@@ -8,6 +8,7 @@ import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMe
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import type { BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { compactAge, latestTimestamp, withDayDividers } from "../../core/timeline/dayDividers";
+import { readingPlace, readingPlaceIndex } from "../../core/timeline/readingPlace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PlainText } from "./PlainText";
@@ -128,8 +129,8 @@ function SelectTextSheet() {
   );
 }
 
-/** Where each chat was read to, by scope, while the app runs: reopening it comes back there. */
-const readingPositions = new Map<string, number>();
+/** Where each chat was read to (its first row on screen, by key), by scope, while the app runs: reopening it comes back there. */
+const readingPositions = new Map<string, string>();
 
 export function ChatTimeline(props: {
   testID: string;
@@ -147,16 +148,20 @@ export function ChatTimeline(props: {
   // Read back from the newest row: the jump button brings it into view again, saying how old it is.
   const away = signal(false);
   const rows = computed(() => withDayDividers(props.items()));
-  // Back where the person left it, once the list and its rows are there; at the newest row, nothing to restore.
+  // Back at the row the person left it at; at the newest row, nothing to restore. The list opens there
+  // itself when the row is already in (`initialScrollIndex`); rows that come later are scrolled to by index.
   // Only the person's own scrolling moves the saved place, not the list settling as it mounts.
   let restore = props.scope ? readingPositions.get(props.scope) : undefined;
+  const initialIndex = untracked(() => readingPlaceIndex(rows(), restore));
+  if (initialIndex !== undefined) restore = undefined;
   let touched = false;
+  let shownFirst: string | undefined;
   const mounted = signal(false);
   effect(() => {
-    if (restore === undefined || rows().length === 0 || !mounted()) return;
-    const offset = restore;
+    const index = readingPlaceIndex(rows(), restore);
+    if (index === undefined || !mounted()) return;
     restore = undefined;
-    untracked(() => list?.scrollToOffset({ offset, animated: false }));
+    untracked(() => list?.scrollToIndex({ index, viewPosition: 0, animated: false }));
   });
   effect(() => {
     if (!props.sent || props.sent() === 0) return;
@@ -184,12 +189,14 @@ export function ChatTimeline(props: {
           mounted.set(true);
         }}
         onScrollDragStart={() => (touched = true)}
+        initialScrollIndex={initialIndex}
+        onViewableItemsChange={({ viewableItems }) => (shownFirst = readingPlace(viewableItems))}
         maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
         onScroll={({ offset, contentSize, size }) => {
           const far = contentSize.height - (offset.y + size.height) > 240;
           away.set(far);
           if (!props.scope || !touched) return;
-          if (far) readingPositions.set(props.scope, offset.y);
+          if (far && shownFirst !== undefined) readingPositions.set(props.scope, shownFirst);
           else readingPositions.delete(props.scope);
         }}
         empty={props.empty() as never}>
