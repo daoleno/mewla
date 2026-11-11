@@ -13,6 +13,7 @@ import {
   cameraSearching,
   catBoxForStep,
   catClipFor,
+  connectedCopy,
   cornerCatBox,
   finderState,
   heroCatBox,
@@ -68,6 +69,13 @@ describe("onboarding steps", () => {
     expect(sealShown("connected", "connecting")).toBe(false);
     expect(sealShown("connected", "connected")).toBe(true);
     expect(sealShown("scan", "connected")).toBe(false);
+  });
+
+  test("Can't reach says what the computer gave, never the transport's own words", () => {
+    for (const word of ["error", "silent", "closed (1006)", "direct-available", ""]) {
+      expect(connectedCopy("waiting", "Desk", word)).toEqual({ title: "Can't reach your computer", lede: "Check that mewla is running on Desk." });
+    }
+    expect(connectedCopy("waiting", "Desk", "This device was removed").lede).toBe("This device was removed");
   });
 });
 

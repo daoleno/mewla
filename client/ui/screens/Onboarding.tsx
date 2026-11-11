@@ -53,7 +53,7 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
   effect(() => {
     if (justPaired()) step.set("connected");
   });
-  cleanup(BackHandler.on("press", () => {
+  onBackPress(() => {
     // A code that is pairing is not left half done.
     if (pairingBusy()) return true;
     const previous = previousOnboardingStep(step(), cameFrom());
@@ -61,7 +61,7 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
     cameFrom.set(null);
     step.set(previous);
     return true;
-  }));
+  });
 
   const frame = (): Frame | null => {
     const s = size();
@@ -144,7 +144,7 @@ export function PairPage(props: { onPaired?(): void }) {
     if (pairings() !== before) untracked(() => props.onPaired?.());
   });
   // A code that is pairing is not left half done.
-  cleanup(BackHandler.on("press", () => pairingBusy()));
+  onBackPress(() => pairingBusy());
   // A browser has no camera reader: it pastes the link.
   const camera = platform.os !== "web";
   const link = signal("");
@@ -153,7 +153,8 @@ export function PairPage(props: { onPaired?(): void }) {
   });
   return (
     <NavPage title="Pair a computer">
-      <Scroll class="flex-1 bg-background" contentClass="gap-4 p-5">
+      {/* The field keeps its focus after the keyboard goes (Back): a tap on Pair still presses Pair. */}
+      <Scroll class="flex-1 bg-background" contentClass="gap-4 p-5" keyboardShouldPersistTaps="handled">
         <Text class="text-base text-muted-foreground">
           {camera ? "On your computer, run mewla pair, then scan the code it shows, or paste the link it prints." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
         </Text>
@@ -171,20 +172,34 @@ export function PairPage(props: { onPaired?(): void }) {
   );
 }
 
+/**
+ * Android's Back while this component lives (iOS has no Back button and accepts the listener).
+ * A browser has its own back: NSH's web runtime has no `BackHandler.on`, so nothing listens there.
+ */
+function onBackPress(listener: () => boolean | void): void {
+  if (platform.os === "web") return;
+  cleanup(BackHandler.on("press", listener));
+}
+
 /** Welcome and connected: the cat above the text, or beside it when the window is short. */
 function HeroStep(props: { frame: Frame | null; compact: boolean; center: JSX.Element; actions: JSX.Element; live?: boolean }) {
   const fade = createMotion({ enter: "fadeIn", delay: 140, duration: 240 });
-  return props.compact ? (
-    <View class="flex-1 pb-2 pl-0 pr-6" style={{ marginLeft: props.frame ? heroZoneWidth(props.frame) : 0, ...fade.style }}>
-      <Scroll class="flex-1" contentClass="grow justify-center gap-5 py-3">
-        <View class="items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
-        <View class="w-full max-w-[360px] gap-2 self-center">{props.actions}</View>
-      </Scroll>
-    </View>
-  ) : (
-    <View class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={{ paddingTop: props.frame ? belowHero(props.frame) : 260, ...fade.style }}>
-      <View class="flex-1 items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
-      <View class="gap-2">{props.actions}</View>
+  // Components run once: the layout is chosen inside the JSX, so a rotation chooses again.
+  return (
+    <View class="flex-1">
+      {props.compact ? (
+        <View testID="step-compact" class="flex-1 pb-2 pl-0 pr-6" style={{ marginLeft: props.frame ? heroZoneWidth(props.frame) : 0, ...fade.style }}>
+          <Scroll class="flex-1" contentClass="grow justify-center gap-5 py-3">
+            <View class="items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
+            <View class="w-full max-w-[360px] gap-2 self-center">{props.actions}</View>
+          </Scroll>
+        </View>
+      ) : (
+        <View testID="step-tall" class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={{ paddingTop: props.frame ? belowHero(props.frame) : 260, ...fade.style }}>
+          <View class="flex-1 items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
+          <View class="gap-2">{props.actions}</View>
+        </View>
+      )}
     </View>
   );
 }
@@ -192,15 +207,19 @@ function HeroStep(props: { frame: Frame | null; compact: boolean; center: JSX.El
 /** Install and scan: the content scrolls, the buttons stay in reach (beside it when the window is short). */
 function SplitStep(props: { compact: boolean; content: JSX.Element; actions: JSX.Element }) {
   const fade = createMotion({ enter: "fadeIn", delay: 140, duration: 240 });
-  return props.compact ? (
-    <View class="flex-1 flex-row gap-6 px-6 pb-2" style={fade.style}>
-      <Scroll class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
-      <View class="w-[220px] justify-end gap-2">{props.actions}</View>
-    </View>
-  ) : (
-    <View class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={fade.style}>
-      <Scroll class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
-      <View class="gap-2">{props.actions}</View>
+  return (
+    <View class="flex-1">
+      {props.compact ? (
+        <View testID="split-compact" class="flex-1 flex-row gap-6 px-6 pb-2" style={fade.style}>
+          <Scroll class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+          <View class="w-[220px] justify-end gap-2">{props.actions}</View>
+        </View>
+      ) : (
+        <View testID="split-tall" class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={fade.style}>
+          <Scroll class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+          <View class="gap-2">{props.actions}</View>
+        </View>
+      )}
     </View>
   );
 }
