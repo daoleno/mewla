@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseGitPatch } from "./gitDiffHunks";
+import { gitHunkSelection, parseGitPatch } from "./gitDiffHunks";
 import { buildGitReviewGroups, gitReviewOrder } from "./gitReviewModel";
 import { findGitPatchMatches, followGitReviewEntry, gitAskContext, gitFindLabel, stepGitCodeText, stepGitFind } from "./gitReader";
 
@@ -81,6 +81,20 @@ describe("Ask the agent", () => {
     expect(ask.where).toBe("app.ts:11-12");
     expect(ask.quote).toEqual(["+ new one", "+ new two"]);
     expect(ask.build("Use a constant")).toBe("In the working-tree diff, app.ts:11-12:\n> + new one\n> + new two\n\nUse a constant");
+  });
+
+  test("a whole hunk sends both sides, its removed lines with its added ones (FAILURES R4#5)", () => {
+    const ask = gitAskContext({ path: "app.ts", group: "changes", hunk, selection: gitHunkSelection(hunk) });
+    expect(ask.where).toBe("app.ts:10-13");
+    expect(ask.build("Explain")).toBe("In the working-tree diff, app.ts:10-13:\n>   keep top\n> - old one\n> + new one\n> + new two\n>   keep end\n\nExplain");
+    // A hunk that starts with its removed line keeps it too.
+    const tail = parseGitPatch(PATCH).hunks[1]!;
+    expect(gitAskContext({ path: "app.ts", group: "changes", hunk: tail, selection: gitHunkSelection(tail) }).quote).toEqual(["- Old tail", "+ new tail", "  end"]);
+  });
+
+  test("added lines around a removed one carry it along", () => {
+    const ask = gitAskContext({ path: "app.ts", group: "changes", hunk, selection: { side: "additions", start: 10, end: 11 } });
+    expect(ask.quote).toEqual(["  keep top", "- old one", "+ new one"]);
   });
 
   test("removed lines say so; a staged file says staged; no selection is the whole file", () => {
