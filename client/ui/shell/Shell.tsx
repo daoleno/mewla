@@ -5,7 +5,8 @@ import { Onboarding } from "../screens/Onboarding";
 import { More } from "../screens/More";
 import { MorePageView } from "../more/Pages";
 import { Brain } from "../screens/Brain";
-import { calendarNav, calendarRoute } from "../calendar/routes";
+import { calendarNav, calendarRoute, showCalendarItem } from "../calendar/routes";
+import { WorkFilePage } from "../work/WorkFilePage";
 import { workRoute, type BrainWorkRoute } from "../work/routes";
 import { Session } from "../screens/Session";
 import { Sessions } from "../screens/Sessions";
@@ -54,6 +55,11 @@ function sessionsRoute(route: SessionsRoute, index: () => number) {
     case "session":
       return <Session nav={sessionsNav} workerId={route.workerId} hint={route.hint}
         active={() => selectedTab() === 1 && index() === sessionsNav.routes().length - 1} />;
+    case "workFile":
+      return <WorkFilePage id={route.id} onClose={() => sessionsNav.pop()} openCalendarItem={(id) => {
+        showCalendarItem(id);
+        selectedTab.set(2);
+      }} />;
   }
 }
 

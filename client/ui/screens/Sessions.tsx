@@ -3,6 +3,8 @@ import { AlertDialog, Button, NavPage, type NavStackState } from "nsh/base";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { servicesOpen } from "../sessions/ServicesSheet";
+import { workLinkOf } from "../sessions/workLinks";
+import { selectedTab } from "../shell/Shell";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
 import { sessionEmptyState } from "../../core/sessions/sessionEmptyState";
 import { countSessionSelection, EMPTY_SESSION_SELECTION, pruneSessionSelection, selectionCountLabel, toggleSessionSelection, type SessionSelection } from "../../core/sessions/sessionSelection";
@@ -109,7 +111,10 @@ function SectionHeader(props: { section: () => SessionListSection }) {
 }
 
 function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => void }) {
-  const model = () => sessionRowModel(props.worker(), { alias: aliases()[props.worker().id] });
+  const model = () => {
+    const link = workLinkOf(props.worker());
+    return sessionRowModel(props.worker(), { alias: aliases()[props.worker().id], workTitle: link?.workTitle, calendarLabel: link?.calendarLabel });
+  };
   const selected = () => selection().has(props.worker().key);
   const toneClass = () => (model().tone === "danger" ? "text-destructive" : model().tone === "needs" ? "text-seal" : model().tone === "accent" ? "text-foreground" : "text-muted-foreground");
   return (
@@ -120,7 +125,8 @@ function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => voi
       {selecting() ? <Icon name={selected() ? "check-circle-fill" : "circle"} size={22} color={selected() ? "primary" : "muted-foreground"} /> : null}
       <View class="items-center justify-center">
         <AgentIcon kind={model().kind} flavor={model().flavor} size={24} />
-        {model().delegated ? <View class="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5"><Icon name="git-network" size={10} color="primary" /></View> : null}
+        {model().fromCalendar ? <View testID="row-calendar" class="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5"><Icon name="calendar" size={10} color="primary" /></View>
+          : model().delegated ? <View class="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5"><Icon name="git-network" size={10} color="primary" /></View> : null}
       </View>
       <View class="flex-1 gap-0.5">
         <Text class="text-base font-semibold line-clamp-1">{model().title}</Text>
@@ -176,6 +182,10 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
     if (action === "new") props.onNew();
     else if (action === "services") servicesOpen.set(true);
   };
+  // Leaving the tab ends selecting.
+  effect(() => {
+    if (selectedTab() !== 1 && untracked(selecting)) selection.set(EMPTY_SESSION_SELECTION);
+  });
   // A Session that left the list cannot stay selected.
   effect(() => {
     const next = pruneSessionSelection(selection(), workers().map((w) => w.key));

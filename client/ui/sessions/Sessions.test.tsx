@@ -171,6 +171,25 @@ describe("a Session", () => {
     await app.waitFor("id:model-row-gpt-6");
   }, 20_000);
 
+  test("a Calendar run's Session is titled by its run, badged, says where it came from, and opens its Work", async () => {
+    const startedAt = Date.parse("2026-07-17T03:00:30Z");
+    const work = {
+      id: "wf-1", project: "calendar", path: "calendar/wf-1.md", title: "Daily digest", mtime: "2026-07-17T03:01:00Z", body: "# Daily digest\n\nRead the three papers.\n",
+      frontmatter: { id: "wf-1", kind: "calendar_action", created: "2026-07-17T03:00:00Z", worker_session: "w4", extra: { calendar_item_id: "c1", calendar_run_id: "r1" } },
+    };
+    const calendarItem = { id: "c1", title: "Paper digest", kind: "scheduled_action", status: "scheduled", timezone: "UTC", due_at: "2026-07-18T03:00:00Z", runs: [{ id: "r1", status: "running", scheduled_for: "2026-07-17T03:00:00Z", work_id: "wf-1" }] };
+    const app = await sessionsApp({ worker_sessions: [session("w4", { started_at: startedAt })], conversations: { w4: [] }, work_items: [work], calendar_items: [calendarItem] });
+    // The run's label comes before the Work's title, as in v0.3.1.
+    await app.waitFor("text:Paper digest · Jul 17");
+    expect(app.count("id:row-calendar")).toBe(1);
+    await app.press("id:session-row");
+    await app.waitFor("id:session-calendar");
+    app.onDialog((dialog) => (dialog.buttons.includes("Open Brain") ? "Open Brain" : null));
+    await app.press("id:session-menu");
+    await app.waitFor("id:work-file-page");
+    expect(app.texts()).toContain("Read the three papers.");
+  }, 20_000);
+
   test("a mewla://sessions/<id> link (a notification, Work, Calendar) opens that Session", async () => {
     const app = await sessionsApp({ worker_sessions: [session("w7", { name: "linked" })], conversations: { w7: [] } });
     await app.waitFor("text:linked");
