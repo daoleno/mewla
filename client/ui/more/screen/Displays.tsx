@@ -181,7 +181,10 @@ function DisplayCard(props: { display: () => AgentDisplay; name: () => string; s
   const title = () => props.name() || props.display().id;
   const holding = () => props.session.holding();
   const live = () => props.session.phase() === "live";
-  const elsewhere = () => props.display().control === "person" && !holding();
+  // Values, not the display object, which every read of the list replaces.
+  const stopped = computed(() => !!props.display().stopped);
+  const control = computed(() => props.display().control);
+  const elsewhere = () => control() === "person" && !holding();
   const run = async (action: () => Promise<void>) => {
     if (untracked(busy)) return;
     busy.set(true);
@@ -194,10 +197,10 @@ function DisplayCard(props: { display: () => AgentDisplay; name: () => string; s
   return (
     <View class="overflow-hidden rounded-2xl border border-border bg-card" testID={`display-${props.display().id}`}>
       <View class="flex-row items-center gap-2 py-1.5 pl-4 pr-1">
-        <View class={`size-2 rounded-full ${holding() ? "bg-destructive" : props.display().stopped || elsewhere() ? "bg-muted-foreground" : "bg-primary"}`} />
+        <View class={`size-2 rounded-full ${holding() ? "bg-destructive" : stopped() || elsewhere() ? "bg-muted-foreground" : "bg-primary"}`} />
         <View class="min-w-0 flex-1">
           <Text class="text-base font-medium line-clamp-1">{title()}</Text>
-          {holding() ? <Text class="text-xs text-muted-foreground line-clamp-1">You hold the agent</Text> : elsewhere() ? <Text class="text-xs text-muted-foreground line-clamp-1">Held on another device</Text> : props.display().stopped ? <Text class="text-xs text-muted-foreground line-clamp-1">Stopped</Text> : null}
+          {holding() ? <Text class="text-xs text-muted-foreground line-clamp-1">You hold the agent</Text> : elsewhere() ? <Text class="text-xs text-muted-foreground line-clamp-1">Held on another device</Text> : stopped() ? <Text class="text-xs text-muted-foreground line-clamp-1">Stopped</Text> : null}
         </View>
         {live() ? (
           <Button accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`rounded-full p-2 ${typing() ? "bg-secondary" : ""}`}>
@@ -210,7 +213,7 @@ function DisplayCard(props: { display: () => AgentDisplay; name: () => string; s
             <MenuItem onSelect={() => props.session.hold(!holding())} class={ITEM}><Text class="text-base">{holding() ? "Let the agent go on" : "Hold the agent"}</Text></MenuItem>
           ) : null}
           {live() ? <MenuItem onSelect={() => props.session.fit()} class={ITEM}><Text class="text-base">Fit</Text></MenuItem> : null}
-          {props.display().stopped ? (
+          {stopped() ? (
             <MenuItem disabled={busy()} onSelect={() => void run(props.onResume)} class={ITEM}><Text class="text-base">Resume</Text></MenuItem>
           ) : (
             <MenuItem disabled={busy() || elsewhere()} accessibilityLabel={`Stop ${title()}`} onSelect={() => void run(props.onStop)} class={ITEM}><Text class="text-base text-destructive">Stop</Text></MenuItem>

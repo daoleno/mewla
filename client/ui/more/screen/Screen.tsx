@@ -357,10 +357,19 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       }
     });
   });
-  const problem = () => (slow() ? connectionProblem(readout()) : null);
-  const warning = () => (phase() === "live" ? powerWarning(status()) : null);
-  const tone = (): IndicatorTone => indicatorTone(!!problem(), warning());
-  const locked = () => !!session()?.locked();
+  // What the chrome shows, as values that change only when what they say does: the
+  // polls and every pong replace the objects they come from, and a slot that read
+  // those would rebuild under the person's finger (an open menu would close).
+  const problem = computed(() => (slow() ? connectionProblem(readout()) : null), { equals: (a, b) => a?.title === b?.title && a?.fix === b?.fix });
+  const warning = computed(() => (phase() === "live" ? powerWarning(status()) : null), { equals: (a, b) => a?.label === b?.label && a?.action === b?.action });
+  const tone = computed<IndicatorTone>(() => indicatorTone(!!problem(), warning()));
+  const locked = computed(() => !!session()?.locked());
+  const isLive = computed(() => phase() === "live" && live());
+  const approved = computed(() => !!status()?.approved);
+  const noteTitle = computed(() => (slowNote() ? (problem()?.title ?? "") : ""));
+  const menuKind = computed(() => (phase() === "local" ? "local" : watching() && phase() === "live" ? "watch" : "full"));
+  const showKeyboard = computed(() => isLive() && !watching());
+  const headerKind = computed(() => (!server() ? "none" : linuxDisplays() ? "linux" : "own"));
 
   const agentLabel = () => {
     const worker = watching()?.worker;
@@ -381,50 +390,62 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       </MenuItem>
     ) : null;
   const keepAwakeItem = () =>
-    status()?.approved ? (
-      <MenuItem disabled={busy()} onSelect={() => setKeepAwake(!status()!.keep_awake)} class={ITEM}>
-        <Text class="text-base">{status()!.keep_awake ? "Let this computer sleep" : "Keep this computer awake"}</Text>
-      </MenuItem>
-    ) : null;
+    keyed(approved, (on) =>
+      on ? (
+        <MenuItem disabled={busy()} onSelect={() => setKeepAwake(!status()?.keep_awake)} class={ITEM}>
+          <Text class="text-base">{status()?.keep_awake ? "Let this computer sleep" : "Keep this computer awake"}</Text>
+        </MenuItem>
+      ) : null,
+    );
   const optionsMenu = (testID: string) => (
     <Menu trigger={<View testID={testID} accessibilityLabel="Screen options" role="button" class="p-2"><Icon name="more-horizontal" size={20} /></View>} popupClass={MENU_POPUP} backdropClass={MENU_BACKDROP}>
       <View class="px-4 pb-1 pt-2"><Text class="text-sm font-medium text-muted-foreground line-clamp-1">{title()}</Text></View>
-      {phase() === "local" ? (
-        <>
-          {keepAwakeItem()}
-          {phoneItem()}
-        </>
-      ) : watching() && phase() === "live" ? (
-        <>
-          <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-base">Fit screen</Text></MenuItem>
-          <MenuItem testID="screen-stop-watching" onSelect={stopWatching} class={ITEM}><Text class="text-base">Stop watching</Text></MenuItem>
-        </>
-      ) : (
-        <>
-          <MenuItem onSelect={toggleMode} class={ITEM}><Text class="text-base">{mode() === "touch" ? "Use as trackpad" : "Touch to click"}</Text></MenuItem>
-          <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-base">Fit screen</Text></MenuItem>
-          {keepAwakeItem()}
-          {phoneItem()}
-          {phase() === "live" && live() ? (
-            <MenuItem onSelect={() => session()?.lose(null)} class={ITEM}><Text class="text-base">Disconnect</Text></MenuItem>
-          ) : (
-            <MenuItem testID="screen-menu-reconnect" onSelect={() => void connect()} class={ITEM}><Text class="text-base">Reconnect</Text></MenuItem>
-          )}
-        </>
+      {keyed(menuKind, (kind) =>
+        kind === "local" ? (
+          <>
+            {keepAwakeItem()}
+            {phoneItem()}
+          </>
+        ) : kind === "watch" ? (
+          <>
+            <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-base">Fit screen</Text></MenuItem>
+            <MenuItem testID="screen-stop-watching" onSelect={stopWatching} class={ITEM}><Text class="text-base">Stop watching</Text></MenuItem>
+          </>
+        ) : (
+          <>
+            <MenuItem onSelect={toggleMode} class={ITEM}><Text class="text-base">{mode() === "touch" ? "Use as trackpad" : "Touch to click"}</Text></MenuItem>
+            <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-base">Fit screen</Text></MenuItem>
+            {keepAwakeItem()}
+            {phoneItem()}
+            {keyed(isLive, (on) =>
+              on ? (
+                <MenuItem onSelect={() => session()?.lose(null)} class={ITEM}><Text class="text-base">Disconnect</Text></MenuItem>
+              ) : (
+                <MenuItem testID="screen-menu-reconnect" onSelect={() => void connect()} class={ITEM}><Text class="text-base">Reconnect</Text></MenuItem>
+              ),
+            )}
+          </>
+        ),
       )}
     </Menu>
   );
-  const indicator = () =>
-    phase() === "live" && live() ? <ConnectionIndicator tone={tone()} locked={locked()} onPress={() => details.set(true)} /> : null;
+  const indicator = () => keyed(isLive, (on) => (on ? <ConnectionIndicator tone={tone()} locked={locked()} onPress={() => details.set(true)} /> : null));
   const keyboardButton = () =>
-    phase() === "live" && live() && !watching() ? (
-      <Button testID="screen-keyboard" accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`rounded-full p-2 ${typing() ? "bg-secondary" : ""}`}>
-        <Icon name="keyboard" size={20} tone={typing() ? "ink" : "soft"} />
-      </Button>
-    ) : null;
+    keyed(showKeyboard, (on) =>
+      on ? (
+        <Button testID="screen-keyboard" accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`rounded-full p-2 ${typing() ? "bg-secondary" : ""}`}>
+          <Icon name="keyboard" size={20} tone={typing() ? "ink" : "soft"} />
+        </Button>
+      ) : null,
+    );
 
   const iphoneAgent = () => (iphone()?.enabled ? iphone()!.active : undefined);
-  const iphoneRow = () => {
+  const iphoneKey = computed(() => {
+    const agent = iphoneAgent();
+    return agent ? `${agent.worker}\n${agent.name ?? ""}` : "";
+  });
+  const iphoneRow = () => keyed(iphoneKey, (key) => (key ? iphoneCard() : null));
+  const iphoneCard = () => {
     const agent = iphoneAgent();
     if (!agent) return null;
     const label = agent.name || "An agent";
@@ -530,19 +551,21 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       statusBar={{ hidden: fullBleed() }}
       headerRight={
         <View class="flex-row items-center gap-1">
-          {server() && !linuxDisplays() ? (
-            <>
-              {slowNote() && problem() ? <Text testID="screen-slow-note" class="text-xs text-warning">{problem()!.title}</Text> : null}
-              {indicator()}
-              {keyboardButton()}
-              {optionsMenu("screen-options")}
-            </>
-          ) : server() && platform.os === "android" ? (
-            // Linux: the menu holds only the rows of other surfaces (the Phone).
-            <Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="p-2"><Icon name="more-horizontal" size={20} /></View>} popupClass={MENU_POPUP} backdropClass={MENU_BACKDROP}>
-              {phoneItem()}
-            </Menu>
-          ) : null}
+          {keyed(headerKind, (kind) =>
+            kind === "own" ? (
+              <>
+                {keyed(noteTitle, (note) => (note ? <Text testID="screen-slow-note" class="text-xs text-warning">{note}</Text> : null))}
+                {indicator()}
+                {keyboardButton()}
+                {optionsMenu("screen-options")}
+              </>
+            ) : kind === "linux" && platform.os === "android" ? (
+              // Linux: the menu holds only the rows of other surfaces (the Phone).
+              <Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="p-2"><Icon name="more-horizontal" size={20} /></View>} popupClass={MENU_POPUP} backdropClass={MENU_BACKDROP}>
+                {phoneItem()}
+              </Menu>
+            ) : null,
+          )}
         </View>
       }
     >
@@ -559,6 +582,14 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       />
     </NavPage>
   );
+}
+
+/**
+ * A slot that is rebuilt only when `key` says something new; call it inside JSX.
+ * What `render` reads is read once, unless it reads it inside its own JSX.
+ */
+function keyed<K>(key: () => K, render: (key: K) => JSX.Element): JSX.Element {
+  return ((value: K) => untracked(() => render(value)))(key());
 }
 
 /**
@@ -647,20 +678,28 @@ function RailButton(props: { icon: IconName; label: string; tone?: "seal"; disab
   );
 }
 
+/** Which agents, by worker and name: the rows are rebuilt when this changes, not on every poll. */
+function agentsKey(agents: () => ScreenAgent[]): () => string {
+  return computed(() => agents().map((a) => `${a.worker}\n${a.name ?? ""}`).join("\n\n"));
+}
+
 function AgentCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.Element; onWatch: (agent: ScreenAgent) => void; onStop: (agent: ScreenAgent) => void; onTakeOver: () => void }) {
   const label = (agent: ScreenAgent | undefined) => agent?.name || "An agent";
+  const which = agentsKey(() => props.agents);
   return (
     <Scroll class="flex-1" contentClass="grow items-center justify-center gap-3 px-6 py-6">
       <View testID="screen-agents" class="w-full items-center gap-3">
         <Icon name="desktop" size={36} tone="faint" />
         <Text class="text-center text-lg font-semibold">{props.agents.length > 1 ? `${props.agents.length} agents are using the screen` : `${label(props.agents[0])} is using the screen`}</Text>
-        {props.agents.map((agent) => (
-          <View class="flex-row flex-wrap items-center justify-center gap-2">
-            {props.agents.length > 1 ? <Text class="text-center text-base">{label(agent)}</Text> : null}
-            <SmallButton title="Watch" icon="eye" label={`Watch ${label(agent)}`} disabled={props.busy} onPress={() => props.onWatch(agent)} />
-            <SmallButton title="Stop" label={`Stop ${label(agent)}`} destructive disabled={props.busy} onPress={() => props.onStop(agent)} />
-          </View>
-        ))}
+        {keyed(which, () =>
+          props.agents.map((agent) => (
+            <View class="flex-row flex-wrap items-center justify-center gap-2">
+              {props.agents.length > 1 ? <Text class="text-center text-base">{label(agent)}</Text> : null}
+              <SmallButton title="Watch" icon="eye" label={`Watch ${label(agent)}`} disabled={props.busy} onPress={() => props.onWatch(agent)} />
+              <SmallButton title="Stop" label={`Stop ${label(agent)}`} destructive disabled={props.busy} onPress={() => props.onStop(agent)} />
+            </View>
+          )),
+        )}
         {props.iphone}
         <View class="pt-2">
           <SmallButton testID="take-over" title={props.agents.length > 1 ? "Take over (stops all)" : "Take over"} icon="hand" filled disabled={props.busy} onPress={props.onTakeOver} />
@@ -672,16 +711,19 @@ function AgentCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.El
 
 /** This device is the computer: a live view would only mirror itself. */
 function LocalCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.Element; onStop: (agent: ScreenAgent) => void }) {
+  const which = agentsKey(() => props.agents);
   return (
     <Scroll class="flex-1" contentClass="grow items-center justify-center px-4 py-6">
       <View testID="screen-local" class="w-full max-w-[440px]">
         <Section>
-          {props.agents.length ? (
-            props.agents.map((agent) => (
-              <Row icon="desktop" title={agent.name || "An agent"} trailing={<SmallButton title="Stop" label={`Stop ${agent.name || "An agent"}`} destructive disabled={props.busy} onPress={() => props.onStop(agent)} />} />
-            ))
-          ) : (
-            <Row icon="desktop" title="No agent on this screen" />
+          {keyed(which, () =>
+            props.agents.length ? (
+              props.agents.map((agent) => (
+                <Row icon="desktop" title={agent.name || "An agent"} trailing={<SmallButton title="Stop" label={`Stop ${agent.name || "An agent"}`} destructive disabled={props.busy} onPress={() => props.onStop(agent)} />} />
+              ))
+            ) : (
+              <Row icon="desktop" title="No agent on this screen" />
+            ),
           )}
         </Section>
       </View>
@@ -726,7 +768,8 @@ function Setup(props: {
   }
   const missing = () => (props.status.permissions ?? []).filter((p) => !p.granted);
   // Some grants apply only to a new Mewla process on the computer.
-  const restart = () => missing().some((p) => p.restart_required) && !!props.status.can_restart;
+  const restart = computed(() => missing().some((p) => p.restart_required) && !!props.status.can_restart);
+  const rows = computed(() => missing().map((p) => [p.id, p.name, p.guidance ?? "", p.can_open ? 1 : 0, p.restart_required ? 1 : 0].join("\n")).join("\n\n"));
   return (
     <View class="w-full max-w-[440px]" testID="screen-permissions">
       <View class="items-center gap-2 py-6">
@@ -734,22 +777,26 @@ function Setup(props: {
         <Text class="text-center text-lg font-semibold">{`Allow Screen on ${props.name}`}</Text>
         {!restart() ? <PillButton testID="screen-ask" filled title={`Ask on ${props.name}`} busy={props.busy} onPress={props.onEnable} /> : null}
       </View>
-      {missing().length ? (
-        <Section>
-          {missing().map((p) => (
-            <Row
-              title={p.name}
-              subtitle={p.guidance}
-              trailing={p.can_open && !p.restart_required ? <SmallButton title="Open settings" onPress={() => props.onOpenSettings(p.id)} /> : undefined}
-            />
-          ))}
-        </Section>
-      ) : null}
+      {keyed(rows, () =>
+        missing().length ? (
+          <Section>
+            {missing().map((p) => (
+              <Row
+                title={p.name}
+                subtitle={p.guidance}
+                trailing={p.can_open && !p.restart_required ? <SmallButton title="Open settings" onPress={() => props.onOpenSettings(p.id)} /> : undefined}
+              />
+            ))}
+          </Section>
+        ) : null,
+      )}
       <View class="mt-4 items-center">
-        {restart() ? (
-          <PillButton testID="screen-restart" filled title={props.busy ? "Restarting Mewla…" : "Restart Mewla"} busy={props.busy} onPress={props.onRestart} />
-        ) : (
-          <PillButton testID="screen-check" title="Check again" onPress={props.onCheck} />
+        {keyed(restart, (on) =>
+          on ? (
+            <PillButton testID="screen-restart" filled title={props.busy ? "Restarting Mewla…" : "Restart Mewla"} busy={props.busy} onPress={props.onRestart} />
+          ) : (
+            <PillButton testID="screen-check" title="Check again" onPress={props.onCheck} />
+          ),
         )}
         {props.reason ? <Text class="mt-2 text-center text-sm text-destructive line-clamp-2">{props.reason}</Text> : null}
       </View>
