@@ -101,7 +101,7 @@ runs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle') }}
+        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle', 'client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
         restore-keys: |
           android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Restore or save Gradle home
@@ -111,12 +111,12 @@ runs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle') }}
+        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle', 'client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
         restore-keys: |
           android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-
 
-    # ccache for the CMake builds: React Native, the app's codegen and the
-    # native modules. The NDK is reinstalled on every runner, so the compiler
+    # ccache for the CMake builds: the NSH client's terminal bridge (and, for
+    # the Expo app's CI link, React Native, its codegen and native modules). The NDK is reinstalled on every runner, so the compiler
     # is checked by content, not mtime, and codegen headers written during the
     # build stay cacheable. Restore is by prefix, so a dependency bump still
     # starts from the previous objects.
@@ -147,7 +147,7 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/ccache
-        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/**') }}
+        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/**', 'client/android/app/CMakeLists.txt', 'client/android/app/src/main/cpp/**') }}
         restore-keys: |
           android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Restore or save ccache
@@ -155,7 +155,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/ccache
-        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/**') }}
+        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/**', 'client/android/app/CMakeLists.txt', 'client/android/app/src/main/cpp/**') }}
         restore-keys: |
           android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Zero ccache statistics

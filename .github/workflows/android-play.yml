@@ -1,8 +1,8 @@
 name: Android Google Play
 
-# Signed Android App Bundle for Google Play: the play-store channel, so the
-# bundle has no REQUEST_INSTALL_PACKAGES, no self-update FileProvider and no
-# GitHub update check. It is signed with the existing release key, which is
+# Signed Android App Bundle for Google Play: the NSH client (client/android)
+# built with -Pmewla.channel=play, so the bundle has no REQUEST_INSTALL_PACKAGES,
+# no self-update FileProvider, no in-app update and no Phone use. It is signed with the existing release key, which is
 # also the Play upload key, so GitHub APK and Play installs share one identity.
 # The GitHub APK in release-artifacts.yml is unchanged.
 #
@@ -83,33 +83,25 @@ jobs:
             git fetch --no-tags origin main
             ./scripts/verify-release-identity.sh --tag "$MEWLA_REF"
           fi
-          if ! grep -q -- '--aab' scripts/android-release-apk.sh || [[ ! -x scripts/verify-aab-play.py ]]; then
-            echo "error: $MEWLA_REF predates the Play channel (no --aab build or verify-aab-play.py)" >&2
+          if [[ ! -f scripts/lib/release_identity.py ]] || ! grep -q -- ':app:bundleProductionRelease' scripts/android-release-apk.sh; then
+            echo "error: $MEWLA_REF predates the NSH client's Play build (client/android, scripts/lib/release_identity.py)" >&2
             exit 1
           fi
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          expo = json.load(open("app/app.base.json"))["expo"]
-          print(f"package={expo['android']['package']}")
-          print(f"version={expo['version']}")
-          print(f"version_code={expo['android']['versionCode']}")
-          print(f"artifact=mewla-android-play-v{expo['version']}-{expo['android']['versionCode']}")
-          PY
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.5"
-
-      - name: Install workspace dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Reject Android asset resource-name collisions
-        working-directory: app
-        run: bun test androidAssetNames.test.js
+          VERSION="$(python3 scripts/lib/release_identity.py version)"
+          VERSION_CODE="$(python3 scripts/lib/release_identity.py version_code)"
+          {
+            echo "package=$(python3 scripts/lib/release_identity.py package)"
+            echo "version=$VERSION"
+            echo "version_code=$VERSION_CODE"
+            echo "artifact=mewla-android-play-v$VERSION-$VERSION_CODE"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Android SDK, arm64 Ghostty and Gradle home
         uses: ./.github/actions/android-native
+
+      # The pinned NSH release (checksums in the script); fetched, not cached.
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
 
       - name: Install pinned bundletool
         run: |
@@ -135,9 +127,8 @@ jobs:
           test -s "$OUT"
           echo "keystore_path=${OUT}" >> "$GITHUB_OUTPUT"
 
-      - name: Build signed Play AAB (play-store channel)
+      - name: Build signed Play AAB (Play channel)
         env:
-          MEWLA_ANDROID_DISTRIBUTION: play-store
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
           MEWLA_ANDROID_KEYSTORE: ${{ steps.keystore.outputs.keystore_path }}

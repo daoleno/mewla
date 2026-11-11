@@ -55,8 +55,10 @@ JOB_PATHS = {
     "client": ["client/*"],
     "native-contract": ["scripts/verify-libghostty.sh", "scripts/lib/*", "app/modules/terminal-vt/*"],
     "release-identity": [
-        "scripts/*", "app/app.base.json", "app/ios-build.json", "app/package.json",
-        "package.json", "CHANGELOG.md", "release/*", "docs/*",
+        "scripts/*", "client/ui/nsh.json", "client/ios/project.yml", "client/android/*",
+        "client/core/update/version.ts", "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt",
+        "app/assets/notices/GHOSTTY-MIT.txt", "package.json", "CHANGELOG.md", "release/*", "docs/*",
+        ".github/actions/android-native/*",
     ],
 }
 

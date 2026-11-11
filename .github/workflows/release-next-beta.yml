@@ -107,9 +107,10 @@ jobs:
         working-directory: daemon
         run: go test ./cmd/mewla
 
-      - name: Test App release contracts
+      # The release workflow contracts (they still live beside the Expo app, which no longer ships).
+      - name: Test release workflow contracts
         working-directory: app
-        run: bun test appConfig.test.js androidAssetNames.test.js releaseArtifactsWorkflow.test.js iosReleaseWorkflow.test.js
+        run: bun test releaseArtifactsWorkflow.test.js iosReleaseWorkflow.test.js
 
       - name: Commit and annotate exact prepared release
         env:

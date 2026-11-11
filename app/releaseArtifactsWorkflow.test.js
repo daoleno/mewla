@@ -14,7 +14,14 @@ const nativeVerifier = fs.readFileSync(
   path.join(__dirname, '..', 'scripts', 'verify-libghostty.sh'),
   'utf8',
 );
-const appPackage = fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8');
+const apkScript = fs.readFileSync(
+  path.join(__dirname, '..', 'scripts', 'android-release-apk.sh'),
+  'utf8',
+);
+const stageScript = fs.readFileSync(
+  path.join(__dirname, '..', 'scripts', 'stage-release.sh'),
+  'utf8',
+);
 const androidNative = fs.readFileSync(
   path.join(__dirname, '..', '.github', 'actions', 'android-native', 'action.yml'),
   'utf8',
@@ -34,17 +41,27 @@ describe('release asset workflow contract', () => {
       expect(source).toContain('uses: ./.github/actions/android-native');
     }
   });
-  it('rejects RN-normalized asset collisions before native and signed builds', () => {
-    const gate = workflow.indexOf('run: bun test androidAssetNames.test.js');
-    expect(gate).toBeGreaterThan(0);
-    expect(gate).toBeLessThan(workflow.indexOf('uses: ./.github/actions/android-native'));
+  it('builds the signed APK from the NSH client, not the Expo app', () => {
+    const android = workflow.slice(workflow.indexOf('  android:\n'), workflow.indexOf('  desktop-stage:'));
+    expect(android).toContain('run: client/scripts/fetch-nsh.sh');
+    expect(android.indexOf('run: client/scripts/fetch-nsh.sh')).toBeLessThan(
+      android.indexOf('./scripts/android-release-apk.sh'),
+    );
+    expect(android).not.toContain('bun ');
+    expect(android).not.toContain('working-directory: app');
+    expect(apkScript).toContain(':app:assembleProductionRelease');
+    expect(apkScript).toContain(':app:bundleProductionRelease');
+    expect(apkScript).toContain('-Pmewla.channel="$CHANNEL" -Pmewla.abis=arm64-v8a');
+    expect(apkScript).not.toContain('expo prebuild');
+    // One version source: client/ui/nsh.json through scripts/lib/release_identity.py.
+    for (const source of [workflow, stageScript, apkScript]) {
+      expect(source).toContain('release_identity.py');
+      expect(source).not.toContain('app/app.base.json');
+    }
     const preparation = fs.readFileSync(
       path.join(__dirname, '..', '.github', 'workflows', 'release-next-beta.yml'), 'utf8',
     );
-    expect(preparation).toContain('androidAssetNames.test.js');
-    expect(preparation.indexOf('androidAssetNames.test.js')).toBeLessThan(
-      preparation.indexOf('- name: Commit and annotate exact prepared release'),
-    );
+    expect(preparation).not.toContain('androidAssetNames.test.js');
   });
   it('uses immutable stable or beta tag pushes as the only automatic publication path', () => {
     expect(workflow).toMatch(
@@ -114,7 +131,7 @@ describe('release asset workflow contract', () => {
   it('keeps recovery reviewed and caches no signing material or signed output', () => {
     expect(workflow).toContain('workflow_dispatch:');
     expect(workflow).toContain('publish:');
-    expect(appPackage).toContain('--build-cache');
+    expect(apkScript).toContain('--build-cache');
     expect(workflow).toContain('-Dorg.gradle.jvmargs=-Xmx6g');
     expect(androidNative).toContain('~/.gradle/caches');
     expect(androidNative).toContain('android-native-inputs-');

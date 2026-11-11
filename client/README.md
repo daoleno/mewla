@@ -47,7 +47,9 @@ cd client/ui && nsh check && nsh test
 
 ## Upgrade
 
-Version code = `major·1 000 000 + minor·10 000 + patch·100` from `ui/nsh.json`, above every Expo build. The
+The version is `ui/nsh.json` `version` (also the daemon's; `scripts/prepare-release.py` moves it). The Android
+version code and iOS build number are `major·1 000 000 + minor·10 000 + patch·100 + 99`, or `+ N` for `-beta.N`
+(`scripts/lib/release_identity.py`; 0.3.2 is 30299), above every Expo build (142 / 140). The
 upgrade gate (`client.yml`, manual dispatch) installs the released Expo APK on an emulator, pairs it with a fresh
 daemon and types a draft, installs the release-signed NSH app over it, and passes only if the daemon still lists
 that one device and sees it sign in again and the draft is in the new storage
