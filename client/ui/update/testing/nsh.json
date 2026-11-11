@@ -1,0 +1,14 @@
+{
+  "name": "Mewla update tests",
+  "id": "com.daoleno.mewla.updatetests",
+  "version": "0.0.0",
+  "appearance": "system",
+  "capabilities": {
+    "host": [
+      "update.*",
+      "test.*"
+    ],
+    "openUrl": true
+  },
+  "theme": "../../theme.json"
+}

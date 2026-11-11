@@ -1,5 +1,6 @@
 import type { ConnectionState } from "../transport";
-import { compareVersions, type AgentUseFix, type AgentUseStatus, type ComputerCheck, type DaemonUpdateStatus } from "./computer";
+import { compareVersions } from "../update/version";
+import { type AgentUseFix, type AgentUseStatus, type ComputerCheck, type DaemonUpdateStatus } from "./computer";
 
 /** One word for a computer's row: what the user would want to know first. */
 export function computerStatusWord(input: {
