@@ -1,5 +1,5 @@
 import type { Zones } from "../calendar/zones";
-import type { BrainWorkSlip } from "./surface";
+import { brainWorkSlipStale, type BrainWorkSlip } from "./surface";
 import type { BrainWorkUserActionKind } from "./types";
 
 /**
@@ -130,6 +130,25 @@ export function brainWorkSnoozeUntil(zones: Zones, now = Date.now()): number {
   if (resolved.status === "resolved") return resolved.instant;
   if (resolved.status === "ambiguous") return resolved.instants[0];
   return zones.resolveLocal(tomorrow, "10:00", zone).status === "resolved" ? (zones.resolveLocal(tomorrow, "10:00", zone) as { instant: number }).instant : now + 86_400_000;
+}
+
+/**
+ * The actions a slip carries in the list, beside the full set on its page: the
+ * answers (or the reply), the way out beside a reply left for days, or the one
+ * primary step; nothing destructive otherwise.
+ */
+export function brainWorkSlipActions(slip: BrainWorkSlip): BrainWorkAction[] {
+  const all = brainWorkActions(slip);
+  if (slip.question) return all.filter((action) => action.kind === "answer" || action.kind === "reply").slice(0, 3);
+  if (brainWorkSlipStale(slip)) return all.filter((action) => action.primary || action.kind === "dismiss").slice(0, 2);
+  return all.filter((action) => action.primary).slice(0, 1);
+}
+
+/** "Waiting for: …" on a Work's page, when it says something the page does not already. */
+export function brainWorkWaitForLine(slip: Pick<BrainWorkSlip, "waitFor" | "calendar" | "summary" | "question">): string | undefined {
+  const wait = slip.waitFor?.trim();
+  if (!wait || slip.calendar || slip.question || wait === slip.summary || !wait.includes(" ")) return undefined;
+  return `Waiting for: ${wait}`;
 }
 
 /** The composer text for "Ask Brain about this". */

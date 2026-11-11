@@ -16,6 +16,12 @@ enum PushHost {
       if granted { UIApplication.shared.registerForRemoteNotifications() }
       return granted
     }
+    // Where a person who said no turns notifications back on: this app's page in Settings.
+    app.handle("push.openSettings") { _ -> Any? in
+      guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return nil }
+      _ = await UIApplication.shared.open(url)
+      return nil
+    }
     app.handle("push.deviceToken") { _ -> Any? in
       let token = try await PushCenter.shared.deviceToken()
       return [

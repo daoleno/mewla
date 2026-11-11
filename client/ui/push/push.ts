@@ -8,6 +8,7 @@ import type { StoredServer } from "../../core/storedServerContract";
 import type { Transport } from "../../core/transport";
 import { startCalendarAlerts } from "../calendar/alerts";
 import { deviceZone } from "../calendar/clock";
+import { refreshReminders, reminderLinks } from "../calendar/ReminderBanner";
 import { calendarLinks, showCalendarItem } from "../calendar/routes";
 import { clearCalendarAlerts, loadStrongAlerts, onStrongAlertsChange, strongAlerts } from "../calendar/state";
 import { current, currentTransport, onTransport, ready, servers, switchTo } from "../session";
@@ -35,7 +36,11 @@ const pushHost: PushHost = {
 let token: Promise<string | null> | null = null;
 /** This install's Expo token; asks for permission (once in the app's life) the first time a computer is connected. */
 function expoToken(): Promise<string | null> {
-  token ??= (async () => ((await ensurePermission(pushHost, Storage)) ? expoPushToken(pushHost, Storage, (input, init) => fetch(input, init)) : null))()
+  token ??= (async () => {
+    const allowed = await ensurePermission(pushHost, Storage);
+    refreshReminders();
+    return allowed ? expoPushToken(pushHost, Storage, (input, init) => fetch(input, init)) : null;
+  })()
     .catch((error) => {
       console.warn("push not registered:", error instanceof Error ? error.message : error);
       return null;
@@ -109,12 +114,16 @@ function sendLiveAnswer(transport: Transport | null): void {
   if (!answer || transport?.state !== "connected") return;
   pendingAnswer = null;
   const requestId = liveAnswerRequestId(answer);
+  const failed = (message: string) => {
+    stops.forEach((stop) => stop());
+    void AlertDialog.show({ title: "Couldn't send that answer", description: message, actions: [{ id: "ok", label: "OK" }] }).catch(() => {});
+  };
+  const timer = setTimeout(() => failed("Timed out. The answer may still have reached Brain."), 30_000);
   const stops = [
+    () => clearTimeout(timer),
     transport.on("live_answer", (frame) => frame.request_id === requestId && stops.forEach((stop) => stop())),
     transport.on("error", (frame) => {
-      if (frame.request_id !== requestId) return;
-      stops.forEach((stop) => stop());
-      void AlertDialog.show({ title: "Couldn't send that answer", description: String(frame.message ?? ""), actions: [{ id: "ok", label: "OK" }] }).catch(() => {});
+      if (frame.request_id === requestId) failed(String(frame.message || "That answer could not be sent."));
     }),
   ];
   try {
@@ -178,6 +187,13 @@ export function startNotifications(): void {
     brainNav.popToRoot();
   };
   startCalendarAlerts();
+  // Calendar's Enable granted notifications: register this phone now.
+  reminderLinks.granted = () => {
+    token = null;
+    const transport = currentTransport();
+    const server = current();
+    if (transport && server) void register(transport, server);
+  };
   effect(() => {
     if (!ready() || waitingLink === null) return;
     const url = waitingLink;

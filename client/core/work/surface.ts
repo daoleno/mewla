@@ -132,6 +132,8 @@ export type BrainWorkSlip = {
   /** What Brain asks, with one-tap answers. */
   question?: string;
   choices?: readonly string[];
+  /** What the Work waits on, as Brain wrote it. */
+  waitFor?: string;
   /** A running Worker's reported phase ("verifying"). */
   phase?: string;
   /** Waiting on a decision since then (immutable while it waits). */
@@ -270,6 +272,7 @@ export function brainWorkSurface(
       unread: work.unread_result,
       question: work.question,
       choices: work.choices,
+      waitFor: work.wait_for,
       phase: group === "running" && worker?.phase && worker.phase !== "working" ? worker.phase : undefined,
       attentionSince: work.attention_since,
       waitedMs: waited > 0 ? waited : undefined,

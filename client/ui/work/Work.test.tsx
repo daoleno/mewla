@@ -44,6 +44,26 @@ describe("Brain's Work", () => {
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "reply", text: "Mewla" });
   }, 20_000);
 
+  test("a question is answered right on its slip, and a page that acted closes back to the list", async () => {
+    const app = await workApp();
+    await app.waitFor("text:pick a name");
+    await app.press("id:work-action-answer-Zen");
+    await app.waitFor("id:work-notice");
+    expect(app.texts()).toContain("Brain has your answer");
+    expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "reply", text: "Zen" });
+    expect(app.shows("id:work-detail")).toBe(false);
+  }, 20_000);
+
+  test("a Work's page says what it waits for when its summary says something else", async () => {
+    const waiting = brain();
+    waiting.current_work.push({ work_id: "w-wait", revision: 1, title: "merge-the-push-change", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: false, summary: "Pushed the change for review.", wait_for: "Reviewer approval on the pull request", updated_at: now() } as never);
+    const app = await workApp({ brain: waiting });
+    await app.waitFor("text:merge the push change");
+    await app.press("id:work-w-wait");
+    await app.waitFor("id:work-wait-for");
+    expect(app.texts()).toContain("Waiting for: Reviewer approval on the pull request");
+  }, 20_000);
+
   test("Not needed anymore asks first, and only then tells Brain", async () => {
     const app = await workApp();
     await app.press("id:work-w-q");

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { testClock } from "../calendar/testClock";
-import { brainWorkActions, brainWorkAskDraft, brainWorkSnoozeUntil, brainWorkUserAction } from "./actions";
+import { brainWorkActions, brainWorkAskDraft, brainWorkSlipActions, brainWorkSnoozeUntil, brainWorkUserAction, brainWorkWaitForLine } from "./actions";
 import { BRAIN_WORK_STUCK_AFTER_MS, brainWorkSurface } from "./surface";
 import type { BrainCurrentWork } from "./types";
 
@@ -133,5 +133,28 @@ describe("a running Calendar run's slip", () => {
     const kinds = brainWorkActions(slip).map((action) => action.kind);
     expect(kinds).toContain("open");
     expect(kinds).not.toContain("stop");
+  });
+});
+
+describe("what a slip carries in the list", () => {
+  const inline = (item: BrainCurrentWork) => brainWorkSlipActions(slipOf(item)).map((action) => `${action.kind}${action.text ? `:${action.text}` : ""}`);
+  test("a question: its answers and the reply, at most three", () => {
+    expect(inline(work({ question: "Which one?", choices: ["A", "B", "C"], wake: { kind: "user_input", ref: "x" } }))).toEqual(["answer:A", "answer:B", "answer:C"]);
+    expect(inline(work({ question: "Which one?", choices: ["A"], wake: { kind: "user_input", ref: "x" } }))).toEqual(["answer:A", "reply"]);
+  });
+  test("waiting on you for days: the reply and the way out", () => {
+    expect(inline(work({ wake: { kind: "user_input", ref: "x" }, attention_since: hoursAgo(30) }))).toEqual(["reply", "dismiss"]);
+  });
+  test("otherwise only the primary step, nothing destructive", () => {
+    expect(inline(work({ wake: { kind: "user_input", ref: "x" }, attention_since: hoursAgo(1) }))).toEqual(["reply"]);
+  });
+});
+
+describe("Waiting for", () => {
+  test("shows what the Work waits on when it says something new", () => {
+    expect(brainWorkWaitForLine({ waitFor: "Reviewer approval on the PR", summary: "Shipping" })).toBe("Waiting for: Reviewer approval on the PR");
+    expect(brainWorkWaitForLine({ waitFor: "operator:2985", summary: "" })).toBeUndefined();
+    expect(brainWorkWaitForLine({ waitFor: "Reviewer approval", summary: "Reviewer approval" })).toBeUndefined();
+    expect(brainWorkWaitForLine({ waitFor: "Reviewer approval", question: "Merge?" })).toBeUndefined();
   });
 });

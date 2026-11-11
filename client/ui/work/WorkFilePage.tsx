@@ -41,6 +41,8 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
   const save = async () => {
     const model = workFilesModel();
     const from = base();
+    // A newer version on the computer waits for the person: no save over it.
+    if (newer()) return;
     if (!model || !from || text() === from.body) return state.set("saved");
     state.set("saving");
     try {
@@ -51,7 +53,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
     } catch (error) {
       state.set("unsaved");
       if (error instanceof WorkItemConflict) newer.set(true);
-      else failure.set("Save failed");
+      else failure.set(`Save failed. ${error instanceof Error && error.message ? error.message : "Could not save work item."}`);
     }
   };
   const edited = (value: string) => {
@@ -72,8 +74,8 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
     try {
       const saved = await workFilesModel()!.setDone(current, workItemStatus(current) !== "done");
       base.set(saved);
-    } catch {
-      failure.set("Save failed");
+    } catch (error) {
+      failure.set(`Save failed. ${error instanceof Error && error.message ? error.message : "Could not save work item."}`);
     }
   };
   const remove = async (current: WorkItem) => {
@@ -85,8 +87,8 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
     try {
       await workFilesModel()!.remove(current);
       props.onClose();
-    } catch {
-      failure.set("Delete failed");
+    } catch (error) {
+      failure.set(`Delete failed. ${error instanceof Error && error.message ? error.message : "Could not delete work item."}`);
     }
   };
   const origin = () => (item() ? calendarOriginOfWork(item()!) : null);
@@ -114,7 +116,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
           {newer() ? (
             <View testID="work-file-newer" class="gap-2 border-b border-border bg-secondary px-4 py-3">
               <Text class="text-base font-semibold">Newer version on the server</Text>
-              <Text class="text-sm text-muted-foreground">Loading it discards your unsaved edits.</Text>
+              {state() !== "saved" ? <Text class="text-sm text-muted-foreground">Loading it discards your unsaved edits.</Text> : null}
               <Button testID="work-file-load" onPress={loadRemote} class="self-start"><Text class="text-base text-primary">Load remote changes</Text></Button>
             </View>
           ) : null}
@@ -128,7 +130,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
                 </Button>
               ) : null}
               {editingBody()
-                ? <Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" />
+                ? <Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} onBlur={() => void save()} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" />
                 : <TextView testID="work-file-preview" markdown={readableBody(text())} />}
             </View>
           </Scroll>
