@@ -103,7 +103,10 @@ func (s *Server) webUIHandler() http.Handler {
 		header.Set("Content-Security-Policy", strings.Join([]string{
 			"default-src 'self'",
 			// NSH's web runtime writes its import map as an inline script of blob:
-			// URLs at run time, so neither a hash nor a nonce can name it.
+			// URLs at run time, so neither a hash nor a nonce can name it. Never add a
+			// hash, nonce or 'strict-dynamic' here: browsers then ignore 'unsafe-inline',
+			// and NSH's web views (the terminal, Screen's viewer), srcdoc frames that
+			// inherit this policy with an inline bridge, stop running.
 			"script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' blob:",
 			"style-src 'self' 'unsafe-inline'",
 			"img-src 'self' data: blob: https:",
