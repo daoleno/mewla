@@ -1,6 +1,9 @@
 name: Native libs (libghostty-vt)
 
-# Optional / release path: builds pinned Ghostty VT Android libraries.
+# Optional / release path: builds pinned Ghostty VT Android libraries and the
+# iOS XCFramework into app/modules/terminal-vt/libs (where client/android and
+# client/ios link them from, -Pmewla.ghostty / MEWLA_GHOSTTY), and links the
+# NSH client's iOS host against the XCFramework.
 # Not part of default PR CI (Zig + Ghostty compile is heavy).
 on:
   workflow_dispatch:
@@ -60,27 +63,21 @@ jobs:
           MEWLA_TOOL_CACHE: ${{ runner.temp }}/tools
         run: ./scripts/build-libghostty-ios.sh
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.5"
+      # The NSH client's iOS host links the XCFramework (client/ios/project.yml MEWLA_GHOSTTY).
+      - name: Install NSH and the iOS framework
+        run: client/scripts/fetch-nsh.sh --ios
 
-      - name: Install app dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Generate iOS project and install pods
+      - name: Generate the client's Xcode project
         run: |
-          cd app
-          bunx expo prebuild --platform ios --clean --no-install
-          cd ios
-          pod install
-          ../../scripts/assert-ios-camera-barcode-pod.sh Podfile.lock
+          brew install xcodegen > /dev/null
+          client/scripts/ios-project.sh
 
-      - name: Compile and link iOS bridge for Apple Silicon simulator
+      - name: Compile and link the client's terminal for Apple Silicon simulator
         run: |
-          cd app/ios
+          cd client/ios
           set -o pipefail
           xcodebuild \
-            -workspace Mewla.xcworkspace \
+            -project Mewla.xcodeproj \
             -scheme Mewla \
             -configuration Debug \
             -sdk iphonesimulator \
@@ -90,12 +87,12 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             build
 
-      - name: Compile and link iOS bridge for arm64 device SDK
+      - name: Compile and link the client's terminal for arm64 device SDK
         run: |
-          cd app/ios
+          cd client/ios
           set -o pipefail
           xcodebuild \
-            -workspace Mewla.xcworkspace \
+            -project Mewla.xcodeproj \
             -scheme Mewla \
             -configuration Release \
             -sdk iphoneos \

@@ -1,7 +1,7 @@
 name: Release artifacts
 
 # Secure release pipeline: Linux amd64/arm64, macOS arm64, Windows amd64, signed
-# Android arm64 APK.
+# Android arm64 APK (the NSH client, client/android, GitHub channel).
 #
 # An annotated vX.Y.Z or vX.Y.Z-beta.N tag push is the normal release action. Manual
 # dispatch can rebuild, and can recover publication only with explicit review.
@@ -110,9 +110,9 @@ jobs:
               exit 1
             }
             ./scripts/verify-release-identity.sh
-            python3 - "$CANDIDATE_VERSION" <<'PY'
-          import json, re, sys
-          tracked = json.load(open("app/app.base.json"))["expo"]["version"]
+            python3 - "$CANDIDATE_VERSION" "$(python3 scripts/lib/release_identity.py version)" <<'PY'
+          import re, sys
+          tracked = sys.argv[2]
           key = lambda v: tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", v).groups())
           if key(sys.argv[1]) <= key(tracked):
               sys.exit(f"error: candidate_version {sys.argv[1]} must be newer than the tracked {tracked}")
@@ -320,21 +320,14 @@ jobs:
           git fetch --no-tags origin main
           ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.5"
-
-      - name: Install workspace dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Reject Android asset resource-name collisions
-        working-directory: app
-        run: bun test androidAssetNames.test.js
-
       # Restores only: release tags read the caches native-cache.yml saves on main.
       - name: Android SDK, arm64 Ghostty and Gradle home
         uses: ./.github/actions/android-native
+
+      # The pinned NSH release (checksums in the script): the CLI that bundles
+      # client/ui and the nsh.aar runtime the APK links. Fetched, not cached.
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
 
       - name: Materialize signing keystore (temp, mode 0600)
         id: keystore
@@ -356,6 +349,9 @@ jobs:
           test -s "$OUT"
           stat -c '%a %n' "$OUT"
 
+      # The NSH client (client/android): production identity com.daoleno.mewla,
+      # GitHub channel (Phone use, in-app update), arm64-v8a, versionCode from
+      # client/ui/nsh.json by scripts/lib/release_identity.py.
       - name: Build signed Android arm64 release APK
         env:
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build

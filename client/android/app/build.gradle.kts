@@ -3,13 +3,20 @@ import javax.inject.Inject
 
 plugins { id("com.android.application") }
 
-// One version for every client: client/ui/nsh.json. The version code is derived from it, so it
-// only ever grows and stays above the Expo app's (141 at 0.3.0) that this one replaces in place.
+// One version for every client and the daemon: client/ui/nsh.json (X.Y.Z or X.Y.Z-beta.N). The version
+// code follows from it by the rule in scripts/lib/release_identity.py, which the release checks the APK
+// against: X·1 000 000 + Y·10 000 + Z·100 + (N for beta.N, 99 for a release). It only ever grows, and
+// starts above the Expo app's (142 at 0.3.1) that this one replaces in place.
 val uiDir = rootProject.file("../ui")
 @Suppress("UNCHECKED_CAST")
 val manifest = JsonSlurper().parse(uiDir.resolve("nsh.json")) as Map<String, Any>
 val version = manifest["version"] as String
-val (major, minor, patch) = version.split(".").map { it.toInt() }
+val versionParts = Regex("""(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-beta\.([1-9]\d*))?""").matchEntire(version)
+  ?: throw GradleException("client/ui/nsh.json version must be X.Y.Z or X.Y.Z-beta.N, not $version")
+val (major, minor, patch) = versionParts.groupValues.subList(1, 4).map { it.toInt() }
+val beta = versionParts.groupValues[4].takeIf { it.isNotEmpty() }?.toInt()
+if (minor > 99 || patch > 99 || (beta ?: 0) > 98) throw GradleException("$version has no version code (minor, patch ≤ 99, beta ≤ 98)")
+val mewlaVersionCode = major * 1_000_000 + minor * 10_000 + patch * 100 + (beta ?: 99)
 val nshHome = providers.environmentVariable("NSH_HOME").orElse("${System.getProperty("user.home")}/.nsh").get()
 val nshCli = providers.environmentVariable("NSH").orElse("$nshHome/bin/nsh").get()
 // The release keystore is the one the Expo app is signed with (CI secrets only); without it, debug.
@@ -35,7 +42,7 @@ android {
     applicationId = "com.daoleno.mewla"
     minSdk = 28
     targetSdk = 36
-    versionCode = major * 1_000_000 + minor * 10_000 + patch * 100
+    versionCode = mewlaVersionCode
     versionName = version
     // -Pmewla.abis=arm64-v8a for a phone-only build (half the size).
     ndk { abiFilters += abis }
@@ -101,6 +108,22 @@ val bundleUi = tasks.register<BundleUi>("bundleUi") {
   core.set(rootProject.file("../core"))
   nsh.set(nshCli)
 }
+// The Ghostty MIT notice (the text Settings > Open-source licenses shows), also as assets/notices/GHOSTTY-MIT.txt:
+// where the Expo APK had it, and what scripts/verify-apk-notice.sh checks in the release APK and Play bundle.
+abstract class GhosttyNotice : DefaultTask() {
+  @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val notice: RegularFileProperty
+  @get:OutputDirectory abstract val assets: DirectoryProperty
+
+  @TaskAction fun copy() {
+    val out = assets.get().asFile.resolve("notices")
+    out.deleteRecursively()
+    out.mkdirs()
+    notice.get().asFile.copyTo(out.resolve("GHOSTTY-MIT.txt"))
+  }
+}
+val ghosttyNotice = tasks.register<GhosttyNotice>("ghosttyNotice") {
+  notice.set(uiDir.resolve("more/settings/licenses/texts/Ghostty-MIT.txt"))
+}
 // Push: Firebase reads its app entry from resources (what the google-services plugin writes). The plugin
 // fails every variant whose package has no entry in the file, so the entry is looked up here instead and a
 // variant without one (the preview identity, until Firebase lists it) builds without push.
@@ -145,6 +168,7 @@ tasks.matching { it.name.startsWith("minify") && it.name.endsWith("WithR8") }.co
 androidComponents {
   onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(bundleUi, BundleUi::assets)
+    variant.sources.assets?.addGeneratedSourceDirectory(ghosttyNotice, GhosttyNotice::assets)
     firebaseEntry(variant.applicationId.get())?.forEach { (name, value) ->
       variant.resValues.put(variant.makeResValueKey("string", name), com.android.build.api.variant.ResValue(value, null))
     }

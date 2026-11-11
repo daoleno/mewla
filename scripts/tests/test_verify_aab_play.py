@@ -91,12 +91,32 @@ class NativeLibraryTests(unittest.TestCase):
         self.assertEqual(len(errors), 2)
 
 
-class DistributionTests(unittest.TestCase):
-    def test_requires_play_store_channel(self):
-        config = lambda channel: json.dumps({"extra": {"distribution": {"android": channel}}})
-        self.assertEqual(verify_aab.check_distribution(bundle({"base/assets/app.config": config("play-store")})), [])
-        self.assertTrue(verify_aab.check_distribution(bundle({"base/assets/app.config": config("github-apk")})))
-        self.assertTrue(verify_aab.check_distribution(bundle({})))
+class PlayChannelTests(unittest.TestCase):
+    """The Play bundle carries nothing of the GitHub channel (Phone use, in-app update)."""
+
+    def check(self, application, permissions=()):
+        xml = manifest(permissions).replace("<application></application>", f"<application>{application}</application>")
+        return verify_aab.check_manifest(xml, "com.daoleno.mewla", "0.2.14", 54)
+
+    def test_accepts_the_shared_components(self):
+        self.assertEqual(self.check(
+            '<service android:name="com.daoleno.mewla.push.MewlaFirebaseMessagingService"/>'
+            '<receiver android:name="expo.modules.mewlalive.SmallWidgetProvider"/>'
+        ), [])
+
+    def test_rejects_phone_use_components_and_permission(self):
+        self.assertTrue(self.check('<service android:name="com.daoleno.mewla.phone.PhoneUseService"/>'))
+        self.assertTrue(self.check('<receiver android:name="com.daoleno.mewla.phone.PhoneBootReceiver"/>'))
+        self.assertTrue(self.check(
+            '<service android:name="expo.modules.mewlaphone.PairingAccessibilityService" '
+            'android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"/>'
+        ))
+        self.assertTrue(self.check("", ["android.permission.WRITE_SECURE_SETTINGS"]))
+
+    def test_rejects_the_in_app_update_provider(self):
+        self.assertTrue(self.check(
+            f'<provider android:name="{verify_aab.UPDATE_PROVIDER}" android:authorities="com.daoleno.mewla.files"/>'
+        ))
 
 
 if __name__ == "__main__":

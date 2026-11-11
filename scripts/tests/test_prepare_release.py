@@ -16,14 +16,14 @@ assert SPEC is not None and SPEC.loader is not None
 prepare_release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(prepare_release)
 
-ROOT_BASE = json.loads((ROOT / "app/app.base.json").read_text(encoding="utf-8"))
-CURRENT_VERSION = ROOT_BASE["expo"]["version"]
+VERSION_SOURCE = "client/ui/nsh.json"
+IOS_PROJECT = "client/ios/project.yml"
+release_identity = prepare_release.release_identity
+CURRENT_VERSION = release_identity.read_version(ROOT)
 CURRENT_TAG = f"v{CURRENT_VERSION}"
-CURRENT_VERSION_CODE = ROOT_BASE["expo"]["android"]["versionCode"]
-CURRENT_IOS_BUILD = json.loads(
-    (ROOT / "app/ios-build.json").read_text(encoding="utf-8")
-)["buildNumber"]
+CURRENT_CODE = release_identity.build_code(CURRENT_VERSION)
 NEXT_VERSION = prepare_release.next_release_version(CURRENT_VERSION)
+NEXT_CODE = release_identity.build_code(NEXT_VERSION)
 NEXT_TAG = f"v{NEXT_VERSION}"
 CURRENT_CORE = tuple(int(part) for part in CURRENT_VERSION.split("-", 1)[0].split("."))
 STABLE_TARGET = f"{CURRENT_CORE[0]}.{CURRENT_CORE[1]}.{CURRENT_CORE[2] + 1}"
@@ -36,13 +36,12 @@ INDEXED_NOTE_PATHS = tuple(
 
 FIXTURE_PATHS = (
     "CHANGELOG.md",
-    "app/app.base.json",
-    "app/ios-build.json",
+    VERSION_SOURCE,
+    IOS_PROJECT,
     "daemon/cmd/mewla/version.go",
     "scripts/verify-release-identity.sh",
     "docs/install-daemon.md",
-    "docs/ios-ci-release.md",
-    "app/constants/computerVersion.ts",
+    "client/core/update/version.ts",
 ) + INDEXED_NOTE_PATHS
 CERTIFICATE = prepare_release.extract_certificate(
     (ROOT / "scripts/verify-release-identity.sh").read_text(encoding="utf-8")
@@ -344,8 +343,8 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         self.assertEqual(output["next_version"], STABLE_TARGET)
         self.assertEqual(output["next_tag"], f"v{STABLE_TARGET}")
 
-        base = json.loads((root / "app/app.base.json").read_text(encoding="utf-8"))
-        self.assertEqual(base["expo"]["version"], STABLE_TARGET)
+        manifest = json.loads((root / VERSION_SOURCE).read_text(encoding="utf-8"))
+        self.assertEqual(manifest["version"], STABLE_TARGET)
         notes = (root / f"docs/releases/v{STABLE_TARGET}.md").read_text(
             encoding="utf-8"
         )
@@ -356,8 +355,27 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         self.assertLess(
             changelog.index(f"v{STABLE_TARGET}"), changelog.index(CURRENT_TAG)
         )
-        ios_docs = (root / "docs/ios-ci-release.md").read_text(encoding="utf-8")
-        self.assertIn(f"marketing version `{STABLE_TARGET}`", ios_docs)
+        project = (root / IOS_PROJECT).read_text(encoding="utf-8")
+        self.assertIn(f'MARKETING_VERSION: "{STABLE_TARGET}"\n', project)
+        self.assertIn(
+            f'CURRENT_PROJECT_VERSION: "{release_identity.build_code(STABLE_TARGET)}"\n', project
+        )
+
+    def test_a_beta_keeps_the_marketing_version_and_orders_below_its_release(self):
+        beta = f"{STABLE_TARGET}-beta.1"
+        root = self.create_repo(user_notes={f"v{beta}": USER_NOTES})
+
+        result = self.run_script(root, beta)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        code = release_identity.build_code(beta)
+        self.assertEqual(output["android_version_code"], code)
+        self.assertEqual(output["ios_build_number"], code)
+        self.assertGreater(code, CURRENT_CODE)
+        self.assertLess(code, release_identity.build_code(STABLE_TARGET))
+        project = (root / IOS_PROJECT).read_text(encoding="utf-8")
+        self.assertIn(f'MARKETING_VERSION: "{STABLE_TARGET}"\n', project)
+        self.assertIn(f'CURRENT_PROJECT_VERSION: "{code}"\n', project)
 
     def test_updates_exact_identity_files_and_writes_user_notes(self):
         root = self.create_repo()
@@ -368,19 +386,19 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         self.assertEqual(output["current_version"], CURRENT_VERSION)
         self.assertEqual(output["next_version"], NEXT_VERSION)
         self.assertEqual(output["next_tag"], NEXT_TAG)
-        self.assertEqual(output["android_version_code"], CURRENT_VERSION_CODE + 1)
-        self.assertEqual(output["ios_build_number"], CURRENT_IOS_BUILD + 1)
+        self.assertEqual(output["android_version_code"], NEXT_CODE)
+        self.assertEqual(output["ios_build_number"], NEXT_CODE)
+        self.assertGreater(NEXT_CODE, CURRENT_CODE)
         self.assertEqual(output["commit_count"], 2)
 
         next_notes_path = f"docs/releases/{NEXT_TAG}.md"
         expected_paths = sorted(
             (
                 "CHANGELOG.md",
-                "app/app.base.json",
-                "app/ios-build.json",
+                VERSION_SOURCE,
+                IOS_PROJECT,
                 "daemon/cmd/mewla/version.go",
                 "docs/install-daemon.md",
-                "docs/ios-ci-release.md",
                 next_notes_path,
             )
         )
@@ -390,27 +408,22 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             sorted(
                 [
                     " M CHANGELOG.md",
-                    " M app/app.base.json",
-                    " M app/ios-build.json",
+                    f" M {VERSION_SOURCE}",
+                    f" M {IOS_PROJECT}",
                     " M daemon/cmd/mewla/version.go",
                     " M docs/install-daemon.md",
-                    " M docs/ios-ci-release.md",
                     f"?? {next_notes_path}",
                 ]
             ),
         )
 
-        base = json.loads((root / "app/app.base.json").read_text(encoding="utf-8"))
-        self.assertEqual(base["expo"]["version"], NEXT_VERSION)
-        self.assertEqual(
-            base["expo"]["android"]["versionCode"], CURRENT_VERSION_CODE + 1
+        manifest = json.loads((root / VERSION_SOURCE).read_text(encoding="utf-8"))
+        self.assertEqual(manifest["version"], NEXT_VERSION)
+        project = (root / IOS_PROJECT).read_text(encoding="utf-8")
+        self.assertIn(
+            f'MARKETING_VERSION: "{release_identity.marketing_version(NEXT_VERSION)}"\n', project
         )
-        self.assertEqual(
-            json.loads((root / "app/ios-build.json").read_text(encoding="utf-8"))[
-                "buildNumber"
-            ],
-            CURRENT_IOS_BUILD + 1,
-        )
+        self.assertIn(f'CURRENT_PROJECT_VERSION: "{NEXT_CODE}"\n', project)
         self.assertIn(
             f'var Version = "{NEXT_VERSION}"',
             (root / "daemon/cmd/mewla/version.go").read_text(encoding="utf-8"),
@@ -427,13 +440,6 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             f"MEWLA_VERSION={NEXT_TAG}",
             (root / "docs/install-daemon.md").read_text(encoding="utf-8"),
         )
-        ios_docs = (root / "docs/ios-ci-release.md").read_text(encoding="utf-8")
-        self.assertIn(f"`{NEXT_VERSION}`", ios_docs)
-        self.assertIn(
-            f"baseline is build `{CURRENT_IOS_BUILD + 1}` in `app/ios-build.json`",
-            ios_docs,
-        )
-
         changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
         self.assertLess(changelog.index(NEXT_TAG), changelog.index(CURRENT_TAG))
         self.assertEqual(changelog.count(f"docs/releases/{NEXT_TAG}.md"), 1)
@@ -504,7 +510,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                 root = self.create_repo(
                     root=self.fixture / name, user_notes=user_notes
                 )
-                original_base = (root / "app/app.base.json").read_bytes()
+                original_base = (root / VERSION_SOURCE).read_bytes()
 
                 result = self.run_script(root)
 
@@ -513,7 +519,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                 self.assertIn("## Fixed", result.stderr)
                 self.assertNotIn("Add reviewed release change", result.stderr)
                 self.assertEqual(
-                    (root / "app/app.base.json").read_bytes(), original_base
+                    (root / VERSION_SOURCE).read_bytes(), original_base
                 )
                 self.assertFalse(
                     (root / f"docs/releases/{NEXT_TAG}.md").exists()
@@ -521,7 +527,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
 
     def test_rejects_a_minimum_computer_version_newer_than_the_release(self):
         root = self.create_repo()
-        target = root / "app/constants/computerVersion.ts"
+        target = root / "client/core/update/version.ts"
         text = target.read_text(encoding="utf-8")
         target.write_text(
             re.sub(r'MIN_COMPUTER_VERSION = "[^"]+"', 'MIN_COMPUTER_VERSION = "99.0.0"', text),
@@ -565,13 +571,31 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         self.assertFalse((root / f"docs/releases/{NEXT_TAG}.md").exists())
 
     def test_fails_closed_on_missing_identity_source(self):
+        for relative in (IOS_PROJECT, "client/core/update/version.ts"):
+            with self.subTest(relative=relative):
+                root = self.create_repo(root=self.fixture / Path(relative).name)
+                (root / relative).unlink()
+                git(root, "add", relative)
+                git(root, "commit", "-m", "Remove an identity source")
+                result = self.run_script(root)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"missing required file: {relative}", result.stderr)
+                self.assertFalse((root / f"docs/releases/{NEXT_TAG}.md").exists())
+
+    def test_fails_closed_when_the_ios_project_disagrees_with_the_version(self):
         root = self.create_repo()
-        (root / "app/ios-build.json").unlink()
-        git(root, "add", "app/ios-build.json")
-        git(root, "commit", "-m", "Remove iOS identity source")
+        project = root / IOS_PROJECT
+        project.write_text(
+            project.read_text(encoding="utf-8").replace(
+                f'CURRENT_PROJECT_VERSION: "{CURRENT_CODE}"', 'CURRENT_PROJECT_VERSION: "1"'
+            ),
+            encoding="utf-8",
+        )
+        git(root, "add", IOS_PROJECT)
+        git(root, "commit", "-m", "Introduce a stale build number")
         result = self.run_script(root)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("missing required file: app/ios-build.json", result.stderr)
+        self.assertIn(IOS_PROJECT, result.stderr)
         self.assertFalse((root / f"docs/releases/{NEXT_TAG}.md").exists())
 
     def test_fails_closed_when_next_output_or_tag_exists(self):
