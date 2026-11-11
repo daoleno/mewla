@@ -124,6 +124,78 @@ describe("Extensions", () => {
   });
 });
 
+describe("Extensions in a browser", () => {
+  const web = { platform: "web" as const, width: 1280, height: 800 };
+  /** The page as web/host.js serves it: its origin, a sign-in in this tab, and how the last one came back. */
+  function browser(c: ReturnType<typeof computer>, returned: unknown = null) {
+    const here: unknown[] = [];
+    const options = {
+      ...c.options,
+      ...web,
+      host: {
+        ...c.options.host,
+        handlers: {
+          ...c.options.host.handlers,
+          "app.origin": "https://desk.example",
+          "links.pluginReturn": returned,
+          "links.openHere": (data: unknown) => void here.push(data),
+        },
+      },
+    };
+    return { options, here };
+  }
+
+  test("a sign-in names the page's origin and takes this tab to the provider", async () => {
+    const flow = { id: "f1", integration: "notion", status: "waiting", authorization_url: "https://notion.example/authorize?state=s123", expires: expires(), web_return: true };
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : { flow }));
+    const b = browser(c);
+    const app = await open(HARNESS, b.options);
+    await app.waitFor("id:connect-notion");
+    await app.press("id:connect-notion");
+    await app.waitUntil(() => b.here.length === 1);
+    expect(b.here).toEqual([{ url: "https://notion.example/authorize?state=s123" }]);
+    expect(app.openedUrls()).toEqual([]);
+    expect(c.asked.find((r) => r.action === "connect_start")).toEqual({ action: "connect_start", input: { integration: "notion", allow_writes: false, web_origin: "https://desk.example" } });
+    expect([...c.secure.keys()]).toContain("mewla.plugin.authorization.s1");
+  });
+
+  test("a code sign-in opens its page in a tab of its own", async () => {
+    const flow = { id: "g1", integration: "github", status: "waiting", user_code: "WDJB-MJHT", authorization_url: "https://github.com/login/device", expires: expires() };
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : { flow }));
+    const b = browser(c);
+    const app = await open(HARNESS, b.options);
+    await app.waitFor("id:connect-github");
+    await app.press("id:connect-github");
+    await app.waitFor("id:device-code");
+    await app.press("id:open-code-page");
+    await app.waitUntil(() => app.openedUrls().length === 1);
+    expect(app.openedUrls()).toEqual(["https://github.com/login/device"]);
+    expect(b.here).toEqual([]);
+  });
+
+  test("a page the provider sent back to /plugins?connected= shows the account connected and forgets the sign-in", async () => {
+    const flow = { id: "f1", integration: "notion", status: "waiting", authorization_url: "https://notion.example/authorize?state=s123", expires: expires(), web_return: true };
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [notionAccount] } : { flow }));
+    c.secure.set("mewla.plugin.authorization.s1", JSON.stringify({ serverId: "s1", flow }));
+    const b = browser(c, { connected: "n1", service: "notion" });
+    const app = await open(HARNESS, b.options);
+    await app.waitFor("text:Notion connected");
+    expect(app.texts()).toContain("Brain can now find and read workspace pages.");
+    expect(c.secure.has("mewla.plugin.authorization.s1")).toBe(false);
+    expect(c.asked.some((r) => r.action === "connect_status")).toBe(false);
+  });
+
+  test("a page sent back with plugin_error says which step failed and can start again", async () => {
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
+    const b = browser(c, { plugin_error: "denied", service: "notion" });
+    const app = await open(HARNESS, b.options);
+    await app.waitFor("id:connect-failed");
+    expect(app.texts()).toContain("Couldn't connect Notion");
+    expect(app.texts()).toContain("Access was not granted. You can connect again whenever you’re ready.");
+    expect(app.texts()).not.toContain("That sign-in already ended");
+  });
+});
+
 describe("A service", () => {
   test("its account's switches tell the computer, and Disconnect asks once with Keep", async () => {
     let accounts = [notionAccount];

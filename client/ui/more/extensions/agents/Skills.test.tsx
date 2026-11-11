@@ -312,6 +312,18 @@ describe("Pictures and pages", () => {
     await app.drag("id:agent-sections", { x: 200 });
     await app.waitFor("id:plugin-helper");
   });
+
+  test("in a browser Plugins and Skills page by their tabs only, not by a swipe", async () => {
+    const c = computer({ skills: [skill("review")], plugins: [plugin("helper")] });
+    const app = await open(HARNESS, { ...c.host(codex), platform: "web", width: 1280, height: 800 });
+    await app.waitFor("id:plugin-helper");
+    await app.drag("id:agent-sections", { x: -200 });
+    await app.wait(200);
+    expect(app.shows("id:plugin-helper")).toBe(true);
+    expect(app.shows("id:skill-review")).toBe(false);
+    await app.press("id:agent-section-skills");
+    await app.waitFor("id:skill-review");
+  });
 });
 
 describe("Copy pickers", () => {

@@ -1,4 +1,4 @@
-import { computed, effect, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { computed, effect, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button, Input } from "nsh/base";
 import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
@@ -117,7 +117,9 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
   const loadingNow = () => (section() === "plugins" ? pluginsState() : skillsState()).status === "loading";
 
   const projectName = () => projectCwd().replace(/\/+$/, "").split("/").pop() || projectCwd();
-  // Plugins and Skills are peer pages: a sideways swipe goes to the other one.
+  // Plugins and Skills are peer pages: a sideways swipe goes to the other one. In a browser
+  // only the tabs do (app/DESIGN.md: no swipe paging on the web), so a drag selects text.
+  const swipes = platform.os !== "web";
   const swipe = (dx: number) => {
     if (!hasPlugins || Math.abs(dx) < SWIPE_DISTANCE) return;
     chosen.set(dx < 0 ? "skills" : "plugins");
@@ -221,7 +223,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
           <Notice live tone={notice()!.kind === "error" ? "failed" : "success"} title={notice()!.message} action="Dismiss" onAction={() => notice.set(null)} />
         </View>
       ) : null}
-      <View testID="agent-sections" panActivation={{ activeOffsetX: 24, failOffsetY: 14 }} onPanEnd={(event) => !event.cancelled && swipe(event.translation.x)}>
+      <View testID="agent-sections" panActivation={swipes ? { activeOffsetX: 24, failOffsetY: 14 } : undefined} onPanEnd={swipes ? (event) => !event.cancelled && swipe(event.translation.x) : undefined}>
       {section() === "skills" ? (
         <SkillsList
           rows={shownSkills()}
