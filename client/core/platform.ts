@@ -21,7 +21,7 @@ export interface SocketLike {
 }
 
 /**
- * Mewla Link's pinned tunnels, which the hosts open (`link.*`): a loopback port whose every
+ * Mewla Relay's pinned tunnels, which the hosts open (`link.*`): a loopback port whose every
  * connection is carried over TLS to host:port, trusting only the computer's pinned transport key.
  * `measure` dials once first and reports the handshake time; `on-demand` only listens.
  */

@@ -4,7 +4,7 @@ import type { StoredServer, StoredTransportCandidate } from "../storedServerCont
 import { directAddressesFor, verifyHealthChallenge, type DirectAddress, type DirectKind } from "./directAddresses";
 
 /**
- * How the phone reaches a computer paired through Mewla Link: over the relay, or straight to an
+ * How the phone reaches a computer paired through Mewla Relay: over the relay, or straight to an
  * address the computer announced (LAN, Tailscale), always inside a TLS stream pinned to the
  * computer's transport key that the host opens on a loopback port. Every caller asks
  * `resolveStoredServerURL` for the URL to use; a computer paired by address gets its own URL.
@@ -21,10 +21,10 @@ export interface TransportPathInfo {
   rttMs: number | null;
 }
 
-export const LINK_OFFLINE_MESSAGE = "Mewla Link is offline. Keep mewla running and check its Link connection.";
-export const LINK_NEEDS_BUILD_MESSAGE = "Mewla Link needs a current Android or iOS build. Update the app, then scan again.";
+export const LINK_OFFLINE_MESSAGE = "Mewla Relay is offline. Keep mewla running and check its Mewla Relay connection.";
+export const LINK_NEEDS_BUILD_MESSAGE = "Mewla Relay needs a current Android or iOS build. Update the app, then scan again.";
 const LINK_PAIRING_UNREACHABLE_MESSAGE =
-  "Mewla Link could not reach this computer. Keep mewla running, wait for Link to show connected, then scan a fresh QR.";
+  "Mewla Relay could not reach this computer. Keep mewla running, wait for Mewla Relay to show connected, then scan a fresh QR.";
 
 interface Selection {
   path: TransportPath;
@@ -114,11 +114,11 @@ export function subscribeTransportPath(listener: () => void): () => void {
   return () => void pathListeners.delete(listener);
 }
 
-/** The URL to reach a computer at now: its own address, or a pinned tunnel's loopback port for Mewla Link. */
+/** The URL to reach a computer at now: its own address, or a pinned tunnel's loopback port for Mewla Relay. */
 export async function resolveStoredServerURL(server: StoredServer): Promise<string> {
   if (server.transportKind !== "link") return server.url;
   if (!/^[0-9a-f]{64}$/i.test(server.transportPin || "") || !/^[0-9a-f]{32}$/i.test(server.linkRouteId || "")) {
-    throw new Error("Mewla Link needs setup. Scan a fresh Mewla Link QR code; the saved route or transport pin is missing.");
+    throw new Error("Mewla Relay needs setup. Scan a fresh Mewla Relay QR code; the saved route or transport pin is missing.");
   }
   const entry = pathsFor(server.id);
   const direct = stillListed(server, entry.direct);
@@ -147,7 +147,7 @@ export async function resolveStoredServerURL(server: StoredServer): Promise<stri
 /**
  * The URL to reach a computer at right now, for callers that cannot wait (HTTP addresses, viewer
  * sockets): the tunnel the live connection chose, else the stored address (and a choice starts).
- * The connection resolves before any of them runs, so on Mewla Link this is the tunnel's port.
+ * The connection resolves before any of them runs, so on Mewla Relay this is the tunnel's port.
  */
 export function serverURLNow(server: StoredServer): string {
   if (server.transportKind !== "link") return server.url;
@@ -438,12 +438,12 @@ async function stopTunnel(key: string): Promise<void> {
 
 function linkCandidates(server: StoredServer): StoredTransportCandidate[] {
   const configured = (server.transportCandidates || []).filter((candidate) => candidate.kind === "link");
-  return configured.length > 0 ? configured : [{ name: "Mewla Link", kind: "link", url: server.url }];
+  return configured.length > 0 ? configured : [{ name: "Mewla Relay", kind: "link", url: server.url }];
 }
 
 function requireTLSServerURL(value: string): URL {
   const parsed = new URL(value);
-  if (parsed.protocol !== "wss:") throw new Error("Mewla Link requires a wss:// candidate.");
+  if (parsed.protocol !== "wss:") throw new Error("Mewla Relay requires a wss:// candidate.");
   return parsed;
 }
 

@@ -91,7 +91,7 @@ describe("naming a computer", () => {
     expect(serverNamedByAddress({ ...link, name: "Studio" })).toBe(false);
   });
 
-  test("renaming keeps the Mewla Link identity", () => {
+  test("renaming keeps the Mewla Relay identity", () => {
     const { server } = mergeStoredServer({ ...link, name: "daoleno's MacBook Pro" }, [link], () => "new");
     expect(server).toMatchObject({
       id: "mac",

@@ -2,7 +2,7 @@ import { normalizeDaemonId, normalizePublicKeyHex, verifyDaemonAssertion } from 
 import type { StoredServer, StoredTransportCandidate } from "../storedServerContract";
 
 /**
- * Where a computer on Mewla Link says a phone can reach it without the relay. An address is
+ * Where a computer on Mewla Relay says a phone can reach it without the relay. An address is
  * only a hint: it is dialed through a TLS stream pinned to the computer's transport key, and the
  * device header is sent only after the answerer has signed a fresh challenge with the daemon key.
  * (Ported from v0.3.1's app/services/directAddresses.ts.)
@@ -15,7 +15,8 @@ export interface DirectAddress {
   kind: DirectKind;
 }
 
-export const DIRECT_LABELS: Record<DirectKind | "relay", string> = { relay: "Relay", lan: "LAN", tailscale: "Tailscale" };
+// "Relayed", not "Relay": it reads after "Mewla Relay".
+export const DIRECT_LABELS: Record<DirectKind | "relay", string> = { relay: "Relayed", lan: "LAN", tailscale: "Tailscale" };
 export const HEALTH_CHALLENGE_PURPOSE = "mewla-health-challenge";
 
 const known = new Map<string, DirectAddress[]>();
@@ -99,7 +100,7 @@ export function sameAddresses(left: DirectAddress[], right: DirectAddress[]): bo
 }
 
 /**
- * How a computer on Mewla Link is reached, in a few words: "Relay", "LAN · 192.168.1.20 · 12 ms",
+ * How a computer on Mewla Relay is reached, in a few words: "Relayed · 40 ms", "LAN · 192.168.1.20 · 12 ms",
  * or "Choosing a path…" before the first connection picks one.
  */
 export function linkPathText(info: { path: DirectKind | "relay"; host: string | null; rttMs: number | null } | null): string {

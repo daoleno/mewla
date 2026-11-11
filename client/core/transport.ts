@@ -29,11 +29,11 @@ export const transportTiming = {
   checkMs: 5_000,
   firstRetryMs: 1_000,
   maxRetryMs: 30_000,
-  /** On Mewla Link's relay, how often to look for a direct path (a phone that joined the computer's Wi-Fi). */
+  /** On Mewla Relay's relay, how often to look for a direct path (a phone that joined the computer's Wi-Fi). */
   directCheckMs: 20_000,
 };
 
-/** Resolves the socket URL for a server: the stored address, or a local tunnel the host opens (Mewla Link). */
+/** Resolves the socket URL for a server: the stored address, or a local tunnel the host opens (Mewla Relay). */
 export type URLResolver = (server: StoredServer) => Promise<string>;
 
 type Listener = (frame: Frame) => void;

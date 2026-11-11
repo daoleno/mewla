@@ -13,12 +13,12 @@ export interface PairingInput {
   daemonId?: string;
   daemonPublicKey: string;
   enrollmentToken: string;
-  // "link" requests run through the app's own pinned Mewla Link tunnel, so
+  // "link" requests run through the app's own pinned Mewla Relay tunnel, so
   // their failures never describe loopback ports or cleartext HTTP.
   transport?: "link" | "direct";
 }
 
-// The pairing request never got an HTTP answer. Over Mewla Link the daemon
+// The pairing request never got an HTTP answer. Over Mewla Relay the daemon
 // may still have trusted this phone, so callers confirm before giving up.
 export class PairingUnreachableError extends Error {}
 

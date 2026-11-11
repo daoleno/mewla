@@ -67,7 +67,7 @@ export function pairingProblem(error: unknown): PairingProblem {
 }
 
 /**
- * Pairs this device with the computer a link names and returns the server to keep. A Mewla Link
+ * Pairs this device with the computer a link names and returns the server to keep. A Mewla Relay
  * code pairs through the host's pinned tunnel to the relay and keeps the route, pin and
  * candidates, so every later connection goes the same way (core/link/pinnedTransport.ts).
  * `onProgress` hears what a slow Link pairing is doing.

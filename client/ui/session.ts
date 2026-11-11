@@ -29,7 +29,7 @@ export const brainThread = signal<InterfaceChatThreadState>(initialInterfaceChat
 /** The draft of Brain's current thread: there as soon as the thread is known, whether or not Brain's host runs. */
 export const brainDraft = signal<Draft | null>(null);
 
-/** How the current computer is reached on Mewla Link (relay, LAN, Tailscale); null otherwise and until chosen. */
+/** How the current computer is reached on Mewla Relay (relay, LAN, Tailscale); null otherwise and until chosen. */
 export const transportPath = signal<TransportPathInfo | null>(null);
 subscribeTransportPath(() => transportPath.set(current() ? transportPathInfo(current()!.id) : null));
 
@@ -151,7 +151,7 @@ export function switchTo(server: StoredServer | null): void {
       const snapshot = frame.brain as BrainSnapshot | undefined;
       if (snapshot && typeof snapshot === "object") applyBrainSnapshot(server, next, snapshot);
     }),
-    // A computer on Mewla Link names the LAN and Tailscale addresses it listens on: kept for this
+    // A computer on Mewla Relay names the LAN and Tailscale addresses it listens on: kept for this
     // run at once, and on the saved computer so a cold start can try them.
     next.on("direct_addresses", (frame) => {
       if (server.transportKind !== "link") return;
