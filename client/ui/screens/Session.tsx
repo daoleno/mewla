@@ -28,6 +28,9 @@ import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { ModelSheet } from "../session/ModelSheet";
 import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
 import { ActionPromptCard } from "../chat/ActionPromptCard";
+import { buildChatComposerPlaceholder } from "../../core/session/chatComposerPresentation";
+import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
+import { compactPathLabel } from "../../core/timeline/pathDisplay";
 import { AgentIcon } from "../icons/AgentIcon";
 import { showCalendarItem } from "../calendar/routes";
 import { workLinkOf } from "../sessions/workLinks";
@@ -340,6 +343,58 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     if (follow(routeComposerPick(command, { canOpenTerminal: true }), false) && typingCommand) text.clear();
   };
 
+  const placeholder = () => buildChatComposerPlaceholder({
+    agentKind: kind(),
+    connectionState: connection() === "connected" ? "connected" : connection() === "connecting" ? "connecting" : "offline",
+    slashQueryActive: /^\/\S*$/.test(text.text()),
+  });
+  /** What an empty chat says: loading, could not load, not available here (Open Terminal), or ready in its folder. */
+  const ChatEmpty = () => {
+    const conversation = () => thread().conversation;
+    const syncing = () => Boolean(conversation() && !conversation()!.available) && isConversationSyncingReason(conversation()?.reason);
+    const phase = () => interfaceTimelinePhase({
+      itemCount: items().length,
+      loading: thread().loading,
+      error: thread().error,
+      suppressed: false,
+      unavailable: Boolean(conversation() && !conversation()!.available && !syncing()),
+      syncing: syncing() && conversation()?.reason !== "transcript_not_found",
+    });
+    return (
+      <View testID="chat-empty" class="flex-1 items-center justify-center gap-2 p-8">
+        {phase() === "loading" ? <Text class="text-sm text-muted-foreground">Loading conversation…</Text>
+          : phase() === "error" ? (
+            <View class="items-center gap-2">
+              <Icon name="alert-circle" size={28} color="destructive" />
+              <Text class="text-base font-semibold">Could not load this chat</Text>
+              <Text class="text-center text-sm text-muted-foreground">{thread().error ?? ""}</Text>
+            </View>
+          ) : phase() === "unavailable" ? (
+            <View class="items-center gap-2">
+              <Icon name="layers" size={28} />
+              <Text class="text-base font-semibold">Chat view is not available here</Text>
+              <Text class="text-center text-sm text-muted-foreground">{conversationUnavailableReason(conversation()?.reason)}</Text>
+              <Button testID="chat-open-terminal" onPress={() => chooseMode("terminal")} class="mt-1 flex-row items-center gap-1.5 rounded-full border border-border px-3 py-1.5 active:bg-accent">
+                <Icon name="terminal" size={16} color="foreground" />
+                <Text class="text-sm font-semibold">Open Terminal</Text>
+              </Button>
+            </View>
+          ) : (
+            <View class="items-center gap-1.5">
+              <Text class="text-lg font-semibold">Ready</Text>
+              <Text class="text-sm text-muted-foreground">Send a message to start.</Text>
+              {worker()?.cwd ? (
+                <View class="mt-1 flex-row items-center gap-1.5 rounded-full bg-accent px-2.5 py-1">
+                  <Icon name="folder" size={13} />
+                  <Text class="text-xs text-muted-foreground line-clamp-1">{compactPathLabel(worker()!.cwd!, { tailSegments: 2, showFullUpTo: 2 })}</Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+      </View>
+    );
+  };
+
   const menu = async () => {
     const actions = [
       ...(canChat() ? [{ id: "mode", label: mode() === "chat" ? "Open terminal" : "Open chat" }] : []),
@@ -395,9 +450,8 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
-              <ChatTimeline testID="session-chat" items={items} handlers={handlers}
-                empty={() => <View class="flex-1 items-center justify-center p-8"><Text class="text-center text-base text-muted-foreground">{thread().loading ? "Loading conversation" : thread().error ?? "Nothing here yet."}</Text></View>} />
-              <Composer text={text} placeholder="Message" canSend={() => true} onSend={sendComposer}
+              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} />
+              <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => true} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"}
                 leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>

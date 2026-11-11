@@ -44,7 +44,9 @@ export type ComposerText = ReturnType<typeof createComposerText>;
  */
 export function Composer(props: {
   text: ComposerText;
-  placeholder: string;
+  placeholder: string | (() => string);
+  /** Focus the field when it appears (a just-created Session). */
+  autoFocus?: boolean;
   canSend: () => boolean;
   /** Returns false to keep the text (an edit that sends once its rewind is done). */
   onSend: (text: string) => void | false;
@@ -70,7 +72,8 @@ export function Composer(props: {
       {props.children as never}
       <View class="flex-row items-end gap-2">
         {props.leading as never}
-        <Input testID="composer" multiline value={value()} placeholder={props.placeholder}
+        <Input testID="composer" multiline value={value()} autoFocus={props.autoFocus}
+          placeholder={typeof props.placeholder === "function" ? props.placeholder() : props.placeholder}
           class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"
           onChange={({ value }) => props.text.set(value)} />
         {props.running() && !value().trim() ? (

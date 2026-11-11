@@ -123,7 +123,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     }
     if (result.kind === "failed") return problem.set(result.message);
     newSessionOpen.set(false);
-    props.onCreated(result.workerId, Boolean(targetId), { cwd: cwd().trim() || undefined, command: launchCommand.trim() || undefined, name: launchName.trim() || undefined, startedAt });
+    props.onCreated(result.workerId, Boolean(targetId), { cwd: cwd().trim() || undefined, command: launchCommand.trim() || undefined, name: launchName.trim() || undefined, startedAt, focusComposer: true });
   };
 
   return (

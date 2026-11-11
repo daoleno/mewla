@@ -15,7 +15,7 @@ export interface FakeDaemonState {
   /** The Sessions `worker_session_list` sends; `create_session` and `kill_worker` change them. */
   worker_sessions?: Record<string, unknown>[];
   /** Each Session's transcript (by worker id), as `codex_conversation_subscribe` answers it. */
-  conversations?: Record<string, Record<string, unknown>[] | { source?: string; events: Record<string, unknown>[] }>;
+  conversations?: Record<string, Record<string, unknown>[] | { source?: string; available?: boolean; reason?: string; events: Record<string, unknown>[] }>;
   /** A DSH Session's pending requests (`dsh_interaction`). */
   dsh?: { epoch: string; items: Record<string, unknown>[] };
   /** Canned answers to other requests, by request type: the reply's `type` and fields. */

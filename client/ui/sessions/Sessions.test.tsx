@@ -190,6 +190,22 @@ describe("a Session", () => {
     expect(app.texts()).toContain("Read the three papers.");
   }, 20_000);
 
+  test("a chat it cannot read says why and opens the terminal; a ready one says where it runs", async () => {
+    const app = await sessionsApp({
+      worker_sessions: [session("w6", { name: "broken" }), session("w8", { name: "fresh", cwd: "/home/me/code/mewla" })],
+      conversations: { w6: { available: false, reason: "transcript_malformed", events: [] }, w8: [] },
+    });
+    await app.press("text:broken");
+    await app.waitFor("id:chat-open-terminal");
+    expect(app.texts()).toContain("Chat could not read this session transcript. Open the terminal view.");
+    await app.press("id:chat-open-terminal");
+    await app.waitFor("id:chat-open-terminal", { state: "gone" });
+    await app.back();
+    await app.press("text:fresh");
+    await app.waitFor("text:Ready");
+    expect(app.texts()).toContain("…/code/mewla");
+  }, 20_000);
+
   test("a mewla://sessions/<id> link (a notification, Work, Calendar) opens that Session", async () => {
     const app = await sessionsApp({ worker_sessions: [session("w7", { name: "linked" })], conversations: { w7: [] } });
     await app.waitFor("text:linked");
