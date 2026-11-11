@@ -2,6 +2,7 @@ import { signal } from "nsh";
 import { getServers, removeServer as forgetServer, serverNamedByAddress, updateServer, type StoredServer } from "../../../core/servers";
 import { checkComputer, revokeThisDevice, type ComputerCheck } from "../../../core/settings/computer";
 import { computerStatusWord } from "../../../core/settings/computerModel";
+import { invalidateStoredServerTransport } from "../../../core/link/pinnedTransport";
 import { connection, current, problem, servers, switchTo } from "../../session";
 
 /** What each computer answered when Settings last asked (the current one answers through its connection). */
@@ -13,7 +14,14 @@ export const checks = signal<Record<string, ComputerCheck>>({});
  */
 export async function probeComputers(): Promise<void> {
   const list = servers();
-  const answers = await Promise.all(list.map(async (server) => [server, await checkComputer(server)] as const));
+  const answers = await Promise.all(
+    list.map(async (server) => {
+      const check = await checkComputer(server);
+      // A Mewla Relay computer that is not current keeps no tunnel open after its check.
+      if (server.id !== current()?.id) await invalidateStoredServerTransport(server);
+      return [server, check] as const;
+    }),
+  );
   const next: Record<string, ComputerCheck> = {};
   let renamed = false;
   for (const [server, check] of answers) {

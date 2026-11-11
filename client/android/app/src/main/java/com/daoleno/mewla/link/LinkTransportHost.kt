@@ -50,7 +50,9 @@ class LinkTransportHost(nsh: NshView) {
     }
     nsh.handle("link.stop") { data, reply ->
       val key = (data as? Map<*, *>)?.get("key") as? String
-      if (key != null) calls.execute { tunnels.remove(key)?.close() }
+      // Out of the map now, so a start for the same key right after never gets the closing tunnel.
+      val proxy = key?.let { tunnels.remove(it) }
+      if (proxy != null) calls.execute { proxy.close() }
       reply.resolve(null)
     }
     nsh.handle("link.stopAll") { _, reply ->

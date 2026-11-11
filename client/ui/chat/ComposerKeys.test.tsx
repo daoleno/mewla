@@ -76,8 +76,13 @@ describe("the composer's keys on a desktop", () => {
 
   test("/ on the page goes to the message box; Escape leaves it", async () => {
     const app = await open(APP, desk("/"));
-    // Brain's page is up once the computer said where Brain is.
+    // Brain's page is up once the computer said where Brain is; `?` opening the cheat sheet
+    // says the page's keys are bound (a slow runner binds them after the first render).
     await app.waitFor("text:Brain is starting…");
+    await app.keyboard.press("shift+/");
+    await app.waitFor("id:shortcuts");
+    await app.keyboard.press("escape");
+    await app.waitUntil(() => !app.shows("id:shortcuts"));
     await app.keyboard.press("/");
     // In the field, `N` is a letter, not New session.
     await app.keyboard.press("n");
