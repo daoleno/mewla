@@ -1,4 +1,5 @@
 import { describe, expect, open, test, type StubResponse } from "nsh/test";
+import { KEYBOARD_SENTINEL } from "../../../core/screen/screenPageModel";
 
 const HARNESS = "./testing/ScreenHarness.tsx";
 const SCREEN = "http://desk.test:9877/screen";
@@ -239,6 +240,17 @@ describe("Screen: the live viewer", () => {
     expect(closed(app)).toHaveLength(0);
     await app.back();
     await app.waitUntil(() => closed(app).length === 1);
+  });
+
+  test("the soft keyboard's field goes back to empty after each key, so a key is sent once (screen [67])", async () => {
+    const app = await open(HARNESS, { ...options({ [`GET ${SCREEN}`]: json(base) }), platform: "android" as const });
+    await goLive(app);
+    await app.press("label:Show keyboard");
+    await app.waitFor("id:remote-key-bar");
+    await app.type("id:remote-keyboard", "a");
+    await app.waitUntil(() => app.value("id:remote-keyboard") === KEYBOARD_SENTINEL);
+    await app.type("id:remote-keyboard", "b");
+    await app.waitUntil(() => app.value("id:remote-keyboard") === KEYBOARD_SENTINEL);
   });
 
   test("a switch of computer closes the viewer", async () => {

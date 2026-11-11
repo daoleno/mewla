@@ -301,7 +301,11 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
 
   const typed = (next: string) => {
     const edit = keyboardEdit(next);
-    value.set(KEYBOARD_SENTINEL);
+    // The field holds `next` now. Setting the sentinel while the signal still held it changed
+    // nothing, so the field kept every key and each change re-sent all of it (screen [67]):
+    // record what it holds, then put the sentinel back before the next key arrives.
+    value.set(next);
+    queueMicrotask(() => value.set(KEYBOARD_SENTINEL));
     if (edit.kind === "none") return;
     const active = activeModifiers(mods());
     if (edit.kind === "backspace") for (let i = 0; i < edit.count; i++) props.session.key("BackSpace", active);
