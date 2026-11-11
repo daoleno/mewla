@@ -29,6 +29,7 @@ import { ModelSheet } from "../session/ModelSheet";
 import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
 import { ActionPromptCard } from "../chat/ActionPromptCard";
 import { buildChatComposerPlaceholder } from "../../core/session/chatComposerPresentation";
+import { terminalFallback } from "../../core/session/terminalFallback";
 import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
 import { compactPathLabel } from "../../core/timeline/pathDisplay";
 import { AgentIcon } from "../icons/AgentIcon";
@@ -40,7 +41,7 @@ import { ChoiceCard } from "../chat/ChoiceCard";
 import { Composer, createComposerText } from "../chat/Composer";
 import { ChatTimeline } from "../chat/Timeline";
 import { Icon } from "../icons/Icon";
-import { brain, connection, current, currentTransport, outbox, workers, workersHydrated } from "../session";
+import { brain, connection, current, currentTransport, outbox, problem as connectionProblem, resumeConnection, workers, workersHydrated } from "../session";
 import type { SessionsRoute } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
@@ -137,6 +138,8 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     onFile: (path: string) => openPath(path),
   };
   const stoppingFor = signal("");
+  const durability = signal(hint.durabilityWarning ?? "");
+  const fallback = computed(() => terminalFallback(connection(), connectionProblem()));
   const notice = signal("");
   // What the Session waits on. Brain's hidden host has no terminal prompt: its question is read from the
   // transcript and answered with answer_choice. A listed Session's prompt is the one the daemon read off its
@@ -510,9 +513,33 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
         </View>
       }>
       <View class="flex-1 bg-background">
+        {durability() ? (
+          <View testID="durability-warning" class="mx-3 mt-2 flex-row items-start gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+            <Icon name="alert-circle" size={18} color="warning" />
+            <View class="flex-1 gap-0.5">
+              <Text class="text-sm font-semibold">Not confirmed durable</Text>
+              <Text class="text-sm text-muted-foreground">{durability()}</Text>
+            </View>
+            <Button testID="durability-dismiss" accessibilityLabel="Dismiss durability warning" onPress={() => durability.set("")} class="active:opacity-60">
+              <Text class="text-sm font-semibold text-primary">Dismiss</Text>
+            </Button>
+          </View>
+        ) : null}
         <View class="flex-1">
           <View class="absolute inset-0" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)} />
+            {fallback() ? (
+              <View testID="terminal-offline" class="absolute left-3 right-3 top-3 gap-1.5 rounded-xl border border-border bg-card px-3 py-3">
+                <Text class="text-base font-semibold">{fallback()!.title}</Text>
+                <Text class="text-sm text-muted-foreground">{fallback()!.detail}</Text>
+                <Text class="text-xs text-muted-foreground">{fallback()!.hint}</Text>
+                {fallback()!.busy ? null : (
+                  <Button testID="terminal-offline-retry" onPress={() => resumeConnection()} class="mt-1 self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
+                    <Text class="text-sm font-semibold">Retry</Text>
+                  </Button>
+                )}
+              </View>
+            ) : null}
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
