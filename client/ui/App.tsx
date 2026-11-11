@@ -7,6 +7,7 @@ import { current, loadSession, ready, resumeConnection } from "./session";
 import { FirstRun, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
 import { readPairingLink } from "../core/pairFlow";
 import { startNotifications } from "./push/push";
+import { startAppUpdate } from "./update/update";
 
 installPlatform(nshPlatform());
 
@@ -31,6 +32,7 @@ async function start(): Promise<void> {
 }
 void start();
 startNotifications();
+startAppUpdate();
 
 // Coming back to the app skips the reconnect backoff.
 effect(() => {

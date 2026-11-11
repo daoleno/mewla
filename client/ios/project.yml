@@ -18,6 +18,11 @@ settings:
     MEWLA_APP_ID: com.daoleno.mewla
     MARKETING_VERSION: "0.3.0"
     CURRENT_PROJECT_VERSION: "1"
+    # Where this build goes, for the in-app update (Info.plist MewlaDistribution, `update.info`):
+    # testflight (told of a newer TestFlight build, opens TestFlight), app-store or none (nothing).
+    # The release passes it to xcodebuild: `xcodebuild MEWLA_IOS_DISTRIBUTION=testflight` (an
+    # environment variable does not override this value). Only the Preview identity has a TestFlight feed.
+    MEWLA_IOS_DISTRIBUTION: none
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
     # NativeShell.xcframework's Simulator slice is arm64 only.
@@ -78,6 +83,7 @@ targets:
       path: build/Info.plist
       properties:
         CFBundleDisplayName: Mewla
+        MewlaDistribution: $(MEWLA_IOS_DISTRIBUTION)
         CADisableMinimumFrameDurationOnPhone: true
         ITSAppUsesNonExemptEncryption: false
         NSCameraUsageDescription: Allow Mewla to access your camera to scan Mewla pairing QR codes.
