@@ -1,5 +1,6 @@
 import { cleanup, effect, Scroll, signal, Text, untracked, View, type JSX } from "nsh";
 import { Button, NavPage, Switch } from "nsh/base";
+import { pageStatusBar } from "../shell/NavPage";
 import { phoneMode, phoneSetupPlan, phoneSteps, type PhoneMode, type PhoneStepId } from "../../core/phone/setup";
 import { color } from "../more/kit/colors";
 import { Icon, type IconName } from "../more/kit/Icon";
@@ -70,6 +71,7 @@ export function PhonePage() {
   return (
     <NavPage
       title="Phone use"
+      statusBar={pageStatusBar()}
       testID="phone-page"
       headerRight={
         phoneAvailable() ? (
