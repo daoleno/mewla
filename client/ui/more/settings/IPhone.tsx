@@ -12,6 +12,8 @@ export function IPhone() {
   const status = signal<IPhoneDaemonStatus | null>(null);
   const error = signal("");
   const busy = signal(false);
+  /** The picture's height over its width, from the picture itself (an iPhone's, until one loads). */
+  const pictureRatio = signal(520 / 240);
   let serverId = "";
 
   const read = () => {
@@ -70,7 +72,13 @@ export function IPhone() {
         <View>
           {status()?.picture ? (
             <View class="mt-4 items-center">
-              <Image src={`data:image/jpeg;base64,${status()!.picture}`} style={{ width: 240, height: 520 }} class="rounded-2xl" accessibilityLabel={`Your iPhone as ${agent()!.name || "the agent"} last saw it`} />
+              <Image
+                src={`data:image/jpeg;base64,${status()!.picture}`}
+                style={{ width: 240, height: Math.round(240 * pictureRatio()) }}
+                class="rounded-2xl"
+                accessibilityLabel={`Your iPhone as ${agent()!.name || "the agent"} last saw it`}
+                onLoad={({ size }) => size.width > 0 && pictureRatio.set(size.height / size.width)}
+              />
             </View>
           ) : null}
           <Section>
@@ -78,8 +86,8 @@ export function IPhone() {
               title={`${agent()!.name || agent()!.worker} is using your iPhone`}
               trailing={
                 <View class="flex-row gap-2">
-                  <View role="button" accessibilityLabel="Done: tell the agent you finished" onPress={() => change({ handoff_done: true })} class="rounded-full bg-secondary px-3 py-1.5"><Text class="text-sm font-medium">Done</Text></View>
-                  <View role="button" accessibilityLabel={`Stop ${agent()!.name || agent()!.worker}`} onPress={() => change({ stop_agent: true })} class="rounded-full bg-secondary px-3 py-1.5"><Text class="text-sm font-medium text-destructive">Stop</Text></View>
+                  <View role="button" accessibilityLabel="Done: tell the agent you finished" disabled={busy()} accessibilityState={{ disabled: busy() }} onPress={() => change({ handoff_done: true })} class="rounded-full bg-secondary px-3 py-1.5 disabled:opacity-50"><Text class="text-sm font-medium">Done</Text></View>
+                  <View role="button" accessibilityLabel={`Stop ${agent()!.name || agent()!.worker}`} disabled={busy()} accessibilityState={{ disabled: busy() }} onPress={() => change({ stop_agent: true })} class="rounded-full bg-secondary px-3 py-1.5 disabled:opacity-50"><Text class="text-sm font-medium text-destructive">Stop</Text></View>
                 </View>
               }
             />

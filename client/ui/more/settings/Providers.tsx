@@ -20,16 +20,17 @@ import {
   upsertProviderConnection,
 } from "../../../core/providers/requests";
 import type { ProviderClient, ProviderConnection, ProviderModel, ProvidersSnapshot } from "../../../core/providers/types";
+import { AGENT_ASSETS } from "../../icons/agents/assets";
 import { connected, daemon } from "../daemon";
 import { Icon } from "../kit/Icon";
-import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow, Tag } from "../kit/kit";
+import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, StatusMark, SwitchRow, Tag } from "../kit/kit";
 import { Segmented } from "../kit/Segmented";
 import type { PageNav } from "../routes";
 import { change, changing, discover, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providerState";
 
 const CLIENTS = [
-  { key: "codex", label: "Codex" },
-  { key: "claude", label: "Claude Code" },
+  { key: "codex", label: "Codex", mark: AGENT_ASSETS.codex },
+  { key: "claude", label: "Claude Code", mark: AGENT_ASSETS.claude },
 ] as const;
 
 /** Search earns its place only once the list is long enough to scan. */
@@ -203,7 +204,7 @@ export function Providers(props: { nav: PageNav }) {
                     onPress={() => void select(c)}
                     trailing={
                       <View class="flex-row items-center gap-2">
-                        {!c.credential_ready ? <Tag label="Key required" /> : null}
+                        {!c.credential_ready ? <StatusMark status="warning" label="Key required" /> : null}
                         {changing() === `select:${c.id}` || changing() === `discover:${c.id}` ? <Spinner size={16} /> : null}
                         <Menu
                           trigger={<View testID={`provider-menu-${c.id}`} accessibilityLabel={`${c.name} actions`} class="p-1"><Icon name="more-horizontal" size={18} /></View>}
