@@ -10,6 +10,7 @@ import { pet } from "../pet/pets";
 import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";
 import type { PageNav } from "../routes";
 import { current, servers } from "../../session";
+import { AboutUpdateRow } from "../../update/AboutUpdateRow";
 import { probeComputers, statusWord } from "./computers";
 import { loadTelegram, telegramRow } from "./telegramState";
 
@@ -168,6 +169,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
 
       <Section title="About">
         <Row title="Mewla" value={`Version ${manifest.version}`} />
+        <AboutUpdateRow />
         <Row icon="shield-check" title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
         <Row icon="help" title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
         <Row testID="settings-licenses" icon="book" title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />

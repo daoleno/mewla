@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The in-app update's permission and FileProvider; merged into the app only on the GitHub channel. -->
+<!-- The in-app update's permission and FileProvider; merged into the app only on the GitHub channel,
+     so the Play build never asks to install other packages. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+  <application>
+    <provider
+      android:name="com.daoleno.mewla.appupdate.AppUpdateFileProvider"
+      android:authorities="${applicationId}.appupdate"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/mewla_app_update_paths" />
+    </provider>
+  </application>
 </manifest>
