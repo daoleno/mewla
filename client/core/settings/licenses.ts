@@ -36,7 +36,7 @@ export function findLicenseItem(data: LicenseData, id: string | undefined): Lice
   return item?.includes?.[included] ?? null;
 }
 
-const PLATFORM_NAMES: Record<string, string> = { android: "Android", ios: "iOS" };
+const PLATFORM_NAMES: Record<string, string> = { android: "Android", ios: "iOS", web: "Web" };
 
 /** "1.2.3 · MIT · Android only" */
 export function licenseSummary(item: LicenseItem): string {

@@ -1,0 +1,21 @@
+{
+  "about": "Third-party files the terminal page (terminal.js) loads beside it, vendored here as they were published (from: where they came from) and copied as they are into the web UI. Served at <origin>/terminal/<name>.",
+  "files": {
+    "xterm.js": {
+      "package": "@xterm/xterm",
+      "version": "6.0.0",
+      "license": "MIT",
+      "licenseFile": "LICENSE-xterm.txt",
+      "sha256": "14903579ff54664cd72f8e8699e6961a6272c21863ec1c3b118cdc8af5d4a972",
+      "upstream": "node_modules/@xterm/xterm/lib/xterm.js"
+    },
+    "xterm.css": {
+      "package": "@xterm/xterm",
+      "version": "6.0.0",
+      "license": "MIT",
+      "licenseFile": "LICENSE-xterm.txt",
+      "sha256": "854a7c0fb70e8b1a083c16797ab827299fb18744f5ad34f227b48337e33293c6",
+      "upstream": "node_modules/@xterm/xterm/css/xterm.css"
+    }
+  }
+}
