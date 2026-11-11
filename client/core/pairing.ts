@@ -240,32 +240,24 @@ export function buildHTTPURL(
 export const LOOPBACK_PAIRING_MESSAGE =
   "This pairing code points at 127.0.0.1, which on a phone is the phone itself, not your computer. Run mewla pair on the computer again; with remote access connected it shows a code that works from anywhere.";
 
+// The pairing request never got an answer over a direct address: name the address and what to check.
 function buildPairingNetworkError(pairURL: string, error: unknown): Error {
   const rawMessage = error instanceof Error ? error.message.trim() : "";
   const healthURL = buildHTTPURL(pairURL, "/health");
-
+  let where = pairURL;
   try {
     const parsed = new URL(pairURL);
     // A loopback code reaches a phone only through a developer port forward
     // (adb reverse); when that fails, the code itself is the problem.
     if (["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname)) {
-      return new Error(LOOPBACK_PAIRING_MESSAGE);
+      return new PairingUnreachableError(LOOPBACK_PAIRING_MESSAGE);
     }
-    if (parsed.protocol === "http:") {
-      const detail = rawMessage || "Network request failed.";
-      return new Error(
-        `${detail} The app could not reach ${pairURL}. Confirm that ${healthURL || "the /health endpoint"} opens from the phone browser. If browser access works but the app still fails on Android, the app build may still be blocking cleartext HTTP and needs to be rebuilt after enabling it.`,
-      );
-    }
+    where = parsed.host;
   } catch {
-    // Fall through to the generic message below.
+    // Name the URL as it came.
   }
-
-  if (healthURL) {
-    return new Error(
-      `${rawMessage || "Network request failed."} The app could not reach ${pairURL}. Confirm that ${healthURL} opens from the phone browser.`,
-    );
-  }
-
-  return new Error(rawMessage || "Network request failed.");
+  const check = healthURL ? ` and that ${healthURL} opens in this phone's browser` : "";
+  return new PairingUnreachableError(
+    `This phone couldn't reach your computer at ${where}${rawMessage ? ` (${rawMessage})` : ""}. Check that mewla is running there, that this phone is on a network that reaches it (the same Wi-Fi, or Tailscale)${check}.`,
+  );
 }
