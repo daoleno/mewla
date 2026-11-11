@@ -35,6 +35,8 @@ import { needsYou } from "./attention";
 import { settingsLinkRoutes } from "../../core/settings/settingsLink";
 import { setOpenExtensions } from "../more/extensions/plugins";
 import { tabTitle } from "../../core/sessions/attention";
+import { sessionRowModel } from "../../core/sessions/listRow";
+import { workLinkOf } from "../sessions/workLinks";
 
 const tabs = [
   { key: "brain", title: "Brain", ios: "sparkles", android: "tab_brain" },
@@ -276,13 +278,17 @@ function Section(props: { index: number }) {
 }
 
 /**
- * The Session's own name for the tab title, as the list knows it. A computed: the list changes
- * with every status line, and only a new name may rewrite the history entry.
+ * The Session's title for the tab, as its row and its page name it (a Session the daemon named
+ * after its id is named by its folder or command, not "mh-… (mh-…)"). A computed: the list changes
+ * with every status line, and only a new title may rewrite the history entry.
  */
 const pageTitle = computed((): string | null => {
   const place = currentPlace();
   if (place.key !== "session") return null;
-  return workers().find((worker) => worker.id === place.workerId)?.name || null;
+  const worker = workers().find((w) => w.id === place.workerId);
+  if (!worker) return null;
+  const link = workLinkOf(worker);
+  return sessionRowModel(worker, { workTitle: link?.workTitle, calendarLabel: link?.calendarLabel }).title || null;
 });
 
 /**
