@@ -1,4 +1,4 @@
-import { cleanup, computed, effect, lifecycle, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, effect, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button, Menu, MenuItem } from "nsh/base";
 import { GuardedSheet as Sheet } from "../../shell/AppSheet";
@@ -24,9 +24,10 @@ import { phoneAvailable, phoneStatus, readPhone } from "../../phone/state";
 import { daemon } from "../daemon";
 import { EmptyState, PillButton, Row, Section, Spinner } from "../kit/kit";
 import { Icon, type IconName } from "../kit/Icon";
+import { inFront } from "../kit/inFront";
 import type { PageNav } from "../routes";
 import { AgentDisplays } from "./Displays";
-import { modifiersFor, RemoteSession, RemoteView } from "./RemoteView";
+import { modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 import { VirtualScreenSwitch, virtualScreenOn } from "./VirtualScreen";
 
 /** Window height (pt) below which a page header does not fit beside the picture: a phone held sideways. */
@@ -251,9 +252,9 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   });
 
   // Away from the app: no picture streams. Back: look again.
-  let foreground = untracked(lifecycle) === "active";
+  let foreground = untracked(inFront);
   effect(() => {
-    const active = lifecycle() === "active";
+    const active = inFront();
     untracked(() => {
       if (active === foreground) return;
       foreground = active;
@@ -288,7 +289,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     const p = phase();
     const s = status();
     const target = server();
-    if (!target || lifecycle() !== "active" || linuxDisplays()) return;
+    if (!target || !inFront() || linuxDisplays()) return;
     const waitingForPermissions = p === "setup" && !!s?.supported && !s.disabled && s.approved && !s.ready;
     if (!waitingForPermissions && p !== "agent" && p !== "local" && p !== "live") return;
     const timer = setInterval(() => {
@@ -308,10 +309,11 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
 
   // An agent on the iPhone works in iPhone Mirroring, off the Mac's screen: Watch
   // can't show it, so it has its own Done (for what it asked of the person) and Stop.
+  // A browser has no iPhone use (as in the Expo web app): it never asks.
   effect(() => {
     const p = phase();
     const target = server();
-    if (!target || (p !== "agent" && p !== "local") || lifecycle() !== "active") return;
+    if (platform.os === "web" || !target || (p !== "agent" && p !== "local") || !inFront()) return;
     const read = () =>
       void getIPhoneStatus(target)
         .then((next) => isCurrent(target.id) && iphone.set(next))
@@ -373,7 +375,8 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   const approved = computed(() => !!status()?.approved);
   const noteTitle = computed(() => (slowNote() ? (problem()?.title ?? "") : ""));
   const menuKind = computed(() => (phase() === "local" ? "local" : watching() && phase() === "live" ? "watch" : "full"));
-  const showKeyboard = computed(() => isLive() && !watching());
+  // A browser with a mouse types into the picture with its own keyboard: no button for one.
+  const showKeyboard = computed(() => isLive() && !watching() && needsSoftKeyboard());
   const headerKind = computed(() => (!server() ? "none" : linuxDisplays() ? "linux" : "own"));
 
   const agentLabel = () => {
@@ -760,7 +763,8 @@ function Setup(props: {
   // No screen to share, but its agents' browsers can have one: the switch is the way in.
   if (props.kind === "virtual") return <View class="w-full max-w-[440px]"><VirtualScreenSwitch /></View>;
   if (props.kind === "unsupported") {
-    const unsupported = () => unsupportedScreen(props.status, true);
+    // A browser cannot choose another computer: it is served by this one.
+    const unsupported = () => unsupportedScreen(props.status, platform.os !== "web");
     return <EmptyState icon="desktop" title={unsupported().title} detail={unsupported().detail ?? undefined} action={unsupported().canChooseComputer ? "Choose a computer" : undefined} onAction={props.onChooseComputer} />;
   }
   if (props.kind === "disabled") return <EmptyState icon="lock" title="Screen is off" detail={`Run mewla screen enable on ${props.name}.`} action="Check again" onAction={props.onCheck} />;

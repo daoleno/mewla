@@ -1,4 +1,4 @@
-import { cleanup, computed, effect, lifecycle, Scroll, signal, Text, untracked, View } from "nsh";
+import { cleanup, computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
 import type { ScrollRef } from "nsh";
 import { Button, Menu, MenuItem } from "nsh/base";
 import { displayIssue, type DisplayIssue } from "../../../core/screen/displayIssue";
@@ -8,8 +8,9 @@ import type { StoredServer } from "../../../core/storedServerContract";
 import { workers } from "../../session";
 import { EmptyState, Notice, Spinner } from "../kit/kit";
 import { Icon } from "../kit/Icon";
+import { inFront } from "../kit/inFront";
 import type { PageNav } from "../routes";
-import { modifiersFor, RemoteSession, RemoteView } from "./RemoteView";
+import { modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 
 /** How often the list reads the computer again, so an agent that starts or ends shows up. */
 const REFRESH_MS = 4_000;
@@ -50,15 +51,15 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
   };
   void read();
   effect(() => {
-    if (lifecycle() !== "active") return;
+    if (!inFront()) return;
     const timer = setInterval(() => void read(), REFRESH_MS);
     return () => clearInterval(timer);
   });
 
   // A phone that leaves the app gives its viewers up (a hold ends with its socket); coming back reconnects them.
-  let foreground = untracked(lifecycle) === "active";
+  let foreground = untracked(inFront);
   effect(() => {
-    const active = lifecycle() === "active";
+    const active = inFront();
     untracked(() => {
       if (active === foreground) return;
       foreground = active;
@@ -202,7 +203,7 @@ function DisplayCard(props: { display: () => AgentDisplay; name: () => string; s
           <Text class="text-base font-medium line-clamp-1">{title()}</Text>
           {holding() ? <Text class="text-xs text-muted-foreground line-clamp-1">You hold the agent</Text> : elsewhere() ? <Text class="text-xs text-muted-foreground line-clamp-1">Held on another device</Text> : stopped() ? <Text class="text-xs text-muted-foreground line-clamp-1">Stopped</Text> : null}
         </View>
-        {live() ? (
+        {live() && needsSoftKeyboard() ? (
           <Button accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`rounded-full p-2 ${typing() ? "bg-secondary" : ""}`}>
             <Icon name="keyboard" size={18} tone={typing() ? "ink" : "soft"} />
           </Button>

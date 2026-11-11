@@ -23,7 +23,7 @@ const claude = { worker: "w2", name: "Claude", since: "2026-11-11T08:01:00Z" };
 
 type Network = Record<string, StubResponse | ((request: { method: string; url: string; body?: string | null }) => StubResponse)>;
 
-function options(network: Network, extra: { below?: unknown; worker?: string; rttMs?: number; platform?: "ios" | "android"; width?: number; height?: number; phone?: Record<string, unknown> } = {}) {
+function options(network: Network, extra: { below?: unknown; worker?: string; rttMs?: number; platform?: "ios" | "android" | "web"; width?: number; height?: number; phone?: Record<string, unknown> } = {}) {
   return {
     platform: extra.platform,
     width: extra.width,
@@ -397,5 +397,78 @@ describe("Screen: Linux agent displays", () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1"), display("w2")], available: true }) }, { worker: "w2" }));
     await app.waitFor("id:display-w2");
     expect(app.shows("id:display-w1")).toBe(true);
+  });
+});
+
+describe("Screen in a browser", () => {
+  const web = { platform: "web" as const, width: 1280, height: 800 };
+  const linux = { ...base, platform: "linux", supported: false, ready: false, agent_displays: true };
+  const DISPLAY_VIEWER = "ws://desk.test:9877/display/viewer";
+
+  test("the browser's own keyboard types into the picture: no keyboard button, no hidden field", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base) }, web));
+    await goLive(app);
+    expect(app.shows("id:remote-view")).toBe(true);
+    expect(app.shows("id:screen-keyboard")).toBe(false);
+    expect(app.shows("id:remote-keyboard")).toBe(false);
+    expect(app.shows("id:remote-key-bar")).toBe(false);
+  });
+
+  test("a wide window keeps its header and the picture at the top", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base) }, { ...web, height: 420 }));
+    await goLive(app);
+    expect(app.shows("id:screen-rail")).toBe(false);
+    expect(app.shows("id:screen-options")).toBe(true);
+  });
+
+  test("another window taking the focus keeps the viewer; another tab closes it, and coming back looks again", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base) }, web));
+    await goLive(app);
+    await app.setLifecycle("inactive");
+    await app.wait(200);
+    expect(closed(app)).toHaveLength(0);
+    await app.setLifecycle("background");
+    await app.waitUntil(() => closed(app).length === 1);
+    await app.setLifecycle("active");
+    await app.waitUntil(() => opened(app).length === 2);
+  });
+
+  test("the connection sheet opens from the dot, and Keep awake works there", async () => {
+    const status = { ...base, keep_awake: false, power: { source: "ac", percent: 80, keeping_awake: false } };
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(status), [`POST ${SCREEN}`]: json({ ...status, keep_awake: true }) }, web));
+    await goLive(app);
+    await app.host.send("app.viewer", { type: "stats", fps: 24, kbps: 1800, inputMs: 45, bridgeMs: 3, presentMs: 70, width: 1280, height: 800 });
+    await app.press("id:screen-indicator");
+    await app.waitFor("text:Connection");
+    for (const text of ["Frame rate", "24 fps", "This computer may sleep"]) expect(app.texts()).toContain(text);
+    await app.press("id:screen-keep-awake");
+    await app.waitUntil(() => posted(app, SCREEN).length > 0);
+    expect(posted(app, SCREEN)[0]).toEqual({ keep_awake: true });
+  });
+
+  test("a computer that can't share its screen doesn't send the browser to another one", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, supported: false, platform: "freebsd", ready: false }) }, web));
+    await app.waitFor("text:Screen needs a Mac, Windows or Linux computer");
+    expect(app.texts()).toContain("Open Mewla from a Mac, Windows or Linux computer.");
+    expect(app.texts()).not.toContain("Choose a computer");
+  });
+
+  test("an agent at work: no iPhone row, as a browser has no iPhone use", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }), [`GET ${IPHONE}`]: json({ enabled: true, active: { worker: "w9", name: "Gemini" } }) }, web));
+    await app.waitFor("text:Codex is using the screen");
+    await app.wait(200);
+    expect(app.requests().some((r) => r.url === IPHONE)).toBe(false);
+    expect(app.texts()).not.toContain("Gemini is using your iPhone");
+  });
+
+  test("agent displays: no keyboard button on a card; another window's focus keeps them", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [{ id: "w1", width: 1280, height: 800, control: "agent", apps: 1 }], available: true }) }, web));
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
+    await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
+    await app.waitFor("label:Options for w1");
+    expect(app.shows("label:Show keyboard")).toBe(false);
+    await app.setLifecycle("inactive");
+    await app.wait(200);
+    expect(closed(app, DISPLAY_VIEWER)).toHaveLength(0);
   });
 });
