@@ -96,6 +96,19 @@ describe("TerminalSession", () => {
     transport.close();
   });
 
+  test("only a tmux terminal gets the FocusIn; a session host terminal would show it as text", async () => {
+    const transport = await connected();
+    const socket = sockets.at(-1)!;
+    const term = new TerminalSession(transport, "w1", recorder().handlers);
+    term.resize(80, 24);
+    await until(() => frames(socket, "terminal_open").length > 0);
+    socket.receive({ type: "terminal_opened", session_id: "h1", cols: 80, rows: 24, backend: "host" });
+    term.input("ls\r");
+    expect(frames(socket, "terminal_input").map((f) => f.data)).toEqual(["ls\r"]);
+    term.close();
+    transport.close();
+  });
+
   test("two terminals open one after the other, so neither takes the other's attachment", async () => {
     const transport = await connected();
     const socket = sockets.at(-1)!;
