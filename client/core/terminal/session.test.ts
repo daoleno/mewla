@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { StoredServer } from "../storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "../testing/memoryPlatform";
 import { Transport, transportTiming } from "../transport";
+import { historyTiming, HISTORY_FAILED, HISTORY_LOADING, type HistoryRender } from "./history";
 import { TerminalSession, type TerminalHandlers } from "./session";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
@@ -12,14 +13,19 @@ const until = async (ready: () => boolean, ms = 1000) => {
   while (!ready() && Date.now() < end) await wait(2);
 };
 const saved = { ...transportTiming };
+const savedHistory = { ...historyTiming };
 let sockets: FakeSocket[];
 
 beforeEach(() => {
   sockets = [];
   installMemoryPlatform({ openSocket: (url, protocols) => { const s = new FakeSocket(url, protocols); sockets.push(s); return s; } });
   Object.assign(transportTiming, { firstRetryMs: 10, maxRetryMs: 40, checkMs: 10, silentLimitMs: 500 });
+  Object.assign(historyTiming, { deltaMs: 5, snapshotMs: 10, timeoutMs: 200 });
 });
-afterEach(() => Object.assign(transportTiming, saved));
+afterEach(() => {
+  Object.assign(transportTiming, saved);
+  Object.assign(historyTiming, savedHistory);
+});
 
 async function connected() {
   const transport = new Transport(server);
@@ -32,15 +38,36 @@ const frames = (socket: FakeSocket, type: string) => socket.sent.map((t) => JSON
 
 function recorder() {
   const log: string[] = [];
+  const history: HistoryRender[] = [];
+  const notices: string[] = [];
   const handlers: TerminalHandlers = {
     reset: () => log.push("reset"),
     output: (data) => log.push(`out:${data}`),
-    scrollState: (s) => log.push(`scroll:${s.atBottom}`),
+    scrollState: (s) => log.push(`scroll:${s.atBottom}:${s.inCopyMode}`),
+    history: (render) => history.push(render),
+    historyNotice: (text) => notices.push(text),
     exit: (code) => log.push(`exit:${code}`),
     error: (m) => log.push(`error:${m}`),
   };
-  return { log, handlers };
+  return { log, history, notices, handlers };
 }
+
+/** A terminal attached as `t1` at 80×24 on a fresh connection. */
+async function attachedTerminal() {
+  const transport = await connected();
+  const socket = sockets.at(-1)!;
+  const rec = recorder();
+  const term = new TerminalSession(transport, "w1", rec.handlers);
+  term.resize(80, 24);
+  await until(() => frames(socket, "terminal_open").length > 0);
+  socket.receive({ type: "terminal_opened", session_id: "t1", cols: 80, rows: 24 });
+  return { transport, socket, term, ...rec };
+}
+
+const historyRequests = (socket: FakeSocket) => frames(socket, "terminal_history");
+const delta = (patch: Record<string, unknown>) => ({
+  pane_id: "mh-1", cols: 80, rows: 24, alternate: false, mouse: false, epoch: 7, reset: false, first: 0, from: 0, next: 0, lines: [], ...patch,
+});
 
 describe("TerminalSession", () => {
   test("opens once the view has a size, then carries output and input of its own attachment only", async () => {
@@ -118,6 +145,132 @@ describe("TerminalSession", () => {
     await wait();
     sockets.at(-1)!.receive({ type: "terminal_error", code: "open_failed", message: "no such pane" });
     expect(log).toEqual(["error:no such pane"]);
+    term.close();
+    transport.close();
+  });
+
+  test("tmux copy mode reports its scroll state for its own attachment only", async () => {
+    const { transport, socket, term, log } = await attachedTerminal();
+    socket.receive({ type: "terminal_scroll_state", session_id: "t1", at_bottom: false, in_copy_mode: true, scroll_position: 12 });
+    socket.receive({ type: "terminal_scroll_state", session_id: "other", at_bottom: true, in_copy_mode: false });
+    term.scrollToBottom();
+    expect(log).toEqual(["reset", "scroll:false:true"]);
+    expect(frames(socket, "terminal_scroll_cancel")).toEqual([{ type: "terminal_scroll_cancel", session_id: "t1" }]);
+    term.close();
+    transport.close();
+  });
+});
+
+describe("TerminalSession history", () => {
+  test("asks for the history once attached, always with a cursor; a tmux snapshot fills the rows", async () => {
+    const { transport, socket, term, history, notices } = await attachedTerminal();
+    expect(history).toEqual([{ reset: true, removed: 0, rows: [], cols: 0, alternate: false }]);
+    expect(notices).toEqual([HISTORY_LOADING]);
+    await until(() => historyRequests(socket).length > 0);
+    const asked = historyRequests(socket)[0];
+    expect(asked).toMatchObject({ session_id: "t1", since: { epoch: 0, next: 0 } });
+    socket.receive({ type: "terminal_history", request_id: asked.request_id, session_id: "t1",
+      history: { pane_id: "%1", cols: 80, total: 2, alternate: false, ansi: "\u001b[1mone\u001b[0m\ntwo\n" } });
+    await until(() => history.length > 1);
+    expect(history[1]).toEqual({ reset: true, removed: 0, rows: ["\u001b[1mone\u001b[0m", "two"], cols: 80, alternate: false });
+    expect(term.history.text).toEqual(["one", "two"]);
+    expect(notices.at(-1)).toBe("");
+    term.close();
+    transport.close();
+  });
+
+  test("output brings the next snapshot: only the rows after what is held, the rows that left dropped from the front", async () => {
+    const { transport, socket, term, history } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    const first = historyRequests(socket)[0];
+    socket.receive({ type: "terminal_history", request_id: first.request_id, session_id: "t1", history: { pane_id: "%1", cols: 80, total: 3, alternate: false, ansi: "a\nb\nc\n" } });
+    await until(() => history.length > 1);
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "d\r\n" });
+    await until(() => historyRequests(socket).length > 1);
+    const second = historyRequests(socket)[1];
+    socket.receive({ type: "terminal_history", request_id: second.request_id, session_id: "t1", history: { pane_id: "%1", cols: 80, total: 3, alternate: false, ansi: "b\nc\nd\n" } });
+    await until(() => history.length > 2);
+    expect(history[2]).toEqual({ reset: false, removed: 1, rows: ["d"], cols: 80, alternate: false });
+    expect(term.history.text).toEqual(["b", "c", "d"]);
+    term.close();
+    transport.close();
+  });
+
+  test("a session host Session answers with numbered deltas; the next request names where the view stands", async () => {
+    const { transport, socket, term, history } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1",
+      history: delta({ reset: true, first: 0, from: 0, next: 2, lines: ["$ ls", "a.txt"], flags: [4, 0] }) });
+    await until(() => history.length > 1);
+    expect(history[1]).toEqual({ reset: true, removed: 0, rows: ["$ ls", "a.txt"], cols: 80, alternate: false });
+    expect(term.history.flags).toEqual([4, 0]);
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "x" });
+    await until(() => historyRequests(socket).length > 1);
+    const next = historyRequests(socket)[1];
+    expect(next.since).toEqual({ epoch: 7, next: 2 });
+    socket.receive({ type: "terminal_history", request_id: next.request_id, session_id: "t1", history: delta({ first: 1, from: 2, next: 3, lines: ["b.txt"] }) });
+    await until(() => history.length > 2);
+    expect(history[2]).toEqual({ reset: false, removed: 1, rows: ["b.txt"], cols: 80, alternate: false });
+    expect(term.history.text).toEqual(["a.txt", "b.txt"]);
+    term.close();
+    transport.close();
+  });
+
+  test("a delta that does not follow what is held voids it and asks again from nothing", async () => {
+    const { transport, socket, term, history } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1", history: delta({ reset: true, next: 1, lines: ["a"] }) });
+    await until(() => history.length > 1);
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "x" });
+    await until(() => historyRequests(socket).length > 1);
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[1].request_id, session_id: "t1", history: delta({ from: 5, next: 6, lines: ["f"] }) });
+    await until(() => historyRequests(socket).length > 2);
+    expect(history[2]).toEqual({ reset: true, removed: 0, rows: [], cols: 0, alternate: false });
+    expect(historyRequests(socket)[2].since).toEqual({ epoch: 0, next: 0 });
+    term.close();
+    transport.close();
+  });
+
+  test("a failed history says so and retries on request; an answer for an old attachment is dropped", async () => {
+    const { transport, socket, term, history, notices } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    socket.receive({ type: "error", request_id: historyRequests(socket)[0].request_id, code: "terminal_history_failed", message: "capture failed" });
+    await until(() => notices.at(-1) === HISTORY_FAILED);
+    term.retryHistory();
+    expect(notices.at(-1)).toBe(HISTORY_LOADING);
+    await until(() => historyRequests(socket).length > 1);
+    const stale = historyRequests(socket)[1];
+    // The daemon restarted the pane: a new attachment before the answer.
+    socket.receive({ type: "terminal_error", session_id: "t1", message: "unknown terminal session" });
+    await until(() => frames(socket, "terminal_open").length > 1);
+    socket.receive({ type: "terminal_opened", session_id: "t2", cols: 80, rows: 24 });
+    socket.receive({ type: "terminal_history", request_id: stale.request_id, session_id: "t1", history: { pane_id: "%1", cols: 80, total: 1, alternate: false, ansi: "old\n" } });
+    await wait(20);
+    expect(history.some((h) => h.rows.includes("old"))).toBe(false);
+    await until(() => historyRequests(socket).some((f) => f.session_id === "t2"));
+    term.close();
+    transport.close();
+  });
+
+  test("the alternate screen has no history: the view is told, so a drag goes to the program", async () => {
+    const { transport, socket, term, history } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1", history: { pane_id: "%1", cols: 80, total: 40, alternate: true, ansi: "" } });
+    await until(() => history.length > 1);
+    expect(history[1]).toEqual({ reset: true, removed: 0, rows: [], cols: 80, alternate: true });
+    term.close();
+    transport.close();
+  });
+
+  test("an exit keeps the history and asks for no more", async () => {
+    const { transport, socket, term, history } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1", history: { pane_id: "%1", cols: 80, total: 1, alternate: false, ansi: "kept\n" } });
+    await until(() => history.length > 1);
+    socket.receive({ type: "terminal_exit", session_id: "t1", exit_code: 0 });
+    await wait(30);
+    expect(historyRequests(socket)).toHaveLength(1);
+    expect(term.history.text).toEqual(["kept"]);
     term.close();
     transport.close();
   });

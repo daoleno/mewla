@@ -11,6 +11,8 @@ internal object Vt {
   external fun nativeWriteBytes(handle: Long, data: ByteArray)
   /** [rows, cols, cursorCol, cursorRow, cursorVisible, _, dirtyCount, (row, runCount, (col, cells, fg, bg, flags)*)*] and the runs' texts. */
   external fun nativeRowRuns(handle: Long, forceFull: Boolean): Array<Any>?
+  /** The text a program copied (OSC 52 and the like) during the writes since the last call, once; null when none. */
+  external fun nativeTakeClipboard(handle: Long): String?
 }
 
 /** The 256-color palette from the theme's 16: xterm's 6×6×6 cube and gray ramp after them. */

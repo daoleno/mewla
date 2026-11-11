@@ -59,6 +59,14 @@ final class Vt {
     data.withUTF8 { bytes in mewla_vt_write(handle, bytes.baseAddress, bytes.count) }
   }
 
+  /// The text a program copied (OSC 52 and the like) during the writes since the last call, once.
+  func takeClipboard() -> String? {
+    var data: UnsafePointer<UInt8>?
+    var length = 0
+    guard mewla_vt_take_clipboard(handle, &data, &length), let data, length > 0 else { return nil }
+    return String(decoding: UnsafeBufferPointer(start: data, count: length), as: UTF8.self)
+  }
+
   func frame(full: Bool) -> TerminalFrame? {
     var out = MewlaVtFrame()
     guard mewla_vt_frame(handle, full, &out), let metaBase = out.meta, out.meta_count >= 7 else { return nil }
