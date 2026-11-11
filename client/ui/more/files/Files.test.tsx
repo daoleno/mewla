@@ -388,6 +388,7 @@ describe("Files on the web", () => {
     const app = await open(HARNESS, { ...c.options, platform: "web" });
     await app.waitFor("id:file-pdf-unavailable");
     expect(app.texts()).toContain("PDF preview is unavailable on Web. Download the file to inspect it.");
+    expect(app.texts()).toContain("out/report.pdf · PDF · 4.0 KB");
     expect(app.shows("id:file-pdf")).toBe(false);
     expect(app.requests().filter((r) => r.url === `${BASE}/session-file-capability`)).toHaveLength(0);
     await app.press("id:file-download");
