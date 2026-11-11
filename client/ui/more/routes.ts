@@ -34,4 +34,6 @@ export type MorePage =
 export interface PageNav {
   push(route: MorePage): void;
   pop(): void;
+  /** The stack's routes, bottom to top (reactive): a page is on top when the last one is its route. */
+  routes?: () => readonly unknown[];
 }
