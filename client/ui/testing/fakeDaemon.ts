@@ -57,6 +57,11 @@ export class FakeDaemon {
     setTimeout(() => socket.onmessage?.({ data: JSON.stringify(frame) }), 1);
   }
 
+  /** Sends `frame` to every connection, as the computer does with its news (a `seq` is added when it has none). */
+  push(frame: Frame): void {
+    this.broadcast(frame.type.startsWith("worker_session_") && frame.seq === undefined ? { ...frame, seq: ++this.seq } : frame);
+  }
+
   private broadcast(frame: Frame): void {
     this.sockets.forEach((socket) => this.to(socket, frame));
   }

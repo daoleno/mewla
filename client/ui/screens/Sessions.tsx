@@ -230,13 +230,19 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
         {notice() ? <Text testID="sessions-notice" class="px-4 py-2 text-sm text-destructive" onPress={() => notice.set("")}>{notice()}</Text> : null}
         <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-24"
           empty={<Empty onPair={props.onPair} onNew={props.onNew} />}>
-          {(row) => (
-            <View>
-              {row().kind === "header"
-                ? <SectionHeader section={() => (row() as Extract<Row, { kind: "header" }>).section} />
-                : <SessionRow worker={() => (row() as Extract<Row, { kind: "row" }>).worker} open={open} />}
-            </View>
-          )}
+          {(row) => {
+            // Cells are recycled: what a cell shows follows the row it holds now. A Session's update makes new
+            // rows, so the cell is rebuilt only when it turns from a heading into a Session or back: a tap during
+            // an update lands on the row, not on one being replaced. Each side keeps its last value while it goes.
+            const header = computed(() => row().kind === "header");
+            const section = computed<SessionListSection>((last) => (row().kind === "header" ? (row() as Extract<Row, { kind: "header" }>).section : last!));
+            const worker = computed<Worker>((last) => (row().kind === "header" ? last! : (row() as Extract<Row, { kind: "row" }>).worker));
+            return (
+              <View>
+                {header() ? <SectionHeader section={section} /> : <SessionRow worker={worker} open={open} />}
+              </View>
+            );
+          }}
         </List>
       </View>
     </NavPage>
