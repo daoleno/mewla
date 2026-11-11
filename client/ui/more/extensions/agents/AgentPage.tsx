@@ -1,4 +1,5 @@
-import { computed, effect, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, effect, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { BackHandler } from "nsh/mobile";
 import type { JSX } from "nsh";
 import { Button, Input } from "nsh/base";
 import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
@@ -77,6 +78,17 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
     shownComputer = id;
     followComputer(id);
     if (current && daemonState() === "connected") untracked(refreshAll);
+  });
+  // The inspector's copy is kept beside the page: when the page goes with it open, the next
+  // agent page would open on it again.
+  cleanup(closeInspector);
+  // Back closes an open inspector or Plugin before the page goes (the device's Back reached the
+  // stack under the sheet).
+  onAndroidBack(() => {
+    if (wide() || !untracked(panel)) return false;
+    if (untracked(panel).startsWith("skill:")) closeInspector();
+    else openPluginKey.set(null);
+    return true;
   });
   // A new inventory: the copies a picker offered may be gone.
   let pickerInventory: string | undefined;
@@ -596,4 +608,10 @@ function PluginFilterSheet(props: { agents: ManagedSkillAgent[]; filters: Plugin
       <SheetButtons onReset={() => props.onChange(NO_PLUGIN_FILTERS)} onDone={props.onClose} />
     </View>
   );
+}
+
+/** Android's Back while the page lives; a browser has its own back (NSH's web runtime has no `BackHandler.on`). */
+function onAndroidBack(listener: () => boolean): void {
+  if (platform.os === "web") return;
+  cleanup(BackHandler.on("press", listener));
 }
