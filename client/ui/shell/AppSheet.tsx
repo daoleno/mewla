@@ -1,4 +1,4 @@
-import { cleanup, effect, keyboardFrame, signal, untracked } from "nsh";
+import { cleanup, effect, Keyboard, keyboardFrame, signal, untracked } from "nsh";
 import { Dialog, Sheet, type DialogProps, type SheetProps } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { sheetOpened, switching } from "../session";
@@ -16,6 +16,8 @@ function guardedOpen(props: { open?: boolean | null; onOpenChange?: (event: { op
     const open = Boolean(props.open);
     if (open && !closed) closed = sheetOpened();
     if (!open) {
+      // A sheet that closes takes the keyboard its field raised with it (R4#4: it stayed up over a page with no field).
+      if (closed) Keyboard.dismiss();
       closed?.();
       closed = null;
       dismissed.set(false);
@@ -24,6 +26,7 @@ function guardedOpen(props: { open?: boolean | null; onOpenChange?: (event: { op
   effect(() => {
     if (!switching() || !untracked(() => Boolean(props.open))) return;
     dismissed.set(true);
+    Keyboard.dismiss();
     closed?.();
     closed = null;
     props.onOpenChange?.({ open: false, reason: "cancel" });

@@ -95,6 +95,14 @@ export function Composer(props: {
       if (composerKeyIntent({ key: "ArrowUp" }, context()) === "recall") props.onRecall?.();
     }, { when: "always" });
   });
+  // A page pushed over this one (the git page from a Session) or another tab: the field lets go, and
+  // its keyboard goes down instead of covering a page that has no field (R4#4).
+  effect(() => {
+    if (!props.active || props.active()) return;
+    untracked(() => {
+      if (focused()) input?.blur();
+    });
+  });
   // Escape leaves the field (the desktop's `/` went into it), so the page's keys work again.
   effect(() => {
     if (!desktop || !focused()) return;

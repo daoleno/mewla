@@ -1,4 +1,4 @@
-import { computed, effect, host, platform, signal, Storage, Text, untracked, View, windowSize } from "nsh";
+import { computed, effect, host, Keyboard, platform, signal, Storage, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button, createNavStack, NavStack, ResizablePanel, ResizablePanelGroup, type NavStackState } from "nsh/base";
 import { PageStack } from "./NavPage";
@@ -250,6 +250,14 @@ function moreRoute(route: MoreRoute) {
  * and what Back does. Around the stack, not each page: a NavStack's page must be its NavPage.
  */
 function Paged<R>(props: { nav: NavStackState<R>; children: JSX.Element }) {
+  // Leaving a page (Back, a pop) takes its field's keyboard down with it; a page pushed on top
+  // may focus its own field, so only its page's composer lets go then (Composer's `active`).
+  let depth = untracked(() => props.nav.routes().length);
+  effect(() => {
+    const now = props.nav.routes().length;
+    if (now < depth) Keyboard.dismiss();
+    depth = now;
+  });
   if (mobile) return props.children;
   return <PageStack.Provider value={{ canGoBack: () => props.nav.routes().length > 1, back: () => props.nav.pop() }}>{props.children}</PageStack.Provider>;
 }
@@ -322,6 +330,13 @@ function WideShell() {
 }
 
 export function Shell() {
+  // Another tab hides the page whose field had the keyboard: it goes down too (R4#4).
+  let shownTab = untracked(selectedTab);
+  effect(() => {
+    const tab = selectedTab();
+    if (tab !== shownTab) Keyboard.dismiss();
+    shownTab = tab;
+  });
   if (!mobile) return <WideShell />;
   return (
     <View class="flex-1 bg-background">
