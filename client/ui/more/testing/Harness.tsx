@@ -56,6 +56,13 @@ host.on("app.daemonState", (state) => {
 });
 host.on("app.sessionProblem", (why) => problem.set(String(why ?? "")));
 host.on("app.daemonPush", (frame) => fake.push(frame as Frame));
+// `app.host.send("app.serverRenamed", name)`: the stored computer takes the name it reports, as
+// Settings' check does (reloadServers): the session's record changes, the connection stays.
+host.on("app.serverRenamed", (name) => {
+  const renamed = { ...current()!, name: String(name) };
+  servers.set(servers().map((server) => (server.id === renamed.id ? renamed : server)));
+  current.set(renamed);
+});
 host.on("app.daemonSwitch", (server) => {
   const next = new FakeDaemon({}, testServer(server as object), "connected");
   next.request = fake.request;

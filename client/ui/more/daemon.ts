@@ -1,6 +1,7 @@
 import { signal } from "nsh";
 import type { Daemon } from "../../core/more/daemon";
 import type { ConnectionState } from "../../core/transport";
+import { current } from "../session";
 
 /**
  * The current computer as the More pages see it. `Pages.tsx` binds it to the
@@ -23,4 +24,16 @@ export function bindDaemon(next: Daemon | null): void {
 /** Whether the current computer answers now. */
 export function connected(): boolean {
   return daemonState() === "connected";
+}
+
+/**
+ * The current computer's name as stored now. The connection keeps the record it was made with,
+ * so a computer that took its reported name in Settings (paired by its address) stayed "this
+ * computer" on these pages until the app started again.
+ */
+export function daemonName(): string | undefined {
+  const bound = daemon()?.server;
+  if (!bound) return undefined;
+  const stored = current();
+  return stored && stored.id === bound.id ? stored.name : bound.name;
 }
