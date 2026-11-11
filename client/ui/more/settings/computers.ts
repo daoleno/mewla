@@ -179,7 +179,7 @@ export async function removeComputer(server: StoredServer): Promise<{ title: str
   checks.set(rest);
   if (wasCurrent) {
     clearCalendarAlerts();
-    switchTo(list[0] ?? null);
+    await switchTo(list[0] ?? null);
   }
   return missedComputersMessage(server, missed);
 }

@@ -1,6 +1,8 @@
 import { cleanup, computed, effect, lifecycle, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
-import { Button, Menu, MenuItem, NavPage, Sheet } from "nsh/base";
+import { Button, Menu, MenuItem } from "nsh/base";
+import { GuardedSheet as Sheet } from "../../shell/AppSheet";
+import { NavPage } from "../../shell/NavPage";
 import { failureText } from "../../../core/more/daemon";
 import { directHint, SLOW_NOTE_MS, SlowWatch } from "../../../core/screen/connectionWatch";
 import { screenRequest, type ScreenAction, type ScreenAgent, type ScreenStatus } from "../../../core/screen/screen";
@@ -552,6 +554,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     <NavPage
       title={linuxDisplays() ? "Screen" : title()}
       testID="screen-page"
+      column="full"
       headerVisible={!fullBleed()}
       statusBar={{ hidden: fullBleed() }}
       headerRight={

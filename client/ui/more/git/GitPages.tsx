@@ -1,6 +1,7 @@
 import { effect, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
-import { AlertDialog, Button, NavPage } from "nsh/base";
+import { AlertDialog, Button } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import type { GitCommitSummary } from "../../../core/git/gitDiff";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import {

@@ -1,5 +1,6 @@
 import { Image, signal, Text, View } from "nsh";
-import { Button, Sheet } from "nsh/base";
+import { Button } from "nsh/base";
+import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
 import { failureText } from "../../../../core/more/daemon";
 import { Icon } from "../../kit/Icon";
 import { Spinner } from "../../kit/kit";

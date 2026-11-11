@@ -1,6 +1,7 @@
 import { cleanup, Clipboard, effect, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
-import { Button, NavPage, TextView } from "nsh/base";
+import { Button, TextView } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import { getBrainWorkspaceFile, getBrainWorkspaceTree, getSessionFileMetadata } from "../../../core/files/requests";
 import {
   bindSessionFileRequestToGeneration,

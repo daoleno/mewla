@@ -1,5 +1,6 @@
 import { signal, Text, View } from "nsh";
-import { AlertDialog, DiffView, NavPage, Tree, type TreeItem } from "nsh/base";
+import { AlertDialog, DiffView, Tree, type TreeItem } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import { formatGitDiffBytes } from "../../../core/git/gitDiffReview";
