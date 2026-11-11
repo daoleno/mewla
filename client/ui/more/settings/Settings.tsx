@@ -1,19 +1,19 @@
-import { cleanup, effect, host, Image, lifecycle, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
+import { announce, cleanup, effect, host, Image, lifecycle, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
 import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
 import { phoneAvailable, phoneLabsWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
 import { Icon } from "../kit/Icon";
-import { Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
+import { Notice, Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
 import { followFriends, friendsEnabled } from "../friends/state";
 import { pet } from "../pet/pets";
 import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";
 import type { PageNav } from "../routes";
 import { current, servers } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
-import { probeComputers, statusWord } from "./computers";
-import { loadTelegram, telegramRow } from "./telegramState";
+import { currentPathMark, followConnectionIssue, probeComputers, removedNotice, statusWord } from "./computers";
+import { loadTelegram, telegramRow, telegramRowLabel } from "./telegramState";
 
 /** The appearance this phone chose: the system's, or always light or dark. */
 export type Appearance = "system" | "light" | "dark";
@@ -64,9 +64,37 @@ function readIPhone(): void {
 export const PRIVACY_URL = "https://mewla.ai/privacy/";
 export const SUPPORT_URL = "https://mewla.ai/support/";
 
+/** What a long press on the current computer revealed (how the phone reaches it), for a few seconds. */
+const pathDetail = signal("");
+let pathTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showPathDetail(detail: string): void {
+  pathDetail.set(detail);
+  announce(detail);
+  if (pathTimer) clearTimeout(pathTimer);
+  pathTimer = setTimeout(() => pathDetail.set(""), 4_000);
+}
+
 /** Settings: the computers, then each thing this phone decides, then About. */
 export function Settings(props: { nav: PageNav; onPair: () => void }) {
-  void untracked(probeComputers);
+  // Each computer is asked again whenever Settings is shown again: back from a page
+  // above it, the app back in front, or a computer added or removed.
+  const depth = untracked(() => {
+    const routes = props.nav.routes?.() ?? [];
+    const at = routes.findIndex((route) => route.name === "settings");
+    return at >= 0 ? at + 1 : routes.length;
+  });
+  let shownAs = "";
+  effect(() => {
+    const top = (props.nav.routes?.().length ?? depth) === depth;
+    const key = `${top && lifecycle() === "active"}|${servers().map((s) => `${s.id}@${s.url}`).join(",")}`;
+    untracked(() => {
+      if (key === shownAs) return;
+      shownAs = key;
+      if (key.startsWith("true|")) void probeComputers();
+    });
+  });
+  followConnectionIssue();
   followFriends();
   void loadStrongAlerts();
   followVirtualScreen();
@@ -97,19 +125,28 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
   });
   return (
     <Page title="Settings" testID="settings">
-      <Section title="Computers">
-        {servers().map((s) => (
-          <Row
-            testID={`computer-${s.id}`}
-            leading={<Icon name="desktop" />}
-            title={s.name || s.url}
-            subtitle={statusWord(s) || undefined}
-            value={s.id === current()?.id ? "Current" : undefined}
-            chevron
-            onPress={() => props.nav.push({ name: "settings-computer", id: s.id })}
-          />
-        ))}
-        <Row testID="pair-another" icon="add" title="Pair a computer" chevron onPress={props.onPair} />
+      {removedNotice() ? (
+        <Notice testID="removed-notice" tone="failed" title={removedNotice()!.title} detail={removedNotice()!.detail} action="OK" onAction={() => removedNotice.set(null)} />
+      ) : null}
+      <Section title="Computers" footer={pathDetail() || undefined}>
+        {servers().map((s) => {
+          const mark = () => (s.id === current()?.id ? currentPathMark() : null);
+          return (
+            <Row
+              testID={`computer-${s.id}`}
+              leading={<Icon name="desktop" />}
+              title={s.name || s.url}
+              subtitle={statusWord(s) || undefined}
+              value={s.id === current()?.id ? "Current" : undefined}
+              trailing={mark() ? <View testID="computer-path" accessibilityElementsHidden><Icon name={mark()!.kind === "relay" ? "cloud" : "link"} size={15} tone="faint" /></View> : undefined}
+              accessibilityLabel={[s.name || s.url, statusWord(s), mark()?.label].filter(Boolean).join(", ")}
+              chevron
+              onPress={() => props.nav.push({ name: "settings-computer", id: s.id })}
+              onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
+            />
+          );
+        })}
+        <Row testID="pair-another" icon="add" title="Pair a computer" accessibilityLabel="Pair a computer" chevron onPress={props.onPair} />
       </Section>
 
       <Section title="Channels">
@@ -120,14 +157,33 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
           subtitle={current() ? telegramRow().subtitle : "No current server"}
           disabled={!current()}
           trailing={current() && telegramRow().status ? <StatusMark status={telegramRow().status!} label={telegramRow().label} /> : undefined}
+          accessibilityLabel={current() ? telegramRowLabel() : "Telegram, No current server"}
+          accessibilityHint={current() ? "Open Telegram details and actions" : undefined}
           chevron={Boolean(current())}
           onPress={current() ? () => props.nav.push({ name: "settings-telegram" }) : undefined}
         />
       </Section>
 
       <Section title="Agents">
-        <Row testID="settings-providers" icon="key" title="Model Providers" subtitle={current() ? undefined : "No current server"} chevron onPress={() => props.nav.push({ name: "settings-providers" })} />
-        <Row testID="settings-outside-agents" icon="brain" title="Outside agents" disabled={!current()} chevron onPress={current() ? () => props.nav.push({ name: "settings-agents" }) : undefined} />
+        <Row
+          testID="settings-providers"
+          icon="key"
+          title="Model Providers"
+          subtitle={current() ? undefined : "No current server"}
+          accessibilityHint="Choose how Codex and Claude connect to models"
+          chevron
+          onPress={() => props.nav.push({ name: "settings-providers" })}
+        />
+        <Row
+          testID="settings-outside-agents"
+          icon="brain"
+          title="Outside agents"
+          subtitle={current() ? undefined : "No current server"}
+          disabled={!current()}
+          accessibilityHint={current() ? "Approve Claude Code or Codex handing work to Brain" : undefined}
+          chevron
+          onPress={current() ? () => props.nav.push({ name: "settings-agents" }) : undefined}
+        />
       </Section>
 
       <Section title="Labs">
@@ -159,6 +215,8 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
             icon={choice === "system" ? "contrast" : choice === "light" ? "sun" : "moon"}
             title={choice === "system" ? "Auto" : choice === "light" ? "Light" : "Dark"}
             check={appearance() === choice}
+            role="radio"
+            selected={appearance() === choice}
             onPress={() => chooseAppearance(choice)}
           />
         ))}
@@ -169,7 +227,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
       </Section>
 
       <Section title="About">
-        <Row title="Mewla" value={`Version ${manifest.version}`} />
+        <Row title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
         <AboutUpdateRow />
         <Row icon="shield-check" title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
         <Row icon="help" title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />

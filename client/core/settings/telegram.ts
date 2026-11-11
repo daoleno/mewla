@@ -40,7 +40,10 @@ async function statusRequest(daemon: Daemon, type: string, body: Record<string, 
   const frame = await daemon
     .request<{ connection?: TelegramConnectionStatus }>(type, body, { reply: "telegram_connection_status", timeoutMs: 20_000 })
     .catch((error: unknown) => {
-      throw new Error(error instanceof Error && /timed out/.test(error.message) ? "Telegram connection request timed out." : "Telegram connection request failed.");
+      // The computer's own words (a bad token, no network there) are what the person can act on.
+      const message = error instanceof Error ? error.message.trim() : "";
+      if (/ timed out$/.test(message)) throw new Error("Telegram connection request timed out.");
+      throw new Error(message && !message.endsWith(" failed") ? message : "Telegram connection request failed.");
     });
   const connection = frame.connection;
   if (!connection || typeof connection.state !== "string" || typeof connection.enabled !== "boolean") throw new Error("Telegram connection request failed.");
@@ -78,6 +81,12 @@ export function telegramLabel(status: TelegramConnectionStatus | null, connected
   return "Connected";
 }
 
+/** The status word's colour: a warning while offline or degraded, ready once connected. */
+export function telegramLabelTone(label: string): "warning" | "ready" | "soft" {
+  if (label === "Server offline" || label === "Needs attention") return "warning";
+  return label === "Connected" ? "ready" : "soft";
+}
+
 /** Who Brain's Telegram messages go to. */
 export function telegramRecipient(status: TelegramConnectionStatus): string {
   if (status.topics_available) return "Brain";
@@ -93,4 +102,15 @@ export function telegramStep(status: TelegramConnectionStatus | null): TelegramS
   if (!status?.bot_username) return "token";
   if (!status.owner_hint) return status.binding_pending ? "open-link" : "connect";
   return status.enabled ? "open-chat" : "reconnect";
+}
+
+/**
+ * What the Telegram page shows below its identity. Until the computer has answered there
+ * is nothing to decide ("loading": no token form that would invite replacing a working
+ * bot); a first read that failed offers Retry. Only an answer decides the step.
+ */
+export function telegramView(input: { status: TelegramConnectionStatus | null; error: string; replacing: boolean }): TelegramStep | "loading" | "retry" {
+  if (input.replacing) return "token";
+  if (!input.status) return input.error ? "retry" : "loading";
+  return telegramStep(input.status);
 }

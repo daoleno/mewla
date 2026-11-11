@@ -36,6 +36,8 @@ export function setTelegram(status: TelegramConnectionStatus): void {
 export function telegramRow(): { subtitle?: string; status?: Status; label?: string } {
   const t = telegram();
   const status = t.serverId === daemon()?.server.id ? t.status : null;
+  // Away from the computer nothing it said last is current.
+  if (!connected()) return { subtitle: "Unavailable" };
   if (t.loading && !status) return { status: "running", label: "Loading" };
   if (t.error && !status) return { status: "failed", label: "Unavailable" };
   if (!status) return {};
@@ -46,4 +48,12 @@ export function telegramRow(): { subtitle?: string; status?: Status; label?: str
     status: status.bot_username || status.state !== "disabled" ? tone : undefined,
     label: word,
   };
+}
+
+/** What a screen reader says for the row: "Telegram, @bot, Connected". */
+export function telegramRowLabel(): string {
+  const t = telegram();
+  const status = t.serverId === daemon()?.server.id ? t.status : null;
+  const row = telegramRow();
+  return ["Telegram", status?.bot_username && connected() ? `@${status.bot_username}` : "", row.label ?? row.subtitle ?? ""].filter(Boolean).join(", ");
 }

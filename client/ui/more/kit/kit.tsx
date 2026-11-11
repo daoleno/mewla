@@ -1,4 +1,4 @@
-import type { JSX } from "nsh";
+import type { AccessibilityRole, JSX } from "nsh";
 import { announce, Canvas, Clipboard, Scroll, Text, View } from "nsh";
 import { AlertDialog, Button, Input, NavPage, Switch } from "nsh/base";
 import { color, type ColorName } from "./colors";
@@ -65,12 +65,16 @@ export interface RowProps {
   disabled?: boolean;
   mono?: boolean;
   testID?: string;
-  /** What a screen reader says for the row, when its texts are not enough. */
-  accessibilityLabel?: string;
-  /** What pressing the row does, for a screen reader. */
-  accessibilityHint?: string;
   onPress?: () => void;
   onLongPress?: () => void;
+  /** What a screen reader says for the row, when its texts are not enough. */
+  accessibilityLabel?: string;
+  /** What pressing it does. */
+  accessibilityHint?: string;
+  /** What it is for screen readers ("button" when it can be pressed). */
+  role?: AccessibilityRole;
+  /** A radio or a choice that is the chosen one. */
+  selected?: boolean;
 }
 
 /** One row: a glyph, a title over a subtitle, a value or a control, a chevron when it opens something. */
@@ -89,16 +93,34 @@ export function Row(props: RowProps) {
       <Hairline inset={props.icon || props.leading ? 48 : 16} />
     </View>
   );
-  if (!props.onPress && !props.onLongPress) return <View testID={props.testID} class={props.disabled ? "opacity-50" : ""}>{body}</View>;
+  if (!props.onPress && !props.onLongPress) {
+    return (
+      <View testID={props.testID} class={props.disabled ? "opacity-50" : ""} accessible={props.accessibilityLabel ? true : undefined} accessibilityLabel={props.accessibilityLabel} role={props.role}>
+        {body}
+      </View>
+    );
+  }
+  // A long press or a hint needs the plain pressable view (a Button takes neither).
   if (props.onLongPress || props.accessibilityHint) {
     return (
-      <View testID={props.testID} role="button" accessibilityLabel={props.accessibilityLabel} accessibilityHint={props.accessibilityHint} disabled={props.disabled} onPress={props.onPress} onLongPress={props.onLongPress} class="active:bg-accent disabled:opacity-50">
+      <View
+        testID={props.testID}
+        role={props.role ?? "button"}
+        accessible
+        accessibilityLabel={props.accessibilityLabel}
+        accessibilityHint={props.accessibilityHint}
+        accessibilityState={{ disabled: Boolean(props.disabled), selected: props.selected }}
+        disabled={props.disabled}
+        onPress={props.onPress}
+        onLongPress={props.onLongPress}
+        class="active:bg-accent disabled:opacity-50"
+      >
         {body}
       </View>
     );
   }
   return (
-    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel} disabled={props.disabled} onPress={props.onPress} class="active:bg-accent disabled:opacity-50">
+    <Button testID={props.testID} disabled={props.disabled} selected={props.selected} accessibilityLabel={props.accessibilityLabel} role={props.role} onPress={props.onPress} class="active:bg-accent disabled:opacity-50">
       {body}
     </Button>
   );
