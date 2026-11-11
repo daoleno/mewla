@@ -25,7 +25,7 @@ import { ServicesSheet } from "../sessions/ServicesSheet";
 import { EnrollmentApproval } from "../enrollment/Approval";
 import { BrowserJoin } from "../enrollment/BrowserJoin";
 import { current, onTransport, workers } from "../session";
-import { routeOwner } from "../../core/screen/float";
+import { routeOwner, screenRoute } from "../../core/screen/float";
 import { ScreenFloatHost } from "../screenfloat/ScreenFloatHost";
 import { workFiles } from "../work/state";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
@@ -175,9 +175,9 @@ export function openPhonePage() {
 }
 
 /** Screen, where an agent's display and the Mac's screen have their full view: the floating screen's Open. */
-export function openScreenPage(_worker: string | null) {
+export function openScreenPage(worker: string | null) {
   selectedTab.set(3);
-  moreNav.setRoutes([{ name: "more" }, { name: "screen" }]);
+  moreNav.setRoutes([{ name: "more" }, screenRoute(worker)]);
 }
 
 /** The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen. */
