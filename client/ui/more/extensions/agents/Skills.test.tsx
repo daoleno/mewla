@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../../testing/fixtures";
 
 /** The More harness with the current computer's Sessions (`host.params.workers`, `app.workers`). */
 const HARNESS = "./testing/Harness.tsx";
@@ -178,7 +179,7 @@ describe("The Skill inspector, by copy", () => {
     await app.waitFor("id:skill-lint");
     await app.press("id:skill-lint");
     await app.waitFor("text:Permanently delete this copy from Codex global Skills · Codex.");
-    await app.press("label:Delete lint from Codex global Skills · Codex");
+    await answering(app, () => app.press("label:Delete lint from Codex global Skills · Codex"));
     await app.waitUntil(() => c.count("skills_command") === 1);
     expect(c.last("skills_command")).toMatchObject({ operation: "delete", skill_id: lone.id });
   });

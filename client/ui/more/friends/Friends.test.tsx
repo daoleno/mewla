@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../testing/fixtures";
 
 const HARNESS = "./testing/Harness.tsx";
 const DOOR = "POST http://desk.test:9877/friends";
@@ -84,11 +85,11 @@ describe("Friends in Labs", () => {
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:friends-auto-post");
     app.onDialog(() => "Keep asking me");
-    await app.press("id:friends-auto-post");
+    await answering(app, () => app.press("id:friends-auto-post"));
     expect(app.dialogs()[0].title).toBe("Post without asking?");
     expect(c.ops.some((op) => op.op === "auto_post")).toBe(false);
     app.onDialog(() => "Turn on");
-    await app.press("id:friends-auto-post");
+    await answering(app, () => app.press("id:friends-auto-post"));
     await app.waitFor("text:Up to 3 a day");
     expect(c.ops.find((op) => op.op === "auto_post")).toMatchObject({ enabled: true });
     await app.waitFor("id:friends-auto-media");
@@ -152,7 +153,7 @@ describe("the Friends feed", () => {
     const app = await open(HARNESS, c.options);
     await app.waitFor("text:Post p1");
     app.onDialog((dialog) => (dialog.sheet ? "Block @lena" : "Block"));
-    await app.press("id:more-p1");
+    await answering(app, () => app.press("id:more-p1"), 2);
     await app.waitFor("text:Post p1", { state: "gone" });
     expect(app.texts()).toContain("Post p2");
     const confirm = app.dialogs().find((d) => !d.sheet)!;
@@ -321,7 +322,7 @@ describe("coming back to a page", () => {
     await app.press("id:open-post-p1");
     await app.waitFor("id:friends-post-text");
     app.onDialog((dialog) => (dialog.sheet ? "Delete post" : "Delete"));
-    await app.press("id:friends-post-more");
+    await answering(app, () => app.press("id:friends-post-more"), 2);
     await app.waitFor("id:friends-feed");
     await app.waitFor("text:Post p3");
     expect(app.texts()).not.toContain("Post p1");
@@ -480,7 +481,7 @@ describe("a draft being edited", () => {
     await app.waitUntil(() => app.requests().filter((r) => r.method === "GET" && r.url === "http://desk.test:9877/friends").length > reads);
     expect(app.value("id:draft-text-d1")).toBe("My words");
     app.onDialog(() => "Discard");
-    await app.press("id:draft-discard-d2");
+    await answering(app, () => app.press("id:draft-discard-d2"));
     await app.waitFor("id:draft-d2", { state: "gone" });
     expect(app.value("id:draft-text-d1")).toBe("My words");
   });
@@ -502,11 +503,11 @@ describe("Friends settings", () => {
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:friends-auto-post");
     app.onDialog(() => "Keep asking me");
-    await app.press("id:friends-auto-post");
+    await answering(app, () => app.press("id:friends-auto-post"));
     expect(app.shows("text:Up to 3 a day")).toBe(false);
     expect(app.shows("id:friends-auto-media")).toBe(false);
     app.onDialog(() => "Delete account");
-    await app.press("id:friends-delete");
+    await answering(app, () => app.press("id:friends-delete"));
     await app.waitFor("id:friends-deleting");
     await app.waitFor("id:friends-delete", { state: "gone" });
   });
