@@ -1,7 +1,7 @@
-import { Clipboard, platform, signal } from "nsh";
+import { Clipboard, host, platform, signal } from "nsh";
 import { AlertDialog } from "nsh/base";
 import { PairLatch } from "../core/onboarding";
-import { NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, type PairingProblem } from "../core/pairFlow";
+import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, type PairingProblem } from "../core/pairFlow";
 import { setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
 
@@ -72,4 +72,26 @@ export async function pasteFromClipboard(): Promise<void> {
   const text = (await Clipboard.readText().catch(() => null))?.trim() ?? "";
   if (!text) return pairingIssue.set(NOTHING_TO_PASTE);
   await pairFromText(text, "paste");
+}
+
+/** Settings' "Pair": the link typed or pasted into the field, else the clipboard's. */
+export async function pairFromField(text: string): Promise<void> {
+  if (text.trim()) return pairFromText(text, "paste");
+  const clipboard = (await Clipboard.readText().catch(() => null))?.trim() ?? "";
+  if (!clipboard) return pairingIssue.set(LINK_REQUIRED);
+  await pairFromText(clipboard, "paste");
+}
+
+/** "Pick QR image": the code in a screenshot or photo the person picks (the host reads it). */
+export async function pairFromPicture(): Promise<void> {
+  pairingIssue.set(null);
+  let picked: { value?: string | null } | null;
+  try {
+    picked = (await host.call("scan.image")) as { value?: string | null } | null;
+  } catch (error) {
+    return pairingIssue.set({ title: "Couldn't read that picture", detail: error instanceof Error ? error.message : String(error) });
+  }
+  if (!picked) return; // nothing picked
+  if (!picked.value) return pairingIssue.set(NO_CODE_IN_PICTURE);
+  await pairFromText(picked.value, "paste");
 }

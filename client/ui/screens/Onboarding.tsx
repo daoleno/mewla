@@ -27,9 +27,9 @@ import {
   type OnboardingStep,
 } from "../../core/onboarding";
 import { Icon, type IconName } from "../icons/Icon";
-import { Spinner } from "../more/kit/kit";
+import { Field, Spinner } from "../more/kit/kit";
 import { restorePet } from "../more/pet/pets";
-import { justPaired, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
+import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
 import { petClip } from "../pets/clips";
 import { connection, problem, resumeConnection } from "../session";
 import { OnboardingScanner, scannerSearching } from "./OnboardingScanner";
@@ -54,6 +54,8 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
     if (justPaired()) step.set("connected");
   });
   cleanup(BackHandler.on("press", () => {
+    // A code that is pairing is not left half done.
+    if (pairingBusy()) return true;
     const previous = previousOnboardingStep(step(), cameFrom());
     if (!previous) return false;
     cameFrom.set(null);
@@ -141,17 +143,29 @@ export function PairPage(props: { onPaired?(): void }) {
   effect(() => {
     if (pairings() !== before) untracked(() => props.onPaired?.());
   });
+  // A code that is pairing is not left half done.
+  cleanup(BackHandler.on("press", () => pairingBusy()));
   // A browser has no camera reader: it pastes the link.
   const camera = platform.os !== "web";
+  const link = signal("");
+  const pair = () => void pairFromField(link()).then(() => {
+    if (!pairingIssue()) link.set("");
+  });
   return (
     <NavPage title="Pair a computer">
       <Scroll class="flex-1 bg-background" contentClass="gap-4 p-5">
         <Text class="text-base text-muted-foreground">
-          {camera ? "On your computer, run mewla pair, then scan the code it shows." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
+          {camera ? "On your computer, run mewla pair, then scan the code it shows, or paste the link it prints." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
         </Text>
         {camera ? <OnboardingScanner /> : null}
         <ScanStatus />
-        <PairAlternatives />
+        <View class="rounded-xl border border-border bg-card">
+          <Field testID="pair-link" label="Pairing link" mono multiline keyboardType="url" value={link()} disabled={pairingBusy()}
+            placeholder="mewla://settings?p=… or https://…/#pair=…" onChange={(value) => link.set(value)} onSubmit={pair} />
+        </View>
+        <FilledButton testID="pair-link-submit" label="Pair" disabled={pairingBusy()} onPress={pair} />
+        {camera ? <OutlinedButton testID="pick-qr-image" icon="image" label="Pick QR image" disabled={pairingBusy()} onPress={() => void pairFromPicture()} /> : null}
+        <OtherWays />
       </Scroll>
     </NavPage>
   );
@@ -246,12 +260,18 @@ function PairAlternatives() {
   return (
     <>
       <OutlinedButton testID="paste" icon="clipboard" label="Paste a pairing link" disabled={pairingBusy()} onPress={() => void pasteFromClipboard()} />
-      <Button testID="other-ways" role="link" accessibilityLabel="Other ways to connect" onPress={() => void openUrl(OTHER_WAYS_URL)}
-        class="min-h-11 flex-row items-center justify-center gap-1.5 active:opacity-70">
-        <Text class="text-sm font-semibold text-muted-foreground">Other ways to connect</Text>
-        <Icon name="open-external" size={14} />
-      </Button>
+      <OtherWays />
     </>
+  );
+}
+
+function OtherWays() {
+  return (
+    <Button testID="other-ways" role="link" accessibilityLabel="Other ways to connect" onPress={() => void openUrl(OTHER_WAYS_URL)}
+      class="min-h-11 flex-row items-center justify-center gap-1.5 active:opacity-70">
+      <Text class="text-sm font-semibold text-muted-foreground">Other ways to connect</Text>
+      <Icon name="open-external" size={14} />
+    </Button>
   );
 }
 
@@ -283,10 +303,10 @@ function Cat(props: { step: OnboardingStep; frame: Frame }) {
   );
 }
 
-function FilledButton(props: { testID: string; label: string; icon?: IconName; onPress(): void }) {
+function FilledButton(props: { testID: string; label: string; icon?: IconName; disabled?: boolean; onPress(): void }) {
   return (
-    <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
-      class="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 active:opacity-80">
+    <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.label}
+      class="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 active:opacity-80 disabled:opacity-50">
       <Text class="text-base font-semibold text-primary-foreground">{props.label}</Text>
       {props.icon ? <Icon name={props.icon} color="primary-foreground" size={18} /> : null}
     </Button>
