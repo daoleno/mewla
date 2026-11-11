@@ -24,7 +24,8 @@ export type MorePage =
   | { name: "stats-model"; model: ModelStat; pricing?: PricingStatus }
   | { name: "stats-day"; day: DayCell }
   | { name: "resources" }
-  | { name: "screen" }
+  /** `worker`: open on that agent's display (the floating screen's Expand). */
+  | { name: "screen"; worker?: string }
   | ExtensionsPage
   | FriendsPage
   | GitPage

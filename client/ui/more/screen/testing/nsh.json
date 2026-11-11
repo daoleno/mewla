@@ -17,6 +17,7 @@
       ]
     },
     "openUrl": true,
+    "statusBar": true,
     "webview": {
       "hosts": [
         "*"
