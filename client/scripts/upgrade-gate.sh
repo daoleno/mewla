@@ -49,7 +49,9 @@ tmux -S "$state/tmux.sock" new-session -d -s gate
 env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent TMUX="$state/tmux.sock,0,0" \
   "$MEWLA" serve -addr "0.0.0.0:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
 daemon=$!
-trap 'kill "$daemon" 2>/dev/null || true; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state"' EXIT
+# The trap's last status becomes the script's: a cleanup that trips (the daemon still writing as
+# its state is removed) must not turn a PASS into a failure.
+trap 'kill "$daemon" 2>/dev/null || true; wait "$daemon" 2>/dev/null || true; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state" 2>/dev/null || true' EXIT
 for _ in $(seq 1 60); do (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && break; sleep 1; done
 link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" 2>&1 | grep -o 'mewla://settings?p=[^ ]*' | head -1)
 [[ -n "$link" ]] || fail "the daemon gave no pairing link"
@@ -73,8 +75,17 @@ if [[ -z "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; then
   log "the Expo app quit after pairing ($(grep -m1 -o 'JavascriptException: .*' "$OUT/old-app-crash.txt" || echo 'see old-app-crash.txt')); opening it again"
   adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
 fi
-tap "android.widget.EditText" 60 || { shot 1-no-composer; fail "no composer to type the draft in"; }
-adb shell input text "${DRAFT// /%s}"
+# The Expo app can still be settling Brain when the composer first takes focus, and the typed text
+# is lost; type it again until the composer shows it.
+for attempt in 1 2 3; do
+  tap "android.widget.EditText" 60 || { shot 1-no-composer; fail "no composer to type the draft in"; }
+  sleep 1
+  adb shell input text "${DRAFT// /%s}"
+  sleep 1
+  shows "$DRAFT" && break
+  log "the draft did not land in the Expo app's composer (try $attempt)"
+done
+shows "$DRAFT" || { shot 1-no-draft; fail "the Expo app's composer did not take the draft"; }
 sleep 3 # the draft is written 400 ms after typing stops
 shot 1-draft
 adb shell am force-stop "$PKG"
