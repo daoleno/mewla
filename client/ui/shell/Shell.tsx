@@ -17,6 +17,7 @@ import { NewSession, newSessionOpen } from "../screens/NewSession";
 import { ServicesSheet } from "../sessions/ServicesSheet";
 import { EnrollmentApproval } from "../enrollment/Approval";
 import { BrowserJoin } from "../enrollment/BrowserJoin";
+import { PhoneFloat } from "../phone";
 import { onTransport } from "../session";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import type { MoreRoute, SessionsRoute } from "./routes";
@@ -48,6 +49,12 @@ onTransport(() => () => sessionsNav.popToRoot());
 export function openSession(workerId: string, hint?: TerminalRouteSessionHint) {
   selectedTab.set(1);
   sessionsNav.setRoutes([{ name: "sessions" }, { name: "session", workerId, hint }]);
+}
+
+/** Phone use's page, under More › Settings: `mewla://phone` (its notifications) and its floating control open it. */
+export function openPhonePage() {
+  selectedTab.set(3);
+  moreNav.setRoutes([{ name: "more" }, { name: "settings" }, { name: "settings-phone" }]);
 }
 
 /**
@@ -134,6 +141,7 @@ export function Shell() {
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
         <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
         <EnrollmentApproval />
+        <PhoneFloat onOpen={openPhonePage} />
       <TabBar testID="tabs" items={tabs.map((t) => ({ title: t.title, icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>
