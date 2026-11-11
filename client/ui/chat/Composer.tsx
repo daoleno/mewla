@@ -95,6 +95,13 @@ export function Composer(props: {
       if (composerKeyIntent({ key: "ArrowUp" }, context()) === "recall") props.onRecall?.();
     }, { when: "always" });
   });
+  // Escape leaves the field (the desktop's `/` went into it), so the page's keys work again.
+  effect(() => {
+    if (!desktop || !focused()) return;
+    keymap.bind("escape", () => {
+      if (!(props.pickerOpen && untracked(props.pickerOpen))) input?.blur();
+    }, { when: "always" });
+  });
   return (
     <View class="border-t border-border bg-background px-3 py-2"
       style={{ marginBottom: props.active && !props.active() ? 0 : Math.max(0, keyboardFrame().height - belowSections()) }}>
