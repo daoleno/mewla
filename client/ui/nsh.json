@@ -30,5 +30,8 @@
       ]
     }
   },
-  "theme": "./theme.json"
+  "theme": "./theme.json",
+  "web": {
+    "host": "web/host.js"
+  }
 }

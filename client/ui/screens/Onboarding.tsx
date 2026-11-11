@@ -1,4 +1,4 @@
-import { host, nativeComponent, signal, Text, View } from "nsh";
+import { host, nativeComponent, platform, signal, Text, View } from "nsh";
 import { AlertDialog, Button, Input, NavPage } from "nsh/base";
 import { pairWith, readPairingLink } from "../../core/pairFlow";
 import { addPairedServer } from "../session";
@@ -16,9 +16,10 @@ const failure = signal("");
 export async function pairFromText(text: string): Promise<void> {
   const payload = readPairingLink(text);
   if (!payload) return failure.set("That isn't a Mewla pairing code. Run mewla pair on the computer and scan the code it shows.");
+  const device = platform.os === "web" ? "browser" : "phone";
   const { action } = await AlertDialog.show({
-    title: "Pair this phone?",
-    description: "Pairing gives this phone access to sessions, terminal, Brain, Workers and files on that computer.",
+    title: `Pair this ${device}?`,
+    description: `Pairing gives this ${device} access to sessions, terminal, Brain, Workers and files on that computer.`,
     actions: [
       { id: "cancel", label: "Cancel", role: "cancel" },
       { id: "pair", label: "Pair" },

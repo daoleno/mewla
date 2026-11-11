@@ -1,4 +1,4 @@
-import { platform, signal, Text, View, windowSize } from "nsh";
+import { host, platform, signal, Text, View, windowSize } from "nsh";
 import { Button, createNavStack, NavStack } from "nsh/base";
 import { isAvailable as mobile, TabBar } from "nsh/mobile";
 import { Onboarding } from "../screens/Onboarding";
@@ -12,6 +12,8 @@ import { Session } from "../screens/Session";
 import { Sessions } from "../screens/Sessions";
 import { NewSession, newSessionOpen } from "../screens/NewSession";
 import { ServicesSheet } from "../sessions/ServicesSheet";
+import { EnrollmentApproval } from "../enrollment/Approval";
+import { BrowserJoin } from "../enrollment/BrowserJoin";
 import { onTransport } from "../session";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import type { MoreRoute, SessionsRoute } from "./routes";
@@ -99,6 +101,7 @@ export function Shell() {
         <View class="flex-1">{tabs.map((_, i) => <Section index={i} />)}</View>
         <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
         <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
+        <EnrollmentApproval />
       </View>
     );
   }
@@ -107,13 +110,23 @@ export function Shell() {
       <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}>{tabs.map((_, i) => <Section index={i} />)}</View>
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
         <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
+        <EnrollmentApproval />
       <TabBar testID="tabs" items={tabs.map((t) => ({ title: t.title, icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>
   );
 }
 
+/**
+ * Before any computer: pair one. A browser served by a computer first asks that computer to let
+ * it in (BrowserJoin); "Use a pairing link" leads to the pairing page, as on a phone.
+ */
 export function FirstRun() {
-  const nav = createNavStack<{ name: "pair" }>([{ name: "pair" }]);
-  return <NavStack state={nav} style={{ flex: 1 }}>{() => <Onboarding />}</NavStack>;
+  const web = platform.os === "web" && host.available();
+  const nav = createNavStack<{ name: "join" } | { name: "pair" }>([{ name: web ? "join" : "pair" }]);
+  return (
+    <NavStack state={nav} style={{ flex: 1 }}>
+      {(route) => (route.name === "join" ? <BrowserJoin onPairingLink={() => nav.push({ name: "pair" })} /> : <Onboarding />)}
+    </NavStack>
+  );
 }

@@ -1,4 +1,4 @@
-import { effect, host, lifecycle, mount, Storage, View } from "nsh";
+import { effect, host, lifecycle, mount, platform, Storage, View } from "nsh";
 import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
 import { nshPlatform } from "./platform";
@@ -23,6 +23,11 @@ async function start(): Promise<void> {
     ).catch((error) => console.warn("legacy storage not copied:", error));
   }
   await loadSession();
+  // A browser opened with `mewla pair`'s link (`<origin>/#pair=<link>`): pair with it, once.
+  if (platform.os === "web" && host.available()) {
+    const link = (await host.call("links.initial").catch(() => null)) as string | null;
+    if (link) void pairFromText(link);
+  }
 }
 void start();
 startNotifications();

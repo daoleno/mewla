@@ -124,8 +124,9 @@ describe("notifications", () => {
       push_token: "ExponentPushToken[test]", server_ref: "s1", time_zone: "Asia/Shanghai", platform: "android", strong_alerts: true, live_state: true,
     });
     expect(framesOf(app.host.posts(), "app_state")[0]).toMatchObject({ app_state: "active" });
-    expect(app.requests()[0].url).toBe("https://exp.host/--/api/v2/push/getExpoPushToken");
-    expect(JSON.parse(app.requests()[0].body ?? "{}")).toMatchObject({ type: "fcm", deviceId: "install-1", appId: "com.daoleno.mewla", deviceToken: "fcm-token" });
+    // Other requests go out on connecting too (pending device approvals): find the token one.
+    const tokenRequest = app.requests().find((r) => r.url === "https://exp.host/--/api/v2/push/getExpoPushToken");
+    expect(JSON.parse(tokenRequest?.body ?? "{}")).toMatchObject({ type: "fcm", deviceId: "install-1", appId: "com.daoleno.mewla", deviceToken: "fcm-token" });
   }, 20_000);
 
   test("a tapped calendar push opens its item, and reports the tap to the computer", async () => {
