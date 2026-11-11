@@ -1,5 +1,6 @@
 import { announce, Canvas, Clipboard, effect, Path2D, signal, Text, untracked, View } from "nsh";
-import { Button, NavPage } from "nsh/base";
+import { Button } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import { dateKey, formatDate, formatFullDateTime } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";
 import { codexPlanLabel, codexRemainingPercent, codexWindowLabel, normalizeCodexUsedPercent } from "../../../core/stats/codexSubscriptionStats";

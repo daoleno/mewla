@@ -1,6 +1,7 @@
 import { cleanup, Clipboard, effect, Image, openUrl, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
-import { Button, NavPage, TextView } from "nsh/base";
+import { Button, TextView } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import { isSvgImage } from "../../../core/files/imageSource";
 import { dirnameOf, resolveMarkdownLink } from "../../../core/files/markdownLinks";
 import { loadSvgPreview, svgPreviewHtml, type SvgPreview } from "../../../core/files/svgPreview";

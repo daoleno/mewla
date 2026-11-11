@@ -1,5 +1,5 @@
 import { Scroll, signal, Text, View } from "nsh";
-import { Sheet } from "nsh/base";
+import { GuardedSheet as Sheet } from "../../shell/AppSheet";
 import type { GitBranchesPayload, GitBranchInfo } from "../../../core/git/gitDiff";
 import { formatGitAge } from "../../../core/git/gitReviewTime";
 import { EmptyState, Field, Notice, Row } from "../kit/kit";

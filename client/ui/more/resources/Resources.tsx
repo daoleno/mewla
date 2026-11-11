@@ -113,7 +113,7 @@ export function Resources(props: { nav: PageNav }) {
   const refresh = () => poller?.refresh();
   const telemetry = () => reading().telemetry;
   return (
-    <Page title="Resources" testID="resources" maxWidth={CONTENT_MAX_WIDTH} refreshing={reading().reading && Boolean(telemetry())} onRefresh={refresh}>
+    <Page title="Resources" testID="resources" column="wide" maxWidth={CONTENT_MAX_WIDTH} refreshing={reading().reading && Boolean(telemetry())} onRefresh={refresh}>
       {telemetry() ? <Ready telemetry={telemetry()!} onRefresh={refresh} /> : <NotReady onRetry={refresh} onOpenSettings={() => props.nav.push({ name: "settings" })} />}
     </Page>
   );

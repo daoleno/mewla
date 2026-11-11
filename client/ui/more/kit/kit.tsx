@@ -1,6 +1,9 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
 import { announce, Canvas, Clipboard, effect, platform, Scroll, Text, untracked, View } from "nsh";
-import { AlertDialog, Button, Input, NavPage, Switch } from "nsh/base";
+import { AlertDialog, Button, Input, Switch } from "nsh/base";
+import { isAvailable as mobile } from "nsh/mobile";
+import type { PageColumn } from "../../../core/web/places";
+import { NavPage } from "../../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
 
@@ -16,23 +19,27 @@ export function Page(props: {
   headerRight?: JSX.Element;
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** The widest the content grows, in points (720; a dashboard takes more). */
+  /** The widest the content grows on a phone or tablet, in points (720; a dashboard takes more). */
   maxWidth?: number;
+  /** The desktop column (app/DESIGN.md): 760 by default, 1200 for Resources. */
+  column?: Exclude<PageColumn, "full" | "reading">;
   /** The page's scroll view, for a page that brings something at its top into view. */
   scrollRef?: (ref: ScrollRef) => void;
   /** A panel beside the scrolling page (a wide screen's details), or nothing. */
   aside?: JSX.Element;
   children?: JSX.Element;
 }) {
+  // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
+  const width = () => (mobile ? (props.maxWidth ?? 720) : props.column === "wide" ? 1200 : 760);
   const scroll = (
     <Scroll ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
-      <View class="w-full self-center" style={{ maxWidth: props.maxWidth ?? 720 }}>{props.children}</View>
+      <View class="w-full self-center" style={{ maxWidth: width() }}>{props.children}</View>
     </Scroll>
   );
   // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
   const withAside = untracked(() => props.aside !== undefined);
   return (
-    <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight}>
+    <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
       {withAside ? <View class="flex-1 flex-row bg-background">{scroll}{props.aside}</View> : scroll}
     </NavPage>
   );
