@@ -1,9 +1,6 @@
 import type { JSX } from "nsh";
-import { Canvas, Scroll, Text, View } from "nsh";
-import { AlertDialog, Button, Input, Switch } from "nsh/base";
-import { isAvailable as mobile } from "nsh/mobile";
-import type { PageColumn } from "../../../core/web/places";
-import { NavPage } from "../../shell/NavPage";
+import { announce, Canvas, Clipboard, Scroll, Text, View } from "nsh";
+import { AlertDialog, Button, Input, NavPage, Switch } from "nsh/base";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
 
@@ -19,16 +16,14 @@ export function Page(props: {
   headerRight?: JSX.Element;
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** The desktop column (app/DESIGN.md): 760 by default, 1200 for Resources. */
-  column?: Exclude<PageColumn, "full" | "reading">;
+  /** The widest the content grows, in points (720; a dashboard takes more). */
+  maxWidth?: number;
   children?: JSX.Element;
 }) {
-  // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
-  const width = () => (mobile ? 720 : props.column === "wide" ? 1200 : 760);
   return (
-    <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
+    <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight}>
       <Scroll class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
-        <View class="w-full self-center" style={{ maxWidth: width() }}>{props.children}</View>
+        <View class="w-full self-center" style={{ maxWidth: props.maxWidth ?? 720 }}>{props.children}</View>
       </Scroll>
     </NavPage>
   );
@@ -70,6 +65,10 @@ export interface RowProps {
   disabled?: boolean;
   mono?: boolean;
   testID?: string;
+  /** What a screen reader says for the row, when its texts are not enough. */
+  accessibilityLabel?: string;
+  /** What pressing the row does, for a screen reader. */
+  accessibilityHint?: string;
   onPress?: () => void;
   onLongPress?: () => void;
 }
@@ -91,15 +90,15 @@ export function Row(props: RowProps) {
     </View>
   );
   if (!props.onPress && !props.onLongPress) return <View testID={props.testID} class={props.disabled ? "opacity-50" : ""}>{body}</View>;
-  if (props.onLongPress) {
+  if (props.onLongPress || props.accessibilityHint) {
     return (
-      <View testID={props.testID} role="button" disabled={props.disabled} onPress={props.onPress} onLongPress={props.onLongPress} class="active:bg-accent disabled:opacity-50">
+      <View testID={props.testID} role="button" accessibilityLabel={props.accessibilityLabel} accessibilityHint={props.accessibilityHint} disabled={props.disabled} onPress={props.onPress} onLongPress={props.onLongPress} class="active:bg-accent disabled:opacity-50">
         {body}
       </View>
     );
   }
   return (
-    <Button testID={props.testID} disabled={props.disabled} onPress={props.onPress} class="active:bg-accent disabled:opacity-50">
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel} disabled={props.disabled} onPress={props.onPress} class="active:bg-accent disabled:opacity-50">
       {body}
     </Button>
   );
@@ -153,10 +152,10 @@ export function Spinner(props: { size?: number; tone?: ColorName }) {
 }
 
 /** What a page shows instead of its content: busy, empty or failed, with at most one way out. */
-export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; action?: string; onAction?: () => void; testID?: string }) {
+export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string }) {
   return (
     <View testID={props.testID} class="items-center gap-2 px-6 py-16">
-      {props.busy ? <Spinner size={24} /> : props.icon ? <Icon name={props.icon} size={28} /> : null}
+      {props.busy ? <Spinner size={24} /> : props.icon ? <Icon name={props.icon} size={28} tone={props.tone} /> : null}
       {props.title ? <Text class="mt-1 text-center text-lg font-semibold">{props.title}</Text> : null}
       {props.detail ? <Text class="text-center text-sm text-muted-foreground">{props.detail}</Text> : null}
       {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} /> : null}
@@ -324,6 +323,27 @@ export function NotBuiltYet(props: { title: string }) {
       <EmptyState title="Not built yet" detail={`${props.title} comes in a later build of this preview.`} />
     </Page>
   );
+}
+
+/**
+ * What a long press on a value offers: a sheet of "Copy …" choices; the chosen one goes on
+ * the clipboard. Stands in for selectable text, which the pages' texts are not.
+ */
+export async function copyMenu(title: string, choices: ReadonlyArray<{ label: string; value: string }>): Promise<void> {
+  if (choices.length === 0) return;
+  const answer = await AlertDialog.show({
+    title,
+    presentation: "actionSheet",
+    actions: [...choices.map((choice, index) => ({ id: String(index), label: choice.label })), { id: "cancel", label: "Cancel", role: "cancel" as const }],
+  });
+  const chosen = answer.action && answer.action !== "cancel" ? choices[Number(answer.action)] : undefined;
+  if (!chosen) return;
+  try {
+    await Clipboard.writeText(chosen.value);
+    announce("Copied");
+  } catch {
+    // A refused copy is not worth a message.
+  }
 }
 
 /** Asks before an irreversible step; resolves true when the person chose `action`. */
