@@ -52,6 +52,15 @@ jobs:
           name: mewla-preview-android
           path: client/android/app/build/outputs/apk/preview/release/*.apk
           retention-days: 14
+      # What turns a captured trace back into names: R8's mapping (`retrace`) and the JS source map
+      # (`nsh symbolicate`), kept beside the APK they belong to.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mewla-preview-android-symbols
+          path: |
+            client/android/app/build/outputs/mapping/previewRelease/mapping.txt
+            client/android/app/build/generated/assets/bundleUi.js.map
+          retention-days: 90
 
   ios:
     name: iOS host (Simulator, upgrade tests)
