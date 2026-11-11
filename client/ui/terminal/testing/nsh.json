@@ -1,0 +1,12 @@
+{
+  "name": "Mewla terminal tests",
+  "id": "com.daoleno.mewla.terminaltests",
+  "version": "0.0.0",
+  "appearance": "system",
+  "capabilities": {
+    "host": [
+      "app.*"
+    ]
+  },
+  "theme": "../../theme.json"
+}

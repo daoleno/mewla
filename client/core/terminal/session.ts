@@ -1,4 +1,5 @@
 import type { Frame, Transport } from "../transport";
+import { TerminalHistoryFeed, type HistoryRender, type TerminalHistoryModel } from "./history";
 
 export type TerminalScrollState = { atBottom: boolean; inCopyMode: boolean; position: number };
 
@@ -6,7 +7,12 @@ export interface TerminalHandlers {
   /** A new attachment: clear the view before its output arrives. */
   reset(): void;
   output(data: string): void;
+  /** tmux copy mode on the computer (`terminal_scroll_state`); a session host Session never sends it. */
   scrollState(state: TerminalScrollState): void;
+  /** The history above the screen changed: what the view does with the rows it holds. */
+  history(render: HistoryRender): void;
+  /** A line about the history ("Loading history…", a failure), "" for none. */
+  historyNotice(text: string): void;
   /** The program ended; the view stays as it was and nothing reopens it. */
   exit(code: number | null): void;
   /** Opening failed, or the attachment broke; `message` is the computer's. */
@@ -35,26 +41,35 @@ export class TerminalSession {
   private closed = false;
   private exited = false;
   private readonly stops: Array<() => void> = [];
+  private readonly feed: TerminalHistoryFeed;
 
   constructor(
     private readonly transport: Transport,
     private readonly targetId: string,
     private readonly handlers: TerminalHandlers,
   ) {
+    this.feed = new TerminalHistoryFeed(transport, { rows: (render) => handlers.history(render), notice: (text) => handlers.historyNotice(text) });
     const mine = (frame: Frame) => this.sessionId !== null && frame.session_id === this.sessionId;
     this.stops.push(
       transport.on("connected", () => this.open()),
       transport.on("disconnected", () => {
         this.sessionId = null;
         this.opening = false;
+        if (!this.exited && !this.closed) this.feed.attach(null);
       }),
-      transport.on("terminal_output", (frame) => mine(frame) && typeof frame.data === "string" && handlers.output(frame.data)),
+      transport.on("terminal_output", (frame) => {
+        if (!mine(frame) || typeof frame.data !== "string") return;
+        handlers.output(frame.data);
+        this.feed.output();
+      }),
       transport.on("terminal_scroll_state", (frame) =>
         mine(frame) && handlers.scrollState({ atBottom: frame.at_bottom !== false, inCopyMode: frame.in_copy_mode === true, position: Number(frame.scroll_position) || 0 })),
       transport.on("terminal_exit", (frame) => {
         if (!mine(frame)) return;
         this.sessionId = null;
         this.exited = true;
+        // The history stays as it was, like the screen.
+        this.feed.close();
         handlers.exit(typeof frame.exit_code === "number" ? frame.exit_code : null);
       }),
       transport.on("terminal_error", (frame) => {
@@ -75,8 +90,11 @@ export class TerminalSession {
     if (cols < 2 || rows < 2) return;
     const changed = !this.size || this.size.cols !== cols || this.size.rows !== rows;
     this.size = { cols, rows };
-    if (this.sessionId && changed) this.send({ type: "terminal_resize", session_id: this.sessionId, cols, rows });
-    else this.open();
+    if (this.sessionId && changed) {
+      this.send({ type: "terminal_resize", session_id: this.sessionId, cols, rows });
+      // The pane reflows: its history comes again at the new width.
+      this.feed.output();
+    } else this.open();
   }
 
   input(data: string): void {
@@ -96,6 +114,16 @@ export class TerminalSession {
     if (this.sessionId) this.send({ type: "terminal_focus_pane", session_id: this.sessionId, col, row });
   }
 
+  /** Ask for the history again (after "History could not load"). */
+  retryHistory(): void {
+    this.feed.retry();
+  }
+
+  /** The history the view holds, row for row: its plain text and flags, for search and the prompt jumps. */
+  get history(): TerminalHistoryModel {
+    return this.feed.model;
+  }
+
   get attached(): boolean {
     return this.sessionId !== null;
   }
@@ -105,6 +133,7 @@ export class TerminalSession {
     this.closed = true;
     if (this.sessionId) this.send({ type: "terminal_close", session_id: this.sessionId });
     this.sessionId = null;
+    this.feed.close();
     this.stops.splice(0).forEach((stop) => stop());
   }
 
@@ -137,6 +166,7 @@ export class TerminalSession {
         if (this.closed) return this.send({ type: "terminal_close", session_id: id });
         this.sessionId = id;
         this.handlers.reset();
+        this.feed.attach(id);
         const cols = Number(frame.cols), rows = Number(frame.rows);
         if (this.size && (cols !== this.size.cols || rows !== this.size.rows)) this.send({ type: "terminal_resize", session_id: id, ...this.size });
         // tmux redraws for a focused client.

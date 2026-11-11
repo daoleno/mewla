@@ -89,6 +89,10 @@ struct TerminalHandle {
     bool force_full_snapshot = true;
     std::vector<std::string> rendered_rows;
     uint16_t rendered_cols = 0;
+    // The last text a program copied (OSC 52, OSC 1337 Copy, OSC 5522), until
+    // nativeTakeClipboard hands it to the view.
+    std::string clipboard;
+    bool has_clipboard = false;
 };
 
 static GhosttyResult createHtmlFormatter(
@@ -1208,6 +1212,36 @@ static std::string encodeMouseSequence(
     return std::string(reinterpret_cast<const char*>(stackBuffer), outLen);
 }
 
+// A program's clipboard write, during ghostty_terminal_vt_write: keep its
+// first text representation for the view to take after the write, and answer.
+static void onClipboardWrite(GhosttyTerminal, void* userdata, const GhosttyClipboardWrite* write)
+{
+    if (!write) {
+        return;
+    }
+    auto* h = static_cast<TerminalHandle*>(userdata);
+    GhosttyClipboardWriteReply reply = GHOSTTY_INIT_SIZED(GhosttyClipboardWriteReply);
+    reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+    for (size_t i = 0; h && write->contents && i < write->contents_len; i += 1) {
+        const GhosttyClipboardContent& content = write->contents[i];
+        const std::string mime = content.mime.ptr
+            ? std::string(reinterpret_cast<const char*>(content.mime.ptr), content.mime.len)
+            : std::string();
+        if (mime.rfind("text/", 0) != 0) {
+            continue;
+        }
+        h->clipboard = content.data.ptr
+            ? std::string(reinterpret_cast<const char*>(content.data.ptr), content.data.len)
+            : std::string();
+        h->has_clipboard = true;
+        reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+        break;
+    }
+    if (write->reply) {
+        write->reply(write, &reply);
+    }
+}
+
 #if defined(__ANDROID__)
 extern "C" {
 
@@ -1258,6 +1292,16 @@ Java_com_daoleno_mewla_terminal_Vt_nativeCreateTerminal(
         h->mouse_encoder,
         GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL,
         &trackLastCell
+    );
+
+    // OSC 52 and the other clipboard writes reach the view (nativeTakeClipboard).
+    // Without these the terminal ignores them; a failure only loses copying.
+    setTerminalOption(h, GHOSTTY_TERMINAL_OPT_USERDATA, h, "userdata");
+    setTerminalOption(
+        h,
+        GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
+        reinterpret_cast<const void*>(&onClipboardWrite),
+        "clipboard write"
     );
 
     LOGI("Terminal created: %dx%d", cols, rows);
@@ -1516,4 +1560,16 @@ Java_com_daoleno_mewla_terminal_Vt_nativeWriteBytes(JNIEnv* env, jobject, jlong 
     jbyte* bytes = env->GetByteArrayElements(data, nullptr);
     ghostty_terminal_vt_write(h->terminal, reinterpret_cast<const uint8_t*>(bytes), (size_t)len);
     env->ReleaseByteArrayElements(data, bytes, JNI_ABORT);
+}
+
+// The text a program copied during the last writes, once; null when none.
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_daoleno_mewla_terminal_Vt_nativeTakeClipboard(JNIEnv* env, jobject, jlong handle)
+{
+    auto* h = getHandle(handle);
+    if (!h || !h->has_clipboard) return nullptr;
+    h->has_clipboard = false;
+    std::string text;
+    text.swap(h->clipboard);
+    return newStringFromStdString(env, text);
 }
