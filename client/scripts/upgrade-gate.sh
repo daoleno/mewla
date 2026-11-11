@@ -3,7 +3,8 @@
 #   1. the released Expo app (OLD_APK) pairs with a fresh daemon and keeps a typed draft;
 #   2. the NSH app (NEW_APK, same package, same signing key) installs over it with `install -r`;
 #   3. it opens without pairing, signs in with the same device key (the daemon lists one device,
-#      seen again after the upgrade) and holds the draft.
+#      seen again after the upgrade) and holds the draft;
+#   4. its scanner opens in this release build: the camera prompt, then the camera running, the app up.
 # Inputs: OLD_APK, NEW_APK, MEWLA (daemon binary), OUT (evidence directory). Exit 0 only if all hold.
 set -euo pipefail
 : "${OLD_APK:?}" "${NEW_APK:?}" "${MEWLA:?}" "${OUT:?}"
@@ -125,4 +126,23 @@ assert any(sys.argv[1] in v for v in drafts), "the draft did not come over"
 assert "mewla:v3:servers" in data, "the computers did not come over"
 print("draft and computers came over")
 ' "$DRAFT" | tee -a "$OUT/gate.log"
+
+# The M1 preview died on its first "Scan code" in a release build (R8 had dropped ML Kit's registrar):
+# open the scanner in this release build, answer the system's camera prompt, and the app must stay up
+# with the camera looking for a code.
+log "4. the scanner runs in the release build"
+adb logcat -c
+adb shell am start -W -a android.intent.action.VIEW -d "mewla://more" "$PKG" > /dev/null
+tap "^Settings$" 20 || { shot 4-no-settings; fail "More has no Settings row"; }
+tap "^Pair a computer$" 20 || { shot 4-no-pair; fail "Settings has no Pair a computer"; }
+tap "^While using the app$" 20 || { shot 4-no-prompt; fail "the scanner did not ask for the camera"; }
+for _ in $(seq 1 20); do shows "Looking for a Mewla code" && break; sleep 1; done
+sleep 3
+shot 4-scanner
+if [[ -z "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; then
+  adb logcat -d -b crash > "$OUT/scanner-crash.txt"
+  fail "the app died with the scanner open (scanner-crash.txt)"
+fi
+shows "Looking for a Mewla code" || fail "the scanner is not looking for a code"
+log "the scanner runs: camera allowed, app up, looking for a code"
 log "PASS"
