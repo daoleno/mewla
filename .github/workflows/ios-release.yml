@@ -169,7 +169,7 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-path
 
-      # The closed identities the Expo app shipped (app/iosIdentity.js): the App Store
+      # The closed identities the Expo app shipped (scripts/lib/release_identity.py): the App Store
       # and TestFlight builds replace those installs in place.
       - name: Resolve closed iOS identity contract
         run: |

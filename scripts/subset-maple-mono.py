@@ -11,7 +11,7 @@ features are unchanged, so the face keeps its PostScript name and 0.6em cell.
 
 Usage (from the repository root, with fontTools installed):
 
-  python3 scripts/subset-maple-mono.py <dir with upstream TTFs> app/assets/fonts
+  python3 scripts/subset-maple-mono.py <dir with upstream TTFs> <output dir>
 
 The input is the upstream Maple Mono CN v7.900 release files
 `MapleMono-CN-{Regular,SemiBold}.ttf`, pinned by SHA-256 below. Git history

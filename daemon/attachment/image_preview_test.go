@@ -10,7 +10,7 @@ import (
 )
 
 func TestImagePreviewPreservesBytesAndBoundsDimensions(t *testing.T) {
-	data, err := os.ReadFile("../../app/assets/reading-fixture/normal.png")
+	data, err := os.ReadFile("../testdata/reading-normal.png")
 	if err != nil {
 		t.Fatal(err)
 	}

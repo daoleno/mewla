@@ -169,8 +169,8 @@ the match shows as a tinted row, older and newer matches are the arrows.
 
 ## Verification
 
-Run the terminal history and native-scroll tests in `app/components/terminal`,
-the wheel encoding/selection tests, the app TypeScript check, and `go test ./...`
+Run the terminal tests in `client/core/terminal` (`bun test core/terminal`) and
+`client/ui/terminal` (`nsh test terminal`), `nsh check`, and `go test ./...`
 for daemon changes. Runtime checks
 need a real tmux pane with more than 6,000 mixed ANSI/CJK rows, an inline TUI and
 an alternate-screen TUI, and Android/iOS device coverage. Record gesture/frame

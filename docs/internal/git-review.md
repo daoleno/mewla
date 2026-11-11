@@ -23,20 +23,23 @@ destination or rename source. No arbitrary commit/branch comparison is implied.
 
 ## Reader
 
-The reader is [@pierre/diffs](https://diffs.com) (the file view too) and the
+The NSH client draws the review natively (`client/ui/more/git`: `GitDiff.tsx`,
+`GitFiles.tsx`) from the models in `client/core/git`. The rest of this section
+describes the Expo app's reader, which the client replaced.
+
+The reader was [@pierre/diffs](https://diffs.com) (the file view too) and the
 Files browser is [@pierre/trees](https://trees.software),
 both running from bundled offline copies (see
 `docs/third-party-assets.md`). On Android and iOS each is a WebView document that
 cannot navigate or fetch; on web the same code mounts straight into the page,
 because the web UI's CSP allows only same-origin scripts. The sheet keeps all
 chrome in React Native (header, list, find bar, display options, action bar,
-menus); the WebViews draw content only. Messages between them are typed in
-`app/components/terminal/pierre/diffViewerProtocol.ts` and
-`treeViewerProtocol.ts`, and every message from a WebView is parsed and dropped
-if unexpected.
+menus); the WebViews draw content only. Messages between them were typed in
+`diffViewerProtocol.ts` and `treeViewerProtocol.ts`, and every message from a
+WebView was parsed and dropped if unexpected.
 
-The WebViews run on iOS 17.5 or newer (the app's deployment target, set in
-`app/plugins/withIOSBuild.js`) and Android WebView 123 or newer. That is the
+The WebViews ran on iOS 17.5 or newer (the Expo app's deployment target) and
+Android WebView 123 or newer. That is the
 oldest engine with `light-dark()`, which Pierre's stylesheets use, so they ship
 exactly as the libraries write them: no lowering step. Android System WebView
 updates through Google Play. A WebView without `light-dark()` shows "This WebView
@@ -151,11 +154,9 @@ repositories. `TestGitDiffNativeFixtureServer` is opt-in with
 authenticated WebSocket handler against temporary repositories. `/stop` shuts
 down this test resource. It is not a daemon entry point or a product route.
 
-The app side is `bun test components/terminal services`. The review's pure
-models (groups, rows, hunks, the agent message) are in `gitReview.test.ts`. The
-route `/screenshot-demo?demo=1&state=chat&fixture=git` (development builds with
-`EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1`) shows the whole sheet on a fake repository. The generated viewers are
-rebuilt with `bun run pierre:generate` (`--check` reports stale output).
+The app side is `cd client && bun test core/git` and `cd client/ui && nsh test more/git`.
+The review's pure models (groups, rows, hunks, the agent message) are in
+`client/core/git/gitReview.test.ts`.
 
 Native performance evidence must come from Android/iOS execution, not these Go
 or Bun tests. Android emulator data, debug-build overhead, and software-rendered

@@ -49,7 +49,7 @@ running without the engine; it prints one line, and the full output goes to
 `<binary>-tagged-build.log`. The runner rebuilds only `cmd/mewla`: after its
 own source changes, restart `go run ./cmd/mewla-dev`.
 
-Product version for banners and release staging comes from `app/app.base.json` (`expo.version`). The daemon default is `daemon/cmd/mewla/version.go` and can be overridden at link time (`-X main.Version=…`).
+Product version for banners and release staging comes from `client/ui/nsh.json` (`version`, read by `scripts/lib/release_identity.py`). The daemon default is `daemon/cmd/mewla/version.go` and can be overridden at link time (`-X main.Version=…`).
 
 ## Release binaries (Linux and Apple Silicon macOS)
 
@@ -108,7 +108,7 @@ Verify identity sources and stage checksums:
 
 ```bash
 ./scripts/verify-release-identity.sh
-VERSION="$(python3 -c "import json; print(json.load(open('app/app.base.json'))['expo']['version'])")"
+VERSION="$(python3 scripts/lib/release_identity.py version)"
 ./scripts/verify-release-identity.sh --stage "dist-download/v$VERSION"
 (cd "dist-download/v$VERSION" && sha256sum -c SHA256SUMS)
 
@@ -185,4 +185,4 @@ See `daemon/Dockerfile`. Prefer the host binary so agents and their CLIs share y
 docker build -f daemon/Dockerfile -t mewla .
 ```
 
-The image's daemon carries the session host's terminal engine, built and linked statically the same way as the Linux release binaries (`zig cc`, musl, `ghosttyvt`), so Sessions run in the container without tmux. `daemon/Dockerfile.dockerignore` keeps the build context to `daemon/`, `scripts/` and the few `app/` files the engine's library build reads. The image never updates itself; rebuild it. Container use requires mounting state, publishing or proxying port 9876, and installing or mounting the agent CLIs yourself.
+The image's daemon carries the session host's terminal engine, built and linked statically the same way as the Linux release binaries (`zig cc`, musl, `ghosttyvt`), so Sessions run in the container without tmux. `daemon/Dockerfile.dockerignore` keeps the build context to `daemon/`, `scripts/`, `native/terminal-vt/` and the few client files the engine's library build checks (`verify-libghostty.sh --contract`). The image never updates itself; rebuild it. Container use requires mounting state, publishing or proxying port 9876, and installing or mounting the agent CLIs yourself.

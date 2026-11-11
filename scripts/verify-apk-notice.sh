@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
+LOCK="$ROOT/native/terminal-vt/native.lock.json"
 # The client's copy (Settings > Open-source licenses), which its Gradle build packages as the notice.
 NOTICE_SRC="$ROOT/client/ui/more/settings/licenses/texts/Ghostty-MIT.txt"
 

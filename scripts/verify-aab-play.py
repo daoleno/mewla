@@ -268,7 +268,7 @@ def main() -> int:
         for cmd in (
             [str(ROOT / "scripts/verify-apk-notice.sh"), str(apk)],
             [str(ROOT / "scripts/verify-android-native-symbols.py"), "--lock",
-             str(ROOT / "app/modules/terminal-vt/native.lock.json"), "--apk", str(apk)],
+             str(ROOT / "native/terminal-vt/native.lock.json"), "--apk", str(apk)],
         ):
             if subprocess.run(cmd).returncode != 0:
                 errors.append(f"universal APK check failed: {Path(cmd[0]).name}")

@@ -1,19 +1,19 @@
 # Context for daemon/Dockerfile (built from the repository root): only what the
-# daemon and its terminal engine's library build read.
+# daemon and its terminal engine's library build read. The engine's build runs
+# scripts/verify-libghostty.sh --contract, which also checks the client files
+# that link libghostty-vt and package its notice.
 *
 !daemon
 !scripts
-!app/app.base.json
-!app/app.config.js
-!app/assets/notices
-!app/modules/terminal-vt
-!app/plugins
+!native/terminal-vt/native.lock.json
+!native/terminal-vt/NOTICE.Ghostty
+!client/android/app/build.gradle.kts
+!client/android/app/CMakeLists.txt
+!client/ios/project.yml
+!client/ui/more/settings/licenses/texts/Ghostty-MIT.txt
 !LICENSE
 !NOTICE
 daemon/tmp
 daemon/ghostty-libs
-app/modules/terminal-vt/android
-app/modules/terminal-vt/ios
-app/modules/terminal-vt/**/build
 **/node_modules
 **/.cache

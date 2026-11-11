@@ -10,7 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CHECK = ROOT / "scripts/check-zig-xcode-compat.sh"
 LIBRARY = ROOT / "scripts/lib/zig-xcode-compat.sh"
-LOCK = ROOT / "app/modules/terminal-vt/native.lock.json"
+LOCK = ROOT / "native/terminal-vt/native.lock.json"
 
 
 def sdk_with_targets(parent: Path, targets: str | None) -> Path:

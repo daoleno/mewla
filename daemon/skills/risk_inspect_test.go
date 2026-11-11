@@ -141,7 +141,7 @@ func TestInspectRejectsStaleOrMismatchedCopy(t *testing.T) {
 func TestInspectImageUsesExactPackageCopyBoundary(t *testing.T) {
 	f := newFixture(t)
 	root := f.writeSkill(f.agentGlobalDir(AgentCursor), "images", "body")
-	data, err := os.ReadFile("../../app/assets/reading-fixture/normal.png")
+	data, err := os.ReadFile("../testdata/reading-normal.png")
 	if err != nil {
 		t.Fatal(err)
 	}

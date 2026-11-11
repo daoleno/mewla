@@ -25,9 +25,10 @@ bun run daemon:build && cd daemon && go test ./...
 # Direct Go build
 cd daemon && go test ./... && go build -o bin/mewla ./cmd/mewla/
 
-# App
-bun install
-cd app && bun test && bunx tsc --noEmit
+# App (the NSH client)
+client/scripts/fetch-nsh.sh
+cd client && bun test core
+cd client/ui && ~/.nsh/bin/nsh check && ~/.nsh/bin/nsh test
 ```
 
 Optional Grok real-session integration tests (maintainer machines only):

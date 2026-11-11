@@ -47,11 +47,8 @@ the budget is checked between native calls, so one slow page can exceed 4 ms.
 The initial/idle capture debounce remains 750 ms. Loading-history measurements
 must include that debounce and native decoding, not just WebView DOM insertion.
 
-Focused behavioral tests live beside the renderer, outside runtime routes.
-`scripts/test-terminal-row-updates-android.sh DEVICE_SERIAL` exercises the shared
-native formatter on an already running Android device. It reconstructs hundreds
-of delta frames and compares each with the full formatter, covering cursor-only
-updates, ANSI/CJK, wrapping, alternate screens, clear/redraw, resize, and theme.
+Focused behavioral tests live beside the renderer (`client/core/terminal`,
+`client/ui/terminal`, and on iOS the terminal unit tests client.yml runs).
 Performance acceptance additionally requires device traces for input latency,
 flood responsiveness, frame pacing, and scrolling; unit tests do not certify those
 budgets. iOS native compilation and device checks require an Apple build host.

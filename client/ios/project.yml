@@ -7,10 +7,10 @@ options:
 settings:
   base:
     # The terminal's libghostty-vt: scripts/build-libghostty-ios.sh builds GhosttyVt.xcframework into
-    # app/modules/terminal-vt/libs/ios (CI: .github/actions/ios-native); it moves into client/ at the cutover.
+    # native/terminal-vt/libs/ios (CI: .github/actions/ios-native), beside the lock the daemon's engine shares.
     # `xcodebuild MEWLA_GHOSTTY=<terminal-vt dir>` points elsewhere (Android: -Pmewla.ghostty). Declared on the
     # project so every target resolves the xcframework's source tree from it.
-    MEWLA_GHOSTTY: $(SRCROOT)/../../app/modules/terminal-vt
+    MEWLA_GHOSTTY: $(SRCROOT)/../../native/terminal-vt
     # The Expo app's identity, so the App Store / TestFlight build replaces it in place: the app,
     # its Live Activity / widget extension (`.live`) and their App Group all follow from it.
     # Preview builds pass MEWLA_APP_ID=com.daoleno.mewla.preview (not PRODUCT_BUNDLE_IDENTIFIER,
@@ -120,7 +120,7 @@ targets:
           - { CFBundleURLName: com.daoleno.mewla, CFBundleURLSchemes: [mewla] }
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
   # The Dynamic Island, Lock Screen Live Activity and home-screen widgets: the Expo app's extension
-  # (app/targets/mewla-live), same name, bundle id and widget kinds, so placed widgets and a running
+  # (mewla-live), same name, bundle id and widget kinds, so placed widgets and a running
   # activity carry over the upgrade.
   MewlaLiveWidgets:
     type: app-extension

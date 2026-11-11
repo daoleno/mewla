@@ -95,8 +95,8 @@
     "xcframework_name": "GhosttyVt.xcframework",
     "upstream_xcframework_name": "ghostty-vt.xcframework",
     "notice_bundle_path": "GHOSTTY-MIT.txt",
-    "notice_source": "app/assets/notices/GHOSTTY-MIT.txt",
-    "notice_packaging": "Expo plugin withIOSBuild copies into the iOS app bundle; verified by scripts/verify-ios-artifact.sh for Simulator .app and IPA"
+    "notice_source": "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt",
+    "notice_packaging": "client/ios/project.yml's 'Bundle the Ghostty notice' step copies it to the app bundle root; verified by scripts/verify-ios-artifact.sh for Simulator .app and IPA"
   },
   "desktop": {
     "note": "Static libghostty-vt for the daemon's session host: Go package daemon/ghosttyvt, build tag ghosttyvt. Same signed release and Zig as the app. Built by scripts/build-libghostty-desktop.sh.",
@@ -138,18 +138,18 @@
     ]
   },
   "outputs": {
-    "lib_dir": "app/modules/terminal-vt/libs/android",
+    "lib_dir": "native/terminal-vt/libs/android",
     "library_filename": "libghostty_vt.so",
-    "headers_dir": "app/modules/terminal-vt/android/src/main/cpp/ghostty",
+    "headers_dir": "native/terminal-vt/include/ghostty",
     "checksums_filename": "SHA256SUMS",
     "manifest_filename": "build-manifest.json"
   },
   "release_apk": {
-    "react_native_architectures": "arm64-v8a",
+    "abis": "arm64-v8a",
     "script": "scripts/android-release-apk.sh",
     "notice_apk_path": "assets/notices/GHOSTTY-MIT.txt",
-    "notice_source": "app/assets/notices/GHOSTTY-MIT.txt",
-    "note": "Sideload beta ships arm64-v8a only. x86_64 is for emulator/dev builds. Notice is packaged via Expo plugin withAndroidRelease into android assets (verified by scripts/verify-apk-notice.sh). iOS notice packaging is owned by withIOSBuild."
+    "notice_source": "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt",
+    "note": "Sideload beta ships arm64-v8a only. x86_64 is for emulator/dev builds. client/android/app/build.gradle.kts (ghosttyNotice) packages the notice into the APK's assets (verified by scripts/verify-apk-notice.sh); client/ios/project.yml bundles it in the iOS app."
   },
   "signing": {
     "env_vars": [
@@ -158,6 +158,6 @@
       "MEWLA_ANDROID_KEY_ALIAS",
       "MEWLA_ANDROID_KEY_PASSWORD"
     ],
-    "mechanism": "Gradle System.getenv via withAndroidRelease plugin; never commit secrets"
+    "mechanism": "client/android/app/build.gradle.kts reads them from the environment (CI secrets only); never commit secrets"
   }
 }

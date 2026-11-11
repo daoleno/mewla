@@ -1,11 +1,11 @@
 name: CI
 
-# Every push and PR runs the fast checks and the Android and iOS JS exports,
-# the two platforms the app ships on. The native work (unsigned iOS Simulator
-# build, Android native link) and the daemon release build, which also exports
-# the web UI the daemon embeds, run on release tag pushes and manual dispatch;
-# the release flow builds the signed artifacts in release-artifacts.yml and
-# ios-release.yml.
+# Every push and PR runs the fast checks: the daemon, the NSH client's core and
+# UI, the native terminal contract and the release scripts. The daemon release
+# build, which also builds the web UI the daemon embeds, runs on release tag
+# pushes and manual dispatch. The client's native hosts are built by client.yml
+# (pull requests), native-cache.yml (main) and, signed, by release-artifacts.yml
+# and ios-release.yml (tags).
 on:
   push:
     branches: [main]
@@ -84,35 +84,6 @@ jobs:
         working-directory: .
         run: ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/release-bin"
 
-  app:
-    name: App (Bun / Expo)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.5"
-      - name: Install
-        run: bun install --frozen-lockfile
-      - name: Unit tests
-        run: bun test
-        working-directory: app
-      - name: Typecheck
-        run: bunx tsc --noEmit
-        working-directory: app
-      - name: Open-source licenses are current
-        run: bun run licenses:generate --check
-      - name: Generated viewer bundles are current
-        run: |
-          bun run mermaid:generate --check
-          bun run screen:generate --check
-      - name: Android export
-        run: bunx expo export --platform android
-        working-directory: app
-      - name: iOS export
-        run: bunx expo export --platform ios
-        working-directory: app
-
   client:
     name: Client (NSH core and UI)
     runs-on: ubuntu-latest
@@ -138,132 +109,13 @@ jobs:
       - name: UI tests
         run: ~/.nsh/bin/nsh test
         working-directory: client/ui
-
-  ios-native:
-    name: iOS native (unsigned Simulator)
-    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
-    runs-on: xcode-27
-    timeout-minutes: 120
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.5"
-      - name: Require Apple build tools
-        run: |
-          set -euo pipefail
-          xcodebuild -version
-          xcrun --sdk iphonesimulator --show-sdk-path
-          command -v pod >/dev/null || {
-            echo "error: CocoaPods is required on the macOS runner" >&2
-            exit 1
-          }
-      - name: Install workspace dependencies
+      - name: Open-source licenses are current
+        run: python3 client/ui/more/settings/licenses/generate.py --check
+      # noVNC (root package.json), which the Screen viewer bundles.
+      - name: Install the Screen viewer's noVNC
         run: bun install --frozen-lockfile
-      - name: iOS Ghostty and CocoaPods caches (restore-only)
-        uses: ./.github/actions/ios-native
-      - name: Generate iOS project and install pods
-        env:
-          # Compile the Live Activity / widget extension here even before releases ship it.
-          MEWLA_IOS_LIVE: "1"
-        run: |
-          set -euo pipefail
-          cd app
-          bunx expo prebuild --platform ios --clean --no-install
-          cd ios
-          pod install
-          ../../scripts/assert-ios-camera-barcode-pod.sh Podfile.lock
-          cd ../..
-          bun run licenses:generate --pods app/ios/Podfile.lock
-      - name: Build unsigned Simulator app
-        env:
-          DERIVED_DATA: ${{ runner.temp }}/ios-derived
-          MEWLA_IOS_LIVE: "1"
-        run: |
-          set -euo pipefail
-          set -o pipefail
-          xcodebuild \
-            -workspace app/ios/Mewla.xcworkspace \
-            -scheme Mewla \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$DERIVED_DATA" \
-            CODE_SIGNING_ALLOWED=NO \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=YES \
-            build
-          APP="$DERIVED_DATA/Build/Products/Debug-iphonesimulator/Mewla.app"
-          ./scripts/verify-ios-artifact.sh simulator "$APP"
-          echo "IOS_SIMULATOR_APP=$APP" >> "$GITHUB_ENV"
-      - name: Upload unsigned Simulator app
-        uses: actions/upload-artifact@v4
-        with:
-          name: mewla-ios-simulator-${{ github.sha }}
-          path: ${{ env.IOS_SIMULATOR_APP }}
-          if-no-files-found: error
-          retention-days: 7
-
-  android-native:
-    name: Android native (bounded link)
-    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.5"
-      - name: Install workspace dependencies
-        run: bun install --frozen-lockfile
-      - name: Verify shared native contract
-        run: ./scripts/verify-libghostty.sh --contract
-      - name: Android SDK, arm64 Ghostty and Gradle home
-        uses: ./.github/actions/android-native
-      - name: Generate Android project
-        run: |
-          set -euo pipefail
-          cd app
-          bunx expo prebuild --platform android --clean --no-install
-      - name: Compile Android native terminal module and app debug link
-        env:
-          NODE_ENV: production
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
-        run: |
-          set -euo pipefail
-          ./scripts/verify-terminal-abi-gradle.sh
-          cd app/android
-          ./gradlew \
-            :terminal-vt:assembleDebug \
-            :app:assembleDebug \
-            :app:assembleRelease \
-            -PreactNativeArchitectures=arm64-v8a \
-            -Pexpo.useLegacyPackaging=true \
-            --build-cache \
-            --console=plain
-          NOTICE="app/src/main/assets/notices/GHOSTTY-MIT.txt"
-          [[ -f "$NOTICE" ]] || {
-            echo "error: prebuild did not package Ghostty MIT notice at $NOTICE" >&2
-            exit 1
-          }
-          cd ../..
-          APK="app/android/app/build/outputs/apk/release/app-release.apk"
-          ./scripts/verify-apk-notice.sh "$APK"
-          ./scripts/verify-android-native-symbols.py \
-            --lock app/modules/terminal-vt/native.lock.json --apk "$APK"
-      - name: Open-source licenses cover the Android build
-        env:
-          NODE_ENV: production
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
-        run: |
-          set -euo pipefail
-          (cd app/android && ./gradlew -q :app:dependencies --configuration releaseRuntimeClasspath \
-            -PreactNativeArchitectures=arm64-v8a -Pexpo.useLegacyPackaging=true) > "$RUNNER_TEMP/android-deps.txt"
-          bun run licenses:generate --maven "$RUNNER_TEMP/android-deps.txt"
+      - name: Screen viewer bundle is current
+        run: bun client/ui/more/screen/runtime/generate.mjs --check
 
   windows:
     name: Windows (daemon build, platform tests, install.ps1)

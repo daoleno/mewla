@@ -6,7 +6,7 @@ upstream Ghostty. The following MIT license text applies to that library
 and must be preserved when redistributing apps or prebuilt native artifacts.
 
 Source: https://github.com/ghostty-org/ghostty
-Release: libghostty-vt 1.0.0 (tag vt-1.0.0), pinned in app/modules/terminal-vt/native.lock.json
+Release: libghostty-vt 1.0.0 (tag vt-1.0.0), pinned in native/terminal-vt/native.lock.json
 
 libghostty-vt also compiles in the following third-party code. Their license
 texts are in the app, under Settings > Open-source licenses:
@@ -18,9 +18,9 @@ texts are in the app, under Settings > Open-source licenses:
   translate-c 2.0.0       MIT
 
 Mewla build entrypoint: scripts/build-libghostty.sh
-Packaging: Expo plugin app/plugins/withAndroidRelease.js copies this
-file into android/app/src/main/assets/notices/GHOSTTY-MIT.txt (APK path
-assets/notices/GHOSTTY-MIT.txt).
+Packaging: client/android/app/build.gradle.kts copies this file into
+the APK at assets/notices/GHOSTTY-MIT.txt; client/ios/project.yml copies
+it to GHOSTTY-MIT.txt at the root of the iOS app bundle.
 
 ---------------------------------------------------------------------------
 

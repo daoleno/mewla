@@ -102,7 +102,7 @@ scroll the list to manufacture a passing anchor. Only the explicit Latest
 command requests latest-follow. Image metadata/binary loading is injected for
 the fixture, so this does not replace authentication/transport coverage.
 
-Run `bun test app`, `cd app && bunx tsc --noEmit`, and Android/iOS Expo exports.
+Run `cd client && bun test core` and `cd client/ui && nsh check && nsh test`.
 Native PID/log and before/after screen evidence remain necessary for crash,
 first-image, scrolling and keyboard claims. Export success is not a signed
 client release or iOS device proof.

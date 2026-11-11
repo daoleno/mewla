@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 LIB = ROOT / "scripts/lib"
-LOCK = ROOT / "app/modules/terminal-vt/native.lock.json"
+LOCK = ROOT / "native/terminal-vt/native.lock.json"
 
 
 def load(name):

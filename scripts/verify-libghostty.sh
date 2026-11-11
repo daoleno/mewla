@@ -10,11 +10,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
-NOTICE="$ROOT/app/assets/notices/GHOSTTY-MIT.txt"
-MODULE_NOTICE="$ROOT/app/modules/terminal-vt/NOTICE.Ghostty"
-PLUGIN="$ROOT/app/plugins/withAndroidRelease.js"
-IOS_PLUGIN="$ROOT/app/plugins/withIOSBuild.js"
+LOCK="$ROOT/native/terminal-vt/native.lock.json"
+NOTICE="$ROOT/client/ui/more/settings/licenses/texts/Ghostty-MIT.txt"
+MODULE_NOTICE="$ROOT/native/terminal-vt/NOTICE.Ghostty"
+# The client hosts that link libghostty-vt and package the notice.
+GRADLE="$ROOT/client/android/app/build.gradle.kts"
+CMAKE="$ROOT/client/android/app/CMakeLists.txt"
+XCODEGEN="$ROOT/client/ios/project.yml"
 
 MODE="full"
 ONLY_ABIS=()
@@ -45,9 +47,7 @@ bad() { echo "FAIL: $*" >&2; fail=1; }
 
 [[ -f "$LOCK" ]] && pass "lockfile present" || bad "missing $LOCK"
 [[ -f "$NOTICE" ]] && pass "Ghostty MIT notice source present" || bad "missing $NOTICE"
-[[ -f "$MODULE_NOTICE" ]] && pass "module NOTICE.Ghostty present" || bad "missing $MODULE_NOTICE"
-[[ -f "$PLUGIN" ]] && pass "withAndroidRelease plugin present" || bad "missing plugin"
-[[ -f "$IOS_PLUGIN" ]] && pass "withIOSBuild plugin present" || bad "missing iOS plugin"
+[[ -f "$MODULE_NOTICE" ]] && pass "NOTICE.Ghostty present" || bad "missing $MODULE_NOTICE"
 [[ -x "$ROOT/scripts/build-libghostty.sh" ]] && pass "build-libghostty.sh executable" || bad "build script not executable"
 [[ -x "$ROOT/scripts/verify-libghostty.sh" ]] && pass "verify-libghostty.sh executable" || bad "verify script not executable"
 [[ -f "$ROOT/scripts/lib/ghostty_release.py" ]] && pass "signed release fetcher present" || bad "missing scripts/lib/ghostty_release.py"
@@ -56,9 +56,34 @@ bad() { echo "FAIL: $*" >&2; fail=1; }
 [[ -x "$ROOT/scripts/android-release-apk.sh" ]] && pass "android-release-apk.sh executable" || bad "release apk script not executable"
 [[ -x "$ROOT/scripts/verify-apk-notice.sh" ]] && pass "verify-apk-notice.sh executable" || bad "apk notice verifier not executable"
 [[ -x "$ROOT/scripts/verify-ios-artifact.sh" ]] && pass "verify-ios-artifact.sh executable" || bad "iOS artifact verifier not executable"
-if grep -Eq "NOTICE_BUNDLE_REL[[:space:]]*=[[:space:]]*[\"']GHOSTTY-MIT\\.txt[\"']" "$IOS_PLUGIN" &&
-  grep -q 'verify_ghostty_notice' "$ROOT/scripts/verify-ios-artifact.sh" &&
-  grep -q 'NOTICE_BUNDLE_REL' "$ROOT/scripts/verify-ios-artifact.sh"; then
+# Android: the client's Gradle build links the libraries from native/terminal-vt by default and
+# packages the notice at the APK path the lock names (verify-apk-notice.sh checks the APK).
+if grep -qF '"${rootDir}/../../native/terminal-vt"' "$GRADLE" &&
+  grep -qF '"${MEWLA_GHOSTTY}/libs/android/${ANDROID_ABI}/libghostty_vt.so"' "$CMAKE" &&
+  grep -qF '"${MEWLA_GHOSTTY}/include"' "$CMAKE"; then
+  pass "Android client links libghostty-vt from native/terminal-vt"
+else
+  bad "client/android does not link libghostty-vt from native/terminal-vt (build.gradle.kts mewla.ghostty default, CMakeLists.txt)"
+fi
+if grep -qF 'notice.set(uiDir.resolve("more/settings/licenses/texts/Ghostty-MIT.txt"))' "$GRADLE" &&
+  grep -qF 'resolve("notices")' "$GRADLE" &&
+  grep -qF 'copyTo(out.resolve("GHOSTTY-MIT.txt"))' "$GRADLE" &&
+  grep -qF 'addGeneratedSourceDirectory(ghosttyNotice' "$GRADLE"; then
+  pass "Android Ghostty MIT notice packaged at assets/notices/GHOSTTY-MIT.txt"
+else
+  bad "client/android/app/build.gradle.kts does not package the Ghostty MIT notice"
+fi
+# iOS: the client's project links the XCFramework from native/terminal-vt by default and copies the
+# notice to the bundle root, where verify-ios-artifact.sh compares it with the source.
+if grep -qF 'MEWLA_GHOSTTY: $(SRCROOT)/../../native/terminal-vt' "$XCODEGEN" &&
+  grep -qF 'libs/ios/GhosttyVt.xcframework' "$XCODEGEN"; then
+  pass "iOS client links GhosttyVt.xcframework from native/terminal-vt"
+else
+  bad "client/ios/project.yml does not link libghostty-vt from native/terminal-vt"
+fi
+if grep -qF '/ui/more/settings/licenses/texts/Ghostty-MIT.txt" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/GHOSTTY-MIT.txt"' "$XCODEGEN" &&
+  grep -Eq "NOTICE_BUNDLE_REL=\"\\\$\{MEWLA_IOS_NOTICE_BUNDLE_REL:-GHOSTTY-MIT\\.txt\}\"" "$ROOT/scripts/verify-ios-artifact.sh" &&
+  grep -q 'verify_ghostty_notice' "$ROOT/scripts/verify-ios-artifact.sh"; then
   pass "iOS Ghostty MIT notice packaging and artifact verification wired"
 else
   bad "iOS Ghostty MIT notice packaging/verification not wired"
@@ -122,7 +147,7 @@ for a in abis:
     assert a["zig_target"]
     assert isinstance(a["elf_machine_code"], int)
 assert "arm64-v8a" in seen
-assert lock["release_apk"]["react_native_architectures"] == "arm64-v8a"
+assert lock["release_apk"]["abis"] == "arm64-v8a"
 assert lock["release_apk"]["notice_apk_path"] == "assets/notices/GHOSTTY-MIT.txt"
 unsupported = set(lock.get("unsupported_abis") or [])
 assert "armeabi-v7a" in unsupported and "x86" in unsupported
@@ -189,14 +214,6 @@ else:
 
 print("ok: lockfile schema, zig pins, ABI contract")
 PY
-
-# Plugin registered?
-if grep -q "withAndroidRelease" "$ROOT/app/app.config.js" \
-  || grep -q "withAndroidRelease" "$ROOT/app/app.base.json"; then
-  pass "withAndroidRelease registered in Expo config"
-else
-  bad "withAndroidRelease not registered in app.config.js / app.base.json"
-fi
 
 if [[ "$MODE" == "contract" ]]; then
   if [[ $fail -ne 0 ]]; then
