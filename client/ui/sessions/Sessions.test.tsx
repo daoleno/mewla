@@ -80,9 +80,13 @@ describe("Sessions", () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "dev server" })] }), storage, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
     await app.waitFor("text:dev server");
-    app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : null));
-    await app.press("id:sessions-menu");
-    await app.waitFor("id:services-sheet");
+    app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : dialog.buttons.includes("Cancel") ? "Cancel" : null));
+    // The menu offers Services once the computer is connected; a slow runner may get there after the list shows.
+    for (let tries = 0; !app.shows("id:services-sheet") && tries < 5; tries += 1) {
+      await app.press("id:sessions-menu");
+      await app.waitFor("id:services-sheet", { timeout: 2_000 }).catch(() => {});
+    }
+    expect(app.shows("id:services-sheet")).toBe(true);
     await app.host.send("links.open", { url: "mewla://sessions?serverId=s2" });
     await app.waitUntil(() => !app.shows("id:services-sheet"));
     expect(app.storage()["mewla:v1:current_server_id"]).toBe("s1");
@@ -271,6 +275,8 @@ describe("a Session", () => {
     await app.press("id:attach-file");
     await app.waitFor("text:Ready");
     await app.type("id:composer", "Read this");
+    // A slow runner draws the typed text a frame later: Send is enabled once it has.
+    await app.waitUntil(() => app.enabled("id:send"));
     await app.press("id:send");
     await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1);
     expect(framesOf(app.host.posts(), "send_input")[0]).toMatchObject({ worker_id: "w6", text: "Read this", attachments: [{ name: "plan.pdf", path: "/state/uploads/plan.pdf", content_type: "application/pdf" }] });
