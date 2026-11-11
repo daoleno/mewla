@@ -134,9 +134,11 @@ describe("a Calendar run's Work file", () => {
     const app = await open(APP, { host: phoneHost({ calendar_items: [calendarItem], work_items: [work], ...daemon }), storage: paired, platform: "android", network: expoTokenService });
     await app.host.send("links.open", { url: "mewla://calendar?id=c1&run=r1" });
     await app.waitFor("id:calendar-run-page", { timeout: 10_000 });
+    // The run's time in the phone's zone: the page has redrawn with it, so the press is not lost to that redraw (a slow runner gets the zone late).
+    await app.waitFor("text:Fri, Jul 17, 11:00 AM · Done", { timeout: 10_000 });
     await app.waitFor("id:open-work-file", { timeout: 10_000 });
     await app.press("id:open-work-file");
-    await app.waitFor("id:work-file-page");
+    await app.waitFor("id:work-file-page", { timeout: 10_000 });
     return app;
   }
 
