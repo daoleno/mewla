@@ -14,7 +14,7 @@
 //   (client/ui/shell/webLocation.ts; core/web/history.ts decides what each step does).
 // - files.*: M4's Files contract (client/ui/more/files/host.ts) the browser's way: an
 //   `<input type=file>` picker, an XHR upload with progress and abort, and a download into memory
-//   handed to the browser's own download (`<a download>`).
+//   handed to the browser's own download (`<a download>`), and a picked picture's thumbnail.
 //
 // The web player has no host posts (only calls reach the page), so the app sends `files.cancel`
 // and `files.cancelDownload` as calls in the browser.
@@ -191,6 +191,33 @@ function cancelUpload(args) {
   return null;
 }
 
+/**
+ * `files.thumbnail {uri, maxPixels}` → `{dataUrl}` or null: a picked picture scaled so its longer
+ * side is at most `maxPixels`, as a JPEG; null when it is not a picture this browser decodes.
+ */
+async function thumbnail(args) {
+  const file = picked.get(args.uri);
+  const maxPixels = Number(args.maxPixels) || 0;
+  if (!file || !String(file.type).startsWith("image/") || maxPixels <= 0) return null;
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    return null;
+  }
+  const factor = Math.min(1, maxPixels / Math.max(bitmap.width, bitmap.height, 1));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * factor));
+  canvas.height = Math.max(1, Math.round(bitmap.height * factor));
+  const context = canvas.getContext("2d");
+  // A JPEG has no transparency: what was clear shows white, not black.
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return { dataUrl: canvas.toDataURL("image/jpeg", 0.85) };
+}
+
 /** The browser saves where its settings say: there is no folder to choose. */
 function pickDirectory() {
   return { token: "browser-downloads", name: "Downloads" };
@@ -290,6 +317,7 @@ export function createHost(player) {
     "files.pickDirectory": () => pickDirectory(),
     "files.download": (args) => download(args),
     "files.cancelDownload": (args) => cancelDownload(args),
+    "files.thumbnail": (args) => thumbnail(args),
   };
   return {
     call(name, args) {

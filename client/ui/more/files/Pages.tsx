@@ -5,7 +5,7 @@ import { filePreviewRoute, type FilesPage } from "./routes";
 import { WorkspacePage } from "./Workspace";
 
 export { AttachmentTray } from "./Attachments";
-export { createAttachmentUploads, type AttachmentUploads } from "./upload";
+export { createAttachmentUploads, pastedFiles, type AttachmentUploads } from "./upload";
 export { filePreviewRoute, workspaceRoute, type FilesPage } from "./routes";
 
 /** The page of a Files route, in whichever stack pushed it. */
