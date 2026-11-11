@@ -289,6 +289,20 @@ describe("Pictures and pages", () => {
     expect(c.last("skills_inspect")).toMatchObject({ path: "b.png", skill_id: shots.id });
   });
 
+  test("on a wide screen a Skill's details sit beside the list, not over it", async () => {
+    const review = skill("review");
+    const c = computer({ skills: [review, skill("lint")] }, (body) => detail(review, [{ path: "SKILL.md" }], body.path as string | undefined, "Read the diff."));
+    const app = await open(HARNESS, { ...c.host(codex), width: 1000 });
+    await app.waitFor("id:skill-review");
+    await app.press("id:skill-review");
+    await app.waitFor("id:details-panel >> id:skill-inspector");
+    await app.waitFor("text:Read the diff.");
+    // The list stays usable beside it.
+    expect(app.shows("id:skill-lint")).toBe(true);
+    await app.press("label:Close Skill details");
+    await app.waitUntil(() => !app.shows("id:skill-inspector"));
+  });
+
   test("Plugins and Skills are peer pages: a sideways swipe goes to the other", async () => {
     const c = computer({ skills: [skill("review")], plugins: [plugin("helper")] });
     const app = await open(HARNESS, c.host(codex));
