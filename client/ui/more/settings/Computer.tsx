@@ -228,12 +228,12 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
   };
 
   return (
-    <>
+    <Page title={server()?.name || "Computer"} testID="computer">
       {!server() ? (
-        <Page title="Computer"><EmptyState title="This computer is no longer paired" /></Page>
+        <EmptyState title="This computer is no longer paired" />
       ) : (
-        <Page title={server()!.name || "Computer"} testID="computer">
-          {notice() ? <Notice testID="computer-notice" tone="failed" title={notice()!.title} detail={notice()!.detail} /> : null}
+        <View>
+          {notice() ?<Notice testID="computer-notice" tone="failed" title={notice()!.title} detail={notice()!.detail} /> : null}
           {connectionProblem() ? (
             <Notice
               testID={connectionProblem()!.testID}
@@ -309,8 +309,8 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
               onPress={() => void remove()}
             />
           </Section>
-        </Page>
+        </View>
       )}
-    </>
+    </Page>
   );
 }

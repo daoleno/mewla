@@ -127,7 +127,7 @@ export function Row(props: RowProps) {
 }
 
 /** A setting that takes effect at once. `busy` while the computer has not answered yet. */
-export function SwitchRow(props: { title: string; subtitle?: string; checked: boolean; busy?: boolean; disabled?: boolean; testID?: string; onChange: (checked: boolean) => void }) {
+export function SwitchRow(props: { title: string; subtitle?: string; checked: boolean; busy?: boolean; disabled?: boolean; testID?: string; accessibilityLabel?: string; onChange: (checked: boolean) => void }) {
   return (
     <Row
       title={props.title}
@@ -138,7 +138,7 @@ export function SwitchRow(props: { title: string; subtitle?: string; checked: bo
           {props.busy ? <Spinner size={16} /> : null}
           <Switch
             testID={props.testID}
-            accessibilityLabel={props.title}
+            accessibilityLabel={props.accessibilityLabel ?? props.title}
             checked={props.checked}
             disabled={props.disabled || props.busy}
             onChange={({ checked }) => props.onChange(checked)}
