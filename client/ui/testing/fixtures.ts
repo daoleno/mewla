@@ -77,3 +77,15 @@ export async function stepUntil(app: Awaited<ReturnType<typeof open>>, condition
     await app.wait(50);
   }
 }
+
+/**
+ * Presses `selector`, which opens a dialog or an action sheet the test's `onDialog` answers, and resolves once
+ * it has been answered: shown (`dialogs()`), then one more step, as the runner answers it in a step. After this
+ * a plain `waitFor` on what the answer does is safe.
+ */
+export async function pressAndAnswer(app: Awaited<ReturnType<typeof open>>, selector: string, timeout = 10_000): Promise<void> {
+  const before = app.dialogs().length;
+  await app.press(selector);
+  await stepUntil(app, () => app.dialogs().length > before, timeout);
+  await app.wait(50);
+}
