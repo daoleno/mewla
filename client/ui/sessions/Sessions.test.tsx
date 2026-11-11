@@ -23,6 +23,16 @@ describe("Sessions", () => {
     expect(app.count("id:session-row")).toBe(1);
   }, 20_000);
 
+  test("a tap that spans a Session's update still opens it: the update does not rebuild the row under the finger", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("a", { name: "release notes", status: "running" })] });
+    await app.waitFor("text:release notes");
+    await app.dragAndHold("id:session-row", { x: 0, y: 0 });
+    await app.host.send("daemon.push", { type: "worker_session_updated", worker_session: session("a", { name: "release notes", status: "done" }) });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await app.drop();
+    await app.waitFor("id:session-menu");
+  }, 20_000);
+
   test("one folder has no caption; with none, it offers New session", async () => {
     const one = await sessionsApp({ worker_sessions: [session("a", { name: "only" })] });
     await one.waitFor("text:only");
