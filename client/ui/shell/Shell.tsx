@@ -239,7 +239,7 @@ function sessionsRoute(route: SessionsRoute, index: () => number) {
 function moreRoute(route: MoreRoute) {
   switch (route.name) {
     case "more": return <More nav={moreNav} />;
-    case "pair": return <PairPage onPaired={() => moreNav.pop()} />;
+    case "pair": return <PairPage onScreen={() => selectedTab() === 3 && moreNav.routes().at(-1)?.name === "pair"} onPaired={() => moreNav.pop()} />;
     default: return <MorePageView route={route} nav={moreNav} onPair={() => moreNav.push({ name: "pair" })} />;
   }
 }

@@ -147,6 +147,15 @@ export function finderState(permission: CameraPermission | null, failed: boolean
   return failed ? "failed" : "camera";
 }
 
+/**
+ * Whether the camera runs: allowed and working, the app in front and its page on screen. Every
+ * tab's stack stays mounted, so a Pair page left for another tab is still there, hidden: its
+ * camera must stop (it kept the camera open and its preview drew a black band over the other tabs).
+ */
+export function cameraRuns(state: FinderState, foreground: boolean, onScreen: boolean): boolean {
+  return state === "camera" && foreground && onScreen;
+}
+
 /** "Looking for a Mewla code…" only while the camera really looks: allowed, running, the app in front. */
 export function cameraSearching(state: FinderState, foreground: boolean, pairing: boolean): boolean {
   return state === "camera" && foreground && !pairing;
