@@ -122,11 +122,8 @@ effect(() => {
       serverId: current.server.id,
       request: (request) => requestConnections(current, request),
       store: secure,
-      openUrl: async (url) => {
-        const { opened } = await openUrl(url);
-        // A browser that blocked the new tab says so, so the card offers to try again.
-        if (!opened && browser) throw new Error("not opened");
-      },
+      // A new tab the browser blocked leaves the card waiting, as in the Expo web app: its "Open <S> again" is a click the browser lets through.
+      openUrl: (url) => openUrl(url).then(() => undefined),
       copy: (text) => Clipboard.writeText(text),
       now: () => Date.now(),
       every: (ms, run) => {
