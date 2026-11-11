@@ -201,7 +201,7 @@ export class ConnectionsFlow {
     this.set({ phase: "verifying", connectError: "" });
     try {
       await this.remember({ ...active, callback: url });
-      const response = await finishPluginReturn(active, this.deps.serverId, url, (_id, request) => this.deps.request(request));
+      const response = await finishPluginReturn(active, this.deps.serverId, url, (_id, request) => this.deps.request(request), this.deps.now());
       await this.settle(response);
     } catch (failure) {
       this.fail(failure instanceof Error ? failure.message : "Could not verify authorization. Try again.");
