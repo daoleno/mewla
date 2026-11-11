@@ -13,6 +13,8 @@ export interface TerminalRouteSessionHint {
   startedAt?: number;
   /** Just created from New session: the composer takes focus once. */
   focusComposer?: boolean;
+  /** The computer could not confirm the new Session's provider setting is saved (shown until dismissed). */
+  durabilityWarning?: string;
 }
 
 /** Agents with a structured chat surface (provider-neutral conversation UI). */
