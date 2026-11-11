@@ -221,7 +221,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
           <Notice live tone={notice()!.kind === "error" ? "failed" : "success"} title={notice()!.message} action="Dismiss" onAction={() => notice.set(null)} />
         </View>
       ) : null}
-      <View panActivation={{ activeOffsetX: 24, failOffsetY: 14 }} onPanEnd={(event) => !event.cancelled && swipe(event.translation.x)}>
+      <View testID="agent-sections" panActivation={{ activeOffsetX: 24, failOffsetY: 14 }} onPanEnd={(event) => !event.cancelled && swipe(event.translation.x)}>
       {section() === "skills" ? (
         <SkillsList
           rows={shownSkills()}

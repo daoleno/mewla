@@ -264,6 +264,42 @@ describe("A Skill's files", () => {
   });
 });
 
+describe("Pictures and pages", () => {
+  const PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+  test("a picture of the copy opens larger, among the copy's other pictures", async () => {
+    const shots = skill("shots");
+    const files: File[] = [{ path: "SKILL.md" }, { path: "a.png", kind: "binary", media_type: "image/png" }, { path: "b.png", kind: "binary", media_type: "image/png" }];
+    const c = computer({ skills: [shots] }, (body) => {
+      const path = body.path as string | undefined;
+      const base = detail(shots, files, path, "Shots.");
+      return path?.endsWith(".png") ? { ...base, preview: { path, kind: "binary", media_type: "image/png", status: "ready", size: 68, bytes_returned: 68, data_url: PIXEL } } : base;
+    });
+    const app = await open(HARNESS, c.host(codex));
+    await app.waitFor("id:skill-shots");
+    await app.press("id:skill-shots");
+    await app.waitFor("id:skill-file-a.png");
+    await app.press("id:skill-file-a.png");
+    await app.waitFor("id:skill-file-image");
+    await app.press("id:skill-file-image");
+    await app.waitFor("id:skill-image-viewer");
+    await app.waitFor("text:1 of 2");
+    await app.press("id:image-next");
+    await app.waitFor("text:2 of 2");
+    expect(c.last("skills_inspect")).toMatchObject({ path: "b.png", skill_id: shots.id });
+  });
+
+  test("Plugins and Skills are peer pages: a sideways swipe goes to the other", async () => {
+    const c = computer({ skills: [skill("review")], plugins: [plugin("helper")] });
+    const app = await open(HARNESS, c.host(codex));
+    await app.waitFor("id:plugin-helper");
+    await app.drag("id:agent-sections", { x: -200 });
+    await app.waitFor("id:skill-review");
+    await app.drag("id:agent-sections", { x: 200 });
+    await app.waitFor("id:plugin-helper");
+  });
+});
+
 describe("Copy pickers", () => {
   test("Delete copy names each copy's place and agents, says why one stays, and closes", async () => {
     const global = skill("review");
