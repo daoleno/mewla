@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { expoTokenService, paired, phoneHost, pressAndAnswer } from "../testing/fixtures";
+import { answering, expoTokenService, paired, phoneHost } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -38,7 +38,7 @@ describe("Phone use in the app", () => {
     app.onDialog((dialog) => (dialog.sheet ? "Take over" : null));
     await app.waitFor("id:screen-float", { timeout: 10_000 });
     expect(app.texts()).toContain("Writer");
-    await pressAndAnswer(app, "id:screen-float-options");
+    await answering(app, () => app.press("id:screen-float-options"));
     await app.waitUntil(() => calls.includes("takeOver"));
     await app.waitFor("id:phone-page");
     await app.waitUntil(() => !app.shows("id:screen-float"));
