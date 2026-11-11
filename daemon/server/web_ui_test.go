@@ -60,6 +60,8 @@ func TestWebUIServesLoopbackClientsOfLoopbackHosts(t *testing.T) {
 		if !strings.Contains(policy, "connect-src 'self' ws://"+host+" wss://"+host) ||
 			!strings.Contains(policy, "frame-ancestors 'none'") ||
 			!strings.Contains(policy, "frame-src 'none'") ||
+			// The page's <base href="/">: deep links load its files from the root.
+			!strings.Contains(policy, "base-uri 'self'") ||
 			// Friends pictures and video come from the media host over https.
 			!strings.Contains(policy, "img-src 'self' data: blob: https:") ||
 			!strings.Contains(policy, "media-src 'self' data: blob: https:") {
