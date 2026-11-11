@@ -1,4 +1,4 @@
-import { effect, lifecycle, Scroll, signal, Text, untracked, View } from "nsh";
+import { Scroll, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { notificationRows, relativeTime, type FriendsNotification, type NotificationRow } from "../../../core/friends/api";
 import { friendsCall } from "../../../core/friends/requests";
@@ -6,7 +6,7 @@ import { Icon, type IconName } from "../kit/Icon";
 import { EmptyState } from "../kit/kit";
 import type { PageNav } from "../routes";
 import { FriendsPageFrame } from "./parts";
-import { draftCount, followFriends, friends, friendsServer, refreshFriends } from "./state";
+import { currentServerId, draftCount, followFriends, followPage, friends, refreshFriends, serverFor } from "./state";
 
 const ICONS: Record<NotificationRow["kind"], IconName> = { comment: "chat", like: "heart", follow: "people" };
 
@@ -25,25 +25,36 @@ function Line(props: { icon: IconName; text: string; detail?: string; at?: strin
 }
 
 /** Comments, likes and follows, newest first; opening the page marks them read. */
-export function Notifications(props: { nav: PageNav }) {
+export function Notifications(props: { nav: PageNav; top: () => boolean }) {
   followFriends();
   const rows = signal<NotificationRow[] | null>(null);
+  let generation = 0;
   const load = async () => {
-    const server = friendsServer();
+    const id = currentServerId();
+    const server = serverFor(id);
     if (!server) return;
+    const mine = ++generation;
+    const live = () => mine === generation && currentServerId() === id;
     try {
       const answer = await friendsCall<{ notifications: FriendsNotification[] }>(server, "GET", "/notifications");
+      if (!live()) return;
       rows.set(notificationRows(answer.notifications ?? []));
     } catch {
-      rows.set([]);
+      if (live()) rows.set([]);
       return;
     }
     // Read once shown: the rows keep their unread mark from before, the bell's dot clears.
     await friendsCall(server, "POST", "/notifications/read").catch(() => {});
-    await refreshFriends();
+    if (live()) await refreshFriends();
   };
-  effect(() => {
-    if (lifecycle() === "active") untracked(() => void load());
+  // Back on the page (from a post or a profile), newer ones show and are marked read too.
+  followPage({
+    top: props.top,
+    clear: () => {
+      generation++;
+      rows.set(null);
+    },
+    load: () => void load(),
   });
   const agent = () => friends().status?.me?.agent_name || "Brain";
   return (

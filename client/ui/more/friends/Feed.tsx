@@ -5,7 +5,7 @@ import { EmptyState } from "../kit/kit";
 import { Segmented } from "../kit/Segmented";
 import type { PageNav } from "../routes";
 import { Avatar, FriendsPageFrame, PostList } from "./parts";
-import { draftCount, followFriends, friends, friendsEnabled, unread } from "./state";
+import { draftCount, followFriends, followPage, friends, friendsEnabled, refreshFriends, unread } from "./state";
 
 type Scope = "all" | "following";
 
@@ -32,8 +32,10 @@ function DraftBanner(props: { nav: PageNav }) {
 }
 
 /** Friends: everyone's posts or only the people you follow, newest first. */
-export function Feed(props: { nav: PageNav }) {
+export function Feed(props: { nav: PageNav; top: () => boolean }) {
   followFriends();
+  // Back on the feed (a post deleted, someone blocked, a draft posted): the drafts and the bell read again.
+  followPage({ top: props.top, clear: () => {}, load: () => void refreshFriends() });
   const scope = signal<Scope>("all");
   const me = () => friends().status?.me;
   // The list stays mounted while the status changes; only turning off replaces it.
@@ -73,9 +75,9 @@ export function Feed(props: { nav: PageNav }) {
           </View>
           <DraftBanner nav={props.nav} />
           {scope() === "all" ? (
-            <PostList testID="friends-list" path="/feed" nav={props.nav} emptyTitle="Nothing here yet" />
+            <PostList testID="friends-list" path="/feed" nav={props.nav} top={props.top} emptyTitle="Nothing here yet" />
           ) : (
-            <PostList testID="friends-list" path="/feed?scope=following" nav={props.nav} emptyTitle="No one followed yet" />
+            <PostList testID="friends-list" path="/feed?scope=following" nav={props.nav} top={props.top} emptyTitle="No one followed yet" />
           )}
         </View>
       )}
@@ -83,10 +85,11 @@ export function Feed(props: { nav: PageNav }) {
   );
 }
 
-export function Bookmarks(props: { nav: PageNav }) {
+export function Bookmarks(props: { nav: PageNav; top: () => boolean }) {
+  followFriends();
   return (
     <FriendsPageFrame title="Bookmarks" testID="friends-bookmarks">
-      <PostList path="/bookmarks" nav={props.nav} emptyTitle="No bookmarks" emptyDetail="Tap the bookmark on a post to keep it here." emptyIcon="bookmark" />
+      <PostList path="/bookmarks" nav={props.nav} top={props.top} emptyTitle="No bookmarks" emptyDetail="Tap the bookmark on a post to keep it here." emptyIcon="bookmark" />
     </FriendsPageFrame>
   );
 }
