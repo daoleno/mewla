@@ -3,11 +3,12 @@ import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { browserEnrollmentServer, readBrowserEnrollmentStatus, requestBrowserEnrollment, type BrowserEnrollmentPrompt } from "../../core/enrollment";
 import { addPairedServer } from "../session";
+import { forgetOwnEnrollment, OWN_ENROLLMENT_KEY, rememberOwnEnrollment } from "./ownRequest";
 
 type JoinState = "starting" | "pending" | "denied" | "expired" | "error";
 
 /** The request survives a reload of the page for as long as it is valid (Expo: sessionStorage). */
-const PROMPT_KEY = "mewla:enrollment:v1";
+const PROMPT_KEY = OWN_ENROLLMENT_KEY;
 
 async function savedPrompt(): Promise<BrowserEnrollmentPrompt | null> {
   try {
@@ -44,7 +45,7 @@ export function BrowserJoin(props: { onPairingLink: () => void }) {
     try {
       origin = String(await host.call("app.origin"));
       const request = (await savedPrompt()) ?? (await requestBrowserEnrollment(origin));
-      await Storage.setItem(PROMPT_KEY, JSON.stringify(request)).catch(() => {});
+      rememberOwnEnrollment(request);
       if (mine !== run) return;
       prompt.set(request);
       state.set("pending");
@@ -63,7 +64,7 @@ export function BrowserJoin(props: { onPairingLink: () => void }) {
       if (status.status === "approved") {
         const input = browserEnrollmentServer(origin, status);
         if (!input) throw new Error("The approval response is incomplete. Please retry.");
-        await Storage.removeItem(PROMPT_KEY).catch(() => {});
+        forgetOwnEnrollment();
         await addPairedServer(input);
         return;
       }
@@ -79,7 +80,7 @@ export function BrowserJoin(props: { onPairingLink: () => void }) {
   };
 
   const again = async () => {
-    await Storage.removeItem(PROMPT_KEY).catch(() => {});
+    forgetOwnEnrollment();
     void start();
   };
   void start();
