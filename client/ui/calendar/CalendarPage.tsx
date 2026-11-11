@@ -153,7 +153,7 @@ export function CalendarPage(props: { nav: NavStackState<CalendarRoute>; openSes
       headerLeft={<Button testID="toggle-month" accessibilityLabel={showMonth() ? "Hide month" : "Show month"} onPress={toggleMonth}><Text class="text-base text-primary">{showMonth() ? "Hide month" : "Show month"}</Text></Button>}
       headerRight={<Button testID="add-item" accessibilityLabel="Add calendar item" disabled={!calendar()} onPress={() => openEditor(null)}><Text class={calendar() ? "text-2xl text-primary" : "text-2xl text-muted-foreground"}>+</Text></Button>}>
       <View class="flex-1 bg-background">
-        <List testID="agenda" class="flex-1" each={rows()}
+        <List keyboardShouldPersistTaps="handled" testID="agenda" class="flex-1" each={rows()}
           keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
           header={() => <View><ReminderBanner />{showMonth() ? <Month /> : null}<Heading /></View>}
           empty={() => <Empty />}>

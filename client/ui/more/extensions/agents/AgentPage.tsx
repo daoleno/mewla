@@ -197,7 +197,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
       onRefresh={refresh}
       aside={
         <View testID="details-panel" class="w-[400px] border-l border-border bg-card" style={{ display: wide() && panel() ? "flex" : "none" }}>
-          {((key) => untracked(() => (!key ? null : <Scroll class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll>)))(wide() ? panel() : "")}
+          {((key) => untracked(() => (!key ? null : <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll>)))(wide() ? panel() : "")}
         </View>
       }
     >
@@ -273,10 +273,10 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
 
       <Sheet open={!wide() && panel().startsWith("skill:")} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
         {/* The sheet takes its content once; the view inside follows the copy shown. */}
-        <View class="shrink">{((key) => untracked(() => (key.startsWith("skill:") ? <Scroll class="shrink">{inspector()}</Scroll> : null)))(wide() ? "" : panel())}</View>
+        <View class="shrink">{((key) => untracked(() => (key.startsWith("skill:") ? <Scroll keyboardShouldPersistTaps="handled" class="shrink">{inspector()}</Scroll> : null)))(wide() ? "" : panel())}</View>
       </Sheet>
       <Sheet open={!wide() && panel().startsWith("plugin:")} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
-        <View class="shrink">{((key) => untracked(() => (key.startsWith("plugin:") ? <Scroll class="shrink">{pluginDetails()}</Scroll> : null)))(wide() ? "" : panel())}</View>
+        <View class="shrink">{((key) => untracked(() => (key.startsWith("plugin:") ? <Scroll keyboardShouldPersistTaps="handled" class="shrink">{pluginDetails()}</Scroll> : null)))(wide() ? "" : panel())}</View>
       </Sheet>
     </Page>
   );

@@ -502,7 +502,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     if (p === "failed") return <EmptyState icon="cloud-offline" title="Disconnected" detail={reason()} action="Reconnect" onAction={() => void connect()} />;
     if (p === "setup")
       return (
-        <Scroll class="flex-1" contentClass="grow items-center justify-center px-4 py-6">
+        <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow items-center justify-center px-4 py-6">
           <Setup status={status()!} kind={setupKind(status()!)} name={title()} busy={busy()} reason={reason()} onEnable={() => void enable()} onOpenSettings={(id) => void openSettings(id)} onRestart={() => void restartMewla()} onCheck={() => void connect()} onChooseComputer={() => props.nav.push({ name: "settings" })} />
         </Scroll>
       );
@@ -532,7 +532,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
           {fullBleed() && live() ? (
             // Sideways, the controls stand beside the picture, which is wider
             // than tall and leaves that strip unused.
-            <Scroll testID="screen-rail" class="grow-0 border-l border-border bg-background" contentClass="grow items-center justify-center gap-1 p-1">
+            <Scroll keyboardShouldPersistTaps="handled" testID="screen-rail" class="grow-0 border-l border-border bg-background" contentClass="grow items-center justify-center gap-1 p-1">
               {indicator()}
               {watching() ? (
                 <>
@@ -702,7 +702,7 @@ function AgentCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.El
   const label = (agent: ScreenAgent | undefined) => agent?.name || "An agent";
   const which = agentsKey(() => props.agents);
   return (
-    <Scroll class="flex-1" contentClass="grow items-center justify-center gap-3 px-6 py-6">
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow items-center justify-center gap-3 px-6 py-6">
       <View testID="screen-agents" class="w-full items-center gap-3">
         <Icon name="desktop" size={36} tone="faint" />
         <Text class="text-center text-lg font-semibold">{props.agents.length > 1 ? `${props.agents.length} agents are using the screen` : `${label(props.agents[0])} is using the screen`}</Text>
@@ -728,7 +728,7 @@ function AgentCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.El
 function LocalCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.Element; onStop: (agent: ScreenAgent) => void }) {
   const which = agentsKey(() => props.agents);
   return (
-    <Scroll class="flex-1" contentClass="grow items-center justify-center px-4 py-6">
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow items-center justify-center px-4 py-6">
       <View testID="screen-local" class="w-full max-w-[440px]">
         <Section>
           {keyed(which, () =>

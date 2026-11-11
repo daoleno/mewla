@@ -23,4 +23,14 @@ describe("what NSH 0.4.0's browser runtime lacks", () => {
       .map((path) => relative(UI, path));
     expect(offenders).toEqual([]);
   });
+
+  // BackHandler.on is not in the browser runtime either: Settings → Pair a computer threw
+  // "he.on is not a function" on the web (FINAL-VERIFY 6387f88f, page:Settings → Pair a computer).
+  test("BackHandler.on is called only behind a web check", () => {
+    const offenders = sources(UI)
+      .filter((path) => /BackHandler\.on\(/.test(readFileSync(path, "utf8")))
+      .filter((path) => !/platform\.os === "web"\) return;\s*cleanup\(BackHandler\.on\(/.test(readFileSync(path, "utf8")))
+      .map((path) => relative(UI, path));
+    expect(offenders).toEqual([]);
+  });
 });

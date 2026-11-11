@@ -174,7 +174,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
       <Current review={review} class="flex-1 bg-background">{() => (
         <View class="flex-1 flex-row bg-background">
           <View testID="git-list" class={wide() ? "w-[380px] border-r border-border" : "flex-1"}>
-            <Scroll class="flex-1" contentClass="px-4 pb-6 pt-2" refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}>
+            <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6 pt-2" refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}>
               <View class="w-full max-w-[720px] self-center">
                 <FlashLine />
                 <View class="mt-3">

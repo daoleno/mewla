@@ -121,7 +121,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
               <Button testID="work-file-load" onPress={loadRemote} class="self-start"><Text class="text-base text-primary">Load remote changes</Text></Button>
             </View>
           ) : null}
-          <Scroll class="flex-1">
+          <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
             <View class="gap-2 px-4 pb-8 pt-4">
               <Text class="text-sm text-muted-foreground">{`${workItemStatusLabel[workItemStatus(item()!)]} · ${age(item()!.mtime)}`}</Text>
               <Text class="text-xl font-semibold">{item()!.title || "Untitled work"}</Text>

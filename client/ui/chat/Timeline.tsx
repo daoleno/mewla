@@ -175,7 +175,7 @@ export function ChatTimeline(props: {
   return (
     <View class="flex-1">
       <SelectTextSheet />
-      <List testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
+      <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
           list = node;
           mounted.set(true);
         }}

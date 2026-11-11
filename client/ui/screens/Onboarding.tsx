@@ -189,7 +189,7 @@ function HeroStep(props: { frame: Frame | null; compact: boolean; center: JSX.El
     <View class="flex-1">
       {props.compact ? (
         <View testID="step-compact" class="flex-1 pb-2 pl-0 pr-6" style={{ marginLeft: props.frame ? heroZoneWidth(props.frame) : 0, ...fade.style }}>
-          <Scroll class="flex-1" contentClass="grow justify-center gap-5 py-3">
+          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow justify-center gap-5 py-3">
             <View class="items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
             <View class="w-full max-w-[360px] gap-2 self-center">{props.actions}</View>
           </Scroll>
@@ -211,12 +211,12 @@ function SplitStep(props: { compact: boolean; content: JSX.Element; actions: JSX
     <View class="flex-1">
       {props.compact ? (
         <View testID="split-compact" class="flex-1 flex-row gap-6 px-6 pb-2" style={fade.style}>
-          <Scroll class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
           <View class="w-[220px] justify-end gap-2">{props.actions}</View>
         </View>
       ) : (
         <View testID="split-tall" class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={fade.style}>
-          <Scroll class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
           <View class="gap-2">{props.actions}</View>
         </View>
       )}

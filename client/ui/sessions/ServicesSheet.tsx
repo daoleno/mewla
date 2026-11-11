@@ -124,7 +124,7 @@ function ServiceDetail(props: { service: () => DiscoveredSessionService; onBack:
           <Text class="text-xs text-muted-foreground line-clamp-1">{`Port ${props.service().port} · ${subtitle()}`}</Text>
         </View>
       </View>
-      <Scroll style={{ maxHeight: 520 }}>
+      <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
         <View class="gap-4 pb-2">
           <Section title="Open">
             {isDSHWebService(props.service()) ? (
@@ -259,7 +259,7 @@ export function ServicesSheet(props: { onOpenSession: (workerId: string) => void
               </View>
             ) : null}
             {count() > 0 ? (
-              <Scroll style={{ maxHeight: 520 }}>
+              <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
                 <View class="gap-4 pb-2">
                   {groupSessionServices(services()).flatMap((section) => section.groups.map((group) => (
                     <Section title={section.title ? `${section.title} · ${group.project}` : group.project}>

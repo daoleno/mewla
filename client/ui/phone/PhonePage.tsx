@@ -126,7 +126,7 @@ function Setup() {
   const working = () => phonePairing() || phoneStatus()?.guide != null;
 
   return (
-    <Scroll class="flex-1" contentClass="px-4 pb-6" testID="phone-setup">
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6" testID="phone-setup">
       <View class="w-full max-w-[720px] self-center">
         <View class="items-center py-7">
           <Icon name="phone" size={40} tone="ink" />
