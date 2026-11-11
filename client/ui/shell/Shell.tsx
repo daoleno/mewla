@@ -25,7 +25,9 @@ import { ServicesSheet } from "../sessions/ServicesSheet";
 import { EnrollmentApproval } from "../enrollment/Approval";
 import { BrowserJoin } from "../enrollment/BrowserJoin";
 import { current, onTransport, workers } from "../session";
-import { PhoneFloat } from "../phone";
+import { routeOwner } from "../../core/screen/float";
+import { ScreenFloatHost } from "../screenfloat/ScreenFloatHost";
+import { workFiles } from "../work/state";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import type { MoreRoute, SessionsRoute } from "./routes";
 import { needsYou } from "./attention";
@@ -172,6 +174,22 @@ export function openPhonePage() {
   moreNav.setRoutes([{ name: "more" }, { name: "settings" }, { name: "settings-phone" }]);
 }
 
+/** Screen, where an agent's display and the Mac's screen have their full view: the floating screen's Open. */
+export function openScreenPage(_worker: string | null) {
+  selectedTab.set(3);
+  moreNav.setRoutes([{ name: "more" }, { name: "screen" }]);
+}
+
+/** The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen. */
+const floatPage = () => {
+  const tab = selectedTab();
+  const top = stacks[tab]?.routes().at(-1) as { name: string; workerId?: string; id?: string } | undefined;
+  return {
+    owner: routeOwner(top, (id) => workFiles().find((item) => item.id === id)?.frontmatter.worker_session),
+    screenPage: tab === 3 && top?.name === "screen",
+  };
+};
+
 /**
  * How a Session's Git review and file previews push their next page: theirs stay on the
  * Sessions stack, anything else opens under More.
@@ -279,7 +297,7 @@ function WideShell() {
           <View class="flex-1">{tabs.map((_, i) => <Section index={i} />)}</View>
         </ResizablePanel>
       </ResizablePanelGroup>
-      <PhoneFloat onOpen={openPhonePage} />
+      <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} />
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
       <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <EnrollmentApproval />
@@ -293,7 +311,7 @@ export function Shell() {
   return (
     <View class="flex-1 bg-background">
       <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}>{tabs.map((_, i) => <Section index={i} />)}</View>
-      <PhoneFloat onOpen={openPhonePage} bottom={belowSections()} />
+      <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} bottomInset={belowSections} />
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
         <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
         <EnrollmentApproval />

@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { expoTokenService, paired, phoneHost } from "../testing/fixtures";
+import { expoTokenService, paired, phoneHost, stepUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -33,19 +33,20 @@ describe("Phone use in the app", () => {
     expect(app.texts()).toContain("Ready");
   }, 20_000);
 
-  test("while an agent works the phone, its floating control is over the app; Take over takes it and opens the Phone page, where the float hides", async () => {
+  test("while an agent works the phone, its floating screen is over the app; Take over takes it and opens the Phone page, where the float hides", async () => {
     const { app, calls } = await phoneApp({ ...ready, agent: "Writer" });
-    await app.waitFor("id:phone-float", { timeout: 10_000 });
+    app.onDialog((dialog) => (dialog.sheet ? "Take over" : null));
+    await app.waitFor("id:screen-float", { timeout: 10_000 });
     expect(app.texts()).toContain("Writer");
-    await app.press("id:phone-float-take-over");
-    await app.waitUntil(() => calls.includes("takeOver"));
+    await app.press("id:screen-float-options");
+    await stepUntil(app, () => calls.includes("takeOver"));
     await app.waitFor("id:phone-page");
-    await app.waitUntil(() => !app.shows("id:phone-float"));
+    await app.waitUntil(() => !app.shows("id:screen-float"));
   }, 20_000);
 
   test("nothing floats while no agent works the phone", async () => {
     const { app } = await phoneApp(ready);
     await app.wait(500);
-    expect(app.shows("id:phone-float")).toBe(false);
+    expect(app.shows("id:screen-float")).toBe(false);
   }, 20_000);
 });

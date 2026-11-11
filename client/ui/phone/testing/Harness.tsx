@@ -5,7 +5,7 @@ import type { StoredServer } from "../../../core/storedServerContract";
 import { testServer } from "../../more/testing/fakeDaemon";
 import { nshPlatform } from "../../platform";
 import { current, ready, servers } from "../../session";
-import { PhoneFloat } from "../PhoneFloat";
+import { ScreenFloatHost } from "../../screenfloat/ScreenFloatHost";
 import { PhonePage } from "../PhonePage";
 
 /**
@@ -46,6 +46,6 @@ mount(() => (
         )
       }
     </NavStack>
-    <PhoneFloat onOpen={open} />
+    <ScreenFloatHost page={() => ({ owner: null, screenPage: false })} onOpenPhone={open} onOpenScreen={() => {}} />
   </View>
 ));
