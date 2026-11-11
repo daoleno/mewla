@@ -65,6 +65,8 @@ host.on("app.daemonSwitch", (server) => {
 
 // `host.params.below`: a page under it, so a test can go back from the page.
 const nav = createNavStack<MorePage>([...(params.below ? [params.below] : []), params.page ?? { name: "stats" }]);
+// `app.host.send("app.navPop")`: the page goes, whatever is open over it (as Android's Back did under a sheet).
+host.on("app.navPop", () => nav.pop());
 
 mount(() => (
   <View class="flex-1 bg-background">
