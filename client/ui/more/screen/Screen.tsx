@@ -459,9 +459,9 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       <View testID="screen-iphone" class="w-full max-w-[440px] items-center gap-2 pt-2">
         <Text class="text-center text-base">{`${label} is using your iPhone`}</Text>
         <View class="flex-row flex-wrap justify-center gap-2">
-          <SmallButton title="Watch" icon="eye" label={`Watch ${who} on your iPhone`} onPress={() => props.nav.push({ name: "settings-iphone" })} />
-          <SmallButton title="Done" icon="check" label="Done: tell the agent you finished on your iPhone" disabled={iphoneBusy()} onPress={() => void changeIPhoneUse({ handoff_done: true })} />
-          <SmallButton title="Stop" label={`Stop ${who} on your iPhone`} destructive disabled={iphoneBusy()} onPress={() => void changeIPhoneUse({ stop_agent: true })} />
+          <SmallButton testID="screen-iphone-watch" title="Watch" icon="eye" label={`Watch ${who} on your iPhone`} onPress={() => props.nav.push({ name: "settings-iphone" })} />
+          <SmallButton testID="screen-iphone-done" title="Done" icon="check" label="Done: tell the agent you finished on your iPhone" disabled={iphoneBusy()} onPress={() => void changeIPhoneUse({ handoff_done: true })} />
+          <SmallButton testID="screen-iphone-stop" title="Stop" label={`Stop ${who} on your iPhone`} destructive disabled={iphoneBusy()} onPress={() => void changeIPhoneUse({ stop_agent: true })} />
         </View>
       </View>
     );
