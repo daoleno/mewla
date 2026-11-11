@@ -241,6 +241,17 @@ describe("Settings' Pair a computer", () => {
     await app.waitFor("id:qr-camera");
   });
 
+  test("a computer paired without a name is named on the connected step by the name it reports", async () => {
+    const app = await pairPage({}, { network: { [computer.pairURL]: () => computer.answer(), [computer.probeURL]: () => computer.probe("manjaro") } });
+    app.onDialog(() => "Pair and grant access");
+    await app.type("id:pair-link", computer.link(""));
+    await app.press("id:pair-link-submit");
+    await app.waitFor("id:connected-title", { timeout: 10_000 });
+    // Connecting shows the name; unreachable (no daemon here) says "Check that mewla is running on manjaro."
+    await app.waitUntil(() => app.texts().some((text) => text === "manjaro" || text.includes("running on manjaro.")), { timeout: 10_000 });
+    expect(app.texts().join(" ")).not.toContain("running on your computer");
+  }, 25_000);
+
   test("pairing again with the computer already paired asks nothing and still shows the connected step", async () => {
     const same = { id: "s2", name: "Desk", url: "ws://10.0.0.5:9876/ws", daemonId: "a1".repeat(32), daemonPublicKey: computer.publicKey };
     const app = await open("../App.tsx", {
