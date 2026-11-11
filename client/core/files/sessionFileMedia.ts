@@ -41,6 +41,89 @@ export function sessionFileMediaRecovery(input: {
     : "fail";
 }
 
+export interface SessionFileMediaSource {
+  uri: string;
+}
+
+export interface SessionFileMediaRecoveryHost<S extends SessionFileMediaSource> {
+  kind: SessionFileMediaKind;
+  /** Signs a fresh read capability for the same file and generation. */
+  resolve(): Promise<S>;
+  /** Plays `source` from `resumeAt` seconds; `play` when it was playing. */
+  load(source: S, resumeAt: number, play: boolean): void;
+  /** Playback can't go on: what the person reads, and whether the file changed. */
+  fail(message: string, stale: boolean): void;
+  isStale(error: unknown): boolean;
+}
+
+/**
+ * The player's side of a stream whose capability lapses (2 minutes): it hears
+ * the player's load, progress and error, and on an error after data played it
+ * signs a fresh source and resumes where it was, at most
+ * `SESSION_FILE_MEDIA_RECOVERY_LIMIT` times in a row (playback moving again
+ * resets the count). An error before any data is a file this player can't play.
+ */
+export function createSessionFileMediaRecovery<S extends SessionFileMediaSource>(host: SessionFileMediaRecoveryHost<S>) {
+  let loadedSinceSource = false;
+  let attempts = 0;
+  let recovering = false;
+  let disposed = false;
+  let currentTime = 0;
+  let resumedAt = 0;
+  let playing = false;
+  return {
+    loaded(): void {
+      loadedSinceSource = true;
+    },
+    progress(time: number): void {
+      if (time > currentTime) playing = true;
+      currentTime = time;
+      // Playback moving again after a recovery means the stream is healthy.
+      if (time > resumedAt + 1) attempts = 0;
+    },
+    ended(): void {
+      playing = false;
+    },
+    paused(): void {
+      playing = false;
+    },
+    error(): void {
+      if (recovering || disposed) return;
+      if (sessionFileMediaRecovery({ loadedSinceSource, attempts }) === "fail") {
+        host.fail(
+          loadedSinceSource
+            ? "Playback stopped and couldn't resume. Refresh and try again."
+            : `${host.kind === "video" ? "This video" : "This audio"} can't be played here. Download it to play it in another app.`,
+          false,
+        );
+        return;
+      }
+      attempts += 1;
+      recovering = true;
+      const resumeAt = currentTime;
+      const play = playing;
+      host
+        .resolve()
+        .then((next) => {
+          if (disposed) return;
+          loadedSinceSource = false;
+          resumedAt = resumeAt;
+          host.load(next, resumeAt, play);
+        })
+        .catch((error: unknown) => {
+          if (disposed) return;
+          host.fail(error instanceof Error && error.message ? error.message : "Could not authorize the stream again.", host.isStale(error));
+        })
+        .finally(() => {
+          recovering = false;
+        });
+    },
+    dispose(): void {
+      disposed = true;
+    },
+  };
+}
+
 /** 0:07, 1:04, 12:30, 1:02:03; hours appear only when the media is that long. */
 export function formatSessionFileMediaTime(
   seconds: number,

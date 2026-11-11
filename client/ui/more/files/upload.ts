@@ -3,7 +3,7 @@ import { AttachmentUploadQueue, type AttachmentQueueItem } from "../../../core/f
 import { buildAttachmentUploadPresentation } from "../../../core/files/attachmentUploadPresentation";
 import { checkPickedCount, createAttachmentUploadOperation, MAX_COMPOSER_ATTACHMENTS, pickLimit, type UploadedAttachment } from "../../../core/files/uploads";
 import type { StoredServer } from "../../../core/storedServerContract";
-import { current } from "../../session";
+import { connection, current } from "../../session";
 import { uploadFile as uploadThrough, type UploadFile, type UploadOptions, type UploadResult } from "../../../core/files/upload";
 import { pickFiles, uploadHost } from "./host";
 
@@ -30,6 +30,8 @@ export interface AttachmentUploads {
   items(): readonly AttachmentQueueItem[];
   /** The picker is open. */
   picking(): boolean;
+  /** Attach can be offered now: the computer is connected, no picker is open and there is room (reactive). */
+  canAttach(): boolean;
   /** Opens the picker for the room left, then uploads what was picked; throws what the person should read. */
   pickAndUpload(): Promise<void>;
   retry(id: string): void;
@@ -74,10 +76,11 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
   return {
     items: () => items(),
     picking: () => picking(),
+    canAttach: () => !!server() && connection() === "connected" && !picking() && items().length < MAX_COMPOSER_ATTACHMENTS,
     async pickAndUpload() {
       if (picking()) return;
       const room = pickLimit(MAX_COMPOSER_ATTACHMENTS - items().length);
-      if (!server()) throw new Error("Connect to a computer to attach files.");
+      if (!server() || connection() !== "connected") throw new Error("Connect to a computer to attach files.");
       picking.set(true);
       try {
         const assets = checkPickedCount(await pickFiles(room), room);

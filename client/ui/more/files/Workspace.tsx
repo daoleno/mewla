@@ -1,25 +1,49 @@
-import { effect, Image, Scroll, signal, Text, untracked, Video, View } from "nsh";
+import { cleanup, Clipboard, effect, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
-import { NavPage } from "../../shell/NavPage";
+import { Button, NavPage, TextView } from "nsh/base";
 import { getBrainWorkspaceFile, getBrainWorkspaceTree, getSessionFileMetadata } from "../../../core/files/requests";
-import { bindSessionFileRequestToGeneration, buildSessionFileBinarySource, type SessionFileIdentity } from "../../../core/files/sessionFilePreview";
+import {
+  bindSessionFileRequestToGeneration,
+  buildSessionFileBinarySource,
+  sessionFileTooLargeMessage,
+  type SessionFileBinarySource,
+  type SessionFileIdentity,
+} from "../../../core/files/sessionFilePreview";
 import { sessionFileMediaKindForPath } from "../../../core/files/sessionFileMedia";
 import {
+  brainWorkspaceEntryAccessibilityLabel,
   brainWorkspaceEntryIconName,
+  brainWorkspaceMarkdownPath,
   workspaceFolderEntries,
   workspaceFolderKey,
+  workspaceLinkPath,
   type BrainWorkspaceFile,
   type BrainWorkspaceTree,
 } from "../../../core/files/workspace";
 import { failureText } from "../../../core/more/daemon";
 import { daemon } from "../daemon";
+import { Icon } from "../kit/Icon";
 import { EmptyState, Row, Section } from "../kit/kit";
 import type { PageNav } from "../routes";
+import { ZoomImage } from "./FilePreview";
+import { MediaPlayer } from "./Media";
 
 // Each folder the workspace showed, per (computer, folder), while the app runs: going back into one reads nothing.
 const trees = new Map<string, BrainWorkspaceTree>();
 // Each computer's workspace folder, for the media its Brain Session plays.
 const roots = new Map<string, string>();
+
+/** The workspace folder with `~` for the home folder. */
+function compact(path: string): string {
+  return path.replace(/^\/(Users|home)\/[^/]+/, "~");
+}
+
+/** Where a page of the workspace is, as the old viewer's subtitle said: the workspace path, then the folder or file in it. */
+export function workspaceLocation(root: string | undefined, path: string): string {
+  const base = root ? compact(root).replace(/\/$/, "") : "";
+  if (!path) return base;
+  return base ? `${base}/${path}` : path;
+}
 
 /** Brain's workspace on the current computer: folders, then a file. A computer switch closes it. */
 export function WorkspacePage(props: { trail?: string[]; file?: string; hostSession?: SessionFileIdentity; nav: PageNav }) {
@@ -33,8 +57,20 @@ export function WorkspacePage(props: { trail?: string[]; file?: string; hostSess
   const name = props.file ? props.file.split("/").at(-1)! : props.trail?.length ? props.trail.at(-1)!.split("/").at(-1)! : "Workspace";
   return (
     <NavPage title={name} testID="workspace">
-      {props.file ? <WorkspaceFile path={props.file} hostSession={props.hostSession} /> : <WorkspaceFolder trail={props.trail ?? []} hostSession={props.hostSession} nav={props.nav} />}
+      {props.file ? <WorkspaceFile path={props.file} hostSession={props.hostSession} nav={props.nav} /> : <WorkspaceFolder trail={props.trail ?? []} hostSession={props.hostSession} nav={props.nav} />}
     </NavPage>
+  );
+}
+
+/** The path line under the header: where this folder or file is. */
+function Location(props: { path: string }) {
+  const root = () => roots.get(daemon()?.server.id ?? "");
+  return (
+    <View>
+      {workspaceLocation(root(), props.path) ? (
+        <Text testID="workspace-location" class="px-4 pb-1 pt-2 font-mono text-xs text-muted-foreground line-clamp-1">{workspaceLocation(root(), props.path)}</Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -77,38 +113,50 @@ function WorkspaceFolder(props: { trail: string[]; hostSession?: SessionFileIden
         : <EmptyState testID="workspace-loading" busy title="Loading workspace" />;
     }
     const entries = workspaceFolderEntries(t);
-    if (!entries.length) return <EmptyState testID="workspace-empty" icon="folder-open" title="This folder is empty." />;
     return (
-      <Section title={props.trail.length ? undefined : t.workspace?.replace(/^\/(Users|home)\/[^/]+/, "~")}>
-        {entries.map((entry) => (
-          <Row
-            testID={`workspace-${entry.path}`}
-            title={entry.name}
-            icon={brainWorkspaceEntryIconName(entry.kind, entry.path)}
-            chevron={entry.kind === "directory"}
-            onPress={() =>
-              props.nav.push(
-                entry.kind === "directory"
-                  ? { name: "files-workspace", trail: [...props.trail, entry.path], hostSession: props.hostSession }
-                  : { name: "files-workspace", file: entry.path, hostSession: props.hostSession },
-              )
-            }
-          />
-        ))}
-      </Section>
+      <View>
+        <View class="-mx-4"><Location path={path} /></View>
+        {entries.length ? (
+          <Section>
+            {entries.map((entry) => (
+              <Row
+                testID={`workspace-${entry.path}`}
+                title={entry.name}
+                icon={brainWorkspaceEntryIconName(entry.kind, entry.path)}
+                chevron={entry.kind === "directory"}
+                accessibilityLabel={brainWorkspaceEntryAccessibilityLabel(entry.kind, entry.name)}
+                onPress={() =>
+                  props.nav.push(
+                    entry.kind === "directory"
+                      ? { name: "files-workspace", trail: [...props.trail, entry.path], hostSession: props.hostSession }
+                      : { name: "files-workspace", file: entry.path, hostSession: props.hostSession },
+                  )
+                }
+              />
+            ))}
+          </Section>
+        ) : (
+          <EmptyState testID="workspace-empty" icon="folder-open" title="This folder is empty." />
+        )}
+      </View>
     );
   }
 }
 
-function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity }) {
+function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity; nav: PageNav }) {
   const media = sessionFileMediaKindForPath(props.path);
   const file = signal<BrainWorkspaceFile | null>(null);
-  const stream = signal("");
+  const stream = signal<SessionFileBinarySource | null>(null);
   const error = signal("");
+  const copied = signal(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+  let sign: (() => Promise<SessionFileBinarySource>) | null = null;
+  cleanup(() => copiedTimer && clearTimeout(copiedTimer));
   const read = async () => {
     const d = daemon();
     if (!d) return error.set("Connect to this computer to open the file.");
     error.set("");
+    stream.set(null);
     try {
       if (media) {
         if (!props.hostSession) throw new Error("Brain isn't running, so this file can't be played yet.");
@@ -116,7 +164,10 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity 
         const request = { ...props.hostSession, path: root ? `${root.replace(/\/$/, "")}/${props.path}` : props.path };
         const metadata = await getSessionFileMetadata(d, request);
         if (metadata.kind !== "video" && metadata.kind !== "audio") throw new Error("This file isn't a video or audio file Mewla can play.");
-        stream.set((await buildSessionFileBinarySource(d.server, bindSessionFileRequestToGeneration(request, metadata))).uri);
+        if (metadata.tooLarge) throw new Error(sessionFileTooLargeMessage(metadata));
+        const server = d.server;
+        sign = () => buildSessionFileBinarySource(server, bindSessionFileRequestToGeneration(request, metadata));
+        stream.set(await sign());
       } else {
         file.set(await getBrainWorkspaceFile(d, props.path));
       }
@@ -126,31 +177,62 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity 
   };
   void read();
 
-  return <>{content()}</>;
+  const copy = () => {
+    const f = file();
+    if (!f?.content) return;
+    void Clipboard.writeText(f.content).then(
+      () => {
+        copied.set(true);
+        if (copiedTimer) clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => copied.set(false), 1_600);
+      },
+      () => {},
+    );
+  };
+
+  // A link in a note opens the workspace file it names; links that leave the workspace do nothing.
+  const openLink = (href: string) => {
+    const next = workspaceLinkPath(props.path, href);
+    if (next) props.nav.push({ name: "files-workspace", file: next, hostSession: props.hostSession });
+  };
+
+  return (
+    <View class="flex-1 bg-background">
+      <View class="flex-row items-center">
+        <View class="min-w-0 flex-1"><Location path={props.path} /></View>
+        {file()?.content && !file()?.data_url ? (
+          <Button testID="workspace-copy" accessibilityLabel={copied() ? "Copied" : "Copy"} onPress={copy} class="mr-2 size-9 items-center justify-center rounded-full active:bg-accent">
+            <Icon name={copied() ? "check" : "copy"} size={18} tone="ink" />
+          </Button>
+        ) : null}
+      </View>
+      <>{content()}</>
+    </View>
+  );
 
   function content(): JSX.Element {
     if (error()) return <EmptyState testID="workspace-file-error" icon="alert-circle" title={error()} action="Try again" onAction={() => void read()} />;
-    if (stream()) {
-      return (
-        <View class="flex-1 items-center justify-center bg-background p-4">
-          <Video testID="workspace-media" src={stream()} controls paused class={media === "video" ? "aspect-video w-full" : "h-16 w-full"} />
-        </View>
-      );
+    const signed = stream();
+    if (signed && media) {
+      return <MediaPlayer testID="workspace-media" kind={media} source={signed} resolve={() => (sign ? sign() : Promise.reject(new Error("Could not authorize the stream again.")))} onFail={(message) => error.set(message)} />;
     }
     const f = file();
     if (!f) return <EmptyState testID="workspace-file-loading" busy title="Loading file" />;
-    if (f.data_url) {
+    if (f.data_url) return <ZoomImage testID="workspace-image" src={f.data_url} name={f.name} />;
+    if (!f.content) return <EmptyState testID="workspace-file-empty" icon="document" title="Empty file." />;
+    if (brainWorkspaceMarkdownPath(f.path || props.path)) {
       return (
-        <Scroll class="flex-1 bg-background" contentClass="grow items-center justify-center" maximumZoomScale={6}>
-          <Image testID="workspace-image" src={f.data_url} class="h-full w-full" style={{ objectFit: "contain" }} accessibilityLabel={f.name} />
+        <Scroll class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2">
+          <TextView testID="workspace-markdown" markdown={f.content} selectable onLinkPress={(event) => openLink(event.url)} />
         </Scroll>
       );
     }
-    if (!f.content) return <EmptyState testID="workspace-file-empty" icon="document" title="Empty file." />;
     return (
       <Scroll class="flex-1 bg-background" contentClass="pb-10">
         <Scroll horizontal class="w-full" contentClass="px-4 py-3">
-          <Text testID="workspace-text" class="font-mono text-sm">{f.content}</Text>
+          <View selectable>
+            <Text testID="workspace-text" class="font-mono text-sm">{f.content}</Text>
+          </View>
         </Scroll>
       </Scroll>
     );
