@@ -83,6 +83,17 @@ function reload(): void {
     .finally(() => mine === generation && loading.set(false));
 }
 
+/**
+ * A pull to refresh. While the computer can't be reached no request goes, but the spinner the pull
+ * started must still be told to stop: `refreshing` turns on and off again (it stayed on, 102/107).
+ */
+function pull(): void {
+  const current = daemon();
+  if (current && current.state === "connected") return reload();
+  loading.set(true);
+  setTimeout(() => loading.set(false), 300);
+}
+
 /** One computer at a time: another computer drops the last one's stats and any late answer for them. */
 function forgetOtherComputer(serverId: string): void {
   if (serverId === untracked(viewFor)) return;
@@ -135,7 +146,7 @@ export function Stats(props: { nav: PageNav }) {
   const subscriptions = () => view()?.codexSubscriptions ?? [];
   const busy = () => !view() && (loading() || daemonState() === "connecting");
   return (
-    <Page title="Stats" testID="stats" refreshing={loading() && Boolean(view())} onRefresh={reload}>
+    <Page title="Stats" testID="stats" refreshing={loading() && Boolean(view())} onRefresh={pull}>
       <View class="mt-2">
         <Segmented testID="stats-range" accessibilityLabel="Stats range" options={STATS_RANGE_TABS} value={range()} onChange={(key) => range.set(key)} />
       </View>
