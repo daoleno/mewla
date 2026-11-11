@@ -93,6 +93,8 @@ func (s *Server) webUIHandler() http.Handler {
 		files = webui.Embedded()
 	}
 	assets := webui.Handler(files)
+	// The NSH page starts from two inline scripts: the policy names them by hash.
+	scripts := strings.Join(append([]string{"'self'", "'wasm-unsafe-eval'"}, webui.InlineScriptHashes(files)...), " ")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.webUIAdmitted(r) {
 			http.NotFound(w, r)
@@ -102,7 +104,7 @@ func (s *Server) webUIHandler() http.Handler {
 		header := w.Header()
 		header.Set("Content-Security-Policy", strings.Join([]string{
 			"default-src 'self'",
-			"script-src 'self' 'wasm-unsafe-eval'",
+			"script-src " + scripts,
 			"style-src 'self' 'unsafe-inline'",
 			"img-src 'self' data: blob: https:",
 			"font-src 'self' data:",

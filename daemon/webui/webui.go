@@ -1,17 +1,20 @@
 // Package webui serves the browser build of the Mewla app from the daemon
-// binary. scripts/build-web-ui.sh exports the Expo web bundle into dist/ and
-// gzips every file; only the .gz files are embedded.
+// binary. scripts/build-web-ui.sh packages the NSH client for the web into
+// dist/ and gzips every file; only the .gz files are embedded.
 package webui
 
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"embed"
+	"encoding/base64"
 	"io"
 	"io/fs"
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -24,20 +27,25 @@ const (
 	immutableAge = "public, max-age=31536000, immutable"
 )
 
-// Hashed build outputs never change content under the same name.
-var immutablePrefixes = []string{"_expo/static/", "assets/"}
+// Hashed build outputs never change content under the same name: `nsh
+// package` names each file, or the folder it is in, `<name>.<10 hex>`.
+var hashedSegment = regexp.MustCompile(`^[^.]+(\.[^.]+)*\.[0-9a-f]{10}(\.[A-Za-z0-9]+)?$`)
+
+// The page's own inline scripts, which the Content-Security-Policy allows by hash.
+var inlineScript = regexp.MustCompile(`(?s)<script(?:\s[^>]*)?>(.*?)</script>`)
 
 var contentTypes = map[string]string{
-	".css":  "text/css; charset=utf-8",
-	".html": "text/html; charset=utf-8",
-	".js":   "text/javascript; charset=utf-8",
-	".json": "application/json",
-	".otf":  "font/otf",
-	".png":  "image/png",
-	".svg":  "image/svg+xml",
-	".ttf":  "font/ttf",
-	".wasm": "application/wasm",
-	".webp": "image/webp",
+	".css":         "text/css; charset=utf-8",
+	".html":        "text/html; charset=utf-8",
+	".js":          "text/javascript; charset=utf-8",
+	".json":        "application/json",
+	".otf":         "font/otf",
+	".png":         "image/png",
+	".svg":         "image/svg+xml",
+	".ttf":         "font/ttf",
+	".wasm":        "application/wasm",
+	".webmanifest": "application/manifest+json",
+	".webp":        "image/webp",
 }
 
 // Embedded returns the bundle compiled into this binary.
@@ -108,12 +116,38 @@ func contentType(name string) string {
 }
 
 func cacheControl(name string) string {
-	for _, prefix := range immutablePrefixes {
-		if strings.HasPrefix(name, prefix) {
+	for _, segment := range strings.Split(name, "/") {
+		if hashedSegment.MatchString(segment) {
 			return immutableAge
 		}
 	}
 	return "no-cache"
+}
+
+// InlineScriptHashes returns the CSP source of each inline script of the
+// bundle's index.html ('sha256-…'), in page order; none without a bundle.
+func InlineScriptHashes(files fs.FS) []string {
+	compressed, err := fs.ReadFile(files, indexFile+gzipSuffix)
+	if err != nil {
+		return nil
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return nil
+	}
+	page, err := io.ReadAll(reader)
+	if err != nil {
+		return nil
+	}
+	var hashes []string
+	for _, match := range inlineScript.FindAllSubmatch(page, -1) {
+		if len(bytes.TrimSpace(match[1])) == 0 {
+			continue
+		}
+		sum := sha256.Sum256(match[1])
+		hashes = append(hashes, "'sha256-"+base64.StdEncoding.EncodeToString(sum[:])+"'")
+	}
+	return hashes
 }
 
 func acceptsGzip(r *http.Request) bool {

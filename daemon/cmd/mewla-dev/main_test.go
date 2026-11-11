@@ -65,7 +65,7 @@ func TestDevBuildUsesReleasePublisherIdentity(t *testing.T) {
 
 func TestDevWatchesWebSourcesWithoutBuildOutputs(t *testing.T) {
 	root := t.TempDir()
-	for _, dir := range []string{"daemon/connections", "app/components/plugins", "app/node_modules/pkg", "daemon/webui/dist", "scripts"} {
+	for _, dir := range []string{"daemon/connections", "client/ui/chat", "client/core/files", "client/ui/node_modules/pkg", "client/android/app", "daemon/webui/dist", "scripts"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -75,21 +75,24 @@ func TestDevWatchesWebSourcesWithoutBuildOutputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tree.Close()
-	for _, path := range []string{"app/components/plugins/PluginsFlow.tsx", "app/assets/icon.png", "app/package.json", "bun.lock", "scripts/build-web-ui.sh", "daemon/connections/onboarding.go"} {
+	for _, path := range []string{"client/ui/chat/Composer.tsx", "client/ui/assets/icon.png", "client/ui/nsh.json", "client/core/files/upload.ts", "scripts/build-web-ui.sh", "daemon/connections/onboarding.go"} {
 		if _, ok := tree.relevantPath(filepath.Join(root, path)); !ok {
 			t.Errorf("change would leave the running build stale: %s", path)
 		}
 	}
-	for _, path := range []string{"app/components/plugins/flow.test.ts", "app/node_modules/pkg/index.js", "app/dist/index.html", "daemon/webui/dist/index.html.gz", "daemon/tmp/mewla-dev", "daemon/connections/aws_test.go", "docs/plugins.md"} {
+	for _, path := range []string{"client/core/files/upload.test.ts", "client/ui/chat/Chat.test.tsx", "client/ui/testing/fakeDaemon.ts", "client/ui/node_modules/pkg/index.js", "client/android/app/build.gradle.kts", "daemon/webui/dist/index.html.gz", "daemon/tmp/mewla-dev", "daemon/connections/aws_test.go", "docs/plugins.md"} {
 		if _, ok := tree.relevantPath(filepath.Join(root, path)); ok {
 			t.Errorf("unnecessary rebuild: %s", path)
 		}
 	}
-	if _, ok := tree.watched[filepath.Join(root, "app/components/plugins")]; !ok {
+	if _, ok := tree.watched[filepath.Join(root, "client/ui/chat")]; !ok {
 		t.Fatal("web sources are not watched")
 	}
-	if _, ok := tree.watched[filepath.Join(root, "app/node_modules/pkg")]; ok {
+	if _, ok := tree.watched[filepath.Join(root, "client/ui/node_modules/pkg")]; ok {
 		t.Fatal("watching dependencies")
+	}
+	if _, ok := tree.watched[filepath.Join(root, "client/android/app")]; ok {
+		t.Fatal("watching the native hosts")
 	}
 }
 
