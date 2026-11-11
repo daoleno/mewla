@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { expoTokenService, framesOf, item, paired, pairedTwo, phoneHost, zoneTable } from "../testing/fixtures";
+import { answering, expoTokenService, framesOf, item, paired, pairedTwo, phoneHost, zoneTable } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const SLOW = { timeout: 10_000 };
@@ -90,7 +90,7 @@ describe("the Calendar tab", () => {
     await app.press("id:calendar-item-Call the bank");
     await app.waitFor("id:cancel-item", SLOW);
     app.onDialog((dialog) => (dialog.title === "Cancel calendar item?" ? "Cancel item" : null));
-    await app.press("id:cancel-item");
+    await answering(app, () => app.press("id:cancel-item"));
     await app.waitUntil(() => framesOf(app.host.posts(), "cancel_calendar_item").length === 1);
     expect(framesOf(app.host.posts(), "cancel_calendar_item")[0]).toMatchObject({ id: "Call the bank", revision: 1 });
     await app.waitFor("id:calendar-empty");

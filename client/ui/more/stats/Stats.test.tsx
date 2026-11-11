@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 
@@ -179,10 +180,10 @@ describe("Stats", () => {
     await app.press("id:copy-model-id");
     await app.waitUntil(() => app.clipboard() === "gpt-6");
     app.onDialog((dialog) => (dialog.sheet ? "Copy" : null));
-    await app.longPress("id:model-fact-Source");
+    await answering(app, () => app.longPress("id:model-fact-Source"));
     expect(app.dialogs().at(-1)?.title).toBe("Source");
     await app.waitUntil(() => app.clipboard() === "LiteLLM");
-    await app.longPress("text:Catalog refresh failed");
+    await answering(app, () => app.longPress("text:Catalog refresh failed"));
     await app.waitUntil(() => app.clipboard() === "Catalog refresh failed");
   });
 
