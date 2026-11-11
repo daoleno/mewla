@@ -2,6 +2,7 @@ import { cleanup, effect, host, Image, lifecycle, openUrl, platform, signal, Sto
 import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
+import { phoneAvailable, phoneLabsWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
 import { Icon } from "../kit/Icon";
 import { Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
@@ -132,7 +133,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
       <Section title="Labs">
         {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" icon="desktop" title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
         <Row testID="settings-friends" icon="people" title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
-        {platform.os === "android" ? <Row testID="settings-phone" icon="phone" title="Phone use" chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
+        {phoneAvailable() ? <Row testID="settings-phone" icon="phone" title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
         {iphoneOffered(iphone()) ? <Row testID="settings-iphone" icon="phone" title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
       </Section>
 

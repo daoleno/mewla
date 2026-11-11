@@ -1,4 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Phone use's permissions, services and receivers; merged into the app only on the GitHub channel. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <!--
+    Granted to the App once, through its own Wireless debugging shell (pm grant). It lets the App
+    turn Wireless debugging back on after a reboot and switch its own accessibility service on,
+    so setup is never repeated. pm grant only works for a permission the manifest declares.
+  -->
+  <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+
+  <!-- The Settings and SystemUI screens the setup guide reads labels from, in the person's language. -->
+  <queries>
+    <package android:name="com.android.settings" />
+    <package android:name="com.android.systemui" />
+  </queries>
+
+  <application>
+    <!-- The app's device key for the link's signature, read with no screen (link/DeviceAuth.kt DeviceKeys). -->
+    <meta-data
+      android:name="com.daoleno.mewla.phone.DEVICE_KEYS"
+      android:value="com.daoleno.mewla.phone.AppDeviceKeys" />
+
+    <!-- Leaving the app while an agent works floats its screen (picture-in-picture): the GitHub APK only. -->
+    <activity
+      android:name="com.daoleno.mewla.MainActivity"
+      android:supportsPictureInPicture="true"
+      tools:node="merge" />
+
+    <!--
+      Reads the pairing code off the Wireless debugging screen. Off until the person turns Phone
+      use on (the App enables the component then), so it is not even in their Accessibility list
+      before that. The class keeps the Expo app's name: Android remembers an enabled service by it.
+    -->
+    <service
+      android:name="expo.modules.mewlaphone.PairingAccessibilityService"
+      android:enabled="false"
+      android:exported="false"
+      android:label="Mewla Phone use"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/mewla_phone_accessibility" />
+    </service>
+
+    <service
+      android:name="com.daoleno.mewla.phone.PhoneUseService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Keeps the connection to the person's computer so its agents can use the phone while the app is in the background" />
+    </service>
+
+    <receiver
+      android:name="com.daoleno.mewla.phone.PhoneActionReceiver"
+      android:exported="false" />
+
+    <!-- Brings Phone use back after a reboot, when the person had it on. -->
+    <receiver
+      android:name="com.daoleno.mewla.phone.PhoneBootReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+      </intent-filter>
+    </receiver>
+  </application>
 </manifest>

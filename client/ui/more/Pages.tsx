@@ -8,7 +8,7 @@ import { GitPageView } from "./git/GitPages";
 import { PetPage } from "./pet/Pet";
 import { restorePet } from "./pet/pets";
 import { Resources } from "./resources/Resources";
-import { NotBuiltYet } from "./kit/kit";
+import { PhonePage } from "../phone/PhonePage";
 import { ScreenPage } from "./screen/Screen";
 import { VirtualScreenPage } from "./screen/VirtualScreen";
 import type { MorePage, PageNav } from "./routes";
@@ -51,7 +51,7 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "friends-blocked":
       return <FriendsPageView route={route} nav={props.nav} />;
     case "settings-iphone": return <IPhone />;
-    case "settings-phone": return <NotBuiltYet title="Phone use" />;
+    case "settings-phone": return <PhonePage />;
     case "settings-virtual-screen": return <VirtualScreenPage />;
     case "settings-pet": return <PetPage />;
     case "settings-licenses": return <Licenses nav={props.nav} />;
