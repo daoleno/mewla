@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, computed, effect, List, signal, Text, View, type ListRef } from "nsh";
+import { cleanup, Clipboard, computed, effect, List, signal, Text, untracked, View, type ListRef } from "nsh";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, Sheet, TextView } from "nsh/base";
 import { isWorkingRow } from "../../core/conversation/timeline";
@@ -8,6 +8,7 @@ import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotif
 import type { BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { compactAge, latestTimestamp, withDayDividers } from "../../core/timeline/dayDividers";
 import { Icon } from "../icons/Icon";
+import { ChatImage } from "./ChatImage";
 import { PlainText } from "./PlainText";
 import { selectingText } from "./messageEdit";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkEventCard, type Expansion } from "./TimelineRows";
@@ -23,6 +24,8 @@ export type MessageHandlers = {
   onLink?: (url: string) => void;
   /** A file a tool call names, pressed. */
   onFile?: (path: string) => void;
+  /** An image a reply shows by its path on the computer, as a data URL. */
+  loadImage?: (path: string) => Promise<string | null>;
 };
 
 /** "Working" with the turn's elapsed time, ticking each second while it shows. */
@@ -80,7 +83,8 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
       ) : it().type === "message" ? (
         <View class="px-4">
           <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-base"
-            onLinkPress={(event) => props.handlers.onLink?.(event.url)} />
+            onLinkPress={(event) => props.handlers.onLink?.(event.url)}
+            renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} />} />
           {!(it() as MessageTimelineItem).streaming && props.handlers.isFinalReply?.(it().id) ? (
             <Button testID="copy-reply" onPress={() => void Clipboard.writeText((it() as MessageTimelineItem).body.replace(/\s+$/u, "")).catch(() => {})}
               class="mt-1 self-start rounded-lg p-1.5 active:bg-accent">
@@ -119,13 +123,46 @@ function SelectTextSheet() {
   );
 }
 
-export function ChatTimeline(props: { testID: string; items: () => TimelineItem[]; empty: () => unknown; handlers?: MessageHandlers }) {
+/** Where each chat was read to, by scope, while the app runs: reopening it comes back there. */
+const readingPositions = new Map<string, number>();
+
+export function ChatTimeline(props: {
+  testID: string;
+  items: () => TimelineItem[];
+  empty: () => unknown;
+  handlers?: MessageHandlers;
+  /** The chat's identity for its reading position (a Session's key); none keeps no position. */
+  scope?: string;
+  /** Counts the person's sends: each brings their newest message to the top, with the reply under it. */
+  sent?: () => number;
+}) {
   const handlers = props.handlers ?? {};
   const expansion = createExpansion();
   let list: ListRef | undefined;
   // Read back from the newest row: the jump button brings it into view again, saying how old it is.
   const away = signal(false);
   const rows = computed(() => withDayDividers(props.items()));
+  // Back where the person left it, once the list and its rows are there; at the newest row, nothing to restore.
+  // Only the person's own scrolling moves the saved place, not the list settling as it mounts.
+  let restore = props.scope ? readingPositions.get(props.scope) : undefined;
+  let touched = false;
+  const mounted = signal(false);
+  effect(() => {
+    if (restore === undefined || rows().length === 0 || !mounted()) return;
+    const offset = restore;
+    restore = undefined;
+    untracked(() => list?.scrollToOffset({ offset, animated: false }));
+  });
+  effect(() => {
+    if (!props.sent || props.sent() === 0) return;
+    untracked(() => {
+      const all = rows();
+      for (let index = all.length - 1; index >= 0; index -= 1) {
+        const row = all[index] as TimelineItem;
+        if (row.type === "message" && (row as MessageTimelineItem).role === "user") return void list?.scrollToIndex({ index, viewPosition: 0, animated: true });
+      }
+    });
+  });
   const now = signal(Date.now());
   effect(() => {
     if (!away()) return;
@@ -137,9 +174,19 @@ export function ChatTimeline(props: { testID: string; items: () => TimelineItem[
   return (
     <View class="flex-1">
       <SelectTextSheet />
-      <List testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => (list = node)}
+      <List testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
+          list = node;
+          mounted.set(true);
+        }}
+        onScrollDragStart={() => (touched = true)}
         maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
-        onScroll={({ offset, contentSize, size }) => away.set(contentSize.height - (offset.y + size.height) > 240)}
+        onScroll={({ offset, contentSize, size }) => {
+          const far = contentSize.height - (offset.y + size.height) > 240;
+          away.set(far);
+          if (!props.scope || !touched) return;
+          if (far) readingPositions.set(props.scope, offset.y);
+          else readingPositions.delete(props.scope);
+        }}
         empty={props.empty() as never}>
         {(item) => <TimelineRow item={item} expansion={expansion} handlers={handlers} />}
       </List>
