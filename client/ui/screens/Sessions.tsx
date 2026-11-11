@@ -116,12 +116,14 @@ function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => voi
     return sessionRowModel(props.worker(), { alias: aliases()[props.worker().id], workTitle: link?.workTitle, calendarLabel: link?.calendarLabel });
   };
   const selected = () => selection().has(props.worker().key);
+  // Only a reachable computer can end its Sessions: offline rows can't be picked.
+  const online = () => connection() === "connected";
   const toneClass = () => (model().tone === "danger" ? "text-destructive" : model().tone === "needs" ? "text-seal" : model().tone === "accent" ? "text-foreground" : "text-muted-foreground");
   return (
     <View testID="session-row" delayLongPress={400}
-      onPress={() => (selecting() ? toggleSelected(props.worker()) : props.open(props.worker()))}
-      onLongPress={() => !selecting() && toggleSelected(props.worker())}
-      class="flex-row items-center gap-3 px-4 py-2.5 active:bg-accent">
+      onPress={() => (selecting() ? online() && toggleSelected(props.worker()) : props.open(props.worker()))}
+      onLongPress={() => !selecting() && online() && toggleSelected(props.worker())}
+      class={selecting() && !online() ? "flex-row items-center gap-3 px-4 py-2.5 opacity-50" : "flex-row items-center gap-3 px-4 py-2.5 active:bg-accent"}>
       {selecting() ? <Icon name={selected() ? "check-circle-fill" : "circle"} size={22} color={selected() ? "primary" : "muted-foreground"} /> : null}
       <View class="items-center justify-center">
         <AgentIcon kind={model().kind} flavor={model().flavor} size={24} />
