@@ -43,6 +43,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     app.onError = { NSLog("Mewla: %@", $0); CrashLog.js($0) }
     CrashLog.register(app)
     ScanHost.register(app)
+    LinkTransportHost.register(app)
     app.register(component: "mewla.qrScanner") { QrScanner($0) }
     app.register(component: "mewla.terminal") { TerminalComponent($0) }
     app.handle("secure.get") { [secure] data in try secure.get(Self.field(data, "key")) }

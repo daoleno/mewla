@@ -16,7 +16,8 @@ import { effectiveMinComputerVersion } from "../../../core/update/version";
 import manifest from "../../nsh.json";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, SwitchRow } from "../kit/kit";
 import type { PageNav } from "../routes";
-import { connection, current, resumeConnection, servers, switchTo } from "../../session";
+import { connection, current, resumeConnection, servers, switchTo, transportPath } from "../../session";
+import { linkPathText } from "../../../core/link/directAddresses";
 import { checks, reloadServers, removeComputer, statusWord } from "./computers";
 
 /** One computer: whether it answers, what agents may use there, its name and address, and removing it. */
@@ -185,7 +186,11 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
         <Section title="Address" footer={notes().address || undefined}>
           <Field testID="computer-address" mono keyboardType="url" value={address()} placeholder="https://mewla.example.com" onChange={(v) => address.set(v)} onCommit={() => void saveAddress()} />
         </Section>
-      ) : null}
+      ) : (
+        <Section title="Address" footer="Paired through Mewla Link: reached over its relay, or straight on your network when the computer can be.">
+          <Row testID="computer-link" title="Mewla Link" value={isCurrent() && connection() === "connected" ? linkPathText(transportPath()) : "Not connected"} />
+        </Section>
+      )}
 
       <Section>
         {!isCurrent() ? <Row testID="computer-use" icon="swap-horizontal" title="Use this computer" onPress={() => { void setServerAutoConnect(props.id, true); switchTo(server()); }} /> : null}

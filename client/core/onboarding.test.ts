@@ -22,7 +22,7 @@ import {
   readCameraPermission,
   sealShown,
 } from "./onboarding";
-import { NOT_A_CODE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, PairingLinkError } from "./pairFlow";
+import { NOT_A_CODE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink } from "./pairFlow";
 import { installMemoryPlatform } from "./testing/memoryPlatform";
 
 const site = readFileSync(join(import.meta.dir, "../../site/index.html"), "utf8");
@@ -183,11 +183,5 @@ describe("pairing", () => {
     installMemoryPlatform({ fetch: () => Promise.reject(new Error("refused")) });
     const problem = pairingProblem(await pairWith(readPairingLink(directLink("http://127.0.0.1:9876"))!).catch((e) => e));
     expect(problem.detail).toContain("the phone itself");
-  });
-
-  test("a Mewla Link code is refused with what to do instead", async () => {
-    const error = await pairWith({ ...readPairingLink(directLink())!, link: { kind: "link", routeId: "r", transportPin: "p", candidates: [] } }).catch((e) => e);
-    expect(error).toBeInstanceOf(PairingLinkError);
-    expect(pairingProblem(error).detail).toContain("Mewla Link");
   });
 });

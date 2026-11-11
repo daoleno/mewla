@@ -1,3 +1,4 @@
+import { serverURLNow } from "../link/pinnedTransport";
 import { signedFetch } from "../more/daemon";
 import type { StoredServer } from "../storedServerContract";
 
@@ -322,7 +323,7 @@ export async function buildSessionFileBinarySource(
   server: StoredServer,
   request: SessionFileBinaryRequest,
 ): Promise<SessionFileBinarySource> {
-  const uri = buildSessionFileBinaryUrl(server.url, request);
+  const uri = buildSessionFileBinaryUrl(serverURLNow(server), request);
   if (!uri) {
     throw new Error("Server file stream URL is unavailable.");
   }

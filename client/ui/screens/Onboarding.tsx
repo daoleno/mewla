@@ -28,7 +28,7 @@ import {
 import { Icon, type IconName } from "../icons/Icon";
 import { Spinner } from "../more/kit/kit";
 import { restorePet } from "../more/pet/pets";
-import { justPaired, pairingBusy, pairingIssue, pairings, pasteFromClipboard } from "../pairing";
+import { justPaired, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
 import { petClip } from "../pets/clips";
 import { connection, problem, resumeConnection } from "../session";
 import { OnboardingScanner, scannerSearching } from "./OnboardingScanner";
@@ -228,7 +228,7 @@ function ScanStatus() {
     <View class="gap-2" android={{ accessibilityLiveRegion: "polite" }}>
       <View class="min-h-6 flex-row items-center justify-center gap-2">
         {pairingBusy() ? <Spinner size={16} /> : null}
-        {pairingBusy() || scannerSearching() ? <Text testID="scan-status" class="text-sm text-muted-foreground">{pairingBusy() ? "Pairing…" : "Looking for a Mewla code…"}</Text> : null}
+        {pairingBusy() || scannerSearching() ? <Text testID="scan-status" class="text-sm text-muted-foreground">{pairingBusy() ? pairingStatus() || "Pairing…" : "Looking for a Mewla code…"}</Text> : null}
       </View>
       {pairingIssue() ? (
         <View testID="pair-issue" class="gap-1 rounded-xl border border-border bg-card p-3">

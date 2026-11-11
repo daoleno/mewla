@@ -10,6 +10,8 @@ import { addPairedServer, current, servers } from "./session";
  * system opened, Settings' "Pair a computer". One at a time; a refused code in view is reported once.
  */
 export const pairingBusy = signal(false);
+/** What a slow pairing is doing (Mewla Link: "Connecting to … through Mewla…"); empty means "Pairing…". */
+export const pairingStatus = signal("");
 /** Why the last code did not pair (shown under the scanner); cleared by the next attempt. */
 export const pairingIssue = signal<PairingProblem | null>(null);
 /** The computer just paired: on a phone the connected step shows over everything until the person goes on. */
@@ -45,8 +47,9 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     if (action !== "pair") return latch.release();
   }
   pairingBusy.set(true);
+  pairingStatus.set("");
   try {
-    await addPairedServer(await pairWith(payload));
+    await addPairedServer(await pairWith(payload, (message) => pairingStatus.set(message)));
     const paired = current();
     if (paired) {
       await setServerAutoConnect(paired.id, true).catch(() => {});
@@ -60,6 +63,7 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     latch.release(value);
   } finally {
     pairingBusy.set(false);
+    pairingStatus.set("");
   }
 }
 
