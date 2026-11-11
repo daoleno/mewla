@@ -390,6 +390,8 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
       accessibilityState={{ selected: props.selected === entry.key }}
       onPress={() => props.onOpen(entry)}
       onLongPress={() => void entryMenu(props.review, props.nav, entry, props.onOpen)}
+      // A mouse's right click (the web, the desktops) opens the same menu.
+      onContextMenu={() => void entryMenu(props.review, props.nav, entry, props.onOpen)}
       class={`flex-row items-center gap-2 border-b border-border py-2.5 pr-2 active:bg-accent ${props.selected === entry.key ? "bg-secondary" : ""}`}
       style={indent}
     >

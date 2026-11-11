@@ -133,6 +133,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
                         <View
                           testID={`git-file-${entry.id}`}
                           onLongPress={() => void entryMenu(review, props.nav, entry.id)}
+                          onContextMenu={() => void entryMenu(review, props.nav, entry.id)}
                           accessibilityLabel={`${entry.label}${changed ? `, ${gitDiffStatusWord(gitDiffTone(changed))}` : holds ? ", has changes" : ""}`}
                           class="flex-row items-center gap-2 py-2 pr-4"
                           style={{ paddingLeft: 16 + entry.depth * 16 }}
