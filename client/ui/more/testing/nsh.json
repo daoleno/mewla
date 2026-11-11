@@ -18,6 +18,7 @@
       ]
     },
     "openUrl": true,
+    "clipboard": true,
     "webview": {
       "hosts": [
         "*"

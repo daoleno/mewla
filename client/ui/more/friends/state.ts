@@ -214,3 +214,46 @@ export function setStatus(status: FriendsStatus): void {
 export function friendsServer(): StoredServer | null {
   return server();
 }
+
+/** The current computer's id (reactive); "" with none. */
+export function currentServerId(): string {
+  return daemon()?.server.id ?? "";
+}
+
+/**
+ * The computer to send an action to about what a page shows from computer `shownId`:
+ * null once the current computer is another one, so a like, a comment, a follow or a
+ * block never goes to a computer other than the one whose posts and people are shown.
+ */
+export function serverFor(shownId: string): StoredServer | null {
+  const target = server();
+  return target && target.id === shownId ? target : null;
+}
+
+/**
+ * A Friends page follows the current computer and its place in the stack: `load`
+ * runs when it opens, again when it comes back to the top of its stack (Back from the
+ * page above) or the app comes back to the front, and after `clear` when the current
+ * computer changes, so what the last computer said never stays on screen.
+ */
+export function followPage(options: { top: () => boolean; clear: () => void; load: () => void }): void {
+  let shownId: string | null = null;
+  let shown = false;
+  effect(() => {
+    const id = currentServerId();
+    const visible = options.top() && lifecycle() === "active";
+    untracked(() => {
+      if (shownId !== null && id !== shownId) {
+        shownId = id;
+        shown = visible;
+        options.clear();
+        options.load();
+        return;
+      }
+      const first = shownId === null;
+      shownId = id;
+      if (first || (visible && !shown)) options.load();
+      shown = visible;
+    });
+  });
+}

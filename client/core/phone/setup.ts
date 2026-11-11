@@ -125,9 +125,3 @@ export function phoneOwner(agent: string, workers: readonly { id: string; name: 
   const byName = workers.filter((w) => w.name === agent);
   return byName.length === 1 ? byName[0].id : null;
 }
-
-/** The floating control's shape and title while an agent works the phone; null while there is nothing to float. */
-export function phoneFloat(status: PhoneStatus | null): { title: string; width: number; height: number } | null {
-  if (!status || !phoneAgentWorking(status) || status.w <= 0 || status.h <= 0) return null;
-  return { title: status.agent || "Phone", width: status.w, height: status.h };
-}

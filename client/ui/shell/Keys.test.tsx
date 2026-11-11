@@ -44,9 +44,11 @@ describe("the command palette", () => {
     expect(app.texts()).toContain("Sessions · /home/me/api");
     await app.clear("label:Search commands");
     await app.type("label:Search commands", "cal");
-    // A query drops the headings and names each row's section instead.
-    await app.waitFor("text:Actions", { state: "gone" });
-    expect(app.texts()).toContain("Go to");
+    // A query drops the headings and names each row's section instead. Wait for this query's rows: the last one's
+    // (no headings either) can still be on screen.
+    await app.waitFor("text:api server", { state: "gone" });
+    await app.waitFor("text:Go to");
+    expect(app.texts()).not.toContain("Actions");
     await app.keyboard.press("enter");
     await app.waitFor("id:palette", { state: "gone" });
     await app.waitUntil(() => path(app) === "/calendar");
@@ -61,6 +63,9 @@ describe("the command palette", () => {
     await app.waitFor("id:palette-empty");
     await app.clear("label:Search commands");
     await app.type("label:Search commands", "docs");
+    // Return runs the row the palette shows for this query: wait until it shows it alone.
+    await app.waitFor("text:Sessions · /home/me/docs");
+    await app.waitFor("text:api server", { state: "gone" });
     await app.keyboard.press("enter");
     await app.waitUntil(() => path(app) === "/sessions/w2");
   }, 20_000);

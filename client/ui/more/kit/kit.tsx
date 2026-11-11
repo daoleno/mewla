@@ -1,5 +1,5 @@
-import type { JSX } from "nsh";
-import { Canvas, Scroll, Text, View } from "nsh";
+import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
+import { announce, Canvas, Clipboard, effect, platform, Scroll, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, Input, Switch } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import type { PageColumn } from "../../../core/web/places";
@@ -19,17 +19,28 @@ export function Page(props: {
   headerRight?: JSX.Element;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** The widest the content grows on a phone or tablet, in points (720; a dashboard takes more). */
+  maxWidth?: number;
   /** The desktop column (client/DESIGN.md): 760 by default, 1200 for Resources. */
   column?: Exclude<PageColumn, "full" | "reading">;
+  /** The page's scroll view, for a page that brings something at its top into view. */
+  scrollRef?: (ref: ScrollRef) => void;
+  /** A panel beside the scrolling page (a wide screen's details), or nothing. */
+  aside?: JSX.Element;
   children?: JSX.Element;
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
-  const width = () => (mobile ? 720 : props.column === "wide" ? 1200 : 760);
+  const width = () => (mobile ? (props.maxWidth ?? 720) : props.column === "wide" ? 1200 : 760);
+  const scroll = (
+    <Scroll ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
+      <View class="w-full self-center" style={{ maxWidth: width() }}>{props.children}</View>
+    </Scroll>
+  );
+  // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
+  const withAside = untracked(() => props.aside !== undefined);
   return (
     <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
-      <Scroll class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
-        <View class="w-full self-center" style={{ maxWidth: width() }}>{props.children}</View>
-      </Scroll>
+      {withAside ? <View class="flex-1 flex-row bg-background">{scroll}{props.aside}</View> : scroll}
     </NavPage>
   );
 }
@@ -72,6 +83,16 @@ export interface RowProps {
   testID?: string;
   onPress?: () => void;
   onLongPress?: () => void;
+  /** What a screen reader says for the row, when its texts are not enough (its state, its account). */
+  accessibilityLabel?: string;
+  /** What pressing it does. */
+  accessibilityHint?: string;
+  /** What it is for screen readers ("button" when it can be pressed). */
+  role?: AccessibilityRole;
+  /** A radio or a choice that is the chosen one. */
+  selected?: boolean;
+  /** A row that opens and closes what is under it. */
+  expanded?: boolean;
 }
 
 /** One row: a glyph, a title over a subtitle, a value or a control, a chevron when it opens something. */
@@ -90,23 +111,41 @@ export function Row(props: RowProps) {
       <Hairline inset={props.icon || props.leading ? 48 : 16} />
     </View>
   );
-  if (!props.onPress && !props.onLongPress) return <View testID={props.testID} class={props.disabled ? "opacity-50" : ""}>{body}</View>;
-  if (props.onLongPress) {
+  if (!props.onPress && !props.onLongPress) {
     return (
-      <View testID={props.testID} role="button" disabled={props.disabled} onPress={props.onPress} onLongPress={props.onLongPress} class="active:bg-accent disabled:opacity-50">
+      <View testID={props.testID} class={props.disabled ? "opacity-50" : ""} accessible={props.accessibilityLabel ? true : undefined} accessibilityLabel={props.accessibilityLabel} role={props.role}>
+        {body}
+      </View>
+    );
+  }
+  // A long press, a hint or an open/closed state needs the plain pressable view (a Button takes none of them).
+  if (props.onLongPress || props.accessibilityHint || props.expanded !== undefined) {
+    return (
+      <View
+        testID={props.testID}
+        role={props.role ?? "button"}
+        accessible
+        accessibilityLabel={props.accessibilityLabel}
+        accessibilityHint={props.accessibilityHint}
+        accessibilityState={{ disabled: Boolean(props.disabled), selected: props.selected, expanded: props.expanded }}
+        disabled={props.disabled}
+        onPress={props.onPress}
+        onLongPress={props.onLongPress}
+        class="active:bg-accent disabled:opacity-50"
+      >
         {body}
       </View>
     );
   }
   return (
-    <Button testID={props.testID} disabled={props.disabled} onPress={props.onPress} class="active:bg-accent disabled:opacity-50">
+    <Button testID={props.testID} disabled={props.disabled} selected={props.selected} accessibilityLabel={props.accessibilityLabel} role={props.role} onPress={props.onPress} class="active:bg-accent disabled:opacity-50">
       {body}
     </Button>
   );
 }
 
 /** A setting that takes effect at once. `busy` while the computer has not answered yet. */
-export function SwitchRow(props: { title: string; subtitle?: string; checked: boolean; busy?: boolean; disabled?: boolean; testID?: string; onChange: (checked: boolean) => void }) {
+export function SwitchRow(props: { title: string; subtitle?: string; checked: boolean; busy?: boolean; disabled?: boolean; testID?: string; accessibilityLabel?: string; onChange: (checked: boolean) => void }) {
   return (
     <Row
       title={props.title}
@@ -117,7 +156,7 @@ export function SwitchRow(props: { title: string; subtitle?: string; checked: bo
           {props.busy ? <Spinner size={16} /> : null}
           <Switch
             testID={props.testID}
-            accessibilityLabel={props.title}
+            accessibilityLabel={props.accessibilityLabel ?? props.title}
             checked={props.checked}
             disabled={props.disabled || props.busy}
             onChange={({ checked }) => props.onChange(checked)}
@@ -153,10 +192,10 @@ export function Spinner(props: { size?: number; tone?: ColorName }) {
 }
 
 /** What a page shows instead of its content: busy, empty or failed, with at most one way out. */
-export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; action?: string; onAction?: () => void; testID?: string }) {
+export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string }) {
   return (
     <View testID={props.testID} class="items-center gap-2 px-6 py-16">
-      {props.busy ? <Spinner size={24} /> : props.icon ? <Icon name={props.icon} size={28} /> : null}
+      {props.busy ? <Spinner size={24} /> : props.icon ? <Icon name={props.icon} size={28} tone={props.tone} /> : null}
       {props.title ? <Text class="mt-1 text-center text-lg font-semibold">{props.title}</Text> : null}
       {props.detail ? <Text class="text-center text-sm text-muted-foreground">{props.detail}</Text> : null}
       {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} /> : null}
@@ -175,17 +214,46 @@ export function PillButton(props: { title: string; onPress: () => void; filled?:
   );
 }
 
-/** A failure next to what failed, with nothing else to decide but trying again. */
-export function Notice(props: { title: string; detail?: string; action?: string; onAction?: () => void; tone?: "warning" | "failed"; testID?: string }) {
+const NOTICE_GLYPH: Record<"warning" | "failed" | "success" | "info", { icon: IconName; tone: ColorName }> = {
+  warning: { icon: "alert", tone: "warning" },
+  failed: { icon: "alert", tone: "failed" },
+  success: { icon: "check-circle", tone: "ready" },
+  info: { icon: "info", tone: "soft" },
+};
+
+/**
+ * A failure next to what failed, with nothing else to decide but trying again;
+ * also a quiet word that something went through (`success`) or wants a look
+ * (`info`), with its own glyph. `busy` while its action runs; `live` announces it.
+ */
+export function Notice(props: {
+  title: string;
+  detail?: string;
+  action?: string;
+  onAction?: () => void;
+  tone?: "warning" | "failed" | "success" | "info";
+  icon?: IconName;
+  busy?: boolean;
+  actionDisabled?: boolean;
+  live?: boolean;
+  testID?: string;
+}) {
+  const glyph = () => NOTICE_GLYPH[props.tone ?? "warning"];
+  // Android hears a live region; VoiceOver is told.
+  if (platform.os === "ios") {
+    effect(() => {
+      if (props.live) announce(props.title);
+    });
+  }
   return (
-    <View testID={props.testID} class="mt-4 flex-row items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3">
-      <Icon name="alert" size={18} tone={props.tone ?? "warning"} />
+    <View testID={props.testID} android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }} class="mt-4 flex-row items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+      {props.busy ? <Spinner size={18} /> : <Icon name={props.icon ?? glyph().icon} size={18} tone={glyph().tone} />}
       <View class="flex-1">
         <Text class="text-sm font-medium">{props.title}</Text>
         {props.detail ? <Text class="mt-0.5 text-sm text-muted-foreground">{props.detail}</Text> : null}
       </View>
       {props.action && props.onAction ? (
-        <Button onPress={props.onAction} class="active:opacity-60"><Text class="text-sm font-semibold">{props.action}</Text></Button>
+        <Button disabled={props.actionDisabled || props.busy} onPress={props.onAction} class="active:opacity-60 disabled:opacity-40"><Text class="text-sm font-semibold">{props.action}</Text></Button>
       ) : null}
     </View>
   );
@@ -291,6 +359,10 @@ export function Field(props: {
   /** The field lost focus: commit what was typed. */
   onCommit?: () => void;
   trailing?: JSX.Element;
+  /** Takes the focus (and the keyboard) when it appears. */
+  autoFocus?: boolean;
+  /** Read only for now (while what it holds is being sent). */
+  disabled?: boolean;
 }) {
   return (
     <View class="gap-1.5 px-4 py-3">
@@ -305,6 +377,8 @@ export function Field(props: {
           masked={props.masked}
           multiline={props.multiline}
           keyboardType={props.keyboardType}
+          autoFocus={props.autoFocus}
+          disabled={props.disabled}
           autoCapitalize="none"
           autoCorrect={false}
           onChange={({ value }) => props.onChange(value)}
@@ -324,6 +398,27 @@ export function NotBuiltYet(props: { title: string }) {
       <EmptyState title="Not built yet" detail={`${props.title} comes in a later build of this preview.`} />
     </Page>
   );
+}
+
+/**
+ * What a long press on a value offers: a sheet of "Copy …" choices; the chosen one goes on
+ * the clipboard. Stands in for selectable text, which the pages' texts are not.
+ */
+export async function copyMenu(title: string, choices: ReadonlyArray<{ label: string; value: string }>): Promise<void> {
+  if (choices.length === 0) return;
+  const answer = await AlertDialog.show({
+    title,
+    presentation: "actionSheet",
+    actions: [...choices.map((choice, index) => ({ id: String(index), label: choice.label })), { id: "cancel", label: "Cancel", role: "cancel" as const }],
+  });
+  const chosen = answer.action && answer.action !== "cancel" ? choices[Number(answer.action)] : undefined;
+  if (!chosen) return;
+  try {
+    await Clipboard.writeText(chosen.value);
+    announce("Copied");
+  } catch {
+    // A refused copy is not worth a message.
+  }
 }
 
 /** Asks before an irreversible step; resolves true when the person chose `action`. */

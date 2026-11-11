@@ -3,17 +3,27 @@ import { AttachmentUploadQueue, type AttachmentQueueItem } from "../../../core/f
 import { buildAttachmentUploadPresentation } from "../../../core/files/attachmentUploadPresentation";
 import { checkPickedCount, createAttachmentUploadOperation, MAX_COMPOSER_ATTACHMENTS, pickLimit, type UploadedAttachment } from "../../../core/files/uploads";
 import type { StoredServer } from "../../../core/storedServerContract";
-import { current } from "../../session";
+import { connection, current } from "../../session";
 import { uploadFile as uploadThrough, type UploadFile, type UploadOptions, type UploadResult } from "../../../core/files/upload";
+import { keepAppFiles } from "./appFiles";
 import { pickFiles, uploadHost } from "./host";
 
 export { AttachmentUploadCancelledError, type UploadFile, type UploadOptions, type UploadResult } from "../../../core/files/upload";
 export { pickFiles } from "./host";
 
 /**
- * Uploads one picked file (`pickFiles`) to `server`, streamed by the host; resolves with
- * where the computer keeps it. For a surface that attaches files its own way (the terminal
- * key bar); a composer with chips uses `createAttachmentUploads`.
+ * Pasted or dropped files (an input's `onPaste` `files`) as files `uploadFile` takes, on
+ * every platform: `uploadFile(server, pastedFiles([file])[0]!)`. A composer with chips
+ * uses its `AttachmentUploads.add` instead.
+ */
+export function pastedFiles(files: readonly File[]): UploadFile[] {
+  return keepAppFiles(files);
+}
+
+/**
+ * Uploads one picked file (`pickFiles`, or `pastedFiles`) to `server`, streamed by the host;
+ * resolves with where the computer keeps it. For a surface that attaches files its own way
+ * (the terminal key bar); a composer with chips uses `createAttachmentUploads`.
  */
 export function uploadFile(server: StoredServer, file: UploadFile, options: UploadOptions = {}): Promise<UploadResult> {
   return uploadThrough(uploadHost, server, file, options);
@@ -30,8 +40,15 @@ export interface AttachmentUploads {
   items(): readonly AttachmentQueueItem[];
   /** The picker is open. */
   picking(): boolean;
+  /** Attach can be offered now: the computer is connected, no picker is open and there is room (reactive). */
+  canAttach(): boolean;
   /** Opens the picker for the room left, then uploads what was picked; throws what the person should read. */
   pickAndUpload(): Promise<void>;
+  /**
+   * Uploads files pasted or dropped into the composer (its input's `onPaste` `files`), as
+   * picked ones are; throws what the person should read (not connected, too many).
+   */
+  add(files: readonly File[]): void;
   retry(id: string): void;
   /** Drops a file; cancels it while it uploads. */
   remove(id: string): void;
@@ -74,10 +91,11 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
   return {
     items: () => items(),
     picking: () => picking(),
+    canAttach: () => !!server() && connection() === "connected" && !picking() && items().length < MAX_COMPOSER_ATTACHMENTS,
     async pickAndUpload() {
       if (picking()) return;
       const room = pickLimit(MAX_COMPOSER_ATTACHMENTS - items().length);
-      if (!server()) throw new Error("Connect to a computer to attach files.");
+      if (!server() || connection() !== "connected") throw new Error("Connect to a computer to attach files.");
       picking.set(true);
       try {
         const assets = checkPickedCount(await pickFiles(room), room);
@@ -85,6 +103,13 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
       } finally {
         picking.set(false);
       }
+    },
+    add(files) {
+      if (!files.length) return;
+      if (!server() || connection() !== "connected") throw new Error("Connect to a computer to attach files.");
+      const room = pickLimit(MAX_COMPOSER_ATTACHMENTS - items().length);
+      const assets = checkPickedCount(keepAppFiles(files), room);
+      queue.enqueue(assets.map((asset) => ({ id: `upload-${(sequence += 1)}`, asset })));
     },
     retry: (id) => queue.retry(id),
     remove: (id) => queue.remove(id),

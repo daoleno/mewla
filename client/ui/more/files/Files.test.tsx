@@ -161,9 +161,124 @@ describe("File preview", () => {
   });
 });
 
+describe("File preview: what each kind shows", () => {
+  test("Markdown renders, and a relative link opens the file beside it in the preview", async () => {
+    const c = preview(meta({ name: "guide.md", path: "/work/docs/guide.md", relative_path: "docs/guide.md", kind: "markdown", content_type: "text/markdown", size: 40 }));
+    c.options.host.handlers["app.daemon"] = ({ type, body }: Asked) => {
+      if (type.startsWith("session_file")) c.asked.push({ type, body });
+      if (type === "session_file_metadata" && body.path === "docs/guide.md") return { reply: "session_file_metadata", metadata: meta({ name: "guide.md", path: "/work/docs/guide.md", relative_path: "docs/guide.md", kind: "markdown", content_type: "text/markdown", size: 40 }) };
+      if (type === "session_file_metadata") return { reply: "session_file_metadata", metadata: meta({ name: "setup.md", path: "/work/docs/setup.md", relative_path: "docs/setup.md", kind: "markdown", content_type: "text/markdown", size: 9 }) };
+      if (body.path === "/work/docs/guide.md") return { reply: "session_file_text", text: { content: "# Guide\n\nSee [Setup](./setup.md).", bytes_read: 40, truncated: false, generation: "g1" } };
+      return { reply: "session_file_text", text: { content: "# Setup", bytes_read: 9, truncated: false, generation: "g1" } };
+    };
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:file-markdown");
+    expect(app.shows("id:file-text")).toBe(false);
+    await app.press("text:Setup");
+    await app.waitUntil(() => c.asked.some((a) => a.type === "session_file_metadata" && a.body.path === "/work/docs/setup.md"));
+    expect(c.asked.find((a) => a.body.path === "/work/docs/setup.md")?.body).toEqual({ worker_id: "w1", process_id: 42, started_at: 1_700_000_000, path: "/work/docs/setup.md" });
+  });
+
+  test("Copy is offered for a cut text only while the whole file can still be read", async () => {
+    const c = preview(meta({ size: 60 * 1024 * 1024 }));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:file-text");
+    expect(app.shows("id:file-copy")).toBe(false);
+  });
+
+  test("an SVG is read whole, checked, and drawn; one that reaches outside the file is refused with its reason", async () => {
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 1"><path d="M0 0h2v1H0z"/></svg>`;
+    const c = preview(meta({ name: "logo.svg", path: "/work/logo.svg", relative_path: "logo.svg", kind: "image", content_type: "image/svg+xml", size: 90 }), {
+      network: {
+        [`POST ${BASE}/session-file-capability`]: capability(),
+        [`GET ${BASE}/session-file?*`]: () => ({ status: 200, headers: { "content-type": "image/svg+xml" }, body: svg }),
+      },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:file-svg");
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 1"><image href="https://example.test/t.png"/></svg>`;
+    await app.press("id:file-close");
+    const again = await open(HARNESS, c.options);
+    await again.waitFor("id:file-problem");
+    expect(again.texts()).toContain("Unsupported SVG content.");
+    expect(again.shows("id:file-problem-action")).toBe(true);
+  });
+});
+
 describe("Brain workspace", () => {
-  test("folders come first, a folder opens without asking again, and a file shows its text", async () => {
+  test("a note renders as Markdown with its place shown, a link opens the note it names, text copies, and rows say what they open", async () => {
     const asked: Asked[] = [];
+    const notes: Record<string, string> = { "notes/plan.md": "# Plan\n\nSee [today](today.txt).", "notes/today.txt": "ship it" };
+    const app = await open(HARNESS, {
+      host: {
+        params: { page: { name: "files-workspace", trail: ["notes"] } },
+        handlers: {
+          ...secureStore(),
+          "app.daemon": ({ type, body }: Asked) => {
+            asked.push({ type, body });
+            if (type === "brain_workspace_tree") return { reply: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", path: "notes", entries: [{ name: "plan.md", path: "notes/plan.md", kind: "file" }] } };
+            if (type === "brain_workspace_file") {
+              const path = String(body.path);
+              return { reply: "brain_workspace_file", file: { name: path.split("/").at(-1), path, kind: "file", language: path.endsWith(".md") ? "markdown" : "text", content: notes[path] } };
+            }
+            return { error: `unexpected ${type}` };
+          },
+        },
+      },
+    });
+    await app.waitFor("id:workspace-notes/plan.md");
+    expect(app.texts()).toContain("~/brain/notes");
+    expect(app.shows("label:Open file plan.md")).toBe(true);
+    await app.press("id:workspace-notes/plan.md");
+    await app.waitFor("id:workspace-markdown");
+    expect(app.texts()).toContain("~/brain/notes/plan.md");
+    await app.press("text:today");
+    await app.waitFor("id:workspace-text");
+    expect(asked.at(-1)).toEqual({ type: "brain_workspace_file", body: { path: "notes/today.txt" } });
+    // Copy is offered for a text (the clipboard itself needs the app's `clipboard` capability).
+    expect(app.shows("id:workspace-copy")).toBe(true);
+  });
+
+  test("a video too large to stream says so before any stream is signed", async () => {
+    const app = await open(HARNESS, {
+      host: {
+        params: { page: { name: "files-workspace", file: "clips/demo.mp4", hostSession: identity } },
+        handlers: {
+          ...secureStore(),
+          "app.daemon": ({ type }: Asked) => {
+            if (type === "session_file_metadata") return { reply: "session_file_metadata", metadata: meta({ name: "demo.mp4", path: "/home/me/brain/clips/demo.mp4", relative_path: "clips/demo.mp4", kind: "video", content_type: "video/mp4", size: 3 * 1024 * 1024 * 1024, too_large: true, preview_limit_bytes: 2 * 1024 * 1024 * 1024 }) };
+            return { error: `unexpected ${type}` };
+          },
+        },
+      },
+    });
+    await app.waitFor("id:workspace-file-error");
+    expect(app.texts()).toContain("This 3.0 GB file exceeds Mewla's 2.0 GB preview limit. It was not downloaded.");
+    expect(app.requests().some((r) => r.url.includes("session-file-capability"))).toBe(false);
+  });
+
+  test("a video with no Brain Session to play it says Brain isn't running", async () => {
+    const app = await open(HARNESS, {
+      host: { params: { page: { name: "files-workspace", file: "clips/demo.mp4" } }, handlers: { ...secureStore(), "app.daemon": () => ({ error: "unexpected" }) } },
+    });
+    await app.waitFor("id:workspace-file-error");
+    expect(app.texts()).toContain("Brain isn't running, so this file can't be played yet.");
+  });
+
+  test("folders come first, each folder is read by its own path (the daemon lists one level), and a folder read once is not read again", async () => {
+    const asked: Asked[] = [];
+    // As daemon/brain/workspace.go answers: one level per path, `children` never filled.
+    const folders: Record<string, unknown[]> = {
+      "": [
+        { name: "plan.md", path: "plan.md", kind: "file" },
+        { name: "notes", path: "notes", kind: "directory" },
+      ],
+      notes: [
+        { name: "today.txt", path: "notes/today.txt", kind: "file" },
+        { name: "old", path: "notes/old", kind: "directory" },
+      ],
+      "notes/old": [],
+    };
     const app = await open(HARNESS, {
       host: {
         params: { page: { name: "files-workspace" } },
@@ -172,12 +287,11 @@ describe("Brain workspace", () => {
           "app.daemon": ({ type, body }: Asked) => {
             if (type.startsWith("brain_workspace")) asked.push({ type, body });
             if (type === "brain_workspace_tree") {
-              return { reply: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", entries: [
-                { name: "plan.md", path: "plan.md", kind: "file" },
-                { name: "notes", path: "notes", kind: "directory", children: [{ name: "today.md", path: "notes/today.md", kind: "file" }] },
-              ] } };
+              const entries = folders[String(body.path)];
+              if (!entries) return { error: "no such folder" };
+              return { reply: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", path: body.path, entries } };
             }
-            if (type === "brain_workspace_file") return { reply: "brain_workspace_file", file: { name: "today.md", path: "notes/today.md", kind: "file", language: "markdown", content: "# Today\n- ship" } };
+            if (type === "brain_workspace_file") return { reply: "brain_workspace_file", file: { name: "today.txt", path: "notes/today.txt", kind: "file", language: "text", content: "ship it" } };
             return { error: `unexpected ${type}` };
           },
         },
@@ -186,12 +300,24 @@ describe("Brain workspace", () => {
     await app.waitFor("id:workspace-notes");
     expect(app.texts().indexOf("notes")).toBeLessThan(app.texts().indexOf("plan.md"));
     await app.press("id:workspace-notes");
-    await app.waitFor("id:workspace-notes/today.md");
-    expect(asked.filter((a) => a.type === "brain_workspace_tree")).toHaveLength(1);
-    await app.press("id:workspace-notes/today.md");
+    await app.waitFor("id:workspace-notes/today.txt");
+    expect(app.shows("id:workspace-empty")).toBe(false);
+    expect(asked.filter((a) => a.type === "brain_workspace_tree").map((a) => a.body)).toEqual([{ path: "" }, { path: "notes" }]);
+    // A folder with nothing in it says so.
+    await app.press("id:workspace-notes/old");
+    await app.waitFor("id:workspace-empty");
+    await app.back();
+    await app.press("id:workspace-notes/today.txt");
     await app.waitFor("id:workspace-text");
-    expect(app.texts()).toContain("# Today\n- ship");
-    expect(asked.at(-1)).toEqual({ type: "brain_workspace_file", body: { path: "notes/today.md" } });
+    expect(app.texts()).toContain("ship it");
+    expect(asked.at(-1)).toEqual({ type: "brain_workspace_file", body: { path: "notes/today.txt" } });
+    // Back in a folder already read: no new request.
+    await app.back();
+    await app.back();
+    await app.waitFor("id:workspace-notes");
+    await app.press("id:workspace-notes");
+    await app.waitFor("id:workspace-notes/today.txt");
+    expect(asked.filter((a) => a.type === "brain_workspace_tree")).toHaveLength(3);
   });
 });
 
@@ -236,6 +362,52 @@ const done = (path: string, name: string): Answer => ({ status: 200, body: JSON.
 
 const asset = (name: string, size = 1024) => ({ uri: `content://picker/${name}`, name, mimeType: "application/pdf", size });
 
+/** A picture to paste: `paste`'s paths are the app folder's (client/ui). */
+const PASTED = "assets/pets/p03/working.webp";
+
+describe("Files on the web", () => {
+  // Cancel mid-upload goes to the page's host as a call (it drops posts): a step can't run while
+  // a host call waits, so that is host.ts's `tell`, unproved here.
+  test("the browser's picker gives chips that upload through the page's host by the picked file's uri", async () => {
+    const u = uploads([{ uri: "browser-file:1", name: "big.zip", mimeType: "application/zip", size: 4096 }], () => done("/state/uploads/big.zip", "big.zip"));
+    const app = await open(UPLOADS, { ...u.options, platform: "web" });
+    await app.press("id:attach");
+    await app.waitFor("text:Ready");
+    expect(u.started[0]).toMatchObject({ url: `${BASE}/upload`, fileUri: "browser-file:1", expectedSize: 4096 });
+    expect(app.texts()).toContain("/state/uploads/big.zip");
+  });
+
+  test("a PDF says the browser can't show it, signs nothing, and still downloads through the browser", async () => {
+    const c = preview(meta({ name: "report.pdf", path: "/work/report.pdf", relative_path: "out/report.pdf", kind: "pdf", content_type: "application/pdf", size: 4096 }), {
+      handlers: {
+        "files.pickDirectory": { token: "browser", name: "Downloads" },
+        "files.download": (request: { names: string[]; expectedSize: number }) => ({ bytesWritten: request.expectedSize, name: request.names[0] }),
+      },
+      network: { [`POST ${BASE}/session-file-capability`]: capability() },
+    });
+    const app = await open(HARNESS, { ...c.options, platform: "web" });
+    await app.waitFor("id:file-pdf-unavailable");
+    expect(app.texts()).toContain("PDF preview is unavailable on Web. Download the file to inspect it.");
+    expect(app.texts()).toContain("out/report.pdf · PDF · 4.0 KB");
+    expect(app.shows("id:file-pdf")).toBe(false);
+    expect(app.requests().filter((r) => r.url === `${BASE}/session-file-capability`)).toHaveLength(0);
+    await app.press("id:file-download");
+    await app.waitFor("text:Saved");
+    const download = app.host.calls().find((m) => m.name === "files.download")!.data as { directory: string; names: string[] };
+    expect(download.directory).toBe("browser");
+    expect(download.names[0]).toBe("report.pdf");
+  });
+
+  test("a video plays in the browser from its signed stream", async () => {
+    const c = preview(meta({ name: "clip.mp4", path: "/work/clip.mp4", relative_path: "clip.mp4", kind: "video", content_type: "video/mp4", size: 4096 }), {
+      network: { [`POST ${BASE}/session-file-capability`]: capability() },
+    });
+    const app = await open(HARNESS, { ...c.options, platform: "web" });
+    await app.waitFor("id:file-media");
+    expect(app.shows("label:Video preview")).toBe(true);
+  });
+});
+
 describe("Attachments", () => {
   test("a picked file streams from its own URI to /upload, signed for upload, and is ready with the computer's path", async () => {
     const u = uploads([asset("報告 1.pdf")], () => done("/state/uploads/abc.pdf", "報告 1.pdf"));
@@ -261,5 +433,52 @@ describe("Attachments", () => {
     expect(u.started.map((request) => request.fileUri)).toEqual(["content://picker/a.pdf", "content://picker/b.pdf"]);
     expect(app.texts()).toContain("upload storage capacity reached");
     expect(app.texts()).toContain("/state/uploads/b.pdf");
+    expect(app.shows("label:Retry upload of a.pdf")).toBe(true);
+  });
+
+  test("a picture shows itself on its chip, read by the host from the picked file, and a tap opens it whole", async () => {
+    const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    const u = uploads([{ uri: "content://picker/cat.png", name: "cat.png", mimeType: "image/png", size: 68 }], () => done("/state/uploads/cat.png", "cat.png"));
+    (u.options.host.handlers as Record<string, unknown>)["files.thumbnail"] = () => ({ dataUrl: pixel });
+    const app = await open(UPLOADS, u.options);
+    await app.press("id:attach");
+    await app.waitFor("text:Ready");
+    await app.waitFor("id:attachment-upload-1-thumbnail");
+    const asked = app.host.calls().filter((m) => m.name === "files.thumbnail").map((m) => m.data);
+    expect(asked[0]).toEqual({ uri: "content://picker/cat.png", maxPixels: 120 });
+    await app.press("label:Open cat.png");
+    await app.waitFor("id:attachment-viewer-image");
+    expect(app.host.calls().some((m) => m.name === "files.thumbnail" && (m.data as { maxPixels: number }).maxPixels === 2048)).toBe(true);
+    await app.press("id:attachment-viewer-close");
+    await app.waitFor("id:attachment-viewer-image", { state: "gone" });
+  });
+
+  test("a pasted picture uploads from the app itself, signed and named, and shows itself on its chip", async () => {
+    const u = uploads([], () => done("unused", "unused"));
+    let sent: { headers: Record<string, string>; size: number } | null = null;
+    const app = await open(UPLOADS, {
+      ...u.options,
+      network: {
+        [`POST ${BASE}/upload`]: (request) => {
+          sent = { headers: request.headers, size: request.body?.length ?? -1 };
+          return done("/state/uploads/working.webp", "working.webp");
+        },
+      },
+    });
+    await app.paste("id:composer", { files: [PASTED] });
+    await app.waitFor("text:Ready");
+    expect(app.texts()).toContain("/state/uploads/working.webp");
+    expect(u.started).toHaveLength(0);
+    expect(sent!.headers["X-Mewla-Upload-Name"] ?? sent!.headers["x-mewla-upload-name"]).toBe("working.webp");
+    expect(sent!.size).toBeGreaterThan(0);
+    await app.waitFor("id:attachment-upload-1-thumbnail");
+    expect(app.host.calls().some((m) => m.name === "files.thumbnail")).toBe(false);
+  });
+
+  test("attaching needs a connected computer", async () => {
+    const u = uploads([asset("a.pdf")], () => done("/state/uploads/a.pdf", "a.pdf"));
+    const app = await open(UPLOADS, { host: { ...u.options.host, params: { state: "waiting" } } });
+    expect(app.enabled("id:attach")).toBe(false);
+    expect(app.host.calls().some((m) => m.name === "files.pick")).toBe(false);
   });
 });

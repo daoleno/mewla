@@ -25,6 +25,8 @@ describe("a Brain notification's thread", () => {
     await app.waitFor("id:composer", { timeout: 10_000 });
     await app.host.send("links.open", { url: "mewla://brain?thread=t-old" });
     await app.waitFor("id:brain-past-thread");
+    // New chat asks the computer: it takes a press once the connection is up (a slow runner connects late).
+    await app.waitUntil(() => app.enabled("id:new-chat"), { timeout: 10_000 });
     await app.press("id:new-chat");
     await app.waitFor("id:composer");
     expect(app.shows("id:brain-past-thread")).toBe(false);

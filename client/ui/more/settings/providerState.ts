@@ -1,8 +1,9 @@
 import { signal } from "nsh";
-import { ProviderError } from "../../../core/providers/errors";
+import type { Daemon } from "../../../core/more/daemon";
+import { PROVIDER_ERROR_CODES, ProviderError, providerMutationRequiresRefresh } from "../../../core/providers/errors";
 import { durabilityWarningMessage } from "../../../core/providers/persistence";
-import { listProviders } from "../../../core/providers/requests";
-import type { ProvidersMutationResult, ProvidersSnapshot } from "../../../core/providers/types";
+import { discoverProviderModels, listProviders } from "../../../core/providers/requests";
+import type { ProviderModelsResult, ProvidersMutationResult, ProvidersSnapshot } from "../../../core/providers/types";
 import { daemon } from "../daemon";
 
 /**
@@ -59,10 +60,11 @@ export function forgetProviders(): void {
 }
 
 /**
- * Runs one change. It is refused while another runs or changes are locked; its reply
- * replaces the catalog only when it is not older than the one held.
+ * Admits one write: refused while another runs, while writes wait for a refresh, or
+ * offline. A failure that leaves the outcome unknown locks writes until a refresh; one
+ * that settled ambiguously also starts that refresh at once.
  */
-export async function change(name: string, work: () => Promise<ProvidersMutationResult>): Promise<ProvidersMutationResult> {
+async function gated<T>(name: string, work: (current: Daemon) => Promise<T>, settle: (result: T, serverId: string) => void): Promise<T> {
   if (changing()) throw new ProviderError("busy", "Another Provider change is still running.", "busy", false);
   if (locked()) throw new ProviderError("locked", "Changes are paused until this list is refreshed.", "conflict", true);
   const current = daemon();
@@ -70,19 +72,44 @@ export async function change(name: string, work: () => Promise<ProvidersMutation
   const serverId = current.server.id;
   changing.set(name);
   try {
-    const result = await work();
-    if (daemon()?.server.id !== serverId) return result;
-    const held = snapshot();
-    if (!held || result.snapshot.revision >= held.revision) providers.set({ serverId, snapshot: result.snapshot, loading: false, error: null });
-    if (result.persistence.ambiguous) locked.set(true);
-    warning.set(result.persistence.durable ? "" : durabilityWarningMessage(result.persistence));
+    const result = await work(current);
+    if (daemon()?.server.id === serverId) settle(result, serverId);
     return result;
   } catch (error) {
-    if (error instanceof ProviderError && error.code === "providers_invalid_reply") locked.set(true);
+    if (daemon()?.server.id === serverId && providerMutationRequiresRefresh(error)) {
+      locked.set(true);
+      if (error instanceof ProviderError && error.code === PROVIDER_ERROR_CODES.invalidReply) queueMicrotask(refreshProviders);
+    }
     throw error;
   } finally {
     changing.set("");
   }
+}
+
+/**
+ * Runs one change. Its reply replaces the catalog only when it is not older than the
+ * one held; one saved without durability says so and waits for a refresh.
+ */
+export function change(name: string, work: () => Promise<ProvidersMutationResult>): Promise<ProvidersMutationResult> {
+  return gated(name, () => work(), (result, serverId) => {
+    const held = snapshot();
+    if (!held || result.snapshot.revision >= held.revision) providers.set({ serverId, snapshot: result.snapshot, loading: false, error: null });
+    if (result.persistence.ambiguous || !result.persistence.durable) locked.set(true);
+    warning.set(result.persistence.durable ? "" : durabilityWarningMessage(result.persistence));
+  });
+}
+
+/**
+ * Asks a connection's endpoint for its models, as a write (the computer stores what it
+ * found): through the same gate, its warnings shown, then the list read again so model
+ * counts and ages are current.
+ */
+export function discover(connectionId: string): Promise<ProviderModelsResult> {
+  return gated(`discover:${connectionId}`, (current) => discoverProviderModels(current, connectionId), (result) => {
+    if (result.persistenceWarning && result.persistenceDurable === false) locked.set(true);
+    if (result.persistenceWarning || result.discoveryWarning) warning.set(result.persistenceWarning ?? result.discoveryWarning ?? "");
+    queueMicrotask(refreshProviders);
+  });
 }
 
 /** "Models synced 5m ago": how fresh a connection's model list is. */

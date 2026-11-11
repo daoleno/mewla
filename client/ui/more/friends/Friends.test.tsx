@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../testing/fixtures";
 
 const HARNESS = "./testing/Harness.tsx";
 const DOOR = "POST http://desk.test:9877/friends";
@@ -84,11 +85,11 @@ describe("Friends in Labs", () => {
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:friends-auto-post");
     app.onDialog(() => "Keep asking me");
-    await app.press("id:friends-auto-post");
+    await answering(app, () => app.press("id:friends-auto-post"));
     expect(app.dialogs()[0].title).toBe("Post without asking?");
     expect(c.ops.some((op) => op.op === "auto_post")).toBe(false);
     app.onDialog(() => "Turn on");
-    await app.press("id:friends-auto-post");
+    await answering(app, () => app.press("id:friends-auto-post"));
     await app.waitFor("text:Up to 3 a day");
     expect(c.ops.find((op) => op.op === "auto_post")).toMatchObject({ enabled: true });
     await app.waitFor("id:friends-auto-media");
@@ -134,6 +135,15 @@ describe("the Friends feed", () => {
     await app.waitFor("id:friends-switch");
   });
 
+  test("in a browser, with Friends off, Open Labs leads to Settings, which offers no Friends switch there", async () => {
+    const c = computer({ signed_in: true, enabled: false, handle: "me", drafts: [], max_drafts: 5 }, () => undefined, { name: "friends" });
+    const app = await open(HARNESS, { ...c.options, platform: "web" });
+    await app.waitFor("text:Friends is off");
+    await app.press("id:friends-off-action");
+    await app.waitFor("id:settings");
+    expect(app.shows("id:friends-switch")).toBe(false);
+  });
+
   test("blocking someone from a post's menu asks, then their posts leave the list", async () => {
     const c = computer(on(), (op) => {
       if (op.method === "GET") return { status: 200, body: { posts: [post("p1"), post("p2", { author: { ...lena, id: "u-kim", handle: "kim" } })], next: "" } };
@@ -143,7 +153,7 @@ describe("the Friends feed", () => {
     const app = await open(HARNESS, c.options);
     await app.waitFor("text:Post p1");
     app.onDialog((dialog) => (dialog.sheet ? "Block @lena" : "Block"));
-    await app.press("id:more-p1");
+    await answering(app, () => app.press("id:more-p1"), 2);
     await app.waitFor("text:Post p1", { state: "gone" });
     expect(app.texts()).toContain("Post p2");
     const confirm = app.dialogs().find((d) => !d.sheet)!;
@@ -220,7 +230,8 @@ describe("a switch of computer", () => {
     await app.host.send("app.daemonSwitch", { id: "s2", name: "Laptop", url: "ws://other.test:9877/ws" });
     await app.waitFor("id:friends-open", { state: "gone" });
     expect(app.texts()).not.toContain("@me");
-    expect(app.requests().some((r) => r.method === "GET" && r.url === "http://other.test:9877/friends")).toBe(true);
+    // The last computer's page goes at once; the next one is asked a moment later.
+    await app.waitUntil(() => app.requests().some((r) => r.method === "GET" && r.url === "http://other.test:9877/friends"));
   });
 });
 
@@ -272,5 +283,233 @@ describe("notifications", () => {
     expect(app.texts()).toContain("@kim followed you");
     expect(app.texts()).toContain("Dango has a draft waiting for you");
     await app.waitUntil(() => c.ops.some((op) => op.path === "/notifications/read" && op.method === "POST"));
+  });
+
+  test("back on the page from a post, newer ones show and are marked read too", async () => {
+    const note = (seq: number, handle: string) => ({ seq, kind: "comment", actor: { ...lena, id: `u-${handle}`, handle }, post_id: "p1", post_text: "Nice", created_at: Date.now(), read: false });
+    let notes = [note(1, "lena")];
+    const c = computer(on(), (op) => {
+      if (op.path === "/notifications" && op.method === "GET") return { status: 200, body: { notifications: notes } };
+      if (op.path === "/notifications/read") return { status: 200, body: { ok: true } };
+      if (op.path === "/posts/p1") return { status: 200, body: { post: post("p1"), comments: [] } };
+      if (op.path === "/people/u-lena") return { status: 200, body: { ...lena, bio: "", followers: 1, following: 1, posts: 1, followed: false, blocked: false, mine: false, created_at: 0 } };
+      return { status: 404 };
+    }, { name: "friends-notifications" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:@lena commented on your post");
+    await app.press("id:notification-1");
+    await app.waitFor("id:friends-post-text");
+    notes = [note(2, "june"), note(1, "lena")];
+    await app.back();
+    await app.waitFor("text:@june commented on your post");
+    await app.waitUntil(() => c.ops.filter((op) => op.path === "/notifications/read").length >= 2);
+  });
+});
+
+describe("coming back to a page", () => {
+  test("the feed reads the computer again: a post deleted on its page is gone, a new one shows", async () => {
+    let feed = [post("p1", { mine: true, author: { ...lena, id: "u-me", handle: "me" } }), post("p2")];
+    const c = computer(on(), (op) => {
+      if (op.method === "GET" && op.path === "/feed") return { status: 200, body: { posts: feed, next: "" } };
+      if (op.method === "GET" && op.path === "/posts/p1") return { status: 200, body: { post: feed[0], comments: [] } };
+      if (op.method === "DELETE" && op.path === "/posts/p1") {
+        feed = [post("p3"), post("p2")];
+        return { status: 200, body: { ok: true } };
+      }
+      return { status: 404 };
+    }, { name: "friends" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Post p1");
+    await app.press("id:open-post-p1");
+    await app.waitFor("id:friends-post-text");
+    app.onDialog((dialog) => (dialog.sheet ? "Delete post" : "Delete"));
+    await answering(app, () => app.press("id:friends-post-more"), 2);
+    await app.waitFor("id:friends-feed");
+    await app.waitFor("text:Post p3");
+    expect(app.texts()).not.toContain("Post p1");
+    expect(app.texts()).toContain("Post p2");
+  });
+
+  test("a profile reads the person again: a follow made on another page shows", async () => {
+    const person = (followed: boolean) => ({ ...lena, bio: "", followers: followed ? 5 : 4, following: 2, posts: 1, followed, blocked: false, mine: false, created_at: 0 });
+    let followed = false;
+    const c = computer(on(), (op) => {
+      if (op.path === "/people/u-lena" && op.method === "GET") return { status: 200, body: person(followed) };
+      if (op.path === "/people/u-lena/posts") return { status: 200, body: { posts: [post("p1")], next: "" } };
+      if (op.path === "/posts/p1" && op.method === "GET") return { status: 200, body: { post: post("p1"), comments: [] } };
+      return { status: 404 };
+    }, { name: "friends-person", id: "u-lena" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:1 posts  2 following  4 followers");
+    await app.waitFor("text:Post p1");
+    await app.press("id:open-post-p1");
+    await app.waitFor("id:friends-post-text");
+    followed = true;
+    await app.back();
+    await app.waitFor("text:1 posts  2 following  5 followers");
+    expect(app.texts()).toContain("Following");
+  });
+});
+
+describe("a switch of computer on an open page", () => {
+  const other = "http://other.test:9877/friends";
+
+  test("the feed drops the last computer's posts, and a like goes to the computer whose posts show", async () => {
+    const c = computer(on(), (op) => (op.method === "GET" && op.path === "/feed" ? { status: 200, body: { posts: [post("p1")], next: "" } } : { status: 404 }), { name: "friends" });
+    const otherOps: Op[] = [];
+    const network = c.options.network as Record<string, unknown>;
+    network[`GET ${other}`] = () => ({ body: on() });
+    network[`POST ${other}`] = (request: { body?: string | null }) => {
+      const op = JSON.parse(request.body ?? "{}") as Op;
+      otherOps.push(op);
+      if (op.method === "GET" && op.path === "/feed") return { body: { status: 200, body: { posts: [post("q1", { text: "Laptop post" })], next: "" } } };
+      if (op.method === "PUT" && op.path === "/posts/q1/like") return { body: { status: 200, body: post("q1", { text: "Laptop post", liked: true, likes: 2 }) } };
+      return { body: { status: 404 } };
+    };
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Post p1");
+    await app.host.send("app.daemonSwitch", { id: "s2", name: "Laptop", url: "ws://other.test:9877/ws" });
+    await app.waitFor("text:Post p1", { state: "gone" });
+    await app.waitFor("text:Laptop post");
+    await app.press("id:like-q1");
+    await app.waitUntil(() => otherOps.some((op) => op.method === "PUT" && op.path === "/posts/q1/like"));
+    expect(c.ops.some((op) => op.method === "PUT")).toBe(false);
+  });
+
+  test("a post page reads the post again from the next computer", async () => {
+    const c = computer(on(), (op) => (op.path === "/posts/p1" ? { status: 200, body: { post: post("p1", { mine: true }), comments: [] } } : { status: 404 }), { name: "friends-post", id: "p1" });
+    const network = c.options.network as Record<string, unknown>;
+    const otherOps: Op[] = [];
+    network[`GET ${other}`] = () => ({ body: on() });
+    network[`POST ${other}`] = (request: { body?: string | null }) => {
+      const op = JSON.parse(request.body ?? "{}") as Op;
+      otherOps.push(op);
+      if (op.path === "/posts/p1") return { body: { status: 200, body: { post: post("p1", { mine: true, text: "As the laptop sees it", comments: 1 }), comments: [{ id: "c9", text: "From the laptop", created_at: Date.now(), author: lena, mine: false }] } } };
+      return { body: { status: 404 } };
+    };
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Post p1");
+    await app.host.send("app.daemonSwitch", { id: "s2", name: "Laptop", url: "ws://other.test:9877/ws" });
+    await app.waitFor("text:As the laptop sees it");
+    expect(app.texts()).toContain("From the laptop");
+    expect(app.texts()).not.toContain("Post p1");
+  });
+});
+
+describe("a post's video", () => {
+  const video = (seconds: number) => [{ kind: "video", url: `https://cdn.test/v${seconds}.mp4`, width: 1280, height: 720, bytes: 10, duration_ms: seconds * 1000, poster: { url: `https://cdn.test/v${seconds}.jpg`, width: 1280, height: 720 } }];
+
+  test("plays muted, one at a time; sound and full screen are a tap away", async () => {
+    const c = computer(on(), (op) => (op.method === "GET" && op.path === "/feed" ? { status: 200, body: { posts: [post("p1", { media: video(12) }), post("p2", { media: video(7) })], next: "" } } : { status: 404 }), { name: "friends" });
+    const app = await open(HARNESS, { ...c.options, network: { ...c.options.network, "GET https://cdn.test/*": { status: 404 } } });
+    await app.waitFor("label:Play video, 0:12");
+    expect(app.count("id:friends-video-player")).toBe(0);
+    await app.press("label:Play video, 0:12");
+    await app.waitFor("id:friends-video-player");
+    expect(app.shows("label:Turn sound on")).toBe(true);
+    await app.press("id:friends-video-sound");
+    await app.waitFor("label:Turn sound off");
+    await app.press("label:Play video, 0:07");
+    await app.waitFor("label:Play video, 0:12");
+    expect(app.count("id:friends-video-player")).toBe(1);
+    expect(app.shows("label:Turn sound on")).toBe(true);
+    await app.press("id:friends-video-full-screen");
+    await app.waitFor("id:friends-video-close");
+    await app.press("id:friends-video-close");
+    await app.waitFor("id:friends-video-close", { state: "gone" });
+    expect(app.count("id:friends-video-player")).toBe(1);
+  });
+
+  test("stops when another page opens over it", async () => {
+    const c = computer(on(), (op) => {
+      if (op.method === "GET" && op.path === "/feed") return { status: 200, body: { posts: [post("p1", { media: video(12) })], next: "" } };
+      if (op.path === "/posts/p1") return { status: 200, body: { post: post("p1", { media: video(12) }), comments: [] } };
+      return { status: 404 };
+    }, { name: "friends" });
+    const app = await open(HARNESS, { ...c.options, network: { ...c.options.network, "GET https://cdn.test/*": { status: 404 } } });
+    await app.waitFor("label:Play video, 0:12");
+    await app.press("label:Play video, 0:12");
+    await app.waitFor("id:friends-video-player");
+    await app.press("id:open-post-p1");
+    await app.waitFor("id:friends-post-text");
+    await app.back();
+    await app.waitFor("label:Play video, 0:12");
+    expect(app.count("id:friends-video-player")).toBe(0);
+  });
+});
+
+describe("the post page", () => {
+  test("Follow sits beside the author, and pressing it does not open the profile", async () => {
+    const c = computer(on(), (op) => {
+      if (op.path === "/posts/p1" && op.method === "GET") return { status: 200, body: { post: post("p1"), comments: [] } };
+      if (op.path === "/people/u-lena" && op.method === "GET") return { status: 200, body: { ...lena, bio: "", followers: 1, following: 1, posts: 1, followed: false, blocked: false, mine: false, created_at: 0 } };
+      if (op.path === "/people/u-lena/follow" && op.method === "PUT") return { status: 200, body: { ...lena, bio: "", followers: 2, following: 1, posts: 1, followed: true, blocked: false, mine: false, created_at: 0 } };
+      return { status: 404 };
+    }, { name: "friends-post", id: "p1" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:friends-follow");
+    await app.press("id:friends-follow");
+    await app.waitFor("text:Following");
+    expect(app.shows("id:friends-person")).toBe(false);
+    await app.press("id:friends-post-comment");
+    await app.type("id:friends-comment", "Hi");
+    expect(app.value("id:friends-comment")).toBe("Hi");
+    await app.press("id:friends-post-author");
+    await app.waitFor("id:friends-person");
+  });
+});
+
+describe("a draft being edited", () => {
+  test("keeps the owner's text when the status is read again or another draft goes", async () => {
+    const draft = (id: string, text: string) => ({ id, text, created_at: new Date().toISOString() });
+    let status = on({ drafts: [draft("d1", "First"), draft("d2", "Second")] });
+    const c = computer(status, (op) => {
+      if (op.op === "check") return { ok: true };
+      if (op.op === "discard_draft") {
+        status = on({ drafts: [draft("d1", "First")] });
+        return { ok: true };
+      }
+      return undefined;
+    }, { name: "friends-drafts" });
+    c.options.network[STATUS] = () => ({ body: status });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:draft-d2");
+    await app.clear("id:draft-text-d1");
+    await app.type("id:draft-text-d1", "My words");
+    const reads = app.requests().filter((r) => r.method === "GET" && r.url === "http://desk.test:9877/friends").length;
+    await app.setLifecycle("background");
+    await app.setLifecycle("active");
+    await app.waitUntil(() => app.requests().filter((r) => r.method === "GET" && r.url === "http://desk.test:9877/friends").length > reads);
+    expect(app.value("id:draft-text-d1")).toBe("My words");
+    app.onDialog(() => "Discard");
+    await answering(app, () => app.press("id:draft-discard-d2"));
+    await app.waitFor("id:draft-d2", { state: "gone" });
+    expect(app.value("id:draft-text-d1")).toBe("My words");
+  });
+});
+
+describe("Friends settings", () => {
+  test("Keep asking me leaves the switch off; deleting the account shows it is busy", async () => {
+    const c = computer(on(), () => undefined, { name: "settings-friends" });
+    const network = c.options.network as Record<string, unknown>;
+    const door = network[DOOR] as (request: { body?: string | null }) => unknown;
+    network[DOOR] = (request: { body?: string | null }) => {
+      const op = JSON.parse(request.body ?? "{}") as Op;
+      if (op.op === "delete_account") {
+        c.ops.push(op);
+        return { body: { signed_in: true, enabled: false, drafts: [], max_drafts: 5 }, delay: 400 };
+      }
+      return door(request);
+    };
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:friends-auto-post");
+    app.onDialog(() => "Keep asking me");
+    await answering(app, () => app.press("id:friends-auto-post"));
+    expect(app.shows("text:Up to 3 a day")).toBe(false);
+    expect(app.shows("id:friends-auto-media")).toBe(false);
+    app.onDialog(() => "Delete account");
+    await answering(app, () => app.press("id:friends-delete"));
+    await app.waitFor("id:friends-deleting");
+    await app.waitFor("id:friends-delete", { state: "gone" });
   });
 });

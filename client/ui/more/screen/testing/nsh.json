@@ -1,0 +1,29 @@
+{
+  "name": "Mewla Screen page tests",
+  "id": "com.daoleno.mewla.screentests",
+  "version": "0.0.0",
+  "appearance": "system",
+  "capabilities": {
+    "host": [
+      "app.*",
+      "secure.*",
+      "files.*",
+      "links.*",
+      "calendar.*",
+      "phone.*"
+    ],
+    "network": {
+      "hosts": [
+        "*"
+      ]
+    },
+    "openUrl": true,
+    "statusBar": true,
+    "webview": {
+      "hosts": [
+        "*"
+      ]
+    }
+  },
+  "theme": "../../../theme.json"
+}

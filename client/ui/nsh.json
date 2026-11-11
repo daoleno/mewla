@@ -27,6 +27,7 @@
     },
     "openUrl": true,
     "clipboard": true,
+    "statusBar": true,
     "webview": {
       "hosts": [
         "viewer.mewla.invalid"

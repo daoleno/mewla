@@ -7,7 +7,8 @@ import { bindDaemon } from "../daemon";
 import { MorePageView } from "../Pages";
 import type { MorePage } from "../routes";
 import { FakeDaemon, testServer } from "./fakeDaemon";
-import { current, servers } from "../../session";
+import { connection, current, problem, servers } from "../../session";
+import type { StoredServer } from "../../../core/storedServerContract";
 
 /**
  * A More page on its own, for `nsh test`: the test plays the computer. Its host
@@ -18,8 +19,8 @@ import { current, servers } from "../../session";
  */
 installPlatform(nshPlatform());
 
-const params = host.params as { page?: MorePage; state?: ConnectionState };
-const fake = new FakeDaemon({}, testServer(), params.state ?? "connected");
+const params = host.params as { page?: MorePage; below?: MorePage; state?: ConnectionState; server?: Partial<StoredServer> };
+const fake = new FakeDaemon({}, testServer(params.server ?? {}), params.state ?? "connected");
 fake.request = (async (type: string, body: Record<string, unknown>, options: { reply: string }) => {
   fake.asked.push({ type, body });
   if (fake.state !== "connected") throw new Error("Daemon is not connected.");
@@ -44,10 +45,16 @@ function answerSent(daemon: FakeDaemon): FakeDaemon["send"] {
 }
 fake.send = answerSent(fake);
 bindDaemon(fake);
-// The computers this phone has: the test's one, current.
-servers.set([fake.server]);
+// The computers this phone has: the test's one, current, and any others the test names (`host.params.servers`).
+servers.set([fake.server, ...((host.params as { servers?: StoredServer[] }).servers ?? [])]);
 current.set(fake.server);
-host.on("app.daemonState", (state) => fake.setState(state as ConnectionState));
+// The session's connection line follows the fake computer's; `app.sessionProblem` says why it fails.
+connection.set(fake.state);
+host.on("app.daemonState", (state) => {
+  fake.setState(state as ConnectionState);
+  connection.set(state as ConnectionState);
+});
+host.on("app.sessionProblem", (why) => problem.set(String(why ?? "")));
 host.on("app.daemonPush", (frame) => fake.push(frame as Frame));
 host.on("app.daemonSwitch", (server) => {
   const next = new FakeDaemon({}, testServer(server as object), "connected");
@@ -56,7 +63,8 @@ host.on("app.daemonSwitch", (server) => {
   bindDaemon(next);
 });
 
-const nav = createNavStack<MorePage>([params.page ?? { name: "stats" }]);
+// `host.params.below`: a page under it, so a test can go back from the page.
+const nav = createNavStack<MorePage>([...(params.below ? [params.below] : []), params.page ?? { name: "stats" }]);
 
 mount(() => (
   <View class="flex-1 bg-background">
