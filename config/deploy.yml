@@ -1,5 +1,5 @@
 # Hosted remote access (Kamal 2), on the host shared with Onlora.
-# Runbook: docs/internal/mewla-link-relay.md, "Hosted remote access".
+# Runbook: docs/internal/mewla-relay.md, "Hosted remote access".
 #
 #   connect.mewla.ai:443   relay -> SNI route (PROXY header) -> account
 #                          service, which holds its own certificate

@@ -872,7 +872,7 @@ func (server *Server) handleConnectorWithRelease(
 		keep = true
 	default:
 		outcome.reject(rejectionProtocol)
-		_ = writeProtocolError(conn, "unsupported_message", "unsupported Link message")
+		_ = writeProtocolError(conn, "unsupported_message", "unsupported Mewla Relay message")
 	}
 }
 
@@ -939,7 +939,7 @@ func (server *Server) authenticate(
 	timestamp := time.UnixMilli(message.TimestampMS)
 	if timestamp.Before(now.Add(-server.config.AuthMaxAge)) ||
 		timestamp.After(now.Add(server.config.AuthMaxAge)) {
-		return nil, newRelayRejection(rejectionAuth, "Link request expired")
+		return nil, newRelayRejection(rejectionAuth, "Mewla Relay request expired")
 	}
 	if !auth.VerifyLinkSignature(
 		message.DaemonPublicKey,
@@ -948,7 +948,7 @@ func (server *Server) authenticate(
 	) {
 		return nil, newRelayRejection(
 			rejectionAuth,
-			"invalid daemon Link signature",
+			"invalid daemon Mewla Relay signature",
 		)
 	}
 	if grant != nil &&
@@ -977,7 +977,7 @@ func (server *Server) authenticate(
 		if !server.nonceExpired(seenAt, now) {
 			return nil, newRelayRejection(
 				rejectionReplay,
-				"Link request replayed",
+				"Mewla Relay request replayed",
 			)
 		}
 	} else if len(server.nonces) >= server.config.MaxNonces {

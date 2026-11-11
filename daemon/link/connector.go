@@ -117,7 +117,7 @@ func NewConnector(
 		return nil, errors.New("daemon auth manager is required")
 	}
 	if identity == nil || identity.RouteID == "" || identity.SPKISHA256 == "" {
-		return nil, errors.New("Link transport identity is required")
+		return nil, errors.New("Mewla Relay transport identity is required")
 	}
 	if handler == nil {
 		return nil, errors.New("daemon HTTP handler is required")
@@ -216,7 +216,7 @@ func (connector *Connector) selectRelay(ctx context.Context) (*registeredRelay, 
 	}
 	if len(connected) == 0 {
 		sort.Strings(failures)
-		return nil, fmt.Errorf("no Link relay is available: %s", strings.Join(failures, "; "))
+		return nil, fmt.Errorf("no relay is available: %s", strings.Join(failures, "; "))
 	}
 	sort.Slice(connected, func(left, right int) bool {
 		if connected[left].rtt == connected[right].rtt {
@@ -287,17 +287,17 @@ func (connector *Connector) runRegisteredRelay(
 		if err != nil {
 			select {
 			case pingErr := <-pingErrors:
-				return fmt.Errorf("Link relay %s keepalive failed: %w", selected.candidate.Name, pingErr)
+				return fmt.Errorf("relay %s keepalive failed: %w", selected.candidate.Name, pingErr)
 			default:
 			}
-			return fmt.Errorf("Link relay %s disconnected: %w", selected.candidate.Name, err)
+			return fmt.Errorf("relay %s disconnected: %w", selected.candidate.Name, err)
 		}
 		switch message.Type {
 		case linkproto.TypeOpenStream:
 			if !linkproto.IsOpaqueID(message.StreamID, 16) ||
 				!linkproto.IsOpaqueID(message.StreamTicket, 32) ||
 				(message.Alias != "" && !linkproto.IsOpaqueID(message.Alias, 16)) {
-				return errors.New("Link relay sent an invalid stream ticket")
+				return errors.New("relay sent an invalid stream ticket")
 			}
 			select {
 			case connector.streams <- struct{}{}:
@@ -307,7 +307,7 @@ func (connector *Connector) runRegisteredRelay(
 					// A pairing that the phone reports as failed is otherwise
 					// invisible here: say what happened to its one-time stream.
 					if err != nil && message.Alias != "" {
-						log.Printf("Mewla Link pairing stream via %s ended early: %v", selected.candidate.Name, err)
+						log.Printf("Mewla Relay pairing stream via %s ended early: %v", selected.candidate.Name, err)
 					}
 				}()
 			default:
@@ -323,9 +323,9 @@ func (connector *Connector) runRegisteredRelay(
 			}
 		case linkproto.TypePong, linkproto.TypeGrantRenewed:
 		case linkproto.TypeError:
-			return fmt.Errorf("Link relay rejected the route: %s", message.Message)
+			return fmt.Errorf("relay rejected the route: %s", message.Message)
 		default:
-			return fmt.Errorf("Link relay sent unsupported message %q", message.Type)
+			return fmt.Errorf("relay sent unsupported message %q", message.Type)
 		}
 		select {
 		case <-ctx.Done():
@@ -416,7 +416,7 @@ func (connector *Connector) serveStream(
 	handshakeCtx, cancel := context.WithTimeout(ctx, connector.config.ControlTimeout)
 	defer cancel()
 	if err := inner.HandshakeContext(handshakeCtx); err != nil {
-		return fmt.Errorf("inner Link TLS handshake: %w", err)
+		return fmt.Errorf("inner Mewla Relay TLS handshake: %w", err)
 	}
 	handler := connector.handler
 	if open.Alias != "" {
@@ -470,7 +470,7 @@ func (connector *Connector) pairingAdmissionHandler(
 		writer = recorder
 		defer func() {
 			log.Printf(
-				"Mewla Link pairing admission via %s: %s %s arrived %s after the stream opened, relay commit %s, answered %d (%d bytes) after %s",
+				"Mewla Relay pairing admission via %s: %s %s arrived %s after the stream opened, relay commit %s, answered %d (%d bytes) after %s",
 				candidate.Name, request.Method, request.URL.Path,
 				arrived.Round(time.Millisecond), commit.Round(time.Millisecond),
 				recorder.status, recorder.bytes, time.Since(streamOpened).Round(time.Millisecond),
@@ -481,7 +481,7 @@ func (connector *Connector) pairingAdmissionHandler(
 		if request.Method != http.MethodPost || request.URL.Path != "/pair" {
 			http.Error(
 				writer,
-				"This one-time Mewla Link admission only accepts the pairing request. Scan the QR code again.",
+				"This one-time Mewla Relay admission only accepts the pairing request. Scan the QR code again.",
 				http.StatusForbidden,
 			)
 			return
@@ -491,13 +491,13 @@ func (connector *Connector) pairingAdmissionHandler(
 			defer func() { commit = time.Since(committing) }()
 			consumeErr = connector.consumeAdmission(ctx, candidate, open)
 			if consumeErr != nil {
-				log.Printf("Mewla Link pairing admission via %s was not committed: %v", candidate.Name, consumeErr)
+				log.Printf("Mewla Relay pairing admission via %s was not committed: %v", candidate.Name, consumeErr)
 			}
 		})
 		if consumeErr != nil {
 			http.Error(
 				writer,
-				"Mewla Link pairing admission is unavailable or was already used. Scan a fresh QR code.",
+				"Mewla Relay pairing admission is unavailable or was already used. Scan a fresh QR code.",
 				http.StatusUnauthorized,
 			)
 			return
@@ -555,7 +555,7 @@ func IssueAdmissions(
 		return nil, err
 	}
 	if authManager == nil || identity == nil {
-		return nil, errors.New("daemon auth and Link transport identity are required")
+		return nil, errors.New("daemon auth and Mewla Relay transport identity are required")
 	}
 	if ttl <= 0 {
 		return nil, errors.New("admission TTL must be positive")
@@ -602,7 +602,7 @@ func IssueAdmissions(
 	}
 	if len(offers) == 0 {
 		sort.Strings(failures)
-		return nil, fmt.Errorf("no Link relay issued an admission: %s", strings.Join(failures, "; "))
+		return nil, fmt.Errorf("no relay issued an admission: %s", strings.Join(failures, "; "))
 	}
 	sort.Slice(offers, func(left, right int) bool {
 		return offers[left].RelayName < offers[right].RelayName
@@ -765,7 +765,7 @@ func dialControl(
 	}
 	if conn.ConnectionState().NegotiatedProtocol != linkproto.ControlALPN {
 		_ = conn.Close()
-		return nil, errors.New("relay did not negotiate Mewla Link control protocol v2")
+		return nil, errors.New("relay did not negotiate Mewla Relay control protocol v2")
 	}
 	_ = conn.SetDeadline(time.Now().Add(config.ControlTimeout))
 	return conn, nil
@@ -796,17 +796,17 @@ func normalizeConnectorConfig(config ConnectorConfig) (ConnectorConfig, error) {
 	config.HostLabel = strings.ToLower(strings.TrimSpace(config.HostLabel))
 	switch {
 	case config.ConnectorToken == "" && config.Grant == nil:
-		return ConnectorConfig{}, errors.New("Link connector token is required")
+		return ConnectorConfig{}, errors.New("Mewla Relay connector token is required")
 	case config.ConnectorToken != "" && len(config.ConnectorToken) < 32:
-		return ConnectorConfig{}, errors.New("Link connector token must contain at least 32 characters")
+		return ConnectorConfig{}, errors.New("Mewla Relay connector token must contain at least 32 characters")
 	case config.HostLabel != "" && !linkproto.IsHostLabel(config.HostLabel):
-		return ConnectorConfig{}, errors.New("Link host label is invalid")
+		return ConnectorConfig{}, errors.New("Mewla Relay host label is invalid")
 	}
 	if len(config.Candidates) == 0 {
-		return ConnectorConfig{}, errors.New("at least one Link relay candidate is required")
+		return ConnectorConfig{}, errors.New("at least one relay candidate is required")
 	}
 	if len(config.Candidates) > 16 {
-		return ConnectorConfig{}, errors.New("at most 16 Link relay candidates are supported")
+		return ConnectorConfig{}, errors.New("at most 16 relay candidates are supported")
 	}
 	if config.ControlTimeout <= 0 {
 		config.ControlTimeout = defaultControlTimeout
@@ -1075,7 +1075,7 @@ func (trace *wireTrace) Close() error {
 	trace.mu.Unlock()
 	if first {
 		log.Printf(
-			"Mewla Link pairing stream via %s closed %s after it opened: read %d bytes (%v), wrote %d bytes (last at %s, error %v)",
+			"Mewla Relay pairing stream via %s closed %s after it opened: read %d bytes (%v), wrote %d bytes (last at %s, error %v)",
 			trace.name, time.Since(trace.opened).Round(time.Millisecond),
 			read, readErr, written, lastWrite.Round(time.Millisecond), writeErr,
 		)

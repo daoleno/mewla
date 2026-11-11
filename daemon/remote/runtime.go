@@ -314,13 +314,12 @@ func (runtime *Runtime) logf(format string, args ...any) {
 	}
 }
 
-// remote access is the product name; the transport underneath is Link.
+// remote access is the product name; the transport underneath is Mewla Relay.
+// The longer keys come first: the replacer takes the first key that matches.
 var userTextReplacer = strings.NewReplacer(
-	"Mewla Link pairing admission", "a remote access pairing code",
-	"Mewla Link", "remote access",
-	"Link relay", "relay",
-	"Link TLS", "TLS",
-	"Link is connected", "remote access is connected",
+	"Mewla Relay pairing admission", "a remote access pairing code",
+	"Mewla Relay TLS", "TLS",
+	"Mewla Relay", "remote access",
 )
 
 // UserText rewrites connector errors in remote access terms.
