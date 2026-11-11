@@ -43,6 +43,11 @@ import { Icon } from "../icons/Icon";
 import { brain, connection, current, currentTransport, outbox, workers, workersHydrated } from "../session";
 import type { SessionsRoute } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
+import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
+import { filePreviewRoute } from "../more/files/routes";
+import { recognizeSessionFileReference } from "../../core/files/sessionFilePreview";
+import { buildGitDiffChipLabel, type GitDiffStatusSnapshot } from "../../core/git/gitDiff";
+import { getGitStatus } from "../../core/git/requests";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "./Sessions";
 
@@ -293,6 +298,49 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     if (!dshLive()) return dshWeb.set(null);
     untracked(() => void listSessionServices(transport).then((snapshot) => dshWeb.set(dshWebServiceURL(snapshot.services))).catch(() => dshWeb.set(null)));
   });
+  // Git: the folder's changes on a chip in the header, read every 15 s while the Session is on screen.
+  const git = signal<{ status: GitDiffStatusSnapshot | null; error: boolean } | null>(null);
+  const gitTarget = computed(() => (props.active() && connected() && worker()?.cwd ? worker()!.cwd! : ""));
+  effect(() => {
+    const cwd = gitTarget();
+    if (!cwd) return;
+    let live = true;
+    const read = () => void getGitStatus(transport, { targetId: props.workerId, cwd })
+      .then((status) => live && git.set({ status, error: false }))
+      .catch(() => live && git.set({ status: untracked(git)?.status ?? null, error: true }));
+    read();
+    const timer = setInterval(read, 15_000);
+    cleanup(() => {
+      live = false;
+      clearInterval(timer);
+    });
+  });
+  const gitChip = computed(() => {
+    const state = git();
+    if (!state || state.status?.reason === "not_git_repo" || (!state.status?.available && !state.error)) return null;
+    return { label: buildGitDiffChipLabel(state.status, false), dirty: Boolean(state.status?.available && !state.status.clean), error: state.error };
+  });
+  const openGit = () => {
+    const cwd = untracked(worker)?.cwd;
+    if (cwd) props.nav.push({ name: "git", targetId: props.workerId, cwd, title: untracked(title) });
+  };
+  // A path the terminal showed, previewed against this run of the Session.
+  const openPath = (path: string) => {
+    const reference = recognizeSessionFileReference(path);
+    const w = untracked(worker);
+    if (!reference || !w?.process_id || !w.started_at) return;
+    props.nav.push(filePreviewRoute(reference, { workerId: props.workerId, processId: w.process_id, startedAt: w.started_at }));
+  };
+
+  // Files picked for the next message, uploaded to this computer as they are picked.
+  const uploads = createAttachmentUploads();
+  cleanup(() => uploads.dispose());
+  const uploading = () => uploads.items().some((item) => item.status === "uploading" || item.status === "queued");
+  const attach = () => {
+    pinned.set(false);
+    void uploads.pickAndUpload().catch((error) => notice.set(error instanceof Error ? error.message : "Could not attach the file."));
+  };
+
   const modelChip = computed(() => resolveComposerModelControl({ capabilities: worker()?.capabilities, connectionConnected: connected(), selection: runtime(), refreshRequired: false }));
 
   const answerAlert = async (alert: ComposerAlert) => {
@@ -310,7 +358,8 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     pinned.set(false);
     switch (route.kind) {
       case "send":
-        chat.send(route.text);
+        chat.send(route.text, uploads.ready());
+        uploads.clear();
         return fromDraft;
       case "prefill":
         text.set(route.text);
@@ -442,20 +491,32 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           </View>
         </View>
       }
-      headerRight={<Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>}>
+      headerRight={
+        <View class="flex-row items-center gap-3">
+          {gitChip() ? (
+            <Button testID="session-git" accessibilityLabel={`Git: ${gitChip()!.label}`} onPress={openGit} class="flex-row items-center gap-1 rounded-full border border-border px-2 py-1 active:bg-accent">
+              <Icon name={gitChip()!.error ? "alert-circle" : "git-branch"} size={14} color={gitChip()!.dirty ? "primary" : undefined} />
+              <Text class="max-w-[120px] text-xs line-clamp-1">{gitChip()!.label}</Text>
+            </Button>
+          ) : null}
+          <Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>
+        </View>
+      }>
       <View class="flex-1 bg-background">
         <View class="flex-1">
           <View class="absolute inset-0" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
-            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} />
+            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)} />
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
               <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} />
-              <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => true} onSend={sendComposer}
+              <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"}
                 leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
-                <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand} />
+                <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand}
+                  onAttach={attach} uploading={uploading} />
+                {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
                 {modelChip() ? (
                   <Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
                     class="mb-2 flex-row items-center gap-1 self-start rounded-full border border-border px-2.5 py-1 active:bg-accent">

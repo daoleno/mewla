@@ -4,6 +4,9 @@ import { isAvailable as mobile, TabBar } from "nsh/mobile";
 import { Onboarding } from "../screens/Onboarding";
 import { More } from "../screens/More";
 import { MorePageView } from "../more/Pages";
+import { FilesPageView } from "../more/files/Pages";
+import { GitPageView } from "../more/git/GitPages";
+import type { MorePage, PageNav } from "../more/routes";
 import { Brain } from "../screens/Brain";
 import { calendarNav, calendarRoute, showCalendarItem } from "../calendar/routes";
 import { WorkFilePage } from "../work/WorkFilePage";
@@ -47,6 +50,21 @@ export function openSession(workerId: string, hint?: TerminalRouteSessionHint) {
   sessionsNav.setRoutes([{ name: "sessions" }, { name: "session", workerId, hint }]);
 }
 
+/**
+ * How a Session's Git review and file previews push their next page: theirs stay on the
+ * Sessions stack, anything else opens under More.
+ */
+const sessionsPageNav: PageNav = {
+  push(route: MorePage) {
+    if (route.name.startsWith("git") || route.name.startsWith("files-")) sessionsNav.push(route as SessionsRoute);
+    else {
+      selectedTab.set(3);
+      moreNav.setRoutes([{ name: "more" }, route]);
+    }
+  },
+  pop: () => sessionsNav.pop(),
+};
+
 function sessionsRoute(route: SessionsRoute, index: () => number) {
   switch (route.name) {
     case "sessions":
@@ -62,6 +80,11 @@ function sessionsRoute(route: SessionsRoute, index: () => number) {
         showCalendarItem(id);
         selectedTab.set(2);
       }} />;
+    case "files-preview":
+    case "files-workspace":
+      return <FilesPageView route={route} nav={sessionsPageNav} />;
+    default:
+      return <GitPageView route={route} nav={sessionsPageNav} />;
   }
 }
 
