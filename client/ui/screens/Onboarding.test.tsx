@@ -57,6 +57,22 @@ describe("first run", () => {
     expect(app.shows("id:paste")).toBe(true);
   });
 
+  test("a rotation lays the step out again: beside the cat on its side, above it upright", async () => {
+    const app = await open("../App.tsx", { host: phone(), platform: "android" });
+    await app.waitFor("id:set-up");
+    await app.waitFor("id:step-tall");
+    await app.setViewport(844, 390);
+    await app.waitFor("id:step-compact");
+    await app.setViewport(390, 844);
+    await app.waitFor("id:step-tall");
+    await app.press("id:scan-now");
+    await app.waitFor("id:split-tall");
+    await app.setViewport(844, 390);
+    await app.waitFor("id:split-compact");
+    await app.setViewport(390, 844);
+    await app.waitFor("id:split-tall");
+  });
+
   test("Other ways to connect opens the docs", async () => {
     const app = await open("../App.tsx", { host: phone(), platform: "android" });
     await app.press("id:scan-now");
