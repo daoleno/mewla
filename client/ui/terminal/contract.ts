@@ -9,6 +9,12 @@ import { nativeComponent } from "nsh";
  * `scroll`, `tapCell`) to the computer. Selection and copy are the platform's
  * own (long press, system menu); IME composition happens in the view, and only
  * committed text is reported as `input`.
+ *
+ * The history above the screen is not the VT's: the computer keeps it
+ * (`terminal_history`, core/terminal/history.ts) and the page hands its rows
+ * to the view (`history`), which draws them above the live screen and scrolls
+ * through them on its own. Search and the prompt jumps run in the page over
+ * the same rows and move the view (`scrollTo`, `mark`).
  */
 /** Colors are CSS hex: `#rrggbb`, or `#rrggbbaa` (what `token()` gives; the VT drops the alpha). */
 export type TerminalTheme = {
@@ -29,24 +35,43 @@ export type TerminalProps = {
 export type TerminalEvents = {
   /** The grid fits cols × rows now (first layout, rotation, keyboard, font size). */
   size: { cols: number; rows: number };
+  /** The VT could not be made (the library did not load, or refused the grid); `retry` tries again. */
+  failed: { message: string };
   /** Bytes for the program: typed text, keys (`\r`, `\x7f`, escape sequences), pasted text. */
   input: { data: string };
-  /** A drag scrolled the history: `lines` > 0 is back in time. The page drives tmux copy mode with it. */
+  /**
+   * A drag the view did not take, `lines` > 0 back in time: it holds no
+   * history, or the program is on the alternate screen. The page drives tmux
+   * copy mode with it.
+   */
   scroll: { lines: number };
-  /** A tap at a cell (tmux pane focus, mouse-mode programs). */
-  tapCell: { col: number; row: number };
-  /** A URL or file path under a tap. */
-  link: { url: string };
+  /** Where the history viewport stands: `top` is the history row at the top (the history's length at the bottom). */
+  viewport: { top: number; atBottom: boolean };
+  /**
+   * A tap. `row` is the live screen's row, -1 on a history row; `text` is
+   * the tapped row's text and `index` the UTF-16 index of the tapped cell in
+   * it (-1 past its end). The page opens a link there, or focuses. The view
+   * does not raise the keyboard itself.
+   */
+  tapCell: { col: number; row: number; text: string; index: number };
+  /** A program copied text (OSC 52, OSC 1337 Copy, OSC 5522). */
+  copy: { text: string };
 };
 
 /**
  * Commands (`ref.command(name, args)`):
  * - `write {data}`: output from the computer, in order.
- * - `reset {}`: clear the screen and history (a new attachment).
+ * - `reset {}`: clear the screen (a new attachment). The history is the `history` command's.
+ * - `history {reset, removed, rows, cols, alternate}`: void the history rows (`reset`), drop
+ *   `removed` from the front, append `rows` (styled ANSI, one per row, drawn `cols` wide).
+ *   While scrolled up, the rows on screen stay put. `alternate`: drags go to the program (`scroll`).
+ * - `scrollTo {row}`: show history row `row` at the top.
+ * - `scrollToBottom {}`: back to the live screen.
+ * - `mark {row}`: highlight one history row (the search's match); -1 none.
  * - `focus {}` / `blur {}`: show or hide the keyboard.
- * - `search {query, backwards}`: select the next match in the view's history.
+ * - `retry {}`: make the VT again after `failed`.
  */
 export const TerminalSurface = nativeComponent<TerminalProps, TerminalEvents>("mewla.terminal", {
   props: ["fontSize", "theme"],
-  events: ["size", "input", "scroll", "tapCell", "link"],
+  events: ["size", "failed", "input", "scroll", "viewport", "tapCell", "copy"],
 });

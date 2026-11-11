@@ -4,14 +4,22 @@ import UIKit
 /// A terminal drawn with CoreText from libghostty-vt's cells (the iOS twin of
 /// client/android/.../terminal/TerminalView.kt). The system keyboard types into it
 /// through UITextInput (composition drawn at the cursor, only committed text
-/// reported); a drag scrolls the history (reported: the computer's tmux copy mode
-/// moves); a tap focuses and reports the cell; a long press selects a line and
-/// offers Copy.
+/// reported). Above the live screen it draws the history the page hands it
+/// (`applyHistory`, styled rows rendered by a second VT) and a drag scrolls through
+/// it here; with no history (or on the alternate screen) the drag is reported (the
+/// computer's tmux copy mode moves). A tap reports the cell and the text under it
+/// (the page opens links and raises the keyboard); a long press selects a line and
+/// offers Copy. Text a program copies (OSC 52) is reported.
 final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   var onSize: (_ cols: Int, _ rows: Int) -> Void = { _, _ in }
+  var onFailed: (_ message: String) -> Void = { _ in }
   var onInput: (_ data: String) -> Void = { _ in }
   var onScroll: (_ lines: Int) -> Void = { _ in }
-  var onTapCell: (_ col: Int, _ row: Int) -> Void = { _, _ in }
+  /// The history row at the top (the history's length at the bottom).
+  var onViewport: (_ top: Int, _ atBottom: Bool) -> Void = { _, _ in }
+  /// `row` is the live screen's, -1 on a history row; `index` is the tapped cell's UTF-16 index in `text`, -1 past it.
+  var onTapCell: (_ col: Int, _ row: Int, _ text: String, _ index: Int) -> Void = { _, _, _, _ in }
+  var onCopy: (_ text: String) -> Void = { _ in }
 
   /// A run with its CoreText line, made on first draw.
   private final class Cell {
@@ -52,6 +60,23 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   private var selRow = -1
   private var scrollRemainder: CGFloat = 0
   private lazy var editMenu = UIEditMenuInteraction(delegate: self)
+  private var failed = false
+
+  // The history above the live screen: its styled rows as the page sent them (drawn
+  // again on a theme change) and as cells, oldest first.
+  private var historyAnsi: [String] = []
+  private var history: [[Cell]] = []
+  private var historyCols = 0
+  private var alternate = false
+  /// The VT that renders history rows, `page` rows tall at the history's width; it keeps
+  /// styling from one row to the next.
+  private var scratch: Vt?
+  /// History rows scrolled into view above the live screen; 0 is the live screen.
+  private var historyOffset = 0
+  private var markRow = -1
+  private var reportedTop = -1
+  private var reportedBottom = true
+  private static let page = 64
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -114,6 +139,9 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     let r = CGFloat((bg.rgb >> 16) & 0xff), g = CGFloat((bg.rgb >> 8) & 0xff), b = CGFloat(bg.rgb & 0xff)
     keyboardAppearance = (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5 ? .dark : .light
     applyTheme()
+    // The history's colors are the VT's: draw its rows again.
+    scratch = nil
+    history = renderHistory(historyAnsi)
     setNeedsDisplay()
   }
 
@@ -127,10 +155,145 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   func write(_ data: String) {
     guard let vt else { return pending.append(data) }
     vt.write(data)
+    if let copied = vt.takeClipboard() { onCopy(copied) }
     schedulePull()
   }
 
-  /// A new attachment: the screen and history start empty.
+  /// After `onFailed`: try to make the VT again.
+  func retry() {
+    guard failed else { return }
+    failed = false
+    relayout()
+    setNeedsDisplay()
+  }
+
+  // MARK: The history
+
+  /// The `history` command: void (`reset`), drop `removed` rows from the front, append
+  /// `lines`. The rows on screen stay put.
+  func applyHistory(reset: Bool, removed: Int, rows lines: [String], cols: Int, alternate: Bool) {
+    if reset {
+      historyAnsi.removeAll()
+      history.removeAll()
+      markRow = -1
+      scratch = nil
+    } else if removed > 0 {
+      let n = min(removed, history.count)
+      historyAnsi.removeFirst(min(n, historyAnsi.count))
+      history.removeFirst(n)
+      markRow = markRow >= n ? markRow - n : -1
+    }
+    if cols > 0, cols != historyCols {
+      historyCols = cols
+      scratch = nil
+    }
+    self.alternate = alternate
+    historyAnsi.append(contentsOf: lines)
+    history.append(contentsOf: renderHistory(lines))
+    // Scrolled up, the rows above the screen grew: the reader's rows stay where they are.
+    if historyOffset > 0, !reset { historyOffset += lines.count }
+    if alternate { historyOffset = 0 }
+    historyOffset = min(max(historyOffset, 0), history.count)
+    reportViewport()
+    setNeedsDisplay()
+  }
+
+  /// Show history row `row` at the top.
+  func scrollTo(row: Int) {
+    guard !alternate, !history.isEmpty else { return }
+    setOffset(history.count - min(max(row, 0), history.count))
+  }
+
+  func scrollToBottom() { setOffset(0) }
+
+  /// Highlight one history row (the search's match); -1 none.
+  func mark(row: Int) {
+    markRow = row >= 0 && row < history.count ? row : -1
+    setNeedsDisplay()
+  }
+
+  private func setOffset(_ next: Int) {
+    let clamped = min(max(next, 0), history.count)
+    guard clamped != historyOffset else { return }
+    historyOffset = clamped
+    reportViewport()
+    setNeedsDisplay()
+  }
+
+  private func reportViewport() {
+    let top = history.count - historyOffset
+    let atBottom = historyOffset == 0
+    guard top != reportedTop || atBottom != reportedBottom else { return }
+    reportedTop = top
+    reportedBottom = atBottom
+    onViewport(top, atBottom)
+  }
+
+  /// History rows as cells, a page at a time through the scratch VT (styling carries
+  /// over from row to row, as tmux captures it).
+  private func renderHistory(_ lines: [String]) -> [[Cell]] {
+    guard !lines.isEmpty else { return [] }
+    if scratch == nil {
+      guard let made = Vt(cols: min(max(historyCols, 2), 1000), rows: Self.page) else { return Array(repeating: [], count: lines.count) }
+      if let vtPalette {
+        made.setTheme(foreground: foreground.rgb, background: background.rgb, cursor: cursorColor.rgb, palette: vtPalette)
+      }
+      scratch = made
+    }
+    guard let scratch else { return [] }
+    var out: [[Cell]] = []
+    out.reserveCapacity(lines.count)
+    var at = 0
+    while at < lines.count {
+      let page = lines[at..<min(at + Self.page, lines.count)]
+      // Clear and home without resetting the styling the page before left.
+      scratch.write("\u{1b}[2J\u{1b}[H" + page.joined(separator: "\r\n"))
+      var rendered = [[Cell]](repeating: [], count: Self.page)
+      if let frame = scratch.frame(full: true) {
+        for (row, runs) in frame.dirty where row >= 0 && row < Self.page {
+          rendered[row] = runs.map(Cell.init)
+        }
+      }
+      out.append(contentsOf: rendered.prefix(page.count))
+      at += Self.page
+    }
+    return out
+  }
+
+  /// What screen row `r` shows: a history row (its index) or a live row (`index - history.count`).
+  private func rowIndex(_ r: Int) -> Int { history.count - historyOffset + r }
+
+  private func screenCells(_ r: Int) -> [Cell] {
+    let i = rowIndex(r)
+    if i < history.count { return i >= 0 ? history[i] : [] }
+    let live = i - history.count
+    return live >= 0 && live < grid.count ? grid[live] : []
+  }
+
+  /// A row's text, the gaps between its runs (blank cells) as spaces, and the UTF-16
+  /// index of cell `col` in it: -1 past its end; a wide character or a grapheme maps to its start.
+  private func rowText(_ cells: [Cell], col: Int) -> (text: String, index: Int) {
+    var line = ""
+    var units = 0
+    var at = 0
+    var index = -1
+    for cell in cells {
+      let run = cell.run
+      if run.col > at {
+        if col >= at, col < run.col { index = units + (col - at) }
+        line += String(repeating: " ", count: run.col - at)
+        units += run.col - at
+      }
+      let count = run.text.utf16.count
+      if col >= run.col, col < run.col + run.cells { index = run.cells == count ? units + (col - run.col) : units }
+      line += run.text
+      units += count
+      at = run.col + run.cells
+    }
+    return (line, index)
+  }
+
+  /// A new attachment: the screen starts empty. The history is the page's (`applyHistory`).
   func reset() {
     vt = nil
     pending.removeAll()
@@ -162,11 +325,18 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
       guard c != cols || r != rows else { return }
       vt.resize(cols: c, rows: r, cellWidth: cellW * scale, cellHeight: cellH * scale)
     } else {
-      guard let made = Vt(cols: c, rows: r) else { return }
+      guard !failed else { return }
+      guard let made = Vt(cols: c, rows: r) else {
+        // Said once; `retry` tries again.
+        failed = true
+        onFailed("libghostty-vt could not make a \(c)×\(r) terminal.")
+        return
+      }
       vt = made
       applyTheme()
       for data in pending { made.write(data) }
       pending.removeAll()
+      if let copied = made.takeClipboard() { onCopy(copied) }
     }
     cols = c
     rows = r
@@ -175,6 +345,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     pull()
     setNeedsDisplay()
     onSize(c, r)
+    reportViewport()
   }
 
   private func schedulePull() {
@@ -209,15 +380,16 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     ctx.setFillColor(background.color.cgColor)
     ctx.fill(bounds)
     ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
-    for (r, row) in grid.enumerated() {
+    for r in 0..<max(rows, 0) {
       let y = CGFloat(r) * cellH
       guard y < rect.maxY, y + cellH > rect.minY else { continue }
-      if r == selRow {
+      let i = rowIndex(r)
+      if r == selRow || (i >= 0 && i < history.count && i == markRow) {
         ctx.setShouldAntialias(false)
         ctx.setFillColor(selectionColor.color.cgColor)
         ctx.fill(CGRect(x: 0, y: y, width: bounds.width, height: cellH))
       }
-      for cell in row { draw(cell, y: y, in: ctx) }
+      for cell in screenCells(r) { draw(cell, y: y, in: ctx) }
     }
     drawCursor(in: ctx)
   }
@@ -266,10 +438,13 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     }
   }
 
+  /// The cursor moves down with the live screen while the history is scrolled into view, and leaves with it.
+  private var cursorScreenRow: Int { cursorRow + historyOffset }
+
   private func drawCursor(in ctx: CGContext) {
-    guard cursorVisible, vt != nil else { return }
+    guard cursorVisible, vt != nil, cursorScreenRow < rows else { return }
     let x = CGFloat(cursorCol) * cellW
-    let y = CGFloat(cursorRow) * cellH
+    let y = CGFloat(cursorScreenRow) * cellH
     if !marked.isEmpty {
       // The composition (IME) at the cursor, underlined; only the committed text is sent.
       let attributes: [NSAttributedString.Key: Any] = [
@@ -294,7 +469,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     }
   }
 
-  // MARK: Touch: a tap focuses and names the cell; a drag scrolls the history; a long press copies a line.
+  // MARK: Touch: a tap names the cell and its text; a drag scrolls the history; a long press copies a line.
 
   private func cell(at point: CGPoint) -> (col: Int, row: Int) {
     let col = min(max(Int(point.x / max(cellW, 1)), 0), max(cols - 1, 0))
@@ -303,9 +478,11 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   }
 
   @objc private func tapped(_ gesture: UITapGestureRecognizer) {
-    showKeyboard()
-    let (col, row) = cell(at: gesture.location(in: self))
-    onTapCell(col, row)
+    guard rows > 0 else { return }
+    let (col, r) = cell(at: gesture.location(in: self))
+    let i = rowIndex(r)
+    let (text, index) = rowText(screenCells(r), col: col)
+    onTapCell(col, i < history.count ? -1 : i - history.count, text, index)
   }
 
   @objc private func panned(_ gesture: UIPanGestureRecognizer) {
@@ -319,7 +496,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
       let lines = Int(scrollRemainder)
       if lines != 0 {
         scrollRemainder -= CGFloat(lines)
-        onScroll(lines)
+        if !alternate, !history.isEmpty || historyOffset > 0 { setOffset(historyOffset + lines) } else { onScroll(lines) }
       }
     default:
       break
@@ -334,16 +511,10 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     editMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: point))
   }
 
-  /// The selected line's text, trailing blanks dropped.
+  /// The text of screen row `row` (a history row while scrolled up), trailing blanks dropped.
   func lineText(_ row: Int) -> String {
-    guard row >= 0, row < grid.count else { return "" }
-    var line = ""
-    var col = 0
-    for cell in grid[row] {
-      if cell.run.col > col { line += String(repeating: " ", count: cell.run.col - col) }
-      line += cell.run.text
-      col = cell.run.col + cell.run.cells
-    }
+    guard row >= 0, row < rows else { return "" }
+    var line = rowText(screenCells(row), col: 0).text
     while line.last == " " { line.removeLast() }
     return line
   }
@@ -599,7 +770,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
 
   /// The cursor's cell, where the system puts the candidates.
   private var cursorRect: CGRect {
-    CGRect(x: CGFloat(cursorCol) * cellW, y: CGFloat(cursorRow) * cellH, width: cellW, height: cellH)
+    CGRect(x: CGFloat(cursorCol) * cellW, y: CGFloat(cursorScreenRow) * cellH, width: cellW, height: cellH)
   }
 
   private func markedWidth(upTo offset: Int) -> CGFloat {
