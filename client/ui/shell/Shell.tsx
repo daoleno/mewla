@@ -196,13 +196,18 @@ export function openScreenPage(worker: string | null) {
   moreNav.setRoutes([{ name: "more" }, screenRoute(worker)]);
 }
 
-/** The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen. */
+/**
+ * The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen or the
+ * Phone page. From the shown tab's top route: every tab's stack stays mounted, so a Phone page left under More
+ * hid the phone's float over the other tabs (phone 19).
+ */
 const floatPage = () => {
   const tab = selectedTab();
   const top = stacks[tab]?.routes().at(-1) as { name: string; workerId?: string; id?: string } | undefined;
   return {
     owner: routeOwner(top, (id) => workFiles().find((item) => item.id === id)?.frontmatter.worker_session),
     screenPage: tab === 3 && top?.name === "screen",
+    phonePage: tab === 3 && top?.name === "settings-phone",
   };
 };
 

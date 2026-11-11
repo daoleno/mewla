@@ -14,7 +14,6 @@ import {
   phoneAvailable,
   phoneControl,
   phoneError,
-  phonePageOpen,
   phonePairing,
   phoneStatus,
   startPhoneHelper,
@@ -29,12 +28,6 @@ import {
  */
 export function PhonePage() {
   cleanup(watchPhoneSetup());
-  // The page is the full view: the floating control hides while it is open.
-  effect(() => {
-    untracked(() => phonePageOpen.set(true));
-    return () => phonePageOpen.set(false);
-  });
-
   // Once paired, the helper starts by itself: nothing for the person to press.
   let asked = "";
   effect(() => {
