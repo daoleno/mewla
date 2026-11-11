@@ -6,6 +6,7 @@ import { NavPage } from "../../shell/NavPage";
 import { gitHunkAtLine, gitHunkSelection, parseGitPatch, splitGitPatchByFile, type GitParsedPatch, type GitPatchHunk, type GitPatchSide } from "../../../core/git/gitDiffHunks";
 import { canExpandGitDiffFile, formatGitDiffBytes, gitDiffContentScope, gitDiffExpansionSides, gitDiffPatchText, planGitDiffReview, type GitDiffExpansionSides, type GitDiffSection } from "../../../core/git/gitDiffReview";
 import type { GitDiffPatchPayload } from "../../../core/git/gitDiff";
+import { padGitDiffPatch, padGitDiffText } from "../../../core/git/gitDiffLinePad";
 import { findGitPatchMatches, followGitReviewEntry, gitAskContext, gitFindLabel, GIT_CODE_TEXT, stepGitCodeText, stepGitFind, type GitFindMatch } from "../../../core/git/gitReader";
 import { splitGitReviewPath, type GitReviewEntry, type GitReviewGroup } from "../../../core/git/gitReviewModel";
 import { getGitFileContent, getGitPatch } from "../../../core/git/requests";
@@ -194,9 +195,10 @@ function PatchReader(props: {
           props.onRef(ref);
         }}
         class="flex-1"
-        patch={props.sides() ? null : props.section()?.patch ?? ""}
-        oldValue={props.sides()?.oldContents ?? null}
-        newValue={props.sides()?.newContents ?? null}
+        // Padded for NSH's Android line layout (R4#3, gitDiffLinePad.ts); the model keeps the text.
+        patch={props.sides() ? null : padGitDiffPatch(props.section()?.patch ?? "")}
+        oldValue={nullablePad(props.sides()?.oldContents)}
+        newValue={nullablePad(props.sides()?.newContents)}
         language={props.path}
         layout={diffLayout(windowSize().width)}
         softWrap={d.wrap()}
@@ -207,6 +209,10 @@ function PatchReader(props: {
       />
     </View>
   );
+}
+
+function nullablePad(text: string | null | undefined): string | null {
+  return text == null ? null : padGitDiffText(text);
 }
 
 function ReaderHeader(props: {
