@@ -1,4 +1,4 @@
-import { computed, keyboardFrame, PanResponder, safeArea, signal, Storage, Text, untracked, View, windowSize, type JSX } from "nsh";
+import { cleanup, computed, createMotion, effect, keyboardFrame, PanResponder, reduceMotion, safeArea, signal, Storage, Text, untracked, View, windowSize, type JSX } from "nsh";
 import { AlertDialog, Button } from "nsh/base";
 import {
   DEFAULT_FLOAT_CORNER,
@@ -25,8 +25,12 @@ const COMPOSER = 140;
 const BAR = 30;
 /** The resize handle: a touch area around a small grip in the window's inner corner. */
 const HANDLE = 32;
-/** Two taps on the title this close together are a double tap. */
-const DOUBLE_TAP_MS = 400;
+/** Two taps on the title this close together are a double tap; a single tap waits this long before it goes to the next screen. */
+const DOUBLE_TAP_MS = 300;
+/** The window gliding to its corner, as v0.3.1's (220 ms, ease out). */
+const SNAP_MS = 220;
+/** One breath of the attention ring, in and out as v0.3.1's. */
+const BREATH_MS = 700;
 
 /** One entry of the window's menu (an action sheet). */
 export interface FloatMenuItem {
@@ -110,18 +114,27 @@ export function ScreenFloat(props: ScreenFloatProps) {
     const d = drag();
     return d ? { x: o.x + d.dx, y: o.y + d.dy } : o;
   };
+  // Let go, the window stands at its new corner and glides there natively from where the finger left it
+  // (with less motion asked for, it is there at once).
+  const settle = createMotion();
   const bar = PanResponder.create({
     // The bar's buttons take a tap; a move of a few points is a drag, wherever it began on the bar.
     onMoveShouldSetPanResponderCapture: (_e, g) => Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6,
+    onPanResponderGrant: () => settle.reset(),
     onPanResponderMove: (_e, g) => drag.set({ dx: g.dx, dy: g.dy }),
     onPanResponderRelease: (_e, g) => {
       untracked(() => {
         const start = floatOrigin(corner(), area(), size(), EDGE);
+        const left = { x: start.x + g.dx, y: start.y + g.dy };
         // A flick carries a little further than the finger.
-        const center = { x: start.x + g.dx + g.vx * 0.08 + size().width / 2, y: start.y + g.dy + g.vy * 0.08 + size().height / 2 };
+        const center = { x: left.x + g.vx * 0.08 + size().width / 2, y: left.y + g.vy * 0.08 + size().height / 2 };
         const next = nearestFloatCorner(center, area());
+        const end = floatOrigin(next, area(), size(), EDGE);
+        settle.translateX.set(left.x - end.x);
+        settle.translateY.set(left.y - end.y);
         drag.set(null);
         corner.set(next);
+        void settle.play({ keyframes: { translateX: [left.x - end.x, 0], translateY: [left.y - end.y, 0] }, duration: SNAP_MS, easing: "easeOut" });
         void Storage.setItem(FLOAT_CORNER_KEY, next).catch(() => undefined);
       });
     },
@@ -141,19 +154,32 @@ export function ScreenFloat(props: ScreenFloatProps) {
     onPanResponderRelease: () => void Storage.setItem(FLOAT_SIZE_KEY, String(untracked(fraction))).catch(() => undefined),
   });
 
-  // A tap on the title goes to the next screen; two quick taps go between the default and the large size.
+  // A tap on the title goes to the next screen once no second tap follows; two quick taps go between the
+  // default and the large size and stay on this screen.
   let lastTap = 0;
+  let pendingCycle: ReturnType<typeof setTimeout> | null = null;
+  const cancelCycle = () => {
+    if (pendingCycle !== null) clearTimeout(pendingCycle);
+    pendingCycle = null;
+  };
+  cleanup(cancelCycle);
   const tapTitle = () => {
     const now = Date.now();
     if (now - lastTap < DOUBLE_TAP_MS) {
       lastTap = 0;
+      cancelCycle();
       const next = toggledFloatFraction(fraction());
       fraction.set(next);
       void Storage.setItem(FLOAT_SIZE_KEY, String(next)).catch(() => undefined);
       return;
     }
     lastTap = now;
-    if (props.count() > 1) props.onCycle();
+    if (props.count() <= 1) return;
+    cancelCycle();
+    pendingCycle = setTimeout(() => {
+      pendingCycle = null;
+      props.onCycle();
+    }, DOUBLE_TAP_MS);
   };
 
   const openMenu = async () => {
@@ -181,7 +207,7 @@ export function ScreenFloat(props: ScreenFloatProps) {
       testID="screen-float"
       accessibilityLabel={`Screen of ${props.title()}`}
       class="absolute overflow-hidden rounded-[10px] bg-card shadow-lg"
-      style={{ left: origin().x, top: origin().y, width: size().width, height: size().height }}
+      style={{ left: origin().x, top: origin().y, width: size().width, height: size().height, transform: settle.transform }}
     >
       <View {...bar.panHandlers} class="flex-row items-center gap-0.5 pl-2.5 pr-0.5" style={{ height: BAR, backgroundColor: "rgba(24,24,24,0.94)" }}>
         <Button testID="screen-float-title" accessibilityLabel={cycles() ? `${props.title()}, ${props.index() + 1} of ${props.count()}, show the next` : props.title()} onPress={tapTitle} class="h-full flex-1 justify-center">
@@ -202,7 +228,7 @@ export function ScreenFloat(props: ScreenFloatProps) {
       </View>
       <View class="bg-popover" style={{ width: picture().width, height: picture().height + extra() }}>{props.children(picture)}</View>
       <View class="absolute inset-0 rounded-[10px] border border-border" style={{ pointerEvents: "none" }} />
-      {props.attention?.() ? <View testID="screen-float-attention" class="absolute inset-0 rounded-[10px] border-[3px] border-seal" style={{ pointerEvents: "none" }} /> : null}
+      {props.attention?.() ? <AttentionRing /> : null}
       <View {...handle.panHandlers} testID="screen-float-resize" accessibilityLabel="Resize" class="absolute p-2"
         style={{ width: HANDLE, height: HANDLE, ...(handleLeft() ? { left: 0 } : { right: 0 }), ...(handleTop() ? { top: BAR } : { bottom: 0 }) }}>
         <View class={handleTop() ? "border-white/90" : "border-muted-foreground"} style={{
@@ -214,4 +240,18 @@ export function ScreenFloat(props: ScreenFloatProps) {
     </View>
   );
   }
+}
+
+/** A ring in the seal colour that keeps breathing while something asks for the person, natively; with less motion asked for, it stays lit. */
+function AttentionRing() {
+  const breath = createMotion();
+  effect(() => {
+    if (reduceMotion()) {
+      breath.reset();
+      return;
+    }
+    void breath.play({ keyframes: { opacity: [1, 0.2] }, duration: BREATH_MS, easing: "easeInOut", iterations: "infinite", direction: "alternate" });
+  });
+  cleanup(() => breath.stop());
+  return <View testID="screen-float-attention" class="absolute inset-0 rounded-[10px] border-[3px] border-seal" style={{ pointerEvents: "none", opacity: breath.opacity }} />;
 }
