@@ -102,6 +102,12 @@ type hostBackend struct {
 
 	mu     sync.Mutex
 	client *sessionhost.Client
+	// reached says this process has had a connection to a host. Until it has, a
+	// host that is not running holds nothing: a Session an earlier run recorded
+	// (Brain's, before a reboot or a restart) went with it. Once it has, a vanished
+	// host is unknown (its socket can be gone for a moment while it lives, as when
+	// logind empties XDG_RUNTIME_DIR, see sessionhost keepSocket).
+	reached bool
 
 	// moved holds the ids of Sessions that moved from tmux: they keep their
 	// %pane id, so the id pattern alone does not name them. movedKnown says
@@ -139,6 +145,7 @@ func (b *hostBackend) conn(start bool) (*sessionhost.Client, error) {
 			return nil, err
 		}
 		b.client = client
+		b.reached = true
 		return client, nil
 	}
 	client, started, err := sessionhost.Connect(ctx, sessionhost.StartOptions{
@@ -157,7 +164,15 @@ func (b *hostBackend) conn(start bool) (*sessionhost.Client, error) {
 		log.Printf("watcher: started the session host %s (pid %d, protocol %d)", welcome.HostVersion, welcome.PID, welcome.Protocol)
 	}
 	b.client = client
+	b.reached = true
 	return client, nil
+}
+
+// hasReached reports whether this process has had a connection to a host.
+func (b *hostBackend) hasReached() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.reached
 }
 
 func hostCtx() (context.Context, context.CancelFunc) {
@@ -386,10 +401,13 @@ func (b *hostBackend) probeOwnership(id string) (bool, bool, error) {
 	return present, present, nil
 }
 
+// resolveAbsence asks the host. sawInventory is the watcher's tmux inventory; what
+// counts here is whether this process ever reached a host (a tmux server answering
+// says nothing about the host).
 func (b *hostBackend) resolveAbsence(id string, sawInventory bool) (bool, error) {
 	client, err := b.conn(false)
 	if errors.Is(err, errSessionHostGone) {
-		if !sawInventory {
+		if !b.hasReached() {
 			// No host has run since this process started: a Session an earlier
 			// run recorded is gone with the host that held it.
 			return true, nil
