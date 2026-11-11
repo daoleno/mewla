@@ -28,6 +28,10 @@ import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { ModelSheet } from "../session/ModelSheet";
 import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
 import { ActionPromptCard } from "../chat/ActionPromptCard";
+import { AgentIcon } from "../icons/AgentIcon";
+import { showCalendarItem } from "../calendar/routes";
+import { workLinkOf } from "../sessions/workLinks";
+import { selectedTab } from "../shell/Shell";
 import { DSHPanel } from "../chat/DSHPanel";
 import { ChoiceCard } from "../chat/ChoiceCard";
 import { Composer, createComposerText } from "../chat/Composer";
@@ -218,10 +222,18 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   void getWorkerAliases(Storage).then((a) => aliases.set(a)).catch(() => {});
   const renaming = signal(false);
   const renameValue = signal("");
+  // The Work this Session runs, and the Calendar run that started it.
+  const link = computed(() => (worker() ? workLinkOf(worker()!) : null));
   const title = computed(() => {
     const w = worker();
-    return w ? sessionRowModel(w, { alias: aliasOf(props.workerId) }).title : hint.name || "Session";
+    return w ? sessionRowModel(w, { alias: aliasOf(props.workerId), workTitle: link()?.workTitle, calendarLabel: link()?.calendarLabel }).title : hint.name || "Session";
   });
+  const openCalendarOrigin = () => {
+    const id = untracked(link)?.calendarItemId;
+    if (!id) return;
+    showCalendarItem(id);
+    selectedTab.set(2);
+  };
 
   const saveRename = async () => {
     const name = untracked(renameValue).trim();
@@ -335,13 +347,17 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
       ...(dshWeb() ? [{ id: "web", label: "Open Web" }] : []),
       { id: "terminal", label: "New Terminal" },
       { id: "rename", label: "Rename" },
+      ...(link() ? [{ id: "work", label: "Open Brain" }] : []),
       { id: "terminate", label: "Terminate", role: "destructive" as const },
       { id: "cancel", label: "Cancel", role: "cancel" as const },
     ];
     const { action } = await AlertDialog.show({ title: untracked(title), presentation: "actionSheet", actions });
     if (action === "mode") chooseMode(untracked(mode) === "chat" ? "terminal" : "chat");
     else if (action === "model") modelOpen.set(true);
-    else if (action === "web") {
+    else if (action === "work") {
+      const work = untracked(link)?.work;
+      if (work) props.nav.push({ name: "workFile", id: work.id });
+    } else if (action === "web") {
       const url = untracked(dshWeb);
       if (url) void openUrl(url).catch(() => notice.set("Could not open DSH Web."));
     }
@@ -357,13 +373,18 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   return (
     <NavPage title={title()}
       headerTitle={
-        <View class="max-w-[240px]">
-          <Text class="text-base font-semibold line-clamp-1">{title()}</Text>
-          {worker() ? (
-            <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">
-              {[workerStatusLabel(worker()!.status), worker()!.delegated ? "Delegated" : "", connection() !== "connected" ? "Offline" : ""].filter(Boolean).join(" · ")}
-            </Text>
-          ) : null}
+        <View class="max-w-[260px] flex-row items-center gap-2">
+          <AgentIcon kind={kind()} size={22} />
+          <View class="flex-1">
+            <Text class="text-base font-semibold line-clamp-1">{title()}</Text>
+            {link()?.calendarLabel ? (
+              <Text testID="session-calendar" class="text-xs text-primary line-clamp-1" onPress={openCalendarOrigin}>{link()!.calendarLabel!}</Text>
+            ) : worker() ? (
+              <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">
+                {[workerStatusLabel(worker()!.status), worker()!.delegated ? "Delegated" : "", connection() !== "connected" ? "Offline" : ""].filter(Boolean).join(" · ")}
+              </Text>
+            ) : null}
+          </View>
         </View>
       }
       headerRight={<Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>}>
