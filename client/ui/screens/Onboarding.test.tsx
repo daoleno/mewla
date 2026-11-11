@@ -126,8 +126,9 @@ describe("after pairing", () => {
     expect(app.texts()).toContain("Connected to Desk.");
     expect(app.storage()["mewla:onboarded"]).toBe("true");
     await app.press("id:open-brain");
+    // Brain's composer is there behind the onboarding already: wait for the onboarding to go.
+    await app.waitFor("id:onboarding", { state: "gone" });
     await app.waitFor("id:composer");
-    expect(app.shows("id:onboarding")).toBe(false);
   }, 15_000);
 
   test("a computer that can't be reached offers Retry and Server settings", async () => {
