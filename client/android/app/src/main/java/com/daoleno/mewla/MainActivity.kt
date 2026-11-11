@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
     nsh.setErrorListener { Log.e(TAG, it); CrashLog.js(this, it) }
     CrashLog.register(this, nsh)
     ScanHost(this, nsh)
+    com.daoleno.mewla.link.LinkTransportHost(nsh)
     nsh.registerComponent("mewla.qrScanner") { events -> QrScanner(this, events) }
     nsh.registerComponent("mewla.terminal") { events -> TerminalComponent(this, events) }
     nsh.handle("secure.get") { data, reply -> answer(reply) { secure.get(key(data)) } }

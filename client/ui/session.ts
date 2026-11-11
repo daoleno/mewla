@@ -4,10 +4,12 @@ import { Chat } from "../core/conversation/chat";
 import { chatCacheKey, Draft } from "../core/conversation/draft";
 import { createOutbox } from "../core/conversation/outboxRuntime";
 import { forgetInterfaceConversationsOutsideServer, initialInterfaceChatThreadState, type InterfaceChatThreadState } from "../core/conversation/thread";
-import { getCurrentServerId, getServers, markOnboarded, saveServer, setCurrentServerId, type StoredServer } from "../core/servers";
+import { getCurrentServerId, getServers, markOnboarded, saveServer, setCurrentServerId, updateServer, type StoredServer } from "../core/servers";
+import { learnDirectAddresses, withDirectAddresses } from "../core/link/directAddresses";
 import { WorkerSessions } from "../core/sessions/store";
 import type { Worker } from "../core/sessions/workers";
 import { Transport, type ConnectionState } from "../core/transport";
+import { subscribeTransportPath, transportPathInfo, type TransportPathInfo } from "../core/link/pinnedTransport";
 
 /**
  * Everything that belongs to the current computer. There is exactly one; switching
@@ -26,6 +28,10 @@ export const brainChat = signal<Chat | null>(null);
 export const brainThread = signal<InterfaceChatThreadState>(initialInterfaceChatThreadState(""));
 /** The draft of Brain's current thread: there as soon as the thread is known, whether or not Brain's host runs. */
 export const brainDraft = signal<Draft | null>(null);
+
+/** How the current computer is reached on Mewla Link (relay, LAN, Tailscale); null otherwise and until chosen. */
+export const transportPath = signal<TransportPathInfo | null>(null);
+subscribeTransportPath(() => transportPath.set(current() ? transportPathInfo(current()!.id) : null));
 
 let transport: Transport | null = null;
 let stops: Array<() => void> = [];
@@ -115,6 +121,7 @@ export function switchTo(server: StoredServer | null): void {
   transport = null;
   brain.set(null);
   current.set(server);
+  transportPath.set(server ? transportPathInfo(server.id) : null);
   connection.set("idle");
   problem.set("");
   forgetInterfaceConversationsOutsideServer(server?.id ?? "");
@@ -143,6 +150,13 @@ export function switchTo(server: StoredServer | null): void {
     next.on("brain_snapshot", (frame) => {
       const snapshot = frame.brain as BrainSnapshot | undefined;
       if (snapshot && typeof snapshot === "object") applyBrainSnapshot(server, next, snapshot);
+    }),
+    // A computer on Mewla Link names the LAN and Tailscale addresses it listens on: kept for this
+    // run at once, and on the saved computer so a cold start can try them.
+    next.on("direct_addresses", (frame) => {
+      if (server.transportKind !== "link") return;
+      const { addresses, changed } = learnDirectAddresses(server, frame.addresses);
+      if (changed) void updateServer(server.id, { transportCandidates: withDirectAddresses(server, addresses) }).catch(() => undefined);
     }),
   ];
   next.connect();

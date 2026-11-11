@@ -1,4 +1,6 @@
 import { describe, expect, open, test } from "nsh/test";
+import nacl from "../../core/vendor/nacl";
+import { buildLinkPairingTestLink } from "../../core/testing/linkPairingTestLink";
 import { testComputer } from "../testing/pairing";
 
 const computer = testComputer();
@@ -147,5 +149,32 @@ describe("after pairing", () => {
     await app.waitFor("id:set-up");
     await app.host.send("links.open", { url: computer.link() });
     await app.waitFor("text:Brain is home.", { timeout: 10_000 });
+  }, 15_000);
+});
+
+describe("Mewla Link", () => {
+  test("a Link code pairs through the host's pinned tunnel, says where it is going, and keeps the route", async () => {
+    const keys = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7));
+    const link = buildLinkPairingTestLink({
+      secretKey: keys.secretKey, publicKey: keys.publicKey, enrollmentToken: "2".repeat(64),
+      routeId: "3".repeat(32), transportPin: "4".repeat(64), label: "quiet-otter-3f9a", domain: "a.link.test", name: "region-a",
+      admissionAlias: "5".repeat(32),
+    });
+    const app = await open("../App.tsx", {
+      host: phone({}, { "link.start": () => ({ port: 4100, rttMs: 20 }), "link.stop": () => null, "link.events": () => [] }),
+      platform: "android", clipboard: link,
+      network: { "POST http://127.0.0.1:4100/pair": () => computer.answer() },
+    });
+    app.onDialog(() => "Pair and grant access");
+    await app.press("id:scan-now");
+    await app.press("id:paste");
+    await app.waitFor("id:connected-title", { timeout: 10_000 });
+    const calls = app.host.calls();
+    expect(calls.find((call) => call.name === "link.start")?.data).toEqual({
+      key: `pair:${"3".repeat(32)}`, host: `${"5".repeat(32)}.a.link.test`, port: 443, pin: "4".repeat(64), mode: "on-demand",
+    });
+    expect(calls.some((call) => call.name === "link.stop")).toBe(true);
+    const saved = JSON.parse(app.storage()["mewla:v3:servers"]!)[0];
+    expect(saved).toMatchObject({ url: "wss://quiet-otter-3f9a.a.link.test/ws", transportKind: "link", transportPin: "4".repeat(64), linkRouteId: "3".repeat(32) });
   }, 15_000);
 });

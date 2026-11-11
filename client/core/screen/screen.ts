@@ -1,3 +1,4 @@
+import { serverURLNow } from "../link/pinnedTransport";
 import { buildHTTPURL } from "../pairing";
 import { daemonURL, deviceAuthorization, signedFetch } from "../more/daemon";
 import { platform, type SocketLike } from "../platform";
@@ -178,7 +179,7 @@ export interface ScreenRoute {
 
 /** The ws(s) address of a viewer socket, on the address the app's own socket uses. */
 export function viewerURL(server: StoredServer, path: string, params: Record<string, string>): string {
-  const http = buildHTTPURL(server.url, path) ?? daemonURL(server, path);
+  const http = buildHTTPURL(serverURLNow(server), path) ?? daemonURL(server, path);
   const url = new URL(http);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);

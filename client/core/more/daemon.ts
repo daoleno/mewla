@@ -1,3 +1,4 @@
+import { serverURLNow } from "../link/pinnedTransport";
 import { getOrCreateLocalDeviceIdentity } from "../auth";
 import { signDeviceAuthorization } from "../deviceAuthContract";
 import { buildHTTPURL } from "../pairing";
@@ -48,7 +49,7 @@ export async function sha256Hex(text: string): Promise<string> {
 
 /** The computer's HTTP address for `pathname` (and `query`), on the address the socket uses. */
 export function daemonURL(server: StoredServer, pathname: string, query?: Record<string, string | undefined>): string {
-  const url = buildHTTPURL(server.url, pathname);
+  const url = buildHTTPURL(serverURLNow(server), pathname);
   if (!url) throw new Error(`${server.name || "The computer"} has no address`);
   const params = Object.entries(query ?? {}).filter((entry): entry is [string, string] => Boolean(entry[1]));
   return params.length ? `${url}?${params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&")}` : url;

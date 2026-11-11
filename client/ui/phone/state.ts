@@ -4,7 +4,8 @@ import { changePhone } from "../../core/phone/api";
 import { phoneLinkTarget, sameTarget, type PhoneLinkTarget } from "../../core/phone/link";
 import { phoneAgentWorking, phoneLabsValue } from "../../core/phone/setup";
 import { parsePhoneStatus, type PhoneStatus } from "../../core/phone/status";
-import { current, ready } from "../session";
+import { serverURLNow } from "../../core/link/pinnedTransport";
+import { current, ready, transportPath } from "../session";
 
 /**
  * Phone use: an agent on the current computer drives this phone. Android's GitHub APK only: the
@@ -113,7 +114,10 @@ export function startPhoneUse(): void {
   let told: PhoneLinkTarget | null | undefined;
   effect(() => {
     if (!phoneAvailable() || !ready()) return;
-    const target = phoneLinkTarget(current());
+    // On Mewla Link the link rides the tunnel the app chose; a new path tells it again.
+    transportPath();
+    const server = current();
+    const target = phoneLinkTarget(server ? { ...server, url: serverURLNow(server) } : null);
     untracked(() => {
       if (told !== undefined && sameTarget(told, target)) return;
       told = target;
