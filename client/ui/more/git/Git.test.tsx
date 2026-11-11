@@ -273,9 +273,9 @@ const GIT_HARNESS = "./testing/Harness.tsx";
 const AGENT = { id: "w1", provider: "claude", cwd: "/repo" };
 
 /** Opens the review with Sessions listed (`workers`) and at a width, choosing `menu` items from action sheets. */
-async function openReview(files: File[], options: { workers?: unknown[]; width?: number } = {}) {
+async function openReview(files: File[], options: { workers?: unknown[]; width?: number; platform?: "web" } = {}) {
   const repo = repository(files);
-  const app = await open(GIT_HARNESS, { width: options.width, host: { params: { page: PAGE, workers: options.workers ?? [] }, handlers: repo.options.host.handlers } });
+  const app = await open(GIT_HARNESS, { width: options.width, platform: options.platform, host: { params: { page: PAGE, workers: options.workers ?? [] }, handlers: repo.options.host.handlers } });
   return { repo, app };
 }
 
@@ -469,5 +469,31 @@ describe("Git review: the repository's files", () => {
     const before = repo.asked.filter((r) => r.type === "git_repo_file_content").length;
     await app.press("id:git-file-refresh");
     await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_repo_file_content").length === before + 1);
+  });
+});
+
+describe("Git review on the web", () => {
+  test("a right click on a changed file opens its menu, and the diff reads in the browser", async () => {
+    const { app, repo } = await openReview([app_ts, notes_md], { platform: "web" });
+    await app.waitFor("id:git-row-changes:notes.md");
+    app.onDialog((dialog) => (dialog.sheet ? "Stage" : null));
+    await app.rightClick("id:git-row-changes:notes.md");
+    await app.waitUntil(() => repo.asked.some((r) => r.type === "git_stage"));
+    expect(app.dialogs().find((d) => d.sheet)?.title).toBe("notes.md");
+    await app.waitFor("id:git-row-staged:notes.md");
+    await openDiffOf(app, "changes:app.ts");
+  });
+
+  test("the repository's tree opens, and a right click on a file offers Open file and Copy path", async () => {
+    const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }], { platform: "web" });
+    await app.waitFor("id:git-row-changes:app.ts");
+    app.onDialog((dialog) => (dialog.sheet ? "Browse files" : null));
+    await app.press("id:git-more");
+    await app.waitFor("id:git-files-tree");
+    await app.type("id:git-files-query", "util");
+    await app.waitFor("id:git-file-src/lib/util.ts");
+    app.onDialog((dialog) => (dialog.sheet ? "Open file" : null));
+    await app.rightClick("id:git-file-src/lib/util.ts");
+    await app.waitFor("id:git-file-view");
   });
 });
