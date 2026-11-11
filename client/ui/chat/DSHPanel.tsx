@@ -1,5 +1,6 @@
 import { cleanup, signal, Text, untracked, View } from "nsh";
-import { Button, Input, Sheet, TextView } from "nsh/base";
+import { Button, Input, TextView } from "nsh/base";
+import { GuardedSheet as Sheet } from "../shell/AppSheet";
 import { dshInteraction, watchDSHInteractions, type DSHAnswer, type DSHInteraction, type DSHInteractionSnapshot, type DSHSessionRun } from "../../core/session/dshInteractions";
 import type { Transport } from "../../core/transport";
 import { Icon } from "../icons/Icon";

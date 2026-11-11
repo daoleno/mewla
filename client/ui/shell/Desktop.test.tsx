@@ -32,6 +32,13 @@ const last = (app: Parameters<typeof locations>[0]) => locations(app).at(-1);
 const desk = { platform: "web" as const, width: 1280, height: 800, storage: paired };
 
 describe("the desktop layout", () => {
+  test("a place that waits on you has a dot beside its name", async () => {
+    const sessions = [{ id: "w1", name: "release", status: "blocked", needs_attention: true, cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
+    const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }) });
+    await app.waitFor("id:sidebar-sessions-dot", { timeout: 10_000 });
+    expect(app.shows("id:sidebar-brain-dot")).toBe(false);
+  }, 20_000);
+
   test("a sidebar of every place beside the page, Friends off the web; the place you pick has a URL and a tab title", async () => {
     const app = await open(APP, { ...desk, host: webHost() });
     await app.waitFor("id:sidebar");

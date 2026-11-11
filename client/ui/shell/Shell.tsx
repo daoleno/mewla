@@ -28,12 +28,14 @@ import { current, onTransport, workers } from "../session";
 import { PhoneFloat } from "../phone";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import type { MoreRoute, SessionsRoute } from "./routes";
+import { needsYou } from "./attention";
+import { tabTitle } from "../../core/sessions/attention";
 
 const tabs = [
-  { title: "Brain", ios: "sparkles", android: "tab_brain" },
-  { title: "Sessions", ios: "list.bullet", android: "tab_sessions" },
-  { title: "Calendar", ios: "calendar", android: "tab_calendar" },
-  { title: "More", ios: "ellipsis", android: "tab_more" },
+  { key: "brain", title: "Brain", ios: "sparkles", android: "tab_brain" },
+  { key: "sessions", title: "Sessions", ios: "list.bullet", android: "tab_sessions" },
+  { key: "calendar", title: "Calendar", ios: "calendar", android: "tab_calendar" },
+  { key: "more", title: "More", ios: "ellipsis", android: "tab_more" },
 ];
 
 export const selectedTab = signal(0);
@@ -294,7 +296,7 @@ export function Shell() {
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
         <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
         <EnrollmentApproval />
-      <TabBar testID="tabs" items={tabs.map((t) => ({ title: t.title, icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
+      <TabBar testID="tabs" items={tabs.map((t, i) => ({ title: tabTitle(t.title, needsYou(t.key), selectedTab() === i), icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>
   );
