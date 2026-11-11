@@ -162,8 +162,20 @@ describe("File preview", () => {
 });
 
 describe("Brain workspace", () => {
-  test("folders come first, a folder opens without asking again, and a file shows its text", async () => {
+  test("folders come first, each folder is read by its own path (the daemon lists one level), and a folder read once is not read again", async () => {
     const asked: Asked[] = [];
+    // As daemon/brain/workspace.go answers: one level per path, `children` never filled.
+    const folders: Record<string, unknown[]> = {
+      "": [
+        { name: "plan.md", path: "plan.md", kind: "file" },
+        { name: "notes", path: "notes", kind: "directory" },
+      ],
+      notes: [
+        { name: "today.txt", path: "notes/today.txt", kind: "file" },
+        { name: "old", path: "notes/old", kind: "directory" },
+      ],
+      "notes/old": [],
+    };
     const app = await open(HARNESS, {
       host: {
         params: { page: { name: "files-workspace" } },
@@ -172,12 +184,11 @@ describe("Brain workspace", () => {
           "app.daemon": ({ type, body }: Asked) => {
             if (type.startsWith("brain_workspace")) asked.push({ type, body });
             if (type === "brain_workspace_tree") {
-              return { reply: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", entries: [
-                { name: "plan.md", path: "plan.md", kind: "file" },
-                { name: "notes", path: "notes", kind: "directory", children: [{ name: "today.md", path: "notes/today.md", kind: "file" }] },
-              ] } };
+              const entries = folders[String(body.path)];
+              if (!entries) return { error: "no such folder" };
+              return { reply: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", path: body.path, entries } };
             }
-            if (type === "brain_workspace_file") return { reply: "brain_workspace_file", file: { name: "today.md", path: "notes/today.md", kind: "file", language: "markdown", content: "# Today\n- ship" } };
+            if (type === "brain_workspace_file") return { reply: "brain_workspace_file", file: { name: "today.txt", path: "notes/today.txt", kind: "file", language: "text", content: "ship it" } };
             return { error: `unexpected ${type}` };
           },
         },
@@ -186,12 +197,24 @@ describe("Brain workspace", () => {
     await app.waitFor("id:workspace-notes");
     expect(app.texts().indexOf("notes")).toBeLessThan(app.texts().indexOf("plan.md"));
     await app.press("id:workspace-notes");
-    await app.waitFor("id:workspace-notes/today.md");
-    expect(asked.filter((a) => a.type === "brain_workspace_tree")).toHaveLength(1);
-    await app.press("id:workspace-notes/today.md");
+    await app.waitFor("id:workspace-notes/today.txt");
+    expect(app.shows("id:workspace-empty")).toBe(false);
+    expect(asked.filter((a) => a.type === "brain_workspace_tree").map((a) => a.body)).toEqual([{ path: "" }, { path: "notes" }]);
+    // A folder with nothing in it says so.
+    await app.press("id:workspace-notes/old");
+    await app.waitFor("id:workspace-empty");
+    await app.back();
+    await app.press("id:workspace-notes/today.txt");
     await app.waitFor("id:workspace-text");
-    expect(app.texts()).toContain("# Today\n- ship");
-    expect(asked.at(-1)).toEqual({ type: "brain_workspace_file", body: { path: "notes/today.md" } });
+    expect(app.texts()).toContain("ship it");
+    expect(asked.at(-1)).toEqual({ type: "brain_workspace_file", body: { path: "notes/today.txt" } });
+    // Back in a folder already read: no new request.
+    await app.back();
+    await app.back();
+    await app.waitFor("id:workspace-notes");
+    await app.press("id:workspace-notes");
+    await app.waitFor("id:workspace-notes/today.txt");
+    expect(asked.filter((a) => a.type === "brain_workspace_tree")).toHaveLength(3);
   });
 });
 
