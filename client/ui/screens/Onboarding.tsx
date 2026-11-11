@@ -1,6 +1,7 @@
 import { cleanup, Clipboard, createMotion, effect, host, Image, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
-import { Button, NavPage } from "nsh/base";
+import { Button } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import { BackHandler } from "nsh/mobile";
 import {
   INSTALL_COMMAND,

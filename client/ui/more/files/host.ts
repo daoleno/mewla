@@ -1,4 +1,4 @@
-import { host, nativeComponent } from "nsh";
+import { host, nativeComponent, platform } from "nsh";
 import type { SessionFileDownloadHost } from "../../../core/files/sessionFilePreviewDownload";
 import type { NativeUploadProgress, UploadDocumentAsset, UploadHost } from "../../../core/files/uploads";
 
@@ -22,9 +22,18 @@ import type { NativeUploadProgress, UploadDocumentAsset, UploadHost } from "../.
  * - `mewla.pdf` (below): a PDF's pages.
  *
  * The calls that wait on a person or a transfer have no timeout.
+ *
+ * In a browser the page host (client/ui/web/host.js) answers them: a file input, XHR, a
+ * download into memory handed to the browser. The web player delivers no posts to the page,
+ * so the two cancels are calls there.
  */
 
 const WAIT = { timeout: 0 };
+
+function cancel(name: string, data: Record<string, string>): void {
+  if (platform.os === "web") void host.call(name, data).catch(() => {});
+  else host.post(name, data);
+}
 
 export function pickFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
   return host.call<UploadDocumentAsset[]>("files.pick", { maxCount }, WAIT).then((assets) => (Array.isArray(assets) ? assets : []));
@@ -33,7 +42,7 @@ export function pickFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
 export const uploadHost: UploadHost = {
   upload: (request) => host.call<{ status: number; body: string }>("files.upload", request, WAIT),
   // A post: a failure to stop is the host's to log; the upload's own answer still settles it.
-  cancel: (uploadId) => host.post("files.cancel", { uploadId }),
+  cancel: (uploadId) => cancel("files.cancel", { uploadId }),
   onProgress: (uploadId, listener) =>
     host.on<NativeUploadProgress & { uploadId: string }>("files.uploadProgress", (event) => {
       if (event?.uploadId === uploadId) listener({ bytesSent: event.bytesSent, totalBytes: event.totalBytes });
@@ -46,7 +55,7 @@ export const downloadHost: SessionFileDownloadHost = {
 };
 
 export function cancelDownload(downloadId: string): void {
-  host.post("files.cancelDownload", { downloadId });
+  cancel("files.cancelDownload", { downloadId });
 }
 
 /**

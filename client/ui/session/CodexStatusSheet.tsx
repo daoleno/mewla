@@ -1,5 +1,6 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
-import { Button, Sheet } from "nsh/base";
+import { Button } from "nsh/base";
+import { AppSheet } from "../shell/AppSheet";
 import type { Daemon } from "../../core/more/daemon";
 import { codexStatusSections, type CodexStatus } from "../../core/session/codexStatus";
 import { CODEX_STATUS_UNAVAILABLE, codexStatus } from "../../core/session/sessionRequests";
@@ -57,7 +58,7 @@ export function CodexStatusSheet(props: {
   };
 
   return (
-    <Sheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
+    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
       <View testID="status-sheet" class="gap-3 pb-8">
         <View class="flex-row items-center gap-2">
           <View class="flex-1">
@@ -136,6 +137,6 @@ export function CodexStatusSheet(props: {
           </View>
         )}
       </View>
-    </Sheet>
+    </AppSheet>
   );
 }

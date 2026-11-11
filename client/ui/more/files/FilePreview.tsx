@@ -1,6 +1,7 @@
 import { cleanup, Clipboard, effect, Image, Scroll, signal, Text, untracked, Video, View } from "nsh";
 import type { JSX } from "nsh";
-import { Button, NavPage } from "nsh/base";
+import { Button } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import {
   sessionFileDownloadLabel,
   sessionFileDownloadStatus,

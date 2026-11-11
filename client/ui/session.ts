@@ -28,6 +28,12 @@ export const brainChat = signal<Chat | null>(null);
 export const brainThread = signal<InterfaceChatThreadState>(initialInterfaceChatThreadState(""));
 /** The draft of Brain's current thread: there as soon as the thread is known, whether or not Brain's host runs. */
 export const brainDraft = signal<Draft | null>(null);
+/**
+ * A past Brain thread a link opened (a Brain notification names its thread):
+ * Brain's chat shows it read-only until it is set back to null. Null shows
+ * Brain's current thread; a link to the current thread leaves it null.
+ */
+export const routedBrainThread = signal<string | null>(null);
 
 /** How the current computer is reached on Mewla Relay (relay, LAN, Tailscale); null otherwise and until chosen. */
 export const transportPath = signal<TransportPathInfo | null>(null);
@@ -104,11 +110,54 @@ export async function loadSession(): Promise<void> {
   const list = await getServers();
   servers.set(list);
   const id = await getCurrentServerId();
-  switchTo(list.find((s) => s.id === id) ?? list[0] ?? null);
+  await switchTo(list.find((s) => s.id === id) ?? list[0] ?? null);
   ready.set(true);
 }
 
-export function switchTo(server: StoredServer | null): void {
+/**
+ * NSH 0.4.0 crashes when the page under an open sheet is torn down, as a switch of
+ * computer does. So a switch first closes every sheet (`switching`, which AppSheet
+ * and GuardedSheet follow), lets them slide away, then switches. With no sheet open
+ * it switches at once.
+ */
+export const switching = signal(false);
+const SHEET_CLOSE_MS = 400;
+let openSheets = 0;
+let switchTarget: StoredServer | null = null;
+let switchDone: Promise<void> | null = null;
+
+/** A sheet opened; what it returns says it closed. */
+export function sheetOpened(): () => void {
+  openSheets += 1;
+  let closed = false;
+  return () => {
+    if (closed) return;
+    closed = true;
+    openSheets -= 1;
+  };
+}
+
+/** Makes `server` the current computer (null: none). Resolves once it is. */
+export function switchTo(server: StoredServer | null): Promise<void> {
+  switchTarget = server;
+  if (switchDone) return switchDone;
+  if (openSheets === 0) {
+    applySwitch(server);
+    return Promise.resolve();
+  }
+  switching.set(true);
+  switchDone = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      switchDone = null;
+      switching.set(false);
+      applySwitch(switchTarget);
+      resolve();
+    }, SHEET_CLOSE_MS);
+  });
+  return switchDone;
+}
+
+function applySwitch(server: StoredServer | null): void {
   const previous = current();
   if (previous) outbox.onDisconnected(previous.id);
   stops.splice(0).forEach((stop) => stop());
@@ -120,6 +169,7 @@ export function switchTo(server: StoredServer | null): void {
   transport?.close();
   transport = null;
   brain.set(null);
+  routedBrainThread.set(null);
   current.set(server);
   transportPath.set(server ? transportPathInfo(server.id) : null);
   connection.set("idle");
@@ -175,13 +225,14 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
   }
   const host = snapshot.host_problem ? null : snapshot.host_worker;
   const threadId = snapshot.chat_thread_id;
+  if (routedBrainThread() && routedBrainThread() === threadId) routedBrainThread.set(null);
   if (!host?.id || !threadId) {
     if (!snapshot.host_problem) startWakePoll(owner);
     return;
   }
   stopWakePoll();
   void Storage.setItem(LAST_BRAIN_CHAT + server.id, JSON.stringify({ host_worker: host, chat_thread_id: threadId })).catch(() => {});
-  const scope = brainThreadScopeKey(threadId);
+  const scope = brainThreadScopeKey(routedBrainThread() ?? threadId);
   const open = brainChat();
   if (open && open.cacheKey.endsWith(`:scope:${scope}`) && openHost === host.id) return;
   closeBrainChat();
@@ -226,6 +277,18 @@ async function reopenLastBrainChat(server: StoredServer, owner: Transport): Prom
   }
 }
 
+/**
+ * Shows one of Brain's threads on the current computer: a past one read-only,
+ * the current one (or none) as Brain's live chat.
+ */
+export function openBrainThread(threadId: string | null): void {
+  const live = brain()?.chat_thread_id;
+  routedBrainThread.set(threadId && threadId !== live ? threadId : null);
+  const server = current();
+  const snapshot = brain();
+  if (transport && server && snapshot) applyBrainSnapshot(server, transport, snapshot);
+}
+
 let openHost = "";
 let stopChat: (() => void) | null = null;
 
@@ -254,7 +317,7 @@ export async function addPairedServer(server: Parameters<typeof saveServer>[0]):
   const saved = await saveServer(server);
   await markOnboarded();
   servers.set(await getServers());
-  switchTo(saved);
+  await switchTo(saved);
 }
 
 export function resumeConnection(): void {

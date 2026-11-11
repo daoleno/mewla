@@ -1,5 +1,6 @@
-import { computed, effect, Image, List, signal, Storage, Text, untracked, View } from "nsh";
-import { AlertDialog, Button, NavPage, type NavStackState } from "nsh/base";
+import { computed, createMotion, effect, Image, List, signal, Storage, Text, untracked, View } from "nsh";
+import { AlertDialog, Button, type NavStackState } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { servicesOpen } from "../sessions/ServicesSheet";
@@ -17,6 +18,7 @@ import {
 } from "../../core/sessions/sessionBulkTerminate";
 import { getCollapsedSessionSections, getWorkerAliases, markWorkerOpened, setCollapsedSessionSections, type StoredWorkerAliases } from "../../core/sessions/deviceState";
 import { groupWorkersByDirectory } from "../../core/sessions/workerDirectory";
+import { newRowKeys } from "../../core/sessions/newRows";
 import type { Worker } from "../../core/sessions/workers";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon, type ColorToken, type IconName } from "../icons/Icon";
@@ -28,6 +30,14 @@ const collapsed = signal<ReadonlySet<string>>(new Set());
 const selection = signal<SessionSelection>(EMPTY_SESSION_SELECTION);
 const terminating = signal(false);
 const notice = signal("");
+/** Rows new since the list last changed: they fade in (`newRowKeys`). Derived with the list, so a new row never reads it stale. */
+let knownRows: ReadonlySet<string> | null = null;
+const freshRows = computed<ReadonlySet<string>>(() => {
+  const keys = workers().map((w) => w.key);
+  const fresh = newRowKeys(knownRows, keys);
+  knownRows = new Set(keys);
+  return fresh;
+});
 
 /** Nicknames are saved on this device; the Session screen's Rename changes them. */
 export async function reloadAliases(): Promise<void> {
@@ -119,9 +129,11 @@ function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => voi
   const selected = () => selection().has(props.worker().key);
   // Only a reachable computer can end its Sessions: offline rows can't be picked.
   const online = () => connection() === "connected";
+  // A row new to the list fades in once; rows that scroll into view never do.
+  const motion = untracked(() => freshRows().has(props.worker().key)) ? createMotion({ enter: "fadeIn", duration: 220 }) : null;
   const toneClass = () => (model().tone === "danger" ? "text-destructive" : model().tone === "needs" ? "text-seal" : model().tone === "accent" ? "text-foreground" : "text-muted-foreground");
   return (
-    <View testID="session-row" delayLongPress={400}
+    <View testID="session-row" delayLongPress={400} style={motion?.style}
       onPress={() => (selecting() ? online() && toggleSelected(props.worker()) : props.open(props.worker()))}
       onLongPress={() => !selecting() && online() && toggleSelected(props.worker())}
       class={selecting() && !online() ? "flex-row items-center gap-3 px-4 py-2.5 opacity-50" : "flex-row items-center gap-3 px-4 py-2.5 active:bg-accent"}>

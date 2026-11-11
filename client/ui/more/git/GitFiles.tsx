@@ -1,5 +1,6 @@
 import { signal, Text, View } from "nsh";
-import { DiffView, NavPage, Tree, type TreeItem } from "nsh/base";
+import { DiffView, Tree, type TreeItem } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import { formatGitDiffBytes } from "../../../core/git/gitDiffReview";
 import { EmptyState, Notice } from "../kit/kit";
 import { Icon } from "../kit/Icon";

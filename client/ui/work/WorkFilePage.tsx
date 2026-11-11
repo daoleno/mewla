@@ -1,5 +1,6 @@
 import { effect, Scroll, signal, Text, View } from "nsh";
-import { AlertDialog, Button, Input, NavPage, TextView } from "nsh/base";
+import { AlertDialog, Button, Input, TextView } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import { calendarOriginOfWork, originLabel } from "../../core/calendar/model";
 import { readableBody, WorkItemConflict, workItemStatus, workItemStatusLabel, type WorkItem } from "../../core/work/workItems";
 import { clock } from "../calendar/clock";
