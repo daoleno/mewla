@@ -25,6 +25,25 @@ describe("a new device asks to be let in", () => {
     await app.waitFor("id:enrollment-approval", { state: "gone" });
   }, 20_000);
 
+  test("a browser a pairing link paired withdraws its own request instead of asking to approve it", async () => {
+    const own = { requestId: "r1", secret: "s", verificationNumber: "042", expiresAt: "2099-01-01T00:00:00Z" };
+    const app = await open(APP, {
+      host: phoneHost({ brain: {} }),
+      storage: { ...paired, "mewla:enrollment:v1": JSON.stringify(own) },
+      platform: "android",
+      network: {
+        ...expoTokenService,
+        "GET http://127.0.0.1:1/enrollment/pending": { status: 200, body: { requests: [request] } },
+        "POST http://127.0.0.1:1/enrollment/decision": { status: 200, body: {} },
+      },
+    });
+    const decisions = () => app.requests().filter((r) => r.url.endsWith("/enrollment/decision"));
+    await app.waitUntil(() => decisions().length === 1, { timeout: 10_000 });
+    expect(JSON.parse(decisions()[0].body ?? "{}")).toMatchObject({ request_id: "r1", approve: false });
+    expect(app.shows("id:enrollment-approval")).toBe(false);
+    expect(app.storage()["mewla:enrollment:v1"]).toBeUndefined();
+  }, 20_000);
+
   test("a browser that isn't paired shows its number and joins once approved", async () => {
     let polls = 0;
     const app = await open(APP, {
