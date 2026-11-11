@@ -244,6 +244,26 @@ describe("Settings' Pair a computer", () => {
     await app.waitFor("id:connected-title", { timeout: 10_000 });
   }, 15_000);
 
+  test("after a pairing from Settings, Open Brain and then More shows More, not the Pair page", async () => {
+    const same = { id: "s2", name: "Desk", url: "ws://10.0.0.5:9876/ws", daemonId: "a1".repeat(32), daemonPublicKey: computer.publicKey };
+    const app = await open("../FakeDaemonApp.tsx", {
+      host: phone(), platform: "android",
+      storage: { "mewla:v3:servers": JSON.stringify([same]), "mewla:v1:current_server_id": "s2", "mewla:onboarded": "true" },
+      network: { [computer.pairURL]: () => computer.answer() },
+    });
+    app.onDialog(() => "Pair and grant access");
+    await app.host.send("links.open", { url: "mewla://settings?addServer=1" });
+    await app.waitFor("id:pair-link");
+    await app.type("id:pair-link", computer.link());
+    await app.press("id:pair-link-submit");
+    await app.waitFor("id:open-brain", { timeout: 10_000 });
+    await app.press("id:open-brain");
+    await app.waitFor("id:composer");
+    await app.host.send("links.open", { url: "mewla://more" });
+    await app.waitFor("text:Computers");
+    expect(app.shows("id:pair-link")).toBe(false);
+  }, 20_000);
+
   test("Pair with an empty field reads the clipboard; with nothing there it asks for the link", async () => {
     const app = await pairPage();
     await app.press("id:pair-link-submit");
