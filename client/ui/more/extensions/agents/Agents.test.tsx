@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../../testing/fixtures";
 
 const HARNESS = "../../testing/Harness.tsx";
 
@@ -152,7 +153,7 @@ describe("An agent's own Skills", () => {
       return "Delete";
     });
     await app.waitFor("id:skill-review-action");
-    await app.press("id:skill-review-action");
+    await answering(app, () => app.press("id:skill-review-action"));
     await app.waitFor("text:Deleted review.");
     expect(asked[0]).toBe('Delete review?\nThis permanently deletes "review".\nAvailable to: Codex\nLocation: Codex global Skills\n\nThis action cannot be undone.');
     const mutation = c.asked.find((entry) => entry.type === "skills_mutation")!.body;
@@ -167,7 +168,7 @@ describe("An agent's own Skills", () => {
     const app = await open(HARNESS, c.host(page));
     app.onDialog(() => "Cancel");
     await app.waitFor("id:skill-review-action");
-    await app.press("id:skill-review-action");
+    await answering(app, () => app.press("id:skill-review-action"));
     await app.waitUntil(() => c.count("skills_command") === 1);
     await app.wait(50);
     expect(c.count("skills_mutation")).toBe(0);
@@ -228,7 +229,9 @@ describe("The Skill inspector", () => {
     const app = await open(HARNESS, c.host(page));
     await app.waitFor("id:skill-review");
     await app.press("id:skill-review");
-    await app.waitFor("text:# Review\nRead the diff.");
+    // SKILL.md is rendered, not shown as its source.
+    await app.waitFor("text:Read the diff.");
+    expect(app.shows("text:# Review\nRead the diff.")).toBe(false);
     await app.press("id:skill-file-config.json");
     await app.waitFor('text:{\n  "depth": 2\n}');
     expect(c.asked.filter((entry) => entry.type === "skills_inspect").at(-1)!.body).toMatchObject({ skill_name: "review", skill_id: review.id, path: "config.json" });
@@ -267,7 +270,7 @@ describe("An agent's own Plugins", () => {
     });
     await app.waitFor("id:plugin-helper-action");
     const readsBefore = c.count("plugins_inventory");
-    await app.press("id:plugin-helper-action");
+    await answering(app, () => app.press("id:plugin-helper-action"));
     await app.waitFor("text:Uninstalled Helper.");
     expect(titles).toEqual(["Uninstall Helper?"]);
     expect(c.count("plugins_inventory")).toBe(readsBefore + 1);
@@ -286,7 +289,7 @@ describe("An agent's own Plugins", () => {
     const app = await open(HARNESS, c.host(page));
     app.onDialog(() => "Uninstall");
     await app.waitFor("id:plugin-helper-action");
-    await app.press("id:plugin-helper-action");
+    await answering(app, () => app.press("id:plugin-helper-action"));
     await app.waitFor("text:The selected Plugin copy is still installed.");
   });
 });

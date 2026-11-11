@@ -74,15 +74,18 @@ export function sortWorkspaceEntries(entries: readonly BrainWorkspaceEntry[]): B
   return [...entries].sort((a, b) => (a.kind === "directory") === (b.kind === "directory") ? a.name.localeCompare(b.name) : a.kind === "directory" ? -1 : 1);
 }
 
-/** The folder at `trail` (entry paths, outermost first), or the root's entries. */
-export function workspaceFolder(tree: BrainWorkspaceTree, trail: readonly string[]): BrainWorkspaceEntry[] {
-  let entries = tree.entries;
-  for (const path of trail) {
-    const next = entries.find((entry) => entry.path === path && entry.kind === "directory");
-    if (!next) return [];
-    entries = next.children;
-  }
-  return sortWorkspaceEntries(entries);
+/**
+ * The rows of one folder as `brain_workspace_tree {path}` answered it. The daemon
+ * lists one level per request and never fills `children`, so every folder is read
+ * on its own (and cached by its path).
+ */
+export function workspaceFolderEntries(tree: BrainWorkspaceTree): BrainWorkspaceEntry[] {
+  return sortWorkspaceEntries(tree.entries);
+}
+
+/** Where a folder of one computer's workspace is cached: the root is `""`. */
+export function workspaceFolderKey(serverId: string, path: string): string {
+  return `${serverId}\u0000${path}`;
 }
 
 export function brainWorkspaceMarkdownPath(path: string): boolean {

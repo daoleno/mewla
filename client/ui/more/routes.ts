@@ -24,7 +24,8 @@ export type MorePage =
   | { name: "stats-model"; model: ModelStat; pricing?: PricingStatus }
   | { name: "stats-day"; day: DayCell }
   | { name: "resources" }
-  | { name: "screen" }
+  /** `worker`: open on that agent's display (the floating screen's Expand). */
+  | { name: "screen"; worker?: string }
   | ExtensionsPage
   | FriendsPage
   | GitPage
@@ -34,4 +35,6 @@ export type MorePage =
 export interface PageNav {
   push(route: MorePage): void;
   pop(): void;
+  /** The stack's routes, bottom to top (reactive): a page is on top again when the last one is its route. */
+  routes?: () => readonly { name: string }[];
 }

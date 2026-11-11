@@ -1,4 +1,4 @@
-import { Text, View } from "nsh";
+import { platform, Text, View } from "nsh";
 import { Button, NavPage } from "nsh/base";
 import type { NavStackState } from "nsh/base";
 import { followFriends, friendsEnabled } from "../more/friends/state";
@@ -52,7 +52,8 @@ export function More(props: { nav: NavStackState<MoreRoute> }) {
     <NavPage title="More">
       <View class="flex-1 bg-background" onLayout={(e) => shown(e.bounds.size)}>
         <View class="mt-4 border-t border-border">
-          {destinations.filter((d) => !d.labs || friendsEnabled()).map((d) => <Row testID={`more-${d.title}`} title={d.title} detail={d.title === "Settings" && updatePending() ? "Update available" : undefined} onPress={() => props.nav.push(d.route)} />)}
+          {/* Friends is a phone Lab: v0.3.1's web app had none. */}
+          {destinations.filter((d) => !d.labs || (platform.os !== "web" && friendsEnabled())).map((d) => <Row testID={`more-${d.title}`} title={d.title} detail={d.title === "Settings" && updatePending() ? "Update available" : undefined} onPress={() => props.nav.push(d.route)} />)}
         </View>
         <ConnectionLine />
       </View>

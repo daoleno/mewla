@@ -1,4 +1,4 @@
-import { signal, untracked } from "nsh";
+import { effect, signal, untracked } from "nsh";
 import { AlertDialog } from "nsh/base";
 import { failureText, type Daemon } from "../../../../core/more/daemon";
 import { groupLogicalPlugins } from "../../../../core/extensions/pluginsScreenModel";
@@ -19,6 +19,8 @@ import {
   type SkillsInventory,
   type SkillsRequestState,
 } from "../../../../core/extensions/skillsManagement";
+import { selectStableSkillsProjectCwd } from "../../../../core/extensions/skillsScreenModel";
+import { workers } from "../../../session";
 import { daemon } from "../../daemon";
 
 /**
@@ -39,16 +41,42 @@ export const inspectState = signal<SkillsRequestState<PackageDetail>>(createSkil
 export const preparing = signal("");
 export const notice = signal<MutationNotice | null>(null);
 /**
- * The project the Skills are read for. The app has no list of sessions with
- * their folders yet, so this is the computer's own view (global Skills).
+ * The project the Skills are read for: the folder of the current computer's
+ * newest Session, kept while a Session still works there (so agents taking
+ * turns in two folders don't flip the list). "" with no Session: global Skills.
  */
 export const projectCwd = signal("");
 
 let serverId = "";
+let projectServer: string | null = null;
 let skillsGeneration = 0;
 let pluginsGeneration = 0;
 let inspectGeneration = 0;
+/** Reads of a Skill's files outside the inspector (a Plugin's Skills, pictures): never the inspector's own. */
+let sideReads = 0;
 let mutationOwner = 0;
+
+// Another project: its Skills are read again and the inspector of the last one closes.
+effect(() => {
+  const list = workers();
+  const id = daemon()?.server.id ?? null;
+  untracked(() => {
+    const previous = projectServer === id ? projectCwd() : "";
+    projectServer = id;
+    const next = selectStableSkillsProjectCwd(list, id, previous);
+    if (next === projectCwd()) return;
+    projectCwd.set(next);
+    const wasRead = skillsState().status !== "idle";
+    skillsGeneration++;
+    inspectGeneration++;
+    skillsState.set(createSkillsRequestState());
+    inspected.set(null);
+    inspectState.set(createSkillsRequestState());
+    notice.set(null);
+    // Before `followComputer` has taken a new computer, its own first read uses this project.
+    if (wasRead && id && id === serverId) void refreshSkills();
+  });
+});
 
 function computer(): Daemon | null {
   const current = untracked(daemon);
@@ -165,7 +193,7 @@ export async function inspectSkill(copy: InstalledSkill, path?: string): Promise
 export async function readSkillCopy(copy: InstalledSkill, path?: string): Promise<PackageDetail> {
   const current = computer();
   if (!current || current.state !== "connected") throw new Error("Connect the current server to inspect this Skill.");
-  const detail = await inspectSkillRequest(current, { generation: ++inspectGeneration, skillName: copy.name, skillId: copy.id, cwd: untracked(projectCwd), path });
+  const detail = await inspectSkillRequest(current, { generation: ++sideReads, skillName: copy.name, skillId: copy.id, cwd: untracked(projectCwd), path });
   if (detail.copyId !== copy.id || detail.skillName !== copy.name) throw new Error("The selected Skill copy changed while it was loading.");
   return detail;
 }
@@ -174,6 +202,14 @@ export function closeInspector(): void {
   inspectGeneration++;
   inspected.set(null);
   inspectState.set(createSkillsRequestState());
+}
+
+/** How long a success stays before it leaves by itself; a failure stays until dismissed. */
+export const SUCCESS_NOTICE_MS = 4_000;
+
+function showNotice(next: MutationNotice): void {
+  notice.set(next);
+  if (next.kind === "success") setTimeout(() => untracked(notice) === next && notice.set(null), SUCCESS_NOTICE_MS);
 }
 
 async function confirm(title: string, message: string, label: string): Promise<boolean> {
@@ -217,7 +253,7 @@ export async function deleteSkillCopy(copy: InstalledSkill): Promise<void> {
     if (!(await confirm(ask.title, ask.message, ask.confirmLabel)) || !mine()) return;
     const result = await deleteSkill(current, identity);
     if (!mine()) return;
-    notice.set({
+    showNotice({
       kind: result.execution.success ? "success" : "error",
       message: result.execution.success ? `Deleted ${copy.name}.` : result.execution.output || "The Skill could not be deleted.",
     });
@@ -276,7 +312,7 @@ export async function uninstallPluginCopy(copy: InstalledPluginCopy): Promise<vo
     }
     const name = command.displayName || command.name;
     const left = outcome.remainingNamedCopies;
-    notice.set({
+    showNotice({
       kind: "success",
       message: left ? `Uninstalled the ${name} copy from ${copy.location}. ${left} ${left === 1 ? "copy remains" : "copies remain"}.` : `Uninstalled ${name}.`,
     });

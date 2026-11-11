@@ -247,6 +247,8 @@ describe("Labs", () => {
     await app.waitFor("id:settings-virtual-screen");
     await app.press("id:settings-virtual-screen");
     await app.waitFor("id:virtual-screen-page");
+    // `enabled` throws while no view matches: the switch first, then that it takes a press.
+    await app.waitFor("id:virtual-screen");
     await app.waitUntil(() => app.enabled("id:virtual-screen"));
     await app.press("id:virtual-screen");
     await app.waitUntil(() => on);
@@ -285,6 +287,45 @@ describe("Labs", () => {
     const app = await open(HARNESS, c.options);
     await app.waitFor("text:Labs");
     expect(app.shows("id:settings-phone")).toBe(false);
+  });
+});
+
+describe("In a browser", () => {
+  const mac = { enabled: true, state: "ready", summary: "Agents on Studio can use your iPhone." };
+  const alertCalls = ["calendar.alertsSetStrong", "calendar.alertsCapabilities", "calendar.alertsOpenSettings", "phone.status", "phone.follow"];
+
+  test("Labs offers only Virtual screen; no Friends, Phone use, iPhone use or Calendar section, and nothing asks the device", async () => {
+    const c = computer({ name: "settings" }, () => null, {
+      platform: "web",
+      network: {
+        "GET http://desk.test:9877/auth-check": { status: 503 },
+        "GET http://desk.test:9877/iphone": json({ ...mac, active: { worker: "w1", name: "Codex", since: "" } }),
+        "POST http://desk.test:9877/browser": json({ virtual_screen: true }),
+      },
+    });
+    const handlers: Record<string, unknown> = { ...c.options.host.handlers };
+    for (const name of alertCalls) handlers[name] = () => null;
+    const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, handlers } });
+    await app.waitFor("id:settings-virtual-screen");
+    await app.waitFor("id:pair-another");
+    for (const id of ["settings-friends", "settings-phone", "settings-iphone", "strong-alerts", "full-screen-alerts"]) expect(app.shows(`id:${id}`)).toBe(false);
+    expect(app.texts()).not.toContain("Calendar");
+    for (const word of ["Appearance", "Pet", "About", "Privacy Policy", "Support", "Open-source Licenses"]) expect(app.texts()).toContain(word);
+    await app.wait(200);
+    expect(app.requests().some((r) => r.url.startsWith("http://desk.test:9877/iphone"))).toBe(false);
+    expect(app.host.calls().filter((call) => alertCalls.includes(call.name))).toEqual([]);
+  });
+
+  test("the computer serving the page has no connection-path mark", async () => {
+    // On a phone this LAN address shows the link mark (SettingsFlows "the computer in use shows how the phone reaches it").
+    const c = computer({ name: "settings" }, () => null, { platform: "web", network: { "GET http://192.168.1.20:9877/auth-check": { status: 503 } } });
+    const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, params: { page: { name: "settings" }, server: { url: "ws://192.168.1.20:9877/ws" } } } });
+    await app.waitFor("id:pair-another");
+    await app.wait(100);
+    expect(app.shows("id:computer-path")).toBe(false);
+    expect(app.texts()).toContain("Current");
+    await app.longPress("id:computer-s1");
+    expect(app.texts()).not.toContain("LAN · 192.168.1.20");
   });
 });
 

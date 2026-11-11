@@ -30,6 +30,11 @@ export function readVirtualScreen(): void {
     .catch((failure) => daemon()?.server.id === server.id && virtualScreenState.set({ ...virtualScreenState(), busy: false, error: failureText(failure, "That didn't finish") }));
 }
 
+/** The switch is on for this computer: what it said last, never another computer's answer. */
+export function virtualScreenOn(serverId: string): boolean {
+  return virtualScreenState().enabled === true && owner === serverId;
+}
+
 function setVirtualScreen(on: boolean): void {
   const server = daemon()?.server;
   if (!server || virtualScreenState().busy) return;

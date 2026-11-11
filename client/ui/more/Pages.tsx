@@ -57,10 +57,10 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "settings-licenses": return <Licenses nav={props.nav} />;
     case "settings-license": return <License id={route.id} nav={props.nav} />;
     case "stats": return <Stats nav={props.nav} />;
-    case "stats-model": return <StatsModel model={route.model} pricing={route.pricing} />;
-    case "stats-day": return <StatsDay day={route.day} />;
-    case "resources": return <Resources />;
-    case "screen": return <ScreenPage nav={props.nav} />;
+    case "stats-model": return <StatsModel model={route.model} pricing={route.pricing} nav={props.nav} />;
+    case "stats-day": return <StatsDay day={route.day} nav={props.nav} />;
+    case "resources": return <Resources nav={props.nav} />;
+    case "screen": return <ScreenPage nav={props.nav} worker={route.worker} />;
     case "extensions":
     case "extensions-service":
     case "extensions-tools":

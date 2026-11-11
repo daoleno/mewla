@@ -1,11 +1,11 @@
-import { computed, signal, Text, View } from "nsh";
+import { computed, platform, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { Icon } from "../kit/Icon";
 import { EmptyState } from "../kit/kit";
 import { Segmented } from "../kit/Segmented";
 import type { PageNav } from "../routes";
 import { Avatar, FriendsPageFrame, PostList } from "./parts";
-import { draftCount, followFriends, friends, friendsEnabled, unread } from "./state";
+import { draftCount, followFriends, followPage, friends, friendsEnabled, refreshFriends, unread } from "./state";
 
 type Scope = "all" | "following";
 
@@ -32,8 +32,10 @@ function DraftBanner(props: { nav: PageNav }) {
 }
 
 /** Friends: everyone's posts or only the people you follow, newest first. */
-export function Feed(props: { nav: PageNav }) {
+export function Feed(props: { nav: PageNav; top: () => boolean }) {
   followFriends();
+  // Back on the feed (a post deleted, someone blocked, a draft posted): the drafts and the bell read again.
+  followPage({ top: props.top, clear: () => {}, load: () => void refreshFriends() });
   const scope = signal<Scope>("all");
   const me = () => friends().status?.me;
   // The list stays mounted while the status changes; only turning off replaces it.
@@ -51,7 +53,7 @@ export function Feed(props: { nav: PageNav }) {
       </Button>
       {me() ? (
         <Button testID="friends-me" accessibilityLabel="Your profile" onPress={() => props.nav.push({ name: "friends-person", id: me()!.id })} class="active:opacity-70">
-          <Avatar author={me()!} size={28} />
+          <Avatar author={me()!} size={32} />
         </Button>
       ) : null}
     </View>
@@ -59,7 +61,8 @@ export function Feed(props: { nav: PageNav }) {
   return (
     <FriendsPageFrame title="Friends" testID="friends-feed" headerRight={friendsEnabled() ? header() : undefined}>
       {off() ? (
-        <EmptyState testID="friends-off" icon="people" title="Friends is off" action="Open Labs" onAction={() => props.nav.push({ name: "settings-friends" })} />
+        // A browser offers no Friends switch (as v0.3.1): Open Labs opens Settings there.
+        <EmptyState testID="friends-off" icon="people" title="Friends is off" action="Open Labs" onAction={() => props.nav.push(platform.os === "web" ? { name: "settings" } : { name: "settings-friends" })} />
       ) : (
         <View class="flex-1">
           <View class="px-4 pt-2">
@@ -73,9 +76,9 @@ export function Feed(props: { nav: PageNav }) {
           </View>
           <DraftBanner nav={props.nav} />
           {scope() === "all" ? (
-            <PostList testID="friends-list" path="/feed" nav={props.nav} emptyTitle="Nothing here yet" />
+            <PostList testID="friends-list" path="/feed" nav={props.nav} top={props.top} emptyTitle="Nothing here yet" />
           ) : (
-            <PostList testID="friends-list" path="/feed?scope=following" nav={props.nav} emptyTitle="No one followed yet" />
+            <PostList testID="friends-list" path="/feed?scope=following" nav={props.nav} top={props.top} emptyTitle="No one followed yet" />
           )}
         </View>
       )}
@@ -83,10 +86,11 @@ export function Feed(props: { nav: PageNav }) {
   );
 }
 
-export function Bookmarks(props: { nav: PageNav }) {
+export function Bookmarks(props: { nav: PageNav; top: () => boolean }) {
+  followFriends();
   return (
     <FriendsPageFrame title="Bookmarks" testID="friends-bookmarks">
-      <PostList path="/bookmarks" nav={props.nav} emptyTitle="No bookmarks" emptyDetail="Tap the bookmark on a post to keep it here." emptyIcon="bookmark" />
+      <PostList path="/bookmarks" nav={props.nav} top={props.top} emptyTitle="No bookmarks" emptyDetail="Tap the bookmark on a post to keep it here." emptyIcon="bookmark" />
     </FriendsPageFrame>
   );
 }

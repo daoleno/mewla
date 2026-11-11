@@ -1,4 +1,4 @@
-import { signal, Text, View, WebView } from "nsh";
+import { platform, Scroll, signal, Text, View, WebView } from "nsh";
 import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
@@ -38,8 +38,18 @@ const KEYS: { key: ScreenKey; label: string; name: string }[] = [
   { key: "Right", label: "→", name: "Right arrow" },
 ];
 
-export function modifiersFor(platform: string | undefined): RemoteModifier[] {
-  return platform === "darwin" || platform === "macos" ? MAC_MODIFIERS : platform === "windows" ? WINDOWS_MODIFIERS : LINUX_MODIFIERS;
+export function modifiersFor(os: string | undefined): RemoteModifier[] {
+  return os === "darwin" || os === "macos" ? MAC_MODIFIERS : os === "windows" ? WINDOWS_MODIFIERS : LINUX_MODIFIERS;
+}
+
+/**
+ * Whether typing goes through the system's soft keyboard (a hidden field, the
+ * key bar and a keyboard button). A browser with a mouse has a keyboard of its
+ * own: a click gives the picture the keys, and the viewer sends every key,
+ * modifiers, shortcuts and paste included, as the Expo web app did.
+ */
+export function needsSoftKeyboard(): boolean {
+  return platform.os !== "web" || !platform.desktop;
 }
 
 // The document's base: WebCodecs (the video decoder) exists only in a secure
@@ -60,6 +70,15 @@ let html: string | null = null;
 
 export type RemotePhase = "connecting" | "live" | "lost";
 
+/** What the viewer page measures of the stream, once a second. */
+export interface ViewerStats {
+  fps: number;
+  kbps: number;
+  inputMs: number | null;
+  bridgeMs: number | null;
+  presentMs: number | null;
+}
+
 /**
  * One live view of a remote screen: the socket to the computer, the viewer in
  * its WebView, and what passes between them. RFB bytes from the socket are
@@ -70,10 +89,13 @@ export class RemoteSession {
   readonly phase = signal<RemotePhase>("connecting");
   readonly reason = signal<string | null>(null);
   readonly locked = signal(false);
-  readonly rtt = signal<number | null>(null);
+  /** Every pong is a sample, even one as long as the last. */
+  readonly rtt = signal<number | null>(null, { equals: false });
   readonly stats = signal<ScreenStreamStats | null>(null);
-  readonly viewerStats = signal<{ fps: number; kbps: number } | null>(null);
+  readonly viewerStats = signal<ViewerStats | null>(null);
   readonly holding = signal(false);
+  /** The viewer felt a long press (a right-click) or the remote bell rang. */
+  onHaptic: (() => void) | null = null;
   private connection: ScreenConnection | null = null;
   private web: WebViewRef | null = null;
   private viewerReady = false;
@@ -86,8 +108,19 @@ export class RemoteSession {
 
   constructor(
     private readonly server: StoredServer,
-    private readonly options: { watch?: boolean; worker?: string; route?: ScreenRoute; align: "top" | "center" },
-  ) {}
+    private readonly options: {
+      watch?: boolean;
+      worker?: string;
+      route?: ScreenRoute;
+      align: "top" | "center";
+      /** The computer ended the socket; true when the page takes it from here (the watched agent finished) instead of showing it lost. */
+      onSocketClosed?: (reason: string | null) => boolean;
+    },
+  ) {
+    this.align = options.align;
+  }
+
+  private align: "top" | "center";
 
   attach(web: WebViewRef): void {
     this.web = web;
@@ -100,7 +133,7 @@ export class RemoteSession {
     switch (message.type) {
       case "ready":
         this.viewerReady = true;
-        this.post([{ type: "mode", mode: this.mode }, { type: "align", align: this.options.align }], true);
+        this.post([{ type: "mode", mode: this.mode }, { type: "align", align: this.align }], true);
         this.flush();
         return;
       case "send":
@@ -115,7 +148,10 @@ export class RemoteSession {
         this.lose(null);
         return;
       case "stats":
-        this.viewerStats.set({ fps: message.fps, kbps: message.kbps });
+        this.viewerStats.set({ fps: message.fps, kbps: message.kbps, inputMs: message.inputMs, bridgeMs: message.bridgeMs ?? null, presentMs: message.presentMs ?? null });
+        return;
+      case "haptic":
+        this.onHaptic?.();
         return;
       default:
         return;
@@ -128,6 +164,9 @@ export class RemoteSession {
     this.phase.set("connecting");
     this.reason.set(null);
     this.holding.set(false);
+    this.rtt.set(null);
+    this.stats.set(null);
+    this.viewerStats.set(null);
     this.stopDeadline = startLiveDeadline(() => {
       if (attempt === this.attempt) this.lose(LIVE_DEADLINE_REASON);
     });
@@ -144,14 +183,26 @@ export class RemoteSession {
         rtt: (ms) => attempt === this.attempt && this.rtt.set(ms),
         locked: (locked) => attempt === this.attempt && this.locked.set(locked),
         streamStats: (stats) => attempt === this.attempt && this.stats.set(stats),
-        closed: (reason) => attempt === this.attempt && this.lose(reason),
+        closed: (reason) => {
+          if (attempt !== this.attempt) return;
+          if (this.options.onSocketClosed?.(reason)) this.disconnect();
+          else this.lose(reason);
+        },
       },
       this.options.watch,
       this.options.worker,
       this.options.route,
     );
     this.connection = connection;
-    void connection.connect();
+    // Signing or opening the socket failed: say why now, not after the deadline.
+    connection.connect().catch((error: unknown) => {
+      if (attempt === this.attempt) this.lose(error instanceof Error && error.message ? error.message : String(error));
+    });
+  }
+
+  /** A socket is open or opening. */
+  get connected(): boolean {
+    return this.connection !== null;
   }
 
   /** Ends the view and says why (`null`: no reason given, or the person chose to). */
@@ -168,6 +219,9 @@ export class RemoteSession {
     const connection = this.connection;
     this.connection = null;
     connection?.close();
+    // A hold rides on the socket: closing it lets the agent go on.
+    this.holding.set(false);
+    this.rtt.set(null);
     this.chunks = [];
     this.outbox = this.outbox.filter((message) => message.type !== "rfb");
     if (connection) this.post([{ type: "close" }]);
@@ -182,6 +236,13 @@ export class RemoteSession {
   setMode(mode: ScreenPointerMode): void {
     this.mode = mode;
     this.post([{ type: "mode", mode }]);
+  }
+
+  /** A short picture sits at the top, or in the middle (sideways, where it owns the display). */
+  setAlign(align: "top" | "center"): void {
+    if (align === this.align) return;
+    this.align = align;
+    this.post([{ type: "align", align }]);
   }
 
   fit(): void {
@@ -237,6 +298,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
   const mods = signal<ModifierState>(NO_MODIFIERS);
   const value = signal(KEYBOARD_SENTINEL);
   let input: InputRef | null = null;
+  const soft = needsSoftKeyboard();
   html ??= viewerHtml();
 
   const typed = (next: string) => {
@@ -265,23 +327,29 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
         scrollable={false}
         onMessage={(e) => props.session.onViewer(e.data)}
       />
-      <Input
-        ref={(node: InputRef) => {
-          input = node;
-        }}
-        testID="remote-keyboard"
-        accessibilityLabel="Type on the remote screen"
-        class="absolute h-px w-px opacity-0"
-        value={value()}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="default"
-        onChange={({ value: next }) => typed(next)}
-        onSubmit={() => press("Return")}
-        onBlur={() => props.onTypingChange(false)}
-      />
-      {props.typing ? (
-        <View class="flex-row items-center gap-1.5 border-t border-border bg-card px-2 py-1.5">
+      {/* A browser's own keyboard types into the picture: no field, no key bar. */}
+      {soft ? (
+        <Input
+          ref={(node: InputRef) => {
+            input = node;
+          }}
+          testID="remote-keyboard"
+          accessibilityLabel="Type on the remote screen"
+          class="absolute h-px w-px opacity-0"
+          value={value()}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="off"
+          caret={false}
+          keyboardType="default"
+          onChange={({ value: next }) => typed(next)}
+          onSubmit={() => press("Return")}
+          onBlur={() => props.onTypingChange(false)}
+        />
+      ) : null}
+      {soft && props.typing ? (
+        // A narrow phone may not fit every key: the bar scrolls sideways.
+        <Scroll horizontal testID="remote-key-bar" class="grow-0 border-t border-border bg-card" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
           {props.modifiers.map((modifier) => {
             const state = () => (mods().locked.includes(modifier.key) ? "locked" : mods().armed.includes(modifier.key) ? "armed" : "off");
             return (
@@ -302,10 +370,11 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
               <Text class="text-sm">{key.label}</Text>
             </Button>
           ))}
-        </View>
+        </Scroll>
       ) : null}
       {(() => {
         // Bring the keyboard up or down when the page asks.
+        if (!soft) return null;
         if (props.typing) queueMicrotask(() => input?.focus());
         else queueMicrotask(() => input?.blur());
         return null;

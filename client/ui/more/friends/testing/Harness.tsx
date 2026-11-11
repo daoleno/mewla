@@ -1,4 +1,4 @@
-import { host, mount, View } from "nsh";
+import { host, mount, Text, View } from "nsh";
 import { createNavStack, NavStack } from "nsh/base";
 import { installPlatform } from "../../../../core/platform";
 import { nshPlatform } from "../../../platform";
@@ -30,7 +30,7 @@ const nav = createNavStack<MorePage>([params.page ?? { name: "friends" }]);
 mount(() => (
   <View class="flex-1 bg-background">
     <NavStack state={nav} style={{ flex: 1 }}>
-      {(route) => (route.name === "settings-friends" ? <FriendsSettings nav={nav} /> : <FriendsPageView route={route as FriendsPage} nav={nav} />)}
+      {(route) => (route.name === "settings-friends" ? <FriendsSettings nav={nav} /> : route.name === "settings" ? <Text testID="settings">Settings</Text> : <FriendsPageView route={route as FriendsPage} nav={nav} />)}
     </NavStack>
   </View>
 ));

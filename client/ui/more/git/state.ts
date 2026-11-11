@@ -14,6 +14,9 @@ import {
   type GitAction,
   type GitTarget,
 } from "../../../core/git/requests";
+import { agentKindFromProvider } from "../../../core/sessions/workerPresentation";
+import { supportsChatInterface } from "../../../core/session/sessionRoute";
+import { outbox, workers } from "../../session";
 import { daemon } from "../daemon";
 import { confirmDestructive } from "../kit/kit";
 
@@ -79,7 +82,6 @@ export class GitReview {
   readonly paths = signal<Loaded<GitRepoPathsPayload>>({ value: null, loading: false, error: "" });
   readonly files = signal<Record<string, Loaded<GitRepoFileContentPayload>>>({});
   private epoch = 0;
-  private fetched = false;
 
   constructor(
     readonly serverId: string,
@@ -137,15 +139,13 @@ export class GitReview {
 
   /**
    * Opening the review reads the status once (no polling while it is open: what
-   * the person reads is a snapshot until they refresh). The first opening also
+   * the person reads is a snapshot until they refresh). Every opening also
    * fetches, for a true ahead and behind. A fetch failure is not news here.
    */
   open(): void {
-    const first = !this.fetched;
-    this.fetched = true;
     void this.refresh().then(() => {
       const d = this.daemon();
-      if (first && d && this.status()?.available && this.status()?.upstream) {
+      if (d && this.status()?.available && this.status()?.upstream) {
         runGitAction(d, this.target, this.repoRoot(), "fetch")
           .then(() => this.refresh())
           .catch(() => {});
@@ -363,6 +363,31 @@ export class GitReview {
     rememberedTree = tree;
     this.tree.set(tree);
   }
+
+  /** Collapses or expands a group (`section:staged`), a folder of the tree, or anything else keyed. */
+  toggleCollapsed(key: string): void {
+    const next = new Set(this.collapsed());
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this.collapsed.set(next);
+  }
+
+  /** The Session runs an agent with a chat, which a review comment can go to (reactive). */
+  canAskAgent(): boolean {
+    if (!this.current()) return false;
+    const worker = workers().find((w) => w.id === this.target.targetId);
+    return !!worker && supportsChatInterface(agentKindFromProvider(worker.provider), worker.capabilities);
+  }
+
+  /**
+   * Sends a review comment to the Session's agent as a chat message: the app's one send
+   * queue (`outbox`) delivers it over this computer's connection, as a message typed in
+   * the Session's chat would be.
+   */
+  askAgent(text: string): void {
+    if (!this.current() || !text.trim()) return;
+    outbox.enqueue({ serverId: this.serverId, workerId: this.target.targetId, text });
+  }
 }
 
 // The list/tree choice outlives the review for the rest of the app session.
@@ -399,11 +424,22 @@ effect(() => {
   });
 });
 
-export async function copyText(text: string, title: string): Promise<void> {
+/** Copies `text`; says `title` (with `detail`) when it went, "Couldn't copy" when it did not. */
+export async function copyText(text: string, title: string, detail?: string): Promise<void> {
   try {
     await Clipboard.writeText(text);
-    say({ title, tone: "success" });
-  } catch {
-    // A refused copy is not worth a message.
+    say({ title, detail, tone: "success" });
+  } catch (reason) {
+    failed("Couldn't copy", reason);
   }
+}
+
+/** Copy diff: the patch text, "Diff copied" with its line count, or "Nothing to copy". */
+export function copyDiff(text: string): Promise<void> {
+  if (!text.trim()) {
+    say({ title: "Nothing to copy", tone: "neutral" });
+    return Promise.resolve();
+  }
+  const lines = text.replace(/\n$/, "").split("\n").length;
+  return copyText(text, "Diff copied", `${lines} ${lines === 1 ? "line" : "lines"}`).catch(() => {});
 }

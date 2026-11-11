@@ -74,6 +74,23 @@ describe("connecting a service", () => {
     expect(h.polls).toHaveLength(0);
   });
 
+  test("Open again tapped twice while the browser opens opens it once", async () => {
+    const h = harness(() => ({ flow: oauth({ integration: "github", user_code: "ABCD-1234", authorization_url: "https://github.com/login/device" }) }));
+    await h.flow.connect("github");
+    let release!: () => void;
+    h.deps.openUrl = (url) => new Promise<void>((resolve) => { h.opened.push(url); release = resolve; });
+    const first = h.flow.openBrowser();
+    await Bun.sleep(0);
+    const second = h.flow.openBrowser();
+    release();
+    await Promise.all([first, second]);
+    expect(h.opened).toEqual(["https://github.com/login/device"]);
+    // Once open, it can be opened again.
+    h.deps.openUrl = (url) => void h.opened.push(url);
+    await h.flow.openBrowser();
+    expect(h.opened).toHaveLength(2);
+  });
+
   test("a GitHub code is shown and copied before the page opens, and the page is polled", async () => {
     const h = harness(() => ({ flow: oauth({ integration: "github", user_code: "ABCD-1234", authorization_url: "https://github.com/login/device" }) }));
     await h.flow.connect("github");
@@ -251,5 +268,67 @@ describe("connecting a service", () => {
     resolve({ catalog: [{ id: "github", name: "GitHub", available: true, setup_url: "", description: "" }], accounts: [] });
     await listing;
     expect(h.flow.state.catalog).toEqual([]);
+  });
+});
+
+describe("in a browser", () => {
+  function web(answer: Parameters<typeof harness>[0]) {
+    const h = harness(answer);
+    const here: string[] = [];
+    const flow = new ConnectionsFlow({ ...h.deps, web: { origin: async () => "https://desk.example", openHere: (url) => void here.push(url) } });
+    return { ...h, flow, here };
+  }
+
+  test("connect_start names the page's origin; a provider that returns to it takes this tab, any other opens a tab of its own", async () => {
+    const h = web((request) => (request.action === "connect_start" ? { flow: oauth({ web_return: true }) } : { flow: oauth({ web_return: true }) }));
+    await h.flow.connect("notion");
+    expect(h.asked[0]).toEqual({ action: "connect_start", input: { integration: "notion", allow_writes: false, web_origin: "https://desk.example" } });
+    expect(h.here).toEqual(["https://notion.example/authorize?state=abc123&client_id=x"]);
+    expect(h.opened).toEqual([]);
+    expect(h.stored.has(pendingConnectionKey("server"))).toBe(true);
+
+    const coded = web(() => ({ flow: oauth({ integration: "github", user_code: "AB-CD", authorization_url: "https://github.com/login/device" }) }));
+    await coded.flow.connect("github");
+    await coded.flow.openBrowser();
+    expect(coded.opened).toEqual(["https://github.com/login/device"]);
+    expect(coded.here).toEqual([]);
+  });
+
+  test("a custom service with a token is added as before, without an origin", async () => {
+    const h = web(() => ({ account: { id: "m1", integration: "mcp", name: "Mine", identity: "", enabled: true, status: "connected", history: [] } }));
+    await h.flow.connect("mcp", { input: { integration: "mcp", name: "Mine", endpoint: "https://mcp.example" }, signIn: false });
+    expect(h.asked[0]).toEqual({ action: "add", input: { integration: "mcp", name: "Mine", endpoint: "https://mcp.example" } });
+  });
+
+  test("a return to /plugins?connected= shows the account connected and drops the stored flow it ended", async () => {
+    const h = web(() => ({ flow: oauth() }));
+    h.stored.set(pendingConnectionKey("server"), JSON.stringify({ serverId: "server", flow: oauth() }));
+    await h.flow.restore(null, { connected: "a1", service: "notion" });
+    expect(h.flow.state.phase).toBe("connected");
+    expect(h.flow.state.connectedId).toBe("a1");
+    expect(h.flow.state.service).toBe("notion");
+    expect(h.stored.size).toBe(0);
+    expect(h.asked).toEqual([]);
+  });
+
+  test("a return with plugin_error says which step failed; a cancelled one reads as cancelled", async () => {
+    const failed = web(() => ({}));
+    await failed.flow.restore(null, { plugin_error: "token", service: "notion" });
+    expect(failed.flow.state.phase).toBe("failed");
+    expect(failed.flow.state.connectError).toBe("The service didn’t accept the sign-in. Start again.");
+
+    const cancelled = web(() => ({}));
+    await cancelled.flow.restore(null, { plugin_error: "cancelled" });
+    expect(cancelled.flow.state.phase).toBe("cancelled");
+    expect(cancelled.flow.state.service).toBeNull();
+  });
+
+  test("a return for another service leaves that service's waiting sign-in waiting", async () => {
+    const h = web(() => ({ flow: oauth() }));
+    h.stored.set(pendingConnectionKey("server"), JSON.stringify({ serverId: "server", flow: oauth() }));
+    await h.flow.restore(null, { connected: "l1", service: "linear" });
+    expect(h.flow.state.phase).toBe("waiting");
+    expect(h.flow.state.service).toBe("notion");
+    expect(h.stored.has(pendingConnectionKey("server"))).toBe(true);
   });
 });

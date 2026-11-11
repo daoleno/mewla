@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../testing/fixtures";
 
 const HARNESS = "./testing/Harness.tsx";
 
@@ -271,7 +272,7 @@ describe("slash menu", () => {
     app.onDialog(() => "Open Terminal");
     await app.press("id:harness-clear");
     await app.type("id:harness-text", "/init");
-    await app.press("id:harness-send");
+    await answering(app, () => app.press("id:harness-send"));
     await app.waitFor('text:{"kind":"prefill","text":"/init","alert":"/init is not available"} pressed:open_terminal');
     expect(app.dialogs().at(-1)).toMatchObject({ title: "/init is not available" });
   }, 20_000);

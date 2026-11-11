@@ -1,6 +1,6 @@
 import { signal, Text, View } from "nsh";
 import { AlertDialog } from "nsh/base";
-import { Page, PillButton, Row, Section, SwitchRow } from "../kit/kit";
+import { Page, PillButton, Row, Section, Spinner, SwitchRow } from "../kit/kit";
 import type { PageNav } from "../routes";
 import { Avatar } from "./parts";
 import {
@@ -117,9 +117,12 @@ export function FriendsSettings(props: { nav: PageNav }) {
       {phase() === "signing_in" && friends().signIn ? (
         <Section title="Sign in to Mewla">
           <View class="items-center gap-4 p-5">
-            <Text testID="friends-code" class="font-mono text-3xl font-semibold tracking-widest select-text" accessibilityLabel={`Code ${friends().signIn!.user_code.split("").join(" ")}`}>
-              {friends().signIn!.user_code}
-            </Text>
+            {/* The code can be selected and copied, to paste it on the sign-in page. */}
+            <View selectable>
+              <Text testID="friends-code" class="font-mono text-3xl font-semibold tracking-widest select-text" accessibilityLabel={`Code ${friends().signIn!.user_code.split("").join(" ")}`}>
+                {friends().signIn!.user_code}
+              </Text>
+            </View>
             <View class="flex-row gap-3">
               <PillButton testID="friends-open-sign-in" title="Open sign-in page" filled onPress={openSignInPage} />
               <PillButton testID="friends-cancel-sign-in" title="Cancel" onPress={cancelSignIn} />
@@ -135,7 +138,14 @@ export function FriendsSettings(props: { nav: PageNav }) {
             subtitle={friends().status!.signed_in ? (friends().status!.account ? `Signed in as ${friends().status!.account}` : "Signed in") : undefined}
             leading={friendsEnabled() && me() ? <Avatar author={me()!} size={40} /> : undefined}
           />
-          <Row testID="friends-delete" title="Delete Friends account" destructive disabled={phase() === "working" || deleting()} onPress={() => void remove()} />
+          <Row
+            testID="friends-delete"
+            title="Delete Friends account"
+            destructive
+            disabled={phase() === "working" || deleting()}
+            trailing={deleting() ? <View testID="friends-deleting" accessibilityLabel="Deleting"><Spinner size={16} /></View> : undefined}
+            onPress={() => void remove()}
+          />
         </Section>
       ) : null}
     </Page>

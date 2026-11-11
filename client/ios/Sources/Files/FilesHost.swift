@@ -28,7 +28,32 @@ final class FilesHost: NSObject, UIDocumentPickerDelegate {
     app.handle("files.pickDirectory") { [self] _, reply in pickDirectory(reply) }
     app.handle("files.download") { [self] data, reply in download(data, reply) }
     app.handle("files.cancelDownload") { [self] data, reply in reply.resolve(transfers.cancel(id: Self.string(data, "downloadId"))) }
+    app.handle("files.thumbnail") { [self] data, reply in thumbnail(data, reply) }
     app.register(component: "mewla.pdf") { PdfComponent($0) }
+  }
+
+  // MARK: Thumbnails
+
+  /// A picked picture scaled so its longer side is at most `maxPixels`, as a JPEG data URL;
+  /// nil for a token this picker did not give or a file UIImage does not decode.
+  private func thumbnail(_ data: Any?, _ reply: NshHostReply) {
+    guard let file = picked[Self.string(data, "uri")] else { return reply.resolve(nil) }
+    let maxPixels = CGFloat(min(max(Self.number(data, "maxPixels") ?? 256, 16), 4096))
+    DispatchQueue.global(qos: .userInitiated).async {
+      let scoped = file.startAccessingSecurityScopedResource()
+      defer { if scoped { file.stopAccessingSecurityScopedResource() } }
+      guard let image = UIImage(contentsOfFile: file.path), image.size.width > 0, image.size.height > 0 else {
+        return DispatchQueue.main.async { reply.resolve(nil) }
+      }
+      let scale = min(1, maxPixels / max(image.size.width * image.scale, image.size.height * image.scale))
+      let size = CGSize(width: max(1, image.size.width * image.scale * scale), height: max(1, image.size.height * image.scale * scale))
+      let format = UIGraphicsImageRendererFormat()
+      format.scale = 1
+      let jpeg = UIGraphicsImageRenderer(size: size, format: format).jpegData(withCompressionQuality: 0.85) { _ in
+        image.draw(in: CGRect(origin: .zero, size: size))
+      }
+      DispatchQueue.main.async { reply.resolve(["dataUrl": "data:image/jpeg;base64," + jpeg.base64EncodedString()]) }
+    }
   }
 
   // MARK: Picking

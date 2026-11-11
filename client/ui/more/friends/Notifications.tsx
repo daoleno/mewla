@@ -1,4 +1,4 @@
-import { effect, lifecycle, Scroll, signal, Text, untracked, View } from "nsh";
+import { Scroll, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { notificationRows, relativeTime, type FriendsNotification, type NotificationRow } from "../../../core/friends/api";
 import { friendsCall } from "../../../core/friends/requests";
@@ -6,11 +6,11 @@ import { Icon, type IconName } from "../kit/Icon";
 import { EmptyState } from "../kit/kit";
 import type { PageNav } from "../routes";
 import { FriendsPageFrame } from "./parts";
-import { draftCount, followFriends, friends, friendsServer, refreshFriends } from "./state";
+import { currentServerId, draftCount, followFriends, followPage, friends, refreshFriends, serverFor } from "./state";
 
 const ICONS: Record<NotificationRow["kind"], IconName> = { comment: "chat", like: "heart", follow: "people" };
 
-function Line(props: { icon: IconName; text: string; detail?: string; at?: string; unread?: boolean; testID?: string; onPress: () => void }) {
+function Line(props: { icon: IconName; text: string; detail?: string; at?: string; unread?: boolean; chevron?: boolean; testID?: string; onPress: () => void }) {
   return (
     <Button testID={props.testID} onPress={props.onPress} class={`flex-row items-start gap-3 border-b border-border px-4 py-3 active:bg-accent ${props.unread ? "bg-card" : ""}`}>
       <View class="pt-0.5"><Icon name={props.icon} /></View>
@@ -20,30 +20,42 @@ function Line(props: { icon: IconName; text: string; detail?: string; at?: strin
         {props.at ? <Text class="mt-0.5 text-xs text-muted-foreground">{props.at}</Text> : null}
       </View>
       {props.unread ? <View class="mt-2 size-2 rounded-full bg-seal" accessibilityLabel="New" /> : null}
+      {props.chevron ? <View class="self-center"><Icon name="chevron-right" size={16} tone="faint" /></View> : null}
     </Button>
   );
 }
 
 /** Comments, likes and follows, newest first; opening the page marks them read. */
-export function Notifications(props: { nav: PageNav }) {
+export function Notifications(props: { nav: PageNav; top: () => boolean }) {
   followFriends();
   const rows = signal<NotificationRow[] | null>(null);
+  let generation = 0;
   const load = async () => {
-    const server = friendsServer();
+    const id = currentServerId();
+    const server = serverFor(id);
     if (!server) return;
+    const mine = ++generation;
+    const live = () => mine === generation && currentServerId() === id;
     try {
       const answer = await friendsCall<{ notifications: FriendsNotification[] }>(server, "GET", "/notifications");
+      if (!live()) return;
       rows.set(notificationRows(answer.notifications ?? []));
     } catch {
-      rows.set([]);
+      if (live()) rows.set([]);
       return;
     }
     // Read once shown: the rows keep their unread mark from before, the bell's dot clears.
     await friendsCall(server, "POST", "/notifications/read").catch(() => {});
-    await refreshFriends();
+    if (live()) await refreshFriends();
   };
-  effect(() => {
-    if (lifecycle() === "active") untracked(() => void load());
+  // Back on the page (from a post or a profile), newer ones show and are marked read too.
+  followPage({
+    top: props.top,
+    clear: () => {
+      generation++;
+      rows.set(null);
+    },
+    load: () => void load(),
   });
   const agent = () => friends().status?.me?.agent_name || "Brain";
   return (
@@ -56,6 +68,7 @@ export function Notifications(props: { nav: PageNav }) {
             <Line
               testID="friends-notification-drafts"
               icon="edit"
+              chevron
               text={draftCount() === 1 ? `${agent()} has a draft waiting for you` : `${agent()} has ${draftCount()} drafts waiting for you`}
               onPress={() => props.nav.push({ name: "friends-drafts" })}
             />

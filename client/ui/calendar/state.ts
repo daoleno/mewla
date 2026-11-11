@@ -1,4 +1,4 @@
-import { host, signal, Storage } from "nsh";
+import { host, platform, signal, Storage } from "nsh";
 import type { ArmedAlert, NativeAlertAction } from "../../core/calendar/alerts";
 import { CalendarModel, type AlertHost } from "../../core/calendar/calendar";
 import { zonesOf, type CalendarItem } from "../../core/calendar/model";
@@ -11,8 +11,11 @@ export const calendarItems = signal<CalendarItem[]>([]);
 /** The first snapshot arrived: before it, "no items" is not "nothing planned". */
 export const calendarLoaded = signal(false);
 
-/** The phone's own alerts: Android's exact alarms and lock-screen alert, iOS's local notifications. */
-const alertHost: AlertHost | null = host.available()
+/**
+ * The phone's own alerts: Android's exact alarms and lock-screen alert, iOS's local notifications.
+ * A browser has none, as in v0.3.1's web app: there the in-app alert card is the alert.
+ */
+const alertHost: AlertHost | null = host.available() && platform.os !== "web"
   ? {
       schedule: async (alerts: ArmedAlert[]) => void (await host.call("calendar.alertsSchedule", { alerts })),
       cancelItem: async (itemId: string) => void (await host.call("calendar.alertsCancelItem", { itemId })),
