@@ -245,12 +245,12 @@ describe("slash menu", () => {
     expect(app.count("id:slash-menu")).toBe(0);
   }, 20_000);
 
-  test("+ shows Attach File (not yet) and the commands by group; a pick routes", async () => {
+  test("+ shows Attach File and the commands by group; a pick routes", async () => {
     const app = await open(HARNESS, computer({ sheet: "slash" }, { codex_slash_commands: () => slashCommands }));
     await app.waitFor("text:commands:4");
     await app.press("id:composer-plus");
     await app.waitFor("id:slash-menu");
-    expect(app.texts()).toContain("Coming soon");
+    expect(app.texts()).toContain("Add a file to this message");
     expect(app.count("id:slash-group-session")).toBe(1);
     expect(app.count("id:slash-group-navigation")).toBe(1);
     await expect(app.press("id:attach-file")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
