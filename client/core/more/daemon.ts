@@ -1,4 +1,4 @@
-import { serverURLNow } from "../link/pinnedTransport";
+import { resolveStoredServerURL, serverURLNow } from "../link/pinnedTransport";
 import { getOrCreateLocalDeviceIdentity } from "../auth";
 import { signDeviceAuthorization } from "../deviceAuthContract";
 import { buildHTTPURL } from "../pairing";
@@ -49,7 +49,11 @@ export async function sha256Hex(text: string): Promise<string> {
 
 /** The computer's HTTP address for `pathname` (and `query`), on the address the socket uses. */
 export function daemonURL(server: StoredServer, pathname: string, query?: Record<string, string | undefined>): string {
-  const url = buildHTTPURL(serverURLNow(server), pathname);
+  return daemonURLAt(serverURLNow(server), server, pathname, query);
+}
+
+function daemonURLAt(base: string, server: StoredServer, pathname: string, query?: Record<string, string | undefined>): string {
+  const url = buildHTTPURL(base, pathname);
   if (!url) throw new Error(`${server.name || "The computer"} has no address`);
   const params = Object.entries(query ?? {}).filter((entry): entry is [string, string] => Boolean(entry[1]));
   return params.length ? `${url}?${params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&")}` : url;
@@ -76,7 +80,8 @@ export async function signedFetch(
   purpose: Purpose,
   options: SignedOptions = {},
 ): Promise<Response> {
-  const url = daemonURL(server, pathname, options.query);
+  // On Mewla Relay this waits for the computer's tunnel (a computer that is not current has none yet).
+  const url = daemonURLAt(await resolveStoredServerURL(server), server, pathname, options.query);
   const text = options.body === undefined ? undefined : JSON.stringify(options.body);
   const signed = typeof purpose === "function" ? purpose(text === undefined ? "" : await sha256Hex(text)) : purpose;
   const controller = new AbortController();
