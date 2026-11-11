@@ -1,7 +1,8 @@
 import { cleanup, computed, effect, openUrl, signal, Storage, Text, untracked, View } from "nsh";
 import { listSessionServices } from "../../core/sessions/services";
 import { dshWebServiceURL } from "../../core/sessions/servicesPresentation";
-import { AlertDialog, Button, Input, Sheet, type NavStackState } from "nsh/base";
+import { AlertDialog, Button, Input, type NavStackState } from "nsh/base";
+import { AppSheet } from "../shell/AppSheet";
 import { NavPage } from "../shell/NavPage";
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
@@ -629,7 +630,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
         }} />
       <CodexSkillsSheet open={skillsOpen} onClose={() => skillsOpen.set(false)} transport={transport} cwd={worker()?.cwd}
         onPick={(name) => text.set(insertSkillMention(untracked(text.text), name))} />
-      <Sheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3" backdropClass="bg-black/40">
+      <AppSheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3" backdropClass="bg-black/40">
         <View class="gap-3 pb-6">
           <Text class="text-lg font-semibold">Rename</Text>
           <Text class="text-sm text-muted-foreground">A name for this Session on this phone. Empty uses its own name.</Text>
@@ -640,7 +641,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
             <Button testID="rename-save" onPress={() => void saveRename()}><Text class="text-base font-semibold text-primary">Save</Text></Button>
           </View>
         </View>
-      </Sheet>
+      </AppSheet>
     </NavPage>
   );
 }

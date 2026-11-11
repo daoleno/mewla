@@ -79,7 +79,7 @@ export function Resources() {
   const refresh = () => poller?.refresh();
   const telemetry = () => reading().telemetry;
   return (
-    <Page title="Resources" testID="resources" refreshing={reading().reading && Boolean(telemetry())} onRefresh={refresh}>
+    <Page title="Resources" testID="resources" column="wide" refreshing={reading().reading && Boolean(telemetry())} onRefresh={refresh}>
       {telemetry() ? <Ready telemetry={telemetry()!} onRefresh={refresh} /> : <NotReady onRetry={refresh} />}
     </Page>
   );

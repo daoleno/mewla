@@ -1,6 +1,7 @@
 import type { JSX } from "nsh";
 import { Image, List, signal, Text, Video, View } from "nsh";
-import { AlertDialog, Button, NavPage } from "nsh/base";
+import { AlertDialog, Button } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import {
   displayName,
   durationLabel,

@@ -1,5 +1,6 @@
 import { host, nativeComponent, platform, signal, Text, View } from "nsh";
-import { AlertDialog, Button, Input, NavPage } from "nsh/base";
+import { AlertDialog, Button, Input } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import { pairWith, readPairingLink } from "../../core/pairFlow";
 import { addPairedServer } from "../session";
 

@@ -1,6 +1,7 @@
 import { computed, effect, lifecycle, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
-import { Button, Menu, MenuItem, NavPage } from "nsh/base";
+import { Button, Menu, MenuItem } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import { displayRoute } from "../../../core/screen/displayRoute";
 import { haltDisplay, listDisplays, resumeDisplay, screenRequest, type AgentDisplay, type ScreenAction, type ScreenAgent, type ScreenStatus } from "../../../core/screen/screen";
 import { screenAgents, screenEntry, unsupportedScreen } from "../../../core/screen/screenPageModel";
@@ -159,6 +160,7 @@ export function ScreenPage(props: { nav: PageNav }) {
     <NavPage
       title="Screen"
       testID="screen-page"
+      column="full"
       headerRight={
         <View class="flex-row items-center gap-1">
           {session() && session()!.locked() ? <Icon name="lock" size={18} tone="warning" /> : null}

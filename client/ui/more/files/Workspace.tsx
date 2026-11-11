@@ -1,6 +1,6 @@
 import { effect, Image, Scroll, signal, Text, untracked, Video, View } from "nsh";
 import type { JSX } from "nsh";
-import { NavPage } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import { getBrainWorkspaceFile, getBrainWorkspaceTree, getSessionFileMetadata } from "../../../core/files/requests";
 import { bindSessionFileRequestToGeneration, buildSessionFileBinarySource, type SessionFileIdentity } from "../../../core/files/sessionFilePreview";
 import { sessionFileMediaKindForPath } from "../../../core/files/sessionFileMedia";

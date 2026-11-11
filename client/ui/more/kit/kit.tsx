@@ -1,6 +1,9 @@
 import type { JSX } from "nsh";
 import { Canvas, Scroll, Text, View } from "nsh";
-import { AlertDialog, Button, Input, NavPage, Switch } from "nsh/base";
+import { AlertDialog, Button, Input, Switch } from "nsh/base";
+import { isAvailable as mobile } from "nsh/mobile";
+import type { PageColumn } from "../../../core/web/places";
+import { NavPage } from "../../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
 
@@ -16,12 +19,16 @@ export function Page(props: {
   headerRight?: JSX.Element;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** The desktop column (app/DESIGN.md): 760 by default, 1200 for Resources. */
+  column?: Exclude<PageColumn, "full" | "reading">;
   children?: JSX.Element;
 }) {
+  // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
+  const width = () => (mobile ? 720 : props.column === "wide" ? 1200 : 760);
   return (
-    <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight}>
+    <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
       <Scroll class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
-        <View class="w-full max-w-[720px] self-center">{props.children}</View>
+        <View class="w-full self-center" style={{ maxWidth: width() }}>{props.children}</View>
       </Scroll>
     </NavPage>
   );

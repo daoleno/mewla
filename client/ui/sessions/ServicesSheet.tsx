@@ -1,5 +1,6 @@
 import { cleanup, Clipboard, effect, openUrl, Scroll, signal, Text, untracked, View } from "nsh";
-import { AlertDialog, Button, Sheet } from "nsh/base";
+import { AlertDialog, Button } from "nsh/base";
+import { AppSheet } from "../shell/AppSheet";
 import { listSessionServices, serviceTunnel, type ServiceTunnel } from "../../core/sessions/services";
 import {
   groupSessionServices,
@@ -217,7 +218,7 @@ export function ServicesSheet(props: { onOpenSession: (workerId: string) => void
   const selectedService = () => services().find((service) => keyOf(service) === selected());
 
   return (
-    <Sheet open={servicesOpen()} onOpenChange={({ open }) => servicesOpen.set(open)} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
+    <AppSheet open={servicesOpen()} onOpenChange={({ open }) => servicesOpen.set(open)} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
       <View testID="services-sheet" class="pb-8">
         {selected() && selectedService() ? (
           <ServiceDetail service={() => selectedService()!} onOpenSession={(workerId) => {
@@ -286,6 +287,6 @@ export function ServicesSheet(props: { onOpenSession: (workerId: string) => void
           </View>
         )}
       </View>
-    </Sheet>
+    </AppSheet>
   );
 }

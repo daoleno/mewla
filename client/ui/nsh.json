@@ -16,7 +16,8 @@
       "live.*",
       "files.*",
       "phone.*",
-      "update.*"
+      "update.*",
+      "web.*"
     ],
     "network": {
       "hosts": [

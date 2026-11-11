@@ -1,5 +1,6 @@
 import { effect, lifecycle, signal, Text, untracked, View } from "nsh";
-import { Button, Sheet } from "nsh/base";
+import { Button } from "nsh/base";
+import { AppSheet } from "../shell/AppSheet";
 import { decideEnrollment, decodePendingEnrollment, pendingEnrollments, verificationChoices, type PendingEnrollment } from "../../core/enrollment";
 import { current, onTransport } from "../session";
 
@@ -81,7 +82,7 @@ export function EnrollmentApproval() {
   };
 
   return (
-    <Sheet open={Boolean(request())} onOpenChange={() => {}} popupClass="rounded-t-2xl bg-background px-5 pt-5" backdropClass="bg-black/40">
+    <AppSheet open={Boolean(request())} onOpenChange={() => {}} popupClass="rounded-t-2xl bg-background px-5 pt-5" backdropClass="bg-black/40">
       <View testID="enrollment-approval" class="gap-4 pb-8">
         <Text class="text-xl font-semibold">Approve new device</Text>
         <View class="gap-1">
@@ -111,6 +112,6 @@ export function EnrollmentApproval() {
           <Text class="text-base font-semibold text-destructive">Deny</Text>
         </Button>
       </View>
-    </Sheet>
+    </AppSheet>
   );
 }

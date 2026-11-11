@@ -1,5 +1,6 @@
 import { cleanup, host, signal, Storage, Text, View } from "nsh";
-import { Button, NavPage } from "nsh/base";
+import { Button } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import { browserEnrollmentServer, readBrowserEnrollmentStatus, requestBrowserEnrollment, type BrowserEnrollmentPrompt } from "../../core/enrollment";
 import { addPairedServer } from "../session";
 
