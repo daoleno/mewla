@@ -238,6 +238,52 @@ describe("The Skill inspector", () => {
   });
 });
 
+/** The computer's answer to `skills_inspect` for a copy whose SKILL.md says "Read it." */
+const inspectReply = (copy: ReturnType<typeof skill>, body: Body) => ({
+  reply: "skills_inspect_result",
+  generation: body.generation,
+  detail: {
+    copy_id: copy.id, skill_name: copy.name, description: "Reviews diffs", enabled: true, root_path: copy.root_path, canonical_path: copy.canonical_path,
+    allowed_root: copy.allowed_root, location: copy.location, scope: "global", agents: ["codex"], capability: { can_delete: true },
+    files: [{ path: "SKILL.md", size: 9, mode: "0644", kind: "markdown", media_type: "text/markdown", preview_status: "ready" }],
+    preview: { path: "SKILL.md", kind: "markdown", media_type: "text/plain", status: "ready", size: 9, bytes_returned: 9, content: "Read it." },
+  },
+});
+
+describe("The Skill inspector and Back", () => {
+  // FINAL-VERIFY 6387f88f extensions (observation): Back with the inspector open popped the agent
+  // page, and opening that page again brought the old inspector back.
+  test("Back closes the inspector, not the page; the page opened again shows no inspector", async () => {
+    const review = skill("review");
+    const c = computer({ skills: [review], plugins: [] }, (type, body) => type !== "skills_inspect" ? null : inspectReply(review, body));
+    const opened = c.host(page);
+    const app = await open(HARNESS, { host: { ...opened.host, params: { page, below: { name: "extensions" } } }, platform: "android" });
+    await app.waitFor("id:skill-review");
+    await app.press("id:skill-review");
+    await app.waitFor("id:skill-inspector");
+    await app.back();
+    await app.waitUntil(() => !app.shows("id:skill-inspector"));
+    expect(app.shows("id:agent-page")).toBe(true);
+  });
+
+  test("a page that goes while its inspector is open leaves no inspector behind for the next time", async () => {
+    const review = skill("review");
+    const c = computer({ skills: [review], plugins: [] }, (type, body) => type !== "skills_inspect" ? null : inspectReply(review, body));
+    const opened = c.host(page);
+    const app = await open(HARNESS, { host: { ...opened.host, params: { page, below: { name: "extensions" } } }, platform: "android" });
+    await app.waitFor("id:skill-review");
+    await app.press("id:skill-review");
+    await app.waitFor("id:skill-inspector");
+    // The page goes under its open sheet (on the device, Back reached the stack first).
+    await app.host.send("app.navPop");
+    await app.waitFor("id:agent-tool-codex");
+    await app.press("id:agent-tool-codex");
+    await app.waitFor("id:skill-review");
+    await app.wait(300);
+    expect(app.shows("id:skill-inspector")).toBe(false);
+  });
+});
+
 describe("An agent's own Plugins", () => {
   test("a protected Plugin says why and never sends an uninstall", async () => {
     const managed = plugin("managed", { capability: { can_uninstall: false, reason: "Codex manages this Plugin." } });

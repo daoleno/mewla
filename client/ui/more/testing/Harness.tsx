@@ -25,7 +25,7 @@ fake.request = (async (type: string, body: Record<string, unknown>, options: { r
   fake.asked.push({ type, body });
   if (fake.state !== "connected") throw new Error("Daemon is not connected.");
   const answer = (await host.call("app.daemon", { type, body })) as Record<string, unknown> | null;
-  if (answer && typeof answer.error === "string") throw new Error(answer.error);
+  if (answer && typeof answer.error === "string") throw Object.assign(new Error(answer.error), typeof answer.code === "string" ? { code: answer.code } : {});
   return { type: options.reply, ...(answer ?? {}) };
 }) as FakeDaemon["request"];
 // A request sent as a frame (with a request_id) is answered the same way: the answer's
@@ -56,6 +56,13 @@ host.on("app.daemonState", (state) => {
 });
 host.on("app.sessionProblem", (why) => problem.set(String(why ?? "")));
 host.on("app.daemonPush", (frame) => fake.push(frame as Frame));
+// `app.host.send("app.serverRenamed", name)`: the stored computer takes the name it reports, as
+// Settings' check does (reloadServers): the session's record changes, the connection stays.
+host.on("app.serverRenamed", (name) => {
+  const renamed = { ...current()!, name: String(name) };
+  servers.set(servers().map((server) => (server.id === renamed.id ? renamed : server)));
+  current.set(renamed);
+});
 host.on("app.daemonSwitch", (server) => {
   const next = new FakeDaemon({}, testServer(server as object), "connected");
   next.request = fake.request;
@@ -65,6 +72,8 @@ host.on("app.daemonSwitch", (server) => {
 
 // `host.params.below`: a page under it, so a test can go back from the page.
 const nav = createNavStack<MorePage>([...(params.below ? [params.below] : []), params.page ?? { name: "stats" }]);
+// `app.host.send("app.navPop")`: the page goes, whatever is open over it (as Android's Back did under a sheet).
+host.on("app.navPop", () => nav.pop());
 
 mount(() => (
   <View class="flex-1 bg-background">

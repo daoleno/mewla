@@ -72,6 +72,8 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
  */
 export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem; expansion: Expansion; handlers: MessageHandlers }) {
   const it = props.item as () => TimelineItem;
+  // The reply's width, which its pictures take.
+  const textWidth = signal(0);
   const as = <T extends TimelineItem["type"]>(type: T) => () => it() as Extract<TimelineItem, { type: T }>;
   return (
     <View class="py-1">
@@ -83,9 +85,11 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
         <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>
       ) : it().type === "message" ? (
         <View class="px-4">
-          <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-base"
-            onLinkPress={(event) => props.handlers.onLink?.(event.url)}
-            renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} />} />
+          <View onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
+            <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-base"
+              onLinkPress={(event) => props.handlers.onLink?.(event.url)}
+              renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} width={textWidth} />} />
+          </View>
           {!(it() as MessageTimelineItem).streaming && props.handlers.isFinalReply?.(it().id) ? (
             <Button testID="copy-reply" onPress={() => void Clipboard.writeText((it() as MessageTimelineItem).body.replace(/\s+$/u, "")).catch(() => {})}
               class="mt-1 self-start rounded-lg p-1.5 active:bg-accent">
@@ -175,7 +179,7 @@ export function ChatTimeline(props: {
   return (
     <View class="flex-1">
       <SelectTextSheet />
-      <List testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
+      <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
           list = node;
           mounted.set(true);
         }}

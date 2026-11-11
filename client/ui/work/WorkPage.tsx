@@ -1,4 +1,4 @@
-import { cleanup, List, Scroll, signal, Text, View } from "nsh";
+import { cleanup, computed, List, Scroll, signal, Text, View } from "nsh";
 import { AlertDialog, Button, Input } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
@@ -180,7 +180,7 @@ export function WorkPage(props: { nav: NavStackState<any>; links: WorkLinks }) {
   return (
     <NavPage title="Work" testID="work-page">
       <View class="flex-1 bg-background">
-        <List testID="work-list" class="flex-1" each={rows()} keyExtractor={(row) => (row.kind === "group" ? `g:${row.title}` : `w:${row.slip.workId}`)}
+        <List keyboardShouldPersistTaps="handled" testID="work-list" class="flex-1" each={rows()} keyExtractor={(row) => (row.kind === "group" ? `g:${row.title}` : `w:${row.slip.workId}`)}
           header={() => (
             <View>
               <Notice />
@@ -196,13 +196,21 @@ export function WorkPage(props: { nav: NavStackState<any>; links: WorkLinks }) {
               {connection() !== "connected" ? <Text class="text-center text-base text-muted-foreground">It shows when your computer is back.</Text> : null}
             </View>
           )}>
-          {(row) => (
-            <View>
-              {row().kind === "group"
-                ? <Text class="bg-background px-4 pb-1.5 pt-4 text-sm font-semibold text-muted-foreground">{(row() as { title: string }).title}</Text>
-                : <SlipRow slip={() => (row() as { slip: BrainWorkSlip }).slip} onPress={() => open((row() as { slip: BrainWorkSlip }).slip)} context={context} />}
-            </View>
-          )}
+          {(row) => {
+            // Every Brain update makes new rows: the cell is rebuilt only when it turns from a heading into a slip or
+            // back, so a tap is never lost to an update (as the Calendar agenda).
+            const group = computed(() => row().kind === "group");
+            // The slip row may read once more after the cell took a heading, before it goes: it keeps its last slip.
+            const slip = computed<BrainWorkSlip>((last) => (row().kind === "group" ? last! : (row() as { slip: BrainWorkSlip }).slip));
+            const title = computed<string>((last) => (row().kind === "group" ? (row() as { title: string }).title : last ?? ""));
+            return (
+              <View>
+                {group()
+                  ? <Text class="bg-background px-4 pb-1.5 pt-4 text-sm font-semibold text-muted-foreground">{title()}</Text>
+                  : <SlipRow slip={slip} onPress={() => open(slip())} context={context} />}
+              </View>
+            );
+          }}
         </List>
       </View>
     </NavPage>
@@ -240,7 +248,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
 
   return (
     <NavPage title="Work" testID="work-detail">
-      <Scroll class="flex-1 bg-background">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         {!slip() ? (
           <View class="items-center gap-2 px-6 py-16">
             <Text class="text-lg font-semibold">This Work is no longer open</Text>

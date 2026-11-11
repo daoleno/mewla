@@ -49,7 +49,7 @@ export function SlashMenu(props: {
     <View>
       {state().open ? (
         <View testID="slash-menu" class="mb-2 overflow-hidden rounded-2xl border border-border bg-card">
-          <Scroll style={{ maxHeight: 360 }}>
+          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 360 }}>
             <View class="gap-2 p-2">
               {state().showActions ? (
                 <Button testID="attach-file" accessibilityLabel="Upload file" disabled={!props.onAttach || !props.connected() || Boolean(props.uploading?.())} onPress={() => props.onAttach?.()}

@@ -16,6 +16,7 @@ export const PROVIDER_ERROR_CODES = {
   timeout: "providers_timeout",
   offline: "providers_offline",
   invalidReply: "providers_invalid_reply",
+  testFailed: "provider_connection_test_failed",
 } as const;
 
 export type ProviderErrorKind =
@@ -28,6 +29,7 @@ export type ProviderErrorKind =
   | "invalid"
   | "offline"
   | "timeout"
+  | "test_failed"
   | "unknown";
 
 export class ProviderError extends Error {
@@ -79,6 +81,8 @@ export function classifyProviderErrorCode(
       return { kind: "offline", refreshable: true };
     case PROVIDER_ERROR_CODES.timeout:
       return { kind: "timeout", refreshable: true };
+    case PROVIDER_ERROR_CODES.testFailed:
+      return { kind: "test_failed", refreshable: false };
     default:
       return { kind: "unknown", refreshable: true };
   }
@@ -104,6 +108,8 @@ export function defaultProviderErrorMessage(kind: ProviderErrorKind): string {
       return "The current server is not connected.";
     case "timeout":
       return "Timed out waiting for Providers.";
+    case "test_failed":
+      return "The connection test failed.";
     default:
       return "The Provider request failed. Refresh and try again.";
   }
@@ -121,16 +127,20 @@ function sanitizeProviderMessage(message: string): string {
 
 export function providerErrorFromPayload(
   payload: { code?: string; message?: string },
-  options?: { credentialWrite?: boolean },
+  options?: { credentialWrite?: boolean; secret?: string },
 ): ProviderError {
   const code = (payload.code ?? "").trim() || "unknown";
   const classification = classifyProviderErrorCode(code);
+  const said = sanitizeProviderMessage((payload.message ?? "").trim());
   // Credential writes never surface daemon-provided text: a faulty provider or
-  // credential store must not be able to reflect the submitted key.
-  const message = options?.credentialWrite
-    ? defaultProviderErrorMessage(classification.kind)
-    : sanitizeProviderMessage((payload.message ?? "").trim()) ||
-      defaultProviderErrorMessage(classification.kind);
+  // credential store must not be able to reflect the submitted key. A failed
+  // connection test is the exception: its reason ("connection refused") is the
+  // point, so it is shown with the key taken out (the daemon takes it out too).
+  const message = !options?.credentialWrite
+    ? said || defaultProviderErrorMessage(classification.kind)
+    : classification.kind === "test_failed"
+      ? withoutSecret(said, options.secret) || defaultProviderErrorMessage(classification.kind)
+      : defaultProviderErrorMessage(classification.kind);
   return new ProviderError(
     code,
     message,
@@ -225,6 +235,11 @@ export function presentProviderError(error: unknown): {
     refreshable: true,
     kind: "unknown",
   };
+}
+
+function withoutSecret(message: string, secret: string | undefined): string {
+  const key = secret?.trim() ?? "";
+  return scrubPossibleSecret(key ? message.split(key).join("[redacted]") : message);
 }
 
 /** Removes common bearer/API-key shapes before any error text reaches UI. */

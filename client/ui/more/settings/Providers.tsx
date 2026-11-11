@@ -259,6 +259,12 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
   const apiKey = signal("");
   const failure = signal<{ title: string; detail: string } | null>(null);
   const testLine = signal("");
+  // What a failed Save or a test said is about the fields as they were: a change takes it away.
+  const edit = (field: { set(value: string): void }, value: string) => {
+    field.set(value);
+    failure.set(null);
+    testLine.set("");
+  };
   const requiresBaseUrl = () => providerEditorRequiresBaseUrl(editor());
   const nameIssue = () => providerNameIssue({ name: name(), snapshot: snapshot(), exceptConnectionId: existing()?.id });
   const canSave = () =>
@@ -346,9 +352,9 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
     <Page title={existing() ? "Edit Provider" : "Add Provider"} testID="provider-editor">
       {props.retry ? <Notice testID="provider-retry" tone="failed" title="The API key was not saved. Check it and try again." /> : null}
       <Section footer={nameIssue() ?? undefined}>
-        <Field testID="provider-name" label="Provider name" value={name()} placeholder="e.g. Work gateway" onChange={(v) => name.set(v)} />
-        {requiresBaseUrl() ? <Field testID="provider-url" label="Base URL" mono keyboardType="url" value={baseUrl()} placeholder="https://api.example.com/v1" onChange={(v) => baseUrl.set(v)} /> : null}
-        <Field testID="provider-key" label="API Key" masked value={apiKey()} placeholder="Paste API key" onChange={(v) => apiKey.set(v)} />
+        <Field testID="provider-name" label="Provider name" value={name()} placeholder="e.g. Work gateway" onChange={(v) => edit(name, v)} />
+        {requiresBaseUrl() ? <Field testID="provider-url" label="Base URL" mono keyboardType="url" value={baseUrl()} placeholder="https://api.example.com/v1" onChange={(v) => edit(baseUrl, v)} /> : null}
+        <Field testID="provider-key" label="API Key" masked value={apiKey()} placeholder="Paste API key" onChange={(v) => edit(apiKey, v)} />
       </Section>
       {existing()?.credential_hint ? (
         <Text testID="provider-key-hint" class="mt-1.5 px-4 text-xs text-muted-foreground line-clamp-1">{`Stored key · ${existing()!.credential_hint} — leave empty to keep it`}</Text>

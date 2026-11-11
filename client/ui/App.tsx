@@ -55,9 +55,12 @@ host.on("links.open", (payload) => {
 });
 
 mount(() => (
-  <View class="flex-1 bg-background">
-    {!ready() ? null : current() ? <Shell /> : null}
-    {/* First run, and on a phone the connected step after any pairing, over the app. */}
+  // The ink every text takes unless it says its own (NSH draws a bare Text black, unreadable in Dark).
+  <View class="flex-1 bg-background text-foreground">
+    {/* The app is not under the connected step: on Android the step vanished behind the app while it still
+        held (after the notification prompt, after a Settings pairing), most likely the app's native views. */}
+    {!ready() ? null : current() && !justPaired() ? <Shell /> : null}
+    {/* First run, and on a phone the connected step after any pairing. */}
     {ready() && (!current() || justPaired()) ? <View class="absolute inset-0 bg-background"><FirstRun /></View> : null}
     <CrashReportSheet />
   </View>

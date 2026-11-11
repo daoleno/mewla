@@ -7,6 +7,7 @@ import type {
 import {
   GIT_DIFF_PATCH_LIMIT_BYTES,
   canExpandGitDiffFile,
+  gitDiffContentScope,
   gitDiffExpansionSides,
   gitDiffPatchText,
   gitDiffSectionsForGroup,
@@ -60,10 +61,20 @@ describe("Git diff groups over daemon sections", () => {
 });
 
 describe("hunk expansion eligibility", () => {
-  test("only a file with exactly one of staged or unstaged edits can expand", () => {
+  test("a file staged and changed again expands too, each group through the index (FINAL-VERIFY gitfiles D4)", () => {
     expect(canExpandGitDiffFile(file())).toBe(true);
     expect(canExpandGitDiffFile(file({ staged: true, unstaged: false }))).toBe(true);
-    expect(canExpandGitDiffFile(file({ staged: true, unstaged: true }))).toBe(false);
+    expect(canExpandGitDiffFile(file({ staged: true, unstaged: true }))).toBe(true);
+    expect(gitDiffContentScope(file(), "changes")).toBeNull();
+    expect(gitDiffContentScope(file({ staged: true, unstaged: true }), "staged")).toBe("staged");
+    expect(gitDiffContentScope(file({ staged: true, unstaged: true }), "changes")).toBe("unstaged");
+  });
+
+  test("sides are taken only for the comparison asked for: an older daemon's HEAD → working tree is not a group's", () => {
+    const sides = { repo_root: "/r", path: "p", base: side({ content: "old\n" }), current: side({ content: "new\n" }) };
+    expect(gitDiffExpansionSides(sides, file(), "unstaged")).toBeNull();
+    expect(gitDiffExpansionSides({ ...sides, scope: "unstaged" }, file(), "unstaged")).toMatchObject({ oldContents: "old\n", newContents: "new\n" });
+    expect(gitDiffExpansionSides({ ...sides, scope: "staged" }, file(), "unstaged")).toBeNull();
   });
 
   test("untracked, binary, added and deleted files never expand", () => {

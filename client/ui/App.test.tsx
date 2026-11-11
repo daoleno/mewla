@@ -1,4 +1,4 @@
-import { describe, expect, open, test } from "nsh/test";
+import { describe, expect, open, test, type App } from "nsh/test";
 
 const secure = new Map<string, string>();
 const host = {
@@ -87,4 +87,33 @@ describe("the in-place upgrade from the Expo app", () => {
     await again.waitFor("id:onboarding");
     expect(offered).toBe(1);
   });
+});
+
+describe("Dark", () => {
+  // NSH draws a Text with no color of its own black: in Dark the rows, headers and the composer's
+  // words were black on the dark page (FINAL-VERIFY 6387f88f settings [94]).
+  function blackTexts(app: App): string[] {
+    const texts = app.texts().filter((text, i, all) => text.trim() !== "" && all.indexOf(text) === i);
+    return texts.filter((text) => {
+      try {
+        return app.spanStyle(`text:${text}`).color === "#000000ff";
+      } catch {
+        return false; // a text that reads in more than one place, or inside a longer one
+      }
+    });
+  }
+
+  test("no text is drawn black on Brain, More or Settings", async () => {
+    const app = await open("./App.tsx", { host, storage: { ...paired, "mewla:theme_preference": "classic-dark" }, platform: "android", colorScheme: "light" });
+    await app.waitFor("text:Your computer is offline", { timeout: 15_000 });
+    expect(blackTexts(app)).toEqual([]);
+    await app.host.send("links.open", { url: "mewla://more" });
+    await app.waitFor("id:more-Settings");
+    expect(blackTexts(app)).toEqual([]);
+    await app.press("id:more-Settings");
+    await app.waitFor("id:pair-another");
+    await app.waitFor("text:Dark");
+    expect(blackTexts(app)).toEqual([]);
+    expect(app.spanStyle("text:Dark").color).toBe("#f4f0eaff"); // the theme's dark ink
+  }, 25_000);
 });

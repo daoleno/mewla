@@ -51,12 +51,11 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
   try {
     await addPairedServer(await pairWith(payload, (message) => pairingStatus.set(message)));
     const paired = current();
-    if (paired) {
-      await setServerAutoConnect(paired.id, true).catch(() => {});
-      // A browser goes straight to the app; a phone sees Brain come home first.
-      if (device() === "phone") justPaired.set(paired);
-    }
+    if (paired) await setServerAutoConnect(paired.id, true).catch(() => {});
+    // Settings' Pair page closes on this, while the app is still there under it.
     pairings.set(pairings() + 1);
+    // A browser goes straight to the app; a phone sees Brain come home first (the app goes until then).
+    if (paired && device() === "phone") justPaired.set(paired);
     latch.release();
   } catch (error) {
     pairingIssue.set(pairingProblem(error));

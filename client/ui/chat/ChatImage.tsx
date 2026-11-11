@@ -5,7 +5,7 @@ import { Image, signal, Text, View } from "nsh";
  * the computer, read through the Session (`load`, `codex_asset`). One that
  * can't load shows its alt text.
  */
-export function ChatImage(props: { src: string; alt?: string; load?: (path: string) => Promise<string | null> }) {
+export function ChatImage(props: { src: string; alt?: string; load?: (path: string) => Promise<string | null>; width?: () => number }) {
   const direct = /^(https?:|data:image\/)/i.test(props.src);
   const src = signal<string | null>(direct ? props.src : null);
   const failed = signal(false);
@@ -15,7 +15,9 @@ export function ChatImage(props: { src: string; alt?: string; load?: (path: stri
       .catch(() => failed.set(true));
   } else if (!direct) failed.set(true);
   return (
-    <View testID="chat-image" class="my-1 overflow-hidden rounded-xl">
+    // A text view sizes what renderImage gives it to its content, so the picture's 100% alone came out
+    // 0 wide (as K9's SKILL.md pictures): it takes the text's width, measured by the page.
+    <View testID="chat-image" class="my-1 overflow-hidden rounded-xl" style={{ width: props.width?.() || undefined }}>
       {src() && !failed() ? (
         <Image src={src()!} accessibilityLabel={props.alt || "Image"} onError={() => failed.set(true)} style={{ width: "100%", aspectRatio: 4 / 3, objectFit: "contain" }} />
       ) : failed() ? (

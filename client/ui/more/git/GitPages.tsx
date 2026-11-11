@@ -15,7 +15,7 @@ import {
   type GitReviewGroup,
   type GitReviewRow,
 } from "../../../core/git/gitReviewModel";
-import { formatGitAge } from "../../../core/git/gitReviewTime";
+import { formatGitAge, spokenGitAge } from "../../../core/git/gitReviewTime";
 import { EmptyState, Field, Notice, Page, Row, Section, Spinner, Tag } from "../kit/kit";
 import { Icon } from "../kit/Icon";
 import { Segmented } from "../kit/Segmented";
@@ -174,7 +174,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
       <Current review={review} class="flex-1 bg-background">{() => (
         <View class="flex-1 flex-row bg-background">
           <View testID="git-list" class={wide() ? "w-[380px] border-r border-border" : "flex-1"}>
-            <Scroll class="flex-1" contentClass="px-4 pb-6 pt-2" refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}>
+            <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6 pt-2" refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}>
               <View class="w-full max-w-[720px] self-center">
                 <FlashLine />
                 <View class="mt-3">
@@ -440,7 +440,7 @@ function CommitRow(props: { review: GitReview; nav: PageNav; commit: GitCommitSu
       testID={`git-commit-${c.short}`}
       title={c.subject || "(no message)"}
       subtitle={[c.short, c.author, formatGitAge(c.date)].join(" · ")}
-      accessibilityLabel={`${c.subject || "(no message)"}, ${c.author}, ${formatGitAge(c.date)} ago`}
+      accessibilityLabel={`${c.subject || "(no message)"}, ${c.author}, ${spokenGitAge(c.date)}`}
       trailing={refs ? <Tag label={refs} /> : undefined}
       chevron
       onPress={() => props.nav.push({ name: "git-commit", ...target(props.review), sha: c.sha })}

@@ -1,4 +1,5 @@
-import { computed, effect, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { cleanup, computed, effect, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { BackHandler } from "nsh/mobile";
 import type { JSX } from "nsh";
 import { Button, Input } from "nsh/base";
 import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
@@ -77,6 +78,17 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
     shownComputer = id;
     followComputer(id);
     if (current && daemonState() === "connected") untracked(refreshAll);
+  });
+  // The inspector's copy is kept beside the page: when the page goes with it open, the next
+  // agent page would open on it again.
+  cleanup(closeInspector);
+  // Back closes an open inspector or Plugin before the page goes (the device's Back reached the
+  // stack under the sheet).
+  onAndroidBack(() => {
+    if (wide() || !untracked(panel)) return false;
+    if (untracked(panel).startsWith("skill:")) closeInspector();
+    else openPluginKey.set(null);
+    return true;
   });
   // A new inventory: the copies a picker offered may be gone.
   let pickerInventory: string | undefined;
@@ -196,8 +208,8 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
       refreshing={loadingNow() && Boolean(skillsRequestData(skillsState()))}
       onRefresh={refresh}
       aside={
-        <View testID="details-panel" class="w-[400px] border-l border-border bg-card" style={{ display: wide() && panel() ? "flex" : "none" }}>
-          {((key) => untracked(() => (!key ? null : <Scroll class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll>)))(wide() ? panel() : "")}
+        <View testID="details-panel" class="w-[400px] flex-col border-l border-border bg-card" style={{ display: wide() && panel() ? "flex" : "none" }}>
+          {((key) => untracked(() => (!key ? null : <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll>)))(wide() ? panel() : "")}
         </View>
       }
     >
@@ -273,10 +285,10 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
 
       <Sheet open={!wide() && panel().startsWith("skill:")} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
         {/* The sheet takes its content once; the view inside follows the copy shown. */}
-        <View class="shrink">{((key) => untracked(() => (key.startsWith("skill:") ? <Scroll class="shrink">{inspector()}</Scroll> : null)))(wide() ? "" : panel())}</View>
+        <View class="shrink">{((key) => untracked(() => (key.startsWith("skill:") ? <Scroll keyboardShouldPersistTaps="handled" class="shrink">{inspector()}</Scroll> : null)))(wide() ? "" : panel())}</View>
       </Sheet>
       <Sheet open={!wide() && panel().startsWith("plugin:")} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
-        <View class="shrink">{((key) => untracked(() => (key.startsWith("plugin:") ? <Scroll class="shrink">{pluginDetails()}</Scroll> : null)))(wide() ? "" : panel())}</View>
+        <View class="shrink">{((key) => untracked(() => (key.startsWith("plugin:") ? <Scroll keyboardShouldPersistTaps="handled" class="shrink">{pluginDetails()}</Scroll> : null)))(wide() ? "" : panel())}</View>
       </Sheet>
     </Page>
   );
@@ -544,7 +556,7 @@ function Choice<K extends string>(props: { title: string; options: readonly K[];
 
 function AgentChoice(props: { agents: readonly ManagedSkillAgent[]; value: readonly ManagedSkillAgent[]; onChange: (agents: ManagedSkillAgent[]) => void; title: string }) {
   return (
-    <View class="mt-4 gap-2" style={{ display: props.agents.length < 2 ? "none" : "flex" }}>
+    <View class="mt-4 flex-col gap-2" style={{ display: props.agents.length < 2 ? "none" : "flex" }}>
       <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
       <View class="flex-row flex-wrap gap-2">
         {props.agents.map((agent) => {
@@ -596,4 +608,10 @@ function PluginFilterSheet(props: { agents: ManagedSkillAgent[]; filters: Plugin
       <SheetButtons onReset={() => props.onChange(NO_PLUGIN_FILTERS)} onDone={props.onClose} />
     </View>
   );
+}
+
+/** Android's Back while the page lives; a browser has its own back (NSH's web runtime has no `BackHandler.on`). */
+function onAndroidBack(listener: () => boolean): void {
+  if (platform.os === "web") return;
+  cleanup(BackHandler.on("press", listener));
 }

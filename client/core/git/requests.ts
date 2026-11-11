@@ -61,8 +61,9 @@ export function getGitPatch(daemon: Daemon, target: GitTarget, path: string): Pr
   return read(daemon, "git_diff_patch", body(target, { path }), "patch", 30_000, "git diff patch");
 }
 
-export function getGitFileContent(daemon: Daemon, target: GitTarget, path: string): Promise<GitDiffFileContentPayload> {
-  return read(daemon, "git_diff_file_content", body(target, { path }), "content", 10_000, "git diff file content");
+/** A file's two whole sides; `scope` picks a group's pair for a file both staged and changed again. */
+export function getGitFileContent(daemon: Daemon, target: GitTarget, path: string, scope: "staged" | "unstaged" | null = null): Promise<GitDiffFileContentPayload> {
+  return read(daemon, "git_diff_file_content", body(target, scope ? { path, scope } : { path }), "content", 10_000, "git diff file content");
 }
 
 export function getGitRepoPaths(daemon: Daemon, target: GitTarget): Promise<GitRepoPathsPayload> {

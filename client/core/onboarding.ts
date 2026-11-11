@@ -48,7 +48,16 @@ export function computerName(name: string | null | undefined, fallback = "your c
 export function connectedCopy(connection: string, name: string, problem: string): { title: string; lede: string } {
   if (connection === "connected") return { title: "Brain is home.", lede: `Connected to ${name}.` };
   if (connection === "connecting" || connection === "idle") return { title: "Connecting…", lede: name };
-  return { title: "Can't reach your computer", lede: problem || `Check that mewla is running on ${name}.` };
+  return { title: "Can't reach your computer", lede: personProblem(problem) || `Check that mewla is running on ${name}.` };
+}
+
+/**
+ * The transport's own words for an end ("error", "silent", "closed (1006)", "direct-available")
+ * are for logs; only a reason the computer gave when it closed is shown to the person.
+ */
+function personProblem(problem: string): string {
+  const text = problem.trim();
+  return /^(error|silent|direct-available|closed \(\d+\))$/.test(text) ? "" : text;
 }
 
 // ---- Layout -------------------------------------------------------------------------------

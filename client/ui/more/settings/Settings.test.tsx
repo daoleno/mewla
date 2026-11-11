@@ -138,6 +138,33 @@ describe("Model Providers", () => {
   });
 });
 
+describe("Provider editor", () => {
+  // FINAL-VERIFY 6387f88f m4 settings [182].
+  test("Test connection says why it failed, and a changed field takes an old notice away", async () => {
+    const c = computer({ name: "settings-provider-editor", client: "codex" }, (type) => {
+      if (type === "list_providers") return snapshot();
+      if (type === "test_provider_connection") return { error: 'Get "http://127.0.0.1:9/models": dial tcp 127.0.0.1:9: connect: connection refused', code: "provider_connection_test_failed" };
+      return null;
+    });
+    const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, params: { page: { name: "settings-providers" } } } });
+    await app.waitFor("text:Work gateway");
+    await app.press("id:provider-add");
+    await app.waitFor("id:provider-name");
+    await app.type("id:provider-name", "Fake verify");
+    await app.type("id:provider-url", "ftp://127.0.0.1:9/v1");
+    await app.type("id:provider-key", "sk-fake-1");
+    await app.press("id:provider-save");
+    await app.waitFor("text:Base URL must use HTTP or HTTPS.");
+    await app.clear?.("id:provider-url");
+    await app.type("id:provider-url", "http://127.0.0.1:9/v1");
+    expect(app.shows("text:Base URL must use HTTP or HTTPS.")).toBe(false);
+    await app.type("id:provider-key", "sk-fake-1"); // a Save takes the key out of its field
+    await app.press("id:provider-test");
+    await app.waitUntil(() => app.texts().some((t) => t.endsWith("connect: connection refused")));
+    expect(app.texts().join(" ")).not.toContain("Providers are not available");
+  });
+});
+
 describe("Telegram", () => {
   test("a token is verified once and never kept on the phone", async () => {
     let status: Record<string, unknown> = { state: "disabled", enabled: false, binding_pending: false };
@@ -216,6 +243,8 @@ describe("iPhone use", () => {
     expect(app.texts()).toContain("Agents on Studio can use your iPhone.");
     await app.press("label:Done: tell the agent you finished");
     await app.waitUntil(() => sent.length === 1);
+    // Done holds both buttons until the computer answers it.
+    await app.waitUntil(() => app.enabled("label:Stop Codex"));
     await app.press("label:Stop Codex");
     await app.waitUntil(() => sent.length === 2);
     expect(sent).toEqual([{ handoff_done: true }, { stop_agent: true }]);

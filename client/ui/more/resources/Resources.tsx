@@ -288,9 +288,9 @@ function Tile(props: { title: string; value: string; testID: string; children?: 
   return (
     <Section testID={props.testID}>
       <View class="gap-2 px-4 py-3">
-        <View class="flex-row items-baseline justify-between">
-          <Text class="text-sm font-medium text-muted-foreground">{props.title}</Text>
-          <Text class="text-2xl font-bold" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+        <View class="flex-row flex-wrap items-baseline justify-between gap-x-2">
+          <Text class="shrink text-sm font-medium text-muted-foreground">{props.title}</Text>
+          <Text class="ml-auto shrink-0 text-2xl font-bold" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
         </View>
         {props.children}
         {props.caption ? <Text class="text-xs text-muted-foreground">{props.caption}</Text> : null}
@@ -301,11 +301,12 @@ function Tile(props: { title: string; value: string; testID: string; children?: 
   );
 }
 
+/** A label and its value on one line, or the value on its own line at the right when a narrow tile can't hold both. */
 function Fact(props: { label: string; value: string }) {
   return (
-    <View class="flex-row justify-between gap-3">
-      <Text class="text-sm text-muted-foreground">{props.label}</Text>
-      <Text class="shrink font-mono text-sm" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+    <View class="flex-row flex-wrap justify-between gap-x-3">
+      <Text class="shrink text-sm text-muted-foreground">{props.label}</Text>
+      <Text class="ml-auto shrink-0 text-right font-mono text-sm" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
     </View>
   );
 }
