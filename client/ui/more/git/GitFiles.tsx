@@ -1,4 +1,4 @@
-import { signal, Text, View } from "nsh";
+import { List, signal, Text, View } from "nsh";
 import { AlertDialog, DiffView, Tree, type TreeItem } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../../shell/NavPage";
@@ -43,6 +43,14 @@ export function repoTree(paths: readonly string[]): TreeItem[] {
 /** Every folder id of a tree, for a search that shows what it found unfolded. */
 export function repoTreeFolders(items: readonly TreeItem[]): string[] {
   return items.flatMap((item) => (item.children?.length ? [item.id, ...repoTreeFolders(item.children)] : []));
+}
+
+/** A search's rows as the tree shows them with every folder open: each folder, then what it holds. */
+export function repoTreeRows(items: readonly TreeItem[], depth = 0): { id: string; label: string; depth: number; folder: boolean }[] {
+  return items.flatMap((item) => [
+    { id: item.id, label: item.label, depth, folder: Boolean(item.children) },
+    ...(item.children ? repoTreeRows(item.children, depth + 1) : []),
+  ]);
 }
 
 /** The changed files of the status by path, and the folders that hold one, for the tree's marks. */
@@ -101,6 +109,26 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
     if (query().trim()) return;
     expanded.set(expanded().includes(id) ? expanded().filter((open) => open !== id) : [...expanded(), id]);
   };
+  // A folder or a file, in the tree or in a phone's search results.
+  const row = (entry: { id: string; label: string; depth: number; folder: boolean }) => {
+    const changed = entry.folder ? null : changes().files.get(entry.id) ?? null;
+    const holds = entry.folder && changes().folders.has(entry.id);
+    return (
+      <View
+        testID={`git-file-${entry.id}`}
+        onPress={mobile ? () => tapped(entry.id, entry.folder) : undefined}
+        onLongPress={() => void entryMenu(review, props.nav, entry.id)}
+        onContextMenu={() => void entryMenu(review, props.nav, entry.id)}
+        accessibilityLabel={`${entry.label}${changed ? `, ${gitDiffStatusWord(gitDiffTone(changed))}` : holds ? ", has changes" : ""}`}
+        class="flex-row items-center gap-2 py-2 pr-4"
+        style={{ paddingLeft: 16 + entry.depth * 16 }}
+      >
+        <Icon name={entry.folder ? (shownExpanded().includes(entry.id) ? "folder-open" : "folder") : "document-text"} size={16} tone={entry.folder ? "soft" : "faint"} />
+        <Text class={`flex-1 font-mono text-sm line-clamp-1 ${changed || holds ? "font-semibold" : ""}`}>{entry.label}</Text>
+        {changed ? <StatusChar file={changed} /> : holds ? <View testID={`git-file-dot-${entry.id}`} class="size-1.5 rounded-full bg-foreground" /> : null}
+      </View>
+    );
+  };
   return (
     <NavPage
       title={review.status()?.repo_name || "Files"}
@@ -120,7 +148,15 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
                   {state.value.truncated ? <View class="px-4"><Notice tone="warning" title="Showing part of this repository" /></View> : null}
                   <Field testID="git-files-query" accessibilityLabel="Search files" placeholder="Search files" value={query()} onChange={(value) => query.set(value)} />
                   {query().trim() && !items().length ? <View class="px-4"><EmptyState title="No matching files" /></View> : null}
-                  <Tree
+                  {/* A phone's search: NSH's Tree spends a tap with the keyboard up on hiding it (no
+                      keyboardShouldPersistTaps), so what was found is a list that keeps the tap (R4#6). */}
+                  {mobile && query().trim() ? (
+                    <List keyboardShouldPersistTaps="handled" testID="git-files-results" class="flex-1" contentClass="py-2"
+                      each={repoTreeRows(items())} keyExtractor={(entry) => entry.id}>
+                      {/* Cells are recycled: the row is read in the JSX, so a cell rebuilds for the entry it holds now. */}
+                      {(entry) => <View>{row(entry())}</View>}
+                    </List>
+                  ) : <Tree
                     testID="git-files-tree"
                     class="flex-1"
                     listClass="py-2"
@@ -135,26 +171,8 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
                       if (!selected.startsWith(DIR)) openFile(selected);
                     }}
                     itemClass="active:bg-accent"
-                    renderItem={(entry) => {
-                      const changed = entry.folder ? null : changes().files.get(entry.id) ?? null;
-                      const holds = entry.folder && changes().folders.has(entry.id);
-                      return (
-                        <View
-                          testID={`git-file-${entry.id}`}
-                          onPress={mobile ? () => tapped(entry.id, entry.folder) : undefined}
-                          onLongPress={() => void entryMenu(review, props.nav, entry.id)}
-                          onContextMenu={() => void entryMenu(review, props.nav, entry.id)}
-                          accessibilityLabel={`${entry.label}${changed ? `, ${gitDiffStatusWord(gitDiffTone(changed))}` : holds ? ", has changes" : ""}`}
-                          class="flex-row items-center gap-2 py-2 pr-4"
-                          style={{ paddingLeft: 16 + entry.depth * 16 }}
-                        >
-                          <Icon name={entry.folder ? (shownExpanded().includes(entry.id) ? "folder-open" : "folder") : "document-text"} size={16} tone={entry.folder ? "soft" : "faint"} />
-                          <Text class={`flex-1 font-mono text-sm line-clamp-1 ${changed || holds ? "font-semibold" : ""}`}>{entry.label}</Text>
-                          {changed ? <StatusChar file={changed} /> : holds ? <View testID={`git-file-dot-${entry.id}`} class="size-1.5 rounded-full bg-foreground" /> : null}
-                        </View>
-                      );
-                    }}
-                  />
+                    renderItem={(entry) => row(entry)}
+                  />}
                 </View>
               );
             })()}
