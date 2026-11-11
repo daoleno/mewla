@@ -236,6 +236,8 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
         const copy = disconnectCopy(a);
         return (
           <View>
+            {/* An account that is off reads quieter; its switch still turns it on. */}
+            <View style={{ opacity: a.enabled ? 1 : 0.6 }}>
             <SwitchRow
               testID={`enabled-${a.id}`}
               accessibilityLabel={`${props.plugin.name} ${a.name} on`}
@@ -246,6 +248,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
               disabled={busy() && running() !== `enabled:${a.id}`}
               onChange={(on) => flow().setEnabled(a, on)}
             />
+            </View>
             {a.integration === "aws" && a.profile ? (renaming() ? <ProfileName account={a} onDone={() => renaming.set(false)} /> : <Row icon="edit" title="Rename profile" onPress={() => renaming.set(true)} />) : null}
             {a.profile_sign_in_by ? <Row icon="time" title="Sign in again by" subtitle={`${formatFullDateTime(a.profile_sign_in_by)} · ${a.profile_sign_in_limit === "maximum" ? "At latest · AWS allows up to 12h; your session may end sooner." : "SSO session"}`} /> : null}
             {a.profile ? <Row icon="person-circle" title="Sign in again" subtitle={`Use ${props.plugin.name} remote sign-in for this ${a.integration === "aws" ? "profile" : "account"}.`} trailing={connectingService() === props.plugin.id ? <Spinner size={16} /> : <SmallButton label="Sign in again" disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />} /> : null}

@@ -186,9 +186,18 @@ function untrackedRender(view: CardView): JSX.Element | null {
   return untracked(view.render);
 }
 
+let lastAnnounced = "";
+
 /** The sign-in's card. It is made again for each step, and each step is heard: Waiting, then Connected. */
 function Card(props: { title: string; detail?: string; busy?: boolean; glyph?: IconName; tone?: "ready" | "failed"; testID?: string; children?: JSX.Element }) {
-  if (platform.os === "ios") announce(untracked(() => [props.title, props.detail].filter(Boolean).join(". ")));
+  if (platform.os === "ios") {
+    // Every Plugins page on the stack shows the card: the step is said once.
+    const words = untracked(() => [props.title, props.detail].filter(Boolean).join(". "));
+    if (words !== lastAnnounced) {
+      lastAnnounced = words;
+      announce(words);
+    }
+  }
   return (
     <View testID={props.testID ?? "connect-card"} android={{ accessibilityLiveRegion: "polite" }} class="mt-4 gap-2 rounded-2xl border border-border bg-card px-4 py-4">
       <View class="flex-row items-center gap-2">

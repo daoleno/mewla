@@ -258,6 +258,16 @@ describe("As before the rewrite", () => {
     expect(app.shows("id:account-acct-3")).toBe(true);
   });
 
+  test("an AWS profile's time left counts down while the page stays open", async () => {
+    const profile = { id: "aws:work", integration: "aws", name: "work", profile: "work", profile_status: "valid", profile_sign_in_by: new Date(Date.now() + 3 * 3_600_000 - 60_000).toISOString(), profile_sign_in_limit: "maximum", identity: "", enabled: true, status: "connected", history: [] };
+    const c = computer({ name: "extensions-service", id: "aws" }, (request) => (request.action === "list" ? { catalog: more, accounts: [profile] } : {}));
+    const app = await open(HARNESS, { ...c.options, clock: {} });
+    await app.clock!.runFor(100);
+    await app.waitFor("text:Up to 2h left");
+    await app.clock!.fastForward(61 * 60_000);
+    await app.waitFor("text:Up to 1h left");
+  });
+
   test("a computer still out of reach after a moment says so, not at once", async () => {
     const c = computer({ name: "extensions" }, () => ({}));
     const options = { host: { ...c.options.host, params: { page: { name: "extensions" }, state: "waiting" } } };

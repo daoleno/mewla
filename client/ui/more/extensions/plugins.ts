@@ -32,18 +32,39 @@ export function plugins(): ConnectionsFlow | null {
  * that finishes it is on screen. The app's shell sets it.
  */
 let openExtensions: (() => void) | null = null;
+/** A return that came before the shell was there to open Extensions (a cold start). */
+let openPending = false;
 export function setOpenExtensions(open: (() => void) | null): void {
   openExtensions = open;
+  if (open && openPending) {
+    openPending = false;
+    open();
+  }
+}
+
+function showExtensions(): void {
+  if (openExtensions) openExtensions();
+  else openPending = true;
 }
 
 /** A socket is offline for a moment on every start; only an offline that lasts means the computer can't be reached. */
 const OFFLINE_SETTLE_MS = 1_500;
 export const offlineSettled = signal(false);
+let settledFor: string | null = null;
 effect(() => {
   const state = daemonState();
-  untracked(() => offlineSettled.set(false));
-  // Still connecting is not offline yet.
-  if (state === "connected" || state === "connecting") return;
+  const id = daemon()?.server.id ?? null;
+  // Another computer starts over.
+  if (id !== settledFor) {
+    settledFor = id;
+    untracked(() => offlineSettled.set(false));
+  }
+  if (state === "connected") {
+    untracked(() => offlineSettled.set(false));
+    return;
+  }
+  // Once out of reach, it stays so through the retries until it connects; still connecting is not offline yet.
+  if (untracked(offlineSettled) || state === "connecting") return;
   const timer = setTimeout(() => offlineSettled.set(true), OFFLINE_SETTLE_MS);
   cleanup(() => clearTimeout(timer));
 });
@@ -118,7 +139,7 @@ effect(() => {
 host.on<{ url?: string }>("links.open", (payload) => {
   const url = payload?.url;
   if (!url || !isPluginReturnUrl(url) && url !== "mewla://plugins") return;
-  openExtensions?.();
+  showExtensions();
   if (flow?.handleLink(url)) return;
   if (!flow) {
     earlyReturn = url;
