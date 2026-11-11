@@ -1,7 +1,7 @@
 import { host, platform, signal, Text, View, windowSize } from "nsh";
 import { Button, createNavStack, NavStack } from "nsh/base";
 import { isAvailable as mobile, TabBar } from "nsh/mobile";
-import { Onboarding } from "../screens/Onboarding";
+import { Onboarding, PairPage } from "../screens/Onboarding";
 import { More } from "../screens/More";
 import { MorePageView } from "../more/Pages";
 import { FilesPageView } from "../more/files/Pages";
@@ -91,7 +91,7 @@ function sessionsRoute(route: SessionsRoute, index: () => number) {
 function moreRoute(route: MoreRoute) {
   switch (route.name) {
     case "more": return <More nav={moreNav} />;
-    case "pair": return <Onboarding />;
+    case "pair": return <PairPage onPaired={() => moreNav.pop()} />;
     default: return <MorePageView route={route} nav={moreNav} onPair={() => moreNav.push({ name: "pair" })} />;
   }
 }
@@ -146,10 +146,16 @@ export function Shell() {
  */
 export function FirstRun() {
   const web = platform.os === "web" && host.available();
-  const nav = createNavStack<{ name: "join" } | { name: "pair" }>([{ name: web ? "join" : "pair" }]);
+  // A phone: the guided onboarding, which also shows the connected step after any pairing.
+  const settings = () => {
+    selectedTab.set(3);
+    moreNav.setRoutes([{ name: "more" }, { name: "settings" }]);
+  };
+  if (!web) return <Onboarding onContinue={() => selectedTab.set(0)} onSettings={settings} />;
+  const nav = createNavStack<{ name: "join" } | { name: "pair" }>([{ name: "join" }]);
   return (
     <NavStack state={nav} style={{ flex: 1 }}>
-      {(route) => (route.name === "join" ? <BrowserJoin onPairingLink={() => nav.push({ name: "pair" })} /> : <Onboarding />)}
+      {(route) => (route.name === "join" ? <BrowserJoin onPairingLink={() => nav.push({ name: "pair" })} /> : <PairPage />)}
     </NavStack>
   );
 }

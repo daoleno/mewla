@@ -19,13 +19,10 @@ const paired = {
 };
 
 describe("first run", () => {
-  test("opens on pairing and explains a pasted text that is not a pairing link", async () => {
+  test("opens on the guided onboarding (Welcome); Screens/Onboarding.test.tsx walks it", async () => {
     const app = await open("./App.tsx", { host });
-    expect(app.shows("id:scan")).toBe(true);
-    await app.type("id:link", "hello");
-    await app.press("id:pair");
-    await app.waitFor("id:failure");
-    expect(app.texts().join(" ")).toContain("isn't a Mewla pairing code");
+    await app.waitFor("id:set-up");
+    expect(app.shows("id:onboarding")).toBe(true);
   });
 });
 
@@ -83,11 +80,11 @@ describe("the in-place upgrade from the Expo app", () => {
     };
     const app = await open("./App.tsx", { host: upgrade, platform: "android" });
     await app.waitFor("id:composer");
-    expect(app.shows("id:scan")).toBe(false);
+    expect(app.shows("id:onboarding")).toBe(false);
     expect(copied).toBe(true);
     expect(app.storage()["mewla.draft.v1:s1:chat"]).toContain("half");
     const again = await open("./App.tsx", { host: upgrade, platform: "android" });
-    await again.waitFor("id:scan");
+    await again.waitFor("id:onboarding");
     expect(offered).toBe(1);
   });
 });
