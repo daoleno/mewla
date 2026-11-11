@@ -103,13 +103,17 @@ function shown<T>(section: string, items: readonly T[]): readonly T[] {
   return expanded().has(section) ? items : items.slice(0, MAX_LIST_ITEMS);
 }
 
-/** A detail page shows one computer's numbers: switching computer closes it, once. */
+/**
+ * A detail page shows one computer's numbers: another computer closes it, once. The
+ * unbound moment between two daemons is not a switch, so the same computer bound
+ * again (a changed address) keeps it.
+ */
 function leaveOnSwitch(nav: PageNav): void {
   const openedFor = untracked(() => daemon())?.server.id;
   let left = false;
   effect(() => {
     const id = daemon()?.server.id;
-    if (left || id === openedFor) return;
+    if (left || id === undefined || id === openedFor) return;
     left = true;
     untracked(() => nav.pop());
   });
