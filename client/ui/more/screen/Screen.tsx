@@ -63,6 +63,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   let epoch = 0;
   let serverId = "";
   let sessions = 0;
+  let gone = false;
 
   const server = () => daemon()?.server ?? null;
   const isCurrent = (id: string) => untracked(server)?.id === id;
@@ -89,7 +90,8 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   // shows the agent's screen without taking over.
   const connect = async (how: How = "auto", worker?: string) => {
     const target = untracked(server);
-    if (!target) return;
+    // A step that finishes after the page was left (Restart Mewla, Stop) opens nothing.
+    if (!target || gone) return;
     dropSession();
     const token = ++epoch;
     const active = () => token === epoch && isCurrent(target.id);
@@ -182,7 +184,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     reason.set("");
     try {
       await screenRequest(target, { action: "restart" });
-      for (let attempt = 0; attempt < 30 && isCurrent(target.id); attempt++) {
+      for (let attempt = 0; attempt < 30 && isCurrent(target.id) && !gone; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 2_000));
         try {
           const next = await screenRequest(target);
@@ -261,8 +263,10 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
 
   // Leaving the page closes the viewer: an open one counts as a person at the computer.
   cleanup(() => {
+    gone = true;
     epoch++;
     dropSession();
+    if (noteTimer) clearTimeout(noteTimer);
   });
 
   const linuxDisplays = () => {
