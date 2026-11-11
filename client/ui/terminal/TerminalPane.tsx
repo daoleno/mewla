@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, colorScheme, keyboardFrame, openUrl, signal, Text, token, View, type NativeComponentRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
 import { Button } from "nsh/base";
 import { TerminalNavigator } from "../../core/terminal/navigation";
 import { TerminalSession } from "../../core/terminal/session";
@@ -6,6 +6,7 @@ import { HISTORY_FAILED } from "../../core/terminal/history";
 import { linkAction, NO_SEARCH } from "../../core/terminal/text";
 import type { Transport } from "../../core/transport";
 import { Icon, type IconName } from "../icons/Icon";
+import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
 import { belowSections } from "../shell/Shell";
 import { TerminalSurface, type TerminalTheme } from "./contract";
 import { TerminalJumpControls, TerminalRendererFailure, TerminalSearchBar } from "./TerminalOverlays";
@@ -41,6 +42,11 @@ export function withControl(data: string): string {
   if ("[\\]^_".includes(data)) return String.fromCharCode(data.charCodeAt(0) - 64);
   if (data === " ") return "\u0000";
   return data;
+}
+
+/** One shell word: single quotes, with any quote inside closed, escaped and reopened. */
+export function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 /** A tapped file path, for the Session's file preview: `line` and `column` when the path carried them (`a.ts:12:5`). */
@@ -102,6 +108,23 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     ctrl.set(false);
     session.input(out);
   };
+  // Attach: a picked file goes to the computer, then its path is typed at the prompt, quoted for the shell.
+  const uploads = createAttachmentUploads();
+  cleanup(() => uploads.dispose());
+  const attachProblem = signal("");
+  effect(() => {
+    const ready = uploads.ready();
+    if (ready.length === 0) return;
+    untracked(() => {
+      for (const file of ready) session.input(`${shellQuote(file.path)} `);
+      uploads.clear();
+    });
+  });
+  const attach = () => {
+    attachProblem.set("");
+    void uploads.pickAndUpload().catch((error) => attachProblem.set(error instanceof Error ? error.message : "Could not attach the file."));
+  };
+
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
   let repeatTimer: ReturnType<typeof setInterval> | undefined;
   const press = (key: Key) => {
@@ -198,8 +221,13 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
           <TerminalRendererFailure message={rendererFailure()!} onRetry={() => command("retry", {})} />
         ) : null}
       </View>
+      {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
+      {attachProblem() ? <Text testID="terminal-attach-problem" class="px-3 py-1 text-xs text-destructive">{attachProblem()}</Text> : null}
       <View class="flex-row items-center gap-1 border-t border-border bg-background px-1.5 py-1.5"
         style={{ marginBottom: props.active() ? Math.max(0, keyboardFrame().height - belowSections()) : 0 }}>
+        <Button testID="terminal-attach" accessibilityLabel="Attach" disabled={uploads.picking()} onPress={attach} class="rounded-lg px-2 py-2 active:bg-accent">
+          <Icon name="attach" size={16} />
+        </Button>
         <Button testID="terminal-keyboard" onPress={() => {
           const show = keyboardFrame().height === 0;
           if (show) focusKeyboard();
