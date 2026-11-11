@@ -132,7 +132,8 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
   const commitOpen = signal(false);
   const branchesOpen = signal(false);
   // The reader beside the list on a wide screen: the entry chosen, and the one it shows.
-  const chosen = signal<string | null>(null);
+  // A fresh object per tap: tapping a row the reader moved away from opens it again.
+  const chosen = signal<{ key: string } | null>(null);
   const shown = signal<string | null>(null);
   const wide = () => windowSize().width >= SPLIT_WIDTH;
   review.open();
@@ -147,7 +148,9 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
     review.query.set("");
   };
   const open = (entry: GitReviewEntry) => {
-    if (wide()) chosen.set(entry.key);
+    if (wide()) {
+      if (shown() !== entry.key || !chosen()) chosen.set({ key: entry.key });
+    }
     else props.nav.push({ name: "git-diff", ...target(review), entry: entry.key });
   };
   const headerRight = (
@@ -192,7 +195,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
               {chosen() ? (
                 <DiffReader
                   review={review}
-                  entry={untracked(chosen)!}
+                  entry={untracked(chosen)!.key}
                   nav={props.nav}
                   onShow={(key) => shown.set(key)}
                   onEmpty={() => {
