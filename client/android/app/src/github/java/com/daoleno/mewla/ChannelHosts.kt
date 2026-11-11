@@ -11,14 +11,29 @@ import com.longbridge.nsh.NshView
  */
 class ChannelHosts(private val activity: MainActivity, private val nsh: NshView) {
   val channel = "github"
+  // update.*: the in-app update (update/UpdateHost.kt).
+  private val update = com.daoleno.mewla.update.UpdateHost(activity, nsh)
+  // phone.*: Phone use (phone/PhoneHost.kt over the phone module).
+  private val phone = com.daoleno.mewla.phone.PhoneHost(activity, nsh)
 
-  fun onResume() {}
+  fun onResume() {
+    phone.onResume()
+  }
 
-  fun onNewIntent(intent: Intent) {}
+  fun onNewIntent(intent: Intent) {
+    phone.onNewIntent(intent)
+  }
 
-  fun onUserLeaveHint() {}
+  fun onUserLeaveHint() {
+    phone.onUserLeaveHint()
+  }
 
-  fun onPictureInPictureModeChanged(inPip: Boolean, config: Configuration) {}
+  fun onPictureInPictureModeChanged(inPip: Boolean, config: Configuration) {
+    phone.onPictureInPictureModeChanged(inPip)
+  }
 
-  fun onDestroy() {}
+  fun onDestroy() {
+    update.onDestroy()
+    phone.onDestroy()
+  }
 }

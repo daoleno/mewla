@@ -1,0 +1,20 @@
+{
+  "name": "Mewla Phone use tests",
+  "id": "com.daoleno.mewla.phonetests",
+  "version": "0.0.0",
+  "appearance": "system",
+  "capabilities": {
+    "host": [
+      "app.*",
+      "secure.*",
+      "push.*",
+      "phone.*"
+    ],
+    "network": {
+      "hosts": [
+        "*"
+      ]
+    }
+  },
+  "theme": "../../theme.json"
+}

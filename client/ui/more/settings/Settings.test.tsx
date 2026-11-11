@@ -264,11 +264,20 @@ describe("Labs", () => {
     expect(app.shows("id:settings-virtual-screen")).toBe(false);
   });
 
-  test("on Android, Phone use is there and says it is not built yet", async () => {
+  test("on the Android GitHub build, Phone use is there with its state and opens its page; the Play build has no row", async () => {
+    const status = { supported: true, sdk: 35, enabled: false, link: false, link_state: "offline", developer_options: false, wireless_debugging: false, wifi: true, paired: false, helper: false, problem: null, accessibility: false, restricted: false, self_healing: true, guide: null, notifications: true, state: "off", w: 0, h: 0, display_info: null, agent: null, handoff: null, drawn: false, opening: null, launch_failed: null };
     const c = computer({ name: "settings" }, () => null, { platform: "android", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
-    const app = await open(HARNESS, c.options);
+    const handlers = { ...c.options.host.handlers, "phone.status": () => status, "phone.follow": () => null };
+    const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, handlers } });
+    await app.waitFor("id:settings-phone");
+    expect(app.texts()).toContain("Off");
     await app.press("id:settings-phone");
-    await app.waitFor("text:Not built yet");
+    await app.waitFor("id:phone-page");
+
+    const play = computer({ name: "settings" }, () => null, { platform: "android", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
+    const other = await open(HARNESS, play.options);
+    await other.waitFor("text:Labs");
+    expect(other.shows("id:settings-phone")).toBe(false);
   });
 
   test("on iOS there is no Phone use row", async () => {
