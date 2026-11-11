@@ -1,4 +1,4 @@
-import { computed, signal, Text, View } from "nsh";
+import { computed, platform, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { Icon } from "../kit/Icon";
 import { EmptyState } from "../kit/kit";
@@ -61,7 +61,8 @@ export function Feed(props: { nav: PageNav; top: () => boolean }) {
   return (
     <FriendsPageFrame title="Friends" testID="friends-feed" headerRight={friendsEnabled() ? header() : undefined}>
       {off() ? (
-        <EmptyState testID="friends-off" icon="people" title="Friends is off" action="Open Labs" onAction={() => props.nav.push({ name: "settings-friends" })} />
+        // A browser offers no Friends switch (as v0.3.1): Open Labs opens Settings there.
+        <EmptyState testID="friends-off" icon="people" title="Friends is off" action="Open Labs" onAction={() => props.nav.push(platform.os === "web" ? { name: "settings" } : { name: "settings-friends" })} />
       ) : (
         <View class="flex-1">
           <View class="px-4 pt-2">

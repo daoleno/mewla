@@ -1,4 +1,4 @@
-import { announce, Canvas, Clipboard, effect, Path2D, signal, Text, untracked, View } from "nsh";
+import { announce, Canvas, Clipboard, effect, Path2D, platform, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../../shell/NavPage";
 import { dateKey, formatDate, formatFullDateTime } from "../../../core/more/dates";
@@ -121,6 +121,7 @@ function leaveOnSwitch(nav: PageNav): void {
 }
 
 export function Stats(props: { nav: PageNav }) {
+  const swipePaging = platform.os !== "web";
   // Each visit starts on Week, as the range control always has.
   range.set(INITIAL_STATS_RANGE);
   // Load on open and whenever the computer (re)connects.
@@ -138,21 +139,21 @@ export function Stats(props: { nav: PageNav }) {
       <View class="mt-2">
         <Segmented testID="stats-range" accessibilityLabel="Stats range" options={STATS_RANGE_TABS} value={range()} onChange={(key) => range.set(key)} />
       </View>
-      {/* A swipe across the page moves to the next or previous range, as the tabs do. */}
+      {/* A swipe across the page moves to the next or previous range, as the tabs do; on the web the tabs alone do (app/DESIGN.md). */}
       <View
         testID="stats-body"
         class="min-h-[420px]"
-        panActivation={{ activeOffsetX: 24, failOffsetY: 16 }}
-        onPanStart={() => {
+        panActivation={swipePaging ? { activeOffsetX: 24, failOffsetY: 16 } : undefined}
+        onPanStart={swipePaging ? () => {
           swipeFromChart = chartTouched;
-        }}
-        onPanEnd={(e) => {
+        } : undefined}
+        onPanEnd={swipePaging ? (e) => {
           const fromChart = swipeFromChart || chartTouched;
           swipeFromChart = false;
           if (fromChart || e.cancelled) return;
           const next = swipedRange(range(), e.translation.x, e.translation.y);
           if (next) range.set(next);
-        }}
+        } : undefined}
       >
         {busy() ? (
           <EmptyState busy testID="stats-loading" />

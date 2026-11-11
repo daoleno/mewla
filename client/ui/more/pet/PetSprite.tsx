@@ -1,4 +1,4 @@
-import { cleanup, effect, Image, lifecycle, reduceMotion, signal, untracked, View } from "nsh";
+import { cleanup, effect, Image, type ImageAsset, lifecycle, platform, reduceMotion, signal, untracked, View } from "nsh";
 import { CLIP_TIMING, petTransition, type PetState } from "../../../core/settings/petPreview";
 import type { Pet } from "./pets";
 
@@ -50,13 +50,22 @@ export function PetSprite(props: { pet: () => Pet; state: () => PetState; size: 
         return (
           <Image
             testID={`pet-clip-${now.name}`}
-            src={pet.clips[now.name]}
+            src={freshPlay(pet.clips[now.name], now)}
             style={bleed ? { position: "absolute", left: -bleed, top: -bleed, width: props.size + 2 * bleed, height: props.size + 2 * bleed } : { width: props.size, height: props.size }}
           />
         );
       }}
     </View>
   );
+}
+
+/**
+ * A browser keeps one animation per image URL, so a one-shot shown again would hold its
+ * last frame. On the web each play of a one-shot gets its own URL (as v0.3.1).
+ */
+function freshPlay(clip: ImageAsset, now: Shown): ImageAsset {
+  if (platform.os !== "web" || CLIP_TIMING[now.name].loop) return clip;
+  return { ...clip, url: `${clip.url}#${now.play}` };
 }
 
 /** The clip a state plays in the preview (it only plays the states it runs through). */

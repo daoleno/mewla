@@ -123,6 +123,17 @@ describe("Stats", () => {
     await app.waitFor("text:$500");
   });
 
+  test("in a browser the ranges change by their tabs only; a swipe leaves the range alone", async () => {
+    const app = await open(HARNESS, { ...computer(() => ({ ranges: { day: range({ cost: 1 }), week: range(), month: range({ cost: 99 }), all: range({ cost: 500 }) } })), platform: "web" });
+    await app.waitFor("text:$12.50");
+    await app.drag("id:stats-summary", { x: -140 });
+    await app.wait(100);
+    expect(app.texts()).toContain("$12.50");
+    expect(app.texts()).not.toContain("$99.00");
+    await app.press("id:stats-range-month");
+    await app.waitFor("text:$99.00");
+  });
+
   test("a swipe that starts on the activity chart scrubs it and leaves the range alone", async () => {
     const app = await open(HARNESS, computer(() => ({ ranges: { week: range({ days: week([0, 1, 2, 3, 4, 5, 6]) }), month: range({ cost: 99 }) } })));
     await app.waitFor("id:activity-chart");
