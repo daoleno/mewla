@@ -3,6 +3,8 @@ package webui
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,8 +27,9 @@ func gz(t *testing.T, value string) []byte {
 
 func bundle(t *testing.T) fstest.MapFS {
 	return fstest.MapFS{
-		"index.html.gz":                     {Data: gz(t, "<html>app</html>")},
-		"_expo/static/js/web/index-1.js.gz": {Data: gz(t, "console.log(1)")},
+		"index.html.gz":           {Data: gz(t, "<html>app</html>")},
+		"app.242ef32319.js.gz":    {Data: gz(t, "console.log(1)")},
+		"manifest.webmanifest.gz": {Data: gz(t, "{}")},
 	}
 }
 
@@ -41,7 +44,7 @@ func get(handler http.Handler, path, acceptEncoding string) *httptest.ResponseRe
 }
 
 func TestHandlerServesPrecompressedAssetsToGzipClients(t *testing.T) {
-	response := get(Handler(bundle(t)), "/_expo/static/js/web/index-1.js", "br, gzip")
+	response := get(Handler(bundle(t)), "/app.242ef32319.js", "br, gzip")
 	if response.Code != http.StatusOK || response.Header().Get("Content-Encoding") != "gzip" {
 		t.Fatalf("status=%d encoding=%q", response.Code, response.Header().Get("Content-Encoding"))
 	}
@@ -98,4 +101,37 @@ func TestHandlerRejectsWrites(t *testing.T) {
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d", recorder.Code)
 	}
+}
+
+func TestCacheControlKeepsHashedNamesForever(t *testing.T) {
+	for name, want := range map[string]string{
+		"nsh.5be0579ad8.wasm":                   immutableAge,
+		"browser.991ab24c49/runtime.js":         immutableAge,
+		"assets/icons/agents/pi.2c3120d5c4.svg": immutableAge,
+		"index.html":                            "no-cache",
+		"manifest.webmanifest":                  "no-cache",
+		"assets/icons/readme.svg":               "no-cache",
+	} {
+		if got := cacheControl(name); got != want {
+			t.Errorf("%s: cache = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestInlineScriptHashesNameThePageScripts(t *testing.T) {
+	page := "<head><script>const a = 1;</script><script src=\"x.js\"></script></head><body><script type=\"module\">\n  import \"./b.js\";\n</script></body>"
+	got := InlineScriptHashes(fstest.MapFS{"index.html.gz": {Data: gz(t, page)}})
+	// sha256 of the exact text between the tags, as browsers hash it.
+	want := []string{"'sha256-" + sum("const a = 1;") + "'", "'sha256-" + sum("\n  import \"./b.js\";\n") + "'"}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("hashes = %q, want %q", got, want)
+	}
+	if InlineScriptHashes(fstest.MapFS{}) != nil {
+		t.Fatal("a build without the web UI has no hashes")
+	}
+}
+
+func sum(text string) string {
+	digest := sha256.Sum256([]byte(text))
+	return base64.StdEncoding.EncodeToString(digest[:])
 }

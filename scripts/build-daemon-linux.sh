@@ -13,7 +13,7 @@
 # CGO_ENABLED=0 releases used.
 #
 # Reads product version from app/app.base.json (expo.version) unless MEWLA_VERSION is set.
-# Embeds the web UI via scripts/build-web-ui.sh (needs `bun install`).
+# Embeds the web UI via scripts/build-web-ui.sh (NSH on PATH, or client/scripts/fetch-nsh.sh installs it).
 # Does not publish, tag, sign Android APKs, or read release keystores.
 #
 # Usage:
