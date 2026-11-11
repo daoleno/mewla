@@ -10,7 +10,7 @@ import { currentServerId, draftCount, followFriends, followPage, friends, refres
 
 const ICONS: Record<NotificationRow["kind"], IconName> = { comment: "chat", like: "heart", follow: "people" };
 
-function Line(props: { icon: IconName; text: string; detail?: string; at?: string; unread?: boolean; testID?: string; onPress: () => void }) {
+function Line(props: { icon: IconName; text: string; detail?: string; at?: string; unread?: boolean; chevron?: boolean; testID?: string; onPress: () => void }) {
   return (
     <Button testID={props.testID} onPress={props.onPress} class={`flex-row items-start gap-3 border-b border-border px-4 py-3 active:bg-accent ${props.unread ? "bg-card" : ""}`}>
       <View class="pt-0.5"><Icon name={props.icon} /></View>
@@ -20,6 +20,7 @@ function Line(props: { icon: IconName; text: string; detail?: string; at?: strin
         {props.at ? <Text class="mt-0.5 text-xs text-muted-foreground">{props.at}</Text> : null}
       </View>
       {props.unread ? <View class="mt-2 size-2 rounded-full bg-seal" accessibilityLabel="New" /> : null}
+      {props.chevron ? <View class="self-center"><Icon name="chevron-right" size={16} tone="faint" /></View> : null}
     </Button>
   );
 }
@@ -67,6 +68,7 @@ export function Notifications(props: { nav: PageNav; top: () => boolean }) {
             <Line
               testID="friends-notification-drafts"
               icon="edit"
+              chevron
               text={draftCount() === 1 ? `${agent()} has a draft waiting for you` : `${agent()} has ${draftCount()} drafts waiting for you`}
               onPress={() => props.nav.push({ name: "friends-drafts" })}
             />
