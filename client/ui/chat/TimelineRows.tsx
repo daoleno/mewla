@@ -2,10 +2,11 @@ import { signal, Text, View } from "nsh";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
-import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
+import { serverForComputer, type ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import { Icon, type IconName } from "../icons/Icon";
 import { ICON_ASSETS } from "../icons/assets";
+import { current, servers, switchTo } from "../session";
 
 /**
  * Which rows are open. A list recycles its cells, so a row's own signal would
@@ -33,7 +34,7 @@ const Mono = (props: { text: string }) => (
 );
 
 /** A tool call, a reasoning or update line, or a folded run of finished calls. */
-export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion }) {
+export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void }) {
   const item = props.item;
   const open = () => props.expansion.isOpen(item().id);
   const expandable = () => Boolean(item().commandText || item().queryText || item().body || item().files?.length || item().steps?.length || item().statusLine);
@@ -58,7 +59,11 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
           {item().queryText ? <TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText! }] }] }} selectable class="text-sm" /> : null}
           {item().statusLine ? <Text class="text-xs text-muted-foreground">{item().statusLine}</Text> : null}
           {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body!} /> : <TextView markdown={item().body!} selectable class="text-sm" />) : null}
-          {item().files?.length ? item().files!.map((file) => <Text class="font-mono text-xs text-muted-foreground">{file}</Text>) : null}
+          {item().files?.length ? item().files!.map((file) => (
+            <Button testID="activity-file" accessibilityLabel={`Open ${file}`} disabled={!props.onFile} onPress={() => props.onFile?.(file)} class="self-start active:opacity-60">
+              <Text class={props.onFile ? "font-mono text-xs text-primary" : "font-mono text-xs text-muted-foreground"}>{file}</Text>
+            </Button>
+          )) : null}
         </View>
       ) : null}
     </View>
@@ -114,9 +119,19 @@ export function TaskNotificationCard(props: { item: () => TaskNotificationTimeli
 /** A task sent to, or answered by, another computer. */
 export function ComputerMessageCard(props: { item: () => ComputerMessageTimelineItem; expansion: Expansion }) {
   const it = props.item;
+  // "Open on <computer>": that computer becomes current, where its own Brain and Sessions show what happened.
+  const target = () => serverForComputer(servers(), it().daemonId, current()?.id ?? null);
   return (
-    <Card id={it().id} expansion={props.expansion} icon="desktop" tone={it().tone} kind={`${it().direction === "to" ? "To" : "From"} ${it().computer} · ${it().kindLabel}`}
-      title={it().userSaid ? `“${it().userSaid}”` : ""} status={it().statusLabel} preview={it().preview} body={it().body} />
+    <View>
+      <Card id={it().id} expansion={props.expansion} icon="desktop" tone={it().tone} kind={`${it().direction === "to" ? "To" : "From"} ${it().computer} · ${it().kindLabel}`}
+        title={it().userSaid ? `“${it().userSaid}”` : ""} status={it().statusLabel} preview={it().preview} body={it().body} />
+      {target() ? (
+        <Button testID="computer-message-open" accessibilityLabel={`Open on ${it().computer}`} onPress={() => { const server = target(); if (server) switchTo(server); }}
+          class="mx-4 mb-1 self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
+          <Text class="text-sm font-semibold text-primary">Open on {it().computer}</Text>
+        </Button>
+      ) : null}
+    </View>
   );
 }
 
