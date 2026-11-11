@@ -56,7 +56,11 @@ export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute>;
       description: "It will remain in Calendar as cancelled.",
       actions: [{ id: "keep", label: "Keep", role: "cancel" }, { id: "cancel", label: "Cancel item", role: "destructive" }],
     });
-    if (answer.action === "cancel") await act(() => calendar()!.cancel(target));
+    // Cancelled, it stays in Calendar's history; the page goes back to the agenda.
+    if (answer.action === "cancel") await act(async () => {
+      await calendar()!.cancel(target);
+      props.nav.pop();
+    });
   };
 
   const header = (i: CalendarItem) => [scheduleLine(i, clock()), nextLine(i, clock())].filter(Boolean).join(" · ");

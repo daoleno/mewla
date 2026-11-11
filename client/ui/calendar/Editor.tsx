@@ -32,6 +32,11 @@ const occurrence = signal(0);
 const failure = signal("");
 const saving = signal(false);
 
+/** Another computer: what was being edited was the old one's. */
+export function closeEditor(): void {
+  open.set(false);
+}
+
 export function openEditor(item: CalendarItem | null): void {
   const c = clock();
   const device = c.zones.device;

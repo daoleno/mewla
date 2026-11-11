@@ -9,7 +9,8 @@ import type { Transport } from "../../core/transport";
 import { startCalendarAlerts } from "../calendar/alerts";
 import { deviceZone } from "../calendar/clock";
 import { refreshReminders, reminderLinks } from "../calendar/ReminderBanner";
-import { calendarLinks, showCalendarItem } from "../calendar/routes";
+import { closeEditor } from "../calendar/Editor";
+import { calendarLinks, calendarNav, showCalendarItem } from "../calendar/routes";
 import { clearCalendarAlerts, loadStrongAlerts, onStrongAlertsChange, strongAlerts } from "../calendar/state";
 import { current, currentTransport, onTransport, ready, servers, switchTo } from "../session";
 import { brainNav, selectedTab, openSession } from "../shell/Shell";
@@ -157,7 +158,7 @@ export function openNotificationLink(url: string): void {
   switch (link.section) {
     case "calendar":
       selectedTab.set(2);
-      if (link.params.id) showCalendarItem(link.params.id);
+      if (link.params.id) showCalendarItem(link.params.id, link.params.run);
       return;
     case "live":
       selectedTab.set(0);
@@ -221,6 +222,17 @@ export function startNotifications(): void {
     ];
     if (transport.state === "connected") connected();
     return () => stops.forEach((stop) => stop());
+  });
+  // Another computer: the Calendar and Work pages of the last one close.
+  let lastServer: string | null = null;
+  effect(() => {
+    const id = current()?.id ?? null;
+    if (lastServer && id !== lastServer) {
+      closeEditor();
+      calendarNav.popToRoot();
+      brainNav.popToRoot();
+    }
+    if (id) lastServer = id;
   });
   // No computer left: nothing of the last one may stay on the phone.
   effect(() => {
