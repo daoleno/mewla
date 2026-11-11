@@ -32,7 +32,7 @@ function useFullItem(id: string) {
   };
 }
 
-export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute> }) {
+export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute>; openSession: (sessionId: string) => void }) {
   const item = useFullItem(props.id);
   const busy = signal(false);
   const failure = signal("");
@@ -93,7 +93,9 @@ export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute> 
             {runs().length ? <SectionTitle title="Runs" /> : null}
             <View class="border-t border-border">
               {(allRuns() ? runs() : runs().slice(0, RUNS_SHOWN)).map((run) => (
-                <Button testID={`run-${run.id}`} onPress={() => props.nav.push({ name: "run", itemId: props.id, runId: run.id })} class="gap-1 border-b border-border bg-card px-4 py-3 active:bg-accent">
+                <Button testID={`run-${run.id}`}
+                  // A run still running opens its Session; the others their result.
+                  onPress={() => (run.status === "running" && run.worker_session ? props.openSession(run.worker_session) : props.nav.push({ name: "run", itemId: props.id, runId: run.id }))} class="gap-1 border-b border-border bg-card px-4 py-3 active:bg-accent">
                   <View class="flex-row items-center gap-1.5">
                     <StatusDot status={run.status} />
                     <Text class="text-sm text-muted-foreground">{`${runWhen(run, item()!, clock())} · ${statusLabel[run.status]}`}</Text>

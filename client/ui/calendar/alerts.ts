@@ -12,6 +12,8 @@ import { calendar, calendarItems } from "./state";
  * Each alert asks once per opening of the app; answered elsewhere, it is gone.
  */
 const asked = new Set<string>();
+/** Alerts opened in Calendar: they do not ask again (until the computer changes). */
+const opened = new Set<string>();
 let showing = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -34,17 +36,21 @@ async function ask(item: CalendarItem): Promise<void> {
         { id: "done", label: "Done" },
         { id: "snooze5", label: "Snooze 5 min" },
         { id: "snooze15", label: "Snooze 15 min" },
+        // No way to wave it off: a hard reminder asks for Done, a snooze, or the item.
         { id: "open", label: "Open in Calendar" },
-        { id: "later", label: "Later", role: "cancel" },
       ],
     });
     const model = calendar();
     if (action === "done") await model?.done(item.id);
     else if (action === "snooze5") await model?.snooze(item.id, 5);
     else if (action === "snooze15") await model?.snooze(item.id, 15);
-    else if (action === "open") showCalendarItem(item.id);
+    else if (action === "open") {
+      opened.add(keyOf(item));
+      showCalendarItem(item.id);
+    }
   } catch (error) {
-    await AlertDialog.show({ title: "Could not reach your computer. Try again.", description: error instanceof Error ? error.message : "", actions: [{ id: "ok", label: "OK" }] }).catch(() => {});
+    const message = error instanceof Error && error.message ? error.message : "Could not reach your computer. Try again.";
+    await AlertDialog.show({ title: "That did not go through", description: message, actions: [{ id: "ok", label: "OK" }] }).catch(() => {});
     asked.delete(keyOf(item));
   } finally {
     showing = false;
@@ -58,7 +64,7 @@ function check(): void {
   const items = calendarItems();
   const now = Date.now();
   if (lifecycle() === "active" && !showing) {
-    const next = openAlerts(items, now).find((item) => !asked.has(keyOf(item)));
+    const next = openAlerts(items, now).find((item) => !asked.has(keyOf(item)) && !opened.has(keyOf(item)));
     if (next) return void ask(next);
   }
   const due = nextAlertDueAt(items, now);
@@ -66,6 +72,10 @@ function check(): void {
 }
 
 export function startCalendarAlerts(): void {
+  effect(() => {
+    calendar();
+    opened.clear();
+  });
   effect(() => {
     calendarItems();
     if (lifecycle() !== "active") asked.clear();

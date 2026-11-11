@@ -34,6 +34,14 @@ class PushHost(private val activity: ComponentActivity, private val nsh: NshView
       asking = reply
       prompt.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
+    // Where a person who said no turns notifications back on: this app's page in system settings.
+    nsh.handle("push.openSettings") { _, reply ->
+      val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, activity.packageName)
+      runCatching { activity.startActivity(intent) }
+        .onSuccess { reply.resolve(null) }
+        .onFailure { reply.reject(it.message ?: "Could not open notification settings.") }
+    }
     nsh.handle("push.deviceToken") { _, reply ->
       if (FirebaseApp.getApps(activity).isEmpty()) return@handle reply.reject("This build has no push service.")
       FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->

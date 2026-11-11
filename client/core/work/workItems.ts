@@ -147,8 +147,9 @@ export class WorkItems {
       this.changed();
       return saved;
     } catch (error) {
-      if (/changed on disk|conflict/i.test(error instanceof Error ? error.message : "")) throw new WorkItemConflict(null);
-      throw error;
+      const message = error instanceof Error ? error.message : "";
+      if (/changed on disk|conflict/i.test(message)) throw new WorkItemConflict(null);
+      throw new Error(/timed out/.test(message) ? "Timed out while writing work item." : message || "Failed to write work item.");
     }
   }
 
@@ -159,7 +160,10 @@ export class WorkItems {
   }
 
   async remove(item: WorkItem): Promise<void> {
-    await this.transport.request("delete_work_item", { id: item.id }, { reply: "work_item_deleted_ack", timeoutMs: 15_000 });
+    await this.transport.request("delete_work_item", { id: item.id }, { reply: "work_item_deleted_ack", timeoutMs: 15_000 }).catch((error) => {
+      const message = error instanceof Error ? error.message : "";
+      throw new Error(/timed out/.test(message) ? "Timed out while deleting work item." : message || "Failed to delete work item.");
+    });
     this.items.delete(item.id);
     this.changed();
   }

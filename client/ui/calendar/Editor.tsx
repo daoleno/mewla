@@ -170,6 +170,7 @@ function Resolved() {
     return clock().zones.knows(zone().trim()) ? resolve(startDate(), startTime()) : ({ status: "invalid", message: "Enter a valid IANA timezone, such as Asia/Shanghai." } as LocalResolution);
   };
   const instant = () => instantOf(resolution());
+  const endInstant = () => (clock().zones.knows(zone().trim()) ? instantOf(resolve(endDate(), endTime())) : null);
   return (
     <View class="gap-2 px-4 py-3">
       {resolution().status === "ambiguous" ? (
@@ -179,9 +180,13 @@ function Resolved() {
             options={(resolution() as { instants: [number, number] }).instants.map((at, i) => ({ value: String(i) as "0" | "1", label: `${i === 0 ? "First" : "Second"} · ${clock().format.time(at, zone().trim(), true)}` }))} />
         </View>
       ) : null}
+      <Text class="text-sm font-semibold text-muted-foreground">Resolved time</Text>
       <Text testID="resolved-time" class={instant() === null ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
         {instant() === null ? (resolution() as { message?: string }).message ?? "" : clock().format.full(instant()!, zone().trim())}
       </Text>
+      {kind() === "event" && instant() !== null && endInstant() !== null ? (
+        <Text testID="resolved-end" class="text-sm text-muted-foreground">{`Ends ${clock().format.full(endInstant()!, zone().trim())}`}</Text>
+      ) : null}
     </View>
   );
 }
@@ -218,9 +223,9 @@ export function CalendarEditor() {
               options={[{ value: "none", label: "None" }, { value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "weekdays", label: "Weekdays" }]} />
           </View>
           <View class="mt-4 border-t border-border">
-            <Field label="Notes" id="editor-notes" value={notes} onChange={(v) => notes.set(v)} multiline />
-            {kind() === "scheduled_action" ? <Field label="Summary" id="editor-summary" value={summary} onChange={(v) => summary.set(v)} maxLength={120} placeholder="One line: what it does" /> : null}
-            {kind() === "scheduled_action" ? <Field label="Action instruction" id="editor-instruction" value={instruction} onChange={(v) => instruction.set(v)} multiline placeholder="What Mewla does when it comes due" /> : null}
+            <Field label="Notes" id="editor-notes" value={notes} onChange={(v) => notes.set(v)} multiline placeholder="Optional context" />
+            {kind() === "scheduled_action" ? <Field label="Summary" id="editor-summary" value={summary} onChange={(v) => summary.set(v)} maxLength={120} placeholder="What it does, in one line" /> : null}
+            {kind() === "scheduled_action" ? <Field label="Action instruction" id="editor-instruction" value={instruction} onChange={(v) => instruction.set(v)} multiline placeholder="What should Mewla do when the time comes?" /> : null}
           </View>
         </View>
       </Scroll>

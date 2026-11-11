@@ -37,13 +37,15 @@ export async function workAction(
   transport: CalendarTransport,
   workId: string,
   action: BrainWorkUserActionKind,
-  options: { text?: string; snoozeUntil?: number } = {},
+  options: { text?: string; snoozeUntil?: number; attachments?: readonly unknown[] } = {},
 ): Promise<WorkActionResult> {
   try {
     const frame = await transport.request<Frame>("brain_work_action", {
       id: workId,
       action,
       ...(options.text ? { text: options.text } : {}),
+      // Files picked into the reply, already on the computer (core/files uploads).
+      ...(options.attachments?.length ? { attachments: options.attachments } : {}),
       ...(options.snoozeUntil ? { snooze_until: new Date(options.snoozeUntil).toISOString() } : {}),
     }, { reply: "brain_work_action", errors: ["error", "brain_work_action_failed"], timeoutMs: 30_000 });
     return { status: frame.status as string | undefined, admission: (frame.admission as string | undefined) || undefined };

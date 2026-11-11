@@ -22,6 +22,32 @@ describe("the Calendar tab", () => {
     expect(app.texts().join(" ")).toMatch(/at \d+:\d\d (AM|PM)/);
   }, 20_000);
 
+  test("a no to the first connection's prompt: Calendar says reminders are disabled and leads to Settings, without asking again", async () => {
+    const calls: string[] = [];
+    const app = await calendarApp({ calendar_items: [] }, {
+      "push.permission": () => ({ granted: false }),
+      "push.requestPermission": () => (calls.push("ask"), false),
+      "push.openSettings": () => void calls.push("settings"),
+    });
+    await app.waitFor("text:Reminders disabled");
+    await app.press("id:reminder-settings");
+    await app.waitUntil(() => calls.includes("settings"));
+    expect(calls.filter((c) => c === "ask")).toHaveLength(1);
+  }, 20_000);
+
+  test("the heading says Today, the month picks a day and Hide month goes back to the whole agenda", async () => {
+    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    await app.waitFor("text:Call the bank");
+    expect(app.texts()).toContain("Today");
+    await app.press("id:toggle-month");
+    await app.waitFor("id:calendar-month");
+    expect(app.texts()).toContain("Hide month");
+    await app.press("id:back-to-today").catch(() => undefined);
+    await app.press("id:toggle-month");
+    await app.waitUntil(() => app.texts().includes("Show month"));
+    expect(app.texts()).toContain("Pay rent");
+  }, 20_000);
+
   test("cancels an item after asking, and it leaves the agenda", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1)] });
     await app.press("id:calendar-item-Call the bank");

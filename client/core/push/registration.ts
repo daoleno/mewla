@@ -40,6 +40,32 @@ export async function ensurePermission(host: PushHost, storage: KeyValueStore): 
 }
 
 /**
+ * What the Calendar's reminder banner says: notifications allowed, never asked (Enable
+ * asks), asked and refused (only system settings can turn them on), or no answer at all.
+ */
+export type ReminderPermission = "granted" | "undetermined" | "denied" | "unavailable";
+
+export async function reminderPermission(host: Pick<PushHost, "permission">, storage: KeyValueStore): Promise<ReminderPermission> {
+  try {
+    if ((await host.permission()).granted) return "granted";
+  } catch {
+    return "unavailable";
+  }
+  const asked = await storage.getItem(PERMISSION_ASKED_KEY).then((value) => value === "1", () => true);
+  return asked ? "denied" : "undetermined";
+}
+
+/** The Calendar's Enable: the one prompt, counted as the app's one ask. */
+export async function askForReminders(host: PushHost, storage: KeyValueStore): Promise<ReminderPermission> {
+  await storage.setItem(PERMISSION_ASKED_KEY, "1").catch(() => {});
+  try {
+    return (await host.requestPermission()) ? "granted" : "denied";
+  } catch {
+    return "unavailable";
+  }
+}
+
+/**
  * The Expo push token for this install, as expo-notifications got it: the device's
  * FCM/APNs token exchanged at Expo's service. The daemon sends through Expo, so it never
  * learns the difference. The exchange is kept per device token; a rotated device token

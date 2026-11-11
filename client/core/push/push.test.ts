@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { memoryStore } from "../testing/memoryPlatform";
 import { isCalendarAlert, parseLink, pushLink } from "./links";
 import { liveAnswerOf, liveAnswerRequestId, widgetBaseUrl } from "./live";
-import { ensurePermission, expoPushToken, PERMISSION_ASKED_KEY, registerPushMessage, type PushHost } from "./registration";
+import { askForReminders, ensurePermission, expoPushToken, PERMISSION_ASKED_KEY, registerPushMessage, reminderPermission, type PushHost } from "./registration";
 import { NotificationReporter } from "./report";
 
 describe("a tapped push opens", () => {
@@ -73,6 +73,18 @@ describe("notification permission", () => {
     const host = fakeHost(false);
     expect(await ensurePermission(host, memoryStore({ [PERMISSION_ASKED_KEY]: "1" }))).toBe(false);
     expect(host.calls).not.toContain("request");
+  });
+  test("the Calendar's reminder banner: not enabled until asked, disabled after a no, unavailable when the phone cannot say", async () => {
+    expect(await reminderPermission(fakeHost(true), memoryStore())).toBe("granted");
+    expect(await reminderPermission(fakeHost(false), memoryStore())).toBe("undetermined");
+    expect(await reminderPermission(fakeHost(false), memoryStore({ [PERMISSION_ASKED_KEY]: "1" }))).toBe("denied");
+    expect(await reminderPermission({ permission: () => Promise.reject(new Error("no")) }, memoryStore())).toBe("unavailable");
+  });
+  test("Enable asks once and counts as the app's one ask", async () => {
+    const storage = memoryStore();
+    expect(await askForReminders(fakeHost(false, false), storage)).toBe("denied");
+    expect(await reminderPermission(fakeHost(false), storage)).toBe("denied");
+    expect(await askForReminders(fakeHost(false, true), memoryStore())).toBe("granted");
   });
 });
 
