@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, effect, Image, openUrl, Scroll, signal, Text, untracked, View, WebView } from "nsh";
+import { cleanup, Clipboard, effect, Image, openUrl, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { Button, TextView } from "nsh/base";
 import { NavPage } from "../../shell/NavPage";
@@ -101,7 +101,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
         const read = await getSessionFileText(d, { ...request(), path: found.path, generation: found.generation });
         if (mine !== epoch) return;
         text.set(read);
-      } else if (renderer !== "unsupported") {
+      } else if (renderer !== "unsupported" && !(renderer === "pdf" && !PDF_PAGES)) {
         const signed = await buildSessionFileBinarySource(d.server, bindSessionFileRequestToGeneration(request(), found));
         if (mine !== epoch) return;
         source.set(signed);
@@ -221,6 +221,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
       }
       return <ImageBody source={signed} name={found.name} onFail={() => failInPlace(SESSION_FILE_STREAM_FAILED, true)} />;
     }
+    if (renderer === "pdf" && !PDF_PAGES) return <EmptyState testID="file-pdf-unavailable" icon="document" detail="PDF preview is unavailable on Web. Download the file to inspect it." />;
     if (renderer === "pdf" && signed) return <PdfBody source={signed} expectedBytes={found.size} onFail={(message) => failInPlace(message, /changed|exceeded its inspected/i.test(message))} />;
     if ((renderer === "video" || renderer === "audio") && signed) {
       return <MediaPlayer testID="file-media" kind={renderer} source={signed} resolve={() => sign(found)} onFail={failInPlace} />;
@@ -339,6 +340,9 @@ function SvgBody(props: { source: SessionFileBinarySource; onFail: (message: str
     </View>
   );
 }
+
+/** `mewla.pdf` is the phones' (PdfRenderer, PDFKit); a browser has no such view, and the daemon's page frames nothing, as in v0.3.1 web. */
+const PDF_PAGES = platform.os !== "web";
 
 /** The PDF's pages; the host refuses a file whose size is not the one inspected (it changed). */
 function PdfBody(props: { source: SessionFileBinarySource; expectedBytes: number; onFail: (message: string) => void }) {

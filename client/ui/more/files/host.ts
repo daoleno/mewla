@@ -1,10 +1,13 @@
 import { host, nativeComponent, platform } from "nsh";
 import type { SessionFileDownloadHost } from "../../../core/files/sessionFilePreviewDownload";
 import type { NativeUploadProgress, UploadDocumentAsset, UploadHost } from "../../../core/files/uploads";
+import { appFileImageUrl, appFileUploadHost, isAppFileUri } from "./appFiles";
 
 /**
- * `files.*`, what only the phone can do with files: Android (client/android/…/files/)
- * and iOS (client/ios/Sources/Files/) answer the same calls.
+ * `files.*`, what only the host can do with files: Android (client/android/…/files/),
+ * iOS (client/ios/Sources/Files/) and the browser (client/ui/web/host.js) answer the same
+ * calls. The browser has no folder picker (`files.pickDirectory` answers at once and the
+ * browser saves the download where it saves downloads) and no `mewla.pdf`.
  *
  * - `files.pick {maxCount}` → `UploadDocumentAsset[]`; `[]` when the picker was closed.
  *   The system picker (Android SAF ACTION_GET_CONTENT, iOS document picker); each `uri`
@@ -40,7 +43,7 @@ export function pickFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
   return host.call<UploadDocumentAsset[]>("files.pick", { maxCount }, WAIT).then((assets) => (Array.isArray(assets) ? assets : []));
 }
 
-export const uploadHost: UploadHost = {
+const hostUploads: UploadHost = {
   upload: (request) => host.call<{ status: number; body: string }>("files.upload", request, WAIT),
   // A post: a failure to stop is the host's to log; the upload's own answer still settles it.
   cancel: (uploadId) => cancel("files.cancel", { uploadId }),
@@ -48,6 +51,22 @@ export const uploadHost: UploadHost = {
     host.on<NativeUploadProgress & { uploadId: string }>("files.uploadProgress", (event) => {
       if (event?.uploadId === uploadId) listener({ bytesSent: event.bytesSent, totalBytes: event.totalBytes });
     }),
+};
+
+const appUploads = new Set<string>();
+
+/** Picked files go through the host; pasted or dropped ones (`keepAppFiles`) through the app's own fetch. */
+export const uploadHost: UploadHost = {
+  upload: (request) => {
+    if (!isAppFileUri(request.fileUri)) return hostUploads.upload(request);
+    appUploads.add(request.uploadId);
+    return appFileUploadHost.upload(request).finally(() => appUploads.delete(request.uploadId));
+  },
+  cancel: (uploadId) => (appUploads.has(uploadId) ? appFileUploadHost : hostUploads).cancel(uploadId),
+  onProgress: (uploadId, listener) => {
+    const stops = [appFileUploadHost.onProgress(uploadId, listener), hostUploads.onProgress(uploadId, listener)];
+    return () => stops.forEach((stop) => stop());
+  },
 };
 
 export const downloadHost: SessionFileDownloadHost = {
@@ -64,6 +83,8 @@ const thumbnails = new Map<string, Promise<string | null>>();
  * and size while the app runs.
  */
 export function thumbnail(uri: string, maxPixels: number): Promise<string | null> {
+  // A pasted picture is the app's own: shown from its object URL, at any size.
+  if (isAppFileUri(uri)) return Promise.resolve(appFileImageUrl(uri));
   const key = `${maxPixels}\u0000${uri}`;
   let pending = thumbnails.get(key);
   if (!pending) {

@@ -362,6 +362,51 @@ const done = (path: string, name: string): Answer => ({ status: 200, body: JSON.
 
 const asset = (name: string, size = 1024) => ({ uri: `content://picker/${name}`, name, mimeType: "application/pdf", size });
 
+/** A picture to paste: `paste`'s paths are the app folder's (client/ui). */
+const PASTED = "assets/pets/p03/working.webp";
+
+describe("Files on the web", () => {
+  // Cancel mid-upload goes to the page's host as a call (it drops posts): a step can't run while
+  // a host call waits, so that is host.ts's `tell`, unproved here.
+  test("the browser's picker gives chips that upload through the page's host by the picked file's uri", async () => {
+    const u = uploads([{ uri: "browser-file:1", name: "big.zip", mimeType: "application/zip", size: 4096 }], () => done("/state/uploads/big.zip", "big.zip"));
+    const app = await open(UPLOADS, { ...u.options, platform: "web" });
+    await app.press("id:attach");
+    await app.waitFor("text:Ready");
+    expect(u.started[0]).toMatchObject({ url: `${BASE}/upload`, fileUri: "browser-file:1", expectedSize: 4096 });
+    expect(app.texts()).toContain("/state/uploads/big.zip");
+  });
+
+  test("a PDF says the browser can't show it, signs nothing, and still downloads through the browser", async () => {
+    const c = preview(meta({ name: "report.pdf", path: "/work/report.pdf", relative_path: "out/report.pdf", kind: "pdf", content_type: "application/pdf", size: 4096 }), {
+      handlers: {
+        "files.pickDirectory": { token: "browser", name: "Downloads" },
+        "files.download": (request: { names: string[]; expectedSize: number }) => ({ bytesWritten: request.expectedSize, name: request.names[0] }),
+      },
+      network: { [`POST ${BASE}/session-file-capability`]: capability() },
+    });
+    const app = await open(HARNESS, { ...c.options, platform: "web" });
+    await app.waitFor("id:file-pdf-unavailable");
+    expect(app.texts()).toContain("PDF preview is unavailable on Web. Download the file to inspect it.");
+    expect(app.shows("id:file-pdf")).toBe(false);
+    expect(app.requests().filter((r) => r.url === `${BASE}/session-file-capability`)).toHaveLength(0);
+    await app.press("id:file-download");
+    await app.waitFor("text:Saved");
+    const download = app.host.calls().find((m) => m.name === "files.download")!.data as { directory: string; names: string[] };
+    expect(download.directory).toBe("browser");
+    expect(download.names[0]).toBe("report.pdf");
+  });
+
+  test("a video plays in the browser from its signed stream", async () => {
+    const c = preview(meta({ name: "clip.mp4", path: "/work/clip.mp4", relative_path: "clip.mp4", kind: "video", content_type: "video/mp4", size: 4096 }), {
+      network: { [`POST ${BASE}/session-file-capability`]: capability() },
+    });
+    const app = await open(HARNESS, { ...c.options, platform: "web" });
+    await app.waitFor("id:file-media");
+    expect(app.shows("label:Video preview")).toBe(true);
+  });
+});
+
 describe("Attachments", () => {
   test("a picked file streams from its own URI to /upload, signed for upload, and is ready with the computer's path", async () => {
     const u = uploads([asset("報告 1.pdf")], () => done("/state/uploads/abc.pdf", "報告 1.pdf"));
@@ -405,6 +450,28 @@ describe("Attachments", () => {
     expect(app.host.calls().some((m) => m.name === "files.thumbnail" && (m.data as { maxPixels: number }).maxPixels === 2048)).toBe(true);
     await app.press("id:attachment-viewer-close");
     await app.waitFor("id:attachment-viewer-image", { state: "gone" });
+  });
+
+  test("a pasted picture uploads from the app itself, signed and named, and shows itself on its chip", async () => {
+    const u = uploads([], () => done("unused", "unused"));
+    let sent: { headers: Record<string, string>; size: number } | null = null;
+    const app = await open(UPLOADS, {
+      ...u.options,
+      network: {
+        [`POST ${BASE}/upload`]: (request) => {
+          sent = { headers: request.headers, size: request.body?.length ?? -1 };
+          return done("/state/uploads/working.webp", "working.webp");
+        },
+      },
+    });
+    await app.paste("id:composer", { files: [PASTED] });
+    await app.waitFor("text:Ready");
+    expect(app.texts()).toContain("/state/uploads/working.webp");
+    expect(u.started).toHaveLength(0);
+    expect(sent!.headers["X-Mewla-Upload-Name"] ?? sent!.headers["x-mewla-upload-name"]).toBe("working.webp");
+    expect(sent!.size).toBeGreaterThan(0);
+    await app.waitFor("id:attachment-upload-1-thumbnail");
+    expect(app.host.calls().some((m) => m.name === "files.thumbnail")).toBe(false);
   });
 
   test("attaching needs a connected computer", async () => {
