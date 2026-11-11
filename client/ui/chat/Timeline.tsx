@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, computed, effect, List, signal, Text, untracked, View, type ListRef } from "nsh";
+import { cleanup, Clipboard, computed, effect, List, platform, signal, Text, untracked, View, type ListRef } from "nsh";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, TextView } from "nsh/base";
 import { GuardedSheet as Sheet } from "../shell/AppSheet";
@@ -141,6 +141,8 @@ export function ChatTimeline(props: {
   scope?: string;
   /** Counts the person's sends: each brings their newest message to the top, with the reply under it. */
   sent?: () => number;
+  /** Whether the chat is on screen: its tab or page can stay mounted, hidden, under another. */
+  shown?: () => boolean;
 }) {
   const handlers = props.handlers ?? {};
   const expansion = createExpansion();
@@ -173,6 +175,28 @@ export function ChatTimeline(props: {
       }
     });
   });
+  // Where the list was while on screen. A browser drops a hidden list's scroll (its tab is
+  // `display: none`), so on the web a return brings back that place, or the newest row
+  // (FAILURES R4 #14: Brain came back some twenty screens up after every tab switch).
+  const shown = () => (props.shown ? props.shown() : true);
+  let last: { offset: number; atEnd: boolean } | null = null;
+  if (platform.os === "web" && props.shown) {
+    let wasShown = untracked(shown);
+    effect(() => {
+      const on = shown();
+      const target = on && !wasShown ? last : null;
+      wasShown = on;
+      if (!target) return;
+      const back = () => (target.atEnd ? list?.scrollToEnd({ animated: false }) : list?.scrollToOffset({ offset: target.offset, animated: false }));
+      // Once the list is laid out again, and once more after its rows have measured.
+      const first = setTimeout(back, 0);
+      const settled = setTimeout(back, 120);
+      cleanup(() => {
+        clearTimeout(first);
+        clearTimeout(settled);
+      });
+    });
+  }
   const now = signal(Date.now());
   effect(() => {
     if (!away()) return;
@@ -193,8 +217,11 @@ export function ChatTimeline(props: {
         onViewableItemsChange={({ viewableItems }) => (shownFirst = readingPlace(viewableItems))}
         maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
         onScroll={({ offset, contentSize, size }) => {
+          // A hidden list's scroll (a browser resets it) is not where the person was.
+          if (!untracked(shown)) return;
           const far = contentSize.height - (offset.y + size.height) > 240;
           away.set(far);
+          last = { offset: offset.y, atEnd: !far };
           if (!props.scope || !touched) return;
           if (far && shownFirst !== undefined) readingPositions.set(props.scope, shownFirst);
           else readingPositions.delete(props.scope);
