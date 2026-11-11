@@ -191,3 +191,43 @@ describe("Mewla Relay", () => {
     expect(saved).toMatchObject({ url: "wss://quiet-otter-3f9a.a.link.test/ws", transportKind: "link", transportPin: "4".repeat(64), linkRouteId: "3".repeat(32) });
   }, 45_000);
 });
+
+describe("Settings' Pair a computer", () => {
+  const desk = { id: "s1", name: "Desk", url: "ws://10.0.0.9:9876/ws", daemonId: "b2".repeat(32), daemonPublicKey: "c".repeat(64) };
+  const paired = { "mewla:v3:servers": JSON.stringify([desk]), "mewla:v1:current_server_id": "s1", "mewla:onboarded": "true" };
+
+  async function pairPage(extra: Record<string, (data: any) => unknown> = {}, options: Record<string, unknown> = {}) {
+    const app = await open("../App.tsx", { host: phone({}, extra), platform: "android", storage: paired, ...options });
+    await app.host.send("links.open", { url: "mewla://settings?addServer=1" });
+    await app.waitFor("id:pair-link");
+    return app;
+  }
+
+  test("a link typed into the field pairs, and the connected step follows", async () => {
+    const app = await pairPage({}, { network: { [computer.pairURL]: () => computer.answer() } });
+    app.onDialog(() => "Pair and grant access");
+    await app.type("id:pair-link", computer.link());
+    await app.press("id:pair-link-submit");
+    await app.waitFor("id:connected-title", { timeout: 10_000 });
+    expect(JSON.parse(app.storage()["mewla:v3:servers"]!).map((s: { url: string }) => s.url).sort()).toEqual(["ws://10.0.0.5:9876/ws", desk.url]);
+  }, 15_000);
+
+  test("Pair with an empty field reads the clipboard; with nothing there it asks for the link", async () => {
+    const app = await pairPage();
+    await app.press("id:pair-link-submit");
+    await app.waitFor("text:Pairing link required");
+  });
+
+  test("Pick QR image pairs the code in the picture, and says when a picture holds none", async () => {
+    let answer: unknown = { value: null };
+    const app = await pairPage({ "scan.image": () => answer });
+    app.onDialog(() => "Cancel");
+    await app.press("id:pick-qr-image");
+    await app.waitFor("text:No QR code found");
+    answer = { value: computer.link() };
+    await app.press("id:pick-qr-image");
+    await app.waitUntil(() => app.dialogs().length > 0);
+    expect(app.dialogs()[0]).toMatchObject({ title: "Pair this phone?" });
+  });
+});
+
