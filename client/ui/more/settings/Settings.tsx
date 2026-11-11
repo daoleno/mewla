@@ -1,5 +1,4 @@
-import { announce, cleanup, effect, host, Image, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
-import { lifecycle } from "../../lifecycle";
+import { announce, cleanup, effect, host, Image, openUrl, platform, signal, Storage, setColorScheme, untracked, View, lifecycle } from "nsh";
 import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";

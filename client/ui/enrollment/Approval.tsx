@@ -1,5 +1,4 @@
-import { effect, signal, Text, untracked, View } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { effect, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
 import { decideEnrollment, decodePendingEnrollment, pendingEnrollments, verificationChoices, type PendingEnrollment } from "../../core/enrollment";

@@ -1,5 +1,4 @@
-import { effect, host, locale, platform, Storage } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { effect, host, locale, platform, Storage, lifecycle } from "nsh";
 import { AlertDialog } from "nsh/base";
 import { parseLink, pushLink } from "../../core/push/links";
 import { liveAnswerOf, liveAnswerRequestId, widgetBaseUrl, type LiveAnswer } from "../../core/push/live";

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Installs the pinned NSH release: the CLI with the Android AARs (into $NSH_HOME, default ~/.nsh)
-# and, with --ios, NativeShell(.Dev).xcframework into client/ios/Frameworks. Checksums are pinned here.
+# Installs the pinned NSH release into $NSH_HOME (default ~/.nsh): the CLI (it carries this machine's
+# runtime and the web runtime) and the Android AARs the app embeds ($NSH_HOME/embed/android); with --ios,
+# NativeShell(.Dev).xcframework into client/ios/Frameworks. Checksums are pinned here: nothing is
+# installed that was not checked (NSH 0.5.0 also adds other platforms' runtimes on demand; the app's
+# builds use none of them).
 set -euo pipefail
-version="v0.4.0"
+version="v0.5.0"
 base="https://github.com/longbridge/nsh/releases/download/$version"
 home="${NSH_HOME:-$HOME/.nsh}"
 client="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,8 +21,8 @@ trap 'rm -rf "$work"' EXIT
 
 if [[ "$("$home/bin/nsh" --version 2>/dev/null | cut -d' ' -f2)" != "${version#v}" ]]; then
   case "$(uname -s)-$(uname -m)" in
-    Linux-x86_64) cli=$(fetch nsh-linux-x86_64.tar.gz 8806121aebf40bb51f8fb6aa703722fbb01253f9a435759c18d53beece1ec976) ;;
-    Darwin-arm64) cli=$(fetch nsh-macos-arm64.tar.gz f63c3d57c31b28c9b34227aac81f099d1e0e61f1db552a6ec5127d114eaf59cb) ;;
+    Linux-x86_64) cli=$(fetch nsh-linux-x86_64.tar.gz a422bbe5dc2a7ae3ff308ee56e05d73d5becc81f57adf11447fc570dcee65e0f) ;;
+    Darwin-arm64) cli=$(fetch nsh-macos-arm64.tar.gz e6722427b391b00cf7ec13137db9366e78d1e7a045f2933cf00b340365309d9d) ;;
     *) echo "no NSH $version CLI for $(uname -sm)" >&2; exit 1 ;;
   esac
   # Never replaces someone's own NSH: an existing $NSH_HOME of another version is an error.
@@ -28,8 +31,17 @@ if [[ "$("$home/bin/nsh" --version 2>/dev/null | cut -d' ' -f2)" != "${version#v
   mkdir -p "$(dirname "$home")" && mv "$work/nsh" "$home"
 fi
 
+# The Android AARs (Gradle reads $NSH_HOME/embed/android/nsh(-dev).aar); 0.5.0's CLI archive no longer carries them.
+if [[ ! -f "$home/embed/android/.$version" ]]; then
+  embed=$(fetch nsh-embed-android.zip 4e0c943c75c4618e84a0139394719068de341f5c4386714502a2fb1cba802d7f)
+  unzip -q "$embed" -d "$work/android"
+  rm -rf "$home/embed/android" && mkdir -p "$home/embed/android"
+  mv "$work/android/nsh-embed-android/nsh.aar" "$work/android/nsh-embed-android/nsh-dev.aar" "$home/embed/android/"
+  touch "$home/embed/android/.$version"
+fi
+
 if [[ "${1:-}" == "--ios" ]]; then
-  embed=$(fetch nsh-embed-ios.zip 698404af02006ae9bf9e2b2c7cd2fd89e52f6d65ab2cb8273229bc31394640c7)
+  embed=$(fetch nsh-embed-ios.zip 2bd3b84ffa72e6fd302b6e1722995cc1800270243f513111b13a2f291d63cd7d)
   unzip -q "$embed" -d "$work/ios"
   rm -rf "$client/ios/Frameworks" && mkdir -p "$client/ios/Frameworks"
   for framework in NativeShell NativeShellDev; do

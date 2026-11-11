@@ -184,6 +184,8 @@ export function ChatTimeline(props: {
           mounted.set(true);
         }}
         onScrollDragStart={() => (touched = true)}
+        // A chat opens at its newest row (NSH 0.5.0, before the first frame), unless it is read back to a saved place.
+        initialScrollAtEnd={restore === undefined}
         maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
         onScroll={({ offset, contentSize, size }) => {
           const far = contentSize.height - (offset.y + size.height) > 240;

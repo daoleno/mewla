@@ -1,5 +1,4 @@
-import { effect, host, platform, signal, untracked } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { effect, host, platform, signal, untracked, lifecycle } from "nsh";
 import { failureText } from "../../core/more/daemon";
 import { changePhone } from "../../core/phone/api";
 import { phoneLinkTarget, sameTarget, type PhoneLinkTarget } from "../../core/phone/link";
