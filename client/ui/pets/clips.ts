@@ -1,3 +1,23 @@
+import p01_idle from "../assets/pets/p01/idle.webp";
+import p01_waking from "../assets/pets/p01/waking.webp";
+import p02_idle from "../assets/pets/p02/idle.webp";
+import p02_waking from "../assets/pets/p02/waking.webp";
+import p03_idle from "../assets/pets/p03/idle.webp";
+import p03_waking from "../assets/pets/p03/waking.webp";
+import p04_idle from "../assets/pets/p04/idle.webp";
+import p04_waking from "../assets/pets/p04/waking.webp";
+import p05_idle from "../assets/pets/p05/idle.webp";
+import p05_waking from "../assets/pets/p05/waking.webp";
+import p06_idle from "../assets/pets/p06/idle.webp";
+import p06_waking from "../assets/pets/p06/waking.webp";
+import p07_idle from "../assets/pets/p07/idle.webp";
+import p07_waking from "../assets/pets/p07/waking.webp";
+import p08_idle from "../assets/pets/p08/idle.webp";
+import p08_waking from "../assets/pets/p08/waking.webp";
+import p09_idle from "../assets/pets/p09/idle.webp";
+import p09_waking from "../assets/pets/p09/waking.webp";
+import p10_idle from "../assets/pets/p10/idle.webp";
+import p10_waking from "../assets/pets/p10/waking.webp";
 import type { ImageAsset } from "nsh";
 import { pet } from "../more/pet/pets";
 import p01_attention from "../assets/pets/p01/attention.webp";
@@ -55,19 +75,19 @@ import p10_homeless from "../assets/pets/p10/homeless.webp";
  * The pets' animated clips (from app/assets/pets: the default at 256 px, the rest at 192 px) for the
  * states the app shows so far; DESIGN.md's state map names the rest. Add a state here, for every pet.
  */
-export type PetClip = "attention" | "working" | "delegating" | "offline" | "homeless";
+export type PetClip = "attention" | "working" | "delegating" | "offline" | "homeless" | "idle" | "waking";
 
 const CLIPS: Record<string, Record<PetClip, ImageAsset>> = {
-  p01: { attention: p01_attention, working: p01_working, delegating: p01_delegating, offline: p01_offline, homeless: p01_homeless },
-  p02: { attention: p02_attention, working: p02_working, delegating: p02_delegating, offline: p02_offline, homeless: p02_homeless },
-  p03: { attention: p03_attention, working: p03_working, delegating: p03_delegating, offline: p03_offline, homeless: p03_homeless },
-  p04: { attention: p04_attention, working: p04_working, delegating: p04_delegating, offline: p04_offline, homeless: p04_homeless },
-  p05: { attention: p05_attention, working: p05_working, delegating: p05_delegating, offline: p05_offline, homeless: p05_homeless },
-  p06: { attention: p06_attention, working: p06_working, delegating: p06_delegating, offline: p06_offline, homeless: p06_homeless },
-  p07: { attention: p07_attention, working: p07_working, delegating: p07_delegating, offline: p07_offline, homeless: p07_homeless },
-  p08: { attention: p08_attention, working: p08_working, delegating: p08_delegating, offline: p08_offline, homeless: p08_homeless },
-  p09: { attention: p09_attention, working: p09_working, delegating: p09_delegating, offline: p09_offline, homeless: p09_homeless },
-  p10: { attention: p10_attention, working: p10_working, delegating: p10_delegating, offline: p10_offline, homeless: p10_homeless },
+  p01: { attention: p01_attention, working: p01_working, delegating: p01_delegating, offline: p01_offline, homeless: p01_homeless, idle: p01_idle, waking: p01_waking },
+  p02: { attention: p02_attention, working: p02_working, delegating: p02_delegating, offline: p02_offline, homeless: p02_homeless, idle: p02_idle, waking: p02_waking },
+  p03: { attention: p03_attention, working: p03_working, delegating: p03_delegating, offline: p03_offline, homeless: p03_homeless, idle: p03_idle, waking: p03_waking },
+  p04: { attention: p04_attention, working: p04_working, delegating: p04_delegating, offline: p04_offline, homeless: p04_homeless, idle: p04_idle, waking: p04_waking },
+  p05: { attention: p05_attention, working: p05_working, delegating: p05_delegating, offline: p05_offline, homeless: p05_homeless, idle: p05_idle, waking: p05_waking },
+  p06: { attention: p06_attention, working: p06_working, delegating: p06_delegating, offline: p06_offline, homeless: p06_homeless, idle: p06_idle, waking: p06_waking },
+  p07: { attention: p07_attention, working: p07_working, delegating: p07_delegating, offline: p07_offline, homeless: p07_homeless, idle: p07_idle, waking: p07_waking },
+  p08: { attention: p08_attention, working: p08_working, delegating: p08_delegating, offline: p08_offline, homeless: p08_homeless, idle: p08_idle, waking: p08_waking },
+  p09: { attention: p09_attention, working: p09_working, delegating: p09_delegating, offline: p09_offline, homeless: p09_homeless, idle: p09_idle, waking: p09_waking },
+  p10: { attention: p10_attention, working: p10_working, delegating: p10_delegating, offline: p10_offline, homeless: p10_homeless, idle: p10_idle, waking: p10_waking },
 };
 
 /** The chosen pet's clip (reactive: follows a change of pet). */
