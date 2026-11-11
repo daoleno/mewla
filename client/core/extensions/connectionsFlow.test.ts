@@ -74,6 +74,23 @@ describe("connecting a service", () => {
     expect(h.polls).toHaveLength(0);
   });
 
+  test("Open again tapped twice while the browser opens opens it once", async () => {
+    const h = harness(() => ({ flow: oauth({ integration: "github", user_code: "ABCD-1234", authorization_url: "https://github.com/login/device" }) }));
+    await h.flow.connect("github");
+    let release!: () => void;
+    h.deps.openUrl = (url) => new Promise<void>((resolve) => { h.opened.push(url); release = resolve; });
+    const first = h.flow.openBrowser();
+    await Bun.sleep(0);
+    const second = h.flow.openBrowser();
+    release();
+    await Promise.all([first, second]);
+    expect(h.opened).toEqual(["https://github.com/login/device"]);
+    // Once open, it can be opened again.
+    h.deps.openUrl = (url) => void h.opened.push(url);
+    await h.flow.openBrowser();
+    expect(h.opened).toHaveLength(2);
+  });
+
   test("a GitHub code is shown and copied before the page opens, and the page is polled", async () => {
     const h = harness(() => ({ flow: oauth({ integration: "github", user_code: "ABCD-1234", authorization_url: "https://github.com/login/device" }) }));
     await h.flow.connect("github");

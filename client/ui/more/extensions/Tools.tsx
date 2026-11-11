@@ -4,7 +4,7 @@ import type { ConnectionTool, PluginAccount } from "../../../core/extensions/con
 import { toolSections, toolsSwitch, type ToolsSwitch } from "../../../core/extensions/pluginConnectionsModel";
 import { formatDateTime } from "../../../core/more/dates";
 import { daemonState } from "../daemon";
-import { EmptyState, Row, Section, StatusMark, SwitchRow, type Status } from "../kit/kit";
+import { EmptyState, Row, Section, Spinner, StatusMark, SwitchRow, type Status } from "../kit/kit";
 import { Icon } from "../kit/Icon";
 import type { PageNav } from "../routes";
 import { PluginsFrame } from "./Pages";
@@ -36,7 +36,8 @@ export function ToolsPage(props: { service: string; account?: string; nav: PageN
   });
   return (
     <PluginsFrame title="Tools & activity" testID="tools-page" nav={props.nav} onRefresh={() => accountId() && void plugins()?.load(accountId()!)}>
-      {target() ? <ToolsView account={target()!} nav={props.nav} /> : <EmptyState busy title="Loading tools" />}
+      {/* Loading only while the account's answer is on its way; a failed one says so above. */}
+      {target() ? <ToolsView account={target()!} nav={props.nav} /> : flowState().running === `load:${accountId()}` || !flowState().loaded || (accountId() && !asked.has(accountId()!)) ? <EmptyState busy title="Loading tools" /> : null}
     </PluginsFrame>
   );
 }
@@ -65,12 +66,13 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
   return (
     <View>
       <Section title={a.name}>
-        <SwitchRow testID="account-on" title="On" subtitle="Brain and Workers can use this account." checked={a.enabled} busy={running() === `enabled:${a.id}`} disabled={busy() && running() !== `enabled:${a.id}`} onChange={(on) => plugins()?.setEnabled(a, on)} />
+        <SwitchRow testID="account-on" accessibilityLabel="Account on" title="On" subtitle="Brain and Workers can use this account." checked={a.enabled} busy={running() === `enabled:${a.id}`} disabled={busy() && running() !== `enabled:${a.id}`} onChange={(on) => plugins()?.setEnabled(a, on)} />
         <Row
           testID="check-tools"
           icon="pulse"
           title="Check service and tools"
           subtitle={a.verified_at ? `Last checked ${formatDateTime(a.verified_at)}` : undefined}
+          trailing={running() === `refresh:${a.id}` ? <Spinner size={16} /> : undefined}
           disabled={busy()}
           onPress={() => plugins()?.refresh(a)}
         />
@@ -84,7 +86,7 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
               const rows = section.tools.map((tool) => <ToolRow tool={tool} locked={locked()} onToggle={(on) => plugins()?.setTools(a, [tool.name], on)} />);
               // A single group is the whole list; All tools already covers it.
               return sections.length > 1
-                ? [<SwitchRow title={`${section.title} · ${section.allowed}/${section.tools.length}`} checked={state.on} disabled={locked() || state.tap === "none"} onChange={() => flip(state)} />, ...rows]
+                ? [<SwitchRow title={`${section.title} · ${section.allowed}/${section.tools.length}`} accessibilityLabel={`All of ${section.title}`} checked={state.on} disabled={locked() || state.tap === "none"} onChange={() => flip(state)} />, ...rows]
                 : rows;
             })}
           </View>
@@ -120,7 +122,14 @@ function ToolRow(props: { tool: ConnectionTool; locked: boolean; onToggle: (allo
   const expandable = inputs.length > 0 || description.length > 120;
   return (
     <View>
-      <View role={expandable ? "button" : undefined} onPress={expandable ? () => expanded.set(!expanded()) : undefined} class="flex-row items-center gap-2 px-4 py-3 active:bg-accent">
+      <View
+        role={expandable ? "button" : undefined}
+        accessibilityLabel={expandable ? `${props.tool.name}, ${inputs.length} input${inputs.length === 1 ? "" : "s"}` : undefined}
+        accessibilityHint={expandable ? (expanded() ? "Hides details" : "Shows details") : undefined}
+        accessibilityState={expandable ? { expanded: expanded() } : undefined}
+        onPress={expandable ? () => expanded.set(!expanded()) : undefined}
+        class="flex-row items-center gap-2 px-4 py-3 active:bg-accent"
+      >
         <View class="w-4">{expandable ? <Icon name={expanded() ? "chevron-down" : "chevron-right"} size={14} tone="faint" /> : null}</View>
         <View class="min-w-0 flex-1">
           <Text class="font-mono text-sm">{props.tool.name}</Text>
