@@ -80,10 +80,15 @@ const width = signal(360);
 export function Resources(props: { nav: PageNav }) {
   let poller: ResourcePoller | null = null;
   let lastServer = "";
-  // A new computer starts from nothing; reading runs while connected and the app is in front.
+  // Reading stops while another page covers this one (the stack's top is not Resources).
+  const onTop = () => {
+    const routes = props.nav.routes?.();
+    return !routes || routes.length === 0 || routes[routes.length - 1]?.name === "resources";
+  };
+  // A new computer starts from nothing; reading runs while connected, on top and the app in front.
   effect(() => {
     const current = daemon();
-    const live = current !== null && daemonState() === "connected" && lifecycle() === "active";
+    const live = current !== null && daemonState() === "connected" && lifecycle() === "active" && onTop();
     poller?.stop();
     poller = null;
     if ((current?.server.id ?? "") !== lastServer) {
