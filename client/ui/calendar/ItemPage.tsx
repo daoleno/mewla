@@ -84,7 +84,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute>;
 
   return (
     <NavPage title={item()?.title ?? "Calendar"} testID="calendar-item-page">
-      <Scroll class="flex-1 bg-background">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         {!item() ? (
           <View class="items-center px-6 py-16"><Text class="text-base text-muted-foreground">This item is no longer in Calendar.</Text></View>
         ) : (
@@ -144,7 +144,7 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
   const run = (): CalendarRun | undefined => item()?.runs?.find((r) => r.id === props.runId);
   return (
     <NavPage title="Run" testID="calendar-run-page">
-      <Scroll class="flex-1 bg-background">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         {!run() ? (
           <View class="items-center px-6 py-16"><Text class="text-base text-muted-foreground">This run is no longer listed.</Text></View>
         ) : (

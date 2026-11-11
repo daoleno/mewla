@@ -180,7 +180,7 @@ export function WorkPage(props: { nav: NavStackState<any>; links: WorkLinks }) {
   return (
     <NavPage title="Work" testID="work-page">
       <View class="flex-1 bg-background">
-        <List testID="work-list" class="flex-1" each={rows()} keyExtractor={(row) => (row.kind === "group" ? `g:${row.title}` : `w:${row.slip.workId}`)}
+        <List keyboardShouldPersistTaps="handled" testID="work-list" class="flex-1" each={rows()} keyExtractor={(row) => (row.kind === "group" ? `g:${row.title}` : `w:${row.slip.workId}`)}
           header={() => (
             <View>
               <Notice />
@@ -248,7 +248,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
 
   return (
     <NavPage title="Work" testID="work-detail">
-      <Scroll class="flex-1 bg-background">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         {!slip() ? (
           <View class="items-center gap-2 px-6 py-16">
             <Text class="text-lg font-semibold">This Work is no longer open</Text>

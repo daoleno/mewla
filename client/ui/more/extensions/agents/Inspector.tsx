@@ -89,7 +89,7 @@ function ancestors(path: string | undefined): Set<string> {
 
 function Code(props: { content: string }) {
   return (
-    <Scroll horizontal class="rounded-xl border border-border bg-background">
+    <Scroll keyboardShouldPersistTaps="handled" horizontal class="rounded-xl border border-border bg-background">
       <View selectable><Text class="p-3 font-mono text-xs">{props.content || "This file is empty."}</Text></View>
     </Scroll>
   );

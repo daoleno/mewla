@@ -84,7 +84,7 @@ export function CodexSkillsSheet(props: {
         ) : visible().length === 0 ? (
           <Text class="py-10 text-center text-sm text-muted-foreground">No matching skills</Text>
         ) : (
-          <Scroll style={{ maxHeight: 430 }}>
+          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 430 }}>
             <View class="overflow-hidden rounded-xl border border-border bg-card">
               {visible().map((skill) => (
                 <Button testID={`skill-${skill.name}`} accessibilityLabel={`Use ${skill.name}`} onPress={() => pick(skill)}

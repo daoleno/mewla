@@ -101,7 +101,7 @@ function WorkspaceFolder(props: { trail: string[]; hostSession?: SessionFileIden
   if (!tree()) void read();
 
   return (
-    <Scroll class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={busy() && !!tree()} onRefresh={() => void read()}>
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={busy() && !!tree()} onRefresh={() => void read()}>
       <>{content()}</>
     </Scroll>
   );
@@ -223,14 +223,14 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity;
     if (!f.content) return <EmptyState testID="workspace-file-empty" icon="document" title="Empty file." />;
     if (brainWorkspaceMarkdownPath(f.path || props.path)) {
       return (
-        <Scroll class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2">
+        <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2">
           <TextView testID="workspace-markdown" markdown={f.content} selectable onLinkPress={(event) => openLink(event.url)} />
         </Scroll>
       );
     }
     return (
-      <Scroll class="flex-1 bg-background" contentClass="pb-10">
-        <Scroll horizontal class="w-full" contentClass="px-4 py-3">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="pb-10">
+        <Scroll keyboardShouldPersistTaps="handled" horizontal class="w-full" contentClass="px-4 py-3">
           <View selectable>
             <Text testID="workspace-text" class="font-mono text-sm">{f.content}</Text>
           </View>

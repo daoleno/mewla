@@ -60,7 +60,7 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
       <View class="flex-1 rounded-xl border border-border">
         {loading() && entries().length === 0 ? <Text class="p-3 text-sm text-muted-foreground">Loading…</Text> : null}
         {!loading() && entries().length === 0 && !problem() ? <Text class="p-3 text-sm text-muted-foreground">No folders here.</Text> : null}
-        <Scroll class="flex-1">
+        <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
           {entries().map((entry) => (
             <Button testID="dir-entry" onPress={() => void load(entry.path)} class="flex-row items-center gap-2 px-3 py-2 active:bg-accent">
               <Icon name="folder" size={16} />

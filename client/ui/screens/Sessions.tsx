@@ -228,7 +228,7 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
           </View>
         ) : null}
         {notice() ? <Text testID="sessions-notice" class="px-4 py-2 text-sm text-destructive" onPress={() => notice.set("")}>{notice()}</Text> : null}
-        <List testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-24"
+        <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-24"
           empty={<Empty onPair={props.onPair} onNew={props.onNew} />}>
           {(row) => (
             <View>

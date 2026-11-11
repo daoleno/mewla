@@ -104,7 +104,7 @@ function BranchPicker(props: { review: GitReview; onDone: () => void }) {
       {creatable() ? <TextButton testID="branch-create" label={`Create ${query().trim()}`} busy={busy() === query().trim()} onPress={() => void run(query().trim(), true)} /> : null}
       {!payload() && !error() ? <EmptyState busy title="Loading branches" /> : null}
       {payload() && !shown().length ? <EmptyState title="No matching branches" /> : null}
-      <Scroll class="max-h-[420px] overflow-hidden rounded-2xl border border-border">
+      <Scroll keyboardShouldPersistTaps="handled" class="max-h-[420px] overflow-hidden rounded-2xl border border-border">
         {shown().map((branch) => (
           <Row
             testID={`branch-${branch.name}`}
