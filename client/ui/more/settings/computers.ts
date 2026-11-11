@@ -89,8 +89,11 @@ export const connectionIssue = signal<{ serverId: string; issue: ConnectionIssue
 let diagnosed = "";
 let followingIssue = false;
 
-/** Looks for the reason each time the current computer's connection fails with a new one. */
-export function followConnectionIssue(): void {
+/**
+ * Looks for the reason each time the current computer's connection fails with a new one.
+ * Started once, at module load, so no page owns (and disposes) it.
+ */
+function followConnectionIssue(): void {
   if (followingIssue) return;
   followingIssue = true;
   effect(() => {
@@ -114,6 +117,8 @@ export function followConnectionIssue(): void {
     });
   });
 }
+
+followConnectionIssue();
 
 /** Look again on the next failure (Try again). */
 export function forgetConnectionIssue(): void {
