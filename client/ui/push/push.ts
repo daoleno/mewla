@@ -184,7 +184,7 @@ export function startNotifications(): void {
   const openSession = (sessionId: string) => openNotificationLink(`mewla://sessions/${encodeURIComponent(sessionId)}`);
   calendarLinks.openSession = openSession;
   workLinks.openSession = openSession;
-  workLinks.openCalendarItem = (itemId) => openNotificationLink(`mewla://calendar?id=${encodeURIComponent(itemId)}`);
+  workLinks.openCalendarItem = (itemId, runId) => openNotificationLink(`mewla://calendar?id=${encodeURIComponent(itemId)}${runId ? `&run=${encodeURIComponent(runId)}` : ""}`);
   workLinks.askBrain = (text) => {
     draftForBrain(text);
     brainNav.popToRoot();

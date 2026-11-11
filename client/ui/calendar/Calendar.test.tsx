@@ -38,6 +38,39 @@ describe("the Calendar tab", () => {
     expect(calls.filter((c) => c === "ask")).toHaveLength(1);
   }, 20_000);
 
+  test("back from Settings with notifications allowed there, the banner goes and the phone registers for pushes", async () => {
+    let granted = false;
+    const app = await calendarApp({ calendar_items: [] }, {
+      "push.permission": () => ({ granted }),
+      "push.requestPermission": () => false,
+      "push.openSettings": () => void (granted = true),
+    });
+    await app.waitFor("text:Reminders disabled");
+    expect(framesOf(app.host.posts(), "register_push")).toHaveLength(0);
+    await app.press("id:reminder-settings");
+    await app.setLifecycle("background");
+    await app.setLifecycle("active");
+    await app.waitUntil(() => !app.shows("id:reminder-banner"), SLOW);
+    await app.waitUntil(() => framesOf(app.host.posts(), "register_push").length === 1, SLOW);
+  }, 20_000);
+
+  test("a new item starts at the next quarter hour an hour from now, in the phone's zone", async () => {
+    // The wall clock in Shanghai (GMT+8, no daylight saving) as the editor's time field shows it.
+    const expected = () => {
+      const at = new Date(Math.ceil((Date.now() + 3_600_000) / 900_000) * 900_000 + 8 * 3_600_000);
+      const hour = at.getUTCHours();
+      return `${hour % 12 || 12}:${String(at.getUTCMinutes()).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+    };
+    const app = await calendarApp({ calendar_items: [] });
+    const before = expected();
+    await app.press("id:add-item");
+    await app.waitFor("id:calendar-editor");
+    // Either side of a quarter hour passing while the editor opens.
+    await app.waitUntil(() => app.texts().includes(before) || app.texts().includes(expected()), SLOW);
+    expect(app.texts()).toContain("Reminder");
+    expect(app.texts()).toContain("None");
+  }, 20_000);
+
   test("the heading says Today, the month picks a day and Hide month goes back to the whole agenda", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
     await app.waitFor("text:Call the bank");
@@ -201,6 +234,19 @@ describe("notifications", () => {
     await app.waitFor("id:work-detail");
     await app.wait(500);
     expect(app.shows("id:work-detail")).toBe(true);
+  }, 20_000);
+
+  test("another computer: the last one's Calendar item and Work pages close", async () => {
+    const brain = { current_work: [{ work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() }] };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)], brain }), storage: pairedTwo, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://brain/work/w-q?serverId=s1" });
+    await app.waitFor("id:work-detail", SLOW);
+    await app.host.send("links.open", { url: "mewla://calendar?id=Call%20the%20bank&serverId=s1" });
+    await app.waitFor("id:calendar-item-page", SLOW);
+    // Both are open, the Work page on its hidden tab.
+    expect(app.shows("id:work-detail")).toBe(true);
+    await app.host.send("links.open", { url: "mewla://sessions?serverId=s2" });
+    await app.waitUntil(() => !app.shows("id:calendar-item-page") && !app.shows("id:work-detail"), SLOW);
   }, 20_000);
 
   test("an alert's link opens the item too, and a link for a computer this phone does not know opens nothing", async () => {

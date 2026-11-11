@@ -14,7 +14,7 @@ const AUTOSAVE_MS = 600;
  * it started from; if the computer changed the file meanwhile, it says so and keeps your
  * text until you load theirs.
  */
-export function WorkFilePage(props: { id: string; onClose: () => void; openCalendarItem: (itemId: string) => void }) {
+export function WorkFilePage(props: { id: string; onClose: () => void; openCalendarItem: (itemId: string, runId?: string) => void }) {
   const item = () => workFiles().find((w) => w.id === props.id);
   const editingBody = signal(false);
   const text = signal("");
@@ -125,7 +125,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
               <Text class="text-sm text-muted-foreground">{`${workItemStatusLabel[workItemStatus(item()!)]} · ${age(item()!.mtime)}`}</Text>
               <Text class="text-xl font-semibold">{item()!.title || "Untitled work"}</Text>
               {origin() ? (
-                <Button onPress={() => props.openCalendarItem(origin()!.itemId)} class="self-start">
+                <Button testID="work-file-calendar-link" onPress={() => props.openCalendarItem(origin()!.itemId, origin()!.runId)} class="self-start">
                   <Text class="text-base text-primary">{originLabel(origin()!, calendarItems(), clock(), { title: item()!.title, at: item()!.frontmatter.created }) ?? "Calendar"}</Text>
                 </Button>
               ) : null}

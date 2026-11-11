@@ -20,7 +20,7 @@ export function calendarRoute(route: CalendarRoute) {
     case "calendar": return <CalendarPage nav={calendarNav} openSession={(id) => calendarLinks.openSession(id)} />;
     case "item": return <ItemPage id={route.id} nav={calendarNav} openSession={(id) => calendarLinks.openSession(id)} />;
     case "run": return <RunPage itemId={route.itemId} runId={route.runId} nav={calendarNav} openSession={(id) => calendarLinks.openSession(id)} />;
-    case "workFile": return <WorkFilePage id={route.id} onClose={() => calendarNav.pop()} openCalendarItem={(id) => calendarNav.push({ name: "item", id })} />;
+    case "workFile": return <WorkFilePage id={route.id} onClose={() => calendarNav.pop()} openCalendarItem={(id, runId) => showCalendarItem(id, runId)} />;
   }
 }
 

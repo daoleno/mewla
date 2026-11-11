@@ -129,4 +129,31 @@ describe("a Calendar run's Work file", () => {
     await app.waitUntil(() => framesOf(app.host.posts(), "write_work_item").length === 2);
     expect((framesOf(app.host.posts(), "write_work_item")[1].frontmatter as Record<string, unknown>).done).toBeTruthy();
   }, 25_000);
+
+  async function openWorkFile(daemon: Record<string, unknown>) {
+    const app = await open(APP, { host: phoneHost({ calendar_items: [calendarItem], work_items: [work], ...daemon }), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar?id=c1&run=r1" });
+    await app.waitFor("id:calendar-run-page", { timeout: 10_000 });
+    await app.waitFor("id:open-work-file", { timeout: 10_000 });
+    await app.press("id:open-work-file");
+    await app.waitFor("id:work-file-page");
+    return app;
+  }
+
+  test("a link with its run opens the run; the Work file's From Calendar goes back to that run", async () => {
+    const app = await openWorkFile({});
+    await app.waitFor("id:work-file-calendar-link", { timeout: 10_000 });
+    await app.press("id:work-file-calendar-link");
+    await app.waitFor("id:calendar-run-page");
+    await app.wait(300);
+    expect(app.shows("id:work-file-page")).toBe(false);
+  }, 25_000);
+
+  test("a save the computer refuses says so, in its words", async () => {
+    const app = await openWorkFile({ replies: { write_work_item: { type: "error", message: "disk is full" } } });
+    await app.press("id:work-file-edit");
+    await app.waitFor("id:work-file-body");
+    await app.type("id:work-file-body", " Also the fourth.");
+    await app.waitFor("text:Save failed. disk is full", { timeout: 10_000 });
+  }, 25_000);
 });
