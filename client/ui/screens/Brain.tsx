@@ -35,9 +35,10 @@ const openWorkEvent = (event: BrainWorkResultEvent) => {
   if (transport && event.unread) markWorkRead(transport, event.work_id);
   brainNav.push({ name: "workDetail", workId: event.work_id });
 };
+// A past thread is read-only: its Work cards and messages offer no actions (Expo's readOnly).
 const items = computed(() => timeline(brainThread(), {
-  onPendingAction: (id, action) => untracked(brainChat)?.actOnFailed(id, action),
-  onWorkEvent: openWorkEvent,
+  onPendingAction: routedBrainThread() ? undefined : (id, action) => untracked(brainChat)?.actOnFailed(id, action),
+  onWorkEvent: routedBrainThread() ? undefined : openWorkEvent,
   currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
 }));
 
@@ -69,6 +70,8 @@ export async function startNewChat(): Promise<void> {
   startingChat.set(true);
   try {
     await newBrainChat(transport);
+    // A past thread was showing: the new chat is what the person asked for.
+    openBrainThread(null);
   } catch {
     // Offline or refused: the current chat stays; the button can be pressed again.
   } finally {
@@ -157,8 +160,9 @@ export function Brain() {
   const editor = createMessageEdit({ text, brain: true, messageRewind: () => false, send: (value) => brainChat()?.send(value) });
   const finalReplies = computed(() => finalReplyIdsOf(brainThread().conversation?.events ?? []));
   const handlers = {
-    onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
-      void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
+    onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) => {
+      if (!untracked(routedBrainThread)) void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
+    },
     isFinalReply: (id: string) => finalReplies().has(id),
     workingSince: () => activity()?.started_at,
     // A reply's image (a Calendar run's result too) is a file on Brain's host.
