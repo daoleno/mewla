@@ -31,6 +31,8 @@ import { workFiles } from "../work/state";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import type { MoreRoute, SessionsRoute } from "./routes";
 import { needsYou } from "./attention";
+import { settingsLinkRoutes } from "../../core/settings/settingsLink";
+import { setOpenExtensions } from "../more/extensions/plugins";
 import { tabTitle } from "../../core/sessions/attention";
 
 const tabs = [
@@ -82,6 +84,17 @@ export function openMore(...routes: MoreRoute[]) {
   selectedTab.set(3);
   moreNav.setRoutes(moreRoutes(routes));
 }
+
+/** `mewla://settings…` (not a pairing link): the Settings page it names, under More. True when it was one. */
+export function openSettingsLink(url: string): boolean {
+  const routes = settingsLinkRoutes(url);
+  if (!routes) return false;
+  openMore(...routes);
+  return true;
+}
+
+// A Plugins sign-in that came back (a browser tab, a phone's link) opens Extensions, where its card finishes it.
+setOpenExtensions(() => openPlace({ key: "extensions" }));
 
 const PLACE_ROUTES: Record<Exclude<DesktopPlaceKey, "brain" | "sessions" | "calendar">, MoreRoute> = {
   extensions: { name: "extensions" },
