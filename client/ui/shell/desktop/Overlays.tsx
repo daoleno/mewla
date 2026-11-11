@@ -149,7 +149,7 @@ function Shortcuts() {
           <Icon name="close" size={18} />
         </Button>
       </View>
-      <Scroll class="max-h-[460px]" contentClass="p-1.5">
+      <Scroll keyboardShouldPersistTaps="handled" class="max-h-[460px]" contentClass="p-1.5">
         {desktopShortcutRows(mod()).map((row) => (
           <View class="min-h-[34px] flex-row items-center gap-3 px-3">
             <Text class="flex-1 text-sm">{row.label}</Text>

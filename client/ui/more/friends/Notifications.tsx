@@ -63,7 +63,7 @@ export function Notifications(props: { nav: PageNav; top: () => boolean }) {
       {rows() === null ? (
         <EmptyState busy />
       ) : (
-        <Scroll class="flex-1">
+        <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
           {draftCount() > 0 ? (
             <Line
               testID="friends-notification-drafts"

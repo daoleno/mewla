@@ -4,7 +4,7 @@ import { AlertDialog, Button, DiffView, Input, type DiffFile, type DiffLineRange
 import { GuardedSheet as Sheet } from "../../shell/AppSheet";
 import { NavPage } from "../../shell/NavPage";
 import { gitHunkAtLine, gitHunkSelection, parseGitPatch, splitGitPatchByFile, type GitParsedPatch, type GitPatchHunk, type GitPatchSide } from "../../../core/git/gitDiffHunks";
-import { canExpandGitDiffFile, formatGitDiffBytes, gitDiffExpansionSides, gitDiffPatchText, planGitDiffReview, type GitDiffExpansionSides, type GitDiffSection } from "../../../core/git/gitDiffReview";
+import { canExpandGitDiffFile, formatGitDiffBytes, gitDiffContentScope, gitDiffExpansionSides, gitDiffPatchText, planGitDiffReview, type GitDiffExpansionSides, type GitDiffSection } from "../../../core/git/gitDiffReview";
 import type { GitDiffPatchPayload } from "../../../core/git/gitDiff";
 import { findGitPatchMatches, followGitReviewEntry, gitAskContext, gitFindLabel, GIT_CODE_TEXT, stepGitCodeText, stepGitFind, type GitFindMatch } from "../../../core/git/gitReader";
 import { splitGitReviewPath, type GitReviewEntry, type GitReviewGroup } from "../../../core/git/gitReviewModel";
@@ -358,16 +358,18 @@ export function DiffReader(props: { review: GitReview; entry: string; nav: PageN
     cursor.set(null);
     selection.set(null);
     try {
+      const scope = gitDiffContentScope(current.file, current.group);
       const [payload, content] = await Promise.all([
         getGitPatch(d, review.target, current.file.path),
         // Both whole sides, when collapsed context can expand: asked with the patch, so the reader opens once.
-        canExpandGitDiffFile(current.file) ? getGitFileContent(d, review.target, current.file.path).catch(() => null) : Promise.resolve(null),
+        // They also carry the syntax colors: a bare patch was drawn plain (FINAL-VERIFY gitfiles D4).
+        canExpandGitDiffFile(current.file) ? getGitFileContent(d, review.target, current.file.path, scope).catch(() => null) : Promise.resolve(null),
       ]);
       if (mine !== epoch) return;
       const plan = planGitDiffReview(payload, current.file, current.group);
       if (plan.kind === "sections") {
         const expandable = plan.sections.length === 1 && plan.sections[0]!.expandable;
-        reader.set({ kind: "ready", sections: plan.sections, payload, sides: expandable && content ? gitDiffExpansionSides(content, current.file) : null });
+        reader.set({ kind: "ready", sections: plan.sections, payload, sides: expandable && content ? gitDiffExpansionSides(content, current.file, scope) : null });
       } else reader.set(plan);
     } catch (reason) {
       if (mine === epoch) reader.set({ kind: "error", message: reason instanceof Error ? reason.message : "Could not load this diff." });

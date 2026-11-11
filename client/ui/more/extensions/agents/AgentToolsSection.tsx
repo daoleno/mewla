@@ -51,7 +51,7 @@ export function AgentToolsSection(props: { nav: PageNav }) {
     );
   };
   return (
-    <View testID="agent-tools" class="mt-6" style={{ display: hidden() ? "none" : "flex" }}>
+    <View testID="agent-tools" class="mt-6 flex-col" style={{ display: hidden() ? "none" : "flex" }}>
       <View class="mb-1.5 gap-0.5 px-4">
         <Text class="text-sm font-medium text-muted-foreground" role="header">From your agents</Text>
         <Text class="text-xs text-muted-foreground">Plugins and Skills that each tool installed itself. Manage or remove them here.</Text>

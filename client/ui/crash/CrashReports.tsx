@@ -61,7 +61,7 @@ export function CrashReportSheet() {
           {current() ? `The details below were also sent to ${current()!.name || "your computer"}. ` : ""}Copy them and send them to us if this keeps happening.
         </Text>
       </View>
-      <Scroll class="max-h-96 rounded-xl border border-border bg-card">
+      <Scroll keyboardShouldPersistTaps="handled" class="max-h-96 rounded-xl border border-border bg-card">
         <View class="gap-3 p-3">
           {crashReports().map((report) => (
             <View class="gap-1">

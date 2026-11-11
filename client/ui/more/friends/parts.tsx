@@ -532,7 +532,7 @@ export function PostList(props: {
       <EmptyState busy />
     </View>
   ) : (
-    <List
+    <List keyboardShouldPersistTaps="handled"
       testID={props.testID}
       class="flex-1 bg-background"
       each={posts() ?? []}

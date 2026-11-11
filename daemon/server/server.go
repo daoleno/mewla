@@ -1598,7 +1598,7 @@ func (s *Server) handleRepositoryMessage(conn *websocket.Conn, raw clientMessage
 			"patch":      payload,
 		})
 	case "git_diff_file_content":
-		payload, err := s.buildGitDiffFileContent(raw.TargetID, raw.Cwd, raw.Path)
+		payload, err := s.buildGitDiffFileContent(raw.TargetID, raw.Cwd, raw.Path, raw.Scope)
 		if err != nil {
 			s.sendErrorWithRequestID(conn, raw.RequestID, "git_diff_file_content_failed", err.Error())
 			return

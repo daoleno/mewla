@@ -550,7 +550,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           </View>
         ) : null}
         <View class="flex-1">
-          <View class="absolute inset-0" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
+          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)} />
             {fallback() ? (
               <View testID="terminal-offline" class="absolute left-3 right-3 top-3 gap-1.5 rounded-xl border border-border bg-card px-3 py-3">

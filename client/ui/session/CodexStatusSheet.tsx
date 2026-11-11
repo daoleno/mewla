@@ -76,7 +76,7 @@ export function CodexStatusSheet(props: {
         </View>
 
         {ready() ? (
-          <Scroll style={{ maxHeight: 470 }}>
+          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 470 }}>
             <View class="gap-4">
               {codexStatusSections(ready()!.status).length === 0 ? (
                 <Text class="py-6 text-center text-sm text-muted-foreground">Codex reported nothing for this chat yet.</Text>

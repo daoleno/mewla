@@ -32,7 +32,7 @@ export function Page(props: {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
   const width = () => (mobile ? (props.maxWidth ?? 720) : props.column === "wide" ? 1200 : 760);
   const scroll = (
-    <Scroll ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
+    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
       <View class="w-full self-center" style={{ maxWidth: width() }}>{props.children}</View>
     </Scroll>
   );

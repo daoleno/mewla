@@ -51,11 +51,12 @@ export function matchesPluginReturn(url: string, flow: ConnectFlow): boolean {
 export async function finishPluginReturn(
   pending: PendingConnection, currentServerId: string | null, callback: string,
   send: (serverId: string, request: ConnectionRequest) => Promise<ConnectionResponse>,
+  now: number = Date.now(),
 ): Promise<ConnectionResponse> {
   if (pending.serverId !== currentServerId || !matchesPluginReturn(callback, pending.flow)) {
     throw new Error("This authorization belongs to another connection. Return to its server and try again.");
   }
-  if (Date.parse(pending.flow.expires) <= Date.now()) throw new Error("This connection expired. Connect again.");
+  if (Date.parse(pending.flow.expires) <= now) throw new Error("This connection expired. Connect again.");
   return send(pending.serverId, { action: "connect_finish", flow_id: pending.flow.id, callback });
 }
 /** What Brain can now do, in one line, from the service's read job. */

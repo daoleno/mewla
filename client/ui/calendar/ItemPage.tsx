@@ -84,7 +84,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute>;
 
   return (
     <NavPage title={item()?.title ?? "Calendar"} testID="calendar-item-page">
-      <Scroll class="flex-1 bg-background">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         {!item() ? (
           <View class="items-center px-6 py-16"><Text class="text-base text-muted-foreground">This item is no longer in Calendar.</Text></View>
         ) : (
@@ -140,11 +140,13 @@ export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute>;
 }
 
 export function RunPage(props: { itemId: string; runId: string; nav: NavStackState<CalendarRoute>; openSession: (sessionId: string) => void }) {
+  // The result's width, which its pictures take.
+  const resultWidth = signal(0);
   const item = useFullItem(props.itemId);
   const run = (): CalendarRun | undefined => item()?.runs?.find((r) => r.id === props.runId);
   return (
     <NavPage title="Run" testID="calendar-run-page">
-      <Scroll class="flex-1 bg-background">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         {!run() ? (
           <View class="items-center px-6 py-16"><Text class="text-base text-muted-foreground">This run is no longer listed.</Text></View>
         ) : (
@@ -156,7 +158,11 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
             {run()!.status === "failed"
               ? <View selectable><Text class="text-base text-destructive">{run()!.failure_reason || "It failed without saying why."}</Text></View>
               : run()!.result
-                ? <TextView testID="run-result" markdown={run()!.result!} renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={loadResultImage} />} />
+                ? (
+                  <View onLayout={({ bounds }) => resultWidth.set(bounds.size.width)}>
+                    <TextView testID="run-result" markdown={run()!.result!} renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={loadResultImage} width={resultWidth} />} />
+                  </View>
+                )
                 : <Text class="text-base text-muted-foreground">{run()!.result_preview ? `${run()!.result_preview}…` : run()!.status === "running" ? "Still running." : "No result."}</Text>}
             {run()!.worker_session && activeRun(item()!)?.id === run()!.id ? (
               <Button testID="open-session" onPress={() => props.openSession(run()!.worker_session!)} class="self-start rounded-full border border-border px-4 py-2 active:bg-accent">

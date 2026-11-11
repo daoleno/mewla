@@ -247,7 +247,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
 function MarkdownBody(props: { text: SessionFileTextPreview; onLink: (href: string) => void }) {
   const note = sessionFileTruncationNote(props.text);
   return (
-    <Scroll class="flex-1" contentClass="px-4 pb-10 pt-3">
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-10 pt-3">
       <TextView testID="file-markdown" markdown={props.text.content} selectable onLinkPress={(event) => props.onLink(event.url)} />
       {note ? <Text testID="file-truncated" class="pt-2 text-xs text-muted-foreground">{note}</Text> : null}
     </Scroll>
@@ -258,8 +258,8 @@ function MarkdownBody(props: { text: SessionFileTextPreview; onLink: (href: stri
 function TextBody(props: { text: SessionFileTextPreview }) {
   const note = sessionFileTruncationNote(props.text);
   return (
-    <Scroll class="flex-1" contentClass="pb-10">
-      <Scroll horizontal class="w-full" contentClass="px-4 py-3">
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="pb-10">
+      <Scroll keyboardShouldPersistTaps="handled" horizontal class="w-full" contentClass="px-4 py-3">
         <View selectable>
           <Text testID="file-text" class="font-mono text-sm">{props.text.content || " "}</Text>
         </View>
@@ -289,7 +289,7 @@ export function ZoomImage(props: { src: string; name: string; testID?: string; o
   };
   return (
     <View class="flex-1">
-      <Scroll ref={(ref) => (scroll = ref)} class="flex-1" contentClass="grow items-center justify-center" maximumZoomScale={4} minimumZoomScale={1} accessibilityLabel="Zoomable image preview">
+      <Scroll keyboardShouldPersistTaps="handled" ref={(ref) => (scroll = ref)} class="flex-1" contentClass="grow items-center justify-center" maximumZoomScale={4} minimumZoomScale={1} accessibilityLabel="Zoomable image preview">
         <View class="h-full w-full" onPress={(event) => tap(event.position.x, event.position.y, event.clickCount)}>
           <Image
             testID={props.testID}

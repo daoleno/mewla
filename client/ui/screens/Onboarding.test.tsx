@@ -57,6 +57,22 @@ describe("first run", () => {
     expect(app.shows("id:paste")).toBe(true);
   });
 
+  test("a rotation lays the step out again: beside the cat on its side, above it upright", async () => {
+    const app = await open("../App.tsx", { host: phone(), platform: "android" });
+    await app.waitFor("id:set-up");
+    await app.waitFor("id:step-tall");
+    await app.setViewport(844, 390);
+    await app.waitFor("id:step-compact");
+    await app.setViewport(390, 844);
+    await app.waitFor("id:step-tall");
+    await app.press("id:scan-now");
+    await app.waitFor("id:split-tall");
+    await app.setViewport(844, 390);
+    await app.waitFor("id:split-compact");
+    await app.setViewport(390, 844);
+    await app.waitFor("id:split-tall");
+  });
+
   test("Other ways to connect opens the docs", async () => {
     const app = await open("../App.tsx", { host: phone(), platform: "android" });
     await app.press("id:scan-now");
@@ -125,8 +141,9 @@ describe("after pairing", () => {
     await app.waitFor("text:Brain is home.", { timeout: 10_000 });
     expect(app.texts()).toContain("Connected to Desk.");
     expect(app.storage()["mewla:onboarded"]).toBe("true");
+    // Nothing of the app is under the step (settings.md [20]: Android drew its native views over it).
+    expect(app.count("id:composer")).toBe(0);
     await app.press("id:open-brain");
-    // Brain's composer is there behind the onboarding already: wait for the onboarding to go.
     await app.waitFor("id:onboarding", { state: "gone" });
     await app.waitFor("id:composer");
   }, 15_000);
@@ -211,6 +228,41 @@ describe("Settings' Pair a computer", () => {
     await app.waitFor("id:connected-title", { timeout: 10_000 });
     expect(JSON.parse(app.storage()["mewla:v3:servers"]!).map((s: { url: string }) => s.url).sort()).toEqual(["ws://10.0.0.5:9876/ws", desk.url]);
   }, 15_000);
+
+  test("pairing again with the computer already paired asks nothing and still shows the connected step", async () => {
+    const same = { id: "s2", name: "Desk", url: "ws://10.0.0.5:9876/ws", daemonId: "a1".repeat(32), daemonPublicKey: computer.publicKey };
+    const app = await open("../App.tsx", {
+      host: phone(), platform: "android",
+      storage: { "mewla:v3:servers": JSON.stringify([same]), "mewla:v1:current_server_id": "s2", "mewla:onboarded": "true" },
+      network: { [computer.pairURL]: () => computer.answer() },
+    });
+    app.onDialog(() => { throw new Error("no dialog for a computer already paired"); });
+    await app.host.send("links.open", { url: "mewla://settings?addServer=1" });
+    await app.waitFor("id:pair-link");
+    await app.type("id:pair-link", computer.link());
+    await app.press("id:pair-link-submit");
+    await app.waitFor("id:connected-title", { timeout: 10_000 });
+  }, 15_000);
+
+  test("after a pairing from Settings, Open Brain and then More shows More, not the Pair page", async () => {
+    const same = { id: "s2", name: "Desk", url: "ws://10.0.0.5:9876/ws", daemonId: "a1".repeat(32), daemonPublicKey: computer.publicKey };
+    const app = await open("../FakeDaemonApp.tsx", {
+      host: phone(), platform: "android",
+      storage: { "mewla:v3:servers": JSON.stringify([same]), "mewla:v1:current_server_id": "s2", "mewla:onboarded": "true" },
+      network: { [computer.pairURL]: () => computer.answer() },
+    });
+    app.onDialog(() => "Pair and grant access");
+    await app.host.send("links.open", { url: "mewla://settings?addServer=1" });
+    await app.waitFor("id:pair-link");
+    await app.type("id:pair-link", computer.link());
+    await app.press("id:pair-link-submit");
+    await app.waitFor("id:open-brain", { timeout: 10_000 });
+    await app.press("id:open-brain");
+    await app.waitFor("id:composer");
+    await app.host.send("links.open", { url: "mewla://more" });
+    await app.waitFor("text:Computers");
+    expect(app.shows("id:pair-link")).toBe(false);
+  }, 20_000);
 
   test("Pair with an empty field reads the clipboard; with nothing there it asks for the link", async () => {
     const app = await pairPage();

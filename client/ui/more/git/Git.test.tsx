@@ -99,7 +99,7 @@ function repository(initial: File[]) {
         };
       case "git_diff_file_content": {
         const side = (content: string) => ({ label: "", exists: true, byte_count: content.length, line_count: content.split("\n").length, content });
-        return { reply: "git_diff_file_content", content: { repo_root: "/repo", path: body.path, base: side("const a = 1;\nconst b = 2;\nconst c = 4;\n"), current: side("const a = 1;\nconst b = 3;\nconst c = 4;\n") } };
+        return { reply: "git_diff_file_content", content: { repo_root: "/repo", path: body.path, scope: body.scope, base: side("const a = 1;\nconst b = 2;\nconst c = 4;\n"), current: side("const a = 1;\nconst b = 3;\nconst c = 4;\n") } };
       }
       case "git_branches":
         return {
@@ -251,6 +251,9 @@ describe("Git review", () => {
     await app.waitFor("text:Add the parser");
     expect(repo.asked.find((r) => r.type === "git_log")?.body).toEqual({ target_id: "w1", cwd: "/repo", limit: 40, skip: 0 });
     expect(app.texts()).toContain("First commit");
+    // A screen reader hears the age in words (FINAL-VERIFY gitfiles H3: "now ago").
+    expect(app.shows("label:Add the parser, Ada, 1 hour ago")).toBe(true);
+    expect(app.shows("label:First commit, Ada, 1 day ago")).toBe(true);
     await app.press("id:git-commit-a1b2c3d");
     await app.waitFor("id:git-commit-file-app.ts");
     expect(repo.asked.find((r) => r.type === "git_show")?.body).toEqual({ target_id: "w1", cwd: "/repo", sha: "a1b2c3d4e5f6" });
@@ -331,10 +334,11 @@ describe("Git review: the reader", () => {
     const { app, repo } = await openReview([app_ts]);
     await openDiffOf(app, "changes:app.ts");
     expect(repo.asked.find((r) => r.type === "git_diff_file_content")?.body).toEqual({ target_id: "w1", cwd: "/repo", path: "app.ts" });
-    // A file staged and changed again has an index between: it keeps its hunks.
+    // A file staged and changed again has the index between: each group asks for its own pair
+    // (FINAL-VERIFY gitfiles D4: the bare patch it showed instead was drawn plain).
     const both = await openReview([{ ...app_ts, staged: true, staged_additions: 1 }]);
     await openDiffOf(both.app, "changes:app.ts");
-    expect(both.repo.asked.some((r) => r.type === "git_diff_file_content")).toBe(false);
+    expect(both.repo.asked.find((r) => r.type === "git_diff_file_content")?.body).toEqual({ target_id: "w1", cwd: "/repo", path: "app.ts", scope: "unstaged" });
   });
 
   test("staging the last unstaged file moves the reader on to the same file in Staged, instead of out", async () => {
@@ -470,6 +474,31 @@ describe("Git review: the repository's files", () => {
     const before = repo.asked.filter((r) => r.type === "git_repo_file_content").length;
     await app.press("id:git-file-refresh");
     await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_repo_file_content").length === before + 1);
+  });
+});
+
+describe("Git review: the repository's files on a phone", () => {
+  test("a tap on a folder opens and closes it, a tap on a file opens it, and a long press offers Open file", async () => {
+    const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }]);
+    await app.waitFor("id:git-row-changes:app.ts");
+    app.onDialog((dialog) => (dialog.sheet ? "Browse files" : null));
+    await answering(app, () => app.press("id:git-more"));
+    await app.waitFor("id:git-file-dir:src");
+    await app.press("id:git-file-dir:src");
+    await app.waitFor("id:git-file-dir:src/lib");
+    await app.press("id:git-file-dir:src/lib");
+    await app.waitFor("id:git-file-src/lib/util.ts");
+    await app.press("id:git-file-dir:src");
+    await app.waitFor("id:git-file-src/lib/util.ts", { state: "gone" });
+    await app.press("id:git-file-dir:src");
+    await app.waitFor("id:git-file-src/lib/util.ts");
+    app.onDialog((dialog) => (dialog.sheet ? "Open file" : null));
+    await answering(app, () => app.longPress("id:git-file-src/lib/util.ts"));
+    await app.waitFor("id:git-file-view");
+    await app.back();
+    await app.waitFor("id:git-file-src/lib/util.ts");
+    await app.press("id:git-file-src/lib/util.ts");
+    await app.waitFor("id:git-file-view");
   });
 });
 

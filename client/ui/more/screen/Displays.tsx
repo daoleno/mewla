@@ -147,7 +147,7 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
             );
           }
           return (
-            <Scroll ref={(node: ScrollRef) => { scroller = node; focusCard(); }} class="flex-1" contentClass="px-4 pb-10 pt-2">
+            <Scroll keyboardShouldPersistTaps="handled" ref={(node: ScrollRef) => { scroller = node; focusCard(); }} class="flex-1" contentClass="px-4 pb-10 pt-2">
               <View class="w-full max-w-[720px] gap-3 self-center">
                 {notice()}
                 {list.map((display) => (

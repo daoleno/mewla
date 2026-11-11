@@ -146,7 +146,7 @@ export function ModelSheet(props: {
         {loading() ? (
           <Text class="py-8 text-center text-sm text-muted-foreground">Loading models…</Text>
         ) : (
-          <Scroll style={{ maxHeight: 420 }}>
+          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }}>
             <View class="gap-2">
               {effectTarget() ? (
                 <View class="gap-2">

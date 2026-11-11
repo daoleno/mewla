@@ -23,6 +23,7 @@ import { Sessions } from "../screens/Sessions";
 import { NewSession, newSessionOpen } from "../screens/NewSession";
 import { ServicesSheet } from "../sessions/ServicesSheet";
 import { EnrollmentApproval } from "../enrollment/Approval";
+import { CalendarAlertCard } from "../calendar/AlertCard";
 import { BrowserJoin } from "../enrollment/BrowserJoin";
 import { current, onTransport, workers } from "../session";
 import { routeOwner, screenRoute } from "../../core/screen/float";
@@ -257,7 +258,7 @@ function Paged<R>(props: { nav: NavStackState<R>; children: JSX.Element }) {
 function Section(props: { index: number }) {
   const shown = () => selectedTab() === props.index;
   return (
-    <View class="absolute inset-0" style={{ display: shown() ? "flex" : "none" }}>
+    <View class="absolute inset-0 flex-col" style={{ display: shown() ? "flex" : "none" }}>
       {props.index === 0 ? <Paged nav={brainNav}><NavStack state={brainNav} style={{ flex: 1 }}>{(route) => (route.name === "brain" ? <Brain /> : workRoute(route, brainNav))}</NavStack></Paged>
         : props.index === 1 ? <Paged nav={sessionsNav}><NavStack state={sessionsNav} style={{ flex: 1 }}>{sessionsRoute}</NavStack></Paged>
         : props.index === 2 ? <Paged nav={calendarNav}><NavStack state={calendarNav} style={{ flex: 1 }}>{calendarRoute}</NavStack></Paged>
@@ -314,6 +315,7 @@ function WideShell() {
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
       <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <EnrollmentApproval />
+      <CalendarAlertCard />
       <DesktopOverlays />
     </View>
   );
@@ -328,6 +330,7 @@ export function Shell() {
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
         <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
         <EnrollmentApproval />
+        <CalendarAlertCard />
       <TabBar testID="tabs" items={tabs.map((t, i) => ({ title: tabTitle(t.title, needsYou(t.key), selectedTab() === i), icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>

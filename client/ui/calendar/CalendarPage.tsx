@@ -1,4 +1,4 @@
-import { List, signal, Text, View } from "nsh";
+import { computed, List, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
@@ -153,18 +153,26 @@ export function CalendarPage(props: { nav: NavStackState<CalendarRoute>; openSes
       headerLeft={<Button testID="toggle-month" accessibilityLabel={showMonth() ? "Hide month" : "Show month"} onPress={toggleMonth}><Text class="text-base text-primary">{showMonth() ? "Hide month" : "Show month"}</Text></Button>}
       headerRight={<Button testID="add-item" accessibilityLabel="Add calendar item" disabled={!calendar()} onPress={() => openEditor(null)}><Text class={calendar() ? "text-2xl text-primary" : "text-2xl text-muted-foreground"}>+</Text></Button>}>
       <View class="flex-1 bg-background">
-        <List testID="agenda" class="flex-1" each={rows()}
+        <List keyboardShouldPersistTaps="handled" testID="agenda" class="flex-1" each={rows()}
           keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
           header={() => <View><ReminderBanner />{showMonth() ? <Month /> : null}<Heading /></View>}
           empty={() => <Empty />}>
-          {(row) => (
-            // Cells are recycled: what a cell shows follows the row it holds now.
-            <View>
-              {row().kind === "section"
-                ? <Text class="bg-background px-4 pb-1.5 pt-4 text-sm font-semibold text-muted-foreground">{(row() as { title: string }).title}</Text>
-                : <ItemRow item={() => (row() as { item: CalendarItem }).item} onPress={() => open((row() as { item: CalendarItem }).item)} />}
-            </View>
-          )}
+          {(row) => {
+            // Cells are recycled: what a cell shows follows the row it holds now. The clock makes new rows every
+            // 30 s, so the cell is rebuilt only when it turns from a heading into an item or back: a tap at the
+            // tick lands on the row, not on one being replaced.
+            const section = computed(() => row().kind === "section");
+            // The item row may read once more after the cell took a heading, before it goes: it keeps its last item.
+            const item = computed<CalendarItem>((last) => (row().kind === "section" ? last! : (row() as { item: CalendarItem }).item));
+            const title = computed<string>((last) => (row().kind === "section" ? (row() as { title: string }).title : last ?? ""));
+            return (
+              <View>
+                {section()
+                  ? <Text class="bg-background px-4 pb-1.5 pt-4 text-sm font-semibold text-muted-foreground">{title()}</Text>
+                  : <ItemRow item={item} onPress={() => open(item())} />}
+              </View>
+            );
+          }}
         </List>
         <CalendarEditor />
       </View>

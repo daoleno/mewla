@@ -210,7 +210,7 @@ export function CalendarEditor() {
         <Text class="text-base font-semibold">{editing() ? "Edit item" : "New item"}</Text>
         <Button testID="editor-save" disabled={saving()} onPress={() => void save()}><Text class="text-base font-semibold text-primary">{saving() ? "Saving…" : "Save"}</Text></Button>
       </View>
-      <Scroll class="flex-1">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
         <View class="pb-10">
           {failure() ? <Text testID="editor-failure" class="px-4 pt-3 text-base text-destructive">{failure()}</Text> : null}
           <View class="mt-3 border-t border-border">

@@ -32,8 +32,9 @@ const waitingActions: NativeAlertAction[] = [];
 /**
  * The current computer's Calendar: its items as the daemon last sent them, the actions on
  * them, and the phone's alerts armed from them. One per computer: a switch closes it, and
- * the next computer's Calendar arms its own alerts in place of these. Replies are not
- * applied; the `calendar_item_changed` broadcast that follows every change is.
+ * the next computer's Calendar arms its own alerts in place of these. Every change is
+ * applied from the `calendar_item_changed` broadcast that follows it; an answer to an alert
+ * (Done, Snooze) also applies its reply, so the alert is closed here the moment it is answered.
  */
 export class CalendarModel {
   items: CalendarItem[] = [];
@@ -43,6 +44,11 @@ export class CalendarModel {
   private stops: Array<() => void> = [];
   private armTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
+  /** Items whose Done or Snooze is on its way to the computer. */
+  private answering = new Set<string>();
+  /** Taking the host's alert actions: until then an open alert may already be answered on the phone. */
+  private taking = 0;
+  private took: boolean;
 
   constructor(
     readonly serverId: string,
@@ -50,6 +56,7 @@ export class CalendarModel {
     private readonly alertHost: AlertHost | null = null,
     private readonly now: () => number = Date.now,
   ) {
+    this.took = alertHost === null;
     this.stops.push(
       transport.on("connected", () => this.refresh()),
       transport.on("calendar_items_snapshot", (frame) => {
@@ -79,6 +86,19 @@ export class CalendarModel {
     this.stops.splice(0).forEach((stop) => stop());
     if (this.armTimer) clearTimeout(this.armTimer);
     this.listeners.clear();
+  }
+
+  /**
+   * Whether the app may ask about an open alert: not while the phone's own answers (Done or
+   * Snooze on the notification or the lock-screen alert) are still being taken from the host.
+   */
+  alertsSettled(): boolean {
+    return this.took && this.taking === 0;
+  }
+
+  /** The item's alert was answered on this phone and the answer has not reached the computer yet. */
+  answered(id: string): boolean {
+    return this.answering.has(id) || waitingActions.some((action) => action.serverId === this.serverId && action.itemId === id);
   }
 
   item(id: string): CalendarItem | undefined {
@@ -112,16 +132,35 @@ export class CalendarModel {
     return this.ask("run_calendar_item", { id }, "calendar_item_running", "Failed to run calendar item.");
   }
 
-  async snooze(id: string, minutes: number): Promise<CalendarItem> {
-    const item = await this.ask("snooze_calendar_item", { id, snooze_minutes: minutes }, "calendar_item_updated", "Failed to snooze calendar item.");
-    await this.alertHost?.cancelItem(id).catch(() => {});
-    return item;
+  snooze(id: string, minutes: number): Promise<CalendarItem> {
+    return this.answer(id, () => this.ask("snooze_calendar_item", { id, snooze_minutes: minutes }, "calendar_item_updated", "Failed to snooze calendar item."));
   }
 
-  async done(id: string): Promise<CalendarItem> {
-    const item = await this.ask("done_calendar_item", { id }, "calendar_item_updated", "Failed to mark calendar item done.");
-    await this.alertHost?.cancelItem(id).catch(() => {});
-    return item;
+  done(id: string): Promise<CalendarItem> {
+    return this.answer(id, () => this.ask("done_calendar_item", { id }, "calendar_item_updated", "Failed to mark calendar item done."));
+  }
+
+  /** An answer to an item's alert: answered while it travels, its reply applied when it lands. */
+  private async answer(id: string, send: () => Promise<CalendarItem>): Promise<CalendarItem> {
+    this.answering.add(id);
+    this.changed();
+    try {
+      const item = await send();
+      this.apply(item);
+      await this.alertHost?.cancelItem(id).catch(() => {});
+      return item;
+    } finally {
+      this.answering.delete(id);
+      this.changed();
+    }
+  }
+
+  /** A reply's item in place of the one it answered, unless the broadcast already brought a newer one. */
+  private apply(item: CalendarItem | undefined): void {
+    if (!item?.id) return;
+    const existing = this.item(item.id);
+    if (!existing || (existing.revision ?? 0) > (item.revision ?? 0)) return;
+    this.items = sortItems([...this.items.filter((i) => i.id !== item.id), item]);
   }
 
   /** The item with every run's full result (lists carry one line of each). */
@@ -146,12 +185,23 @@ export class CalendarModel {
    */
   async replayNativeActions(): Promise<void> {
     if (!this.alertHost) return;
-    const taken = await this.alertHost.takeActions().catch(() => [] as NativeAlertAction[]);
+    this.taking++;
+    let taken: NativeAlertAction[] = [];
+    try {
+      taken = await this.alertHost.takeActions().catch(() => [] as NativeAlertAction[]);
+    } finally {
+      this.taking--;
+    }
     waitingActions.push(...taken);
+    this.took = true;
+    // Alerts gated on this can open now; before the list came there are none.
+    if (this.loaded) this.changed();
     if (this.transport.state !== "connected") return;
     const mine = waitingActions.filter((a) => a.serverId === this.serverId);
     const others = waitingActions.filter((a) => a.serverId !== this.serverId);
     waitingActions.splice(0, waitingActions.length, ...others);
+    // Answered until each reaches the computer, not only the one on its way.
+    mine.forEach((action) => this.answering.add(action.itemId));
     for (const action of mine) {
       try {
         if (action.type === "done") await this.done(action.itemId);
@@ -161,6 +211,9 @@ export class CalendarModel {
         }
       } catch {
         // Gone, or already answered on another phone.
+      } finally {
+        this.answering.delete(action.itemId);
+        this.changed();
       }
     }
   }

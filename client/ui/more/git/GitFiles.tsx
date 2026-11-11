@@ -1,5 +1,6 @@
 import { signal, Text, View } from "nsh";
 import { AlertDialog, DiffView, Tree, type TreeItem } from "nsh/base";
+import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../../shell/NavPage";
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
@@ -92,6 +93,14 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
   const changes = () => repoTreeChanges(review.status()?.files ?? []);
   // While searching every folder of what was found is open; the person's own folding comes back after.
   const shownExpanded = () => (query().trim() ? repoTreeFolders(items()) : expanded());
+  const openFile = (path: string) => props.nav.push({ name: "git-file", targetId: review.target.targetId, cwd: review.target.cwd, path });
+  // On a phone a row that hears long presses (its menu) takes the touch from the tree, so it hears the tap
+  // too: a folder opens or closes (a search shows every folder open), a file opens.
+  const tapped = (id: string, folder: boolean) => {
+    if (!folder) return openFile(id);
+    if (query().trim()) return;
+    expanded.set(expanded().includes(id) ? expanded().filter((open) => open !== id) : [...expanded(), id]);
+  };
   return (
     <NavPage
       title={review.status()?.repo_name || "Files"}
@@ -123,7 +132,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
                     }}
                     selected={null}
                     onSelectedChange={({ selected }) => {
-                      if (!selected.startsWith(DIR)) props.nav.push({ name: "git-file", targetId: review.target.targetId, cwd: review.target.cwd, path: selected });
+                      if (!selected.startsWith(DIR)) openFile(selected);
                     }}
                     itemClass="active:bg-accent"
                     renderItem={(entry) => {
@@ -132,6 +141,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
                       return (
                         <View
                           testID={`git-file-${entry.id}`}
+                          onPress={mobile ? () => tapped(entry.id, entry.folder) : undefined}
                           onLongPress={() => void entryMenu(review, props.nav, entry.id)}
                           onContextMenu={() => void entryMenu(review, props.nav, entry.id)}
                           accessibilityLabel={`${entry.label}${changed ? `, ${gitDiffStatusWord(gitDiffTone(changed))}` : holds ? ", has changes" : ""}`}

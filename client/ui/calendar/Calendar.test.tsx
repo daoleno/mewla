@@ -56,13 +56,14 @@ describe("the Calendar tab", () => {
 
   test("a new item starts at the next quarter hour an hour from now, in the phone's zone", async () => {
     // The wall clock in Shanghai (GMT+8, no daylight saving) as the editor's time field shows it.
-    const expected = () => {
-      const at = new Date(Math.ceil((Date.now() + 3_600_000) / 900_000) * 900_000 + 8 * 3_600_000);
+    const expected = (now = Date.now()) => {
+      const at = new Date(Math.ceil((now + 3_600_000) / 900_000) * 900_000 + 8 * 3_600_000);
       const hour = at.getUTCHours();
       return `${hour % 12 || 12}:${String(at.getUTCMinutes()).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
     };
     const app = await calendarApp({ calendar_items: [] });
-    const before = expected();
+    // The editor reads the Calendar's clock, which ticks every 30 s: it may be that much behind.
+    const before = expected(Date.now() - 31_000);
     await app.press("id:add-item");
     await app.waitFor("id:calendar-editor");
     // Either side of a quarter hour passing while the editor opens.
@@ -82,6 +83,16 @@ describe("the Calendar tab", () => {
     await app.press("id:toggle-month");
     await app.waitUntil(() => app.texts().includes("Show month"));
     expect(app.texts()).toContain("Pay rent");
+  }, 20_000);
+
+  test("a tap that spans the clock's 30 s tick still opens its item: the tick does not rebuild the row under the finger", async () => {
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)] }), storage: paired, platform: "android", network: expoTokenService, clock: {} });
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.waitFor("id:calendar-item-Call the bank", SLOW);
+    await app.dragAndHold("id:calendar-item-Call the bank", { x: 0, y: 0 });
+    await app.clock!.runFor(31_000);
+    await app.drop();
+    await app.waitFor("id:cancel-item", SLOW);
   }, 20_000);
 
   test("cancels an item after asking, goes back to the agenda, and the item leaves it", async () => {
@@ -179,18 +190,40 @@ describe("the Calendar tab", () => {
     expect((call.data as { alerts: Record<string, unknown>[] }).alerts[0]).toMatchObject({ itemId: "Call the bank", serverId: "s1", title: "Call the bank", body: "Reminder" });
   }, 20_000);
 
-  test("an alert that comes due while the app is open asks Done, Snooze or Open, and Snooze tells the computer", async () => {
+  // FINAL-VERIFY 6387f88f m3 76: the system's action sheet dropped the kind, time and notes, and Back waved it off.
+  test("an alert that comes due while the app is open shows its kind, time and notes until answered; Back leaves it, Snooze tells the computer", async () => {
     // Due in three seconds: the app's own clock opens it.
-    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Standup", 3 / 3600)] }), storage: paired, platform: "android", network: expoTokenService });
-    const asked: string[] = [];
-    app.onDialog((dialog) => {
-      asked.push(dialog.title ?? "");
-      return dialog.title === "Standup" ? "Snooze 5 min" : null;
-    });
-    await app.wait(4_000);
-    await app.waitUntil(() => framesOf(app.host.posts(), "snooze_calendar_item").length === 1, { timeout: 10_000 });
-    expect(asked).toContain("Standup");
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Standup", 3 / 3600, { notes: "Check the oven" })] }), storage: paired, platform: "android", network: expoTokenService });
+    await app.waitFor("id:calendar-alert-card", SLOW);
+    await app.waitUntil(() => app.texts().includes("Check the oven") && app.texts().includes("Reminder"), SLOW);
+    expect(app.texts()).toContain("Standup");
+    expect(app.texts().join(" ")).toMatch(/\d+:\d\d (AM|PM)/);
+    await app.back();
+    await app.wait(500);
+    expect(app.shows("id:calendar-alert-card")).toBe(true);
+    await app.press("id:alert-snooze5");
+    await app.waitUntil(() => framesOf(app.host.posts(), "snooze_calendar_item").length === 1, SLOW);
     expect(framesOf(app.host.posts(), "snooze_calendar_item")[0]).toMatchObject({ id: "Standup", snooze_minutes: 5 });
+    await app.waitUntil(() => !app.shows("id:calendar-alert-card"), SLOW);
+  }, 20_000);
+
+  // FINAL-VERIFY 6387f88f m3 162–165 / 79: Done on the full-screen alert, then the opening app asked again.
+  test("an alert answered on the phone's own alert before the app opened is not asked again; the answer reaches the computer", async () => {
+    const fired = new Date(Date.now() - 60_000).toISOString();
+    const done = { type: "done", itemId: "Standup", serverId: "s1", minutes: 0, atMs: Date.now() - 30_000 };
+    let taken = false;
+    const app = await open(APP, {
+      host: phoneHost({ calendar_items: [item("Standup", -1 / 60, { alerted_at: fired })] }, {
+        // The phone hands its queued answers over a moment after the computer's list arrives.
+        "calendar.alertsTakeActions": () => new Promise((resolve) => setTimeout(() => resolve(taken ? [] : ((taken = true), [done])), 800)),
+      }),
+      storage: paired, platform: "android", network: expoTokenService,
+    });
+    await app.waitFor("id:composer");
+    await app.waitUntil(() => framesOf(app.host.posts(), "done_calendar_item").length === 1, SLOW);
+    await app.wait(1_000);
+    expect(app.dialogs().map((dialog) => dialog.title)).not.toContain("Standup");
+    expect(app.shows("id:calendar-alert-card")).toBe(false);
   }, 20_000);
 
   test("says the calendar is offline when the computer is not reachable", async () => {
