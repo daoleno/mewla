@@ -54,6 +54,8 @@ describe("Computers", () => {
     app.onDialog((dialog) => (dialog.title === "Remove Studio?" ? "Remove" : null));
     await app.press("id:computer-s2");
     await app.waitFor("id:computer-remove");
+    await app.waitFor("id:computer-remove");
+
     await app.press("id:computer-remove");
     await app.waitFor("id:removed-notice");
     expect(app.texts()).toContain("Desk didn't answer");
@@ -79,6 +81,8 @@ describe("Computers", () => {
     const app = await open(HARNESS, s.options);
     app.onDialog(() => "Remove");
     await app.press("id:computer-s2");
+    await app.waitFor("id:computer-remove");
+
     await app.press("id:computer-remove");
     await app.waitUntil(() => !app.shows("id:computer-s2") && app.shows("id:pair-another"));
     // Studio forgets Desk too, both ways.
