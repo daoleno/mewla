@@ -140,7 +140,7 @@ func rankedPhoneAddresses(entries []addressbook.Entry) []addressbook.Entry {
 // works once, for whichever phone or browser uses it first.
 type pairingLinks struct {
 	expiresAt    time.Time
-	phoneAddress string // "Mewla Link" or the URL in the QR; empty when no phone can reach this computer
+	phoneAddress string // relayLabel or the URL in the QR; empty when no phone can reach this computer
 	phoneLink    string
 	localBrowser string
 	localShort   string // http://127.0.0.1:9876/p/<token>, when the daemon serves it
@@ -246,9 +246,13 @@ func printStatus(w io.Writer, style termStyle, status pairingStatus) {
 	}
 }
 
+// relayLabel is how the CLI names the Mewla Relay path: the address shown for it,
+// its KIND in `mewla address list`, and its status line.
+const relayLabel = "Mewla Relay"
+
 // phoneReachLine says what the phone needs to reach the address in the QR.
 func phoneReachLine(address string) string {
-	if strings.HasPrefix(address, "Remote access") || address == "Mewla Link" {
+	if strings.HasPrefix(address, "Remote access") || address == relayLabel {
 		return "Works from any network."
 	}
 	parsed, err := url.Parse(address)
@@ -371,7 +375,7 @@ func printFirstDevicePairing(w io.Writer, manager *auth.Manager, book *addressbo
 	if len(manager.ListDevices()) != 0 {
 		return false, nil
 	}
-	// With remote access on, the phone QR is a Mewla Link pairing that only
+	// With remote access on, the phone QR is a Mewla Relay pairing that only
 	// mewla pair can make once this computer's route is registered. The one
 	// built here from the address book would be the hosted address as a direct
 	// pairing, which an iPhone cannot connect to, so leave it to mewla pair.
@@ -472,7 +476,7 @@ func printStartupInfo(w io.Writer, listenAddr, stateDir, dataDir string, linkEna
 		fmt.Fprintf(w, "  %-11s %s\n", "Data", dataDir)
 	}
 	if linkEnabled {
-		fmt.Fprintf(w, "  %-11s %s\n", "Mewla Link", "connecting outbound")
+		fmt.Fprintf(w, "  %-11s %s\n", relayLabel, "connecting outbound")
 	}
 	phone := rankedPhoneAddresses(entries)
 	sort.SliceStable(phone, func(i, j int) bool {

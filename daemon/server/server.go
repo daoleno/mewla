@@ -492,7 +492,7 @@ type clientMessage struct {
 }
 
 // Handler exposes the daemon's complete origin as one transport boundary.
-// LAN, tunnels, reverse proxies, and Mewla Link all use this same handler so
+// LAN, tunnels, reverse proxies, and Mewla Relay all use this same handler so
 // /ws and the HTTP streaming routes cannot drift between transports.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()

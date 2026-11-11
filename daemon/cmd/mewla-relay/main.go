@@ -163,12 +163,12 @@ func run(args []string) error {
 
 	clientListener, err := net.Listen("tcp", clientAddress)
 	if err != nil {
-		return fmt.Errorf("listen for Link clients: %w", err)
+		return fmt.Errorf("listen for Mewla Relay clients: %w", err)
 	}
 	defer clientListener.Close()
 	controlTCP, err := net.Listen("tcp", controlAddress)
 	if err != nil {
-		return fmt.Errorf("listen for Link connectors: %w", err)
+		return fmt.Errorf("listen for Mewla Relay connectors: %w", err)
 	}
 	defer controlTCP.Close()
 	controlListener := tls.NewListener(controlTCP, &tls.Config{

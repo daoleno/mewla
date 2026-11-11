@@ -65,7 +65,7 @@ func NewDoor(manager *Manager, backend Backend) *Door {
 		Stateless:    true,
 		JSONResponse: true,
 		// The SDK refuses a loopback peer that names a public Host, which is
-		// what a request forwarded by Mewla Link looks like. TransportAllowed
+		// what a request forwarded by Mewla Relay looks like. TransportAllowed
 		// already requires a loopback Host for plain HTTP and accepts a public
 		// one only over TLS, so the rebinding guard is redundant here.
 		DisableLocalhostProtection: true,
@@ -75,7 +75,7 @@ func NewDoor(manager *Manager, backend Backend) *Door {
 
 // TransportAllowed reports whether a request came by a route the door serves:
 // this computer itself (a loopback client calling a loopback host), or TLS
-// that reached the daemon, as Mewla Link does. Plain HTTP from the network,
+// that reached the daemon, as Mewla Relay does. Plain HTTP from the network,
 // and a proxy on this computer that forwards a public host name, are refused:
 // a bearer token must not cross a network in the clear.
 func TransportAllowed(r *http.Request) bool {

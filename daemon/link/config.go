@@ -10,9 +10,53 @@ import (
 )
 
 const (
-	ConfigVersion         = 1
-	DefaultConfigFilename = "link.json"
+	ConfigVersion = 1
+	// DefaultConfigFilename is the operator config in the state directory.
+	DefaultConfigFilename = "relay.json"
+	// LegacyConfigFilename is its name before Mewla Relay was called that.
+	LegacyConfigFilename = "link.json"
 )
+
+// LegacyConfigMove says what MoveLegacyConfig found.
+type LegacyConfigMove int
+
+const (
+	// LegacyConfigAbsent: there is no legacy file; nothing to do.
+	LegacyConfigAbsent LegacyConfigMove = iota
+	// LegacyConfigMoved: the legacy file was renamed to the default name.
+	LegacyConfigMoved
+	// LegacyConfigIgnored: both files exist; the default one is used and the
+	// legacy one is left for the operator to remove.
+	LegacyConfigIgnored
+)
+
+// MoveLegacyConfig renames <stateDir>/link.json to <stateDir>/relay.json when
+// only the legacy file exists. It is a one-time move, not a second read path:
+// LoadConnectorConfig only ever reads the default name. The rename keeps the
+// file's mode (0600).
+func MoveLegacyConfig(stateDir string) (LegacyConfigMove, error) {
+	dir := strings.TrimSpace(stateDir)
+	if dir == "" {
+		return LegacyConfigAbsent, nil
+	}
+	legacy := filepath.Join(dir, LegacyConfigFilename)
+	current := filepath.Join(dir, DefaultConfigFilename)
+	if _, err := os.Lstat(legacy); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return LegacyConfigAbsent, nil
+		}
+		return LegacyConfigAbsent, err
+	}
+	if _, err := os.Lstat(current); err == nil {
+		return LegacyConfigIgnored, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return LegacyConfigAbsent, err
+	}
+	if err := os.Rename(legacy, current); err != nil {
+		return LegacyConfigAbsent, fmt.Errorf("move %s to %s: %w", legacy, current, err)
+	}
+	return LegacyConfigMoved, nil
+}
 
 type fileConfig struct {
 	Version           int         `json:"version"`
@@ -38,7 +82,7 @@ func DefaultConfigPath(stateDir string) string {
 func LoadConnectorConfig(path string) (ConnectorConfig, error) {
 	normalizedPath := strings.TrimSpace(path)
 	if normalizedPath == "" {
-		return ConnectorConfig{}, errors.New("Link config path is required")
+		return ConnectorConfig{}, errors.New("Mewla Relay config path is required")
 	}
 	raw, err := os.ReadFile(normalizedPath)
 	if err != nil {
@@ -46,11 +90,11 @@ func LoadConnectorConfig(path string) (ConnectorConfig, error) {
 	}
 	var stored fileConfig
 	if err := json.Unmarshal(raw, &stored); err != nil {
-		return ConnectorConfig{}, fmt.Errorf("decode Link config: %w", err)
+		return ConnectorConfig{}, fmt.Errorf("decode Mewla Relay config: %w", err)
 	}
 	if stored.Version != ConfigVersion {
 		return ConnectorConfig{}, fmt.Errorf(
-			"unsupported Link config version %d (expected %d)",
+			"unsupported Mewla Relay config version %d (expected %d)",
 			stored.Version,
 			ConfigVersion,
 		)
@@ -59,13 +103,13 @@ func LoadConnectorConfig(path string) (ConnectorConfig, error) {
 	if envName := strings.TrimSpace(stored.ConnectorTokenEnv); envName != "" {
 		if token != "" {
 			return ConnectorConfig{}, errors.New(
-				"Link config must use connector_token or connector_token_env, not both",
+				"Mewla Relay config must use connector_token or connector_token_env, not both",
 			)
 		}
 		token = strings.TrimSpace(os.Getenv(envName))
 		if token == "" {
 			return ConnectorConfig{}, fmt.Errorf(
-				"Link connector token environment variable %s is empty",
+				"Mewla Relay connector token environment variable %s is empty",
 				envName,
 			)
 		}
