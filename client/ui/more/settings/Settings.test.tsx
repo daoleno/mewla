@@ -247,6 +247,8 @@ describe("Labs", () => {
     await app.waitFor("id:settings-virtual-screen");
     await app.press("id:settings-virtual-screen");
     await app.waitFor("id:virtual-screen-page");
+    // `enabled` throws while no view matches: the switch first, then that it takes a press.
+    await app.waitFor("id:virtual-screen");
     await app.waitUntil(() => app.enabled("id:virtual-screen"));
     await app.press("id:virtual-screen");
     await app.waitUntil(() => on);

@@ -93,6 +93,8 @@ describe("Screen: setup", () => {
     await app.waitFor("id:screen-restart");
     await app.press("id:screen-restart");
     await app.waitFor("text:Restarting Mewla…");
+    // The page says so as it asks: the request is on its way, not yet made.
+    await app.waitUntil(() => posted(app, SCREEN).length > 0);
     expect(posted(app, SCREEN)).toEqual([{ action: "restart" }]);
     await app.waitUntil(() => opened(app).length > 0, { timeout: 8_000 });
   });
@@ -116,6 +118,8 @@ describe("Screen: setup", () => {
       "POST http://desk.test:9877/browser": (request) => json({ virtual_screen: JSON.parse(String(request.body)).enabled === true }),
       [`GET ${DISPLAY}`]: json({ displays: [], available: true }),
     }));
+    // `enabled` throws while no view matches: the switch first, then that it takes a press.
+    await app.waitFor("id:virtual-screen");
     await app.waitUntil(() => app.enabled("id:virtual-screen"));
     await app.press("id:virtual-screen");
     await app.waitFor("text:Nothing on screen");
