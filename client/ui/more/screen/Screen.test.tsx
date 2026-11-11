@@ -23,14 +23,21 @@ const claude = { worker: "w2", name: "Claude", since: "2026-11-11T08:01:00Z" };
 
 type Network = Record<string, StubResponse | ((request: { method: string; url: string; body?: string | null }) => StubResponse)>;
 
-function options(network: Network, extra: { below?: unknown; worker?: string; rttMs?: number; platform?: "ios" | "android"; width?: number; height?: number } = {}) {
+function options(network: Network, extra: { below?: unknown; worker?: string; rttMs?: number; platform?: "ios" | "android"; width?: number; height?: number; phone?: Record<string, unknown> } = {}) {
   return {
     platform: extra.platform,
     width: extra.width,
     height: extra.height,
     host: {
       params: { page: { name: "screen", worker: extra.worker }, below: extra.below, rttMs: extra.rttMs },
-      handlers: { ...secureStore(), "app.daemon": () => ({ error: "not in this test" }), "app.socketOpened": null, "app.socketClosed": null, "app.socketSent": null },
+      handlers: {
+        ...secureStore(),
+        "app.daemon": () => ({ error: "not in this test" }),
+        "app.socketOpened": null,
+        "app.socketClosed": null,
+        "app.socketSent": null,
+        "phone.status": () => extra.phone ?? { supported: false, enabled: false },
+      },
     },
     network,
   };
@@ -203,12 +210,21 @@ describe("Screen: agents", () => {
     expect(posted(app, SCREEN)[0]).toEqual({ keep_awake: true });
   });
 
-  test("on Android the menu has Phone, which says it is not built yet", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }, { platform: "android" }));
+  test("where phone use is on, the menu has Phone with who is using it", async () => {
+    const phone = { supported: true, enabled: true, agent: "Claude" };
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }, { platform: "android", phone }));
     await app.waitFor("id:screen-agents");
     await app.press("id:screen-options");
-    await app.press("text:Phone");
-    await app.waitFor("text:Not built yet");
+    await app.waitFor("id:screen-phone");
+    expect(app.texts()).toContain("Claude");
+  });
+
+  test("where phone use is off, the menu has no Phone", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }, { platform: "android", phone: { supported: true, enabled: false } }));
+    await app.waitFor("id:screen-agents");
+    await app.press("id:screen-options");
+    await app.waitFor("text:Let this computer sleep");
+    expect(app.shows("id:screen-phone")).toBe(false);
   });
 });
 

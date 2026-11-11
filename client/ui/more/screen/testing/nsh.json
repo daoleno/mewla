@@ -9,7 +9,8 @@
       "secure.*",
       "files.*",
       "links.*",
-      "calendar.*"
+      "calendar.*",
+      "phone.*"
     ],
     "network": {
       "hosts": [
