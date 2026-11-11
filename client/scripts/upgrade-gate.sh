@@ -60,7 +60,7 @@ adb install "$OLD_APK" | tail -1 | tee -a "$OUT/gate.log"
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 adb shell am start -W -a android.intent.action.VIEW -d "$link" "$PKG" > /dev/null
 tap "^pair and grant access$" 60 || { shot 1-no-confirm; fail "the Expo app did not ask to pair"; }
-for _ in $(seq 1 60); do [[ "$(devices | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["devices"]))')" == 1 ]] && break; sleep 1; done
+for _ in $(seq 1 60); do [[ "$(devices | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["devices"] or []))')" == 1 ]] && break; sleep 1; done
 before=$(devices)
 device_id=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["devices"][0]["id"])' "$before")
 log "paired as device $device_id"
