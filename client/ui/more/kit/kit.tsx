@@ -10,7 +10,7 @@ import { Icon, type IconName } from "./Icon";
 /**
  * The building blocks of the More pages: a page with the system header, inset
  * grouped sections of rows on a card, and the few states a page has (busy,
- * empty, failed). Paper and ink, hairlines for structure (app/DESIGN.md).
+ * empty, failed). Paper and ink, hairlines for structure (client/DESIGN.md).
  */
 
 export function Page(props: {
@@ -19,7 +19,7 @@ export function Page(props: {
   headerRight?: JSX.Element;
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** The desktop column (app/DESIGN.md): 760 by default, 1200 for Resources. */
+  /** The desktop column (client/DESIGN.md): 760 by default, 1200 for Resources. */
   column?: Exclude<PageColumn, "full" | "reading">;
   children?: JSX.Element;
 }) {
@@ -193,7 +193,7 @@ export function Notice(props: { title: string; detail?: string; action?: string;
 
 export type Status = "ready" | "running" | "warning" | "failed" | "blocked" | "neutral" | "needs";
 
-/** A state's glyph and word: the six Work states survive greyscale (app/DESIGN.md). */
+/** A state's glyph and word: the six Work states survive greyscale (client/DESIGN.md). */
 export function StatusMark(props: { status: Status; label?: string }) {
   const tone = (): ColorName => (props.status === "neutral" ? "soft" : props.status === "needs" ? "seal" : props.status);
   return (

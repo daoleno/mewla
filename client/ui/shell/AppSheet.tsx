@@ -44,7 +44,7 @@ export function GuardedSheet(props: SheetProps) {
   return <Sheet {...props} open={open()} />;
 }
 
-/** The card a sheet becomes on the desktop: centered near the top, one inset all round (app/DESIGN.md). */
+/** The card a sheet becomes on the desktop: centered near the top, one inset all round (client/DESIGN.md). */
 const DIALOG = "mt-24 w-[560px] max-w-[92%] self-center overflow-hidden rounded-xl border border-border";
 
 /**
