@@ -25,6 +25,6 @@ export function calendarRoute(route: CalendarRoute) {
 }
 
 /** Opens an item from anywhere (a notification, a Work's link): the agenda under it, so back leads there. */
-export function showCalendarItem(id: string): void {
-  calendarNav.setRoutes([{ name: "calendar" }, { name: "item", id }]);
+export function showCalendarItem(id: string, runId?: string): void {
+  calendarNav.setRoutes([{ name: "calendar" }, { name: "item", id }, ...(runId ? [{ name: "run" as const, itemId: id, runId }] : [])]);
 }

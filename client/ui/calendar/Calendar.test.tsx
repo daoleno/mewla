@@ -48,7 +48,7 @@ describe("the Calendar tab", () => {
     expect(app.texts()).toContain("Pay rent");
   }, 20_000);
 
-  test("cancels an item after asking, and it leaves the agenda", async () => {
+  test("cancels an item after asking, goes back to the agenda, and the item leaves it", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1)] });
     await app.press("id:calendar-item-Call the bank");
     await app.waitFor("id:cancel-item");
@@ -56,7 +56,6 @@ describe("the Calendar tab", () => {
     await app.press("id:cancel-item");
     await app.waitUntil(() => framesOf(app.host.posts(), "cancel_calendar_item").length === 1);
     expect(framesOf(app.host.posts(), "cancel_calendar_item")[0]).toMatchObject({ id: "Call the bank", revision: 1 });
-    await app.back();
     await app.waitFor("id:calendar-empty");
   }, 20_000);
 
