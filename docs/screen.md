@@ -78,7 +78,7 @@ computer is locked. A slow connection is said once, briefly, beside the dot
 ("Slow connection"). Tap the dot for the details: the way out if there is one
 (join the computer's Wi-Fi or Tailscale, when the computer lists addresses the
 phone could not reach), then the route (Relay, Tailscale, LAN or Local; for a
-phone paired through Mewla Link it is the path the phone chose, and **video**
+phone paired through Mewla Relay it is the path the phone chose, and **video**
 while motion is going as video), the round trip, the time from your tap until
 the screen redraws, updates per second, bandwidth, whether the picture is sent
 at reduced quality, the stage that takes longest when it isn't the network
@@ -434,7 +434,7 @@ mewla screen enable     # allow devices to ask again
 ## When the picture is slow
 
 Tap the connection dot on the Screen page. The route says
-whether the phone reaches the computer through the Mewla Link relay or directly,
+whether the phone reaches the computer through Mewla Relay or directly,
 and the slowest stage, when it isn't the network, says what holds the picture up.
 
 - **Network** is high and the route is **Relay**: the round trip through the
@@ -443,7 +443,7 @@ and the slowest stage, when it isn't the network, says what holds the picture up
   even a few KB takes 400 to 700 ms to be answered. Input then reaches the
   screen that much later too; only a nearer relay or a direct address
   shortens that. A direct address (Tailscale, or Wi-Fi at home) avoids it,
-  and a phone paired through Mewla Link uses one by itself when the computer
+  and a phone paired through Mewla Relay uses one by itself when the computer
   listens on that network and the phone can reach it; see
   [Direct when it can](connect-and-pair.md#direct-when-it-can). If the path
   stays **Relay** at home, the phone can't reach the computer's private

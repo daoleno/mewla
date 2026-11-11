@@ -95,7 +95,7 @@ time. To bake a different reachable address, such as a VPN address, pass
 `aapt2 dump resources <apk> | grep -A1 react_native_dev_server`.
 
 Use a **Metro-connected debug APK** for development, not a standalone APK or
-Expo Go. Mewla's custom terminal and pinned Link transport need
+Expo Go. Mewla's custom terminal and pinned Relay transport need
 their compiled native modules. The development APK uses the existing React
 Native dev-support runtime; it does not require an additional Expo Dev Client
 dependency. Android and iOS continue to share product JS; the native connection

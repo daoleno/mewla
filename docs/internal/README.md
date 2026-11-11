@@ -15,8 +15,8 @@ and [third-party assets](../third-party-assets.md).
 
 - [Daemon builds and boot service](daemon-builds.md): installer trust, source and release builds, `mewla boot`
 - [Executor internals](executor-internals.md): delegated adapters, gateway routing, resource ownership, structured Chat
-- [Security engineering](security-engineering.md): Mewla Link trust, relay metadata, mobile bridge, device admin protocol
-- [Mewla Link Relay operations](mewla-link-relay.md)
+- [Security engineering](security-engineering.md): Mewla Relay trust, relay metadata, mobile bridge, device admin protocol
+- [Mewla Relay operations](mewla-relay.md)
 - [Calendar engineering](calendar-engineering.md)
 - [Notification policy](notification-policy.md)
 - [Telegram channel](telegram.md)
