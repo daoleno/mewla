@@ -30,6 +30,20 @@ final class TerminalTests: XCTestCase {
     XCTAssertTrue(try XCTUnwrap(vt.frame(full: false)).dirty.isEmpty, "a second frame without output changes nothing")
   }
 
+  func testConcealedTextIsNotDrawn() throws {
+    // SGR 8: the daemon prints its "mewla-origin" marker concealed at the top of every new Session.
+    let vt = try XCTUnwrap(Vt(cols: 20, rows: 4))
+    XCTAssertTrue(vt.setTheme(foreground: 0xf4f0ea, background: 0x141210, cursor: 0xf4f0ea, palette: palette256(palette)))
+    vt.write("A\u{1b}[8mHIDDEN\u{1b}[0mB\r\n\u{1b}[8;44mXY\u{1b}[0m")
+    let frame = try XCTUnwrap(vt.frame(full: true))
+    let texts = frame.dirty.flatMap(\.runs).map(\.text).joined()
+    XCTAssertFalse(texts.contains("HIDDEN"))
+    XCTAssertFalse(texts.contains("XY"))
+    XCTAssertTrue(texts.contains("A") && texts.contains("B"))
+    let row1 = try XCTUnwrap(frame.dirty.first { $0.row == 1 }).runs
+    XCTAssertTrue(row1.contains { $0.bg != 0 && !$0.underline }, "a concealed run keeps its background")
+  }
+
   func testCssColors() {
     XCTAssertEqual(CssColor("#141210"), CssColor(rgb: 0x141210))
     XCTAssertEqual(CssColor("#3D7EFF55")?.rgb, 0x3D7EFF)

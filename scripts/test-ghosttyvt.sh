@@ -26,3 +26,11 @@ go test -tags ghosttyvt -count=1 "$@" ./ghosttyvt/... ./sessionhost/...
 # watcher does not use the engine and runs in the untagged suite.
 go test -tags ghosttyvt -count=1 -run 'TestHost|TestSessionHost' "$@" ./watcher/
 go test -tags ghosttyvt -count=1 -run 'TestHostTerminal' "$@" ./terminal/
+# The app's terminal cell packer (iOS TerminalVt.cpp, the twin of Android's jni_bridge.cpp) on the
+# same library: concealed text stays hidden (scripts/tests/terminal_vt_conceal.cpp).
+OUT="$(mktemp -d)"
+trap 'rm -rf "$OUT"' EXIT
+"${CXX:-c++}" -std=c++17 -w -D_Nullable= -D_Nonnull= -I"$ROOT/client/ios/Sources/Terminal" -I"$CACHE/include" \
+  "$ROOT/client/ios/Sources/Terminal/TerminalVt.cpp" "$ROOT/scripts/tests/terminal_vt_conceal.cpp" \
+  "$CACHE/$TARGET/libghostty-vt.a" -lpthread -lm -o "$OUT/terminal_vt_conceal"
+"$OUT/terminal_vt_conceal"

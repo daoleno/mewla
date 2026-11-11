@@ -575,8 +575,9 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
                 {optionsMenu("screen-options")}
               </>
             ) : kind === "linux" && platform.os === "android" ? (
-              // Linux: the menu holds only the rows of other surfaces (the Phone).
-              <Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="p-2"><Icon name="more-horizontal" size={20} /></View>} popupClass={MENU_POPUP} backdropClass={MENU_BACKDROP}>
+              // Linux: the menu holds only the rows of other surfaces (the Phone); with none, its button is hidden
+              // (it opened an empty sheet). The menu itself stays: one made later in the header does not open.
+              <Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="p-2" style={{ display: phoneOn() ? "flex" : "none", flexDirection: "column" }}><Icon name="more-horizontal" size={20} /></View>} popupClass={MENU_POPUP} backdropClass={MENU_BACKDROP}>
                 {phoneItem()}
               </Menu>
             ) : null,

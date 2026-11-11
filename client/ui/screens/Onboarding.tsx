@@ -31,7 +31,8 @@ import { Field, Spinner } from "../more/kit/kit";
 import { restorePet } from "../more/pet/pets";
 import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
 import { petClip } from "../pets/clips";
-import { connection, problem, resumeConnection } from "../session";
+import { connection, problem, resumeConnection, servers } from "../session";
+import { probeComputer } from "../more/settings/computers";
 import { OnboardingScanner, scannerSearching } from "./OnboardingScanner";
 
 export { pairFromText } from "../pairing";
@@ -68,7 +69,15 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
     return s ? { ...s, top: safeArea().top, bottom: safeArea().bottom } : null;
   };
   const compact = () => (frame() ? isCompactFrame(frame()!) : false);
-  const server = () => justPaired();
+  // The computer as saved now: one paired by its address takes the name it reports (asked here, as Settings does).
+  const server = () => {
+    const paired = justPaired();
+    return paired ? servers().find((s) => s.id === paired.id) ?? paired : null;
+  };
+  effect(() => {
+    const paired = justPaired();
+    if (paired) untracked(() => void probeComputer(paired).catch(() => {}));
+  });
   const name = () => computerName(server()?.name);
   const finish = (then: () => void) => {
     justPaired.set(null);

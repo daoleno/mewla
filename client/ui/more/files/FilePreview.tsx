@@ -44,6 +44,7 @@ import type { PageNav } from "../routes";
 import { cancelDownload, downloadHost, MewlaPdf } from "./host";
 import { MediaPlayer } from "./Media";
 import { filePreviewRoute } from "./routes";
+import { viewerBaseUrl } from "../../viewerBase";
 
 /** What a picture's or PDF's stream failing means: the file changed, or the stream lapsed. */
 export const SESSION_FILE_STREAM_FAILED = "The file stream changed or could not be loaded. Refresh and try again.";
@@ -329,7 +330,7 @@ function SvgBody(props: { source: SessionFileBinarySource; onFail: (message: str
           testID="file-svg"
           class="flex-1"
           html={svgPreviewHtml(preview()!, color("paper"))}
-          baseUrl="https://viewer.mewla.invalid/"
+          baseUrl={viewerBaseUrl}
           javaScriptEnabled={false}
           accessibilityLabel="Zoomable image preview"
           onError={() => props.onFail(SESSION_FILE_STREAM_FAILED)}

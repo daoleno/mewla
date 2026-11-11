@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, computed, effect, List, signal, Text, untracked, View, type ListRef } from "nsh";
+import { cleanup, Clipboard, computed, effect, List, platform, signal, Text, untracked, View, type ListRef } from "nsh";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, TextView } from "nsh/base";
 import { GuardedSheet as Sheet } from "../shell/AppSheet";
@@ -8,6 +8,7 @@ import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMe
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import type { BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { compactAge, latestTimestamp, withDayDividers } from "../../core/timeline/dayDividers";
+import { readingPlace, readingPlaceIndex } from "../../core/timeline/readingPlace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PlainText } from "./PlainText";
@@ -128,8 +129,8 @@ function SelectTextSheet() {
   );
 }
 
-/** Where each chat was read to, by scope, while the app runs: reopening it comes back there. */
-const readingPositions = new Map<string, number>();
+/** Where each chat was read to (its first row on screen, by key), by scope, while the app runs: reopening it comes back there. */
+const readingPositions = new Map<string, string>();
 
 export function ChatTimeline(props: {
   testID: string;
@@ -140,6 +141,8 @@ export function ChatTimeline(props: {
   scope?: string;
   /** Counts the person's sends: each brings their newest message to the top, with the reply under it. */
   sent?: () => number;
+  /** Whether the chat is on screen: its tab or page can stay mounted, hidden, under another. */
+  shown?: () => boolean;
 }) {
   const handlers = props.handlers ?? {};
   const expansion = createExpansion();
@@ -147,16 +150,20 @@ export function ChatTimeline(props: {
   // Read back from the newest row: the jump button brings it into view again, saying how old it is.
   const away = signal(false);
   const rows = computed(() => withDayDividers(props.items()));
-  // Back where the person left it, once the list and its rows are there; at the newest row, nothing to restore.
+  // Back at the row the person left it at; at the newest row, nothing to restore. The list opens there
+  // itself when the row is already in (`initialScrollIndex`); rows that come later are scrolled to by index.
   // Only the person's own scrolling moves the saved place, not the list settling as it mounts.
   let restore = props.scope ? readingPositions.get(props.scope) : undefined;
+  const initialIndex = untracked(() => readingPlaceIndex(rows(), restore));
+  if (initialIndex !== undefined) restore = undefined;
   let touched = false;
+  let shownFirst: string | undefined;
   const mounted = signal(false);
   effect(() => {
-    if (restore === undefined || rows().length === 0 || !mounted()) return;
-    const offset = restore;
+    const index = readingPlaceIndex(rows(), restore);
+    if (index === undefined || !mounted()) return;
     restore = undefined;
-    untracked(() => list?.scrollToOffset({ offset, animated: false }));
+    untracked(() => list?.scrollToIndex({ index, viewPosition: 0, animated: false }));
   });
   effect(() => {
     if (!props.sent || props.sent() === 0) return;
@@ -168,6 +175,28 @@ export function ChatTimeline(props: {
       }
     });
   });
+  // Where the list was while on screen. A browser drops a hidden list's scroll (its tab is
+  // `display: none`), so on the web a return brings back that place, or the newest row
+  // (FAILURES R4 #14: Brain came back some twenty screens up after every tab switch).
+  const shown = () => (props.shown ? props.shown() : true);
+  let last: { offset: number; atEnd: boolean } | null = null;
+  if (platform.os === "web" && props.shown) {
+    let wasShown = untracked(shown);
+    effect(() => {
+      const on = shown();
+      const target = on && !wasShown ? last : null;
+      wasShown = on;
+      if (!target) return;
+      const back = () => (target.atEnd ? list?.scrollToEnd({ animated: false }) : list?.scrollToOffset({ offset: target.offset, animated: false }));
+      // Once the list is laid out again, and once more after its rows have measured.
+      const first = setTimeout(back, 0);
+      const settled = setTimeout(back, 120);
+      cleanup(() => {
+        clearTimeout(first);
+        clearTimeout(settled);
+      });
+    });
+  }
   const now = signal(Date.now());
   effect(() => {
     if (!away()) return;
@@ -184,14 +213,22 @@ export function ChatTimeline(props: {
           mounted.set(true);
         }}
         onScrollDragStart={() => (touched = true)}
-        // A chat opens at its newest row (NSH 0.5.0, before the first frame), unless it is read back to a saved place.
-        initialScrollAtEnd={restore === undefined}
+        // A chat opens at its newest row (NSH 0.5.0, before the first frame), unless it is read back to a saved row.
+        initialScrollAtEnd={initialIndex === undefined && restore === undefined}
+        initialScrollIndex={initialIndex}
+        onViewableItemsChange={({ viewableItems }) => {
+          // A hidden list's rows (a browser resets its scroll) are not where the person was.
+          if (untracked(shown)) shownFirst = readingPlace(viewableItems);
+        }}
         maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
         onScroll={({ offset, contentSize, size }) => {
+          // A hidden list's scroll (a browser resets it) is not where the person was.
+          if (!untracked(shown)) return;
           const far = contentSize.height - (offset.y + size.height) > 240;
           away.set(far);
+          last = { offset: offset.y, atEnd: !far };
           if (!props.scope || !touched) return;
-          if (far) readingPositions.set(props.scope, offset.y);
+          if (far && shownFirst !== undefined) readingPositions.set(props.scope, shownFirst);
           else readingPositions.delete(props.scope);
         }}
         empty={props.empty() as never}>

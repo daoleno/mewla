@@ -1,5 +1,6 @@
 import { cleanup, effect, Scroll, signal, Text, untracked, View, type JSX } from "nsh";
 import { Button, NavPage, Switch } from "nsh/base";
+import { pageStatusBar } from "../shell/NavPage";
 import { phoneMode, phoneSetupPlan, phoneSteps, type PhoneMode, type PhoneStepId } from "../../core/phone/setup";
 import { color } from "../more/kit/colors";
 import { Icon, type IconName } from "../more/kit/Icon";
@@ -13,7 +14,6 @@ import {
   phoneAvailable,
   phoneControl,
   phoneError,
-  phonePageOpen,
   phonePairing,
   phoneStatus,
   startPhoneHelper,
@@ -28,12 +28,6 @@ import {
  */
 export function PhonePage() {
   cleanup(watchPhoneSetup());
-  // The page is the full view: the floating control hides while it is open.
-  effect(() => {
-    untracked(() => phonePageOpen.set(true));
-    return () => phonePageOpen.set(false);
-  });
-
   // Once paired, the helper starts by itself: nothing for the person to press.
   let asked = "";
   effect(() => {
@@ -70,6 +64,7 @@ export function PhonePage() {
   return (
     <NavPage
       title="Phone use"
+      statusBar={pageStatusBar()}
       testID="phone-page"
       headerRight={
         phoneAvailable() ? (
@@ -192,7 +187,8 @@ function Live() {
   return (
     <View class="flex-1" testID="phone-live">
       <View class="flex-row items-center justify-center gap-2 px-4 py-3">
-        <Text testID="phone-live-title" class="text-lg font-semibold line-clamp-2">{title()}</Text>
+        {/* A long name ("Phonebot2 (mh-…)") shrinks and ends in "…" on the right: unshrunk, the centred row cut it at the left (phone 15). */}
+        <Text testID="phone-live-title" class="min-w-0 shrink text-lg font-semibold line-clamp-1">{title()}</Text>
         <View class="size-2 rounded-full" style={{ backgroundColor: dot() }} />
         {mode() === "watching" || mode() === "driving" ? (
           <Button testID="phone-pip" accessibilityLabel="Float" hitSlop={8} onPress={floatPhone} class="p-2 active:opacity-60">

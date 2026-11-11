@@ -100,6 +100,16 @@ describe("the desktop layout", () => {
     expect((locations(app)[0].state.snapshot as { tab: number; routes: { name: string }[] }).routes.map((route) => route.name)).toEqual(["settings"]);
   }, 20_000);
 
+  test("a Session the daemon named after its id has the title its page shows, not the id twice", async () => {
+    const id = "mh-c76c35d267c789a94b2d013b";
+    const sessions = [{ id, name: `${id} (${id})`, cwd: "/home/me/gitdemo", command: "zsh", status: "running", started_at: 1 }];
+    const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }, { "web.initialPath": { path: `/sessions/${id}`, state: null } }) });
+    // Before the Session list arrives the tab says "Session"; then the page's title.
+    await app.waitUntil(() => last(app)?.path === `/sessions/${id}` && last(app)?.title !== "Session · Mewla", { timeout: 10_000 });
+    await app.wait(300);
+    expect(last(app)!.title).toBe("gitdemo · Mewla");
+  }, 20_000);
+
   test("a Session's URL is under Sessions and its tab says its name; another computer's entry never reopens its id", async () => {
     const sessions = [{ id: "w1", name: "api server", cwd: "/home/me/api", status: "running", started_at: 1 }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }, { "web.initialPath": { path: "/sessions/w1", state: null } }) });

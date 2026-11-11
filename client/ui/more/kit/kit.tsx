@@ -6,6 +6,7 @@ import type { PageColumn } from "../../../core/web/places";
 import { NavPage } from "../../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
+import { spinnerRadius } from "../../../core/more/spinner";
 
 /**
  * The building blocks of the More pages: a page with the system header, inset
@@ -179,7 +180,8 @@ export function Spinner(props: { size?: number; tone?: ColorName }) {
       style={{ width: size(), height: size() }}
       accessibilityLabel="Loading"
       draw={(cx, s) => {
-        const r = Math.min(s.width, s.height) / 2 - 1.5;
+        const r = spinnerRadius(s.width, s.height);
+        if (r === null) return;
         cx.lineWidth = 2;
         cx.lineCap = "round";
         cx.strokeStyle = color(props.tone ?? "soft");

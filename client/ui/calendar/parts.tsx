@@ -38,9 +38,12 @@ export function Choices<T extends string>(props: { value: T; options: { value: T
   return (
     <View testID={props.testID} class="flex-row flex-wrap gap-2">
       {props.options.map((option) => (
+        // Chosen or not, a chip has the same border and the same weight, so choosing one never changes
+        // its width (a bolder "Weekly" wrapped to "Weekl / y" and doubled the row's height, as v0.3.1's
+        // ChipGroup never did: its states differ in colour only).
         <Button testID={`${props.testID}-${option.value}`} onPress={() => props.onChange(option.value)}
-          class={props.value === option.value ? "rounded-full bg-primary px-3.5 py-1.5" : "rounded-full border border-border px-3.5 py-1.5 active:bg-accent"}>
-          <Text class={props.value === option.value ? "text-sm font-semibold text-primary-foreground" : "text-sm"}>{option.label}</Text>
+          class={props.value === option.value ? "rounded-full border border-primary bg-primary px-3.5 py-1.5" : "rounded-full border border-border px-3.5 py-1.5 active:bg-accent"}>
+          <Text class={props.value === option.value ? "line-clamp-1 text-sm font-medium text-primary-foreground" : "line-clamp-1 text-sm font-medium"}>{option.label}</Text>
         </Button>
       ))}
     </View>

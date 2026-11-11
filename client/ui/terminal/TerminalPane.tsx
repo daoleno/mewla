@@ -1,5 +1,6 @@
 import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
 import { Button } from "nsh/base";
+import { BackHandler } from "nsh/mobile";
 import { TerminalNavigator } from "../../core/terminal/navigation";
 import { TerminalSession } from "../../core/terminal/session";
 import { HISTORY_FAILED } from "../../core/terminal/history";
@@ -174,6 +175,16 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     });
   });
 
+  // The keyboard the terminal raised is its own (no field), so Android's Back would leave the page with it
+  // up: Back hides it first (R4#4).
+  onBackPress(() => {
+    if (!props.active() || !keyboard() || keyboardFrame().height <= 0) return false;
+    command("blur", {});
+    keyboard.set(false);
+    ctrl.set(false);
+    return true;
+  });
+
   // A tap: a link opens; elsewhere on the live screen, the keyboard and the pane under the finger.
   const tap = (col: number, row: number, text: string, index: number) => {
     const link = index >= 0 ? linkAction(text, index) : null;
@@ -265,4 +276,10 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       </View>
     </View>
   );
+}
+
+/** Android's Back while the pane lives; a browser has its own back (NSH's web runtime has no `BackHandler.on`). */
+function onBackPress(listener: () => boolean): void {
+  if (platform.os === "web") return;
+  cleanup(BackHandler.on("press", listener));
 }

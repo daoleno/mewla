@@ -384,9 +384,12 @@ extern "C" bool mewla_vt_frame(MewlaVt* vt, bool forceFull, MewlaVtFrame* out)
                 const uint32_t fg = argbOf(resolveEffectiveForeground(style, colors, hasFg, fgc));
                 GhosttyColorRgb eb;
                 const uint32_t bg = resolveEffectiveBackground(style, colors, hasBg, bgc, &eb) ? argbOf(eb) : 0;
+                // Concealed text (SGR 8, e.g. the daemon's origin marker) is packed as blanks: its
+                // background stays, its glyphs and underline do not.
+                const bool concealed = (style.flags & GHOSTTY_STYLE_FLAG_INVISIBLE) != 0;
                 const int32_t flags = (style.flags & GHOSTTY_STYLE_FLAG_BOLD ? 1 : 0) |
                     (style.flags & GHOSTTY_STYLE_FLAG_ITALIC ? 2 : 0) |
-                    ((style.flags & GHOSTTY_STYLE_UNDERLINE_MASK) ? 4 : 0) |
+                    ((style.flags & GHOSTTY_STYLE_UNDERLINE_MASK) && !concealed ? 4 : 0) |
                     (style.flags & GHOSTTY_STYLE_FLAG_INVERSE ? 8 : 0);
                 const int32_t width = wide == GHOSTTY_CELL_WIDE_WIDE ? 2 : 1;
                 if (runCol < 0 || fg != runFg || bg != runBg || flags != runFlags || width == 2) {
@@ -401,7 +404,7 @@ extern "C" bool mewla_vt_frame(MewlaVt* vt, bool forceFull, MewlaVtFrame* out)
                 ghostty_cell_get(cell, GHOSTTY_CELL_DATA_HAS_TEXT, &hasText);
                 uint32_t cp = 0;
                 ghostty_cell_get(cell, GHOSTTY_CELL_DATA_CODEPOINT, &cp);
-                if (!hasText || cp == 0) {
+                if (concealed || !hasText || cp == 0) {
                     text.push_back(u' ');
                 } else {
                     uint32_t glen = 0;

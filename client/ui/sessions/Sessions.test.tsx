@@ -145,6 +145,31 @@ describe("a Session", () => {
     expect(app.shows("id:action-prompt")).toBe(false);
   }, 20_000);
 
+  test("a long chat read back up, left and reopened shows its messages at the row it was read to (FAILURES R4#9)", async () => {
+    const long = Array.from({ length: 60 }, (_, i) => ({
+      id: `m${i}`, seq: i + 1, kind: i % 2 ? "assistant_message" : "user_message",
+      timestamp: new Date(Date.UTC(2026, 10, 11, 7, 0, i)).toISOString(),
+      body: `Message ${i}. ` + "A long line of words that wraps over several rows in a phone-sized chat. ".repeat(4),
+    }));
+    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "longchat", status: "done" })], conversations: { w1: long } });
+    await app.waitFor("text:longchat", { timeout: 10_000 });
+    await app.press("text:longchat");
+    await app.waitFor("id:session-chat");
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
+    if (app.shows("id:jump-latest")) await app.press("id:jump-latest");
+    await app.wait(300);
+    for (let i = 0; i < 3; i += 1) await app.scroll("id:session-chat", -1500);
+    await app.wait(300);
+    expect(app.shows("id:jump-latest")).toBe(true);
+    await app.back();
+    await app.waitFor("text:longchat");
+    await app.press("text:longchat");
+    await app.waitFor("id:session-chat");
+    await app.wait(1000);
+    expect(app.texts().filter((t) => t.startsWith("Message")).length).toBeGreaterThan(0);
+    expect(app.shows("id:jump-latest")).toBe(true);
+  }, 30_000);
+
   test("the menu switches to the terminal and renames it on this phone", async () => {
     const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
     await app.waitFor("text:notes", { timeout: 10_000 });

@@ -4,7 +4,7 @@
  * the agent quotes. Pure, so the Git pages and the tests share it.
  */
 import { formatGitAskAgentMessage } from "./gitAskAgent";
-import { gitSelectedLines, type GitParsedPatch, type GitPatchHunk, type GitPatchSide } from "./gitDiffHunks";
+import { gitHunkSelection, gitSelectedLines, type GitParsedPatch, type GitPatchHunk, type GitPatchLine, type GitPatchSide } from "./gitDiffHunks";
 import type { GitReviewEntry, GitReviewGroup } from "./gitReviewModel";
 
 export interface GitFindMatch {
@@ -79,6 +79,19 @@ export interface GitAskContext {
  * What Ask the agent is about: the selected lines of a hunk (quoted, with their
  * range), else the whole file.
  */
+/**
+ * The lines an agent is asked about. A whole hunk is sent as it reads, both sides; a range of
+ * added lines carries the removed lines between them (the new side alone told the agent the old
+ * code was missing: FAILURES R4#5). A range of removed lines stays the old side, as its label says.
+ */
+function askLines(hunk: GitPatchHunk, side: GitPatchSide, start: number, end: number): GitPatchLine[] {
+  const whole = gitHunkSelection(hunk);
+  if (whole && whole.side === side && Math.min(start, end) === whole.start && Math.max(start, end) === whole.end) return hunk.lines;
+  const picked = gitSelectedLines(hunk, side, start, end);
+  if (side !== "additions" || picked.length === 0) return picked;
+  return hunk.lines.slice(hunk.lines.indexOf(picked[0]!), hunk.lines.indexOf(picked[picked.length - 1]!) + 1);
+}
+
 export function gitAskContext(input: {
   path: string;
   group: GitReviewGroup;
@@ -88,7 +101,7 @@ export function gitAskContext(input: {
   const { path, group, hunk, selection } = input;
   if (hunk && selection) {
     const { side, start, end } = selection;
-    const lines = gitSelectedLines(hunk, side, start, end);
+    const lines = askLines(hunk, side, start, end);
     const low = Math.min(start, end);
     const high = Math.max(start, end);
     return {

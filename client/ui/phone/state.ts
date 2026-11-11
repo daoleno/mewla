@@ -25,8 +25,6 @@ export const phoneError = signal("");
 export const phonePairing = signal(false);
 /** The helper is being started because the person asked. */
 export const phoneStarting = signal(false);
-/** The Phone page is on screen: the floating control hides there. */
-export const phonePageOpen = signal(false);
 
 /** Settings → Labs → Phone use: Off, Set up, Ready or You are in control. */
 export function phoneLabsWord(): string {
