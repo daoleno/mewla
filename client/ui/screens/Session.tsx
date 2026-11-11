@@ -1,7 +1,9 @@
 import { cleanup, computed, effect, openUrl, signal, Storage, Text, untracked, View } from "nsh";
 import { listSessionServices } from "../../core/sessions/services";
 import { dshWebServiceURL } from "../../core/sessions/servicesPresentation";
-import { AlertDialog, Button, Input, NavPage, Sheet, type NavStackState } from "nsh/base";
+import { AlertDialog, Button, Input, type NavStackState } from "nsh/base";
+import { AppSheet } from "../shell/AppSheet";
+import { NavPage } from "../shell/NavPage";
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
 import { createChatTimeline } from "../../core/conversation/timeline";
@@ -21,7 +23,8 @@ import { CHOICE_GONE_NOTICE, choiceFromPrompt, isPromptGoneError, latestPendingC
 import type { CodexSlashCommand } from "../../core/session/codexSlashCommands";
 import type { ComposerAlert, ComposerSendRoute } from "../../core/session/composerSlash";
 import { resolveComposerModelControl } from "../../core/session/sessionModelHelpers";
-import { canSwitchModel, chatSlashCommands, codexAsset, getThreadRuntime } from "../../core/session/sessionRequests";
+import { canSwitchModel, chatSlashCommands, getThreadRuntime } from "../../core/session/sessionRequests";
+import { chatImage } from "../chat/assets";
 import type { ThreadRuntimeSelection } from "../../core/providers/types";
 import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
@@ -36,6 +39,9 @@ import { AgentIcon } from "../icons/AgentIcon";
 import { showCalendarItem } from "../calendar/routes";
 import { workLinkOf } from "../sessions/workLinks";
 import { selectedTab } from "../shell/Shell";
+import { terminalShowing } from "../shell/desktop/keys";
+import { lastEditablePrompt } from "../../core/web/composer";
+import { slashMenuState } from "../../core/session/composerSlash";
 import { DSHPanel } from "../chat/DSHPanel";
 import { ChoiceCard } from "../chat/ChoiceCard";
 import { Composer, createComposerText } from "../chat/Composer";
@@ -54,28 +60,6 @@ import { reloadAliases } from "./Sessions";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 
-/**
- * Reply images read from the computer, by computer, folder and path: a recycled row or a
- * streaming reply draws an image again without asking again. A switch of computer clears it.
- */
-const assets = new Map<string, Promise<string | null>>();
-let assetsFor = "";
-function cachedAsset(serverId: string, cwd: string | undefined, path: string, load: () => Promise<string | null>): Promise<string | null> {
-  if (assetsFor !== serverId) {
-    assets.clear();
-    assetsFor = serverId;
-  }
-  const key = `${cwd ?? ""}|${path}`;
-  let asset = assets.get(key);
-  if (!asset) {
-    asset = load().catch((error) => {
-      assets.delete(key);
-      throw error;
-    });
-    assets.set(key, asset);
-  }
-  return asset;
-}
 
 /** The person's chat-or-terminal choice per Session, saved on the device (Expo's key). */
 const storedModes = signal<StoredInterfaceRenderModes>({});
@@ -159,7 +143,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     workingSince: () => activity()?.started_at,
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),
-    loadImage: (path: string) => cachedAsset(server.id, untracked(worker)?.cwd, path, () => codexAsset(transport, path, untracked(worker)?.cwd)),
+    loadImage: (path: string) => chatImage(transport, server.id, untracked(worker)?.cwd, path),
   };
   const stoppingFor = signal("");
   /** The person's sends from this screen: each brings the sent message to the top. */
@@ -306,6 +290,19 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const skillsOpen = signal(false);
   const slashCommands = signal<CodexSlashCommand[]>([]);
   const slashUnavailable = signal(false);
+  /** A typed `/` opened the command list (not the "+" menu): Return waits for a pick. */
+  const slashPicking = () => slashMenuState({ text: text.text(), agentKind: kind(), commands: slashCommands(), connected: connected(), pinned: false }).open;
+  /** ↑ in the empty composer edits the last message, as Edit in its menu does. */
+  const recall = () => {
+    const item = lastEditablePrompt(untracked(items), { connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
+    if (item?.type === "message") editor.open(item);
+  };
+  // The terminal owns every key while it shows: the desktop's shortcuts step aside.
+  effect(() => {
+    if (!props.active() || mode() !== "terminal") return;
+    terminalShowing.set(true);
+    return () => terminalShowing.set(false);
+  });
   const runtime = signal<ThreadRuntimeSelection | null>(null);
   const codexLive = computed(() => kind() === "codex" && connected());
   effect(() => {
@@ -512,7 +509,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   };
 
   return (
-    <NavPage title={title()}
+    <NavPage title={title()} column="wide"
       headerTitle={
         <View class="max-w-[260px] flex-row items-center gap-2">
           <AgentIcon kind={kind()} size={22} />
@@ -573,7 +570,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
               <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
-                onStop={() => void stop()} active={() => props.active() && mode() === "chat"}
+                onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}
                 leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
                 <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand}
                   onAttach={attach} uploading={uploading} />
@@ -612,7 +609,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
         }} />
       <CodexSkillsSheet open={skillsOpen} onClose={() => skillsOpen.set(false)} transport={transport} cwd={worker()?.cwd}
         onPick={(name) => text.set(insertSkillMention(untracked(text.text), name))} />
-      <Sheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3" backdropClass="bg-black/40">
+      <AppSheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3" backdropClass="bg-black/40">
         <View class="gap-3 pb-6">
           <Text class="text-lg font-semibold">Rename</Text>
           <Text class="text-sm text-muted-foreground">A name for this Session on this phone. Empty uses its own name.</Text>
@@ -623,7 +620,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
             <Button testID="rename-save" onPress={() => void saveRename()}><Text class="text-base font-semibold text-primary">Save</Text></Button>
           </View>
         </View>
-      </Sheet>
+      </AppSheet>
     </NavPage>
   );
 }

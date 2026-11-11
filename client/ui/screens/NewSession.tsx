@@ -1,5 +1,6 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
-import { Button, Input, Sheet } from "nsh/base";
+import { Button, Input } from "nsh/base";
+import { AppSheet } from "../shell/AppSheet";
 import { LAUNCH_PRESETS } from "../../core/sessions/agentCommands";
 import { createSession } from "../../core/sessions/create";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
@@ -127,7 +128,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   };
 
   return (
-    <Sheet open={newSessionOpen()} onOpenChange={({ open }) => newSessionOpen.set(open)} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
+    <AppSheet testID="new-session-sheet" open={newSessionOpen()} onOpenChange={({ open }) => newSessionOpen.set(open)} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
       <View class="gap-3 pb-8">
         <View class="flex-row items-center">
           <Text class="flex-1 text-lg font-semibold">{newSessionTarget() ? "New terminal" : "New session"}</Text>
@@ -185,6 +186,6 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
           </View>
         )}
       </View>
-    </Sheet>
+    </AppSheet>
   );
 }

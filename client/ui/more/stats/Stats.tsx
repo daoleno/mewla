@@ -1,5 +1,5 @@
 import { Canvas, effect, Path2D, signal, Text, untracked, View } from "nsh";
-import { NavPage } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import { formatDate, formatFullDateTime, formatLongDay, parseDateOnly } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";
 import { codexPlanLabel, codexRemainingPercent, codexWindowLabel, normalizeCodexUsedPercent } from "../../../core/stats/codexSubscriptionStats";

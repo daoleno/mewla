@@ -1,5 +1,6 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
-import { Button, Input, Sheet } from "nsh/base";
+import { Button, Input } from "nsh/base";
+import { AppSheet } from "../shell/AppSheet";
 import type { Daemon } from "../../core/more/daemon";
 import { codexSkills, filterCodexSkills, type CodexSkill } from "../../core/session/sessionRequests";
 import { Icon } from "../icons/Icon";
@@ -54,7 +55,7 @@ export function CodexSkillsSheet(props: {
   };
 
   return (
-    <Sheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
+    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
       <View testID="skills-sheet" class="gap-3 pb-8">
         <View class="flex-row items-center gap-2">
           <Text class="flex-1 text-lg font-semibold">Skills</Text>
@@ -100,6 +101,6 @@ export function CodexSkillsSheet(props: {
           </Scroll>
         )}
       </View>
-    </Sheet>
+    </AppSheet>
   );
 }

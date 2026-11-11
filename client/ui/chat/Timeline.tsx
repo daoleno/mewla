@@ -1,6 +1,7 @@
 import { cleanup, Clipboard, computed, effect, List, signal, Text, untracked, View, type ListRef } from "nsh";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
-import { Button, Sheet, TextView } from "nsh/base";
+import { Button, TextView } from "nsh/base";
+import { GuardedSheet as Sheet } from "../shell/AppSheet";
 import { isWorkingRow } from "../../core/conversation/timeline";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";

@@ -1,5 +1,6 @@
 import { List, signal, Text, View } from "nsh";
-import { Button, NavPage } from "nsh/base";
+import { Button } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { monthTitle } from "../../core/calendar/format";
 import { activeRun, groupAgenda, itemsOnDay, itemSummary, kindLabel, rowTime, statusLabel, type CalendarItem } from "../../core/calendar/model";
@@ -148,7 +149,7 @@ export function CalendarPage(props: { nav: NavStackState<CalendarRoute>; openSes
     else props.nav.push({ name: "item", id: item.id });
   };
   return (
-    <NavPage title="Calendar" testID="calendar-page"
+    <NavPage title="Calendar" testID="calendar-page" column="wide"
       headerLeft={<Button testID="toggle-month" accessibilityLabel={showMonth() ? "Hide month" : "Show month"} onPress={toggleMonth}><Text class="text-base text-primary">{showMonth() ? "Hide month" : "Show month"}</Text></Button>}
       headerRight={<Button testID="add-item" accessibilityLabel="Add calendar item" disabled={!calendar()} onPress={() => openEditor(null)}><Text class={calendar() ? "text-2xl text-primary" : "text-2xl text-muted-foreground"}>+</Text></Button>}>
       <View class="flex-1 bg-background">

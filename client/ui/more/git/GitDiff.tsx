@@ -1,5 +1,6 @@
 import { computed, effect, signal, Text, untracked, View, windowSize } from "nsh";
-import { AlertDialog, DiffView, NavPage, type DiffLineRange, type DiffViewRef } from "nsh/base";
+import { AlertDialog, DiffView, type DiffLineRange, type DiffViewRef } from "nsh/base";
+import { NavPage } from "../../shell/NavPage";
 import { gitHunkAtLine, gitHunkSelection, parseGitPatch, splitGitPatchByFile, type GitParsedPatch, type GitPatchHunk, type GitPatchSide } from "../../../core/git/gitDiffHunks";
 import { formatGitDiffBytes, gitDiffPatchText, planGitDiffReview, type GitDiffSection } from "../../../core/git/gitDiffReview";
 import type { GitDiffPatchPayload } from "../../../core/git/gitDiff";

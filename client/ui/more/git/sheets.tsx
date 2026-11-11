@@ -1,5 +1,5 @@
 import { signal, Text, View } from "nsh";
-import { Sheet } from "nsh/base";
+import { GuardedSheet as Sheet } from "../../shell/AppSheet";
 import type { GitBranchesPayload } from "../../../core/git/gitDiff";
 import { EmptyState, Field, Notice, Row } from "../kit/kit";
 import { Icon } from "../kit/Icon";

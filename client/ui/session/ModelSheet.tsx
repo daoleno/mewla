@@ -1,5 +1,6 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
-import { Button, Sheet } from "nsh/base";
+import { Button } from "nsh/base";
+import { AppSheet } from "../shell/AppSheet";
 import type { Daemon } from "../../core/more/daemon";
 import { classifyMutationPersistence, durabilityWarningMessage } from "../../core/providers/persistence";
 import { ProviderError, providerMutationRequiresRefresh } from "../../core/providers/errors";
@@ -128,7 +129,7 @@ export function ModelSheet(props: {
   });
 
   return (
-    <Sheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
+    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
       <View testID="model-sheet" class="gap-3 pb-8">
         <View class="flex-row items-center gap-2">
           {effectTarget() ? (
@@ -198,6 +199,6 @@ export function ModelSheet(props: {
           </Scroll>
         )}
       </View>
-    </Sheet>
+    </AppSheet>
   );
 }
