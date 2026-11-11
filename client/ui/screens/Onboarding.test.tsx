@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../testing/fixtures";
 import nacl from "../../core/vendor/nacl";
 import { buildLinkPairingTestLink } from "../../core/testing/linkPairingTestLink";
 import { readPairingLink } from "../../core/pairFlow";
@@ -80,7 +81,7 @@ describe("pairing by paste", () => {
     const app = await open("../App.tsx", { host: phone(), platform: "android", clipboard: computer.link() });
     app.onDialog(() => "Cancel");
     await app.press("id:scan-now");
-    await app.press("id:paste");
+    await answering(app, () => app.press("id:paste"));
     expect(app.dialogs()[0]).toMatchObject({ title: "Pair this phone?" });
     expect(app.shows("id:pair-issue")).toBe(false);
     expect(app.storage()["mewla:v3:servers"]).toBeUndefined();
@@ -93,7 +94,7 @@ describe("pairing by paste", () => {
     });
     app.onDialog(() => "Pair and grant access");
     await app.press("id:scan-now");
-    await app.press("id:paste");
+    await answering(app, () => app.press("id:paste"));
     await app.waitFor("text:Code used or expired");
     expect(app.texts()).toContain("pairing code expired");
     expect(app.shows("id:finder")).toBe(true);
@@ -106,7 +107,7 @@ describe("pairing by paste", () => {
     });
     app.onDialog(() => "Pair and grant access");
     await app.press("id:scan-now");
-    await app.press("id:paste");
+    await answering(app, () => app.press("id:paste"));
     await app.waitFor("text:Can't reach your computer");
     expect(app.texts().join(" ")).toContain("10.0.0.5:9876");
   });
@@ -120,7 +121,7 @@ describe("after pairing", () => {
     });
     app.onDialog(() => "Pair and grant access");
     await app.press("id:scan-now");
-    await app.press("id:paste");
+    await answering(app, () => app.press("id:paste"));
     await app.waitFor("text:Brain is home.", { timeout: 10_000 });
     expect(app.texts()).toContain("Connected to Desk.");
     expect(app.storage()["mewla:onboarded"]).toBe("true");
@@ -136,7 +137,7 @@ describe("after pairing", () => {
     });
     app.onDialog(() => "Pair and grant access");
     await app.press("id:scan-now");
-    await app.press("id:paste");
+    await answering(app, () => app.press("id:paste"));
     await app.waitFor("id:connected-title");
     await app.waitFor("text:Can't reach your computer", { timeout: 15_000 });
     expect(app.shows("id:retry")).toBe(true);
@@ -148,7 +149,7 @@ describe("after pairing", () => {
     const app = await open("../FakeDaemonApp.tsx", { host: phone(), platform: "android", network: { [computer.pairURL]: () => computer.answer() } });
     app.onDialog(() => "Pair and grant access");
     await app.waitFor("id:set-up");
-    await app.host.send("links.open", { url: computer.link() });
+    await answering(app, () => app.host.send("links.open", { url: computer.link() }));
     await app.waitFor("text:Brain is home.", { timeout: 10_000 });
   }, 15_000);
 });
@@ -171,7 +172,7 @@ describe("Mewla Relay", () => {
     app.onDialog(() => "Pair and grant access");
     await app.press("id:scan-now");
     await app.waitFor("id:paste");
-    await app.press("id:paste");
+    await answering(app, () => app.press("id:paste"));
     // Each stage on its own, so a slow runner says where it stopped.
     await app.waitUntil(() => app.dialogs().length > 0 || app.host.calls().some((call) => call.name === "link.start"), { timeout: 10_000 }).catch((error) => {
       const parsed = readPairingLink(link);
