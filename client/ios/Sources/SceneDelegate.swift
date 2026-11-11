@@ -50,6 +50,17 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     PushHost.register(app)
     LiveHost.register(app)
     CalendarHost.register(app)
+    // The in-app update (client/ui/update): this binary's identity and where it was distributed
+    // (Info.plist MewlaDistribution from the MEWLA_IOS_DISTRIBUTION build setting).
+    app.handle("update.info") { _ -> Any? in
+      let info = Bundle.main.infoDictionary ?? [:]
+      return [
+        "distribution": info["MewlaDistribution"] as? String ?? "none",
+        "appId": Bundle.main.bundleIdentifier ?? "",
+        "version": info["CFBundleShortVersionString"] as? String ?? "",
+        "build": info["CFBundleVersion"] as? String ?? "",
+      ] as [String: Any]
+    }
     _ = FilesHost(app)
     app.params = ["deviceName": UIDevice.current.name]
 

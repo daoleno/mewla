@@ -4,6 +4,7 @@ import type { NavStackState } from "nsh/base";
 import { followFriends, friendsEnabled } from "../more/friends/state";
 import { connection, current, problem } from "../session";
 import type { MoreRoute } from "../shell/routes";
+import { updatePending } from "../update/update";
 
 const destinations: { title: string; route: MoreRoute; labs?: boolean }[] = [
   { title: "Screen", route: { name: "screen" } },
@@ -51,7 +52,7 @@ export function More(props: { nav: NavStackState<MoreRoute> }) {
     <NavPage title="More">
       <View class="flex-1 bg-background" onLayout={(e) => shown(e.bounds.size)}>
         <View class="mt-4 border-t border-border">
-          {destinations.filter((d) => !d.labs || friendsEnabled()).map((d) => <Row testID={`more-${d.title}`} title={d.title} onPress={() => props.nav.push(d.route)} />)}
+          {destinations.filter((d) => !d.labs || friendsEnabled()).map((d) => <Row testID={`more-${d.title}`} title={d.title} detail={d.title === "Settings" && updatePending() ? "Update available" : undefined} onPress={() => props.nav.push(d.route)} />)}
         </View>
         <ConnectionLine />
       </View>

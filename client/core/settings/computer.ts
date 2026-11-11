@@ -47,8 +47,8 @@ export interface DaemonUpdateStatus {
 
 export type ComputerCheck = { state: "online"; name?: string } | { state: "unpaired" } | { state: "offline" };
 
-/** The oldest computer this app works with. */
-export const MIN_COMPUTER_VERSION = "0.2.88";
+/** The oldest computer this app works with, and SemVer order: one definition, the update's. */
+export { compareVersions, MIN_COMPUTER_VERSION } from "../update/version";
 
 export function getAgentUse(server: StoredServer): Promise<AgentUseStatus> {
   return signedJSON<AgentUseStatus>(server, "GET", "/agent-use", "mewla-agent-use:GET:/agent-use");
@@ -116,39 +116,3 @@ export async function revokeThisDevice(server: StoredServer): Promise<boolean> {
   }
 }
 
-interface SemVersion {
-  core: [number, number, number];
-  prerelease: string[];
-}
-
-function parseVersion(raw: string): SemVersion | null {
-  const value = raw.trim().replace(/^v/, "").split("+", 1)[0];
-  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(.+))?$/.exec(value);
-  if (!match) return null;
-  const prerelease = match[4] === undefined ? [] : match[4].split(".");
-  if (prerelease.some((part) => !/^[0-9A-Za-z-]+$/.test(part) || (/^\d+$/.test(part) && part.length > 1 && part[0] === "0"))) return null;
-  const core = [Number(match[1]), Number(match[2]), Number(match[3])] as [number, number, number];
-  return core.every(Number.isSafeInteger) ? { core, prerelease } : null;
-}
-
-/** SemVer precedence, as the computer's self-update compares; null when either is no version. */
-export function compareVersions(left: string, right: string): number | null {
-  const a = parseVersion(left);
-  const b = parseVersion(right);
-  if (!a || !b) return null;
-  for (let index = 0; index < 3; index += 1) {
-    if (a.core[index] !== b.core[index]) return a.core[index] < b.core[index] ? -1 : 1;
-  }
-  if (!a.prerelease.length || !b.prerelease.length) return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length ? -1 : 1;
-  for (let index = 0; index < Math.min(a.prerelease.length, b.prerelease.length); index += 1) {
-    const x = a.prerelease[index];
-    const y = b.prerelease[index];
-    if (x === y) continue;
-    const xn = /^\d+$/.test(x);
-    const yn = /^\d+$/.test(y);
-    if (xn && yn) return Number(x) < Number(y) ? -1 : 1;
-    if (xn !== yn) return xn ? -1 : 1;
-    return x < y ? -1 : 1;
-  }
-  return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length < b.prerelease.length ? -1 : 1;
-}

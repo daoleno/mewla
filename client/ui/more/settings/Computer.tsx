@@ -12,6 +12,8 @@ import {
 } from "../../../core/settings/computer";
 import { computerProblems, computerProblemsMayChange, computerTmuxProblem, computerUpdateProblem, type ComputerAction, type ComputerProblem } from "../../../core/settings/computerModel";
 import { checkComputer } from "../../../core/settings/computer";
+import { effectiveMinComputerVersion } from "../../../core/update/version";
+import manifest from "../../nsh.json";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, SwitchRow } from "../kit/kit";
 import type { PageNav } from "../routes";
 import { connection, current, resumeConnection, servers, switchTo } from "../../session";
@@ -135,7 +137,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
   }
 
   const problems = (): ComputerProblem[] =>
-    [computerUpdateProblem(update(), MIN_COMPUTER_VERSION), computerTmuxProblem(update()), ...computerProblems(agentUse())].filter((p): p is ComputerProblem => Boolean(p));
+    [computerUpdateProblem(update(), effectiveMinComputerVersion(MIN_COMPUTER_VERSION, manifest.version)), computerTmuxProblem(update()), ...computerProblems(agentUse())].filter((p): p is ComputerProblem => Boolean(p));
 
   return !server() ? (
     <Page title="Computer"><EmptyState title="This computer is no longer paired" /></Page>
