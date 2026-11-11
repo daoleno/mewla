@@ -21,7 +21,6 @@ import {
   apartNames,
   checks,
   currentConnectionIssue,
-  followConnectionIssue,
   forgetConnectionIssue,
   probeComputer,
   reloadServers,
@@ -45,8 +44,6 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
   const isCurrent = () => current()?.id === props.id;
   const reachable = () => (isCurrent() && connection() === "connected") || checks()[props.id]?.state === "online";
   const note = (key: string, text: string) => notes.set({ ...notes(), [key]: text });
-
-  followConnectionIssue();
 
   // A computer that is gone (removed here or elsewhere, or a stale link) leaves for Settings.
   let left = false;

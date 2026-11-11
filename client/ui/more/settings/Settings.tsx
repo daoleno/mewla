@@ -12,7 +12,7 @@ import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen
 import type { PageNav } from "../routes";
 import { current, servers } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
-import { currentPathMark, followConnectionIssue, probeComputers, removedNotice, statusWord } from "./computers";
+import { currentPathMark, probeComputers, removedNotice, statusWord } from "./computers";
 import { loadTelegram, telegramRow, telegramRowLabel } from "./telegramState";
 
 /** The appearance this phone chose: the system's, or always light or dark. */
@@ -96,7 +96,6 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
       loadTelegram();
     });
   });
-  followConnectionIssue();
   followFriends();
   void loadStrongAlerts();
   followVirtualScreen();
