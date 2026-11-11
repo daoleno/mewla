@@ -75,6 +75,8 @@ func TestPhoneReportsTapsForegroundAndViewingToTheRecorder(t *testing.T) {
 	}
 	defer conn.Close()
 
+	// Dial returns before the server's handler has registered the connection.
+	waitFor(t, func() bool { return srv.NotificationPresence("w1").Connected }, "the phone's connection was not registered")
 	if got := srv.NotificationPresence("w1"); !got.Connected || got.Foreground || got.ForegroundKnown || got.Viewing {
 		t.Fatalf("presence before the app spoke = %#v", got)
 	}
