@@ -1,11 +1,12 @@
-import { cleanup, Clipboard, List, signal, Text, View, type ListRef } from "nsh";
+import { cleanup, Clipboard, computed, effect, List, signal, Text, View, type ListRef } from "nsh";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, Sheet, TextView } from "nsh/base";
 import { isWorkingRow } from "../../core/conversation/timeline";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
-import type { BrainWorkEventTimelineItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
+import type { BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
+import { compactAge, latestTimestamp, withDayDividers } from "../../core/timeline/dayDividers";
 import { Icon } from "../icons/Icon";
 import { PlainText } from "./PlainText";
 import { selectingText } from "./messageEdit";
@@ -18,6 +19,10 @@ export type MessageHandlers = {
   isFinalReply?: (id: string) => boolean;
   /** When the running turn started (the provider's own clock): "Working · 1:05". */
   workingSince?: () => string | undefined;
+  /** A link pressed in a reply: a web page, or a file the Session wrote. */
+  onLink?: (url: string) => void;
+  /** A file a tool call names, pressed. */
+  onFile?: (path: string) => void;
 };
 
 /** "Working" with the turn's elapsed time, ticking each second while it shows. */
@@ -61,16 +66,21 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
  * shows the item it was given next; per-row state (open or not) lives in
  * `expansion`, by id.
  */
-export function TimelineRow(props: { item: () => TimelineItem; expansion: Expansion; handlers: MessageHandlers }) {
-  const it = props.item;
+export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem; expansion: Expansion; handlers: MessageHandlers }) {
+  const it = props.item as () => TimelineItem;
   const as = <T extends TimelineItem["type"]>(type: T) => () => it() as Extract<TimelineItem, { type: T }>;
   return (
     <View class="py-1">
-      {it().type === "message" && (it() as MessageTimelineItem).role === "user" ? (
+      {(it() as TimelineItem | DateDividerItem).type === "date-divider" ? (
+        <View testID="date-divider" class="items-center py-1.5">
+          <Text class="rounded-full bg-accent px-2.5 py-0.5 text-xs text-muted-foreground">{(it() as unknown as DateDividerItem).label}</Text>
+        </View>
+      ) : it().type === "message" && (it() as MessageTimelineItem).role === "user" ? (
         <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>
       ) : it().type === "message" ? (
         <View class="px-4">
-          <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-base" />
+          <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-base"
+            onLinkPress={(event) => props.handlers.onLink?.(event.url)} />
           {!(it() as MessageTimelineItem).streaming && props.handlers.isFinalReply?.(it().id) ? (
             <Button testID="copy-reply" onPress={() => void Clipboard.writeText((it() as MessageTimelineItem).body.replace(/\s+$/u, "")).catch(() => {})}
               class="mt-1 self-start rounded-lg p-1.5 active:bg-accent">
@@ -81,7 +91,7 @@ export function TimelineRow(props: { item: () => TimelineItem; expansion: Expans
       ) : isWorkingRow(it()) ? (
         <WorkingRow since={() => props.handlers.workingSince?.()} />
       ) : it().type === "activity" ? (
-        <ActivityRow item={as("activity") as () => ActivityTimelineItem} expansion={props.expansion} />
+        <ActivityRow item={as("activity") as () => ActivityTimelineItem} expansion={props.expansion} onFile={props.handlers.onFile} />
       ) : it().type === "plan" ? (
         <PlanRow item={as("plan") as () => PlanTimelineItem} />
       ) : it().type === "task-notification" ? (
@@ -113,22 +123,31 @@ export function ChatTimeline(props: { testID: string; items: () => TimelineItem[
   const handlers = props.handlers ?? {};
   const expansion = createExpansion();
   let list: ListRef | undefined;
-  // Read back from the newest row: "Latest" brings it into view again.
+  // Read back from the newest row: the jump button brings it into view again, saying how old it is.
   const away = signal(false);
+  const rows = computed(() => withDayDividers(props.items()));
+  const now = signal(Date.now());
+  effect(() => {
+    if (!away()) return;
+    now.set(Date.now());
+    const timer = setInterval(() => now.set(Date.now()), 1000);
+    cleanup(() => clearInterval(timer));
+  });
+  const age = () => compactAge(latestTimestamp(props.items()), now());
   return (
     <View class="flex-1">
       <SelectTextSheet />
-      <List testID={props.testID} class="flex-1" each={props.items()} keyExtractor={(item) => item.id} ref={(node) => (list = node)}
+      <List testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => (list = node)}
         maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
         onScroll={({ offset, contentSize, size }) => away.set(contentSize.height - (offset.y + size.height) > 240)}
         empty={props.empty() as never}>
         {(item) => <TimelineRow item={item} expansion={expansion} handlers={handlers} />}
       </List>
       {away() ? (
-        <Button testID="jump-latest" onPress={() => list?.scrollToEnd({ animated: true })}
+        <Button testID="jump-latest" accessibilityLabel={age() ? `Jump to latest, ${age()} ago` : "Jump to latest"} onPress={() => list?.scrollToEnd({ animated: true })}
           class="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 active:bg-accent">
           <Icon name="arrow-down" size={16} />
-          <Text class="text-sm">Latest</Text>
+          {age() ? <Text class="text-sm text-muted-foreground">{age()}</Text> : null}
         </Button>
       ) : null}
     </View>

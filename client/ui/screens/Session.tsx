@@ -133,6 +133,8 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
       void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
     isFinalReply: (id: string) => finalReplies().has(id),
     workingSince: () => activity()?.started_at,
+    onLink: (url: string) => openLink(url),
+    onFile: (path: string) => openPath(path),
   };
   const stoppingFor = signal("");
   const notice = signal("");
@@ -323,6 +325,11 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const openGit = () => {
     const cwd = untracked(worker)?.cwd;
     if (cwd) props.nav.push({ name: "git", targetId: props.workerId, cwd, title: untracked(title) });
+  };
+  // A reply's link: a file the Session wrote opens in the preview; a page opens in the browser.
+  const openLink = (url: string) => {
+    if (recognizeSessionFileReference(url)) return openPath(url);
+    if (/^https?:\/\//i.test(url)) void openUrl(url).catch(() => notice.set("Could not open the link."));
   };
   // A path the terminal showed, previewed against this run of the Session.
   const openPath = (path: string) => {
