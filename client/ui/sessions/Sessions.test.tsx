@@ -27,7 +27,7 @@ describe("Sessions", () => {
     const app = await sessionsApp({ worker_sessions: [session("a", { name: "release notes", status: "running" })] });
     await app.waitFor("text:release notes");
     await app.dragAndHold("id:session-row", { x: 0, y: 0 });
-    await app.host.send("daemon.push", { type: "worker_session_updated", worker_session: session("a", { name: "release notes", status: "done" }) });
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: session("a", { name: "release notes", status: "done" }) });
     await new Promise((resolve) => setTimeout(resolve, 300));
     await app.drop();
     await app.waitFor("id:session-menu");

@@ -1,4 +1,4 @@
-import { effect, Scroll, signal, Text, View } from "nsh";
+import { computed, effect, Scroll, signal, Text, View } from "nsh";
 import { AlertDialog, Button, Input, TextView } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { calendarOriginOfWork, originLabel } from "../../core/calendar/model";
@@ -17,6 +17,12 @@ const AUTOSAVE_MS = 600;
  */
 export function WorkFilePage(props: { id: string; onClose: () => void; openCalendarItem: (itemId: string, runId?: string) => void }) {
   const item = () => workFiles().find((w) => w.id === props.id);
+  /** Set once Delete is confirmed: the page closes over its file, it does not say "not found" first. */
+  const removing = signal(false);
+  // Components run once: what is shown follows these two. `shown` keeps the last version, so the
+  // page's parts never read a file that is gone while the page turns into "Work item not found".
+  const gone = computed(() => !item() && !removing());
+  const shown = computed<WorkItem | undefined>((last) => item() ?? last);
   const editingBody = signal(false);
   const text = signal("");
   /** The version the text was loaded from. */
@@ -33,10 +39,15 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
     if (!loaded) {
       base.set(current);
       text.set(current.body);
-    } else if (current.mtime !== loaded.mtime && state() === "saved") {
+      return;
+    }
+    // While a save is out, the computer's echo of it can come before its answer: decide when the
+    // answer is in (it moves `base`). Only a version newer than the one the text is on is theirs.
+    if (state() === "saving" || !(Date.parse(current.mtime) > Date.parse(loaded.mtime))) return;
+    if (state() === "saved") {
       base.set(current);
       text.set(current.body);
-    } else if (current.mtime !== loaded.mtime) newer.set(true);
+    } else newer.set(true);
   });
 
   const save = async () => {
@@ -85,14 +96,16 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
       actions: [{ id: "keep", label: "Cancel", role: "cancel" }, { id: "delete", label: "Delete", role: "destructive" }],
     });
     if (answer.action !== "delete") return;
+    removing.set(true);
     try {
       await workFilesModel()!.remove(current);
       props.onClose();
     } catch (error) {
+      removing.set(false);
       failure.set(`Delete failed. ${error instanceof Error && error.message ? error.message : "Could not delete work item."}`);
     }
   };
-  const origin = () => (item() ? calendarOriginOfWork(item()!) : null);
+  const origin = () => (shown() ? calendarOriginOfWork(shown()!) : null);
   const age = (iso: string) => {
     const ms = clock().now - Date.parse(iso);
     if (!Number.isFinite(ms) || ms < 60_000) return "now";
@@ -106,44 +119,47 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
 
   return (
     <NavPage title={item()?.project ?? "Work"} testID="work-file-page"
-      headerRight={item() ? <Button testID="work-file-edit" onPress={() => { if (editingBody()) void save(); editingBody.set(!editingBody()); }}><Text class="text-base text-primary">{editingBody() ? "Preview" : "Edit"}</Text></Button> : undefined}>
-      {!item() ? (
-        <View class="flex-1 items-center gap-2 bg-background px-6 py-16">
-          <Text class="text-lg font-semibold">Work item not found</Text>
-          <Text class="text-center text-base text-muted-foreground">It may have been deleted or belongs to another server.</Text>
-        </View>
-      ) : (
-        <View class="flex-1 bg-background">
-          {newer() ? (
-            <View testID="work-file-newer" class="gap-2 border-b border-border bg-secondary px-4 py-3">
-              <Text class="text-base font-semibold">Newer version on the server</Text>
-              {state() !== "saved" ? <Text class="text-sm text-muted-foreground">Loading it discards your unsaved edits.</Text> : null}
-              <Button testID="work-file-load" onPress={loadRemote} class="self-start"><Text class="text-base text-primary">Load remote changes</Text></Button>
-            </View>
-          ) : null}
-          <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
-            <View class="gap-2 px-4 pb-8 pt-4">
-              <Text class="text-sm text-muted-foreground">{`${workItemStatusLabel[workItemStatus(item()!)]} · ${age(item()!.mtime)}`}</Text>
-              <Text class="text-xl font-semibold">{item()!.title || "Untitled work"}</Text>
-              {origin() ? (
-                <Button testID="work-file-calendar-link" onPress={() => props.openCalendarItem(origin()!.itemId, origin()!.runId)} class="self-start">
-                  <Text class="text-base text-primary">{originLabel(origin()!, calendarItems(), clock(), { title: item()!.title, at: item()!.frontmatter.created }) ?? "Calendar"}</Text>
-                </Button>
-              ) : null}
-              {editingBody()
-                ? <Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} onBlur={() => void save()} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" />
-                : <TextView testID="work-file-preview" markdown={readableBody(text())} />}
-            </View>
-          </Scroll>
-          <View class="flex-row items-center justify-between border-t border-border px-4 py-3">
-            <Text testID="work-file-state" class="text-sm text-muted-foreground">{failure() || (state() === "saving" ? "Saving" : state() === "unsaved" ? "Unsaved" : "Saved")}</Text>
-            <View class="flex-row gap-4">
-              <Button testID="work-file-delete" onPress={() => void remove(item()!)}><Text class="text-base text-destructive">Delete</Text></Button>
-              <Button testID="work-file-done" onPress={() => void toggleDone(item()!)}><Text class="text-base font-semibold text-primary">{workItemStatus(item()!) === "done" ? "Reopen" : "Mark done"}</Text></Button>
+      headerRight={!gone() ? <Button testID="work-file-edit" onPress={() => { if (editingBody()) void save(); editingBody.set(!editingBody()); }}><Text class="text-base text-primary">{editingBody() ? "Preview" : "Edit"}</Text></Button> : undefined}>
+      {/* NSH's NavPage takes its children once: the choice sits inside a View of this page's own. */}
+      <View class="flex-1 bg-background">
+        {gone() ? (
+          <View class="flex-1 items-center gap-2 bg-background px-6 py-16">
+            <Text class="text-lg font-semibold">Work item not found</Text>
+            <Text class="text-center text-base text-muted-foreground">It may have been deleted or belongs to another server.</Text>
+          </View>
+        ) : (
+          <View class="flex-1 bg-background">
+            {newer() ? (
+              <View testID="work-file-newer" class="gap-2 border-b border-border bg-secondary px-4 py-3">
+                <Text class="text-base font-semibold">Newer version on the server</Text>
+                {state() !== "saved" ? <Text class="text-sm text-muted-foreground">Loading it discards your unsaved edits.</Text> : null}
+                <Button testID="work-file-load" onPress={loadRemote} class="self-start"><Text class="text-base text-primary">Load remote changes</Text></Button>
+              </View>
+            ) : null}
+            <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
+              <View class="gap-2 px-4 pb-8 pt-4">
+                <Text class="text-sm text-muted-foreground">{`${workItemStatusLabel[workItemStatus(shown()!)]} · ${age(shown()!.mtime)}`}</Text>
+                <Text class="text-xl font-semibold">{shown()!.title || "Untitled work"}</Text>
+                {origin() ? (
+                  <Button testID="work-file-calendar-link" onPress={() => props.openCalendarItem(origin()!.itemId, origin()!.runId)} class="self-start">
+                    <Text class="text-base text-primary">{originLabel(origin()!, calendarItems(), clock(), { title: shown()!.title, at: shown()!.frontmatter.created }) ?? "Calendar"}</Text>
+                  </Button>
+                ) : null}
+                {editingBody()
+                  ? <Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} onBlur={() => void save()} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" />
+                  : <TextView testID="work-file-preview" markdown={readableBody(text())} />}
+              </View>
+            </Scroll>
+            <View class="flex-row items-center justify-between border-t border-border px-4 py-3">
+              <Text testID="work-file-state" class="text-sm text-muted-foreground">{failure() || (state() === "saving" ? "Saving" : state() === "unsaved" ? "Unsaved" : "Saved")}</Text>
+              <View class="flex-row gap-4">
+                <Button testID="work-file-delete" onPress={() => void remove(shown()!)}><Text class="text-base text-destructive">Delete</Text></Button>
+                <Button testID="work-file-done" onPress={() => void toggleDone(shown()!)}><Text class="text-base font-semibold text-primary">{workItemStatus(shown()!) === "done" ? "Reopen" : "Mark done"}</Text></Button>
+              </View>
             </View>
           </View>
-        </View>
-      )}
+        )}
+      </View>
     </NavPage>
   );
 }
