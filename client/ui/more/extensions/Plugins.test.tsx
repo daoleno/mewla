@@ -308,6 +308,16 @@ describe("As before the rewrite", () => {
     await app.waitFor("text:Credentials stay on Desk. Each tool needs your permission.");
   });
 
+  // FINAL-VERIFY 6387f88f extensions D4: a computer paired by its address took its reported name in
+  // Settings, but the pages kept saying "this computer" until the app started again.
+  test("a computer that takes its reported name is named by it at once", async () => {
+    const c = computer({ name: "extensions-service", id: "github" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
+    const app = await open(HARNESS, { host: { ...c.options.host, params: { ...c.options.host.params, server: { name: "192.168.1.5" } } } });
+    await app.waitFor("text:Your sign-in stays on this computer. Brain only acts on tasks you give it.");
+    await app.host.send("app.serverRenamed", "claude9983");
+    await app.waitFor("text:Your sign-in stays on claude9983. Brain only acts on tasks you give it.");
+  });
+
   test("Hyperliquid offers another key only once an account holds one", async () => {
     const reader = { id: "h1", integration: "hyperliquid", name: "Mainnet", identity: "0xabc", enabled: true, status: "connected", history: [] };
     let accounts: unknown[] = [reader];

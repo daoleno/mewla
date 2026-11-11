@@ -18,7 +18,7 @@ import {
 import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { serverDisplayName } from "../../../core/extensions/serverDisplayName";
 import { formatDateTime, formatFullDateTime } from "../../../core/more/dates";
-import { daemon } from "../daemon";
+import { daemonName } from "../daemon";
 import { EmptyState, Field, Notice, Row, Section, Spinner, StatusMark, SwitchRow } from "../kit/kit";
 import type { PageNav } from "../routes";
 import { Action } from "./Action";
@@ -47,7 +47,7 @@ export function ServicePage(props: { id: string; nav: PageNav }) {
   // The trading form is offered as "Add another key" once an account holds a key.
   const keyed = computed(() => accounts().some((account) => !!account.signer));
   const body = (p: PluginIntegration | null): JSX.Element => {
-    if (!p) return flowState().loaded ? <Notice tone="failed" title="Service unavailable" detail={`${serverDisplayName(daemon()?.server.name, "This server")} does not offer this service.`} /> : <EmptyState busy title="Loading services" />;
+    if (!p) return flowState().loaded ? <Notice tone="failed" title="Service unavailable" detail={`${serverDisplayName(daemonName(), "This server")} does not offer this service.`} /> : <EmptyState busy title="Loading services" />;
     return (
       <View>
         <Header plugin={p} accounts={accounts()} />
@@ -99,7 +99,7 @@ function ConnectOffer(props: { plugin: PluginIntegration }) {
   const busy = () => flowState().running !== null || (connectingService() !== null && !connecting());
   return (
     <View>
-      <Section title="What Brain can do" footer={`Your sign-in stays on ${serverDisplayName(daemon()?.server.name)}. Brain only acts on tasks you give it.`}>
+      <Section title="What Brain can do" footer={`Your sign-in stays on ${serverDisplayName(daemonName())}. Brain only acts on tasks you give it.`}>
         <Row icon="eye" title="Read and search" subtitle={job?.read} value="On" />
         <Row icon="edit" title="Make changes when asked" subtitle={job ? `${job.write}. Off until you allow it.` : "Off until you allow it."} value="Off" />
       </Section>
@@ -389,7 +389,7 @@ function CustomServiceForm(props: { plugin: PluginIntegration; again: boolean })
           <View class="mt-4">
             <Action filled testID="custom-connect" label={browser() ? "Continue in browser" : "Connect service"} busy={connectingService() === props.plugin.id} disabled={!endpoint().trim() || (trust() && !networks().trim())} onPress={() => void connect()} />
           </View>
-          <Text testID="custom-note" class="mt-2 px-4 text-xs text-muted-foreground">{`Credentials stay on ${serverDisplayName(daemon()?.server.name)}. Each tool needs your permission.`}</Text>
+          <Text testID="custom-note" class="mt-2 px-4 text-xs text-muted-foreground">{`Credentials stay on ${serverDisplayName(daemonName())}. Each tool needs your permission.`}</Text>
         </View>
       ) : (
         <View class="mt-4">
@@ -420,7 +420,7 @@ function HyperliquidForm(props: { plugin: PluginIntegration; keyed: boolean }) {
         </Section>
       ) : (
         <View>
-          <Section title="Trading" footer={`The key stays on ${serverDisplayName(daemon()?.server.name)}.`}>
+          <Section title="Trading" footer={`The key stays on ${serverDisplayName(daemonName())}.`}>
             <Field label="API wallet key" accessibilityLabel="Hyperliquid API wallet key" placeholder="0x…" masked value={key()} onChange={(value) => key.set(value)} />
           </Section>
           <View class="mt-4 gap-2">
