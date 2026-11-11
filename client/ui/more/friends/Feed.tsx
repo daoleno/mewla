@@ -53,7 +53,7 @@ export function Feed(props: { nav: PageNav; top: () => boolean }) {
       </Button>
       {me() ? (
         <Button testID="friends-me" accessibilityLabel="Your profile" onPress={() => props.nav.push({ name: "friends-person", id: me()!.id })} class="active:opacity-70">
-          <Avatar author={me()!} size={28} />
+          <Avatar author={me()!} size={32} />
         </Button>
       ) : null}
     </View>
