@@ -11,13 +11,13 @@ import type { ProviderConnectionInput, ProviderConnectionTestResult, ProviderMod
  * out once, inside its request, and is never read back.
  */
 
-function asProviderError(error: unknown, credentialWrite = false): ProviderError {
+function asProviderError(error: unknown, credentialWrite = false, secret?: string): ProviderError {
   if (error instanceof ProviderError) return error;
   const message = error instanceof Error ? error.message : String(error ?? "");
   if (/not connected/i.test(message)) return offlineProviderError();
   if (/timed out/i.test(message)) return new ProviderError(PROVIDER_ERROR_CODES.timeout, "Timed out waiting for Providers.", "timeout", true);
   const code = (error as { code?: unknown } | null)?.code;
-  return providerErrorFromPayload({ code: typeof code === "string" ? code : undefined, message }, { credentialWrite });
+  return providerErrorFromPayload({ code: typeof code === "string" ? code : undefined, message }, { credentialWrite, secret });
 }
 
 function parsed<T>(parse: () => T | null, invalid: string): T {
@@ -96,7 +96,7 @@ export async function testProviderConnection(
     ? { provider_connection: { preset_id: "custom", client: target.client, base_url: target.baseUrl.trim(), advanced: true }, credential: target.apiKey.trim() }
     : { connection_id: target.connectionId };
   const frame = await daemon.request("test_provider_connection", body, { reply: "provider_connection_test", timeoutMs: 20_000 }).catch((error) => {
-    throw asProviderError(error, unsaved);
+    throw asProviderError(error, unsaved, unsaved ? target.apiKey : undefined);
   });
   return parsed(() => parseProviderConnectionTestResult(frame, target.client), "Daemon returned an invalid connection test result.");
 }

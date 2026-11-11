@@ -119,8 +119,10 @@ var (
 	ErrCredentialStoreFailed      = errors.New("credential store operation failed")
 	ErrDiscoveryCacheInvalid      = errors.New("provider discovery cache invalid")
 	ErrDiscoveryPersistFailed     = errors.New("provider discovery cache persist failed")
-	ErrInternalNotWire            = errors.New("modelprofiles: internal type cannot be JSON-marshaled; use ToWire")
-	ErrPersistDirSync             = errors.New("model profile file renamed but directory sync failed")
+	// ErrConnectionTestFailed: a connection test reached no answer it could use (refused, unreachable, an HTTP error); the message says why.
+	ErrConnectionTestFailed = errors.New("provider connection test failed")
+	ErrInternalNotWire      = errors.New("modelprofiles: internal type cannot be JSON-marshaled; use ToWire")
+	ErrPersistDirSync       = errors.New("model profile file renamed but directory sync failed")
 
 	ErrRouteNotFound               = errors.New("route not found")
 	ErrRouteAdmissionDenied        = errors.New("route admission denied")

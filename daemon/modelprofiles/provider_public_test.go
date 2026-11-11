@@ -522,3 +522,34 @@ func TestCustomDefaultDoesNotFabricateDiscoveredModel(t *testing.T) {
 		t.Fatalf("connection-only launch must not require a model: %v", err)
 	}
 }
+
+// FINAL-VERIFY 6387f88f m4 settings [182]: an unsaved test against an endpoint
+// that refuses said "Providers are not available on this daemon." (the
+// uncoded error went out as model_profiles_unavailable). A failed probe has
+// its own code, its reason, and never the key.
+func TestConnectionTestFailureHasItsOwnCodeAndNoKey(t *testing.T) {
+	refused := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := refused.URL
+	refused.Close()
+	teapot := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no", http.StatusTeapot)
+	}))
+	t.Cleanup(teapot.Close)
+	owner := startTestOwner(t, func(string) (string, bool) { return "", false })
+	// The last one carries the key in its path, which the refused dial's error repeats.
+	for _, base := range []string{url, teapot.URL, url + "/fixture-echoed-key"} {
+		_, err := owner.TestProviderConnection(ProviderConnectionTestInput{Client: ClientClaude, BaseURL: base, Credential: "fixture-echoed-key"})
+		if err == nil {
+			t.Fatalf("%s: expected a failure", base)
+		}
+		if code := ControlErrorCode(err); code != CodeConnectionTestFailed {
+			t.Fatalf("%s: code=%q err=%v", base, code, err)
+		}
+		if strings.HasPrefix(err.Error(), "provider connection test failed") {
+			t.Fatalf("%s: the reason starts with the sentinel's words: %v", base, err)
+		}
+		if strings.Contains(err.Error(), "fixture-echoed-key") {
+			t.Fatalf("%s: the key is in the reason: %v", base, err)
+		}
+	}
+}
