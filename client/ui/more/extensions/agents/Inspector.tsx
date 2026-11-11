@@ -107,6 +107,8 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
   const selected = () => props.detail.preview?.path ?? defaultSkillFile(files());
   const expanded = signal<ReadonlySet<string>>(ancestors(untracked(selected)));
   const viewing = signal<string | null>(null);
+  // The width of the rendered SKILL.md, which its pictures take.
+  const markdownWidth = signal(0);
   const copyId = untracked(() => props.detail.copyId);
   const read: ImageReader = cachedReader(async (path) => {
     const preview = untracked(() => props.detail.preview);
@@ -187,6 +189,7 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
           <EmptyState icon="attach" title="Binary file" detail={`${preview()!.mediaType} · ${preview()!.size} bytes. Content preview is unavailable.`} />
         ) : null}
         {renderer() === "markdown" ? (
+          <View onLayout={({ bounds }) => markdownWidth.set(bounds.size.width)}>
           <TextView
             testID="skill-markdown"
             markdown={preview()?.content || "This file is empty."}
@@ -201,9 +204,10 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
               } catch (reason) {
                 problem = failureText(reason, "This Skill image is unavailable.");
               }
-              return <SkillImage path={path} alt={image.alt} problem={problem} read={read} onOpen={(target) => viewing.set(target)} />;
+              return <SkillImage path={path} alt={image.alt} problem={problem} read={read} onOpen={(target) => viewing.set(target)} width={markdownWidth} />;
             }}
           />
+          </View>
         ) : null}
         {renderer() === "text" ? <Code content={preview()?.content ?? ""} /> : null}
         {renderer() === "json" ? <Code content={JSON.stringify(JSON.parse(preview()?.content ?? "null"), null, 2)} /> : null}

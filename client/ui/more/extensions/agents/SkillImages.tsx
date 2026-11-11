@@ -25,7 +25,7 @@ export function cachedReader(read: ImageReader): ImageReader {
 }
 
 /** A picture a Skill's Markdown shows, from the copy itself; a tap opens it larger. */
-export function SkillImage(props: { path: string | null; alt?: string; problem?: string; read: ImageReader; onOpen: (path: string) => void }) {
+export function SkillImage(props: { path: string | null; alt?: string; problem?: string; read: ImageReader; onOpen: (path: string) => void; width?: () => number }) {
   const src = signal("");
   const error = signal(props.problem ?? "");
   if (props.path) {
@@ -34,7 +34,9 @@ export function SkillImage(props: { path: string | null; alt?: string; problem?:
       .catch((reason: unknown) => error.set(failureText(reason, "This Skill image is unavailable.")));
   }
   return (
-    <View class="my-1">
+    // A text view sizes what renderImage gives it to its content, so `w-full` alone came out 0 wide (K9):
+    // the picture takes the text's width, measured by the page.
+    <View class="my-1" style={{ width: props.width?.() || undefined }}>
       {src() ? (
         <View role="button" accessibilityLabel={props.alt || props.path || "Image"} accessibilityHint="Opens the image" onPress={() => props.path && props.onOpen(props.path)} class="active:opacity-80">
           <Image src={src()} class="h-48 w-full rounded-xl" style={{ objectFit: "contain" }} accessibilityLabel={props.alt || props.path || "Image"} />
