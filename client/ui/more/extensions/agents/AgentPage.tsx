@@ -1,19 +1,19 @@
-import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { computed, effect, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button, Input } from "nsh/base";
 import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
 import { agentExtensionsScopeLabel, pluginsForScope, skillCopyScope, skillsForScope, type AgentExtensionsScope } from "../../../../core/extensions/agentExtensionsModel";
 import type { InstalledPluginCopy } from "../../../../core/extensions/pluginsManagement";
-import { filterLogicalPlugins, groupLogicalPlugins, pluginCopyLabel, type LogicalPlugin, type PluginCapabilityFilter, type PluginFilters } from "../../../../core/extensions/pluginsScreenModel";
+import { filterLogicalPlugins, groupLogicalPlugins, type LogicalPlugin, type PluginCapabilityFilter, type PluginFilters } from "../../../../core/extensions/pluginsScreenModel";
 import { skillAgentLabel, skillsRequestData, type InstalledSkill, type ManagedSkillAgent } from "../../../../core/extensions/skillsManagement";
-import { filterLogicalSkills, MANAGED_SKILL_AGENTS, type LogicalSkill, type SkillFilters, type SkillScopeFilter, type SkillStatusFilter } from "../../../../core/extensions/skillsScreenModel";
+import { filterLogicalSkills, MANAGED_SKILL_AGENTS, skillCopyLocation, type LogicalSkill, type SkillFilters, type SkillScopeFilter, type SkillStatusFilter } from "../../../../core/extensions/skillsScreenModel";
 import { skillRowSupportsDelete, type SkillsSurfaceSection } from "../../../../core/extensions/skillsSurfaceModel";
 import { daemon, daemonState } from "../../daemon";
 import { Icon, type IconName } from "../../kit/Icon";
 import { EmptyState, Notice, Page, PillButton, Spinner } from "../../kit/kit";
 import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../../routes";
-import { isManaged, PluginDetails, SkillInspector } from "./Inspector";
+import { isManaged, PluginCopyCard, PluginDetails, SheetHeader, SkillInspector } from "./Inspector";
 import { AgentMarks } from "./marks";
 import {
   allSkills,
@@ -38,6 +38,10 @@ import {
 
 const SHEET = "max-h-[94%] rounded-t-3xl bg-card px-4 pb-8 pt-3";
 const BACKDROP = "bg-black/30";
+/** From this width, Skill and Plugin details sit beside the list (a tablet, a phone on its side). */
+const WIDE_DETAILS = 920;
+/** How far a sideways swipe goes before it switches between Plugins and Skills. */
+const SWIPE_DISTANCE = 60;
 
 const NO_SKILL_FILTERS: SkillFilters = { agents: [], status: "all", scope: "all" };
 const NO_PLUGIN_FILTERS: PluginFilters = { agents: [], capability: "all" };
@@ -59,12 +63,32 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
   const skillPicker = signal<LogicalSkill | null>(null);
   const pluginPicker = signal<LogicalPlugin | null>(null);
   const openPluginKey = signal<string | null>(null);
+  let shownComputer: string | null | undefined;
 
   effect(() => {
     const current = daemon();
-    followComputer(current?.server.id ?? "");
+    const id = current?.server.id ?? "";
+    // Another computer: a copy picked on the last one is never offered to this one.
+    if (shownComputer !== undefined && shownComputer !== id) {
+      skillPicker.set(null);
+      pluginPicker.set(null);
+      openPluginKey.set(null);
+    }
+    shownComputer = id;
+    followComputer(id);
     if (current && daemonState() === "connected") untracked(refreshAll);
   });
+  // A new inventory: the copies a picker offered may be gone.
+  let pickerInventory: string | undefined;
+  effect(() => {
+    const generated = skillsRequestData(skillsState())?.generatedAt;
+    untracked(() => {
+      if (pickerInventory !== undefined && generated !== pickerInventory) skillPicker.set(null);
+      pickerInventory = generated;
+    });
+  });
+  // A wide screen shows details beside the list instead of over it.
+  const wide = () => windowSize().width >= WIDE_DETAILS;
 
   const allPlugins = () => groupLogicalPlugins(pluginCopies());
   const plugins = () => pluginsForScope(pluginCopies(), props.scope);
@@ -92,12 +116,93 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
   const refresh = () => (section() === "plugins" ? void refreshPlugins() : void refreshSkills());
   const loadingNow = () => (section() === "plugins" ? pluginsState() : skillsState()).status === "loading";
 
+  const projectName = () => projectCwd().replace(/\/+$/, "").split("/").pop() || projectCwd();
+  // Plugins and Skills are peer pages: a sideways swipe goes to the other one.
+  const swipe = (dx: number) => {
+    if (!hasPlugins || Math.abs(dx) < SWIPE_DISTANCE) return;
+    chosen.set(dx < 0 ? "skills" : "plugins");
+  };
+  // Each is made for the one copy or Plugin it shows (the panel's key), which it keeps while it closes.
+  const inspector = () => {
+    const copy = untracked(inspected)!;
+    return (
+      <SkillInspector
+        logical={logicalOf(copy)}
+        copy={copy}
+        plugins={allPlugins()}
+        pluginsShown={hasPlugins}
+        onSelectFile={(path) => void inspectSkill(copy, path)}
+        onInspect={(other) => void inspectSkill(other)}
+        onDelete={(other) => void deleteSkillCopy(other)}
+        onOpenPlugin={(key) => { closeInspector(); chosen.set("plugins"); openPluginKey.set(key); }}
+        onClose={closeInspector}
+      />
+    );
+  };
+  const pluginDetails = () => {
+    const shown = untracked(openPlugin)!;
+    return <PluginDetails plugin={allPlugins().find((plugin) => plugin.key === shown.key) ?? shown} onUninstall={(copy: InstalledPluginCopy) => void uninstallPluginCopy(copy)} onClose={() => openPluginKey.set(null)} />;
+  };
+  const skillPickerView = (skill: LogicalSkill) => (
+    <View testID="skill-copy-picker" class="gap-2">
+      <SheetHeader title="Delete copy" detail={skill.name} closeLabel="Close copy selector" onClose={() => skillPicker.set(null)} />
+      {skill.copies.map((copy) => {
+        const deletable = () => skillRowSupportsDelete(copy, mutationOperations());
+        const location = skillCopyLocation(copy);
+        return (
+          <View class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2">
+            <View class="min-w-0 flex-1 gap-0.5">
+              <AgentMarks agents={copy.agents as ManagedSkillAgent[]} size={16} />
+              <Text class="text-sm line-clamp-2">{location.label}</Text>
+              <View selectable><Text class="font-mono text-xs text-muted-foreground line-clamp-1">{location.path}</Text></View>
+              {deletable() ? null : <Text class="text-xs text-muted-foreground">{copy.capability.reason || "This copy cannot be deleted from here."}</Text>}
+            </View>
+            {deletable() ? (
+              <Button
+                testID={`pick-delete-${copy.id}`}
+                accessibilityLabel={`Delete ${copy.name} from ${copy.location}`}
+                disabled={Boolean(preparing())}
+                onPress={() => { skillPicker.set(null); void deleteSkillCopy(copy); }}
+                class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
+              >
+                {preparing() === `delete:${copy.id}` ? <Spinner size={16} /> : <Icon name="trash" size={20} tone="seal" />}
+              </Button>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+  const pluginPickerView = (plugin: LogicalPlugin) => (
+    <View testID="plugin-copy-picker" class="gap-2">
+      <SheetHeader title="Choose copy" detail={plugin.displayName} closeLabel="Close Plugin copy selector" onClose={() => pluginPicker.set(null)} />
+      {plugin.copies.map((copy) => (
+        <PluginCopyCard copy={copy} onUninstall={(picked) => { pluginPicker.set(null); void uninstallPluginCopy(picked); }} />
+      ))}
+    </View>
+  );
+  // Keyed by what they show, so a poll or a file picked doesn't build them again.
+  const panel = computed(
+    () => (inspected() && section() === "skills" ? `skill:${inspected()!.id}` : openPlugin() && section() === "plugins" ? `plugin:${openPlugin()!.key}` : ""),
+    { equals: (a, b) => a === b },
+  );
+
   return (
-    <Page title={agentExtensionsScopeLabel(props.scope)} testID="agent-page" refreshing={loadingNow() && Boolean(skillsRequestData(skillsState()))} onRefresh={refresh}>
-      {projectCwd() ? (
-        <View class="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1" accessibilityLabel={`Project ${projectCwd().split("/").filter(Boolean).at(-1)}`}>
+    <Page
+      title={agentExtensionsScopeLabel(props.scope)}
+      testID="agent-page"
+      refreshing={loadingNow() && Boolean(skillsRequestData(skillsState()))}
+      onRefresh={refresh}
+      aside={
+        <View testID="details-panel" class="w-[400px] border-l border-border bg-card" style={{ display: wide() && panel() ? "flex" : "none" }}>
+          {((key) => untracked(() => (!key ? null : <Scroll class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll>)))(wide() ? panel() : "")}
+        </View>
+      }
+    >
+      {daemon() && projectCwd() ? (
+        <View testID="project-scope" class="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1" accessible accessibilityLabel={`Project ${projectName()}`}>
           <Icon name="folder" size={14} />
-          <Text class="text-xs">{projectCwd().split("/").filter(Boolean).at(-1) ?? projectCwd()}</Text>
+          <Text class="text-xs line-clamp-1">{projectName()}</Text>
         </View>
       ) : null}
       {hasPlugins ? (
@@ -113,9 +218,10 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
       ) : null}
       {notice() ? (
         <View testID="mutation-notice">
-          <Notice tone={notice()!.kind === "error" ? "failed" : undefined} title={notice()!.message} action="Dismiss" onAction={() => notice.set(null)} />
+          <Notice live tone={notice()!.kind === "error" ? "failed" : "success"} title={notice()!.message} action="Dismiss" onAction={() => notice.set(null)} />
         </View>
       ) : null}
+      <View panActivation={{ activeOffsetX: 24, failOffsetY: 14 }} onPanEnd={(event) => !event.cancelled && swipe(event.translation.x)}>
       {section() === "skills" ? (
         <SkillsList
           rows={shownSkills()}
@@ -147,6 +253,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
           nav={props.nav}
         />
       )}
+      </View>
 
       <Sheet open={filtersOpen() === "skills"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
         <SkillFilterSheet agents={filterAgents()} filters={skillFilters()} onChange={(next) => skillFilters.set(next)} onClose={() => filtersOpen.set(null)} />
@@ -156,86 +263,18 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
       </Sheet>
 
       <Sheet open={skillPicker() !== null} onOpenChange={({ open }) => !open && skillPicker.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
-        {skillPicker() ? (
-          <View testID="skill-copy-picker" class="gap-2">
-            <Text class="text-xl font-semibold" role="header">Delete copy</Text>
-            <Text class="text-sm text-muted-foreground">{skillPicker()!.name}</Text>
-            {skillPicker()!.copies.map((copy) => {
-              const deletable = skillRowSupportsDelete(copy, mutationOperations());
-              return (
-                <View class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2">
-                  <View class="min-w-0 flex-1">
-                    <Text class="text-sm">{copy.location}</Text>
-                    <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{copy.rootPath}</Text>
-                    {deletable ? null : <Text class="text-xs text-muted-foreground">This copy cannot be deleted from here.</Text>}
-                  </View>
-                  {deletable ? (
-                    <Button
-                      testID={`pick-delete-${copy.id}`}
-                      accessibilityLabel={`Delete ${copy.name} from ${copy.location}`}
-                      disabled={Boolean(preparing())}
-                      onPress={() => { skillPicker.set(null); void deleteSkillCopy(copy); }}
-                      class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
-                    >
-                      <Icon name="trash" size={20} tone="seal" />
-                    </Button>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
-        ) : null}
+        <View>{((skill) => untracked(() => (skill ? skillPickerView(skill) : null)))(skillPicker())}</View>
       </Sheet>
       <Sheet open={pluginPicker() !== null} onOpenChange={({ open }) => !open && pluginPicker.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
-        {pluginPicker() ? (
-          <View testID="plugin-copy-picker" class="gap-2">
-            <Text class="text-xl font-semibold" role="header">Uninstall copy</Text>
-            <Text class="text-sm text-muted-foreground">{pluginPicker()!.displayName}</Text>
-            {pluginPicker()!.copies.map((copy) => (
-              <View class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2">
-                <View class="min-w-0 flex-1">
-                  <Text class="text-sm">{pluginCopyLabel(copy)}</Text>
-                  <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{copy.rootPath}</Text>
-                </View>
-                {copy.capability.canUninstall ? (
-                  <Button
-                    testID={`pick-uninstall-${copy.copyId}`}
-                    accessibilityLabel={`Uninstall copy from ${copy.location}`}
-                    disabled={Boolean(preparing())}
-                    onPress={() => { pluginPicker.set(null); void uninstallPluginCopy(copy); }}
-                    class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
-                  >
-                    <Icon name="trash" size={20} tone="seal" />
-                  </Button>
-                ) : null}
-              </View>
-            ))}
-          </View>
-        ) : null}
+        <View>{((plugin) => untracked(() => (plugin ? pluginPickerView(plugin) : null)))(pluginPicker())}</View>
       </Sheet>
 
-      <Sheet open={inspected() !== null} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
-        {inspected() ? (
-          <Scroll class="shrink">
-            <SkillInspector
-              logical={logicalOf(inspected()!)}
-              copy={inspected()!}
-              plugins={allPlugins()}
-              pluginsShown={hasPlugins}
-              onSelectFile={(path) => void inspectSkill(inspected()!, path)}
-              onDelete={(copy) => void deleteSkillCopy(copy)}
-              onOpenPlugin={(key) => { closeInspector(); chosen.set("plugins"); openPluginKey.set(key); }}
-              onClose={closeInspector}
-            />
-          </Scroll>
-        ) : null}
+      <Sheet open={!wide() && panel().startsWith("skill:")} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+        {/* The sheet takes its content once; the view inside follows the copy shown. */}
+        <View class="shrink">{((key) => untracked(() => (key.startsWith("skill:") ? <Scroll class="shrink">{inspector()}</Scroll> : null)))(wide() ? "" : panel())}</View>
       </Sheet>
-      <Sheet open={openPlugin() !== null} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
-        {openPlugin() ? (
-          <Scroll class="shrink">
-            <PluginDetails plugin={openPlugin()!} onUninstall={(copy: InstalledPluginCopy) => void uninstallPluginCopy(copy)} onClose={() => openPluginKey.set(null)} />
-          </Scroll>
-        ) : null}
+      <Sheet open={!wide() && panel().startsWith("plugin:")} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+        <View class="shrink">{((key) => untracked(() => (key.startsWith("plugin:") ? <Scroll class="shrink">{pluginDetails()}</Scroll> : null)))(wide() ? "" : panel())}</View>
       </Sheet>
     </Page>
   );
@@ -400,7 +439,7 @@ function OwnershipNotice(props: { count: number; onView: () => void }) {
       {state().status === "error" ? (
         <Notice testID="ownership-failed" title="Plugin ownership unavailable" detail="Skills that come with plugins may appear here. They stay protected." action="Retry" onAction={() => void refreshPlugins()} />
       ) : props.count > 0 ? (
-        <Notice testID="ownership-notice" tone={undefined} title={`${props.count} more ${props.count === 1 ? "Skill comes" : "Skills come"} with plugins`} action="View" onAction={props.onView} />
+        <Notice testID="ownership-notice" tone="info" icon="puzzle" title={`${props.count} more ${props.count === 1 ? "Skill comes" : "Skills come"} with plugins`} action="View" onAction={props.onView} />
       ) : null}
     </View>
   );
@@ -426,7 +465,7 @@ function PluginsList(props: {
     if (!daemon()) return <EmptyState icon="server" title="No current server" detail="Choose one in Settings." action="Open Settings" onAction={() => props.nav.push({ name: "settings" })} />;
     if (!inventory() && state().status === "error") return <EmptyState testID="plugins-failed" icon="warning" title="Plugins unavailable" detail={state().error} action="Try again" onAction={() => void refreshPlugins()} />;
     if (!inventory()) return <EmptyState busy title="Loading installed Plugins" />;
-    if (!props.total) return <EmptyState icon="plugins" title="No plugins installed" />;
+    if (!props.total) return <EmptyState icon="plugins" title="No plugins installed" action="Refresh" onAction={() => void refreshPlugins()} />;
     if (!props.rows.length) return <EmptyState icon="search" title="No matches" action="Clear search" onAction={props.onClearFilters} />;
     return (
       <Card>
