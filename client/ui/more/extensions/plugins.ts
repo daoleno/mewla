@@ -1,11 +1,12 @@
-import { cleanup, Clipboard, effect, host, lifecycle, openUrl, signal, untracked } from "nsh";
-import { ConnectionsFlow, initialFlowState, type FlowState } from "../../../core/extensions/connectionsFlow";
+import { cleanup, Clipboard, effect, host, openUrl, platform as nshPlatform, signal, untracked } from "nsh";
+import { ConnectionsFlow, initialFlowState, type FlowState, type WebDeps, type WebReturn } from "../../../core/extensions/connectionsFlow";
 import type { ConnectionResponse } from "../../../core/extensions/connections";
 import { isPluginReturnUrl, retainPluginReturn } from "../../../core/extensions/pluginOnboarding";
 import { requestConnections } from "../../../core/extensions/requests";
 import { platform } from "../../../core/platform";
 import { servers } from "../../session";
 import { daemon, daemonState } from "../daemon";
+import { inFront } from "../kit/inFront";
 
 /**
  * The Plugins of the current computer: one connect flow per computer, made when
@@ -80,6 +81,30 @@ effect(() => {
   });
 });
 
+/**
+ * In a browser (the web host, web/host.js): the page's origin for `web_origin`,
+ * a sign-in that takes this tab (`links.openHere`), and how the last one came
+ * back (`links.pluginReturn`, read once as the page loads). The apps have none.
+ */
+const browser = nshPlatform.os === "web" && host.available();
+let origin: Promise<string | null> | null = null;
+const web: WebDeps | undefined = browser
+  ? {
+      origin: () => (origin ??= host.call("app.origin").then((value) => (typeof value === "string" && value ? value : null), () => null)),
+      openHere: async (url) => void (await host.call("links.openHere", { url })),
+    }
+  : undefined;
+const webReturn: Promise<WebReturn | null> = browser
+  ? host.call("links.pluginReturn").then(
+      (value) => (value && typeof value === "object" ? (value as WebReturn) : null),
+      () => null,
+    )
+  : Promise.resolve(null);
+// A sign-in that came back to this page opens Extensions, where its card is.
+void webReturn.then((returned) => {
+  if (returned) showExtensions();
+});
+
 const secure = {
   get: (key: string) => platform().secure.getItem(key),
   set: (key: string, value: string) => platform().secure.setItem(key, value),
@@ -97,14 +122,19 @@ effect(() => {
       serverId: current.server.id,
       request: (request) => requestConnections(current, request),
       store: secure,
-      openUrl: (url) => openUrl(url).then(() => undefined),
+      openUrl: async (url) => {
+        const { opened } = await openUrl(url);
+        // A browser that blocked the new tab says so, so the card offers to try again.
+        if (!opened && browser) throw new Error("not opened");
+      },
       copy: (text) => Clipboard.writeText(text),
       now: () => Date.now(),
       every: (ms, run) => {
         const timer = setInterval(run, ms);
         return () => clearInterval(timer);
       },
-      active: () => lifecycle() === "active",
+      active: inFront,
+      web,
     });
     flow = next;
     next.onChange((state) => flowState.set(state));
@@ -127,13 +157,27 @@ effect(() => {
     if (current.state === "connected") void next.list();
     const initial = earlyReturn;
     earlyReturn = null;
-    void next.restore(initial);
+    // A browser reads how its last sign-in came back before it checks the one it left waiting.
+    if (browser) {
+      void webReturn.then((returned) => {
+        if (flow === next) void next.restore(initial, takeWebReturn(returned));
+      });
+    }
+    else void next.restore(initial);
   });
 });
 
-// Back in front: a sign-in left waiting may have finished in the browser.
+/** The page's return belongs to the first flow made after the page loaded: once. */
+let webReturnTaken = false;
+function takeWebReturn(returned: WebReturn | null): WebReturn | null {
+  if (webReturnTaken) return null;
+  webReturnTaken = true;
+  return returned;
+}
+
+// Back in front: a sign-in left waiting may have finished in the browser (in a browser, back from another tab).
 effect(() => {
-  if (lifecycle() === "active") untracked(() => void flow?.check());
+  if (inFront()) untracked(() => void flow?.check());
 });
 
 host.on<{ url?: string }>("links.open", (payload) => {

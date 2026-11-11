@@ -1,6 +1,6 @@
 import { accountSignInInput, connectsWithForm, enabledRequest, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "./pluginConnectionsModel";
 import type { ConnectionRequest, ConnectionResponse, PluginAccount, PluginIntegration } from "./connections";
-import { finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, type ConnectPhase, type PendingConnection } from "./pluginOnboarding";
+import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginReturnError, type ConnectPhase, type PendingConnection } from "./pluginOnboarding";
 
 /**
  * The Plugins of one computer: its catalog and accounts, the one sign-in in
@@ -31,6 +31,25 @@ export interface FlowDeps {
   every(ms: number, run: () => void): () => void;
   /** Whether the app is in front (polling waits while it is not). */
   active(): boolean;
+  /**
+   * In a browser: the page's origin, which `connect_start` sends so the
+   * provider returns this tab to the web UI's `/plugins` (`web_return`), and
+   * how the sign-in page opens in this tab. Absent in the apps, whose sign-in
+   * returns on `mewla://plugins`.
+   */
+  web?: WebDeps;
+}
+
+export interface WebDeps {
+  origin(): Promise<string | null> | string | null;
+  openHere(url: string): void | Promise<void>;
+}
+
+/** How a web sign-in ended, as the computer's callback sent the tab back: `/plugins?connected=<account>` or `?plugin_error=<step>`, with `service=`. */
+export interface WebReturn {
+  connected?: string;
+  plugin_error?: string;
+  service?: string;
 }
 
 export interface FlowState {
@@ -239,12 +258,23 @@ export class ConnectionsFlow {
    * Picks up a sign-in left waiting (the app was closed while the browser was
    * open), then checks it, or finishes it with the link the app opened with.
    */
-  async restore(initialUrl?: string | null): Promise<void> {
+  async restore(initialUrl?: string | null, returned?: WebReturn | null): Promise<void> {
+    // A web sign-in came back through the computer's callback, which settled it there; the stored flow only confirms it.
+    const settled = !!returned && !!(returned.connected || returned.plugin_error);
+    if (returned && settled) {
+      if (returned.connected) this.set({ service: returned.service ?? null, connectedId: returned.connected, phase: "connected", connectError: "" });
+      else {
+        this.set({ service: returned.service ?? null });
+        this.fail(pluginReturnError(returned.plugin_error) ?? "", returned.plugin_error === "cancelled" ? "cancelled" : "failed");
+      }
+    }
     const raw = await this.deps.store.get(this.key).catch(() => null);
     if (!raw || !this.alive) return;
     try {
       const stored = JSON.parse(raw) as PendingConnection;
       if (stored.serverId !== this.deps.serverId || !(Date.parse(stored.flow.expires) > this.deps.now())) { await this.remember(null); return; }
+      // The return ended this flow; one for another service keeps waiting.
+      if (returned && settled && (!returned.service || stored.flow.integration === returned.service)) { await this.remember(null); return; }
       this.set({ flow: stored, service: stored.flow.integration, phase: stored.flow.status === "confirm" ? "idle" : "waiting" });
       if (initialUrl && matchesPluginReturn(initialUrl, stored.flow)) await this.finish(initialUrl);
       else await this.check();
@@ -286,7 +316,10 @@ export class ConnectionsFlow {
       // The code is on screen too; a clipboard that refuses never keeps the page closed.
       if (active.flow.user_code) await Promise.resolve(this.deps.copy(active.flow.user_code)).catch(() => {});
       try {
-        await this.deps.openUrl(active.flow.authorization_url);
+        // In a browser, a provider that returns to the web UI takes this tab there (a popup would outlive its opener);
+        // any other sign-in (a code, an address to paste) opens in a tab of its own while this one polls.
+        if (this.deps.web && active.flow.web_return) await this.deps.web.openHere(active.flow.authorization_url);
+        else await this.deps.openUrl(active.flow.authorization_url);
       } catch {
         this.fail("The browser could not open. Try again.");
         return;
@@ -317,7 +350,10 @@ export class ConnectionsFlow {
         else this.set({ phase: "idle" });
         return;
       }
-      const result = await this.send({ action: "connect_start", input }, `connect:${serviceId}`);
+      // A browser names its origin, so the sign-in comes back to this page.
+      const origin = this.deps.web ? await Promise.resolve(this.deps.web.origin()).catch(() => null) : null;
+      const start = connectInput(input, this.deps.web ? "web" : "native", origin ?? undefined);
+      const result = await this.send({ action: "connect_start", input: start }, `connect:${serviceId}`);
       if (!result?.flow) { this.set({ phase: "idle" }); return; }
       // A profile still signed in connects without a browser.
       if (result.flow.status === "connected") { await this.settle(result); return; }

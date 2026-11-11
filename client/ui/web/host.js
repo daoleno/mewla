@@ -18,6 +18,11 @@
 //
 // The web player has no host posts (only calls reach the page), so the app sends `files.cancel`
 // and `files.cancelDownload` as calls in the browser.
+// - links.pluginReturn: how a Plugins sign-in ended, as the computer's callback sent this tab back
+//   (`/plugins?connected=<account>` or `?plugin_error=<step>`, with `service=`): read once and taken
+//   out of the address bar, so a reload or Back doesn't replay it.
+// - links.openHere: opens a sign-in page in this tab ({url}, http or https); its provider returns
+//   the tab to `/plugins`.
 
 const SECURE_PREFIX = "mewla:secure:";
 const LEGACY_COPIED = "mewla:web-host:legacy-copied";
@@ -286,6 +291,34 @@ function cancelDownload(args) {
   return null;
 }
 
+// --- Plugins sign-in return -------------------------------------------------------------------
+
+const PLUGIN_RETURN_KEYS = ["connected", "plugin_error", "service"];
+
+function pluginReturn() {
+  if (window.location.pathname !== "/plugins") return null;
+  const query = new URLSearchParams(window.location.search);
+  const connected = query.get("connected") || "";
+  const error = query.get("plugin_error") || "";
+  if (!connected && !error) return null;
+  const service = query.get("service") || "";
+  for (const key of PLUGIN_RETURN_KEYS) query.delete(key);
+  const rest = query.toString();
+  window.history.replaceState(window.history.state, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
+  const returned = {};
+  if (connected) returned.connected = connected;
+  if (error) returned.plugin_error = error;
+  if (service) returned.service = service;
+  return returned;
+}
+
+function openHere(args) {
+  const url = new URL(String(args && args.url ? args.url : ""));
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("links.openHere: not a web address");
+  window.location.assign(url.href);
+  return null;
+}
+
 export function createHost(player) {
   // `nsh test` loads this module outside a browser: the page's objects are only touched in one.
   if (typeof window !== "undefined") {
@@ -318,6 +351,8 @@ export function createHost(player) {
     "files.download": (args) => download(args),
     "files.cancelDownload": (args) => cancelDownload(args),
     "files.thumbnail": (args) => thumbnail(args),
+    "links.pluginReturn": () => pluginReturn(),
+    "links.openHere": (args) => openHere(args),
   };
   return {
     call(name, args) {

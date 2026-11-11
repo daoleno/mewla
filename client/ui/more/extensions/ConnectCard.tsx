@@ -40,6 +40,8 @@ export function ConnectCard(props: { nav: PageNav }) {
       const none: CardView = { key: "none", render: () => null };
       if (!s.service && !s.connectError) return none;
       if (serviceName === null) {
+        // A sign-in that came back to a page still loading the list waits for it to name the service.
+        if (s.service && !s.loaded) return none;
         return s.connectError
           ? { key: `ended:${s.connectError}`, render: () => <Card glyph="info-fill" title="That sign-in already ended" detail={s.connectError}><Action label="OK" onPress={() => flow().dismiss()} /></Card> }
           : none;
