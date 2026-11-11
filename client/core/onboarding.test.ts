@@ -10,6 +10,7 @@ import {
   START_NOTE,
   WELCOME_LEDE,
   WELCOME_TITLE,
+  cameraRuns,
   cameraSearching,
   catBoxForStep,
   catClipFor,
@@ -125,6 +126,18 @@ describe("the viewfinder", () => {
     expect(finderState("denied", false, false)).toBe("denied");
     expect(finderState("granted", true, false)).toBe("failed");
     expect(finderState("granted", false, false)).toBe("camera");
+  });
+
+  test("runs the camera only in front and on screen: a page under another tab keeps it off", () => {
+    expect(cameraRuns("camera", true, true)).toBe(true);
+    expect(cameraRuns("camera", true, false)).toBe(false);
+    expect(cameraRuns("camera", false, true)).toBe(false);
+    expect(cameraRuns("denied", true, true)).toBe(false);
+  });
+
+  test("the Pair page in More's stack is told when it is on screen", () => {
+    const shell = readFileSync(join(import.meta.dir, "../ui/shell/Shell.tsx"), "utf8");
+    expect(shell).toMatch(/case "pair": return <PairPage onScreen=\{\(\) => selectedTab\(\) === 3 && moreNav\.routes\(\)\.at\(-1\)\?\.name === "pair"\}/);
   });
 
   test("says it is looking only while the camera runs in front and nothing pairs", () => {

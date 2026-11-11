@@ -70,6 +70,11 @@ const (
 // one on screen. No key was sent.
 var ErrPromptGone = errors.New("the prompt has passed")
 
+// ErrPromptOpen refuses a chat input while the Session's pane shows a prompt:
+// the paste and its Enter would answer the prompt with whatever the cursor is
+// on. The prompt is answered through its card (AnswerPrompt) instead.
+var ErrPromptOpen = errors.New("a prompt is open in this Session; answer it first")
+
 // withChoicePrompt gives an AskUserQuestion signal its structured prompt. The
 // pane shows one question at a time, so the other tabs carry only their header
 // until the transcript fills them.
@@ -580,7 +585,15 @@ func (w *Watcher) answerPrompt(pane claudeChoicePane, sessionID, promptID string
 	if !valid || number < 1 || number > 9 {
 		return refusePrompt("the prompt has no option %d", number)
 	}
-	if err := pane.sendKey(fmt.Sprint(number)); err != nil {
+	if prompt.Unnumbered {
+		// A menu without numbers ignores a typed one: move its cursor, then Enter.
+		if err := w.moveMenuCursor(pane, sessionID, *prompt, number); err != nil {
+			return err
+		}
+		if err := pane.sendKey("Enter"); err != nil {
+			return err
+		}
+	} else if err := pane.sendKey(fmt.Sprint(number)); err != nil {
 		return err
 	}
 	deadline := time.Now().Add(claudeChoiceStepTimeout)
@@ -597,6 +610,67 @@ func (w *Watcher) answerPrompt(pane claudeChoicePane, sessionID, promptID string
 			return refusePrompt("the prompt did not take option %d", number)
 		}
 	}
+}
+
+// moveMenuCursor brings the cursor of an unnumbered menu to option number,
+// one arrow at a time. The menu is read again after every key: a different
+// menu, or a cursor that does not move, stops it before anything is picked.
+func (w *Watcher) moveMenuCursor(pane claudeChoicePane, sessionID string, prompt classifier.Prompt, number int) error {
+	for steps := 0; ; steps++ {
+		at := selectedOption(prompt)
+		if at == number {
+			return nil
+		}
+		if at == 0 || steps >= len(prompt.Options) {
+			return refusePrompt("the menu's cursor could not be brought to option %d", number)
+		}
+		key := "Down"
+		if number < at {
+			key = "Up"
+		}
+		if err := pane.sendKey(key); err != nil {
+			return err
+		}
+		deadline := time.Now().Add(claudeChoiceStepTimeout)
+		for {
+			time.Sleep(claudeChoicePollInterval)
+			current, err := w.currentPrompt(pane, sessionID)
+			if err != nil {
+				return err
+			}
+			if current == nil || current.ID != prompt.ID {
+				return fmt.Errorf("%w: %w", ErrPromptGone, ErrClaudeChoiceRefused)
+			}
+			if selectedOption(*current) != at {
+				prompt = *current
+				break
+			}
+			if !time.Now().Before(deadline) {
+				return refusePrompt("the menu's cursor did not move")
+			}
+		}
+	}
+}
+
+// selectedOption is the number of the option behind the cursor, 0 for none.
+func selectedOption(prompt classifier.Prompt) int {
+	for _, option := range prompt.Options {
+		if option.Selected {
+			return option.Number
+		}
+	}
+	return 0
+}
+
+// refuseInputUnderPrompt is ErrPromptOpen, as definitely not submitted, when
+// the pane shows a prompt; nil when it shows none or cannot be read (the send
+// keeps its own guards then).
+func (w *Watcher) refuseInputUnderPrompt(pane claudeChoicePane, sessionID, receipt string) error {
+	prompt, err := w.currentPrompt(pane, sessionID)
+	if err != nil || prompt == nil {
+		return nil
+	}
+	return definitelyNotSubmitted(receipt, fmt.Errorf("%w (%s)", ErrPromptOpen, prompt.Title))
 }
 
 func refusePrompt(format string, args ...any) error {

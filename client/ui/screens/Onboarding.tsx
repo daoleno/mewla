@@ -137,8 +137,8 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
   );
 }
 
-/** Settings → "Pair a computer": the scan step on its own page; the connected step follows a pairing. */
-export function PairPage(props: { onPaired?(): void }) {
+/** Settings → "Pair a computer": the scan step on its own page; the connected step follows a pairing. `onScreen`: whether the page is shown (its camera stops when not). */
+export function PairPage(props: { onPaired?(): void; onScreen?: () => boolean }) {
   const before = untracked(pairings);
   effect(() => {
     if (pairings() !== before) untracked(() => props.onPaired?.());
@@ -158,7 +158,7 @@ export function PairPage(props: { onPaired?(): void }) {
         <Text class="text-base text-muted-foreground">
           {camera ? "On your computer, run mewla pair, then scan the code it shows, or paste the link it prints." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
         </Text>
-        {camera ? <OnboardingScanner /> : null}
+        {camera ? <OnboardingScanner onScreen={props.onScreen} /> : null}
         <ScanStatus />
         <View class="rounded-xl border border-border bg-card">
           <Field testID="pair-link" label="Pairing link" mono multiline keyboardType="url" value={link()} disabled={pairingBusy()}

@@ -1,6 +1,6 @@
 import { cleanup, effect, host, nativeComponent, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
-import { cameraSearching, finderState, readCameraPermission, type CameraPermission } from "../../core/onboarding";
+import { cameraRuns, cameraSearching, finderState, readCameraPermission, type CameraPermission } from "../../core/onboarding";
 import { Spinner } from "../more/kit/kit";
 import { pairFromText, pairingBusy } from "../pairing";
 
@@ -18,16 +18,17 @@ export const scannerSearching = signal(false);
 
 /**
  * The viewfinder. The first time it shows, the system asks for the camera by itself (a finder
- * that waits for a tap reads as a black screen); the camera runs only while it is on screen, the
- * app in front and nothing pairing. Refused, failed or missing, it says so and points to Settings;
+ * that waits for a tap reads as a black screen); the camera runs only while its page is on screen
+ * (`onScreen`: a tab's page stays mounted under another tab), the app in front and nothing pairing. Refused, failed or missing, it says so and points to Settings;
  * the link can always be pasted instead.
  */
-export function OnboardingScanner(props: { compact?: boolean }) {
+export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => boolean }) {
   const permission = signal<CameraPermission | null>(null);
   const asking = signal(false);
   const failed = signal(false);
   const state = () => finderState(permission(), failed(), asking());
-  const running = () => state() === "camera" && lifecycle() === "active";
+  const onScreen = () => props.onScreen?.() ?? true;
+  const running = () => cameraRuns(state(), lifecycle() === "active", onScreen());
 
   const ask = async () => {
     if (!host.available()) return permission.set("denied");
@@ -50,7 +51,7 @@ export function OnboardingScanner(props: { compact?: boolean }) {
       if (permission() !== null && !asking()) void check(false);
     });
   });
-  effect(() => scannerSearching.set(cameraSearching(state(), lifecycle() === "active", pairingBusy())));
+  effect(() => scannerSearching.set(cameraSearching(state(), lifecycle() === "active" && onScreen(), pairingBusy())));
   cleanup(() => scannerSearching.set(false));
 
   const openSettings = () => void host.call("app.openSettings").catch(() => {});
@@ -58,7 +59,7 @@ export function OnboardingScanner(props: { compact?: boolean }) {
     <View testID="finder" class="w-full items-center justify-center self-center overflow-hidden rounded-3xl border border-border"
       style={{ backgroundColor: DARK, aspectRatio: 1, maxHeight: 320, maxWidth: props.compact ? 200 : 320 }}>
       {state() === "camera" ? (running() ? (
-        <CodeScanner active={!pairingBusy()} class="absolute inset-0"
+        <CodeScanner testID="qr-camera" active={!pairingBusy()} class="absolute inset-0"
           onScan={({ value }) => void pairFromText(value, "camera")}
           onUnavailable={({ reason }) => {
             if (reason === "permission") void check(false);
