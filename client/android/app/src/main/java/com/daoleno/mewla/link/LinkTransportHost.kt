@@ -25,7 +25,7 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
 
 /**
- * Mewla Link's pinned tunnels (ported from the Expo app's link-transport module): a loopback
+ * Mewla Relay's pinned tunnels (ported from the Expo app's link-transport module): a loopback
  * listener per key whose every connection is bridged to TLS 1.3 at host:port, trusting only a
  * leaf whose SubjectPublicKeyInfo SHA-256 is the pin the computer's QR code carried.
  * - `link.start {key, host, port, pin, mode}` → `{port, rttMs}`; mode `measure` first does one
@@ -42,10 +42,10 @@ class LinkTransportHost(nsh: NshView) {
 
   init {
     nsh.handle("link.start") { data, reply ->
-      val input = data as? Map<*, *> ?: return@handle reply.reject("Mewla Link tunnel input is missing.")
+      val input = data as? Map<*, *> ?: return@handle reply.reject("Mewla Relay tunnel input is missing.")
       calls.execute {
         val result = runCatching { start(input) }
-        main.post { result.fold({ reply.resolve(it) }, { reply.reject(it.message ?: "Mewla Link could not start.") }) }
+        main.post { result.fold({ reply.resolve(it) }, { reply.reject(it.message ?: "Mewla Relay could not start.") }) }
       }
     }
     nsh.handle("link.stop") { data, reply ->
@@ -68,11 +68,11 @@ class LinkTransportHost(nsh: NshView) {
     val port = (input["port"] as? Number)?.toInt() ?: 0
     val pin = input["pin"] as? String ?: ""
     val mode = input["mode"] as? String ?: ""
-    require(key.isNotBlank()) { "Mewla Link tunnel key is required." }
-    require(host.isNotBlank() && !host.contains('/') && !host.contains('\u0000')) { "Mewla Link host is invalid." }
-    require(port in 1..65535) { "Mewla Link port is invalid." }
-    require(pin.matches(Regex("^[0-9a-fA-F]{64}$"))) { "Mewla Link SPKI pin is invalid." }
-    require(mode == "measure" || mode == "on-demand") { "Mewla Link tunnel mode is invalid." }
+    require(key.isNotBlank()) { "Mewla Relay tunnel key is required." }
+    require(host.isNotBlank() && !host.contains('/') && !host.contains('\u0000')) { "Mewla Relay host is invalid." }
+    require(port in 1..65535) { "Mewla Relay port is invalid." }
+    require(pin.matches(Regex("^[0-9a-fA-F]{64}$"))) { "Mewla Relay SPKI pin is invalid." }
+    require(mode == "measure" || mode == "on-demand") { "Mewla Relay tunnel mode is invalid." }
     tunnels[key]?.let { existing ->
       if (existing.matches(host, port, pin, mode)) return mapOf("port" to existing.localPort, "rttMs" to existing.lastRttMs)
       existing.close()
@@ -83,7 +83,7 @@ class LinkTransportHost(nsh: NshView) {
       proxy.start()
     } catch (error: Throwable) {
       proxy.close()
-      throw IllegalStateException("Mewla Link could not reach a pinned relay candidate.", error)
+      throw IllegalStateException("Mewla Relay could not be reached.", error)
     }
     tunnels[key] = proxy
     return mapOf("port" to proxy.localPort, "rttMs" to proxy.lastRttMs)
@@ -233,9 +233,9 @@ private fun pinnedSSLContext(pinHex: String): SSLContext {
     }
 
     override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-      val leaf = chain.firstOrNull() ?: throw CertificateException("Mewla Link peer sent no certificate.")
+      val leaf = chain.firstOrNull() ?: throw CertificateException("Mewla Relay peer sent no certificate.")
       val actual = MessageDigest.getInstance("SHA-256").digest(leaf.publicKey.encoded)
-      if (!MessageDigest.isEqual(actual, expected)) throw CertificateException("Mewla Link transport certificate pin mismatch.")
+      if (!MessageDigest.isEqual(actual, expected)) throw CertificateException("Mewla Relay transport certificate pin mismatch.")
     }
   }
   return SSLContext.getInstance("TLSv1.3").apply { init(null, arrayOf(trustManager), SecureRandom()) }

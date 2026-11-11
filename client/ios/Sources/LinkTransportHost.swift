@@ -4,7 +4,7 @@ import NativeShell
 import Network
 import Security
 
-/// Mewla Link's pinned TLS tunnel. Each tunnel is a 127.0.0.1 listener whose accepted
+/// Mewla Relay's pinned TLS tunnel. Each tunnel is a 127.0.0.1 listener whose accepted
 /// connections are bridged to a TLS 1.3 connection to host:port that trusts only a leaf
 /// certificate whose SubjectPublicKeyInfo SHA-256 is the pin.
 /// - `link.start {key, host, port, pin, mode}` → `{port, rttMs}`: mode `measure` does one pinned
@@ -64,19 +64,19 @@ enum LinkTransportHost {
 
   private static func validate(key: String, host: String, port: Int, pin: String, mode: String) throws {
     guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw LinkTransportError.invalidInput("Mewla Link tunnel key is required.")
+      throw LinkTransportError.invalidInput("Mewla Relay tunnel key is required.")
     }
     guard !host.isEmpty, !host.contains("/"), !host.contains("\0") else {
-      throw LinkTransportError.invalidInput("Mewla Link host is invalid.")
+      throw LinkTransportError.invalidInput("Mewla Relay host is invalid.")
     }
     guard (1...65535).contains(port) else {
-      throw LinkTransportError.invalidInput("Mewla Link port is invalid.")
+      throw LinkTransportError.invalidInput("Mewla Relay port is invalid.")
     }
     guard pin.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil else {
       throw LinkTransportError.invalidPin
     }
     guard mode == "measure" || mode == "on-demand" else {
-      throw LinkTransportError.invalidInput("Mewla Link tunnel mode is invalid.")
+      throw LinkTransportError.invalidInput("Mewla Relay tunnel mode is invalid.")
     }
   }
 }
@@ -89,8 +89,8 @@ enum LinkTransportError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidInput(let detail): return detail
-    case .invalidPin: return "Mewla Link SPKI pin is invalid."
-    case .unavailable: return "Mewla Link could not reach a pinned relay candidate."
+    case .invalidPin: return "Mewla Relay SPKI pin is invalid."
+    case .unavailable: return "Mewla Relay could not be reached."
     }
   }
 }

@@ -187,7 +187,7 @@ final class LiveStore {
     WidgetCenter.shared.reloadAllTimelines()
   }
 
-  /// Mewla Link has no address a widget can fetch: the widgets show what this app and pushes apply.
+  /// Mewla Relay has no address a widget can fetch: the widgets show what this app and pushes apply.
   func configureWidgetPushed() {
     guard let data = try? JSONEncoder().encode(["mode": "pushed"]) else { return }
     MewlaLiveShared.write(data, to: MewlaLiveShared.widgetConfigURL)

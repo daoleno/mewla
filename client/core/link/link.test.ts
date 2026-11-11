@@ -58,7 +58,7 @@ function fakeTunnels(rtt: Record<string, number | "down"> = {}) {
     async start(key, host, port, pin, mode) {
       expect(pin).toBe(PIN);
       started.push(`${key} ${host}:${port} ${mode}`);
-      if (rtt[host] === "down") throw new Error("Mewla Link could not reach a pinned relay candidate.");
+      if (rtt[host] === "down") throw new Error("Mewla Relay could not be reached.");
       const local = next++;
       open.set(key, { host, port, local, mode });
       return { port: local, rttMs: typeof rtt[host] === "number" ? (rtt[host] as number) : 30 };
@@ -94,7 +94,7 @@ function linkServer(extra: Partial<StoredServer> = {}): StoredServer {
 
 beforeEach(() => resetLinkTransportForTests());
 
-describe("pairing with a Mewla Link code", () => {
+describe("pairing with a Mewla Relay code", () => {
   test("pairs through a pinned tunnel to the code's admission and keeps the route, pin and stable address", async () => {
     const host = fakeTunnels();
     const calls: string[] = [];
@@ -169,7 +169,7 @@ describe("pairing with a Mewla Link code", () => {
   });
 });
 
-describe("reaching a computer on Mewla Link", () => {
+describe("reaching a computer on Mewla Relay", () => {
   test("a computer paired by address is reached at its address", async () => {
     installMemoryPlatform();
     expect(await resolveStoredServerURL({ ...linkServer(), transportKind: "manual", url: "ws://10.0.0.5:9876/ws" })).toBe("ws://10.0.0.5:9876/ws");

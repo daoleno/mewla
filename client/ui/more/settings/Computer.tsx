@@ -187,8 +187,8 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
           <Field testID="computer-address" mono keyboardType="url" value={address()} placeholder="https://mewla.example.com" onChange={(v) => address.set(v)} onCommit={() => void saveAddress()} />
         </Section>
       ) : (
-        <Section title="Address" footer="Paired through Mewla Link: reached over its relay, or straight on your network when the computer can be.">
-          <Row testID="computer-link" title="Mewla Link" value={isCurrent() && connection() === "connected" ? linkPathText(transportPath()) : "Not connected"} />
+        <Section title="Address" footer="Paired through Mewla Relay: reached through it, or straight on your network when the computer can be.">
+          <Row testID="computer-link" title="Mewla Relay" value={isCurrent() && connection() === "connected" ? linkPathText(transportPath()) : "Not connected"} />
         </Section>
       )}
 

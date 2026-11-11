@@ -152,7 +152,7 @@ describe("after pairing", () => {
   }, 15_000);
 });
 
-describe("Mewla Link", () => {
+describe("Mewla Relay", () => {
   test("a Link code pairs through the host's pinned tunnel, says where it is going, and keeps the route", async () => {
     const keys = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7));
     const link = buildLinkPairingTestLink({
