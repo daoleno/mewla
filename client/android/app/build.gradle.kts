@@ -14,6 +14,10 @@ val nshHome = providers.environmentVariable("NSH_HOME").orElse("${System.getProp
 val nshCli = providers.environmentVariable("NSH").orElse("$nshHome/bin/nsh").get()
 // The release keystore is the one the Expo app is signed with (CI secrets only); without it, debug.
 val releaseKeystore = providers.environmentVariable("MEWLA_ANDROID_KEYSTORE").orNull?.takeIf { it.isNotBlank() }
+// Where the APK goes: "github" (the sideloaded APK: Phone use, self-update) or "play" (the store build: neither).
+// The Expo app chose this with MEWLA_ANDROID_DISTRIBUTION; -Pmewla.channel=play builds the store variant.
+val channel = providers.gradleProperty("mewla.channel").orNull ?: "github"
+if (channel !in setOf("github", "play")) throw GradleException("mewla.channel must be github or play, not $channel")
 
 // The terminal's libghostty-vt: built once per ABI by scripts/build-libghostty.sh into app/modules/terminal-vt
 // (it moves into client/ at the cutover). -Pmewla.ghostty=<dir> points elsewhere.
@@ -36,6 +40,7 @@ android {
     // -Pmewla.abis=arm64-v8a for a phone-only build (half the size).
     ndk { abiFilters += abis }
     externalNativeBuild { cmake { arguments += "-DMEWLA_GHOSTTY=${ghostty.absolutePath}" } }
+    buildConfigField("String", "CHANNEL", "\"$channel\"")
   }
   flavorDimensions += "identity"
   productFlavors {
@@ -65,7 +70,14 @@ android {
   testOptions { unitTests.isReturnDefaultValues = true }
   externalNativeBuild { cmake { path = file("CMakeLists.txt"); version = "3.22.1" } }
   ndkVersion = "27.1.12297006"
-  sourceSets { getByName("main") { jniLibs.directories.add(ghostty.resolve("libs/android").path) } }
+  sourceSets {
+    getByName("main") {
+      jniLibs.directories.add(ghostty.resolve("libs/android").path)
+      // ChannelHosts: what this channel adds to the app (src/github or src/play).
+      java.directories.add("src/$channel/java")
+      kotlin.directories.add("src/$channel/java")
+    }
+  }
 }
 
 // The app itself: client/ui (and the core it imports) bundled and compiled to bytecode, as assets/nsh.
@@ -132,6 +144,10 @@ dependencies {
   implementation("com.google.mlkit:barcode-scanning:17.3.0")
   implementation("com.google.firebase:firebase-messaging:25.0.1")
   implementation("androidx.lifecycle:lifecycle-common:2.9.4")
+  if (channel == "github") {
+    implementation(project(":phone"))
+    implementation(project(":appupdate"))
+  }
   testImplementation("junit:junit:4.13.2")
   testImplementation("org.json:json:20240303")
 }

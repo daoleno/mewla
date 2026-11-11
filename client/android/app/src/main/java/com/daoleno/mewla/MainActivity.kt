@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
   private val secure by lazy { SecureStore(this) }
   private val legacy by lazy { LegacyStorage(this) }
   private lateinit var push: PushHost
+  private lateinit var channelHosts: ChannelHosts
 
   override fun onCreate(state: Bundle?) {
     super.onCreate(state)
@@ -38,6 +39,7 @@ class MainActivity : ComponentActivity() {
     push = PushHost(this, nsh)
     LiveHost(this, nsh)
     com.daoleno.mewla.files.FilesHost(this, nsh)
+    channelHosts = ChannelHosts(this, nsh)
     nsh.setParams(mapOf("deviceName" to deviceName()))
     setContentView(nsh)
     // scripts/dev-android.sh starts a debug build on `nsh dev`: every save reloads the app.
@@ -49,7 +51,23 @@ class MainActivity : ComponentActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    channelHosts.onNewIntent(intent)
     openLink(intent)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    channelHosts.onResume()
+  }
+
+  override fun onUserLeaveHint() {
+    super.onUserLeaveHint()
+    channelHosts.onUserLeaveHint()
+  }
+
+  override fun onPictureInPictureModeChanged(inPip: Boolean, config: android.content.res.Configuration) {
+    super.onPictureInPictureModeChanged(inPip, config)
+    channelHosts.onPictureInPictureModeChanged(inPip, config)
   }
 
   /** A `mewla://` link the system opened us with; the app holds the event until it listens. */
@@ -71,6 +89,7 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onDestroy() {
+    channelHosts.onDestroy()
     nsh.destroy()
     super.onDestroy()
   }

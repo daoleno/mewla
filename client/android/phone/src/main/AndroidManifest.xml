@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phone use's permissions, services and receivers; merged into the app only on the GitHub channel. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+</manifest>
