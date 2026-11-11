@@ -141,8 +141,9 @@ describe("after pairing", () => {
     await app.waitFor("text:Brain is home.", { timeout: 10_000 });
     expect(app.texts()).toContain("Connected to Desk.");
     expect(app.storage()["mewla:onboarded"]).toBe("true");
+    // Nothing of the app is under the step (settings.md [20]: Android drew its native views over it).
+    expect(app.count("id:composer")).toBe(0);
     await app.press("id:open-brain");
-    // Brain's composer is there behind the onboarding already: wait for the onboarding to go.
     await app.waitFor("id:onboarding", { state: "gone" });
     await app.waitFor("id:composer");
   }, 15_000);
