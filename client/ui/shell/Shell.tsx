@@ -43,7 +43,7 @@ export const selectedTab = signal(0);
 export const belowSections = signal(0);
 /**
  * The desktop layout (a browser or a desktop window at least 1024 pt wide): a
- * sidebar beside every page instead of the tabs (app/DESIGN.md "Desktop web").
+ * sidebar beside every page instead of the tabs (client/DESIGN.md "Desktop web").
  */
 export const desktop = computed(() => isDesktopLayout({ mobile, width: windowSize().width }));
 

@@ -9,7 +9,7 @@ import { Icon } from "../more/kit/Icon";
 export const PageStack = context<{ canGoBack: () => boolean; back: () => void }>({ canGoBack: () => false, back: () => {} });
 
 export type AppNavPageProps = NavPageProps & {
-  /** The page's column (app/DESIGN.md): its header row and, framed, its content share it. Default `"page"`. */
+  /** The page's column (client/DESIGN.md): its header row and, framed, its content share it. Default `"page"`. */
   column?: PageColumn;
   /** The content is held in the column (default); false for a page that centers its own inside a full-width scroll. */
   frame?: boolean;

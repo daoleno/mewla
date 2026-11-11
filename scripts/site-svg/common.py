@@ -1,6 +1,6 @@
 # Shared palette and drawing helpers for the README drawings.
 # Every SVG must render on its own (README, GitHub camo): no webfonts, no
-# script, one <style>. Colours and shapes follow app/DESIGN.md (Seal & Slip):
+# script, one <style>. Colours and shapes follow client/DESIGN.md (Seal & Slip):
 # paper and ink, vermilion only for the seal, Send and "Needs you", and one
 # glyph per Work state.
 import base64

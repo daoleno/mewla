@@ -1,7 +1,7 @@
 /**
  * The desktop layout's places: the sidebar rows, the URL of each place, the
  * browser tab's title, and the sidebar's width. Pure, so the shell and the
- * page host agree without a browser (app/DESIGN.md "Desktop web").
+ * page host agree without a browser (client/DESIGN.md "Desktop web").
  */
 
 /** From this width a non-phone window gets the desktop layout; below it the tabs stay. */
@@ -150,7 +150,7 @@ export function storedSidebarWidth(raw: string | null | undefined): number {
   return clampPanelWidth(Number.isFinite(value) ? value : SIDEBAR_WIDTH.initial, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max);
 }
 
-/** A page's content column (app/DESIGN.md): 760, 1200 (Calendar, Resources, a Session), 820 (a chat), or the whole pane. */
+/** A page's content column (client/DESIGN.md): 760, 1200 (Calendar, Resources, a Session), 820 (a chat), or the whole pane. */
 export type PageColumn = "page" | "wide" | "reading" | "full";
 
 export const PAGE_COLUMN_WIDTH: Record<Exclude<PageColumn, "full">, number> = { page: 760, wide: 1200, reading: 820 };

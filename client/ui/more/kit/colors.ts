@@ -2,7 +2,7 @@ import { colorScheme } from "nsh";
 
 /**
  * The colours the pages draw with outside classes (canvas strokes, status marks),
- * from app/DESIGN.md: paper and ink, the six Work states, vermilion for the seal only.
+ * from client/DESIGN.md: paper and ink, the six Work states, vermilion for the seal only.
  */
 const light = {
   ink: "#161412",
