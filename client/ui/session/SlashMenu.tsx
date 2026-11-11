@@ -40,6 +40,9 @@ export function SlashMenu(props: {
   /** The "+" button is on. */
   pinned: () => boolean;
   onPick: (command: CodexSlashCommand) => void;
+  /** Attach File: picks files for the next message; absent where a composer can't attach. */
+  onAttach?: () => void;
+  uploading?: () => boolean;
 }) {
   const state = () => slashMenuState({ text: props.text(), agentKind: props.agentKind(), commands: props.commands(), connected: props.connected(), pinned: props.pinned() });
   return (
@@ -49,12 +52,14 @@ export function SlashMenu(props: {
           <Scroll style={{ maxHeight: 360 }}>
             <View class="gap-2 p-2">
               {state().showActions ? (
-                <Button testID="attach-file" accessibilityLabel="Upload file" disabled class="flex-row items-center gap-3 rounded-xl px-2 py-2 opacity-50">
-                  <Icon name="attach" size={20} />
+                <Button testID="attach-file" accessibilityLabel="Upload file" disabled={!props.onAttach || !props.connected() || Boolean(props.uploading?.())} onPress={() => props.onAttach?.()}
+                  class={props.onAttach && props.connected() ? "flex-row items-center gap-3 rounded-xl px-2 py-2 active:bg-accent" : "flex-row items-center gap-3 rounded-xl px-2 py-2 opacity-50"}>
+                  <Icon name={props.uploading?.() ? "cloud-upload" : "attach"} size={20} color={props.onAttach && props.connected() ? "primary" : undefined} />
                   <View class="flex-1 gap-0.5">
                     <Text class="text-base">Attach File</Text>
-                    <Text class="text-xs text-muted-foreground">Coming soon</Text>
+                    <Text class="text-xs text-muted-foreground">{props.uploading?.() ? "Uploading..." : "Add a file to this message"}</Text>
                   </View>
+                  <Icon name="chevron-right" size={16} />
                 </Button>
               ) : null}
               {state().showCommandList ? (

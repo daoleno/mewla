@@ -214,4 +214,39 @@ describe("a Session", () => {
     await app.waitFor("id:session-menu");
     expect(framesOf(app.host.posts(), "set_active_worker").at(-1)?.worker_id).toBe("w7");
   }, 20_000);
+
+  test("a Session in a repository shows its changes on a chip that opens Git review", async () => {
+    const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }, { path: "notes.md", staged: false, unstaged: false, untracked: true, additions: 0, deletions: 0 }];
+    const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 2, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 1, additions: 3, deletions: 1, files };
+    const app = await sessionsApp({ worker_sessions: [session("w5", { name: "repo work" })], conversations: { w5: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } });
+    await app.press("text:repo work");
+    await app.waitFor("id:session-git");
+    expect(app.texts()).toContain("2 files  +3  -1");
+    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w5", cwd: "/home/me/mewla" });
+    await app.press("id:session-git");
+    await app.waitFor("id:git-page");
+  }, 20_000);
+
+  test("Attach File uploads a picked file and the message carries where the computer keeps it", async () => {
+    const app = await open(APP, {
+      host: phoneHost({ brain: {}, worker_sessions: [session("w6", { name: "attach" })], conversations: { w6: [] } }, {
+        "files.pick": () => [{ uri: "content://picker/plan.pdf", name: "plan.pdf", mimeType: "application/pdf", size: 2048 }],
+        "files.upload": () => Promise.resolve().then(() => ({ status: 200, body: JSON.stringify({ path: "/state/uploads/plan.pdf", name: "plan.pdf" }) })),
+        "files.cancel": () => null,
+      }),
+      storage: paired,
+      platform: "android",
+    });
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.press("text:attach");
+    await app.waitFor("id:composer");
+    await app.press("id:composer-plus");
+    await app.press("id:attach-file");
+    await app.waitFor("text:Ready");
+    await app.type("id:composer", "Read this");
+    await app.press("id:send");
+    await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1);
+    expect(framesOf(app.host.posts(), "send_input")[0]).toMatchObject({ worker_id: "w6", text: "Read this", attachments: [{ name: "plan.pdf", path: "/state/uploads/plan.pdf", content_type: "application/pdf" }] });
+    await app.waitFor("text:Ready", { state: "gone" });
+  }, 20_000);
 });
