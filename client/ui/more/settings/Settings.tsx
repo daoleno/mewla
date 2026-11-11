@@ -49,13 +49,19 @@ function readAlertCapabilities(): void {
     .catch(() => fullScreenAllowed.set(null));
 }
 
+/**
+ * A browser is served by its computer and has no phone, alerts or iPhone of its own to
+ * offer: Labs keeps only Virtual screen there, and the Calendar section goes (as v0.3.1).
+ */
+const onWeb = () => platform.os === "web";
+
 /** iPhone use on the current computer; Labs shows the row only where it is offered (a Mac). */
 const iphone = signal<IPhoneDaemonStatus | null>(null);
 let iphoneFor = "";
 
 function readIPhone(): void {
   const server = daemon()?.server;
-  if (!server) return;
+  if (!server || onWeb()) return;
   void getIPhoneStatus(server)
     .then((next) => daemon()?.server.id === server.id && iphone.set(next))
     .catch(() => daemon()?.server.id === server.id && iphone.set(null));
@@ -97,7 +103,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
     });
   });
   followFriends();
-  void loadStrongAlerts();
+  if (!onWeb()) void loadStrongAlerts();
   followVirtualScreen();
   // iPhone use, every 15 s while Settings is open: an agent may start or stop using it.
   let iphoneTimer: ReturnType<typeof setInterval> | null = null;
@@ -112,7 +118,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
         iphone.set(null);
       }
     });
-    if (!id || !active) return;
+    if (!id || !active || onWeb()) return;
     untracked(readIPhone);
     iphoneTimer = setInterval(readIPhone, 15_000);
   });
@@ -189,12 +195,12 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
 
       <Section title="Labs">
         {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" icon="desktop" title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
-        <Row testID="settings-friends" icon="people" title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
-        {phoneAvailable() ? <Row testID="settings-phone" icon="phone" title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
-        {iphoneOffered(iphone()) ? <Row testID="settings-iphone" icon="phone" title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
+        {onWeb() ? null : <Row testID="settings-friends" icon="people" title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />}
+        {!onWeb() && phoneAvailable() ? <Row testID="settings-phone" icon="phone" title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
+        {!onWeb() && iphoneOffered(iphone()) ? <Row testID="settings-iphone" icon="phone" title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
       </Section>
 
-      {platform.os === "web" ? null : (
+      {onWeb() ? null : (
         <Section title="Calendar">
           <SwitchRow testID="strong-alerts" title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
           {platform.os === "android" && strongAlerts() && fullScreenAllowed() === false ? (

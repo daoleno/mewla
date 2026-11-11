@@ -134,6 +134,15 @@ describe("the Friends feed", () => {
     await app.waitFor("id:friends-switch");
   });
 
+  test("in a browser, with Friends off, Open Labs leads to Settings, which offers no Friends switch there", async () => {
+    const c = computer({ signed_in: true, enabled: false, handle: "me", drafts: [], max_drafts: 5 }, () => undefined, { name: "friends" });
+    const app = await open(HARNESS, { ...c.options, platform: "web" });
+    await app.waitFor("text:Friends is off");
+    await app.press("id:friends-off-action");
+    await app.waitFor("id:settings");
+    expect(app.shows("id:friends-switch")).toBe(false);
+  });
+
   test("blocking someone from a post's menu asks, then their posts leave the list", async () => {
     const c = computer(on(), (op) => {
       if (op.method === "GET") return { status: 200, body: { posts: [post("p1"), post("p2", { author: { ...lena, id: "u-kim", handle: "kim" } })], next: "" } };

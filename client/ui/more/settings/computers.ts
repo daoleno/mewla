@@ -1,4 +1,4 @@
-import { effect, signal, untracked } from "nsh";
+import { effect, platform, signal, untracked } from "nsh";
 import { getServers, removeServer as forgetServer, serverNamedByAddress, updateServer, type StoredServer } from "../../../core/servers";
 import { checkComputer, revokeThisDevice, type ComputerCheck } from "../../../core/settings/computer";
 import { computerStatusWord } from "../../../core/settings/computerModel";
@@ -152,10 +152,13 @@ export function statusWord(server: StoredServer): string {
   });
 }
 
-/** How this phone reaches the current computer, while it is connected. */
+/**
+ * How this phone reaches the current computer, while it is connected. A browser reaches
+ * only the computer serving the page, through the page's origin: no mark there (as v0.3.1).
+ */
 export function currentPathMark(): PathMark | null {
   const now = current();
-  return now ? pathMark(pathOfConnection(now), connection() === "connected") : null;
+  return now && platform.os !== "web" ? pathMark(pathOfConnection(now), connection() === "connected") : null;
 }
 
 /** What the last removal said about the computers that did not answer; Settings shows it until dismissed. */
