@@ -1,5 +1,5 @@
 import { cleanup, effect, signal, untracked } from "nsh";
-import { Dialog, Sheet, type SheetProps } from "nsh/base";
+import { Dialog, Sheet, type DialogProps, type SheetProps } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { sheetOpened, switching } from "../session";
 import { desktop } from "./Shell";
@@ -9,7 +9,7 @@ import { desktop } from "./Shell";
  * when the page under an open sheet goes) and tells its owner, and it stays closed
  * until the owner opens it again.
  */
-function guardedOpen(props: SheetProps): () => boolean {
+function guardedOpen(props: { open?: boolean | null; onOpenChange?: (event: { open: boolean; reason: "cancel" }) => void }): () => boolean {
   const dismissed = signal(false);
   let closed: (() => void) | null = null;
   effect(() => {
@@ -30,6 +30,12 @@ function guardedOpen(props: SheetProps): () => boolean {
   });
   cleanup(() => closed?.());
   return () => Boolean(props.open) && !dismissed();
+}
+
+/** NSH's Dialog (a page sheet on iOS), closed by a switch of computer like AppSheet. */
+export function GuardedDialog(props: DialogProps) {
+  const open = guardedOpen(props);
+  return <Dialog {...props} open={open()} />;
 }
 
 /** NSH's bottom sheet, closed by a switch of computer like AppSheet. */

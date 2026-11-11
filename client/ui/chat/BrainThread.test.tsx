@@ -19,6 +19,17 @@ describe("a Brain notification's thread", () => {
     expect(app.shows("id:brain-past-thread")).toBe(false);
   }, 20_000);
 
+  test("New chat from a past thread opens the new chat", async () => {
+    const fresh = { ...brain, chat_thread_id: "t-new" };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, replies: { brain_chat_new: { type: "brain_snapshot", brain: fresh } } }) });
+    await app.waitFor("id:composer", { timeout: 10_000 });
+    await app.host.send("links.open", { url: "mewla://brain?thread=t-old" });
+    await app.waitFor("id:brain-past-thread");
+    await app.press("id:new-chat");
+    await app.waitFor("id:composer");
+    expect(app.shows("id:brain-past-thread")).toBe(false);
+  }, 20_000);
+
   test("the current thread opens as Brain's live chat", async () => {
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain }) });
     await app.waitFor("id:composer", { timeout: 10_000 });

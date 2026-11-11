@@ -61,5 +61,5 @@ export async function removeComputer(server: StoredServer): Promise<void> {
   await forgetServer(server.id);
   const list = await getServers();
   servers.set(list);
-  if (wasCurrent) switchTo(list[0] ?? null);
+  if (wasCurrent) await switchTo(list[0] ?? null);
 }

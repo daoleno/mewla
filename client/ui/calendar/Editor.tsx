@@ -1,5 +1,6 @@
 import { host, platform, Scroll, signal, Text, View, type Signal } from "nsh";
-import { Button, Dialog, Input } from "nsh/base";
+import { Button, Input } from "nsh/base";
+import { GuardedDialog as Dialog } from "../shell/AppSheet";
 import { draftTimeField, type CalendarDraft } from "../../core/calendar/calendar";
 import { kindLabel, type CalendarItem, type CalendarKind, type CalendarRecurrence } from "../../core/calendar/model";
 import type { LocalResolution } from "../../core/calendar/zones";
