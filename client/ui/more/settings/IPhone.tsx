@@ -1,4 +1,5 @@
-import { cleanup, effect, Image, lifecycle, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, Image, signal, Text, untracked, View } from "nsh";
+import { lifecycle } from "../../lifecycle";
 import { changeIPhone, getIPhoneStatus, type IPhoneChange, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { failureText } from "../../../core/more/daemon";
 import { daemon } from "../daemon";

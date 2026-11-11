@@ -1,4 +1,5 @@
-import { effect, host, lifecycle, mount, platform, Storage, View } from "nsh";
+import { effect, host, mount, platform, Storage, View } from "nsh";
+import { lifecycle } from "./lifecycle";
 import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
 import { nshPlatform } from "./platform";

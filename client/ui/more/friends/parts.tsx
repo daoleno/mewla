@@ -1,5 +1,6 @@
 import type { JSX } from "nsh";
-import { computed, effect, Image, keyboardFrame, lifecycle, List, signal, Text, untracked, Video, View, windowSize, type VideoRef, type ViewRef } from "nsh";
+import { computed, effect, Image, keyboardFrame, List, signal, Text, untracked, Video, View, windowSize, type VideoRef, type ViewRef } from "nsh";
+import { lifecycle } from "../../lifecycle";
 import { AlertDialog, Button } from "nsh/base";
 import { GuardedDialog as Dialog } from "../../shell/AppSheet";
 import { NavPage } from "../../shell/NavPage";
