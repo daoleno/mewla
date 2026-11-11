@@ -62,6 +62,8 @@ func TestWebUIServesLoopbackClientsOfLoopbackHosts(t *testing.T) {
 			!strings.Contains(policy, "frame-src 'none'") ||
 			// The page's <base href="/">: deep links load its files from the root.
 			!strings.Contains(policy, "base-uri 'self'") ||
+			// NSH's runtime writes its import map inline, with blob: URLs.
+			!strings.Contains(policy, "script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' blob:") ||
 			// Friends pictures and video come from the media host over https.
 			!strings.Contains(policy, "img-src 'self' data: blob: https:") ||
 			!strings.Contains(policy, "media-src 'self' data: blob: https:") {

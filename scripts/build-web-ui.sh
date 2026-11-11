@@ -38,6 +38,11 @@ if "<base " not in page:
     page = page.replace("<head>", '<head>\n<base href="/">', 1)
 open(path, "w", encoding="utf-8").write(page)
 PY
+# The web terminal's page (an NSH web view) loads these from <origin>/terminal/.
+mkdir -p "$APP/terminal"
+for file in terminal.js xterm.js xterm.css LICENSE-xterm.txt; do
+  cp "$ROOT/client/ui/web/terminal/$file" "$APP/terminal/$file"
+done
 # NSH writes .gz and .br beside some files: keep one gzip of every file.
 find "$APP" -type f \( -name '*.gz' -o -name '*.br' \) -delete
 find "$APP" -type f -exec gzip -9 -n {} +
