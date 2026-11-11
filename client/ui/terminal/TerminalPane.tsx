@@ -159,6 +159,16 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     command("focus", {});
     keyboard.set(true);
   };
+  // Leaving the terminal (the chat, another page) lets go of the keyboard; coming back keeps it down until tapped.
+  effect(() => {
+    if (props.active()) return;
+    untracked(() => {
+      if (!keyboard()) return;
+      command("blur", {});
+      keyboard.set(false);
+      ctrl.set(false);
+    });
+  });
 
   // A tap: a link opens; elsewhere on the live screen, the keyboard and the pane under the finger.
   const tap = (col: number, row: number, text: string, index: number) => {
