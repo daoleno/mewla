@@ -1,4 +1,6 @@
 // Shared by the M3 page tests: a paired phone, a host that answers like the Android one, Expo's token service.
+import type { open } from "nsh/test";
+
 export const paired = {
   "mewla:v3:servers": JSON.stringify([{ id: "s1", name: "Desk", url: "ws://127.0.0.1:1/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) }]),
   "mewla:v1:current_server_id": "s1",
@@ -63,4 +65,15 @@ export function item(id: string, hours: number, patch: Record<string, unknown> =
 /** The frames the fake computer received of a type, from the host posts. */
 export function framesOf(posts: { name: string; data: unknown }[], type: string): Record<string, unknown>[] {
   return posts.filter((p) => p.name === "app.testFrame" && (p.data as { type?: string })?.type === type).map((p) => p.data as Record<string, unknown>);
+}
+
+/**
+ * Waits for `condition` a step at a time. A dialog the app shows once a step has resolved (a slow runner's
+ * sheet comes after `press`) is answered only while a step runs, which `waitUntil` on the test's own state is not.
+ */
+export async function stepUntil(app: Awaited<ReturnType<typeof open>>, condition: () => boolean, timeout = 10_000): Promise<void> {
+  for (const end = Date.now() + timeout; !condition(); ) {
+    if (Date.now() > end) throw new Error(`the condition never held in ${timeout} ms`);
+    await app.wait(50);
+  }
 }

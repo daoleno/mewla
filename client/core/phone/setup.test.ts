@@ -3,7 +3,6 @@ import {
   floatPlaceholder,
   nextPhoneStep,
   phoneAgentWorking,
-  phoneFloat,
   phoneLabsValue,
   phoneMode,
   phoneOwner,
@@ -91,14 +90,6 @@ describe("phone float", () => {
     expect(floatPlaceholder({ drawn: false, opening: "微信 (分身 999)", launch_failed: null })).toEqual({ text: "微信 (分身 999)", failed: false });
     expect(floatPlaceholder({ drawn: false, opening: null, launch_failed: "微信 (分身 999)" })).toEqual({ text: "Couldn't open 微信 (分身 999)", failed: true });
     expect(floatPlaceholder({ drawn: false, opening: null, launch_failed: null })).toEqual({ text: null, failed: false });
-  });
-
-  test("exists only while an agent works the phone and its screen has a size", () => {
-    expect(phoneFloat({ ...working, agent: "Writer" })).toEqual({ title: "Writer", width: 720, height: 1600 });
-    expect(phoneFloat({ ...working, agent: null })).toBeNull();
-    expect(phoneFloat({ ...working, state: "stopped" })).toBeNull();
-    expect(phoneFloat({ ...working, w: 0, h: 0 })).toBeNull();
-    expect(phoneFloat(null)).toBeNull();
   });
 
   test("the agent is matched to a Worker by id, else by a name only one has", () => {

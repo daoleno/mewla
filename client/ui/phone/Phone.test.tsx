@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { stepUntil } from "../testing/fixtures";
 
 const HARNESS = "./testing/Harness.tsx";
 const DAEMON = "a".repeat(64);
@@ -231,32 +232,68 @@ describe("Phone use, live", () => {
   }, 20_000);
 });
 
-describe("Phone use, the floating control", () => {
-  test("floats over another page while an agent works, and Stop stops it", async () => {
+describe("Phone use, the floating screen", () => {
+  /**
+   * The window's menu, answered by one handler set as the app opens; waited for a step at a time, as a slow
+   * runner shows the sheet after the press resolved (`stepUntil`).
+   */
+  function menus(app: App) {
+    let choose: string | null = null;
+    let offered: string[] | null = null;
+    app.onDialog((dialog) => {
+      if (!dialog.sheet) return null;
+      offered = dialog.buttons;
+      return choose ?? "Cancel";
+    });
+    /** Opens the menu and answers it with `answer`; resolves the options it offered. */
+    return async (answer: string | null): Promise<string[]> => {
+      choose = answer;
+      offered = null;
+      await app.press("id:screen-float-options");
+      await stepUntil(app, () => offered !== null);
+      return offered!;
+    };
+  }
+
+  test("floats over another page while an agent works, named after it; Stop in its menu stops it", async () => {
     const { options } = start(working, { params: { page: "home" } });
     const app = await open(HARNESS, options);
-    await app.waitFor("id:phone-float");
+    const menu = menus(app);
+    await app.waitFor("id:screen-float");
     expect(app.texts()).toContain("Writer");
-    expect(app.shows("id:phone-float-take-over")).toBe(true);
-    await app.press("id:phone-float-stop");
+    expect(await menu("Stop")).toEqual(["Take over", "Stop", "Cancel"]);
     await app.waitUntil(() => calls(app, "phone.stop").length === 1);
   }, 20_000);
 
   test("Take over opens the Phone page, where the float is not", async () => {
     const { options } = start(working, { params: { page: "home" } });
     const app = await open(HARNESS, options);
-    await app.press("id:phone-float-take-over");
+    const menu = menus(app);
+    await app.waitFor("id:screen-float");
+    await menu("Take over");
     await app.waitFor("id:phone-page");
     expect(calls(app, "phone.takeOver").length).toBe(1);
-    await app.waitFor("id:phone-float", { state: "gone" });
+    await app.waitFor("id:screen-float", { state: "gone" });
   }, 20_000);
 
-  test("driving offers Give back, a handoff Done; an app that could not open says so", async () => {
+  test("Open opens the Phone page without taking over", async () => {
+    const { options } = start(working, { params: { page: "home" } });
+    const app = await open(HARNESS, options);
+    await app.press("id:screen-float-open");
+    await app.waitFor("id:phone-page");
+    expect(calls(app, "phone.takeOver")).toHaveLength(0);
+  }, 20_000);
+
+  test("driving offers Give back, a handoff Done with the ring; an app that could not open says so", async () => {
     const { options } = start({ ...working, state: "person_in_control" }, { params: { page: "home" } });
     const app = await open(HARNESS, options);
-    await app.waitFor("id:phone-float-give-back");
+    const menu = menus(app);
+    await app.waitFor("id:screen-float");
+    expect(await menu(null)).toEqual(["Give back", "Stop", "Cancel"]);
     await app.host.send("phone.status", { ...working, state: "person_in_control", handoff: "Pay" });
-    await app.waitFor("id:phone-float-done");
+    await app.waitFor("id:screen-float-attention");
+    expect(await menu("Done")).toEqual(["Done", "Stop", "Cancel"]);
+    await app.waitUntil(() => calls(app, "phone.handoffDone").length === 1);
     await app.host.send("phone.status", { ...working, drawn: false, launch_failed: "微信" });
     await app.waitFor("text:Couldn't open 微信");
   }, 20_000);
@@ -266,6 +303,6 @@ describe("Phone use, the floating control", () => {
     const app = await open(HARNESS, options);
     await app.waitFor("text:Home");
     await app.wait(200);
-    expect(app.shows("id:phone-float")).toBe(false);
+    expect(app.shows("id:screen-float")).toBe(false);
   }, 20_000);
 });
