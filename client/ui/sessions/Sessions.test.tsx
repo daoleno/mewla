@@ -77,6 +77,7 @@ describe("Sessions", () => {
     await app.waitFor("text:one");
     await app.longPress("text:one");
     await app.waitFor("text:1 selected");
+    await app.waitFor("text:two", { timeout: 10_000 });
     await app.press("text:two");
     await app.waitFor("text:2 selected");
     app.onDialog(() => "Terminate");
@@ -100,6 +101,7 @@ describe("a Session", () => {
   test("shows its chat, and the prompt open in its terminal as a card the person can answer", async () => {
     const app = await sessionsApp({ worker_sessions: [blocked], conversations: { w9: transcript } });
     await app.waitFor("text:cleanup");
+    await app.waitFor("text:cleanup", { timeout: 10_000 });
     await app.press("text:cleanup");
     await app.waitFor("id:action-prompt");
     expect(app.texts()).toContain("Run this command?");
@@ -112,6 +114,7 @@ describe("a Session", () => {
 
   test("the menu switches to the terminal and renames it on this phone", async () => {
     const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
+    await app.waitFor("text:notes", { timeout: 10_000 });
     await app.press("text:notes");
     await app.waitFor("id:session-chat");
     app.onDialog((dialog) => (dialog.buttons.includes("Rename") ? "Rename" : null));
@@ -131,6 +134,7 @@ describe("a Session", () => {
       conversations: { w5: { source: "dsh_session_jsonl", events: [] } },
       dsh: { epoch: "e1", items: [{ rpcId: "r1", payload: { type: "approval/requested", sessionId: "s", toolName: "Bash", reason: "Run `make deploy`" } }] },
     });
+    await app.waitFor("text:dsh run", { timeout: 10_000 });
     await app.press("text:dsh run");
     await app.waitFor("id:dsh-banner");
     expect(app.texts()).toContain("Permission requested");
@@ -155,6 +159,7 @@ describe("a Session", () => {
         list_providers: { type: "providers", revision: 1, connections: [{ id: "c1", name: "OpenAI", clients: ["codex"], credential_ready: true, advanced: false }], defaults: { codex: { connection_id: "c1" } }, presets: [], models: { c1: [{ id: "gpt-6", available: true, source: "catalog" }] } },
       },
     });
+    await app.waitFor("text:codex run", { timeout: 10_000 });
     await app.press("text:codex run");
     await app.waitFor("id:model-chip");
     expect(app.texts()).toContain("gpt-6");
@@ -195,12 +200,14 @@ describe("a Session", () => {
       worker_sessions: [session("w6", { name: "broken" }), session("w8", { name: "fresh", cwd: "/home/me/code/mewla" })],
       conversations: { w6: { available: false, reason: "transcript_malformed", events: [] }, w8: [] },
     });
+    await app.waitFor("text:broken", { timeout: 10_000 });
     await app.press("text:broken");
     await app.waitFor("id:chat-open-terminal");
     expect(app.texts()).toContain("Chat could not read this session transcript. Open the terminal view.");
     await app.press("id:chat-open-terminal");
     await app.waitFor("id:chat-open-terminal", { state: "gone" });
     await app.back();
+    await app.waitFor("text:fresh", { timeout: 10_000 });
     await app.press("text:fresh");
     await app.waitFor("text:Ready");
     expect(app.texts()).toContain("…/code/mewla");
@@ -219,6 +226,7 @@ describe("a Session", () => {
     const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }, { path: "notes.md", staged: false, unstaged: false, untracked: true, additions: 0, deletions: 0 }];
     const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 2, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 1, additions: 3, deletions: 1, files };
     const app = await sessionsApp({ worker_sessions: [session("w5", { name: "repo work" })], conversations: { w5: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } });
+    await app.waitFor("text:repo work", { timeout: 10_000 });
     await app.press("text:repo work");
     await app.waitFor("id:session-git");
     expect(app.texts()).toContain("2 files  +3  -1");
@@ -238,6 +246,7 @@ describe("a Session", () => {
       platform: "android",
     });
     await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("text:attach", { timeout: 10_000 });
     await app.press("text:attach");
     await app.waitFor("id:composer");
     await app.press("id:composer-plus");
