@@ -84,6 +84,16 @@ describe("the Calendar tab", () => {
     expect(app.texts()).toContain("Pay rent");
   }, 20_000);
 
+  test("a tap that spans the clock's 30 s tick still opens its item: the tick does not rebuild the row under the finger", async () => {
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)] }), storage: paired, platform: "android", network: expoTokenService, clock: {} });
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.waitFor("id:calendar-item-Call the bank", SLOW);
+    await app.dragAndHold("id:calendar-item-Call the bank", { x: 0, y: 0 });
+    await app.clock!.runFor(31_000);
+    await app.drop();
+    await app.waitFor("id:cancel-item", SLOW);
+  }, 20_000);
+
   test("cancels an item after asking, goes back to the agenda, and the item leaves it", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1)] });
     await app.waitFor("id:calendar-item-Call the bank", SLOW);
