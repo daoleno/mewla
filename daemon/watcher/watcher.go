@@ -2923,6 +2923,10 @@ func (w *Watcher) SendInputWithReceiptResult(sessionID, text, receipt string) (I
 		err := definitelyNotSubmitted(receipt, fmt.Errorf("receipt input payload is empty"))
 		return InputResult{Outcome: InputNotSubmitted, Receipt: receipt}, err
 	}
+	pane := &sessionClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
+	if err := w.refuseInputUnderPrompt(pane, sessionID, receipt); err != nil {
+		return InputResult{Outcome: InputNotSubmitted, Receipt: receipt}, err
+	}
 	return w.sessionInputOwner().submit(
 		sessionID,
 		identity,

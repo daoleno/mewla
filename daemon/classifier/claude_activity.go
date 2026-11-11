@@ -78,7 +78,12 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	}
 	// Launch-time menus (trust this folder, accept a mode, pick a theme) end
 	// in "Enter to confirm" and appear before any conversation exists.
-	if prompt, ok := ParseMenuPrompt(a.Name(), PromptStartup, pane, "Enter to confirm"); ok {
+	// Since 2.1.322 the folder trust menu shows no numbers.
+	prompt, ok := ParseMenuPrompt(a.Name(), PromptStartup, pane, "Enter to confirm")
+	if !ok {
+		prompt, ok = ParseCursorMenuPrompt(a.Name(), PromptStartup, pane, "Enter to confirm")
+	}
+	if ok {
 		prompt.Title = "Waiting for your choice"
 		return ActivitySignal{
 			State:    StateBlocked,
