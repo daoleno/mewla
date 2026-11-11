@@ -169,8 +169,11 @@ export class TerminalSession {
         this.feed.attach(id);
         const cols = Number(frame.cols), rows = Number(frame.rows);
         if (this.size && (cols !== this.size.cols || rows !== this.size.rows)) this.send({ type: "terminal_resize", session_id: id, ...this.size });
-        // tmux redraws for a focused client.
-        this.send({ type: "terminal_input", session_id: id, data: "\u001b[I" });
+        // tmux redraws for a focused client, and passes the FocusIn on only to a pane that asked
+        // for focus events. Any other backend (the session host) would type it into the program as
+        // "[I", so it goes to tmux only: the daemon names the backend it opened (older ones did not).
+        const backend = typeof frame.backend === "string" && frame.backend ? frame.backend : "tmux";
+        if (backend === "tmux") this.send({ type: "terminal_input", session_id: id, data: "\u001b[I" });
       }));
       const stopFailed = this.transport.on("terminal_error", (frame) => {
         if (frame.session_id) return;
