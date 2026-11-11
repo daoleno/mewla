@@ -1,5 +1,4 @@
-import { Clipboard, cleanup, effect, openUrl, signal, Text, untracked, View } from "nsh";
-import { lifecycle } from "../../lifecycle";
+import { Clipboard, cleanup, effect, openUrl, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { formatFullDateTime } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";

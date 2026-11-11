@@ -1,6 +1,5 @@
 import type { JSX } from "nsh";
-import { Canvas, cleanup, effect, signal, Text, untracked, View } from "nsh";
-import { lifecycle } from "../../lifecycle";
+import { Canvas, cleanup, effect, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { ResourcePoller, type ResourceReading } from "../../../core/resources/poll";
 import {

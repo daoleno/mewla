@@ -13,18 +13,9 @@ function sources(dir: string): string[] {
   });
 }
 
-describe("what NSH 0.4.0's browser runtime lacks", () => {
-  // `lifecycle` is not exported in a browser: a call throws and the web app never starts
-  // (nsh test's runtime has it, so only a real browser showed it). ui/lifecycle.ts stands in.
-  test("lifecycle comes from ui/lifecycle.ts, never from nsh", () => {
-    const offenders = sources(UI)
-      .filter((path) => !path.endsWith(join("ui", "lifecycle.ts")))
-      .filter((path) => /import\s*\{[^}]*\blifecycle\b[^}]*\}\s*from\s*"nsh"/.test(readFileSync(path, "utf8")))
-      .map((path) => relative(UI, path));
-    expect(offenders).toEqual([]);
-  });
-
-  // BackHandler.on is not in the browser runtime either: Settings → Pair a computer threw
+describe("what NSH's browser runtime lacks", () => {
+  // NSH 0.5.0 exports `lifecycle` in a browser (0.4.0 did not; ui/lifecycle.ts stood in until then).
+  // BackHandler is not in the browser runtime (still undefined in 0.5.0's): Settings → Pair a computer threw
   // "he.on is not a function" on the web (FINAL-VERIFY 6387f88f, page:Settings → Pair a computer).
   test("BackHandler.on is called only behind a web check", () => {
     const offenders = sources(UI)

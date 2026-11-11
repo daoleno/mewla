@@ -104,10 +104,10 @@ jobs:
         run: bun test core
         working-directory: client
       - name: Typecheck
-        run: ~/.nsh/bin/nsh check
+        run: ${NSH_HOME:-$HOME/.nsh}/bin/nsh check
         working-directory: client/ui
       - name: UI tests
-        run: ~/.nsh/bin/nsh test
+        run: ${NSH_HOME:-$HOME/.nsh}/bin/nsh test
         working-directory: client/ui
       - name: Open-source licenses are current
         run: python3 client/ui/more/settings/licenses/generate.py --check

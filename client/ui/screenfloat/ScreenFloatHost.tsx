@@ -1,5 +1,4 @@
-import { cleanup, computed, effect, signal, Text, untracked, View, type JSX } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { cleanup, computed, effect, signal, Text, untracked, View, type JSX, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { floatPlaceholder, phoneMode } from "../../core/phone/setup";
 import {

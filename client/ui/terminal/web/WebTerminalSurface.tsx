@@ -84,6 +84,7 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
     focus: () => post({ type: "focus" }),
     blur: () => post({ type: "blur" }),
     measure: () => web?.measure() ?? Promise.resolve(null),
+    reveal: (options) => web?.reveal(options),
   };
   if (typeof props.ref === "function") props.ref(ref);
 

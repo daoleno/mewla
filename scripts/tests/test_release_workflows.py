@@ -361,8 +361,8 @@ class CIWorkflowTests(unittest.TestCase):
         client = between(CI, "  client:\n", "  windows:")
         for needle in (
             "run: bun test core",
-            "run: ~/.nsh/bin/nsh check",
-            "run: ~/.nsh/bin/nsh test",
+            "run: ${NSH_HOME:-$HOME/.nsh}/bin/nsh check",
+            "run: ${NSH_HOME:-$HOME/.nsh}/bin/nsh test",
             "run: python3 client/ui/more/settings/licenses/generate.py --check",
             "run: bun install --frozen-lockfile",
             "run: bun client/ui/more/screen/runtime/generate.mjs --check",

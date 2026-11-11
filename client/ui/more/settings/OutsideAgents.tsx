@@ -1,5 +1,4 @@
-import { cleanup, effect, signal, Text, untracked, View } from "nsh";
-import { lifecycle } from "../../lifecycle";
+import { cleanup, effect, signal, Text, untracked, View, lifecycle } from "nsh";
 import { formatFullDateTime } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";
 import { decideOutsideAgent, listOutsideAgents, type OutsideAgents as Agents } from "../../../core/settings/outsideAgents";

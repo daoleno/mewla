@@ -39,13 +39,21 @@ export class FakeSocket implements SocketLike {
   onclose: SocketLike["onclose"] = null;
   onerror: SocketLike["onerror"] = null;
   sent: string[] = [];
-  inFlight = 0;
-  constructor(readonly url: string, readonly protocols: string[], readonly quota = 8) {}
+  /** Bytes sent in this turn, not yet gone out (NSH 0.5.0: up to 8 MiB in at most 1,024 messages wait). */
+  buffered = 0;
+  private waiting = 0;
+  constructor(readonly url: string, readonly protocols: string[], readonly quotaBytes = 8 << 20, readonly quotaMessages = 1024) {}
   send(data: string): void {
-    if (this.inFlight >= this.quota) throw Object.assign(new Error("quota"), { code: "ERR_NSH_QUOTA_EXCEEDED" });
-    this.inFlight++;
+    if (this.buffered + data.length > this.quotaBytes || this.waiting >= this.quotaMessages) {
+      throw Object.assign(new Error("quota"), { code: "ERR_NSH_QUOTA_EXCEEDED" });
+    }
+    this.buffered += data.length;
+    this.waiting++;
     this.sent.push(data);
-    setTimeout(() => this.inFlight--, 0);
+    setTimeout(() => {
+      this.buffered -= data.length;
+      this.waiting--;
+    }, 0);
   }
   close(code = 1000, reason = ""): void {
     if (this.readyState === 3) return;

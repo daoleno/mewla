@@ -1,5 +1,4 @@
-import { effect, openUrl, signal, untracked } from "nsh";
-import { lifecycle } from "../../lifecycle";
+import { effect, openUrl, signal, untracked, lifecycle } from "nsh";
 import type { FriendsStatus } from "../../../core/friends/api";
 import {
   deleteFriendsAccount,
