@@ -18,6 +18,7 @@ import {
 } from "../../../core/screen/screenPageModel";
 import type { ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
 import { changeIPhone, getIPhoneStatus, type IPhoneChange, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
+import { phoneAvailable, phoneStatus, readPhone } from "../../phone/state";
 import { daemon } from "../daemon";
 import { EmptyState, PillButton, Row, Section, Spinner } from "../kit/kit";
 import { Icon, type IconName } from "../kit/Icon";
@@ -44,6 +45,8 @@ const ITEM = "rounded-lg px-4 py-3 active:bg-accent disabled:opacity-50";
  * at work instead of taking over.
  */
 export function ScreenPage(props: { nav: PageNav; worker?: string }) {
+  // The menu's Phone item says who uses the phone now.
+  void readPhone();
   const status = signal<ScreenStatus | null>(null);
   const phase = signal<Phase>("checking");
   /** Why the last step failed, or the computer's own reason while setting up. */
@@ -383,10 +386,12 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     session()?.setMode(next);
   };
 
+  // Only where phone use is on; it says who is using the phone, and opens the phone's own page.
   const phoneItem = () =>
-    platform.os === "android" ? (
+    phoneAvailable() && phoneStatus()?.enabled ? (
       <MenuItem testID="screen-phone" onSelect={() => props.nav.push({ name: "settings-phone" })} class={ITEM}>
         <Text class="text-base">Phone</Text>
+        <Text class="text-sm text-muted-foreground">{phoneStatus()?.agent || "Ready"}</Text>
       </MenuItem>
     ) : null;
   const keepAwakeItem = () =>
