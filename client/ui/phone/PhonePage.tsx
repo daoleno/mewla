@@ -187,7 +187,8 @@ function Live() {
   return (
     <View class="flex-1" testID="phone-live">
       <View class="flex-row items-center justify-center gap-2 px-4 py-3">
-        <Text testID="phone-live-title" class="text-lg font-semibold line-clamp-2">{title()}</Text>
+        {/* A long name ("Phonebot2 (mh-…)") shrinks and ends in "…" on the right: unshrunk, the centred row cut it at the left (phone 15). */}
+        <Text testID="phone-live-title" class="min-w-0 shrink text-lg font-semibold line-clamp-1">{title()}</Text>
         <View class="size-2 rounded-full" style={{ backgroundColor: dot() }} />
         {mode() === "watching" || mode() === "driving" ? (
           <Button testID="phone-pip" accessibilityLabel="Float" hitSlop={8} onPress={floatPhone} class="p-2 active:opacity-60">
