@@ -167,7 +167,7 @@ function parseCompactLinkPairingPayload(
     let offset = 0;
     const take = (length: number) => {
       if (offset + length > bytes.length) {
-        throw new Error("Short Link pairing payload.");
+        throw new Error("Short Mewla Relay pairing payload.");
       }
       const value = bytes.subarray(offset, offset + length);
       offset += length;

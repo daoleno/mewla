@@ -1,7 +1,7 @@
 import Foundation
 
 /// What a widget shows, and where it comes from: a server a widget can fetch is read from its
-/// read-only snapshot endpoint; a Mewla Link server shows the state the app and pushes cached.
+/// read-only snapshot endpoint; a Mewla Relay server shows the state the app and pushes cached.
 struct MewlaWidgetSnapshot {
   var state: MewlaLiveState?
   /// True when there is nothing trustworthy to draw: never configured, revoked, or too old.

@@ -39,7 +39,7 @@ class MewlaLiveModule : Module() {
       WidgetSync.refreshAsync(context)
     }
 
-    /** A server reached through Mewla Link has no address a widget can fetch: its widgets show the pushed state. */
+    /** A server reached through Mewla Relay has no address a widget can fetch: its widgets show the pushed state. */
     Function("configureWidgetPushed") {
       val prefs = LivePrefs(context)
       prefs.widgetMode = WIDGET_PUSHED

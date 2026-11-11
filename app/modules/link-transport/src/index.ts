@@ -33,7 +33,7 @@ function nativeModule(): LinkTransportNativeModule {
   }
   if (!cached) {
     throw new Error(
-      "Mewla Link needs a current Android or iOS build. Update/rebuild the app, then scan again.",
+      "Mewla Relay needs a current Android or iOS build. Update/rebuild the app, then scan again.",
     );
   }
   return cached;

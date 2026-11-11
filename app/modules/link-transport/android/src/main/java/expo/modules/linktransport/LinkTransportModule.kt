@@ -47,7 +47,7 @@ class LinkTransportModule : Module() {
                 mapOf("port" to proxy.localPort, "rttMs" to proxy.lastRttMs)
             } catch (error: Throwable) {
                 proxy.close()
-                throw IllegalStateException("Mewla Link could not reach a pinned relay candidate.", error)
+                throw IllegalStateException("Mewla Relay could not reach a pinned relay candidate.", error)
             }
         }
 
@@ -78,16 +78,16 @@ class LinkTransportModule : Module() {
     }
 
     private fun validateInput(key: String, host: String, port: Int, pin: String, mode: String) {
-        require(key.isNotBlank()) { "Mewla Link tunnel key is required." }
+        require(key.isNotBlank()) { "Mewla Relay tunnel key is required." }
         require(host.isNotBlank() && !host.contains('/') && !host.contains('\u0000')) {
-            "Mewla Link host is invalid."
+            "Mewla Relay host is invalid."
         }
-        require(port in 1..65535) { "Mewla Link port is invalid." }
+        require(port in 1..65535) { "Mewla Relay port is invalid." }
         require(pin.matches(Regex("^[0-9a-fA-F]{64}$"))) {
-            "Mewla Link SPKI pin is invalid."
+            "Mewla Relay SPKI pin is invalid."
         }
         require(mode == "measure" || mode == "on-demand") {
-            "Mewla Link tunnel mode is invalid."
+            "Mewla Relay tunnel mode is invalid."
         }
     }
 }
@@ -255,10 +255,10 @@ private fun pinnedSSLContext(pinHex: String): SSLContext {
 
         override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
             val leaf = chain.firstOrNull()
-                ?: throw java.security.cert.CertificateException("Mewla Link peer sent no certificate.")
+                ?: throw java.security.cert.CertificateException("Mewla Relay peer sent no certificate.")
             val actual = MessageDigest.getInstance("SHA-256").digest(leaf.publicKey.encoded)
             if (!MessageDigest.isEqual(actual, expected)) {
-                throw java.security.cert.CertificateException("Mewla Link transport certificate pin mismatch.")
+                throw java.security.cert.CertificateException("Mewla Relay transport certificate pin mismatch.")
             }
         }
     }

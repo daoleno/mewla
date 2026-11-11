@@ -7,7 +7,7 @@ import {
 import type { TransportPathInfo } from "./connectionPath";
 import type { StoredServer, StoredTransportCandidate } from "./storage";
 
-/** How the phone reaches a computer: through Mewla Link's relay, or straight. */
+/** How the phone reaches a computer: through Mewla Relay, or straight. */
 export type TransportPath = "relay" | DirectKind;
 
 interface Selection {
@@ -149,7 +149,7 @@ export async function resolveStoredServerURL(
     !/^[0-9a-f]{32}$/i.test(server.linkRouteId || "")
   ) {
     throw new Error(
-      "Mewla Link needs setup. Scan a fresh Mewla Link QR code; the saved route or transport pin is missing.",
+      "Mewla Relay needs setup. Scan a fresh Mewla Relay QR code; the saved route or transport pin is missing.",
     );
   }
   const entry = pathsFor(server.id);
@@ -214,7 +214,7 @@ async function chooseTransport(
   }
   if (!chosen) {
     throw new Error(
-      "Mewla Link is offline. Keep mewla running and check its Link connection.",
+      "Mewla Relay is offline. Keep mewla running and check its Mewla Relay connection.",
     );
   }
   chosen.measuredAt = Date.now();
@@ -272,7 +272,7 @@ async function measureRelay(
     );
   if (available.length === 0) {
     throw new Error(
-      "Mewla Link is offline. Keep mewla running and check its Link connection.",
+      "Mewla Relay is offline. Keep mewla running and check its Mewla Relay connection.",
     );
   }
   const best = available[0];
@@ -606,7 +606,7 @@ async function resolveOnDemandLinkURL(
     );
   } catch {
     throw new Error(
-      "Mewla Link could not reach this computer. Keep mewla running, wait for Link to show connected, then scan a fresh QR.",
+      "Mewla Relay could not reach this computer. Keep mewla running, wait for Mewla Relay to show connected, then scan a fresh QR.",
     );
   }
   return rewriteURL(input.url, `ws://127.0.0.1:${result.port}`);
@@ -639,13 +639,13 @@ function linkCandidates(server: StoredServer): StoredTransportCandidate[] {
   if (configured.length > 0) {
     return configured;
   }
-  return [{ name: "Mewla Link", kind: "link", url: server.url }];
+  return [{ name: "Mewla Relay", kind: "link", url: server.url }];
 }
 
 function requireTLSServerURL(value: string): URL {
   const parsed = new URL(value);
   if (parsed.protocol !== "wss:") {
-    throw new Error("Mewla Link requires a wss:// candidate.");
+    throw new Error("Mewla Relay requires a wss:// candidate.");
   }
   return parsed;
 }
