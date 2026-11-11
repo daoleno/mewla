@@ -57,8 +57,13 @@ export class FakeDaemon {
     setTimeout(() => socket.onmessage?.({ data: JSON.stringify(frame) }), 1);
   }
 
-  /** Sends `frame` to every connection, as the computer does with its news (a `seq` is added when it has none). */
+  /**
+   * The computer's own news, as it sends it to every connection: a Session's update (a `seq` is added
+   * when it has none), or a change made on the computer itself (a Work file edited or removed there).
+   */
   push(frame: Frame): void {
+    if (frame.type === "work_item_deleted") this.state.work_items = (this.state.work_items ?? []).filter((w) => w.id !== frame.id);
+    if (frame.type === "work_item_changed") this.state.work_items = [...(this.state.work_items ?? []).filter((w) => w.id !== frame.id), frame.work_item as never];
     this.broadcast(frame.type.startsWith("worker_session_") && frame.seq === undefined ? { ...frame, seq: ++this.seq } : frame);
   }
 
@@ -146,10 +151,13 @@ export class FakeDaemon {
         if (existing && existing.mtime !== frame.base_mtime && new Date(String(existing.mtime)).toISOString() !== frame.base_mtime) return fail("work item changed on disk");
         const written = { ...existing, id: frame.id, project: frame.project, path: frame.path, body: frame.body, frontmatter: frame.frontmatter, mtime: new Date(Date.now() + this.revision++).toISOString() };
         this.state.work_items = [...items.filter((w) => w.id !== frame.id), written];
+        // The daemon's file watcher tells every connection, often before the writer's own answer.
+        this.broadcast({ type: "work_item_changed", id: frame.id, path: frame.path, work_item: written });
         return reply("work_item_written", { work_item: written });
       }
       case "delete_work_item":
         this.state.work_items = (this.state.work_items ?? []).filter((w) => w.id !== frame.id);
+        this.broadcast({ type: "work_item_deleted", id: frame.id });
         return reply("work_item_deleted_ack", { id: frame.id });
       case "live_state_get":
         return reply("live_state", { live: this.state.live ?? null });

@@ -151,6 +151,57 @@ describe("a Calendar run's Work file", () => {
     expect(app.shows("id:work-file-page")).toBe(false);
   }, 25_000);
 
+  // FINAL-VERIFY 6387f88f m3 143/141: the computer's echo of the page's own save came before the
+  // save's answer and was taken for someone else's newer version; autosave then stopped.
+  test("its own autosave is never a newer version on the server, and the next edit saves too", async () => {
+    const app = await openWorkFile({});
+    await app.press("id:work-file-edit");
+    await app.waitFor("id:work-file-body");
+    await app.type("id:work-file-body", " XYZ");
+    await app.waitUntil(() => framesOf(app.host.posts(), "write_work_item").length === 1, { timeout: 10_000 });
+    await app.waitFor("text:Saved", { timeout: 10_000 });
+    await app.wait(300);
+    expect(app.shows("id:work-file-newer")).toBe(false);
+    await app.type("id:work-file-body", "Q");
+    await app.waitUntil(() => framesOf(app.host.posts(), "write_work_item").length === 2, { timeout: 10_000 });
+    await app.waitFor("text:Saved", { timeout: 10_000 });
+    await app.wait(300);
+    expect(app.shows("id:work-file-newer")).toBe(false);
+    expect(String(framesOf(app.host.posts(), "write_work_item")[1].body)).toContain("XYZQ");
+  }, 25_000);
+
+  test("a change made on the computer while an edit is unsaved asks before loading it", async () => {
+    const app = await openWorkFile({});
+    await app.press("id:work-file-edit");
+    await app.waitFor("id:work-file-body");
+    await app.type("id:work-file-body", " mine");
+    await app.host.send("app.daemonPush", { type: "work_item_changed", id: "wf-1", work_item: { ...work, body: work.body + "theirs\n", mtime: new Date(Date.now() + 60_000).toISOString() } });
+    await app.waitFor("id:work-file-newer", { timeout: 10_000 });
+    await app.wait(1_000);
+    expect(framesOf(app.host.posts(), "write_work_item")).toHaveLength(0);
+  }, 25_000);
+
+  // FINAL-VERIFY 6387f88f m3 142: Delete removed the file, then said "Delete failed. cannot read
+  // property 'frontmatter' of undefined" and stayed.
+  test("Delete removes the file and leaves the page", async () => {
+    const app = await openWorkFile({});
+    app.onDialog(() => "Delete");
+    await app.press("id:work-file-delete");
+    await app.waitUntil(() => framesOf(app.host.posts(), "delete_work_item").length === 1, { timeout: 10_000 });
+    await app.waitUntil(() => !app.shows("id:work-file-page"), { timeout: 10_000 });
+    expect(app.texts().join(" ")).not.toContain("Delete failed");
+  }, 25_000);
+
+  // FINAL-VERIFY 6387f88f m3 136/132: removed on the computer while open, the page kept the old body.
+  test("a file removed on the computer while its page is open says Work item not found", async () => {
+    const app = await openWorkFile({});
+    await app.waitFor("text:Read the three papers.");
+    await app.host.send("app.daemonPush", { type: "work_item_deleted", id: "wf-1", path: "calendar/wf-1.md" });
+    await app.waitFor("text:Work item not found", { timeout: 10_000 });
+    expect(app.shows("id:work-file-delete")).toBe(false);
+    expect(app.texts()).not.toContain("Read the three papers.");
+  }, 25_000);
+
   test("a save the computer refuses says so, in its words", async () => {
     const app = await openWorkFile({ replies: { write_work_item: { type: "error", message: "disk is full" } } });
     await app.press("id:work-file-edit");
