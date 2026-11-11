@@ -60,7 +60,7 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "stats-model": return <StatsModel model={route.model} pricing={route.pricing} nav={props.nav} />;
     case "stats-day": return <StatsDay day={route.day} nav={props.nav} />;
     case "resources": return <Resources nav={props.nav} />;
-    case "screen": return <ScreenPage nav={props.nav} />;
+    case "screen": return <ScreenPage nav={props.nav} worker={route.worker} />;
     case "extensions":
     case "extensions-service":
     case "extensions-tools":
