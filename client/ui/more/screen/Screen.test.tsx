@@ -1,4 +1,5 @@
 import { describe, expect, open, test, type StubResponse } from "nsh/test";
+import { KEYBOARD_SENTINEL } from "../../../core/screen/screenPageModel";
 
 const HARNESS = "./testing/ScreenHarness.tsx";
 const SCREEN = "http://desk.test:9877/screen";
@@ -241,6 +242,17 @@ describe("Screen: the live viewer", () => {
     await app.waitUntil(() => closed(app).length === 1);
   });
 
+  test("the soft keyboard's field goes back to empty after each key, so a key is sent once (screen [67])", async () => {
+    const app = await open(HARNESS, { ...options({ [`GET ${SCREEN}`]: json(base) }), platform: "android" as const });
+    await goLive(app);
+    await app.press("label:Show keyboard");
+    await app.waitFor("id:remote-key-bar");
+    await app.type("id:remote-keyboard", "a");
+    await app.waitUntil(() => app.value("id:remote-keyboard") === KEYBOARD_SENTINEL);
+    await app.type("id:remote-keyboard", "b");
+    await app.waitUntil(() => app.value("id:remote-keyboard") === KEYBOARD_SENTINEL);
+  });
+
   test("a switch of computer closes the viewer", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), "GET http://laptop.test:9877/screen": json({ ...base, name: "Laptop" }) }));
     await goLive(app);
@@ -344,6 +356,25 @@ describe("Screen: Linux agent displays", () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) }));
     await app.waitFor("text:Nothing on screen");
     expect(app.texts()).toContain("An agent's screen shows up here while it works.");
+  });
+
+  test("on a phone, the Linux page's options show only when they hold the Phone row (screen [72])", async () => {
+    const network = { [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) };
+    const off = await open(HARNESS, options(network, { platform: "android", phone: { supported: true, enabled: false } }));
+    await off.waitFor("text:Nothing on screen");
+    expect(off.shows("id:screen-options")).toBe(false);
+  });
+
+  test("on a phone with phone use on, the Linux page's options hold the Phone row", async () => {
+    const network = { [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) };
+    const on = await open(HARNESS, options(network, { platform: "android", phone: { supported: true, enabled: true } }));
+    await on.waitFor("id:screen-options");
+    // The button shows once Phone use is read; a press before its first layout lands nowhere.
+    for (let tries = 0; !on.shows("id:screen-phone") && tries < 5; tries += 1) {
+      await on.press("id:screen-options");
+      await on.waitFor("id:screen-phone", { timeout: 1_000 }).catch(() => {});
+    }
+    expect(on.shows("id:screen-phone")).toBe(true);
   });
 
   test("a first read that fails ends the wait and explains it", async () => {

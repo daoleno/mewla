@@ -1,4 +1,4 @@
-import { computed, effect, host, platform, signal, Storage, Text, untracked, View, windowSize } from "nsh";
+import { computed, effect, host, Keyboard, platform, signal, Storage, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button, createNavStack, NavStack, ResizablePanel, ResizablePanelGroup, type NavStackState } from "nsh/base";
 import { PageStack } from "./NavPage";
@@ -35,6 +35,8 @@ import { needsYou } from "./attention";
 import { settingsLinkRoutes } from "../../core/settings/settingsLink";
 import { setOpenExtensions } from "../more/extensions/plugins";
 import { tabTitle } from "../../core/sessions/attention";
+import { sessionRowModel } from "../../core/sessions/listRow";
+import { workLinkOf } from "../sessions/workLinks";
 
 const tabs = [
   { key: "brain", title: "Brain", ios: "sparkles", android: "tab_brain" },
@@ -194,13 +196,18 @@ export function openScreenPage(worker: string | null) {
   moreNav.setRoutes([{ name: "more" }, screenRoute(worker)]);
 }
 
-/** The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen. */
+/**
+ * The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen or the
+ * Phone page. From the shown tab's top route: every tab's stack stays mounted, so a Phone page left under More
+ * hid the phone's float over the other tabs (phone 19).
+ */
 const floatPage = () => {
   const tab = selectedTab();
   const top = stacks[tab]?.routes().at(-1) as { name: string; workerId?: string; id?: string } | undefined;
   return {
     owner: routeOwner(top, (id) => workFiles().find((item) => item.id === id)?.frontmatter.worker_session),
     screenPage: tab === 3 && top?.name === "screen",
+    phonePage: tab === 3 && top?.name === "settings-phone",
   };
 };
 
@@ -250,6 +257,14 @@ function moreRoute(route: MoreRoute) {
  * and what Back does. Around the stack, not each page: a NavStack's page must be its NavPage.
  */
 function Paged<R>(props: { nav: NavStackState<R>; children: JSX.Element }) {
+  // Leaving a page (Back, a pop) takes its field's keyboard down with it; a page pushed on top
+  // may focus its own field, so only its page's composer lets go then (Composer's `active`).
+  let depth = untracked(() => props.nav.routes().length);
+  effect(() => {
+    const now = props.nav.routes().length;
+    if (now < depth) Keyboard.dismiss();
+    depth = now;
+  });
   if (mobile) return props.children;
   return <PageStack.Provider value={{ canGoBack: () => props.nav.routes().length > 1, back: () => props.nav.pop() }}>{props.children}</PageStack.Provider>;
 }
@@ -268,13 +283,17 @@ function Section(props: { index: number }) {
 }
 
 /**
- * The Session's own name for the tab title, as the list knows it. A computed: the list changes
- * with every status line, and only a new name may rewrite the history entry.
+ * The Session's title for the tab, as its row and its page name it (a Session the daemon named
+ * after its id is named by its folder or command, not "mh-… (mh-…)"). A computed: the list changes
+ * with every status line, and only a new title may rewrite the history entry.
  */
 const pageTitle = computed((): string | null => {
   const place = currentPlace();
   if (place.key !== "session") return null;
-  return workers().find((worker) => worker.id === place.workerId)?.name || null;
+  const worker = workers().find((w) => w.id === place.workerId);
+  if (!worker) return null;
+  const link = workLinkOf(worker);
+  return sessionRowModel(worker, { workTitle: link?.workTitle, calendarLabel: link?.calendarLabel }).title || null;
 });
 
 /**
@@ -322,6 +341,13 @@ function WideShell() {
 }
 
 export function Shell() {
+  // Another tab hides the page whose field had the keyboard: it goes down too (R4#4).
+  let shownTab = untracked(selectedTab);
+  effect(() => {
+    const tab = selectedTab();
+    if (tab !== shownTab) Keyboard.dismiss();
+    shownTab = tab;
+  });
   if (!mobile) return <WideShell />;
   return (
     <View class="flex-1 bg-background">

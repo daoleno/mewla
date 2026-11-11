@@ -292,8 +292,15 @@ func TestHostInventoryNeverReadsACrashAsTheEnd(t *testing.T) {
 	if _, err := w.sessions().resolveAbsence(id, true); !errors.Is(err, ErrOwnershipProbeUnavailable) {
 		t.Fatalf("resolveAbsence after the host vanished = %v", err)
 	}
-	// A fresh process that never saw the host: the Session is gone with it.
-	if gone, err := w.sessions().resolveAbsence(id, false); err != nil || !gone {
+	// A vanished host stays unknown whatever tmux saw: it is this process having
+	// reached a host that counts.
+	if _, err := w.sessions().resolveAbsence(id, false); !errors.Is(err, ErrOwnershipProbeUnavailable) {
+		t.Fatalf("resolveAbsence after the host vanished, tmux never seen = %v", err)
+	}
+	// A fresh process that never reached the host (a restart, a reboot): the
+	// Session is gone with it, also when tmux answered.
+	fresh := hostWatcher(t, h)
+	if gone, err := fresh.sessions().resolveAbsence(id, true); err != nil || !gone {
 		t.Fatalf("resolveAbsence in a process that never saw a host = %v, %v", gone, err)
 	}
 }

@@ -107,6 +107,19 @@ describe("the Calendar tab", () => {
     await app.waitFor("id:calendar-empty");
   }, 20_000);
 
+  test("a chosen chip keeps its label's weight, so choosing Weekly never widens it into two lines", async () => {
+    const app = await calendarApp({ calendar_items: [] });
+    await app.waitFor("id:calendar-empty");
+    await app.press("id:add-item");
+    await app.waitFor("id:editor-repeat-weekly");
+    await app.press("id:editor-repeat-weekly");
+    await app.wait(100);
+    const chosen = app.spanStyle("id:editor-repeat-weekly >> text:Weekly");
+    const other = app.spanStyle("id:editor-repeat-daily >> text:Daily");
+    expect(chosen.fontWeight).toBe(other.fontWeight);
+    expect(chosen.color).not.toBe(other.color);
+  });
+
   test("a new reminder takes its date and time from the system's pickers, in the phone's zone", async () => {
     const app = await calendarApp({ calendar_items: [] }, {
       "calendar.pickDate": () => ({ year: 2031, month: 7, day: 14 }),

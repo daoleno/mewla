@@ -87,6 +87,28 @@ func TestHostSessionIDs(t *testing.T) {
 	}
 }
 
+// TestHostGoneAfterARestartIsAbsentEvenWithTmuxSeen: after a reboot or a restart the
+// session host is not running and this process never reached one, so a host Session an
+// earlier run recorded (Brain's) is gone with it, also when a tmux server answered the
+// inventory. It read as unknown, so Brain was neither reused nor replaced and never
+// started again (FAILURES Round 4 #15).
+func TestHostGoneAfterARestartIsAbsentEvenWithTmuxSeen(t *testing.T) {
+	root := t.TempDir()
+	w := New(50 * time.Millisecond)
+	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
+	w.SetSessionHost(SessionHostConfig{
+		SocketPath: filepath.Join(root, "run", "host-00000000.sock"),
+		Executable: "/nonexistent/mewla",
+		StateDir:   filepath.Join(root, "state"),
+		Version:    "t",
+	})
+	w.sawTmuxServer.Store(true) // a tmux server answered the inventory
+	recorded := "mh-0123456789abcdef01234567"
+	if gone, err := w.ResolveDelegatedAbsence(recorded); err != nil || !gone {
+		t.Fatalf("Brain's Session from before the restart = gone %v, %v; want gone", gone, err)
+	}
+}
+
 // TestHostOnlyInventoryNeedsNoTmux: on a computer without tmux (Windows) the
 // first inventory is empty until the host runs, so the watcher becomes ready
 // and Brain's host can start; tmux is never asked.

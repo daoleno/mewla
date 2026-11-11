@@ -1,14 +1,15 @@
-import { platform, Scroll, signal, Text, View, WebView } from "nsh";
+import { effect, keyboardFrame, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
 import { ScreenConnection, type ScreenRoute } from "../../../core/screen/screen";
-import { activeModifiers, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendModifiers, tapModifier, type ModifierState } from "../../../core/screen/screenPageModel";
+import { activeModifiers, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
 import { startLiveDeadline, LIVE_DEADLINE_REASON } from "../../../core/screen/screenLiveDeadline";
 import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type ScreenModifier, type ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
 import type { ScreenStreamStats } from "../../../core/screen/screenStream";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { SCREEN_VIEWER_SOURCE } from "./viewerSource";
+import { viewerBaseUrl } from "../../viewerBase";
 
 export interface RemoteModifier {
   key: ScreenModifier;
@@ -52,9 +53,6 @@ export function needsSoftKeyboard(): boolean {
   return platform.os !== "web" || !platform.desktop;
 }
 
-// The document's base: WebCodecs (the video decoder) exists only in a secure
-// context. `.invalid` never resolves and the CSP forbids every request.
-const VIEWER_BASE_URL = "https://viewer.mewla.invalid/";
 
 /** Pixel-only document with no network access: the app relays the RFB bytes. */
 export function viewerHtml(): string {
@@ -303,7 +301,11 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
 
   const typed = (next: string) => {
     const edit = keyboardEdit(next);
-    value.set(KEYBOARD_SENTINEL);
+    // The field holds `next` now. Setting the sentinel while the signal still held it changed
+    // nothing, so the field kept every key and each change re-sent all of it (screen [67]):
+    // record what it holds, then put the sentinel back before the next key arrives.
+    value.set(next);
+    queueMicrotask(() => value.set(KEYBOARD_SENTINEL));
     if (edit.kind === "none") return;
     const active = activeModifiers(mods());
     if (edit.kind === "backspace") for (let i = 0; i < edit.count; i++) props.session.key("BackSpace", active);
@@ -314,6 +316,15 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
     props.session.key(key, activeModifiers(mods()));
     mods.set(spendModifiers(mods()));
   };
+  // Android's Back hides the keyboard without blurring the field: end typing when it goes down.
+  let keyboardSeen = false;
+  if (soft) {
+    effect(() => {
+      const step = typingKeyboardStep(keyboardSeen, props.typing, keyboardFrame().height > 0);
+      keyboardSeen = step.seen;
+      if (step.end) untracked(() => props.onTypingChange(false));
+    });
+  }
 
   return (
     <View class={props.class ?? "flex-1"}>
@@ -323,7 +334,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
         accessibilityLabel={props.label}
         class="flex-1 bg-background"
         html={html}
-        baseUrl={VIEWER_BASE_URL}
+        baseUrl={viewerBaseUrl}
         scrollable={false}
         onMessage={(e) => props.session.onViewer(e.data)}
       />

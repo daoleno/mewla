@@ -1508,12 +1508,15 @@ Java_com_daoleno_mewla_terminal_Vt_nativeRowRuns(JNIEnv* env, jobject, jlong han
                     uint32_t fg = argbOf(resolveEffectiveForeground(style, colors, hasFg, fgc));
                     GhosttyColorRgb eb; bool nonDefaultBg = resolveEffectiveBackground(style, colors, hasBg, bgc, &eb);
                     uint32_t bg = nonDefaultBg ? argbOf(eb) : 0;
-                    jint flags = (style.flags & GHOSTTY_STYLE_FLAG_BOLD ? 1 : 0) | (style.flags & GHOSTTY_STYLE_FLAG_ITALIC ? 2 : 0) | ((style.flags & GHOSTTY_STYLE_UNDERLINE_MASK) ? 4 : 0) | (style.flags & GHOSTTY_STYLE_FLAG_INVERSE ? 8 : 0);
+                    // Concealed text (SGR 8, e.g. the daemon's origin marker) is packed as blanks: its
+                    // background stays, its glyphs and underline do not (TerminalVt.cpp does the same).
+                    bool concealed = (style.flags & GHOSTTY_STYLE_FLAG_INVISIBLE) != 0;
+                    jint flags = (style.flags & GHOSTTY_STYLE_FLAG_BOLD ? 1 : 0) | (style.flags & GHOSTTY_STYLE_FLAG_ITALIC ? 2 : 0) | ((style.flags & GHOSTTY_STYLE_UNDERLINE_MASK) && !concealed ? 4 : 0) | (style.flags & GHOSTTY_STYLE_FLAG_INVERSE ? 8 : 0);
                     jint width = wide == GHOSTTY_CELL_WIDE_WIDE ? 2 : 1;
                     if (runCol < 0 || fg != runFg || bg != runBg || flags != runFlags || width == 2) { flush(); runCol = col; runFg = fg; runBg = bg; runFlags = flags; }
                     bool hasText = false; ghostty_cell_get(cell, GHOSTTY_CELL_DATA_HAS_TEXT, &hasText);
                     uint32_t cp = 0; ghostty_cell_get(cell, GHOSTTY_CELL_DATA_CODEPOINT, &cp);
-                    if (!hasText || cp == 0) runText.push_back(u' ');
+                    if (concealed || !hasText || cp == 0) runText.push_back(u' ');
                     else {
                         uint32_t glen = 0;
                         if (ghostty_render_state_row_cells_get(cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN, &glen) == GHOSTTY_SUCCESS && glen > 1) {

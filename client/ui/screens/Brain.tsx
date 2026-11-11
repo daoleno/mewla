@@ -107,7 +107,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
   return (
     <View class="flex-1">
       {surface() === "chat" ? (
-        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers}
+        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={() => selectedTab() === 0 && brainNav.routes().length === 1}
           empty={() => (brainThread().loading ? <Notice title={connection() === "connected" ? "Loading…" : "The conversation shows when your computer is back"} /> : <Notice title="What should Brain do?" detail="Brain plans the work and runs the agents on your computer." />)} />
       ) : surface() === "waking" ? (
         <Notice title="Brain is starting…" />

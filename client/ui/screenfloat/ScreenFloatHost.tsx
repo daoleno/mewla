@@ -20,7 +20,7 @@ import { Icon } from "../more/kit/Icon";
 import { Spinner } from "../more/kit/kit";
 import { LINUX_MODIFIERS, MAC_MODIFIERS, RemoteSession, RemoteView } from "../more/screen/RemoteView";
 import { PhoneLiveView } from "../phone/contract";
-import { phoneAvailable, phoneControl, phonePageOpen, phoneStatus } from "../phone/state";
+import { phoneAvailable, phoneControl, phoneStatus } from "../phone/state";
 import { current, workers } from "../session";
 import { ScreenFloat, type FloatMenuItem } from "./ScreenFloat";
 
@@ -35,8 +35,8 @@ const FRAME_MAX = 720;
 const KEY_BAR = 53;
 
 export interface ScreenFloatHostProps {
-  /** The page the person is on (the Phone page is read here): whose it is, and whether it is Screen. */
-  page: () => Omit<FloatPage, "phonePage">;
+  /** The page the person is on: whose it is, and whether it is Screen or the Phone page (on screen, not just mounted under a hidden tab). */
+  page: () => FloatPage;
   onOpenPhone: () => void;
   /** Opens Screen (for a display, its Worker's). */
   onOpenScreen: (worker: string | null) => void;
@@ -138,7 +138,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
     for (const agent of mac()) out.push(macSource({ ...agent, name: agent.name || list.find((candidate) => candidate.id === agent.worker)?.name }));
     return out;
   });
-  const sources = computed(() => floatSources(all(), { ...props.page(), phonePage: phonePageOpen() }));
+  const sources = computed(() => floatSources(all(), props.page()));
   const source = () => pickSource(sources(), picked());
   effect(() => {
     const keys = sources().filter((s) => s.kind === "display").map((s) => s.key);

@@ -374,7 +374,8 @@ describe("Git review: the reader", () => {
     await app.type("id:ask-comment", "Why 3?");
     await app.press("id:ask-send");
     await app.waitUntil(() => sent().length === 2);
-    expect(sent()[1]!.text).toBe("In the working-tree diff, app.ts:1-3:\n>   const a = 1;\n> + const b = 3;\n>   const c = 4;\n\nWhy 3?");
+    // The hunk goes whole, its removed line too (FAILURES R4#5).
+    expect(sent()[1]!.text).toBe("In the working-tree diff, app.ts:1-3:\n>   const a = 1;\n> - const b = 2;\n> + const b = 3;\n>   const c = 4;\n\nWhy 3?");
   });
 
   test("a Session without an agent offers no Ask", async () => {
@@ -498,6 +499,27 @@ describe("Git review: the repository's files on a phone", () => {
     await app.back();
     await app.waitFor("id:git-file-src/lib/util.ts");
     await app.press("id:git-file-src/lib/util.ts");
+    await app.waitFor("id:git-file-view");
+  });
+});
+
+describe("Git review: searching the repository's files on a phone", () => {
+  test("what a search finds is a list that keeps the keyboard's taps: one press opens the file (FAILURES R4#6)", async () => {
+    const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }]);
+    await app.waitFor("id:git-row-changes:app.ts");
+    app.onDialog((dialog) => (dialog.sheet ? "Browse files" : null));
+    await answering(app, () => app.press("id:git-more"));
+    await app.waitFor("id:git-files-query");
+    await app.type("id:git-files-query", "util");
+    await app.waitFor("id:git-files-results");
+    expect(app.shows("id:git-file-dir:src/lib")).toBe(true);
+    expect(app.shows("id:git-file-app.ts")).toBe(false);
+    // Another search: the list's cells show what this one found, not the last one's rows.
+    await app.clear("id:git-files-query");
+    await app.type("id:git-files-query", "app");
+    await app.waitFor("id:git-file-app.ts");
+    expect(app.shows("id:git-file-src/lib/util.ts")).toBe(false);
+    await app.press("id:git-file-app.ts");
     await app.waitFor("id:git-file-view");
   });
 });

@@ -14,6 +14,18 @@ export type KeyboardEdit =
   | { kind: "backspace"; count: number }
   | { kind: "none" };
 
+/**
+ * Typing on a remote screen while the soft keyboard is up: Android's Back hides the keyboard
+ * without blurring the hidden field, so typing (the key bar, the tinted button) stayed on (screen
+ * [69]). One step per keyboard change: `seen` is whether the keyboard came up during this typing;
+ * `end` says to stop typing because it went down after that. A keyboard not up yet is no hide.
+ */
+export function typingKeyboardStep(seen: boolean, typing: boolean, keyboardUp: boolean): { seen: boolean; end: boolean } {
+  if (!typing) return { seen: false, end: false };
+  if (keyboardUp) return { seen: true, end: false };
+  return { seen: false, end: seen };
+}
+
 /** Turns one soft-keyboard edit of the sentinel field into keystrokes. */
 export function keyboardEdit(next: string): KeyboardEdit {
   if (next === KEYBOARD_SENTINEL) return { kind: "none" };

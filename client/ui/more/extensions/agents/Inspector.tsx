@@ -6,7 +6,7 @@ import { pluginAgentLabel, type InstalledPluginCopy } from "../../../../core/ext
 import { pluginCopyLabel, pluginReadonlyReason, type LogicalPlugin } from "../../../../core/extensions/pluginsScreenModel";
 import { skillFileLink, skillImagePath } from "../../../../core/extensions/skillImagePath";
 import { resolveSkillCopyPluginOwner, skillPluginStatusReason } from "../../../../core/extensions/skillsPluginOwnership";
-import { buildSkillFileTree, defaultSkillFile, skillCopyLocation, skillRenderer, type LogicalSkill, type SkillTreeNode } from "../../../../core/extensions/skillsScreenModel";
+import { buildSkillFileTree, defaultSkillFile, skillCopyLocation, skillMarkdownBody, skillRenderer, type LogicalSkill, type SkillTreeNode } from "../../../../core/extensions/skillsScreenModel";
 import { skillRowSupportsDelete } from "../../../../core/extensions/skillsSurfaceModel";
 import { scopeLabel, type InstalledSkill, type ManagedSkillAgent, type PackageDetail } from "../../../../core/extensions/skillsManagement";
 import { failureText } from "../../../../core/more/daemon";
@@ -192,7 +192,7 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
           <View onLayout={({ bounds }) => markdownWidth.set(bounds.size.width)}>
           <TextView
             testID="skill-markdown"
-            markdown={preview()?.content || "This file is empty."}
+            markdown={skillMarkdownBody(preview()?.content ?? "") || "This file is empty."}
             selectable
             class="text-base"
             onLinkPress={(event) => openLink(event.url)}
