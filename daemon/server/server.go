@@ -1517,10 +1517,14 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 				break
 			}
 			log.Printf("send_input failed worker=%s request=%s: %v", raw.WorkerID, raw.RequestID, err)
+			code := "send_input_failed"
+			if errors.Is(err, watcher.ErrPromptOpen) {
+				code = "prompt_open"
+			}
 			s.sendJSON(conn, map[string]any{
 				"type":       "input_failed",
 				"request_id": raw.RequestID,
-				"code":       "send_input_failed",
+				"code":       code,
 				"message":    err.Error(),
 			})
 		} else {

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // PromptKind names what a blocking prompt in an agent's terminal asks for.
@@ -52,6 +53,10 @@ type Prompt struct {
 	Questions []PromptQuestion `json:"questions,omitempty"`
 	// CallID is the provider tool call behind a choice prompt, when known.
 	CallID string `json:"call_id,omitempty"`
+	// Unnumbered says the menu shows no numbers (Claude's folder trust since
+	// 2.1.322): Options are numbered by position, and an answer moves the
+	// cursor to its row and presses Enter, since a typed number does nothing.
+	Unnumbered bool `json:"unnumbered,omitempty"`
 }
 
 // PromptOption is one row of a numbered menu. Number is the digit the
@@ -87,6 +92,7 @@ func PromptID(kind PromptKind, parts ...string) string {
 var (
 	promptRowRe     = regexp.MustCompile(`^\s*(?:[❯›>]\s*)?(\d{1,2})[.)]\s+(\S.*)$`)
 	promptCursorRe  = regexp.MustCompile(`^\s*[❯›>]\s*\d`)
+	cursorRowRe     = regexp.MustCompile(`^\s*[❯›]\s+(\S.*)$`)
 	promptBoxEdgeRe = regexp.MustCompile(`^[\s│┃|]+`)
 	promptRuleRe    = regexp.MustCompile(`^[\s─━╌╍┄┅┈┉-]{6,}$`)
 	promptTabBarRe  = regexp.MustCompile(`([☐☒])\s+(.+?)(?:\s{2,}|$)`)
@@ -308,6 +314,10 @@ func ParseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 // locateMenu finds the numbered menu at the bottom of pane: body is every line
 // above its footer, menuStart the index in body of the menu's first row.
 func locateMenu(pane string, footerPrefixes []string) (body []string, options []PromptOption, menuStart int, ok bool) {
+	return locateMenuWith(pane, footerPrefixes, parseNumberedMenu)
+}
+
+func locateMenuWith(pane string, footerPrefixes []string, parseMenu func([]string) ([]PromptOption, int, bool)) (body []string, options []PromptOption, menuStart int, ok bool) {
 	lines := strings.Split(strings.ReplaceAll(pane, "\r\n", "\n"), "\n")
 	last := len(lines) - 1
 	for last >= 0 && strings.TrimSpace(lines[last]) == "" {
@@ -337,11 +347,68 @@ func locateMenu(pane string, footerPrefixes []string) (body []string, options []
 	if footer >= 0 {
 		body = lines[:footer]
 	}
-	options, menuStart, ok = parseNumberedMenu(body)
+	options, menuStart, ok = parseMenu(body)
 	if !ok || len(options) < 2 {
 		return nil, nil, 0, false
 	}
 	return body, options, menuStart, true
+}
+
+// ParseCursorMenuPrompt is ParseMenuPrompt for a menu that shows no numbers,
+// only a cursor on one of its rows (Claude's folder trust since 2.1.322).
+func ParseCursorMenuPrompt(provider string, kind PromptKind, pane string, footerPrefixes ...string) (Prompt, bool) {
+	body, options, start, ok := locateMenuWith(pane, footerPrefixes, parseCursorMenu)
+	if !ok {
+		return Prompt{}, false
+	}
+	prompt, _ := menuPrompt(provider, kind, body, options, start)
+	prompt.Unnumbered = true
+	return prompt, true
+}
+
+// parseCursorMenu reads a menu without numbers that ends lines: the block of
+// rows after the last blank line, their labels in one column, exactly one row
+// behind the cursor. Anything else in the block (a numbered row, a wrapped or
+// indented line) means it is not such a menu.
+func parseCursorMenu(lines []string) ([]PromptOption, int, bool) {
+	end := len(lines) - 1
+	for end >= 0 && strings.TrimSpace(lines[end]) == "" {
+		end--
+	}
+	start := end
+	for start > 0 && strings.TrimSpace(lines[start-1]) != "" {
+		start--
+	}
+	if end < 0 || end-start+1 < 2 || end-start+1 > 9 {
+		return nil, 0, false
+	}
+	var options []PromptOption
+	column, cursor := -1, false
+	for index := start; index <= end; index++ {
+		text := strings.TrimRight(lines[index], " \t")
+		if promptRowRe.MatchString(text) {
+			return nil, 0, false
+		}
+		label, at, selected := strings.TrimLeft(text, " "), 0, false
+		if match := cursorRowRe.FindStringSubmatchIndex(text); match != nil {
+			if cursor {
+				return nil, 0, false
+			}
+			cursor, selected = true, true
+			label, at = text[match[2]:], utf8.RuneCountInString(text[:match[2]])
+		} else {
+			at = len(text) - len(label)
+		}
+		if column >= 0 && at != column {
+			return nil, 0, false
+		}
+		column = at
+		options = append(options, PromptOption{Number: len(options) + 1, Label: collapse(label), Selected: selected})
+	}
+	if !cursor {
+		return nil, 0, false
+	}
+	return options, start, true
 }
 
 func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefixes ...string) (Prompt, menuMeta, bool) {
@@ -349,6 +416,11 @@ func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 	if !ok {
 		return Prompt{}, menuMeta{}, false
 	}
+	prompt, meta := menuPrompt(provider, kind, body, options, start)
+	return prompt, meta, true
+}
+
+func menuPrompt(provider string, kind PromptKind, body []string, options []PromptOption, start int) (Prompt, menuMeta) {
 	title, request, full, meta := menuRequest(body, start)
 	labels := make([]string, 0, len(options)+2)
 	labels = append(labels, withoutVolatileLines(full))
@@ -362,7 +434,7 @@ func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 		Title:    title,
 		Request:  withoutVolatileLines(request),
 		Options:  options,
-	}, meta, true
+	}, meta
 }
 
 // ParseChoiceTabs reads the tab headers of an AskUserQuestion prompt, in
