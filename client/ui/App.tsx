@@ -4,7 +4,8 @@ import { installPlatform } from "../core/platform";
 import { nshPlatform } from "./platform";
 import { pairFromText } from "./screens/Onboarding";
 import { current, loadSession, ready, resumeConnection } from "./session";
-import { FirstRun, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
+import { FirstRun, openPhone, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
+import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
 import { startNotifications } from "./push/push";
 import { startAppUpdate } from "./update/update";
@@ -44,6 +45,8 @@ host.on("links.open", (payload) => {
   const url = (payload as { url?: string } | null)?.url;
   if (!url) return;
   if (readPairingLink(url)) return void pairFromText(url);
+  // Phone use's notifications, its picture-in-picture tap and Take over open its page.
+  if (isPhoneLink(url)) return openPhone();
   const section = sectionOfLink(url);
   if (section !== null) selectedTab.set(section);
 });

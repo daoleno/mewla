@@ -1,5 +1,6 @@
 import { computed, untracked, signal, Text, View } from "nsh";
-import { Button, NavPage } from "nsh/base";
+import { Button } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
 import { finalReplyIdsOf } from "../../core/timeline/model";
@@ -12,7 +13,8 @@ import { createChatTimeline } from "../../core/conversation/timeline";
 import type { BrainWorkResultEvent } from "../../core/timeline/brainWorkEvent";
 import type { BrainCurrentWork } from "../../core/timeline/types";
 import { markWorkRead } from "../../core/work/brainWork";
-import { brainNav } from "../shell/Shell";
+import { brainNav, selectedTab } from "../shell/Shell";
+import { lastEditablePrompt } from "../../core/web/composer";
 import { WorkHeaderButton } from "../work/WorkPage";
 import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport } from "../session";
 
@@ -59,7 +61,8 @@ function surface() {
   return brainSurface({ hasServer: Boolean(current()), connected: connection() === "connected", snapshot: brain() });
 }
 
-async function startNewChat(): Promise<void> {
+/** New chat (Brain's header, the desktop palette). */
+export async function startNewChat(): Promise<void> {
   const transport = currentTransport();
   if (!transport || startingChat()) return;
   startingChat.set(true);
@@ -105,7 +108,12 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
   return (
     <ChatComposer text={props.text} placeholder="Tell Brain…" canSend={() => Boolean(brainChat())}
       onSend={(value) => (untracked(editor.edit) ? (void editor.send(value), false) : brainChat()?.send(value))}
-      running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"} onStop={() => void stop()}>
+      running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"} onStop={() => void stop()}
+      active={() => selectedTab() === 0 && brainNav.routes().length === 1}
+      onRecall={() => {
+        const item = lastEditablePrompt(untracked(items), { connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
+        if (item) editor.open(item);
+      }}>
       {connection() !== "connected" && surface() === "chat" ? (
         <Text testID="offline" class="pb-1.5 text-center text-sm text-muted-foreground">Offline · messages send when your computer is back</Text>
       ) : null}
@@ -139,7 +147,7 @@ export function Brain() {
     workingSince: () => activity()?.started_at,
   };
   return (
-    <NavPage title="Brain" headerLeft={<WorkHeaderButton onPress={() => brainNav.push({ name: "work" })} />}
+    <NavPage title="Brain" column="reading" headerLeft={<WorkHeaderButton onPress={() => brainNav.push({ name: "work" })} />}
       headerRight={<Button testID="new-chat" onPress={() => void startNewChat()} disabled={connection() !== "connected" || startingChat()}><Text class="text-base text-primary">New chat</Text></Button>}>
       <View class="flex-1 bg-background">
         <Body handlers={handlers} />

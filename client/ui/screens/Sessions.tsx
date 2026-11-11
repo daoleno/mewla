@@ -1,5 +1,6 @@
 import { computed, effect, List, signal, Storage, Text, untracked, View } from "nsh";
-import { AlertDialog, Button, NavPage, type NavStackState } from "nsh/base";
+import { AlertDialog, Button, type NavStackState } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { servicesOpen } from "../sessions/ServicesSheet";

@@ -1,5 +1,6 @@
 import { List, Scroll, signal, Text, View } from "nsh";
-import { AlertDialog, Button, Input, NavPage } from "nsh/base";
+import { AlertDialog, Button, Input } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { markWorkRead, objectiveLine, workAction } from "../../core/work/brainWork";
 import {

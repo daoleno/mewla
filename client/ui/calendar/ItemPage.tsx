@@ -1,4 +1,5 @@
-import { AlertDialog, Button, NavPage, TextView } from "nsh/base";
+import { AlertDialog, Button, TextView } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { effect, Scroll, signal, Text, View } from "nsh";
 import {
