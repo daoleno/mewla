@@ -5,6 +5,7 @@ import {
   filterLogicalSkills,
   filterInstalledSkills,
   groupLogicalSkills,
+  skillMarkdownBody,
   skillRenderer,
 } from "./skillsScreenModel";
 import type { InstalledSkill, PackageFile } from "./skillsManagement";
@@ -165,5 +166,19 @@ describe("local Skills screen model", () => {
     expect(skillRenderer("json", '{"ok":true}')).toBe("json");
     expect(skillRenderer("json", "{")).toBe("invalid-json");
     expect(skillRenderer("binary")).toBe("binary");
+  });
+});
+
+describe("a SKILL.md's Markdown", () => {
+  test("leaves out the frontmatter (shown as the Overview), so its closing --- does not make a heading", () => {
+    const md = "---\nname: verify-demo\ndescription: Scratch Skill.\n---\n\n# Verify demo\nBody.";
+    expect(skillMarkdownBody(md)).toBe("# Verify demo\nBody.");
+    expect(skillMarkdownBody("---\r\nname: x\r\n---\r\n# T")).toBe("# T");
+  });
+
+  test("keeps a file without frontmatter, and a rule that is not one, as it is", () => {
+    expect(skillMarkdownBody("# T\n\n---\n\nmore")).toBe("# T\n\n---\n\nmore");
+    expect(skillMarkdownBody("---\nno closing fence")).toBe("---\nno closing fence");
+    expect(skillMarkdownBody("")).toBe("");
   });
 });

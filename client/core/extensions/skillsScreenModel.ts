@@ -247,6 +247,16 @@ export function defaultSkillFile(
   );
 }
 
+/**
+ * A Markdown file's text without its leading YAML frontmatter (`---` … `---`). The Overview
+ * already shows a Skill's name and description; as Markdown, the block's closing `---` turns
+ * its lines into a setext heading. Anything else is left as it is.
+ */
+export function skillMarkdownBody(content: string): string {
+  const match = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(content);
+  return match ? content.slice(match[0].length).replace(/^(?:[ \t]*\r?\n)+/, "") : content;
+}
+
 export function skillRenderer(
   kind: PackageFile["kind"],
   content?: string,
