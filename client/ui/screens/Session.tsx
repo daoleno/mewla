@@ -21,7 +21,7 @@ import { CHOICE_GONE_NOTICE, choiceFromPrompt, isPromptGoneError, latestPendingC
 import type { CodexSlashCommand } from "../../core/session/codexSlashCommands";
 import type { ComposerAlert, ComposerSendRoute } from "../../core/session/composerSlash";
 import { resolveComposerModelControl } from "../../core/session/sessionModelHelpers";
-import { canSwitchModel, chatSlashCommands, getThreadRuntime } from "../../core/session/sessionRequests";
+import { canSwitchModel, chatSlashCommands, codexAsset, getThreadRuntime } from "../../core/session/sessionRequests";
 import type { ThreadRuntimeSelection } from "../../core/providers/types";
 import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
@@ -53,6 +53,29 @@ import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "./Sessions";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
+
+/**
+ * Reply images read from the computer, by computer, folder and path: a recycled row or a
+ * streaming reply draws an image again without asking again. A switch of computer clears it.
+ */
+const assets = new Map<string, Promise<string | null>>();
+let assetsFor = "";
+function cachedAsset(serverId: string, cwd: string | undefined, path: string, load: () => Promise<string | null>): Promise<string | null> {
+  if (assetsFor !== serverId) {
+    assets.clear();
+    assetsFor = serverId;
+  }
+  const key = `${cwd ?? ""}|${path}`;
+  let asset = assets.get(key);
+  if (!asset) {
+    asset = load().catch((error) => {
+      assets.delete(key);
+      throw error;
+    });
+    assets.set(key, asset);
+  }
+  return asset;
+}
 
 /** The person's chat-or-terminal choice per Session, saved on the device (Expo's key). */
 const storedModes = signal<StoredInterfaceRenderModes>({});
@@ -136,8 +159,11 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     workingSince: () => activity()?.started_at,
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),
+    loadImage: (path: string) => cachedAsset(server.id, untracked(worker)?.cwd, path, () => codexAsset(transport, path, untracked(worker)?.cwd)),
   };
   const stoppingFor = signal("");
+  /** The person's sends from this screen: each brings the sent message to the top. */
+  const sends = signal(0);
   const durability = signal(hint.durabilityWarning ?? "");
   const fallback = computed(() => terminalFallback(connection(), connectionProblem()));
   const notice = signal("");
@@ -369,6 +395,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     switch (route.kind) {
       case "send":
         chat.send(route.text, uploads.ready());
+        sends.set(untracked(sends) + 1);
         uploads.clear();
         return fromDraft;
       case "prefill":
@@ -543,7 +570,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
-              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} />
+              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"}
