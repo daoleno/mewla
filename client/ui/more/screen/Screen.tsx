@@ -392,13 +392,17 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   };
 
   // Only where phone use is on; it says who is using the phone, and opens the phone's own page.
+  // Rebuilt only when it comes or goes: a status read while the menu is open never takes the item from under a finger.
+  const phoneOn = computed(() => phoneAvailable() && !!phoneStatus()?.enabled);
   const phoneItem = () =>
-    phoneAvailable() && phoneStatus()?.enabled ? (
-      <MenuItem testID="screen-phone" onSelect={() => props.nav.push({ name: "settings-phone" })} class={ITEM}>
-        <Text class="text-base">Phone</Text>
-        <Text class="text-sm text-muted-foreground">{phoneStatus()?.agent || "Ready"}</Text>
-      </MenuItem>
-    ) : null;
+    keyed(phoneOn, (on) =>
+      on ? (
+        <MenuItem testID="screen-phone" onSelect={() => props.nav.push({ name: "settings-phone" })} class={ITEM}>
+          <Text class="text-base">Phone</Text>
+          <Text class="text-sm text-muted-foreground">{phoneStatus()?.agent || "Ready"}</Text>
+        </MenuItem>
+      ) : null,
+    );
   const keepAwakeItem = () =>
     keyed(approved, (on) =>
       on ? (
