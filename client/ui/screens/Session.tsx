@@ -1,7 +1,8 @@
 import { cleanup, computed, effect, openUrl, signal, Storage, Text, untracked, View } from "nsh";
 import { listSessionServices } from "../../core/sessions/services";
 import { dshWebServiceURL } from "../../core/sessions/servicesPresentation";
-import { AlertDialog, Button, Input, NavPage, Sheet, type NavStackState } from "nsh/base";
+import { AlertDialog, Button, Input, Sheet, type NavStackState } from "nsh/base";
+import { NavPage } from "../shell/NavPage";
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
 import { createChatTimeline } from "../../core/conversation/timeline";
@@ -56,6 +57,29 @@ import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "./Sessions";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
+
+/**
+ * Reply images read from the computer, by computer, folder and path: a recycled row or a
+ * streaming reply draws an image again without asking again. A switch of computer clears it.
+ */
+const assets = new Map<string, Promise<string | null>>();
+let assetsFor = "";
+function cachedAsset(serverId: string, cwd: string | undefined, path: string, load: () => Promise<string | null>): Promise<string | null> {
+  if (assetsFor !== serverId) {
+    assets.clear();
+    assetsFor = serverId;
+  }
+  const key = `${cwd ?? ""}|${path}`;
+  let asset = assets.get(key);
+  if (!asset) {
+    asset = load().catch((error) => {
+      assets.delete(key);
+      throw error;
+    });
+    assets.set(key, asset);
+  }
+  return asset;
+}
 
 /** The person's chat-or-terminal choice per Session, saved on the device (Expo's key). */
 const storedModes = signal<StoredInterfaceRenderModes>({});
@@ -139,7 +163,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     workingSince: () => activity()?.started_at,
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),
-    loadImage: (path: string) => codexAsset(transport, path, untracked(worker)?.cwd),
+    loadImage: (path: string) => cachedAsset(server.id, untracked(worker)?.cwd, path, () => codexAsset(transport, path, untracked(worker)?.cwd)),
   };
   const stoppingFor = signal("");
   /** The person's sends from this screen: each brings the sent message to the top. */
@@ -505,7 +529,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   };
 
   return (
-    <NavPage title={title()}
+    <NavPage title={title()} column="wide"
       headerTitle={
         <View class="max-w-[260px] flex-row items-center gap-2">
           <AgentIcon kind={kind()} size={22} />

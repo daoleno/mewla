@@ -142,10 +142,13 @@ export function ChatTimeline(props: {
   // Read back from the newest row: the jump button brings it into view again, saying how old it is.
   const away = signal(false);
   const rows = computed(() => withDayDividers(props.items()));
-  // Back where the person left it, once the rows are there; at the newest row, nothing to restore.
+  // Back where the person left it, once the list and its rows are there; at the newest row, nothing to restore.
+  // Only the person's own scrolling moves the saved place, not the list settling as it mounts.
   let restore = props.scope ? readingPositions.get(props.scope) : undefined;
+  let touched = false;
+  const mounted = signal(false);
   effect(() => {
-    if (restore === undefined || rows().length === 0 || !list) return;
+    if (restore === undefined || rows().length === 0 || !mounted()) return;
     const offset = restore;
     restore = undefined;
     untracked(() => list?.scrollToOffset({ offset, animated: false }));
@@ -171,12 +174,16 @@ export function ChatTimeline(props: {
   return (
     <View class="flex-1">
       <SelectTextSheet />
-      <List testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => (list = node)}
+      <List testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
+          list = node;
+          mounted.set(true);
+        }}
+        onScrollDragStart={() => (touched = true)}
         maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
         onScroll={({ offset, contentSize, size }) => {
           const far = contentSize.height - (offset.y + size.height) > 240;
           away.set(far);
-          if (!props.scope) return;
+          if (!props.scope || !touched) return;
           if (far) readingPositions.set(props.scope, offset.y);
           else readingPositions.delete(props.scope);
         }}
