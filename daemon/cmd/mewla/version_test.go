@@ -10,7 +10,8 @@ import (
 	"testing"
 )
 
-func TestDefaultVersionMatchesAppBase(t *testing.T) {
+// The release version source is the NSH client's manifest (scripts/lib/release_identity.py).
+func TestDefaultVersionMatchesReleaseVersion(t *testing.T) {
 	t.Parallel()
 
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -19,31 +20,23 @@ func TestDefaultVersionMatchesAppBase(t *testing.T) {
 	}
 	// daemon/cmd/mewla -> repo root
 	root := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
-	basePath := filepath.Join(root, "app", "app.base.json")
-	raw, err := os.ReadFile(basePath)
+	manifestPath := filepath.Join(root, "client", "ui", "nsh.json")
+	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
-		t.Fatalf("read app.base.json: %v", err)
+		t.Fatalf("read client/ui/nsh.json: %v", err)
 	}
 	var doc struct {
-		Expo struct {
-			Version string `json:"version"`
-			Android struct {
-				Package     string `json:"package"`
-				VersionCode int    `json:"versionCode"`
-			} `json:"android"`
-		} `json:"expo"`
+		ID      string `json:"id"`
+		Version string `json:"version"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("parse app.base.json: %v", err)
+		t.Fatalf("parse client/ui/nsh.json: %v", err)
 	}
-	if doc.Expo.Version != Version {
-		t.Fatalf("Version %q != app.base.json expo.version %q", Version, doc.Expo.Version)
+	if doc.Version != Version {
+		t.Fatalf("Version %q != client/ui/nsh.json version %q", Version, doc.Version)
 	}
-	if doc.Expo.Android.Package != "com.daoleno.mewla" {
-		t.Fatalf("unexpected package %q", doc.Expo.Android.Package)
-	}
-	if doc.Expo.Android.VersionCode < 1 {
-		t.Fatalf("versionCode must be positive; got %d", doc.Expo.Android.VersionCode)
+	if doc.ID != "com.daoleno.mewla" {
+		t.Fatalf("unexpected app id %q", doc.ID)
 	}
 }
 

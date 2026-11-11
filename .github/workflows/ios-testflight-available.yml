@@ -102,7 +102,7 @@ jobs:
           curl -fsSL --retry 3 \
             "https://github.com/${{ github.repository }}/releases/download/${MEWLA_TESTFLIGHT_TAG}/testflight-manifest.json" \
             -o "$RUNNER_TEMP/previous.json" || echo '{}' > "$RUNNER_TEMP/previous.json"
-          BUNDLE_ID="$(node -p "require('./app/iosIdentity').resolveIOSIdentity('preview').bundleIdentifier")"
+          BUNDLE_ID="$(python3 scripts/lib/release_identity.py ios_preview_bundle_id)"
           python3 - "$BUNDLE_ID" available/available.json "$RUNNER_TEMP/previous.json" out/testflight-manifest.json "$GITHUB_OUTPUT" <<'PY'
           import json, sys
           bundle, found_path, previous_path, manifest_path, output = sys.argv[1:]

@@ -12,7 +12,7 @@
 # netgo and osusergo keep DNS and user lookups the same pure-Go code the
 # CGO_ENABLED=0 releases used.
 #
-# Reads product version from app/app.base.json (expo.version) unless MEWLA_VERSION is set.
+# Reads product version from client/ui/nsh.json (scripts/lib/release_identity.py) unless MEWLA_VERSION is set.
 # Embeds the web UI via scripts/build-web-ui.sh (NSH on PATH, or client/scripts/fetch-nsh.sh installs it).
 # Does not publish, tag, sign Android APKs, or read release keystores.
 #
@@ -90,7 +90,7 @@ done
 
 VERSION="${MEWLA_VERSION:-}"
 if [[ -z "$VERSION" ]]; then
-  VERSION="$(python3 -c "import json;print(json.load(open('app/app.base.json'))['expo']['version'])")"
+  VERSION="$(python3 "$ROOT/scripts/lib/release_identity.py" version)"
 fi
 
 if [[ -z "$OUT_DIR" ]]; then

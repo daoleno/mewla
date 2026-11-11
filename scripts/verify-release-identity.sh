@@ -6,9 +6,10 @@
 #   ./scripts/verify-release-identity.sh --tag vX.Y.Z
 #   ./scripts/verify-release-identity.sh --stage dist-download/vX.Y.Z
 #
-# The version, Android versionCode and iOS build number come from
-# app/app.base.json and app/ios-build.json. Every other identity source, the
-# tag, the release notes and the stage must agree with them.
+# The version is client/ui/nsh.json "version"; the Android versionCode and the
+# iOS build number follow from it (scripts/lib/release_identity.py). Every
+# other identity source (the client's Gradle and Xcode projects, the daemon),
+# the tag, the release notes and the stage must agree with them.
 
 set -euo pipefail
 
@@ -29,22 +30,18 @@ done
 EXPECTED_PACKAGE="com.daoleno.mewla"
 IFS=$'\t' read -r EXPECTED_VERSION EXPECTED_VERSION_CODE EXPECTED_IOS_BUILD_NUMBER < <(
   python3 - "$ROOT" <<'PY'
-import json, re, sys
+import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-expo = json.loads((root / "app/app.base.json").read_text(encoding="utf-8"))["expo"]
-version = expo.get("version")
-version_code = (expo.get("android") or {}).get("versionCode")
-ios_build = json.loads((root / "app/ios-build.json").read_text(encoding="utf-8")).get("buildNumber")
-if not isinstance(version, str) or not re.fullmatch(
-    r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?", version
-):
-    sys.exit(f"error: app.base.json version must be X.Y.Z or X.Y.Z-beta.N; got {version!r}")
-for label, value in (("app.base.json versionCode", version_code), ("ios-build.json buildNumber", ios_build)):
-    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-        sys.exit(f"error: {label} must be a positive integer; got {value!r}")
-print(f"{version}\t{version_code}\t{ios_build}")
+sys.path.insert(0, str(root / "scripts" / "lib"))
+import release_identity
+
+try:
+    tracked = release_identity.identity(release_identity.read_version(root))
+except release_identity.IdentityError as exc:
+    sys.exit(f"error: {exc}")
+print(f"{tracked['version']}\t{tracked['version_code']}\t{tracked['ios_build_number']}")
 PY
 )
 [[ -n "${EXPECTED_IOS_BUILD_NUMBER:-}" ]] || {
@@ -83,61 +80,6 @@ if [[ -n "$RELEASE_TAG" ]]; then
   echo "ok: annotated release tag $RELEASE_TAG resolves to HEAD on origin/main"
 fi
 
-verify_ios_identity() {
-  local variant="$1"
-  local expected_name="$2"
-  local expected_bundle="$3"
-  # Identity, not distribution: the Preview CI that runs this has
-  # MEWLA_IOS_DISTRIBUTION=testflight, which app.config.js refuses for the
-  # production identity this also checks.
-  MEWLA_IOS_APP_VARIANT="$variant" MEWLA_IOS_DISTRIBUTION=none \
-    node - "$expected_name" "$expected_bundle" "$EXPECTED_PACKAGE" "$EXPECTED_IOS_BUILD_NUMBER" "$EXPECTED_VERSION" <<'JS'
-const createConfig = require('./app/app.config.js');
-const expectedDisplayName = process.argv[2];
-const expectedBundle = process.argv[3];
-const expectedAndroidPackage = process.argv[4];
-const expectedIOSBuildNumber = process.argv[5];
-const expectedVersion = process.argv[6];
-const expectedMarketingVersion = expectedVersion.split('-', 1)[0];
-const config = createConfig();
-
-if (config.name !== 'Mewla') {
-  throw new Error(`top-level Expo name must remain Mewla; got ${config.name}`);
-}
-if (config.version !== expectedVersion) {
-  throw new Error(`general/Android version must remain ${expectedVersion}; got ${config.version}`);
-}
-if (config.ios.bundleIdentifier !== expectedBundle) {
-  throw new Error(`iOS bundle identifier is ${config.ios.bundleIdentifier}; expected ${expectedBundle}`);
-}
-if (config.ios.infoPlist.CFBundleDisplayName !== expectedDisplayName) {
-  throw new Error(
-    `iOS display name is ${config.ios.infoPlist.CFBundleDisplayName}; expected ${expectedDisplayName}`,
-  );
-}
-if (config.ios.infoPlist.CFBundleShortVersionString !== expectedMarketingVersion) {
-  throw new Error(
-    `iOS marketing version must resolve to ${expectedMarketingVersion}; got ${config.ios.infoPlist.CFBundleShortVersionString}`,
-  );
-}
-if (config.ios.infoPlist.CFBundleVersion !== expectedIOSBuildNumber) {
-  throw new Error(
-    `iOS build number must resolve to ${expectedIOSBuildNumber}; got ${config.ios.infoPlist.CFBundleVersion}`,
-  );
-}
-if (config.android.package !== expectedAndroidPackage) {
-  throw new Error(
-    `Android package changed under iOS variant: ${config.android.package}; expected ${expectedAndroidPackage}`,
-  );
-}
-JS
-}
-
-# Validate both closed iOS branches regardless of the caller's active variant.
-# This keeps the canonical release verifier meaningful inside Preview CI.
-verify_ios_identity production "Mewla" "com.daoleno.mewla"
-verify_ios_identity preview "Mewla" "com.daoleno.mewla.preview"
-
 python3 - "$ROOT" "$EXPECTED_VERSION" "$EXPECTED_PACKAGE" "$EXPECTED_VERSION_CODE" "$EXPECTED_IOS_BUILD_NUMBER" "$EXPECTED_CERT_FP" "$STAGE" <<'PY'
 import hashlib
 import json
@@ -174,25 +116,65 @@ def sha256_file(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-# --- tracked identity ---
-base = json.loads((root / "app/app.base.json").read_text(encoding="utf-8"))
-expo = base["expo"]
-android = expo["android"]
-if expo.get("version") != exp_version:
-    errors.append(f"app.base.json version: got {expo.get('version')!r} want {exp_version!r}")
-if android.get("package") != exp_package:
-    errors.append(f"app.base.json package: got {android.get('package')!r} want {exp_package!r}")
-if int(android.get("versionCode", -1)) != exp_vc:
-    errors.append(f"app.base.json versionCode: got {android.get('versionCode')!r} want {exp_vc!r}")
-if "buildNumber" in (expo.get("ios") or {}):
-    errors.append("app.base.json must not duplicate the reviewed iOS build-number source")
-ios_build_path = root / "app/ios-build.json"
-if not ios_build_path.is_file():
-    errors.append("missing reviewed iOS build-number source: app/ios-build.json")
+# --- tracked identity: the NSH client (client/) ---
+exp_marketing = exp_version.split("-", 1)[0]
+nsh = json.loads((root / "client/ui/nsh.json").read_text(encoding="utf-8"))
+if nsh.get("version") != exp_version:
+    errors.append(f"client/ui/nsh.json version: got {nsh.get('version')!r} want {exp_version!r}")
+if nsh.get("id") != exp_package:
+    errors.append(f"client/ui/nsh.json id: got {nsh.get('id')!r} want {exp_package!r}")
+
+# Android: the production identity is the shipped package; the version code is
+# release_identity.py's rule, computed by Gradle from nsh.json.
+gradle = (root / "client/android/app/build.gradle.kts").read_text(encoding="utf-8")
+for needle, problem in (
+    (f'applicationId = "{exp_package}"', f"applicationId must be {exp_package}"),
+    (f'namespace = "{exp_package}"', f"namespace must be {exp_package}"),
+    ('uiDir.resolve("nsh.json")', "must read the version from client/ui/nsh.json"),
+    ("major * 1_000_000 + minor * 10_000 + patch * 100 + (beta ?: 99)", "versionCode must follow scripts/lib/release_identity.py"),
+    ("versionCode = mewlaVersionCode", "versionCode must be the derived code"),
+    ("versionName = version", "versionName must be the nsh.json version"),
+    ('create("production") { dimension = "identity"; resValue', "production flavor must keep the package unsuffixed"),
+    ('providers.gradleProperty("mewla.channel")', "must take the -Pmewla.channel=github|play channel"),
+    ('if (channel == "github") {', "Phone use and the in-app update must be GitHub-channel only"),
+):
+    if needle not in gradle:
+        errors.append(f"client/android/app/build.gradle.kts: {problem}")
+for name in ("MEWLA_ANDROID_KEYSTORE", "MEWLA_ANDROID_KEYSTORE_PASSWORD", "MEWLA_ANDROID_KEY_ALIAS", "MEWLA_ANDROID_KEY_PASSWORD"):
+    if f'"{name}"' not in gradle:
+        errors.append(f"client/android/app/build.gradle.kts: release signing must read {name}")
+
+# iOS: the shipped bundle id, and the marketing version / build number this release derives.
+project = (root / "client/ios/project.yml").read_text(encoding="utf-8")
+def ios_setting(name):
+    found = re.findall(rf'(?m)^\s+{name}: "?([^"\n]*)"?\s*$', project)
+    return found[0] if len(found) == 1 else None
+for name, want in (
+    ("MEWLA_APP_ID", exp_package),
+    ("MARKETING_VERSION", exp_marketing),
+    ("CURRENT_PROJECT_VERSION", str(exp_ios_build)),
+    ("MEWLA_IOS_DISTRIBUTION", "none"),
+):
+    got = ios_setting(name)
+    if got != want:
+        errors.append(f"client/ios/project.yml {name}: got {got!r} want {want!r}")
+for needle in ("PRODUCT_BUNDLE_IDENTIFIER: $(MEWLA_APP_ID)\n", "PRODUCT_BUNDLE_IDENTIFIER: $(MEWLA_APP_ID).live\n",
+               "group.$(MEWLA_APP_ID)", "MewlaDistribution: $(MEWLA_IOS_DISTRIBUTION)",
+               "PROVISIONING_PROFILE_SPECIFIER: $(MEWLA_APP_PROFILE)", "PROVISIONING_PROFILE_SPECIFIER: $(MEWLA_LIVE_PROFILE)"):
+    if needle not in project:
+        errors.append(f"client/ios/project.yml missing {needle.strip()!r}")
+
+# The oldest computer the app accepts is never newer than the app (prepare-release.py enforces it too).
+min_computer = re.search(
+    r'export const MIN_COMPUTER_VERSION = "([^"]+)";',
+    (root / "client/core/update/version.ts").read_text(encoding="utf-8"),
+)
+if not min_computer:
+    errors.append("client/core/update/version.ts must declare MIN_COMPUTER_VERSION")
 else:
-    ios_build = json.loads(ios_build_path.read_text(encoding="utf-8")).get("buildNumber")
-    if not isinstance(ios_build, int) or isinstance(ios_build, bool) or ios_build != exp_ios_build:
-        errors.append(f"ios-build.json buildNumber: got {ios_build!r} want {exp_ios_build}")
+    order = lambda v: tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", v).groups()) + (0 if "-" in v else 1,)
+    if order(min_computer.group(1)) > order(exp_version):
+        errors.append(f"MIN_COMPUTER_VERSION {min_computer.group(1)} is newer than the release {exp_version}")
 
 version_go = (root / "daemon/cmd/mewla/version.go").read_text(encoding="utf-8")
 m = re.search(r'var Version = "([^"]+)"', version_go)
@@ -209,15 +191,16 @@ for line in (root / "scripts/capture-android-crash.sh").read_text(encoding="utf-
 if exp_package not in crash_line:
     errors.append("capture-android-crash.sh default package does not match")
 
-cfg = (root / "app/app.config.js").read_text(encoding="utf-8")
-if "app.base.json" not in cfg:
-    errors.append("app.config.js must load app.base.json as identity source")
-
 apk_script = (root / "scripts/android-release-apk.sh").read_text(encoding="utf-8")
-if "expo prebuild --clean" not in apk_script and "prebuild --clean" not in apk_script:
-    errors.append("android-release-apk.sh must use expo prebuild --clean for package identity")
-if "versionName" not in apk_script or "versionCode" not in apk_script:
-    errors.append("android-release-apk.sh must assert generated versionName/versionCode identity")
+for needle, problem in (
+    (":app:assembleProductionRelease", "must build the client's production APK"),
+    (":app:bundleProductionRelease", "must build the client's production AAB with --aab"),
+    ('-Pmewla.channel="$CHANNEL" -Pmewla.abis=arm64-v8a', "must pick the channel and build arm64-v8a only"),
+    ("versionName", "must assert the APK's versionName/versionCode identity"),
+    ("versionCode", "must assert the APK's versionName/versionCode identity"),
+):
+    if needle not in apk_script:
+        errors.append(f"android-release-apk.sh {problem}")
 # Local default only; must not force a host path that overrides CI Temurin JAVA_HOME.
 if 'JAVA_HOME="${JAVA_HOME:-' not in apk_script and "JAVA_HOME=\"${JAVA_HOME:-" not in apk_script:
     errors.append("android-release-apk.sh must default JAVA_HOME only when unset")
@@ -228,64 +211,9 @@ apk_verifier = (root / "scripts/verify-apk-release.sh").read_text(encoding="utf-
 if "verify-android-native-symbols.py" not in apk_verifier:
     errors.append("verify-apk-release.sh must verify packaged Android native symbols")
 
-app_pkg = json.loads((root / "app/package.json").read_text(encoding="utf-8"))
-build_apk = (app_pkg.get("scripts") or {}).get("build:apk") or ""
-if not build_apk:
-    errors.append("app/package.json missing scripts.build:apk")
-else:
-    if "/usr/lib/jvm/" in build_apk or "JAVA_HOME=" in build_apk:
-        errors.append(
-            "app/package.json build:apk must inherit caller JAVA_HOME "
-            "(no hardcoded JAVA_HOME or /usr/lib/jvm path)"
-        )
-    if "NODE_ENV=production" not in build_apk:
-        errors.append("app/package.json build:apk must set NODE_ENV=production")
-    if "-PreactNativeArchitectures=arm64-v8a" not in build_apk:
-        errors.append("app/package.json build:apk must pin arm64-v8a architectures")
-    if "app-release-arm64.apk" not in build_apk:
-        errors.append("app/package.json build:apk must produce app-release-arm64.apk")
-    for sibling in ("build:apk:universal", "build:apk:debug"):
-        s = (app_pkg.get("scripts") or {}).get(sibling) or ""
-        if s and ("/usr/lib/jvm/" in s or re.search(r"JAVA_HOME=", s)):
-            errors.append(f"app/package.json {sibling} must not hardcode JAVA_HOME")
-
-vt_gradle = root / "app/modules/terminal-vt/android/build.gradle"
-if not vt_gradle.is_file():
-    errors.append("missing terminal-vt android/build.gradle")
-else:
-    gtxt = vt_gradle.read_text(encoding="utf-8")
-    # Hardcoded dual abiFilters override -PreactNativeArchitectures and break arm64-only release.
-    if re.search(r"abiFilters\s+'arm64-v8a'\s*,\s*'x86_64'", gtxt) or re.search(
-        r'abiFilters\s+"arm64-v8a"\s*,\s*"x86_64"', gtxt
-    ):
-        errors.append(
-            "terminal-vt build.gradle must not hardcode abiFilters arm64-v8a,x86_64; "
-            "derive ABIs from reactNativeArchitectures"
-        )
-    if "reactNativeArchitectures" not in gtxt:
-        errors.append(
-            "terminal-vt build.gradle must honor project property reactNativeArchitectures"
-        )
-    if "terminalAbis" not in gtxt:
-        errors.append("terminal-vt build.gradle must define terminalAbis()")
-    if "libghostty_vt.so" not in gtxt:
-        errors.append(
-            "terminal-vt build.gradle should fail configuration when libghostty_vt.so is missing for a selected ABI"
-        )
-    # Script-level `def MEWLA_TERMINAL_*` is invisible inside methods (Gradle Script capture).
-    if re.search(r"(?m)^def\s+MEWLA_TERMINAL_SUPPORTED_ABIS\b", gtxt):
-        errors.append(
-            "terminal-vt build.gradle must not use script-level def MEWLA_TERMINAL_SUPPORTED_ABIS "
-            "(methods cannot capture it; keep supported ABIs local to terminalAbis())"
-        )
-
-abi_gradle_check = root / "scripts/verify-terminal-abi-gradle.sh"
-if not abi_gradle_check.is_file():
-    errors.append("missing scripts/verify-terminal-abi-gradle.sh")
-elif not os.access(abi_gradle_check, os.X_OK):
-    errors.append("scripts/verify-terminal-abi-gradle.sh must be executable")
 
 for rel in (
+    "scripts/lib/release_identity.py",
     "scripts/stage-release.sh",
     "scripts/build-daemon-linux.sh",
     "scripts/verify-release-identity.sh",
@@ -385,9 +313,15 @@ else:
         if needle not in notes:
             errors.append(f"release notes missing required topic: {needle!r}")
 
-for rel in ("LICENSE", "NOTICE", "TRADEMARKS.md", "app/assets/notices/GHOSTTY-MIT.txt"):
+CLIENT_GHOSTTY_NOTICE = "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt"
+for rel in ("LICENSE", "NOTICE", "TRADEMARKS.md", CLIENT_GHOSTTY_NOTICE):
     if not (root / rel).is_file():
         errors.append(f"missing repo legal/notice file: {rel}")
+# The client packages its own copy; the libghostty build still copies app/'s next to the libraries.
+expo_notice = root / "app/assets/notices/GHOSTTY-MIT.txt"
+if expo_notice.is_file() and (root / CLIENT_GHOSTTY_NOTICE).is_file():
+    if expo_notice.read_bytes() != (root / CLIENT_GHOSTTY_NOTICE).read_bytes():
+        errors.append(f"{CLIENT_GHOSTTY_NOTICE} differs from app/assets/notices/GHOSTTY-MIT.txt")
 
 public_key_pem = root / "release/mewla-update-public-key.pem"
 updater_go = root / "daemon/selfupdate/selfupdate.go"

@@ -28,7 +28,7 @@ The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta
 | Linux amd64/arm64 (static, musl) and Windows amd64 (static, MinGW) daemons with `zig cc` on Ubuntu; macOS arm64 daemon on a `macos-26` runner; all with the session host's terminal engine (`ghosttyvt`) | yes | — |
 | Run each daemon on its own platform: Linux amd64, Linux arm64 (`ubuntu-24.04-arm`), macOS (`daemon/releasesmoke`), Windows (`windows-latest`: version, the host with the engine, `/health`, `install.ps1` from a release-shaped zip, `scripts/tests/release_smoke_windows.ps1`) | yes | — |
 | Build release-grade `libghostty` arm64 | yes | — |
-| Clean Expo prebuild + signed arm64 APK | yes | — |
+| Signed arm64 APK of the NSH client (`client/android`, `:app:assembleProductionRelease -Pmewla.channel=github`) | yes | — |
 | Verify package / version / ABI / Ghostty native imports / notice / cert fingerprint | yes | — |
 | Stage tree + checksums + signed updater manifest | yes | — |
 | Upload workflow artifact | yes | — |
@@ -82,13 +82,15 @@ Release notes leave out maintainer identity. It lives in tracked files instead:
 
 | Fact | Source |
 | --- | --- |
-| Version | `app/app.base.json` `expo.version`, mirrored in `daemon/cmd/mewla/version.go` |
-| Android package | `com.daoleno.mewla` (`app/app.base.json`) |
-| Android `versionCode` | `app/app.base.json`; preparation increments it by one |
-| Android ABI | `arm64-v8a` only (`app/package.json` `build:apk`, `app/modules/terminal-vt/native.lock.json`) |
+| Version | `client/ui/nsh.json` `version`, mirrored in `daemon/cmd/mewla/version.go` |
+| Android package | `com.daoleno.mewla` (`client/ui/nsh.json` `id`, `client/android/app/build.gradle.kts`) |
+| Android `versionCode` and iOS `CFBundleVersion` | Derived from the version (below); `client/ios/project.yml` carries the iOS values |
+| Android ABI | `arm64-v8a` only (`scripts/android-release-apk.sh` `-Pmewla.abis=arm64-v8a`, `app/modules/terminal-vt/native.lock.json`) |
 | iOS Preview bundle, marketing version and build number | See [iOS CI](ios-ci-release.md#signed-release-and-testflight) |
 
-`scripts/verify-release-identity.sh` reads the version, `versionCode` and iOS build number from `app/app.base.json` and `app/ios-build.json`, and checks that `version.go`, the resolved app config, the tag, the release notes and any stage agree with them. Preparation does not edit the verifier. The Android certificate fingerprint stays pinned in it.
+One rule (`scripts/lib/release_identity.py`, the same in the client's Gradle build) gives every build number from the version `X.Y.Z` or `X.Y.Z-beta.N`: `X·1 000 000 + Y·10 000 + Z·100 + 99` for a release and `+ N` instead of `+ 99` for `beta.N` (Y and Z at most 99, N at most 98). 0.3.2 is 30299 and 0.3.2-beta.1 is 30201, so the numbers grow with the version and start above every Expo build (Android `versionCode` 142, iOS build 140 at 0.3.1). The iOS marketing version is `X.Y.Z` without `-beta.N`.
+
+`scripts/verify-release-identity.sh` reads the version from `client/ui/nsh.json` and derives the build numbers, and checks that `version.go`, the client's Gradle and Xcode projects, the tag, the release notes and any stage agree with them. Preparation does not edit the verifier. The Android certificate fingerprint stays pinned in it.
 
 ## workflow_dispatch inputs
 
@@ -146,7 +148,6 @@ Keep at least one of `## New` and `## Fixed`, with `- ` bullets only. Preparatio
 
 The generated notes have no iPhone line, because the TestFlight upload runs after the tag. Once the build is in the public `Mewla Preview` group, add `- **iPhone:** [Mewla Preview on TestFlight](https://testflight.apple.com/join/nMQheDCE)` after the Android line in `docs/releases/vX.Y.Z.md`, commit it, and apply the same file to the GitHub Release with `gh release edit vX.Y.Z --notes-file docs/releases/vX.Y.Z.md`.
 
-Preparation, normal app CI and the Android release job run `app/androidAssetNames.test.js` before an expensive signed build. The gate uses Metro asset parsing and React Native's actual Android resource folder/name normalization across repository image and font assets, including density variants. Extensions, punctuation and letter case do not necessarily distinguish Android resource names: use distinct basenames for files such as a PNG and JPEG in the same directory.
 
 ### Maintainer fallback: manual annotated tag
 
@@ -172,7 +173,7 @@ gh workflow run release-artifacts.yml \
   -f publish=true
 ```
 
-Preview TestFlight recovery uses the tracked build number from `app/ios-build.json` at that tag:
+Preview TestFlight recovery derives the build number from that tag's version when `build_number` is left out; pass a larger one to upload again:
 
 ```bash
 gh workflow run ios-release.yml \
@@ -209,9 +210,9 @@ gh workflow run android-play.yml --ref main -f ref=vX.Y.Z -f destination=alpha -
 
 Every run checks the built AAB with `scripts/verify-aab-play.py` and the pinned bundletool:
 
-- package, `versionName` and `versionCode` match `app/app.base.json`; `targetSdkVersion` is 36;
+- package, `versionName` and `versionCode` match `client/ui/nsh.json` and the derived code; `targetSdkVersion` is 36;
 - no `REQUEST_INSTALL_PACKAGES`, `SYSTEM_ALERT_WINDOW` or `RECORD_AUDIO`, and no app-update `FileProvider` in the merged manifest;
-- the embedded Expo config says `distribution.android = play-store`, so the update check stays hidden;
+- nothing of the GitHub channel: no Phone use service, receiver, accessibility service or `WRITE_SECURE_SETTINGS`, and no in-app update (`-Pmewla.channel=play` links neither module);
 - only arm64-v8a libraries, every `.so` has 16 KB ELF `LOAD` alignment, and every split APK bundletool generates passes `zipalign -c -P 16`;
 - the universal APK carries the Ghostty notice and passes the native import check;
 - the upload certificate SHA-256 is the public release identity.
@@ -255,7 +256,7 @@ An uploaded, `VALID` build is not installable: the public `Mewla Preview` group 
 
 Android SDK setup explicitly requests `platform-tools` because the action's default also requests the removed SDK package `tools`. The following install step retains the pinned Android platform, build-tools, NDK, and CMake packages.
 
-The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before clean prebuild and Gradle. Native CI (release tag pushes and manual `ci.yml` dispatch) builds Android debug/release variants with development signing and the release-shaped daemon binaries; official certificate verification remains in the release workflow, and `release-artifacts.yml` rebuilds the daemon archives before publishing.
+The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before the client's Gradle build. Native CI (release tag pushes and manual `ci.yml` dispatch) builds Android debug/release variants with development signing and the release-shaped daemon binaries; official certificate verification remains in the release workflow, and `release-artifacts.yml` rebuilds the daemon archives before publishing.
 
 GitHub scopes a cache to the ref that saved it: a tag run can read `main`'s caches, but no later run can read a tag's. Until v0.2.5 every release saved a 2.2 GB Gradle cache under its own tag, keyed on `app/app.base.json`, so the next release always missed it. In v0.2.5 the Android Gradle step took 642 s with 131 of 996 tasks from cache, and the release was public 13 min 33 s after the tag; the daemon archives had been ready after 2 min 38 s.
 
@@ -298,7 +299,8 @@ Daemon archives contain `mewla` (`mewla.exe` in the Windows zip), `LICENSE`, `NO
 | `scripts/prepare-release.py` | Validate the current annotated release and write the explicit newer identity, canonical notes, and changelog entry |
 | `scripts/materialize-android-keystore.sh` | Base64 → temp keystore file (0600); prints path only |
 | `scripts/verify-apk-release.sh` | Package/version/ABI/notice/certificate checks |
-| `scripts/android-release-apk.sh` | Clean prebuild + signed assembleRelease; `--aab` builds the play-store bundle |
+| `scripts/lib/release_identity.py` | The version (`client/ui/nsh.json`) and the build numbers derived from it |
+| `scripts/android-release-apk.sh` | The client's signed GitHub APK (`assembleProductionRelease`); `--aab` builds the Play bundle (`bundleProductionRelease -Pmewla.channel=play`) |
 | `scripts/verify-aab-play.py` | Play AAB manifest/channel/16 KB/ABI/notice/certificate checks |
 | `scripts/google-play-upload.py` | Play Developer API upload to a testing track (`--dry-run`, `--validate-only`) |
 | `scripts/stage-release.sh` | Deterministic stage tree |
