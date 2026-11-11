@@ -91,7 +91,9 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
     untracked(() => {
       if (key === shownAs) return;
       shownAs = key;
-      if (key.startsWith("true|")) void probeComputers();
+      if (!key.startsWith("true|")) return;
+      void probeComputers();
+      loadTelegram();
     });
   });
   followConnectionIssue();

@@ -48,6 +48,17 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
 
   followConnectionIssue();
 
+  // A computer that is gone (removed here or elsewhere, or a stale link) leaves for Settings.
+  let left = false;
+  const leave = () => {
+    if (left) return;
+    left = true;
+    props.nav.pop();
+  };
+  effect(() => {
+    if (!server()) untracked(leave);
+  });
+
   // The name a computer reports, adopted here or in Settings, shows in the field.
   let shownName = untracked(() => server()?.name ?? "");
   effect(() => {
@@ -200,7 +211,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
       const missed = await removeComputer(s);
       // The page leaves; what did not answer is said where the person lands.
       if (missed) removedNotice.set(missed);
-      props.nav.pop();
+      leave();
     } finally {
       busy.set("");
     }
