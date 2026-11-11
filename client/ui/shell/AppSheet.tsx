@@ -1,4 +1,4 @@
-import { cleanup, effect, signal, untracked } from "nsh";
+import { cleanup, effect, keyboardFrame, signal, untracked } from "nsh";
 import { Dialog, Sheet, type DialogProps, type SheetProps } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { sheetOpened, switching } from "../session";
@@ -32,6 +32,17 @@ function guardedOpen(props: { open?: boolean | null; onOpenChange?: (event: { op
   return () => Boolean(props.open) && !dismissed();
 }
 
+/**
+ * The panel's style, lifted over the software keyboard. NSH's bottom sheet does not move for it, so a
+ * sheet's field and its buttons (Commit, Ask the agent, a branch, a search) sat behind the keyboard.
+ * Read in the JSX, so it follows the keyboard.
+ */
+function aboveKeyboard(props: SheetProps): SheetProps["popupStyle"] {
+  const height = keyboardFrame().height;
+  if (height <= 0 || (props.side ?? "bottom") !== "bottom") return props.popupStyle;
+  return [props.popupStyle, { paddingBottom: height + 16 }];
+}
+
 /** NSH's Dialog (a page sheet on iOS), closed by a switch of computer like AppSheet. */
 export function GuardedDialog(props: DialogProps) {
   const open = guardedOpen(props);
@@ -41,7 +52,7 @@ export function GuardedDialog(props: DialogProps) {
 /** NSH's bottom sheet, closed by a switch of computer like AppSheet. */
 export function GuardedSheet(props: SheetProps) {
   const open = guardedOpen(props);
-  return <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} open={open()} />;
+  return <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} popupStyle={aboveKeyboard(props)} open={open()} />;
 }
 
 /** The theme's ink for a sheet's or dialog's texts that say no color of their own (NSH draws them black; unreadable in Dark). */
@@ -57,7 +68,7 @@ const DIALOG = "mt-24 w-[560px] max-w-[92%] self-center overflow-hidden rounded-
  */
 export function AppSheet(props: SheetProps & { testID?: string }) {
   const open = guardedOpen(props);
-  if (mobile) return <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} open={open()} />;
+  if (mobile) return <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} popupStyle={aboveKeyboard(props)} open={open()} />;
   const popup = () => `${DIALOG} ${INK} ${(props.popupClass ?? "").replace(/\brounded-t-\S+/g, "")}`;
   return (
     <>
@@ -67,7 +78,7 @@ export function AppSheet(props: SheetProps & { testID?: string }) {
           onOpenChange={({ open, reason }) => props.onOpenChange?.({ open, reason })} onCancel={props.onCancel} onClose={props.onClose}>
           {props.children}
         </Dialog>
-      ) : <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} open={open()} />}
+      ) : <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} popupStyle={aboveKeyboard(props)} open={open()} />}
     </>
   );
 }
