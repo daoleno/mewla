@@ -4,6 +4,7 @@ import { Button } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
 import { decideEnrollment, decodePendingEnrollment, pendingEnrollments, verificationChoices, type PendingEnrollment } from "../../core/enrollment";
 import { current, onTransport } from "../session";
+import { forgetOwnEnrollment, ownEnrollmentRequest } from "./ownRequest";
 
 /** The current computer's requests from new devices, newest last; cleared on a switch or a disconnect. */
 const requests = signal<PendingEnrollment[]>([]);
@@ -40,6 +41,22 @@ onTransport((transport) => {
   };
 });
 
+// This browser's own request, left pending when a pairing link paired it instead: it is
+// never shown, and once this browser is paired it is withdrawn, so no device is asked about it.
+const withdrawn = new Set<string>();
+effect(() => {
+  const own = ownEnrollmentRequest();
+  const server = current();
+  const mine = own ? requests().find((r) => r.id === own) : undefined;
+  if (!server || !mine) return;
+  untracked(() => {
+    withdrawn.add(mine.id);
+    requests.set(requests().filter((r) => r.id !== mine.id));
+    forgetOwnEnrollment();
+    void decideEnrollment(server, mine, mine.verificationNumber, false).catch(() => {});
+  });
+});
+
 // Coming back to the app reads what arrived while away.
 effect(() => {
   if (lifecycle() === "active") untracked(refresh);
@@ -51,7 +68,7 @@ effect(() => {
  * until decided: no swipe or backdrop closes it.
  */
 export function EnrollmentApproval() {
-  const request = () => requests()[0] ?? null;
+  const request = () => requests().find((r) => !withdrawn.has(r.id) && r.id !== ownEnrollmentRequest()) ?? null;
   const choices = signal<string[]>([]);
   const selected = signal("");
   const busy = signal(false);
