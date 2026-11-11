@@ -15,7 +15,7 @@ export const pairedTwo = {
 };
 
 /** Asia/Shanghai has had no DST since 1991: one span is the whole truth. */
-const zoneTable = (zones: string[]) => ({
+export const zoneTable = (zones: string[]) => ({
   device: "Asia/Shanghai",
   hour12: true,
   zones: Object.fromEntries(zones.map((id) => [id, id === "Asia/Shanghai" ? [{ atMs: 0, offsetMinutes: 480, name: "GMT+8" }] : id === "UTC" ? [{ atMs: 0, offsetMinutes: 0, name: "UTC" }] : null])),

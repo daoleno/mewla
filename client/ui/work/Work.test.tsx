@@ -110,9 +110,10 @@ describe("a Calendar run's Work file", () => {
   test("opens from its run, reads without the metadata, saves an edit and marks it done", async () => {
     const app = await open(APP, { host: phoneHost({ calendar_items: [calendarItem], work_items: [work] }), storage: paired, platform: "android", network: expoTokenService });
     await app.host.send("links.open", { url: "mewla://calendar?id=c1" });
-    await app.waitFor("id:run-r1");
+    // The run's time in the phone's zone: the page has redrawn with it (a slow runner gets the zone late).
+    await app.waitFor("text:Fri, Jul 17, 11:00 AM · Done", { timeout: 10_000 });
     await app.press("id:run-r1");
-    await app.waitFor("id:open-work-file");
+    await app.waitFor("id:open-work-file", { timeout: 10_000 });
     await app.press("id:open-work-file");
     await app.waitFor("id:work-file-page");
     expect(app.texts()).toContain("Read the three papers.");

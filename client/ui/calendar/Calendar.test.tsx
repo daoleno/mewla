@@ -1,24 +1,27 @@
 import { describe, expect, open, test } from "nsh/test";
-import { expoTokenService, framesOf, item, paired, pairedTwo, phoneHost } from "../testing/fixtures";
+import { expoTokenService, framesOf, item, paired, pairedTwo, phoneHost, zoneTable } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
+const SLOW = { timeout: 10_000 };
 
+/** The Calendar tab once the phone's zone is in (a slow runner gets it late, and the agenda redraws then). */
 async function calendarApp(daemon: Record<string, unknown>, extra: Record<string, (data: any) => unknown> = {}) {
   const app = await open(APP, { host: phoneHost(daemon, extra), storage: paired, platform: "android", network: expoTokenService });
   await app.host.send("links.open", { url: "mewla://calendar" });
   await app.waitFor("id:calendar-page");
+  await app.waitUntil(() => app.texts().some((text) => text.includes("GMT+8")), SLOW);
   return app;
 }
 
 describe("the Calendar tab", () => {
   test("lists what is planned by day, hides cancelled items and opens one", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Dentist", 26, { kind: "event", start_at: new Date(Date.now() + 26 * 3_600_000).toISOString(), end_at: new Date(Date.now() + 27 * 3_600_000).toISOString() }), item("Old plan", 2, { status: "cancelled" })] });
-    await app.waitFor("text:Call the bank");
-    expect(app.texts()).toContain("Dentist");
+    await app.waitFor("id:calendar-item-Call the bank", SLOW);
+    await app.waitFor("text:Dentist", SLOW);
     expect(app.texts()).not.toContain("Old plan");
     expect(app.texts().join(" ")).toMatch(/Scheduled · Reminder/);
-    await app.press("text:Call the bank");
-    await app.waitFor("id:calendar-item-page");
+    await app.press("id:calendar-item-Call the bank");
+    await app.waitFor("id:calendar-item-page", SLOW);
     expect(app.texts().join(" ")).toMatch(/at \d+:\d\d (AM|PM)/);
   }, 20_000);
 
@@ -50,8 +53,9 @@ describe("the Calendar tab", () => {
 
   test("cancels an item after asking, goes back to the agenda, and the item leaves it", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1)] });
+    await app.waitFor("id:calendar-item-Call the bank", SLOW);
     await app.press("id:calendar-item-Call the bank");
-    await app.waitFor("id:cancel-item");
+    await app.waitFor("id:cancel-item", SLOW);
     app.onDialog((dialog) => (dialog.title === "Cancel calendar item?" ? "Cancel item" : null));
     await app.press("id:cancel-item");
     await app.waitUntil(() => framesOf(app.host.posts(), "cancel_calendar_item").length === 1);
@@ -68,15 +72,46 @@ describe("the Calendar tab", () => {
     await app.press("id:add-item");
     await app.waitFor("id:calendar-editor");
     await app.type("id:editor-title", "Pick up the parcel");
+    await app.waitFor("id:editor-start-date", SLOW);
     await app.press("id:editor-start-date");
     await app.press("id:editor-start-time");
-    await app.waitFor("text:Monday, July 14, 2031, 6:20 PM GMT+8");
+    await app.waitFor("text:Monday, July 14, 2031, 6:20 PM GMT+8", SLOW);
     await app.press("id:editor-save");
     await app.waitUntil(() => framesOf(app.host.posts(), "create_calendar_item").length === 1);
     expect(framesOf(app.host.posts(), "create_calendar_item")[0].calendar_item).toMatchObject({
       title: "Pick up the parcel", kind: "reminder", timezone: "Asia/Shanghai", recurrence: "none", notify_at: "2031-07-14T18:20:00+08:00",
     });
     await app.waitFor("text:Pick up the parcel");
+  }, 20_000);
+
+  test("a new item opened before the phone's zone is known takes that zone once it comes, not UTC", async () => {
+    const slowZones = { "calendar.zones": ({ zones }: { zones: string[] }) => new Promise((resolve) => setTimeout(() => resolve(zoneTable(zones)), 1_500)) };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [] }, slowZones), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.waitFor("id:add-item", SLOW);
+    expect(app.texts().some((text) => text.includes("GMT+8"))).toBe(false);
+    await app.press("id:add-item");
+    await app.waitFor("id:calendar-editor");
+    await app.type("id:editor-title", "Water the plants");
+    await app.waitUntil(() => app.texts().some((text) => text.includes("PM GMT+8") || text.includes("AM GMT+8")), SLOW);
+    await app.press("id:editor-save");
+    await app.waitUntil(() => framesOf(app.host.posts(), "create_calendar_item").length === 1, SLOW);
+    const created = framesOf(app.host.posts(), "create_calendar_item")[0].calendar_item as { timezone: string; notify_at: string };
+    expect(created).toMatchObject({ timezone: "Asia/Shanghai" });
+    expect(String(created.notify_at)).toMatch(/\+08:00$/);
+  }, 20_000);
+
+  // (`texts()` lists a List's cells in their pool's order, not the screen's, so the order is not checked here.)
+  test("the agenda redraws in the phone's zone when it comes late, and its rows still open their own item", async () => {
+    const slowZones = { "calendar.zones": ({ zones }: { zones: string[] }) => new Promise((resolve) => setTimeout(() => resolve(zoneTable(zones)), 1_500)) };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1), item("Dentist", 26)] }, slowZones), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.waitFor("text:Dentist", SLOW);
+    await app.waitUntil(() => app.texts().some((text) => text.includes("GMT+8")), SLOW);
+    await app.wait(300);
+    await app.press("id:calendar-item-Dentist");
+    await app.waitFor("id:item-title", SLOW);
+    expect(app.texts()).toContain("Dentist");
   }, 20_000);
 
   test("a title is required, and the editor says so instead of saving", async () => {

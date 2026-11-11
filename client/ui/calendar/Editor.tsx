@@ -52,8 +52,10 @@ export function openEditor(item: CalendarItem | null): void {
   instruction.set(item?.action_instruction ?? "");
   const start = item ? Date.parse(item.start_at || item.notify_at || item.due_at || item.next_at) : Math.ceil((c.now + 3_600_000) / 900_000) * 900_000;
   const end = item?.end_at ? Date.parse(item.end_at) : start + 3_600_000;
-  const z = item?.timezone || device;
-  void ensureZones([z]).then(() => {
+  void ensureZones(item?.timezone ? [item.timezone] : []).then(() => {
+    // A new item takes the phone's zone, which may only now be known (until then the table says UTC).
+    const z = item?.timezone || clock().zones.device;
+    if (!item?.timezone && zone() === device) zone.set(z);
     const s = clock().zones.localFields(start, z);
     const e = clock().zones.localFields(end, z);
     startDate.set(s.date);
