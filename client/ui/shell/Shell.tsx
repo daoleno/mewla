@@ -83,8 +83,8 @@ function sessionsRoute(route: SessionsRoute, index: () => number) {
       return <Session nav={sessionsNav} workerId={route.workerId} hint={route.hint}
         active={() => selectedTab() === 1 && index() === sessionsNav.routes().length - 1} />;
     case "workFile":
-      return <WorkFilePage id={route.id} onClose={() => sessionsNav.pop()} openCalendarItem={(id) => {
-        showCalendarItem(id);
+      return <WorkFilePage id={route.id} onClose={() => sessionsNav.pop()} openCalendarItem={(id, runId) => {
+        showCalendarItem(id, runId);
         selectedTab.set(2);
       }} />;
     case "files-preview":

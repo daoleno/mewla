@@ -13,6 +13,6 @@ export function workRoute(route: BrainWorkRoute, nav: NavStackState<BrainWorkRou
   switch (route.name) {
     case "work": return <WorkPage nav={nav} links={workLinks} />;
     case "workDetail": return <WorkDetail workId={route.workId} nav={nav} links={workLinks} />;
-    case "workFile": return <WorkFilePage id={route.id} onClose={() => nav.pop()} openCalendarItem={(id) => workLinks.openCalendarItem(id)} />;
+    case "workFile": return <WorkFilePage id={route.id} onClose={() => nav.pop()} openCalendarItem={(id, runId) => workLinks.openCalendarItem(id, runId)} />;
   }
 }

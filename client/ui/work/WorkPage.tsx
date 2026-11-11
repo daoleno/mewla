@@ -17,7 +17,8 @@ export type WorkRoute = { name: "work" } | { name: "workDetail"; workId: string 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
 export interface WorkLinks {
   openSession(sessionId: string): void;
-  openCalendarItem(itemId: string): void;
+  /** The item, and its run when the Work came from one (v0.3.1's Calendar origin link). */
+  openCalendarItem(itemId: string, runId?: string): void;
   /** "Ask Brain about this": Brain's composer with the Work quoted, never sent. */
   askBrain(text: string): void;
 }
@@ -251,7 +252,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
             </View>
             <View selectable><Text testID="work-title" class="text-xl font-semibold">{slip()!.title}</Text></View>
             {slip()!.calendar && slip()!.calendarLink ? (
-              <Button testID="work-calendar-link" accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId)} class="self-start">
+              <Button testID="work-calendar-link" accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)} class="self-start">
                 <Text class="text-base text-primary">{slip()!.calendarLink!}</Text>
               </Button>
             ) : null}
