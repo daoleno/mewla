@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -56,7 +57,7 @@ describe("Computers", () => {
     await app.waitFor("id:computer-remove");
     await app.waitFor("id:computer-remove");
 
-    await app.press("id:computer-remove");
+    await answering(app, () => app.press("id:computer-remove"));
     await app.waitFor("id:removed-notice");
     expect(app.texts()).toContain("Desk didn't answer");
     expect(app.texts()).toContain('It still works with Studio. On it, run mewla computers remove "Studio".');
@@ -83,7 +84,7 @@ describe("Computers", () => {
     await app.press("id:computer-s2");
     await app.waitFor("id:computer-remove");
 
-    await app.press("id:computer-remove");
+    await answering(app, () => app.press("id:computer-remove"));
     await app.waitUntil(() => !app.shows("id:computer-s2") && app.shows("id:pair-another"));
     // Studio forgets Desk too, both ways.
     expect(app.requests().some((r) => r.method === "DELETE" && r.url === "http://studio.test:9877/computers")).toBe(true);
