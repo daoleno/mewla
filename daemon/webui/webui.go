@@ -6,9 +6,7 @@ package webui
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/sha256"
 	"embed"
-	"encoding/base64"
 	"io"
 	"io/fs"
 	"mime"
@@ -30,9 +28,6 @@ const (
 // Hashed build outputs never change content under the same name: `nsh
 // package` names each file, or the folder it is in, `<name>.<10 hex>`.
 var hashedSegment = regexp.MustCompile(`^[^.]+(\.[^.]+)*\.[0-9a-f]{10}(\.[A-Za-z0-9]+)?$`)
-
-// The page's own inline scripts, which the Content-Security-Policy allows by hash.
-var inlineScript = regexp.MustCompile(`(?s)<script(?:\s[^>]*)?>(.*?)</script>`)
 
 var contentTypes = map[string]string{
 	".css":         "text/css; charset=utf-8",
@@ -122,32 +117,6 @@ func cacheControl(name string) string {
 		}
 	}
 	return "no-cache"
-}
-
-// InlineScriptHashes returns the CSP source of each inline script of the
-// bundle's index.html ('sha256-…'), in page order; none without a bundle.
-func InlineScriptHashes(files fs.FS) []string {
-	compressed, err := fs.ReadFile(files, indexFile+gzipSuffix)
-	if err != nil {
-		return nil
-	}
-	reader, err := gzip.NewReader(bytes.NewReader(compressed))
-	if err != nil {
-		return nil
-	}
-	page, err := io.ReadAll(reader)
-	if err != nil {
-		return nil
-	}
-	var hashes []string
-	for _, match := range inlineScript.FindAllSubmatch(page, -1) {
-		if len(bytes.TrimSpace(match[1])) == 0 {
-			continue
-		}
-		sum := sha256.Sum256(match[1])
-		hashes = append(hashes, "'sha256-"+base64.StdEncoding.EncodeToString(sum[:])+"'")
-	}
-	return hashes
 }
 
 func acceptsGzip(r *http.Request) bool {

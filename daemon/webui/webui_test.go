@@ -3,8 +3,6 @@ package webui
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -116,22 +114,4 @@ func TestCacheControlKeepsHashedNamesForever(t *testing.T) {
 			t.Errorf("%s: cache = %q, want %q", name, got, want)
 		}
 	}
-}
-
-func TestInlineScriptHashesNameThePageScripts(t *testing.T) {
-	page := "<head><script>const a = 1;</script><script src=\"x.js\"></script></head><body><script type=\"module\">\n  import \"./b.js\";\n</script></body>"
-	got := InlineScriptHashes(fstest.MapFS{"index.html.gz": {Data: gz(t, page)}})
-	// sha256 of the exact text between the tags, as browsers hash it.
-	want := []string{"'sha256-" + sum("const a = 1;") + "'", "'sha256-" + sum("\n  import \"./b.js\";\n") + "'"}
-	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("hashes = %q, want %q", got, want)
-	}
-	if InlineScriptHashes(fstest.MapFS{}) != nil {
-		t.Fatal("a build without the web UI has no hashes")
-	}
-}
-
-func sum(text string) string {
-	digest := sha256.Sum256([]byte(text))
-	return base64.StdEncoding.EncodeToString(digest[:])
 }
