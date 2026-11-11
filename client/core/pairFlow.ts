@@ -59,6 +59,16 @@ export const NOTHING_TO_PASTE: PairingProblem = {
   detail: "Copy the link from mewla pair --details on your computer, then tap Paste again.",
 };
 
+export const LINK_REQUIRED: PairingProblem = {
+  title: "Pairing link required",
+  detail: "Paste the link mewla pair --details prints, or scan its QR code.",
+};
+
+export const NO_CODE_IN_PICTURE: PairingProblem = {
+  title: "No QR code found",
+  detail: "Pick a screenshot or photo of the code mewla pair shows.",
+};
+
 export function pairingProblem(error: unknown): PairingProblem {
   const detail = error instanceof Error && error.message.trim() ? error.message.trim() : "Could not pair with that computer.";
   if (error instanceof PairingCodeRejectedError) return { title: "Code used or expired", detail };
