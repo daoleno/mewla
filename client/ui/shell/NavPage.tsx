@@ -1,7 +1,8 @@
-import { context, split, Text, View } from "nsh";
+import { colorScheme, context, split, Text, View } from "nsh";
 import type { JSX } from "nsh";
-import { Button, NavPage as BaseNavPage, type NavPageProps } from "nsh/base";
+import { Button, NavPage as BaseNavPage, type NavPageProps, type StatusBar } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
+import { statusBarForeground } from "../../core/settings/statusBar";
 import { pageColumnWidth, type PageColumn } from "../../core/web/places";
 import { Icon } from "../more/kit/Icon";
 
@@ -24,6 +25,11 @@ export type AppNavPageProps = NavPageProps & {
 const INK = "text-foreground";
 const HEADER = "bg-background text-foreground tint-foreground";
 
+/** A page's status bar: its content in the app's appearance (`core/settings/statusBar.ts`), then the page's own fields. Read in the JSX, so it follows a change of appearance. */
+export function pageStatusBar(own?: StatusBar): StatusBar {
+  return { foreground: statusBarForeground(colorScheme() === "dark" ? "dark" : "light"), ...own };
+}
+
 /**
  * The app's page. iOS and Android draw their system header from `title`,
  * `headerLeft`, `headerTitle` and `headerRight`; the desktops and the web draw
@@ -33,8 +39,8 @@ const HEADER = "bg-background text-foreground tint-foreground";
  */
 export function NavPage(props: AppNavPageProps) {
   if (mobile) {
-    const [own, rest] = split(props, ["column", "frame", "class", "headerClass"]);
-    return <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} />;
+    const [own, rest] = split(props, ["column", "frame", "class", "headerClass", "statusBar"]);
+    return <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;
   }
   // Read once each, into the one header: forwarded too, they would be made twice.
   const [own, rest] = split(props, ["header", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children", "class"]);

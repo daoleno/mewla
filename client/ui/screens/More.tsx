@@ -1,5 +1,6 @@
 import { platform, Text, View } from "nsh";
 import { Button, NavPage } from "nsh/base";
+import { pageStatusBar } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { followFriends, friendsEnabled } from "../more/friends/state";
 import { connection, current, problem } from "../session";
@@ -49,7 +50,7 @@ export function More(props: { nav: NavStackState<MoreRoute> }) {
     followFriends();
   };
   return (
-    <NavPage title="More">
+    <NavPage title="More" statusBar={pageStatusBar()}>
       <View class="flex-1 bg-background" onLayout={(e) => shown(e.bounds.size)}>
         <View class="mt-4 border-t border-border">
           {/* Friends is a phone Lab: v0.3.1's web app had none. */}
