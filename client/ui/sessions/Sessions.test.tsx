@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost } from "../testing/fixtures";
+import { answering, framesOf, paired, phoneHost } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const session = (id: string, patch: Record<string, unknown> = {}) => ({ id, name: "", status: "done", cwd: "/home/me/mewla", command: "claude --permission-mode bypassPermissions", provider: "claude", updated_at: Date.now(), ...patch });
@@ -58,14 +58,14 @@ describe("Sessions", () => {
     });
     await app.waitFor("text:dev server");
     app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : dialog.buttons.includes("Start tunnel") ? "Start tunnel" : null));
-    await app.press("id:sessions-menu");
+    await answering(app, () => app.press("id:sessions-menu"));
     await app.waitFor("id:service-row");
     expect(app.texts()).toContain("5173");
     expect(app.texts()).toContain("1 port");
     await app.press("id:service-row");
     await app.waitFor("id:service-terminal");
     expect(app.texts()).toContain("192.0.2.10:5173");
-    await app.press("id:tunnel-toggle");
+    await answering(app, () => app.press("id:tunnel-toggle"));
     await app.waitFor("id:tunnel-copy");
     expect(framesOf(app.host.posts(), "service_tunnel").at(-1)).toMatchObject({ service_id: "svc-1", service_generation: "g1", tunnel_action: "start" });
     expect(app.texts()).toContain("Stop public tunnel");
@@ -103,7 +103,7 @@ describe("Sessions", () => {
     await app.press("text:two");
     await app.waitFor("text:2 selected");
     app.onDialog(() => "Terminate");
-    await app.press("id:selection-terminate");
+    await answering(app, () => app.press("id:selection-terminate"));
     await app.waitFor("text:No sessions yet");
     expect(framesOf(app.host.posts(), "kill_worker").map((f) => f.worker_id).sort()).toEqual(["a", "b"]);
     expect(app.dialogs()[0]).toMatchObject({ title: "Terminate sessions?" });
@@ -140,7 +140,7 @@ describe("a Session", () => {
     await app.press("text:notes");
     await app.waitFor("id:session-chat");
     app.onDialog((dialog) => (dialog.buttons.includes("Rename") ? "Rename" : null));
-    await app.press("id:session-menu");
+    await answering(app, () => app.press("id:session-menu"));
     await app.waitFor("id:rename-input");
     await app.type("id:rename-input", "Scratchpad");
     await app.press("id:rename-save");
@@ -212,7 +212,7 @@ describe("a Session", () => {
     await app.press("id:session-row");
     await app.waitFor("id:session-calendar");
     app.onDialog((dialog) => (dialog.buttons.includes("Open Brain") ? "Open Brain" : null));
-    await app.press("id:session-menu");
+    await answering(app, () => app.press("id:session-menu"));
     await app.waitFor("id:work-file-page");
     expect(app.texts()).toContain("Read the three papers.");
   }, 20_000);

@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { expoTokenService, framesOf, item, paired, phoneHost } from "../testing/fixtures";
+import { answering, expoTokenService, framesOf, item, paired, phoneHost } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const now = () => new Date().toISOString();
@@ -70,11 +70,11 @@ describe("Brain's Work", () => {
     await app.waitFor("id:work-action-dismiss");
     let decline = true;
     app.onDialog((dialog) => (dialog.title === "Not needed anymore?" ? (decline ? "Cancel" : "Not needed anymore") : null));
-    await app.press("id:work-action-dismiss");
+    await answering(app, () => app.press("id:work-action-dismiss"));
     await app.wait(300);
     expect(framesOf(app.host.posts(), "brain_work_action")).toHaveLength(0);
     decline = false;
-    await app.press("id:work-action-dismiss");
+    await answering(app, () => app.press("id:work-action-dismiss"));
     await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "dismiss" });
   }, 20_000);

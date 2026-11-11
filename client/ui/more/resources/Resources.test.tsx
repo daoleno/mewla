@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../testing/fixtures";
 import dashboard from "../../../core/resources/fixtures/dashboard-v2.json";
 
 const HARNESS = "../testing/Harness.tsx";
@@ -154,14 +155,14 @@ describe("Resources", () => {
     await app.press("id:consumer-worker:worker:android-build");
     let choice = "Copy Worker ID";
     app.onDialog((dialog) => (dialog.sheet ? choice : null));
-    await app.longPress("id:consumer-details");
+    await answering(app, () => app.longPress("id:consumer-details"));
     expect(app.dialogs().at(-1)?.buttons).toEqual(["Copy title", "Copy ID", "Copy Worker ID", "Copy Work ID", "Copy commands", "Cancel"]);
     await app.waitUntil(() => app.clipboard() === "worker-build");
     choice = "Copy PID";
-    await app.longPress("id:process-18420");
+    await answering(app, () => app.longPress("id:process-18420"));
     await app.waitUntil(() => app.clipboard() === "18420");
     choice = "Copy start token";
-    await app.longPress("id:process-18420");
+    await answering(app, () => app.longPress("id:process-18420"));
     await app.waitUntil(() => app.clipboard() === "918204");
   });
 
