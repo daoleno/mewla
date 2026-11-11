@@ -76,11 +76,12 @@ describe("the composer's keys on a desktop", () => {
 
   test("/ on the page goes to the message box; Escape leaves it", async () => {
     const app = await open(APP, desk("/"));
-    await app.waitFor("id:sidebar");
+    // Brain's page is up once the computer said where Brain is.
+    await app.waitFor("text:Brain is starting…");
     await app.keyboard.press("/");
     // In the field, `N` is a letter, not New session.
     await app.keyboard.press("n");
-    await app.wait(50);
+    await app.waitUntil(() => app.value("id:composer") === "n");
     expect(app.shows("id:new-cwd")).toBe(false);
     await app.keyboard.press("escape");
     // Outside it again, `N` is the shortcut.
