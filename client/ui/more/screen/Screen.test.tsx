@@ -334,6 +334,10 @@ describe("Screen: Linux agent displays", () => {
     await app.press("label:Options for w1");
     await app.waitFor("text:Hold the agent");
     expect(app.texts()).toContain("Fit");
+    await app.press("text:Hold the agent");
+    await app.waitFor("text:You hold the agent");
+    expect(app.host.posts().filter((p) => p.name === "app.socketSent").map((p) => (p.data as { message: unknown }).message)).toContainEqual({ type: "hold", on: true });
+    await app.press("label:Options for w1");
     await app.press("label:Stop w1");
     await app.waitFor("id:displays-issue");
     expect(app.texts()).toContain("That didn't finish");
