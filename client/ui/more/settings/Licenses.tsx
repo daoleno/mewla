@@ -32,8 +32,8 @@ export function License(props: { id: string; nav: PageNav }) {
       </Section>
       {item.note ? <Text class="mt-3 px-4 text-sm text-muted-foreground">{item.note}</Text> : null}
       {text ? (
-        <View class="mt-4 rounded-2xl border border-border bg-card px-4 py-3">
-          <Text testID="license-text" class="font-mono text-xs leading-5">{text}</Text>
+        <View class="mt-4 rounded-2xl border border-border bg-card px-4 py-3" selectable>
+          <Text testID="license-text" class="font-mono text-xs leading-5 select-text">{text}</Text>
         </View>
       ) : null}
       {item.includes?.length ? (
