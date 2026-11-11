@@ -5,6 +5,15 @@ export const paired = {
   "mewla:onboarded": "true",
 };
 
+/** Two computers paired, Desk current: a link for Lab switches first. Both answer from the same scripted daemon. */
+export const pairedTwo = {
+  ...paired,
+  "mewla:v3:servers": JSON.stringify([
+    { id: "s1", name: "Desk", url: "ws://127.0.0.1:1/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) },
+    { id: "s2", name: "Lab", url: "ws://127.0.0.1:2/ws", daemonId: "c".repeat(64), daemonPublicKey: "d".repeat(64) },
+  ]),
+};
+
 /** Asia/Shanghai has had no DST since 1991: one span is the whole truth. */
 const zoneTable = (zones: string[]) => ({
   device: "Asia/Shanghai",

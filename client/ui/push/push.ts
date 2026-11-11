@@ -8,7 +8,7 @@ import type { StoredServer } from "../../core/storedServerContract";
 import type { Transport } from "../../core/transport";
 import { startCalendarAlerts } from "../calendar/alerts";
 import { deviceZone } from "../calendar/clock";
-import { refreshReminders, reminderLinks } from "../calendar/ReminderBanner";
+import { refreshReminders, reminderLinks, startReminderBanner } from "../calendar/ReminderBanner";
 import { closeEditor } from "../calendar/Editor";
 import { calendarLinks, calendarNav, showCalendarItem } from "../calendar/routes";
 import { clearCalendarAlerts, loadStrongAlerts, onStrongAlertsChange, strongAlerts } from "../calendar/state";
@@ -153,6 +153,8 @@ export function openNotificationLink(url: string): void {
   if (serverId && serverId !== current()?.id) {
     const target = servers().find((s) => s.id === serverId);
     if (!target) return;
+    // The editor goes first: switching under an open sheet crashes NSH 0.4.0's runtime (SIGSEGV in `nsh test`).
+    closeEditor();
     switchTo(target);
   }
   switch (link.section) {
@@ -204,6 +206,7 @@ export function startNotifications(): void {
   if (!hosted) return;
 
   void loadStrongAlerts();
+  startReminderBanner();
   onTransport((transport, server) => {
     void host.call("live.setCurrentServer", { serverId: server.id }).catch(() => {});
     const connected = () => {

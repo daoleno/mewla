@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { expoTokenService, framesOf, item, paired, phoneHost } from "../testing/fixtures";
+import { expoTokenService, framesOf, item, paired, pairedTwo, phoneHost } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -146,6 +146,26 @@ describe("notifications", () => {
     const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)] }, slowStart), storage: paired, platform: "android", network: expoTokenService });
     await app.host.send("push.opened", { data: { screen: "calendar", calendar_id: "Call the bank", server_id: "s1" } });
     await app.waitFor("id:calendar-item-page");
+  }, 20_000);
+
+  // Switching computers under the editor's open sheet crashed `nsh test` 0.4.0 (SIGSEGV); the link closes the editor first.
+  test("a tap for another paired computer switches to it and still lands on its page; the last one's editor closes", async () => {
+    const brain = { current_work: [{ work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() }] };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)], brain }), storage: pairedTwo, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.waitFor("id:add-item");
+    await app.press("id:add-item");
+    await app.waitFor("id:calendar-editor");
+    await app.host.send("push.opened", { data: { screen: "calendar", calendar_id: "Call the bank", server_id: "s2" } });
+    await app.waitFor("id:calendar-item-page");
+    await app.wait(500);
+    expect(app.shows("id:calendar-item-page")).toBe(true);
+    expect(app.shows("id:editor-save")).toBe(false);
+    // And back to the first computer, onto a Work of Brain's.
+    await app.host.send("links.open", { url: "mewla://brain/work/w-q?serverId=s1" });
+    await app.waitFor("id:work-detail");
+    await app.wait(500);
+    expect(app.shows("id:work-detail")).toBe(true);
   }, 20_000);
 
   test("an alert's link opens the item too, and a link for a computer this phone does not know opens nothing", async () => {
