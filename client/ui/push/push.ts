@@ -256,7 +256,4 @@ export function startNotifications(): void {
     const url = pushLink(data);
     if (url) openNotificationLink(url);
   });
-  host.on<{ url?: string }>("links.open", (payload) => {
-    if (payload?.url && /^mewla:\/\/(calendar|live|brain|sessions)/i.test(payload.url)) openNotificationLink(payload.url);
-  });
 }
