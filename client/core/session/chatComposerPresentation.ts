@@ -30,13 +30,13 @@ export function buildChatComposerPlaceholder({
   }
   switch (agentKind) {
     case 'codex':
-      return 'Ask Codex';
+      return 'Message Codex';
     case 'grok':
-      return 'Ask Grok';
+      return 'Message Grok';
     case 'cursor':
-      return 'Ask Cursor';
+      return 'Message Cursor';
     case 'claude':
-      return 'Ask Claude';
+      return 'Message Claude';
     default:
       return 'Message';
   }
