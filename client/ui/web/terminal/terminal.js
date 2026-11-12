@@ -845,12 +845,18 @@
     if (x.mewla_vt_mouse(vt, action, button, mods, p.x - padX, p.y - padY, outBuf, outBuf + 4)) send({ type: "input", data: outText() });
   }
 
-  var down = null, unit = 1, anchor = null, reporting = false;
+  var down = null, unit = 1, anchor = null, reporting = false, pressed = false;
+
+  /** The keyboard's place: the textarea, once a press on the canvas ends (Firefox leaves the frame's body focused). */
+  function takeFocus() {
+    if (document.activeElement !== input) input.focus({ preventScroll: true });
+  }
 
   canvas.addEventListener("mousedown", function (e) {
     if (e.button !== 0 && !reportsMouse(e)) return;
     e.preventDefault();
-    input.focus({ preventScroll: true });
+    pressed = true;
+    takeFocus();
     if (reportsMouse(e)) {
       reporting = true;
       mouseReport(e, MOUSE.PRESS);
@@ -903,6 +909,10 @@
   });
 
   window.addEventListener("mouseup", function (e) {
+    if (pressed) {
+      pressed = false;
+      takeFocus();
+    }
     if (reporting) {
       reporting = false;
       mouseReport(e, MOUSE.RELEASE);
@@ -955,15 +965,16 @@
     if (!copied) send({ type: "copy", text: text });
   }
 
-  input.addEventListener("copy", function (e) {
+  // At the document: the whole frame is the terminal, and Firefox may aim these at its body.
+  document.addEventListener("copy", function (e) {
     var text = selectedText();
     if (!text || !e.clipboardData) return;
     e.clipboardData.setData("text/plain", text);
     e.preventDefault();
     copiedAt = Date.now();
   });
-  input.addEventListener("cut", function (e) { e.preventDefault(); });
-  input.addEventListener("paste", function (e) {
+  document.addEventListener("cut", function (e) { e.preventDefault(); });
+  document.addEventListener("paste", function (e) {
     e.preventDefault();
     var text = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
     if (!text || !vt) return;
@@ -1047,6 +1058,8 @@
   }
   input.addEventListener("focus", function () { focusChanged(true); });
   input.addEventListener("blur", function () { focusChanged(false); });
+  // The frame focused as a whole (a click from the app's page, Tab): the keyboard goes to the textarea.
+  window.addEventListener("focus", function () { if (vt) takeFocus(); });
 
   // Commands from the app.
 

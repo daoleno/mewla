@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -57,13 +58,13 @@ func TestWebUIServesLoopbackClientsOfLoopbackHosts(t *testing.T) {
 			t.Fatalf("%s: status=%d body=%q", host, response.Code, response.Body.String())
 		}
 		policy := response.Header().Get("Content-Security-Policy")
-		if !strings.Contains(policy, "connect-src 'self' ws://"+host+" wss://"+host) ||
+		if !strings.Contains(policy, "connect-src 'self' http://"+host+" ws://"+host+" wss://"+host) ||
 			!strings.Contains(policy, "frame-ancestors 'none'") ||
 			!strings.Contains(policy, "frame-src 'none'") ||
 			// The page's <base href="/">: deep links load its files from the root.
 			!strings.Contains(policy, "base-uri 'self'") ||
 			// NSH's runtime writes its import map inline, with blob: URLs.
-			!strings.Contains(policy, "script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' blob:") ||
+			!strings.Contains(policy, "script-src 'self' http://"+host+" 'wasm-unsafe-eval' 'unsafe-inline' blob:") ||
 			// Friends pictures and video come from the media host over https.
 			!strings.Contains(policy, "img-src 'self' data: blob: https:") ||
 			!strings.Contains(policy, "media-src 'self' data: blob: https:") {
@@ -205,6 +206,30 @@ func TestAppRoutesServeTheWebUIToPageLoadsOnly(t *testing.T) {
 		if response.Code == http.StatusOK || strings.Contains(response.Body.String(), "<html>") {
 			t.Fatalf("%s %s accept=%q host=%s: status=%d body=%q", tc.method, tc.path, tc.accept, tc.host, response.Code, response.Body.String())
 		}
+	}
+}
+
+// NSH's web views are srcdoc frames with an opaque origin that inherit the page's policy; WebKit
+// matches their inherited 'self' against that origin, so the page's own origin is named as well.
+func TestPolicyNamesThePagesOriginForItsSandboxedFrames(t *testing.T) {
+	s := webUITestServer(t, "https://mewla.example.ts.net")
+	for host, origin := range map[string]string{
+		"127.0.0.1:9876":           "http://127.0.0.1:9876",
+		"localhost:9876":           "http://localhost:9876",
+		"Mewla.Example.ts.net":     "https://mewla.example.ts.net",
+		"mewla.example.ts.net:443": "https://mewla.example.ts.net",
+	} {
+		policy := serveWebUI(s, host, "127.0.0.1:50000").Header().Get("Content-Security-Policy")
+		for _, directive := range strings.Split(policy, "; ") {
+			name, _, _ := strings.Cut(directive, " ")
+			named := slices.Contains(strings.Fields(directive), origin)
+			if want := name == "script-src" || name == "font-src" || name == "connect-src"; named != want {
+				t.Fatalf("%s: %q names %s: %v, want %v", host, directive, origin, named, want)
+			}
+		}
+	}
+	if policy := serveWebUI(s, "other.example.ts.net", "127.0.0.1:50000").Header().Get("Content-Security-Policy"); policy != "" {
+		t.Fatalf("an unknown host got a policy: %q", policy)
 	}
 }
 
