@@ -376,9 +376,15 @@
     schedule();
   }
 
-  /** History rows (whole lines, ANSI) drawn through the second VT a page at a time, so their colors are the VT's. */
-  function renderHistory(ansiRows) {
-    if (!ansiRows.length) return [];
+  /**
+   * History row i as a line, drawn through the second VT with the rows of its page, when it is first
+   * needed (drawn, selected, tapped): history arrives in thousands of rows while output floods, and
+   * nobody looks at most of them. Rows stand alone (core/terminal/history.ts), so a page starts from
+   * a reset.
+   */
+  function historyLine(i) {
+    if (history[i]) return history[i];
+    var start = i - (i % PAGE), end = Math.min(start + PAGE, historyAnsi.length);
     var width = Math.min(Math.max(historyCols || cols || 80, 2), 1000);
     if (!scratch || scratchCols !== width) {
       if (scratch) x.mewla_vt_destroy(scratch);
@@ -386,21 +392,14 @@
       scratchCols = width;
       if (scratch) themeVt(scratch);
     }
-    var out = [];
-    if (!scratch) {
-      for (var e = 0; e < ansiRows.length; e++) out.push({ runs: [], wrapped: false });
-      return out;
-    }
-    for (var at = 0; at < ansiRows.length; at += PAGE) {
-      var page = ansiRows.slice(at, at + PAGE);
-      // Clear and home without resetting the styling the page before left.
-      withBytes(enc.encode("\x1b[2J\x1b[H" + page.join("\r\n")), function (p, n) { x.mewla_vt_write(scratch, p, n); });
-      var rendered = [];
+    var rendered = [];
+    if (scratch) {
+      withBytes(enc.encode("\x1b[0m\x1b[2J\x1b[H" + historyAnsi.slice(start, end).join("\r\n")), function (p, n) { x.mewla_vt_write(scratch, p, n); });
       decode(scratch, true, function (row, line) { if (row < PAGE) rendered[row] = line; });
-      // A history row is a whole line (the computer joined wrapped rows).
-      for (var i = 0; i < page.length; i++) out.push({ runs: rendered[i] ? rendered[i].runs : [], wrapped: false });
     }
-    return out;
+    // A history row is a whole line (the computer joined wrapped rows).
+    for (var r = start; r < end; r++) history[r] = { runs: rendered[r - start] ? rendered[r - start].runs : [], wrapped: false };
+    return history[i];
   }
 
   function destroyScratch() {
@@ -468,7 +467,7 @@
   // Content lines: history then the screen.
 
   function lineCount() { return history.length + grid.length; }
-  function lineAt(i) { return (i < history.length ? history[i] : grid[i - history.length]) || { runs: [], wrapped: false }; }
+  function lineAt(i) { return (i < 0 ? null : i < history.length ? historyLine(i) : grid[i - history.length]) || { runs: [], wrapped: false }; }
   /** The y of content line i, in device pixels. */
   function lineY(i) { return padY + (i - history.length) * cellH + Math.round(scrollPx); }
   function lineUnder(y) { return history.length + Math.floor((y - padY - Math.round(scrollPx)) / cellH); }
@@ -768,11 +767,12 @@
     if (m.cols > 0 && m.cols !== historyCols) {
       historyCols = m.cols;
       destroyScratch();
+      history = new Array(historyAnsi.length);
     }
     alternate = m.alternate;
+    // Kept as sent; drawn when first needed (historyLine). `history` holds the drawn ones, as long as historyAnsi.
     for (var i = 0; i < m.rows.length; i++) historyAnsi.push(m.rows[i]);
-    var added = renderHistory(m.rows);
-    for (var j = 0; j < added.length; j++) history.push(added[j]);
+    history.length = historyAnsi.length;
     // Scrolled up, the rows above the screen grew: the reader's rows stay where they are.
     if (scrollPx > 0 && !m.reset) scrollPx += m.rows.length * cellH;
     if (alternate) scrollPx = 0;
@@ -1077,9 +1077,9 @@
     vtPalette = palette256(sixteen);
     if (!x) return;
     if (vt) themeVt(vt);
-    // The history's colors are the VT's: draw its rows again.
+    // The history's colors are the VT's: its rows are drawn again when next needed.
     destroyScratch();
-    history = renderHistory(historyAnsi);
+    history = new Array(historyAnsi.length);
     pull(true);
   }
 
