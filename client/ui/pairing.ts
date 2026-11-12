@@ -16,6 +16,12 @@ export const pairingStatus = signal("");
 export const pairingIssue = signal<PairingProblem | null>(null);
 /** The computer just paired: on a phone the connected step shows over everything until the person goes on. */
 export const justPaired = signal<StoredServer | null>(null);
+/**
+ * A pairing link the system opened while the app runs: "Pairing…" (or what a slow pairing is doing)
+ * while it pairs, then why it did not. The pairing pages show their own; the app shows this one over
+ * the rest, as the Expo app's toasts did (parity #36).
+ */
+export const linkPairing = signal<{ problem: PairingProblem | null } | null>(null);
 /** Counts finished pairings, on every platform: a pairing page closes when it moves. */
 export const pairings = signal(0);
 const device = () => (platform.os === "web" ? "browser" : "phone");
@@ -48,6 +54,7 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
   }
   pairingBusy.set(true);
   pairingStatus.set("");
+  if (source === "link") linkPairing.set({ problem: null });
   try {
     await addPairedServer(await pairWith(payload, (message) => pairingStatus.set(message)));
     const paired = current();
@@ -62,9 +69,11 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     pairings.set(pairings() + 1);
     // A browser goes straight to the app; a phone sees Brain come home first (the app goes until then).
     if (paired && device() === "phone") justPaired.set(paired);
+    if (source === "link") linkPairing.set(null);
     latch.release();
   } catch (error) {
     pairingIssue.set(pairingProblem(error));
+    if (source === "link") linkPairing.set({ problem: pairingProblem(error) });
     latch.release(value);
   } finally {
     pairingBusy.set(false);
