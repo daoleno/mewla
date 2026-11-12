@@ -94,7 +94,7 @@ export function BrowserJoin(props: { onPairingLink: () => void }) {
   return (
     <NavPage title="Connect to Mewla">
       <View testID="browser-join" class="flex-1 items-center justify-center bg-background p-6">
-        <View class="w-full max-w-[440px] gap-6">
+        <View class="w-full max-w-[480px] gap-6">
           <Text class="text-center text-sm text-muted-foreground">Connect to Mewla</Text>
           <Text class="text-center text-3xl font-semibold">{title()}</Text>
           <Text testID="join-detail" class="text-center text-base text-muted-foreground">{detail()}</Text>
