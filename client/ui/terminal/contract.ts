@@ -80,6 +80,8 @@ export type TerminalEvents = {
  * - `mark {row}`: highlight one history row (the search's match); -1 none.
  * - `focus {}` / `blur {}`: show or hide the keyboard.
  * - `retry {}`: make the VT again after `failed`.
+ * - `paste {text}`: text pasted into the program, framed for bracketed paste when the program asked for it
+ *   (the key bar's Paste on the phones; the web pastes through the browser and has no such key).
  */
 export const TerminalSurface = nativeComponent<TerminalProps, TerminalEvents>("mewla.terminal", {
   props: ["fontSize", "theme", "padding"],

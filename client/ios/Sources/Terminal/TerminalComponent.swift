@@ -60,6 +60,8 @@ final class TerminalComponent: NshComponent {
       terminal.hideKeyboard()
     case "retry":
       terminal.retry()
+    case "paste":
+      if let text = args?["text"] as? String { terminal.paste(text) }
     default:
       break
     }

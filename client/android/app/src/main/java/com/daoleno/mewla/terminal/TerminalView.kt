@@ -1001,6 +1001,9 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     return clip.getItemAt(0).coerceToText(context)?.toString()?.takeIf { it.isNotEmpty() }
   }
 
+  /** The `paste` command (the key bar's Paste): as the selection menu's Paste. */
+  fun pasteText(text: String) = paste(text)
+
   /** Pasted text to the program, framed for bracketed paste when it asked for it. */
   private fun paste(text: String) {
     if (handle == 0L) return
