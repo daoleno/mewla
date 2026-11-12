@@ -1,6 +1,5 @@
 import { cleanup, Clipboard, computed, openUrl, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
-import { AlertDialog } from "nsh/base";
 import { accountRow, endpointHost, openAccountId } from "../../../core/extensions/accountListModel";
 import { cloudProfileGroups } from "../../../core/extensions/cloudProfilesModel";
 import { accountStatus, type ConnectionRequest, type PluginAccount, type PluginIntegration } from "../../../core/extensions/connections";
@@ -19,7 +18,7 @@ import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { serverDisplayName } from "../../../core/extensions/serverDisplayName";
 import { formatDateTime, formatFullDateTime } from "../../../core/more/dates";
 import { daemonName } from "../daemon";
-import { EmptyState, Field, Notice, Row, Section, Spinner, StatusMark, SwitchRow } from "../../kit/kit";
+import { confirmDestructive, EmptyState, Field, Notice, Row, RowButton, Section, Spinner, StatusMark, SwitchRow, Tile } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { Action } from "./Action";
 import { connectingService, PluginsFrame, ToolUpdateNotices, toneStatus } from "./Pages";
@@ -50,7 +49,6 @@ export function ServicePage(props: { id: string; nav: PageNav }) {
     if (!p) return flowState().loaded ? <Notice tone="failed" title="Service unavailable" detail={`${serverDisplayName(daemonName(), "This server")} does not offer this service.`} /> : <EmptyState busy title="Loading services" />;
     return (
       <View>
-        <Header plugin={p} accounts={accounts()} />
         <ToolUpdateNotices service={p.id} />
         {hasAccounts() ? <AccountList plugin={p} accounts={accounts()} nav={props.nav} /> : !custom && p.id !== "hyperliquid" ? <ConnectOffer plugin={p} /> : null}
         {custom ? <CustomServiceForm plugin={p} again={untracked(hasAccounts)} /> : null}
@@ -64,27 +62,27 @@ export function ServicePage(props: { id: string; nav: PageNav }) {
     );
   };
   return (
-    <PluginsFrame title={plugin()?.name ?? "Service"} testID="service-page" nav={props.nav}>
+    <PluginsFrame title={plugin()?.name ?? "Service"} testID="service-page" nav={props.nav} hero={plugin() ? <Header plugin={plugin()!} accounts={accounts()} /> : undefined}>
       {((current) => untracked(() => body(current.plugin)))(view())}
     </PluginsFrame>
   );
 }
 
+/** The detail's top block (SPEC §15 Collection): a 64 pt tile, the name in display type, the state line. */
 function Header(props: { plugin: PluginIntegration; accounts: PluginAccount[] }) {
   const state = () => serviceState(props.plugin, props.accounts);
   const cli = props.plugin.cli && CLI_NAMES[props.plugin.id] ? `${CLI_NAMES[props.plugin.id]} ${props.plugin.cli.version} · ${props.plugin.cli.managed ? "managed by Mewla" : "local installation"}` : "";
   return (
-    <View class="mt-4 flex-row items-start gap-3 px-1">
-      <ServiceMark id={props.plugin.id} size={32} />
-      <View class="min-w-0 flex-1 gap-1">
-        <Text class="text-xl font-semibold" role="header">{props.plugin.name}</Text>
-        {props.plugin.description ? <Text class="text-sm text-muted-foreground">{props.plugin.description}</Text> : null}
-        {cli ? <Text class="text-xs text-muted-foreground">{cli}</Text> : null}
+    <View testID="service-header" class="gap-3 px-1 pb-2 pt-3">
+      <Tile size={64}><ServiceMark id={props.plugin.id} size={32} /></Tile>
+      <View class="gap-1">
+        <Text class="text-display font-bold tracking-display" role="header" style={{ numberOfLines: 2 }}>{props.plugin.name}</Text>
+        {(() => {
+          const s = state();
+          return s.kind === "status" ? <StatusMark status={toneStatus(s.tone)} label={s.label} /> : null;
+        })()}
+        {cli ? <Text class="text-caption text-muted-foreground">{cli}</Text> : null}
       </View>
-      {(() => {
-        const s = state();
-        return s.kind === "status" ? <StatusMark status={toneStatus(s.tone)} label={s.label} /> : null;
-      })()}
     </View>
   );
 }
@@ -147,6 +145,7 @@ function AccountList(props: { plugin: PluginIntegration; accounts: PluginAccount
           />
           {open() ? <AccountCard plugin={props.plugin} account={account} nav={props.nav} /> : null}
         </Section>
+        {open() ? <AccountEnd account={account} /> : null}
       </View>
     );
   };
@@ -186,11 +185,6 @@ function disconnectCopy(account: PluginAccount): { title: string; detail: string
   return { title: `Disconnect ${account.name}?`, detail: "Brain loses access right away, and Mewla removes its saved sign-in.", action: "Disconnect" };
 }
 
-async function confirm(title: string, detail: string, action: string): Promise<boolean> {
-  const answer = await AlertDialog.show({ title, description: detail, actions: [{ id: "keep", label: "Keep", role: "cancel" }, { id: "go", label: action, role: "destructive" }] });
-  return answer.action === "go";
-}
-
 /**
  * One account: its switch, the one fix it needs if any, what Brain may do, its
  * tools, and Disconnect after one confirm.
@@ -215,7 +209,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
     const subtitle = [name === "read" ? job?.read : job?.write, note].filter(Boolean).join(". ");
     const pending = running() === `${name}:${a.id}` || (name === "write" && control.kind === "consent" && running() === `connect:${props.plugin.id}`);
     if (control.kind === "consent") {
-      return <Row icon="edit" title={title} subtitle={subtitle} trailing={pending ? <Spinner size={16} /> : <SmallButton label="Allow" accessibilityLabel={`Allow changes in ${props.plugin.name}`} disabled={busy()} onPress={() => flow().setAccess(a, name, true)} />} />;
+      return <Row icon="edit" title={title} subtitle={subtitle} trailing={pending ? <Spinner size={16} /> : <RowButton label="Allow" accessibilityLabel={`Allow changes in ${props.plugin.name}`} disabled={busy()} onPress={() => flow().setAccess(a, name, true)} />} />;
     }
     return <SwitchRow testID={`${name}-${a.id}`} title={title} subtitle={subtitle} checked={control.on} busy={pending} disabled={busy() && !pending} onChange={(on) => flow().setAccess(a, name, on)} />;
   };
@@ -233,7 +227,6 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
             ? aws.subtitle
             : [custom ? endpointHost(a.endpoint) : a.identity !== a.name ? a.identity : "", a.verified_at ? `Checked ${formatDateTime(a.verified_at)}` : ""].filter(Boolean).join(" · ");
         const tools = allowedToolCount(a);
-        const copy = disconnectCopy(a);
         return (
           <View>
             {/* An account that is off reads quieter; its switch still turns it on. */}
@@ -251,7 +244,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
             </View>
             {a.integration === "aws" && a.profile ? (renaming() ? <ProfileName account={a} onDone={() => renaming.set(false)} /> : <Row icon="edit" title="Rename profile" onPress={() => renaming.set(true)} />) : null}
             {a.profile_sign_in_by ? <Row icon="time" title="Sign in again by" subtitle={`${formatFullDateTime(a.profile_sign_in_by)} · ${a.profile_sign_in_limit === "maximum" ? "At latest · AWS allows up to 12h; your session may end sooner." : "SSO session"}`} /> : null}
-            {a.profile ? <Row icon="person-circle" title="Sign in again" subtitle={`Use ${props.plugin.name} remote sign-in for this ${a.integration === "aws" ? "profile" : "account"}.`} trailing={connectingService() === props.plugin.id ? <Spinner size={16} /> : <SmallButton label="Sign in again" disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />} /> : null}
+            {a.profile ? <Row icon="person-circle" title="Sign in again" subtitle={`Use ${props.plugin.name} remote sign-in for this ${a.integration === "aws" ? "profile" : "account"}.`} trailing={connectingService() === props.plugin.id ? <Spinner size={16} /> : <RowButton label="Sign in again" disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />} /> : null}
             {!a.profile && recovery ? (
               <Row
                 testID={`recover-${a.id}`}
@@ -262,7 +255,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
                 trailing={
                   running() === `recover:${a.id}` || (recovery.action === "reconnect" && connectingService() === props.plugin.id) || (recovery.action === "disconnect" && running() === `disconnect:${a.id}`)
                     ? <Spinner size={16} />
-                    : <SmallButton label={recovery.actionLabel} disabled={busy()} onPress={() => flow().recover(a, recovery.action)} />
+                    : <RowButton label={recovery.actionLabel} disabled={busy()} onPress={() => flow().recover(a, recovery.action)} />
                 }
               />
             ) : null}
@@ -293,6 +286,27 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
               chevron
               onPress={() => props.nav.push({ name: "extensions-tools", service: props.plugin.id, account: a.id })}
             />
+          </View>
+        );
+      })()}
+    </View>
+  );
+}
+
+/** An open account's irreversible steps, alone in the last group (SPEC §15): removing its trading key, Disconnect. */
+function AccountEnd(props: { account: PluginAccount }) {
+  const account = () => flowState().accounts.find((item) => item.id === props.account.id) ?? props.account;
+  const running = () => flowState().running;
+  const busy = () => running() !== null;
+  const flow = () => plugins()!;
+  return (
+    <View>
+      {(() => {
+        const a = account();
+        const copy = disconnectCopy(a);
+        if (!a.signer && !a.profile && !canDisconnect(a)) return null;
+        return (
+          <Section>
             {a.signer ? (
               <Row
                 icon="key"
@@ -302,7 +316,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
                 destructive
                 disabled={busy()}
                 onPress={() =>
-                  void confirm(`Remove the trading key from ${a.name}?`, "Brain can still read it, and can no longer place or cancel orders. Mewla deletes the saved key.", "Remove key").then((yes) => yes && flow().removeKey(a))
+                  void confirmDestructive(`Remove the trading key from ${a.name}?`, "Brain can still read it, and can no longer place or cancel orders. Mewla deletes the saved key.", "Remove key").then((yes) => yes && flow().removeKey(a))
                 }
               />
             ) : null}
@@ -314,20 +328,12 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
                 trailing={running() === `disconnect:${a.id}` ? <Spinner size={16} /> : undefined}
                 destructive
                 disabled={busy()}
-                onPress={() => void confirm(copy.title, copy.detail, copy.action).then((yes) => yes && flow().disconnect(a))}
+                onPress={() => void confirmDestructive(copy.title, copy.detail, copy.action).then((yes) => yes && flow().disconnect(a))}
               />
             )}
-          </View>
+          </Section>
         );
       })()}
-    </View>
-  );
-}
-
-function SmallButton(props: { label: string; onPress: () => void; disabled?: boolean; accessibilityLabel?: string }) {
-  return (
-    <View role="button" accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} class="rounded-full bg-secondary px-3 py-1.5 active:opacity-70 disabled:opacity-50">
-      <Text class="text-sm font-medium">{props.label}</Text>
     </View>
   );
 }
@@ -389,7 +395,7 @@ function CustomServiceForm(props: { plugin: PluginIntegration; again: boolean })
           <View class="mt-4">
             <Action filled testID="custom-connect" label={browser() ? "Continue in browser" : "Connect service"} busy={connectingService() === props.plugin.id} disabled={!endpoint().trim() || (trust() && !networks().trim())} onPress={() => void connect()} />
           </View>
-          <Text testID="custom-note" class="mt-2 px-4 text-xs text-muted-foreground">{`Credentials stay on ${serverDisplayName(daemonName())}. Each tool needs your permission.`}</Text>
+          <Text testID="custom-note" class="mt-2 px-4 text-caption text-muted-foreground">{`Credentials stay on ${serverDisplayName(daemonName())}. Each tool needs your permission.`}</Text>
         </View>
       ) : (
         <View class="mt-4">
