@@ -141,3 +141,17 @@ describe("a delegated Worker's Session", () => {
     expect(app.texts()).toContain(task);
   }, 20_000);
 });
+
+describe("the day caption", () => {
+  test("a thread opens with its day's caption, even when its first message came back without a time", async () => {
+    const now = new Date().toISOString();
+    const app = await brainWith([
+      { id: "u1", seq: 1, kind: "user_message", role: "user", body: "Run the bash command touch /tmp/proof then say done" },
+      { id: "a1", seq: 2, timestamp: now, kind: "assistant_message", role: "assistant", body: "Done. I created the empty file." },
+    ]);
+    await app.waitFor("id:date-divider", { timeout: 10_000 });
+    const texts = app.texts();
+    expect(texts.indexOf("Today")).toBeGreaterThanOrEqual(0);
+    expect(texts.indexOf("Today")).toBeLessThan(texts.indexOf("Run the bash command touch /tmp/proof then say done"));
+  }, 20_000);
+});
