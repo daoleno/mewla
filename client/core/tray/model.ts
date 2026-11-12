@@ -11,7 +11,7 @@ import { agentKindFromProvider, typeLabel } from "../sessions/workerPresentation
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerApproval, WorkerPrompt } from "../sessions/workers";
 import type { WorkWorkerSession } from "../work/types";
-import { liveWorkerIds } from "../work/workers";
+import { liveWorkerIds, type WorkWorkerLine } from "../work/workers";
 import { brainWorkSurface, type BrainWorkSlip } from "../work/surface";
 import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
 
@@ -282,6 +282,30 @@ export function sessionRow(worker: Worker, now: number, options: { alias?: strin
     target: { open: "session", workerId: worker.id },
     done: ended || undefined,
     progress: ended ? undefined : progressSteps(worker.phase) ?? undefined,
+  };
+}
+
+/**
+ * A Work's Worker as a tray row (§11 Work detail, "Workers"): its agent's logo, "Agent · title" (no Session
+ * id), what it does, its progress bar, and "● 12m" while it works, else when it finished; it pushes its
+ * Session. What it does: a state that is news ("Needs you", "Failed", "Ended"), then what it reported; with
+ * nothing reported (a Claude Session on today's daemons reports nothing), the project it works in, which
+ * the title does not say, rather than a bare "Working" or its terminal's footer.
+ */
+export function workerRow(worker: WorkWorkerLine, now: number): TrayRow {
+  const live = worker.state === "running";
+  const named = worker.name && worker.name !== worker.agentLabel && worker.name !== "Worker";
+  return {
+    key: `worker:${worker.sessionId}`,
+    title: named ? `${worker.agentLabel} · ${worker.name}` : worker.agentLabel,
+    line: [worker.stateLabel, worker.summary || worker.project].filter(Boolean).join(" · "),
+    end: live ? elapsedShort(worker.since, now) : worker.time,
+    live: live || undefined,
+    needs: worker.state === "blocked" || undefined,
+    tile: { kind: "agent", agent: worker.agent, flavor: worker.flavor },
+    target: { open: "session", workerId: worker.sessionId },
+    done: worker.state === "done" || undefined,
+    progress: worker.progress,
   };
 }
 

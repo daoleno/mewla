@@ -3,7 +3,8 @@ import type { Worker } from "../sessions/workers";
 import type { BrainCurrentWork } from "../work/types";
 import { listTime } from "../sessions/listRow";
 import { catState } from "../pets/cat";
-import { backMark, requestsOf, trayModel, type TrayInput } from "./model";
+import { workWorkerLines } from "../work/workers";
+import { backMark, requestsOf, trayModel, workerRow, type TrayInput } from "./model";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
 
@@ -126,6 +127,20 @@ describe("tray model", () => {
     const one = trayModel(input({ workers: [worker("b")], currentWork: [work("w1", { worker_sessions: [joined("b", true)] })] }));
     expect(one.running).toHaveLength(1);
     expect(one.running[0]).toMatchObject({ key: "work:w1", tile: { kind: "agent", agent: "claude" }, target: { open: "session", workerId: "b" } });
+  });
+
+  test("Work detail's Worker is a tray row: \"Agent · title\" without its id, what it does or where, \"● 12m\" while it works", () => {
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    const id = "mh-17b3337d43f38037916f0e5b";
+    const joined = new Date(NOW - 12 * 60_000).toISOString();
+    const lines = workWorkerLines([
+      { session_id: id, name: `Hello writer (${id})`, provider: "claude", state: "running", summary: footer, live: true, joined_at: joined, updated_at: joined },
+      { session_id: "%8", name: "builder", provider: "codex", state: "failed", summary: "Build broke on Windows", live: false, joined_at: joined, ended_at: joined, updated_at: joined },
+    ], new Map([[id, worker(id, { name: `Hello writer (${id})`, status: "running", summary: footer })]]), new Date(NOW));
+    const [live, failed] = lines.map((line) => workerRow(line, NOW));
+    expect(live).toMatchObject({ title: "Claude Code · Hello writer", line: "mewla", end: "12m", live: true, tile: { kind: "agent", agent: "claude" }, target: { open: "session", workerId: id } });
+    expect(failed).toMatchObject({ title: "OpenAI Codex · builder", line: "Failed · Build broke on Windows" });
+    expect(failed!.live).toBeUndefined();
   });
 
   test("a new device asking to be let in is a request: no one-tap, its row opens its sheet", () => {
