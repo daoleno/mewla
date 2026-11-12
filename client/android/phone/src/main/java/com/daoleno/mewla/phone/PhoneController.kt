@@ -555,9 +555,10 @@ object PhoneController {
      * error: the keeper's reason, or (between the helper going and the keeper's next pass) the plain fact.
      * Null when the phone is not in setup.
      */
-    fun setupReason(): String? = when (state()) {
-        "setup" -> problem ?: "The helper is not running on the phone; Mewla is starting it again."
-        else -> null
+    fun setupReason(): String? = when {
+        state() != "setup" -> null
+        !prefs.enabled -> "Phone use is switched off in Mewla on the phone."
+        else -> problem ?: "The helper is not running on the phone; Mewla is starting it again."
     }
 
     private fun noteProblem(message: String?) {
