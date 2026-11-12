@@ -3,6 +3,7 @@ import { createNavStack, NavStack } from "nsh/base";
 import { installPlatform } from "../../../core/platform";
 import type { ConnectionState, Frame } from "../../../core/transport";
 import { nshPlatform } from "../../platform";
+import { MenuHost } from "../../kit/Menu";
 import { bindDaemon } from "../daemon";
 import { MorePageView } from "../Pages";
 import type { MorePage } from "../routes";
@@ -78,5 +79,6 @@ host.on("app.navPop", () => nav.pop());
 mount(() => (
   <View class="flex-1 bg-background">
     <NavStack state={nav} style={{ flex: 1 }}>{(route) => <MorePageView route={route} nav={nav} onPair={() => {}} />}</NavStack>
+    <MenuHost />
   </View>
 ));

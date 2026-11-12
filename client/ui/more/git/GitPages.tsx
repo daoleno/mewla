@@ -1,4 +1,4 @@
-import { effect, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { effect, Scroll, signal, Text, untracked, View, type ViewRef } from "nsh";
 import type { JSX } from "nsh";
 import { AlertDialog, Button } from "nsh/base";
 import { NavPage } from "../../shell/NavPage";
@@ -20,7 +20,9 @@ import { DisplayTitle, EmptyState, Notice, Page, PillButton, Row, RowButton, Sea
 import { Icon } from "../../kit/Icon";
 import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
-import { CommitFilePage, DiffPage, DiffReader, SPLIT_WIDTH } from "./GitDiff";
+import { CommitFilePage, DiffPage, DiffReader } from "./GitDiff";
+import { listDetail } from "../../shell/layout";
+import { createMenuAnchor, showMenu, type MenuItem } from "../../kit/Menu";
 import { FilePage, FilesPage } from "./GitFiles";
 import { Counts, Current, FileName, FlashLine, IconButton, StatusTile, TextButton } from "./parts";
 import type { GitPage } from "./routes";
@@ -77,23 +79,22 @@ async function entryMenu(review: GitReview, nav: PageNav, entry: GitReviewEntry,
 }
 
 /** More actions on the whole repository. */
-async function overflowMenu(review: GitReview, nav: PageNav): Promise<void> {
+async function overflowMenu(review: GitReview, nav: PageNav, anchor: ViewRef | null): Promise<void> {
   const snapshot = review.status();
   // SPEC §15 Code review's order: Refresh, Browse files, Fetch, Pull, Push, Copy path, Copy branch, Undo last
-  // discard (only once there is one: a sheet has no disabled actions), then Discard all changes last, in ink.
-  const actions: Array<{ id: string; label: string; role?: "cancel" }> = [{ id: "refresh", label: "Refresh" }];
+  // discard (disabled until there is one; a phone's action sheet leaves it out), then Discard all changes last, in ink.
+  const actions: MenuItem[] = [{ id: "refresh", label: "Refresh" }];
   if (snapshot?.available) {
     actions.push({ id: "browse", label: "Browse files" });
     if (snapshot.upstream) actions.push({ id: "fetch", label: "Fetch" }, { id: "pull", label: "Pull" }, { id: "push", label: "Push" });
     if (snapshot.repo_root) actions.push({ id: "copy-root", label: "Copy path" });
     if (snapshot.branch) actions.push({ id: "copy-branch", label: "Copy branch" });
-    if (review.lastDiscard()) actions.push({ id: "undo", label: "Undo last discard" });
+    actions.push({ id: "undo", label: "Undo last discard", disabled: !review.lastDiscard() });
     if (review.groups().changes.length) actions.push({ id: "discard-all", label: "Discard all changes" });
   }
-  actions.push({ id: "cancel", label: "Cancel", role: "cancel" });
   const title = [snapshot?.repo_name, snapshot?.branch].filter(Boolean).join(" · ");
-  const answer = await AlertDialog.show({ title: title || undefined, presentation: "actionSheet", actions });
-  switch (answer.action) {
+  const chosen = await showMenu({ title: title || undefined, items: actions, anchor, testID: "git-menu-popover" });
+  switch (chosen) {
     case "refresh":
       // Already reading: the answer on its way is the refresh.
       if (review.loading()) break;
@@ -106,7 +107,7 @@ async function overflowMenu(review: GitReview, nav: PageNav): Promise<void> {
     case "fetch":
     case "pull":
     case "push":
-      void review.sync(answer.action);
+      void review.sync(chosen);
       break;
     case "undo":
       review.undoLastDiscard();
@@ -138,8 +139,10 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
   // The reader beside the list on a wide screen: the entry chosen, and the one it shows.
   // A fresh object per tap: tapping a row the reader moved away from opens it again.
   const chosen = signal<{ key: string } | null>(null);
+  const moreAnchor = createMenuAnchor();
   const shown = signal<string | null>(null);
-  const wide = () => windowSize().width >= SPLIT_WIDTH;
+  // List and detail side by side on wide with a right pane of 880 or more (SPEC §14.2), following the pane live.
+  const wide = () => listDetail();
   review.open();
   // History loads the first time its tab is shown.
   effect(() => {
@@ -163,7 +166,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
     <View class="flex-row items-center">
       <IconButton testID="git-search" icon="search" label="Search changed files" selected={review.searchOpen()} onPress={() => (review.searchOpen() ? closeSearch() : review.searchOpen.set(true))} />
       <IconButton testID="git-tree" icon={review.tree() ? "list" : "folder"} label={review.tree() ? "Show as list" : "Show as folders"} onPress={() => review.setTree(!review.tree())} />
-      <IconButton testID="git-more" icon="more-vertical" label="More actions" onPress={() => void overflowMenu(review, props.nav)} />
+      <IconButton ref={moreAnchor.ref} testID="git-more" icon="more-vertical" label="More actions" onPress={() => void overflowMenu(review, props.nav, moreAnchor.node())} />
     </View>
   );
   return (

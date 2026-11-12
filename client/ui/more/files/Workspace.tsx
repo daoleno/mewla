@@ -1,6 +1,7 @@
 import { cleanup, Clipboard, effect, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
 import { Button, TextView } from "nsh/base";
+import { listDetail } from "../../shell/layout";
 import { NavPage } from "../../shell/NavPage";
 import { getBrainWorkspaceFile, getBrainWorkspaceTree, getSessionFileMetadata } from "../../../core/files/requests";
 import {
@@ -59,9 +60,33 @@ export function WorkspacePage(props: { trail?: string[]; file?: string; hostSess
   const name = props.file ? props.file.split("/").at(-1)! : props.trail?.length ? props.trail.at(-1)!.split("/").at(-1)! : "Workspace";
   // A folder's display title is its name, under its path; the nav bar names it once that has scrolled away.
   const titleAway = signal(Boolean(props.file));
+  // On wide with room (SPEC §14.2) a file opens beside its folder; else on its own page.
+  const chosen = signal<string | null>(null);
+  const openFile = (path: string) => {
+    if (listDetail()) return chosen.set(path);
+    props.nav.push({ name: "files-workspace", file: path, hostSession: props.hostSession });
+  };
+  if (props.file) {
+    return (
+      <NavPage title={titleAway() ? name : ""} testID="workspace">
+        <WorkspaceFile path={props.file} hostSession={props.hostSession} nav={props.nav} />
+      </NavPage>
+    );
+  }
   return (
-    <NavPage title={titleAway() ? name : ""} testID="workspace">
-      {props.file ? <WorkspaceFile path={props.file} hostSession={props.hostSession} nav={props.nav} /> : <WorkspaceFolder trail={props.trail ?? []} name={name} hostSession={props.hostSession} nav={props.nav} onTitleAway={(away) => titleAway.set(away)} />}
+    <NavPage title={titleAway() ? name : ""} testID="workspace" column={listDetail() ? "full" : "page"}>
+      <View class="flex-1 flex-row bg-background">
+        <View testID="workspace-list" class={listDetail() ? "w-[380px] border-r border-border" : "flex-1"}>
+          <WorkspaceFolder trail={props.trail ?? []} name={name} hostSession={props.hostSession} nav={props.nav} onOpenFile={openFile} selected={() => (listDetail() ? chosen() : null)} onTitleAway={(away) => titleAway.set(away)} />
+        </View>
+        {listDetail() ? (
+          <View testID="workspace-reader" class="flex-1 bg-background pt-2">
+            {chosen()
+              ? <WorkspaceFile path={chosen()!} hostSession={props.hostSession} nav={props.nav} />
+              : <View class="flex-1 px-4"><EmptyState testID="workspace-no-file" icon="document" title="No file selected" /></View>}
+          </View>
+        ) : null}
+      </View>
     </NavPage>
   );
 }
@@ -71,7 +96,7 @@ function location(path: string): string {
   return workspaceLocation(roots.get(daemon()?.server.id ?? ""), path);
 }
 
-function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: SessionFileIdentity; nav: PageNav; onTitleAway: (away: boolean) => void }) {
+function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: SessionFileIdentity; nav: PageNav; onOpenFile: (path: string) => void; selected: () => string | null; onTitleAway: (away: boolean) => void }) {
   const id = daemon()?.server.id ?? "";
   const path = props.trail.at(-1) ?? "";
   const tree = signal<BrainWorkspaceTree | null>(trees.get(workspaceFolderKey(id, path)) ?? null);
@@ -124,12 +149,11 @@ function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: S
         value={entry.kind === "directory" || entry.size === undefined ? undefined : formatBytes(entry.size)}
         chevron={entry.kind === "directory"}
         accessibilityLabel={brainWorkspaceEntryAccessibilityLabel(entry.kind, entry.name)}
+        selected={entry.kind !== "directory" && props.selected() === entry.path}
         onPress={() =>
-          props.nav.push(
-            entry.kind === "directory"
-              ? { name: "files-workspace", trail: [...props.trail, entry.path], hostSession: props.hostSession }
-              : { name: "files-workspace", file: entry.path, hostSession: props.hostSession },
-          )
+          entry.kind === "directory"
+            ? props.nav.push({ name: "files-workspace", trail: [...props.trail, entry.path], hostSession: props.hostSession })
+            : props.onOpenFile(entry.path)
         }
       />
     );
