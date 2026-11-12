@@ -7,7 +7,7 @@ import { padGitDiffText } from "../../../core/git/gitDiffLinePad";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import { formatGitDiffBytes } from "../../../core/git/gitDiffReview";
 import { matchesGitReviewQuery } from "../../../core/git/gitReviewModel";
-import { EmptyState, Field, Notice } from "../../kit/kit";
+import { DisplayTitle, EmptyState, Notice, SearchField } from "../../kit/kit";
 import { Icon } from "../../kit/Icon";
 import type { PageNav } from "../routes";
 import { Current, FlashLine, IconButton, StatusTile } from "./parts";
@@ -126,7 +126,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
         onLongPress={() => void entryMenu(review, props.nav, entry.id)}
         onContextMenu={() => void entryMenu(review, props.nav, entry.id)}
         accessibilityLabel={`${entry.label}${changed ? `, ${gitDiffStatusWord(gitDiffTone(changed))}` : holds ? ", has changes" : ""}`}
-        class="flex-row items-center gap-2 py-2 pr-4"
+        class="min-h-[44px] flex-row items-center gap-2 py-2 pr-4"
         style={{ paddingLeft: 16 + entry.depth * 16 }}
       >
         <Icon name={entry.folder ? (shownExpanded().includes(entry.id) ? "folder-open" : "folder") : "document-text"} size={16} tone={entry.folder ? "soft" : "faint"} />
@@ -137,12 +137,14 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
   };
   return (
     <NavPage
-      title={review.status()?.repo_name || "Files"}
+      title=""
       testID="git-files-page"
       headerRight={<IconButton testID="git-files-refresh" icon="refresh" label="Refresh" onPress={() => void review.loadPaths()} />}
     >
       <Current review={review} class="flex-1 bg-background">{() => (
           <View class="flex-1 bg-background">
+            {/* SPEC §15 File browser: the path as the eyebrow, the folder as the title. */}
+            <View class="px-4"><DisplayTitle eyebrow={review.status()?.repo_root ? review.status()!.repo_root!.replace(/^\/(Users|home)\/[^/]+/, "~") : undefined} title={review.status()?.repo_name || "Files"} /></View>
             <View class="px-4"><FlashLine /></View>
             {(() => {
               const state = review.paths();
@@ -152,19 +154,19 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
               return (
                 <View class="flex-1">
                   {state.value.truncated ? <View class="px-4"><Notice tone="warning" title="Showing part of this repository" /></View> : null}
-                  <Field testID="git-files-query" accessibilityLabel="Search files" placeholder="Search files" value={query()} onChange={(value) => query.set(value)} />
+                  <View class="px-4 pb-3 pt-2"><SearchField testID="git-files-query" accessibilityLabel="Search files" placeholder="Search files" value={query()} onChange={(value) => query.set(value)} /></View>
                   {query().trim() && !items().length ? <View class="px-4"><EmptyState title="No matching files" /></View> : null}
                   {/* A phone's search: NSH's Tree spends a tap with the keyboard up on hiding it (no
                       keyboardShouldPersistTaps), so what was found is a list that keeps the tap (R4#6). */}
                   {mobile && query().trim() ? (
-                    <List keyboardShouldPersistTaps="handled" testID="git-files-results" class="flex-1" contentClass="py-2"
+                    <List keyboardShouldPersistTaps="handled" testID="git-files-results" class="mx-4 mb-4 flex-1 rounded-(--radius-group) bg-card" contentClass="py-2"
                       each={repoTreeRows(items())} keyExtractor={(entry) => entry.id}>
                       {/* Cells are recycled: the row is read in the JSX, so a cell rebuilds for the entry it holds now. */}
                       {(entry) => <View>{row(entry())}</View>}
                     </List>
                   ) : <Tree
                     testID="git-files-tree"
-                    class="flex-1"
+                    class="mx-4 mb-4 flex-1 overflow-hidden rounded-(--radius-group) bg-card"
                     listClass="py-2"
                     accessibilityLabel="Repository files"
                     items={items()}
@@ -194,7 +196,7 @@ export function FilePage(props: { review: GitReview; path: string; nav: PageNav 
   void review.loadFile(props.path);
   return (
     <NavPage
-      title={props.path || "Files"}
+      title={props.path.split("/").at(-1) || "Files"}
       testID="git-file-page"
       headerRight={
         <View class="flex-row items-center">
@@ -224,7 +226,9 @@ export function FilePage(props: { review: GitReview; path: string; nav: PageNav 
                       <Notice tone="warning" title="Showing part of this file" detail={`First ${formatGitDiffBytes(content.length)} of ${formatGitDiffBytes(snapshot.byte_count)}.`} />
                     </View>
                   ) : null}
-                  <DiffView testID="git-file-view" class="flex-1" oldValue={shown} newValue={shown} expandAll language={props.path} layout="unified" />
+                  <View class="mx-4 mb-4 mt-2 flex-1 overflow-hidden rounded-(--radius-group) bg-card">
+                    <DiffView testID="git-file-view" class="flex-1" classes={{ lineNumber: "text-faint" }} oldValue={shown} newValue={shown} expandAll language={props.path} layout="unified" />
+                  </View>
                 </View>
               );
             })()}
