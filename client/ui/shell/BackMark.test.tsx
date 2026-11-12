@@ -30,3 +30,21 @@ describe("the connection mark follows you (SPEC §1.3)", () => {
     expect(app.shows("id:add-item")).toBe(true);
   }, 30_000);
 });
+
+describe("a Session's header on Android", () => {
+  const brain = { chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-11T07:00:00.000Z" } };
+  const proj = { id: "s-proj", name: "s-proj", cwd: "/home/me/proj", command: "claude", status: "unknown", started_at: "2026-11-11T07:00:00.000Z" };
+
+  test("Back is the page's own, right before the logo; a Session named after its folder says the folder once", async () => {
+    const app = await open("../FakeDaemonApp.tsx", { host: phoneHost({ brain, worker_sessions: [proj] }), storage: paired, platform: "android", network: expoTokenService });
+    await app.waitFor("id:composer");
+    await app.host.send("links.open", { url: "mewla://sessions/s-proj" });
+    await app.waitFor("id:session-status", { timeout: 10_000 });
+    expect(app.shows("id:page-back")).toBe(true);
+    const status = app.texts().find((text) => text.endsWith("· Idle") || text === "Idle");
+    expect(status).toBe("Idle");
+    await app.wait(500);
+    await app.press("id:page-back");
+    await app.waitUntil(() => !app.shows("id:session-status"));
+  }, 30_000);
+});
