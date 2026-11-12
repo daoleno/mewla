@@ -17,6 +17,7 @@ import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
@@ -54,6 +55,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     fun viewport(top: Int, atBottom: Boolean)
     fun tapCell(col: Int, row: Int, text: String, index: Int)
     fun copy(text: String)
+    /** A pinch ended at this text size (8–14 dp): the page sets it as `fontSize`; the drawing stays scaled until then. */
+    fun fontSize(size: Int) {}
   }
 
   /** A run as the packer gives it (TerminalVt.h): its text is chars[start until start + len). */
@@ -79,7 +82,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   private var fit = TerminalFit.NONE
   /** Content pixels the drawing is panned sideways (0..fit.maxPanX). */
   private var panX = 0f
-  private var fontDp = 8f
+  private var fontDp = 10f
   /** Pixels kept clear inside the view's edges (the terminal group's padding): the grid is the area inside. */
   private var padL = 0
   private var padT = 0
@@ -143,8 +146,9 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   private var selFrom: IntArray? = null
   private var selTo: IntArray? = null
   private var actionMode: ActionMode? = null
-  private val handleLeft: Drawable? = themeDrawable(android.R.attr.textSelectHandleLeft)
-  private val handleRight: Drawable? = themeDrawable(android.R.attr.textSelectHandleRight)
+  // The platform's handle shapes, tinted with the theme's handle color (copies: other fields' handles keep theirs).
+  private val handleLeft: Drawable? = themeDrawable(android.R.attr.textSelectHandleLeft)?.mutate()
+  private val handleRight: Drawable? = themeDrawable(android.R.attr.textSelectHandleRight)?.mutate()
   /** The handle being dragged: 0 none, 1 start, 2 end. */
   private var dragging = 0
 
@@ -159,7 +163,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   init {
     isFocusable = true
     isFocusableInTouchMode = true
-    setFontSize(8f)
+    setFontSize(10f)
   }
 
   private fun textPaint(face: Typeface) = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
@@ -175,8 +179,12 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     d
   } catch (e: Exception) { null }
 
-  /** Text size in dp (the shipped app's 8 CSS px is the default): the grid follows from it. */
+  /** Text size in dp (the page's; 10 on the phones unless a pinch set another): the grid follows from it, and the line height is 1.4 times it. */
   fun setFontSize(size: Float) {
+    if (size <= 0f) return
+    endPinch()
+    if (size == fontDp && cellW > 0) return
+    val oldCellH = cellH
     fontDp = size
     fontPx = size * resources.displayMetrics.density
     paint.textSize = fontPx
@@ -186,11 +194,13 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     for (other in arrayOf(boldPaint, italicPaint, boldItalicPaint, slantPaint, boldSlantPaint)) other.textSize = paint.textSize
     val m = paint.fontMetrics
     val textH = m.descent - m.ascent
-    cellH = max(1, textH.roundToInt())
+    cellH = max(1, max(textH.roundToInt(), (TerminalPinch.lineHeightDp(size) * resources.displayMetrics.density).roundToInt()))
     baseline = ((cellH - textH) / 2 - m.ascent).roundToInt()
     thickness = try { Vt.nativeGlyphThickness(cellH) } catch (e: Throwable) { max(1, (cellH / 14f).roundToInt()) }
     advances.forEach { it.fill(Float.NaN) }
     glyphOps.clear()
+    // Scrolled back, the same history row stays at the bottom: every line is one cell high.
+    if (oldCellH > 0 && scrollPx > 0f) scrollPx = scrollPx * cellH / oldCellH
     relayout(width, height)
     invalidate()
   }
@@ -201,11 +211,12 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     return if (hex.length == 9 && hex.startsWith("#")) Color.parseColor("#" + hex.substring(7, 9) + hex.substring(1, 7)) else Color.parseColor(hex)
   }
 
-  fun setTheme(background: String, foreground: String, cursor: String, selection: String, palette: List<String>) {
+  fun setTheme(background: String, foreground: String, cursor: String, selection: String, handle: String?, palette: List<String>) {
     this.background = cssColor(background) or 0xFF000000.toInt()
     this.foreground = cssColor(foreground)
     cursorColor = cssColor(cursor)
     selectionColor = cssColor(selection)
+    handle?.let { cssColor(it) }?.let { color -> handleLeft?.setTint(color); handleRight?.setTint(color) }
     theme = intArrayOf(this.foreground, this.background, cursorColor) to palette256(palette.map { cssColor(it) and 0xFFFFFF })
     applyTheme()
     // The history's colors are the VT's: its rows are drawn again when next needed.
@@ -509,6 +520,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     canvas.drawColor(background)
     if (cellH <= 0) return
     canvas.save()
+    // While pinching only the drawing scales; the grid changes once the fingers lift.
+    if (pinchScale != 1f) canvas.scale(pinchScale, pinchScale, pinchX, pinchY)
     canvas.translate(padL.toFloat(), padT.toFloat())
     canvas.scale(fit.scale, fit.scale)
     canvas.translate(-panX, -fit.topCut)
@@ -1145,7 +1158,64 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     }
   })
 
+  // MARK: Pinch
+
+  /** The drawing's scale while pinching (1 otherwise), about the fingers' focus. */
+  private var pinchScale = 1f
+  private var pinchX = 0f
+  private var pinchY = 0f
+  /** A second finger came down in this gesture: the rest of it is the pinch's, never a scroll, pan or long press. */
+  private var twoFingers = false
+  /** If the page never sets the size a pinch asked for, the drawing goes back to its own. */
+  private val pinchSettle = Runnable { endPinch() }
+
+  private val pinch = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+    override fun onScaleBegin(d: ScaleGestureDetector): Boolean {
+      // A view that does not hold the Session's size keeps its fit: the pinch is not its to take.
+      if (cellW <= 0 || sessionCols > 0 || dragging != 0) return false
+      removeCallbacks(pinchSettle)
+      if (hasSelection() || actionMode != null) clearSelection()
+      pinchX = d.focusX
+      pinchY = d.focusY
+      return true
+    }
+
+    override fun onScale(d: ScaleGestureDetector): Boolean {
+      pinchScale = TerminalPinch.drawScale(fontDp, pinchScale * d.scaleFactor)
+      pinchX = d.focusX
+      pinchY = d.focusY
+      invalidate()
+      return true
+    }
+
+    override fun onScaleEnd(d: ScaleGestureDetector) {
+      val size = TerminalPinch.sizeAfter(fontDp, pinchScale)
+      if (size.toFloat() == fontDp) return endPinch()
+      events.fontSize(size)
+      postDelayed(pinchSettle, PINCH_SETTLE_MS)
+    }
+  }).apply { isQuickScaleEnabled = false }
+
+  private fun endPinch() {
+    removeCallbacks(pinchSettle)
+    if (pinchScale == 1f) return
+    pinchScale = 1f
+    invalidate()
+  }
+
   override fun onTouchEvent(e: MotionEvent): Boolean {
+    if (e.actionMasked == MotionEvent.ACTION_DOWN) twoFingers = false
+    pinch.onTouchEvent(e)
+    if (e.actionMasked == MotionEvent.ACTION_POINTER_DOWN && dragging == 0 && !twoFingers) {
+      twoFingers = true
+      parent?.requestDisallowInterceptTouchEvent(true)
+      scroller.forceFinished(true)
+      // What the first finger started (a scroll, a pan, a long press waiting) ends here.
+      val cancel = MotionEvent.obtain(e).apply { action = MotionEvent.ACTION_CANCEL }
+      gestures.onTouchEvent(cancel)
+      cancel.recycle()
+    }
+    if (twoFingers) return true
     // A selection handle under the finger is dragged, the menu hidden meanwhile.
     when (e.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
@@ -1209,6 +1279,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     /** Rows the scratch VT renders at a time. */
     const val PAGE = 64
     const val BLINK_MS = 600L
+    const val PINCH_SETTLE_MS = 600L
     const val COPY = 1
     const val PASTE = 2
     const val SELECT_ALL = 3

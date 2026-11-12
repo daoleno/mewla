@@ -66,6 +66,9 @@ Open a Session to read it in one of three ways:
   is not shown.
 - **Terminal**: the live terminal, rendered natively. Works for any command,
   including a Shell. A key row above the keyboard adds Ctrl, Esc, Tab and arrows.
+  On Android, pinch to change the text size between 8 and 14 (10 by default).
+  The phone remembers it, and the terminal takes the new size once you lift
+  your fingers.
 - **Git**: read-only All, Working and Staged diffs for the Session's
   repository. Reading a diff never stages or discards anything.
 
