@@ -58,15 +58,15 @@ describe("requests in Brain's thread", () => {
   }, 20_000);
 
   test("a cold start with requests open opens on the oldest, centred: the newest stacked rows wait below", async () => {
-    const sessions = Array.from({ length: 14 }, (_, i) => session(`s${i}`, { delegated: true, approvals: [approval(`a${i}`, `step ${i} of the release`)] }));
+    const sessions = Array.from({ length: 20 }, (_, i) => session(`s${i}`, { delegated: true, approvals: [approval(`a${i}`, `step ${i} of the release`)] }));
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: sessions }) });
     await app.waitFor("id:request-card", { timeout: 10_000 });
     await app.wait(800);
-    expect(app.count("id:request-stacked")).toBe(13);
+    expect(app.count("id:request-stacked")).toBe(19);
     expect(app.shows("id:request-card")).toBe(true);
     // Centred, the thread's end (the newest stacked rows) is below: the jump control shows, with their count.
     await app.waitFor("id:jump-requests");
-    expect(app.texts()).toContain("14");
+    expect(app.texts()).toContain("20");
   }, 20_000);
 
   test("answered on another device: the computer's record seals the card here at once, with who answered", async () => {
@@ -75,6 +75,10 @@ describe("requests in Brain's thread", () => {
       host: phoneHost({ brain, worker_sessions: [session("docs", { delegated: true, approvals: [approval("a1", "git push origin main")] })] }),
     });
     await app.waitFor("id:request-card", { timeout: 10_000 });
+    // A hook approval asks nothing but its command: it shows once, in mono, with no question repeating it.
+    expect(app.texts().filter((text) => text === "git push origin main")).toHaveLength(1);
+    expect(app.shows("id:request-command")).toBe(true);
+    expect(app.shows("id:request-question")).toBe(false);
     await app.host.send("app.daemonPush", { type: "request_answered", request: {
       id: "approval:docs:a1", kind: "approval", session_id: "docs", work_id: "w1", asked: "git push origin main", answer: "Allow", outcome: "approved",
       by: { kind: "device", device_name: "Pixel 8" }, answered_at: new Date().toISOString(), anchor: { approval_id: "a1" },

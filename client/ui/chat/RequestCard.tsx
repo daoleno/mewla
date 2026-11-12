@@ -223,13 +223,18 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
     }
   };
   const asked = () => askedParts(prompt.requestText ?? "");
+  const question = () => {
+    const text = asked().question || props.card.title;
+    return text.trim() === asked().command ? "" : text;
+  };
   const allow = prompt.options.find((option) => option.primary);
   const deny = prompt.options.find((option) => option.destructive);
   const yesNo = prompt.options.length === 2 && allow && deny && allow !== deny;
   return (
     <View class="gap-3">
       {/* The question at 17/600, the command in mono, what else the agent said in soft (SPEC §11 Request card). */}
-      <Text testID="request-question" class="text-body font-semibold">{asked().question || props.card.title}</Text>
+      {/* A hook approval asks nothing but its command: then the command stands alone, not said twice. */}
+      {question() ? <Text testID="request-question" class="text-body font-semibold">{question()}</Text> : null}
       {asked().command ? <View selectable><Text testID="request-command" class="font-mono text-code">{asked().command}</Text></View> : null}
       {asked().notes ? <Text class="text-sub text-muted-foreground line-clamp-3">{asked().notes}</Text> : null}
       {yesNo ? (
