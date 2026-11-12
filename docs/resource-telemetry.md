@@ -314,7 +314,7 @@ grow with the size of a transcript or of the machine:
 
 ## App entry and refresh behavior
 
-Open **Resources** from the menu (☰ on a phone, the sidebar on a wide screen).
+Open **Resources** from the menu (☰ on a phone; on a wide screen, **Search or run** or `G` then `R`).
 That row is its only entry point; no page menu repeats it. The view always uses
 the canonical current server and shows its name above the latest machine
 snapshot. It never merges measurements across servers.
