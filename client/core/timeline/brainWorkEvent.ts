@@ -1,3 +1,4 @@
+import type { ResultAction } from "../work/types";
 /** Canonical Brain Work card domain for conversation/timeline presentation. */
 export type BrainWorkEventKind =
   | "session.done"
@@ -29,6 +30,7 @@ export type BrainWorkResultEvent = {
   attention?: string;
   event_kind?: string;
   details_json?: string;
-  next_action?: string;
+  /** The result's next steps (WIRE §4). */
+  actions?: ResultAction[];
   wait_for?: string;
 };

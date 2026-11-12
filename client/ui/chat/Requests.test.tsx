@@ -83,16 +83,33 @@ describe("a Work in Brain's thread", () => {
   const result = (patch: Record<string, unknown> = {}) => ({
     id: "wr1", seq: 1, timestamp: "2026-11-12T11:20:00.000Z", kind: "status", source: "work_result", status: "session.done",
     title: "Ship the docs", body: "The docs are live at the new address.", work_id: "w1", work_session_id: "docs", session_name: "docs",
-    unread: true, work_review_state: "resolved", work_session_state: "finalized", work_result_current: true, work_next_action: "Announce it", ...patch,
+    unread: true, work_review_state: "resolved", work_session_state: "finalized", work_result_current: true, ...patch,
   });
   const docs = session("docs", { status: "done" });
 
-  test("came back and new: a result card that never shows Brain's next_action; opening it reads it", async () => {
+  test("a result's next steps are ghost buttons; one opens where it names, reads the result and the card becomes its line", async () => {
+    const work_actions = [
+      { kind: "pull_request", url: "https://github.com/daoleno/mewla/pull/4242" },
+      { kind: "git_review", session_id: "docs", cwd: "/home/me/mewla" },
+      { kind: "file", session_id: "docs", cwd: "/home/me/mewla", path: "docs/NOTES.md" },
+      { kind: "brain_folder", path: "worklog/ship-docs" },
+      { kind: "made_up", path: "x" },
+    ];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [docs], conversations: { "brain-host": [result({ work_actions })] } }) });
+    await app.waitFor("id:work-actions", { timeout: 10_000 });
+    expect(app.texts().filter((t) => ["Pull request #4242", "Review changes", "NOTES.md", "Worklog"].includes(t))).toEqual(["Pull request #4242", "Review changes", "NOTES.md", "Worklog"]);
+    expect(app.count("id:work-actions >> id:work-action-made_up")).toBe(0);
+    await app.wait(500);
+    await app.press("id:work-action-git_review");
+    await app.waitFor("id:git-page");
+    expect(framesOf(app.host.posts(), "brain_work_read")[0]).toMatchObject({ id: "w1" });
+  }, 20_000);
+
+  test("came back and new: a result card; opening it reads it", async () => {
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [docs], conversations: { "brain-host": [result()] } }) });
     await app.waitFor("id:work-result", { timeout: 10_000 });
     expect(app.texts()).toContain("Ship the docs");
     expect(app.shows("id:work-unread")).toBe(true);
-    expect(app.texts().join(" ")).not.toContain("Announce it");
     await app.wait(500);
     await app.press("id:work-result-open");
     await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_read").length > 0);

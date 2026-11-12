@@ -594,7 +594,7 @@ describe("timelineItemsSemanticEqual", () => {
       { attention: "user_input" },
       { event_kind: "verification" },
       { details_json: '{"ci_run":3}' },
-      { next_action: "Promote build" },
+      { actions: [{ kind: "pull_request", url: "https://github.com/o/r/pull/1" }] },
       { wait_for: "Preview archive" },
     ];
     for (const override of fields) {

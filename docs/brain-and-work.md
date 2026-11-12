@@ -125,6 +125,12 @@ Every slip carries its next step:
 | Failed | Retry it through Brain, or dismiss it |
 | Ended with no result | "Outcome unknown": ask Brain to check, or close it |
 
+A result that came back also carries the next steps it truthfully offers, as
+small buttons on its card in Brain's thread and in its sheet: the pull request
+it opened, **Review changes** when its project has uncommitted changes, the
+files it names, and the Work's worklog. A result that names none has none.
+Using one reads the result.
+
 Your reply goes to Brain as a message about that Work, and the slip says
 "With Brain" until Brain acts on it. You never have to close finished Work:
 once Brain has read a result and nothing is pending, Mewla asks a small model
