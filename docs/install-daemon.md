@@ -5,13 +5,16 @@ running as a service, updates, the app builds and uninstalling.
 
 ## What you need
 
-- Linux `amd64`/`arm64`, WSL2, or an Apple Silicon Mac
-- `curl`, `tar`, and `sha256sum` (Linux) or `shasum` (macOS)
+- Linux `amd64`/`arm64`, WSL2, an Apple Silicon Mac, or Windows 10 (version
+  1809 or later) or 11 on x64
+- `curl`, `tar`, and `sha256sum` (Linux) or `shasum` (macOS); on Windows,
+  PowerShell
 - At least one agent CLI on `PATH` and already signed in: `claude`, `codex`,
   `cursor-agent`, `grok`, `pi` or `opencode` (OpenCode 2; `mewla doctor` names
-  the upgrade command when it finds OpenCode 1). One is enough; `mewla` offers
-  Claude Code and Codex when none is ready, and asks which one Brain uses
-  when several are.
+  the upgrade command when it finds OpenCode 1). One is enough. On Linux and
+  macOS, `mewla` offers Claude Code and Codex when none is ready; on Windows,
+  install one yourself. `mewla` asks which one Brain uses when several are
+  ready.
 
 ## Install the daemon
 
@@ -32,7 +35,7 @@ The last line is the command that starts Mewla: `mewla`, or its full path
 when the current shell cannot find it yet. New terminals find `mewla` once the
 installer has added its directory to your shell profile.
 
-If `mewla` is already installed, the same command runs `mewla update` instead,
+If `mewla` is already installed, `install.sh` runs `mewla update` instead,
 unless you set `MEWLA_VERSION` or `MEWLA_INSTALL_DIR`.
 
 Options, set as environment variables on `sh`:
@@ -46,6 +49,38 @@ Options, set as environment variables on `sh`:
 
 ```sh
 curl -fsSL https://mewla.ai/install.sh | MEWLA_INSTALL_DIR="$HOME/bin" sh
+```
+
+### Windows
+
+In PowerShell, as yourself (not as Administrator):
+
+```powershell
+irm https://mewla.ai/install.ps1 | iex
+```
+
+It finds the newest stable release the same way, verifies
+`mewla-windows-amd64.zip` against `SHA256SUMS`, and installs `mewla.exe` into
+`%LOCALAPPDATA%\Programs\Mewla`. It adds that folder to your user `PATH`, then
+runs [`mewla boot install`](#keep-it-running): Mewla starts now and each time
+you log in. Nothing needs administrator rights. Running it again installs over
+the existing copy, even while Mewla is running, but the running Mewla keeps its
+old version until it restarts; to update, use `mewla update`.
+
+`irm | iex` takes no arguments, so options are environment variables set
+before it:
+
+| Variable | Effect |
+| --- | --- |
+| `MEWLA_VERSION=v0.3.1` | Install this exact release tag, beta included |
+| `MEWLA_INSTALL_DIR=<path>` | Install into this folder (not a system folder) |
+| `MEWLA_NO_PATH_UPDATE=1` | Do not change your user `PATH` |
+| `MEWLA_NO_START=1` | Do not start Mewla or register it to start at login |
+| `MEWLA_DRY_RUN=1` | Print the plan; change nothing |
+| `MEWLA_INSTALL_FROM=<folder>` | Use `mewla-windows-amd64.zip` and `SHA256SUMS` from this folder instead of downloading |
+
+```powershell
+$env:MEWLA_NO_START = '1'; irm https://mewla.ai/install.ps1 | iex
 ```
 
 ### Manual download
@@ -65,6 +100,13 @@ tar -xzf mewla-darwin-arm64.tar.gz
 mkdir -p ~/.local/bin
 install -m 755 mewla ~/.local/bin/mewla
 ~/.local/bin/mewla doctor
+```
+
+On Windows, compare the hash with the `mewla-windows-amd64.zip` line of
+`SHA256SUMS`, then unpack `mewla.exe` into a folder on your `PATH`:
+
+```powershell
+(Get-FileHash mewla-windows-amd64.zip -Algorithm SHA256).Hash.ToLower()
 ```
 
 If macOS blocks the binary,
@@ -92,7 +134,7 @@ yourself any time:
    no service manager, such as a container, it starts Mewla detached from your
    SSH session and says that it will not survive a restart.
 3. **Pair your phone.** It draws the QR code and prints the same link to paste
-   into the app (**Settings > Pair a computer**).
+   into the app (on the welcome screen, or the computer page's **Pair a computer**).
 4. **Wait.** It waits up to 15 minutes, until the code expires, for the phone,
    then says so.
 
@@ -115,10 +157,12 @@ usual "Next, start Mewla" line.
 | Linux `arm64` / `aarch64` | `mewla-linux-arm64.tar.gz` | Supported |
 | WSL2 on either architecture | The matching Linux archive | Supported |
 | Apple Silicon macOS | `mewla-darwin-arm64.tar.gz` | Supported |
+| Windows 10 (1809 or later) and 11, x64 | `mewla-windows-amd64.zip` | Supported since 0.3.0 |
+| Windows on ARM | None | Not supported |
 | Intel macOS | None | Not supported |
-| Native Windows | None | Not supported; use WSL2 |
 
-The installer stops on an unsupported platform before downloading anything.
+Both installers stop on an unsupported platform before downloading anything.
+On Windows, use `install.ps1`; `install.sh` is for Linux, WSL2 and macOS.
 
 ## Check the host
 
@@ -152,11 +196,13 @@ running: they live in the session host, not in the daemon.
 
 ### Automatic updates
 
-A released `mewla` on Linux checks every six hours and installs a newer stable
-release once no Brain turn or Worker is running. **Settings → your computer**
-in the app shows the version the computer runs and, when a newer release
-exists, an **Update** button that does the same right away. When the app and
-the computer no longer fit together, the same row says so with the same button.
+A released `mewla` on Linux and Windows checks every six hours and installs a
+newer stable release once no Brain turn or Worker is running. When a newer
+release exists, the computer page (tap the cat) shows an update row with
+**Update**, which does the same right away; the computer's details show the
+version it runs. When the app and the computer no longer fit together,
+**Needs fixing** reads **Update required** with **Update**, and the cat
+carries a dot.
 
 An update never leaves the computer without a working Mewla. The running
 process shuts down, then starts the new binary itself and replaces the
@@ -180,7 +226,7 @@ and you can still read and type into them. Each one moves to the session host
 on its own once its agent finishes its turn: the agent starts again in the
 same conversation, under the same Session, with its Work. An agent Mewla cannot
 resume this way (Grok, Cursor Agent, a plain shell) keeps running in `tmux`,
-no longer controlled by Mewla; **Settings → your computer** says how many. If
+no longer controlled by Mewla; `mewla attach` still lists them. If
 Brain itself has to stay behind, a new Brain starts in the session host and
 picks up from its handoff notes and your Work. You can uninstall `tmux` once
 none are left that you need.
@@ -189,7 +235,7 @@ none are left that you need.
 
 `mewla` is the whole runtime. Run it in a terminal, or let
 Mewla start it for you: a user service on Linux with systemd, a LaunchAgent on
-macOS.
+macOS, a scheduled task for your user on Windows.
 
 ```sh
 mewla boot install          # this binary, default state and address
@@ -199,11 +245,12 @@ mewla boot status
 mewla boot uninstall
 ```
 
-The first `mewla` asks `Start Mewla automatically when this computer starts?`
-after the connect choice and runs `mewla boot install` (with `-lan` if you
-chose the same Wi-Fi) when you press Enter. Without systemd user services, as
-in many containers and WSL setups, it says so and keeps running in the
-terminal.
+On Linux and macOS, the first `mewla` asks `Start Mewla automatically when
+this computer starts?` after the connect choice and runs `mewla boot install`
+(with `-lan` if you chose the same Wi-Fi) when you press Enter. Without systemd
+user services, as in many containers and WSL setups, it says so and keeps
+running in the terminal. On Windows the installer runs `mewla boot install`
+itself.
 
 `mewla boot install` refuses to run as root and refuses to start a second daemon
 on a state directory that is already in use; stop the running `mewla` first.
@@ -229,6 +276,11 @@ Restarting the service never stops your Sessions or agents.
   `~/Library/Application Support/Mewla/signing/`. `mewla boot status` shows
   how `Mewla.app` is signed. If the identity can't be used, Mewla signs ad hoc
   instead, and macOS asks for the permissions again after each update.
+- **Windows**: a Task Scheduler task named `Mewla` for your user only, which
+  starts Mewla when you log in, with no window and no administrator rights.
+  Installed over SSH with nobody logged in at the desktop, Mewla starts now
+  and the task takes over from your next login. Output goes to
+  `logs\daemon.log` in the state directory.
 
 Do not run the daemon as root.
 
@@ -237,7 +289,7 @@ Do not run the daemon as root.
 | Setting | Value |
 | --- | --- |
 | Listen address | `127.0.0.1:9876` (`mewla --lan` uses `0.0.0.0:9876`) |
-| State directory | `~/.mewla` |
+| State directory | `~/.mewla` (on Windows, `%USERPROFILE%\.mewla`) |
 | Executor configuration | `~/.mewla/executors.toml` (optional) |
 | Brain workspace | `~/.mewla/brain` |
 
@@ -272,16 +324,16 @@ C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
 #### Update the app
 
 Mewla looks for a newer release on its own, at launch and when you come back to
-it (at most every six hours). **Settings → About** shows the version and an
+it (at most every six hours). **Settings › About** shows the version and an
 update row under it: **Check for updates** says **Up to date** and checks again
 when you tap it, and offers **Retry** if it can't reach GitHub. When a newer
-release exists, a small dot appears on the menu and on **Settings**, and the
-row reads **Update available** with an **Update** button. Tap it to download the
+release exists, the row reads **Update available** with an **Update** button,
+and the computer page shows **Update available** too. Tap it to download the
 APK, with progress in the row. Mewla checks the release's signed manifest and the APK's SHA-256
 before it opens the Android installer. The first time, Android asks you to let
 Mewla install apps. Allow it, come back, and the installer opens. If a download
 fails, tap **Retry**. Versions before 0.2.9 need one manual install as
-above; 0.2.9 and 0.2.10 show the update in **Settings → About** only.
+above; 0.2.9 and 0.2.10 show the update in **Settings › About** only.
 
 Builds take their update channel from `MEWLA_ANDROID_DISTRIBUTION` at build
 time: `github-apk` (default), `play-store` or `none`. Store and `none` builds,
@@ -351,3 +403,12 @@ A source build serves a placeholder instead of the web UI unless you first run
 2. Delete the binary (`command -v mewla` shows where it is).
 3. Optionally delete `~/.mewla`. It holds the daemon's identity, paired devices,
    Work and Brain data; deleting it unpairs every phone.
+
+On Windows:
+
+1. Run `mewla boot uninstall`. It stops Mewla and removes the scheduled task.
+   Your Sessions keep running in the session host until you sign out or
+   restart, and Windows can't delete `mewla.exe` while they do.
+2. After signing out or restarting, delete `%LOCALAPPDATA%\Programs\Mewla`
+   and remove that folder from your user `PATH`.
+3. Optionally delete `%USERPROFILE%\.mewla`.

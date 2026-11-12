@@ -99,7 +99,7 @@ Known issues: [Releases](docs/releases/README.md#known-issues).
 ## Documentation
 
 - **Get it running:** [Get started](docs/get-started.md) · [Install and update](docs/install-daemon.md) · [Connect and pair](docs/connect-and-pair.md)
-- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications and Telegram](docs/notifications.md) · [Calendar](docs/calendar.md) · [Plugins](docs/plugins.md)
+- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications and Telegram](docs/notifications.md) · [Calendar](docs/calendar.md) · [Extensions](docs/extensions.md)
 - **Configure it:** [Agents and models](docs/executors.md) · [Usage and resources](docs/usage-and-resources.md)
 - **Reference:** [Commands](docs/cli.md) · [Security and privacy](docs/security-and-privacy.md) · [Troubleshooting](docs/troubleshooting.md)
 

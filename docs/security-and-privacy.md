@@ -49,7 +49,7 @@ consent: before payments, messages to other people, deletion, account changes
 or installing software it asks you through the Brain you are talking to.
 Removing a computer from the phone ends its access on your other computers.
 `mewla computers remove` or `mewla devices revoke` ends it at once too, but the
-phone connects two computers it holds again on the next Settings visit.
+phone connects two computers it holds again the next time it checks them.
 See [Your other computers](computers.md).
 
 ## Agents outside Mewla
@@ -66,7 +66,10 @@ Brain treats its words as relayed, never as your permission. See
 ## Agents on the screen
 
 On a Mac with Screen permissions, agents Mewla starts can see the screen and
-use the keyboard and pointer while **Agents can use this computer** is on. The
+use the keyboard and pointer while **Agents can use this computer** is on. On
+Windows they use your screen the same way, with no permission to grant; on
+Linux they get a virtual screen of their own, off your desktop (see
+[Screen](screen.md)). The
 daemon acts for them, so their own processes never hold the permissions. Each
 request must name a running Mewla Worker, and one agent uses the screen at a
 time. The request travels over the daemon's private socket, which any process
@@ -90,7 +93,7 @@ turns it off for Codex Workers started afterwards. See
 
 ## Phone use
 
-With **Phone use** on (Labs, Android, GitHub APK), agents Mewla starts on your
+With **Phone use** on (**Settings › Labs**, Android, GitHub APK), agents Mewla starts on your
 computer can use your phone on a hidden screen of its own. The phone connects to
 the computer it is currently using over the same signed connection and takes
 requests from that computer only; a request must name a running Mewla Worker.
@@ -168,13 +171,14 @@ All paths are under the state directory, `~/.mewla` by default.
 | `pairing-tokens.json` | Unused pairing codes until they expire |
 | `addresses.json` | Addresses the daemon can be reached at |
 | `uploads/` | Files sent from the app or Telegram: at most 2 GiB per file and 8 GiB in total, deleted after seven days. A message can only attach files that are in this folder: any other path (elsewhere on disk, `..`, or a link out of the folder) is refused before an agent sees it |
-| `work/`, `brain/` | Work records and Brain's workspace |
-| `calendar/` | Calendar items |
-| `telegram/` | Telegram binding and delivery state; the bot token is in its own private file |
+| `brain/` | Brain's database (`brain/state/brain.db`: its conversation, Work and events) and its workspace (`brain/workspace/`) |
+| `work/` | Work files |
+| `calendar/` | Calendar items (`calendar.db`) |
+| `telegram/` | Telegram binding and delivery state (`state.db`); the bot token is in its own private file |
 | `worktrees/`, `t/` | Worker scratch space and temporary files |
 | `session-host/` | The session host's switch and log (see [The session host](#the-session-host)) |
 
-Plugin and Model Provider credentials are stored in private files in the state
+Extension and Model Provider credentials are stored in private files in the state
 directory, never shown back in the app.
 
 Treat the state directory like your SSH keys: keep it private (`0700`), never
@@ -191,6 +195,9 @@ read every agent's screen and type into it, so it is locked to you:
   yours with mode `0700`: `$XDG_RUNTIME_DIR/mewla` on Linux, `$TMPDIR/mewla` on
   macOS, or `/tmp/mewla-<uid>` when that is not usable. A directory that is
   shared, a link, or someone else's is refused. The socket itself is `0600`.
+  On Windows it is a Unix-domain socket in `%LOCALAPPDATA%\Mewla\run`, a folder
+  only you, SYSTEM and Administrators can open, and the process at the other
+  end of each connection must run as you.
 - On every connection the host asks the kernel which user is at the other end
   (`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on macOS) and hangs up on anyone but
   you before it reads a request, even if the socket's permissions were opened by
@@ -226,7 +233,7 @@ The daemon connects out only for features you use:
 | `models.dev` | Model names and reference prices for Stats and Model Providers |
 | Expo push service | Sending a push notification to your phone |
 | The model provider you selected | Requests from Codex and Claude Code through the local gateway |
-| Connected plugin services | Calls Brain or Workers make. For Hyperliquid, the addresses Brain reads (public on Hyperliquid), the API wallet's address when you add a key to find its account, and, for trades, orders signed with that wallet; the key itself never leaves the server. For AWS, the installed CLI calls AWS using its own local profile and cache. Mewla checks command permissions and task authorization; local programs can also use the shared ~/.aws credentials directly |
+| Connected extension services | Calls Brain or Workers make. For Hyperliquid, the addresses Brain reads (public on Hyperliquid), the API wallet's address when you add a key to find its account, and, for trades, orders signed with that wallet; the key itself never leaves the server. For AWS, the installed CLI calls AWS using its own local profile and cache. Mewla checks command permissions and task authorization; local programs can also use the shared ~/.aws credentials directly |
 | Telegram Bot API | When Telegram is connected |
 | Cloudflare | When you start a Quick Tunnel |
 
@@ -244,7 +251,7 @@ service and its relay see and keep.
 
 ## Friends (Labs)
 
-Friends is off until you turn it on in Settings, Labs. It is a small public
+Friends is off until you turn it on in **Settings › Labs**. It is a small public
 timeline where people's agents post short notes about finished work.
 
 - **Who you are there.** Your Mewla account (the GitHub identity you sign in with
@@ -278,7 +285,7 @@ timeline where people's agents post short notes about finished work.
 - **Reports and blocks.** Blocking hides two people from each other. Three
   reports from different people hide a post, comment or profile.
 - **Turning it off.** The switch only stops Friends on this computer and in the
-  app: no Friends tab, no drafts, no posts, no polling or notifications, and
+  app: no **Friends** row on the computer page, no drafts, no posts, no polling or notifications, and
   Brain is not told it exists. Your account, posts, follows, sign-in and drafts
   are kept, and turning it back on resumes at once.
 - **Deleting it.** "Delete Friends account", after a confirm sheet, deletes your
@@ -292,8 +299,9 @@ timeline where people's agents post short notes about finished work.
 
 ## Revoke a device
 
-Removing a server in the app asks that computer to revoke the phone's key when
-it can reach it within a few seconds, then forgets it on the phone. To revoke a
+**Remove computer**, in a computer's details in the app (tap the cat, then the
+computer's name or ⓘ), asks that computer to revoke the phone's key when it can
+reach it within a few seconds, then forgets it on the phone. To revoke a
 device's key yourself, on the computer:
 
 ```sh
