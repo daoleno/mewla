@@ -64,7 +64,8 @@ android {
     }
   }
   buildTypes {
-    getByName("debug") { applicationIdSuffix = ".debug" }
+    // The dev build (hot reload) sits beside the Preview under its own name.
+    getByName("debug") { applicationIdSuffix = ".debug"; resValue("string", "app_name", "Mewla Dev") }
     getByName("release") {
       signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
       isMinifyEnabled = true
