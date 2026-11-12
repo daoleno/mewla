@@ -5,9 +5,10 @@ import { nshPlatform } from "./platform";
 import { justPaired, linkPairing, pairFromText, pairingStatus } from "./pairing";
 import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
 import { current, loadSession, ready, resumeConnection } from "./session";
-import { FirstRun, openPhonePage, openSettingsLink, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
+import { FirstRun, openPhonePage, openPlace, openSettingsLink, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
+import { placeOfLink } from "../core/web/places";
 import { startNotifications } from "./push/push";
 import { startAppUpdate } from "./update/update";
 
@@ -49,6 +50,9 @@ host.on("links.open", (payload) => {
   if (readPairingLink(url)) return void pairFromText(url);
   if (isPhoneLink(url)) return void openPhonePage();
   if (openSettingsLink(url)) return;
+  // `mewla://stats`, `…/screen`, `…/terminal/<id>`, `…/work/<id>`…: the page it names, as the Expo app's routes did (parity #48).
+  const place = placeOfLink(url);
+  if (place) return void openPlace(place);
   const section = sectionOfLink(url);
   if (section !== null) selectedTab.set(section);
 });
