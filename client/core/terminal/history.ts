@@ -91,7 +91,49 @@ export function snapshotRows(snapshot: HistorySnapshot): string[] {
   if (snapshot.alternate || !snapshot.ansi) return [];
   const rows = snapshot.ansi.replace(/\n$/, "").split("\n");
   if (rows.length > HISTORY_MAX_ROWS) throw new Error("Terminal history is too large.");
-  return rows;
+  return standAloneRows(rows);
+}
+
+const SGR = /\x1b\[([0-9;:]*)m/g;
+
+/** The SGR sequences in force after `row`, given those in force before it (`pen`, "" for none). */
+function penAfter(pen: string, row: string): string {
+  for (const match of row.matchAll(SGR)) {
+    const tokens = match[1] === "" ? ["0"] : match[1].split(";");
+    const kept: string[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const main = tokens[i].split(":")[0];
+      if (main === "" || main === "0") {
+        // A reset: what came before it, in this sequence or the rows above, is gone.
+        pen = "";
+        kept.length = 0;
+      } else if ((main === "38" || main === "48" || main === "58") && !tokens[i].includes(":")) {
+        // An extended color with ;-separated parts: its parts (the 0 in 38;5;0 is a color, not a reset).
+        const parts = tokens[i + 1] === "5" ? 3 : tokens[i + 1] === "2" ? 5 : 1;
+        kept.push(tokens.slice(i, i + parts).join(";"));
+        i += parts - 1;
+      } else {
+        kept.push(tokens[i]);
+      }
+    }
+    if (kept.length) pen += "\x1b[" + kept.join(";") + "m";
+  }
+  return pen;
+}
+
+/**
+ * Rows that each start from what is in force where they begin. tmux captures a style once and the
+ * rows after it lean on it; a view draws any page of history rows on its own (lazily, as they come
+ * into sight), so a row that leans on the rows above it starts with a reset and that style. A
+ * session host's rows stand alone already (daemon/ghosttyvt, Styled).
+ */
+export function standAloneRows(rows: readonly string[]): string[] {
+  let pen = "";
+  return rows.map((row) => {
+    const out = pen ? "\x1b[0m" + pen + row : row;
+    pen = penAfter(pen, row);
+    return out;
+  });
 }
 
 /** Checks a delta's shape and bounds before the view allocates for it. */

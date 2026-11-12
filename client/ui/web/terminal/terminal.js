@@ -246,6 +246,8 @@
   var box = document.getElementById("box");
   var canvas = document.getElementById("vt");
   var ctx = canvas.getContext("2d", { alpha: false });
+  // A restored context (after a GPU reset) starts from the default state: set the face again and repaint.
+  canvas.addEventListener("contextrestored", function () { curFace = ""; schedule(); });
   var input = document.getElementById("input");
   var mac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
   var coarse = window.matchMedia ? window.matchMedia("(any-pointer: coarse)") : null;
@@ -264,7 +266,8 @@
   // The grid, in device pixels.
   var dpr = 1, fontPx = 13, cellW = 8, cellH = 16, baseline = 12, thick = 1, padX = 0, padY = 0;
   var devW = 0, devH = 0, cols = 0, rows = 0;
-  var widths = {};
+  // Each face's character widths, and the face the context has (reading ctx.font back costs a serialization).
+  var widths = {}, faceWidths = {}, curFace = "";
   var glyphs = {};
 
   // The content: history lines above the screen's.
@@ -376,9 +379,15 @@
     schedule();
   }
 
-  /** History rows (whole lines, ANSI) drawn through the second VT a page at a time, so their colors are the VT's. */
-  function renderHistory(ansiRows) {
-    if (!ansiRows.length) return [];
+  /**
+   * History row i as a line, drawn through the second VT with the rows of its page, when it is first
+   * needed (drawn, selected, tapped): history arrives in thousands of rows while output floods, and
+   * nobody looks at most of them. Rows stand alone (core/terminal/history.ts), so a page starts from
+   * a reset.
+   */
+  function historyLine(i) {
+    if (history[i]) return history[i];
+    var start = i - (i % PAGE), end = Math.min(start + PAGE, historyAnsi.length);
     var width = Math.min(Math.max(historyCols || cols || 80, 2), 1000);
     if (!scratch || scratchCols !== width) {
       if (scratch) x.mewla_vt_destroy(scratch);
@@ -386,21 +395,14 @@
       scratchCols = width;
       if (scratch) themeVt(scratch);
     }
-    var out = [];
-    if (!scratch) {
-      for (var e = 0; e < ansiRows.length; e++) out.push({ runs: [], wrapped: false });
-      return out;
-    }
-    for (var at = 0; at < ansiRows.length; at += PAGE) {
-      var page = ansiRows.slice(at, at + PAGE);
-      // Clear and home without resetting the styling the page before left.
-      withBytes(enc.encode("\x1b[2J\x1b[H" + page.join("\r\n")), function (p, n) { x.mewla_vt_write(scratch, p, n); });
-      var rendered = [];
+    var rendered = [];
+    if (scratch) {
+      withBytes(enc.encode("\x1b[0m\x1b[2J\x1b[H" + historyAnsi.slice(start, end).join("\r\n")), function (p, n) { x.mewla_vt_write(scratch, p, n); });
       decode(scratch, true, function (row, line) { if (row < PAGE) rendered[row] = line; });
-      // A history row is a whole line (the computer joined wrapped rows).
-      for (var i = 0; i < page.length; i++) out.push({ runs: rendered[i] ? rendered[i].runs : [], wrapped: false });
     }
-    return out;
+    // A history row is a whole line (the computer joined wrapped rows).
+    for (var r = start; r < end; r++) history[r] = { runs: rendered[r - start] ? rendered[r - start].runs : [], wrapped: false };
+    return history[i];
   }
 
   function destroyScratch() {
@@ -432,6 +434,7 @@
     padX = Math.round(PAD_X * dpr);
     padY = Math.round(PAD_Y * dpr);
     widths = {};
+    curFace = "";
     glyphs = {};
   }
 
@@ -443,6 +446,7 @@
     if (canvas.width !== devW || canvas.height !== devH) {
       canvas.width = devW;
       canvas.height = devH;
+      curFace = "";
     }
     canvas.style.width = devW / dpr + "px";
     canvas.style.height = devH / dpr + "px";
@@ -468,7 +472,7 @@
   // Content lines: history then the screen.
 
   function lineCount() { return history.length + grid.length; }
-  function lineAt(i) { return (i < history.length ? history[i] : grid[i - history.length]) || { runs: [], wrapped: false }; }
+  function lineAt(i) { return (i < 0 ? null : i < history.length ? historyLine(i) : grid[i - history.length]) || { runs: [], wrapped: false }; }
   /** The y of content line i, in device pixels. */
   function lineY(i) { return padY + (i - history.length) * cellH + Math.round(scrollPx); }
   function lineUnder(y) { return history.length + Math.floor((y - padY - Math.round(scrollPx)) / cellH); }
@@ -540,17 +544,28 @@
     ctx.restore();
   }
 
+  /** Sets the context's face when it changes; a frame draws thousands of runs in a few faces. */
+  function setFace(f) {
+    if (f === curFace) return;
+    ctx.font = curFace = f;
+    faceWidths = widths[f] || (widths[f] = {});
+  }
+
+  /** `text`'s width in the current face, measured once. */
+  function textWidth(text) {
+    var w = faceWidths[text];
+    if (w === undefined) faceWidths[text] = w = ctx.measureText(text).width;
+    return w;
+  }
+
   /** Whether `c` in the current face is exactly one cell wide (then runs of such characters draw as one string). */
   function fits(c) {
-    var key = ctx.font + "\u0000" + c;
-    var w = widths[key];
-    if (w === undefined) widths[key] = w = ctx.measureText(c).width;
-    return Math.abs(w - cellW) < 0.05;
+    return Math.abs(textWidth(c) - cellW) < 0.05;
   }
 
   /** A glyph that is not one cell wide (CJK, emoji, a symbol from a fallback face): centred in its `cells`, scaled down to fit. */
   function drawFitted(text, x0, y, cells) {
-    var room = cells * cellW, w = ctx.measureText(text).width;
+    var room = cells * cellW, w = textWidth(text);
     if (w <= room + 0.5 || w <= 0) {
       ctx.fillText(text, x0 + (room - w) / 2, y + baseline);
       return;
@@ -596,7 +611,7 @@
   /** `next` is the run after this one in its row (a flag's second regional indicator). */
   function drawRun(run, y, color, next) {
     var x0 = padX + run.col * cellW;
-    ctx.font = face(run.flags);
+    setFace(face(run.flags));
     ctx.fillStyle = color;
     if (run.flags & FLAG.FLAG_TAIL) {
       // A flag's second regional indicator: the first draws the flag across both.
@@ -679,7 +694,7 @@
     if (y + cellH <= 0 || y >= canvas.height) return;
     if (composing && preedit) {
       // The composition, at the cursor, over the cells it covers, underlined.
-      ctx.font = face(0);
+      setFace(face(0));
       var w = Math.max(cellW, Math.ceil(ctx.measureText(preedit).width / cellW) * cellW);
       ctx.fillStyle = theme.background;
       ctx.fillRect(x0, y, w, cellH);
@@ -768,11 +783,12 @@
     if (m.cols > 0 && m.cols !== historyCols) {
       historyCols = m.cols;
       destroyScratch();
+      history = new Array(historyAnsi.length);
     }
     alternate = m.alternate;
+    // Kept as sent; drawn when first needed (historyLine). `history` holds the drawn ones, as long as historyAnsi.
     for (var i = 0; i < m.rows.length; i++) historyAnsi.push(m.rows[i]);
-    var added = renderHistory(m.rows);
-    for (var j = 0; j < added.length; j++) history.push(added[j]);
+    history.length = historyAnsi.length;
     // Scrolled up, the rows above the screen grew: the reader's rows stay where they are.
     if (scrollPx > 0 && !m.reset) scrollPx += m.rows.length * cellH;
     if (alternate) scrollPx = 0;
@@ -1077,9 +1093,9 @@
     vtPalette = palette256(sixteen);
     if (!x) return;
     if (vt) themeVt(vt);
-    // The history's colors are the VT's: draw its rows again.
+    // The history's colors are the VT's: its rows are drawn again when next needed.
     destroyScratch();
-    history = renderHistory(historyAnsi);
+    history = new Array(historyAnsi.length);
     pull(true);
   }
 
