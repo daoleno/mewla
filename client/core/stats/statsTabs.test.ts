@@ -1,27 +1,25 @@
-// @ts-nocheck
 import { describe, expect, it } from 'bun:test';
-import {
-  INITIAL_STATS_RANGE,
-  STATS_RANGE_TABS,
-  statsRangeAt,
-  statsRangeIndex,
-} from './statsTabs';
+import { availableRanges, INITIAL_STATS_RANGE, rangeDays, rangeEyebrow, shownRange, STATS_RANGE_TABS } from './statsTabs';
 
-describe('Stats range tabs', () => {
-  it('keeps the existing Week initial selection', () => {
-    expect(INITIAL_STATS_RANGE).toBe('week');
-    expect(statsRangeIndex(INITIAL_STATS_RANGE)).toBe(1);
+describe('Stats range tabs (SPEC §15 Metrics)', () => {
+  it('is 7 / 14 / 30 days, opening on 14', () => {
+    expect(STATS_RANGE_TABS.map((tab) => tab.label)).toEqual(['7 days', '14 days', '30 days']);
+    expect(STATS_RANGE_TABS.map((tab) => tab.key)).toEqual(['week', 'fortnight', 'month']);
+    expect(INITIAL_STATS_RANGE).toBe('fortnight');
+    expect(rangeEyebrow('fortnight')).toBe('Last 14 days');
+    expect(rangeDays('month')).toBe(30);
   });
 
-  it('maps every tap and pager index through the same stable order', () => {
-    expect(STATS_RANGE_TABS.map((tab) => statsRangeAt(statsRangeIndex(tab.key))))
-      .toEqual(STATS_RANGE_TABS.map((tab) => tab.key));
+  it('a computer from before the 14-day range shows 7 and 30 only, on 7', () => {
+    const old = { day: {}, week: {}, month: {}, all: {} };
+    expect(availableRanges(old).map((tab) => tab.key)).toEqual(['week', 'month']);
+    expect(shownRange('fortnight', availableRanges(old))).toBe('week');
+    expect(shownRange('month', availableRanges(old))).toBe('month');
   });
 
-  it('bounds pager indices instead of creating an invalid selection', () => {
-    expect(statsRangeAt(-1)).toBe('day');
-    expect(statsRangeAt(STATS_RANGE_TABS.length)).toBe('all');
-    expect(statsRangeAt(Number.POSITIVE_INFINITY)).toBe('day');
-    expect(statsRangeAt(Number.NaN)).toBe('day');
+  it('before any answer, or with none of them, all three', () => {
+    expect(availableRanges(null)).toBe(STATS_RANGE_TABS);
+    expect(availableRanges({})).toBe(STATS_RANGE_TABS);
+    expect(shownRange('fortnight', availableRanges({ week: {}, fortnight: {}, month: {} }))).toBe('fortnight');
   });
 });
