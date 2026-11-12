@@ -22,9 +22,9 @@ import type { ScreenPointerMode } from "../../../core/screen/screenViewerProtoco
 import { changeIPhone, getIPhoneStatus, type IPhoneChange, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { phoneAvailable, phoneStatus, readPhone } from "../../phone/state";
 import { daemon } from "../daemon";
-import { EmptyState, PillButton, Row, Section, Spinner } from "../kit/kit";
-import { Icon, type IconName } from "../kit/Icon";
-import { inFront } from "../kit/inFront";
+import { EmptyState, PillButton, Row, Section, Spinner } from "../../kit/kit";
+import { Icon, type IconName } from "../../kit/Icon";
+import { inFront } from "../../kit/inFront";
 import type { PageNav } from "../routes";
 import { AgentDisplays } from "./Displays";
 import { modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
@@ -680,7 +680,7 @@ function SmallButton(props: { title: string; icon?: IconName; label?: string; fi
       onPress={props.onPress}
       class={`flex-row items-center gap-1.5 rounded-full px-3 py-1.5 active:opacity-70 disabled:opacity-50 ${props.filled ? "bg-primary" : "bg-secondary"}`}
     >
-      {props.icon ? <Icon name={props.icon} size={14} tone={props.filled ? "paper" : "soft"} /> : null}
+      {props.icon ? <Icon name={props.icon} size={14} tone={props.filled ? "canvas" : "soft"} /> : null}
       <Text class={`text-sm font-medium ${props.filled ? "text-primary-foreground" : props.destructive ? "text-destructive" : ""}`}>{props.title}</Text>
     </Button>
   );

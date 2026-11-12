@@ -13,7 +13,7 @@ import {
 import { computerProblems, computerProblemsMayChange, computerTmuxProblem, computerUpdateProblem, type ComputerAction, type ComputerProblem } from "../../../core/settings/computerModel";
 import { effectiveMinComputerVersion } from "../../../core/update/version";
 import manifest from "../../nsh.json";
-import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../kit/kit";
+import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { connection, current, resumeConnection, servers, switchTo, transportPath } from "../../session";
 import { linkPathText } from "../../../core/link/directAddresses";

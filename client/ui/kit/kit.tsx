@@ -2,16 +2,16 @@ import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
 import { announce, Canvas, Clipboard, effect, platform, Scroll, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, Input, Switch } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
-import type { PageColumn } from "../../../core/web/places";
-import { NavPage } from "../../shell/NavPage";
+import type { PageColumn } from "../../core/web/places";
+import { NavPage } from "../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
-import { spinnerRadius } from "../../../core/more/spinner";
+import { spinnerRadius } from "../../core/more/spinner";
 
 /**
- * The building blocks of the More pages: a page with the system header, inset
- * grouped sections of rows on a card, and the few states a page has (busy,
- * empty, failed). Paper and ink, hairlines for structure (client/DESIGN.md).
+ * The building blocks of the pages: a page with the system header, groups of rows
+ * under a section label, buttons, and the few states a page has (busy, empty,
+ * failed). The Soft look of soft-final SPEC §10–§11: canvas, surface groups, ink.
  */
 
 export function Page(props: {
@@ -46,20 +46,20 @@ export function Page(props: {
   );
 }
 
-/** A caption, one card of rows separated by inset hairlines, an optional footnote. */
+/** A section label (caption, soft), one surface group of rows with inset hair dividers, an optional footnote. */
 export function Section(props: { title?: string; detail?: JSX.Element; footer?: string; testID?: string; children?: JSX.Element }) {
   return (
     <View class="mt-6" testID={props.testID}>
       {props.title || props.detail ? (
-        <View class="mb-1.5 flex-row items-center justify-between px-4">
-          <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title ?? ""}</Text>
+        <View class="mb-2 min-h-[18px] flex-row items-center justify-between px-4">
+          <Text class="text-caption font-semibold text-muted-foreground" role="header">{props.title ?? ""}</Text>
           {props.detail ?? null}
         </View>
       ) : null}
-      <View class="overflow-hidden rounded-2xl border border-border bg-card">
+      <View class="overflow-hidden rounded-(--radius-group) bg-card">
         <View class="-mb-px">{props.children}</View>
       </View>
-      {props.footer ? <Text class="mt-1.5 px-4 text-xs text-muted-foreground">{props.footer}</Text> : null}
+      {props.footer ? <Text class="mt-2 px-4 text-caption text-muted-foreground">{props.footer}</Text> : null}
     </View>
   );
 }
@@ -99,22 +99,22 @@ export interface RowProps {
 /** One row: a glyph, a title over a subtitle, a value or a control, a chevron when it opens something. */
 export function Row(props: RowProps) {
   const body = (
-    <View class="min-h-[52px] flex-row items-center gap-3 px-4 py-3">
-      {props.leading ?? (props.icon ? <Icon name={props.icon} tone={props.destructive ? "seal" : "soft"} /> : null)}
+    <View class="min-h-[56px] flex-row items-center gap-3 px-4 py-3">
+      {props.leading ?? (props.icon ? <Icon name={props.icon} size={24} tone={props.destructive ? "ink" : "soft"} /> : null)}
       <View class="min-w-0 flex-1">
-        <Text class={props.destructive ? "text-base text-destructive" : props.mono ? "font-mono text-sm" : "text-base"} style={{ numberOfLines: 2 }}>{props.title}</Text>
-        {props.subtitle ? <Text class="mt-0.5 text-sm text-muted-foreground line-clamp-3">{props.subtitle}</Text> : null}
+        <Text class={props.destructive ? "text-body text-destructive" : props.mono ? "font-mono text-code" : "text-body"} style={{ numberOfLines: 2 }}>{props.title}</Text>
+        {props.subtitle ? <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-3">{props.subtitle}</Text> : null}
       </View>
-      {props.value ? <Text class="max-w-[50%] text-right text-base text-muted-foreground line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text> : null}
+      {props.value ? <Text class="max-w-[50%] text-right text-body text-muted-foreground line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text> : null}
       {props.trailing ?? null}
-      {props.check ? <Icon name="check" tone="ink" size={18} /> : null}
-      {props.chevron ? <Icon name="chevron-right" size={16} tone="faint" /> : null}
-      <Hairline inset={props.icon || props.leading ? 48 : 16} />
+      {props.check ? <Icon name="check" tone="ink" size={20} /> : null}
+      {props.chevron ? <Icon name="chevron-right" size={18} tone="faint" /> : null}
+      <Hairline inset={props.icon || props.leading ? 52 : 16} />
     </View>
   );
   if (!props.onPress && !props.onLongPress) {
     return (
-      <View testID={props.testID} class={props.disabled ? "opacity-50" : ""} accessible={props.accessibilityLabel ? true : undefined} accessibilityLabel={props.accessibilityLabel} role={props.role}>
+      <View testID={props.testID} class={props.disabled ? "opacity-40" : ""} accessible={props.accessibilityLabel ? true : undefined} accessibilityLabel={props.accessibilityLabel} role={props.role}>
         {body}
       </View>
     );
@@ -132,14 +132,14 @@ export function Row(props: RowProps) {
         disabled={props.disabled}
         onPress={props.onPress}
         onLongPress={props.onLongPress}
-        class="active:bg-accent disabled:opacity-50"
+        class="active:bg-accent disabled:opacity-40"
       >
         {body}
       </View>
     );
   }
   return (
-    <Button testID={props.testID} disabled={props.disabled} selected={props.selected} accessibilityLabel={props.accessibilityLabel} role={props.role} onPress={props.onPress} class="active:bg-accent disabled:opacity-50">
+    <Button testID={props.testID} disabled={props.disabled} selected={props.selected} accessibilityLabel={props.accessibilityLabel} role={props.role} onPress={props.onPress} class="active:bg-accent disabled:opacity-40">
       {body}
     </Button>
   );
@@ -161,9 +161,9 @@ export function SwitchRow(props: { title: string; subtitle?: string; checked: bo
             checked={props.checked}
             disabled={props.disabled || props.busy}
             onChange={({ checked }) => props.onChange(checked)}
-            class="disabled:opacity-50"
-            trackClass="h-[30px] w-[50px] rounded-full bg-secondary border border-border checked:bg-primary checked:border-primary"
-            thumbClass="m-[2px] size-[24px] rounded-full bg-card shadow-sm checked:translate-x-[20px]"
+            class="disabled:opacity-40"
+            trackClass="h-[30px] w-[50px] rounded-full bg-track checked:bg-primary"
+            thumbClass="m-[2px] size-[26px] rounded-full bg-card checked:translate-x-[20px]"
           />
         </View>
       }
@@ -198,28 +198,47 @@ export function EmptyState(props: { title?: string; detail?: string; busy?: bool
   return (
     <View testID={props.testID} class="items-center gap-2 px-6 py-16">
       {props.busy ? <Spinner size={24} /> : props.icon ? <Icon name={props.icon} size={28} tone={props.tone} /> : null}
-      {props.title ? <Text class="mt-1 text-center text-lg font-semibold">{props.title}</Text> : null}
-      {props.detail ? <Text class="text-center text-sm text-muted-foreground">{props.detail}</Text> : null}
-      {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} /> : null}
+      {props.title ? <Text class="mt-1 text-center text-title font-semibold tracking-title">{props.title}</Text> : null}
+      {props.detail ? <Text class="text-center text-sub text-muted-foreground">{props.detail}</Text> : null}
+      {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} onCanvas /> : null}
     </View>
   );
 }
 
-/** A capsule button: ink when it is the page's one action, tint otherwise. */
-export function PillButton(props: { title: string; onPress: () => void; filled?: boolean; busy?: boolean; disabled?: boolean; destructive?: boolean; testID?: string }) {
-  const tone = props.filled ? "bg-primary" : "bg-secondary";
+/**
+ * A button (SPEC §11): `ink` when it is the one action, `ghost` otherwise, `seal` for Approve only.
+ * 52 high (48 `small`), radius 16 (14 small), 17/600, never wrapping; pressed .7, disabled 40 %.
+ * A ghost button is canvas inside a surface group, surface on the canvas (`onCanvas`).
+ */
+export function PillButton(props: {
+  title: string;
+  onPress: () => void;
+  /** The ink button: the page's or the group's one action. */
+  filled?: boolean;
+  kind?: "ink" | "ghost" | "seal";
+  small?: boolean;
+  onCanvas?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
+  destructive?: boolean;
+  testID?: string;
+}) {
+  const kind = () => props.kind ?? (props.filled ? "ink" : "ghost");
+  const fill = () => (kind() === "ink" ? "bg-primary" : kind() === "seal" ? "bg-seal" : props.onCanvas ? "bg-card" : "bg-muted");
+  const size = () => (props.small ? "h-[48px] rounded-(--radius-control) px-4" : "h-[52px] rounded-2xl px-5");
+  const ink = () => (kind() === "ink" ? "text-primary-foreground" : kind() === "seal" ? "text-seal-foreground" : "text-foreground");
   return (
-    <Button testID={props.testID} disabled={props.disabled || props.busy} onPress={props.onPress} class={`mt-2 flex-row items-center gap-2 rounded-full px-4 py-2 active:opacity-70 disabled:opacity-50 ${tone}`}>
-      {props.busy ? <Spinner size={14} tone={props.filled ? "paper" : "soft"} /> : null}
-      <Text class={props.filled ? "text-sm font-medium text-primary-foreground" : props.destructive ? "text-sm font-medium text-destructive" : "text-sm font-medium"}>{props.title}</Text>
+    <Button testID={props.testID} disabled={props.disabled || props.busy} onPress={props.onPress} class={`mt-2 flex-row items-center justify-center gap-2 active:opacity-70 disabled:opacity-40 ${size()} ${fill()}`}>
+      {props.busy ? <Spinner size={16} tone={kind() === "ghost" ? "soft" : "canvas"} /> : null}
+      <Text class={`text-body font-semibold line-clamp-1 ${ink()}`}>{props.title}</Text>
     </Button>
   );
 }
 
 const NOTICE_GLYPH: Record<"warning" | "failed" | "success" | "info", { icon: IconName; tone: ColorName }> = {
-  warning: { icon: "alert", tone: "warning" },
-  failed: { icon: "alert", tone: "failed" },
-  success: { icon: "check-circle", tone: "ready" },
+  warning: { icon: "alert", tone: "soft" },
+  failed: { icon: "alert", tone: "ink" },
+  success: { icon: "check-circle", tone: "soft" },
   info: { icon: "info", tone: "soft" },
 };
 
@@ -248,14 +267,18 @@ export function Notice(props: {
     });
   }
   return (
-    <View testID={props.testID} android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }} class="mt-4 flex-row items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3">
-      {props.busy ? <Spinner size={18} /> : <Icon name={props.icon ?? glyph().icon} size={18} tone={glyph().tone} />}
-      <View class="flex-1">
-        <Text class="text-sm font-medium">{props.title}</Text>
-        {props.detail ? <Text class="mt-0.5 text-sm text-muted-foreground">{props.detail}</Text> : null}
+    <View testID={props.testID} android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }} class="mt-4 min-h-[68px] gap-3 rounded-(--radius-group) bg-card px-4 py-3.5">
+      <View class="flex-row items-start gap-3.5">
+        {props.busy ? <Spinner size={24} /> : <Icon name={props.icon ?? glyph().icon} size={24} tone={glyph().tone} />}
+        <View class="flex-1">
+          <Text class="text-body font-semibold">{props.title}</Text>
+          {props.detail ? <Text class="mt-0.5 text-sub text-muted-foreground">{props.detail}</Text> : null}
+        </View>
       </View>
       {props.action && props.onAction ? (
-        <Button disabled={props.actionDisabled || props.busy} onPress={props.onAction} class="active:opacity-60 disabled:opacity-40"><Text class="text-sm font-semibold">{props.action}</Text></Button>
+        <View class="flex-row flex-wrap gap-2 pl-[38px]">
+          <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} kind="ink" small disabled={props.actionDisabled || props.busy} onPress={props.onAction} />
+        </View>
       ) : null}
     </View>
   );
@@ -263,7 +286,7 @@ export function Notice(props: {
 
 export type Status = "ready" | "running" | "warning" | "failed" | "blocked" | "neutral" | "needs";
 
-/** A state's glyph and word: the six Work states survive greyscale (client/DESIGN.md). */
+/** A state's glyph and word: the shape tells the state, so it reads in ink and soft alone (red only for needs you). */
 export function StatusMark(props: { status: Status; label?: string }) {
   const tone = (): ColorName => (props.status === "neutral" ? "soft" : props.status === "needs" ? "seal" : props.status);
   return (
@@ -280,7 +303,7 @@ export function StatusMark(props: { status: Status; label?: string }) {
           if (props.status === "ready") {
             cx.arc(6.5, 6.5, 6, 0, Math.PI * 2);
             cx.fill();
-            cx.strokeStyle = color("card");
+            cx.strokeStyle = color("surface");
             cx.beginPath();
             cx.moveTo(3.8, 6.7);
             cx.lineTo(5.7, 8.5);
@@ -312,16 +335,16 @@ export function StatusMark(props: { status: Status; label?: string }) {
           }
         }}
       />
-      {props.label ? <Text class="text-sm text-muted-foreground">{props.label}</Text> : null}
+      {props.label ? <Text class="text-sub text-muted-foreground">{props.label}</Text> : null}
     </View>
   );
 }
 
-/** A plain paper tag. */
+/** A quiet label on a row (not the red request tag): caption 600, soft, on a canvas pill. */
 export function Tag(props: { label: string }) {
   return (
-    <View class="rounded-full border border-border px-2 py-0.5">
-      <Text class="text-xs font-medium text-muted-foreground">{props.label}</Text>
+    <View class="rounded-full bg-muted px-2.5 py-1">
+      <Text class="text-caption font-semibold text-muted-foreground">{props.label}</Text>
     </View>
   );
 }
@@ -329,16 +352,16 @@ export function Tag(props: { label: string }) {
 /** "Show N more items" / "Show fewer items" under a long card. */
 export function ShowMore(props: { hidden: number; expanded: boolean; onToggle: () => void; testID?: string }) {
   return (
-    <Button testID={props.testID} onPress={props.onToggle} class="px-4 py-3 active:bg-accent">
-      <Text class="text-sm font-medium text-muted-foreground">{props.expanded ? "Show fewer items" : `Show ${props.hidden} more ${props.hidden === 1 ? "item" : "items"}`}</Text>
+    <Button testID={props.testID} onPress={props.onToggle} class="min-h-[52px] justify-center px-4 active:bg-accent">
+      <Text class="text-sub text-muted-foreground">{props.expanded ? "Show fewer items" : `Show ${props.hidden} more ${props.hidden === 1 ? "item" : "items"}`}</Text>
     </Button>
   );
 }
 
-/** A thin bar: `share` of the width filled in ink, on the tint. */
+/** A thin bar: `share` of the width filled in ink, on the track. */
 export function Meter(props: { share: number; tone?: ColorName; height?: number }) {
   return (
-    <View class="overflow-hidden rounded-full bg-secondary" style={{ height: props.height ?? 3 }}>
+    <View class="overflow-hidden rounded-full bg-track" style={{ height: props.height ?? 4 }}>
       <View class="h-full rounded-full" style={{ width: `${Math.round(Math.max(0, Math.min(1, props.share)) * 1000) / 10}%`, backgroundColor: color(props.tone ?? "ink") }} />
     </View>
   );
@@ -368,12 +391,12 @@ export function Field(props: {
 }) {
   return (
     <View class="gap-1.5 px-4 py-3">
-      {props.label ? <Text class="text-xs font-medium text-muted-foreground">{props.label}</Text> : null}
-      <View class="flex-row items-center gap-2 rounded-xl border border-border bg-background px-3">
+      {props.label ? <Text class="text-caption font-semibold text-muted-foreground">{props.label}</Text> : null}
+      <View class="flex-row items-center gap-2 rounded-(--radius-control) bg-background px-3">
         <Input
           testID={props.testID}
           accessibilityLabel={props.accessibilityLabel ?? props.label}
-          class={props.mono ? "min-h-[44px] flex-1 py-2.5 font-mono text-sm" : "min-h-[44px] flex-1 py-2.5 text-base"}
+          class={props.mono ? "min-h-[48px] flex-1 py-3 font-mono text-code" : "min-h-[48px] flex-1 py-3 text-body"}
           value={props.value}
           placeholder={props.placeholder}
           masked={props.masked}
@@ -423,14 +446,17 @@ export async function copyMenu(title: string, choices: ReadonlyArray<{ label: st
   }
 }
 
-/** Asks before an irreversible step; resolves true when the person chose `action`. */
+/**
+ * Asks before an irreversible step (the system alert); resolves true when the person chose `action`.
+ * The action keeps the normal role: red is for what waits for you, so iOS must not paint it.
+ */
 export async function confirmDestructive(title: string, message: string, action: string): Promise<boolean> {
   const answer = await AlertDialog.show({
     title,
     description: message,
     actions: [
       { id: "cancel", label: "Cancel", role: "cancel" },
-      { id: "go", label: action, role: "destructive" },
+      { id: "go", label: action },
     ],
   });
   return answer.action === "go";

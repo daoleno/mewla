@@ -1,8 +1,8 @@
 import { computed, platform, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
-import { Icon } from "../kit/Icon";
-import { EmptyState } from "../kit/kit";
-import { Segmented } from "../kit/Segmented";
+import { Icon } from "../../kit/Icon";
+import { EmptyState } from "../../kit/kit";
+import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { Avatar, FriendsPageFrame, PostList } from "./parts";
 import { draftCount, followFriends, followPage, friends, friendsEnabled, refreshFriends, unread } from "./state";

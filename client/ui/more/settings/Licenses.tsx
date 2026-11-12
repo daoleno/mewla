@@ -1,6 +1,6 @@
 import { openUrl, Text, View } from "nsh";
 import { findLicenseItem, licenseItemId, licenseSummary, type LicenseData, type LicenseItem } from "../../../core/settings/licenses";
-import { EmptyState, Page, Row, Section } from "../kit/kit";
+import { EmptyState, Page, Row, Section } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import data from "./licenses/licenses.json";
 

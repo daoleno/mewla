@@ -2,8 +2,8 @@ import { Scroll, signal, Text, View } from "nsh";
 import { GuardedSheet as Sheet } from "../../shell/AppSheet";
 import type { GitBranchesPayload, GitBranchInfo } from "../../../core/git/gitDiff";
 import { formatGitAge } from "../../../core/git/gitReviewTime";
-import { EmptyState, Field, Notice, Row } from "../kit/kit";
-import { Icon } from "../kit/Icon";
+import { EmptyState, Field, Notice, Row } from "../../kit/kit";
+import { Icon } from "../../kit/Icon";
 import { BACKDROP, SHEET, TextButton } from "./parts";
 import type { GitReview } from "./state";
 

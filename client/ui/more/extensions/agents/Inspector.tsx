@@ -10,8 +10,8 @@ import { buildSkillFileTree, defaultSkillFile, skillCopyLocation, skillMarkdownB
 import { skillRowSupportsDelete } from "../../../../core/extensions/skillsSurfaceModel";
 import { scopeLabel, type InstalledSkill, type ManagedSkillAgent, type PackageDetail } from "../../../../core/extensions/skillsManagement";
 import { failureText } from "../../../../core/more/daemon";
-import { Icon, type IconName } from "../../kit/Icon";
-import { EmptyState, Notice, Spinner, Tag } from "../../kit/kit";
+import { Icon, type IconName } from "../../../kit/Icon";
+import { EmptyState, Notice, Spinner, Tag } from "../../../kit/kit";
 import { AgentMarks } from "./marks";
 import { cachedReader, SkillImage, SkillImageViewer, type ImageReader } from "./SkillImages";
 import { allSkills, inspectState, mutationOperations, preparing, readSkillCopy } from "./state";

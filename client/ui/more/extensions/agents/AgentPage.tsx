@@ -10,9 +10,9 @@ import { skillAgentLabel, skillsRequestData, type InstalledSkill, type ManagedSk
 import { filterLogicalSkills, MANAGED_SKILL_AGENTS, skillCopyLocation, type LogicalSkill, type SkillFilters, type SkillScopeFilter, type SkillStatusFilter } from "../../../../core/extensions/skillsScreenModel";
 import { skillRowSupportsDelete, type SkillsSurfaceSection } from "../../../../core/extensions/skillsSurfaceModel";
 import { daemon, daemonState } from "../../daemon";
-import { Icon, type IconName } from "../../kit/Icon";
-import { EmptyState, Notice, Page, PillButton, Spinner } from "../../kit/kit";
-import { Segmented } from "../../kit/Segmented";
+import { Icon, type IconName } from "../../../kit/Icon";
+import { EmptyState, Notice, Page, PillButton, Spinner } from "../../../kit/kit";
+import { Segmented } from "../../../kit/Segmented";
 import type { PageNav } from "../../routes";
 import { isManaged, PluginCopyCard, PluginDetails, SheetHeader, SkillInspector } from "./Inspector";
 import { AgentMarks } from "./marks";

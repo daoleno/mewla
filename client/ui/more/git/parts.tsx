@@ -3,9 +3,9 @@ import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { gitDiffStatusMark, gitDiffStatusWord, gitDiffTone, type GitDiffStatusTone } from "../../../core/git/gitDiffPresentation";
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
-import { color, type ColorName } from "../kit/colors";
-import { Icon, type IconName } from "../kit/Icon";
-import { EmptyState, Spinner } from "../kit/kit";
+import { color, type ColorName } from "../../kit/colors";
+import { Icon, type IconName } from "../../kit/Icon";
+import { EmptyState, Spinner } from "../../kit/kit";
 import { gitFlash, type GitReview } from "./state";
 
 /** Added and deleted keep the change colours; modified and renamed are ink (amber reads as Warning). */
@@ -84,7 +84,7 @@ export function TextButton(props: { label: string; onPress: () => void; filled?:
       onPress={props.onPress}
       class={`flex-row items-center justify-center gap-1.5 rounded-full px-3 py-1.5 active:opacity-70 disabled:opacity-50 ${props.filled ? "bg-primary" : "bg-secondary"}`}
     >
-      {props.busy ? <Spinner size={14} tone={props.filled ? "paper" : "soft"} /> : null}
+      {props.busy ? <Spinner size={14} tone={props.filled ? "canvas" : "soft"} /> : null}
       <Text class={`text-sm font-medium ${props.filled ? "text-primary-foreground" : ""}`}>{props.label}</Text>
     </Button>
   );

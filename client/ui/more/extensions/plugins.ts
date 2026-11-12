@@ -6,7 +6,7 @@ import { requestConnections } from "../../../core/extensions/requests";
 import { platform } from "../../../core/platform";
 import { servers } from "../../session";
 import { daemon, daemonState } from "../daemon";
-import { inFront } from "../kit/inFront";
+import { inFront } from "../../kit/inFront";
 
 /**
  * The Plugins of the current computer: one connect flow per computer, made when

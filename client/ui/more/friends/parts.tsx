@@ -17,8 +17,8 @@ import {
 import { appendPage, replacePost, toggled, withCursor, type PostPage } from "../../../core/friends/paging";
 import { friendsCall } from "../../../core/friends/requests";
 import { afterScroll, isPlaying, stopped, VIDEO_VISIBLE_SHARE, type PlayingVideo } from "../../../core/friends/video";
-import { Icon, type IconName } from "../kit/Icon";
-import { EmptyState, Spinner } from "../kit/kit";
+import { Icon, type IconName } from "../../kit/Icon";
+import { EmptyState, Spinner } from "../../kit/kit";
 import { findPet } from "../pet/pets";
 import type { PageNav } from "../routes";
 import { currentServerId, followPage, serverFor } from "./state";
@@ -129,7 +129,7 @@ export function stopVideo(owner: string, postId?: string): void {
 
 function PlayDisc() {
   return (
-    <View class="size-14 items-center justify-center rounded-full bg-primary/70"><Icon name="play" size={26} tone="paper" /></View>
+    <View class="size-14 items-center justify-center rounded-full bg-primary/70"><Icon name="play" size={26} tone="canvas" /></View>
   );
 }
 
@@ -143,7 +143,7 @@ function SoundButton(props: { muted: boolean; onPress: () => void; testID?: stri
       onPress={props.onPress}
       class={`${props.class ?? "absolute bottom-2 right-2 size-8"} items-center justify-center rounded-full bg-primary/70 active:opacity-70`}
     >
-      <Icon name={props.muted ? "volume-off" : "volume"} size={18} tone="paper" />
+      <Icon name={props.muted ? "volume-off" : "volume"} size={18} tone="canvas" />
     </Button>
   );
 }
@@ -249,7 +249,7 @@ function PostVideo(props: { media: FriendsMedia; postId: string; owner: string; 
             />
             <View class="absolute left-0 right-0 top-0 flex-row items-center justify-between px-3" style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}>
               <Button testID="friends-video-close" accessibilityLabel="Close" onPress={closeFull} class="size-10 items-center justify-center rounded-full bg-primary/70 active:opacity-70">
-                <Icon name="close" size={18} tone="paper" />
+                <Icon name="close" size={18} tone="canvas" />
               </Button>
               <SoundButton testID="friends-video-wide-sound" class="size-10" muted={muted()} onPress={() => muted.set(!muted())} />
             </View>

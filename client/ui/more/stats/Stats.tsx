@@ -44,10 +44,10 @@ import { activityAreaPath, activityChartPoints, activityCurvePath, activityIndex
 import { costEstimateMark, statsModelHeading, statsModelKey } from "../../../core/stats/statsCostPresentation";
 import { EMPTY_RANGE, hasRangeStats, isCostKnown, type CodexSubscriptionUsage, type DayCell, type ModelStat, type PricingStatus, type RangeData, type StatsView } from "../../../core/stats/statsPayload";
 import { INITIAL_STATS_RANGE, STATS_RANGE_TABS, type StatsRange } from "../../../core/stats/statsTabs";
-import { color, withAlpha } from "../kit/colors";
-import { Icon } from "../kit/Icon";
-import { copyMenu, EmptyState, Meter, Page, Row, Section, ShowMore, Tag } from "../kit/kit";
-import { Segmented } from "../kit/Segmented";
+import { color, withAlpha } from "../../kit/colors";
+import { Icon } from "../../kit/Icon";
+import { copyMenu, EmptyState, Meter, Page, Row, Section, ShowMore, Tag } from "../../kit/kit";
+import { Segmented } from "../../kit/Segmented";
 import { daemon, daemonState } from "../daemon";
 import type { PageNav } from "../routes";
 
@@ -417,7 +417,7 @@ function Activity(props: { days: readonly DayCell[]; range: StatsRange; nav: Pag
             wash.addColorStop(1, withAlpha(ink, 0));
             cx.fillStyle = wash;
             cx.fill(new Path2D(activityAreaPath(pts, baseline)));
-            cx.strokeStyle = color("hairline");
+            cx.strokeStyle = color("hair");
             cx.lineWidth = 1;
             cx.beginPath();
             cx.moveTo(0, baseline);
@@ -440,7 +440,7 @@ function Activity(props: { days: readonly DayCell[]; range: StatsRange; nav: Pag
               cx.stroke();
             }
             cx.fillStyle = ink;
-            cx.strokeStyle = color("paper");
+            cx.strokeStyle = color("canvas");
             cx.lineWidth = 1.5;
             cx.beginPath();
             cx.arc(dot.x, dot.y, 3.5, 0, Math.PI * 2);

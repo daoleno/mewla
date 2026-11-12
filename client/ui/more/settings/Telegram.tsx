@@ -13,9 +13,9 @@ import {
   type TelegramAction,
 } from "../../../core/settings/telegram";
 import { connected, daemon } from "../daemon";
-import { color } from "../kit/colors";
-import { Icon } from "../kit/Icon";
-import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner } from "../kit/kit";
+import { color } from "../../kit/colors";
+import { Icon } from "../../kit/Icon";
+import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner } from "../../kit/kit";
 import { loadTelegram, setTelegram, telegram } from "./telegramState";
 
 const POLL_MS = 5_000;

@@ -2,8 +2,8 @@ import { announce, Clipboard, computed, openUrl, platform, signal, Text, untrack
 import type { JSX } from "nsh";
 import { accessControl, connectsWithForm, signInAddressFromText } from "../../../core/extensions/pluginConnectionsModel";
 import { brainCanNow, pluginJobs } from "../../../core/extensions/pluginOnboarding";
-import { Field, Notice, Spinner } from "../kit/kit";
-import { Icon, type IconName } from "../kit/Icon";
+import { Field, Notice, Spinner } from "../../kit/kit";
+import { Icon, type IconName } from "../../kit/Icon";
 import type { PageNav } from "../routes";
 import { Action } from "./Action";
 import { flowState, plugins } from "./plugins";

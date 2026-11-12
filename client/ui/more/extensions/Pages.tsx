@@ -5,7 +5,7 @@ import { cloudProfilesSummary } from "../../../core/extensions/cloudProfilesMode
 import { isConnecting, pluginCatalogRows, serviceOff, toolUpdates, type ConnectionTone, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
 import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { daemon } from "../daemon";
-import { EmptyState, Notice, Page, Row, Section, Spinner, StatusMark, Tag, type Status } from "../kit/kit";
+import { EmptyState, Notice, Page, Row, Section, Spinner, StatusMark, Tag, type Status } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { AgentPage } from "./agents/AgentPage";
 import { AgentToolsSection } from "./agents/AgentToolsSection";

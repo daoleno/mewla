@@ -1,7 +1,7 @@
 import { signal, untracked, View } from "nsh";
 import { suggestedAWSProfile, validAWSProfileName } from "../../../core/extensions/cloudProfilesModel";
 import type { PluginAccount } from "../../../core/extensions/connections";
-import { Field, Notice } from "../kit/kit";
+import { Field, Notice } from "../../kit/kit";
 import { Action } from "./Action";
 import { flowState, plugins } from "./plugins";
 
