@@ -101,6 +101,11 @@ export interface CodexConversationEvent {
   role?: CodexConversationRole;
   title?: string;
   body?: string;
+  /**
+   * Who wrote a user_message: none is the person, "provider" the provider itself (a compaction summary),
+   * "delegated" the brief Mewla handed a delegated Worker (`core/timeline/delegatedBrief.ts`).
+   */
+  origin?: string;
   /** Files a user_message carried; `body` is then only what the person wrote. */
   attachments?: ConversationAttachment[];
   command?: string;
@@ -365,6 +370,7 @@ function normalizeCodexConversationEvent(
       : undefined,
     choice: normalizeConversationChoice(event.choice),
     source: typeof event.source === "string" ? event.source : undefined,
+    origin: typeof event.origin === "string" && event.origin ? event.origin : undefined,
     work_id: typeof event.work_id === "string" ? event.work_id : undefined,
     work_session_id:
       typeof event.work_session_id === "string"

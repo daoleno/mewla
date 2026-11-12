@@ -55,6 +55,8 @@ export interface MessageTimelineItem {
 
   /** Process-local presentation alias; provider id/body remain canonical. */
   turnFocusAnchorId?: string;
+  /** A delegated Worker's brief: its task alone, which the chat shows instead of `body` (`delegatedBrief.ts`). */
+  delegatedTask?: string;
 }
 
 // components/terminal/InterfaceTimelinePlanTypes.ts
