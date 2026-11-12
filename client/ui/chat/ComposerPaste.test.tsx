@@ -30,6 +30,16 @@ describe("pasting into the composer", () => {
     await app.waitUntil(() => app.texts().includes("what is this? /state/uploads/working.webp"));
   });
 
+  test("with only a chip and no text, Send is on and sends the picture", async () => {
+    const app = await open(COMPOSER, { ...computer(), platform: "web" });
+    expect(app.enabled("id:send")).toBe(false);
+    await app.paste("id:composer", { files: [PICTURE] });
+    await app.waitFor("text:Ready");
+    await app.waitUntil(() => app.enabled("id:send"));
+    await app.press("id:send");
+    await app.waitUntil(() => app.texts().includes(" /state/uploads/working.webp"));
+  });
+
   test("a picture pasted from a phone keyboard becomes a chip too", async () => {
     const app = await open(COMPOSER, { ...computer(), platform: "android" });
     await app.paste("id:composer", { files: [PICTURE] });
@@ -48,4 +58,17 @@ describe("pasting into the composer", () => {
     await app.paste("id:composer", { files: [PICTURE] });
     await app.waitFor("text:Connect to a computer to attach files.");
   });
+});
+
+describe("pasting into home's composer", () => {
+  const APP = "../FakeDaemonApp.tsx";
+  test("home: a pasted picture becomes a chip", async () => {
+    const { paired, phoneHost } = await import("../testing/fixtures");
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain: { chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude" } } }),
+      network: { "POST http://127.0.0.1:1/upload": () => ({ status: 200, body: JSON.stringify({ path: "/state/uploads/working.webp", name: "working.webp" }) }) } });
+    await app.waitFor("text:What should Brain do?", { timeout: 10_000 });
+    await app.wait(500);
+    await app.paste("id:composer", { files: [PICTURE] });
+    await app.waitFor("text:Ready", { timeout: 10_000 });
+  }, 20_000);
 });

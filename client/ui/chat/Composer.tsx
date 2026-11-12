@@ -104,6 +104,8 @@ export function Composer(props: {
   /** Focus the field when it appears (a just-created Session). */
   autoFocus?: boolean;
   canSend: () => boolean;
+  /** Chips ready to go: with them Send sends even with no text (SPEC §1.4). */
+  attached?: () => boolean;
   /** Returns false to keep the text (an edit that sends once its rewind is done). */
   onSend: (text: string) => void | false;
   running: () => boolean;
@@ -134,7 +136,7 @@ export function Composer(props: {
   const disabled = () => Boolean(props.disabled?.());
   const send = () => {
     const text = value();
-    if (disabled() || !props.canSend() || !text.trim()) return;
+    if (disabled() || !props.canSend() || (!text.trim() && !props.attached?.())) return;
     if (props.onSend(text) !== false) props.text.clear();
   };
   const desktop = platform.desktop;
@@ -209,7 +211,7 @@ export function Composer(props: {
             <Text class="text-base font-semibold">{props.stopping() ? "Stopping…" : "Stop"}</Text>
           </Button>
         ) : (
-          <Button testID="send" onPress={send} disabled={disabled() || !props.canSend() || !value().trim()} class={disabled() ? "rounded-full bg-primary px-4 py-2.5 opacity-40" : "rounded-full bg-primary px-4 py-2.5 active:opacity-80"}>
+          <Button testID="send" onPress={send} disabled={disabled() || !props.canSend() || (!value().trim() && !props.attached?.())} class={disabled() ? "rounded-full bg-primary px-4 py-2.5 opacity-40" : "rounded-full bg-primary px-4 py-2.5 active:opacity-80"}>
             <Text class="text-base font-semibold text-primary-foreground">Send</Text>
           </Button>
         )}
