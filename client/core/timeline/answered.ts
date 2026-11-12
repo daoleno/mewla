@@ -71,6 +71,12 @@ export function answeredBy(record: AnsweredRequest): string {
  * The record as its sealed line: the outcome, the answer (else what was asked), and who and when.
  * `at` formats the answer's time. Brain's thread shows it when Brain asked or a Work's Worker did.
  */
+/**
+ * A terminal prompt's record: its `asked` is the screen run together (a Tip line, the tool's summary,
+ * the command, "Do you want to proceed?"), never shown as the answer; its title ("Bash command") is.
+ */
+const SCREEN_PROMPTS = new Set(["permission", "plan", "startup"]);
+
 export function sealedOfAnswered(record: AnsweredRequest, at: (ms: number) => string): SealedRequest {
   const answered = Date.parse(record.answered_at);
   const when = Number.isFinite(answered) ? at(answered) : "";
@@ -84,7 +90,7 @@ export function sealedOfAnswered(record: AnsweredRequest, at: (ms: number) => st
   return {
     key: answeredKeys(record)[0] ?? `answered:${record.id}`,
     verb,
-    answer: command || record.answer || record.asked || record.title || verb,
+    answer: command || record.answer || (SCREEN_PROMPTS.has(record.kind) ? record.title : record.asked) || record.title || verb,
     mono: Boolean(command),
     title: record.asked || record.title || "",
     source: [answeredBy(record), when].filter(Boolean).join(" · "),
