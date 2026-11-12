@@ -34,7 +34,7 @@ function meta(slip: BrainWorkSlip): string {
 
 /** The action in flight ("<workId>:<kind>:<text>"): its button waits, the Work's others are off. */
 const busy = signal("");
-/** What the last action did, under the list's heading: "Brain has your answer", or why it failed. */
+/** What the last action did, under the list's heading: "Sent to Brain", or why it failed. */
 const notice = signal<{ text: string; detail?: string; failed?: boolean } | null>(null);
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -44,7 +44,7 @@ function say(text: string, options: { detail?: string; failed?: boolean } = {}):
   noticeTimer = setTimeout(() => notice.set(null), 5_000);
 }
 
-const SAID: Partial<Record<BrainWorkAction["kind"], string>> = { close: "Closed", stop: "Stopped", dismiss: "Dismissed", snooze: "Snoozed for an hour" };
+const SAID: Partial<Record<BrainWorkAction["kind"], string>> = { close: "Closed", dismiss: "Dismissed", snooze: "Snoozed for 1 hour" };
 
 interface ActionContext {
   links: WorkLinks;
@@ -89,8 +89,8 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
     });
     if (kind === "reply") {
       if (result.admission === "uncertain") say("Sent, but Brain may not have it", { detail: "Check Brain's chat before sending again." });
-      else say("Brain has your answer");
-    } else say(SAID[action.kind] ?? "Done");
+      else say("Sent to Brain");
+    } else say(action.kind === "stop" ? `Stopped “${slip.title}”` : SAID[action.kind] ?? "Done");
     context.done();
     return true;
   } catch (error) {
@@ -133,12 +133,17 @@ function ActionRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; 
 function WorkerRow(props: { line: WorkWorkerLine; first: boolean; onPress: () => void }) {
   const line = props.line;
   return (
-    <Button testID="work-worker" accessibilityLabel={[`${line.agentLabel} · ${line.name}`, line.summary, line.time].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
+    <Button testID="work-worker" accessibilityLabel={[`${line.agentLabel} · ${line.name}`, line.stateLabel, line.summary, line.time].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
       class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 active:bg-accent ${props.first ? "" : "border-t border-border"}`}>
       <View class="size-[28px] items-center justify-center"><AgentIcon kind={line.agent} flavor={line.flavor} size={20} /></View>
       <View class="min-w-0 flex-1">
         <Text class="text-body font-semibold line-clamp-1">{`${line.agentLabel} · ${line.name}`}</Text>
-        {line.summary ? <Text class="text-sub text-muted-foreground line-clamp-1">{line.summary}</Text> : null}
+        {line.stateLabel || line.summary ? (
+          <Text testID="work-worker-line" class="text-sub text-muted-foreground line-clamp-1">
+            {line.stateLabel ? <Text class={`font-semibold ${line.state === "ended" ? "" : "text-foreground"}`}>{line.stateLabel}</Text> : null}
+            {line.stateLabel && line.summary ? ` · ${line.summary}` : line.summary}
+          </Text>
+        ) : null}
         {line.progress !== undefined ? <ProgressBar filled={line.progress} testID="work-worker-progress" /> : null}
       </View>
       <Text class="text-caption text-muted-foreground">{line.time === "live" ? "" : line.time}</Text>
