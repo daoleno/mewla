@@ -58,15 +58,29 @@ export function NavPage(props: AppNavPageProps) {
   const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
   if (mobile) {
     // The system's Back can't carry a dot: while the mark shows, the page's own Back stands in for it.
-    const back = () => (mark() ? <View class="flex-row items-center gap-2"><MarkedBack mark={mark()!} back={stack.back} />{props.headerLeft ?? null}</View> : props.headerLeft);
+    const [slots, page] = split(props, ["headerLeft", "headerTitle"]);
+    const markedBack = () => (mark() ? <MarkedBack mark={mark()!} back={stack.back} /> : null);
+    // Android draws the header's leading item after the title: there Back and the leading item go into
+    // the title's place, ahead of the title, so they lead as on iOS. Read by key, the slots are made once.
+    const android = platform.os === "android";
+    const hasLeft = "headerLeft" in props;
+    const left = () => (android ? undefined : mark() ? <View class="flex-row items-center gap-2">{markedBack()}{slots.headerLeft ?? null}</View> : slots.headerLeft);
+    const title = () =>
+      android && (mark() || hasLeft) ? (
+        <View class="flex-row items-center gap-4">
+          {markedBack()}
+          {slots.headerLeft ?? null}
+          {slots.headerTitle ?? <Text role="header" class="shrink text-[22px] font-medium text-foreground line-clamp-1">{page.title ?? ""}</Text>}
+        </View>
+      ) : slots.headerTitle;
     // A phone never reaches 1024 pt: its pages stay the system's own, with nothing around their content.
     if (platform.idiom === "phone") {
-      const [own, rest] = split(props, ["column", "frame", "class", "headerClass", "statusBar"]);
-      return <BaseNavPage {...rest} headerBackVisible={!mark()} headerLeft={back()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;
+      const [own, rest] = split(page, ["column", "frame", "class", "headerClass", "statusBar"]);
+      return <BaseNavPage {...rest} headerBackVisible={!mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;
     }
-    const [own, rest] = split(props, ["column", "frame", "class", "headerClass", "statusBar", "children"]);
+    const [own, rest] = split(page, ["column", "frame", "class", "headerClass", "statusBar", "children"]);
     return (
-      <BaseNavPage {...rest} headerBackVisible={!mark()} headerLeft={back()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)}>
+      <BaseNavPage {...rest} headerBackVisible={!mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)}>
         <Column width={width}>{own.children}</Column>
       </BaseNavPage>
     );
@@ -116,7 +130,7 @@ function MarkDot(props: { tone: "grey" | "red" }) {
   return <View testID="back-mark" class={`absolute right-1.5 top-1.5 size-2 rounded-full ${props.tone === "red" ? "bg-seal" : "bg-muted-foreground"}`} />;
 }
 
-/** iOS and Android: Back with the connection mark, in the system header's leading place while the mark shows. */
+/** iOS and Android: Back with the connection mark, leading the system header while the mark shows (on Android from the title's place). */
 function MarkedBack(props: { mark: { tone: "grey" | "red"; label: string }; back: () => void }) {
   return (
     <Button testID="page-back" accessibilityLabel={props.mark.label} onPress={props.back} class="size-10 items-center justify-center rounded-full active:bg-accent">
