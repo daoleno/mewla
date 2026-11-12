@@ -18,55 +18,58 @@ function brain() {
 
 async function workApp(daemon: Record<string, unknown> = { brain: brain() }) {
   const app = await open(APP, { host: phoneHost(daemon), storage: paired, platform: "android", network: expoTokenService });
-  await app.waitFor("text:Work · 1");
-  await app.press("id:open-work");
-  await app.waitFor("id:work-page");
+  await app.waitFor("id:composer");
+  // Brain's snapshot is in: the state control counts what waits on you.
+  await app.waitUntil(() => app.texts().some((text) => /needs? you/.test(text)), { timeout: 10_000 });
   return app;
 }
 
+/** Work detail, as a Brain notification about it opens it (on home, so Back leads home). */
+async function openWork(app: Awaited<ReturnType<typeof workApp>>, workId: string) {
+  await app.host.send("links.open", { url: `mewla://brain/work/${workId}` });
+  await app.waitFor("id:work-detail");
+}
+
 describe("Brain's Work", () => {
-  test("Brain's header says how many need you, and the Work page groups it by what it asks of you", async () => {
+  test("the tray is the Work list: a Work that waits on you is under Needs you and counts, and its row opens Work detail", async () => {
     const app = await workApp();
-    await app.waitFor("text:pick a name");
-    const shown = app.texts();
-    for (const label of ["Needs you", "Running", "Back", "Queued", "ship the beta", "fix sync", "write the docs", "Claude Code · perpetuo · " + shown.find((t) => t.startsWith("Claude Code · perpetuo · "))?.slice(25)]) expect(shown).toContain(label);
-    expect(shown.join(" ")).toContain("1 needs you · 1 running · 1 back · 1 queued");
-    expect(shown.join(" ")).toContain("Verifying · Running the release checks");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-needs");
+    await app.press("text:Which name do we ship?");
+    await app.waitFor("id:work-detail");
+    expect(app.texts()).toContain("Which name do we ship?");
   }, 20_000);
 
   test("answers a question with one tap, and Brain has it", async () => {
     const app = await workApp();
-    await app.press("id:work-w-q");
-    await app.waitFor("id:work-detail");
+    await openWork(app, "w-q");
     expect(app.texts()).toContain("Which name do we ship?");
     await app.press("id:work-action-answer-Mewla");
-    await app.waitFor("text:Brain has your answer");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "reply", text: "Mewla" });
   }, 20_000);
 
-  test("a question is answered right on its slip, and a page that acted closes back to the list", async () => {
+  test("a page that acted closes back to where it was opened", async () => {
     const app = await workApp();
-    await app.waitFor("text:pick a name");
+    await openWork(app, "w-q");
     await app.press("id:work-action-answer-Zen");
-    await app.waitFor("id:work-notice");
-    expect(app.texts()).toContain("Brain has your answer");
+    await app.waitUntil(() => !app.shows("id:work-detail"));
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "reply", text: "Zen" });
-    expect(app.shows("id:work-detail")).toBe(false);
+    expect(app.shows("id:home-header")).toBe(true);
   }, 20_000);
 
   test("a Work's page says what it waits for when its summary says something else", async () => {
     const waiting = brain();
     waiting.current_work.push({ work_id: "w-wait", revision: 1, title: "merge-the-push-change", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: false, summary: "Pushed the change for review.", wait_for: "Reviewer approval on the pull request", updated_at: now() } as never);
     const app = await workApp({ brain: waiting });
-    await app.waitFor("text:merge the push change");
-    await app.press("id:work-w-wait");
+    await openWork(app, "w-wait");
     await app.waitFor("id:work-wait-for");
     expect(app.texts()).toContain("Waiting for: Reviewer approval on the pull request");
   }, 20_000);
 
   test("Not needed anymore asks first, and only then tells Brain", async () => {
     const app = await workApp();
-    await app.press("id:work-w-q");
+    await openWork(app, "w-q");
     await app.waitFor("id:work-action-dismiss");
     let decline = true;
     app.onDialog((dialog) => (dialog.title === "Not needed anymore?" ? (decline ? "Cancel" : "Not needed anymore") : null));
@@ -81,20 +84,13 @@ describe("Brain's Work", () => {
 
   test("a result that came back is accepted with one tap and its unread mark is cleared on opening", async () => {
     const app = await workApp();
-    await app.press("id:work-w-back");
-    await app.waitFor("id:work-detail");
+    await openWork(app, "w-back");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_read").length > 0);
     expect(framesOf(app.host.posts(), "brain_work_read")[0]).toMatchObject({ id: "w-back" });
     expect(app.texts()).toContain("Fixed the sync race and added a test.");
     await app.press("id:work-action-close");
     await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-back", action: "close" });
-  }, 20_000);
-
-  test("with nothing open it says so", async () => {
-    const app = await open(APP, { host: phoneHost({ brain: { current_work: [] } }), storage: paired, platform: "android", network: expoTokenService });
-    await app.waitFor("id:open-work");
-    await app.press("id:open-work");
-    await app.waitFor("text:No open Work");
   }, 20_000);
 });
 

@@ -6,7 +6,11 @@ const session = (id: string, patch: Record<string, unknown> = {}) => ({ id, name
 
 async function sessionsApp(daemon: Record<string, unknown>) {
   const app = await open(APP, { host: phoneHost({ brain: {}, ...daemon }), storage: paired, platform: "android" });
+  // The inbox link opens the tray; its last row is All Sessions, by folder.
   await app.host.send("links.open", { url: "mewla://sessions" });
+  await app.waitFor("id:tray-all-sessions");
+  await app.press("id:tray-all-sessions");
+  await app.waitFor("id:sessions");
   return app;
 }
 
@@ -45,10 +49,11 @@ describe("Sessions", () => {
     expect(none.texts()).toContain("New session");
   }, 20_000);
 
-  test("New session starts the agent in the folder shown and opens it", async () => {
-    const app = await sessionsApp({ worker_sessions: [session("a", { name: "first" })] });
+  test("New session (the tray's +) starts the agent in the folder shown and opens it", async () => {
+    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
     await app.waitFor("text:first");
-    await app.press("id:new-session");
+    await app.press("id:tray-new");
     await app.waitFor("id:preset-codex");
     await app.press("id:preset-codex");
     await app.waitFor("id:session-menu");
@@ -58,7 +63,7 @@ describe("Sessions", () => {
     expect(active.at(-1)).toBe("w101");
   }, 20_000);
 
-  test("the menu's Services lists ports by project; a port's page opens its terminal and shares it after asking", async () => {
+  test("the tray menu's Services lists ports by project; a port's page opens its terminal and shares it after asking", async () => {
     const web = { id: "svc-1", generation: "g1", worker_id: "a", worker_name: "dev server", project: "mewla", cwd: "/home/me/mewla", process: "vite", pid: 9, port: 5173, protocol: "tcp", binds: ["0.0.0.0"], urls: [{ label: "LAN", url: "http://192.0.2.10:5173", address: "192.0.2.10:5173", kind: "lan" }], local_only: false, source: "session" };
     const app = await sessionsApp({
       worker_sessions: [session("a", { name: "dev server" })],
@@ -69,7 +74,9 @@ describe("Sessions", () => {
     });
     await app.waitFor("text:dev server");
     app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : dialog.buttons.includes("Start tunnel") ? "Start tunnel" : null));
-    await answering(app, () => app.press("id:sessions-menu"));
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("id:tray-menu");
+    await answering(app, () => app.press("id:tray-menu"));
     await app.waitFor("id:service-row");
     expect(app.texts()).toContain("5173");
     expect(app.texts()).toContain("1 port");
@@ -94,7 +101,7 @@ describe("Sessions", () => {
     app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : dialog.buttons.includes("Cancel") ? "Cancel" : null));
     // The menu offers Services once the computer is connected; a slow runner may get there after the list shows.
     for (let tries = 0; !app.shows("id:services-sheet") && tries < 5; tries += 1) {
-      await app.press("id:sessions-menu");
+      await app.press("id:tray-menu");
       await app.waitFor("id:services-sheet", { timeout: 2_000 }).catch(() => {});
     }
     expect(app.shows("id:services-sheet")).toBe(true);
@@ -319,9 +326,7 @@ describe("a Session", () => {
       storage: paired,
       platform: "android",
     });
-    await app.host.send("links.open", { url: "mewla://sessions" });
-    await app.waitFor("text:attach", { timeout: 10_000 });
-    await app.press("text:attach");
+    await app.host.send("links.open", { url: "mewla://sessions/w6" });
     await app.waitFor("id:composer");
     await app.press("id:composer-plus");
     await app.press("id:attach-file");

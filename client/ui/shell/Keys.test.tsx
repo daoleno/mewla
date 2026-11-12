@@ -148,7 +148,7 @@ describe("the desktop's keys", () => {
 
   test("below 1024 pt there are no desktop shortcuts", async () => {
     const app = await open(APP, { ...desk(), width: 800 });
-    await app.waitFor("id:tab-row");
+    await app.waitFor("id:home-header");
     await app.keyboard.press("mod+k");
     await app.wait(100);
     expect(app.shows("id:palette")).toBe(false);

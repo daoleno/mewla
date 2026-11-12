@@ -229,9 +229,9 @@ describe("Settings' Pair a computer", () => {
     expect(JSON.parse(app.storage()["mewla:v3:servers"]!).map((s: { url: string }) => s.url).sort()).toEqual(["ws://10.0.0.5:9876/ws", desk.url]);
   }, 15_000);
 
-  test("the camera runs only while the Pair page is on screen: another tab stops it, coming back starts it", async () => {
-    // Every tab's stack stays mounted, so a Pair page left for another tab kept its camera open
-    // (FAILURES Round 3: a black band over the other tabs; the camera reopened at every resume).
+  test("the camera runs only while the Pair page is on screen: a page over it stops it, coming back starts it", async () => {
+    // A Pair page under another page kept its camera open (FAILURES Round 3: a black band over the
+    // other pages; the camera reopened at every resume).
     const app = await open("../App.tsx", { host: phone({ permission: "granted" }), platform: "android", storage: paired });
     await app.host.send("links.open", { url: "mewla://settings?addServer=1" });
     await app.waitFor("id:qr-camera");
@@ -267,7 +267,7 @@ describe("Settings' Pair a computer", () => {
     await app.waitFor("id:connected-title", { timeout: 10_000 });
   }, 15_000);
 
-  test("after a pairing from Settings, Open Brain and then More shows More, not the Pair page", async () => {
+  test("after a pairing from the computer page, Open Brain and then the cat shows the computer page, not the Pair page", async () => {
     const same = { id: "s2", name: "Desk", url: "ws://10.0.0.5:9876/ws", daemonId: "a1".repeat(32), daemonPublicKey: computer.publicKey };
     const app = await open("../FakeDaemonApp.tsx", {
       host: phone(), platform: "android",
@@ -282,7 +282,7 @@ describe("Settings' Pair a computer", () => {
     await app.waitFor("id:open-brain", { timeout: 10_000 });
     await app.press("id:open-brain");
     await app.waitFor("id:composer");
-    await app.host.send("links.open", { url: "mewla://more" });
+    await app.press("id:home-cat");
     await app.waitFor("text:Computers");
     expect(app.shows("id:pair-link")).toBe(false);
   }, 20_000);

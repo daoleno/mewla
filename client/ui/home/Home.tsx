@@ -23,12 +23,11 @@ import { Icon } from "../kit/Icon";
 import { HomeCat } from "./Cat";
 import { StateControl } from "../tray/StateControl";
 import { Tray } from "../tray/Tray";
+import { goneChoices } from "../tray/state";
 import { BrainMenu } from "../brain/BrainMenu";
 import { newSessionOpen } from "../screens/NewSession";
 
 const startingChat = signal(false);
-/** Questions the computer said have passed; their card stays hidden even if the transcript lags. */
-const goneChoices = signal<ReadonlySet<string>>(new Set());
 const notice = signal("");
 const pendingChoice = computed(() => visiblePendingChoice(brainThread().conversation?.events, goneChoices()));
 const pendingChoiceKey = computed(() => pendingChoice()?.call_id ?? "");

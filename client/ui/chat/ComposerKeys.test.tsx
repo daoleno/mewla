@@ -98,9 +98,7 @@ describe("the composer's keys on a desktop", () => {
 describe("the composer on a phone", () => {
   test("↑ from a hardware keyboard in the empty composer edits the last message", async () => {
     const app = await open(APP, { host: phoneHost(daemon), storage: paired, platform: "android" });
-    await app.host.send("links.open", { url: "mewla://sessions" });
-    await app.waitFor("text:notes", { timeout: 10_000 });
-    await app.press("text:notes");
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
     await app.waitFor("text:Delete the build folder");
     await app.type("id:composer", "x");
     await app.clear("id:composer");
@@ -111,9 +109,7 @@ describe("the composer on a phone", () => {
 
   test("Return is a new line; Send sends", async () => {
     const app = await open(APP, { host: phoneHost(daemon), storage: paired, platform: "android" });
-    await app.host.send("links.open", { url: "mewla://sessions" });
-    await app.waitFor("text:notes", { timeout: 10_000 });
-    await app.press("text:notes");
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
     await app.waitFor("id:composer");
     await app.type("id:composer", "hello");
     await app.submit("id:composer");
