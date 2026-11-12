@@ -1,10 +1,11 @@
 import { computed, signal, Storage } from "nsh";
-import { brainSurface, type BrainSnapshot } from "../../core/brain";
+import { brainSurface } from "../../core/brain";
 import { openAlerts } from "../../core/calendar/alerts";
 import { itemInstant, itemsOnDay, rowTime } from "../../core/calendar/model";
 import { getRecentWorkerOpens } from "../../core/sessions/deviceState";
 import { normalizePrompt } from "../../core/sessions/workers";
-import { visiblePendingChoice } from "../../core/timeline/claudeChoiceModel";
+import { latestPendingChoice } from "../../core/timeline/claudeChoiceModel";
+import type { SealedRequest } from "../../core/timeline/requestCards";
 import { trayModel, type TraySort, type TrayTodayInput } from "../../core/tray/model";
 import type { BrainCurrentWork, BrainOpenWork } from "../../core/work/types";
 import { clock } from "../calendar/clock";
@@ -32,20 +33,29 @@ export function refreshOpened(): void {
 }
 refreshOpened();
 
-/** Questions the computer said have passed, so their rows go before the transcript catches up. */
-export const goneChoices = signal<ReadonlySet<string>>(new Set());
+/**
+ * Requests answered (or found passed) here, newest last: their cards seal to a quiet line in every
+ * thread that shows them and their tray rows go in the same frame, before the computer clears them
+ * (SPEC §1.1 "Sealed everywhere at once"). Kept while the app runs; keys are unique per prompt.
+ */
+export const sealedRequests = signal<readonly SealedRequest[]>([]);
+const answered = computed(() => new Set(sealedRequests().map((sealed) => sealed.key)));
 
-function brainHost(snapshot: BrainSnapshot | null) {
-  const host = snapshot?.host_worker;
+export function sealRequest(sealed: SealedRequest): void {
+  sealedRequests.set([...sealedRequests().filter((s) => s.key !== sealed.key), sealed]);
+}
+
+/** Brain's own host Session, with the prompt it is blocked on. */
+export const brainHost = computed(() => {
+  const host = brain()?.host_worker;
   return host?.id ? { id: host.id, prompt: normalizePrompt(host.prompt) } : null;
-}
+});
 
-function brainChoice() {
-  const pending = visiblePendingChoice(brainThread().conversation?.events, goneChoices());
-  if (!pending?.call_id) return null;
-  const question = pending.choice.questions.find((q) => q.question)?.question ?? "";
-  return { callId: pending.call_id, question };
-}
+/** Brain's pending chat question (AskUserQuestion), from its transcript. */
+export const brainChoice = computed(() => {
+  const pending = latestPendingChoice(brainThread().conversation?.events);
+  return pending?.call_id ? { callId: pending.call_id, choice: pending.choice } : null;
+});
 
 function today(): TrayTodayInput[] {
   const now = clock();
@@ -72,8 +82,9 @@ export const tray = computed(() => {
     surface: brainSurface({ hasServer: Boolean(server), connected: connection() === "connected", snapshot }),
     hostProblem: snapshot?.host_problem,
     workers: workers(),
-    brainHost: brainHost(snapshot),
-    brainChoice: brainChoice(),
+    brainHost: brainHost(),
+    brainChoice: brainChoice() ? { callId: brainChoice()!.callId, question: brainChoice()!.choice.questions.find((q) => q.question)?.question ?? "" } : null,
+    answered: answered(),
     currentWork: snapshot?.current_work as BrainCurrentWork[] | undefined,
     openWork: snapshot?.open_work as BrainOpenWork[] | undefined,
     today: today(),

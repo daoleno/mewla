@@ -11,4 +11,3 @@ export { MentionPanel, mentionPanelOpen } from "./MentionPanel";
 export { BrainCantStartNotice, BrainChatFailed, BrainChatUnavailable } from "./BrainStates";
 export { createBrainComposer, type BrainComposer } from "./composer";
 export { brainChatState, brainChatUnavailable, brainComposerBlock, brainSurface, type BrainChatState, type BrainSurface } from "../../core/brain";
-export { answerBrainHostPrompt, brainHostActionPrompt } from "../../core/brainPrompt";

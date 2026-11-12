@@ -1,0 +1,339 @@
+import { computed, signal, Text, untracked, View } from "nsh";
+import type { Signal } from "nsh";
+import { Button, Input } from "nsh/base";
+import type { ConversationChoice } from "../../core/conversation/conversation";
+import { answerChoice, answerPrompt, decideApproval } from "../../core/conversation/turn";
+import {
+  buildChoiceAnswers, choiceDraftAnswerText, choiceQuestionAnswered, choiceReviewStep, emptyChoiceDraft, isChoiceGoneError, isPromptGoneError,
+  latestPendingChoice, nextChoiceStep, questionAllowsOther, setChoiceOtherText, toggleChoiceOption, toggleChoiceOther, unansweredChoiceQuestions,
+  type ChoiceAnswer,
+} from "../../core/timeline/claudeChoiceModel";
+import type { CodexConversationEvent } from "../../core/conversation/conversation";
+import type { TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
+import {
+  openCardKey, requestCardsOf, sealAction, sealedInThread, type RequestCard as Card, type RequestThread, type SealedRequest,
+} from "../../core/timeline/requestCards";
+import { AgentIcon } from "../icons/AgentIcon";
+import { Icon } from "../kit/Icon";
+import { brainChoice, brainHost, sealedRequests, sealRequest, tray } from "../tray/state";
+import { connection, currentTransport, workers } from "../session";
+
+/**
+ * A thread's request cards (soft-final SPEC §1.1, §1.2, §11 Request card): the open requests of
+ * Brain's thread or of one Session, from the same model as the tray, so a row and its card are one
+ * object; a Session's own pending question (its transcript) fills a terminal question's options.
+ */
+export function threadRequests(thread: RequestThread, events?: () => readonly CodexConversationEvent[] | undefined) {
+  return computed(() => {
+    const workerId = thread.brain ? "" : thread.workerId;
+    const pending = events && workerId ? latestPendingChoice(events()) : null;
+    return requestCardsOf({
+      requests: tray().needs,
+      workers: workers(),
+      brainHost: brainHost(),
+      brainChoice: brainChoice(),
+      transcriptChoice: pending?.call_id ? { workerId, callId: pending.call_id, choice: pending.choice } : null,
+    }, thread);
+  });
+}
+
+/** Requests answered here that this thread shows as quiet lines (the five newest). */
+export function threadSealed(thread: RequestThread) {
+  return computed(() => sealedRequests().filter((s) => sealedInThread(s, thread)).slice(-5));
+}
+
+/** What the person did with a card, for the thread to say ("That question has already passed."). */
+export type RequestNotice = (text: string) => void;
+
+const PASSED = "This request has already passed.";
+
+function sealedOf(card: Card, verb: string, answer: string, mono?: boolean): SealedRequest {
+  return { key: card.key, verb, answer, mono, title: card.title, source: card.source, brain: card.inBrain, workerId: card.sourceWorkerId };
+}
+
+/** The top line: a red dot and the kind, the source at the right (it opens the Session, or Brain's terminal). */
+function TopLine(props: { card: () => Card; onSource?: (card: Card) => void }) {
+  const card = props.card;
+  return (
+    <View class="min-h-[24px] flex-row items-center gap-2">
+      <View class="size-2 rounded-full bg-seal" />
+      <Text class="flex-1 text-caption font-semibold line-clamp-1">{card().label}</Text>
+      {props.onSource && card().sourceWorkerId ? (
+        <Button testID="request-source" accessibilityLabel={card().terminal ? "Open Brain's terminal" : `Open ${card().source}`} onPress={() => props.onSource?.(untracked(card))}
+          class="-my-2.5 min-h-[44px] max-w-[60%] flex-row items-center gap-1 active:opacity-70">
+          {card().agent && !card().terminal ? <AgentIcon kind={card().agent!} flavor={card().flavor ?? "shell"} size={14} /> : null}
+          <Text class="shrink text-caption text-muted-foreground line-clamp-1">{card().terminal ? "Terminal" : card().source}</Text>
+          <Icon name="chevron-right" size={14} tone="faint" />
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
+/** A question: one step per question (54 pt rows with a ring), then the review and Submit. Made once per card key. */
+function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: () => boolean; submit: (answers: ChoiceAnswer[]) => Promise<void>; onDone: (answer: string) => void; onGone: () => void }) {
+  const choice = props.choice;
+  const draft = signal(emptyChoiceDraft(choice));
+  const step = signal(0);
+  const sending = signal(false);
+  const failure = signal("");
+  const review = choiceReviewStep(choice);
+  const pick = (q: number, o: number) => {
+    draft.set(toggleChoiceOption(choice, draft(), q, o));
+    if (!choice.questions[q]!.multi_select) step.set(nextChoiceStep(choice, q));
+  };
+  const submit = async () => {
+    const answers = buildChoiceAnswers(choice, draft());
+    if (!answers || sending()) return;
+    sending.set(true);
+    failure.set("");
+    try {
+      await props.submit(answers);
+      props.onDone(choice.questions.map((question, i) => choiceDraftAnswerText(question, draft()[i]!)).filter(Boolean).join(" · "));
+    } catch (error) {
+      if (isChoiceGoneError(error) || isPromptGoneError(error)) return props.onGone();
+      failure.set(error instanceof Error && error.message ? error.message : "Couldn't send. Try again.");
+    } finally {
+      sending.set(false);
+    }
+  };
+  const Question = (q: { index: number }) => {
+    const question = choice.questions[q.index]!;
+    const answer = () => draft()[q.index]!;
+    return (
+      <View class="gap-2">
+        {question.header ? <Text class="text-caption font-semibold text-muted-foreground">{question.header}</Text> : null}
+        <Text class="text-body font-semibold">{question.question}</Text>
+        {question.multi_select ? <Text class="text-sub text-muted-foreground">Choose any</Text> : null}
+        <View class="-mx-4">
+          {question.options.map((option, o) => (
+            <Button testID={`choice-option-${o}`} disabled={!props.connected()} onPress={() => pick(q.index, o)}
+              class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent disabled:opacity-40">
+              <View class="min-w-0 flex-1">
+                <Text class="text-body">{option.label}</Text>
+                {option.description ? <Text class="text-sub text-muted-foreground">{option.description}</Text> : null}
+              </View>
+              <View class={answer().selected.includes(o) ? "size-[22px] items-center justify-center rounded-full bg-primary" : "size-[22px] rounded-full border-2 border-faint"}>
+                {answer().selected.includes(o) ? <Icon name="check" size={14} tone="canvas" /> : null}
+              </View>
+            </Button>
+          ))}
+          {questionAllowsOther(question) ? (
+            answer().otherActive ? (
+              <View class="border-t border-border px-4 py-2">
+                <Input testID="choice-other" value={answer().other} placeholder="Your answer" autoFocus
+                  onChange={({ value }) => draft.set(setChoiceOtherText(draft(), q.index, value))}
+                  class="min-h-[44px] rounded-(--radius-control) bg-muted px-3 text-body" />
+              </View>
+            ) : (
+              <Button testID="choice-other-open" disabled={!props.connected()} onPress={() => draft.set(toggleChoiceOther(choice, draft(), q.index))}
+                class="min-h-[54px] justify-center border-t border-border px-4 active:bg-accent disabled:opacity-40">
+                <Text class="text-body text-muted-foreground">Other…</Text>
+              </Button>
+            )
+          ) : null}
+        </View>
+      </View>
+    );
+  };
+  const Review = () => (
+    <View class="gap-2">
+      <Text class="text-body font-semibold">Review your answers</Text>
+      <View class="-mx-4">
+        {choice.questions.map((question, i) => (
+          <Button onPress={() => step.set(i)} class="min-h-[54px] justify-center border-t border-border px-4 py-2 active:bg-accent">
+            <Text class="text-caption text-muted-foreground">{question.header || question.question}</Text>
+            <Text class="text-body">{choiceDraftAnswerText(question, draft()[i]!) || "No answer yet"}</Text>
+          </Button>
+        ))}
+      </View>
+    </View>
+  );
+  const many = choice.questions.length > 1 || choice.questions.some((q) => q.multi_select);
+  return (
+    <View class="gap-3">
+      {step() === review ? <Review /> : choice.questions.map((_, i) => (step() === i ? <Question index={i} /> : null))}
+      {failure() ? <Text testID="request-failed" class="text-sub">{failure()}</Text> : null}
+      {many || step() === review ? (
+        <View class="flex-row items-center justify-between">
+          <Button onPress={() => step.set(Math.max(0, step() - 1))} disabled={step() === 0} class="min-h-[44px] justify-center px-1 disabled:opacity-40">
+            <Text class="text-body text-muted-foreground">Back</Text>
+          </Button>
+          {step() === review ? (
+            <Button testID="choice-submit" onPress={() => void submit()} disabled={sending() || !props.connected() || unansweredChoiceQuestions(choice, draft()).length > 0}
+              class="h-[48px] items-center justify-center rounded-(--radius-control) bg-primary px-4 active:opacity-70 disabled:opacity-40">
+              <Text class="text-body font-semibold text-primary-foreground">{sending() ? "Sending…" : "Submit"}</Text>
+            </Button>
+          ) : (
+            <Button testID="choice-next" onPress={() => step.set(nextChoiceStep(choice, step()))} disabled={!choiceQuestionAnswered(choice.questions[step()]!, draft()[step()]!)}
+              class="min-h-[44px] justify-center px-1 disabled:opacity-40">
+              <Text class="text-body font-semibold">{step() + 1 < review ? "Next" : "Review"}</Text>
+            </Button>
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** An approval or a terminal menu: the command, then Deny and Approve (a plain yes/no) or the menu's rows. */
+function ActionBody(props: { card: Card; connected: () => boolean; onDone: (option: TerminalActionPromptOption) => void; onGone: () => void }) {
+  const body = props.card.body as Extract<Card["body"], { kind: "action" }>;
+  const prompt = body.prompt;
+  const sending = signal("");
+  const failed = signal(false);
+  const choose = async (option: TerminalActionPromptOption) => {
+    const transport = currentTransport();
+    if (sending() || !transport) return;
+    sending.set(option.id);
+    failed.set(false);
+    try {
+      if (option.approvalOptionId && prompt.approvalId) await decideApproval(transport, body.workerId, prompt.approvalId, option.approvalOptionId);
+      else if (option.number !== undefined && prompt.promptId) await answerPrompt(transport, body.workerId, prompt.promptId, { number: option.number });
+      props.onDone(option);
+    } catch (error) {
+      if (isPromptGoneError(error)) return props.onGone();
+      failed.set(true);
+    } finally {
+      sending.set("");
+    }
+  };
+  const allow = prompt.options.find((option) => option.primary);
+  const deny = prompt.options.find((option) => option.destructive);
+  const yesNo = prompt.options.length === 2 && allow && deny && allow !== deny;
+  return (
+    <View class="gap-3">
+      {prompt.requestText ? (
+        <View class="max-h-48 overflow-hidden rounded-(--radius-control) bg-muted px-3 py-2.5">
+          <View selectable><Text class="font-mono text-code">{prompt.requestText}</Text></View>
+        </View>
+      ) : <Text class="text-body font-semibold">{props.card.title}</Text>}
+      {yesNo ? (
+        <View class="flex-row gap-2">
+          <Button testID={`prompt-option-${deny!.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(deny!)}
+            style={{ flex: 2 }} class="h-[48px] items-center justify-center rounded-(--radius-control) bg-muted active:opacity-70 disabled:opacity-40">
+            <Text class="text-body font-semibold line-clamp-1">{sending() === deny!.id ? "Sending…" : deny!.label}</Text>
+          </Button>
+          <Button testID={`prompt-option-${allow!.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(allow!)}
+            style={{ flex: 3 }} class="h-[48px] flex-row items-center justify-center gap-1.5 rounded-(--radius-control) bg-seal active:opacity-70 disabled:opacity-40">
+            <Icon name="check" size={18} tone="onSeal" />
+            <Text class="text-body font-semibold text-seal-foreground line-clamp-1">{sending() === allow!.id ? "Sending…" : allow!.label}</Text>
+          </Button>
+        </View>
+      ) : (
+        <View class="-mx-4">
+          {prompt.options.map((option) => (
+            <Button testID={`prompt-option-${option.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(option)}
+              class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent disabled:opacity-40">
+              <View class="min-w-0 flex-1">
+                <Text class="text-body">{sending() === option.id ? "Sending…" : option.label}</Text>
+                {option.description ? <Text class="text-sub text-muted-foreground">{option.description}</Text> : null}
+              </View>
+              <View class={option.id === prompt.defaultOptionId ? "size-[22px] rounded-full border-[7px] border-primary" : "size-[22px] rounded-full border-2 border-faint"} />
+            </Button>
+          ))}
+        </View>
+      )}
+      {failed() ? <Text testID="request-failed" class="text-sub">Couldn't send. Try again.</Text> : null}
+    </View>
+  );
+}
+
+/** One open request: the card the person answers here. */
+function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; notice: RequestNotice }) {
+  const card = props.card;
+  const gone = () => {
+    sealRequest(sealedOf(card, "Not answered", card.title));
+    props.notice(PASSED);
+  };
+  const submit = (answers: ChoiceAnswer[]) => {
+    const transport = currentTransport();
+    if (!transport || card.body.kind !== "choice") return Promise.reject(new Error("Your computer is offline."));
+    const route = card.body.route;
+    return route.via === "choice" ? answerChoice(transport, route.workerId, route.callId, answers) : answerPrompt(transport, route.workerId, route.promptId, { answers });
+  };
+  return (
+    <View testID="request-card" class="gap-3 rounded-(--radius-group) bg-card p-4">
+      <TopLine card={() => card} onSource={props.onSource} />
+      {card.body.kind === "choice" ? (
+        <ChoiceBody card={card} choice={card.body.choice} connected={props.connected} submit={submit}
+          onDone={(answer) => sealRequest(sealedOf(card, "You chose", answer))} onGone={gone} />
+      ) : card.body.kind === "action" ? (
+        <ActionBody card={card} connected={props.connected} onGone={gone}
+          onDone={(option) => {
+            const words = sealAction(card, option.label, Boolean(option.destructive));
+            sealRequest(sealedOf(card, words.verb, words.answer, words.mono));
+          }} />
+      ) : (
+        <View class="gap-3">
+          <Text class="text-body font-semibold">{card.body.detail}</Text>
+          <Button testID="request-open-terminal" onPress={() => props.onOpenTerminal((card.body as { workerId: string }).workerId)}
+            class="h-[48px] items-center justify-center self-start rounded-(--radius-control) bg-primary px-4 active:opacity-70">
+            <Text class="text-body font-semibold text-primary-foreground">Open terminal</Text>
+          </Button>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** A stacked request under the open one: 52 pt, the dot, the question, the source. Tap opens it instead. */
+function StackedRow(props: { card: () => Card; onPress: () => void }) {
+  return (
+    <Button testID="request-stacked" accessibilityLabel={`${props.card().title}, ${props.card().source}`} onPress={props.onPress}
+      class="min-h-[52px] flex-row items-center gap-2.5 rounded-2xl bg-card px-4 active:opacity-70">
+      <View class="size-2 rounded-full bg-seal" />
+      <Text class="min-w-0 flex-1 text-sub font-semibold line-clamp-1">{props.card().title}</Text>
+      <Text class="max-w-[42%] text-sub text-muted-foreground line-clamp-1">{props.card().source}</Text>
+    </Button>
+  );
+}
+
+/** An answered request's quiet line: a check, what was done, the answer. Tap shows the question again. */
+function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; onToggle: () => void }) {
+  const s = props.sealed;
+  return (
+    <Button testID="request-sealed" accessibilityLabel={`${s().verb}: ${s().answer}`} onPress={props.onToggle} class="gap-1 py-1.5 active:opacity-70">
+      <View class="min-h-[28px] flex-row items-center gap-2">
+        <Icon name="check-circle" size={20} tone="soft" />
+        <Text class="text-caption text-muted-foreground">{s().verb}</Text>
+        <Text class={`min-w-0 flex-1 text-sub font-semibold line-clamp-1 ${s().mono ? "font-mono" : ""}`}>{s().answer}</Text>
+      </View>
+      {props.open() ? <Text class="pl-7 text-sub text-muted-foreground">{`${s().title} · ${s().source}`}</Text> : null}
+    </Button>
+  );
+}
+
+/**
+ * The requests at the foot of a thread (never docked above the composer, SPEC §1.4): the quiet lines
+ * of what was answered here, then the open request and the others stacked under it. `picked` is
+ * the card the person (or a tray row) chose to open; answering opens the next.
+ */
+export function RequestStack(props: {
+  thread: RequestThread;
+  cards: () => readonly Card[];
+  picked: Signal<string>;
+  onSource?: (card: Card) => void;
+  onOpenTerminal: (workerId: string) => void;
+  notice: RequestNotice;
+}) {
+  const connected = () => connection() === "connected";
+  // The open card is made once per key (its draft survives every update of the request list).
+  const openKey = computed(() => openCardKey(props.cards(), props.picked()));
+  const openCard = () => props.cards().find((card) => card.key === untracked(openKey));
+  const sealed = threadSealed(props.thread);
+  const shown = signal<ReadonlySet<string>>(new Set());
+  const toggle = (key: string) => {
+    const next = new Set(shown());
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    shown.set(next);
+  };
+  return (
+    <View testID="request-stack" class="gap-2 px-4 pb-2">
+      {sealed().map((s) => <SealedLine sealed={() => s} open={() => shown().has(s.key)} onToggle={() => toggle(s.key)} />)}
+      {openKey() ? <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} notice={props.notice} /> : null}
+      {props.cards().filter((card) => card.key !== openKey()).map((card) => <StackedRow card={() => card} onPress={() => props.picked.set(card.key)} />)}
+    </View>
+  );
+}
