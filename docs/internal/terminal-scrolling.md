@@ -44,8 +44,10 @@ width would otherwise write rows over rows on its grid, and stay so after the
 sizes match again. A viewer never takes the size back on its own (after
 `AttachBehind` or `AttachResized`), or two viewers of different sizes would take
 it from each other. A smaller viewer that is not the one acted on shows the
-other size wrongly until its person acts; viewers from before `Redraw` keep
-their stream.
+other size wrongly until its person acts (a focus-out report is not acting);
+viewers from before `Redraw` keep their stream. A host from before `Redraw`
+answers `Attached.Redraw` false: the daemon's view and `mewla attach` then take
+their size back whenever they attach again and on every resize, as before.
 
 A request without `since` (an older App), and every tmux Session, still gets the
 snapshot described below. The App turns both into the same instruction for the

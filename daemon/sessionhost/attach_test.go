@@ -143,6 +143,9 @@ func TestResizeEndsTheViewersThatRedraw(t *testing.T) {
 	}
 	phone := attachView(t, c, AttachParams{ID: "two", Cols: 80, Rows: 24, Redraw: true})
 	older := attachView(t, c, AttachParams{ID: "two"}) // a viewer from before Redraw
+	if !phone.a.Redraw || older.a.Redraw {
+		t.Fatalf("attached with redraw %v and %v, want the host to say it redraws only the viewer that asked", phone.a.Redraw, older.a.Redraw)
+	}
 
 	// The same size again changes nothing.
 	if err := c.Resize(ctxT(t), "two", 80, 24); err != nil {
