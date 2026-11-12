@@ -1,34 +1,36 @@
-# Plugins
+# Extensions
 
-Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Cloudflare, Tailscale, AWS, Google Cloud, Onlora for generating and finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
-services. Plugins are a **preview**.
+Extensions connect Brain and its Workers to services you use: Linear, Notion,
+GitHub, Slack, Cloudflare, Tailscale, AWS, Google Cloud, Google Workspace,
+Onlora for generating and finding assets, Hyperliquid for markets and trading,
+and your own MCP or OpenAPI services. Extensions are a **preview**.
 
-Connected accounts belong to the current server. Switching servers in the app
-shows that server's accounts and never moves an account between servers.
+To open them, tap the cat, then **Extensions**. The page groups services as
+**Connected**, **Needs fixing**, **From your agents** and **Available**.
+
+Connected accounts belong to the current computer. Switching computers shows
+that computer's accounts and never moves an account between computers.
 
 ## Connect a service
 
-![Plugins: one row per service. GitHub and Linear connected, Notion with Reconnect on its row, Cloudflare with Connect, and Remote MCP to add](assets/plugins.svg)
-
-1. Open the menu and choose **Extensions**. Mewla's plugins come first, one
-   row per service.
-2. Tap **Connect** on the service's row.
+1. Tap the cat, then **Extensions**.
+2. Tap **Connect** on the service's row under **Available**.
 3. Sign in on the service's own page and approve Mewla.
 4. You land back on Extensions with the service **Connected**. Brain can read and
    search it right away.
 
 The card at the top of Extensions follows the sign-in: **Waiting for Linear**
 while you are on the service's page (with **Open Linear again** and **Cancel**),
-then the result. It adds nothing while you wait. After a connect it offers **Allow changes too**; you can skip
-it and allow changes later on the service's page.
+then the result. It adds nothing while you wait. After a connect it offers
+**Allow changes too**; you can skip it and allow changes later on the service's
+page.
 
 From the web UI, the service returns your browser tab to the web UI's own
 Extensions page. From the phone app it returns to the app.
 
 If a sign-in comes back without connecting, the card names the step that
 failed: the service didn't complete sign-in, didn't accept it, its tools
-couldn't be loaded, or this server couldn't save the account. The daemon log
+couldn't be loaded, or this computer couldn't save the account. The daemon log
 has a matching `plugins:` line with the cause, never a credential. Connect again
 after fixing the cause.
 
@@ -57,10 +59,10 @@ while background readers such as Watch fail without touching the network; one
 attempt per backoff step finds out whether the service is back. After three
 failed attempts in a row the account shows **Unavailable** with the real reason
 (for example "connection timed out" or "the service answered 503 Service
-Unavailable"), and it clears by itself once the service answers. The daemon log
-gets one line when the outage starts and one when it ends. Your own and Brain's
-calls are never held back by the backoff, and a refused sign-in is never an
-outage.
+Unavailable") and **Check now**, and it clears by itself once the service
+answers. The daemon log gets one line when the outage starts and one when it
+ends. Your own and Brain's calls are never held back by the backoff, and a
+refused sign-in is never an outage.
 
 There are no tokens, client IDs or callback URLs to type for sign-in services.
 
@@ -75,11 +77,11 @@ Mewla's own app registration with the provider:
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
-| Tailscale | One tap: Mewla opens the Tailscale admin console in your signed-in Chrome on the server's computer and creates an OAuth client named Mewla there, then keeps its ID and secret in the server's vault. If Chrome isn't ready or isn't signed in to Tailscale, Extensions opens the console's Trust credentials page and you paste the client secret | Same flow; the paste field is on the Extensions page |
-| AWS | Local AWS CLI profiles. Sign in remotely and paste the code; Mewla maintains the official CLI automatically | Phone and web manage the same profiles on the current server |
+| Tailscale | One tap: Mewla opens the Tailscale admin console in your signed-in Chrome on the computer and creates an OAuth client named Mewla there, then keeps its ID and secret in the computer's vault. If Chrome isn't ready or isn't signed in to Tailscale, Extensions opens the console's Trust credentials page and you paste the client secret | Same flow; the paste field is on the Extensions page |
+| AWS | Local AWS CLI profiles. Sign in remotely and paste the code; Mewla maintains the official CLI automatically | Phone and web manage the same profiles on the current computer |
 | Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; automatic Linux and macOS SDK updates |
 | Google Workspace | Gmail, Calendar and Drive through Google's own `gws` CLI. Connect asks once for a Google client (below), then signs in with Google; paste the address the browser ends on | One account, shared with the CLI; Mewla installs a checksum-pinned `gws` in one tap |
-| Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
+| Remote MCP | The service's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address. On this computer (`http://127.0.0.1`) that page sends the browser straight back to Extensions. From any other web address it shows an address instead: copy it, paste it into the sign-in card in Mewla and choose **Continue** |
 | Hyperliquid | No sign-in and no setup to read; one API wallet key you paste to let Brain trade | Works everywhere; the key field is on the service's page |
@@ -87,7 +89,7 @@ Mewla's own app registration with the provider:
 Why Slack's return is not forwarded to every web address: the page at
 `connect.mewla.ai` receives a Slack code that only the Mewla that started the
 sign-in can redeem. If the page forwarded it to whatever address a link names,
-an attacker could start a sign-in on their own server, send the Slack link to
+an attacker could start a sign-in on their own computer, send the Slack link to
 you, and receive the code you approve. So it forwards only to a loopback
 address, which only your own computer can reach, and otherwise shows the code
 for you to paste into your own Mewla. It never passes the code to another page
@@ -96,12 +98,12 @@ in the browser either.
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
 
-Mewla has no Google plugins. Google Calendar and Gmail were removed, as was the
-older Google Workspace plugin: when a server starts it signs out of any Google
-account still connected there and deletes the account and its saved token.
-Mewla's own [Calendar](calendar.md) is not a plugin and is unaffected. fal and
-Image generation were removed the same way. Onlora generates images, speech and
-video.
+Some services were retired: Google Calendar and Gmail with Mewla's own Google
+sign-in, the first Google Workspace extension, fal and Image generation. When
+Mewla starts it signs out of any such account still connected and deletes the
+account and its saved token. Google Workspace today runs through Google's own
+`gws` CLI ([below](#google-workspace)), Onlora generates images, speech and
+video, and Mewla's own [Calendar](calendar.md) was never an extension.
 
 ## What Brain can do
 
@@ -122,11 +124,10 @@ schema, run a status check and see recent calls. Every switch takes effect on
 the tap, with no confirm. The tools are one list: **All tools** leads it with
 a switch over every tool, and each group (Read and search, Make changes, and
 Other tools that Mewla hasn't reviewed) starts with a row holding its own
-switch, in the same column as the tools' switches. A partly allowed list reads
-off, with its count beside it: a tap allows the rest, and once all are on a
-tap turns them all off. When the service still has to approve changes, All
-tools leaves them off and reads on once everything else is allowed; turning on
-Make changes asks the service first.
+switch. A partly allowed list reads off, with its count beside it: a tap allows
+the rest, and once all are on a tap turns them all off. When the service still
+has to approve changes, All tools leaves them off and reads on once everything
+else is allowed; turning on Make changes asks the service first.
 
 A service can add or change its tools at any time. For an MCP service, Mewla
 reads the list again on every call, when it announces a change, when you open
@@ -146,15 +147,51 @@ Permission is not an instruction. Even with changes allowed, Brain should send
 messages or update records only when the task you gave it calls for that.
 Writes are never retried automatically.
 
-An account's status is **Connected**, **Needs sign-in again**, **Off** or
-**Last call failed**. When an account needs something, its row on Extensions and
-its card on the service page show one action: **Reconnect** when sign-in
-expired, **Turn on** when it is off, **Check again** after a failed call, or
-**Retry** when removing its credentials did not finish.
+An account's status is **Connected**, **Needs sign-in again**, **Unavailable**,
+**Last call failed** or **Off**. A service with an account that needs something
+is under **Needs fixing**, and the account's card on the service page shows one
+action: **Reconnect** when sign-in expired, **Check now** while the service
+can't be reached, **Check again** after a failed call, or **Retry** when
+removing its credentials did not finish. An account that is off is turned back
+on with its own switch.
 
-To add a second account, use **Add another account** at the bottom of the
-service's page. It
-is the same sign-in as Connect.
+To add a second account, use **Add another Linear account** (named for the
+service) at the bottom of the service's page. It is the same sign-in as
+Connect.
+
+## Turn a service off
+
+Each account on a service's page has an on/off switch. Off hides every tool of
+that account from Brain and Workers: `mewla connections search` skips it, and
+`describe` and `invoke` refuse it. The sign-in, Read and search, Make changes
+and per-tool choices stay as they were, so turning it back on restores the same
+tools. Extensions shows the service as **Off** when every account on it is off.
+
+## Disconnect
+
+On the service's page, tap **Disconnect** on the account and confirm on the same
+card. (Hyperliquid's mainnet account has none; it is switched off instead.) Mewla disables the account first, so later calls fail even if revoking it
+at the provider needs a retry. Some providers do not support revocation from
+Mewla; in that case also remove Mewla's access in the provider's settings.
+
+## Your own services
+
+**Remote MCP** adds an MCP server and **OpenAPI** adds an OpenAPI 3 service, by
+its address or document. Custom endpoints must be public HTTPS by default. To
+reach a service on your own network, turn on **Allow a private network** in the
+form and give that account its address ranges; cloud metadata and link-local
+addresses are always refused. Your own services get no automatic permissions:
+after connecting one, choose its tools.
+
+## From your agents
+
+Below Mewla's own services, **From your agents** lists what each agent (Claude
+Code, Codex and the others) installed itself: one row per agent with its
+plugins and Skills, such as "Codex · 6 plugins · 34 Skills". Skills shared by
+several agents are listed once, under **Shared**. Tap a row to see them. From a
+Skill you can delete the copy you opened, and from a plugin uninstall it, after
+you confirm; built-in copies and copies owned by a plugin are protected. See
+[Your agents' plugins and Skills](executors.md#your-agents-plugins-and-skills).
 
 ## Cloudflare
 
@@ -191,7 +228,7 @@ requested. To change what Mewla can do, revoke
 the client in Trust credentials and connect again.
 
 Tailscale's whole API is open through three tools driven by its official
-OpenAPI document (kept in the server's state and refreshed weekly): **search**
+OpenAPI document (kept in Mewla's state on the computer and refreshed weekly): **search**
 finds an operation, **read** calls a GET operation, and **execute** calls any
 operation. Read and search are on once connected. Execute sits under **Make
 changes when asked**; deleting or renaming a device, changing policy or DNS,
@@ -250,148 +287,6 @@ backs up config and credentials, signs out where the session is not shared,
 and removes only that profile's sections. The profile disappears from the CLI
 too. A shared login/SSO cache remains available to other profiles. Turning the
 profile off only disables agents; it does not delete the CLI sign-in.
-
-
-## Hyperliquid
-
-Hyperliquid needs no setup to read. Every server has one **Hyperliquid** account
-(mainnet, **Read only**) from the start, so Brain can read markets, prices,
-order books and an account's positions, orders, fills and PnL right away. It
-takes the address from your conversation and can remember it itself; positions
-and balances on Hyperliquid are public, so no key is involved. The account
-stays: you can switch it off, and a trading key comes and goes without
-touching it.
-
-Trading is a separate, optional step. To let Brain trade, open **Hyperliquid**
-in Extensions, tap **Add API wallet key** under **Trading**, and paste one **API
-wallet key**. Create the API wallet on Hyperliquid's own site
-(`app.hyperliquid.xyz/API`; **Create an API wallet** opens it), approve it, and
-paste its private key once. Never paste your main wallet's key: Mewla refuses
-it. Mewla asks Hyperliquid which account the key trades for and on which
-network, so there is no address or network to fill in. The account shows the
-address it trades for (**0x1234…abcd**), and every tool result names its
-network. A mainnet key turns the read-only account into that trading account; a
-testnet key (Hyperliquid's practice network, test money only) adds a separate
-**Hyperliquid Testnet** account, tagged **Testnet** on its card. A key is
-saved with the one account it was approved for and never used on the other
-network.
-
-An API wallet can sign trades but not withdrawals or transfers out; those need
-your main wallet's own signature, and Mewla has no code that makes them. A
-leaked API wallet can still trade, and Hyperliquid also lets an API wallet
-deposit into a vault, so it can move value that way; use a fresh one, and remove
-it on Hyperliquid's site if it is ever exposed. The key stays on the server in the
-private vault, is never shown or logged, and **Remove trading key** on the
-account deletes it and leaves the account reading as it was. The mainnet account
-has no Disconnect; only a testnet account does.
-
-Adding a key for an account that is already connected updates that account.
-
-**Read and search** (on after you connect): `list_markets`, `get_mids`,
-`get_book`, `get_candles`, `get_funding_history`, `get_account` (positions,
-margin and spot balances), `get_open_orders`, `get_fills`,
-`get_funding_payments`, `get_portfolio`, `get_vaults` and `get_order_status`.
-Account tools take an optional `address`; the read-only account has none of its own, so Brain names one with each read, and a trading account defaults to its own. Times
-come back with a readable `…_at` field in the time zone you name (`timezone`),
-this computer's own if you don't. Results are bounded: lists are one page and say when they were
-cut.
-
-**Make changes when asked** (off until you turn it on, and only with a saved
-key): `place_order`, `modify_order`, `cancel_order`, `set_leverage` and
-`schedule_cancel`. Brain places an order only when you ask for it. Each result
-says which network it used and returns exactly what was signed and sent, with
-Hyperliquid's own reply and order id. Prices and sizes are never rounded for
-you: a price with too many digits is refused before anything is sent, with a
-valid example. An order is sent once and never retried; if Hyperliquid does not
-answer, check `get_open_orders` or `get_order_status` before trying again.
-
-Not supported: withdrawals, transfers, vault deposits, market orders and
-trigger orders, builder-deployed (HIP-3) markets, and sub-accounts. Hyperliquid
-limits one IP to 1,200 request weight a minute; Mewla does not retry when it
-says so.
-
-## Custom services
-
-Under **Your own services** you can add an MCP server or an OpenAPI service by
-endpoint or document. Custom endpoints must be public HTTPS by default. To reach
-a service on your own network, grant that account an explicit address range;
-cloud metadata and link-local addresses are always refused. Custom services get
-no automatic permissions: after connecting one, choose its tools.
-
-## Turn a plugin off
-
-Each account on a service's page has an on/off switch next to its status. Off
-hides every tool of that account from Brain and Workers: `mewla connections
-search` skips it, and `describe` and `invoke` refuse it. The sign-in, Read and
-search, Make changes and per-tool choices stay as they were, so turning it back
-on restores the same tools. Extensions shows the service as **Off** when every
-account on it is off.
-
-## Disconnect
-
-On the service's page, tap **Disconnect** on the account and confirm on the same
-card. (Hyperliquid's mainnet account has none; it is switched off instead.) Mewla disables the account first, so later calls fail even if revoking it
-at the provider needs a retry. Some providers do not support revocation from
-Mewla; in that case also remove Mewla's access in the provider's settings.
-
-## Use plugins from the computer
-
-Brain and Workers use the same accounts through the CLI:
-
-```sh
-mewla connections list --json
-mewla connections search --query github --json
-mewla connections describe --id ACCOUNT_ID --json   # every tool: name and description
-mewla connections describe --id ACCOUNT_ID --tool get_me --json
-mewla connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
-mewla connections invoke --id ACCOUNT_ID --tool add_asset --args-file asset.json --json
-mewla connections policy --id ACCOUNT_ID --tools get_me,list_issues --allow
-mewla connections resources --id ACCOUNT_ID
-mewla connections read-resource --id ACCOUNT_ID --uri onlora://projects/PROJECT_ID
-mewla connections updates --id ACCOUNT_ID
-mewla connections confirm-updates --id ACCOUNT_ID --tools generate_image,write_file
-```
-
-`policy --tools` sets every listed tool in one change: all of them, or none
-if any name is unknown. Leave out `--allow` to turn them off. `describe`
-without `--tool` lists every tool on the account. Inline `--args` stays small;
-put a large payload (up to 8 MiB, such as `add_asset`'s base64 asset) in a file
-and pass `--args-file path`.
-
-When arguments do not fit the tool's input schema, the error names the
-failing argument path and the constraint it broke (for example
-`items: maxItems: array length 9 is greater than 8`), so a call can be fixed
-without re-reading the whole schema.
-
-Each call is one bounded request; nothing pages automatically.
-
-- **Resources.** An MCP server can publish documents next to its tools, such as
-  an Onlora project. `resources` lists them and their URI templates;
-  `read-resource` reads one. Reading needs the account on and at least one read
-  tool allowed (any allowed tool for a custom service).
-- **Errors.** When a service rejects a call, its own message comes back,
-  shortened to 2,000 bytes with credentials removed.
-- **Time.** A call may take two minutes, or longer when its arguments ask the
-  service to wait (`wait_s` and similar), up to ten minutes. If time runs out,
-  the call may already have run: Mewla never retries it, and you should check
-  its state with a read tool before calling again. Calls on the same account
-  run side by side.
-- **Updates.** `updates` asks the service for its current tools and shows
-  those waiting for confirmation; `confirm-updates` and `dismiss-updates` act
-  on the listed tools, all or none, and only with the person's consent.
-
-## Where credentials live
-
-Tokens stay on the daemon, in a private vault file readable only by your user.
-Account history records which tool was called and when, but not tokens,
-arguments or results.
-
-Mewla only connects a plugin to public addresses, so a name that resolves to your
-own network is refused. One exception: a proxy app in fake-IP mode (Surge, Clash
-and similar) answers every lookup with an address in `198.18.0.0/15` and routes
-by name, so Mewla connects to a *name* that resolves there. HTTPS still checks
-the certificate for that name. If your network answers with some other private
-address, the connection fails with "this network answers with a private address".
 
 ## Google Cloud
 
@@ -487,3 +382,120 @@ method's parameters. List, get and free/busy calls and `+triage`, `+read` and
 and everything else need enabled writes plus your task-specific authorization
 (`--mewla-authorize`). Local file arguments, push subscriptions and `gws auth` are
 unavailable.
+
+## Hyperliquid
+
+Hyperliquid needs no setup to read. Every computer has one **Hyperliquid** account
+(mainnet, **Read only**) from the start, so Brain can read markets, prices,
+order books and an account's positions, orders, fills and PnL right away. It
+takes the address from your conversation and can remember it itself; positions
+and balances on Hyperliquid are public, so no key is involved. The account
+stays: you can switch it off, and a trading key comes and goes without
+touching it.
+
+Trading is a separate, optional step. To let Brain trade, open **Hyperliquid**
+in Extensions, tap **Add API wallet key** under **Trading**, and paste one **API
+wallet key**. Create the API wallet on Hyperliquid's own site
+(`app.hyperliquid.xyz/API`; **Create an API wallet** opens it), approve it, and
+paste its private key once. Never paste your main wallet's key: Mewla refuses
+it. Mewla asks Hyperliquid which account the key trades for and on which
+network, so there is no address or network to fill in. The account shows the
+address it trades for (**0x1234…abcd**), and every tool result names its
+network. A mainnet key turns the read-only account into that trading account; a
+testnet key (Hyperliquid's practice network, test money only) adds a separate
+**Hyperliquid Testnet** account, tagged **Testnet** on its card. A key is
+saved with the one account it was approved for and never used on the other
+network.
+
+An API wallet can sign trades but not withdrawals or transfers out; those need
+your main wallet's own signature, and Mewla has no code that makes them. A
+leaked API wallet can still trade, and Hyperliquid also lets an API wallet
+deposit into a vault, so it can move value that way; use a fresh one, and remove
+it on Hyperliquid's site if it is ever exposed. The key stays on the computer in the
+private vault, is never shown or logged, and **Remove trading key** on the
+account deletes it and leaves the account reading as it was. The mainnet account
+has no Disconnect; only a testnet account does.
+
+Adding a key for an account that is already connected updates that account.
+
+**Read and search** (on after you connect): `list_markets`, `get_mids`,
+`get_book`, `get_candles`, `get_funding_history`, `get_account` (positions,
+margin and spot balances), `get_open_orders`, `get_fills`,
+`get_funding_payments`, `get_portfolio`, `get_vaults` and `get_order_status`.
+Account tools take an optional `address`; the read-only account has none of its own, so Brain names one with each read, and a trading account defaults to its own. Times
+come back with a readable `…_at` field in the time zone you name (`timezone`),
+this computer's own if you don't. Results are bounded: lists are one page and say when they were
+cut.
+
+**Make changes when asked** (off until you turn it on, and only with a saved
+key): `place_order`, `modify_order`, `cancel_order`, `set_leverage` and
+`schedule_cancel`. Brain places an order only when you ask for it. Each result
+says which network it used and returns exactly what was signed and sent, with
+Hyperliquid's own reply and order id. Prices and sizes are never rounded for
+you: a price with too many digits is refused before anything is sent, with a
+valid example. An order is sent once and never retried; if Hyperliquid does not
+answer, check `get_open_orders` or `get_order_status` before trying again.
+
+Not supported: withdrawals, transfers, vault deposits, market orders and
+trigger orders, builder-deployed (HIP-3) markets, and sub-accounts. Hyperliquid
+limits one IP to 1,200 request weight a minute; Mewla does not retry when it
+says so.
+
+## Use them from the computer
+
+Brain and Workers use the same accounts through the CLI:
+
+```sh
+mewla connections list --json
+mewla connections search --query github --json
+mewla connections describe --id ACCOUNT_ID --json   # every tool: name and description
+mewla connections describe --id ACCOUNT_ID --tool get_me --json
+mewla connections invoke --id ACCOUNT_ID --tool get_me --args '{}' --json
+mewla connections invoke --id ACCOUNT_ID --tool add_asset --args-file asset.json --json
+mewla connections policy --id ACCOUNT_ID --tools get_me,list_issues --allow
+mewla connections resources --id ACCOUNT_ID
+mewla connections read-resource --id ACCOUNT_ID --uri onlora://projects/PROJECT_ID
+mewla connections updates --id ACCOUNT_ID
+mewla connections confirm-updates --id ACCOUNT_ID --tools generate_image,write_file
+```
+
+`policy --tools` sets every listed tool in one change: all of them, or none
+if any name is unknown. Leave out `--allow` to turn them off. `describe`
+without `--tool` lists every tool on the account. Inline `--args` stays small;
+put a large payload (up to 8 MiB, such as `add_asset`'s base64 asset) in a file
+and pass `--args-file path`.
+
+When arguments do not fit the tool's input schema, the error names the
+failing argument path and the constraint it broke (for example
+`items: maxItems: array length 9 is greater than 8`), so a call can be fixed
+without re-reading the whole schema.
+
+Each call is one bounded request; nothing pages automatically.
+
+- **Resources.** An MCP server can publish documents next to its tools, such as
+  an Onlora project. `resources` lists them and their URI templates;
+  `read-resource` reads one. Reading needs the account on and at least one read
+  tool allowed (any allowed tool for a custom service).
+- **Errors.** When a service rejects a call, its own message comes back,
+  shortened to 2,000 bytes with credentials removed.
+- **Time.** A call may take two minutes, or longer when its arguments ask the
+  service to wait (`wait_s` and similar), up to ten minutes. If time runs out,
+  the call may already have run: Mewla never retries it, and you should check
+  its state with a read tool before calling again. Calls on the same account
+  run side by side.
+- **Updates.** `updates` asks the service for its current tools and shows
+  those waiting for confirmation; `confirm-updates` and `dismiss-updates` act
+  on the listed tools, all or none, and only with the person's consent.
+
+## Where credentials live
+
+Tokens stay on the daemon, in a private vault file readable only by your user.
+Account history records which tool was called and when, but not tokens,
+arguments or results.
+
+Mewla only connects a service to public addresses, so a name that resolves to your
+own network is refused. One exception: a proxy app in fake-IP mode (Surge, Clash
+and similar) answers every lookup with an address in `198.18.0.0/15` and routes
+by name, so Mewla connects to a *name* that resolves there. HTTPS still checks
+the certificate for that name. If your network answers with some other private
+address, the connection fails with "this network answers with a private address".
