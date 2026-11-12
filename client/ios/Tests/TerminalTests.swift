@@ -119,6 +119,40 @@ final class TerminalTests: XCTestCase {
     XCTAssertEqual(view.lineText(0), "", "reset starts an empty screen")
   }
 
+  /// Parity #3: a long press selects the word; a copy joins a soft-wrapped row with the next and ends a
+  /// hard row with a newline (trailing blanks dropped); Select All takes every row; a paste reaches the
+  /// program framed only when it turned bracketed paste on.
+  @MainActor
+  func testSelectCopyAndPaste() throws {
+    let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+    var input: [String] = []
+    view.onInput = { input.append($0) }
+    view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    view.setFontSize(13)
+    view.frame = CGRect(x: 0, y: 0, width: ceil(20 * view.cellW), height: ceil(6 * view.cellH))
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    XCTAssertEqual(view.cols, 20)
+    // Row 0 wraps into row 1 (24 characters in 20 columns); row 2 is "hello world" and a newline.
+    view.write("abcdefghijklmnopqrstuvwx\r\nhello world   \r\nlast")
+    let at = { (col: Int, row: Int) in CGPoint(x: (CGFloat(col) + 0.5) * view.cellW, y: (CGFloat(row) + 0.5) * view.cellH) }
+
+    XCTAssertTrue(view.selectWord(at: at(7, 2)))
+    XCTAssertEqual(view.selectedText(), "world")
+    XCTAssertTrue(view.selectWord(at: at(3, 0)))
+    XCTAssertEqual(view.selectedText(), "abcdefghijklmnopqrst", "a word stops at the row's end; the handles stretch it")
+    XCTAssertFalse(view.selectWord(at: at(15, 2)), "a blank selects nothing")
+    view.selectAll()
+    XCTAssertEqual(view.selectedText(), "abcdefghijklmnopqrstuvwx\nhello world\nlast",
+                   "the wrapped row joins the next; hard rows end in a newline without their trailing blanks")
+
+    view.paste("echo a\necho b")
+    view.write("\u{1b}[?2004h")
+    view.paste("x\ny")
+    XCTAssertEqual(input, ["echo a\recho b", "\u{1b}[200~x\ny\u{1b}[201~"])
+  }
+
   /// The render corpus (scripts/terminal-corpus, `MEWLA_CORPUS`): every screen drawn at its grid at
   /// 3x, saved as `MEWLA_TEST_OUT`/corpus/<name>.png for the side-by-side with the reference.
   @MainActor

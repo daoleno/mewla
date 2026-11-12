@@ -347,6 +347,8 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   private var lineCount: Int { history.count + rows }
 
   private func line(_ i: Int) -> Line {
+    // Output written since the last draw is read before anything looks at a row.
+    if needsPull { pull() }
     if i < history.count { return i >= 0 ? history[i] : .empty }
     let live = i - history.count
     return live >= 0 && live < grid.count ? grid[live] : .empty
@@ -860,6 +862,8 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
         if i != to.line { out += "\n" }
       }
     }
+    // Empty rows at the end (Select All over a screen not yet full) are not text.
+    while out.hasSuffix("\n") { out.removeLast() }
     return out
   }
 
@@ -918,7 +922,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   }
 
   /// Pasted text to the program, framed for bracketed paste when it asked for it.
-  private func paste(_ text: String) {
+  func paste(_ text: String) {
     guard let vt, let bytes = vt.paste(text) else { return }
     onInput(bytes)
     scrollToBottom()
@@ -942,9 +946,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     }
     actions.append(UIAction(title: "Select All", image: UIImage(systemName: "selection.pin.in.out")) { [weak self] _ in
       guard let self else { return }
-      self.selFrom = (0, 0)
-      self.selTo = (max(self.lineCount - 1, 0), max(self.cols - 1, 0))
-      self.setNeedsDisplay()
+      self.selectAll()
       DispatchQueue.main.async { self.showMenu(at: self.menuPoint) }
     })
     return UIMenu(children: actions)
@@ -1030,6 +1032,14 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   @objc private func pressed(_ gesture: UILongPressGestureRecognizer) {
     guard gesture.state == .began, cellH > 0 else { return }
     let point = gesture.location(in: self)
+    selectWord(at: point)
+    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    showMenu(at: point)
+  }
+
+  /// A long press: select the word under `point` (nothing on a blank). Whether a word was selected.
+  @discardableResult
+  func selectWord(at point: CGPoint) -> Bool {
     let i = min(max(lineUnder(point.y), 0), max(lineCount - 1, 0))
     if let span = word(at: i, col: colUnder(point.x)) {
       selFrom = (i, span.0)
@@ -1039,8 +1049,14 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
       selTo = nil
     }
     setNeedsDisplay()
-    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    showMenu(at: point)
+    return selFrom != nil
+  }
+
+  /// Select All: every row, the history's included.
+  func selectAll() {
+    selFrom = (0, 0)
+    selTo = (max(lineCount - 1, 0), max(cols - 1, 0))
+    setNeedsDisplay()
   }
 
   /// The text of screen row `row` (a history row while scrolled up), trailing blanks dropped.

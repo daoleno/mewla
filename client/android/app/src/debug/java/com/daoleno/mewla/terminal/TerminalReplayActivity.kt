@@ -18,7 +18,7 @@ import kotlin.math.ceil
  *     --es file corpus/sgr.vt --ei cols 52 --ei rows 30 [--ef font 8] [--ez light true]
  *
  * `file` is relative to the app's files dir. The view's rectangle on screen is logged
- * ("TerminalReplay: rect x y w h") once the bytes are drawn.
+ * ("TerminalReplay: rect x y w h") once the bytes are drawn, and what the view sends ("input ...").
  */
 class TerminalReplayActivity : Activity() {
   private val dark = listOf("#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea")
@@ -34,7 +34,8 @@ class TerminalReplayActivity : Activity() {
     val view = TerminalView(this, object : TerminalView.Events {
       override fun size(cols: Int, rows: Int) { Log.i(TAG, "size $cols $rows") }
       override fun failed(message: String) { Log.e(TAG, "failed $message") }
-      override fun input(data: String) {}
+      // What the view sends the program (typed keys, pastes), escaped, for the selection and paste check.
+      override fun input(data: String) { Log.i(TAG, "input " + data.replace("\u001b", "\\e").replace("\r", "\\r").replace("\n", "\\n")) }
       override fun scroll(lines: Int) {}
       override fun viewport(top: Int, atBottom: Boolean) {}
       override fun tapCell(col: Int, row: Int, text: String, index: Int) {}
