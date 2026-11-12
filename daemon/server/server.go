@@ -1937,8 +1937,7 @@ func (s *Server) loadProviderConversation(
 	if err != nil {
 		return work.CodexConversation{}, err
 	}
-	conversation = s.rewound.apply(strings.TrimSpace(resolved.targetID), conversation)
-	return s.withAnsweredRequests(resolved.targetID, conversation), nil
+	return s.rewound.apply(strings.TrimSpace(resolved.targetID), conversation), nil
 }
 
 func (s *Server) handleListSessionServices(conn *websocket.Conn, raw clientMessage) {
@@ -2231,6 +2230,11 @@ func (s *Server) publishCodexConversationSubscription(
 		}
 	}
 	providerConversation := conversation
+	if !brainScoped {
+		// Answered requests join the Session's thread after its projection;
+		// Brain's thread takes its own in brainScopedConversation.
+		conversation = s.withAnsweredRequests(resolved.targetID, conversation)
+	}
 	if brainScoped {
 		conversation = s.brainScopedConversation(raw.ConversationScopeKey, conversation, now)
 		if reusedProvider {
@@ -2375,6 +2379,7 @@ type brainProjectionKey struct {
 	store     uint64
 	calendar  uint64
 	computers uint64
+	answered  uint64
 }
 
 func (s *Server) brainProjectionKey(scopeKey string) brainProjectionKey {
@@ -2383,7 +2388,7 @@ func (s *Server) brainProjectionKey(scopeKey string) brainProjectionKey {
 		return brainProjectionKey{}
 	}
 	threadID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(scopeKey), prefix))
-	key := brainProjectionKey{store: s.brain.ConversationProjectionVersion()}
+	key := brainProjectionKey{store: s.brain.ConversationProjectionVersion(), answered: s.answeredLedger().Version()}
 	if s.calendar != nil {
 		key.calendar = s.calendar.Generation()
 	}
@@ -2750,7 +2755,7 @@ func codexConversationSubscriptionFingerprintMemoized(
 	writeFingerprintInt(hash, len(conversation.Events))
 	for _, event := range conversation.Events {
 		id := strings.TrimSpace(event.ID)
-		if _, ok := eventFingerprints[id]; !ok || event.Source == "request_answered" {
+		if _, ok := eventFingerprints[id]; !ok || event.Source == answeredConversationKind {
 			// New or unknown event: its fingerprint must be computed. An
 			// answered request is an overlay the reader does not version.
 			changed[id] = struct{}{}
