@@ -141,6 +141,21 @@ describe("tray model", () => {
     expect(m.todayCount).toBe(5);
   });
 
+  test("a Work whose Session asks you is that Needs you row only, not also a row of its own", () => {
+    const asking = worker("f", { name: "Fixer", status: "blocked", needs_attention: true, summary: "Which build command?" });
+    const m = trayModel(input({
+      workers: [asking],
+      currentWork: [work("w1", { title: "Fixer", status: "done", unread_result: true, summary: "Ready", attempt_session_id: "f", updated_at: new Date(NOW - 1000).toISOString() })],
+    }));
+    expect(m.needs.map((r) => r.key)).toEqual(["attention:f"]);
+    expect([...m.running, ...m.done].map((r) => r.key)).toEqual([]);
+    const answered = trayModel(input({
+      workers: [{ ...asking, needs_attention: false }],
+      currentWork: [work("w1", { title: "Fixer", status: "done", unread_result: true, summary: "Ready", attempt_session_id: "f", updated_at: new Date(NOW - 1000).toISOString() })],
+    }));
+    expect(answered.done.map((r) => r.key)).toEqual(["work:w1"]);
+  });
+
   test("Done shows the unread result; a Work waiting on a decision is a request", () => {
     const m = trayModel(input({
       currentWork: [

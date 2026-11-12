@@ -338,8 +338,11 @@ function noticeOf(input: TrayInput): TrayNotice | null {
 export function trayModel(input: TrayInput): TrayModel {
   const needs = requestsOf(input);
   const sessions = new Map(input.workers.map((worker) => [worker.id, worker] as const));
-  const slips = brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now, input.openWork).slips;
-  // A Session that runs a listed Work is that Work's row; asking you, it is a Needs you row only.
+  // A Session that runs a listed Work is that Work's row; asking you, it is a Needs you row only, and
+  // the Work has no row of its own until it is answered.
+  const asking = new Set(input.workers.filter(hasRequest).map((worker) => worker.id));
+  const slips = brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now, input.openWork).slips
+    .filter((slip) => slip.group === "needs" || ![slip.sessionId, ...liveWorkerIds(slip.workerSessions)].some((id) => id && asking.has(id)));
   const folded = new Set(slips.flatMap((slip) => [slip.sessionId, ...liveWorkerIds(slip.workerSessions)]).filter((id): id is string => Boolean(id)));
   const opened = (id: string) => input.opened[id] ?? 0;
   const activity = (worker: Worker) => worker.updated_at ?? worker.started_at ?? 0;

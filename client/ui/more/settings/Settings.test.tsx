@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { typeUntil } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -184,7 +185,7 @@ describe("Telegram", () => {
     });
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:telegram-token");
-    await app.type("id:telegram-token", "123:abc");
+    await typeUntil(app, "id:telegram-token", "123:abc", "id:telegram-verify");
     await app.press("id:telegram-verify");
     await app.waitFor("text:@mewla_bot");
     expect(app.shows("id:telegram-connect")).toBe(true);

@@ -305,7 +305,16 @@ export function ChatTimeline(props: {
           else readingPositions.delete(props.scope);
         }}
         empty={props.empty() as never}>
-        {(item) => ((item() as FootRow).type === "thread-foot" ? (props.foot!.render((node) => anchor.set(node)) as never) : <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />)}
+        {(item) => {
+          // A recycled cell takes whatever row comes next: the foot's cell can become a row and back,
+          // so which of the two it draws follows its item, not the item it was made for.
+          const foot = computed(() => (item() as FootRow).type === "thread-foot");
+          return (
+            <View>
+              {foot() ? (props.foot!.render((node) => anchor.set(node)) as never) : <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />}
+            </View>
+          );
+        }}
       </List>
       {away() ? (
         (props.requests?.() ?? 0) > 0 ? (
