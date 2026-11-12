@@ -141,6 +141,8 @@ describe("tray model", () => {
     expect(live).toMatchObject({ title: "Claude Code · Hello writer", line: "mewla", end: "12m", live: true, tile: { kind: "agent", agent: "claude" }, target: { open: "session", workerId: id } });
     expect(failed).toMatchObject({ title: "OpenAI Codex · builder", line: "Failed · Build broke on Windows" });
     expect(failed!.live).toBeUndefined();
+    // Under the eyebrow "Work · mewla" the project is not said again.
+    expect(workerRow(lines[0]!, NOW, "mewla").line).toBe("");
   });
 
   test("a new device asking to be let in is a request: no one-tap, its row opens its sheet", () => {
