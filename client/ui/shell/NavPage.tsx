@@ -58,7 +58,7 @@ export function NavPage(props: AppNavPageProps) {
   const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
   if (mobile) {
     // The system's Back can't carry a dot: while the mark shows, the page's own Back stands in for it.
-    const back = () => (mark() ? <MarkedBack mark={mark()!} back={stack.back} /> : undefined);
+    const back = () => (mark() ? <View class="flex-row items-center gap-2"><MarkedBack mark={mark()!} back={stack.back} />{props.headerLeft ?? null}</View> : props.headerLeft);
     // A phone never reaches 1024 pt: its pages stay the system's own, with nothing around their content.
     if (platform.idiom === "phone") {
       const [own, rest] = split(props, ["column", "frame", "class", "headerClass", "statusBar"]);
