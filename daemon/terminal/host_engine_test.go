@@ -3,7 +3,11 @@
 package terminal
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -225,6 +229,221 @@ func TestHostTerminalViewRedrawsOnResize(t *testing.T) {
 			t.Fatal("the program did not exit after its input")
 		}
 	}
+}
+
+// Another viewer (mewla attach on a desk) resizes the Session while the App's
+// view is open: the program redraws for the desk's width, and the App's grid,
+// another width, would draw rows over rows. The view starts over at once, and
+// the person typing on the App takes the size back, after which the App's
+// screen is the host's.
+func TestHostTerminalViewRedrawsWhenAnotherViewerResizes(t *testing.T) {
+	socket, client := startTestHost(t)
+	dir := t.TempDir()
+	const id = "mh-0123456789abcdef76543211"
+	// Like a full-screen agent: on every resize it draws rows as wide as the terminal.
+	script := `last=""; while :; do s=$(stty size); if [ "$s" != "$last" ]; then last=$s; c=${s#* }
+printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"; printf '\r\n'; done; printf 'ready-%s ' "$c"; fi; sleep 0.05; done`
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := client.Create(ctx, sessionhost.CreateParams{
+		ID: id, Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/bin:/bin", "HOME=" + dir}, Dir: dir, Cols: 80, Rows: 24,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitHostScreen(t, client, id, "ready-80")
+
+	sent := make(chan map[string]any, 1024)
+	manager := NewManager(&HostBackend{Version: "test-daemon"})
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 19, Socket: socket}, func(v any) { sent <- v.(map[string]any) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened := <-sent; opened["type"] != "terminal_opened" {
+		t.Fatalf("opened = %v", opened)
+	}
+	viewer, err := ghosttyvt.New(ghosttyvt.Options{Cols: 70, Rows: 19})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer viewer.Close()
+	settle := func() (resets int) {
+		for {
+			select {
+			case msg := <-sent:
+				if msg["type"] != "terminal_output" {
+					t.Fatalf("unexpected %v", msg)
+				}
+				data := msg["data"].(string)
+				resets += strings.Count(data, fullReset)
+				viewer.Write([]byte(data))
+			case <-time.After(400 * time.Millisecond):
+				return resets
+			}
+		}
+	}
+	waitHostScreen(t, client, id, "ready-70")
+	settle()
+	matchHost(t, viewer, client, id)
+
+	desk, err := client.Attach(ctx, sessionhost.AttachParams{ID: id, Cols: 160, Rows: 45, Redraw: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer desk.Close()
+	waitHostScreen(t, client, id, "ready-160")
+	if resets := settle(); resets == 0 {
+		t.Fatal("the App's view was not drawn again when another viewer resized the Session")
+	}
+
+	// The App's view losing the keyboard (a focus report) is no reason to take the size.
+	if err := manager.Input("owner", view.ID(), "\x1b[O"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if info, err := client.Info(ctx, id); err != nil || info.Cols != 160 {
+		t.Fatalf("info = %+v, %v; a focus-out took the size", info, err)
+	}
+
+	// The person types on the App: the Session is the App's size again, and its screen the host's.
+	if err := manager.Input("owner", view.ID(), "x\r"); err != nil {
+		t.Fatal(err)
+	}
+	waitHostScreen(t, client, id, "ready-70")
+	settle()
+	matchHost(t, viewer, client, id)
+	for range desk.Output() {
+	}
+	if end, err := desk.End(); err != nil || end.Reason != sessionhost.AttachResized {
+		t.Fatalf("the desk's view ended with %+v, %v; want %q", end, err, sessionhost.AttachResized)
+	}
+
+	// The App's grid sent again at the size it has (the terminal shown again) changes nothing.
+	if err := manager.Resize("owner", view.ID(), 70, 19); err != nil {
+		t.Fatal(err)
+	}
+	if resets := settle(); resets != 0 {
+		t.Fatalf("showing the terminal again at its own size drew it again %d times", resets)
+	}
+}
+
+// olderHost serves a socket in front of the host at socket that acts as a host
+// from before AttachResized: an attach request loses its "redraw", so the host
+// neither ends the view on another viewer's resize nor says it would.
+func olderHost(t *testing.T, socket string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "oh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	path := filepath.Join(dir, "o.sock")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		for {
+			down, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			up, err := net.Dial("unix", socket)
+			if err != nil {
+				down.Close()
+				continue
+			}
+			go func() { io.Copy(down, up); down.Close() }()
+			go func() {
+				defer up.Close()
+				for {
+					var header [4]byte
+					if _, err := io.ReadFull(down, header[:]); err != nil {
+						return
+					}
+					body := make([]byte, binary.BigEndian.Uint32(header[:]))
+					if _, err := io.ReadFull(down, body); err != nil {
+						return
+					}
+					body = bytes.Replace(body, []byte(`,"redraw":true`), nil, 1)
+					binary.BigEndian.PutUint32(header[:], uint32(len(body)))
+					if _, err := up.Write(append(header[:], body...)); err != nil {
+						return
+					}
+				}
+			}()
+		}
+	}()
+	return path
+}
+
+// A daemon newer than its host is the usual state after an upgrade. A host
+// from before AttachResized never tells the view of another viewer's resize,
+// so the App's grid sent again (the terminal shown) still resizes the Session
+// and draws the view again, as it did before.
+func TestHostTerminalViewOnAnOlderHostTakesItsSizeBack(t *testing.T) {
+	socket, client := startTestHost(t)
+	dir := t.TempDir()
+	const id = "mh-0123456789abcdef76543212"
+	script := `last=""; while :; do s=$(stty size); if [ "$s" != "$last" ]; then last=$s; c=${s#* }
+printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"; printf '\r\n'; done; printf 'ready-%s ' "$c"; fi; sleep 0.05; done`
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := client.Create(ctx, sessionhost.CreateParams{
+		ID: id, Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/bin:/bin", "HOME=" + dir}, Dir: dir, Cols: 80, Rows: 24,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitHostScreen(t, client, id, "ready-80")
+
+	sent := make(chan map[string]any, 1024)
+	manager := NewManager(&HostBackend{Version: "test-daemon"})
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 19, Socket: olderHost(t, socket)}, func(v any) { sent <- v.(map[string]any) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened := <-sent; opened["type"] != "terminal_opened" {
+		t.Fatalf("opened = %v", opened)
+	}
+	viewer, err := ghosttyvt.New(ghosttyvt.Options{Cols: 70, Rows: 19})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer viewer.Close()
+	settle := func() (resets int) {
+		for {
+			select {
+			case msg := <-sent:
+				if msg["type"] != "terminal_output" {
+					t.Fatalf("unexpected %v", msg)
+				}
+				data := msg["data"].(string)
+				resets += strings.Count(data, fullReset)
+				viewer.Write([]byte(data))
+			case <-time.After(400 * time.Millisecond):
+				return resets
+			}
+		}
+	}
+	waitHostScreen(t, client, id, "ready-70")
+	settle()
+
+	desk, err := client.Attach(ctx, sessionhost.AttachParams{ID: id, Cols: 160, Rows: 45, Redraw: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer desk.Close()
+	waitHostScreen(t, client, id, "ready-160")
+	settle()
+
+	if err := manager.Resize("owner", view.ID(), 70, 19); err != nil {
+		t.Fatal(err)
+	}
+	waitHostScreen(t, client, id, "ready-70")
+	if resets := settle(); resets == 0 {
+		t.Fatal("the App's grid sent again on an older host did not draw the view again")
+	}
+	matchHost(t, viewer, client, id)
 }
 
 func TestHostTerminalRefusesWithoutAHost(t *testing.T) {
