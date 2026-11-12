@@ -36,6 +36,11 @@ type Store struct {
 	timelineCache timelineReadCache
 	turnCache     turnReadCache
 
+	// workWorkers caches state/work_workers.jsonl (work_workers.go) under its
+	// own lock: the snapshot reads it while holding mu.
+	workWorkersMu sync.Mutex
+	workWorkers   map[string]WorkWorkerRecord
+
 	// db is state/brain.db: the lifecycle engine's tables, the presentation
 	// rows and the timeline (presentation_store.go). presentation is the last
 	// committed presentation image, generation the database generation it was

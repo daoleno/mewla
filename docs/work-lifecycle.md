@@ -351,6 +351,21 @@ out, newest first, with its status, progress mode and wait; Brain's own
 context keeps only the bounded `current_work`), and maps each lifecycle onto six marks in
 `brainWorkLifecycleStatus` (`app/components/brain/brainWorkEventPresentation.ts`).
 
+**Workers of a Work.** A Work can be run by several Worker Sessions over its
+life: `mewla worker spawn -work <id>` hands it to a new Session while Brain
+handles the previous result. Each `current_work` and `open_work` entry lists
+them as `worker_sessions`, in the order they joined, live and finished:
+`session_id`, `name`, `executor_id`, `provider`, `state` (`running`,
+`blocked`, `done`, `failed`, or `ended` for a Session that left without a
+result), `summary`, `phase` (live only), `live`, `joined_at`, `ended_at` and
+`updated_at`. Membership comes only from the Work's admissions and delegated
+turns; the name and executor a Session had when it joined are kept in
+`state/work_workers.jsonl`, so a finished Worker is still named after its pane
+is gone. A Session reused by another Work is finished for this one. A closed
+Work is in neither list; `brain_work_detail` (`id`: the Work id) answers its
+`work` with the same `worker_sessions`. `attempt_session_id` stays: it is the
+one Session that owns the Work right now.
+
 ### User Decisions
 
 The user acts on a Work from its slip. Each action is one typed request
