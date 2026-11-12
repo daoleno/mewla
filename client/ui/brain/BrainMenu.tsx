@@ -1,6 +1,8 @@
-import { effect, signal, untracked, View } from "nsh";
+import { effect, signal, untracked, View, type ViewRef } from "nsh";
 import { AlertDialog, Button } from "nsh/base";
 import { Sheet } from "../kit/Sheet";
+import { MenuPopover } from "../kit/Menu";
+import { wide } from "../shell/layout";
 import { Row } from "../kit/kit";
 import { Icon, type IconName } from "../kit/Icon";
 import { AgentIcon } from "../icons/AgentIcon";
@@ -60,6 +62,8 @@ export function BrainMenu(props: {
   /** A short message for a toast ("Couldn't start a new chat"): without it a refusal is silent. */
   onNotice?: (text: string) => void;
   source?: BrainSource;
+  /** ⋯, which it opens from: on wide the menu is a popover there (SPEC §14.2) and its pages are dialogs. */
+  anchor?: () => ViewRef | null;
 }) {
   const source = props.source ?? currentBrain;
   const page = signal<Page>("menu");
@@ -141,8 +145,13 @@ export function BrainMenu(props: {
     return id === "executor" && provider ? <AgentIcon kind={agentKindFromProvider(provider)} size={22} /> : undefined;
   };
 
+  // On wide the menu itself is a popover at ⋯; Brain host and Model are dialogs.
+  const popover = () => wide() && page() === "menu" && Boolean(props.anchor?.());
   return (
-    <Sheet testID="brain-menu-sheet" open={props.open} onClose={close}
+    <>
+    <MenuPopover testID="brain-menu-popover" open={() => props.open() && popover()} anchor={() => props.anchor?.() ?? null} onClose={close} onSelect={(id) => choose(id as BrainMenuRowId)}
+      items={() => rows().map((row) => ({ id: row.id, label: row.label, icon: ROW_ICONS[row.id], disabled: !row.enabled, value: row.id === "model" ? modelValue(runtime()) || undefined : undefined, trailing: trailing(row.id) }))} />
+    <Sheet testID="brain-menu-sheet" open={() => props.open() && !popover()} onClose={close}
       title={() => (page() === "host" ? "Brain host" : page() === "model" ? "" : "Brain")}
       leading={page() === "host" ? (
         <Button testID="brain-menu-back" accessibilityLabel="Back to Brain's menu" onPress={() => page.set("menu")} class="-ml-2 rounded-full p-2 active:opacity-70">
@@ -169,5 +178,6 @@ export function BrainMenu(props: {
         </View>
       )}
     </Sheet>
+    </>
   );
 }

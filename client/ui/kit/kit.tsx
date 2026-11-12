@@ -1,8 +1,8 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
 import { announce, Canvas, Clipboard, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, Input, Switch } from "nsh/base";
-import { isAvailable as mobile } from "nsh/mobile";
-import type { PageColumn } from "../../core/web/places";
+import { PAGE_COLUMN_WIDTH } from "../../core/web/places";
+import { wide } from "../shell/layout";
 import { NavPage } from "../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
@@ -31,10 +31,8 @@ export function Page(props: {
   headerRight?: JSX.Element;
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** The widest the content grows on a phone or tablet, in points (720; a dashboard takes more). */
+  /** The widest the content grows below 1024 pt, in points (720; a dashboard takes more). On wide every list page has the 680 column. */
   maxWidth?: number;
-  /** The desktop column (client/DESIGN.md): 760 by default, 1200 for Resources. */
-  column?: Exclude<PageColumn, "full" | "reading">;
   /** The page's scroll view, for a page that brings something at its top into view. */
   scrollRef?: (ref: ScrollRef) => void;
   /** A panel beside the scrolling page (a wide screen's details), or nothing. */
@@ -44,7 +42,7 @@ export function Page(props: {
   children?: JSX.Element;
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
-  const width = () => (mobile ? (props.maxWidth ?? 720) : props.column === "wide" ? 1200 : 760);
+  const width = () => (wide() ? PAGE_COLUMN_WIDTH.page : (props.maxWidth ?? 720));
   // Whether the display title is on screen: the nav bar names the page once it has scrolled away.
   const display = untracked(() => Boolean(props.display));
   const titleAway = signal(!display);
@@ -60,7 +58,7 @@ export function Page(props: {
   // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
   const withAside = untracked(() => props.aside !== undefined);
   return (
-    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
+    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column="page" frame={false}>
       <View class="flex-1 bg-background">
         {withAside ? <View class="flex-1 flex-row">{scroll}{props.aside}</View> : scroll}
         {props.overlay ?? null}
@@ -295,14 +293,14 @@ export function Row(props: RowProps) {
         disabled={props.disabled}
         onPress={props.onPress}
         onLongPress={props.onLongPress}
-        class="active:bg-accent disabled:opacity-40"
+        class="hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
       >
         {body}
       </View>
     );
   }
   return (
-    <Button testID={props.testID} disabled={props.disabled} selected={props.selected} accessibilityLabel={props.accessibilityLabel} role={props.role} onPress={props.onPress} class="active:bg-accent disabled:opacity-40">
+    <Button testID={props.testID} disabled={props.disabled} selected={props.selected} accessibilityLabel={props.accessibilityLabel} role={props.role} onPress={props.onPress} class="hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
       {body}
     </Button>
   );

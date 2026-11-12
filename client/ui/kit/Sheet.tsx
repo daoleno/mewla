@@ -1,6 +1,7 @@
 import { Text, View } from "nsh";
 import type { JSX } from "nsh";
 import { AppSheet } from "../shell/AppSheet";
+import { wide } from "../shell/layout";
 
 /**
  * The Soft sheet (soft-final/SPEC.md §11 Sheet): rises from the bottom on the sheet
@@ -10,7 +11,7 @@ import { AppSheet } from "../shell/AppSheet";
  *
  * One sheet can show several pages (Brain's menu, then "Brain host" or "Model"): the
  * owner swaps `children` and `title` while it stays open. Built on AppSheet, so a
- * switch of computer closes it and the desktop shows it as a centred card.
+ * switch of computer closes it and on wide it is a centred dialog without the grabber.
  */
 export function Sheet(props: {
   open: () => boolean;
@@ -27,10 +28,13 @@ export function Sheet(props: {
   return (
     <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe
       popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet shadow-float" backdropClass="bg-scrim">
-      <View testID={props.testID} class="pb-8">
-        <View class="items-center pt-2">
-          <View class="h-[5px] w-[36px] rounded-full bg-track" />
-        </View>
+      <View testID={props.testID} class={wide() ? "pb-6 pt-3" : "pb-8"}>
+        {/* A dialog on wide has no grabber (SPEC §14.2). */}
+        {wide() ? null : (
+          <View class="items-center pt-2">
+            <View class="h-[5px] w-[36px] rounded-full bg-track" />
+          </View>
+        )}
         {title() || props.leading || props.trailing ? (
           <View class="min-h-[44px] flex-row items-center gap-2 px-4 pb-[19px] pt-[11px]">
             {props.leading ?? null}

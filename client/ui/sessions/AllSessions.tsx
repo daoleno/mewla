@@ -6,7 +6,6 @@ import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { workLinkOf } from "./workLinks";
-import { desktop } from "../shell/Shell";
 import { openPage } from "../shell/nav";
 import { newSessionOpen } from "../screens/NewSession";
 import { haptic } from "../shell/haptics";
@@ -158,8 +157,8 @@ function SessionRow(props: { worker: () => Worker; first: () => boolean; last: (
         toggleSelected(props.worker());
       }}
       onContextMenu={() => {
-        // The desktop layout: a right-click starts selecting, as a long press does on a phone (parity #28).
-        if (untracked(desktop) && !selecting() && online()) toggleSelected(props.worker());
+        // A right-click starts selecting, as a long press does on touch (parity #28, SPEC §14.4).
+        if (!selecting() && online()) toggleSelected(props.worker());
       }}
       class={`mx-4 min-h-[68px] flex-row items-center gap-3.5 bg-card px-4 py-3 ${props.first() ? "rounded-t-(--radius-group)" : ""} ${props.last() ? "rounded-b-(--radius-group)" : ""} ${selecting() && !online() ? "opacity-50" : "active:bg-accent"}`}>
       {selecting() ? <Icon name={selected() ? "check-circle-fill" : "circle"} size={22} color={selected() ? "primary" : "muted-foreground"} /> : null}

@@ -32,6 +32,9 @@ describe("layout", () => {
     expect(tileBasis(320)).toBe("100%");
     expect(consumersWide(760)).toBe(true);
     expect(consumersWide(759)).toBe(false);
+    // The wide layout's 680 column: four across and the Procs column all the same.
+    expect(tileBasis(680, true)).toBe("23%");
+    expect(consumersWide(680, true)).toBe(true);
   });
 });
 

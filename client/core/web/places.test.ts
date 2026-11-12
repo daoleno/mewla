@@ -1,36 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import {
-  clampPanelWidth,
+  clampPaneWidth,
   documentTitle,
-  isDesktopLayout,
+  isWide,
   pageColumnWidth,
   placeOfPath,
   placePath,
-  sidebarKeyOf,
-  sidebarRows,
-  storedSidebarWidth,
+  showsListDetail,
+  stepPaneWidth,
+  storedPaneWidth,
   type WebPlace,
 } from "./places";
 
-describe("desktop layout gate", () => {
-  test("a non-phone window gets the desktop layout from 1024 pt; phones never do", () => {
-    expect(isDesktopLayout({ mobile: false, width: 1024 })).toBe(true);
-    expect(isDesktopLayout({ mobile: false, width: 1023 })).toBe(false);
-    expect(isDesktopLayout({ mobile: true, width: 1366 })).toBe(false);
-  });
-});
-
-describe("sidebar", () => {
-  test("the rows in order; Friends only where it is on", () => {
-    expect(sidebarRows({ friends: true }).map((row) => row.label)).toEqual(["Brain", "Sessions", "Calendar", "Extensions", "Screen", "Stats", "Resources", "Friends", "Settings"]);
-    expect(sidebarRows({ friends: false }).map((row) => row.key)).not.toContain("friends");
+describe("the wide gate (SPEC §14.6)", () => {
+  test("two panes from a 1024 pt window, whatever the device", () => {
+    expect(isWide(1024)).toBe(true);
+    expect(isWide(1023)).toBe(false);
+    expect(isWide(1366)).toBe(true);
   });
 
-  test("a Session selects Sessions, a Work file Brain, the computer page Settings", () => {
-    expect(sidebarKeyOf({ key: "session", workerId: "w1" })).toBe("sessions");
-    expect(sidebarKeyOf({ key: "work", page: { name: "workFile", id: "w1" } })).toBe("brain");
-    expect(sidebarKeyOf({ key: "computer" })).toBe("settings");
-    expect(sidebarKeyOf({ key: "calendar" })).toBe("calendar");
+  test("list and detail side by side from an 880 pt right pane, on wide only", () => {
+    expect(showsListDetail({ wide: true, paneWidth: 880 })).toBe(true);
+    expect(showsListDetail({ wide: true, paneWidth: 879 })).toBe(false);
+    // A phone held sideways has the room but not the two panes: the item pushes.
+    expect(showsListDetail({ wide: false, paneWidth: 932 })).toBe(false);
   });
 });
 
@@ -102,27 +95,35 @@ describe("tab titles", () => {
   test("the place's name, or the page's own, then Mewla", () => {
     expect(documentTitle({ key: "calendar" })).toBe("Calendar · Mewla");
     expect(documentTitle({ key: "extensions" })).toBe("Extensions · Mewla");
+    expect(documentTitle({ key: "sessions" })).toBe("All Sessions · Mewla");
+    expect(documentTitle({ key: "computer" })).toBe("Computer · Mewla");
     expect(documentTitle({ key: "session", workerId: "w1" })).toBe("Session · Mewla");
     expect(documentTitle({ key: "session", workerId: "w1" }, "  api server ")).toBe("api server · Mewla");
     expect(documentTitle(null)).toBe("Mewla");
   });
 });
 
-describe("sidebar width", () => {
-  test("clamped to 216–400, the default without a saved number", () => {
-    expect(storedSidebarWidth(null)).toBe(264);
-    expect(storedSidebarWidth("")).toBe(264);
-    expect(storedSidebarWidth("wide")).toBe(264);
-    expect(storedSidebarWidth("300.4")).toBe(300);
-    expect(storedSidebarWidth("80")).toBe(216);
-    expect(storedSidebarWidth("9000")).toBe(400);
-    expect(clampPanelWidth(Number.NaN, 216, 400)).toBe(216);
+describe("the left pane's width (SPEC §14.1)", () => {
+  test("clamped to 280–420, 320 without a saved number", () => {
+    expect(storedPaneWidth(null)).toBe(320);
+    expect(storedPaneWidth("")).toBe(320);
+    expect(storedPaneWidth("wide")).toBe(320);
+    expect(storedPaneWidth("300.4")).toBe(300);
+    expect(storedPaneWidth("80")).toBe(280);
+    expect(storedPaneWidth("9000")).toBe(420);
+    expect(clampPaneWidth(Number.NaN)).toBe(320);
   });
 
-  test("page columns per DESIGN.md", () => {
-    expect(pageColumnWidth("page")).toBe(760);
-    expect(pageColumnWidth("wide")).toBe(1200);
-    expect(pageColumnWidth("reading")).toBe(820);
+  test("← and → step 16 and stop at the ends", () => {
+    expect(stepPaneWidth(320, 1)).toBe(336);
+    expect(stepPaneWidth(320, -1)).toBe(304);
+    expect(stepPaneWidth(412, 1)).toBe(420);
+    expect(stepPaneWidth(290, -1)).toBe(280);
+  });
+
+  test("reading columns: list pages 680, threads 760, the rest the whole pane", () => {
+    expect(pageColumnWidth("page")).toBe(680);
+    expect(pageColumnWidth("reading")).toBe(760);
     expect(pageColumnWidth("full")).toBeNull();
   });
 });

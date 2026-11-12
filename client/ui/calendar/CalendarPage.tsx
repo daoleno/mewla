@@ -150,7 +150,7 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
     else props.nav.push({ name: "item", id: item.id });
   };
   return (
-    <NavPage title="Calendar" testID="calendar-page" column="wide"
+    <NavPage title="Calendar" testID="calendar-page"
       headerLeft={<Button testID="toggle-month" accessibilityLabel={showMonth() ? "Hide month" : "Show month"} onPress={toggleMonth}><Text class="text-base text-primary">{showMonth() ? "Hide month" : "Show month"}</Text></Button>}
       headerRight={<Button testID="add-item" accessibilityLabel="Add calendar item" disabled={!calendar()} onPress={() => openEditor(null)}><Text class={calendar() ? "text-2xl text-primary" : "text-2xl text-muted-foreground"}>+</Text></Button>}>
       <View class="flex-1 bg-background">

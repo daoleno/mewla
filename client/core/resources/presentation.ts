@@ -14,13 +14,14 @@ import {
 /** How Resources lays out and words what the telemetry says: tiles, PSI, consumer rows and what can be copied from them. */
 
 /** Tiles four across from 1040 points, one column below 340, else two across. */
-export function tileBasis(width: number): `${number}%` {
-  return width >= 1040 ? "23%" : width < 340 ? "100%" : "48%";
+export function tileBasis(width: number, wide = false): `${number}%` {
+  // On wide the page has the 680 column and still four tiles across (SPEC §15 Metrics).
+  return wide || width >= 1040 ? "23%" : width < 340 ? "100%" : "48%";
 }
 
-/** The consumers table shows the process count as a column from 760 points. */
-export function consumersWide(width: number): boolean {
-  return width >= 760;
+/** The consumers table shows the process count as a column from 760 points, and on wide in its 680 column. */
+export function consumersWide(width: number, wide = false): boolean {
+  return wide || width >= 760;
 }
 
 /** Memory in use: total less available when both are known, else what the computer called used. */

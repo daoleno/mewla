@@ -1,13 +1,15 @@
-import { computed, effect, host, platform, signal, Storage, untracked, View, windowSize } from "nsh";
+import { computed, effect, host, platform, signal, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
-import { createNavStack, NavStack, ResizablePanel, ResizablePanelGroup, type NavStackState } from "nsh/base";
+import { createNavStack, NavStack, type NavStackState } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { PageStack } from "./NavPage";
 import { reuseRoutes, type PoppedPage } from "../../core/web/history";
-import { clampPanelWidth, isDesktopLayout, SIDEBAR_WIDTH, SIDEBAR_WIDTH_KEY, sidebarKeyOf, storedSidebarWidth, type WebPlace } from "../../core/web/places";
+import type { WebPlace } from "../../core/web/places";
 import { placeOfRoutes, routesOfPlace } from "./routePlaces";
 import { DesktopOverlays } from "./desktop/Overlays";
-import { Sidebar } from "./desktop/Sidebar";
+import { LeftPane, PaneHandle } from "./LeftPane";
+import { loadPaneWidth, paneWidth, rightPaneWidth, wide } from "./layout";
+import { MenuHost } from "../kit/Menu";
 import { syncWebLocation, type PageSnapshot } from "./webLocation";
 import { Onboarding, PairPage } from "../screens/Onboarding";
 import { MorePageView } from "../more/Pages";
@@ -31,16 +33,11 @@ import { settingsLinkRoutes } from "../../core/settings/settingsLink";
 import { setOpenExtensions } from "../more/extensions/plugins";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { workLinkOf } from "../sessions/workLinks";
-import { goHome, isTop, nav, openPage, openSession, pageNav } from "./nav";
+import { goHome, isTop, nav, openPage, openSession, pageNav, trayOpen } from "./nav";
 import type { Route } from "./routes";
 
 /** What lies below the stack (the system bar): the keyboard covers it before it reaches a page. */
 export const belowSections = signal(0);
-/**
- * The desktop layout (a browser or a desktop window at least 1024 pt wide): the sidebar beside
- * the stack (client/DESIGN.md "Desktop web"). Below it, and on phones, the stack alone.
- */
-export const desktop = computed(() => isDesktopLayout({ mobile, width: windowSize().width }));
 
 // A computer switch: sheets close first (they listen to the switch themselves), then the stack
 // returns to the new computer's home (SPEC §3.8).
@@ -69,14 +66,13 @@ export function openScreenPage(worker: string | null) {
   openPage({ name: "computer" }, screenRoute(worker));
 }
 
-/** Goes to a place a URL, the sidebar, the palette or `G` then a letter names. */
+/** Goes to a place a URL, the palette or `G` then a letter names. */
 export function openPlace(place: WebPlace) {
   nav.setRoutes([{ name: "home" }, ...routesOfPlace(place)]);
 }
 
-/** Where the person is: what the URL, the tab title and the sidebar's selected row follow. */
+/** Where the person is: what the URL and the tab title follow. */
 export const currentPlace = computed<WebPlace>(() => placeOfRoutes(nav.routes()));
-export const selectedPlace = computed(() => sidebarKeyOf(currentPlace()));
 
 /** A history entry: the stack. */
 function snapshot(): PageSnapshot {
@@ -89,14 +85,6 @@ function restore(page: PoppedPage<PageSnapshot>) {
   const routes = page.snapshot.routes as Route[];
   if (!routes.length || routes[0]?.name !== "home") return goHome();
   nav.setRoutes(reuseRoutes(untracked(nav.routes) as unknown[], routes) as Route[]);
-}
-
-/** The sidebar's width: dragged, saved, restored at the next start. */
-export const sidebarWidth = signal<number>(SIDEBAR_WIDTH.initial);
-function saveSidebarWidth(size: number) {
-  const width = clampPanelWidth(size, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max);
-  sidebarWidth.set(width);
-  void Storage.setItem(SIDEBAR_WIDTH_KEY, String(width)).catch(() => {});
 }
 
 /** The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen or the Phone page. */
@@ -159,11 +147,11 @@ const pageTitle = computed((): string | null => {
   return sessionRowModel(worker, { workTitle: link?.workTitle, calendarLabel: link?.calendarLabel }).title || null;
 });
 
-/** What every layout lays over the stack. */
+/** What every layout lays over the stack. The floating screen stays in the right pane, at its bottom right on wide. */
 function Overlays(props: { bottomInset?: () => number }) {
   return (
     <>
-      <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} bottomInset={props.bottomInset} />
+      <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} bottomInset={props.bottomInset} leftInset={() => (wide() ? paneWidth() : 0)} />
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? nav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
       <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <EnrollmentApproval />
@@ -173,34 +161,32 @@ function Overlays(props: { bottomInset?: () => number }) {
 }
 
 /**
- * A browser or a desktop window: from 1024 pt the sidebar sits beside the stack (resizable, its
- * width saved); below it the stack alone, as on a phone.
+ * The app's frame (soft-final SPEC §14): one tree at every width. From a 1024 pt window, on any
+ * device, the tray is the left pane beside the one stack; below it the stack alone, as on a phone.
+ * Crossing 1024 only adds or removes the pane: the stack, its pages, their scroll and what is typed
+ * stay as they were.
  */
-function WideShell() {
-  void Storage.getItem(SIDEBAR_WIDTH_KEY).then((raw) => sidebarWidth.set(storedSidebarWidth(raw))).catch(() => {});
-  syncWebLocation({ place: currentPlace, snapshot, pageTitle, serverId: () => current()?.id ?? null, restore });
-  return (
-    <View class="flex-1 bg-background">
-      <ResizablePanelGroup class="flex-1" handleClass="bg-border group-hover:bg-ring group-active:bg-ring" handleAccessibilityLabel="Resize sidebar">
-        <ResizablePanel visible={desktop()} fixed size={sidebarWidth()} minSize={SIDEBAR_WIDTH.min} maxSize={SIDEBAR_WIDTH.max} onResize={({ size }) => saveSidebarWidth(size)}>
-          <Sidebar />
-        </ResizablePanel>
-        <ResizablePanel minSize={320}>
-          <View class="flex-1"><Stack /></View>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-      <Overlays />
-      <DesktopOverlays />
-    </View>
-  );
-}
-
 export function Shell() {
-  if (!mobile) return <WideShell />;
+  loadPaneWidth();
+  // On the desktops and the web every place has a URL and the tab a title (SPEC §14.5).
+  if (!mobile) syncWebLocation({ place: currentPlace, snapshot, pageTitle, serverId: () => current()?.id ?? null, restore });
+  // Narrow to wide: an open tray becomes the left pane (§14.6), and the phone's overlay does not come back when narrowed again.
+  effect(() => {
+    if (wide()) untracked(() => trayOpen() && trayOpen.set(false));
+  });
   return (
     <View class="flex-1 bg-background">
-      <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}><Stack /></View>
+      <View class="flex-1 flex-row">
+        {wide() ? <LeftPane /> : null}
+        {wide() ? <PaneHandle /> : null}
+        <View testID="right-pane" class="flex-1" onLayout={({ bounds }) => {
+          rightPaneWidth.set(bounds.size.width);
+          belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height));
+        }}><Stack /></View>
+      </View>
       <Overlays bottomInset={belowSections} />
+      <DesktopOverlays />
+      <MenuHost />
     </View>
   );
 }
