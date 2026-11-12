@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mewla · Naps all day. Ships all night.</title>
-<meta name="description" content="Mewla runs your coding agents on your own computer. Brain leads them, and your phone hears from it only when something needs you. Open source, for iPhone, Android and the web.">
+<meta name="description" content="Tell Brain the goal. It leads a team of agents on your own computer, and calls you only when it matters. Open source, for iPhone, Android and the web.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#18191C" media="(prefers-color-scheme: dark)">
@@ -13,7 +13,7 @@
 <link rel="icon" href="favicon-32.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta property="og:title" content="Mewla · Naps all day. Ships all night.">
-<meta property="og:description" content="Your coding agents work on your own computer. Brain leads them, and calls you only when something needs you.">
+<meta property="og:description" content="Tell Brain the goal. It leads a team of agents on your own computer, and calls you only when it matters.">
 <meta property="og:url" content="https://mewla.ai/">
 <meta property="og:image" content="https://mewla.ai/og-card.png">
 <meta property="og:image:width" content="1200">
@@ -85,8 +85,8 @@
 <section class="hero" id="top">
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <h1 class="display"><span class="quiet"><span>Naps</span> <span>all day.</span></span> <span><span>Ships</span> <span>all night.</span></span></h1>
-      <p class="lede">Your coding agents work on your own computer. Brain leads them, and calls you only when something needs you.</p>
+      <h1><span class="quiet"><span>Naps</span> <span>all day.</span></span> <span><span>Ships</span> <span>all night.</span></span></h1>
+      <p class="lede">Tell Brain the goal. It leads a team of agents on your own computer, and calls you only when it matters.</p>
       <div class="ctas">
         <a class="btn ink" href="#get">Get Mewla</a>
         <a class="btn ghost" href="docs/">Read the docs</a>
@@ -467,9 +467,10 @@
           <button type="button" role="tab" class="on" aria-selected="true" data-os="unix">macOS · Linux</button>
           <button type="button" role="tab" aria-selected="false" data-os="win">Windows</button>
         </div>
-        <div class="cmd-card" data-os-cmd="unix"><code>curl -fsSL https://mewla.ai/install.sh | sh</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
+        <div class="cmd-card" data-os-cmd="unix" data-link="installScript"><code data-cmd="curl -fsSL {} | sh">curl -fsSL https://mewla.ai/install.sh | sh</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
         <div class="cmd-card" data-os-cmd="win" hidden><code>irm https://mewla.ai/install.ps1 | iex</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
-        <p class="small">Checksum-verified. No admin rights, no telemetry.</p>
+        <div data-os-note="unix"><p class="small">Checksum-verified · no sudo · no telemetry</p></div>
+        <p class="small" data-os-note="win" hidden>Checksum-verified · no administrator · no telemetry</p>
         </div>
       </li>
       <li class="step">
@@ -484,6 +485,7 @@
   4. Decide later
 
 This computer's address: <span class="b">https://quiet-otter-3f9a.m.mewla.ai</span></pre>
+        <p class="small">Pick 1 and sign in with GitHub. <a href="docs/connect-and-pair/#choose-an-address">Other ways to connect</a></p>
         </div>
       </li>
       <li class="step">

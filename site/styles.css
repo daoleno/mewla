@@ -81,7 +81,7 @@ a.btn:hover{opacity:.88}
 /* ---------- hero ---------- */
 .hero{padding:24px 0 72px}
 .hero-grid{display:flex;flex-direction:column;gap:32px}
-.hero h1{font-size:44px;font-size:clamp(38px,12.6vw,72px)}
+.hero h1{font-family:var(--display);font-weight:800;letter-spacing:-.006em;line-height:1;font-size:44px;font-size:clamp(38px,12.6vw,72px)}
 .hero h1 .quiet{color:var(--soft)}
 .hero h1>span{display:block}
 .lede{margin-top:16px;font-size:19px;line-height:27px;color:var(--soft);max-width:34em}

@@ -8,6 +8,12 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- the bar, copy buttons, the install tabs --------------------------------
+// Where the install script lives, in one place; the app's first-run copy is
+// checked against this page (client/core/onboarding.test.ts).
+const LINKS = { installScript: 'https://mewla.ai/install.sh' };
+for (const node of $$('[data-link]')) {
+  for (const code of $$('[data-cmd]', node)) code.textContent = code.dataset.cmd.replace('{}', LINKS[node.dataset.link]);
+}
 const bar = $('.bar');
 const onScroll = () => bar.classList.toggle('scrolled', scrollY > 8);
 addEventListener('scroll', onScroll, { passive: true });
@@ -34,7 +40,10 @@ function tabs(buttons, key, pick) {
     });
   }
 }
-tabs($$('[data-os]'), 'os', (os) => { for (const c of $$('[data-os-cmd]')) c.hidden = c.dataset.osCmd !== os; });
+tabs($$('[data-os]'), 'os', (os) => {
+  for (const c of $$('[data-os-cmd]')) c.hidden = c.dataset.osCmd !== os;
+  for (const c of $$('[data-os-note]')) c.hidden = c.dataset.osNote !== os;
+});
 if (/Windows/.test(navigator.userAgent)) $('[data-os="win"]')?.click();
 
 // ---- the cat: Brain's state, drawn by Dango's clips (SPEC 5) -----------------
