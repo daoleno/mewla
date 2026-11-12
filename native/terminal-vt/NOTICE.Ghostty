@@ -5,11 +5,11 @@ Full redistribution notice (also bundled in the Android and iOS apps):
   client/ui/more/settings/licenses/texts/Ghostty-MIT.txt
 
 Upstream: https://github.com/ghostty-org/ghostty
-Release: libghostty-vt 1.0.0 (tag vt-1.0.0), built from the signed release
-tarballs at https://release.files.ghostty.org/libghostty-vt/1.0.0/
+Release: libghostty-vt 1.0.1 (tag vt-1.0.1), built from the signed release
+tarballs at https://release.files.ghostty.org/libghostty-vt/1.0.1/
 Pin + ABI contract: native.lock.json
 
-Third-party code compiled into libghostty-vt 1.0.0 (from deps/libghostty-vt-third-party.json
+Third-party code compiled into libghostty-vt 1.0.1 (from deps/libghostty-vt-third-party.json
 in the release tarball; every entry is permissively licensed, none is copyleft):
 
   highway          1.2.0           Apache-2.0 OR BSD-3-Clause

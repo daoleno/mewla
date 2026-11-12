@@ -1,4 +1,5 @@
 import { describe, expect, open, test, type App } from "nsh/test";
+import theme from "./theme.json";
 
 const secure = new Map<string, string>();
 const host = {
@@ -114,6 +115,7 @@ describe("Dark", () => {
     await app.waitFor("id:pair-another");
     await app.waitFor("text:Dark");
     expect(blackTexts(app)).toEqual([]);
-    expect(app.spanStyle("text:Dark").color).toBe("#f4f0eaff"); // the theme's dark ink
+    // The theme's dark ink, from ui/theme.json.
+    expect(app.spanStyle("text:Dark").color).toBe(`${theme.cssVars.dark.foreground.toLowerCase()}ff`);
   }, 25_000);
 });
