@@ -8,7 +8,14 @@ that hold libghostty-vt. The web runs the same libghostty-vt, with the phones'
 packer and glyphs (`client/native/terminal`), as WebAssembly in a web view page
 that draws on a canvas (`client/ui/terminal/web`, `client/ui/web/terminal`;
 `scripts/build-libghostty-web.sh` builds `mewla-vt.wasm` from the release pinned in
-`native/terminal-vt/native.lock.json`). All three draw the packer's runs on a grid of
+`native/terminal-vt/native.lock.json`). The page is NSH's web view, a srcdoc frame
+sandboxed to an opaque origin that inherits the app's Content-Security-Policy: its
+script, faces and VT come from the app's `/terminal/`, read cross-origin (the daemon
+marks those files `Access-Control-Allow-Origin: *`), and the policy names the app's
+own origin beside `'self'`, because WebKit matches an inherited `'self'` against
+the frame's opaque origin and refuses them otherwise. `scripts/terminal-corpus/web.ts`
+renders the corpus through that page in Chromium, Firefox or WebKit (`ENGINE`) at a
+real device scale. All three draw the packer's runs on a grid of
 whole device pixels and draw box, block, braille and Powerline glyphs themselves, so
 rows of lines and blocks meet. PTY output and input use the canonical server's
 authenticated WebSocket connection; the view has no connection or credentials of
