@@ -1,16 +1,19 @@
 name: Client (NSH)
 
 # The NSH client, which replaced the Expo app in one cutover release (client/README.md).
-# Until it is stable it runs on pull requests and manual dispatch only, never on
-# a push to main, so it cannot turn main red; prove a change on a branch with
-# `gh workflow run client.yml --ref <branch> -f gate=false`. A run builds both hosts: the Android preview APK
+# A release gate, not a development step (user, 2026-11-12): it runs on a push to main that
+# touches the client (the merge, which also saves the native caches ci.yml restores) and by
+# hand, never on each push to a branch or PR. Before the cutover merge, run it once by hand on
+# the final commit with the upgrade gate: `gh workflow run client.yml --ref <branch>`. Device
+# rounds during development build locally. A run builds both hosts: the Android preview APK
 # (com.daoleno.mewla.preview, an artifact to sideload; on dispatch signed with the release key so
 # every Preview installs over the last one, client/scripts/preview-signer.sh) and the iOS
 # Simulator app with its upgrade tests. The fast checks (core tests, nsh check,
 # nsh test) run in ci.yml's client job. The upgrade gate runs on manual dispatch:
 # the released Expo APK, then the release-signed NSH app installed over it.
 on:
-  pull_request:
+  push:
+    branches: [main]
     paths: ["client/**", ".github/workflows/client.yml"]
   workflow_dispatch:
     inputs:

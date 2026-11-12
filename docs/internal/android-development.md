@@ -182,7 +182,7 @@ Each release has versioned notes under `docs/releases/`; the release page includ
 
 ### CI (GitHub Actions)
 
-Signed arm64 APK and daemon binaries are built in parallel when a reviewed annotated stable or beta tag is pushed by [`.github/workflows/release-artifacts.yml`](../../.github/workflows/release-artifacts.yml). The workflow publishes the matching GitHub Release with the verified daemon archives first, then attaches the signed APK and the complete signed manifest when the Android build is verified. Stable tags become normal Latest releases; beta tags remain prereleases. Manual dispatch is build-only by default and requires an explicit reviewed boolean for publication recovery. Pull requests that touch `client/` build the preview APK in `client.yml`; `native-cache.yml` builds the release task graph on main. Required secret **names** and release preparation details: [ci-release.md](../ci-release.md).
+Signed arm64 APK and daemon binaries are built in parallel when a reviewed annotated stable or beta tag is pushed by [`.github/workflows/release-artifacts.yml`](../../.github/workflows/release-artifacts.yml). The workflow publishes the matching GitHub Release with the verified daemon archives first, then attaches the signed APK and the complete signed manifest when the Android build is verified. Stable tags become normal Latest releases; beta tags remain prereleases. Manual dispatch is build-only by default and requires an explicit reviewed boolean for publication recovery. A push to `main` that touches `client/`, or a manual dispatch, builds the preview APK in `client.yml`; `native-cache.yml` builds the release task graph on main. Required secret **names** and release preparation details: [ci-release.md](../ci-release.md).
 
 ## Related docs
 
