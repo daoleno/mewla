@@ -179,3 +179,15 @@ export function sealAction(card: RequestCard, optionLabel: string, deny: boolean
 export function sealedInThread(sealed: SealedRequest, thread: RequestThread): boolean {
   return thread.brain ? sealed.brain : sealed.workerId === thread.workerId;
 }
+
+/**
+ * An option row's words (SPEC §11 Request card, "A row"): the label is the text up to the first " · ", the rest
+ * (else the option's description) the soft line under it. The agent's own numbering ("2. ") and a trailing "›"
+ * are its terminal's, not the option's.
+ */
+export function optionParts(label: string, description?: string): { label: string; detail: string } {
+  const bare = label.replace(/^\s*\d+[.)]\s+/, "").replace(/\s*›\s*$/, "").trim();
+  const at = bare.indexOf(" · ");
+  if (at < 0) return { label: bare, detail: description?.trim() ?? "" };
+  return { label: bare.slice(0, at).trim(), detail: bare.slice(at + 3).trim() || description?.trim() || "" };
+}

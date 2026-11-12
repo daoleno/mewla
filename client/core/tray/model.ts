@@ -364,8 +364,12 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now
     key: `work:${slip.workId}`,
     title: slip.title,
     line,
-    // Running: how long; otherwise when it last changed ("11:20" for a result, as a Session's row).
-    end: running ? elapsedShort(since, now) : slip.updatedAt ? listTime(Date.parse(slip.updatedAt), new Date(now)) : "",
+    // Running: how long; queued or waiting: that word, never a date (§1.2, §11 Tray row end); a result: when it
+    // came back ("11:20", as a Session's row).
+    end: running ? elapsedShort(since, now)
+      : slip.group === "queued" ? "Queued"
+      : slip.group === "waiting" ? "Waiting"
+      : slip.updatedAt ? listTime(Date.parse(slip.updatedAt), new Date(now)) : "",
     live: running || undefined,
     // A Work its one Worker runs opens that Session (its logo); with none, Work detail (Brain's mark).
     tile: model ? { kind: "agent", agent: model.kind, flavor: model.flavor } : { kind: "brain" },
@@ -473,7 +477,7 @@ export function trayModel(input: TrayInput): TrayModel {
   const state = stateOf(input, needs.length, runningCount);
   return {
     state,
-    title: headlineOf(state, running.length, needs.length),
+    title: headlineOf(state, runningCount, needs.length),
     notice: noticeOf(input),
     runningCount,
     dimmed: input.hasServer && (input.pairAgain || input.connection !== "connected"),

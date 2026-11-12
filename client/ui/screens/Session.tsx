@@ -7,7 +7,8 @@ import { AppSheet } from "../shell/AppSheet";
 import { NavPage } from "../shell/NavPage";
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
-import { createChatTimeline } from "../../core/conversation/timeline";
+import { createChatTimeline, isWorkingRow } from "../../core/conversation/timeline";
+import { workingLineShown, workingSince } from "../../core/sessions/activity";
 import { rewindMessage, stopTurn } from "../../core/conversation/turn";
 import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
 import { resolveBlockedTerminal } from "../../core/session/blockedTerminalSurface";
@@ -126,6 +127,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const items = computed(() => timeline(thread(), { onPendingAction: (id, action) => chat.actOnFailed(id, action) }));
   const durableHere = durableAnswered(items);
   const activity = computed(() => thread().conversation?.activity);
+  // The "Working" line only while the agent works on a turn: not over an open request, not once it ended (§11).
+  const shownItems = computed(() => workingLineShown(worker(), activity()?.status === "running") ? items() : items().filter((item) => !isWorkingRow(item)));
   const editor = createMessageEdit({
     text,
     brain: false,
@@ -136,7 +139,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const handlers = {
     onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
       void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
-    workingSince: () => activity()?.started_at,
+    workingSince: () => workingSince(worker(), activity()?.started_at),
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),
     loadImage: (path: string) => chatImage(transport, server.id, untracked(worker)?.cwd, path),
@@ -536,7 +539,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
-              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
+              <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
                 foot={{
                   shown: () => requests().length > 0 || sealedHere().length > 0,
                   render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,

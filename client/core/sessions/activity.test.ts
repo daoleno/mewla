@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { elapsedShort, promptTitle, sessionActivity } from "./activity";
+import { elapsedShort, promptTitle, sessionActivity, workingLineShown, workingSince } from "./activity";
 import type { Worker } from "./workers";
 
 const FOOTER = ["⏸ manual mode on · ? for shortcuts"];
@@ -53,4 +53,20 @@ test("a prompt's title skips the agent's tip and boilerplate lines", () => {
 test("a wrapped Tip is skipped whole in a prompt's title", () => {
   const request = 'Tip: auto mode handles these prompts for you — choose "switch to auto\nmode" below\nFetch HTTP headers from example.edu\ncurl -sI https://example.edu';
   expect(promptTitle({ id: "p", kind: "permission", request } as never)).toBe("Fetch HTTP headers from example.edu");
+});
+
+describe("the Working line (SPEC §11)", () => {
+  const prompt = { id: "p", kind: "permission", provider: "claude", title: "Bash command", options: [] } as never;
+  test("shows while the agent works, not while a request is open, nor once it is blocked or ended", () => {
+    expect(workingLineShown({ status: "running" }, true)).toBe(true);
+    expect(workingLineShown({ status: "running", prompt }, true)).toBe(false);
+    expect(workingLineShown({ status: "running", approvals: [{ id: "a", tool: "Bash", options: [] }] }, true)).toBe(false);
+    expect(workingLineShown({ status: "blocked" }, true)).toBe(false);
+    expect(workingLineShown({ status: "done" }, true)).toBe(false);
+    expect(workingLineShown({ status: "running" }, false)).toBe(false);
+  });
+  test("counts from the daemon's running_since when it has one", () => {
+    expect(workingSince({ running_since: Date.parse("2026-11-12T20:47:07Z") }, "2026-11-12T18:00:00Z")).toBe("2026-11-12T20:47:07.000Z");
+    expect(workingSince({}, "2026-11-12T18:00:00Z")).toBe("2026-11-12T18:00:00Z");
+  });
 });

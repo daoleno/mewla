@@ -14,7 +14,7 @@ import {
 import type { CodexConversationEvent } from "../../core/conversation/conversation";
 import type { TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
 import {
-  openCardKey, promptParts, requestCardsOf, sealAction, sealedInThread, type RequestCard as Card, type RequestThread, type SealedRequest,
+  openCardKey, optionParts, promptParts, requestCardsOf, sealAction, sealedInThread, type RequestCard as Card, type RequestThread, type SealedRequest,
 } from "../../core/timeline/requestCards";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
@@ -82,6 +82,17 @@ function TopLine(props: { card: () => Card; onSource?: (card: Card) => void }) {
   );
 }
 
+/** An option row's words (SPEC §11 Request card, "A row"): the label 17/24 up to two lines, the rest one soft 15/20 line. */
+function OptionWords(props: { label: string; description?: string }) {
+  const parts = () => optionParts(props.label, props.description);
+  return (
+    <View class="min-w-0 flex-1 gap-0.5">
+      <Text class="text-body line-clamp-2">{parts().label}</Text>
+      {parts().detail ? <Text class="text-sub text-muted-foreground line-clamp-1">{parts().detail}</Text> : null}
+    </View>
+  );
+}
+
 /** A question: one step per question (54 pt rows with a ring), then the review and Submit. Made once per card key. */
 function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: () => boolean; submit: (answers: ChoiceAnswer[]) => Promise<void>; onDone: (answer: string) => void; onGone: () => void }) {
   const choice = props.choice;
@@ -121,10 +132,7 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
           {question.options.map((option, o) => (
             <Button testID={`choice-option-${o}`} disabled={!props.connected()} onPress={() => pick(q.index, o)}
               class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent disabled:opacity-40">
-              <View class="min-w-0 flex-1">
-                <Text class="text-body">{option.label}</Text>
-                {option.description ? <Text class="text-sub text-muted-foreground">{option.description}</Text> : null}
-              </View>
+              <OptionWords label={option.label} description={option.description} />
               <View class={answer().selected.includes(o) ? "size-[22px] items-center justify-center rounded-full bg-primary" : "size-[22px] rounded-full border-2 border-faint"}>
                 {answer().selected.includes(o) ? <Icon name="check" size={14} tone="canvas" /> : null}
               </View>
@@ -242,10 +250,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
           {prompt.options.map((option) => (
             <Button testID={`prompt-option-${option.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(option)}
               class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent disabled:opacity-40">
-              <View class="min-w-0 flex-1">
-                <Text class="text-body">{sending() === option.id ? "Sending…" : option.label}</Text>
-                {option.description ? <Text class="text-sub text-muted-foreground">{option.description}</Text> : null}
-              </View>
+              <OptionWords label={sending() === option.id ? "Sending…" : option.label} description={option.description} />
               <View class="size-[22px] rounded-full border-2 border-faint" />
             </Button>
           ))}
