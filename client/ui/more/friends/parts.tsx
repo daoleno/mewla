@@ -30,7 +30,7 @@ export function Avatar(props: { author: Pick<FriendsAuthor, "agent_name" | "hand
   return (<>{portrait() ? (
     <Image src={portrait()!} style={{ width: size(), height: size(), borderRadius: size() * 0.28 }} accessibilityElementsHidden />
   ) : (
-    <View class="items-center justify-center rounded-full bg-secondary" style={{ width: size(), height: size() }} accessibilityElementsHidden>
+    <View class="items-center justify-center rounded-full bg-muted" style={{ width: size(), height: size() }} accessibilityElementsHidden>
       <Text class="font-semibold text-muted-foreground" style={{ fontSize: Math.round(size() * 0.36) }}>{initials(props.author)}</Text>
     </View>
   )}</>);
@@ -39,8 +39,8 @@ export function Avatar(props: { author: Pick<FriendsAuthor, "agent_name" | "hand
 /** "Agent": the person posts as their agent. */
 export function AgentPill() {
   return (
-    <View class="rounded-full border border-border px-1.5 py-px">
-      <Text class="text-[11px] font-medium text-muted-foreground">Agent</Text>
+    <View class="rounded-full bg-muted px-2 py-0.5">
+      <Text class="text-caption font-semibold text-muted-foreground">Agent</Text>
     </View>
   );
 }
@@ -69,11 +69,11 @@ export function fail(reason: unknown, fallback = "That did not work"): void {
 export function FlashLine() {
   return (
     <>{flash() ? (
-    <View testID="friends-flash" role="alert" class="mx-4 mt-2 flex-row items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+    <View testID="friends-flash" role="alert" class="mx-4 mt-2 flex-row items-start gap-3 rounded-(--radius-group) bg-card px-4 py-3.5">
       <Icon name={flash()!.tone === "error" ? "alert-circle" : "check-circle"} size={18} tone={flash()!.tone === "error" ? "failed" : "ready"} />
       <View class="flex-1">
-        <Text class="text-sm font-medium">{flash()!.title}</Text>
-        <Text class="mt-0.5 text-sm text-muted-foreground">{flash()!.detail}</Text>
+        <Text class="text-sub font-semibold">{flash()!.title}</Text>
+        <Text class="mt-0.5 text-sub text-muted-foreground">{flash()!.detail}</Text>
       </View>
     </View>
   ) : null}</>
@@ -103,11 +103,21 @@ export function keyboardLift() {
 }
 
 /** A quiet icon button of a post's action row. */
-export function ActionButton(props: { icon: IconName; label: string; count?: number; on?: boolean; testID?: string; onPress: () => void }) {
+/**
+ * A post's action. `soft`: a 44 pt soft button with its count (SPEC §15 Feed: the reactions and Comments);
+ * else a quiet 44 pt icon (Bookmark, ⋯).
+ */
+export function ActionButton(props: { icon: IconName; label: string; count?: number; on?: boolean; soft?: boolean; testID?: string; onPress: () => void }) {
   return (
-    <Button testID={props.testID} accessibilityLabel={props.label} selected={props.on} onPress={props.onPress} class="min-h-[36px] flex-row items-center gap-1.5 pr-4 active:opacity-60">
+    <Button
+      testID={props.testID}
+      accessibilityLabel={props.label}
+      selected={props.on}
+      onPress={props.onPress}
+      class={props.soft ? `h-11 flex-row items-center gap-1.5 rounded-full px-4 active:opacity-70 ${props.on ? "bg-accent" : "bg-muted"}` : "size-11 items-center justify-center rounded-full active:bg-accent"}
+    >
       <Icon name={props.icon} size={20} tone={props.on ? "ink" : "soft"} />
-      {props.count !== undefined ? <Text class={props.on ? "text-sm" : "text-sm text-muted-foreground"} style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
+      {props.count !== undefined ? <Text class={props.on ? "text-sub font-semibold" : "text-sub text-muted-foreground"} style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
     </Button>
   );
 }
@@ -269,7 +279,7 @@ function PostVideo(props: { media: FriendsMedia; postId: string; owner: string; 
         </View>
         {props.media.duration_ms ? (
           <View class="absolute bottom-2 right-2 rounded-md bg-primary/70 px-1.5 py-0.5">
-            <Text class="text-xs text-primary-foreground">{label()}</Text>
+            <Text class="text-caption text-primary-foreground">{label()}</Text>
           </View>
         ) : null}
       </Button>
@@ -289,7 +299,7 @@ export function PostMedia(props: { media: readonly FriendsMedia[]; postId: strin
     />
   );
   return (
-    <View class="mt-2 overflow-hidden rounded-xl border border-border bg-secondary">
+    <View class="mt-3 overflow-hidden rounded-[14px] bg-muted">
       {first().kind === "video" ? (
         <PostVideo media={first()} postId={props.postId} owner={props.owner} active={props.active} />
       ) : mediaLayout(props.media.length) === "single" ? (
@@ -418,40 +428,44 @@ export function PostCard(props: { post: FriendsPost; now: number; nav: PageNav; 
   // A like replaces the post; its media (a video playing) stays as it is.
   const media = computed(() => props.post.media ?? [], { equals: (a, b) => a.length === b.length && a.every((m, i) => m.url === b[i].url) });
   return (
-    <View testID={`post-${props.post.id}`} class="flex-row gap-3 border-b border-border px-4 pb-1 pt-3">
-      <Button accessibilityLabel={`Open ${name()}'s profile`} onPress={() => props.nav.push({ name: "friends-person", id: props.post.author.id })} class="active:opacity-70">
-        <Avatar author={props.post.author} />
-      </Button>
-      <View class="min-w-0 flex-1">
-        <Button testID={`open-post-${props.post.id}`} accessibilityLabel={`Open post by ${name()}`} onPress={() => props.nav.push({ name: "friends-post", id: props.post.id })} class="active:opacity-70">
-          <View class="flex-row items-center gap-1.5">
-            <Text class="shrink text-base font-semibold line-clamp-1">{name()}</Text>
-            {props.post.author.agent_name ? <AgentPill /> : null}
-            <Text class="shrink text-sm text-muted-foreground line-clamp-1">{`@${props.post.author.handle} · ${relativeTime(props.post.created_at, props.now)}`}</Text>
-          </View>
-          <Text class="mt-1 text-base">{props.post.text}</Text>
+    // A surface card (SPEC §15 Feed): the face, who and when, ⋯; the text; its media; the reactions as soft buttons.
+    <View testID={`post-${props.post.id}`} class="mx-4 mt-3 rounded-(--radius-group) bg-card px-4 pb-3 pt-4">
+      <View class="flex-row items-center gap-3">
+        <Button accessibilityLabel={`Open ${name()}'s profile`} onPress={() => props.nav.push({ name: "friends-person", id: props.post.author.id })} class="active:opacity-70">
+          <Avatar author={props.post.author} size={36} />
         </Button>
-        {media().length ? ((list) => untracked(() => <PostMedia media={list} postId={props.post.id} owner={props.owner} active={props.active} />))(media()) : null}
-        <View class="mt-1 flex-row items-center">
-          <ActionButton icon="chat" label={`${props.post.comments} comments`} count={props.post.comments} onPress={() => props.nav.push({ name: "friends-post", id: props.post.id })} />
-          <ActionButton
-            testID={`like-${props.post.id}`}
-            icon={props.post.liked ? "heart-fill" : "heart"}
-            on={props.post.liked}
-            label={props.post.liked ? `Unlike, ${props.post.likes} likes` : `Like, ${props.post.likes} likes`}
-            count={props.post.likes}
-            onPress={() => void togglePost(props.post, "like", props.handlers)}
-          />
-          <ActionButton
-            testID={`bookmark-${props.post.id}`}
-            icon={props.post.bookmarked ? "bookmark-fill" : "bookmark"}
-            on={props.post.bookmarked}
-            label={props.post.bookmarked ? "Remove bookmark" : "Bookmark"}
-            onPress={() => void togglePost(props.post, "bookmark", props.handlers)}
-          />
-          <View class="flex-1" />
-          <ActionButton testID={`more-${props.post.id}`} icon="more-horizontal" label="More" onPress={() => void postMenu(props.post, props.handlers)} />
+        <View class="min-w-0 flex-1">
+          <View class="flex-row items-center gap-1.5">
+            <Text class="shrink text-sub font-semibold line-clamp-1">{name()}</Text>
+            {props.post.author.agent_name ? <AgentPill /> : null}
+          </View>
+          <Text class="text-caption text-muted-foreground line-clamp-1">{`@${props.post.author.handle} · ${relativeTime(props.post.created_at, props.now)}`}</Text>
         </View>
+        <ActionButton testID={`more-${props.post.id}`} icon="more-horizontal" label="More" onPress={() => void postMenu(props.post, props.handlers)} />
+      </View>
+      <Button testID={`open-post-${props.post.id}`} accessibilityLabel={`Open post by ${name()}`} onPress={() => props.nav.push({ name: "friends-post", id: props.post.id })} class="mt-2 active:opacity-70">
+        <Text class="text-body">{props.post.text}</Text>
+      </Button>
+      {media().length ? ((list) => untracked(() => <PostMedia media={list} postId={props.post.id} owner={props.owner} active={props.active} />))(media()) : null}
+      <View class="mt-3 flex-row items-center gap-2">
+        <ActionButton
+          soft
+          testID={`like-${props.post.id}`}
+          icon={props.post.liked ? "heart-fill" : "heart"}
+          on={props.post.liked}
+          label={props.post.liked ? `Unlike, ${props.post.likes} likes` : `Like, ${props.post.likes} likes`}
+          count={props.post.likes}
+          onPress={() => void togglePost(props.post, "like", props.handlers)}
+        />
+        <ActionButton soft icon="chat" label={`${props.post.comments} comments`} count={props.post.comments} onPress={() => props.nav.push({ name: "friends-post", id: props.post.id })} />
+        <View class="flex-1" />
+        <ActionButton
+          testID={`bookmark-${props.post.id}`}
+          icon={props.post.bookmarked ? "bookmark-fill" : "bookmark"}
+          on={props.post.bookmarked}
+          label={props.post.bookmarked ? "Remove bookmark" : "Bookmark"}
+          onPress={() => void togglePost(props.post, "bookmark", props.handlers)}
+        />
       </View>
     </View>
   );
@@ -547,6 +561,7 @@ export function PostList(props: {
           icon={error() ? "cloud-offline" : (props.emptyIcon ?? "people")}
         />
       )}
+      contentClass="pb-6"
       footer={() => (loadingMore() ? <View class="items-center p-4"><Spinner /></View> : null)}
       loadMoreThreshold={0.6}
       onLoadMore={() => {

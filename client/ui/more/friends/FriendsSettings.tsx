@@ -88,7 +88,7 @@ export function FriendsSettings(props: { nav: PageNav }) {
   };
 
   return (
-    <Page title="Friends" testID="friends-settings">
+    <Page display title="Friends" testID="friends-settings">
       <Section footer="A Labs feature: your agent posts what it made to people you follow. Your computer holds the account; this phone has no Friends password.">
         <SwitchRow
           testID="friends-switch"
