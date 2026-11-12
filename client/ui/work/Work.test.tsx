@@ -109,10 +109,27 @@ describe("Brain's Work", () => {
     expect(app.texts()).toContain("Failed · Build broke on Windows");
     expect(app.texts()).toContain("Ended");
     expect(app.texts()).toContain("Claude Code · release");
-    expect(app.count("id:work-worker-progress")).toBe(1);
+    expect(app.count("id:work-workers >> id:tray-progress")).toBe(1);
+    // The live one ends in its live dot and how long it has worked on the Work, as a tray row does.
+    expect(app.count("id:work-workers >> id:row-live")).toBe(1);
     expect(app.enabled("id:work-worker >> nth=0")).toBe(false);
     await app.press("id:work-worker >> nth=1");
     await app.waitFor("id:session-status");
+  }, 20_000);
+
+  test("the live daemon's Claude Worker: \"Claude Code · Hello writer\", never its (mh-…) id nor its terminal footer", async () => {
+    const daemon = brain();
+    const at = now();
+    const id = "mh-17b3337d43f38037916f0e5b";
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    (daemon.current_work[1] as Record<string, unknown>).worker_sessions = [
+      { session_id: id, name: `Hello writer (${id})`, provider: "claude", state: "running", summary: footer, live: true, joined_at: at, updated_at: at },
+    ];
+    const app = await workApp({ brain: daemon, worker_sessions: [{ id, name: `Hello writer (${id})`, status: "unknown", summary: footer, command: "claude", provider: "claude", cwd: "/home/me/perpetuo", updated_at: Date.now() }] });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-workers");
+    expect(app.texts()).toContain("Claude Code · Hello writer");
+    expect(app.texts().some((text) => text.includes("(mh-") || text.includes("shift+tab") || text.includes("⏵"))).toBe(false);
   }, 20_000);
 
   test("a closed Work's page comes from the computer: its title, how it ended, who worked on it", async () => {

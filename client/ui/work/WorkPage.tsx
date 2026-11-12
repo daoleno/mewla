@@ -5,8 +5,8 @@ import type { NavStackState } from "nsh/base";
 import { markWorkRead, workAction, workDetail } from "../../core/work/brainWork";
 import type { BrainWorkDetail, BrainWorkStatus } from "../../core/work/types";
 import { workProject, workWorkerLines, type WorkWorkerLine } from "../../core/work/workers";
-import { AgentIcon } from "../icons/AgentIcon";
-import { ProgressBar } from "../kit/ProgressBar";
+import { workerRow } from "../../core/tray/model";
+import { RowEnd, RowHair, RowText, RowTile } from "../tray/rowParts";
 import {
   BRAIN_WORK_SNOOZE_SECONDS, brainWorkActions, brainWorkAskDraft, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
 } from "../../core/work/actions";
@@ -116,36 +116,28 @@ function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; 
   );
 }
 
-/** A Worker of the Work (SPEC §11 Work detail): a tray row, "Agent · name", what it does, its progress, the time; pushes its Session. */
-function WorkerRow(props: { line: WorkWorkerLine; first: boolean; onPress: () => void }) {
-  const line = props.line;
-  return (
-    <Button testID="work-worker" accessibilityLabel={[`${line.agentLabel} · ${line.name}`, line.stateLabel, line.summary, line.time].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
-      class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 active:bg-accent ${props.first ? "" : "border-t border-border"}`}>
-      <View class="size-[28px] items-center justify-center"><AgentIcon kind={line.agent} flavor={line.flavor} size={20} /></View>
-      <View class="min-w-0 flex-1">
-        <Text class="text-body font-semibold line-clamp-1">{`${line.agentLabel} · ${line.name}`}</Text>
-        {line.stateLabel || line.summary ? (
-          <Text testID="work-worker-line" class="text-sub text-muted-foreground line-clamp-1">
-            {line.stateLabel ? <Text class={`font-semibold ${line.state === "ended" ? "" : "text-foreground"}`}>{line.stateLabel}</Text> : null}
-            {line.stateLabel && line.summary ? ` · ${line.summary}` : line.summary}
-          </Text>
-        ) : null}
-        {line.progress !== undefined ? <ProgressBar filled={line.progress} testID="work-worker-progress" /> : null}
-      </View>
-      <Text class="text-caption text-muted-foreground">{line.time === "live" ? "" : line.time}</Text>
-    </Button>
-  );
-}
-
+/**
+ * The Workers (SPEC §11 Work detail): a group of tray rows, the tray's own parts and model (`workerRow`): the
+ * agent's logo, "Agent · title", what it does, its progress, the time. Each pushes its Session; one the list
+ * no longer has is shown but does not open.
+ */
 function Workers(props: { lines: () => WorkWorkerLine[]; onOpen: (sessionId: string) => void }) {
+  const rows = () => props.lines().map((line) => ({ line, row: workerRow(line, clock().now) }));
   return (
     <View>
       {props.lines().length ? (
         <>
           <Caption role="header" class="mb-2 mt-6 px-4" text="Workers" />
           <View testID="work-workers" class="overflow-hidden rounded-(--radius-group) bg-card">
-            {props.lines().map((line, index) => <WorkerRow line={line} first={index === 0} onPress={() => props.onOpen(line.sessionId)} />)}
+            {rows().map(({ line, row }, index, list) => (
+              <Button testID="work-worker" accessibilityLabel={[row.title, row.line, row.end].filter(Boolean).join(", ")} disabled={!line.openable} onPress={() => props.onOpen(line.sessionId)}
+                class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 active:bg-accent">
+                <RowTile tile={() => row.tile} />
+                <RowText row={() => row} />
+                <RowEnd row={() => row} />
+                {index === list.length - 1 ? null : <RowHair />}
+              </Button>
+            ))}
           </View>
         </>
       ) : null}
