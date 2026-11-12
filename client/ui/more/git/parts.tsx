@@ -1,4 +1,4 @@
-import { Text, untracked, View } from "nsh";
+import { Text, untracked, View, type ViewRef } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { gitDiffStatusMark, gitDiffStatusWord, gitDiffTone, type GitDiffStatusTone } from "../../../core/git/gitDiffPresentation";
@@ -60,9 +60,10 @@ export function FileName(props: { path: string }) {
 }
 
 /** A small icon button with its label for screen readers. */
-export function IconButton(props: { icon: IconName; label: string; onPress: () => void; disabled?: boolean; selected?: boolean; busy?: boolean; testID?: string }) {
+export function IconButton(props: { icon: IconName; label: string; onPress: () => void; disabled?: boolean; selected?: boolean; busy?: boolean; testID?: string; ref?: (node: ViewRef) => void }) {
   return (
     <Button
+      ref={props.ref}
       testID={props.testID}
       accessibilityLabel={props.label}
       selected={props.selected}
@@ -71,7 +72,7 @@ export function IconButton(props: { icon: IconName; label: string; onPress: () =
         haptic.selection();
         props.onPress();
       }}
-      class={`size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-40 ${props.selected ? "bg-muted" : ""}`}
+      class={`size-11 items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 ${props.selected ? "bg-muted" : ""}`}
     >
       {props.busy ? <Spinner size={16} /> : <Icon name={props.icon} size={20} tone="ink" />}
     </Button>

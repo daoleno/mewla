@@ -239,6 +239,33 @@ describe("Brain workspace", () => {
     expect(app.shows("id:workspace-copy")).toBe(true);
   });
 
+  test("on wide with an 880 pt right pane a file opens beside its folder; narrower, on its own page", async () => {
+    const app = await open(HARNESS, {
+      width: 1280,
+      height: 800,
+      host: {
+        params: { page: { name: "files-workspace", trail: ["notes"] } },
+        handlers: {
+          ...secureStore(),
+          "app.daemon": ({ type, body }: Asked) => {
+            if (type === "brain_workspace_tree") return { reply: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", path: "notes", entries: [{ name: "today.txt", path: "notes/today.txt", kind: "file" }] } };
+            if (type === "brain_workspace_file") return { reply: "brain_workspace_file", file: { name: "today.txt", path: String(body.path), kind: "file", language: "text", content: "ship it" } };
+            return { error: `unexpected ${type}` };
+          },
+        },
+      },
+    });
+    await app.waitFor("id:workspace-no-file");
+    await app.press("id:workspace-notes/today.txt");
+    await app.waitFor("id:workspace-text");
+    expect(app.shows("id:workspace-notes/today.txt")).toBe(true);
+    await app.setViewport(1024, 800);
+    await app.waitFor("id:workspace-reader", { state: "gone" });
+    await app.press("id:workspace-notes/today.txt");
+    await app.waitUntil(() => !app.shows("id:workspace-notes/today.txt"));
+    await app.waitFor("id:workspace-text");
+  });
+
   test("a video too large to stream says so before any stream is signed", async () => {
     const app = await open(HARNESS, {
       host: {

@@ -431,14 +431,23 @@ describe("Git review: the list", () => {
     expect(app.texts()).toContain("Commit 1 file");
   });
 
-  test("on a wide screen the reader sits beside the list, and says No file selected until one is", async () => {
-    const { app } = await openReview([app_ts, notes_md], { width: 1024 });
+  test("with a right pane of 880 or more (a 1280 window with the default pane) the reader sits beside the list, and says No file selected until one is", async () => {
+    const { app } = await openReview([app_ts, notes_md], { width: 1280 });
     await app.waitFor("id:git-no-file");
     expect(app.texts()).toContain("No file selected");
     await app.press("id:git-row-changes:app.ts");
     await app.waitFor("id:git-diff-view");
     expect(app.shows("id:git-diff-page")).toBe(false);
     expect(app.shows("id:git-list")).toBe(true);
+  });
+
+  test("below 880 (a 1024 window: 704 beside the pane) the diff pushes, as on a phone; the split follows the width live", async () => {
+    const { app } = await openReview([app_ts, notes_md], { width: 1280 });
+    await app.waitFor("id:git-no-file");
+    await app.setViewport(1024, 800);
+    await app.waitFor("id:git-reader", { state: "gone" });
+    await app.press("id:git-row-changes:app.ts");
+    await app.waitFor("id:git-diff-page");
   });
 
   test("the branch sheet is titled, shows each branch's sync and remote, and offers Create only for a name Git takes", async () => {
@@ -475,6 +484,29 @@ describe("Git review: the repository's files", () => {
     const before = repo.asked.filter((r) => r.type === "git_repo_file_content").length;
     await app.press("id:git-file-refresh");
     await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_repo_file_content").length === before + 1);
+  });
+});
+
+describe("Git review on wide (SPEC §14.2)", () => {
+  test("Git ⋯ is a popover at its button, Undo last discard in place but disabled; Browse files opens a file beside the tree", async () => {
+    const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }], { width: 1280 });
+    await app.waitFor("id:git-row-changes:app.ts");
+    await app.press("id:git-more");
+    await app.waitFor("id:git-menu-popover");
+    expect(app.enabled("id:menu-item-undo")).toBe(false);
+    expect(app.dialogs().length).toBe(0);
+    await app.press("id:menu-item-browse");
+    await app.waitFor("id:git-files-tree");
+    await app.waitFor("id:git-files-no-file");
+    await app.press("id:git-file-app.ts");
+    await app.waitFor("id:git-file-view");
+    expect(app.shows("id:git-files-tree")).toBe(true);
+    expect(app.shows("id:git-file-page")).toBe(false);
+    // Narrower than 880 beside the pane, a file pushes its own page again.
+    await app.setViewport(1024, 800);
+    await app.waitFor("id:git-file-reader", { state: "gone" });
+    await app.press("id:git-file-app.ts");
+    await app.waitFor("id:git-file-page");
   });
 });
 

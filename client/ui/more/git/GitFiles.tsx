@@ -2,6 +2,7 @@ import { Keyboard, List, signal, Text, View } from "nsh";
 import { AlertDialog, DiffView, Tree, type TreeItem } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../../shell/NavPage";
+import { listDetail } from "../../shell/layout";
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
 import { padGitDiffText } from "../../../core/git/gitDiffLinePad";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
@@ -102,8 +103,11 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
   const changes = () => repoTreeChanges(review.status()?.files ?? []);
   // While searching every folder of what was found is open; the person's own folding comes back after.
   const shownExpanded = () => (query().trim() ? repoTreeFolders(items()) : expanded());
-  // The file page has no field: the search's keyboard goes down with it (R5#4).
+  // On wide with room (SPEC §14.2) the file opens beside the tree; else on its own page, which has no
+  // field: the search's keyboard goes down with it (R5#4).
+  const chosen = signal<string | null>(null);
   const openFile = (path: string) => {
+    if (listDetail()) return chosen.set(path);
     Keyboard.dismiss();
     props.nav.push({ name: "git-file", targetId: review.target.targetId, cwd: review.target.cwd, path });
   };
@@ -142,7 +146,8 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
       headerRight={<IconButton testID="git-files-refresh" icon="refresh" label="Refresh" onPress={() => void review.loadPaths()} />}
     >
       <Current review={review} class="flex-1 bg-background">{() => (
-          <View class="flex-1 bg-background">
+        <View class="flex-1 flex-row bg-background">
+          <View testID="git-files-list" class={listDetail() ? "w-[380px] border-r border-border" : "flex-1"}>
             {/* SPEC §15 File browser: the path as the eyebrow, the folder as the title. */}
             <View class="px-4"><DisplayTitle eyebrow={review.status()?.repo_root ? review.status()!.repo_root!.replace(/^\/(Users|home)\/[^/]+/, "~") : undefined} title={review.status()?.repo_name || "Files"} /></View>
             <View class="px-4"><FlashLine /></View>
@@ -178,34 +183,57 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
                     onSelectedChange={({ selected }) => {
                       if (!selected.startsWith(DIR)) openFile(selected);
                     }}
-                    itemClass="active:bg-accent"
+                    itemClass="hover:bg-accent active:bg-accent"
                     renderItem={(entry) => row(entry)}
                   />}
                 </View>
               );
             })()}
           </View>
+          {listDetail() ? (
+            <View testID="git-file-reader" class="flex-1 bg-background">
+              {chosen() ? (
+                <View class="flex-1">
+                  <View class="min-h-[52px] flex-row items-center gap-2 border-b border-border px-4">
+                    <Text role="header" class="min-w-0 flex-1 text-[17px] font-semibold line-clamp-1">{chosen()!.split("/").at(-1) || chosen()!}</Text>
+                    <FileActions review={review} path={chosen()!} />
+                  </View>
+                  <FileBody review={review} path={chosen()!} />
+                </View>
+              ) : <View class="flex-1 px-4"><EmptyState testID="git-files-no-file" icon="document" title="No file selected" /></View>}
+            </View>
+          ) : null}
+        </View>
       )}</Current>
     </NavPage>
   );
 }
 
+/** A working file's Refresh and Copy path. */
+function FileActions(props: { review: GitReview; path: string }) {
+  const review = props.review;
+  return (
+    <View class="flex-row items-center">
+      <IconButton testID="git-file-refresh" icon="refresh" label="Refresh" busy={!!review.files()[props.path]?.loading && !!review.files()[props.path]?.value} onPress={() => void review.loadFile(props.path)} />
+      <IconButton testID="git-file-copy-path" icon="link" label="Copy path" onPress={() => void copyText(props.path, "Path copied", props.path)} />
+    </View>
+  );
+}
+
 /** One file of the working tree, as it is now, read only; read again each time it opens and on Refresh. */
 export function FilePage(props: { review: GitReview; path: string; nav: PageNav }) {
+  return (
+    <NavPage title={props.path.split("/").at(-1) || "Files"} testID="git-file-page" headerRight={<FileActions review={props.review} path={props.path} />}>
+      <Current review={props.review} class="flex-1 bg-background">{() => <FileBody review={props.review} path={props.path} />}</Current>
+    </NavPage>
+  );
+}
+
+/** A working file's content: its page's, and the reader's beside the tree on wide. */
+function FileBody(props: { review: GitReview; path: string }) {
   const review = props.review;
   void review.loadFile(props.path);
   return (
-    <NavPage
-      title={props.path.split("/").at(-1) || "Files"}
-      testID="git-file-page"
-      headerRight={
-        <View class="flex-row items-center">
-          <IconButton testID="git-file-refresh" icon="refresh" label="Refresh" busy={!!review.files()[props.path]?.loading && !!review.files()[props.path]?.value} onPress={() => void review.loadFile(props.path)} />
-          <IconButton testID="git-file-copy-path" icon="link" label="Copy path" onPress={() => void copyText(props.path, "Path copied", props.path)} />
-        </View>
-      }
-    >
-      <Current review={review} class="flex-1 bg-background">{() => (
           <View class="flex-1 bg-background">
             <View class="px-4"><FlashLine /></View>
             {(() => {
@@ -233,7 +261,5 @@ export function FilePage(props: { review: GitReview; path: string; nav: PageNav 
               );
             })()}
           </View>
-      )}</Current>
-    </NavPage>
   );
 }
