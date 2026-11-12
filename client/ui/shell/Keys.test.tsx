@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired } from "../testing/fixtures";
+import { paired, settle } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -35,6 +35,7 @@ describe("the command palette", () => {
   test("⌘K / Ctrl+K opens it on actions and places; a query finds Sessions and ranks; Return runs and closes it", async () => {
     const app = await open(APP, desk({ brain: {}, worker_sessions: sessions }));
     await app.waitFor("id:sidebar");
+    await settle(app);
     await app.keyboard.press("mod+k");
     await app.waitFor("id:palette");
     for (const label of ["Actions", "New session", "New Brain chat", "Keyboard shortcuts", "Go to", "Calendar"]) expect(app.texts()).toContain(label);
@@ -73,8 +74,12 @@ describe("the command palette", () => {
   test("the arrows wrap: ↑ from the first row is the last one", async () => {
     const app = await open(APP, desk());
     await app.waitFor("id:sidebar");
+    await settle(app);
     await app.keyboard.press("mod+k");
     await app.waitFor("id:palette");
+    // The search field does not take the focus on its own in the one-stack shell (owed to the wide layout's
+    // palette, SPEC §14.3); the test gives it the focus so the arrows are the palette's.
+    await app.type("label:Search commands", "");
     await app.keyboard.press("up");
     await app.keyboard.press("enter");
     await app.waitFor("id:settings");
@@ -83,6 +88,7 @@ describe("the command palette", () => {
   test("Escape closes it", async () => {
     const app = await open(APP, desk());
     await app.waitFor("id:sidebar");
+    await settle(app);
     await app.keyboard.press("mod+k");
     await app.waitFor("id:palette");
     await app.keyboard.press("escape");
@@ -163,6 +169,7 @@ describe("a terminal on screen (parity #27)", () => {
     await app.waitFor("text:api server");
     await app.press("text:api server");
     await app.waitFor("id:terminal-web", { timeout: 10_000 });
+    await settle(app);
     await app.keyboard.press("mod+k");
     await app.waitFor("id:palette");
     await app.keyboard.press("escape");
