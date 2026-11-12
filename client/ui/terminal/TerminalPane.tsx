@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, safeArea, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
 import { Button } from "nsh/base";
 import { BackHandler } from "nsh/mobile";
 import { TerminalNavigator } from "../../core/terminal/navigation";
@@ -256,7 +256,11 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
       {attachProblem() ? <Text testID="terminal-attach-problem" class="px-3 py-1 text-xs text-destructive">{attachProblem()}</Text> : null}
       <View class="flex-row items-center gap-1 border-t border-border bg-background px-1.5 py-1.5"
-        style={{ marginBottom: props.active() ? Math.max(0, keyboardFrame().height - belowSections()) : 0 }}>
+        style={{
+          marginBottom: props.active() ? Math.max(0, keyboardFrame().height - belowSections()) : 0,
+          // Clear of the system's navigation bar (three buttons or the gesture handle), as the chat composer is.
+          paddingBottom: 6 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
+        }}>
         <Button testID="terminal-attach" accessibilityLabel="Attach" disabled={uploads.picking()} onPress={attach} class="rounded-lg px-2 py-2 active:bg-accent">
           <Icon name="attach" size={16} />
         </Button>
