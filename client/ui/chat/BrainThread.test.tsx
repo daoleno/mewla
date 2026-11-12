@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired, phoneHost } from "../testing/fixtures";
+import { answering, paired, phoneHost } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const brain = {
@@ -27,8 +27,10 @@ describe("a Brain notification's thread", () => {
     await app.waitFor("id:brain-past-thread");
     // New chat asks the computer: it takes a press once the connection is up (a slow runner connects late).
     await app.press("id:brain-menu");
+    await app.waitFor("id:brain-menu-new-chat");
     await app.waitUntil(() => app.enabled("id:brain-menu-new-chat"), { timeout: 10_000 });
-    await app.press("id:brain-menu-new-chat");
+    app.onDialog((dialog) => (dialog.buttons.includes("New chat") ? "New chat" : null));
+    await answering(app, () => app.press("id:brain-menu-new-chat"));
     await app.waitFor("id:composer");
     expect(app.shows("id:brain-past-thread")).toBe(false);
   }, 20_000);

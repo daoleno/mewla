@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering, framesOf, paired, phoneHost } from "../testing/fixtures";
+import { answering, framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const session = (id: string, patch: Record<string, unknown> = {}) => ({ id, name: "", status: "done", cwd: "/home/me/mewla", command: "claude --permission-mode bypassPermissions", provider: "claude", updated_at: Date.now(), ...patch });
@@ -9,8 +9,7 @@ async function sessionsApp(daemon: Record<string, unknown>) {
   // The inbox link opens the tray; its last row is All Sessions, by folder.
   await app.host.send("links.open", { url: "mewla://sessions" });
   await app.waitFor("id:tray-all-sessions");
-  await app.press("id:tray-all-sessions");
-  await app.waitFor("id:sessions");
+  await pressUntil(app, "id:tray-all-sessions", "id:sessions");
   return app;
 }
 

@@ -79,6 +79,31 @@ export async function stepUntil(app: Awaited<ReturnType<typeof open>>, condition
 }
 
 /**
+ * Lets the app settle after it opens: headless, the first press or key in the first moments after start
+ * (Brain's snapshot still arriving) is lost. The emulator takes a tap 300 ms after the tray opens (11-12),
+ * so this is the harness, not the app.
+ */
+export async function settle(app: Awaited<ReturnType<typeof open>>): Promise<void> {
+  await app.wait(500);
+}
+
+/**
+ * Presses `selector` until `opened` shows. Headless, the first press after the tray opens, while Brain's
+ * snapshot is still arriving, is lost (on the emulator a tap 300 ms after the tray opens lands: the harness, not the app).
+ */
+export async function pressUntil(app: Awaited<ReturnType<typeof open>>, selector: string, opened: string, timeout = 10_000): Promise<void> {
+  for (const end = Date.now() + timeout; ; ) {
+    if (app.shows(selector)) await app.press(selector);
+    try {
+      await app.waitFor(opened, { timeout: 400 });
+      return;
+    } catch (error) {
+      if (Date.now() > end) throw error;
+    }
+  }
+}
+
+/**
  * Runs `step` (a press, a long press, a sent event), which opens `count` dialogs or action sheets one after
  * another that the test's `onDialog` answers, and resolves once they have been answered: shown (`dialogs()`),
  * then one more step, as the runner answers a dialog only while a step runs. After it, a plain `waitFor` or

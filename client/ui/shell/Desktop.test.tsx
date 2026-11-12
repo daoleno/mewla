@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired, phoneHost } from "../testing/fixtures";
+import { paired, phoneHost, settle } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -149,6 +149,7 @@ describe("the desktop layout", () => {
     const app = await open(APP, { ...desk, width: 800, host: webHost() });
     await app.waitFor("id:home-header");
     expect(app.shows("id:sidebar")).toBe(false);
+    await settle(app);
     await app.press("id:home-cat");
     await app.waitUntil(() => last(app)?.path === "/computer");
   }, 20_000);

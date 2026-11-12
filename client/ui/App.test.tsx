@@ -51,7 +51,7 @@ describe("Brain", () => {
   test("says the computer is offline instead of spinning, and the composer is there", async () => {
     const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
     await app.waitFor("id:brain-notice");
-    await app.waitFor("text:Your computer is offline", { timeout: 15_000 });
+    await app.waitFor("text:Desk is offline", { timeout: 15_000 });
     expect(app.shows("id:composer")).toBe(true);
   }, 20_000);
 });
@@ -105,7 +105,7 @@ describe("Dark", () => {
 
   test("no text is drawn black on Brain, the computer page or Settings", async () => {
     const app = await open("./App.tsx", { host, storage: { ...paired, "mewla:theme_preference": "classic-dark" }, platform: "android", colorScheme: "light" });
-    await app.waitFor("text:Your computer is offline", { timeout: 15_000 });
+    await app.waitFor("text:Desk is offline", { timeout: 15_000 });
     expect(blackTexts(app)).toEqual([]);
     await app.press("id:home-cat");
     await app.waitFor("id:computer-settings");
