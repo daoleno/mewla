@@ -61,6 +61,15 @@ type persisted struct {
 	Peers      []outboundPeer            `json:"peers"`
 	Outbox     []outboxItem              `json:"outbox"`
 	Handoffs   []handoff                 `json:"handoffs,omitempty"`
+	// Seen is when each computer's channel last opened or closed, by peer
+	// key, and the daemon id it said hello with, so "last seen" (and which
+	// computer an inbound peer is) outlive a restart of this daemon.
+	Seen map[string]seenRecord `json:"seen,omitempty"`
+}
+
+type seenRecord struct {
+	At       time.Time `json:"at"`
+	DaemonID string    `json:"daemon_id,omitempty"`
 }
 
 const (

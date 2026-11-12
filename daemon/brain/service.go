@@ -69,6 +69,8 @@ type Service struct {
 	watcher Watcher
 	execs   *work.ExecutorConfig
 	now     func() time.Time
+	// resultGit probes Worker projects for a result's git_review action.
+	resultGit resultGitProbes
 	// defaultHostLogged logs once which agent Brain picked by default when
 	// more than one is installed and none was chosen.
 	defaultHostLogged sync.Once
@@ -2253,6 +2255,14 @@ func (s *Service) UnsubscribeWork(id int) {
 	}
 }
 
+// Work reads one Work.
+func (s *Service) Work(workID string) (Work, error) {
+	if s == nil || s.store == nil {
+		return Work{}, fmt.Errorf("brain service is not configured")
+	}
+	return s.store.Work(workID)
+}
+
 // WorkDetail is one Work's detail, current or closed, with its Workers'
 // live state from the current Session inventory.
 func (s *Service) WorkDetail(workID string) (WorkDetail, error) {
@@ -2263,7 +2273,36 @@ func (s *Service) WorkDetail(workID string) (WorkDetail, error) {
 	if err != nil {
 		return WorkDetail{}, err
 	}
-	return s.store.WorkDetail(workID, s.workerRefs(hostID))
+	detail, err := s.store.WorkDetail(workID, s.workerRefs(hostID))
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	item, err := s.store.Work(detail.ID)
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	events, err := s.store.ListWorkEvents(detail.ID)
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	for index := len(events) - 1; index >= 0; index-- {
+		event := events[index]
+		if !isProjectedWorkResultEvent(event.Kind) {
+			continue
+		}
+		sessionID := strings.TrimSpace(strings.TrimPrefix(event.PayloadRef, "session:"))
+		if sessionID == strings.TrimSpace(event.PayloadRef) {
+			sessionID = ""
+		}
+		if actions := s.workResultActions(workResultSource{
+			sessionID: sessionID, summary: event.Summary, details: event.DetailsJSON,
+			contextRef: item.ContextRef, current: true, cwd: s.workWorkerCwd(item.ID, sessionID),
+		}); len(actions) > 0 {
+			detail.ResultActions = actions
+		}
+		break
+	}
+	return detail, nil
 }
 
 func (s *Service) MarkWorkRead(workID string) error {
@@ -2328,6 +2367,11 @@ func (s *Service) AnnotateWorkResultEvents(events []work.CodexConversationEvent)
 	if err != nil {
 		return err
 	}
+	currentByWork := make(map[string]string, len(lifecycles))
+	for workID, lifecycle := range lifecycles {
+		currentByWork[workID] = lifecycle.CurrentEventID
+	}
+	s.annotateWorkResultActions(events, currentByWork)
 	for index := range events {
 		lifecycle, found := lifecycles[events[index].WorkID]
 		if !found || events[index].Source != workResultConversationSource {

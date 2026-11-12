@@ -57,6 +57,7 @@ type Hub struct {
 	nextSub     int
 	onApprovals func(workerID string)
 	onBound     func(workerID string)
+	onResolved  func(workerID string, approval Approval, e Event)
 }
 
 type workerState struct {
@@ -94,12 +95,21 @@ func (h *Hub) Publish(e Event) {
 	}
 	h.mu.Lock()
 	w := h.worker(e.WorkerID)
+	var resolved *Approval
+	if e.Kind == KindApprovalResolved {
+		for i := range w.Approvals {
+			if w.Approvals[i].ID == e.ApprovalID {
+				copied := w.Approvals[i]
+				resolved = &copied
+			}
+		}
+	}
 	before := approvalIDs(w.Approvals)
 	bindingBefore, boundBefore := w.Binding, w.Bound
 	w.apply(e)
 	changed := before != approvalIDs(w.Approvals)
 	rebound := e.Kind == KindBound && (w.Bound != boundBefore || w.Binding.ConversationID != bindingBefore.ConversationID || w.Binding.Ref != bindingBefore.Ref)
-	onApprovals, onBound := h.onApprovals, h.onBound
+	onApprovals, onBound, onResolved := h.onApprovals, h.onBound, h.onResolved
 	subs := make([]chan Event, 0, len(w.subs))
 	for _, ch := range w.subs {
 		subs = append(subs, ch)
@@ -111,12 +121,24 @@ func (h *Hub) Publish(e Event) {
 	if rebound && onBound != nil {
 		onBound(e.WorkerID)
 	}
+	if resolved != nil && onResolved != nil {
+		onResolved(e.WorkerID, *resolved, e)
+	}
 	for _, ch := range subs {
 		select {
 		case ch <- e:
 		default:
 		}
 	}
+}
+
+// OnApprovalResolved calls notify, outside the Hub's lock, with each pending
+// approval as it is resolved and the event that resolved it (By says who:
+// mewla, agent, timeout).
+func (h *Hub) OnApprovalResolved(notify func(workerID string, approval Approval, e Event)) {
+	h.mu.Lock()
+	h.onResolved = notify
+	h.mu.Unlock()
 }
 
 // OnApprovalsChanged calls notify, outside the Hub's lock, whenever the set of

@@ -72,12 +72,16 @@ type Caps struct {
 }
 
 type Hello struct {
-	Protocol  int                   `json:"protocol"`
-	Version   string                `json:"version"`
-	Name      string                `json:"name"`
-	DaemonID  string                `json:"daemon_id"`
-	Caps      Caps                  `json:"caps"`
-	Assertion *auth.ServerAssertion `json:"assertion,omitempty"`
+	Protocol int    `json:"protocol"`
+	Version  string `json:"version"`
+	Name     string `json:"name"`
+	DaemonID string `json:"daemon_id"`
+	Caps     Caps   `json:"caps"`
+	// OpenRequests is how many requests on this computer wait for the person
+	// (Options.OpenRequests). Absent from a computer that predates it, which
+	// is "unknown", never zero.
+	OpenRequests *int                  `json:"open_requests,omitempty"`
+	Assertion    *auth.ServerAssertion `json:"assertion,omitempty"`
 }
 
 type DeliveryResult struct {
@@ -151,6 +155,9 @@ type PeerView struct {
 	URL       string     `json:"url,omitempty"`
 	Queued    int        `json:"queued,omitempty"`
 	LastError string     `json:"last_error,omitempty"`
+	// OpenRequests is the count the computer last reported over its live
+	// channel; only while Online. Absent when offline or not reported.
+	OpenRequests *int `json:"open_requests,omitempty"`
 }
 
 type OutboxView struct {
