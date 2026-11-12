@@ -1,5 +1,5 @@
 import { computed, effect, Scroll, signal, Text, View } from "nsh";
-import { AlertDialog, Button, Input, TextView } from "nsh/base";
+import { Button, Input, TextView } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { calendarOriginOfWork, originLabel } from "../../core/calendar/model";
 import { readableBody, WorkItemConflict, workItemStatus, workItemStatusLabel, type WorkItem } from "../../core/work/workItems";
@@ -7,6 +7,7 @@ import { clock } from "../calendar/clock";
 import { calendarItems } from "../calendar/state";
 import { workFiles, workFilesModel } from "./state";
 import { brainFiles, openChatLink } from "../chat/links";
+import { showAlert } from "../shell/alert";
 
 const AUTOSAVE_MS = 600;
 
@@ -94,7 +95,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
     }
   };
   const remove = async (current: WorkItem) => {
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       title: "Delete work item?", description: "This removes the Markdown work file from the server.",
       actions: [{ id: "keep", label: "Cancel", role: "cancel" }, { id: "delete", label: "Delete", role: "destructive" }],
     });

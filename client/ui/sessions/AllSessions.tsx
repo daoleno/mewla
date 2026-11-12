@@ -1,5 +1,5 @@
 import { cleanup, computed, createMotion, effect, List, platform, signal, Storage, Text, untracked, View } from "nsh";
-import { AlertDialog, Button, type NavStackState } from "nsh/base";
+import { Button, type NavStackState } from "nsh/base";
 import { DisplayTitle, PillButton, SectionLabel, Tile } from "../kit/kit";
 import { BackHandler } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
@@ -27,6 +27,7 @@ import { AgentIcon } from "../icons/AgentIcon";
 import { Icon, type ColorToken, type IconName } from "../icons/Icon";
 import { connection, current, currentTransport, resumeConnection, workers, workersHydrated } from "../session";
 import type { Route } from "../shell/routes";
+import { showAlert } from "../shell/alert";
 
 const aliases = signal<StoredWorkerAliases>({});
 const collapsed = signal<ReadonlySet<string>>(new Set());
@@ -83,7 +84,7 @@ async function terminateSelected(): Promise<void> {
   haptic.notification("warning");
   // Named by what it ends; the action keeps the normal role (red is for what waits for you).
   const only = keys.length === 1 ? workers().find((w) => w.key === keys[0]) : undefined;
-  const { action } = await AlertDialog.show({
+  const { action } = await showAlert({
     title: only ? `Terminate ${sessionRowModel(only, { alias: untracked(aliases)[only.id] }).title}?` : `Terminate ${keys.length} sessions?`,
     description: sessionTerminationConfirmMessage(keys.length),
     actions: [{ id: "cancel", label: "Cancel", role: "cancel" }, { id: "terminate", label: "Terminate" }],

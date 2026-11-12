@@ -1,11 +1,12 @@
 import { Scroll, Text, View } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { slashCommandEmptyText, slashCommandIcon, type CodexSlashCommand } from "../../core/session/codexSlashCommands";
 import { groupSlashCommands, slashMenuState, type ComposerAlert } from "../../core/session/composerSlash";
 import type { SlashCommandAlertButton } from "../../core/session/slashCommandRouter";
 import type { AgentKind } from "../../core/sessions/workerPresentation";
 import { ICON_ASSETS } from "../icons/assets";
 import { Icon, type IconName } from "../icons/Icon";
+import { showAlert } from "../shell/alert";
 
 export {
   insertSkillMention,
@@ -107,7 +108,7 @@ export function ComposerPlusButton(props: { pinned: () => boolean; connected: ()
 
 /** Shows a route's alert and settles with the button pressed (`cancel` when it closed without one). */
 export async function showComposerAlert(alert: ComposerAlert): Promise<SlashCommandAlertButton["action"]> {
-  const result = await AlertDialog.show({
+  const result = await showAlert({
     title: alert.title,
     description: alert.message,
     actions: alert.buttons.map((button) => ({ id: button.action, label: button.label, role: button.action === "cancel" ? "cancel" : "default" })),

@@ -1,10 +1,10 @@
 import { Clipboard, host, platform, signal } from "nsh";
-import { AlertDialog } from "nsh/base";
 import { PairLatch } from "../core/onboarding";
 import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
 import { haptic } from "./shell/haptics";
+import { showAlert } from "./shell/alert";
 
 /**
  * Pairing, one pipeline for every way in: a scanned code, a pasted link, a `mewla://` link the
@@ -42,7 +42,7 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
   }
   if (!alreadyPairedWith(servers(), payload)) {
     const copy = pairingScopeCopy(device());
-    const { action } = await AlertDialog.show({
+    const { action } = await showAlert({
       title: copy.title,
       description: copy.message,
       actions: [

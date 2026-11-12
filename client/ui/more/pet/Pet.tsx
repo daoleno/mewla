@@ -4,6 +4,7 @@ import type { PetState } from "../../../core/settings/petPreview";
 import { Page } from "../../kit/kit";
 import { PetSprite } from "../../pets/PetSprite";
 import { choosePet, pet, PETS } from "../../pets/pets";
+import { haptic } from "../../shell/haptics";
 
 /** The poses "{name} at work" shows, with their captions (SPEC §15 Picker grid). */
 const POSES: readonly { state: PetState; caption: string }[] = [
@@ -29,6 +30,7 @@ export function PetPage() {
   cleanup(() => timer && clearTimeout(timer));
   const pick = (id: string, name: string) => {
     if (pet().id === id) return;
+    haptic.selection();
     choosePet(id);
     toast.set(`${name} moved in`);
     announce(`${name} moved in`);

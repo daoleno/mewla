@@ -1,5 +1,4 @@
 import { effect, host, locale, platform, Storage, lifecycle } from "nsh";
-import { AlertDialog } from "nsh/base";
 import { parseLink, pushLink } from "../../core/push/links";
 import { liveAnswerOf, liveAnswerRequestId, widgetBaseUrl, type LiveAnswer } from "../../core/push/live";
 import { ensurePermission, expoPushToken, registerPushMessage, type DeviceToken, type PushHost } from "../../core/push/registration";
@@ -15,6 +14,7 @@ import { current, currentTransport, onTransport, openBrainThread, ready, servers
 import { goHome, openPage } from "../shell/nav";
 import { draftForBrain } from "../work/WorkPage";
 import { workLinks } from "../work/links";
+import { showAlert } from "../shell/alert";
 
 /**
  * Notifications and the Live surfaces, for the one current computer: this phone's push
@@ -116,7 +116,7 @@ function sendLiveAnswer(transport: Transport | null): void {
   const requestId = liveAnswerRequestId(answer);
   const failed = (message: string) => {
     stops.forEach((stop) => stop());
-    void AlertDialog.show({ title: "Couldn't send that answer", description: message, actions: [{ id: "ok", label: "OK" }] }).catch(() => {});
+    void showAlert({ title: "Couldn't send that answer", description: message, actions: [{ id: "ok", label: "OK" }] }).catch(() => {});
   };
   const timer = setTimeout(() => failed("Timed out. The answer may still have reached Brain."), 30_000);
   const stops = [

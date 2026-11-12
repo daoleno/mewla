@@ -1,5 +1,4 @@
 import { signal, Text, View } from "nsh";
-import { AlertDialog } from "nsh/base";
 import { Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { Avatar } from "./parts";
@@ -17,10 +16,11 @@ import {
   turnOff,
   turnOn,
 } from "./state";
+import { showAlert } from "../../shell/alert";
 
 /** Asks with the points that matter; true when the person chose `confirm`. */
 async function ask(title: string, points: string[], confirm: string, cancel: string, destructive = false): Promise<boolean> {
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title,
     description: points.join("\n\n"),
     actions: [

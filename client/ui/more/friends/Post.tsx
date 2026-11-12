@@ -1,5 +1,5 @@
 import { computed, effect, Scroll, signal, Text, untracked, View, type InputRef } from "nsh";
-import { AlertDialog, Button, Input } from "nsh/base";
+import { Button, Input } from "nsh/base";
 import { displayName, FRIENDS_COMMENT_LIMIT, relativeTime, type FriendsComment, type FriendsPerson, type FriendsPost } from "../../../core/friends/api";
 import { friendsCall } from "../../../core/friends/requests";
 import { formatDateTime } from "../../../core/more/dates";
@@ -8,6 +8,7 @@ import { EmptyState, PillButton } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { ActionButton, AgentPill, Avatar, fail, FriendsPageFrame, keyboardLift, postMenu, PostMedia, report, togglePost, videoOwner, type PostHandlers } from "./parts";
 import { currentServerId, followFriends, followPage, serverFor } from "./state";
+import { showAlert } from "../../shell/alert";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -132,10 +133,10 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
       ...(!comment.mine ? [{ id: "report", label: "Report comment" }] : []),
       { id: "cancel", label: "Cancel", role: "cancel" as const },
     ];
-    const answer = await AlertDialog.show({ presentation: "actionSheet", actions });
+    const answer = await showAlert({ presentation: "actionSheet", actions });
     if (answer.action === "report") return void report("comment", comment.id, shownFrom);
     if (answer.action !== "delete") return;
-    const sure = await AlertDialog.show({
+    const sure = await showAlert({
       title: "Delete this comment?",
       actions: [
         { id: "cancel", label: "Cancel", role: "cancel" },

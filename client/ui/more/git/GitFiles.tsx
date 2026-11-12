@@ -1,5 +1,5 @@
 import { Keyboard, List, signal, Text, View } from "nsh";
-import { AlertDialog, DiffView, Tree, type TreeItem } from "nsh/base";
+import { DiffView, Tree, type TreeItem } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../../shell/NavPage";
 import { listDetail } from "../../shell/layout";
@@ -13,6 +13,7 @@ import { Icon } from "../../kit/Icon";
 import type { PageNav } from "../routes";
 import { Current, FlashLine, IconButton, StatusTile } from "./parts";
 import { copyText, type GitReview } from "./state";
+import { showAlert } from "../../shell/alert";
 
 const DIR = "dir:";
 
@@ -71,7 +72,7 @@ export function repoTreeChanges(files: readonly GitDiffFileInfo[]): { files: Map
 async function entryMenu(review: GitReview, nav: PageNav, id: string): Promise<void> {
   const folder = id.startsWith(DIR);
   const path = folder ? id.slice(DIR.length) : id;
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title: path,
     presentation: "actionSheet",
     actions: [

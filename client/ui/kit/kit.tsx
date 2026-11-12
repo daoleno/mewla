@@ -1,12 +1,14 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
 import { announce, Canvas, Clipboard, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
-import { AlertDialog, Button, Input, Switch } from "nsh/base";
+import { Button, Input, Switch } from "nsh/base";
 import { PAGE_COLUMN_WIDTH } from "../../core/web/places";
 import { wide } from "../shell/layout";
 import { NavPage } from "../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
 import { spinnerRadius } from "../../core/more/spinner";
+import { showAlert } from "../shell/alert";
+import { haptic } from "../shell/haptics";
 
 /**
  * The building blocks of the pages: a page with the system header, groups of rows
@@ -594,7 +596,7 @@ export function NotBuiltYet(props: { title: string }) {
  */
 export async function copyMenu(title: string, choices: ReadonlyArray<{ label: string; value: string }>): Promise<void> {
   if (choices.length === 0) return;
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title,
     presentation: "actionSheet",
     actions: [...choices.map((choice, index) => ({ id: String(index), label: choice.label })), { id: "cancel", label: "Cancel", role: "cancel" as const }],
@@ -614,7 +616,8 @@ export async function copyMenu(title: string, choices: ReadonlyArray<{ label: st
  * The action keeps the normal role: red is for what waits for you, so iOS must not paint it.
  */
 export async function confirmDestructive(title: string, message: string, action: string): Promise<boolean> {
-  const answer = await AlertDialog.show({
+  haptic.notification("warning");
+  const answer = await showAlert({
     title,
     description: message,
     actions: [
