@@ -138,7 +138,7 @@ describe("Sessions", () => {
     await answering(app, () => app.press("id:selection-terminate"));
     await app.waitFor("text:No sessions yet");
     expect(framesOf(app.host.posts(), "kill_worker").map((f) => f.worker_id).sort()).toEqual(["a", "b"]);
-    expect(app.dialogs()[0]).toMatchObject({ title: "Terminate sessions?" });
+    expect(app.dialogs()[0]).toMatchObject({ title: "Terminate 2 sessions?" });
   }, 20_000);
   test("Back while selecting ends selecting and stays on Sessions (parity #26)", async () => {
     const app = await sessionsApp({ worker_sessions: [session("a", { name: "one" }), session("b", { name: "two" })] });
