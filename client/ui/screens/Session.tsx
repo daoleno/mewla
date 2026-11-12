@@ -462,6 +462,12 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     } else if (action === "terminate") void terminate();
   };
 
+  // The folder, unless the title already is it (a Session without a name of its own): "proj", not "proj / proj · Idle".
+  const projectWord = () => {
+    const folder = worker()?.cwd ? pathBasename(worker()!.cwd!) : "";
+    return folder && folder !== title() ? folder : "";
+  };
+
   return (
     <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"}
       headerTitle={
@@ -476,7 +482,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
             ) : worker() ? (
               // "{project} · {state}" (soft-final SPEC §11): the folder, then what it is doing; the connection mark's word when offline.
               <Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">
-                {[worker()!.cwd ? pathBasename(worker()!.cwd!) : "", connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)].filter(Boolean).join(" · ")}
+                {[projectWord(), connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)].filter(Boolean).join(" · ")}
               </Text>
             ) : null}
           </View>
