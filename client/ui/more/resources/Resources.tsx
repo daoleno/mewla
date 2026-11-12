@@ -1,6 +1,6 @@
 import { wide } from "../../shell/layout";
 import type { JSX } from "nsh";
-import { Canvas, cleanup, effect, signal, Text, untracked, View, lifecycle } from "nsh";
+import { Canvas, cleanup, effect, Scroll, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { ResourcePoller, type ResourceReading } from "../../../core/resources/poll";
 import {
@@ -497,20 +497,19 @@ function Consumers(props: { t: ResourceTelemetry }) {
           </View>
         }
       />
-      <View class="flex-row flex-wrap gap-2" accessibilityLabel="Filter by owner">
+      {/* One row that scrolls sideways, no glyphs (FIDELITY-AUDIT 19): the chips never wrap. */}
+      <Scroll horizontal scrollbar={false} testID="owner-chips" class="grow-0" contentClass="flex-row gap-2 pr-4">
         <Chip testID="owner-all" label={`All ${props.t.consumers.length}`} accessibilityLabel="Filter All" selected={owner() === "all"} onPress={() => choose("all")} />
         {OWNERS.filter((o) => counts().has(o.key)).map((o) => (
           <Chip
             testID={`owner-${o.key}`}
-            icon={OWNER_ICON[o.key]}
             label={`${o.label} ${counts().get(o.key)}`}
             accessibilityLabel={`Filter ${o.label}`}
             selected={owner() === o.key}
-            warning={o.key === "orphaned_worker"}
             onPress={() => choose(o.key)}
           />
         ))}
-      </View>
+      </Scroll>
       <Section testID="consumers">
         <View testID="consumers-header" class="flex-row items-center gap-3 px-4 pb-1 pt-2.5">
           <View class="flex-1" />
@@ -537,7 +536,7 @@ function Consumers(props: { t: ResourceTelemetry }) {
   );
 }
 
-function Chip(props: { label: string; selected: boolean; icon?: IconName; warning?: boolean; accessibilityLabel?: string; testID?: string; onPress: () => void }) {
+function Chip(props: { label: string; selected: boolean; accessibilityLabel?: string; testID?: string; onPress: () => void }) {
   return (
     <Button
       testID={props.testID}
@@ -546,8 +545,7 @@ function Chip(props: { label: string; selected: boolean; icon?: IconName; warnin
       onPress={props.onPress}
       class={props.selected ? "h-9 flex-row items-center gap-1.5 rounded-full bg-primary px-3.5" : "h-9 flex-row items-center gap-1.5 rounded-full bg-card px-3.5 active:bg-accent"}
     >
-      {props.icon ? <Icon name={props.icon} size={14} tone={props.selected ? "canvas" : props.warning ? "warning" : "soft"} /> : null}
-      <Text class={props.selected ? "text-sub font-semibold text-primary-foreground" : "text-sub font-semibold"} style={!props.selected && props.warning ? { color: color("warning") } : undefined}>{props.label}</Text>
+      <Text class={props.selected ? "text-sub font-semibold text-primary-foreground line-clamp-1" : "text-sub font-semibold line-clamp-1"}>{props.label}</Text>
     </Button>
   );
 }
