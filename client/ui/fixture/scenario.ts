@@ -227,7 +227,15 @@ export function scenario(): FakeDaemonState & { assets: Record<string, string> }
       brain_work_detail: { type: "brain_work_detail", work: DOCS_DETAIL },
       approval_decision: { type: "approval_decided" },
       // A getter: every read is sampled now, as the computer's own five-second poll would be.
-      get get_resource_telemetry() { return { type: "resource_telemetry", ...dashboard, sampled_at: new Date().toISOString() }; },
+      // Its history moves with it, so the window stays the five minutes it holds.
+      get get_resource_telemetry() {
+        const shift = Date.now() - Date.parse(dashboard.sampled_at);
+        const at = (iso: string) => new Date(Date.parse(iso) + shift).toISOString();
+        return {
+          type: "resource_telemetry", ...dashboard, sampled_at: at(dashboard.sampled_at),
+          history: dashboard.history.map((sample) => ({ ...sample, sampled_at: at(sample.sampled_at) })),
+        };
+      },
     } as NonNullable<FakeDaemonState["replies"]>,
   };
 }
