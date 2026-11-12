@@ -231,8 +231,8 @@ describe("The computer page", () => {
   test("the computer in use shows how the phone reaches it; a long press says more", async () => {
     const app = await open(HARNESS, setup({ server: { url: "ws://192.168.1.20:9877/ws" } }, { network: { "GET http://192.168.1.20:9877/auth-check": { status: 503 } } }));
     await app.waitFor("id:computer-path");
-    // In words after Connected, not a glyph: the path while no round trip is measured.
-    expect(app.texts()).toContain("· LAN");
+    // In words after Connected, not a glyph, with one space each side of the dot: the path while no round trip is measured.
+    expect(app.texts()).toContain(" · LAN");
     await app.longPress("id:computer-connection");
     await app.waitFor("text:LAN · 192.168.1.20");
     await app.host.send("app.daemonState", "waiting");
