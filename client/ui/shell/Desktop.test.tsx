@@ -44,6 +44,16 @@ describe("the desktop layout", () => {
     await app.waitFor("id:computer");
   }, 20_000);
 
+  test("a right-click on a Session row starts selecting, as a long press does on a phone (parity #28)", async () => {
+    const sessions = [{ id: "w1", name: "release", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
+    const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }) });
+    await app.waitFor("id:sidebar-sessions", { timeout: 10_000 });
+    await app.press("id:sidebar-sessions");
+    await app.waitFor("text:release");
+    await app.rightClick("id:session-row");
+    await app.waitFor("text:1 selected");
+  }, 20_000);
+
   test("a place that waits on you has a dot beside its name", async () => {
     const sessions = [{ id: "w1", name: "release", status: "blocked", needs_attention: true, cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }) });

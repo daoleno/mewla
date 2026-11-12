@@ -1,11 +1,12 @@
-import { computed, createMotion, effect, Image, List, signal, Storage, Text, untracked, View } from "nsh";
+import { cleanup, computed, createMotion, effect, Image, List, platform, signal, Storage, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, type NavStackState } from "nsh/base";
+import { BackHandler } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { workLinkOf } from "../sessions/workLinks";
-import { selectedTab } from "../shell/Shell";
+import { desktop, selectedTab } from "../shell/Shell";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
 import { sessionEmptyCat, sessionEmptyState } from "../../core/sessions/sessionEmptyState";
 import { petClip } from "../pets/clips";
@@ -134,8 +135,15 @@ function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => voi
   const toneClass = () => (model().tone === "danger" ? "text-destructive" : model().tone === "needs" ? "text-seal" : model().tone === "accent" ? "text-foreground" : "text-muted-foreground");
   return (
     <View testID="session-row" delayLongPress={400} style={motion?.style}
+      accessibilityLabel={model().accessibilityLabel} role={selecting() ? "checkbox" : "button"}
+      accessibilityState={selecting() ? { checked: selected(), disabled: !online() } : undefined}
+      accessibilityHint={selecting() ? "Double tap to toggle selection" : "Opens the terminal session"}
       onPress={() => (selecting() ? online() && toggleSelected(props.worker()) : props.open(props.worker()))}
       onLongPress={() => !selecting() && online() && toggleSelected(props.worker())}
+      onContextMenu={() => {
+        // The desktop layout: a right-click starts selecting, as a long press does on a phone (parity #28).
+        if (untracked(desktop) && !selecting() && online()) toggleSelected(props.worker());
+      }}
       class={selecting() && !online() ? "flex-row items-center gap-3 px-4 py-2.5 opacity-50" : "flex-row items-center gap-3 px-4 py-2.5 active:bg-accent"}>
       {selecting() ? <Icon name={selected() ? "check-circle-fill" : "circle"} size={22} color={selected() ? "primary" : "muted-foreground"} /> : null}
       <View class="items-center justify-center">
@@ -200,6 +208,12 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
     if (action === "new") props.onNew();
     else if (action === "services") servicesOpen.set(true);
   };
+  // Android's Back ends selecting first (parity #26), as the Expo list did; a browser has its own back.
+  if (platform.os !== "web") cleanup(BackHandler.on("press", () => {
+    if (!untracked(selecting) || untracked(selectedTab) !== 1) return false;
+    selection.set(EMPTY_SESSION_SELECTION);
+    return true;
+  }));
   // Leaving the tab ends selecting.
   effect(() => {
     if (selectedTab() !== 1 && untracked(selecting)) selection.set(EMPTY_SESSION_SELECTION);

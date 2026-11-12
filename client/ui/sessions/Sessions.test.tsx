@@ -119,6 +119,22 @@ describe("Sessions", () => {
     expect(framesOf(app.host.posts(), "kill_worker").map((f) => f.worker_id).sort()).toEqual(["a", "b"]);
     expect(app.dialogs()[0]).toMatchObject({ title: "Terminate sessions?" });
   }, 20_000);
+  test("Back while selecting ends selecting and stays on Sessions (parity #26)", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("a", { name: "one" }), session("b", { name: "two" })] });
+    await app.waitFor("text:one");
+    await app.longPress("text:one");
+    await app.waitFor("text:1 selected");
+    await app.back();
+    await app.waitUntil(() => !app.shows("text:1 selected"));
+    expect(app.count("id:session-row")).toBe(2);
+    expect(app.shows("id:selection-terminate")).toBe(false);
+  }, 20_000);
+
+  test("a row names itself to a screen reader: title and state (parity #10)", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("a", { name: "release notes", status: "running" })] });
+    await app.waitFor("text:release notes");
+    expect(app.count("label:release notes, Running, No recent output")).toBe(1);
+  }, 20_000);
 });
 
 describe("a Session", () => {
