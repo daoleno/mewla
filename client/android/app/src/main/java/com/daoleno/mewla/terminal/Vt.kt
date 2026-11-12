@@ -37,6 +37,9 @@ internal object Vt {
   const val BLINK = 64
   const val CLUSTER = 128
   const val UNDERLINE_SHIFT = 8
+  const val EMOJI_WIDE = 1 shl 11
+  const val FLAG_HEAD = 1 shl 12
+  const val FLAG_TAIL = 1 shl 13
 }
 
 /** The 256-color palette from the theme's 16 (0xRRGGBB): xterm's 6×6×6 cube and gray ramp after them. */

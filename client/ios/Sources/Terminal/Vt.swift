@@ -14,6 +14,10 @@ enum VtLayout {
   static let blink = 64
   static let cluster = 128
   static let underlineShift = 8
+  /// Drawing hints (TerminalVt.h): a one-cell emoji drawn across the blank cell after it; a flag's two regional indicators.
+  static let emojiWide = 1 << 11
+  static let flagHead = 1 << 12
+  static let flagTail = 1 << 13
 }
 
 /// One run of cells in one style, from libghostty-vt (TerminalVt.h): plain (one UTF-16 unit

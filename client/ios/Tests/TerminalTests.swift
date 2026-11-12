@@ -153,6 +153,40 @@ final class TerminalTests: XCTestCase {
     XCTAssertEqual(input, ["echo a\recho b", "\u{1b}[200~x\ny\u{1b}[201~"])
   }
 
+  /// Parity #3 as the person sees it: the terminal in the app's window with a word selected, its
+  /// handles and the system edit menu, saved as `MEWLA_TEST_OUT`/selection-ios.png.
+  @MainActor
+  func testSelectionHandlesAndMenuOnScreen() throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = try XCTUnwrap(scene.windows.first { $0.isKeyWindow } ?? scene.windows.first)
+    let view = TerminalView(frame: window.bounds.inset(by: window.safeAreaInsets))
+    view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    window.addSubview(view)
+    defer { view.removeFromSuperview() }
+    view.layoutIfNeeded()
+    view.write("$ git log --oneline -3\r\n3cde66ce Client web: base href\r\nfb1f6b82 Merge remote-tracking branch\r\n" +
+               "6350ec0e Client web: pairing\r\n$ echo hello world\r\nhello world\r\n$ ")
+    let word = CGPoint(x: 8.5 * view.cellW, y: 5.5 * view.cellH)
+    XCTAssertTrue(view.selectWord(at: word))
+    XCTAssertEqual(view.selectedText(), "world")
+    view.showSelectionMenu(at: word)
+    RunLoop.main.run(until: Date().addingTimeInterval(2))
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = window.screen.scale
+    let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+      for shown in scene.windows.sorted(by: { $0.windowLevel < $1.windowLevel }) where !shown.isHidden {
+        shown.drawHierarchy(in: shown.bounds, afterScreenUpdates: true)
+      }
+    }
+    if let dir = ProcessInfo.processInfo.environment["MEWLA_TEST_OUT"], let png = image.pngData() {
+      try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("selection-ios.png"))
+    }
+    let attachment = XCTAttachment(image: image)
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
   /// The render corpus (scripts/terminal-corpus, `MEWLA_CORPUS`): every screen drawn at its grid at
   /// 3x, saved as `MEWLA_TEST_OUT`/corpus/<name>.png for the side-by-side with the reference.
   @MainActor
@@ -178,6 +212,7 @@ final class TerminalTests: XCTestCase {
       let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in view.draw(view.bounds) }
       if let out, let png = image.pngData() { try png.write(to: out.appendingPathComponent("\(name).png")) }
       if name == "box" { try assertWallTouches(image, cols: cols, rows: rows) }
+      if name == "emoji" { try assertEmojiFullSize(image, cols: cols, rows: rows) }
     }
   }
 }
@@ -204,6 +239,26 @@ private func assertWallTouches(_ image: UIImage, cols: Int, rows: Int, file: Sta
   }
 }
 
+/// The emoji screen (gen.py; the same check as check.py): the VS16 heart at row 0 col 7 inks the blank
+/// cell after it, the text heart at row 3 col 6 stays in its cell, and the regional indicators at row 2
+/// cols 7-10 draw one flag (colored pixels), not two letters.
+@MainActor
+private func assertEmojiFullSize(_ image: UIImage, cols: Int, rows: Int, file: StaticString = #filePath, line: UInt = #line) throws {
+  let pixels = try XCTUnwrap(Pixels(image))
+  let cw = CGFloat(pixels.width) / CGFloat(cols), ch = CGFloat(pixels.height) / CGFloat(rows)
+  func count(row: Int, cols c0: Int, _ c1: Int, _ test: (Int, Int) -> Bool) -> Int {
+    var n = 0
+    for y in Int((CGFloat(row) * ch).rounded()) + 1..<Int((CGFloat(row + 1) * ch).rounded()) - 1 {
+      for x in Int((CGFloat(c0) * cw).rounded()) + 1..<Int((CGFloat(c1 + 1) * cw).rounded()) - 1 where test(x, y) { n += 1 }
+    }
+    return n
+  }
+  let ink = { (x: Int, y: Int) in !pixels.near(x: x, y: y, 0x141210, tolerance: 40) }
+  XCTAssertGreaterThanOrEqual(count(row: 0, cols: 8, 8, ink), 4, "the VS16 heart reaches the blank cell after it", file: file, line: line)
+  XCTAssertEqual(count(row: 3, cols: 7, 7, ink), 0, "the text heart stays in its cell", file: file, line: line)
+  XCTAssertGreaterThanOrEqual(count(row: 2, cols: 7, 10, { pixels.saturation(x: $0, y: $1) > 80 }), 20, "one flag across the regional indicators", file: file, line: line)
+}
+
 /// An image's pixels, read as 0xRRGGBB at top-left-origin coordinates.
 private struct Pixels {
   let width: Int
@@ -225,6 +280,13 @@ private struct Pixels {
     self.width = width
     self.height = height
     self.data = data
+  }
+
+  /// The spread between a pixel's strongest and weakest channel (0 for grays).
+  func saturation(x: Int, y: Int) -> Int {
+    let i = (min(max(y, 0), height - 1) * width + min(max(x, 0), width - 1)) * 4
+    let c = [Int(data[i]), Int(data[i + 1]), Int(data[i + 2])]
+    return c.max()! - c.min()!
   }
 
   /// How far a pixel is from `rgb` (the sum over the channels).
