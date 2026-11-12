@@ -7,6 +7,7 @@ import { color, type ColorName } from "../../kit/colors";
 import { Icon, type IconName } from "../../kit/Icon";
 import { EmptyState, Spinner } from "../../kit/kit";
 import { gitFlash, type GitReview } from "./state";
+import { haptic } from "../../shell/haptics";
 
 /** Added and deleted keep the change colours; modified and renamed are ink (amber reads as Warning). */
 export function toneColor(tone: GitDiffStatusTone): ColorName {
@@ -66,7 +67,10 @@ export function IconButton(props: { icon: IconName; label: string; onPress: () =
       accessibilityLabel={props.label}
       selected={props.selected}
       disabled={props.disabled || props.busy}
-      onPress={props.onPress}
+      onPress={() => {
+        haptic.selection();
+        props.onPress();
+      }}
       class={`size-10 items-center justify-center rounded-full active:bg-accent disabled:opacity-40 ${props.selected ? "bg-secondary" : ""}`}
     >
       {props.busy ? <Spinner size={16} /> : <Icon name={props.icon} size={20} tone="ink" />}

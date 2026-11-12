@@ -7,6 +7,7 @@ import { sessionRowModel } from "../../core/sessions/listRow";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { workLinkOf } from "../sessions/workLinks";
 import { desktop, selectedTab } from "../shell/Shell";
+import { haptic } from "../shell/haptics";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
 import { sessionEmptyCat, sessionEmptyState } from "../../core/sessions/sessionEmptyState";
 import { petClip } from "../pets/clips";
@@ -77,6 +78,7 @@ async function terminateSelected(): Promise<void> {
   const server = current();
   const keys = [...selection()];
   if (!transport || !server || keys.length === 0 || terminating()) return;
+  haptic.notification("warning");
   const { action } = await AlertDialog.show({
     title: "Terminate sessions?",
     description: sessionTerminationConfirmMessage(keys.length),
@@ -99,6 +101,7 @@ async function terminateSelected(): Promise<void> {
       selection.set(failed.size ? new Set([...failed]) : EMPTY_SESSION_SELECTION);
       const titles = summary.failedEntries.map((e) => (byKey.get(e.sessionKey) ? sessionRowModel(byKey.get(e.sessionKey)!, { alias: untracked(aliases)[e.workerId] }).title : ""));
       notice.set(sessionTerminationSummaryMessage(summary, titles));
+      if (!failed.size) haptic.notification("success");
     },
   });
   batch.start();
@@ -139,7 +142,11 @@ function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => voi
       accessibilityState={selecting() ? { checked: selected(), disabled: !online() } : undefined}
       accessibilityHint={selecting() ? "Double tap to toggle selection" : "Opens the terminal session"}
       onPress={() => (selecting() ? online() && toggleSelected(props.worker()) : props.open(props.worker()))}
-      onLongPress={() => !selecting() && online() && toggleSelected(props.worker())}
+      onLongPress={() => {
+        if (selecting() || !online()) return;
+        haptic.impact("medium");
+        toggleSelected(props.worker());
+      }}
       onContextMenu={() => {
         // The desktop layout: a right-click starts selecting, as a long press does on a phone (parity #28).
         if (untracked(desktop) && !selecting() && online()) toggleSelected(props.worker());
