@@ -841,7 +841,7 @@ object PhoneController {
                 "apps" -> {
                     val reply = helper.call("apps")
                     if (!reply.optBoolean("ok")) failure(id, "failed", reply.optString("error"))
-                    else JSONObject().put("type", "result").put("id", id).put("ok", true).put("apps", reply.getJSONArray("apps").also { dropSelf(it) })
+                    else JSONObject().put("type", "result").put("id", id).put("ok", true).put("apps", reply.getJSONArray("apps"))
                 }
                 "handoff" -> handoff(id, request, helper, args, wantImage)
                 else -> act(id, op, helper, args, wantImage)
@@ -866,13 +866,6 @@ object PhoneController {
         runCatching { screenLock.acquire(90_000) }
     }
 
-    /** Mewla itself is never something an agent should open on its own screen. */
-    private fun dropSelf(apps: JSONArray) {
-        for (i in apps.length() - 1 downTo 0) {
-            if (apps.getJSONObject(i).optString("package") == app.packageName) apps.remove(i)
-        }
-    }
-
     private fun act(id: String, op: String, helper: HelperClient, args: JSONObject, wantImage: Boolean): JSONObject {
         ensureDisplay(helper)
         var settleQuiet = 300L
@@ -887,7 +880,6 @@ object PhoneController {
         when (op) {
             "screen" -> {}
             "launch" -> {
-                if (args.optString("package") == app.packageName) return failure(id, "failed", "Mewla's own screen is not for agents.")
                 val label = appLabel(args.getString("package"), args.optInt("user", 0))
                 opening = label
                 launchFailed = null
