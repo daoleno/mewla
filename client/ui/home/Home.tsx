@@ -22,6 +22,7 @@ import { brain, brainChat, brainDraft, brainThread, connection, current, current
 import type { WorkCardHandlers } from "../chat/TimelineRows";
 import type { WorkCardModel } from "../../core/timeline/workCardModel";
 import { sessionRowModel } from "../../core/sessions/listRow";
+import { workWorkerLines } from "../../core/work/workers";
 import { presentWorker } from "../../core/sessions/workerPresentation";
 import { Sheet } from "../kit/Sheet";
 import { PillButton } from "../kit/kit";
@@ -78,6 +79,8 @@ const workHandlers: WorkCardHandlers = {
     return { kind: row.kind, flavor: row.flavor, name: presentWorker(worker).typeLabel, progress: progressSteps(worker.phase) ?? undefined };
   },
   onTitle: (workId) => openWorkDetail(workId),
+  workers: (rows) => workWorkerLines(rows, new Map(workers().map((w) => [w.id, w] as const))),
+  onSession: (sessionId) => openSession(sessionId),
   onLine: (model) => resultSheet.set(model),
 };
 // A past thread is read-only: its Work cards and messages offer no actions.
