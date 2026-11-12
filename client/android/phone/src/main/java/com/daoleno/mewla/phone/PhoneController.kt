@@ -193,11 +193,25 @@ object PhoneController {
     @Synchronized
     private fun startKeeper() {
         if (keeper?.isAlive == true) return
+        watchSystem()
         keeper = Thread({ keepHelper() }, "mewla-phone-keeper").apply { isDaemon = true; start() }
     }
 
+    private val wake = java.util.concurrent.Semaphore(0)
+    private val helperKeeper by lazy { HelperKeeper(keeperEnv) }
+
+    /** Something the keeper waits for may have happened (Wi-Fi, the Wireless debugging switch, the helper going): its next pass is now. */
+    private fun kick() {
+        helperKeeper.changed()
+        if (wake.availablePermits() == 0) wake.release()
+    }
+
+    private fun sleepUnlessKicked(ms: Long) {
+        wake.tryAcquire(ms, java.util.concurrent.TimeUnit.MILLISECONDS)
+        wake.drainPermits()
+    }
+
     private fun keepHelper() {
-        var wait = 1_000L
         var shown = state()
         try {
             while (prefs.enabled) {
@@ -206,21 +220,63 @@ object PhoneController {
                     shown = state()
                     publish()
                 }
-                if (client?.isClosed == false) {
-                    if (staleHelper) replaceStaleHelper()
-                    wait = 5_000L
-                } else if (prefs.paired && !pairing && onWifi()) {
-                    val up = runCatching { ensureHelper() }.onFailure { Log.i(TAG, "helper not up yet: ${it.message}") }.isSuccess
-                    publish()
-                    wait = if (up) 5_000L else (wait * 2).coerceIn(4_000L, 30_000L)
-                } else {
-                    wait = 5_000L
-                }
-                Thread.sleep(wait)
+                if (client?.isClosed == false && staleHelper) replaceStaleHelper()
+                val wait = helperKeeper.step()
+                publish()
+                sleepUnlessKicked(wait)
             }
         } catch (_: InterruptedException) {
         }
     }
+
+    private val keeperEnv = object : HelperKeeper.Env {
+        override fun facts() = Facts(
+            enabled = prefs.enabled,
+            paired = prefs.paired,
+            pairing = pairing,
+            wifi = onWifi(),
+            wirelessOn = wirelessDebuggingOn(),
+            mayEnableWireless = selfHealing,
+            pausedUntil = promptGuard.pausedUntil,
+            now = System.currentTimeMillis(),
+        )
+        override fun helperUp() = client?.isClosed == false
+        override fun startHelper() { ensureHelper() }
+        override fun grant(): String? = grantThroughWirelessDebugging()
+        override fun report(reason: String?) = noteProblem(reason)
+    }
+
+    private fun wirelessDebuggingOn(): Boolean = Settings.Global.getInt(app.contentResolver, "adb_wifi_enabled", 0) == 1
+
+    /**
+     * Wi-Fi coming and going, and Wireless debugging being switched (by Android after a network change,
+     * or by the person), are what the keeper waits on: it looks again the moment one happens instead of
+     * on its next poll.
+     */
+    private fun watchSystem() {
+        if (watchingSystem) return
+        watchingSystem = true
+        runCatching {
+            val cm = app.getSystemService(ConnectivityManager::class.java)
+            cm.registerNetworkCallback(
+                android.net.NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),
+                object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: android.net.Network) = kick()
+                    override fun onLost(network: android.net.Network) { kick(); publish() }
+                },
+            )
+        }.onFailure { Log.w(TAG, "cannot watch Wi-Fi", it) }
+        runCatching {
+            app.contentResolver.registerContentObserver(
+                Settings.Global.getUriFor("adb_wifi_enabled"), false,
+                object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+                    override fun onChange(selfChange: Boolean) { kick(); publish() }
+                },
+            )
+        }.onFailure { Log.w(TAG, "cannot watch the Wireless debugging switch", it) }
+    }
+
+    private var watchingSystem = false
 
     // ---- setup -------------------------------------------------------------------------------
 
@@ -240,7 +296,7 @@ object PhoneController {
             .put("wifi", onWifi())
             .put("paired", prefs.paired)
             .put("helper", helperUp)
-            .put("problem", problem ?: JSONObject.NULL)
+            .put("problem", setupReason() ?: JSONObject.NULL)
             .put("accessibility", SettingsReading.serviceRunning)
             .put("restricted", accessibilityRestricted())
             .put("self_healing", selfHealing)
@@ -391,7 +447,7 @@ object PhoneController {
         SettingsReading.needs = null
         SettingsReading.guiding = code == null && SettingsReading.serviceRunning
         if (SettingsReading.guiding) SettingsReading.service?.beginGuide()
-        pausedUntil = 0
+        promptGuard.personAsked()
         try {
             // A guided walk may start from nothing (Build number, a lock screen, the system's prompt), so it gets longer.
             val deadline = System.currentTimeMillis() + if (SettingsReading.guiding) 8 * 60_000 else 3 * 60_000
@@ -455,12 +511,15 @@ object PhoneController {
     // ---- helper ------------------------------------------------------------------------------
 
     private fun connectAdb(): AdbConnection {
+        // Right after Wireless debugging was switched on its port may not be announced yet.
+        val announceWaitMs = if (justSwitchedOn) 10_000L else 3_000L
+        justSwitchedOn = false
         val tls = AndroidAdb.tls(AndroidAdb.identity(app))
         val cache = object : PortCache {
             override fun load() = prefs.adbPort.takeIf { it > 0 }
             override fun save(port: Int) { prefs.adbPort = port }
         }
-        val connect = AdbConnectPort({ null }, finder, cache)
+        val connect = AdbConnectPort({ null }, finder, cache, announceWaitMs)
         return try {
             runBlocking { connect.connect { port -> AdbConnection.open("127.0.0.1", port, tls) } }
         } catch (e: AdbConnectionException) {
@@ -487,9 +546,20 @@ object PhoneController {
         }
     }
 
-    /** Why the helper is not up, for the person's screen and the agent's error; null while it is up. */
+    /** The keeper's last word on why the helper is not up; null while it is up. */
     @Volatile var problem: String? = null
         private set
+
+    /**
+     * Why the phone is in setup, in a sentence, for the person's screen, the computer and the agent's
+     * error: the keeper's reason, or (between the helper going and the keeper's next pass) the plain fact.
+     * Null when the phone is not in setup.
+     */
+    fun setupReason(): String? = when {
+        state() != "setup" -> null
+        !prefs.enabled -> "Phone use is switched off in Mewla on the phone."
+        else -> problem ?: "The helper is not running on the phone; Mewla is starting it again."
+    }
 
     private fun noteProblem(message: String?) {
         if (problem == message) return
@@ -555,6 +625,8 @@ object PhoneController {
                 display = null
                 resetPicture()
                 publish()
+                // The keeper looks at once why it went and what brings it back.
+                kick()
             }
         }
         client = candidate
@@ -582,48 +654,68 @@ object PhoneController {
             .onFailure { Log.i(TAG, "keeping the helper of an earlier install: ${it.message}") }
     }
 
-    /** With WRITE_SECURE_SETTINGS (granted once through the helper) Wireless debugging is turned back on without the person. */
+    /**
+     * With WRITE_SECURE_SETTINGS (see [grantThroughWirelessDebugging]) Wireless debugging is turned back on
+     * without the person. [HelperKeeper] does not get here when it cannot or may not (see [SetupRecovery]);
+     * the person's own Start does, and then the words say what is missing.
+     */
     private fun ensureWirelessDebugging() {
-        if (Settings.Global.getInt(app.contentResolver, "adb_wifi_enabled", 0) == 1) {
-            strikes = 0
+        if (wirelessDebuggingOn()) {
+            promptGuard.switchHeld()
             return
         }
         if (!selfHealing) {
-            throw IllegalStateException("Wireless debugging is off")
+            throw IllegalStateException("Wireless debugging is off and Mewla has not been given the permission to switch it back on")
         }
         // On a network Android has not been told to allow, switching it on raises the system's prompt, and
         // if that is dismissed the switch falls back. Twice in a row means this network is the person's to
-        // approve: stop raising the prompt for a while rather than nag.
-        val now = System.currentTimeMillis()
-        if (now < pausedUntil) throw IllegalStateException("Wireless debugging is off on this network")
-        strikes = if (switchedOnAt > 0 && now - switchedOnAt < 90_000) strikes + 1 else 0
-        if (strikes >= 2) {
-            pausedUntil = now + 30 * 60_000
-            strikes = 0
-            throw IllegalStateException("Wireless debugging is off on this network")
+        // approve: stop raising the prompt for a few minutes rather than nag.
+        if (!promptGuard.mayRaisePrompt(System.currentTimeMillis())) {
+            throw IllegalStateException("Wireless debugging keeps switching itself off on this Wi-Fi network")
         }
-        switchedOnAt = now
         Settings.Global.putInt(app.contentResolver, "adb_wifi_enabled", 1)
         Thread.sleep(2_500)
+        justSwitchedOn = true
     }
 
-    private var strikes = 0
-    private var switchedOnAt = 0L
-    @Volatile private var pausedUntil = 0L
+    private val promptGuard = PromptGuard()
+
+    /** Wireless debugging was switched on just now: its port is announced a moment later, so finding it waits longer. */
+    @Volatile private var justSwitchedOn = false
 
     /** The person asked for the helper (Start): the pause the keeper put on raising the system's network prompt does not apply to them. */
     fun startedByPerson() {
-        strikes = 0
-        pausedUntil = 0
+        promptGuard.personAsked()
     }
 
-    /** Once, through the helper's own shell: lets this App turn Wireless debugging back on and its accessibility service on without the person. */
-    private fun grantSelfHealing(adb: AdbConnection) {
-        if (app.checkSelfPermission(WRITE_SECURE) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
-        runCatching { adb.exec("pm grant ${app.packageName} $WRITE_SECURE").use { it.readText() } }
+    /** The words of the last refused grant, for the reason shown while Wireless debugging is off; null when it was not refused. */
+    @Volatile private var grantFailure: String? = null
+
+    /** Through the phone's own shell: lets this App turn Wireless debugging back on and its accessibility service on without the person. Returns why it did not work, or null. */
+    private fun grantSelfHealing(adb: AdbConnection): String? {
+        if (selfHealing) return null
+        val outcome = runCatching { adb.exec("pm grant ${app.packageName} $WRITE_SECURE").use { it.readText() } }
             .onSuccess { Log.i(TAG, "pm grant WRITE_SECURE_SETTINGS: '${it.trim()}' granted=${selfHealing}") }
             .onFailure { Log.w(TAG, "pm grant WRITE_SECURE_SETTINGS failed", it) }
+        grantFailure = if (selfHealing) null else {
+            val said = outcome.getOrNull()?.trim()?.lineSequence()?.firstOrNull { it.isNotBlank() } ?: outcome.exceptionOrNull()?.message
+            "the phone refused the grant" + (said?.let { ": ${it.take(100)}" } ?: "")
+        }
+        return grantFailure
     }
+
+    /**
+     * Gets the grant when a helper is already serving (adopted from before this install, or started by a
+     * run that never reached the grant) and Wireless debugging is still on: after that it is switched back
+     * on by itself, whatever turned it off.
+     */
+    private fun grantThroughWirelessDebugging(): String? = try {
+        connectAdb().use { grantSelfHealing(it) }
+    } catch (e: Exception) {
+        Log.i(TAG, "cannot get the grant now: ${e.message}")
+        grantFailure = "no connection to Wireless debugging to ask: ${e.message ?: e.javaClass.simpleName}".take(160)
+        grantFailure
+    }.also { if (it == null) publish() }
 
     /** Whether this App may write secure settings (the grant above happened). */
     val selfHealing: Boolean
@@ -724,7 +816,7 @@ object PhoneController {
             val helper = try {
                 ensureHelper()
             } catch (e: Exception) {
-                return failure(id, "not_ready", "Phone use isn't ready on the phone: open Mewla → Phone${e.message?.let { " ($it)" }.orEmpty()}")
+                return failure(id, "not_ready", "Phone use isn't ready on the phone: ${setupReason() ?: e.message ?: "the helper is not up"}")
             }
             keepScreenOn()
             activeWorker = request.optString("worker_name").ifEmpty { request.optString("worker") }.ifEmpty { "An agent" }
