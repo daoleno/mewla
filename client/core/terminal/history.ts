@@ -231,9 +231,20 @@ export class TerminalHistoryModel {
       this.first + this.lines.length === this.next;
   }
 
+  /**
+   * Whether the delta is a host's answer while it has numbered no rows yet: a program that started on
+   * the alternate screen (Claude Code) leaves nothing to number, and the host answers a view
+   * that holds nothing with nothing at epoch 0. That is in step. Asking again would void the view
+   * every few hundred milliseconds, and its selection with it.
+   */
+  private startsEmpty(delta: HistoryDelta): boolean {
+    return !this.numbered && !this.lines.length && delta.epoch === 0 && delta.first === 0 && delta.from === 0 &&
+      delta.next === 0 && !delta.lines.length;
+  }
+
   /** The view's instruction for a delta, null when nothing it shows changed, or "resync" when the delta does not follow what is held. */
   applyDelta(delta: HistoryDelta): HistoryRender | null | "resync" {
-    if (!delta.reset && !this.continues(delta)) return "resync";
+    if (!delta.reset && !this.continues(delta) && !this.startsEmpty(delta)) return "resync";
     const flags = delta.flags && delta.flags.length === delta.lines.length ? delta.flags : delta.lines.map(() => 0);
     const modesChanged = delta.alternate !== this.alternate || delta.cols !== this.cols || delta.pane_id !== this.paneId;
     let render: HistoryRender;
