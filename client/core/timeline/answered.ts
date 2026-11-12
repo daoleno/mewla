@@ -74,11 +74,18 @@ export function answeredBy(record: AnsweredRequest): string {
 export function sealedOfAnswered(record: AnsweredRequest, at: (ms: number) => string): SealedRequest {
   const answered = Date.parse(record.answered_at);
   const when = Number.isFinite(answered) ? at(answered) : "";
-  const verb = VERB[record.outcome];
+  // An approval names what was approved, its command in mono, not the button ("Allow"); a prompt or a
+  // question answered names the choice: "You chose · Yes" (soft-final SPEC §11 Request card, answered).
+  // A terminal prompt's `asked` is its screen text run together, so only an approval's is a command.
+  const approval = record.kind === "approval" && (record.outcome === "approved" || record.outcome === "denied");
+  const chose = record.outcome === "approved" || record.outcome === "denied" || record.outcome === "answered";
+  const verb = approval || !chose ? VERB[record.outcome] : "You chose";
+  const command = approval ? record.asked.split(/\r?\n/).find((line) => line.trim())?.trim() : undefined;
   return {
     key: answeredKeys(record)[0] ?? `answered:${record.id}`,
     verb,
-    answer: record.answer || record.asked || record.title || verb,
+    answer: command || record.answer || record.asked || record.title || verb,
+    mono: Boolean(command),
     title: record.asked || record.title || "",
     source: [answeredBy(record), when].filter(Boolean).join(" · "),
     brain: Boolean(record.thread_id || record.work_id),

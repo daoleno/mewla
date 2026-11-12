@@ -82,7 +82,7 @@ describe("requests in Brain's thread", () => {
     await app.waitFor("id:request-sealed");
     expect(app.shows("id:request-card")).toBe(false);
     expect(app.texts()).toContain("Approved");
-    expect(app.texts()).toContain("Allow");
+    expect(app.texts()).toContain("git push origin main");
     await app.waitUntil(() => !app.texts().includes("1 needs you"));
   }, 20_000);
 
@@ -94,7 +94,7 @@ describe("requests in Brain's thread", () => {
         by: { kind: "device", device_name: "Proof phone" }, answered_at: at, anchor: { prompt_id: "p1" } } };
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": [row] } }) });
     await app.waitFor("id:request-answered", { timeout: 10_000 });
-    expect(app.texts()).toContain("Approved");
+    expect(app.texts()).toContain("You chose");
     expect(app.texts()).toContain("Yes");
     expect(app.count("id:request-sealed")).toBe(1);
     await app.wait(500);

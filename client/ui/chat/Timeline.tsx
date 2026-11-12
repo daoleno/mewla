@@ -8,7 +8,7 @@ import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
-import { compactAge, latestTimestamp, withDayDividers } from "../../core/timeline/dayDividers";
+import { withDayDividers } from "../../core/timeline/dayDividers";
 import { readingPlace, readingPlaceIndex } from "../../core/timeline/readingPlace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
@@ -205,7 +205,7 @@ export function ChatTimeline(props: {
   handlers.openPicture = (key) => viewing.set(key);
   const expansion = createExpansion();
   let list: ListRef | undefined;
-  // Read back from the newest row: the jump button brings it into view again, saying how old it is.
+  // Read back from the newest row: the jump button brings it into view again.
   const away = signal(false);
   const rows = computed((): (TimelineItem | DateDividerItem | FootRow)[] => {
     const all = withDayDividers(props.items());
@@ -305,14 +305,6 @@ export function ChatTimeline(props: {
       });
     });
   }
-  const now = signal(Date.now());
-  effect(() => {
-    if (!away()) return;
-    now.set(Date.now());
-    const timer = setInterval(() => now.set(Date.now()), 1000);
-    cleanup(() => clearInterval(timer));
-  });
-  const age = () => compactAge(latestTimestamp(props.items()), now());
   return (
     <View class="flex-1">
       <SelectTextSheet />
@@ -363,10 +355,9 @@ export function ChatTimeline(props: {
             <Icon name="arrow-down" size={16} color="foreground" />
           </Button>
         ) : (
-          <Button testID="jump-latest" accessibilityLabel={age() ? `Jump to latest, ${age()} ago` : "Jump to latest"} onPress={() => list?.scrollToEnd({ animated: true })}
-            class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1 rounded-full bg-card px-3 shadow-float active:opacity-70">
-            <Icon name="arrow-down" size={16} color="foreground" />
-            {age() ? <Text class="text-sub text-muted-foreground">{age()}</Text> : null}
+          <Button testID="jump-latest" accessibilityLabel="Jump to latest" onPress={() => list?.scrollToEnd({ animated: true })}
+            class="absolute bottom-3 right-4 size-11 items-center justify-center rounded-full bg-card shadow-float active:opacity-70">
+            <Icon name="arrow-down" size={18} color="foreground" />
           </Button>
         )
       ) : null}
