@@ -127,6 +127,9 @@ export interface WorkerPrompt {
   options?: WorkerPromptOption[];
   questions?: WorkerPromptQuestion[];
   call_id?: string;
+  /** A Claude permission's tool ("Bash", "Read") and its one line (the command, else the file), when the daemon can name the call (WIRE §7). */
+  tool?: string;
+  summary?: string;
 }
 
 // services/sessionFilePreview.ts

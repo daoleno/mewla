@@ -66,6 +66,10 @@ export interface Worker {
   last_output_lines: string[];
   started_at?: number;
   updated_at?: number;
+  /** While `running` by the terminal: when this run began (WIRE §9); absent on a delegated Worker. */
+  running_since?: number;
+  /** While `running`: the tool call the agent started last ("Bash curl -sI https://example.org"), from its hook. */
+  activity?: string;
   process_id?: number;
   delegated?: boolean;
   capabilities?: WorkerCapabilities;
@@ -128,6 +132,8 @@ export type RawWorker = {
   last_output_lines?: string[];
   started_at?: string | number | Date;
   updated_at?: string | number | Date;
+  running_since?: string | number | Date;
+  activity?: string;
   process_id?: number;
   delegated?: boolean;
   capabilities?: {
@@ -435,6 +441,8 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       stringArraysEqual(left.last_output_lines, right.last_output_lines) &&
       left.started_at === right.started_at &&
       left.updated_at === right.updated_at &&
+      left.running_since === right.running_since &&
+      left.activity === right.activity &&
       left.process_id === right.process_id &&
       left.delegated === right.delegated &&
       left.capabilities?.structured_events ===
@@ -494,6 +502,8 @@ function normalizeWorker(
     last_output_lines: Array.isArray(agent.last_output_lines) ? agent.last_output_lines : [],
     started_at: normalizeTimestamp(agent.started_at),
     updated_at: normalizeTimestamp(agent.updated_at),
+    running_since: agent.status === 'running' ? normalizeTimestamp(agent.running_since) : undefined,
+    activity: agent.status === 'running' && typeof agent.activity === 'string' && agent.activity.trim() ? agent.activity.trim() : undefined,
     process_id: typeof agent.process_id === 'number' && Number.isFinite(agent.process_id)
       ? agent.process_id
       : undefined,
@@ -574,6 +584,10 @@ export function normalizePrompt(raw: unknown): WorkerPrompt | undefined {
     request: optionalString(entry.request),
     call_id: optionalString(entry.call_id),
   };
+  const tool = optionalString(entry.tool)?.trim();
+  const summary = optionalString(entry.summary)?.trim();
+  if (tool) prompt.tool = tool;
+  if (summary) prompt.summary = summary;
   if (kind === 'choice') {
     const questions: WorkerPromptQuestion[] = [];
     for (const item of Array.isArray(entry.questions) ? entry.questions : []) {

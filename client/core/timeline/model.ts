@@ -214,7 +214,15 @@ export function buildTimelineFromSortedEvents(
         continue;
       }
       if (event.source === "request_answered") {
-        if (event.answered) items.push({ type: "answered", id: event.id, timestamp: event.timestamp, record: event.answered, keys: answeredKeys(event.answered) });
+        if (event.answered) {
+          const item = { type: "answered" as const, id: event.id, timestamp: event.timestamp, record: event.answered, keys: answeredKeys(event.answered) };
+          // A record again under its id is its newer version (WIRE §8: a terminal answer's outcome follows within
+          // about 2 s): it takes the first one's place, so the thread keeps one line.
+          const recordId = event.answered.id;
+          const earlier = items.findIndex((other) => other.type === "answered" && other.record.id === recordId);
+          if (earlier >= 0) items[earlier] = { ...item, id: items[earlier].id, timestamp: items[earlier].timestamp };
+          else items.push(item);
+        }
         continue;
       }
       if (shouldRenderStatusAsMessage(event)) {

@@ -275,7 +275,7 @@ export function sessionRow(worker: Worker, now: number, options: { alias?: strin
     key: `session:${worker.id}`,
     title: model.title || withoutSessionId(worker.name) || "Session",
     line: model.line,
-    end: live ? elapsedShort(worker.started_at, now) : listTime(worker.updated_at, new Date(now)),
+    end: live ? elapsedShort(worker.running_since ?? worker.started_at, now) : listTime(worker.updated_at, new Date(now)),
     live: live || undefined,
     needs: hasRequest(worker) || undefined,
     tile: { kind: "agent", agent: model.kind, flavor: model.flavor },

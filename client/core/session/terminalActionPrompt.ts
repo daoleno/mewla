@@ -19,6 +19,8 @@ export type TerminalActionPrompt = {
   title: string;
   requestLabel?: string;
   requestText?: string;
+  /** The call's own line when the daemon names it (WIRE §7 `prompt.summary`): the card's command, as is. */
+  commandText?: string;
   defaultOptionId?: string;
   options: TerminalActionPromptOption[];
   /** The agent's own id for a decision it reported; its options answer through it. */
@@ -81,6 +83,7 @@ export function buildMenuPrompt(prompt: WorkerPrompt, scopeKey?: string): Termin
     id: prompt.id,
     title: prompt.title || "Waiting for confirmation",
     requestText: prompt.request ? redactSensitiveLines(prompt.request) : undefined,
+    commandText: prompt.summary ? redactSensitiveText(prompt.summary) : undefined,
     defaultOptionId: options.find((option) => option.default)?.id,
     options,
     promptId: prompt.id,
