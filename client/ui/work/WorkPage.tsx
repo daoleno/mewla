@@ -121,8 +121,8 @@ function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; 
  * agent's logo, "Agent · title", what it does, its progress, the time. Each pushes its Session; one the list
  * no longer has is shown but does not open.
  */
-function Workers(props: { lines: () => WorkWorkerLine[]; onOpen: (sessionId: string) => void }) {
-  const rows = () => props.lines().map((line) => ({ line, row: workerRow(line, clock().now) }));
+function Workers(props: { lines: () => WorkWorkerLine[]; project: () => string | undefined; onOpen: (sessionId: string) => void }) {
+  const rows = () => props.lines().map((line) => ({ line, row: workerRow(line, clock().now, props.project()) }));
   return (
     <View>
       {props.lines().length ? (
@@ -291,7 +291,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
           {!slip() && closed() ? (
             <View>
               <TopBlock project={project} title={title} dot={() => null} done={() => closed()!.status === "done"} state={() => CLOSED_STATUS[closed()!.status] ?? "Closed"} since={() => since(closed()!.updated_at)} />
-              <Workers lines={workerLines} onOpen={props.links.openSession} />
+              <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
             </View>
           ) : !slip() ? (
             // Nothing while the computer is asked; what it said, or offline, once there is no asking.
@@ -320,7 +320,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
                   </View>
                 </>
               ) : null}
-              <Workers lines={workerLines} onOpen={props.links.openSession} />
+              <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
               <View testID="work-links" class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
                 {file() ? (
                   <GroupRow testID="work-file" icon="document-text" label="Work file" value={file()!.path.split("/").pop()} chevron first

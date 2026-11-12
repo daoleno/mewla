@@ -289,16 +289,17 @@ export function sessionRow(worker: Worker, now: number, options: { alias?: strin
  * A Work's Worker as a tray row (§11 Work detail, "Workers"): its agent's logo, "Agent · title" (no Session
  * id), what it does, its progress bar, and "● 12m" while it works, else when it finished; it pushes its
  * Session. What it does: a state that is news ("Needs you", "Failed", "Ended"), then what it reported; with
- * nothing reported (a Claude Session on today's daemons reports nothing), the project it works in, which
- * the title does not say, rather than a bare "Working" or its terminal's footer.
+ * nothing reported (a Claude Session on today's daemons reports nothing), the project it works in when the
+ * Work's eyebrow names another, else nothing, rather than a bare "Working" or its terminal's footer.
  */
-export function workerRow(worker: WorkWorkerLine, now: number): TrayRow {
+export function workerRow(worker: WorkWorkerLine, now: number, workProject?: string): TrayRow {
   const live = worker.state === "running";
   const named = worker.name && worker.name !== worker.agentLabel && worker.name !== "Worker";
   return {
     key: `worker:${worker.sessionId}`,
     title: named ? `${worker.agentLabel} · ${worker.name}` : worker.agentLabel,
-    line: [worker.stateLabel, worker.summary || worker.project].filter(Boolean).join(" · "),
+    // The project only where the page's eyebrow ("Work · mewla") does not already say it.
+    line: [worker.stateLabel, worker.summary || (worker.project !== workProject ? worker.project : "")].filter(Boolean).join(" · "),
     end: live ? elapsedShort(worker.since, now) : worker.time,
     live: live || undefined,
     needs: worker.state === "blocked" || undefined,
