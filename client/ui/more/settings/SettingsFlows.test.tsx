@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { pressUntil } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -181,7 +182,7 @@ describe("Model Providers", () => {
     });
     const app = await open(HARNESS, s.options);
     await app.waitFor("id:provider-add");
-    await app.press("id:provider-add");
+    await pressUntil(app, "id:provider-add", "id:provider-name");
     await app.type("id:provider-name", "Home");
     await app.type("id:provider-url", "https://c9.example.com/v1");
     await app.type("id:provider-key", "sk-home");
