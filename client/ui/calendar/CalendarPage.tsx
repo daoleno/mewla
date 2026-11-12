@@ -4,7 +4,7 @@ import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { monthTitle } from "../../core/calendar/format";
 import { activeRun, groupAgenda, itemsOnDay, itemSummary, kindLabel, rowTime, statusLabel, type CalendarItem } from "../../core/calendar/model";
-import { connection } from "../session";
+import { connection, workers } from "../session";
 import { clock } from "./clock";
 import { CalendarEditor, openEditor } from "./Editor";
 import { StatusDot } from "./parts";
@@ -142,10 +142,11 @@ export function CalendarPage(props: { nav: NavStackState<CalendarRoute>; openSes
     if (showMonth()) pickedDay.set(null);
     showMonth.set(!showMonth());
   };
-  // A running item opens its Session; the others their page.
+  // A running item opens its Session while the computer lists it; the others, and a run whose Session
+  // has gone, their page (the Expo app checked the same; parity #45).
   const open = (item: CalendarItem) => {
     const session = item.status === "running" ? activeRun(item)?.worker_session : undefined;
-    if (session) props.openSession(session);
+    if (session && workers().some((worker) => worker.id === session)) props.openSession(session);
     else props.nav.push({ name: "item", id: item.id });
   };
   return (
