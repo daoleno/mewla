@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { typeUntil } from "../../testing/fixtures";
+import { typeUntil, pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -250,8 +250,7 @@ describe("iPhone use", () => {
     await app.press("label:Done: tell the agent you finished");
     await app.waitUntil(() => sent.length === 1);
     // Done holds both buttons until the computer answers it.
-    await app.waitUntil(() => app.enabled("label:Stop Codex"));
-    await app.press("label:Stop Codex");
+    await pressWhenEnabled(app, "label:Stop Codex");
     await app.waitUntil(() => sent.length === 2);
     expect(sent).toEqual([{ handoff_done: true }, { stop_agent: true }]);
   });
@@ -284,8 +283,7 @@ describe("Labs", () => {
     await app.waitFor("id:virtual-screen-page");
     // `enabled` throws while no view matches: the switch first, then that it takes a press.
     await app.waitFor("id:virtual-screen");
-    await app.waitUntil(() => app.enabled("id:virtual-screen"));
-    await app.press("id:virtual-screen");
+    await pressWhenEnabled(app, "id:virtual-screen");
     await app.waitUntil(() => on);
     await app.back();
     await app.waitUntil(() => app.texts().includes("On"));

@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering, framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
+import { answering, framesOf, paired, phoneHost, pressUntil, pressWhenEnabled, typeUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const WEB = {
@@ -346,13 +346,11 @@ describe("a Session", () => {
     });
     await app.host.send("links.open", { url: "mewla://sessions/w6" });
     await app.waitFor("id:composer");
-    await app.press("id:composer-plus");
-    await app.press("id:attach-file");
-    await app.waitFor("text:Ready");
-    await app.type("id:composer", "Read this");
-    // A slow runner draws the typed text a frame later: Send is enabled once it has.
-    await app.waitUntil(() => app.enabled("id:send"));
-    await app.press("id:send");
+    // Under a full suite's load a press or the first keys after a sheet closes can be lost: each step waits for what it does.
+    await pressUntil(app, "id:composer-plus", "id:attach-file");
+    await pressUntil(app, "id:attach-file", "text:Ready");
+    await typeUntil(app, "id:composer", "Read this", "id:send");
+    await pressWhenEnabled(app, "id:send");
     await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1);
     expect(framesOf(app.host.posts(), "send_input")[0]).toMatchObject({ worker_id: "w6", text: "Read this", attachments: [{ name: "plan.pdf", path: "/state/uploads/plan.pdf", content_type: "application/pdf" }] });
     await app.waitFor("text:Ready", { state: "gone" });
