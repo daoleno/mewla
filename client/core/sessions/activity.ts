@@ -40,13 +40,16 @@ export const isPromptNoise = (line: string) => /^tip:/i.test(line) || /^this com
 /**
  * A prompt's request as lines that say something: trimmed, without the noise. Older daemons send Claude's Tip
  * too, and a narrow terminal wraps it ('… choose "switch to auto' / 'mode" below'): a Tip goes with the lines
- * that close its open quote.
+ * that close its open quote, and a first line that only closes a quote is such a tail.
  */
 export function promptLines(text: string): string[] {
   const out: string[] = [];
   let inTip = false;
+  const odd = (line: string) => (line.match(/"/g)?.length ?? 0) % 2 === 1;
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
+    // A daemon that strips the Tip's first line (main 3f244931) leaves its wrapped tail ('mode" below') first.
+    if (out.length === 0 && !inTip && line && odd(line) && !/^tip:/i.test(line)) continue;
     if (inTip) {
       if (line && (line.match(/"/g)?.length ?? 0) % 2 === 1) inTip = false;
       continue;

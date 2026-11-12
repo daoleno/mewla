@@ -95,3 +95,8 @@ test("an older daemon's Tip wrapped by a narrow terminal goes whole, its tail is
   const request = 'Tip: auto mode handles these prompts for you — choose "switch to auto\nmode" below\nFetch HTTP headers from example.edu\ncurl -sI https://example.edu\nThis command requires approval\n\nDo you want to proceed?';
   expect(promptParts(request)).toEqual({ question: "Do you want to proceed?", command: "curl -sI https://example.edu", notes: "Fetch HTTP headers from example.edu" });
 });
+
+test("a Tip the daemon stripped but whose wrapped tail it left first: the tail is not the description", () => {
+  expect(promptParts('mode" below\nFetch HTTP headers from example.edu\ncurl -sI https://example.edu\nThis command requires approval\n\nDo you want to proceed?', "curl -sI https://example.edu"))
+    .toEqual({ question: "Do you want to proceed?", command: "curl -sI https://example.edu", notes: "Fetch HTTP headers from example.edu" });
+});
