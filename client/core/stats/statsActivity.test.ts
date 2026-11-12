@@ -29,18 +29,14 @@ describe('buildDailyActivitySeries', () => {
     expect(series[6].day?.totalTokens).toBe(9);
   });
 
-  test('gives the Day range the week ending today so it has a trend', () => {
-    const series = buildDailyActivitySeries([day('2026-10-27', 9)], 'day', NOW);
-    expect(series).toHaveLength(7);
-    expect(series[0].date).toBe('2026-10-21');
-    expect(series[6].date).toBe('2026-10-27');
-  });
-
-  test('spans 31 days for Month and from the first recorded day for All', () => {
-    expect(buildDailyActivitySeries([], 'month', NOW)).toHaveLength(31);
-    const all = buildDailyActivitySeries([day('2026-10-01', 1), day('2026-10-03', 2)], 'all', NOW);
-    expect(all[0].date).toBe('2026-10-01');
-    expect(all[all.length - 1].date).toBe('2026-10-27');
+  test('14 and 30 days end today, as the daemon counts them', () => {
+    const fortnight = buildDailyActivitySeries([], 'fortnight', NOW);
+    expect(fortnight).toHaveLength(14);
+    expect(fortnight[0].date).toBe('2026-10-14');
+    const month = buildDailyActivitySeries([], 'month', NOW);
+    expect(month).toHaveLength(30);
+    expect(month[0].date).toBe('2026-09-28');
+    expect(month[29].date).toBe('2026-10-27');
   });
 });
 

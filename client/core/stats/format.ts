@@ -1,5 +1,5 @@
 import { formatDateTime, formatShortDate, formatUSD, parseDateOnly } from "../more/dates";
-import { isTotalTokensKnown, type CostProvenance, type DayCell, type ModelStat, type PricingStatus } from "./statsPayload";
+import { isCostKnown, isTotalTokensKnown, type CostProvenance, type DayCell, type ModelStat, type PricingStatus } from "./statsPayload";
 import { unpricedReasonLabel } from "./unpricedReason";
 
 /** How Stats words its numbers: compact counts, dollars, and what is not known. */
@@ -82,6 +82,30 @@ export function chartDate(date: string): string {
   return day ? formatShortDate(day) : date;
 }
 
+/**
+ * What the one chart draws (SPEC §15 Metrics): spend by day; activity (tokens, else sessions) only
+ * when no day in it has a known cost.
+ */
+export type ChartSeries = "cost" | "tokens" | "sessions";
+
+export function chartSeries(days: ReadonlyArray<DayCell | null>): ChartSeries {
+  const known = days.filter((day): day is DayCell => day !== null);
+  // A known cost above nothing: a range of only unpriced or zero days draws its activity instead.
+  if (known.some((day) => isCostKnown(day) && day.cost > 0)) return "cost";
+  return activityUsesTokens(known) ? "tokens" : "sessions";
+}
+
+export function chartValue(day: DayCell | null, series: ChartSeries): number {
+  if (!day) return 0;
+  return series === "cost" ? Math.max(0, day.cost) : series === "tokens" ? day.totalTokens : day.sessions;
+}
+
+/** The chart's readout for a day: "$5.20", "1.2M tokens", "3 sessions". */
+export function chartReadout(day: DayCell | null, series: ChartSeries): string {
+  if (series === "cost") return formatAvailableCost(day?.cost ?? 0, day ? day.costKnown : true);
+  return activityReadout(day, series === "tokens");
+}
+
 /** The activity chart's readout for a day. */
 export function activityReadout(day: DayCell | null, usesTokens: boolean): string {
   if (usesTokens) return `${day ? formatAvailableTokens(day.totalTokens, day.totalTokensKnown) : "0"} tokens`;
@@ -154,7 +178,7 @@ export function dayFacts(day: DayCell): Array<[string, string]> {
 }
 
 /** The empty range's title. */
-export function emptyRangeTitle(range: "day" | "week" | "month" | "all", anyStats: boolean): string {
+export function emptyRangeTitle(days: number, anyStats: boolean): string {
   if (!anyStats) return "No stats yet";
-  return range === "day" ? "No activity today" : `No ${range} activity`;
+  return `No activity in the last ${days} days`;
 }
