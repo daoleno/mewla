@@ -64,6 +64,8 @@ jobs:
           MEWLA_ANDROID_KEY_ALIAS: ${{ github.event_name == 'workflow_dispatch' && secrets.ZEN_ANDROID_KEY_ALIAS || '' }}
           MEWLA_ANDROID_KEY_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && secrets.ZEN_ANDROID_KEY_PASSWORD || '' }}
         run: ./gradlew --no-daemon --console=plain assemblePreviewRelease -Pmewla.abis=arm64-v8a
+      - name: Every pet image the app names is in the APK
+        run: python3 client/scripts/check-pet-assets.py android "$(ls client/android/app/build/outputs/apk/preview/release/*.apk | head -1)"
       - name: Shred the keystore
         if: always() && github.event_name == 'workflow_dispatch'
         run: |
@@ -133,6 +135,7 @@ jobs:
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -5
           APP=build/dd/Build/Products/Release-iphonesimulator/Mewla.app
           du -sh "$APP"
+          python3 ../scripts/check-pet-assets.py ios "$APP"
           mkdir -p out
           xcrun simctl boot "$SIM" || true
           xcrun simctl bootstatus "$SIM" -b
