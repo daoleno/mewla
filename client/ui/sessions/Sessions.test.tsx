@@ -390,4 +390,24 @@ describe("a Session", () => {
     await app.waitUntil(() => !app.shows("id:file-preview"), { timeout: 5_000 });
     expect(app.shows("id:session-menu")).toBe(true);
   }, 20_000);
+  test("New Terminal from a Session starts in its folder with its agent's Provider connection (parity #39, #40)", async () => {
+    const providers = {
+      type: "providers", revision: 1,
+      connections: [{ id: "gw", name: "Gateway", preset_id: "custom", clients: ["claude"], credential_ready: true, advanced: false }],
+      defaults: { claude: { connection_id: "gw" } },
+      presets: [{ id: "custom", label: "Custom Gateway", clients: ["claude"], advanced: true }],
+      models: {},
+    };
+    const app = await sessionsApp({ worker_sessions: [session("w4", { name: "site work", cwd: "/home/me/site" }), session("w0", { name: "other", cwd: "/home/me/mewla" })], conversations: { w4: transcript }, replies: { list_providers: providers } });
+    await app.waitFor("text:site work", { timeout: 10_000 });
+    await app.press("text:site work");
+    await app.waitFor("id:session-chat");
+    app.onDialog((dialog) => (dialog.buttons.includes("New Terminal") ? "New Terminal" : null));
+    await answering(app, () => app.press("id:session-menu"));
+    await app.waitFor("id:new-cwd");
+    expect(app.value("id:new-cwd")).toBe("/home/me/site");
+    await app.press("id:preset-claude");
+    await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
+    expect(framesOf(app.host.posts(), "create_session").at(-1)).toMatchObject({ target_id: "w4", cwd: "/home/me/site", connection_id: "gw" });
+  }, 20_000);
 });
