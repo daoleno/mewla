@@ -180,7 +180,7 @@ describe("a Session", () => {
     expect(app.texts()).toContain("Delete the build folder");
     await app.wait(500);
     await app.press("id:prompt-option-2");
-    await app.waitFor("text:Running");
+    await app.waitFor("text:mewla · Running");
     expect(framesOf(app.host.posts(), "answer_prompt").at(-1)).toMatchObject({ worker_id: "w9", prompt_answer: { prompt_id: "p-1", number: 2 } });
     await app.waitFor("id:request-sealed");
     expect(app.shows("id:request-card")).toBe(false);
@@ -245,7 +245,7 @@ describe("a Session", () => {
     expect(answers.at(-1)).toMatchObject({ worker_id: "w5", process_id: 77, dsh_answer: { epoch: "e1", rpcId: "r1", outcome: "allowed-once" } });
   }, 20_000);
 
-  test("a Codex Session's /status opens its status, and its model chip opens Model & Effect", async () => {
+  test("a Codex Session's /status opens its status, and its model chip opens Model & Effort", async () => {
     const codex = session("w3", { name: "codex run", status: "done", provider: "codex", command: "codex", capabilities: { structured_events: true, model_profile_managed: true, model_profile_active_switch: true } });
     const runtime = { session_id: "w3", client: "codex", connection_id: "c1", connection_name: "OpenAI", model_id: "gpt-6", reasoning_efforts: ["low", "high"], credential_ready: true, hot_switchable: true };
     const app = await sessionsApp({
@@ -288,7 +288,7 @@ describe("a Session", () => {
     expect(app.count("id:row-calendar")).toBe(1);
     await app.press("id:session-row");
     await app.waitFor("id:session-calendar");
-    app.onDialog((dialog) => (dialog.buttons.includes("Open Brain") ? "Open Brain" : null));
+    app.onDialog((dialog) => (dialog.buttons.includes("Open its Work") ? "Open its Work" : null));
     await answering(app, () => app.press("id:session-menu"));
     await app.waitFor("id:work-file-page");
     expect(app.texts()).toContain("Read the three papers.");
@@ -321,17 +321,17 @@ describe("a Session", () => {
     expect(framesOf(app.host.posts(), "set_active_worker").at(-1)?.worker_id).toBe("w7");
   }, 20_000);
 
-  test("a Session in a repository shows its changes on a chip that opens Git review", async () => {
+  test("a Session's Changes (its menu) opens Git review of its folder", async () => {
     const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }, { path: "notes.md", staged: false, unstaged: false, untracked: true, additions: 0, deletions: 0 }];
     const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 2, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 1, additions: 3, deletions: 1, files };
     const app = await sessionsApp({ worker_sessions: [session("w5", { name: "repo work" })], conversations: { w5: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } }, { drawnHeader: true });
     await app.waitFor("text:repo work", { timeout: 10_000 });
     await app.press("text:repo work");
-    await app.waitFor("id:session-git");
-    expect(app.texts()).toContain("2 files  +3  -1");
-    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w5", cwd: "/home/me/mewla" });
-    await app.press("id:session-git");
+    await app.waitFor("id:session-menu");
+    app.onDialog((dialog) => (dialog.buttons.includes("Changes") ? "Changes" : null));
+    await answering(app, () => app.press("id:session-menu"));
     await app.waitFor("id:git-page");
+    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w5", cwd: "/home/me/mewla" });
   }, 20_000);
 
   test("Attach File uploads a picked file and the message carries where the computer keeps it", async () => {
@@ -371,8 +371,8 @@ describe("a Session", () => {
     await app.waitFor("text:notes", { timeout: 10_000 });
     await app.press("text:notes");
     await app.waitFor("id:session-chat");
-    app.onDialog((dialog) => (dialog.buttons.includes("Open terminal") ? "Open terminal" : dialog.buttons.includes("Terminate") ? "Terminate" : null));
-    await answering(app, () => app.press("id:session-menu"));
+    app.onDialog((dialog) => (dialog.buttons.includes("Terminate") ? "Terminate" : null));
+    await app.press("id:session-mode-terminal");
     await app.waitUntil(() => !app.shows("id:session-chat"));
     await app.host.send("app.daemonDown");
     await app.waitFor("id:terminal-offline", { timeout: 10_000 });
@@ -431,19 +431,19 @@ describe("a Session", () => {
     await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
     expect(framesOf(app.host.posts(), "create_session").at(-1)).toMatchObject({ target_id: "w4", cwd: "/home/me/site", connection_id: "gw" });
   }, 20_000);
-  test("an open Git review closes when its Session changes folder; the chip reads the new one (parity #43)", async () => {
+  test("an open Git review closes when its Session changes folder (parity #43)", async () => {
     const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }];
     const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 1, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 0, additions: 3, deletions: 1, files };
     const repo = session("w8", { name: "repo work" });
     const app = await sessionsApp({ worker_sessions: [repo], conversations: { w8: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } }, { drawnHeader: true });
     await app.waitFor("text:repo work", { timeout: 10_000 });
     await app.press("text:repo work");
-    await app.waitFor("id:session-git");
-    await app.press("id:session-git");
+    await app.waitFor("id:session-menu");
+    app.onDialog((dialog) => (dialog.buttons.includes("Changes") ? "Changes" : null));
+    await answering(app, () => app.press("id:session-menu"));
     await app.waitFor("id:git-page");
     await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...repo, cwd: "/home/me/site" } });
     await app.waitUntil(() => !app.shows("id:git-page"), { timeout: 5_000 });
     expect(app.shows("id:session-menu")).toBe(true);
-    await app.waitUntil(() => framesOf(app.host.posts(), "git_diff_status").at(-1)?.cwd === "/home/me/site", { timeout: 5_000 });
   }, 20_000);
 });

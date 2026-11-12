@@ -42,7 +42,7 @@ function modelValue(runtime: ThreadRuntimeSelection | null): string {
  * with Open terminal, Browse workspace, Switch executor (trailing the agent's logo),
  * Model (trailing "model · effort") and New chat, always in that order. A row the
  * computer cannot do now stays in place at 40 % and does nothing. Switch executor
- * and Model replace the menu with their page ("Brain host", Model & Effect) in the
+ * and Model replace the menu with their page ("Brain host", Model & Effort) in the
  * same sheet; a switch that lands closes it. New chat closes it and asks "Start a
  * new chat?"; a refusal tells `onNotice` "Couldn't start a new chat".
  *
