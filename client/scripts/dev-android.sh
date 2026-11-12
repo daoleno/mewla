@@ -13,5 +13,7 @@ until (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; do
   sleep 0.2
 done
 adb reverse "tcp:$port" "tcp:$port"
-adb shell am start -S -n com.daoleno.mewla.preview.debug/com.daoleno.mewla.MainActivity --es devServer "ws://127.0.0.1:$port/ws"
+# The start link, the one way in: tap Load on the device to confirm.
+adb shell am start -a android.intent.action.VIEW -d "'mewla-dev://start?server=ws://127.0.0.1:$port/ws'"
+echo "Tap Load on the device."
 wait "$server"

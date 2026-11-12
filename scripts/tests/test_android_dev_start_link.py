@@ -22,14 +22,20 @@ class DevStartLinkIsDebugOnly(unittest.TestCase):
                 self.assertEqual(declares, manifest.parent.name == "debug")
 
     def test_its_class_is_compiled_only_into_debug(self):
-        sources = [path for path in SRC.rglob("*.kt") if "DevStartActivity" in path.read_text()]
+        sources = [path for path in SRC.rglob("*.kt") if "class DevStartActivity" in path.read_text()]
         self.assertTrue(sources)
         for path in sources:
             self.assertEqual(path.relative_to(SRC).parts[0], "debug", str(path))
 
-    def test_the_app_takes_a_dev_server_only_in_a_debug_build(self):
+    def test_the_app_takes_a_dev_server_only_through_the_confirmed_link(self):
+        # One way in: no extra that names a server (any app can start the exported MainActivity), only the
+        # token DevStartActivity gets for the server the person confirmed, and only in a debug build.
         main = (SRC / "main/java/com/daoleno/mewla/MainActivity.kt").read_text()
-        self.assertIn('BuildConfig.DEBUG && dev != null', main)
+        self.assertIn("if (BuildConfig.DEBUG) DevLaunch.serverFor(", main)
+        for path in SRC.rglob("*.kt"):
+            self.assertNotIn('"devServer"', path.read_text(), str(path))
+        start = (SRC / "debug/java/com/daoleno/mewla/DevStartActivity.kt").read_text()
+        self.assertLess(start.index(".setPositiveButton("), start.index("DevLaunch.confirm("))
 
 
 if __name__ == "__main__":

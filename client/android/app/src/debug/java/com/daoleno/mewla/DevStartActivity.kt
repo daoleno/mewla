@@ -31,7 +31,7 @@ class DevStartActivity : Activity() {
       .setNegativeButton("Cancel") { _, _ -> finish() }
       .setPositiveButton("Load") { _, _ ->
         startActivity(Intent(this, MainActivity::class.java)
-          .putExtra("devServer", server)
+          .putExtra(DevLaunch.EXTRA, DevLaunch.confirm(server))
           .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
         finish()
       }

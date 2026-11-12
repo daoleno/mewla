@@ -65,7 +65,7 @@ Wiring (source of truth for packaging):
 
 ## Day-to-day workflow
 
-- **Hot reload:** `client/scripts/dev-android.sh` installs the preview debug build on the one device `adb` sees and runs it from `nsh dev`: every save reloads it.
+- **Hot reload:** `client/scripts/dev-android.sh` installs the preview debug build on the one device `adb` sees and opens it on `nsh dev` through the start link `mewla-dev://start?server=ws://…` (tap Load on the device): every save reloads it. The start link is the debug build's only way onto a dev server: it accepts a server on this network only and always asks first.
 - **A build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`. The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app.
 - **Checks:** `cd client && bun test core`, then `cd client/ui && ~/.nsh/bin/nsh check && ~/.nsh/bin/nsh test`.
 
