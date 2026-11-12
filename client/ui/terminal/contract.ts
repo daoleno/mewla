@@ -22,12 +22,17 @@ export type TerminalTheme = {
   foreground: string;
   cursor: string;
   selection: string;
+  /** The selection handles' color (Android tints the platform's handle shapes with it). */
+  handle?: string;
   /** The 16 ANSI colors, `#rrggbb`. */
   palette: string[];
 };
 
 export type TerminalProps = {
-  /** In points. The view derives its grid from it and its size. */
+  /**
+   * In points. The view derives its grid from it and its size; Android's line height is 1.4 times it in
+   * whole points (10/14, 9/13). The page keeps the device's size (ui/terminal/fontSize.ts).
+   */
   fontSize: number;
   theme: TerminalTheme;
   /**
@@ -62,6 +67,12 @@ export type TerminalEvents = {
   tapCell: { col: number; row: number; text: string; index: number };
   /** A program copied text (OSC 52, OSC 1337 Copy, OSC 5522). */
   copy: { text: string };
+  /**
+   * A pinch ended at `size` (whole points, 8–14). While the fingers move the view only scales its drawing;
+   * the page sets the size as `fontSize`, which changes the grid once. A view drawing the Session's size
+   * for another viewer (`sessionSize`) keeps its fit and takes no pinch. Android only so far.
+   */
+  fontSize: { size: number };
 };
 
 /**
@@ -85,5 +96,5 @@ export type TerminalEvents = {
  */
 export const TerminalSurface = nativeComponent<TerminalProps, TerminalEvents>("mewla.terminal", {
   props: ["fontSize", "theme", "padding"],
-  events: ["size", "failed", "input", "scroll", "viewport", "tapCell", "copy"],
+  events: ["size", "failed", "input", "scroll", "viewport", "tapCell", "copy", "fontSize"],
 });
