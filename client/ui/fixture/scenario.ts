@@ -161,8 +161,11 @@ function sessionThread(s: Sess) {
   return [s.brief ? brief(s.brief, 25) : brief(`${s.name} in ${s.proj}.`, 25), ...steps, ...shots, reply(s.reply ?? `${s.act}.`, 10), ...edit];
 }
 
+/** The phases the mock's Workers report (its steps 2, 3, 2 of five: planning, working, planning). */
+const PHASE: Record<string, string> = { quickstart: "planning", shots: "working", apiref: "planning" };
+
 function joined(s: Sess) {
-  return { session_id: s.id, name: s.name, provider: s.agent, state: "running", summary: s.act, live: true, joined_at: at(Number(s.t) + 1), updated_at: at(1) };
+  return { session_id: s.id, name: s.name, provider: s.agent, state: "running", summary: s.act, live: true, joined_at: at(Number(s.t) + 1), updated_at: at(1), ...(PHASE[s.id] ? { phase: PHASE[s.id] } : {}) };
 }
 const docsWorkers = SESS.filter((s) => s.work === "docsref");
 
@@ -170,10 +173,10 @@ const brain = {
   chat_thread_id: "t-now",
   host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me/workspace", command: "claude", provider: "claude", started_at: ago(6 * HOUR) },
   current_work: [
-    { work_id: IDS.docsWork, revision: 4, title: "Docs refresh", status: "running", progress_mode: "owned", unread_result: false, attempt_session_id: "quickstart",
+    { work_id: IDS.docsWork, revision: 4, title: "Docs refresh", status: "running", progress_mode: "owned", unread_result: false, attempt_session_id: "quickstart", attempt_delegated: true,
       summary: "Refresh the atlas-docs guides for the new API: quickstart, screenshots and the generated reference.", created_at: today("13:20"), updated_at: at(1),
       worker_sessions: docsWorkers.map(joined) },
-    { work_id: IDS.pricingWork, revision: 2, title: "Pricing page rework", status: "running", progress_mode: "owned", unread_result: false, attempt_session_id: "pricing",
+    { work_id: IDS.pricingWork, revision: 2, title: "Pricing page rework", status: "running", progress_mode: "owned", unread_result: false, attempt_session_id: "pricing", attempt_delegated: true,
       summary: "Three plans, a comparison table and an annual toggle on landing-site, matching the new tokens.", created_at: today("12:58"), updated_at: at(1),
       worker_sessions: [joined({ ...byId("pricing"), t: 12 })] },
   ],
@@ -214,6 +217,12 @@ export function scenario(): FakeDaemonState & { assets: Record<string, string> }
     worker_sessions: SESS.map(workerSession),
     conversations,
     calendar_items,
+    // The Work's file (its Work detail's "Work file" row), as the computer lists it.
+    work_items: [{
+      id: IDS.docsWork, path: "/home/me/.mewla/work/atlas-docs/docs-refresh.md", project: "atlas-docs", title: "Docs refresh",
+      body: "# Docs refresh\n\nRefresh the atlas-docs guides for the new API: quickstart, screenshots and the generated reference.\n",
+      frontmatter: { id: IDS.docsWork, kind: "task", created: today("13:20"), started: today("13:21"), title: "Docs refresh" }, mtime: at(2),
+    }],
     computers: { computers: [
       { daemon_id: "c".repeat(64), name: "studio", online: true, open_requests: 0 },
       { daemon_id: "d".repeat(64), name: "laptop", online: false, open_requests: 0, last_seen: today("09:14") },

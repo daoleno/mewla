@@ -85,17 +85,19 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
   }
   if (slip.group === "running") {
     const open: BrainWorkAction[] = slip.sessionId ? [{ kind: "open", label: "Open Worker", primary: true }] : [];
-    // Calendar, not Brain, runs a Calendar run's Worker: Stop would cancel
-    // Brain's Work and leave the run going.
-    const stop: BrainWorkAction[] = slip.sessionId && !slip.calendar
+    // The daemon stops only a Work whose Attempt runs in a delegated Worker. Calendar, not Brain, runs a
+    // Calendar run's Worker: Stop would cancel Brain's Work and leave the run going.
+    const stop: BrainWorkAction[] = slip.stoppable && !slip.calendar
       ? [{ kind: "stop", label: "Stop", confirm: "The Worker is closed and its Work cancelled. Unsaved work in it is lost." }]
       : [];
-    return [...open, { kind: "ask", label: "Ask Brain about this" }, ...stop];
+    // Snoozed, it stays out of Needs you for the hour if it comes to need you (SPEC §11 Work detail).
+    return [...open, { kind: "ask", label: "Ask Brain about this" }, { kind: "snooze", label: "Snooze 1 hour" }, ...stop];
   }
   if (slip.group === "queued" || slip.group === "waiting") {
     // Nothing here asks for you, so the slip stays quiet; its sheet has these.
     return [
       { kind: "ask", label: "Ask Brain about this" },
+      { kind: "snooze", label: "Snooze 1 hour" },
       { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
     ];
   }

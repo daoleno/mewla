@@ -44,10 +44,14 @@ describe("every Work state has a way forward", () => {
     expect(kinds(work({ status: "done", unread_result: true }))).toEqual(["read", "ask"]);
   });
 
-  test("running: open the Worker, ask Brain, or stop it with a confirmation", () => {
+  test("running: open the Worker, ask Brain, snooze it, or stop it with a confirmation", () => {
     const item = work({ status: "running", progress_mode: "owned", attempt_session_id: "%9", attempt_delegated: true });
     const workers = [{ id: "%9", name: "w", status: "running", phase: "verifying", summary: "Running go test ./..." }];
-    expect(kinds(item, workers)).toEqual(["open", "ask", "stop"]);
+    expect(kinds(item, workers)).toEqual(["open", "ask", "snooze", "stop"]);
+    // The daemon stops only a delegated Worker's Attempt: no Stop to offer for another.
+    expect(kinds({ ...item, attempt_delegated: false }, workers)).toEqual(["open", "ask", "snooze"]);
+    // A delegated Attempt the list does not have yet is still stopped by the daemon.
+    expect(kinds(item, [])).toEqual(["ask", "snooze", "stop"]);
     expect(slipOf(item, workers).phase).toBe("verifying");
     expect(brainWorkActions(slipOf(item, workers)).at(-1)?.confirm).toContain("cancelled");
   });
