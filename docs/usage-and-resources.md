@@ -1,17 +1,17 @@
 # Usage and resources
 
-Two screens answer "what are my agents consuming?": **Stats** for tokens and
-cost, **Resources** for CPU, memory and disk on the computer. Both open from
-the menu and show the current server only; Mewla never adds several computers
-together.
+Two pages answer "what are my agents consuming?": **Stats** for tokens and
+cost, **Resources** for CPU, memory and disk on the computer. Tap the cat for
+the computer page; both are there. They show the current computer only; Mewla
+never adds several computers together.
 
 ## Stats
 
-![Stats: about $182 this month across four models, with tokens and sessions per model](assets/stats.svg)
-
-Stats reads the agents' own history on the computer and shows, per model,
-tokens, sessions and cost for the range you pick. Tap a model for input,
-output and cache tokens, the price source and when it was refreshed.
+Stats reads the agents' own history on the computer. Its title is the total
+cost for the range you pick, with spend by day as a chart,
+then tokens, sessions and cost per model and per project. Tap a model for
+input, output and cache tokens, the price source and when it was refreshed, or
+a day in the chart for that day.
 
 Costs come in four kinds, kept apart:
 
@@ -48,22 +48,16 @@ Per agent:
 
 ## Resources
 
-![Resources: CPU, memory, disk and pressure cards above a list of processes attributed to Workers, Brain, Docker and you](assets/resources.svg)
+Resources is a live view of the computer, refreshed every five seconds while it
+is open:
 
-Resources is a live view of the computer, refreshed every five seconds while
-it is open:
-
-- **CPU, Memory, Disk I/O and Pressure** cards, each with the last minutes of
-  history. On Linux, Pressure is PSI. On a Mac there is no PSI: the card shows
-  the system's own memory pressure level (Normal, Warning or Critical) instead.
-  **Details** adds per-core activity, load averages, cache and swap, mount
-  space, and PSI averages on Linux.
-- The pressure state (normal, elevated or critical) and the signals that crossed
-  a threshold.
-- **Consumers**: processes grouped by owner (Workers, Orphaned Workers, Brain,
-  Docker, User), sorted by memory (RSS) or CPU. Tap one for its command, folder
-  and process list. An orphaned Worker shows **Residual** next to its last
-  status.
+- The headline says how much pressure the computer is under, and which
+  signals crossed a threshold.
+- **CPU, Memory, Disk and Pressure** tiles. On Linux, Pressure is PSI. On a Mac
+  there is no PSI: the tile shows the system's own memory pressure level
+  (Normal, Warning or Critical) instead.
+- **Using this machine**: processes grouped by owner (Workers, orphaned
+  Workers, Brain, Docker and you).
 
 When pressure turns elevated or critical, Brain is told and decides what to do,
 such as waiting before it starts more Workers or closing one. Mewla itself never
@@ -80,6 +74,3 @@ every sample, no restart needed:
   "disk_free_percent": { "elevated": 10, "critical": 3 }
 }
 ```
-
-If the connection drops, the last sample stays on screen marked **Last
-sample**.

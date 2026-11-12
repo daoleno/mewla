@@ -161,24 +161,28 @@ does sign-in, the background service and this pairing in one command.
 
 ### On the phone
 
-On the app's welcome screen tap **Mewla already running? Scan its code**, or
-open **Settings > Pair a computer** in the app, then scan the QR code, import a
-screenshot or photo of it, or paste the printed link. Opening a `mewla://` link
-on the phone works too.
+The first computer: on the welcome screen, tap **Mewla already running? Scan its
+code**. Another computer: tap the cat, then **Pair a computer**. Scan the QR
+code, or paste the printed link: **Paste a pairing link** on first run, the
+**Pairing link** field and **Pair** on **Pair a computer**, which also has
+**Pick QR image** for a screenshot or photo of the code. Opening a `mewla://`
+link on the phone works too. Confirm with **Pair and grant access**.
 
-After pairing a computer, the app opens Brain, where the first message goes,
-whether that is the first computer or one added later.
+When it says **Brain is home.**, tap **Open Brain**: the app opens that
+computer's Brain, whether it is the first computer or one added later.
 
 After pairing, the app reconnects with the stored address and device key. The
 computer shows up under the name it calls itself, such as your Mac's name. To
-rename it or change the address later, tap it in **Settings**.
+rename it or change the address later, open its details: tap the cat, then
+this computer's name, or ⓘ beside another computer under **Computers**.
 
 The app can keep several paired computers, but it connects to only one at a
-time: the current one. The computer at the bottom of the menu is the one in
-use; tap it to switch to another paired computer, or to open **Settings >
-Computers** (with a single computer it goes straight there). Switching there
-or in **Settings** disconnects from the previous computer and clears its Sessions, Brain, Work and
-Calendar from the app before the new one loads.
+time: the current one. Its name shows under **Brain** once you have two. To
+switch, tap the cat and tap another computer under **Computers**; each one
+shows its state (**Online**, **Offline**, **Pair again**). Switching
+disconnects from the previous computer and clears its Sessions, Brain, Work and
+Calendar from the app before the new one loads, and you land on the new
+computer's Brain.
 
 ### In a browser
 
@@ -226,9 +230,10 @@ Pair only browser profiles you control.
 
 Once one device is paired, a new browser can ask for access at any HTTPS
 address of your computer. It shows a three-digit number. A paired device shows
-the request with several numbers; tap the matching one to approve. A wrong
-choice shows an error, and denied or expired requests can be retried. Requests
-expire after five minutes.
+**Approve new device** with several numbers; tap the matching one to approve.
+While it waits, the request is also a **Needs you** row in the tray, which
+opens it again. A wrong choice shows an error, and denied or expired requests
+can be retried. Requests expire after five minutes.
 
 You can answer on the computer too:
 
@@ -269,11 +274,11 @@ mewla devices revoke -id <device-id>
 ```
 
 Revoking removes the device's key, closes its live connections and rejects its
-later requests. Browsers appear as `Mewla Web (...)`. Removing a computer in the
-app's Settings first has your other computers forget it, then asks that
-computer to revoke the phone, for up to three
-seconds; if the computer is offline the phone forgets it anyway and the key
-stays trusted until you revoke it here.
+later requests. Browsers appear as `Mewla Web (...)`. **Remove computer**, in
+a computer's details in the app, first has your other computers forget it,
+then asks that computer to revoke the phone, for up to three seconds; if the
+computer is offline the phone forgets it anyway and the key stays trusted
+until you revoke it here.
 
 Pairing is idempotent for one phone: if a pairing answer is lost on the way
 back (a dropped connection, or the same QR scanned twice), the phone checks
@@ -298,7 +303,7 @@ mewla logout -delete-account   # turn it off and delete your account
 ```
 
 Remote access is its own choice. Signing in to a Mewla account does not turn it
-on: turning on Friends in the app signs this computer in to the account and
+on: turning on Friends in the app (**Settings › Labs**) signs this computer in to the account and
 nothing else, so a computer you reach over Tailscale, a Cloudflare tunnel or the
 same network gets Friends without a public address. If the computer is already
 signed in that way, `mewla login` turns remote access on without a second
@@ -348,8 +353,7 @@ starts). See the operator guide in `docs/internal/mewla-relay.md`.
 
 A phone paired through Mewla Relay goes straight to the computer when it can
 reach it on the same Wi-Fi/LAN or over Tailscale, and uses the relay otherwise.
-The connection details on the Screen page (tap its dot) say which: **LAN**, **Tailscale** or **Relay**.
-The same path shows as a small glyph beside the computer in the menu and in Settings → Computers (a link when direct, a cloud on the relay); tap the menu glyph or long-press the row for **LAN**, **Tailscale** or **Relay** with its round trip.
+Screen's ⋯ › **Connection** says which: **LAN**, **Tailscale** or **Relay**.
 
 A computer that listens only on loopback, the default, also listens on its
 Wi-Fi/LAN and Tailscale addresses (private networks: 10/8, 172.16/12,

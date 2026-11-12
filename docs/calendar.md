@@ -1,44 +1,54 @@
 # Calendar
 
-Calendar is Mewla's view of time: what happens when. Open it from the menu
-(☰, or the sidebar on a wide screen). It lives on the daemon and syncs to the
-app, so it belongs to the current server like everything else.
+Calendar is Mewla's view of time: what happens when. It lives on the daemon
+and syncs to the app, so it belongs to the current computer like everything
+else.
+
+## Open it
+
+Open the tray (the state control next to **Brain**). **Today** shows the next
+three items; tap one to open it. Tap **Calendar** for the whole page:
+
+- **Today** lists the day, with past items dimmed above the line for now.
+  **Month** shows the month grid; pick a day to see it.
+- **+** adds an item.
+- Tap an item to open it. A running item opens its live Session instead.
 
 ## Item kinds
 
-![Calendar: today a reminder and a scheduled action running as Work, Friday a deadline that needs you, Monday a scheduled action](assets/calendar.svg)
-
 | Kind | Has | What happens when it is due |
 | --- | --- | --- |
-| Event | A start and an end | Shows as running during the interval, then completes |
-| Reminder | A notify time | Your phone shows a notification and the item waits for you |
-| Deadline | A due time | The item waits for you |
-| Scheduled action | A due time and an instruction | An agent runs the instruction as Work and reports back to Brain |
+| **Event** | A start and an end | Shows as running during the interval, then completes |
+| **Reminder** | A notify time | Your phone shows a notification and the item waits for you |
+| **Deadline** | A due time | The item waits for you |
+| **Mewla action** | A due time and an instruction | An agent runs the instruction as Work and reports back to Brain |
 
-In the app, an item that waits for you shows the red **Needs you** mark;
-running, done, failed and cancelled items use the same marks as Work. Each row
-says what the item does in one line.
+An item that waits for you shows **Needs you**, counts in the state control and
+has a **Needs you** row in the tray. Each row says what the item does in one
+line.
 
 Open an item to see:
 
 - its schedule in words ("Every day at 8:30 PM · Next: tomorrow 8:30 PM"),
   with the timezone only when it differs from your phone's;
-- what it does, in one line; a scheduled action's full instructions are one
-  tap away under **Instructions**;
+- what it does, in one line; a Mewla action's full instructions are under
+  **Instructions**;
 - its runs, newest first: the date, how it went and the first line of what it
-  produced. Tap a run to read its whole result, or why it failed. A run still
-  in progress opens its live Session, and so does tapping a running item in the
-  agenda.
+  produced. Tap a run for its whole result, or why it failed, with **Open
+  session** and **Open its Work**.
+
+**Edit** changes an item; **Run now** (or **Retry now** after a failure) runs a
+Mewla action on demand.
 
 You enter a local date, a local time and a timezone. Items can repeat daily,
 weekly or on weekdays, and keep their local time across daylight-saving
 changes. A time that does not exist on a daylight-saving day is rejected; a
 time that occurs twice asks you to choose the first or second occurrence.
 
-## Scheduled actions
+## Mewla actions
 
-A scheduled action is a small job for an agent: "At 09:30 on weekdays,
-summarise yesterday's merged pull requests." When it is due, Mewla:
+A Mewla action is a small job for an agent: "At 09:30 on weekdays, summarise
+yesterday's merged pull requests." When it is due, Mewla:
 
 1. creates a visible Work item and starts the agent in its own Session, on
    Brain's executor;
@@ -46,19 +56,18 @@ summarise yesterday's merged pull requests." When it is due, Mewla:
 3. posts the result to the Brain thread where you created the action, and
    sends one push notification that opens that thread.
 
-The Work and the Session it starts say where they came from: a calendar glyph
-and the schedule's name and date ("运营：挖稿 · Oct 27") on the Work rail, the
-Work page, the Session's row in Sessions and the Session's header. Tap it to
-open that run in Calendar.
+The Work and the Session it starts say where they came from: the Session's row
+has a calendar badge and its header names the item and the date ("运营：挖稿 ·
+Oct 27"), and Work detail links the item.
 
 Each occurrence runs at most once, even across daemon restarts. A recurring
 action moves on to its next time after a success or a failure; the failed run
-keeps the reason, and the item itself is simply scheduled again. If the daemon was down when an action was due, it
-runs on startup only if it is at most 15 minutes late; older ones are marked
-failed so stale work does not start unexpectedly. Use **Run now** to run one on
-demand.
+keeps the reason, and the item itself is simply scheduled again. If the daemon
+was down when an action was due, it runs on startup only if it is at most 15
+minutes late; older ones are marked failed so stale work does not start
+unexpectedly.
 
-Scheduled actions run unattended; see
+Mewla actions run unattended; see
 [Permission bypass risks](executors.md#permission-bypass-risks).
 
 ## Alerts you will not miss
@@ -82,21 +91,27 @@ On Android the alert is an alarm-style notification in its own Calendar channel
 Done and Snooze, and opening the app from it asks for your unlock first. On iOS
 it is a Time Sensitive notification, which breaks through Focus.
 
-When an alert fires with the app open, or you open the app from it, a card
-covers the screen with the title, time and notes, and stays until you act:
+An alert is a request: when it fires with the app open, or you open the app
+from it, a card covers the screen with the title, time and notes, and stays
+until you act. Until then it is also a **Needs you** row in the tray, which
+opens the card again.
 
 - **Done** finishes a reminder or deadline (a repeating one moves to its next
   time) and silences an event's alert.
-- **Snooze 5 min / 15 min** alerts again later.
+- **Snooze 5 min** or **Snooze 15 min** alerts again later.
 - **Open in Calendar** goes to the item.
 
-The card is the same on every phone and on the web: acting on one dismisses it
-everywhere. Settings has one switch, **Strong calendar alerts**, on by default.
-Off, alerts are ordinary notifications (no lock-screen takeover on Android, no
-Time Sensitive on iOS) and the card still appears in the app.
+Acting on the card anywhere dismisses it everywhere, on every phone and on the
+web.
 
-If you deny notification permission, Calendar keeps working and tells you
-notifications are off.
+Settings (tap the cat, then **Settings**) has **Strong calendar alerts**, on by
+default. Off, alerts are ordinary notifications (no lock-screen takeover on
+Android, no Time Sensitive on iOS) and the card still appears in the app. On
+Android, when the system has not allowed alerts over the lock screen, **Allow
+full-screen alerts** opens the system setting.
+
+If you deny notification permission, Calendar keeps working and its page says
+reminders are not enabled.
 
 ## Items Mewla acts on
 
@@ -112,7 +127,7 @@ can create items of this kind.
 Brain creates calendar items when you ask for one explicitly ("remind me
 tomorrow at 9"). It does not pull commitments out of every message.
 
-From the computer:
+From the computer (a Mewla action is `scheduled_action`):
 
 ```sh
 mewla calendar list --json
@@ -133,12 +148,13 @@ mewla calendar done -id <item-id> --json
 `-lead <minutes>` on `create` sets how long before an event or deadline the
 phone alerts (default 10 for an event, 30 for a deadline).
 
-A scheduled action needs `-source-thread`, the Brain thread that receives its
+A Mewla action needs `-source-thread`, the Brain thread that receives its
 result. `-summary` is the one line Calendar shows; `-instruction` is the full
 prompt the agent gets. Brain writes the summary in your language. An item
-without one shows the first sentence of its instruction. Events use `-end-date` and `-end-time`. `mewla calendar update` takes the
-complete item as `-item-json` plus its current `-revision`, so two edits cannot
-silently overwrite each other.
+without one shows the first sentence of its instruction. Events use
+`-end-date` and `-end-time`. `mewla calendar update` takes the complete item as
+`-item-json` plus its current `-revision`, so two edits cannot silently
+overwrite each other.
 
 ## Limits
 

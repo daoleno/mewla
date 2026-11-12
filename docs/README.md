@@ -1,15 +1,15 @@
 # Mewla documentation
 
-Mewla is a phone app and a small daemon on your own computer. Every coding
-agent and shell there becomes a Session you can read as chat or drive as a
-terminal, and Brain leads them toward a goal you set once.
+Mewla is a phone app and a small daemon on your own computer: you tell Brain
+the goal, it leads your coding agents there as Sessions you can read as chat
+or drive as a terminal, and it calls you only when something needs you.
 
 New here? [Get started](get-started.md) is one path from install to your first goal.
 
 ## Get it running
 
 - [Get started](get-started.md): install, pair, first Session, first goal.
-- [Install and update](install-daemon.md): platforms, manual download, running as a service, the app builds, uninstalling.
+- [Install and update](install-daemon.md): Linux, macOS and Windows, manual download, starting at login, updates, the app builds, uninstalling.
 - [Connect and pair](connect-and-pair.md): same Wi-Fi, Tailscale or an HTTPS tunnel; more devices and browsers.
 
 ## Use it
@@ -18,13 +18,13 @@ New here? [Get started](get-started.md) is one path from install to your first g
 - [Brain and Work](brain-and-work.md): hand Brain a goal, follow the Work, answer when it asks.
 - [Notifications and Telegram](notifications.md): when Mewla interrupts you, and Brain from Telegram.
 - [Calendar](calendar.md): reminders and scheduled actions that run as Work.
-- [Plugins](plugins.md): let Brain read Linear, Notion, GitHub and more, and change them with your consent.
-- [Screen](screen.md): see and control your Mac's screen from the phone.
-- [Phone use](phone.md): agents use your Android phone on a hidden screen, with you in charge (Labs).
-- [iPhone use](iphone.md): agents on your Mac use your locked iPhone through iPhone Mirroring, off your screen (Labs).
+- [Extensions](extensions.md): let Brain read Linear, Notion, GitHub and more, and change them with your consent.
+- [Screen](screen.md): see and control your computer's screen from the phone.
+- [Phone use](phone.md): agents use your Android phone on a hidden screen, or your iPhone through your Mac, with you in charge (Labs).
 - [Agents in your browser](your-browser.md): agents use your own Chrome and its logins, in a tab group of their own.
 - [Your other computers](computers.md): let Brain hand a task to your Mac, Mac mini or another computer running Mewla.
 - [Agents outside Mewla](outside-agents.md): let Claude Code or Codex in a terminal hand work to Brain over MCP.
+- [Watch](watch.md): Mewla looks over your projects and tells you which problems need you.
 
 ## Configure it
 

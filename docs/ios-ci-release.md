@@ -128,7 +128,7 @@ Per identity (Preview shown; Production uses the same names without `.preview`),
 
 The workflow checks, before archiving, that the extension profile is for `<bundle>.live`, belongs to the team, is an App Store profile, is unexpired, and that **both** profiles contain the App Group. `scripts/set-ios-target-signing.js` then gives each target its own profile (a single command-line profile would be applied to the extension too), the export options list both, and `scripts/verify-ios-artifact.sh` checks the extension's identity, version, extension point and App Group entitlement.
 
-Live Activities need no portal capability of their own; `NSSupportsLiveActivities` is in the app's Info.plist. The APNs key stays in Expo: it carries the ordinary and silent pushes, but cannot send an ActivityKit (`liveactivity`) push, see `docs/live-surfaces.md`.
+Live Activities need no portal capability of their own; `NSSupportsLiveActivities` is in the app's Info.plist. The APNs key stays in Expo: it carries the ordinary and silent pushes, but cannot send an ActivityKit (`liveactivity`) push, see `docs/notifications.md`.
 
 ## Local verification boundary
 

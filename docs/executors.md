@@ -22,6 +22,21 @@ these; one installed, signed-in CLI is enough:
 A Session's type follows the program that actually runs: a Cursor Session using
 a Claude model is still a Cursor Session.
 
+## Choose Brain's agent and model
+
+In the app, Brain's menu (**⋯** at the right of Brain's header) has:
+
+- **Switch executor**: the installed agents with their provider, runtime and
+  account, the current one checked, then "Install more with mewla deps". Pick
+  one and Brain moves to it, with its thread. `mewla brain use <executor>` does
+  the same from the computer.
+- **Model**: the current agent's models, then **Effort** (**Low**, **Medium**,
+  **High**).
+
+A Session's own **⋯ › Model & Effort** opens the same sheet for that Session
+only. Brain picks each Worker's agent and model itself; see
+[Worker routing](brain-and-work.md#worker-routing).
+
 ## executors.toml
 
 `~/.mewla/executors.toml` is optional. `mewla setup` writes one with prompts:
@@ -74,7 +89,7 @@ command = "claude"
 config_dir = "/path/to/claude_work"
 ```
 
-`mewla doctor` and the Brain host picker in the app show which account each
+`mewla doctor` and Brain's menu › **Switch executor** show which account each
 executor is signed in as, so two sign-ins of one agent can be told apart. The
 account is the email the CLI recorded at sign-in; it is blank for an API key.
 A separate sign-in keeps its own conversations and settings, so the Model
@@ -88,7 +103,7 @@ and no setting that turns this off: agents run tools and shell commands without
 asking, and nothing reviews an action before it runs. On a machine with secrets
 or production access, that is dangerous.
 
-This covers the Brain host, Brain Workers and Calendar scheduled actions, and the
+This covers the Brain host, Brain Workers and Calendar's **Mewla actions**, and the
 app's agent presets carry the same flags. Mewla adds these flags whatever the
 configuration says:
 
@@ -126,16 +141,15 @@ So:
 
 1. On a machine with secrets or production access, do not run Mewla, or do not
    give that machine's work to Brain.
-2. Use Brain and scheduled actions only where you accept an agent changing
+2. Use Brain and Mewla actions only where you accept an agent changing
    things without asking.
 3. Model providers see what agents send them.
 
 ## Model Providers
 
-![Model Providers for Codex: Official login, OpenAI, DeepSeek (selected) and OpenRouter, with the Mewla Provider Gateway ready](assets/models.svg)
-
-**Settings > Agents > Model Providers** decides where Codex and Claude Code
-send model requests. Pick the client, then its connection:
+**Settings › Model Providers** (tap the cat, then **Settings**) decides where
+Codex and Claude Code send model requests. Pick the client, then its
+connection:
 
 | Connection | Requests go to |
 | --- | --- |
@@ -183,8 +197,8 @@ catalog when it can. Choosing a connection sets no default model: each CLI
 keeps its own (for Claude Code, whatever you chose with `/model`). A model
 picked for one Session applies to that Session only.
 
-**Model access.** A Provider's **Model access** sheet (its **…** menu) turns
-each model on or off for every agent using that Provider. A model that is off
+**Model access.** A Provider's **Model access** page turns each model on or
+off for every agent using that Provider. A model that is off
 is refused by the gateway, so a Session asking for it fails until it is turned
 back on. Turning a model off asks for confirmation first.
 
@@ -202,10 +216,9 @@ never changes the other.
 
 ## Your agents' plugins and Skills
 
-![Skills on Studio Mac: release-notes, go-tests, brand-voice and design-audit, with the agent that loads each](assets/skills.svg)
-
-**Extensions**, in the menu, leads with Mewla's own [plugins](plugins.md).
-Below them, **From your agents** has one row per tool with what that tool
+**Extensions** (tap the cat, then **Extensions**) leads with the services
+Mewla itself connects; see [Extensions](extensions.md). Below them, **From your
+agents** has one row per tool with what that tool
 installed itself, such as "Codex · 6 plugins · 34 Skills". Tools with nothing
 installed are named in one line underneath.
 

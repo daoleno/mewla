@@ -18,7 +18,7 @@ installer and `mewla update` pick the highest version.
   allow installs from your browser or file manager, and Play Protect may warn.
 - **Plugins**: first-time sign-in is not yet available for Slack, and for
   Google Workspace unless your daemon already has Google sign-in configured.
-  See [Plugins](../plugins.md#sign-in-availability).
+  See [Extensions](../extensions.md#sign-in-availability).
 - **macOS daemon**: the Apple Silicon binary is cross-built; report problems you
   hit on a real Mac.
 - **Push notifications** are a single best-effort attempt each; a missed alert
