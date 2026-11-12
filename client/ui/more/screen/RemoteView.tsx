@@ -1,4 +1,4 @@
-import { effect, keyboardFrame, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
+import { effect, host, keyboardFrame, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
@@ -51,6 +51,11 @@ export function modifiersFor(os: string | undefined): RemoteModifier[] {
  */
 export function needsSoftKeyboard(): boolean {
   return platform.os !== "web" || !platform.desktop;
+}
+
+/** "Full size" is offered where the page host can do it: a browser with a keyboard of its own (parity #29). */
+export function canShowFullSize(): boolean {
+  return !needsSoftKeyboard() && host.available();
 }
 
 
@@ -245,6 +250,16 @@ export class RemoteSession {
 
   fit(): void {
     this.post([{ type: "fit" }]);
+  }
+
+  /**
+   * Full size, with the keyboard locked where the browser allows it (⌘W and Ctrl+T reach the remote),
+   * as the Expo web app's menu did. The page host does it (`web.fullscreen`): the picture's frame
+   * cannot, and the click's user activation is the page's. `label` picks this picture's view.
+   */
+  fullSize(label: string): Promise<boolean> {
+    return host.call<{ keyboardLocked?: boolean } | null>("web.fullscreen", { testID: "remote-view", label })
+      .then(() => true, () => false);
   }
 
   key(key: ScreenKey, mods: ScreenModifier[]): void {

@@ -10,7 +10,7 @@ import { EmptyState, Notice, Spinner } from "../../kit/kit";
 import { Icon } from "../../kit/Icon";
 import { inFront } from "../../kit/inFront";
 import type { PageNav } from "../routes";
-import { modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
+import { canShowFullSize, modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 
 /** How often the list reads the computer again, so an agent that starts or ends shows up. */
 const REFRESH_MS = 4_000;
@@ -214,6 +214,9 @@ function DisplayCard(props: { display: () => AgentDisplay; name: () => string; s
             <MenuItem onSelect={() => props.session.hold(!holding())} class={ITEM}><Text class="text-base">{holding() ? "Let the agent go on" : "Hold the agent"}</Text></MenuItem>
           ) : null}
           {live() ? <MenuItem onSelect={() => props.session.fit()} class={ITEM}><Text class="text-base">Fit</Text></MenuItem> : null}
+          {live() && canShowFullSize() ? (
+            <MenuItem testID="display-full-size" onSelect={() => void props.session.fullSize(`Display of ${untracked(title)}`)} class={ITEM}><Text class="text-base">Full size</Text></MenuItem>
+          ) : null}
           {stopped() ? (
             <MenuItem disabled={busy()} onSelect={() => void run(props.onResume)} class={ITEM}><Text class="text-base">Resume</Text></MenuItem>
           ) : (

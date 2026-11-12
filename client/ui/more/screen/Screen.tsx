@@ -27,7 +27,7 @@ import { Icon, type IconName } from "../../kit/Icon";
 import { inFront } from "../../kit/inFront";
 import type { PageNav } from "../routes";
 import { AgentDisplays } from "./Displays";
-import { modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
+import { canShowFullSize, modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 import { VirtualScreenSwitch, virtualScreenOn } from "./VirtualScreen";
 
 /** Window height (pt) below which a page header does not fit beside the picture: a phone held sideways. */
@@ -429,6 +429,9 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
           <>
             <MenuItem onSelect={toggleMode} class={ITEM}><Text class="text-base">{mode() === "touch" ? "Use as trackpad" : "Touch to click"}</Text></MenuItem>
             <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-base">Fit screen</Text></MenuItem>
+            {canShowFullSize() ? (
+              <MenuItem testID="screen-full-size" onSelect={() => void session()?.fullSize(`Screen of ${untracked(title)}`)} class={ITEM}><Text class="text-base">Full size</Text></MenuItem>
+            ) : null}
             {keepAwakeItem()}
             {phoneItem()}
             {keyed(isLive, (on) =>
