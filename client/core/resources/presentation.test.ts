@@ -10,6 +10,9 @@ import {
   memoryPressureMeterLabel,
   memoryPressureMicro,
   memoryUsedBytes,
+  pressedResources,
+  pressureWords,
+  primaryDisk,
   processCopyChoices,
   processesByMemory,
   psiChartLabel,
@@ -105,5 +108,27 @@ describe("consumer rows", () => {
       { label: "Copy start token", value: "918204" },
     ]);
     expect(processCopyChoices({})).toEqual([]);
+  });
+});
+
+describe("the pressure in words", () => {
+  const signal = (name: string) => ({ name, value: 3.2, threshold: 2, state: "elevated" });
+  test("says what is under pressure, never the metric", () => {
+    expect(pressureWords(telemetry({ state: "normal" }))).toBe("Pressure low");
+    expect(pressureWords(telemetry({ state: "elevated", signals: [signal("psi.memory.some.avg10")] }))).toBe("Memory under pressure");
+    expect(pressureWords(telemetry({ state: "critical", signals: [signal("psi.memory.full.avg60"), signal("psi.cpu.some.avg10"), signal("memory.available_percent")] }))).toBe("Memory and CPU under pressure");
+    expect(pressureWords(telemetry({ state: "elevated", signals: [signal("psi.cpu.some.avg10"), signal("psi.io.full.avg10"), signal("memory.swap")] }))).toBe("CPU, disk and swap under pressure");
+    expect(pressureWords(telemetry({ state: "elevated" }))).toBe("Under pressure");
+  });
+  test("a Mac's memory pressure level counts as memory", () => {
+    const mac = telemetry({ state: "elevated", psi: {}, memory_pressure: { level: "warn" } });
+    expect(pressedResources(mac)).toEqual(["Memory"]);
+    expect(pressureWords(mac)).toBe("Memory under pressure");
+  });
+  test("the Disk tile shows the root mount, else the largest", () => {
+    const disk = (mount: string, total: number) => ({ mount, total_bytes: total, used_bytes: 1, free_bytes: total - 1 });
+    expect(primaryDisk(telemetry({ disks: [disk("/data", 9e12), disk("/", 1e12)] }))?.mount).toBe("/");
+    expect(primaryDisk(telemetry({ disks: [disk("/a", 1e12), disk("/b", 9e12)] }))?.mount).toBe("/b");
+    expect(primaryDisk(telemetry({}))).toBeUndefined();
   });
 });
