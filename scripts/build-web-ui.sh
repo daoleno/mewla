@@ -27,17 +27,9 @@ fi
 # The package is one folder named after the app.
 APP="$(dirname "$(find "$STAGE/package" -mindepth 2 -maxdepth 2 -name index.html | head -1)")"
 test -f "$APP/index.html"
-# The page loads its files by relative URL; a reload of /sessions/<id> must
-# still find them at the root, where the daemon always serves the app.
-python3 - "$APP/index.html" <<'PY'
-import sys
-path = sys.argv[1]
-page = open(path, encoding="utf-8").read()
-if "<base " not in page:
-    assert page.count("<head>") == 1, "index.html has no single <head>"
-    page = page.replace("<head>", '<head>\n<base href="/">', 1)
-open(path, "w", encoding="utf-8").write(page)
-PY
+# The page's <base href="/"> (nsh.json web.base) keeps its files at the root, where the daemon
+# serves them, when a deep link such as /sessions/<id> is reloaded or opened.
+grep -q '^<base href="/">$' "$APP/index.html" || { echo "index.html has no <base href=\"/\"> (nsh.json web.base)" >&2; exit 1; }
 # The web terminal's page (an NSH web view) loads these from <origin>/terminal/.
 mkdir -p "$APP/terminal"
 for file in terminal.js xterm.js xterm.css LICENSE-xterm.txt; do
