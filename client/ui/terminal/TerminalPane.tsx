@@ -99,6 +99,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       command("reset", {});
     },
     output: (data) => command("write", { data }),
+    sessionSize: (cols, rows) => command("sessionSize", { cols, rows }),
     scrollState: (s) => copyMode.set(!s.atBottom),
     history: (render) => {
       command("history", render);

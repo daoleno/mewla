@@ -62,6 +62,10 @@ export type TerminalEvents = {
  * Commands (`ref.command(name, args)`):
  * - `write {data}`: output from the computer, in order.
  * - `reset {}`: clear the screen (a new attachment). The history is the `history` command's.
+ * - `sessionSize {cols, rows}`: the Session's size, before the replay drawn at it. When it is not the
+ *   view's grid (another viewer holds the size), the VT takes it and the view draws that screen fitted
+ *   into its area: scaled down to a readable limit, then panned sideways. Its `size` event still
+ *   reports its own grid; the Session's size equal to it again ends the fit.
  * - `history {reset, removed, rows, cols, alternate}`: void the history rows (`reset`), drop
  *   `removed` from the front, append `rows` (styled ANSI, one per row, drawn `cols` wide).
  *   While scrolled up, the rows on screen stay put. `alternate`: drags go to the program (`scroll`).
