@@ -332,3 +332,44 @@ func TestWorkerRequestNamesItsWork(t *testing.T) {
 		t.Fatalf("the Work's history = %+v", rows)
 	}
 }
+
+// A Claude permission held by its hook is drawn on the screen too; answered
+// through the approval, it is recorded there, and the menu leaving the screen
+// afterwards is that same answer, not one given in the terminal.
+func TestAPromptAnsweredThroughItsApprovalIsRecordedOnce(t *testing.T) {
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := map[string]*classifier.Worker{"%1": {ID: "%1"}}
+	s := &Server{promptLeftGrace: 20 * time.Millisecond, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
+	s.answered = ledger
+	prompt := permissionPrompt()
+	prompt.Title, prompt.Request = "Bash command", "git push origin main"
+	state := func(p *classifier.Prompt) watcher.SessionEvent {
+		if p == nil {
+			return watcher.SessionEvent{Type: "worker_state_change", Worker: &classifier.Worker{ID: "%1", State: classifier.StateRunning}}
+		}
+		return watcher.SessionEvent{Type: "worker_state_change", Worker: &classifier.Worker{ID: "%1", State: classifier.StateBlocked, Prompt: p}}
+	}
+	s.observePromptLifecycle(state(prompt))
+	approval := ApprovalWire{ID: "hook-1", Kind: "exec", Tool: "Bash", Summary: "git push origin main",
+		Options: []ApprovalOptionWire{{ID: "allow", Label: "Allow"}, {ID: "deny", Label: "Deny"}}}
+	s.recordAnswered(ApprovalAnswerRecord("%1", approval, "allow", answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone"}, time.Now()))
+	s.observePromptLifecycle(state(nil))
+	time.Sleep(100 * time.Millisecond)
+	rows := ledger.List(answered.Filter{SessionID: "%1"})
+	if len(rows) != 1 || rows[0].By.Kind != answered.ByDevice {
+		t.Fatalf("records = %+v", rows)
+	}
+
+	// The next prompt, with no approval answered while it showed, is still
+	// sealed as answered in the terminal.
+	time.Sleep(5 * time.Millisecond)
+	s.observePromptLifecycle(state(prompt))
+	s.observePromptLifecycle(state(nil))
+	time.Sleep(100 * time.Millisecond)
+	if rows := ledger.List(answered.Filter{SessionID: "%1"}); len(rows) != 2 || rows[0].By.Kind != answered.ByTerminal {
+		t.Fatalf("records after a terminal answer = %+v", rows)
+	}
+}

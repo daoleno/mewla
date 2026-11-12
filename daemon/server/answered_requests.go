@@ -483,6 +483,15 @@ func (w *promptWatch) forget(sessionID string) {
 	delete(w.left, sessionID)
 }
 
+// answeredWhileShown reports whether something the Session asked was
+// answered through Mewla while its screen prompt showed: a permission its hook
+// held, or the agent's approval, is drawn as that prompt and recorded as
+// itself, so the prompt leaving is that answer.
+func answeredWhileShown(ledger *answered.Ledger, sessionID string, since time.Time) bool {
+	newest := ledger.List(answered.Filter{SessionID: sessionID, Limit: 1})
+	return len(newest) == 1 && !newest[0].AnsweredAt.Before(since)
+}
+
 // promptLeftGrace is how long a prompt must stay off the screen before it
 // counts as answered there: a screen read that misses it once must not seal
 // it, and the app's own answer lands well inside it.
@@ -522,7 +531,7 @@ func (s *Server) observePromptLifecycle(ev watcher.SessionEvent) {
 		}
 		ledger := s.answeredLedger()
 		id := promptRecordID(sessionID, left.prompt.ID, &left.since)
-		if _, recorded := ledger.Get(id); recorded {
+		if _, recorded := ledger.Get(id); recorded || answeredWhileShown(ledger, sessionID, left.since) {
 			return
 		}
 		record := PromptAnswerRecord(sessionID, left.prompt, PromptAnswer{}, nil, answered.Answerer{Kind: answered.ByTerminal}, &left.since, now)
