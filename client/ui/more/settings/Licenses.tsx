@@ -9,7 +9,7 @@ const licenses = data as LicenseData;
 /** Settings → Open-source Licenses: what the app ships, by section. */
 export function Licenses(props: { nav: PageNav }) {
   return (
-    <Page title="Open-source Licenses" testID="licenses-page">
+    <Page display title="Open-source Licenses" testID="licenses-page">
       {licenses.sections.map((section, s) => (
         <Section title={section.title}>
           {section.items.map((item, i) => <Row testID={`license-${s}-${i}`} title={item.name} subtitle={licenseSummary(item)} chevron onPress={() => props.nav.push({ name: "settings-license", id: licenseItemId(s, i) })} />)}
@@ -22,10 +22,10 @@ export function Licenses(props: { nav: PageNav }) {
 /** One work: where its source is, any note, and its license text. */
 export function License(props: { id: string; nav: PageNav }) {
   const item: LicenseItem | null = findLicenseItem(licenses, props.id);
-  if (!item) return <Page title="License"><EmptyState icon="book" title="License not found" /></Page>;
+  if (!item) return <Page display title="License"><EmptyState icon="book" title="License not found" /></Page>;
   const text = item.text ? licenses.texts[item.text] : "";
   return (
-    <Page title={item.name} testID="license-page">
+    <Page display title={item.name} testID="license-page">
       <Section>
         <Row title={item.name} subtitle={licenseSummary(item)} />
         {item.url ? <Row icon="open-external" title="Source" value={item.url.replace(/^https?:\/\//, "")} onPress={() => void openUrl(item.url!)} /> : null}

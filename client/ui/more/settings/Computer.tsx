@@ -236,7 +236,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
   };
 
   return (
-    <Page title={server()?.name || "Computer"} testID="computer">
+    <Page display title={server()?.name || "Computer"} testID="computer">
       {!server() ? (
         <EmptyState title="This computer is no longer paired" />
       ) : (
@@ -289,13 +289,13 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
               <Field testID="computer-address" accessibilityLabel="Address" mono keyboardType="url" value={address()} placeholder="https://mewla.example.com" onChange={(v) => address.set(v)} onCommit={() => void saveAddress()} />
             </Section>
           ) : (
-            <Section title="Address" footer="Paired through Mewla Relay: reached through it, or straight on your network when the computer can be.">
+            <Section title="Address">
               <Row testID="computer-link" title="Mewla Relay" value={isCurrent() && connection() === "connected" ? linkPathText(transportPath()) : "Not connected"} />
             </Section>
           )}
 
-          <Section>
-            {!isCurrent() ? (
+          {!isCurrent() ? (
+            <Section>
               <Row
                 testID="computer-use"
                 icon="swap-horizontal"
@@ -306,7 +306,9 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
                   switchTo(server());
                 }}
               />
-            ) : null}
+            </Section>
+          ) : null}
+          <Section>
             <Row
               testID="computer-remove"
               destructive

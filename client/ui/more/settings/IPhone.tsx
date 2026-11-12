@@ -64,7 +64,7 @@ export function IPhone() {
   };
   const agent = () => status()?.active;
   return (
-    <Page title="iPhone use" testID="iphone-page">
+    <Page display title="iPhone use" testID="iphone-page">
       <Section footer={line()}>
         <SwitchRow testID="iphone-switch" title="iPhone use" checked={status()?.enabled === true} busy={busy()} disabled={!status() || status()!.state === "unsupported"} onChange={(on) => change({ enabled: on })} />
       </Section>

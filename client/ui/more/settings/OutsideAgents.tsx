@@ -54,7 +54,7 @@ export function OutsideAgents() {
   }
 
   return (
-    <Page title="Outside agents" testID="outside-agents">
+    <Page display title="Outside agents" testID="outside-agents">
       {!daemon() ? (
         <EmptyState title="No current server" />
       ) : (

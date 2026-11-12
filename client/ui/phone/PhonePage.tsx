@@ -4,7 +4,7 @@ import { pageStatusBar } from "../shell/NavPage";
 import { phoneMode, phoneSetupPlan, phoneSteps, type PhoneMode, type PhoneStepId } from "../../core/phone/setup";
 import { color } from "../kit/colors";
 import { Icon, type IconName } from "../kit/Icon";
-import { Notice, Row, Section, Spinner } from "../kit/kit";
+import { DisplayTitle, Notice, Row, Section, Spinner } from "../kit/kit";
 import { PhoneLiveView } from "./contract";
 import {
   allowPhoneAccessibility,
@@ -119,13 +119,16 @@ function Setup() {
     else void startPhoneHelper();
   };
   const working = () => phonePairing() || phoneStatus()?.guide != null;
+  const stepEyebrow = () => {
+    const steps = phoneSteps(phoneStatus()!);
+    const at = steps.findIndex((step) => step.id === plan().current);
+    return at < 0 ? undefined : `Step ${at + 1} of ${steps.length}`;
+  };
 
   return (
     <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6" testID="phone-setup">
       <View class="w-full max-w-[720px] self-center">
-        <View class="items-center py-7">
-          <Icon name="phone" size={40} tone="ink" />
-        </View>
+        <DisplayTitle eyebrow={stepEyebrow()} title="Set up Phone use" />
         <Section>
           {phoneSteps(phoneStatus()!).map((step) => {
             const current = plan().current === step.id;
