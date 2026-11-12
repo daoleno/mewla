@@ -15,7 +15,7 @@ An iPhone build must be signed and provisioned. App Store distribution IPAs are 
 
 ## Unsigned macOS CI
 
-The `ios` job in [`.github/workflows/client.yml`](../.github/workflows/client.yml) runs on the Apple Silicon `xcode-27` image for pull requests that touch `client/` and on manual dispatch. It:
+The `ios` job in [`.github/workflows/client.yml`](../.github/workflows/client.yml) runs on the Apple Silicon `xcode-27` image on a push to `main` that touches `client/` and on manual dispatch. It:
 
 1. validates the shared Android/iOS native contract, then restores, or builds when the cache misses, and verifies the pinned `native/terminal-vt/libs/ios/GhosttyVt.xcframework` device and Simulator slices through the shared `ios-native` action, whose caches only `native-cache.yml` on `main` saves;
 2. installs NSH and its iOS framework and generates the Xcode project with xcodegen;
