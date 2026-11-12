@@ -24,7 +24,8 @@ import {
 import { failureText } from "../../../core/more/daemon";
 import { daemon } from "../daemon";
 import { Icon } from "../../kit/Icon";
-import { EmptyState, Row, Section } from "../../kit/kit";
+import { DisplayTitle, EmptyState, Row, Section } from "../../kit/kit";
+import { formatBytes } from "../../../core/resources/resourceTelemetry";
 import type { PageNav } from "../routes";
 import { ZoomImage } from "./FilePreview";
 import { MediaPlayer } from "./Media";
@@ -56,26 +57,21 @@ export function WorkspacePage(props: { trail?: string[]; file?: string; hostSess
     });
   });
   const name = props.file ? props.file.split("/").at(-1)! : props.trail?.length ? props.trail.at(-1)!.split("/").at(-1)! : "Workspace";
+  // A folder's display title is its name, under its path; the nav bar names it once that has scrolled away.
+  const titleAway = signal(Boolean(props.file));
   return (
-    <NavPage title={name} testID="workspace">
-      {props.file ? <WorkspaceFile path={props.file} hostSession={props.hostSession} nav={props.nav} /> : <WorkspaceFolder trail={props.trail ?? []} hostSession={props.hostSession} nav={props.nav} />}
+    <NavPage title={titleAway() ? name : ""} testID="workspace">
+      {props.file ? <WorkspaceFile path={props.file} hostSession={props.hostSession} nav={props.nav} /> : <WorkspaceFolder trail={props.trail ?? []} name={name} hostSession={props.hostSession} nav={props.nav} onTitleAway={(away) => titleAway.set(away)} />}
     </NavPage>
   );
 }
 
-/** The path line under the header: where this folder or file is. */
-function Location(props: { path: string }) {
-  const root = () => roots.get(daemon()?.server.id ?? "");
-  return (
-    <View>
-      {workspaceLocation(root(), props.path) ? (
-        <Text testID="workspace-location" class="px-4 pb-1 pt-2 font-mono text-xs text-muted-foreground line-clamp-1">{workspaceLocation(root(), props.path)}</Text>
-      ) : null}
-    </View>
-  );
+/** Where this folder or file is: the path, as the eyebrow over its name. */
+function location(path: string): string {
+  return workspaceLocation(roots.get(daemon()?.server.id ?? ""), path);
 }
 
-function WorkspaceFolder(props: { trail: string[]; hostSession?: SessionFileIdentity; nav: PageNav }) {
+function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: SessionFileIdentity; nav: PageNav; onTitleAway: (away: boolean) => void }) {
   const id = daemon()?.server.id ?? "";
   const path = props.trail.at(-1) ?? "";
   const tree = signal<BrainWorkspaceTree | null>(trees.get(workspaceFolderKey(id, path)) ?? null);
@@ -101,8 +97,13 @@ function WorkspaceFolder(props: { trail: string[]; hostSession?: SessionFileIden
   if (!tree()) void read();
 
   return (
-    <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={busy() && !!tree()} onRefresh={() => void read()}>
-      <>{content()}</>
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={busy() && !!tree()} onRefresh={() => void read()}
+      onScroll={(e) => props.onTitleAway(e.offset.y > 56)} scrollEventThrottle={64}>
+      <View class="w-full max-w-[680px] self-center">
+        {/* Read with the tree: the workspace's own folder comes with its first answer. */}
+        <DisplayTitle testID="workspace-location" eyebrow={(tree() ? location(path) : "") || undefined} title={props.name} />
+        <>{content()}</>
+      </View>
     </Scroll>
   );
 
@@ -114,31 +115,31 @@ function WorkspaceFolder(props: { trail: string[]; hostSession?: SessionFileIden
         : <EmptyState testID="workspace-loading" busy title="Loading workspace" />;
     }
     const entries = workspaceFolderEntries(t);
+    // Folders first, a group of rows that push; then the files with their sizes (SPEC §15 File browser).
+    const row = (entry: (typeof entries)[number]) => (
+      <Row
+        testID={`workspace-${entry.path}`}
+        title={entry.name}
+        icon={brainWorkspaceEntryIconName(entry.kind, entry.path)}
+        value={entry.kind === "directory" || entry.size === undefined ? undefined : formatBytes(entry.size)}
+        chevron={entry.kind === "directory"}
+        accessibilityLabel={brainWorkspaceEntryAccessibilityLabel(entry.kind, entry.name)}
+        onPress={() =>
+          props.nav.push(
+            entry.kind === "directory"
+              ? { name: "files-workspace", trail: [...props.trail, entry.path], hostSession: props.hostSession }
+              : { name: "files-workspace", file: entry.path, hostSession: props.hostSession },
+          )
+        }
+      />
+    );
+    const folders = entries.filter((entry) => entry.kind === "directory");
+    const files = entries.filter((entry) => entry.kind !== "directory");
     return (
       <View>
-        <View class="-mx-4"><Location path={path} /></View>
-        {entries.length ? (
-          <Section>
-            {entries.map((entry) => (
-              <Row
-                testID={`workspace-${entry.path}`}
-                title={entry.name}
-                icon={brainWorkspaceEntryIconName(entry.kind, entry.path)}
-                chevron={entry.kind === "directory"}
-                accessibilityLabel={brainWorkspaceEntryAccessibilityLabel(entry.kind, entry.name)}
-                onPress={() =>
-                  props.nav.push(
-                    entry.kind === "directory"
-                      ? { name: "files-workspace", trail: [...props.trail, entry.path], hostSession: props.hostSession }
-                      : { name: "files-workspace", file: entry.path, hostSession: props.hostSession },
-                  )
-                }
-              />
-            ))}
-          </Section>
-        ) : (
-          <EmptyState testID="workspace-empty" icon="folder-open" title="This folder is empty." />
-        )}
+        {folders.length ? <Section title="Folders">{folders.map(row)}</Section> : null}
+        {files.length ? <Section title="Files">{files.map(row)}</Section> : null}
+        {entries.length ? null : <EmptyState testID="workspace-empty" icon="folder-open" title="This folder is empty." />}
       </View>
     );
   }
@@ -199,15 +200,19 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity;
 
   return (
     <View class="flex-1 bg-background">
-      <View class="flex-row items-center">
-        <View class="min-w-0 flex-1"><Location path={props.path} /></View>
+      {/* The file's name over its path, Copy as an icon button, then the content on a surface card. */}
+      <View class="min-h-[60px] flex-row items-center gap-2 px-4">
+        <View class="min-w-0 flex-1">
+          <Text class="text-title font-bold line-clamp-1" role="header">{props.path.split("/").at(-1)!}</Text>
+          {location(props.path) ? <Text testID="workspace-location" class="font-mono text-caption text-muted-foreground line-clamp-1">{location(props.path)}</Text> : null}
+        </View>
         {file()?.content && !file()?.data_url ? (
-          <Button testID="workspace-copy" accessibilityLabel={copied() ? "Copied" : "Copy"} onPress={copy} class="mr-2 size-9 items-center justify-center rounded-full active:bg-accent">
-            <Icon name={copied() ? "check" : "copy"} size={18} tone="ink" />
+          <Button testID="workspace-copy" accessibilityLabel={copied() ? "Copied" : "Copy"} onPress={copy} class="size-11 items-center justify-center rounded-full active:bg-accent">
+            <Icon name={copied() ? "check" : "copy"} size={20} tone="ink" />
           </Button>
         ) : null}
       </View>
-      <>{content()}</>
+      <View class="mx-4 mb-4 flex-1 overflow-hidden rounded-(--radius-group) bg-card">{content()}</View>
     </View>
   );
 
@@ -223,16 +228,16 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity;
     if (!f.content) return <EmptyState testID="workspace-file-empty" icon="document" title="Empty file." />;
     if (brainWorkspaceMarkdownPath(f.path || props.path)) {
       return (
-        <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2">
+        <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-10 pt-3">
           <TextView testID="workspace-markdown" markdown={f.content} selectable onLinkPress={(event) => openLink(event.url)} />
         </Scroll>
       );
     }
     return (
-      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="pb-10">
+      <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="pb-10">
         <Scroll keyboardShouldPersistTaps="handled" horizontal class="w-full" contentClass="px-4 py-3">
           <View selectable>
-            <Text testID="workspace-text" class="font-mono text-sm">{f.content}</Text>
+            <Text testID="workspace-text" class="font-mono text-code">{f.content}</Text>
           </View>
         </Scroll>
       </Scroll>

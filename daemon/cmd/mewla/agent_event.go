@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/answered"
 	"io"
 	"os"
 	"path/filepath"
@@ -51,6 +52,19 @@ type agentEventService struct {
 	raised map[string]bool          // approval id -> Brain was told
 	told   map[string]chan struct{} // approval id -> closed once Brain was told or could not be
 	notes  map[string]string        // approval id -> what the answer relied on
+
+	// answered keeps the record of every approval answered here.
+	answered *answered.Ledger
+	// askedAt is when a screen prompt was shown (the server's prompt watch),
+	// so an answer from here names the same showing as the app's would.
+	askedAt func(sessionID, promptID string) *time.Time
+}
+
+func (s *agentEventService) promptAskedAt(sessionID, promptID string) *time.Time {
+	if s == nil || s.askedAt == nil {
+		return nil
+	}
+	return s.askedAt(sessionID, promptID)
 }
 
 func newAgentEventService(hub *agentevents.Hub, workers func() []*classifier.Worker) *agentEventService {
@@ -380,6 +394,14 @@ func (s *agentEventService) decide(workerID, approvalID, optionID, by, basis str
 		summary += " — basis: " + truncateRunes(basis, 300)
 	}
 	s.finishQuestion(workerID, *chosen, outcome, summary, who, basis)
+	if by == answeredByOperator {
+		// The app's answers are recorded by the server, which knows the device.
+		answerer := answered.Answerer{Kind: answered.ByOperator, Basis: basis}
+		if route == routeBrain {
+			answerer.Kind = answered.ByBrain
+		}
+		recordAnswered(s.answered, server.ApprovalAnswerRecord(workerID, approvalWire(*chosen), optionID, answerer, s.now()))
+	}
 	if by == answeredByOperator && route == routeBrain {
 		s.brainAnswered(workerID)
 	}

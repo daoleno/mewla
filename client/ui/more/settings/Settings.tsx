@@ -119,7 +119,7 @@ export function Settings(props: { nav: PageNav }) {
     if (daemon() && daemonState() === "connected") untracked(loadTelegram);
   });
   return (
-    <Page title="Settings" testID="settings">
+    <Page display title="Settings" testID="settings">
       <Section title="Channels">
         <Row
           testID="settings-telegram"
@@ -171,7 +171,6 @@ export function Settings(props: { nav: PageNav }) {
             <Row
               testID="full-screen-alerts"
               title="Allow full-screen alerts"
-              subtitle="Android needs your OK to show an alert over the lock screen"
               chevron
               onPress={() => void host.call("calendar.alertsOpenSettings").catch(() => {})}
             />

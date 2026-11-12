@@ -42,6 +42,13 @@ func (s *Server) handleAnswerChoice(conn *websocket.Conn, raw clientMessage) {
 		return
 	}
 	load := s.choiceConversationLoader(resolved)
+	// The question, read before the answer settles it.
+	var asked *work.CodexConversationEvent
+	if conversation, loadErr := load(); loadErr == nil {
+		if event, ok := work.PendingConversationChoice(conversation, request.CallID); ok {
+			asked = &event
+		}
+	}
 	answers, err := s.answerChoice(resolved.targetID, request, load)
 	if err != nil {
 		code, message := "answer_choice_failed", err.Error()
@@ -55,6 +62,9 @@ func (s *Server) handleAnswerChoice(conn *websocket.Conn, raw clientMessage) {
 		}
 		s.sendErrorWithRequestID(conn, raw.RequestID, code, message)
 		return
+	}
+	if asked != nil {
+		s.recordAnswered(ChoiceAnswerRecord(resolved.targetID, *asked, answers, s.answeredByConn(conn), time.Now()))
 	}
 	s.sendJSON(conn, map[string]any{
 		"type":       "choice_answered",

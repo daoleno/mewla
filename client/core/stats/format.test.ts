@@ -5,6 +5,9 @@ import {
   chartDate,
   costSourceLabel,
   dayFacts,
+  chartReadout,
+  chartSeries,
+  chartValue,
   emptyRangeTitle,
   formatAvailableCost,
   formatAvailableTokens,
@@ -96,9 +99,19 @@ describe("Stats numbers", () => {
   test("a day's detail and the empty range's title", () => {
     const day: DayCell = { date: "2026-10-27", totalTokens: 0, totalTokensKnown: false, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheRead: 0, cacheCreate: 0, cost: 0, sessions: 2 };
     expect(Object.fromEntries(dayFacts(day)).Total).toBe("—");
-    expect(emptyRangeTitle("week", false)).toBe("No stats yet");
-    expect(emptyRangeTitle("day", true)).toBe("No activity today");
-    expect(emptyRangeTitle("month", true)).toBe("No month activity");
+    expect(emptyRangeTitle(7, false)).toBe("No stats yet");
+    expect(emptyRangeTitle(14, true)).toBe("No activity in the last 14 days");
+  });
+
+  test("the chart is spend by day; activity only when no day has a known cost", () => {
+    const cell = (cost: number, costKnown: boolean | undefined, totalTokens = 1000): DayCell => ({ date: "2026-11-09", totalTokens, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheRead: 0, cacheCreate: 0, cost, costKnown, sessions: 1 });
+    expect(chartSeries([cell(5.2, true), null])).toBe("cost");
+    expect(chartReadout(cell(5.2, true), "cost")).toBe("$5.20");
+    expect(chartReadout(null, "cost")).toBe("$0.00");
+    expect(chartValue(cell(5.2, true), "cost")).toBe(5.2);
+    expect(chartSeries([cell(0, false), cell(0, true)])).toBe("tokens");
+    expect(chartReadout(cell(0, false), "tokens")).toBe("1K tokens");
+    expect(chartSeries([cell(0, false, 0)].map((d) => ({ ...d, totalTokensKnown: false })))).toBe("sessions");
   });
 });
 

@@ -50,6 +50,14 @@ type Options struct {
 	// Thread names the Brain conversation a message is sent from, so its
 	// card shows there.
 	Thread func() string
+	// OpenRequests counts the requests on this computer that wait for the
+	// person; the other computers show it ("1 needs you"). Nil means this
+	// computer does not report one.
+	OpenRequests func() int
+	// OnChange is called, outside the Manager's lock, when what PeerViews
+	// show changes: a channel opens or closes, a computer reports new caps or
+	// a new open-request count, a peer is added or removed.
+	OnChange func()
 }
 
 type Manager struct {
@@ -113,11 +121,17 @@ func NewManager(opts Options) (*Manager, error) {
 	if state.Deliveries == nil {
 		state.Deliveries = map[string]deliveryRecord{}
 	}
+	if state.Seen == nil {
+		state.Seen = map[string]seenRecord{}
+	}
 	m := &Manager{
 		opts: opts, dir: dir, state: state,
 		conns: map[string]*peerConn{}, hellos: map[string]Hello{},
 		lastSeen: map[string]time.Time{}, lastErr: map[string]string{},
 		loops: map[string]context.CancelFunc{}, inflight: map[string]bool{},
+	}
+	for key, seen := range m.state.Seen {
+		m.lastSeen[key] = seen.At
 	}
 	// A message cut off by a restart is sent again; the receiving Brain's
 	// receipt makes the resend harmless.
@@ -274,11 +288,33 @@ func (m *Manager) hello() Hello {
 		caps = m.opts.Caps()
 	}
 	return Hello{
-		Protocol: ProtocolVersion,
-		Version:  m.opts.Version,
-		Name:     m.name(),
-		DaemonID: m.opts.Auth.DaemonID(),
-		Caps:     caps,
+		Protocol:     ProtocolVersion,
+		Version:      m.opts.Version,
+		Name:         m.name(),
+		DaemonID:     m.opts.Auth.DaemonID(),
+		Caps:         caps,
+		OpenRequests: m.openRequests(),
+	}
+}
+
+func (m *Manager) openRequests() *int {
+	if m.opts.OpenRequests == nil {
+		return nil
+	}
+	count := m.opts.OpenRequests()
+	return &count
+}
+
+func sameCount(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func (m *Manager) changed() {
+	if m.opts.OnChange != nil {
+		m.opts.OnChange()
 	}
 }
 
@@ -300,7 +336,9 @@ func (m *Manager) serve(ctx context.Context, key string, conn *peerConn, remote 
 	m.hellos[key] = remote
 	m.lastSeen[key] = time.Now().UTC()
 	delete(m.lastErr, key)
+	m.saveSeenLocked(key)
 	m.mu.Unlock()
+	m.changed()
 
 	ctx, cancel := context.WithCancel(ctx)
 	// Closing the socket is what unblocks the read below.
@@ -317,7 +355,9 @@ func (m *Manager) serve(ctx context.Context, key string, conn *peerConn, remote 
 		}
 		m.lastSeen[key] = time.Now().UTC()
 		m.requeueInflightLocked(key)
+		m.saveSeenLocked(key)
 		m.mu.Unlock()
+		m.changed()
 	}()
 
 	workers.Add(2)
@@ -374,11 +414,17 @@ func (m *Manager) serve(ctx context.Context, key string, conn *peerConn, remote 
 			// was settled by the first.
 			if incoming.Hello != nil {
 				m.mu.Lock()
+				moved := false
 				if hello, ok := m.hellos[key]; ok {
+					moved = !reflect.DeepEqual(hello.Caps, incoming.Hello.Caps) || !sameCount(hello.OpenRequests, incoming.Hello.OpenRequests)
 					hello.Caps = incoming.Hello.Caps
+					hello.OpenRequests = incoming.Hello.OpenRequests
 					m.hellos[key] = hello
 				}
 				m.mu.Unlock()
+				if moved {
+					m.changed()
+				}
 			}
 		}
 	}
@@ -392,6 +438,9 @@ func (m *Manager) sendLoop(ctx context.Context, key string, conn *peerConn) {
 	// ready, the screen is turned off), so the other Brain is told again;
 	// once early too, in case they changed while the channel opened.
 	var sentCaps Caps
+	// The open-request count is told as soon as it moves (checked every
+	// tick); it rides a hello with the caps last sent.
+	sentCount := m.openRequests()
 	for {
 		for _, message := range m.claimDue(key) {
 			if err := conn.write(frame{Type: "message", Message: &message}); err != nil {
@@ -405,13 +454,22 @@ func (m *Manager) sendLoop(ctx context.Context, key string, conn *peerConn) {
 		case <-conn.wake:
 		case <-ticker.C:
 			pings++
+			if pings%6 != 0 && !sameCount(m.openRequests(), sentCount) {
+				hello := m.hello()
+				if err := conn.write(frame{Type: "hello", Hello: &hello}); err != nil {
+					conn.ws.Close()
+					return
+				}
+				sentCaps, sentCount = hello.Caps, hello.OpenRequests
+			}
 			if pings%6 == 0 {
-				if hello := m.hello(); !reflect.DeepEqual(hello.Caps, sentCaps) {
+				if hello := m.hello(); !reflect.DeepEqual(hello.Caps, sentCaps) || !sameCount(hello.OpenRequests, sentCount) {
 					if err := conn.write(frame{Type: "hello", Hello: &hello}); err != nil {
 						conn.ws.Close()
 						return
 					}
 					sentCaps = hello.Caps
+					sentCount = hello.OpenRequests
 				}
 				conn.writeMu.Lock()
 				err := conn.ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second))
@@ -609,6 +667,37 @@ func (m *Manager) setError(key string, err error) {
 	m.mu.Unlock()
 }
 
+// saveSeenLocked keeps when key's channel last opened or closed. Frames in
+// between only move the in-memory time: one write per channel change.
+func (m *Manager) saveSeenLocked(key string) {
+	if !m.knownKeyLocked(key) {
+		// Removed or revoked while its channel was closing.
+		delete(m.lastSeen, key)
+		return
+	}
+	record := seenRecord{At: m.lastSeen[key], DaemonID: m.state.Seen[key].DaemonID}
+	if hello, ok := m.hellos[key]; ok && hello.DaemonID != "" {
+		record.DaemonID = hello.DaemonID
+	}
+	m.state.Seen[key] = record
+	m.saveLocked()
+}
+
+func (m *Manager) knownKeyLocked(key string) bool {
+	if daemonID, ok := strings.CutPrefix(key, "out:"); ok {
+		_, found := m.outboundPeerLocked(daemonID)
+		return found
+	}
+	if deviceID, ok := strings.CutPrefix(key, "in:"); ok {
+		for _, device := range m.opts.Auth.ListDevices() {
+			if device.ID == deviceID && device.Kind == auth.DeviceKindComputer {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (m *Manager) saveLocked() {
 	if err := saveState(m.dir, m.state); err != nil {
 		log.Printf("computers: save state: %v", err)
@@ -649,6 +738,8 @@ func (m *Manager) forgetInbound(deviceID string) {
 	if conn := m.conns[key]; conn != nil {
 		conn.ws.Close()
 	}
+	delete(m.lastSeen, key)
+	delete(m.state.Seen, key)
 	m.dropOutboxLocked(key)
 }
 
@@ -698,11 +789,18 @@ func (m *Manager) fillLiveLocked(key string, view *PeerView) {
 	if hello, ok := m.hellos[key]; ok {
 		caps := hello.Caps
 		view.Caps = &caps
+		if view.Online && hello.OpenRequests != nil {
+			count := *hello.OpenRequests
+			view.OpenRequests = &count
+		}
 		view.Version = hello.Version
 		view.Protocol = hello.Protocol
 		if view.DaemonID == "" {
 			view.DaemonID = hello.DaemonID
 		}
+	}
+	if view.DaemonID == "" {
+		view.DaemonID = m.state.Seen[key].DaemonID
 	}
 	if seen, ok := m.lastSeen[key]; ok {
 		seenCopy := seen
@@ -1058,6 +1156,8 @@ func (m *Manager) removeOutboundLocked(key string) {
 	if conn := m.conns[key]; conn != nil {
 		conn.ws.Close()
 	}
+	delete(m.lastSeen, key)
+	delete(m.state.Seen, key)
 	kept := m.state.Peers[:0]
 	for _, peer := range m.state.Peers {
 		if outboundKey(peer.DaemonID) != key {

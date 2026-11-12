@@ -130,12 +130,12 @@ const notes_md: File = { path: "notes.md", status: "untracked", staged: false, u
 const done_ts: File = { path: "done.ts", status: "modified", staged: true, unstaged: false, untracked: false, staged_additions: 2 };
 
 describe("Git review", () => {
-  test("groups the changes into Staged and Changes with their counts, and reads the status once with one fetch", async () => {
+  test("groups the changes into Staged and Not staged with their counts, and reads the status once with one fetch", async () => {
     const repo = repository([done_ts, app_ts, notes_md]);
     const app = await open(HARNESS, repo.options);
     await app.waitFor("id:git-group-changes");
-    expect(app.texts()).toContain("Staged · 1");
-    expect(app.texts()).toContain("Changes · 2");
+    expect(app.shows("label:Staged, 1 file")).toBe(true);
+    expect(app.shows("label:Not staged, 2 files")).toBe(true);
     expect(app.shows("id:git-row-staged:done.ts")).toBe(true);
     expect(app.shows("id:git-row-changes:app.ts")).toBe(true);
     expect(app.shows("id:git-row-changes:notes.md")).toBe(true);
@@ -158,8 +158,8 @@ describe("Git review", () => {
     const stage = repo.asked.find((r) => r.type === "git_stage");
     expect(stage?.body).toEqual({ target_id: "w1", cwd: "/repo", repo_root: "/repo", paths: ["app.ts"] });
     expect(repo.asked.filter((r) => r.type === "git_diff_status").length).toBeGreaterThan(before);
-    expect(app.texts()).toContain("Staged · 1");
-    expect(app.texts()).toContain("Changes · 1");
+    expect(app.shows("label:Staged, 1 file")).toBe(true);
+    expect(app.shows("label:Not staged, 1 file")).toBe(true);
 
     // The group's button stages the rest.
     await app.press("id:git-bulk-changes");
@@ -212,7 +212,7 @@ describe("Git review", () => {
     expect(repo.asked.find((r) => r.type === "git_commit")?.body).toEqual({ target_id: "w1", cwd: "/repo", repo_root: "/repo", message: "Tidy the parser" });
     expect(repo.asked.some((r) => r.type === "git_push")).toBe(false);
     await app.waitUntil(() => !app.shows("id:git-group-staged"));
-    expect(app.texts()).toContain("Changes · 1");
+    expect(app.shows("label:Not staged, 1 file")).toBe(true);
   });
 
   test("a row opens its diff in the reader, and the hunk actions stage what is chosen", async () => {
@@ -352,10 +352,10 @@ describe("Git review: the reader", () => {
   test("Ask the agent sends the comment about the file, then about a hunk's lines, to the Session's chat", async () => {
     const { app } = await openReview([app_ts], { workers: [AGENT] });
     await openDiffOf(app, "changes:app.ts");
-    await app.waitFor("label:Ask the agent about this file");
-    await app.press("label:Ask the agent about this file");
+    await app.waitFor("label:Ask Claude Code about this file");
+    await app.press("label:Ask Claude Code about this file");
     await app.waitFor("id:ask-sheet");
-    expect(app.texts()).toContain("Ask the agent");
+    expect(app.texts()).toContain("Ask Claude Code");
     expect(app.enabled("id:ask-send")).toBe(false);
     await app.type("id:ask-comment", "Rename b");
     await app.press("id:ask-send");
@@ -365,8 +365,8 @@ describe("Git review: the reader", () => {
     expect(sent()[0]).toMatchObject({ workerId: "w1", text: "In the working-tree diff, app.ts:\n\nRename b" });
 
     await app.press("id:git-hunk-next");
-    await app.waitFor("label:Ask the agent about this hunk");
-    await app.press("label:Ask the agent about this hunk");
+    await app.waitFor("label:Ask Claude Code about this hunk");
+    await app.press("label:Ask Claude Code about this hunk");
     await app.waitFor("id:ask-where");
     // The hunk's lines on the new side, quoted as the old sheet did (its first three).
     expect(app.texts()).toContain("app.ts:1-3");

@@ -1,6 +1,6 @@
 import { announce, cleanup, effect, lifecycle, platform, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
-import { fixButtonKind, optionalUpdate, otherComputerState, type FixRow } from "../../core/computer/needsFixing";
+import { fixButtonKind, optionalUpdate, type FixRow } from "../../core/computer/needsFixing";
 import { failureText } from "../../core/more/daemon";
 import { setServerAutoConnect, type StoredServer } from "../../core/servers";
 import { changeAgentUse, installDaemonUpdate } from "../../core/settings/computer";
@@ -9,7 +9,8 @@ import { Icon, type IconName } from "../kit/Icon";
 import { Notice, Page, PillButton, Row, Section } from "../kit/kit";
 import { followFriends, friendsEnabled } from "../more/friends/state";
 import type { MorePage, PageNav } from "../more/routes";
-import { checks, currentPathMark, forgetConnectionIssue, probeComputers, removedNotice } from "../more/settings/computers";
+import { currentPathMark, forgetConnectionIssue, probeComputers, removedNotice } from "../more/settings/computers";
+import { otherState } from "./computers";
 import { PetSprite } from "../pets/PetSprite";
 import { connection, current, resumeConnection, servers, switchTo } from "../session";
 import { goHome, nav } from "../shell/nav";
@@ -192,7 +193,7 @@ export function ComputerPage(props: {
 
       <Section title="Computers" testID="computers">
         {others().map((server) => {
-          const state = () => otherComputerState(checks()[server.id]);
+          const state = () => otherState(server);
           return (
             <View class={state().dim ? "opacity-[0.55]" : ""}>
               <Row

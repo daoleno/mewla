@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/answered"
 	"io"
 	"log"
 	"net"
@@ -600,6 +601,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
 	srv.SetAgentApprovals(appApprovals{service: agentEvents})
+	answeredRequests, err := answered.Open(stateDir)
+	if err != nil {
+		return fmt.Errorf("open answered requests: %w", err)
+	}
+	srv.SetAnsweredRequests(answeredRequests)
+	agentEvents.answered = answeredRequests
+	agentEvents.askedAt = srv.PromptAskedAt
+	eventHub.OnApprovalResolved(func(workerID string, approval agentevents.Approval, e agentevents.Event) {
+		recordAgentResolution(answeredRequests, workerID, approval, e)
+	})
 	if codexFollow != nil {
 		srv.SetCodexStatus(func(ctx context.Context, workerID string) (any, error) {
 			status, err := codexFollow.Status(ctx, workerID)
@@ -718,6 +729,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 			caps.ComputerUse = agentUse.ComputerReady()
 			return caps
 		},
+		// What waits for the person here, for the other computers' pages;
+		// their channels and this computer's count reach the app at once.
+		OpenRequests: srv.OpenRequestCount,
+		OnChange:     srv.NotifyComputers,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize computers: %w", err)
@@ -1052,6 +1067,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 			Handler:     srv.Handler(),
 			AddressBook: book,
 			Logf:        log.Printf,
+			OnStatus:    func(remote.Status) { srv.NotifyComputers() },
 		}).Run,
 	})
 
@@ -3158,10 +3174,10 @@ func revokeDeviceWithRuntimeOwnerWait(
 		if response.PersistenceOutcome != control.PersistenceApplied ||
 			response.PersistenceDurable == nil {
 			return deviceRevokeResult{
-					Outcome: control.PersistenceUnknown,
-				}, errors.New(
-					"runtime owner returned success without a complete persistence result",
-				)
+				Outcome: control.PersistenceUnknown,
+			}, errors.New(
+				"runtime owner returned success without a complete persistence result",
+			)
 		}
 		return deviceRevokeResult{
 			Outcome:                      response.PersistenceOutcome,
@@ -3175,10 +3191,10 @@ func revokeDeviceWithRuntimeOwnerWait(
 			control.PersistenceVerifiedAbsent ||
 			response.PersistenceDurable == nil {
 			return deviceRevokeResult{
-					Outcome: control.PersistenceUnknown,
-				}, errors.New(
-					"runtime owner returned device_not_found without a complete durability result",
-				)
+				Outcome: control.PersistenceUnknown,
+			}, errors.New(
+				"runtime owner returned device_not_found without a complete durability result",
+			)
 		}
 		return deviceRevokeResult{
 			Outcome:                      control.PersistenceVerifiedAbsent,
@@ -3244,20 +3260,20 @@ func withAuthRuntimeOwnerWait(
 			if statErr == nil &&
 				socketInfo.Mode()&os.ModeSocket == 0 {
 				return authRuntimeOwnerResult{
-						EarlierRequestMayHaveArrived: earlierRequestMayHaveArrived,
-					}, fmt.Errorf(
-						"daemon control path is not a socket: %s",
-						socketPath,
-					)
+					EarlierRequestMayHaveArrived: earlierRequestMayHaveArrived,
+				}, fmt.Errorf(
+					"daemon control path is not a socket: %s",
+					socketPath,
+				)
 			}
 			if statErr != nil &&
 				!errors.Is(statErr, os.ErrNotExist) {
 				return authRuntimeOwnerResult{
-						EarlierRequestMayHaveArrived: earlierRequestMayHaveArrived,
-					}, fmt.Errorf(
-						"inspect daemon control socket: %w",
-						statErr,
-					)
+					EarlierRequestMayHaveArrived: earlierRequestMayHaveArrived,
+				}, fmt.Errorf(
+					"inspect daemon control socket: %w",
+					statErr,
+				)
 			}
 			manager, managerErr := auth.NewManager(resolvedStateDir)
 			if managerErr != nil {
@@ -3277,12 +3293,12 @@ func withAuthRuntimeOwnerWait(
 			continue
 		case <-deadline:
 			return authRuntimeOwnerResult{
-					EarlierRequestMayHaveArrived: earlierRequestMayHaveArrived,
-				}, fmt.Errorf(
-					"daemon runtime owner is active but its control socket is unavailable; %s: %w",
-					unknownOutcome,
-					lastCallErr,
-				)
+				EarlierRequestMayHaveArrived: earlierRequestMayHaveArrived,
+			}, fmt.Errorf(
+				"daemon runtime owner is active but its control socket is unavailable; %s: %w",
+				unknownOutcome,
+				lastCallErr,
+			)
 		}
 	}
 }

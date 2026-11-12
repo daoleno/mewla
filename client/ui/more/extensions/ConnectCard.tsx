@@ -201,12 +201,12 @@ function Card(props: { title: string; detail?: string; busy?: boolean; glyph?: I
     }
   }
   return (
-    <View testID={props.testID ?? "connect-card"} android={{ accessibilityLiveRegion: "polite" }} class="mt-4 gap-2 rounded-2xl border border-border bg-card px-4 py-4">
+    <View testID={props.testID ?? "connect-card"} android={{ accessibilityLiveRegion: "polite" }} class="mt-4 gap-2 rounded-(--radius-group) bg-card px-4 py-4">
       <View class="flex-row items-center gap-2">
         {props.busy ? <Spinner size={18} /> : props.glyph ? <Icon name={props.glyph} size={20} tone={props.tone ?? "soft"} /> : null}
         <Text class="flex-1 text-lg font-semibold" role="header">{props.title}</Text>
       </View>
-      {props.detail ? <Text class="text-sm text-muted-foreground">{props.detail}</Text> : null}
+      {props.detail ? <Text class="text-sub text-muted-foreground">{props.detail}</Text> : null}
       {props.children ? <View class="mt-1 gap-2">{props.children}</View> : null}
     </View>
   );

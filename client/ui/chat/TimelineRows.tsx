@@ -5,7 +5,8 @@ import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
 import { workCardModel, type WorkCardModel } from "../../core/timeline/workCardModel";
 import { WORK_CARD_WORKERS, type WorkWorkerLine } from "../../core/work/workers";
-import type { WorkWorkerSession } from "../../core/work/types";
+import type { ResultAction, WorkWorkerSession } from "../../core/work/types";
+import { resultActionLabel } from "../../core/work/resultActions";
 import type { AgentKind, TerminalFlavor } from "../../core/sessions/workerPresentation";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon as KitIcon } from "../kit/Icon";
@@ -155,6 +156,8 @@ export type WorkCardHandlers = {
   onSession: (sessionId: string) => void;
   /** The quiet line: the result sheet. */
   onLine: (model: WorkCardModel) => void;
+  /** A result's next step: it goes where the step names, and the card becomes its line. */
+  onAction: (model: WorkCardModel, action: ResultAction) => void;
 };
 
 /** "Agent · Done 11:20". */
@@ -167,6 +170,24 @@ function WorkLogo(props: { agent: { kind: AgentKind; flavor: TerminalFlavor } | 
   return props.agent
     ? <AgentIcon kind={props.agent.kind} flavor={props.agent.flavor} size={props.size - 8} />
     : <View class="items-center justify-center rounded-lg bg-foreground" style={{ width: props.size, height: props.size }}><KitIcon name="brain" size={props.size - 10} tone="canvas" /></View>;
+}
+
+/** A result's next steps (SPEC §11): small ghost buttons, canvas fill, an 18 pt glyph, ink words, wrapping. */
+export function ResultActions(props: { actions: readonly ResultAction[]; disabled?: boolean; onPress: (action: ResultAction) => void }) {
+  return (
+    <View testID="work-actions" class="flex-row flex-wrap gap-2">
+      {props.actions.map((action) => {
+        const { label, icon } = resultActionLabel(action);
+        return (
+          <Button testID={`work-action-${action.kind}`} accessibilityLabel={label} disabled={props.disabled} onPress={() => props.onPress(action)}
+            class="h-[36px] max-w-full flex-row items-center gap-1.5 rounded-full bg-background px-3 active:opacity-70 disabled:opacity-40">
+            <KitIcon name={icon} size={18} tone="ink" />
+            <Text class="shrink text-sub font-semibold line-clamp-1">{label}</Text>
+          </Button>
+        );
+      })}
+    </View>
+  );
 }
 
 /** A Worker of a Work on its card (SPEC §11): 44 pt, its logo, name, what it does, the time; pushes its Session. */
@@ -217,6 +238,7 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
             <KitIcon name="chevron-right" size={18} tone="faint" />
           </Button>
           {model().summary ? <View selectable><Text class="text-sub">{model().summary}</Text></View> : null}
+          {model().actions.length ? <ResultActions actions={model().actions} disabled={!props.handlers} onPress={(action) => props.handlers?.onAction(model(), action)} /> : null}
         </View>
       ) : (
         <View testID={model().kind === "needs" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">

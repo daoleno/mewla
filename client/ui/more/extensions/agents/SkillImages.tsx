@@ -39,10 +39,10 @@ export function SkillImage(props: { path: string | null; alt?: string; problem?:
     <View class="my-1" style={{ width: props.width?.() || undefined }}>
       {src() ? (
         <View role="button" accessibilityLabel={props.alt || props.path || "Image"} accessibilityHint="Opens the image" onPress={() => props.path && props.onOpen(props.path)} class="active:opacity-80">
-          <Image src={src()} class="h-48 w-full rounded-xl" style={{ objectFit: "contain" }} accessibilityLabel={props.alt || props.path || "Image"} />
+          <Image src={src()} class="h-48 w-full rounded-[14px]" style={{ objectFit: "contain" }} accessibilityLabel={props.alt || props.path || "Image"} />
         </View>
       ) : error() ? (
-        <Text class="text-xs text-muted-foreground">{`${props.alt ? `${props.alt}: ` : ""}${error()}`}</Text>
+        <Text class="text-caption text-muted-foreground">{`${props.alt ? `${props.alt}: ` : ""}${error()}`}</Text>
       ) : (
         <Spinner size={16} />
       )}
@@ -53,7 +53,7 @@ export function SkillImage(props: { path: string | null; alt?: string; problem?:
 /** One picture of the copy at a time, full width, with the copy's other pictures before and after it. */
 export function SkillImageViewer(props: { images: readonly string[]; start: string | null; read: ImageReader; onClose: () => void }) {
   return (
-    <Sheet open={props.start !== null} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="h-[94%] rounded-t-3xl bg-card px-4 pb-8 pt-3" backdropClass="bg-black/60">
+    <Sheet open={props.start !== null} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="h-[94%] rounded-t-(--radius-sheet) bg-sheet px-4 pb-8 pt-3 shadow-float" backdropClass="bg-scrim">
       {props.start !== null ? <ViewerBody images={props.images} start={props.start} read={props.read} onClose={props.onClose} /> : null}
     </Sheet>
   );
@@ -84,15 +84,15 @@ function ViewerBody(props: { images: readonly string[]; start: string; read: Ima
     <View testID="skill-image-viewer" class="flex-1 gap-3">
       <View class="flex-row items-center gap-3">
         <View class="min-w-0 flex-1">
-          <Text class="font-mono text-sm line-clamp-1">{list[index()]!}</Text>
-          {list.length > 1 ? <Text class="text-xs text-muted-foreground">{`${index() + 1} of ${list.length}`}</Text> : null}
+          <Text class="font-mono text-code line-clamp-1">{list[index()]!}</Text>
+          {list.length > 1 ? <Text class="text-caption text-muted-foreground">{`${index() + 1} of ${list.length}`}</Text> : null}
         </View>
         <Button accessibilityLabel="Close image" onPress={props.onClose} class="size-11 items-center justify-center rounded-full active:bg-accent">
           <Icon name="close" size={20} />
         </Button>
       </View>
       <View class="flex-1 items-center justify-center" panActivation={{ activeOffsetX: 24, failOffsetY: 14 }} onPanEnd={(event) => !event.cancelled && Math.abs(event.translation.x) > 60 && go(event.translation.x < 0 ? 1 : -1)}>
-        {src() ? <Image src={src()} class="h-full w-full" style={{ objectFit: "contain" }} accessibilityLabel={list[index()]!} /> : error() ? <Text class="text-sm text-muted-foreground">{error()}</Text> : <Spinner />}
+        {src() ? <Image src={src()} class="h-full w-full" style={{ objectFit: "contain" }} accessibilityLabel={list[index()]!} /> : error() ? <Text class="text-sub text-muted-foreground">{error()}</Text> : <Spinner />}
       </View>
       {list.length > 1 ? (
         <View class="flex-row justify-between">

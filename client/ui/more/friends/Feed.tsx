@@ -17,15 +17,13 @@ function DraftBanner(props: { nav: PageNav }) {
       testID="friends-drafts-banner"
       accessibilityLabel={`${draftCount()} ${one() ? "draft" : "drafts"} waiting`}
       onPress={() => props.nav.push({ name: "friends-drafts" })}
-      class="mx-4 mt-3 flex-row items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 active:bg-accent"
+      class="mx-4 mt-3 min-h-[52px] flex-row items-center gap-3 rounded-full bg-card pl-2 pr-4 active:bg-accent"
     >
-      <View class="size-8 items-center justify-center rounded-full bg-seal">
-        <Text class="text-sm font-semibold text-primary-foreground">{String(draftCount())}</Text>
+      {/* Waiting for you: the one place Friends uses the seal. */}
+      <View class="size-9 items-center justify-center rounded-full bg-seal">
+        <Text class="text-sub font-semibold text-seal-foreground">{String(draftCount())}</Text>
       </View>
-      <View class="flex-1">
-        <Text class="text-base font-medium">{one() ? "Draft waiting" : "Drafts waiting"}</Text>
-        <Text class="text-sm text-muted-foreground">{one() ? "Brain wrote this for you to check" : "Brain wrote these for you to check"}</Text>
-      </View>
+      <Text class="flex-1 text-body font-semibold">{one() ? "Draft waiting" : "Drafts waiting"}</Text>
       <Icon name="chevron-right" size={16} tone="faint" />
     </Button>
   ) : null}</>);
@@ -46,7 +44,7 @@ export function Feed(props: { nav: PageNav; top: () => boolean }) {
         testID="friends-bell"
         accessibilityLabel={unread() > 0 ? `Notifications, ${unread()} new` : "Notifications"}
         onPress={() => props.nav.push({ name: "friends-notifications" })}
-        class="size-10 items-center justify-center active:opacity-60"
+        class="size-11 items-center justify-center rounded-full active:bg-accent"
       >
         <Icon name="bell" tone="ink" />
         {unread() > 0 ? <View class="absolute right-2 top-2 size-2.5 rounded-full bg-seal" /> : null}

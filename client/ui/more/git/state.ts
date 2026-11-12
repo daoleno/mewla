@@ -14,7 +14,7 @@ import {
   type GitAction,
   type GitTarget,
 } from "../../../core/git/requests";
-import { agentKindFromProvider } from "../../../core/sessions/workerPresentation";
+import { agentKindFromProvider, presentWorker } from "../../../core/sessions/workerPresentation";
 import { supportsChatInterface } from "../../../core/session/sessionRoute";
 import { outbox, workers } from "../../session";
 import { daemon } from "../daemon";
@@ -377,6 +377,12 @@ export class GitReview {
     if (!this.current()) return false;
     const worker = workers().find((w) => w.id === this.target.targetId);
     return !!worker && supportsChatInterface(agentKindFromProvider(worker.provider), worker.capabilities);
+  }
+
+  /** The Session's agent by name ("Claude Code"), for "Ask {agent}" (reactive). */
+  agentName(): string {
+    const worker = workers().find((w) => w.id === this.target.targetId);
+    return worker ? presentWorker(worker).typeLabel : "agent";
   }
 
   /**

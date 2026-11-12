@@ -15,9 +15,9 @@ function Line(props: { icon: IconName; text: string; detail?: string; at?: strin
     <Button testID={props.testID} onPress={props.onPress} class={`flex-row items-start gap-3 border-b border-border px-4 py-3 active:bg-accent ${props.unread ? "bg-card" : ""}`}>
       <View class="pt-0.5"><Icon name={props.icon} /></View>
       <View class="min-w-0 flex-1">
-        <Text class="text-base">{props.text}</Text>
-        {props.detail ? <Text class="mt-0.5 text-sm text-muted-foreground line-clamp-2">{props.detail}</Text> : null}
-        {props.at ? <Text class="mt-0.5 text-xs text-muted-foreground">{props.at}</Text> : null}
+        <Text class="text-body">{props.text}</Text>
+        {props.detail ? <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-2">{props.detail}</Text> : null}
+        {props.at ? <Text class="mt-0.5 text-caption text-muted-foreground">{props.at}</Text> : null}
       </View>
       {props.unread ? <View class="mt-2 size-2 rounded-full bg-seal" accessibilityLabel="New" /> : null}
       {props.chevron ? <View class="self-center"><Icon name="chevron-right" size={16} tone="faint" /></View> : null}

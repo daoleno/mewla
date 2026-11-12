@@ -33,8 +33,8 @@ func TestCollectorSmoke(t *testing.T) {
 		t.Fatal("Stats() returned nil")
 	}
 
-	if len(resp.Ranges) != 4 {
-		t.Fatalf("expected 4 ranges, got %d", len(resp.Ranges))
+	if len(resp.Ranges) != 5 {
+		t.Fatalf("expected 5 ranges, got %d", len(resp.Ranges))
 	}
 
 	all := resp.Ranges["all"]
@@ -842,5 +842,65 @@ func TestClaudeSessionProjectComesFromTheRecordedFolder(t *testing.T) {
 	agg := byDate["2026-04-04"]
 	if agg == nil || agg.projects["mewla-cat-lab"] == nil || agg.projects["lab"] != nil {
 		t.Fatalf("projects = %+v", agg)
+	}
+}
+
+func TestRangeStartsCountTodayIn(t *testing.T) {
+	now := time.Date(2026, 11, 12, 18, 30, 0, 0, time.UTC)
+	got := rangeStarts(now)
+	want := map[string]string{"day": "2026-11-12", "week": "2026-11-06", "fortnight": "2026-10-30", "month": "2026-10-14", "all": "0000-00-00"}
+	if len(got) != len(want) {
+		t.Fatalf("ranges = %v, want %v", got, want)
+	}
+	for name, from := range want {
+		if got[name] != from {
+			t.Fatalf("%s starts %q, want %q", name, got[name], from)
+		}
+	}
+}
+
+func TestFortnightRangeHoldsTheLastFourteenDays(t *testing.T) {
+	setTestLocalLocation(t, time.UTC)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	at := func(daysAgo int) string {
+		return time.Now().UTC().AddDate(0, 0, -daysAgo).Truncate(24 * time.Hour).Add(12 * time.Hour).Format(time.RFC3339Nano)
+	}
+	// One session 10 days ago, one 20 days ago: the fortnight holds the first only.
+	writePiSession(t, home, "--home-user-workspace-mewla--", "ten.jsonl",
+		piHeader("/home/user/workspace/mewla", at(10)),
+		piAssistantLine("a1", at(10), "opencode-go", "deepseek-v4-flash", piUsageJSON(100, 50, 0, 0, piReasoning(0), 0.001)),
+	)
+	writePiSession(t, home, "--home-user-workspace-mewla--", "twenty.jsonl",
+		piHeader("/home/user/workspace/mewla", at(20)),
+		piAssistantLine("a2", at(20), "opencode-go", "deepseek-v4-flash", piUsageJSON(1000, 500, 0, 0, piReasoning(0), 0.01)),
+	)
+	c := NewCollector()
+	c.refresh()
+	resp := c.Stats()
+	sessions := func(name string) int {
+		r := resp.Ranges[name]
+		if r == nil {
+			t.Fatalf("missing %q range", name)
+		}
+		return r.Sessions
+	}
+	if got := sessions("week"); got != 0 {
+		t.Fatalf("week sessions = %d, want 0", got)
+	}
+	if got := sessions("fortnight"); got != 1 {
+		t.Fatalf("fortnight sessions = %d, want 1", got)
+	}
+	if got := sessions("month"); got != 2 {
+		t.Fatalf("month sessions = %d, want 2", got)
+	}
+	fortnight := resp.Ranges["fortnight"]
+	if len(fortnight.Models) != 1 || !piClose(fortnight.Models[0].Cost, 0.001) {
+		t.Fatalf("fortnight models = %+v, want the 10-day-old session's model only", fortnight.Models)
+	}
+	for _, day := range fortnight.Days {
+		if day.Date < rangeStarts(time.Now())["fortnight"] {
+			t.Fatalf("fortnight day %s precedes its start", day.Date)
+		}
 	}
 }
