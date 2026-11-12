@@ -7,6 +7,12 @@ export interface TerminalHandlers {
   /** A new attachment: clear the view before its output arrives. */
   reset(): void;
   output(data: string): void;
+  /**
+   * The Session's size, told before each replay (session host). When another viewer (mewla attach on a
+   * computer) holds the size, it is not this view's grid: the view draws the screen at this size, fitted
+   * into its area, until its person acts here and the size is the view's again. Older computers never say.
+   */
+  sessionSize(cols: number, rows: number): void;
   /** tmux copy mode on the computer (`terminal_scroll_state`); a session host Session never sends it. */
   scrollState(state: TerminalScrollState): void;
   /** The history above the screen changed: what the view does with the rows it holds. */
@@ -38,6 +44,8 @@ export class TerminalSession {
   private sessionId: string | null = null;
   private size: { cols: number; rows: number } | null = null;
   private opening = false;
+  /** The Session's size the computer told last (`terminal_size`). */
+  private told: { cols: number; rows: number } | null = null;
   private closed = false;
   private exited = false;
   private readonly stops: Array<() => void> = [];
@@ -61,6 +69,14 @@ export class TerminalSession {
         if (!mine(frame) || typeof frame.data !== "string") return;
         handlers.output(frame.data);
         this.feed.output();
+      }),
+      transport.on("terminal_size", (frame) => {
+        const cols = Number(frame.cols), rows = Number(frame.rows);
+        if (!mine(frame) || !(cols >= 2 && rows >= 2)) return;
+        handlers.sessionSize(cols, rows);
+        // The Session was resized: its history comes again at the new width.
+        if (this.told && (this.told.cols !== cols || this.told.rows !== rows)) this.feed.output();
+        this.told = { cols, rows };
       }),
       transport.on("terminal_scroll_state", (frame) =>
         mine(frame) && handlers.scrollState({ atBottom: frame.at_bottom !== false, inCopyMode: frame.in_copy_mode === true, position: Number(frame.scroll_position) || 0 })),

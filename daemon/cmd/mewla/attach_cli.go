@@ -49,8 +49,9 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stderr, "none, pick from the live Sessions: arrow keys and typing filter, Enter attaches")
 		fmt.Fprintln(stderr, "(without a terminal the list is printed). Ctrl-\\ detaches; the Session keeps")
 		fmt.Fprintln(stderr, "running. This terminal's size becomes the Session's when it attaches, is resized")
-		fmt.Fprintln(stderr, "or is typed into; another viewer that resizes it redraws this one. A Session")
-		fmt.Fprintln(stderr, "still in tmux opens in tmux, which detaches with its own prefix key.")
+		fmt.Fprintln(stderr, "or is typed into; while another viewer has it at another size, this terminal")
+		fmt.Fprintln(stderr, "shows the Session's screen cut to its window. A Session still in tmux opens in")
+		fmt.Fprintln(stderr, "tmux, which detaches with its own prefix key.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "--all (or Tab in the picker) tiles every live Session in this terminal and keeps")
 		fmt.Fprintln(stderr, "them updating, without touching them. Arrow keys, Tab, 1-9 or a click choose;")
@@ -263,6 +264,33 @@ func startInputPump(ctx context.Context, in io.Reader) <-chan []byte {
 	return typed
 }
 
+// mirrorFrame paints a Session's screen of another size (another viewer
+// holds it) into a terminal of w x h: each row cut to w columns, the end of
+// the screen when it is taller than h (what a person watches is its end, as in
+// a grid tile), and the cursor where it is when that shows.
+func mirrorFrame(c sessionhost.Capture, w, h int) string {
+	screen := newGridScreen(c)
+	var b strings.Builder
+	b.WriteString("\x1b[?25l\x1b[H")
+	for i, row := range screen.view(h) {
+		if i > 0 {
+			b.WriteString("\r\n")
+		}
+		b.WriteString(cutStyled(row, w))
+	}
+	if y := c.CursorY - screen.viewStart(h); y >= 0 && y < h && c.CursorX < w {
+		fmt.Fprintf(&b, "\x1b[%d;%dH\x1b[?25h", y+1, c.CursorX+1)
+	}
+	return b.String()
+}
+
+// mirrorDelay gathers output for one repaint of a mirrored screen.
+var mirrorDelay = 40 * time.Millisecond
+
+// attachSizePoll is how often a terminal on a host from before AttachResized
+// asks the Session's size.
+var attachSizePoll = 500 * time.Millisecond
+
 // attachLoopTyped is attachLoop over keys that arrive on typed. A nonzero
 // backKey ends it too, with back set, for a caller that shows a Session from a
 // grid; keys after it in the same read are dropped, as after Ctrl-\.
@@ -272,13 +300,20 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 	// the person types while another viewer has it; attaching again on its own
 	// (behind, or resized by another viewer) shows the Session at whatever size
 	// it has, so two viewers never take the size from each other.
-	// A host from before AttachResized never redraws this terminal for another
-	// viewer's resize: then it takes its size whenever it attaches, as before.
+	// A host from before AttachResized never ends this terminal's view for
+	// another viewer's resize: then it asks the Session's size every
+	// attachSizePoll and redraws when it changed.
+	// While the Session is not this terminal's size, output written for the
+	// other size would be drawn wrongly here: the terminal mirrors the host's
+	// screen instead (mirrorFrame), until its person acts and takes the size.
 	owned, redraws := false, false
+	var shown [2]int // the size the view's replay was drawn at
+	mirror := false  // the Session is another size: this terminal mirrors its screen
+	var startOver func() error
 	attach := func(passive bool) (*sessionhost.Attachment, error) {
 		cols, rows := size()
 		params := sessionhost.AttachParams{ID: id, Redraw: true}
-		if !passive || !redraws {
+		if !passive {
 			params.Cols, params.Rows = cols, rows
 		}
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -290,6 +325,7 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 		}
 		if err == nil {
 			owned, redraws = view.Cols == cols && view.Rows == rows, view.Redraw
+			shown = [2]int{view.Cols, view.Rows}
 		}
 		return view, err
 	}
@@ -303,7 +339,11 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 		if err := client.Resize(callCtx, id, cols, rows); err != nil {
 			return err
 		}
-		owned = true
+		owned, shown = true, [2]int{cols, rows}
+		if mirror {
+			// Drawn at this terminal's size from here on: its own stream again.
+			return startOver()
+		}
 		return nil
 	}
 	view, err := attach(false)
@@ -313,7 +353,45 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 	defer func() { view.Close() }()
 	io.WriteString(out, enterAttach)
 	defer io.WriteString(out, leaveAttach)
-	out.Write(view.Replay)
+	var paintAt <-chan time.Time
+	paint := func() {
+		paintAt = nil
+		cols, rows := size()
+		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		if c, err := client.Capture(callCtx, sessionhost.CaptureParams{ID: id, Scope: sessionhost.ScopeScreen, Styled: true, Trim: true}); err == nil {
+			io.WriteString(out, mirrorFrame(c, cols, rows))
+		}
+	}
+	// show draws the view's replay, or mirrors the screen when the Session is another size.
+	show := func() {
+		cols, rows := size()
+		mirror = view.Cols != cols || view.Rows != rows
+		if mirror {
+			io.WriteString(out, "\x1b[r"+redraw)
+			paint()
+			return
+		}
+		out.Write(view.Replay)
+	}
+	show()
+	// This terminal fell behind, or the Session is another size now: start the screen over.
+	startOver = func() error {
+		view.Close()
+		var err error
+		if view, err = attach(true); err != nil {
+			return err
+		}
+		io.WriteString(out, redraw)
+		show()
+		return nil
+	}
+	var poll <-chan time.Time
+	if !redraws {
+		tick := time.NewTicker(attachSizePoll)
+		defer tick.Stop()
+		poll = tick.C
+	}
 
 	send := func(data []byte) error {
 		if len(data) == 0 {
@@ -333,7 +411,11 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 		select {
 		case chunk, ok := <-view.Output():
 			if ok {
-				out.Write(chunk)
+				if !mirror {
+					out.Write(chunk)
+				} else if paintAt == nil {
+					paintAt = time.After(mirrorDelay)
+				}
 				continue
 			}
 			end, err := view.End()
@@ -341,13 +423,9 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 			case err != nil:
 				return "", false, fmt.Errorf("the session host stopped showing %s: %w", id, err)
 			case end.Reason == sessionhost.AttachBehind || end.Reason == sessionhost.AttachResized:
-				// This terminal fell behind, or the Session is another size now: start the screen over.
-				view.Close()
-				if view, err = attach(true); err != nil {
+				if err := startOver(); err != nil {
 					return "", false, err
 				}
-				io.WriteString(out, redraw)
-				out.Write(view.Replay)
 			case end.Reason == sessionhost.AttachExited && end.ExitCode != nil:
 				return fmt.Sprintf("[%s exited with code %d]", id, *end.ExitCode), false, nil
 			default:
@@ -375,6 +453,17 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 		case <-resized:
 			if err := takeSize(); err != nil {
 				return "", false, err
+			}
+		case <-paintAt:
+			paint()
+		case <-poll:
+			callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			info, err := client.Info(callCtx, id)
+			cancel()
+			if err == nil && (info.Cols != shown[0] || info.Rows != shown[1]) {
+				if err := startOver(); err != nil {
+					return "", false, err
+				}
 			}
 		case <-ctx.Done():
 			return "", false, ctx.Err()
