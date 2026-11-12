@@ -146,8 +146,6 @@ export type WorkCardHandlers = {
   agentOf: (sessionId: string | undefined) => { kind: AgentKind; flavor: TerminalFlavor; name: string } | null;
   /** The title of a Work: its detail page. */
   onTitle: (workId: string) => void;
-  /** A next step: it goes to Brain as the person's message, and the result is read. */
-  onNextStep: (model: WorkCardModel, text: string) => void;
   /** The quiet line: the result sheet. */
   onLine: (model: WorkCardModel) => void;
 };
@@ -195,15 +193,6 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
             <KitIcon name="chevron-right" size={18} tone="faint" />
           </Button>
           {model().summary ? <View selectable><Text class="text-sub">{model().summary}</Text></View> : null}
-          {model().nextStep && props.handlers ? (
-            <View class="flex-row flex-wrap gap-2">
-              <Button testID="work-next-step" onPress={() => props.handlers?.onNextStep(model(), model().nextStep!)}
-                class="h-[48px] flex-row items-center gap-1.5 rounded-(--radius-control) bg-muted px-4 active:opacity-70">
-                <KitIcon name="arrow-forward" size={18} tone="ink" />
-                <Text class="text-body font-semibold line-clamp-1">{model().nextStep!}</Text>
-              </Button>
-            </View>
-          ) : null}
         </View>
       ) : (
         <View testID={model().kind === "needs" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">

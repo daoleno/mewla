@@ -75,15 +75,14 @@ describe("a Work in Brain's thread", () => {
   });
   const docs = session("docs", { status: "done" });
 
-  test("came back and new: a result card; its next step goes to Brain and it becomes its line, which opens the result sheet", async () => {
+  test("came back and new: a result card that never shows Brain's next_action; opening it reads it", async () => {
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [docs], conversations: { "brain-host": [result()] } }) });
     await app.waitFor("id:work-result", { timeout: 10_000 });
     expect(app.texts()).toContain("Ship the docs");
     expect(app.shows("id:work-unread")).toBe(true);
+    expect(app.texts().join(" ")).not.toContain("Announce it");
     await app.wait(500);
-    await app.press("id:work-next-step");
-    await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length > 0);
-    expect(JSON.stringify(framesOf(app.host.posts(), "send_input").at(-1))).toContain("Announce it");
+    await app.press("id:work-result-open");
     await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_read").length > 0);
     expect(framesOf(app.host.posts(), "brain_work_read")[0]).toMatchObject({ id: "w1" });
   }, 20_000);
