@@ -6,7 +6,7 @@ import { FriendsPageView } from "./friends/FriendsPages";
 import { FriendsSettings } from "./friends/FriendsSettings";
 import { GitPageView } from "./git/GitPages";
 import { PetPage } from "./pet/Pet";
-import { restorePet } from "./pet/pets";
+import { restorePet } from "../pets/pets";
 import { Resources } from "./resources/Resources";
 import { PhonePage } from "../phone/PhonePage";
 import { ScreenPage } from "./screen/Screen";

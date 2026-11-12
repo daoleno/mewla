@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, createMotion, effect, host, Image, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
+import { cleanup, Clipboard, createMotion, effect, host, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
@@ -28,9 +28,9 @@ import {
 } from "../../core/onboarding";
 import { Icon, type IconName } from "../icons/Icon";
 import { Field, Spinner } from "../kit/kit";
-import { restorePet } from "../more/pet/pets";
+import { restorePet } from "../pets/pets";
 import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
-import { petClip } from "../pets/clips";
+import { PetSprite } from "../pets/PetSprite";
 import { connection, problem, resumeConnection, servers } from "../session";
 import { probeComputer } from "../more/settings/computers";
 import { OnboardingScanner, scannerSearching } from "./OnboardingScanner";
@@ -314,19 +314,23 @@ function Cat(props: { step: OnboardingStep; frame: Frame }) {
   const move = () => (reduceMotion() ? 0 : 440);
   return (
     <>
-      <Image src={petClip("homeless")} accessibilityElementsHidden
+      <View
         style={{
           position: "absolute", pointerEvents: "none", left: hero().cx - hero().size / 2, top: hero().cy - hero().size / 2, width: hero().size, height: hero().size,
           opacity: seal() ? 1 : 0, transform: [{ scale: seal() ? 1 : 1.5 }],
           transitionProperty: "opacity, transform", transitionDuration: reduceMotion() ? 0 : 260, transitionDelay: seal() && !reduceMotion() ? 380 : 0,
-        }} />
+        }}>
+        <PetSprite state={() => "homeless"} size={hero().size} />
+      </View>
       {/* Drawn at one size and moved by a transform, so the move between spots runs natively. */}
-      <Image testID="cat" src={petClip(clip())} accessibilityElementsHidden
+      <View testID="cat"
         style={{
           position: "absolute", pointerEvents: "none", left: 0, top: 0, width: CAT_BASE, height: CAT_BASE,
           transform: [{ translateX: box().cx - CAT_BASE / 2 }, { translateY: box().cy - CAT_BASE / 2 }, { scale: box().size / CAT_BASE }],
           transitionProperty: "transform", transitionDuration: move(), transitionTimingFunction: "ease-in-out",
-        }} />
+        }}>
+        <PetSprite state={clip} size={CAT_BASE} />
+      </View>
     </>
   );
 }
