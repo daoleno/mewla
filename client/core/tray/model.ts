@@ -290,8 +290,9 @@ function stateOf(input: TrayInput, needs: number, running: number): StateControl
   if (input.connection === "connecting") return s("connecting", "Connecting…", "ring", false);
   if (input.connection !== "connected") return s("offline", "Offline", "ring", false);
   if (input.surface === "host_down") return s("cant_start", "Can't start", "seal", true);
-  if (input.surface === "waking") return s("starting", "Starting…", "ring", false);
+  // What waits on you outranks Brain still starting: a Session's request can be answered meanwhile.
   if (needs > 0) return s("needs", needs === 1 ? "1 needs you" : `${needs} need you`, "seal", true);
+  if (input.surface === "waking") return s("starting", "Starting…", "ring", false);
   if (running > 0) return s("running", `${running} running`, "ink", true);
   return s("quiet", "All quiet", null, false);
 }

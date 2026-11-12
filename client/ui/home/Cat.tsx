@@ -1,31 +1,29 @@
 import { cleanup, computed, effect, Image, lifecycle, reduceMotion, signal, untracked, View } from "nsh";
 import { Button } from "nsh/base";
-import { brainNeedsYou, sessionsNeedYou } from "../../core/sessions/attention";
-import type { BrainCurrentWork } from "../../core/work/types";
 import { pet } from "../more/pet/pets";
 import { petClip, type PetClip } from "../pets/clips";
-import { brain, brainThread, connection, workers } from "../session";
+import { brainThread } from "../session";
+import { tray } from "../tray/state";
 import { catNeedsYou } from "../computer/ComputerPage";
 
 /** How long a state's clip plays before the cat holds still (SPEC §5: 2–3 s). */
 const CLIP_MS = 2600;
 
 /**
- * The cat is the computer (SPEC §1.3): what it is doing, in the clip of that state. Connected
- * and quiet it naps; busy it works (Brain's turn) or delegates (Workers); waiting on you it calls;
- * connecting or starting it wakes; offline, unpaired or unable to start it sits in the grey ring.
+ * The cat is the computer (SPEC §1.3), from the same model as the state control: quiet it naps;
+ * busy it works (Brain's turn) or delegates (Workers); waiting on you it calls; connecting or
+ * starting it wakes; offline, unpaired or unable to start it sits in the grey ring.
  */
 const state = computed<PetClip>(() => {
-  const link = connection();
-  if (link === "connecting") return "waking";
-  if (link !== "connected") return "offline";
-  const snapshot = brain();
-  if (snapshot?.host_problem) return "offline";
-  if (!snapshot?.host_worker?.id) return "waking";
-  if (brainNeedsYou(snapshot.current_work as BrainCurrentWork[] | undefined) || sessionsNeedYou(workers())) return "attention";
-  if (brainThread().conversation?.activity?.status === "running") return "working";
-  if (workers().some((worker) => worker.status === "running")) return "delegating";
-  return "idle";
+  switch (tray().state.kind) {
+    case "needs": return "attention";
+    case "running": return brainThread().conversation?.activity?.status === "running" ? "working" : "delegating";
+    case "quiet": return "idle";
+    case "connecting":
+    case "starting": return "waking";
+    case "none": return "homeless";
+    default: return "offline";
+  }
 });
 
 /**

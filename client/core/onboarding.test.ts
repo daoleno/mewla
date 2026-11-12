@@ -135,9 +135,9 @@ describe("the viewfinder", () => {
     expect(cameraRuns("denied", true, true)).toBe(false);
   });
 
-  test("the Pair page in More's stack is told when it is on screen", () => {
+  test("the Pair page is told when it is on screen: the top of the one stack", () => {
     const shell = readFileSync(join(import.meta.dir, "../ui/shell/Shell.tsx"), "utf8");
-    expect(shell).toMatch(/case "pair": return <PairPage onScreen=\{\(\) => selectedTab\(\) === 3 && moreNav\.routes\(\)\.at\(-1\)\?\.name === "pair"\}/);
+    expect(shell).toMatch(/case "pair": return <PairPage onScreen=\{\(\) => isTop\(index\(\)\)\}/);
   });
 
   test("says it is looking only while the camera runs in front and nothing pairs", () => {

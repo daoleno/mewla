@@ -1,4 +1,4 @@
-import { cleanup, computed, List, Scroll, signal, Text, View } from "nsh";
+import { cleanup, effect, Scroll, signal, Text, View } from "nsh";
 import { AlertDialog, Button, Input } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
@@ -129,6 +129,15 @@ function Notice() {
 
 export function WorkDetail(props: { workId: string; nav: NavStackState<any>; links: WorkLinks }) {
   const slip = () => workSurface().slips.find((s) => s.workId === props.workId);
+  // Opening a result that came back reads it, from whichever way it was opened (the tray, a card, a notification).
+  let read = false;
+  effect(() => {
+    const shown = slip();
+    const transport = connection() === "connected" ? currentTransport() : null;
+    if (read || !shown?.unread || !transport) return;
+    read = true;
+    markWorkRead(transport, shown.workId);
+  });
   const reply = signal("");
   const files = createAttachmentUploads();
   // Leaving the page drops what was picked and stops an upload still going.

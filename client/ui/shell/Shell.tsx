@@ -50,7 +50,9 @@ onTransport(() => () => goHome());
 export function openSettingsLink(url: string): boolean {
   const routes = settingsLinkRoutes(url);
   if (!routes) return false;
-  openPage({ name: "computer" }, ...routes);
+  // `addServer`: Pair a computer, which lives on the computer page.
+  if (routes.at(-1)?.name === "pair") openPage({ name: "computer" }, { name: "pair" });
+  else openPage({ name: "computer" }, ...routes);
   return true;
 }
 
@@ -210,7 +212,7 @@ export function Shell() {
 export function FirstRun() {
   const web = platform.os === "web" && host.available();
   // A phone: the guided onboarding, which also shows the connected step after any pairing.
-  if (!web) return <Onboarding onContinue={() => goHome()} onSettings={() => openPage({ name: "computer" }, { name: "settings" })} />;
+  if (!web) return <Onboarding onContinue={() => goHome()} onSettings={() => openPage({ name: "computer" })} />;
   const join = createNavStack<{ name: "join" } | { name: "pair" }>([{ name: "join" }]);
   return (
     <Paged nav={join}>
