@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost } from "../testing/fixtures";
+import { framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const brain = { chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-11T07:00:00.000Z" } };
@@ -100,6 +100,37 @@ describe("requests in Brain's thread", () => {
     await app.wait(500);
     await app.press("id:request-sealed");
     await app.waitUntil(() => app.texts().some((t) => t.startsWith("Bash command rm -rf build · Proof phone")));
+  }, 20_000);
+
+  test("answered in a Session: the computer's row arrives live, between the rows already there, and says it once", async () => {
+    const asked = "2026-11-12T09:23:10.000Z";
+    const events = [
+      { id: "u1", seq: 1, timestamp: "2026-11-12T09:23:00.000Z", kind: "message", role: "user", body: "Run the bash command touch /tmp/x then say done" },
+      { id: "t1", seq: 2, timestamp: "2026-11-12T09:23:20.000Z", kind: "tool_call", role: "assistant", call_id: "c1", tool_name: "Bash", title: "Run touch x", status: "running" },
+    ];
+    const app = await open(APP, {
+      platform: "android", storage: paired,
+      host: phoneHost({ brain, worker_sessions: [session("mine", { approvals: [approval("a3", "touch /tmp/x")] })], conversations: { mine: events }, replies: { approval_decision: { type: "approval_decided" } } }),
+    });
+    await app.waitFor("text:1 needs you", { timeout: 10_000 });
+    await app.press("id:state-control");
+    await pressUntil(app, "text:touch /tmp/x", "id:request-card");
+    await app.wait(500);
+    await app.press("id:prompt-option-allow");
+    await app.waitFor("id:request-sealed");
+    await app.host.send("app.daemonPush", { type: "request_answered", request: {
+      id: "approval:mine:a3", kind: "approval", session_id: "mine", asked: "touch /tmp/x", answer: "Allow", outcome: "approved",
+      by: { kind: "device", device_name: "Proof phone" }, answered_at: "2026-11-12T09:24:23.000Z", anchor: { approval_id: "a3" },
+    } });
+    const subscription = framesOf(app.host.posts(), "codex_conversation_subscribe").filter((frame) => frame.worker_id === "mine").at(-1)!;
+    await app.host.send("app.daemonPush", { type: "codex_conversation_delta", request_id: subscription.request_id, worker_id: "mine", revision: 2, base_revision: 1, deletes: [], upserts: [
+      { id: "answered:approval:mine:a3", seq: 3, timestamp: asked, kind: "request_answered", source: "request_answered", role: "system", title: "Bash", body: "Allow", status: "approved",
+        request: { id: "approval:mine:a3", kind: "approval", session_id: "mine", asked: "touch /tmp/x", answer: "Allow", outcome: "approved",
+          by: { kind: "device", device_name: "Proof phone" }, answered_at: "2026-11-12T09:24:23.000Z", anchor: { approval_id: "a3" } } },
+    ] });
+    await app.waitFor("id:request-answered", { timeout: 5_000 });
+    expect(app.count("id:request-sealed")).toBe(1);
+    expect(app.texts()).toContain("Approved");
   }, 20_000);
 
   test("a Session the person started asks only in that Session", async () => {

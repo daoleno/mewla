@@ -21,6 +21,8 @@ export interface WorkWorkerLine {
   state: WorkWorkerState;
   /** What it does now, or its result line. */
   summary: string;
+  /** A state the row must say in words: "Needs you", "Failed", "Ended"; none while it runs or once it is done. */
+  stateLabel?: string;
   /** Running with a reported phase: the filled segments. */
   progress?: number;
   /** "live" while it works; else when it finished. */
@@ -31,6 +33,8 @@ export interface WorkWorkerLine {
 
 /** The card shows this many; the rest are "N more". */
 export const WORK_CARD_WORKERS = 3;
+
+const STATE_LABEL: Partial<Record<WorkWorkerState, string>> = { blocked: "Needs you", failed: "Failed", ended: "Ended" };
 
 const LIVE_STATE: Partial<Record<Worker["status"], WorkWorkerState>> = { running: "running", blocked: "blocked", done: "done", failed: "failed" };
 
@@ -53,6 +57,7 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
       agentLabel: typeLabel(agent, flavor),
       state,
       summary,
+      stateLabel: STATE_LABEL[state],
       progress: working ? progressSteps(following ? session.phase ?? row.phase : row.phase) ?? undefined : undefined,
       time: working ? "live" : listTime(Number.isFinite(at) ? at : undefined, now),
       openable: Boolean(session),

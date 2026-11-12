@@ -98,12 +98,16 @@ describe("Brain's Work", () => {
     (daemon.current_work[1] as Record<string, unknown>).worker_sessions = [
       { session_id: "%5", name: "planner", provider: "codex", state: "done", summary: "Plan written", live: false, joined_at: at, ended_at: at, updated_at: at },
       { session_id: "%7", name: "release", provider: "claude", state: "running", summary: "Running the release checks", phase: "verifying", live: true, joined_at: at, updated_at: at },
+      { session_id: "%8", name: "builder", provider: "claude", state: "failed", summary: "Build broke on Windows", live: false, joined_at: at, ended_at: at, updated_at: at },
+      { session_id: "%9", name: "verifier", provider: "claude", state: "ended", summary: "", live: false, joined_at: at, ended_at: at, updated_at: at },
     ];
     const app = await workApp({ brain: daemon, worker_sessions: [{ id: "%7", name: "release", status: "running", phase: "verifying", summary: "Running the release checks", command: "claude", provider: "claude", cwd: "/home/me/perpetuo", updated_at: Date.now() }] });
     await openWork(app, "w-run");
     await app.waitFor("id:work-workers");
-    expect(app.count("id:work-worker")).toBe(2);
+    expect(app.count("id:work-worker")).toBe(4);
     expect(app.texts()).toContain("OpenAI Codex · planner");
+    expect(app.texts()).toContain("Failed · Build broke on Windows");
+    expect(app.texts()).toContain("Ended");
     expect(app.texts()).toContain("Claude Code · release");
     expect(app.count("id:work-worker-progress")).toBe(1);
     expect(app.enabled("id:work-worker >> nth=0")).toBe(false);
