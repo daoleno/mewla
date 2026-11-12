@@ -124,6 +124,8 @@ export type BrainWorkSlip = {
   title: string;
   /** "Claude Code · perpetuo" when the Work's Session is live. */
   who?: string;
+  /** The live Session's project ("perpetuo"): Work detail's eyebrow reads "Work · perpetuo". */
+  project?: string;
   summary?: string;
   updatedAt?: string;
   /** The live Session that owns the Work, when it is still open. */
@@ -261,6 +263,7 @@ export function brainWorkSurface(
       statusLabel,
       title: brainWorkTitle(work.title),
       who: worker ? workerWho(worker) : undefined,
+      project: projectName(worker?.cwd) || undefined,
       summary: work.question
         ? work.question
         : stuck
@@ -365,7 +368,8 @@ export function workerWho(worker: BrainWorkerRef): string | undefined {
   return [executor, project].filter(Boolean).join(" · ") || undefined;
 }
 
-function projectName(cwd: string | undefined): string {
+/** A working directory's last part ("perpetuo"), or "" with none. */
+export function projectName(cwd: string | undefined): string {
   const parts = (cwd ?? "").split("/").filter(Boolean);
   return parts[parts.length - 1] ?? "";
 }
