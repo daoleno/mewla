@@ -154,3 +154,22 @@ describe("the desktop's keys", () => {
     expect(app.shows("id:palette")).toBe(false);
   }, 20_000);
 });
+
+describe("a terminal on screen (parity #27)", () => {
+  test("with the focus outside the terminal, ⌘K and G then a letter still work", async () => {
+    const app = await open(APP, desk({ brain: {}, worker_sessions: [{ ...sessions[0], command: "bash", provider: "" }] }));
+    await app.waitFor("id:sidebar");
+    await app.press("id:sidebar-sessions");
+    await app.waitFor("text:api server");
+    await app.press("text:api server");
+    await app.waitFor("id:terminal-web", { timeout: 10_000 });
+    await app.keyboard.press("mod+k");
+    await app.waitFor("id:palette");
+    await app.keyboard.press("escape");
+    await app.waitFor("id:palette", { state: "gone" });
+    await app.keyboard.press("g");
+    await app.keyboard.press("c");
+    await app.waitUntil(() => path(app) === "/calendar");
+  }, 20_000);
+});
+

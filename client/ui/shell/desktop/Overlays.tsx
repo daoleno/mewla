@@ -17,7 +17,7 @@ import { newSessionOpen } from "../../screens/NewSession";
 import { workers } from "../../session";
 import { workSurface } from "../../work/state";
 import { brainNav, desktop, openPlace, openSession, selectedTab } from "../Shell";
-import { focusComposer, terminalShowing } from "./keys";
+import { focusComposer, terminalOwnsKeys } from "./keys";
 
 /** The ⌘K palette and the `?` cheat sheet are open. */
 export const paletteOpen = signal(false);
@@ -54,20 +54,20 @@ function pressed(keystroke: string) {
 /**
  * The desktop's keys, through NSH's keymap: ⌘K / Ctrl+K anywhere (fields
  * too); `?`, `N`, `/` and `G` then a letter only outside fields
- * (`notEditing`). None while the terminal shows: it owns every key.
+ * (`notEditing`). None while the terminal owns the keys (keys.ts).
  */
 function bindKeys() {
   effect(() => {
-    if (!desktop() || terminalShowing()) return;
+    if (!desktop() || terminalOwnsKeys()) return;
     keymap.bind("mod+k", () => paletteOpen.set(!untracked(paletteOpen)));
   });
   effect(() => {
-    if (!desktop() || terminalShowing() || paletteOpen() || shortcutsOpen()) return;
+    if (!desktop() || terminalOwnsKeys() || paletteOpen() || shortcutsOpen()) return;
     keymap.bind(Object.fromEntries(GLOBAL_KEYSTROKES.map((keystroke) => [keystroke, () => pressed(keystroke)])), { when: "notEditing" });
   });
   // The letters after `G` are bound only while it waits for one.
   effect(() => {
-    if (!pendingGo() || terminalShowing()) return;
+    if (!pendingGo() || terminalOwnsKeys()) return;
     keymap.bind(Object.fromEntries(GO_KEYSTROKES.map((keystroke) => [keystroke, () => pressed(keystroke)])), { when: "notEditing" });
     const timer = setTimeout(() => pendingGo.set(false), GO_SEQUENCE_MS);
     return () => clearTimeout(timer);
