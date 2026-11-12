@@ -18,6 +18,8 @@ export interface FakeDaemonState {
   conversations?: Record<string, Record<string, unknown>[] | { source?: string; available?: boolean; reason?: string; events: Record<string, unknown>[] }>;
   /** A DSH Session's pending requests (`dsh_interaction`). */
   dsh?: { epoch: string; items: Record<string, unknown>[] };
+  /** The `computers` message (WIRE §5) without its type: the other computers as this one sees them. */
+  computers?: Record<string, unknown>;
   /** Canned answers by request type (before any built-in one): the reply's `type` and fields, e.g. `{ type: "error", message }`. */
   replies?: Record<string, { type: string } & Record<string, unknown>>;
 }
@@ -105,6 +107,8 @@ export class FakeDaemon {
     switch (frame.type) {
       case "brain_snapshot":
         return reply("brain_snapshot", { brain: this.state.brain ?? {} });
+      case "computers":
+        return reply("computers", this.state.computers ?? { computers: [], open_requests: 0 });
       case "list_calendar_items":
         return reply("calendar_items_snapshot", { calendar_items: this.state.calendar_items ?? [] });
       case "get_calendar_item": {

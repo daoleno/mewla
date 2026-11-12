@@ -24,6 +24,67 @@ function setup(params: Record<string, unknown>, extra: Record<string, unknown> =
   };
 }
 
+/** The page's computer answers `computers` with `message` (WIRE §5); every other request is unexpected. */
+function withComputers(params: Record<string, unknown>, message: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+  const base = setup(params, extra);
+  return { ...base, host: { ...base.host, handlers: { ...base.host.handlers, "app.daemon": ({ type }: { type: string }) => (type === "computers" ? message : { error: "unexpected" }) } } };
+}
+
+/** How often the page's computer was asked for `computers` (the host's `app.daemon` calls). */
+const framesAsked = (app: { host: { calls(): { name: string; data: unknown }[] } }) =>
+  app.host.calls().filter((call) => call.name === "app.daemon" && (call.data as { type?: string })?.type === "computers").length;
+
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+
+describe("Other computers, as this computer sees them", () => {
+  test("each row says Online, Online · N needs you, or Offline · last seen, from this computer's word; the phone's Pair again still wins", async () => {
+    const app = await open(HARNESS, withComputers({ servers: [studio, lab] }, {
+      computers: [
+        { daemon_id: studio.daemonId, name: "studio", online: true, open_requests: 1, last_seen: hoursAgo(0) },
+        { daemon_id: lab.daemonId, name: "lab", online: false, open_requests: 3, last_seen: hoursAgo(30) },
+      ],
+      open_requests: 0,
+    }, {
+      storage: { "mewla:v3:servers": JSON.stringify([desk, studio, lab]) },
+      // The phone itself cannot reach either: this computer's word is what the rows say.
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "GET http://studio.test:9877/auth-check": { status: 503 }, "GET http://lab.test:9877/auth-check": { status: 503 } },
+    }));
+    await app.waitFor("text:Online · 1 needs you");
+    expect(app.shows("id:computer-s2-dot")).toBe(true);
+    // Lab is offline: its count is unknown, so no dot, and it says when it was last seen.
+    expect(app.texts().some((t) => t.startsWith("Offline · last seen "))).toBe(true);
+    expect(app.shows("id:computer-s3-dot")).toBe(false);
+    // The computer says unasked that Studio's request was answered.
+    await app.host.send("app.daemonPush", { type: "computers", computers: [{ daemon_id: studio.daemonId, name: "studio", online: true, open_requests: 0 }], open_requests: 0 });
+    await app.waitUntil(() => !app.shows("id:computer-s2-dot"));
+    expect(app.texts()).toContain("Online");
+  });
+
+  test("a computer that forgot this phone reads Pair again even while this computer sees it online", async () => {
+    const app = await open(HARNESS, withComputers({ servers: [studio] }, {
+      computers: [{ daemon_id: studio.daemonId, name: "studio", online: true, open_requests: 0 }], open_requests: 0,
+    }, {
+      storage: { "mewla:v3:servers": JSON.stringify([desk, studio]) },
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "GET http://studio.test:9877/auth-check": { status: 401 } },
+    }));
+    await app.waitFor("text:Pair again");
+    expect(app.shows("id:computer-s2-dot")).toBe(true);
+  });
+
+  test("offline through the relay, Needs fixing dates this computer's own word on it", async () => {
+    const app = await open(HARNESS, withComputers({ server: { transportKind: "link" } }, {
+      computers: [], open_requests: 0,
+      connection: { phase: "offline", cause: "relay unreachable", last_failure: "relay unreachable", last_failure_at: hoursAgo(1) },
+    }, { network: { "GET http://desk.test:9877/auth-check": { status: 503 } } }));
+    await app.waitUntil(() => framesAsked(app) > 0);
+    await app.wait(200);
+    await app.host.send("app.daemonState", "waiting");
+    await app.host.send("app.sessionProblem", "socket closed");
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Relay unreachable · ")));
+    expect(app.shows("id:fix-connection-button")).toBe(true);
+  });
+});
+
 describe("The computer page", () => {
   test("shows this computer, the others with their state, Pair a computer, the rare places and Settings", async () => {
     const app = await open(HARNESS, setup({ servers: [studio, lab] }, {

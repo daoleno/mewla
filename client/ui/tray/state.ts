@@ -12,8 +12,9 @@ import type { BrainCurrentWork, BrainOpenWork } from "../../core/work/types";
 import { clock } from "../calendar/clock";
 import { calendarItems } from "../calendar/state";
 import { deviceRequests } from "../enrollment/state";
-import { currentConnectionIssue, currentIssue } from "../more/settings/computers";
-import { brain, brainThread, connection, current, onTransport, problem, workers } from "../session";
+import { currentIssue } from "../more/settings/computers";
+import { currentDiagnosis } from "../computer/computers";
+import { brain, brainThread, connection, current, onTransport, workers } from "../session";
 
 const SORT_KEY = "mewla:tray:sort";
 
@@ -99,7 +100,7 @@ export const tray = computed(() => {
     computerName: server?.name ?? "",
     connection: connection(),
     pairAgain: issue === "device_not_paired",
-    diagnosis: currentConnectionIssue()?.title || problem() || undefined,
+    diagnosis: currentDiagnosis(),
     surface: brainSurface({ hasServer: Boolean(server), connected: connection() === "connected", snapshot }),
     hostProblem: snapshot?.host_problem,
     workers: workers(),
