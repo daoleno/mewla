@@ -153,18 +153,22 @@ describe("a Session", () => {
     prompt: { id: "p-1", kind: "permission", provider: "claude", title: "Run this command?", request: "rm -rf build", options: [{ number: 1, label: "Yes", selected: true }, { number: 2, label: "No" }] },
   });
 
-  test("shows its chat, and the prompt open in its terminal as a card the person can answer", async () => {
+  test("shows its chat, and the prompt open in its terminal as a request card in its thread the person can answer", async () => {
     const app = await sessionsApp({ worker_sessions: [blocked], conversations: { w9: transcript } });
     await app.waitFor("text:cleanup");
     await app.waitFor("text:cleanup", { timeout: 10_000 });
     await app.press("text:cleanup");
-    await app.waitFor("id:action-prompt");
-    expect(app.texts()).toContain("Run this command?");
+    await app.waitFor("id:request-card");
+    // The terminal's permission menu: what it runs, then No and Yes (the default).
+    expect(app.texts()).toContain("Approve");
+    expect(app.texts()).toContain("rm -rf build");
     expect(app.texts()).toContain("Delete the build folder");
+    await app.wait(500);
     await app.press("id:prompt-option-2");
     await app.waitFor("text:Running");
     expect(framesOf(app.host.posts(), "answer_prompt").at(-1)).toMatchObject({ worker_id: "w9", prompt_answer: { prompt_id: "p-1", number: 2 } });
-    expect(app.shows("id:action-prompt")).toBe(false);
+    await app.waitFor("id:request-sealed");
+    expect(app.shows("id:request-card")).toBe(false);
   }, 20_000);
 
   test("a long chat read back up, left and reopened shows its messages at the row it was read to (FAILURES R4#9)", async () => {
