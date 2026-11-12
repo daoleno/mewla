@@ -1108,6 +1108,38 @@ func (s *Store) loadPresentationLocked() (presentationDatabase, error) {
 	return clonePresentationDatabase(s.presentation), nil
 }
 
+// readPresentationLocked is the committed presentation image itself, for a
+// reader that only looks. Copying it whole for every read cost a few ms and
+// tens of MB of garbage on a Brain with thousands of Works and Turns, and the
+// daemon reads it several times a second. A committed image is never changed
+// in place (persistPresentationLocked replaces it), so a reader that holds
+// s.mu may read it; it must not change it, and must copy whatever it returns
+// that points into it.
+func (s *Store) readPresentationLocked() presentationDatabase {
+	return s.presentation
+}
+
+// cloneWorks copies Work with the pointers and slices they own.
+func cloneWorks(items []Work) []Work {
+	out := append([]Work(nil), items...)
+	for index := range out {
+		out[index].Wake = cloneWorkWake(items[index].Wake)
+		out[index].Review = cloneWorkReview(items[index].Review)
+		out[index].Choices = append([]string(nil), items[index].Choices...)
+		out[index].QuestionAt = cloneTimePointer(items[index].QuestionAt)
+		out[index].SnoozedUntil = cloneTimePointer(items[index].SnoozedUntil)
+	}
+	return out
+}
+
+// cloneWorkEvent copies a Work event with the times it points to.
+func cloneWorkEvent(event WorkEvent) WorkEvent {
+	event.HandledAt = cloneTimePointer(event.HandledAt)
+	event.ResolvedAt = cloneTimePointer(event.ResolvedAt)
+	event.DiscardedAt = cloneTimePointer(event.DiscardedAt)
+	return event
+}
+
 func clonePresentationDatabase(database presentationDatabase) presentationDatabase {
 	clone := database
 	clone.BrainInputAdmissions = append([]BrainInputAdmission(nil), database.BrainInputAdmissions...)
@@ -1119,14 +1151,7 @@ func clonePresentationDatabase(database presentationDatabase) presentationDataba
 		foreground := *database.HostForegroundTurn
 		clone.HostForegroundTurn = &foreground
 	}
-	clone.BrainWork = append([]Work(nil), database.BrainWork...)
-	for index := range clone.BrainWork {
-		clone.BrainWork[index].Wake = cloneWorkWake(database.BrainWork[index].Wake)
-		clone.BrainWork[index].Review = cloneWorkReview(database.BrainWork[index].Review)
-		clone.BrainWork[index].Choices = append([]string(nil), database.BrainWork[index].Choices...)
-		clone.BrainWork[index].QuestionAt = cloneTimePointer(database.BrainWork[index].QuestionAt)
-		clone.BrainWork[index].SnoozedUntil = cloneTimePointer(database.BrainWork[index].SnoozedUntil)
-	}
+	clone.BrainWork = cloneWorks(database.BrainWork)
 	clone.BrainWorkEvents = append([]WorkEvent(nil), database.BrainWorkEvents...)
 	for index := range clone.BrainWorkEvents {
 		event := &clone.BrainWorkEvents[index]
@@ -1351,11 +1376,7 @@ func (s *Store) Work(id string) (Work, error) {
 func (s *Store) ListWork() ([]Work, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	database, err := s.loadPresentationLocked()
-	if err != nil {
-		return nil, err
-	}
-	out := append([]Work(nil), database.BrainWork...)
+	out := cloneWorks(s.readPresentationLocked().BrainWork)
 	sort.SliceStable(out, func(left, right int) bool {
 		if out[left].UpdatedAt.Equal(out[right].UpdatedAt) {
 			return out[left].ID < out[right].ID
@@ -2434,14 +2455,10 @@ func (s *Store) ListWorkEvents(workID string) ([]WorkEvent, error) {
 	workID = strings.TrimSpace(workID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	database, err := s.loadPresentationLocked()
-	if err != nil {
-		return nil, err
-	}
 	out := []WorkEvent{}
-	for _, event := range database.BrainWorkEvents {
+	for _, event := range s.readPresentationLocked().BrainWorkEvents {
 		if workID == "" || event.WorkID == workID {
-			out = append(out, event)
+			out = append(out, cloneWorkEvent(event))
 		}
 	}
 	return out, nil
@@ -2682,10 +2699,7 @@ func (s *Store) CloseHostForegroundTurn(hostSessionID, hostGeneration, hostTurnI
 func (s *Store) LeasedReviewActions() ([]WorkReviewAction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	database, err := s.loadPresentationLocked()
-	if err != nil {
-		return nil, err
-	}
+	database := s.readPresentationLocked()
 	out := []WorkReviewAction{}
 	for _, item := range database.BrainWork {
 		review := item.Review
@@ -2693,10 +2707,19 @@ func (s *Store) LeasedReviewActions() ([]WorkReviewAction, error) {
 			continue
 		}
 		if action, found := reviewActionFromReview(database, review); found {
-			out = append(out, action)
+			out = append(out, detachReviewAction(action))
 		}
 	}
 	return out, nil
+}
+
+// detachReviewAction copies the times an action points to, which the action
+// built from a review points into the review itself.
+func detachReviewAction(action WorkReviewAction) WorkReviewAction {
+	action.ClaimedAt = cloneTimePointer(action.ClaimedAt)
+	action.DeliveredAt = cloneTimePointer(action.DeliveredAt)
+	action.HandlingEndedAt = cloneTimePointer(action.HandlingEndedAt)
+	return action
 }
 
 // LiveReviewHandlings returns unfinished delivered history for bounded startup

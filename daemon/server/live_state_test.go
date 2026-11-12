@@ -66,6 +66,17 @@ func newLiveFixture(t *testing.T) *liveFixture {
 	}
 	t.Cleanup(func() { conn.Close() })
 	f.conn = conn
+	// Dial returns once the upgrade is answered; the server binds the client a
+	// moment later. A broadcast made before that reaches nobody (a phone asks
+	// with live_state_get on connect), so a test that broadcasts at once lost
+	// it on a loaded machine, whatever its read deadline.
+	deadline := time.Now().Add(10 * time.Second)
+	for server.clientCount() != 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("the server never registered the client")
+		}
+		time.Sleep(time.Millisecond)
+	}
 	return f
 }
 
