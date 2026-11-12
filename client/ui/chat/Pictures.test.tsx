@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired, phoneHost } from "../testing/fixtures";
+import { framesOf, paired, phoneHost } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -72,6 +72,26 @@ describe("pictures in a chat", () => {
     await app.waitFor("text:1 of 3");
     await app.scroll("label:Pictures in this chat", 400);
     await app.waitFor("text:2 of 3");
+  }, 20_000);
+});
+
+describe("the viewer while the thread moves", () => {
+  test("a reply streaming meanwhile leaves the viewer on its picture; a new picture joins the count", async () => {
+    const app = await brainWithPictures();
+    await app.waitFor("id:tool-pictures >> id:chat-image-open", { timeout: 10_000 });
+    await app.wait(300);
+    await app.press("id:tool-pictures >> id:chat-image-open");
+    await app.waitFor("id:picture-viewer-image");
+    const subscription = framesOf(app.host.posts(), "codex_conversation_subscribe").filter((frame) => frame.worker_id === "brain-host").at(-1)!;
+    const delta = (revision: number, body: string) => app.host.send("app.daemonPush", { type: "codex_conversation_delta", request_id: subscription.request_id, worker_id: "brain-host", revision, base_revision: revision - 1, deletes: [],
+      upserts: [{ id: "a2", seq: 4, timestamp: at(4), kind: "assistant_message", role: "assistant", body, streaming: true }] });
+    await delta(2, "Looking at");
+    await delta(3, "Looking at the second one");
+    await app.wait(300);
+    expect(app.texts()).toContain("2 of 3");
+    expect(app.shows("id:picture-viewer-image")).toBe(true);
+    await delta(4, "Looking at the second one: ![zoomed](/home/me/shots/zoom.png)");
+    await app.waitFor("text:2 of 4");
   }, 20_000);
 });
 

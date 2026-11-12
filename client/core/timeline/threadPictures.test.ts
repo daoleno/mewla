@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ActivityTimelineItem } from "./activityTypes";
-import { markdownPictures, pictureKey, sentPictures, threadPictures, toolPictures } from "./threadPictures";
+import { markdownPictures, pictureKey, samePictures, sentPictures, threadPictures, toolPictures } from "./threadPictures";
 import type { MessageTimelineItem, TimelineItem } from "./types";
 
 const message = (id: string, role: "user" | "assistant", body: string, attachments: MessageTimelineItem["attachments"] = []): MessageTimelineItem => ({ type: "message", id, role, body, attachments });
@@ -40,5 +40,11 @@ describe("the pictures of a thread", () => {
       { key: pictureKey("t1", "/tmp/screen.png"), src: "/tmp/screen.png", alt: "Took a screenshot" },
       { key: pictureKey("a1", "page.png"), src: "page.png", alt: "the page" },
     ]);
+  });
+
+  test("a reply that grows without a new picture leaves the pictures as they were", () => {
+    const before = threadPictures([message("a1", "assistant", "![a](a.png) Look")]);
+    expect(samePictures(before, threadPictures([message("a1", "assistant", "![a](a.png) Look here, the button")]))).toBe(true);
+    expect(samePictures(before, threadPictures([message("a1", "assistant", "![a](a.png) Look ![b](b.png)")]))).toBe(false);
   });
 });

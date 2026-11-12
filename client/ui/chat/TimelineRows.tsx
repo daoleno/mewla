@@ -53,7 +53,7 @@ function FileRow(props: { file: ActivityFileRow; onFile?: (path: string) => void
   const file = props.file;
   return (
     <Button testID="activity-file" accessibilityLabel={[`Open ${file.path}`, file.added !== undefined ? `${file.added} added` : "", file.removed !== undefined ? `${file.removed} removed` : ""].filter(Boolean).join(", ")}
-      disabled={!props.onFile} onPress={() => props.onFile?.(file.path)} class="min-h-[32px] flex-row items-center gap-2 active:opacity-60">
+      disabled={!props.onFile} onPress={() => props.onFile?.(file.path)} class="min-h-[44px] flex-row items-center gap-2 active:opacity-60">
       <Text class={`min-w-0 shrink font-mono text-code line-clamp-1 ${props.onFile ? "text-foreground" : "text-muted-foreground"}`}>{file.path}</Text>
       {file.added !== undefined ? <Text testID="activity-file-added" class="font-mono text-code text-add">{`+${file.added}`}</Text> : null}
       {file.removed !== undefined ? <Text testID="activity-file-removed" class="font-mono text-code text-del">{`−${file.removed}`}</Text> : null}
