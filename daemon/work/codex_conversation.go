@@ -226,6 +226,12 @@ func conversationWithActivity(conversation CodexConversation, lifecycle *provide
 // conversation. The person did not type it.
 const ConversationOriginProvider = "provider"
 
+// ConversationOriginDelegated marks a user-role record that is the brief
+// Mewla handed a delegated Worker (the typed "Execute: " intent and one exact
+// paste), not something the person typed. Its Body stays the whole brief;
+// the apps show the task and fold the rest.
+const ConversationOriginDelegated = "delegated"
+
 // ConversationKindUpdate is a line the provider's own terminal prints as the
 // agent speaking between steps (Claude "updates" thinking). It is not hidden
 // reasoning and not a final message.
@@ -260,8 +266,10 @@ type CodexConversationEvent struct {
 	Source      string                        `json:"source,omitempty"`
 	// Origin says who wrote a user_message when the provider records it:
 	// empty is the person, ConversationOriginProvider is the provider itself
-	// (Claude's compaction summary). Consumers read this field; they never
-	// infer authorship from the text.
+	// (Claude's compaction summary), ConversationOriginDelegated is Mewla
+	// handing a delegated Worker its brief (Claude only: its native record
+	// keeps the delegated intent and paste envelope). Consumers read this
+	// field; they never infer authorship from the text.
 	Origin string `json:"origin,omitempty"`
 	// Attachments are the files a user_message carried, as typed fields; Body
 	// is then the text the person wrote. The apps render chips from this and

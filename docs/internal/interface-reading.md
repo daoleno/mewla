@@ -93,3 +93,15 @@ remains an image when history reloads. The Brain admission digest covers the exa
 rendered provider input, so the files are part of what it matches the provider's
 echo against. Rows stored before attachments were typed are not special-cased in
 the app; the retired `Uploaded files:` text list is plain text.
+
+A `user_message` says who wrote it in `origin`: empty is the person,
+`provider` is the provider itself (Claude's compaction summary), `delegated`
+is the brief Mewla handed a delegated Worker (`work.ConversationOriginDelegated`).
+Only Claude marks `delegated`: its native record keeps the typed `Execute: `
+intent and the paste envelope (`work.UnwrapClaudeDelegatedInput`); a Codex
+Worker's brief arrives as plain input and has no origin. `body` stays the
+whole brief. The app shows a delegated brief as its task alone (the text
+before `Mewla lifecycle protocol:`), clamped to two lines and expandable
+(`core/timeline/delegatedBrief.ts`). For daemons from before the field, the app
+also accepts the strict old shape: a body that starts with `Execute:` and has a
+line `Mewla lifecycle protocol:`.
