@@ -1,18 +1,16 @@
-import { announce, cleanup, effect, host, Image, openUrl, platform, signal, Storage, setColorScheme, untracked, View, lifecycle } from "nsh";
+import { cleanup, effect, host, Image, openUrl, platform, signal, Storage, setColorScheme, untracked, View, lifecycle } from "nsh";
 import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
 import { phoneAvailable, phoneLabsWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
-import { Icon } from "../../kit/Icon";
-import { Notice, Page, Row, Section, StatusMark, SwitchRow } from "../../kit/kit";
+import { Page, Row, Section, StatusMark, SwitchRow } from "../../kit/kit";
 import { followFriends, friendsEnabled } from "../friends/state";
 import { pet } from "../pet/pets";
 import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";
 import type { PageNav } from "../routes";
-import { current, servers } from "../../session";
+import { current } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
-import { currentPathMark, probeComputers, removedNotice, statusWord } from "./computers";
 import { loadTelegram, telegramRow, telegramRowLabel } from "./telegramState";
 
 /** The appearance this phone chose: the system's, or always light or dark. */
@@ -70,21 +68,12 @@ function readIPhone(): void {
 export const PRIVACY_URL = "https://mewla.ai/privacy/";
 export const SUPPORT_URL = "https://mewla.ai/support/";
 
-/** What a long press on the current computer revealed (how the phone reaches it), for a few seconds. */
-const pathDetail = signal("");
-let pathTimer: ReturnType<typeof setTimeout> | null = null;
-
-function showPathDetail(detail: string): void {
-  pathDetail.set(detail);
-  announce(detail);
-  if (pathTimer) clearTimeout(pathTimer);
-  pathTimer = setTimeout(() => pathDetail.set(""), 4_000);
-}
-
-/** Settings: the computers, then each thing this phone decides, then About. */
-export function Settings(props: { nav: PageNav; onPair: () => void }) {
-  // Each computer is asked again whenever Settings is shown again: back from a page
-  // above it, the app back in front, or a computer added or removed.
+/**
+ * Settings: what this phone decides and what this app connects to, then About. The computers
+ * (which one is in use, pairing, each one's details) are on the cat's computer page.
+ */
+export function Settings(props: { nav: PageNav }) {
+  // Telegram is read again whenever Settings is shown again: back from a page above it, or the app back in front.
   const depth = untracked(() => {
     const routes = props.nav.routes?.() ?? [];
     const at = routes.findIndex((route) => route.name === "settings");
@@ -93,12 +82,11 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
   let shownAs = "";
   effect(() => {
     const top = (props.nav.routes?.().length ?? depth) === depth;
-    const key = `${top && lifecycle() === "active"}|${servers().map((s) => `${s.id}@${s.url}`).join(",")}`;
+    const key = `${top && lifecycle() === "active"}|${current()?.id ?? ""}`;
     untracked(() => {
       if (key === shownAs) return;
       shownAs = key;
       if (!key.startsWith("true|")) return;
-      void probeComputers();
       loadTelegram();
     });
   });
@@ -132,30 +120,6 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
   });
   return (
     <Page title="Settings" testID="settings">
-      {removedNotice() ? (
-        <Notice testID="removed-notice" tone="failed" title={removedNotice()!.title} detail={removedNotice()!.detail} action="OK" onAction={() => removedNotice.set(null)} />
-      ) : null}
-      <Section title="Computers" footer={pathDetail() || undefined}>
-        {servers().map((s) => {
-          const mark = () => (s.id === current()?.id ? currentPathMark() : null);
-          return (
-            <Row
-              testID={`computer-${s.id}`}
-              leading={<Icon name="desktop" />}
-              title={s.name || s.url}
-              subtitle={statusWord(s) || undefined}
-              value={s.id === current()?.id ? "Current" : undefined}
-              trailing={mark() ? <View testID="computer-path" accessibilityElementsHidden><Icon name={mark()!.kind === "relay" ? "cloud" : "link"} size={15} tone="faint" /></View> : undefined}
-              accessibilityLabel={[s.name || s.url, statusWord(s), mark()?.label].filter(Boolean).join(", ")}
-              chevron
-              onPress={() => props.nav.push({ name: "settings-computer", id: s.id })}
-              onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
-            />
-          );
-        })}
-        <Row testID="pair-another" icon="add" title="Pair a computer" accessibilityLabel="Pair a computer" chevron onPress={props.onPair} />
-      </Section>
-
       <Section title="Channels">
         <Row
           testID="settings-telegram"

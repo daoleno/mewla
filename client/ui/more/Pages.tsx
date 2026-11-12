@@ -34,7 +34,7 @@ onTransport((transport) => {
 export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () => void }) {
   const route = props.route;
   switch (route.name) {
-    case "settings": return <Settings nav={props.nav} onPair={props.onPair} />;
+    case "settings": return <Settings nav={props.nav} />;
     case "settings-computer": return <Computer id={route.id} nav={props.nav} onPair={props.onPair} />;
     case "settings-telegram": return <Telegram />;
     case "settings-providers": return <Providers nav={props.nav} />;
