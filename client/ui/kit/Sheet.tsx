@@ -26,7 +26,7 @@ export function Sheet(props: {
   const title = () => (typeof props.title === "function" ? props.title() : props.title ?? "");
   return (
     <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe
-      popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet" backdropClass="bg-scrim">
+      popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet shadow-float" backdropClass="bg-scrim">
       <View testID={props.testID} class="pb-8">
         <View class="items-center pt-2">
           <View class="h-[5px] w-[36px] rounded-full bg-track" />
