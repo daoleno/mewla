@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { WorkWorkerSession } from "./types";
-import { liveWorkerIds, workProject, workWorkerLines } from "./workers";
+import { liveWorkerIds, workerName, workProject, workWorkerLines } from "./workers";
 
 const NOW = new Date("2026-11-12T09:10:00Z");
 
@@ -45,6 +45,25 @@ describe("the Workers of a Work", () => {
     expect(workWorkerLines(rows, sessions, NOW)[2]).toMatchObject({ state: "done", progress: undefined });
     const nameless = workWorkerLines([{ ...rows[1]!, name: undefined }, { ...rows[1]!, name: undefined, executor_id: undefined, provider: undefined }], new Map(), NOW);
     expect(nameless.map((l) => [l.name, l.agent])).toEqual([["codex", "codex"], ["Worker", "terminal"]]);
+  });
+
+  test("a name never shows the Session id the daemon appends; another parenthesis stays", () => {
+    expect(workerName("Hello writer (mh-17b3337d43f38037916f0e5b)")).toBe("Hello writer");
+    expect(workerName("Fix (macOS)")).toBe("Fix (macOS)");
+    const live = { ...rows[2]!, session_id: "mh-17b3337d43f38037916f0e5b", name: "Hello writer (mh-17b3337d43f38037916f0e5b)" };
+    expect(workWorkerLines([live], new Map(), NOW)[0]!.name).toBe("Hello writer");
+  });
+
+  test("what a live Worker does is never its terminal's footer", () => {
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    const live = { ...rows[2]!, summary: footer, phase: undefined };
+    // The list has its Session, which reported nothing yet: its state's word.
+    const followed = workWorkerLines([live], new Map([["worker:@c", session("worker:@c", { summary: footer, last_output_lines: [footer] })]]), NOW)[0]!;
+    expect(followed.summary).toBe("Working");
+    // The list lacks it, and it reported no phase: nothing rather than the screen.
+    expect(workWorkerLines([live], new Map(), NOW)[0]!.summary).toBe("");
+    const manual = { ...live, summary: "⏸ manual mode on · ? for shortcuts" };
+    expect(JSON.stringify(workWorkerLines([manual], new Map([["worker:@c", session("worker:@c", { summary: manual.summary })]]), NOW))).not.toContain("manual mode");
   });
 
   test("only live Workers fold into the Work's row", () => {

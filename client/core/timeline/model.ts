@@ -37,6 +37,7 @@ import {
   type ActivityTimelineItem,
 } from "./activityTypes";
 import type { DisplayAttachment } from "./types";
+import { delegatedTask } from "./delegatedBrief";
 import type { TimelineItem } from "./types";
 import { compareConversationEvents } from "../conversation/reconciliation";
 import { isImageAttachment } from "./imageSource";
@@ -143,6 +144,11 @@ export function buildTimelineFromSortedEvents(
         event.kind === "user_message"
           ? turnFocusAnchorAliases?.get(event.id)
           : undefined;
+      // A delegated Worker's brief shows its task, never Mewla's protocol; with no task it is no row.
+      const task = event.kind === "user_message" ? delegatedTask(event) : null;
+      if (task === "") {
+        continue;
+      }
       items.push({
         type: "message",
         id: event.id || `${event.kind}:${event.seq}`,
@@ -152,6 +158,7 @@ export function buildTimelineFromSortedEvents(
         attachments,
         streaming: event.partial,
         ...(turnFocusAnchorId ? { turnFocusAnchorId } : {}),
+        ...(task ? { delegatedTask: task } : {}),
       });
       continue;
     }
@@ -1810,6 +1817,14 @@ function commandPositionals(tokens: string[], executable: string) {
   const positionals: string[] = [];
   for (let index = 0; index < relevant.length; index++) {
     const token = relevant[index];
+    // The command ends at a shell operator: "cat a.md | head -60; cat b.md" names a.md, not "head".
+    if (token === "|" || token === "||" || token === "&&" || token === ";") {
+      break;
+    }
+    if (token?.endsWith(";") && token.length > 1) {
+      if (!token.startsWith("-")) positionals.push(token.slice(0, -1));
+      break;
+    }
     if (!token || token === "--") {
       continue;
     }

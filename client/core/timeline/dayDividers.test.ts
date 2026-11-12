@@ -16,4 +16,9 @@ describe("day dividers", () => {
   test("rows without a time get no divider of their own", () => {
     expect(labels(withDayDividers([message("a"), message("b")]))).toEqual(["a", "b"]);
   });
+
+  test("the thread opens with its day's label even when its first rows carry no time", () => {
+    const today = new Date().toISOString();
+    expect(labels(withDayDividers([message("a"), message("b"), message("c", today), message("d")]))).toEqual(["[Today]", "a", "b", "c", "d"]);
+  });
 });

@@ -72,7 +72,8 @@ Brain and a Session draw the same rows (`ui/chat`, soft-final SPEC §1.7):
   path, and a folded run lists its steps' files
   (`core/timeline/activityFiles.ts`).
 - **Pictures**: sent ones at 168 × 126 above the bubble, a tool call's as
-  thumbnails under its row (96 × 170 tall, 200 × 125 wide), a reply's at the
+  thumbnails under its row (96 × 170 tall, 200 × 125 wide; radius 16 on the
+  canvas, no fill or padding behind), a reply's at the
   text's width. A failed one keeps its frame with a refresh glyph and loads
   again on a tap. A tap opens the viewer (`PictureViewer`): black in both
   themes, ×, "2 of 3", previous and next, arrow keys and swipe, double tap
@@ -431,9 +432,10 @@ came back before you accept it.
 
 In the conversation, every Work result is a full slip (`WorkSlip`):
 executor · project · time, the state, the title and one line. A Work's slip
-moves to when its newest result came back. A turn's tool rows fold into one
-quiet "Worked · N steps" row that expands to the steps (Brain only; Session
-chats keep every row). The composer says "Tell Brain…".
+moves to when its newest result came back. A turn's finished tool rows fold
+into one row that says what they did ("Ran 1 command, edited 1 file") with
+its kind's icon and the files in soft, and opens onto the real rows; Brain and
+a Session fold alike (`core/timeline/foldToolRuns.ts`). The composer says "Tell Brain…".
 
 ## Type
 

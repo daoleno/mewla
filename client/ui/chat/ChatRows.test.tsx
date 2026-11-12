@@ -106,3 +106,52 @@ describe("edited files", () => {
     expect(app.shows("label:Open /home/someone/work/mewla/daemon/work/notes.md, 2 added, 1 removed")).toBe(true);
   }, 20_000);
 });
+
+describe("a delegated Worker's Session", () => {
+  const worker = { id: "w1", name: "Hello writer", status: "running", cwd: "/home/me/proj", command: "claude", provider: "claude", delegated: true, started_at: 1_762_840_800_000, process_id: 77, updated_at: Date.now() };
+  const protocol = "Mewla lifecycle protocol:\nProfile: quick.\nYou are the delegated Worker: execute the assigned work directly.";
+  const task = "Create the file hello.txt in the current directory containing exactly one line: hello. Overwrite it if it exists. Touch nothing else.\n\nReport back with the output of: cat -A hello.txt";
+  const brief = (id: string, body: string, origin?: string) => ({ id, seq: 1, timestamp: at(1), kind: "user_message", role: "user", body, ...(origin ? { origin } : {}) });
+
+  async function sessionWith(first: Record<string, unknown>) {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [worker], conversations: { w1: [first, reply("a1", 2, "Done: hello.txt holds one line.")] } }) });
+    await app.waitFor("id:composer", { timeout: 10_000 });
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
+    await app.waitFor("id:delegated-brief", { timeout: 10_000 });
+    return app;
+  }
+
+  test("opens with the task in two lines, not the protocol and not as the person's bubble; a tap shows the whole task", async () => {
+    const app = await sessionWith(brief("b1", `Execute:\n\n${task}\n\n${protocol}`, "delegated"));
+    const shown = () => app.texts().join("\n");
+    expect(shown()).not.toContain("Mewla lifecycle protocol");
+    expect(shown()).not.toContain("Execute:");
+    expect(app.shows("id:user-message")).toBe(false);
+    expect(app.texts()).toContain(task);
+    await app.wait(300);
+    expect(app.shows("id:delegated-task")).toBe(true);
+    await app.press("id:delegated-brief");
+    await app.waitFor("id:delegated-task-open");
+    expect(shown()).not.toContain("Mewla lifecycle protocol");
+  }, 20_000);
+
+  test("a computer from before the origin field: the old brief shape reads the same", async () => {
+    const app = await sessionWith(brief("b1", `Execute: ${task}\n\n${protocol}`));
+    expect(app.texts().join("\n")).not.toContain("Mewla lifecycle protocol");
+    expect(app.texts()).toContain(task);
+  }, 20_000);
+});
+
+describe("the day caption", () => {
+  test("a thread opens with its day's caption, even when its first message came back without a time", async () => {
+    const now = new Date().toISOString();
+    const app = await brainWith([
+      { id: "u1", seq: 1, kind: "user_message", role: "user", body: "Run the bash command touch /tmp/proof then say done" },
+      { id: "a1", seq: 2, timestamp: now, kind: "assistant_message", role: "assistant", body: "Done. I created the empty file." },
+    ]);
+    await app.waitFor("id:date-divider", { timeout: 10_000 });
+    const texts = app.texts();
+    expect(texts.indexOf("Today")).toBeGreaterThanOrEqual(0);
+    expect(texts.indexOf("Today")).toBeLessThan(texts.indexOf("Run the bash command touch /tmp/proof then say done"));
+  }, 20_000);
+});
