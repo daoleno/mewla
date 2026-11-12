@@ -26,7 +26,9 @@ cd client/ui && nsh check && nsh test
 - **Android, hot reload:** `client/scripts/dev-android.sh` installs the preview debug build on the one device `adb`
   sees and runs it from `nsh dev`: every save reloads it.
 - **Android, a build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`.
-  The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app.
+  The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app. A local
+  build is signed with your debug key; the Preview `client.yml` keeps on dispatch carries the release key
+  (`client/scripts/preview-signer.sh`), so each one installs over the last, and its upgrade gate proves it.
 - **iOS:** `client/scripts/fetch-nsh.sh --ios && client/scripts/ios-project.sh` (`--dev` links NativeShellDev), then
   open `client/ios/Mewla.xcodeproj`. With `--dev`, launch with `-devServer ws://127.0.0.1:8790/ws` and run
   `nsh dev --server-only client/ui`. Preview builds pass `MEWLA_APP_ID=com.daoleno.mewla.preview`, which also names

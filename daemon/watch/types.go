@@ -75,6 +75,13 @@ type Remote struct {
 	URL  string `json:"url"`
 }
 
+// A repository's GitHub.Access.
+const (
+	AccessWrite   = "write"
+	AccessRead    = "read"
+	AccessUnknown = "unknown"
+)
+
 // GitHub records which connected account can read the project's repository
 // and what each read endpoint last answered.
 type GitHub struct {
@@ -84,6 +91,11 @@ type GitHub struct {
 	Branch    string            `json:"default_branch,omitempty"`
 	Endpoints map[string]string `json:"endpoints,omitempty"` // endpoint -> "ok" or the failure
 	CheckedAt time.Time         `json:"checked_at,omitzero"`
+	// Access says whether the person can push to the repository through any
+	// connected account: AccessWrite (push, maintain or admin), AccessRead
+	// (every account that sees it only reads: somebody else's project) or
+	// AccessUnknown (GitHub did not say). Empty means not resolved yet.
+	Access string `json:"access,omitempty"`
 	// Coverage says whether Watch collects from the repository (collecting,
 	// not_connected, disabled, not_allowed, unreachable); Reason says why not.
 	Coverage string `json:"coverage,omitempty"`

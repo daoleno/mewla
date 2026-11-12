@@ -536,6 +536,25 @@ describe("Git review on the web", () => {
     await openDiffOf(app, "changes:app.ts");
   });
 
+  test("a click on a folder of Browse files opens and closes it, a click on a file opens it (FAILURES R5#3)", async () => {
+    const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }], { platform: "web" });
+    await app.waitFor("id:git-row-changes:app.ts");
+    app.onDialog((dialog) => (dialog.sheet ? "Browse files" : null));
+    await answering(app, () => app.press("id:git-more"));
+    await app.waitFor("id:git-files-tree");
+    await app.press("id:git-file-dir:src");
+    await app.waitFor("id:git-file-dir:src/lib");
+    await app.press("id:git-file-dir:src");
+    await app.waitUntil(() => !app.shows("id:git-file-dir:src/lib"));
+    await app.press("id:git-file-app.ts");
+    await app.waitFor("id:git-file-view");
+    await app.back();
+    await app.type("id:git-files-query", "util");
+    await app.waitFor("id:git-file-src/lib/util.ts");
+    await app.press("id:git-file-src/lib/util.ts");
+    await app.waitFor("id:git-file-view");
+  });
+
   test("the repository's tree opens, and a right click on a file offers Open file and Copy path", async () => {
     const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }], { platform: "web" });
     await app.waitFor("id:git-row-changes:app.ts");

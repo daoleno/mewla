@@ -1,8 +1,8 @@
 import { Clipboard, host, platform, signal } from "nsh";
 import { AlertDialog } from "nsh/base";
 import { PairLatch } from "../core/onboarding";
-import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, type PairingProblem } from "../core/pairFlow";
-import { setServerAutoConnect, type StoredServer } from "../core/servers";
+import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
+import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
 
 /**
@@ -52,6 +52,12 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     await addPairedServer(await pairWith(payload, (message) => pairingStatus.set(message)));
     const paired = current();
     if (paired) await setServerAutoConnect(paired.id, true).catch(() => {});
+    // A browser's page comes from the computer it just paired: an older pairing at that address is gone.
+    if (paired && device() === "browser") {
+      const stale = supersededAtAddress(servers(), paired);
+      for (const id of stale) await removeServer(id).catch(() => {});
+      if (stale.length) servers.set(await getServers());
+    }
     // Settings' Pair page closes on this, while the app is still there under it.
     pairings.set(pairings() + 1);
     // A browser goes straight to the app; a phone sees Brain come home first (the app goes until then).

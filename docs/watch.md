@@ -53,7 +53,8 @@ uses, and follows the same switches:
 
 - An account that is off or disconnected is not read.
 - Watch uses only read tools, and only the ones allowed for that account.
-  GitHub's own tools: `search_repositories` (finds the default branch),
+  GitHub's own tools: `search_repositories` (finds the default branch and
+  whether you can push to the repository),
   `actions_list` (CI runs), `list_issues`, `list_pull_requests`,
   `list_dependabot_alerts` and `list_code_scanning_alerts`. Linear:
   `list_teams`, `list_issues` and `list_comments`.
@@ -93,7 +94,13 @@ mewla watch project link-linear --project <id> --team PER --confirm
 A few clear-cut problems are flagged immediately, without a model:
 
 - **CI is red.** The latest CI run on the default branch failed. Watch also
-  shows how long it has been failing.
+  shows how long it has been failing. Only for repositories you can push to
+  through some connected account (push, maintain or admin): a clone of
+  somebody else's project, such as an open-source repository you contribute to
+  through a fork, goes red and green on its own and raises nothing; Watch does
+  not read its CI runs or alerts, and `mewla watch projects` says so. Its issues
+  and open pull requests are still read. If GitHub does not say what you may do
+  there, Watch behaves as if you can push.
 - **Repeated daemon error.** The daemon reported the same problem (same kind
   and subject) at least five times within ten minutes in the last week.
 - **Worker stalled or lost repeatedly.** One piece of Work lost or stalled its
