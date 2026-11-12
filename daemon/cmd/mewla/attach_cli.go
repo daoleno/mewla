@@ -48,8 +48,9 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stderr, "name (any case, or the start of one name), \"brain\", an id (mh-... or %N). With")
 		fmt.Fprintln(stderr, "none, pick from the live Sessions: arrow keys and typing filter, Enter attaches")
 		fmt.Fprintln(stderr, "(without a terminal the list is printed). Ctrl-\\ detaches; the Session keeps")
-		fmt.Fprintln(stderr, "running. This terminal's size becomes the Session's. A Session still in tmux")
-		fmt.Fprintln(stderr, "opens in tmux, which detaches with its own prefix key.")
+		fmt.Fprintln(stderr, "running. This terminal's size becomes the Session's when it attaches, is resized")
+		fmt.Fprintln(stderr, "or is typed into; another viewer that resizes it redraws this one. A Session")
+		fmt.Fprintln(stderr, "still in tmux opens in tmux, which detaches with its own prefix key.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "--all (or Tab in the picker) tiles every live Session in this terminal and keeps")
 		fmt.Fprintln(stderr, "them updating, without touching them. Arrow keys, Tab, 1-9 or a click choose;")
@@ -266,18 +267,46 @@ func startInputPump(ctx context.Context, in io.Reader) <-chan []byte {
 // backKey ends it too, with back set, for a caller that shows a Session from a
 // grid; keys after it in the same read are dropped, as after Ctrl-\.
 func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string, typed <-chan []byte, out io.Writer, size func() (int, int), resized <-chan os.Signal, backKey byte) (outcome string, back bool, err error) {
-	attach := func() (*sessionhost.Attachment, error) {
+	// The Session has one size, set by the viewer a person last acted on. This
+	// terminal sets it when it attaches, when its window is resized and when
+	// the person types while another viewer has it; attaching again on its own
+	// (behind, or resized by another viewer) shows the Session at whatever size
+	// it has, so two viewers never take the size from each other.
+	// A host from before AttachResized never redraws this terminal for another
+	// viewer's resize: then it takes its size whenever it attaches, as before.
+	owned, redraws := false, false
+	attach := func(passive bool) (*sessionhost.Attachment, error) {
 		cols, rows := size()
+		params := sessionhost.AttachParams{ID: id, Redraw: true}
+		if !passive || !redraws {
+			params.Cols, params.Rows = cols, rows
+		}
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		view, err := client.Attach(callCtx, sessionhost.AttachParams{ID: id, Cols: cols, Rows: rows})
+		view, err := client.Attach(callCtx, params)
 		var hostErr *sessionhost.Error
 		if errors.As(err, &hostErr) && hostErr.Code == sessionhost.ErrCodeNotFound {
 			return nil, fmt.Errorf("no Session %s in the session host", id)
 		}
+		if err == nil {
+			owned, redraws = view.Cols == cols && view.Rows == rows, view.Redraw
+		}
 		return view, err
 	}
-	view, err := attach()
+	takeSize := func() error {
+		cols, rows := size()
+		if cols <= 0 || rows <= 0 {
+			return nil
+		}
+		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		if err := client.Resize(callCtx, id, cols, rows); err != nil {
+			return err
+		}
+		owned = true
+		return nil
+	}
+	view, err := attach(false)
 	if err != nil {
 		return "", false, err
 	}
@@ -289,6 +318,11 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 	send := func(data []byte) error {
 		if len(data) == 0 {
 			return nil
+		}
+		if !owned {
+			if err := takeSize(); err != nil {
+				return err
+			}
 		}
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -306,10 +340,10 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 			switch {
 			case err != nil:
 				return "", false, fmt.Errorf("the session host stopped showing %s: %w", id, err)
-			case end.Reason == sessionhost.AttachBehind:
-				// This terminal fell behind: start the screen over.
+			case end.Reason == sessionhost.AttachBehind || end.Reason == sessionhost.AttachResized:
+				// This terminal fell behind, or the Session is another size now: start the screen over.
 				view.Close()
-				if view, err = attach(); err != nil {
+				if view, err = attach(true); err != nil {
 					return "", false, err
 				}
 				io.WriteString(out, redraw)
@@ -339,13 +373,8 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 				return "", false, err
 			}
 		case <-resized:
-			if cols, rows := size(); cols > 0 && rows > 0 {
-				callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-				err := client.Resize(callCtx, id, cols, rows)
-				cancel()
-				if err != nil {
-					return "", false, err
-				}
+			if err := takeSize(); err != nil {
+				return "", false, err
 			}
 		case <-ctx.Done():
 			return "", false, ctx.Err()
