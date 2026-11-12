@@ -36,6 +36,7 @@
   },
   "theme": "./theme.json",
   "web": {
-    "host": "web/host.js"
+    "host": "web/host.js",
+    "base": "/"
   }
 }
