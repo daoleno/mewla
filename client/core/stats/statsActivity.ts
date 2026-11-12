@@ -1,5 +1,5 @@
 import type { DayCell } from './statsPayload';
-import type { StatsRange } from './statsTabs';
+import { rangeDays, type StatsRange } from './statsTabs';
 
 // Daily activity series and curve geometry for the Stats Activity chart.
 
@@ -7,9 +7,6 @@ export type ActivityDay = {
   date: string;
   day: DayCell | null;
 };
-
-// A single day has no trend, so the Day range draws the week that ends today.
-const DAY_RANGE_CONTEXT_DAYS = 7;
 
 export function parseDateOnly(dateStr: string): Date | null {
   const parts = dateStr.split('-').map((part) => Number(part));
@@ -41,29 +38,9 @@ export function buildDailyActivitySeries(
   now: Date = new Date(),
 ): ActivityDay[] {
   const byDate = new Map(days.map((day) => [day.date, day]));
-  const sortedDates = [...byDate.keys()].sort();
-  const latestDataDate = sortedDates.length > 0 ? parseDateOnly(sortedDates[sortedDates.length - 1]) : null;
-  const today = dateOnly(now);
-  const end =
-    latestDataDate && latestDataDate > today && range === 'all'
-      ? latestDataDate
-      : today;
-  let start: Date;
-  switch (range) {
-    case 'day':
-      start = addDays(end, -(DAY_RANGE_CONTEXT_DAYS - 1));
-      break;
-    case 'week':
-      start = addDays(end, -6);
-      break;
-    case 'month':
-      start = addDays(end, -30);
-      break;
-    case 'all':
-    default:
-      start = sortedDates.length > 0 ? parseDateOnly(sortedDates[0]) ?? end : end;
-      break;
-  }
+  // The range's days, today included, as the daemon counts them.
+  const end = dateOnly(now);
+  const start = addDays(end, -(rangeDays(range) - 1));
 
   const out: ActivityDay[] = [];
   for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {

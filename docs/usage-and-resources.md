@@ -10,8 +10,10 @@ together.
 ![Stats: about $182 this month across four models, with tokens and sessions per model](assets/stats.svg)
 
 Stats reads the agents' own history on the computer and shows, per model,
-tokens, sessions and cost for the range you pick. Tap a model for input,
-output and cache tokens, the price source and when it was refreshed.
+tokens, sessions and cost for the last 7, 14 or 30 days (14 when it opens).
+The title is what the range cost, and the chart is spend by day: touch or
+drag across it to read a day, tap to open it. Tap a model for input, output
+and cache tokens, the price source and when it was refreshed.
 
 Costs come in four kinds, kept apart:
 
