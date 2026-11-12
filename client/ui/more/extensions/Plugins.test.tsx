@@ -220,6 +220,8 @@ describe("A service", () => {
       expect(dialog.buttons).toEqual(["Keep", "Disconnect"]);
       return "Disconnect";
     });
+    // The switch's change is still being saved: Disconnect waits for it.
+    await app.waitUntil(() => app.enabled("id:disconnect-n1"));
     await answering(app, () => app.press("id:disconnect-n1"));
     await app.waitUntil(() => c.asked.some((r) => r.action === "disconnect"));
     await app.waitFor("id:service-connect");
