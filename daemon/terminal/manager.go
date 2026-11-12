@@ -241,6 +241,13 @@ func (m *Manager) forward(ownerID string, session Session, send SendFunc) {
 				"session_id": session.ID(),
 				"data":       ev.Data,
 			})
+		case EventSize:
+			send(map[string]any{
+				"type":       "terminal_size",
+				"session_id": session.ID(),
+				"cols":       ev.Size.Cols,
+				"rows":       ev.Size.Rows,
+			})
 		case EventScroll:
 			send(map[string]any{
 				"type":            "terminal_scroll_state",

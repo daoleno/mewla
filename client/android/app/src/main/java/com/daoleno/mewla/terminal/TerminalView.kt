@@ -66,8 +66,20 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 
   private var handle = 0L
   private var failed = false
+  /** The VT's grid: the area's own, or the Session's while another viewer holds its size. */
   private var rows = 0
   private var cols = 0
+  /** The grid the view's area fits (what `size` reports). */
+  private var areaCols = 0
+  private var areaRows = 0
+  /** The Session's size the page told (`sessionSize`) when it is not the area's grid; 0 none. */
+  private var sessionCols = 0
+  private var sessionRows = 0
+  /** How the VT's grid is drawn in the area: scaled down and panned when it is the Session's larger one. */
+  private var fit = TerminalFit.NONE
+  /** Content pixels the drawing is panned sideways (0..fit.maxPanX). */
+  private var panX = 0f
+  private var fontDp = 8f
   private var grid: Array<Line> = emptyArray()
   private var cursorCol = 0
   private var cursorRow = 0
@@ -160,6 +172,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 
   /** Text size in dp (the shipped app's 8 CSS px is the default): the grid follows from it. */
   fun setFontSize(size: Float) {
+    fontDp = size
     fontPx = size * resources.displayMetrics.density
     paint.textSize = fontPx
     val advance = paint.measureText("M")
@@ -213,31 +226,71 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     if (w <= 0 || h <= 0 || cellW <= 0 || failed) return
     val c = max(2, w / cellW)
     val r = max(2, h / cellH)
+    val areaChanged = c != areaCols || r != areaRows
+    areaCols = c
+    areaRows = r
+    if (sessionCols == c && sessionRows == r) { sessionCols = 0; sessionRows = 0 }
+    val made = handle == 0L
+    if (!sizeVt()) return
+    if (made || areaChanged) events.size(c, r)
+    refit()
+  }
+
+  /**
+   * The `sessionSize` command: the Session's size, before the replay drawn at it. Another viewer holds
+   * the size when it is not the area's grid: the VT takes it, so the replay and the output after it are
+   * drawn as the program wrote them, and the view fits that grid into its area. The area's grid again
+   * (this view's person acted, the page sent it) ends that.
+   */
+  fun setSessionSize(c: Int, r: Int) {
+    if (c < 2 || r < 2) return
+    if (c == areaCols && r == areaRows) { sessionCols = 0; sessionRows = 0 } else { sessionCols = c; sessionRows = r }
+    if (areaCols == 0 || failed) return // laid out later: relayout sizes the VT
+    if (!sizeVt()) return
+    refit()
+    invalidate()
+  }
+
+  /** The VT at the grid it draws (the Session's, else the area's), made first if needed; false if it could not be. */
+  private fun sizeVt(): Boolean {
+    val c = if (sessionCols > 0) sessionCols else areaCols
+    val r = if (sessionCols > 0) sessionRows else areaRows
     if (handle == 0L) {
       // The library may not load (UnsatisfiedLinkError) or may refuse the grid: say so, never crash.
       val made = try {
         Vt.nativeCreateTerminal(c, r)
       } catch (e: Throwable) {
         fail("libghostty-vt did not load: ${e.message ?: e.javaClass.simpleName}")
-        return
+        return false
       }
       if (made == 0L) {
         fail("libghostty-vt could not make a ${c}×${r} terminal.")
-        return
+        return false
       }
       handle = made
       applyTheme()
     } else if (c != cols || r != rows) {
       Vt.nativeResize(handle, c, r, cellW.toFloat(), cellH.toFloat())
-    } else return
+    } else return true
     cols = c
     rows = r
     grid = Array(r) { EMPTY }
     pull(true)
-    events.size(c, r)
+    return true
+  }
+
+  private fun refit() {
+    fit = TerminalFit.of(width, height, cols, rows, cellW, cellH, TerminalFit.minScale(fontDp))
+    panX = panX.coerceIn(0f, fit.maxPanX)
     clampScroll()
     reportViewport()
   }
+
+  // The content (cells at full size, lineY's rows) drawn into the view: scaled by fit.scale, panned by
+  // panX, its top cut by fit.topCut. Touches map back through these.
+  private fun contentX(x: Float) = x / fit.scale + panX
+  private fun contentY(y: Float) = y / fit.scale + fit.topCut
+  private fun viewY(y: Float) = (y - fit.topCut) * fit.scale
 
   private fun fail(message: String) {
     failed = true
@@ -260,12 +313,15 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     restartBlink()
   }
 
-  /** A new attachment: the screen starts empty. The history is the page's (`history`). */
+  /** A new attachment: the screen starts empty, at the area's grid. The history is the page's (`history`). */
   fun reset() {
     if (handle != 0L) Vt.nativeDestroyTerminal(handle)
     handle = 0L
     cols = 0
     rows = 0
+    sessionCols = 0
+    sessionRows = 0
+    panX = 0f
     clearSelection()
     relayout(width, height)
     invalidate()
@@ -307,7 +363,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   fun scrollTo(row: Int) {
     if (alternate || history.isEmpty()) return
     scroller.forceFinished(true)
-    setScroll((history.size - row.coerceIn(0, history.size)).toFloat() * cellH)
+    setScroll((history.size - row.coerceIn(0, history.size)).toFloat() * cellH + fit.topCut)
   }
 
   fun scrollToBottom() {
@@ -321,7 +377,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     invalidate()
   }
 
-  private fun maxScroll() = if (alternate) 0f else (history.size * cellH).toFloat()
+  private fun maxScroll() = if (alternate) 0f else history.size * cellH + fit.topCut
 
   private fun clampScroll() {
     scrollPx = scrollPx.coerceIn(0f, maxScroll())
@@ -337,7 +393,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   }
 
   private fun reportViewport() {
-    val up = if (cellH > 0) ceil(scrollPx / cellH - 0.01f).toInt() else 0
+    val up = if (cellH > 0) max(0, ceil((scrollPx - fit.topCut) / cellH - 0.01f).toInt()) else 0
     val top = history.size - up
     val atBottom = scrollPx < 0.5f
     if (top == reportedTop && atBottom == reportedBottom) return
@@ -436,8 +492,16 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   override fun onDraw(canvas: Canvas) {
     canvas.drawColor(background)
     if (cellH <= 0) return
-    val first = max(0, lineUnder(0f))
-    val last = min(lineCount() - 1, lineUnder(height.toFloat() - 1))
+    canvas.save()
+    canvas.scale(fit.scale, fit.scale)
+    canvas.translate(-panX, -fit.topCut)
+    drawContent(canvas)
+    canvas.restore()
+  }
+
+  private fun drawContent(canvas: Canvas) {
+    val first = max(0, lineUnder(contentY(0f)))
+    val last = min(lineCount() - 1, lineUnder(contentY(height.toFloat() - 1)))
     val from = selFrom
     val to = selTo
     for (i in first..last) {
@@ -451,7 +515,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
       }
       if (i < history.size && i == markRow) {
         fill.color = selectionColor
-        canvas.drawRect(0f, y, width.toFloat(), y + cellH, fill)
+        canvas.drawRect(0f, y, max(cols * cellW.toFloat(), contentX(width.toFloat())), y + cellH, fill)
       }
       if (from != null && to != null && i >= from[0] && i <= to[0]) {
         val c0 = if (i == from[0]) from[1] else 0
@@ -658,7 +722,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   private fun drawCursor(canvas: Canvas) {
     if (!cursorVisible || handle == 0L || cursorRow >= rows) return
     val y = lineY(history.size + cursorRow).toFloat()
-    if (y >= height || y + cellH <= 0) return
+    if (y >= contentY(height.toFloat()) || y + cellH <= contentY(0f)) return
     val x = (cursorCol * cellW).toFloat()
     if (composing.isNotEmpty()) {
       // The composition (IME) at the cursor, underlined; only the committed text is sent.
@@ -861,7 +925,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     for (which in 1..2) {
       val d = (if (which == 1) handleLeft else handleRight) ?: continue
       val b = handleBounds(which) ?: continue
-      if (b.top > height || b.bottom < 0) continue
+      if (b.top > contentY(height.toFloat()) || b.bottom < contentY(0f)) continue
       d.bounds = b
       d.draw(canvas)
     }
@@ -905,8 +969,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
         val from = selFrom
         val to = selTo
         if (from == null || to == null) { out.set(menuAt[0] - 1, menuAt[1] - 1, menuAt[0] + 1, menuAt[1] + 1); return }
-        val top = lineY(from[0]).coerceIn(0, height)
-        val bottom = (lineY(to[0]) + cellH).coerceIn(0, height)
+        val top = viewY(lineY(from[0]).toFloat()).roundToInt().coerceIn(0, height)
+        val bottom = viewY((lineY(to[0]) + cellH).toFloat()).roundToInt().coerceIn(0, height)
         out.set(0, top, width, max(bottom, top + 1))
       }
     }, ActionMode.TYPE_FLOATING)
@@ -998,10 +1062,13 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 
   // A tap names the cell and its text; a drag scrolls (fling included); a long press selects.
   private var dragRemainder = 0f
+  /** The axis a drag keeps once it starts: 0 not yet, 1 sideways (panning a wider Session grid), 2 up and down. */
+  private var dragAxis = 0
 
   private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
     override fun onDown(e: MotionEvent): Boolean {
       dragRemainder = 0f
+      dragAxis = 0
       scroller.forceFinished(true)
       return true
     }
@@ -1009,19 +1076,26 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     override fun onSingleTapUp(e: MotionEvent): Boolean {
       if (hasSelection() || actionMode != null) { clearSelection(); return true }
       if (cellW <= 0 || cellH <= 0 || rows <= 0) return true
-      val col = colUnder(e.x)
-      val i = lineUnder(e.y).coerceIn(0, max(lineCount() - 1, 0))
+      val col = colUnder(contentX(e.x))
+      val i = lineUnder(contentY(e.y)).coerceIn(0, max(lineCount() - 1, 0))
       val (text, index) = lineText(lineAt(i), col)
       events.tapCell(col, if (i < history.size) -1 else i - history.size, text, index)
       return true
     }
 
     override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
-      if (!alternate && (history.isNotEmpty() || scrollPx > 0)) {
+      if (dragAxis == 0) dragAxis = if (fit.maxPanX > 0f && abs(dx) > abs(dy)) 1 else 2
+      if (dragAxis == 1) {
+        // A Session grid wider than the area pans sideways under the finger.
+        val next = (panX + dx / fit.scale).coerceIn(0f, fit.maxPanX)
+        if (next != panX) { panX = next; invalidate(); actionMode?.invalidateContentRect() }
+        return true
+      }
+      if (!alternate && (history.isNotEmpty() || scrollPx > 0 || fit.topCut > 0f)) {
         // A drag down (dy < 0) moves back in time.
-        setScroll(scrollPx - dy)
+        setScroll(scrollPx - dy / fit.scale)
       } else {
-        dragRemainder += -dy / cellH
+        dragRemainder += -dy / (cellH * fit.scale)
         val lines = dragRemainder.toInt()
         if (lines != 0) {
           dragRemainder -= lines
@@ -1032,16 +1106,16 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     }
 
     override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-      if (alternate || history.isEmpty()) return false
-      scroller.fling(0, scrollPx.roundToInt(), 0, vy.roundToInt(), 0, 0, 0, maxScroll().roundToInt())
+      if (dragAxis == 1 || alternate || maxScroll() <= 0f) return false
+      scroller.fling(0, scrollPx.roundToInt(), 0, (vy / fit.scale).roundToInt(), 0, 0, 0, maxScroll().roundToInt())
       postInvalidateOnAnimation()
       return true
     }
 
     override fun onLongPress(e: MotionEvent) {
       if (cellW <= 0 || rows <= 0) return
-      val i = lineUnder(e.y).coerceIn(0, max(lineCount() - 1, 0))
-      val col = colUnder(e.x)
+      val i = lineUnder(contentY(e.y)).coerceIn(0, max(lineCount() - 1, 0))
+      val col = colUnder(contentX(e.x))
       menuAt[0] = e.x.roundToInt()
       menuAt[1] = e.y.roundToInt()
       val word = wordAt(i, col)
@@ -1056,9 +1130,11 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     when (e.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
         val slop = (cellH / 2)
+        val x = contentX(e.x).toInt()
+        val y = contentY(e.y).toInt()
         dragging = when {
-          handleBounds(2)?.let { Rect(it).apply { inset(-slop, -slop) }.contains(e.x.toInt(), e.y.toInt()) } == true -> 2
-          handleBounds(1)?.let { Rect(it).apply { inset(-slop, -slop) }.contains(e.x.toInt(), e.y.toInt()) } == true -> 1
+          handleBounds(2)?.let { Rect(it).apply { inset(-slop, -slop) }.contains(x, y) } == true -> 2
+          handleBounds(1)?.let { Rect(it).apply { inset(-slop, -slop) }.contains(x, y) } == true -> 1
           else -> 0
         }
         if (dragging != 0) {
@@ -1085,10 +1161,11 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   private fun moveHandle(x: Float, y: Float) {
     val from = selFrom ?: return
     val to = selTo ?: return
-    val fy = y - cellH
-    if (fy < cellH) setScroll(scrollPx + cellH / 2f) else if (fy > height - cellH) setScroll(scrollPx - cellH / 2f)
-    val i = lineUnder(fy).coerceIn(0, max(lineCount() - 1, 0))
-    val col = colUnder(x + if (dragging == 2) -cellW / 2f else cellW / 2f)
+    val cell = cellH * fit.scale
+    val fy = y - cell
+    if (fy < cell) setScroll(scrollPx + cellH / 2f) else if (fy > height - cell) setScroll(scrollPx - cellH / 2f)
+    val i = lineUnder(contentY(fy)).coerceIn(0, max(lineCount() - 1, 0))
+    val col = colUnder(contentX(x) + if (dragging == 2) -cellW / 2f else cellW / 2f)
     if (dragging == 1) { from[0] = i; from[1] = col } else { to[0] = i; to[1] = col }
     // Dragged past each other: swap ends (and handles).
     if (from[0] > to[0] || (from[0] == to[0] && from[1] > to[1])) {

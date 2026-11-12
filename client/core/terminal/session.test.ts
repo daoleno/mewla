@@ -38,6 +38,8 @@ async function connected() {
   await until(() => transport.state === "connected");
   return transport;
 }
+/** The socket the transport uses now: another file's leftover transport may have made a later one in `sockets`. */
+const own = (transport: Transport) => (transport as unknown as { socket: FakeSocket | null }).socket!;
 const frames = (socket: FakeSocket, type: string) => socket.sent.map((t) => JSON.parse(t)).filter((f) => f.type === type);
 
 function recorder() {
@@ -47,6 +49,7 @@ function recorder() {
   const handlers: TerminalHandlers = {
     reset: () => log.push("reset"),
     output: (data) => log.push(`out:${data}`),
+    sessionSize: (cols, rows) => log.push(`size:${cols}x${rows}`),
     scrollState: (s) => log.push(`scroll:${s.atBottom}:${s.inCopyMode}`),
     history: (render) => history.push(render),
     historyNotice: (text) => notices.push(text),
@@ -59,7 +62,7 @@ function recorder() {
 /** A terminal attached as `t1` at 80×24 on a fresh connection. */
 async function attachedTerminal() {
   const transport = await connected();
-  const socket = sockets.at(-1)!;
+  const socket = own(transport);
   const rec = recorder();
   const term = new TerminalSession(transport, "w1", rec.handlers);
   term.resize(80, 24);
@@ -76,7 +79,7 @@ const delta = (patch: Record<string, unknown>) => ({
 describe("TerminalSession", () => {
   test("opens once the view has a size, then carries output and input of its own attachment only", async () => {
     const transport = await connected();
-    const socket = sockets.at(-1)!;
+    const socket = own(transport);
     const { log, handlers } = recorder();
     const term = new TerminalSession(transport, "w1", handlers);
     expect(frames(socket, "terminal_open")).toHaveLength(0);
@@ -111,9 +114,27 @@ describe("TerminalSession", () => {
     transport.close();
   });
 
+  test("the Session's size the computer tells reaches the view before the replay at it, for its own attachment only", async () => {
+    const { transport, socket, term, log } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    await wait(30);
+    const asked = historyRequests(socket).length;
+    // Another viewer took the size: the view hears it, then the full redraw; its own grid is not sent back.
+    socket.receive({ type: "terminal_size", session_id: "t1", cols: 160, rows: 45 });
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "\u001bcwide" });
+    socket.receive({ type: "terminal_size", session_id: "other", cols: 20, rows: 5 });
+    expect(log).toEqual(["reset", "size:160x45", "out:\u001bcwide"]);
+    expect(frames(socket, "terminal_resize")).toHaveLength(0);
+    // Its history reflowed at the other width: asked for again.
+    await until(() => historyRequests(socket).length > asked);
+    expect(historyRequests(socket).length).toBeGreaterThan(asked);
+    term.close();
+    transport.close();
+  });
+
   test("only a tmux terminal gets the FocusIn; a session host terminal would show it as text", async () => {
     const transport = await connected();
-    const socket = sockets.at(-1)!;
+    const socket = own(transport);
     const term = new TerminalSession(transport, "w1", recorder().handlers);
     term.resize(80, 24);
     await until(() => frames(socket, "terminal_open").length > 0);
@@ -126,7 +147,7 @@ describe("TerminalSession", () => {
 
   test("two terminals open one after the other, so neither takes the other's attachment", async () => {
     const transport = await connected();
-    const socket = sockets.at(-1)!;
+    const socket = own(transport);
     const a = recorder(), b = recorder();
     const ta = new TerminalSession(transport, "w1", a.handlers);
     const tb = new TerminalSession(transport, "w2", b.handlers);
@@ -152,12 +173,13 @@ describe("TerminalSession", () => {
     const term = new TerminalSession(transport, "w1", handlers);
     term.resize(80, 24);
     await wait();
-    sockets.at(-1)!.receive({ type: "terminal_opened", session_id: "t1", cols: 80, rows: 24 });
-    sockets.at(-1)!.close(1006, "gone");
-    await wait(30);
-    sockets.at(-1)!.open();
-    await wait();
-    const next = sockets.at(-1)!;
+    const first = own(transport);
+    first.receive({ type: "terminal_opened", session_id: "t1", cols: 80, rows: 24 });
+    first.close(1006, "gone");
+    await until(() => !!own(transport) && own(transport) !== first);
+    const next = own(transport);
+    next.open();
+    await until(() => frames(next, "terminal_open").length > 0);
     expect(frames(next, "terminal_open")).toHaveLength(1);
     next.receive({ type: "terminal_opened", session_id: "t9", cols: 80, rows: 24 });
     next.receive({ type: "terminal_exit", session_id: "t9", exit_code: 0 });
@@ -175,7 +197,7 @@ describe("TerminalSession", () => {
     const term = new TerminalSession(transport, "gone", handlers);
     term.resize(80, 24);
     await wait();
-    sockets.at(-1)!.receive({ type: "terminal_error", code: "open_failed", message: "no such pane" });
+    own(transport).receive({ type: "terminal_error", code: "open_failed", message: "no such pane" });
     expect(log).toEqual(["error:no such pane"]);
     term.close();
     transport.close();

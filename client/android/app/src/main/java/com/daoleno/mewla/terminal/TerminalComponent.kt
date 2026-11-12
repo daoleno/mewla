@@ -40,6 +40,11 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
     when (name) {
       "write" -> (m?.get("data") as? String)?.let(view::write)
       "reset" -> view.reset()
+      "sessionSize" -> {
+        val cols = (m?.get("cols") as? Number)?.toInt()
+        val rows = (m?.get("rows") as? Number)?.toInt()
+        if (cols != null && rows != null) view.setSessionSize(cols, rows)
+      }
       "history" -> view.applyHistory(
         reset = m?.get("reset") == true,
         removed = (m?.get("removed") as? Number)?.toInt() ?: 0,

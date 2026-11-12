@@ -6,13 +6,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/sessionhost"
@@ -71,8 +74,9 @@ func TestHostTerminalView(t *testing.T) {
 	waitHostScreen(t, client, id, "ready")
 
 	sent := make(chan map[string]any, 1024)
+	sizes := &sizesTold{}
 	manager := NewManager(&HostBackend{Version: "test-daemon"})
-	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 20, Socket: socket}, func(v any) { sent <- v.(map[string]any) })
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 20, Socket: socket}, sizes.split(sent))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,8 +96,8 @@ func TestHostTerminalView(t *testing.T) {
 			select {
 			case msg := <-sent:
 				switch msg["type"] {
-				case "terminal_output":
-					viewer.Write([]byte(msg["data"].(string)))
+				case "terminal_output", "terminal_size":
+					show(t, viewer, msg)
 				case "terminal_exit":
 					exit = msg
 					return
@@ -167,8 +171,9 @@ func TestHostTerminalViewRedrawsOnResize(t *testing.T) {
 	waitHostScreen(t, client, id, "ready")
 
 	sent := make(chan map[string]any, 1024)
+	sizes := &sizesTold{}
 	manager := NewManager(&HostBackend{Version: "test-daemon"})
-	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 20, Socket: socket}, func(v any) { sent <- v.(map[string]any) })
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 20, Socket: socket}, sizes.split(sent))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,10 +189,10 @@ func TestHostTerminalViewRedrawsOnResize(t *testing.T) {
 		for {
 			select {
 			case msg := <-sent:
-				if msg["type"] != "terminal_output" {
-					t.Fatalf("unexpected %v", msg)
+				// The grid the App measured is its own here: it never takes the Session's size.
+				if msg["type"] != "terminal_size" {
+					show(t, viewer, msg)
 				}
-				viewer.Write([]byte(msg["data"].(string)))
 			case <-time.After(300 * time.Millisecond):
 				return
 			}
@@ -253,8 +258,9 @@ printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"
 	waitHostScreen(t, client, id, "ready-80")
 
 	sent := make(chan map[string]any, 1024)
+	sizes := &sizesTold{}
 	manager := NewManager(&HostBackend{Version: "test-daemon"})
-	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 19, Socket: socket}, func(v any) { sent <- v.(map[string]any) })
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 19, Socket: socket}, sizes.split(sent))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,12 +276,7 @@ printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"
 		for {
 			select {
 			case msg := <-sent:
-				if msg["type"] != "terminal_output" {
-					t.Fatalf("unexpected %v", msg)
-				}
-				data := msg["data"].(string)
-				resets += strings.Count(data, fullReset)
-				viewer.Write([]byte(data))
+				resets += strings.Count(show(t, viewer, msg), fullReset)
 			case <-time.After(400 * time.Millisecond):
 				return resets
 			}
@@ -294,6 +295,11 @@ printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"
 	if resets := settle(); resets == 0 {
 		t.Fatal("the App's view was not drawn again when another viewer resized the Session")
 	}
+	if got := sizes.last(); got != "160x45" {
+		t.Fatalf("the App's view was last told the Session is %q, want the desk's 160x45 so it draws the screen at that size", got)
+	}
+	// Drawn at the Session's size, the App's view shows exactly the host's screen.
+	matchHost(t, viewer, client, id)
 
 	// The App's view losing the keyboard (a focus report) is no reason to take the size.
 	if err := manager.Input("owner", view.ID(), "\x1b[O"); err != nil {
@@ -311,6 +317,9 @@ printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"
 	waitHostScreen(t, client, id, "ready-70")
 	settle()
 	matchHost(t, viewer, client, id)
+	if got := sizes.last(); got != "70x19" {
+		t.Fatalf("the App's view was last told the Session is %q, want its own 70x19 once it took the size back", got)
+	}
 	for range desk.Output() {
 	}
 	if end, err := desk.End(); err != nil || end.Reason != sessionhost.AttachResized {
@@ -377,11 +386,11 @@ func olderHost(t *testing.T, socket string) string {
 	return path
 }
 
-// A daemon newer than its host is the usual state after an upgrade. A host
-// from before AttachResized never tells the view of another viewer's resize,
-// so the App's grid sent again (the terminal shown) still resizes the Session
-// and draws the view again, as it did before.
-func TestHostTerminalViewOnAnOlderHostTakesItsSizeBack(t *testing.T) {
+// A daemon newer than its host is the usual state after an upgrade: every
+// Session open before it runs on the older host. That host never tells the
+// view of another viewer's resize, so the view asks the Session's size and
+// redraws at it just the same, and takes it back when its person acts.
+func TestHostTerminalViewOnAnOlderHostRedrawsToo(t *testing.T) {
 	socket, client := startTestHost(t)
 	dir := t.TempDir()
 	const id = "mh-0123456789abcdef76543212"
@@ -397,8 +406,9 @@ printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"
 	waitHostScreen(t, client, id, "ready-80")
 
 	sent := make(chan map[string]any, 1024)
+	sizes := &sizesTold{}
 	manager := NewManager(&HostBackend{Version: "test-daemon"})
-	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 19, Socket: olderHost(t, socket)}, func(v any) { sent <- v.(map[string]any) })
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 19, Socket: olderHost(t, socket)}, sizes.split(sent))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,12 +424,7 @@ printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"
 		for {
 			select {
 			case msg := <-sent:
-				if msg["type"] != "terminal_output" {
-					t.Fatalf("unexpected %v", msg)
-				}
-				data := msg["data"].(string)
-				resets += strings.Count(data, fullReset)
-				viewer.Write([]byte(data))
+				resets += strings.Count(show(t, viewer, msg), fullReset)
 			case <-time.After(400 * time.Millisecond):
 				return resets
 			}
@@ -434,16 +439,35 @@ printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"
 	}
 	defer desk.Close()
 	waitHostScreen(t, client, id, "ready-160")
-	settle()
+	time.Sleep(2 * sizePoll)
+	if resets := settle(); resets == 0 {
+		t.Fatal("on an older host the App's view was not drawn again when another viewer resized the Session")
+	}
+	if got := sizes.last(); got != "160x45" {
+		t.Fatalf("the App's view was last told the Session is %q, want the desk's 160x45", got)
+	}
+	matchHost(t, viewer, client, id)
+	if info, err := client.Info(ctx, id); err != nil || info.Cols != 160 || info.Rows != 45 {
+		t.Fatalf("info = %+v, %v; the App's view took the size back on its own", info, err)
+	}
 
-	if err := manager.Resize("owner", view.ID(), 70, 19); err != nil {
+	if err := manager.Input("owner", view.ID(), "x"); err != nil {
 		t.Fatal(err)
 	}
 	waitHostScreen(t, client, id, "ready-70")
 	if resets := settle(); resets == 0 {
-		t.Fatal("the App's grid sent again on an older host did not draw the view again")
+		t.Fatal("typing on the App on an older host did not draw the view again at its own size")
 	}
 	matchHost(t, viewer, client, id)
+	if got := sizes.last(); got != "70x19" {
+		t.Fatalf("the App's view was last told the Session is %q, want its own 70x19", got)
+	}
+	if err := manager.Resize("owner", view.ID(), 70, 19); err != nil {
+		t.Fatal(err)
+	}
+	if resets := settle(); resets != 0 {
+		t.Fatalf("showing the terminal again at its own size drew it again %d times", resets)
+	}
 }
 
 func TestHostTerminalRefusesWithoutAHost(t *testing.T) {
@@ -494,5 +518,102 @@ func matchHost(t *testing.T, viewer *ghosttyvt.Terminal, client *sessionhost.Cli
 	state := viewer.State()
 	if view != host.Text || state.CursorX != host.CursorX || state.CursorY != host.CursorY {
 		t.Fatalf("viewer %q at %d,%d; host %q at %d,%d", view, state.CursorX, state.CursorY, host.Text, host.CursorX, host.CursorY)
+	}
+}
+
+// show draws one message on the test's App view as the App's view does: a
+// Session size (terminal_size) becomes its grid, output is written. It
+// returns the output ("" for a size).
+func show(t *testing.T, viewer *ghosttyvt.Terminal, msg map[string]any) string {
+	t.Helper()
+	switch msg["type"] {
+	case "terminal_size":
+		if _, err := viewer.Resize(msg["cols"].(int), msg["rows"].(int)); err != nil {
+			t.Fatal(err)
+		}
+		return ""
+	case "terminal_output":
+		data := msg["data"].(string)
+		viewer.Write([]byte(data))
+		return data
+	}
+	t.Fatalf("unexpected %v", msg)
+	return ""
+}
+
+// sizesTold records the Session sizes a view was told (terminal_size) on the
+// way to sent.
+type sizesTold struct {
+	mu   sync.Mutex
+	told []string
+}
+
+func (s *sizesTold) split(sent chan<- map[string]any) func(any) {
+	return func(v any) {
+		msg := v.(map[string]any)
+		if msg["type"] == "terminal_size" {
+			s.mu.Lock()
+			s.told = append(s.told, fmt.Sprintf("%vx%v", msg["cols"], msg["rows"]))
+			s.mu.Unlock()
+		}
+		sent <- msg
+	}
+}
+
+func (s *sizesTold) last() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.told) == 0 {
+		return ""
+	}
+	return s.told[len(s.told)-1]
+}
+
+// The host cuts its output anywhere, a character's bytes included, and the App
+// gets each piece as JSON text: a piece that ends inside a character would
+// arrive as U+FFFD and push the rest of the row over (a divider "─" drawn
+// as three diamonds, the footer under it starting "──"). Every piece the view
+// sends is whole characters.
+func TestHostTerminalViewNeverSendsHalfACharacter(t *testing.T) {
+	socket, client := startTestHost(t)
+	dir := t.TempDir()
+	const id = "mh-0123456789abcdef76543213"
+	script := `printf 'ready\r\n'; read x; printf 'a\342\224'; sleep 0.3; printf '\200b \360\237'; sleep 0.3; printf '\220\261c\r\n'; read y`
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if _, err := client.Create(ctx, sessionhost.CreateParams{
+		ID: id, Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/bin:/bin", "HOME=" + dir}, Dir: dir, Cols: 80, Rows: 24,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitHostScreen(t, client, id, "ready")
+	sent := make(chan map[string]any, 1024)
+	manager := NewManager(&HostBackend{Version: "test-daemon"})
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 80, Rows: 24, Socket: socket}, func(v any) { sent <- v.(map[string]any) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Input("owner", view.ID(), "\r"); err != nil {
+		t.Fatal(err)
+	}
+	var got strings.Builder
+	deadline := time.After(10 * time.Second)
+	for !strings.Contains(got.String(), "c\r") {
+		select {
+		case msg := <-sent:
+			if msg["type"] != "terminal_output" {
+				continue
+			}
+			data := msg["data"].(string)
+			if !utf8.ValidString(data) {
+				t.Fatalf("the view sent half a character: %q", data)
+			}
+			got.WriteString(data)
+		case <-deadline:
+			t.Fatalf("timed out; got %q", got.String())
+		}
+	}
+	if !strings.Contains(got.String(), "a─b 🐱c") {
+		t.Fatalf("output %q, want a─b 🐱c whole", got.String())
 	}
 }
