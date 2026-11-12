@@ -10,6 +10,7 @@
  * | `mewla:v1:collapsed_session_sections` | JSON array of folded section keys (`<serverId>::cwd::<dir>`, `::project::<name>`, `::fallback`); removed when empty. |
  * | `mewla:codex_render_modes` | JSON object, Session key → `"chat"` or `"terminal"`. |
  * | `mewla:recent_agent_opens` | JSON object, Session key → open time in ms; the newest 100. |
+ * | `mewla:terminal_font_size` | The phones' terminal text size in points, a whole number 8–14, set by a pinch (new in the NSH app). |
  *
  * A Session key is `makeSessionKey(serverId, workerId)`, the JSON text
  * `["<serverId>","<workerId>"]` (sessionKeys.ts). A value that does not parse
@@ -22,6 +23,7 @@ export const DEVICE_STATE_KEYS = {
   workerAliases: "mewla:agent_aliases",
   collapsedSessionSections: "mewla:v1:collapsed_session_sections",
   interfaceRenderModes: "mewla:codex_render_modes",
+  terminalFontSize: "mewla:terminal_font_size",
 } as const;
 
 const KEYS = DEVICE_STATE_KEYS;
@@ -171,5 +173,28 @@ export async function setInterfaceRenderMode(
   };
 
   await storage.setItem(KEYS.interfaceRenderModes, JSON.stringify(next));
+  return next;
+}
+
+/**
+ * The phones' terminal text size (SPEC 11, Terminal): mono 10/14 until the person pinches; a pinch
+ * sets 8–14, remembered on this device. Its line height is 1.4 times it, in whole points (10/14, 9/13).
+ */
+export const TERMINAL_FONT = { default: 10, min: 8, max: 14 } as const;
+
+/** A stored or pinched size as one the terminal draws at: whole, within 8–14; anything else the default. */
+export function terminalFontSize(value: unknown): number {
+  const size = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  if (typeof size !== "number" || !Number.isFinite(size)) return TERMINAL_FONT.default;
+  return Math.min(TERMINAL_FONT.max, Math.max(TERMINAL_FONT.min, Math.round(size)));
+}
+
+export async function getTerminalFontSize(storage: KeyValueStore): Promise<number> {
+  return terminalFontSize(await storage.getItem(KEYS.terminalFontSize));
+}
+
+export async function setTerminalFontSize(storage: KeyValueStore, size: number): Promise<number> {
+  const next = terminalFontSize(size);
+  await storage.setItem(KEYS.terminalFontSize, String(next));
   return next;
 }

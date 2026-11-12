@@ -12,14 +12,13 @@ import { belowSections } from "../shell/Shell";
 import { TerminalSurface, type TerminalTheme } from "./contract";
 import { TerminalJumpControls, TerminalRendererFailure, TerminalSearchBar } from "./TerminalOverlays";
 import { keyboardOnlyWeb, WebTerminalSurface } from "./web/WebTerminalSurface";
+import { loadTerminalTextSize, setTerminalTextSize, terminalTextSize } from "./fontSize";
+import { TERMINAL_FONT } from "../../core/sessions/deviceState";
 
 /** The phones' native view; the web's is libghostty-vt (WebAssembly) on a canvas in a web view, with the same contract. */
 const Surface: typeof TerminalSurface = platform.os === "web" ? WebTerminalSurface : TerminalSurface;
-/**
- * Text size: the phones draw at 8 (inside the terminal group, about 69 columns at 360 dp and 75 at 390, so Claude
- * Code and Codex lay out as on a laptop; SPEC 11's 12/18 would give about 44 and 49); the web's larger screens at 13.
- */
-const FONT_SIZE = platform.os === "web" ? 13 : 8;
+// The text size is the device's (fontSize.ts): mono 10/14 on the phones until a pinch sets 8–14; 13 on the web.
+loadTerminalTextSize();
 
 const PALETTE_DARK = ["#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea"];
 const PALETTE_LIGHT = ["#161412", "#b3372b", "#3f7a33", "#946112", "#2c55c0", "#80428f", "#21787a", "#d8d2c8", "#57514a", "#d24a3c", "#4f9441", "#b37a1a", "#3d6be0", "#9b56ab", "#2a9396", "#fbfaf7"];
@@ -27,7 +26,12 @@ const PALETTE_LIGHT = ["#161412", "#b3372b", "#3f7a33", "#946112", "#2c55c0", "#
 /** The terminal's colors from the app's theme, light or dark like the rest of the app: it sits in a surface group. */
 function theme(): TerminalTheme {
   const dark = colorScheme() === "dark";
-  return { background: token("card"), foreground: token("foreground"), cursor: token("foreground"), selection: dark ? "#3D7EFF55" : "#2C55C055", palette: dark ? PALETTE_DARK : PALETTE_LIGHT };
+  // Selection is ink, not the platform's colour (SPEC 11, Terminal): ink handles and an ink wash at 20 %.
+  return {
+    background: token("card"), foreground: token("foreground"), cursor: token("foreground"),
+    selection: dark ? "#F2F3F533" : "#13141633", handle: dark ? "#F2F3F5" : "#131416",
+    palette: dark ? PALETTE_DARK : PALETTE_LIGHT,
+  };
 }
 
 /**
@@ -224,21 +228,47 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     session.focusPane(col, row);
   };
 
+  // The view's grid goes to the Session. One reported before this device's text size is read is held:
+  // that size may change the grid, and the Session is then sized once, not twice.
+  let heldGrid: { cols: number; rows: number } | null = null;
+  let grids = 0;
+  let heldTimer: ReturnType<typeof setTimeout> | undefined;
+  const takeGrid = (cols: number, rows: number) => {
+    grids++;
+    nav.setGridRows(rows);
+    session.resize(cols, rows);
+  };
+  effect(() => {
+    const size = terminalTextSize();
+    if (size === undefined) return;
+    untracked(() => {
+      const held = heldGrid;
+      heldGrid = null;
+      if (!held) return;
+      if (size === TERMINAL_FONT.default) return takeGrid(held.cols, held.rows);
+      // The view reports the grid of the new size; the held one stands only if that grid is the same.
+      const seen = grids;
+      heldTimer = setTimeout(() => grids === seen && takeGrid(held.cols, held.rows), 300);
+    });
+  });
+  cleanup(() => clearTimeout(heldTimer));
+
   return (
     <View class="flex-1" style={{ backgroundColor: token("background") }}>
       {/* The terminal group (a surface, radius 20) and what floats over it, above the key bar (and so above the keyboard). */}
       <View testID="terminal-group" class="mx-1.5 mt-1 flex-1 overflow-hidden rounded-(--radius-group) bg-card"
         style={NATIVE_PADDING ? undefined : { paddingTop: GROUP_PADDING.top, paddingRight: GROUP_PADDING.right, paddingBottom: GROUP_PADDING.bottom, paddingLeft: GROUP_PADDING.left }}>
-        <Surface class="flex-1" fontSize={FONT_SIZE} theme={theme()} padding={NATIVE_PADDING ? GROUP_PADDING : undefined}
+        <Surface class="flex-1" fontSize={terminalTextSize() ?? TERMINAL_FONT.default} theme={theme()} padding={NATIVE_PADDING ? GROUP_PADDING : undefined}
           ref={(node) => {
             surface = node;
             for (const [name, args] of pending.splice(0)) node.command(name, args);
           }}
           onSize={({ cols, rows }) => {
             rendererFailure.set(null);
-            nav.setGridRows(rows);
-            session.resize(cols, rows);
+            if (terminalTextSize() === undefined) heldGrid = { cols, rows };
+            else takeGrid(cols, rows);
           }}
+          onFontSize={({ size }) => setTerminalTextSize(size)}
           onFailed={({ message }) => rendererFailure.set(message)}
           onInput={({ data }) => {
             if (scrolledBack()) command("scrollToBottom", {});

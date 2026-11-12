@@ -16,6 +16,7 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
     override fun tapCell(col: Int, row: Int, text: String, index: Int) =
       ctx.emit("tapCell", mapOf("col" to col, "row" to row, "text" to text, "index" to index))
     override fun copy(text: String) = ctx.emit("copy", mapOf("text" to text))
+    override fun fontSize(size: Int) = ctx.emit("fontSize", mapOf("size" to size))
   })
 
   override fun view(): View = view
@@ -33,6 +34,7 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
           foreground = m["foreground"] as? String ?: return,
           cursor = m["cursor"] as? String ?: return,
           selection = m["selection"] as? String ?: return,
+          handle = m["handle"] as? String,
           palette = (m["palette"] as? List<*>)?.map { it.toString() } ?: emptyList(),
         )
       }

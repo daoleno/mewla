@@ -9,6 +9,9 @@ import {
   setCollapsedSessionSections,
   setInterfaceRenderMode,
   setWorkerAlias,
+  getTerminalFontSize,
+  setTerminalFontSize,
+  terminalFontSize,
 } from "./deviceState";
 import { makeSessionKey } from "./sessionKeys";
 
@@ -98,5 +101,26 @@ describe("recent opens", () => {
     expect(opens[makeSessionKey("srv", "%4")]).toBeUndefined();
     // Newest first, as the Expo app wrote it.
     expect(Object.keys(JSON.parse(storage.entries.get("mewla:recent_agent_opens")!))[0]).toBe(makeSessionKey("srv", "%104"));
+  });
+});
+
+describe("Terminal text size", () => {
+  test("is 10 until a pinch sets one; a pinch's size is kept whole within 8–14", async () => {
+    const storage = memoryStore({});
+    expect(await getTerminalFontSize(storage)).toBe(10);
+    expect(await setTerminalFontSize(storage, 12.4)).toBe(12);
+    expect(await storage.getItem("mewla:terminal_font_size")).toBe("12");
+    expect(await getTerminalFontSize(storage)).toBe(12);
+    expect(await setTerminalFontSize(storage, 30)).toBe(14);
+    expect(await setTerminalFontSize(storage, 3)).toBe(8);
+  });
+
+  test("a stored value that is not a size reads as the default", async () => {
+    for (const bad of ["", "abc", "NaN", "{}"]) {
+      expect(await getTerminalFontSize(memoryStore({ "mewla:terminal_font_size": bad }))).toBe(10);
+    }
+    expect(terminalFontSize(undefined)).toBe(10);
+    expect(terminalFontSize(Infinity)).toBe(10);
+    expect(terminalFontSize("9")).toBe(9);
   });
 });
