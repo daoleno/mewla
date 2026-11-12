@@ -4,6 +4,7 @@ package com.daoleno.mewla.phone.adb
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.util.Log
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.InetAddress
@@ -15,14 +16,15 @@ class NsdAdbServiceFinder(context: Context) : AdbServiceFinder {
     override suspend fun findPorts(serviceType: String, timeoutMs: Long): List<Int> {
         val services = Channel<NsdServiceInfo>(Channel.UNLIMITED)
         val listener = object : NsdManager.DiscoveryListener {
-            override fun onServiceFound(info: NsdServiceInfo) { services.trySend(info) }
+            override fun onServiceFound(info: NsdServiceInfo) { Log.i(TAG, "found ${info.serviceName}"); services.trySend(info) }
             override fun onServiceLost(info: NsdServiceInfo) {}
             override fun onDiscoveryStarted(serviceType: String) {}
             override fun onDiscoveryStopped(serviceType: String) {}
-            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) { services.close() }
+            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) { Log.i(TAG, "discovery of $serviceType failed to start: $errorCode"); services.close() }
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
         }
         nsd.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, listener)
+        val began = System.currentTimeMillis()
         val ports = LinkedHashSet<Int>()
         try {
             withTimeoutOrNull(timeoutMs) {
@@ -39,6 +41,7 @@ class NsdAdbServiceFinder(context: Context) : AdbServiceFinder {
             }
         } finally {
             runCatching { nsd.stopServiceDiscovery(listener) }
+            Log.i(TAG, "discovery of $serviceType ended after ${System.currentTimeMillis() - began} ms of $timeoutMs with ports $ports")
         }
         return ports.toList()
     }
@@ -65,6 +68,7 @@ class NsdAdbServiceFinder(context: Context) : AdbServiceFinder {
     }
 
     private companion object {
+        const val TAG = "MewlaPhone"
         const val SETTLE_MS = 400L
         const val RESOLVE_MS = 1_500L
     }
