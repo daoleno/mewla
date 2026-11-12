@@ -71,6 +71,9 @@ type daemonConfig struct {
 	stateDir       string
 	linkConfigPath string
 	lan            bool
+	// loopbackOnly keeps a loopback daemon off this computer's private
+	// addresses: no TLS listeners on Wi-Fi/LAN or Tailscale (a test daemon).
+	loopbackOnly bool
 }
 
 type pairConfig struct {
@@ -642,20 +645,18 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetDirectEndpoints(func() []server.DirectEndpoint {
 		return directEndpoints(cfg.addr, detectPrivateNetworkAddresses())
 	})
-	if host, port, err := net.SplitHostPort(cfg.addr); err == nil && isLoopbackHost(host) {
+	if portNumber, ok := privateListenerPort(cfg); ok {
 		// A loopback daemon also listens, over TLS only, on this computer's
 		// private addresses, so a paired phone on the same network or tailnet
 		// can skip the relay without any flag.
-		if portNumber, err := strconv.Atoi(port); err == nil {
-			srv.EnablePrivateListeners(portNumber, func() []net.IP {
-				var ips []net.IP
-				for _, address := range detectPrivateNetworkAddresses() {
-					ips = append(ips, address.ip)
-				}
-				return ips
-			})
-			srv.SetDirectEndpoints(srv.PrivateEndpoints)
-		}
+		srv.EnablePrivateListeners(portNumber, func() []net.IP {
+			var ips []net.IP
+			for _, address := range detectPrivateNetworkAddresses() {
+				ips = append(ips, address.ip)
+			}
+			return ips
+		})
+		srv.SetDirectEndpoints(srv.PrivateEndpoints)
 	}
 	enrollmentManager, err := enrollment.New(authManager.StorageDir())
 	if err != nil {
@@ -2716,6 +2717,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	cfg := daemonConfig{}
 	fs.StringVar(&cfg.addr, "addr", "127.0.0.1:9876", "listen on host:port")
 	fs.BoolVar(&cfg.lan, "lan", false, "listen on all networks (plain HTTP; trusted networks only)")
+	fs.BoolVar(&cfg.loopbackOnly, "loopback-only", false, "reachable from this computer only: no TLS listeners on Wi-Fi/LAN or Tailscale addresses (test daemons)")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	bindRelayConfigFlags(fs, &cfg.linkConfigPath, "Mewla Relay config (default: <state-dir>/relay.json when present)")
 	fs.Usage = func() { printTopLevelUsage(stderr) }
@@ -2732,13 +2734,31 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	if cfg.lan && addrExplicit {
 		return cfg, fmt.Errorf("--lan and -addr cannot be used together")
 	}
+	if cfg.lan && cfg.loopbackOnly {
+		return cfg, fmt.Errorf("--lan and -loopback-only cannot be used together")
+	}
 	if cfg.lan {
 		cfg.addr = "0.0.0.0:9876"
+	}
+	if host, _, err := net.SplitHostPort(cfg.addr); cfg.loopbackOnly && (err != nil || !isLoopbackHost(host)) {
+		return cfg, fmt.Errorf("-loopback-only needs a loopback -addr, not %q", cfg.addr)
 	}
 	if fs.NArg() > 0 {
 		return cfg, fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 	return cfg, nil
+}
+
+// privateListenerPort is the port a daemon also listens on, over TLS, at this
+// computer's private addresses: a loopback daemon does, unless it is
+// -loopback-only.
+func privateListenerPort(cfg daemonConfig) (int, bool) {
+	host, port, err := net.SplitHostPort(cfg.addr)
+	if err != nil || !isLoopbackHost(host) || cfg.loopbackOnly {
+		return 0, false
+	}
+	number, err := strconv.Atoi(port)
+	return number, err == nil
 }
 
 func printTopLevelUsage(w io.Writer) {
@@ -2789,6 +2809,7 @@ Agents and tools
 Flags
   -lan                  listen on all networks (plain HTTP; trusted networks only)
   -addr host:port       listen on host:port instead of 127.0.0.1:9876
+  -loopback-only        reachable from this computer only: no TLS listeners on Wi-Fi/LAN or Tailscale (test daemons)
   -state-dir dir        state directory (default ~/.mewla)
   -relay-config path    Mewla Relay config, for a self-hosted relay (default <state-dir>/relay.json)
   -v, --version         print the Mewla version and exit
