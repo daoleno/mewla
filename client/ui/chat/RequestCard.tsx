@@ -1,5 +1,5 @@
 import { computed, signal, Text, untracked, View } from "nsh";
-import type { Signal } from "nsh";
+import type { Signal, ViewRef } from "nsh";
 import { Button, Input } from "nsh/base";
 import type { ConversationChoice } from "../../core/conversation/conversation";
 import { answerChoice, answerPrompt, decideApproval } from "../../core/conversation/turn";
@@ -240,7 +240,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
 }
 
 /** One open request: the card the person answers here. */
-function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; notice: RequestNotice }) {
+function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; notice: RequestNotice; anchor?: (node: ViewRef) => void }) {
   const card = props.card;
   const gone = () => {
     sealRequest(sealedOf(card, "Not answered", card.title));
@@ -253,7 +253,7 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
     return route.via === "choice" ? answerChoice(transport, route.workerId, route.callId, answers) : answerPrompt(transport, route.workerId, route.promptId, { answers });
   };
   return (
-    <View testID="request-card" class="gap-3 rounded-(--radius-group) bg-card p-4">
+    <View testID="request-card" ref={props.anchor} class="gap-3 rounded-(--radius-group) bg-card p-4">
       <TopLine card={() => card} onSource={props.onSource} />
       {card.body.kind === "choice" ? (
         <ChoiceBody card={card} choice={card.body.choice} connected={props.connected} submit={submit}
@@ -316,6 +316,8 @@ export function RequestStack(props: {
   onSource?: (card: Card) => void;
   onOpenTerminal: (workerId: string) => void;
   notice: RequestNotice;
+  /** The open card's view: the thread centres it (SPEC §3.1 cold start, a tray row). */
+  anchor?: (node: ViewRef) => void;
 }) {
   const connected = () => connection() === "connected";
   // The open card is made once per key (its draft survives every update of the request list).
@@ -332,7 +334,7 @@ export function RequestStack(props: {
   return (
     <View testID="request-stack" class="gap-2 px-4 pb-2">
       {sealed().map((s) => <SealedLine sealed={() => s} open={() => shown().has(s.key)} onToggle={() => toggle(s.key)} />)}
-      {openKey() ? <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} notice={props.notice} /> : null}
+      {openKey() ? <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} notice={props.notice} anchor={props.anchor} /> : null}
       {props.cards().filter((card) => card.key !== openKey()).map((card) => <StackedRow card={() => card} onPress={() => props.picked.set(card.key)} />)}
     </View>
   );
