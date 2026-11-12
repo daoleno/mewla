@@ -1,4 +1,4 @@
-import { signal, Text, View } from "nsh";
+import { Clipboard, signal, Text, View } from "nsh";
 import { ProgressBar } from "../kit/ProgressBar";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
@@ -43,12 +43,39 @@ export type Expansion = ReturnType<typeof createExpansion>;
 const iconOf = (name: string | undefined, fallback: IconName): IconName => (name && name in ICON_ASSETS ? (name as IconName) : fallback);
 const toneColor = (tone: string | undefined) => (tone === "failed" || tone === "danger" ? "destructive" : tone === "running" || tone === "accent" ? "foreground" : tone === "attention" ? "warning" : "muted-foreground");
 
-/** Copy on every code block of a chat (SPEC §1.7): NSH's own button, which copies and shows a check for a moment. */
-export const CODE_ACTIONS = [{ id: "copy", label: "Copy" }];
+/**
+ * A chat's code block (soft-final SPEC §11 Message, the mock's `.codeblock`): a surface card, radius 20,
+ * with a 48 pt header (the language or "code" in soft mono, then Copy, which shows a check for a moment),
+ * the code in mono 13/20 under it, scrolling sideways. NSH draws and colours the code.
+ */
+export function CodeBlock(props: { code: string; language?: string }) {
+  const copied = signal(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const copy = () => {
+    void Clipboard.writeText(props.code).then(() => {
+      copied.set(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => copied.set(false), 1500);
+    }).catch(() => {});
+  };
+  return (
+    <View testID="code-block" class="my-1 overflow-hidden rounded-(--radius-group) bg-card">
+      <View class="h-12 flex-row items-center gap-2 pl-4 pr-1">
+        <Text class="min-w-0 flex-1 font-mono text-code text-muted-foreground line-clamp-1">{props.language || "code"}</Text>
+        <Button testID="code-copy" accessibilityLabel={copied() ? "Copied" : "Copy"} onPress={copy} class="size-11 items-center justify-center rounded-full active:bg-accent">
+          <Icon name={copied() ? "check" : "copy"} size={18} color="muted-foreground" />
+        </Button>
+      </View>
+      <TextView document={{ blocks: [{ type: "codeBlock", code: props.code, language: props.language ?? "" }] }}
+        classes={{ codeBlock: "m-0 rounded-none border-0 bg-transparent px-4 pb-4 pt-0" }} />
+    </View>
+  );
+}
 
-const Mono = (props: { text: string }) => (
-  <TextView document={{ blocks: [{ type: "codeBlock", code: props.text, language: "" }] }} selectable codeBlockActions={CODE_ACTIONS} />
-);
+/** How a chat's Markdown draws its code blocks: as `CodeBlock`. */
+export const renderCode = (block: { code: string; language?: string }) => <CodeBlock code={block.code} language={block.language} />;
+
+const Mono = (props: { text: string }) => <CodeBlock code={props.text} />;
 
 /** A file as the row titles show it: from its project down (`daemon/watcher/watcher.go`), not the whole absolute path, whose end a line cuts off. */
 const shownPath = (path: string) => distinctivePath(path) ?? compactPathLabel(path);
@@ -100,7 +127,7 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
           {item().commandText ? <Mono text={item().commandText!} /> : null}
           {item().queryText ? <TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText! }] }] }} selectable class="text-sm" /> : null}
           {item().statusLine ? <Text class="text-xs text-muted-foreground">{item().statusLine}</Text> : null}
-          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body!} /> : <TextView markdown={item().body!} selectable codeBlockActions={CODE_ACTIONS} class="text-sm" />) : null}
+          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body!} /> : <TextView markdown={item().body!} selectable renderCodeBlock={renderCode} class="text-sm" />) : null}
           {files().map((file) => <FileRow file={file} onFile={props.onFile} />)}
         </View>
       ) : null}

@@ -9,7 +9,6 @@ import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
 import { createChatTimeline } from "../../core/conversation/timeline";
 import { rewindMessage, stopTurn } from "../../core/conversation/turn";
-import { finalReplyIdsOf } from "../../core/timeline/model";
 import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
 import { resolveBlockedTerminal } from "../../core/session/blockedTerminalSurface";
 import { shouldLeaveMissingSession } from "../../core/session/missingSession";
@@ -134,11 +133,9 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     rewind: (eventId) => rewindMessage(transport, props.workerId, eventId),
     send: (value) => chat.send(value),
   });
-  const finalReplies = computed(() => finalReplyIdsOf(thread().conversation?.events ?? []));
   const handlers = {
     onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
       void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
-    isFinalReply: (id: string) => finalReplies().has(id),
     workingSince: () => activity()?.started_at,
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),

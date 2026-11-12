@@ -37,7 +37,6 @@ import {
   type ActivityTimelineItem,
 } from "./activityTypes";
 import type { DisplayAttachment } from "./types";
-import type { ReplyIds } from "./messageActionsModel";
 import type { TimelineItem } from "./types";
 import { compareConversationEvents } from "../conversation/reconciliation";
 import { isImageAttachment } from "./imageSource";
@@ -1110,33 +1109,6 @@ function explorationEntryLine(entry: ExplorationEntry) {
   }).title;
   const suffix = entry.running ? " (running)" : entry.failed ? " (failed)" : "";
   return `${action}${suffix}`;
-}
-
-/**
- * The id of each turn's final finished reply. A turn with tool calls between
- * pieces of text gets its row under the last piece only.
- */
-export function finalReplyIdsOf(unsortedEvents: readonly CodexConversationEvent[]): ReplyIds {
-  const events = [...unsortedEvents].sort(compareConversationEvents);
-  const ids = new Set<string>();
-  let reply: CodexConversationEvent | undefined;
-  const close = () => {
-    if (reply) ids.add(reply.id || `${reply.kind}:${reply.seq}`);
-    reply = undefined;
-  };
-  for (const event of events) {
-    if (event.kind === "user_message") {
-      close();
-    } else if (
-      event.kind === "assistant_message" &&
-      !event.partial &&
-      cleanStructuredMessageText(event.body || "")
-    ) {
-      reply = event;
-    }
-  }
-  close();
-  return ids;
 }
 
 function displayAttachments(event: CodexConversationEvent): DisplayAttachment[] {

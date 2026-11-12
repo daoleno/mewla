@@ -38,9 +38,6 @@ export interface MessageActionEnvironment {
   canSelectText: boolean;
 }
 
-/** The message ids that are a turn's final reply: each gets the Copy and ⋯ row. */
-export type ReplyIds = ReadonlySet<string>;
-
 export function messageEditMode(env: Pick<MessageActionEnvironment, "messageRewind" | "brain">): MessageEditMode {
   return env.messageRewind && !env.brain ? "rewind" : "copy";
 }

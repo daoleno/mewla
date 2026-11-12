@@ -15,16 +15,14 @@ import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
 import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
 import { PlainText } from "./PlainText";
-import { selectingText } from "./messageEdit";
-import { ActivityRow, CODE_ACTIONS, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
+import { selectingText, showMessageMenu } from "./messageEdit";
+import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
 import { brainFiles, openChatLink, openChatPath } from "./links";
 
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
   onUserMessage?: (item: MessageTimelineItem) => void;
-  /** A turn's final reply gets a Copy button under it. */
-  isFinalReply?: (id: string) => boolean;
   /** When the running turn started (the provider's own clock): "Working · 1:05". */
   workingSince?: () => string | undefined;
   /** A link pressed in a reply: a web page, or a file the Session wrote. None: the chat's own (`openChatLink` on Brain's files). */
@@ -108,21 +106,17 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
         <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>
       ) : it().type === "message" ? (
         <View class="px-4">
-          <View onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
-            <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-message"
-              codeBlockActions={CODE_ACTIONS}
+          {/* Brain's reply is its text alone (soft-final SPEC §11 Message); a long press opens Copy and Select Text. */}
+          <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}
+            onLongPress={() => !(it() as MessageTimelineItem).streaming && void showMessageMenu(it() as MessageTimelineItem, { connected: true, running: false })}>
+            <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} class="text-message"
+              renderCodeBlock={renderCode}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
               renderImage={(image) => {
                 const key = pictureKey(it().id, image.src);
                 return <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} width={textWidth} onOpen={() => props.handlers.openPicture?.(key)} />;
               }} />
           </View>
-          {!(it() as MessageTimelineItem).streaming && props.handlers.isFinalReply?.(it().id) ? (
-            <Button testID="copy-reply" onPress={() => void Clipboard.writeText((it() as MessageTimelineItem).body.replace(/\s+$/u, "")).catch(() => {})}
-              class="mt-1 size-11 items-center justify-center self-start rounded-full active:bg-accent">
-              <Icon name="copy" size={18} />
-            </Button>
-          ) : null}
         </View>
       ) : isWorkingRow(it()) ? (
         <WorkingRow since={() => props.handlers.workingSince?.()} />
