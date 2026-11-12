@@ -143,6 +143,7 @@ type Server struct {
 	calendarScheduler          *calendar.Scheduler
 	telegram                   *telegramchannel.Manager
 	computers                  *computers.Manager
+	openRequests               openRequestsCache
 	outsideAgents              *outsideagents.Manager
 	outsideAgentsDoor          http.Handler
 	computerName               string
@@ -1102,6 +1103,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSnoozeCalendarItem(conn, raw)
 	case "done_calendar_item":
 		s.handleDoneCalendarItem(conn, raw)
+	case "computers":
+		s.handleComputersList(conn, raw)
 	case "brain_snapshot":
 		s.sendBrainSnapshot(conn, raw.RequestID)
 	case "brain_context":
