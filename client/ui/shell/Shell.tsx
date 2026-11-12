@@ -117,12 +117,11 @@ function page(route: Route, index: () => number): JSX.Element {
 }
 
 /**
- * On the desktops and the web a page draws its own header: it learns whether there is a Back
- * (the stack holds more than home) and what Back does. Around the stack, not each page: a
- * NavStack's page must be its NavPage.
+ * A page learns whether there is a Back (the stack holds more than home) and what Back does: the
+ * desktops and the web draw their own header, and on iOS and Android Back carries the connection
+ * mark itself (SPEC §1.3). Around the stack, not each page: a NavStack's page must be its NavPage.
  */
 function Paged<R>(props: { nav: NavStackState<R>; children: JSX.Element }) {
-  if (mobile) return props.children;
   return <PageStack.Provider value={{ canGoBack: () => props.nav.routes().length > 1, back: () => props.nav.pop() }}>{props.children}</PageStack.Provider>;
 }
 

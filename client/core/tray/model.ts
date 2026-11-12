@@ -389,3 +389,14 @@ export function trayModel(input: TrayInput): TrayModel {
     done,
   };
 }
+
+/**
+ * SPEC §1.3, "the connection mark follows you": on a pushed page, while the computer is offline,
+ * connecting or must be paired again, Back carries an 8 pt dot (grey; red for Pair again) and says it.
+ */
+export function backMark(kind: StateKind): { tone: "grey" | "red"; label: string } | null {
+  if (kind === "offline") return { tone: "grey", label: "Back · Offline" };
+  if (kind === "connecting") return { tone: "grey", label: "Back · Connecting" };
+  if (kind === "pair") return { tone: "red", label: "Back · Pair again" };
+  return null;
+}
