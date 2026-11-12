@@ -58,7 +58,7 @@
   },
   "android": {
     "min_api": 29,
-    "ndk_note": "Verified via ELF .note.android.ident API level 29 (0x1d) on libghostty_vt.so built from the vt-1.0.0 release (re-verify on 1.0.1); file(1) reports 'for Android 29'.",
+    "ndk_note": "Verified via ELF .note.android.ident API level 29 (0x1d) on libghostty_vt.so built from the vt-1.0.1 release (build-libghostty.sh asserts it on every build); file(1) reports 'for Android 29'.",
     "forbidden_undefined_symbols": [
       "shm_open",
       "shm_unlink"
