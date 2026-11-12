@@ -7,12 +7,13 @@ import { changeAgentUse, installDaemonUpdate } from "../../core/settings/compute
 import { computerProblemsMayChange } from "../../core/settings/computerModel";
 import { Icon, type IconName } from "../kit/Icon";
 import { Notice, Page, PillButton, Row, Section } from "../kit/kit";
-import { followFriends, friendsEnabled } from "../more/friends/state";
+import { followFriends, friendsEnabled, unread } from "../more/friends/state";
+import { flowState } from "../more/extensions/plugins";
 import type { MorePage, PageNav } from "../more/routes";
-import { currentPathMark, forgetConnectionIssue, probeComputers, removedNotice } from "../more/settings/computers";
+import { currentPathMark, forgetConnectionIssue, probeComputers, removedNotice, statusWord } from "../more/settings/computers";
 import { otherState } from "./computers";
 import { PetSprite } from "../pets/PetSprite";
-import { connection, current, resumeConnection, servers, switchTo } from "../session";
+import { connection, current, resumeConnection, servers, switchTo, transportPath } from "../session";
 import { goHome, nav } from "../shell/nav";
 import { updatePending } from "../update/update";
 import { computerAgentUse, computerUpdate, fixRows, minComputerVersion, readComputer } from "./state";
@@ -23,12 +24,16 @@ export { catNeedsYou } from "./state";
 /** The header block's connection line (SPEC §1.3: the computer page says the connection in its header). */
 const WORDS = { connected: "Connected", connecting: "Connecting…", waiting: "Offline", idle: "Not connected" } as const;
 
-const RARE: { title: string; icon: IconName; route: MorePage; lab?: boolean }[] = [
+/**
+ * The rare places, each with its value (SPEC §11 Computer page row) where the phone already knows it: Extensions'
+ * connected accounts once listed, Friends' unread. Screen, Stats and Resources would each need a request of their own.
+ */
+const RARE: { title: string; icon: IconName; route: MorePage; lab?: boolean; value?: () => string | undefined }[] = [
   { title: "Screen", icon: "eye", route: { name: "screen" } },
-  { title: "Extensions", icon: "plugins", route: { name: "extensions" } },
+  { title: "Extensions", icon: "plugins", route: { name: "extensions" }, value: () => (flowState().loaded && flowState().accounts.length ? String(flowState().accounts.length) : undefined) },
   { title: "Stats", icon: "stats", route: { name: "stats" } },
   { title: "Resources", icon: "resources", route: { name: "resources" } },
-  { title: "Friends", icon: "people", route: { name: "friends" }, lab: true },
+  { title: "Friends", icon: "people", route: { name: "friends" }, lab: true, value: () => (unread() > 0 ? `${unread()} new` : undefined) },
 ];
 
 /** Friends is asked about once, the first time the computer page shows (not at every start). */
@@ -52,21 +57,33 @@ function useComputer(server: StoredServer): void {
   void switchTo(server).then(() => goHome());
 }
 
+/** "Connected · 18 ms" while the phone has measured the way there, else "Connected · LAN" (how it reaches it), else the word. */
+function connectionTail(): string {
+  if (connection() !== "connected") return "";
+  const rtt = transportPath()?.rttMs;
+  if (rtt !== null && rtt !== undefined && Number.isFinite(rtt) && rtt > 0) return `${Math.round(rtt)} ms`;
+  return currentPathMark()?.label ?? "";
+}
+
+/** The header block (SPEC §11 Computer page): the 72 pt cat beside the name at display 32/700, the connection line under it. */
 function CatHeader(props: { nav: PageNav }) {
   const mark = () => currentPathMark();
   return (
     <View class="gap-1 pt-2">
-      <PetSprite testID="computer-cat" state={() => (connection() === "connected" ? "idle" : connection() === "connecting" ? "waking" : "offline")} size={72} />
-      <Button testID="computer-details" accessibilityLabel={`${current()?.name ?? "This computer"}, details`} onPress={() => current() && props.nav.push({ name: "settings-computer", id: current()!.id })}
-        class="mt-2 flex-row items-center gap-1.5 self-start active:opacity-70">
-        <Text role="header" class="text-display font-bold tracking-display line-clamp-1">{current()?.name || current()?.url || "Computer"}</Text>
-        <Icon name="chevron-right" size={20} tone="faint" />
-      </Button>
-      <View testID="computer-connection" class="flex-row items-center gap-2" onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
-        accessible accessibilityLabel={[WORDS[connection()], mark()?.label].filter(Boolean).join(", ")}>
-        <View class={connection() === "connected" ? "size-2 rounded-full bg-add" : "size-2 rounded-full border-2 border-muted-foreground"} />
-        <Text class="text-sub text-muted-foreground">{WORDS[connection()]}</Text>
-        {mark() ? <View testID="computer-path" accessibilityElementsHidden><Icon name={mark()!.kind === "relay" ? "cloud" : "link"} size={15} tone="faint" /></View> : null}
+      <View class="flex-row items-center gap-3">
+        <PetSprite testID="computer-cat" state={() => (connection() === "connected" ? "idle" : connection() === "connecting" ? "waking" : "offline")} size={72} />
+        <View class="min-w-0 flex-1 gap-0.5">
+          <Button testID="computer-details" accessibilityLabel={`${current()?.name ?? "This computer"}, details`} onPress={() => current() && props.nav.push({ name: "settings-computer", id: current()!.id })}
+            class="self-start active:opacity-70">
+            <Text role="header" class="text-display font-bold tracking-display line-clamp-1">{current()?.name || current()?.url || "Computer"}</Text>
+          </Button>
+          <View testID="computer-connection" class="flex-row items-center gap-2" onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
+            accessible accessibilityLabel={[WORDS[connection()], connectionTail()].filter(Boolean).join(", ")}>
+            <View class={connection() === "connected" ? "size-2 rounded-full bg-add" : "size-2 rounded-full border-2 border-muted-foreground"} />
+            <Text class="text-sub text-muted-foreground">{WORDS[connection()]}</Text>
+            {connectionTail() ? <Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{`· ${connectionTail()}`}</Text> : null}
+          </View>
+        </View>
       </View>
       {pathDetail() ? <Text testID="computer-path-detail" class="text-sub text-muted-foreground">{pathDetail()}</Text> : null}
     </View>
@@ -194,6 +211,22 @@ export function ComputerPage(props: {
       ) : null}
 
       <Section title="Computers" testID="computers">
+        {/* This computer first: its row and its ⓘ open its details (it is already the one in use). */}
+        {current() ? (
+          <Row
+            testID={`computer-${current()!.id}`}
+            icon="desktop"
+            title={current()!.name || current()!.url}
+            subtitle={statusWord(current()!) || undefined}
+            onPress={() => props.nav.push({ name: "settings-computer", id: current()!.id })}
+            trailing={
+              <Button testID={`computer-${current()!.id}-info`} accessibilityLabel={`${current()!.name || "This computer"} details`} onPress={() => props.nav.push({ name: "settings-computer", id: current()!.id })}
+                class="size-11 items-center justify-center active:opacity-70">
+                <Icon name="info" size={22} tone="soft" />
+              </Button>
+            }
+          />
+        ) : null}
         {others().map((server) => {
           const state = () => otherState(server);
           return (
@@ -225,7 +258,7 @@ export function ComputerPage(props: {
       <Section>
         {/* Friends is a phone Lab: v0.3.1's web app had none. */}
         {RARE.filter((place) => !place.lab || (platform.os !== "web" && friendsEnabled())).map((place) => (
-          <Row testID={`computer-${place.route.name}`} icon={place.icon} title={place.title} chevron onPress={() => props.nav.push(place.route)} />
+          <Row testID={`computer-${place.route.name}`} icon={place.icon} title={place.title} value={place.value?.()} chevron onPress={() => props.nav.push(place.route)} />
         ))}
       </Section>
 
