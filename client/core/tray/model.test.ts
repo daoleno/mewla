@@ -286,3 +286,18 @@ describe("the daemon's run fields (WIRE §7, §9)", () => {
     expect(requestsOf(input({ workers: [worker("q", { status: "blocked", prompt })] }))[0]).toMatchObject({ kind: "prompt", title: "/etc/hostname" });
   });
 });
+
+test("a quiet Work under Running ends in its state in words, never a date (SPEC 1.2, §11 Tray row end)", () => {
+  const m = trayModel(input({ openWork: [
+    { work_id: "q", title: "Docs", status: "open", updated_at: "2026-11-11T09:00:00Z" },
+    { work_id: "w", title: "Deploy", status: "waiting", wait_for: "the deploy window", updated_at: "2026-11-11T09:00:00Z" },
+  ] }));
+  expect(m.running.find((r) => r.key === "work:q")?.end).toBe("Queued");
+  expect(m.running.find((r) => r.key === "work:w")?.end).toBe("Waiting");
+  expect(m.running.every((r) => r.live || r.end === "Queued" || r.end === "Waiting")).toBe(true);
+});
+
+test("the tray's headline counts what works, not the quiet Work under Running", () => {
+  const m = trayModel(input({ workers: [worker("a")], openWork: [{ work_id: "q", title: "Docs", status: "open" }] }));
+  expect(m.title).toBe("1 running");
+});

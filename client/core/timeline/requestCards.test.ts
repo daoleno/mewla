@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import { requestsOf } from "../tray/model";
-import { openCardKey, promptParts, requestCardsOf, sealAction, type RequestCardsInput } from "./requestCards";
+import { openCardKey, optionParts, promptParts, requestCardsOf, sealAction, type RequestCardsInput } from "./requestCards";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
 
@@ -99,4 +99,10 @@ test("an older daemon's Tip wrapped by a narrow terminal goes whole, its tail is
 test("a Tip the daemon stripped but whose wrapped tail it left first: the tail is not the description", () => {
   expect(promptParts('mode" below\nFetch HTTP headers from example.edu\ncurl -sI https://example.edu\nThis command requires approval\n\nDo you want to proceed?', "curl -sI https://example.edu"))
     .toEqual({ question: "Do you want to proceed?", command: "curl -sI https://example.edu", notes: "Fetch HTTP headers from example.edu" });
+});
+
+test("an option row: the label up to the first ' · ', the rest its soft line; the agent's number and › dropped", () => {
+  expect(optionParts("Yes, and switch to auto mode · auto mode handles these prompts for")).toEqual({ label: "Yes, and switch to auto mode", detail: "auto mode handles these prompts for" });
+  expect(optionParts("2. Yes, and don’t ask again for: curl * ›")).toEqual({ label: "Yes, and don’t ask again for: curl *", detail: "" });
+  expect(optionParts("No", "Tell Claude what to do instead")).toEqual({ label: "No", detail: "Tell Claude what to do instead" });
 });

@@ -121,3 +121,20 @@ export function elapsedShort(since: number | undefined, now: number): string {
   const hours = Math.floor(minutes / 60);
   return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
 }
+
+/**
+ * Whether a Session's thread shows its "Working" line (SPEC §11 Working line): only while the agent works on a
+ * turn, so never while one of its requests is open (a prompt, a decision) nor once the daemon says it is
+ * blocked or ended. An idle-or-older daemon's `unknown` leaves it to the transcript's own activity.
+ */
+export function workingLineShown(worker: Pick<Worker, "status" | "prompt" | "approvals"> | undefined, transcriptRunning: boolean): boolean {
+  if (!transcriptRunning) return false;
+  if (!worker) return true;
+  if (worker.prompt || (worker.approvals ?? []).some((approval) => !isQuestionApproval(approval))) return false;
+  return worker.status === "running" || worker.status === "unknown";
+}
+
+/** When the Working line's run began: the daemon's `running_since` (WIRE §9), else the transcript's turn start. */
+export function workingSince(worker: Pick<Worker, "running_since"> | undefined, transcriptStart: string | undefined): string | undefined {
+  return worker?.running_since ? new Date(worker.running_since).toISOString() : transcriptStart;
+}
