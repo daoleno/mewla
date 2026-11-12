@@ -25,6 +25,8 @@ export function Page(props: {
   eyebrow?: string;
   /** The display title when it is not the page's name (Stats' total, a folder's name). */
   displayTitle?: string;
+  /** A detail page's own top block in place of the display title (a service's tile, name and state). */
+  hero?: JSX.Element;
   testID?: string;
   headerRight?: JSX.Element;
   refreshing?: boolean;
@@ -50,7 +52,7 @@ export function Page(props: {
     <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}
       onScroll={display ? (e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY) : undefined} scrollEventThrottle={display ? 64 : undefined}>
       <View class="w-full self-center" style={{ maxWidth: width() }}>
-        {display ? <DisplayTitle eyebrow={props.eyebrow} title={props.displayTitle ?? props.title} /> : null}
+        {display ? (props.hero ?? <DisplayTitle eyebrow={props.eyebrow} title={props.displayTitle ?? props.title} />) : null}
         {props.children}
       </View>
     </Scroll>
@@ -108,6 +110,39 @@ export function Tile(props: { size?: 28 | 36 | 64; icon?: IconName; mark?: strin
     <View testID={props.testID} class="items-center justify-center bg-background" style={{ width: size(), height: size(), borderRadius: radius() }}>
       {props.children ?? (props.icon ? <Icon name={props.icon} size={size() === 64 ? 32 : size() === 36 ? 20 : 16} tone="ink" /> : props.mark ? <Text class="font-mono text-caption font-semibold">{props.mark}</Text> : null)}
     </View>
+  );
+}
+
+/** The search field under a collection's title (SPEC §15): 44 pt on the surface, radius 14, a clear button once it holds text. */
+export function SearchField(props: { value: string; placeholder: string; onChange: (value: string) => void; accessibilityLabel?: string; testID?: string }) {
+  return (
+    <View class="min-h-[44px] flex-row items-center gap-2 rounded-[14px] bg-card px-3">
+      <Icon name="search" size={16} tone="soft" />
+      <Input
+        testID={props.testID}
+        accessibilityLabel={props.accessibilityLabel ?? props.placeholder}
+        class="min-h-[44px] flex-1 py-2 text-body"
+        value={props.value}
+        placeholder={props.placeholder}
+        autoCapitalize="none"
+        autoCorrect={false}
+        onChange={({ value }) => props.onChange(value)}
+      />
+      {props.value ? (
+        <Button accessibilityLabel="Clear search" onPress={() => props.onChange("")} class="size-8 items-center justify-center active:opacity-60">
+          <Icon name="close-circle" size={16} tone="faint" />
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
+/** A small ghost button on a row (Connect, Reconnect, Allow): 32 pt, canvas pill, 15/600. */
+export function RowButton(props: { label: string; onPress: () => void; disabled?: boolean; accessibilityLabel?: string; testID?: string }) {
+  return (
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} class="h-8 items-center justify-center rounded-full bg-background px-3.5 active:opacity-70 disabled:opacity-40">
+      <Text class="text-sub font-semibold">{props.label}</Text>
+    </Button>
   );
 }
 

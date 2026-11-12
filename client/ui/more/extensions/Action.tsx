@@ -13,7 +13,7 @@ export function Action(props: { label: string; onPress: () => void; filled?: boo
       class={`min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl px-4 active:opacity-70 disabled:opacity-50 ${props.filled ? "bg-primary" : "bg-secondary"}`}
     >
       {props.busy ? <Spinner size={14} tone={props.filled ? "canvas" : "soft"} /> : null}
-      <Text class={`text-base font-medium ${props.filled ? "text-primary-foreground" : props.destructive ? "text-destructive" : ""}`}>{props.label}</Text>
+      <Text class={`text-body font-semibold ${props.filled ? "text-primary-foreground" : props.destructive ? "text-destructive" : ""}`}>{props.label}</Text>
     </Button>
   );
 }

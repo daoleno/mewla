@@ -1,7 +1,7 @@
 import { cleanup, computed, effect, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import { BackHandler } from "nsh/mobile";
 import type { JSX } from "nsh";
-import { Button, Input } from "nsh/base";
+import { Button } from "nsh/base";
 import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
 import { agentExtensionsScopeLabel, pluginsForScope, skillCopyScope, skillsForScope, type AgentExtensionsScope } from "../../../../core/extensions/agentExtensionsModel";
 import type { InstalledPluginCopy } from "../../../../core/extensions/pluginsManagement";
@@ -11,7 +11,7 @@ import { filterLogicalSkills, MANAGED_SKILL_AGENTS, skillCopyLocation, type Logi
 import { skillRowSupportsDelete, type SkillsSurfaceSection } from "../../../../core/extensions/skillsSurfaceModel";
 import { daemon, daemonState } from "../../daemon";
 import { Icon, type IconName } from "../../../kit/Icon";
-import { EmptyState, Notice, Page, PillButton, Spinner } from "../../../kit/kit";
+import { EmptyState, Notice, Page, PillButton, SearchField, Spinner } from "../../../kit/kit";
 import { Segmented } from "../../../kit/Segmented";
 import type { PageNav } from "../../routes";
 import { isManaged, PluginCopyCard, PluginDetails, SheetHeader, SkillInspector } from "./Inspector";
@@ -167,9 +167,9 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
           <View class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2">
             <View class="min-w-0 flex-1 gap-0.5">
               <AgentMarks agents={copy.agents as ManagedSkillAgent[]} size={16} />
-              <Text class="text-sm line-clamp-2">{location.label}</Text>
-              <View selectable><Text class="font-mono text-xs text-muted-foreground line-clamp-1">{location.path}</Text></View>
-              {deletable() ? null : <Text class="text-xs text-muted-foreground">{copy.capability.reason || "This copy cannot be deleted from here."}</Text>}
+              <Text class="text-sub line-clamp-2">{location.label}</Text>
+              <View selectable><Text class="font-mono text-code text-muted-foreground line-clamp-1">{location.path}</Text></View>
+              {deletable() ? null : <Text class="text-caption text-muted-foreground">{copy.capability.reason || "This copy cannot be deleted from here."}</Text>}
             </View>
             {deletable() ? (
               <Button
@@ -203,6 +203,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
 
   return (
     <Page
+      display
       title={agentExtensionsScopeLabel(props.scope)}
       testID="agent-page"
       refreshing={loadingNow() && Boolean(skillsRequestData(skillsState()))}
@@ -216,7 +217,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
       {daemon() && projectCwd() ? (
         <View testID="project-scope" class="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1" accessible accessibilityLabel={`Project ${projectName()}`}>
           <Icon name="folder" size={14} />
-          <Text class="text-xs line-clamp-1">{projectName()}</Text>
+          <Text class="text-caption line-clamp-1">{projectName()}</Text>
         </View>
       ) : null}
       {hasPlugins ? (
@@ -298,26 +299,11 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
 function Toolbar(props: { placeholder: string; label: string; query: string; onQuery: (value: string) => void; filterLabel: string; filtered: boolean; onFilters: () => void; testID: string }) {
   return (
     <View class="mt-4 flex-row items-center gap-2">
-      <View class="min-h-[44px] flex-1 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3">
-        <Icon name="search" size={16} />
-        <Input
-          testID={`${props.testID}-search`}
-          accessibilityLabel={props.label}
-          class="min-h-[44px] flex-1 py-2 text-base"
-          value={props.query}
-          placeholder={props.placeholder}
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChange={({ value }) => props.onQuery(value)}
-        />
-        {props.query ? (
-          <Button accessibilityLabel="Clear search" onPress={() => props.onQuery("")} class="size-8 items-center justify-center active:opacity-60">
-            <Icon name="close-circle" size={16} tone="faint" />
-          </Button>
-        ) : null}
+      <View class="flex-1">
+        <SearchField testID={`${props.testID}-search`} accessibilityLabel={props.label} placeholder={props.placeholder} value={props.query} onChange={props.onQuery} />
       </View>
-      <Button testID={`${props.testID}-filter`} accessibilityLabel={props.filterLabel} onPress={props.onFilters} class={`size-11 items-center justify-center rounded-xl border border-border active:bg-accent ${props.filtered ? "bg-secondary" : "bg-card"}`}>
-        <Icon name="options" size={18} tone={props.filtered ? "ink" : "soft"} />
+      <Button testID={`${props.testID}-filter`} accessibilityLabel={props.filterLabel} onPress={props.onFilters} class={`size-11 items-center justify-center rounded-[14px] active:bg-accent ${props.filtered ? "bg-primary" : "bg-card"}`}>
+        <Icon name="options" size={18} tone={props.filtered ? "canvas" : "soft"} />
       </Button>
     </View>
   );
@@ -327,7 +313,7 @@ function Toolbar(props: { placeholder: string; label: string; query: string; onQ
 function Chip(props: { label: string; removeLabel: string; onRemove: () => void }) {
   return (
     <Button accessibilityLabel={props.removeLabel} onPress={props.onRemove} class="flex-row items-center gap-1 rounded-full bg-secondary px-3 py-1 active:opacity-70">
-      <Text class="text-xs font-medium">{props.label}</Text>
+      <Text class="text-caption font-semibold">{props.label}</Text>
       <Icon name="close" size={12} />
     </Button>
   );
@@ -338,8 +324,8 @@ function ItemRow(props: { testID: string; name: string; summary: string; agents:
   return (
     <View class="flex-row items-center">
       <Button testID={props.testID} accessibilityLabel={props.openLabel} onPress={props.onOpen} class="min-w-0 flex-1 gap-1 py-3 pl-4 pr-2 active:bg-accent">
-        <Text class="text-base font-medium line-clamp-1">{props.name}</Text>
-        <Text class="text-sm text-muted-foreground line-clamp-2">{props.summary}</Text>
+        <Text class="text-body font-semibold line-clamp-1">{props.name}</Text>
+        <Text class="text-sub text-muted-foreground line-clamp-2">{props.summary}</Text>
         <AgentMarks agents={props.agents} size={15} />
       </Button>
       <Button testID={`${props.testID}-action`} accessibilityLabel={props.action.label} disabled={props.action.disabled} onPress={props.action.onPress} class="mr-1 size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50">
@@ -352,7 +338,7 @@ function ItemRow(props: { testID: string; name: string; summary: string; agents:
 
 function Card(props: { children?: JSX.Element }) {
   return (
-    <View class="mt-3 overflow-hidden rounded-2xl border border-border bg-card">
+    <View class="mt-3 overflow-hidden rounded-(--radius-group) bg-card">
       <View class="-mb-px">{props.children}</View>
     </View>
   );
@@ -536,7 +522,7 @@ const CAPABILITY_LABEL: Record<PluginCapabilityFilter, string> = { all: "All", u
 function Choice<K extends string>(props: { title: string; options: readonly K[]; labels: Record<K, string>; value: K; onChange: (value: K) => void; testID: string }) {
   return (
     <View class="mt-4 gap-2">
-      <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
+      <Text class="text-sub font-semibold text-muted-foreground" role="header">{props.title}</Text>
       <View class="flex-row flex-wrap gap-2">
         {props.options.map((option) => (
           <Button
@@ -546,7 +532,7 @@ function Choice<K extends string>(props: { title: string; options: readonly K[];
             onPress={() => props.onChange(option)}
             class={`rounded-full border px-3 py-1.5 active:opacity-70 ${props.value === option ? "border-foreground bg-secondary" : "border-border"}`}
           >
-            <Text class="text-sm">{props.labels[option]}</Text>
+            <Text class="text-sub">{props.labels[option]}</Text>
           </Button>
         ))}
       </View>
@@ -557,7 +543,7 @@ function Choice<K extends string>(props: { title: string; options: readonly K[];
 function AgentChoice(props: { agents: readonly ManagedSkillAgent[]; value: readonly ManagedSkillAgent[]; onChange: (agents: ManagedSkillAgent[]) => void; title: string }) {
   return (
     <View class="mt-4 flex-col gap-2" style={{ display: props.agents.length < 2 ? "none" : "flex" }}>
-      <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
+      <Text class="text-sub font-semibold text-muted-foreground" role="header">{props.title}</Text>
       <View class="flex-row flex-wrap gap-2">
         {props.agents.map((agent) => {
           const on = props.value.includes(agent);
@@ -569,7 +555,7 @@ function AgentChoice(props: { agents: readonly ManagedSkillAgent[]; value: reado
               onPress={() => props.onChange(on ? props.value.filter((item) => item !== agent) : [...props.value, agent])}
               class={`rounded-full border px-3 py-1.5 active:opacity-70 ${on ? "border-foreground bg-secondary" : "border-border"}`}
             >
-              <Text class="text-sm">{skillAgentLabel(agent)}</Text>
+              <Text class="text-sub">{skillAgentLabel(agent)}</Text>
             </Button>
           );
         })}

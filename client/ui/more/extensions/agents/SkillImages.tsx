@@ -42,7 +42,7 @@ export function SkillImage(props: { path: string | null; alt?: string; problem?:
           <Image src={src()} class="h-48 w-full rounded-xl" style={{ objectFit: "contain" }} accessibilityLabel={props.alt || props.path || "Image"} />
         </View>
       ) : error() ? (
-        <Text class="text-xs text-muted-foreground">{`${props.alt ? `${props.alt}: ` : ""}${error()}`}</Text>
+        <Text class="text-caption text-muted-foreground">{`${props.alt ? `${props.alt}: ` : ""}${error()}`}</Text>
       ) : (
         <Spinner size={16} />
       )}
@@ -84,15 +84,15 @@ function ViewerBody(props: { images: readonly string[]; start: string; read: Ima
     <View testID="skill-image-viewer" class="flex-1 gap-3">
       <View class="flex-row items-center gap-3">
         <View class="min-w-0 flex-1">
-          <Text class="font-mono text-sm line-clamp-1">{list[index()]!}</Text>
-          {list.length > 1 ? <Text class="text-xs text-muted-foreground">{`${index() + 1} of ${list.length}`}</Text> : null}
+          <Text class="font-mono text-code line-clamp-1">{list[index()]!}</Text>
+          {list.length > 1 ? <Text class="text-caption text-muted-foreground">{`${index() + 1} of ${list.length}`}</Text> : null}
         </View>
         <Button accessibilityLabel="Close image" onPress={props.onClose} class="size-11 items-center justify-center rounded-full active:bg-accent">
           <Icon name="close" size={20} />
         </Button>
       </View>
       <View class="flex-1 items-center justify-center" panActivation={{ activeOffsetX: 24, failOffsetY: 14 }} onPanEnd={(event) => !event.cancelled && Math.abs(event.translation.x) > 60 && go(event.translation.x < 0 ? 1 : -1)}>
-        {src() ? <Image src={src()} class="h-full w-full" style={{ objectFit: "contain" }} accessibilityLabel={list[index()]!} /> : error() ? <Text class="text-sm text-muted-foreground">{error()}</Text> : <Spinner />}
+        {src() ? <Image src={src()} class="h-full w-full" style={{ objectFit: "contain" }} accessibilityLabel={list[index()]!} /> : error() ? <Text class="text-sub text-muted-foreground">{error()}</Text> : <Spinner />}
       </View>
       {list.length > 1 ? (
         <View class="flex-row justify-between">
