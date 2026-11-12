@@ -24,6 +24,10 @@ on:
       old_version:
         description: "Expo release the gate upgrades from (a tag, or latest)"
         default: "latest"
+      android_only:
+        description: "Only the Android host: a Preview-signed APK to hand over (no iOS job)"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}-${{ github.event_name }}
@@ -95,6 +99,7 @@ jobs:
 
   ios:
     name: iOS host (Simulator, upgrade tests)
+    if: github.event_name != 'workflow_dispatch' || !inputs.android_only
     runs-on: xcode-27
     timeout-minutes: 45
     steps:
