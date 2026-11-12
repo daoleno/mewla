@@ -45,6 +45,12 @@ enum {
   MEWLA_VT_BLINK = 64,
   MEWLA_VT_CLUSTER = 128,
   MEWLA_VT_UNDERLINE_SHIFT = 8,
+  /// Drawing hints (the grid and text are the VT's): a one-cell emoji (VS16 or keycap) whose next cell
+  /// is blank, drawn at full size across both; two adjacent regional indicators, the head drawing the
+  /// flag across both runs' cells and the tail no glyph.
+  MEWLA_VT_EMOJI_WIDE = 1 << 11,
+  MEWLA_VT_FLAG_HEAD = 1 << 12,
+  MEWLA_VT_FLAG_TAIL = 1 << 13,
 };
 typedef struct {
   const int32_t *_Nullable meta;

@@ -7,6 +7,10 @@ Maple project), cut down to what a terminal cell needs:
 - MapleMono-NF-Regular.ttf: everything but CJK (Latin, symbols, box drawing, blocks, braille,
   Powerline and Nerd Font icons, including Material Design in plane 15).
 - MapleMono-NF-SemiBold.ttf (bold text): the same without the icons (they are drawn from Regular).
+- MapleMono-NF-Italic.ttf and MapleMono-NF-SemiBoldItalic.ttf (italic, bold italic): only what italic
+  text in a terminal is (ITALIC_RANGES: Latin, Latin-1, Latin Extended-A, Greek, Cyrillic, combining
+  marks, punctuation, currency, arrows). Anything else in an italic run is drawn from the upright face,
+  slanted.
 
 CJK is left to the system face (PingFang, Noto Sans CJK); the renderers centre it in its two cells.
 Hinting is dropped (phones draw at high density), and so is every layout feature but the ones that
@@ -35,6 +39,10 @@ CJK_RANGES = (
     (0xFF00, 0xFFEF), (0x20000, 0x3FFFF),
 )
 ICON_RANGES = ((0xE000, 0xF8FF), (0xF0000, 0x10FFFF))
+ITALIC_RANGES = (
+    (0x20, 0x7E), (0xA0, 0xFF), (0x100, 0x17F), (0x300, 0x36F), (0x370, 0x3FF), (0x400, 0x4FF),
+    (0x2000, 0x206F), (0x20A0, 0x20CF), (0x2190, 0x21FF),
+)
 KEEP_FEATURES = ["ccmp", "locl", "mark", "mkmk"]
 # Every cell the renderers do not draw themselves must come from this face.
 MUST_HAVE = [*range(0x20, 0x7F), 0x23BF, 0x25CF, 0x276F, 0x2192, 0x2026, 0x2713, 0xE0A0, 0xE0A1, 0xE0A2,
@@ -45,9 +53,12 @@ def in_ranges(c, ranges):
     return any(low <= c <= high for low, high in ranges)
 
 
-def subset_font(data: bytes, output: Path, icons: bool) -> None:
+def subset_font(data: bytes, output: Path, icons: bool, italic: bool = False) -> None:
     font = TTFont(io.BytesIO(data))
-    keep = [c for c in font.getBestCmap() if not in_ranges(c, CJK_RANGES) and (icons or not in_ranges(c, ICON_RANGES))]
+    if italic:
+        keep = [c for c in font.getBestCmap() if in_ranges(c, ITALIC_RANGES)]
+    else:
+        keep = [c for c in font.getBestCmap() if not in_ranges(c, CJK_RANGES) and (icons or not in_ranges(c, ICON_RANGES))]
     options = subset.Options()
     options.layout_features = KEEP_FEATURES
     options.name_IDs = ["*"]
@@ -60,10 +71,10 @@ def subset_font(data: bytes, output: Path, icons: bool) -> None:
     subsetter.populate(unicodes=keep)
     subsetter.subset(font)
     font.save(output)
-    verify(TTFont(io.BytesIO(data)), TTFont(output), output, keep, icons)
+    verify(TTFont(io.BytesIO(data)), TTFont(output), output, keep, icons, italic)
 
 
-def verify(before: TTFont, after: TTFont, output: Path, keep, icons: bool) -> None:
+def verify(before: TTFont, after: TTFont, output: Path, keep, icons: bool, italic: bool) -> None:
     for table, fields in {"head": ["unitsPerEm"], "hhea": ["ascent", "descent", "lineGap"],
                           "OS/2": ["sTypoAscender", "sTypoDescender", "sTypoLineGap", "usWinAscent", "usWinDescent"]}.items():
         for field in fields:
@@ -74,7 +85,7 @@ def verify(before: TTFont, after: TTFont, output: Path, keep, icons: bool) -> No
         # One cell, or zero for a combining mark.
         assert after["hmtx"][glyph][0] == before["hmtx"][old[c]][0] in (0, 600), hex(c)
     for c in MUST_HAVE:
-        if icons or not in_ranges(c, ICON_RANGES):
+        if (icons or not in_ranges(c, ICON_RANGES)) and (not italic or in_ranges(c, ITALIC_RANGES)):
             assert c in new, hex(c)
     features = {r.FeatureTag for r in after["GSUB"].table.FeatureList.FeatureRecord} if "GSUB" in after else set()
     assert not features & {"calt", "liga", "dlig", "rlig"}, features
@@ -92,6 +103,8 @@ def main() -> None:
     with zipfile.ZipFile(archive) as z:
         subset_font(z.read("MapleMono-NF-Regular.ttf"), out / "MapleMono-NF-Regular.ttf", icons=True)
         subset_font(z.read("MapleMono-NF-SemiBold.ttf"), out / "MapleMono-NF-SemiBold.ttf", icons=False)
+        subset_font(z.read("MapleMono-NF-Italic.ttf"), out / "MapleMono-NF-Italic.ttf", icons=False, italic=True)
+        subset_font(z.read("MapleMono-NF-SemiBoldItalic.ttf"), out / "MapleMono-NF-SemiBoldItalic.ttf", icons=False, italic=True)
         (out / "OFL.txt").write_bytes(z.read("LICENSE.txt"))
 
 

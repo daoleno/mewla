@@ -53,6 +53,12 @@
     "what": "Steady underline cursor",
     "source": "gen.py"
   },
+  "emoji": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Narrow emoji (VS16, keycap) spilling into a blank cell or fitted, flags from regional-indicator pairs",
+    "source": "gen.py"
+  },
   "gitdiff": {
     "cols": 52,
     "rows": 30,

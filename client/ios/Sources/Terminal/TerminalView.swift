@@ -68,8 +68,12 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   private var pixelScale: CGFloat = 2
   private var ctFont: CTFont = TerminalFonts.regular(8)
   private var ctBold: CTFont = TerminalFonts.bold(8)
+  /// Maple's real italic (Latin, Greek, Cyrillic, punctuation); a character it lacks is drawn from the
+  /// upright face slanted (`ctSlant`, `ctBoldSlant`).
   private var ctItalic: CTFont = TerminalFonts.regular(8)
   private var ctBoldItalic: CTFont = TerminalFonts.bold(8)
+  private var ctSlant: CTFont = TerminalFonts.regular(8)
+  private var ctBoldSlant: CTFont = TerminalFonts.bold(8)
   /// The regular face as a UIFont (the composition's width).
   private var font: UIFont { ctFont as UIFont }
   private(set) var cellW: CGFloat = 0
@@ -77,8 +81,9 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   private var baseline: CGFloat = 0
   /// The one line weight (box drawing, underline, strikethrough, cursor), in points.
   private var thickness: CGFloat = 1
-  /// Whether the bundled face has each BMP character (then its advance is one cell), per weight.
-  private var inFont: [[UInt16: Bool]] = [[:], [:]]
+  /// Whether the bundled face has each BMP character (then its advance is one cell), per face:
+  /// regular, bold, italic, bold italic.
+  private var inFont: [[UInt16: Bool]] = [[:], [:], [:], [:]]
   private var glyphOps: [UInt32: [MewlaGlyphOp]] = [:]
 
   private var background = CssColor(rgb: 0x141210)
@@ -164,15 +169,17 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     let snapped = points * (cellPx / pixelScale) / max(advance, 0.1)
     ctFont = TerminalFonts.regular(snapped)
     ctBold = TerminalFonts.bold(snapped)
-    ctItalic = Self.slanted(ctFont)
-    ctBoldItalic = Self.slanted(ctBold)
+    ctSlant = Self.slanted(ctFont)
+    ctBoldSlant = Self.slanted(ctBold)
+    ctItalic = TerminalFonts.italic(snapped, bold: false) ?? ctSlant
+    ctBoldItalic = TerminalFonts.italic(snapped, bold: true) ?? ctBoldSlant
     cellW = cellPx / pixelScale
     let ascent = CTFontGetAscent(ctFont), descent = CTFontGetDescent(ctFont)
     let cellHPx = max(1, ((ascent + descent) * pixelScale).rounded())
     cellH = cellHPx / pixelScale
     baseline = (((cellH - ascent - descent) / 2 + ascent) * pixelScale).rounded() / pixelScale
     thickness = CGFloat(mewla_glyph_thickness(Int32(cellHPx))) / pixelScale
-    inFont = [[:], [:]]
+    inFont = [[:], [:], [:], [:]]
     glyphOps.removeAll()
     for line in grid { line.cells.forEach { $0.items = nil } }
     for line in history { line.cells.forEach { $0.items = nil } }
@@ -519,26 +526,32 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
           ctx.fill(CGRect(x: CGFloat(c0) * cellW, y: y, width: CGFloat(c1 - c0 + 1) * cellW, height: cellH))
         }
       }
-      for cell in content.cells { draw(cell, y: y, in: ctx) }
+      for (k, cell) in content.cells.enumerated() {
+        draw(cell, y: y, in: ctx, next: k + 1 < content.cells.count ? content.cells[k + 1].run : nil)
+      }
     }
     drawCursor(in: ctx)
     drawHandles(in: ctx)
   }
 
-  private func faceFor(_ run: TerminalRun) -> CTFont {
-    run.bold ? (run.italic ? ctBoldItalic : ctBold) : (run.italic ? ctItalic : ctFont)
+  private func faceIndex(_ run: TerminalRun) -> Int { (run.bold ? 1 : 0) + (run.italic ? 2 : 0) }
+
+  private func face(_ index: Int) -> CTFont { [ctFont, ctBold, ctItalic, ctBoldItalic][index] }
+
+  /// What draws a character the run's face lacks: the upright face (slanted in an italic run) and its fallbacks.
+  private func uprightFace(_ run: TerminalRun) -> CTFont {
+    run.italic ? (run.bold ? ctBoldSlant : ctSlant) : (run.bold ? ctBold : ctFont)
   }
 
   private func isDrawn(_ cp: UInt32) -> Bool { mewla_glyph_is_drawn(cp) }
 
-  /// Whether the bundled face draws this character itself (its advance is then exactly one cell).
-  private func hasGlyph(_ unit: UInt16, bold: Bool) -> Bool {
-    let k = bold ? 1 : 0
-    if let known = inFont[k][unit] { return known }
+  /// Whether bundled face `index` draws this character itself (its advance is then exactly one cell).
+  private func hasGlyph(_ unit: UInt16, face index: Int) -> Bool {
+    if let known = inFont[index][unit] { return known }
     var u = unit
     var glyph = CGGlyph(0)
-    let found = CTFontGetGlyphsForCharacters(bold ? ctBold : ctFont, &u, &glyph, 1) && glyph != 0
-    inFont[k][unit] = found
+    let found = CTFontGetGlyphsForCharacters(face(index), &u, &glyph, 1) && glyph != 0
+    inFont[index][unit] = found
     return found
   }
 
@@ -552,52 +565,73 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   }
 
   /// What a run draws in `color`: in-face text in one line per stretch, each other glyph on its own.
-  private func items(for run: TerminalRun, color: UInt32) -> [Item] {
-    let face = faceFor(run)
+  /// `next` is the run after it in its row (a flag's second regional indicator).
+  private func items(for run: TerminalRun, color: UInt32, next: TerminalRun?) -> [Item] {
+    let index = faceIndex(run)
+    let primary = face(index)
+    let upright = uprightFace(run)
     let cg = UIColor(argb: color).cgColor
     var out: [Item] = []
     let x0 = CGFloat(run.col) * cellW
+    let fitted = { (units: ArraySlice<UInt16>, x: CGFloat, cells: Int) -> Item in
+      let line = self.ctLine(units, font: upright, color: cg)
+      return .fitted(line, x: x, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), box: CGFloat(cells) * self.cellW)
+    }
+    if run.flags & VtLayout.flagTail != 0 {
+      // A flag's second regional indicator: the first draws the flag across both.
+      return []
+    }
     if run.plain {
+      // Stretches drawn in one face: 0 the run's own, 1 the upright face (an italic run's other characters).
       var seg = -1
+      var segFace = 0
       for k in 0...run.units.count {
         let u: UInt16 = k < run.units.count ? run.units[k] : 0x20
         let drawn = k < run.units.count && isDrawn(UInt32(u))
-        let fits = u != 0x20 && !drawn && hasGlyph(u, bold: run.bold)
-        if !fits, seg >= 0 {
-          out.append(.text(ctLine(run.units[seg..<k], font: face, color: cg), x: x0 + CGFloat(seg) * cellW))
+        var one = -1
+        if u != 0x20, !drawn {
+          if hasGlyph(u, face: index) { one = 0 } else if run.italic, hasGlyph(u, face: index - 2) { one = 1 }
+        }
+        if seg >= 0, one != segFace {
+          out.append(.text(ctLine(run.units[seg..<k], font: segFace == 0 ? primary : upright, color: cg), x: x0 + CGFloat(seg) * cellW))
           seg = -1
         }
         guard k < run.units.count, u != 0x20 else { continue }
         if drawn {
           out.append(.glyph(UInt32(u), x: x0 + CGFloat(k) * cellW))
-        } else if !fits {
-          let line = ctLine(run.units[k..<(k + 1)], font: face, color: cg)
-          out.append(.fitted(line, x: x0 + CGFloat(k) * cellW, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), box: cellW))
+        } else if one < 0 {
+          out.append(fitted(run.units[k..<(k + 1)], x0 + CGFloat(k) * cellW, 1))
         } else if seg < 0 {
           seg = k
+          segFace = one
         }
       }
     } else if !run.units.isEmpty {
       let scalars = Array(String(decoding: run.units, as: UTF16.self).unicodeScalars)
       if scalars.count == 1, isDrawn(scalars[0].value) {
         out.append(.glyph(scalars[0].value, x: x0))
+      } else if run.flags & VtLayout.flagHead != 0, let next {
+        // Two regional indicators: the one flag, centred across both runs' cells.
+        out.append(fitted((run.units + next.units)[...], x0, run.cells + next.cells))
+      } else if run.flags & VtLayout.emojiWide != 0 {
+        // An emoji the VT gives one cell, with a blank cell after it: full size across both.
+        out.append(fitted(run.units[...], x0, 2))
       } else {
-        let line = ctLine(run.units[...], font: face, color: cg)
-        out.append(.fitted(line, x: x0, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), box: CGFloat(run.cells) * cellW))
+        out.append(fitted(run.units[...], x0, run.cells))
       }
     }
     return out
   }
 
-  private func draw(_ cell: Cell, y: CGFloat, in ctx: CGContext, color: UInt32? = nil) {
+  private func draw(_ cell: Cell, y: CGFloat, in ctx: CGContext, color: UInt32? = nil, next: TerminalRun? = nil) {
     let run = cell.run
     let items: [Item]
     if let color {
-      items = self.items(for: run, color: color)
+      items = self.items(for: run, color: color, next: next)
     } else if let made = cell.items {
       items = made
     } else {
-      items = self.items(for: run, color: run.fg)
+      items = self.items(for: run, color: run.fg, next: next)
       cell.items = items
     }
     let ink = color ?? run.fg
@@ -788,7 +822,9 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
       if let under {
         ctx.saveGState()
         ctx.clip(to: CGRect(x: cx, y: y, width: w, height: cellH))
-        draw(under, y: y, in: ctx, color: background.rgb | 0xff000000)
+        let cells = grid[cursorRow].cells
+        let next = cells.firstIndex { $0 === under }.flatMap { $0 + 1 < cells.count ? cells[$0 + 1].run : nil }
+        draw(under, y: y, in: ctx, color: background.rgb | 0xff000000, next: next)
         ctx.restoreGState()
       }
     }
@@ -915,6 +951,9 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     selTo = to
     setNeedsDisplay()
   }
+
+  /// The edit menu (Copy, Paste, Select All) at `point`, as after a long press.
+  func showSelectionMenu(at point: CGPoint) { showMenu(at: point) }
 
   private func showMenu(at point: CGPoint) {
     menuPoint = point
