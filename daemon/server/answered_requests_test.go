@@ -248,3 +248,31 @@ func TestBrainThreadShowsOnlyItsOwnAnsweredRequests(t *testing.T) {
 		}
 	}
 }
+
+// A delegated Worker's request is recorded with the Work it asked for, so the
+// tray history can name it; a Session that runs no Work names none.
+func TestWorkerRequestNamesItsWork(t *testing.T) {
+	srv, _ := ledgerNotificationServer(t, "worker:@ask")
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.SetAnsweredRequests(ledger)
+	workID, ok := srv.brain.ActiveWorkOfSession("worker:@ask")
+	if !ok {
+		t.Fatal("the fixture's Worker runs no Work")
+	}
+	for _, sessionID := range []string{"worker:@ask", "worker:@solo"} {
+		srv.recordAnswered(answered.Request{ID: "prompt:" + sessionID + ":p1", Kind: answered.KindPermission, SessionID: sessionID,
+			Asked: "Push?", Answer: "Yes", Outcome: answered.OutcomeApproved, By: answered.Answerer{Kind: answered.ByDevice}})
+	}
+	if got, _ := ledger.Get("prompt:worker:@ask:p1"); got.WorkID != workID {
+		t.Fatalf("work_id = %q, want %q", got.WorkID, workID)
+	}
+	if got, _ := ledger.Get("prompt:worker:@solo:p1"); got.WorkID != "" {
+		t.Fatalf("a Session without Work named %q", got.WorkID)
+	}
+	if rows := ledger.List(answered.Filter{WorkIDs: map[string]bool{workID: true}}); len(rows) != 1 {
+		t.Fatalf("the Work's history = %+v", rows)
+	}
+}

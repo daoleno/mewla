@@ -39,11 +39,19 @@ func (s *Server) SetAnsweredRequests(ledger *answered.Ledger) {
 	})
 }
 
-// stampAnsweredThread names the Brain thread a request was answered in: the
-// current chat for Brain's own Session, the Work's own thread for its
-// question.
+// stampAnsweredThread names the Work a delegated Worker asked for and the
+// Brain thread a request was answered in: the current chat for Brain's own
+// Session, the Work's own thread for its question.
 func (s *Server) stampAnsweredThread(record *answered.Request) {
-	if record.ThreadID != "" || s.brain == nil {
+	if s.brain == nil {
+		return
+	}
+	if record.WorkID == "" && record.SessionID != "" {
+		if workID, ok := s.brain.ActiveWorkOfSession(record.SessionID); ok {
+			record.WorkID = workID
+		}
+	}
+	if record.ThreadID != "" {
 		return
 	}
 	switch {
