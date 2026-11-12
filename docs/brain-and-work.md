@@ -119,7 +119,7 @@ Every slip carries its next step:
 
 | The Work | You can |
 | --- | --- |
-| Asks a question | Tap one of Brain's answers ("Keep both"), reply in your own words, snooze it until tomorrow morning, or say it is not needed anymore |
+| Asks a question | Tap one of Brain's answers ("Keep both"), reply in your own words, snooze it for an hour, or say it is not needed anymore |
 | Came back | **Accept** it, which closes it, or **Ask Brain about this**, which opens Brain's composer with the Work quoted |
 | Is running | Open its Worker, ask Brain about it, or **Stop** it (after a confirmation; the Worker closes and the Work is cancelled) |
 | Failed | Retry it through Brain, or dismiss it |
@@ -250,7 +250,10 @@ clients, not capabilities: no `codex-high`.
 ## Watch and steer Workers
 
 Workers are in **Sessions** like any other Session: open one, read it as Chat
-or Terminal, type into it. From the computer:
+or Terminal, type into it. A Work's card in Brain's thread lists up to three
+of its Workers (then "N more"), and its page lists every Worker that joined it,
+finished ones too; a Work with several Workers is one row in the tray reading
+"N Workers". From the computer:
 
 ```sh
 mewla worker list --json

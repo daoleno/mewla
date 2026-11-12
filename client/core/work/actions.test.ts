@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { testClock } from "../calendar/testClock";
-import { brainWorkActions, brainWorkAskDraft, brainWorkSlipActions, brainWorkSnoozeUntil, brainWorkUserAction, brainWorkWaitForLine } from "./actions";
+import { brainWorkActions, brainWorkAskDraft, brainWorkSlipActions, brainWorkUserAction, brainWorkWaitForLine } from "./actions";
 import { BRAIN_WORK_STUCK_AFTER_MS, brainWorkSurface } from "./surface";
 import type { BrainCurrentWork } from "./types";
 
@@ -111,10 +110,7 @@ test("slip actions map onto the daemon's user actions", () => {
   expect(brainWorkUserAction("open")).toBeNull();
 });
 
-test("snooze is tomorrow at nine, and Ask Brain quotes the Work", () => {
-  // 22:30 on Oct 8 in Shanghai: tomorrow 09:00 there.
-  const { zones } = testClock(0, "Asia/Shanghai");
-  expect(brainWorkSnoozeUntil(zones, Date.parse("2026-10-08T14:30:00Z"))).toBe(Date.parse("2026-10-09T01:00:00Z"));
+test("Ask Brain quotes the Work", () => {
   expect(brainWorkAskDraft({ title: "sync fix", workId: "w1", summary: "Keep both?" })).toBe("Re: sync fix (work w1)\n> Keep both?\n");
 });
 

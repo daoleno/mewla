@@ -150,7 +150,7 @@ export class FakeDaemon {
         const action = frame.action as string;
         if (action === "close" || action === "dismiss" || action === "stop") work.status = action === "close" ? "done" : "cancelled";
         if (action === "reply") Object.assign(work, { question: undefined, choices: undefined, user_action: { kind: "reply", text: frame.text, at: new Date().toISOString(), admission: "accepted" } });
-        if (action === "snooze") work.snoozed_until = frame.snooze_until;
+        if (action === "snooze") work.snoozed_until = new Date(Date.now() + Number(frame.snooze_seconds) * 1000).toISOString();
         work.unread_result = false;
         reply("brain_work_action", { work_id: frame.id, status: work.status, admission: "accepted" });
         return this.broadcast({ type: "brain_snapshot", brain: this.state.brain ?? {} });
