@@ -1,10 +1,13 @@
 import { cleanup, computed, createMotion, effect, List, platform, signal, Storage, Text, untracked, View } from "nsh";
 import { Button, type NavStackState } from "nsh/base";
-import { DisplayTitle, PillButton, SectionLabel, Tile } from "../kit/kit";
+import { DisplayTitle, PillButton, SectionLabel } from "../kit/kit";
 import { BackHandler } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
+import { sessionRow } from "../../core/tray/model";
+import { clock } from "../calendar/clock";
+import { RowEnd, RowHair, RowText, RowTile } from "../tray/rowParts";
 import { workLinkOf } from "./workLinks";
 import { openPage } from "../shell/nav";
 import { newSessionOpen } from "../screens/NewSession";
@@ -23,8 +26,7 @@ import { getCollapsedSessionSections, getWorkerAliases, markWorkerOpened, setCol
 import { groupWorkersByDirectory } from "../../core/sessions/workerDirectory";
 import { newRowKeys } from "../../core/sessions/newRows";
 import type { Worker } from "../../core/sessions/workers";
-import { AgentIcon } from "../icons/AgentIcon";
-import { Icon, type ColorToken, type IconName } from "../icons/Icon";
+import { Icon, type IconName } from "../icons/Icon";
 import { connection, current, currentTransport, resumeConnection, workers, workersHydrated } from "../session";
 import type { Route } from "../shell/routes";
 import { showAlert } from "../shell/alert";
@@ -52,14 +54,17 @@ void getCollapsedSessionSections(Storage).then((keys) => collapsed.set(new Set(k
 
 const selecting = computed(() => countSessionSelection(selection()) > 0);
 
-/** A row knows where it sits in its folder's surface group: the first rounds the top, the last the bottom and has no hair. */
-type Row = { key: string; kind: "header"; section: SessionListSection } | { key: string; kind: "row"; worker: Worker; first: boolean; last: boolean };
+/**
+ * A row knows where it sits in its folder's surface group: the first rounds the top, the last the bottom and
+ * has no hair. Every folder has its label (SPEC §15 Grouped list); only several fold.
+ */
+type Row = { key: string; kind: "header"; section: SessionListSection; foldable: boolean } | { key: string; kind: "row"; worker: Worker; first: boolean; last: boolean };
 
 const rows = computed<Row[]>(() => {
   const sections = buildSessionListSections(groupWorkersByDirectory(workers()), collapsed(), selecting());
   const out: Row[] = [];
   for (const section of sections) {
-    if (sections.length > 1) out.push({ key: `h:${section.key}`, kind: "header", section });
+    out.push({ key: `h:${section.key}`, kind: "header", section, foldable: sections.length > 1 });
     section.data.forEach((worker, i) => out.push({ key: worker.key, kind: "row", worker, first: i === 0, last: i === section.data.length - 1 }));
   }
   return out;
@@ -112,43 +117,51 @@ async function terminateSelected(): Promise<void> {
   batch.start();
 }
 
-const STATUS_MARK: Record<string, { icon: IconName; color: ColorToken } | undefined> = {
-  done: { icon: "check-circle-fill", color: "muted-foreground" },
-  failed: { icon: "close-circle-fill", color: "destructive" },
-  blocked: { icon: "pause-circle", color: "warning" },
-};
-
-/** A folder's section label (SPEC §15 Grouped list): a folder icon, the name, the count at the right; a tap folds it. */
-function SectionHeader(props: { section: () => SessionListSection }) {
+/**
+ * A folder's section label (SPEC §15 Grouped list): a folder icon, the name, the count at the right, inset
+ * 32 like the tray's labels; with several folders a tap folds it, and a folded one with a Session waiting on
+ * you keeps its red dot.
+ */
+function SectionHeader(props: { section: () => SessionListSection; foldable: () => boolean }) {
   const s = props.section;
   return (
-    <SectionLabel
-      testID="section"
-      icon="folder"
-      title={s().title}
-      count={s().count}
-      folded={s().collapsed}
-      onPress={() => !selecting() && toggleSection(s().key)}
-      trailing={s().mark === "needs" ? <Icon name="hand" size={14} color="seal" /> : s().mark === "failed" ? <Icon name="close-circle-fill" size={14} color="destructive" /> : s().mark === "running" ? <Icon name="time" size={14} /> : undefined}
-    />
+    <View class="px-4">
+      {props.foldable() ? (
+        <SectionLabel
+          testID="section"
+          icon="folder"
+          title={s().title}
+          count={s().count}
+          folded={s().collapsed}
+          onPress={() => !selecting() && toggleSection(s().key)}
+          trailing={s().mark === "needs" ? <View testID="section-needs" class="size-2 rounded-full bg-seal" /> : undefined}
+        />
+      ) : <SectionLabel testID="section" icon="folder" title={s().title} count={s().count} />}
+    </View>
   );
 }
 
-/** A Session as a tray row (SPEC §11): 68 pt, a 28 pt tile, the title over its line, the end; in its folder's surface group. */
+/**
+ * A Session as a tray row (SPEC §11, §15 Grouped list): 68 pt, its agent's logo, the title over what it is
+ * doing in words, the end ("● 12m" while it runs); in its folder's surface group. Selecting, a check circle
+ * takes the tile's place.
+ */
 function SessionRow(props: { worker: () => Worker; first: () => boolean; last: () => boolean; open: (worker: Worker) => void }) {
-  const model = () => {
+  const options = () => {
     const link = workLinkOf(props.worker());
-    return sessionRowModel(props.worker(), { alias: aliases()[props.worker().id], workTitle: link?.workTitle, calendarLabel: link?.calendarLabel });
+    return { alias: aliases()[props.worker().id], workTitle: link?.workTitle, calendarLabel: link?.calendarLabel };
   };
+  const row = () => sessionRow(props.worker(), clock().now, options());
+  // Title, origin (From Calendar), state, what it does and when.
+  const label = () => sessionRowModel(props.worker(), options()).accessibilityLabel;
   const selected = () => selection().has(props.worker().key);
   // Only a reachable computer can end its Sessions: offline rows can't be picked.
   const online = () => connection() === "connected";
   // A row new to the list fades in once; rows that scroll into view never do.
   const motion = untracked(() => freshRows().has(props.worker().key)) ? createMotion({ enter: "fadeIn", duration: 220 }) : null;
-  const toneClass = () => (model().tone === "danger" ? "text-destructive" : model().tone === "needs" ? "text-seal" : model().tone === "accent" ? "text-foreground" : "text-muted-foreground");
   return (
     <View testID="session-row" delayLongPress={400} style={motion?.style}
-      accessibilityLabel={model().accessibilityLabel} role={selecting() ? "checkbox" : "button"}
+      accessibilityLabel={label()} role={selecting() ? "checkbox" : "button"}
       accessibilityState={selecting() ? { checked: selected(), disabled: !online() } : undefined}
       accessibilityHint={selecting() ? "Double tap to toggle selection" : "Opens the terminal session"}
       onPress={() => (selecting() ? online() && toggleSelected(props.worker()) : props.open(props.worker()))}
@@ -162,23 +175,14 @@ function SessionRow(props: { worker: () => Worker; first: () => boolean; last: (
         if (!selecting() && online()) toggleSelected(props.worker());
       }}
       class={`mx-4 min-h-[68px] flex-row items-center gap-3.5 bg-card px-4 py-3 ${props.first() ? "rounded-t-(--radius-group)" : ""} ${props.last() ? "rounded-b-(--radius-group)" : ""} ${selecting() && !online() ? "opacity-50" : "active:bg-accent"}`}>
-      {selecting() ? <Icon name={selected() ? "check-circle-fill" : "circle"} size={22} color={selected() ? "primary" : "muted-foreground"} /> : null}
-      <View class="items-center justify-center">
-        <Tile size={28}><AgentIcon kind={model().kind} flavor={model().flavor} size={18} /></Tile>
-        {model().fromCalendar ? <View testID="row-calendar" class="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5"><Icon name="calendar" size={10} color="primary" /></View>
-          : model().delegated ? <View class="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5"><Icon name="git-network" size={10} color="primary" /></View> : null}
-      </View>
-      <View class="min-w-0 flex-1">
-        <Text class="text-body font-semibold line-clamp-1">{model().title}</Text>
-        <Text class={`text-sub line-clamp-1 ${toneClass()}`}>{`${model().previewPrefix ?? ""}${model().preview}`}</Text>
-      </View>
-      <View class="items-end gap-1">
-        {model().time !== "live" ? <Text class="text-sub text-muted-foreground">{model().time}</Text> : null}
-        {model().needsYou ? <Icon name="hand" size={16} color="seal" />
-          : model().status === "running" ? <View class="h-2 w-2 rounded-full bg-primary" />
-          : STATUS_MARK[model().status] ? <Icon name={STATUS_MARK[model().status]!.icon} size={16} color={STATUS_MARK[model().status]!.color} /> : null}
-      </View>
-      {props.last() ? null : <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: selecting() ? 94 : 58 }} />}
+      {selecting() ? (
+        <View testID="row-check" class="size-[28px] items-center justify-center">
+          <Icon name={selected() ? "check-circle-fill" : "circle"} size={24} color={selected() ? "foreground" : "muted-foreground"} />
+        </View>
+      ) : <RowTile tile={() => row().tile} />}
+      <RowText row={row} />
+      {selecting() ? null : <RowEnd row={row} />}
+      {props.last() ? null : <RowHair />}
     </View>
   );
 }
@@ -255,10 +259,11 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
             // an update lands on the row, not on one being replaced. Each side keeps its last value while it goes.
             const header = computed(() => row().kind === "header");
             const section = computed<SessionListSection>((last) => (row().kind === "header" ? (row() as Extract<Row, { kind: "header" }>).section : last!));
+            const foldable = computed<boolean>((last) => (row().kind === "header" ? (row() as Extract<Row, { kind: "header" }>).foldable : last ?? false));
             const item = computed<Extract<Row, { kind: "row" }>>((last) => (row().kind === "header" ? last! : (row() as Extract<Row, { kind: "row" }>)));
             return (
               <View>
-                {header() ? <SectionHeader section={section} /> : <SessionRow worker={() => item().worker} first={() => item().first} last={() => item().last} open={open} />}
+                {header() ? <SectionHeader section={section} foldable={foldable} /> : <SessionRow worker={() => item().worker} first={() => item().first} last={() => item().last} open={open} />}
               </View>
             );
           }}

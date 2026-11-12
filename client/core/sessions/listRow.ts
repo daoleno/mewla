@@ -1,6 +1,6 @@
 import { DateStyle, formatDate } from "../timeline/dates";
-import { formatWorkerSessionPreview, type SessionPreviewTone } from "./sessionPreview";
-import { buildWorkerSessionAccessibilityLabel, isWorkerActivelyRunning } from "./workerStatusPresentation";
+import { sessionActivity } from "./activity";
+import { buildWorkerSessionAccessibilityLabel, workerStatusLabel } from "./workerStatusPresentation";
 import { presentWorker, type AgentKind, type TerminalFlavor } from "./workerPresentation";
 import type { Worker, WorkerStatus } from "./workers";
 
@@ -27,16 +27,13 @@ export type SessionRowModel = {
   title: string;
   kind: AgentKind;
   flavor: TerminalFlavor;
-  preview: string;
-  previewPrefix?: string;
-  tone: SessionPreviewTone;
-  /** "live" while a turn runs, else when it last changed. */
-  time: string;
+  /** What it is doing, in words (core/sessions/activity `sessionActivity`). */
+  line: string;
   status: WorkerStatus;
   needsYou: boolean;
   delegated: boolean;
   fromCalendar: boolean;
-  /** What a screen reader says for the row (the Expo app's WorkerSessionRow label): title, origin, status, preview, time. */
+  /** What a screen reader says for the row (the Expo app's WorkerSessionRow label): title, origin, status, line, time. */
   accessibilityLabel: string;
 };
 
@@ -61,16 +58,12 @@ export function sessionRowModel(worker: Worker, options: { alias?: string; calen
   const title = presented.titleSource !== "default"
     ? presented.title
     : workTitle || presented.shortTitle || (generated ? "" : shortWorkerLabel(worker.name)) || presented.title;
-  const preview = formatWorkerSessionPreview(worker);
-  const time = isWorkerActivelyRunning(worker.status) ? "live" : listTime(worker.updated_at);
+  const line = sessionActivity(worker);
   return {
     title,
     kind: presented.kind,
     flavor: presented.terminalFlavor,
-    preview: preview.text,
-    previewPrefix: preview.prefix,
-    tone: preview.tone,
-    time,
+    line,
     status: worker.status,
     needsYou: worker.needs_attention === true,
     delegated: Boolean(worker.delegated),
@@ -78,8 +71,9 @@ export function sessionRowModel(worker: Worker, options: { alias?: string; calen
     accessibilityLabel: buildWorkerSessionAccessibilityLabel({
       title,
       status: worker.status,
-      preview: `${preview.prefix ?? ""}${preview.text}`,
-      timeLabel: time === "live" ? "" : time,
+      // A line that is only the state's word ("Done", "Idle") is said once.
+      preview: line === workerStatusLabel(worker.status) ? "" : line,
+      timeLabel: worker.status === "running" ? "" : listTime(worker.updated_at),
       brainDelegated: Boolean(worker.delegated),
       fromCalendar: Boolean(options.calendarLabel),
     }),
