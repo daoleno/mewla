@@ -10,7 +10,7 @@ export interface CatInput {
   needs: number;
   /** Brain's own turn is running. */
   brainTurn: boolean;
-  /** Sessions running (Workers). */
+  /** The Running rows the state control counts (`TrayModel.runningCount`): quiet queued and waiting Work left out. */
   running: number;
 }
 

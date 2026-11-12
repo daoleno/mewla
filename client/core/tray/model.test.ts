@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { BrainCurrentWork } from "../work/types";
 import { listTime } from "../sessions/listRow";
+import { catState } from "../pets/cat";
 import { backMark, requestsOf, trayModel, type TrayInput } from "./model";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
@@ -142,6 +143,19 @@ describe("tray model", () => {
     }));
     expect(m.running.slice(0, 3).map((r) => r.key)).toEqual(["session:b", "session:c", "session:a"]);
     expect(m.state.words).toBe("3 running");
+  });
+
+  test("only quiet Work under Running: All quiet, and the cat naps (the header, the tray and the cat agree)", () => {
+    const m = trayModel(input({ openWork: [{ work_id: "q", title: "Queued", status: "open" }, { work_id: "w", title: "Waiting", status: "waiting", wait_for: "the deploy window" }] }));
+    expect(m.running.map((r) => r.quiet)).toEqual([true, true]);
+    expect(m.state.words).toBe("All quiet");
+    expect(m.runningCount).toBe(0);
+    const cat = (t: typeof m) => catState({ kind: t.state.kind, starting: false, needs: t.needs.length, brainTurn: false, running: t.runningCount });
+    expect(cat(m)).toBe("idle");
+    const busy = trayModel(input({ workers: [worker("a")], openWork: [{ work_id: "q", title: "Queued", status: "open" }] }));
+    expect(busy.runningCount).toBe(1);
+    expect(busy.state.words).toBe("1 running");
+    expect(cat(busy)).toBe("delegating");
   });
 
   test("Today shows the next three; a running item opens its Session", () => {

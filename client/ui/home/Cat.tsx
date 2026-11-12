@@ -18,7 +18,8 @@ const state = computed(() => {
     starting: brainSurface({ hasServer: Boolean(current()), connected: connection() === "connected", snapshot: brain() }) === "waking",
     needs: t.needs.length,
     brainTurn: brainThread().conversation?.activity?.status === "running",
-    running: t.running.length,
+    // The count the state control says: quiet rows (queued and waiting Work) under Running don't wake it.
+    running: t.runningCount,
   });
 });
 
