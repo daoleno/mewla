@@ -29,6 +29,38 @@ export type BrainSessionFinalization = {
 
 export type BrainWorkAttentionState = "queued" | "reserved" | "reviewing";
 
+/** A Worker Session that joined a Work (daemon WIRE §1): oldest first, live or finished. */
+export type WorkWorkerState = "running" | "blocked" | "done" | "failed" | "ended";
+
+export type WorkWorkerSession = {
+  session_id: string;
+  /** What it was called when it joined, or its live name; absent when never recorded. */
+  name?: string;
+  executor_id?: string;
+  provider?: string;
+  state: WorkWorkerState;
+  /** Live: what it does now; finished: its result line. */
+  summary?: string;
+  /** Live only: the Worker's reported phase. */
+  phase?: string;
+  /** Open and working on this Work. */
+  live: boolean;
+  joined_at: string;
+  ended_at?: string;
+  updated_at: string;
+};
+
+/** `brain_work_detail`'s Work: one Work's page, current or closed. */
+export type BrainWorkDetail = {
+  work_id: string;
+  revision: number;
+  title: string;
+  status: BrainWorkStatus;
+  created_at: string;
+  updated_at: string;
+  worker_sessions: WorkWorkerSession[];
+};
+
 export type BrainCurrentWork = {
   work_id: string;
   revision: number;
@@ -58,6 +90,8 @@ export type BrainCurrentWork = {
   user_action?: BrainWorkUserAction;
   /** The schedule and run a Calendar occurrence's Work came from. */
   calendar?: BrainWorkCalendarRef;
+  /** Every Worker Session that joined it; absent until one has. */
+  worker_sessions?: WorkWorkerSession[];
 };
 
 export type BrainWorkCalendarRef = { item_id: string; run_id: string };
@@ -75,6 +109,7 @@ export type BrainOpenWork = {
   wake?: BrainWorkWake;
   updated_at?: string;
   calendar?: BrainWorkCalendarRef;
+  worker_sessions?: WorkWorkerSession[];
 };
 
 export type BrainWorkUserActionKind = "reply" | "close" | "dismiss" | "stop" | "snooze";

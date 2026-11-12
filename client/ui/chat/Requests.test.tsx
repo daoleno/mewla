@@ -57,6 +57,18 @@ describe("requests in Brain's thread", () => {
     expect(app.count("id:request-stacked")).toBe(0);
   }, 20_000);
 
+  test("a cold start with requests open opens on the oldest, centred: the newest stacked rows wait below", async () => {
+    const sessions = Array.from({ length: 14 }, (_, i) => session(`s${i}`, { delegated: true, approvals: [approval(`a${i}`, `step ${i} of the release`)] }));
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: sessions }) });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    await app.wait(800);
+    expect(app.count("id:request-stacked")).toBe(13);
+    expect(app.shows("id:request-card")).toBe(true);
+    // Centred, the thread's end (the newest stacked rows) is below: the jump control shows, with their count.
+    await app.waitFor("id:jump-requests");
+    expect(app.texts()).toContain("14");
+  }, 20_000);
+
   test("a Session the person started asks only in that Session", async () => {
     const app = await open(APP, {
       platform: "android", storage: paired,
@@ -75,17 +87,40 @@ describe("a Work in Brain's thread", () => {
   });
   const docs = session("docs", { status: "done" });
 
-  test("came back and new: a result card; its next step goes to Brain and it becomes its line, which opens the result sheet", async () => {
+  test("came back and new: a result card that never shows Brain's next_action; opening it reads it", async () => {
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [docs], conversations: { "brain-host": [result()] } }) });
     await app.waitFor("id:work-result", { timeout: 10_000 });
     expect(app.texts()).toContain("Ship the docs");
     expect(app.shows("id:work-unread")).toBe(true);
+    expect(app.texts().join(" ")).not.toContain("Announce it");
     await app.wait(500);
-    await app.press("id:work-next-step");
-    await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length > 0);
-    expect(JSON.stringify(framesOf(app.host.posts(), "send_input").at(-1))).toContain("Announce it");
+    await app.press("id:work-result-open");
     await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_read").length > 0);
     expect(framesOf(app.host.posts(), "brain_work_read")[0]).toMatchObject({ id: "w1" });
+  }, 20_000);
+
+  test("live with several Workers: three Worker lines and \"N more\"; a line pushes its Session, \"more\" Work detail", async () => {
+    const joined = (id: string, live: boolean) => ({ session_id: id, name: `Worker ${id}`, provider: "claude", state: live ? "running" : "done", summary: live ? `working on ${id}` : `${id} done`, live, joined_at: "2026-11-12T11:00:00Z", ended_at: live ? undefined : "2026-11-12T11:10:00Z", updated_at: "2026-11-12T11:10:00Z" });
+    const current_work = [{ work_id: "w1", revision: 3, title: "Ship the docs", status: "running", unread_result: false, attempt_session_id: "d",
+      worker_sessions: [joined("a", false), joined("b", false), joined("c", true), joined("d", true)] }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
+      brain: { ...brain, current_work }, worker_sessions: ["a", "b", "c", "d"].map((id) => session(id, { status: id === "a" || id === "b" ? "done" : "running", phase: "verifying" })),
+      conversations: { "brain-host": [result({ unread: false, status: "session.done" })] },
+    }) });
+    await app.waitFor("id:work-card", { timeout: 10_000 });
+    expect(app.count("id:work-card-worker")).toBe(3);
+    expect(app.texts()).toContain("1 more");
+    expect(app.texts()).toContain("Worker a  a done");
+    expect(app.texts().join(" ")).not.toContain("Worker d");
+    expect(app.count("id:work-card-progress")).toBe(1);
+    await app.wait(500);
+    await app.press("id:work-card-worker >> nth=2");
+    await app.waitFor("id:session-status");
+    await app.back();
+    await app.waitFor("id:work-card-more");
+    await app.wait(500);
+    await app.press("id:work-card-more");
+    await app.waitFor("id:work-detail");
   }, 20_000);
 
   test("read: the quiet line opens the result sheet, whose Open session opens the Session", async () => {

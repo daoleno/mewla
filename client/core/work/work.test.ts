@@ -38,14 +38,14 @@ describe("Brain's Work in the snapshot", () => {
     expect(workOfSnapshot(null)).toEqual({ current: [], open: [], objective: null });
   });
 
-  test("an action says what it is, a snooze when, and a timeout that it may have reached Brain", async () => {
+  test("an action says what it is, a snooze how long, and a timeout that it may have reached Brain", async () => {
     const transport = new FakeTransport();
     transport.answer = () => ({ type: "brain_work_action", status: "running", admission: "uncertain" });
     expect(await workAction(transport, "w1", "reply", { text: "Keep both" })).toEqual({ status: "running", admission: "uncertain" });
-    await workAction(transport, "w1", "snooze", { snoozeUntil: Date.parse("2026-10-09T01:00:00Z") });
+    await workAction(transport, "w1", "snooze", { snoozeSeconds: 3600 });
     expect(transport.requests.map((r) => r.body)).toEqual([
       { id: "w1", action: "reply", text: "Keep both" },
-      { id: "w1", action: "snooze", snooze_until: "2026-10-09T01:00:00.000Z" },
+      { id: "w1", action: "snooze", snooze_seconds: 3600 },
     ]);
     transport.answer = () => new Error("brain_work_action timed out");
     await expect(workAction(transport, "w1", "close")).rejects.toThrow("Timed out. The action may still have reached Brain.");

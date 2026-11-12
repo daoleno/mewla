@@ -1,5 +1,5 @@
 import type { CalendarClock, CalendarItem } from "../calendar/model";
-import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef } from "./types";
+import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef, WorkWorkerSession } from "./types";
 
 /** How a Work's state reads: a ring, a seal, a check (DESIGN.md's Work states). */
 export type WorkStatus = "ready" | "running" | "needs" | "warning" | "failed" | "blocked";
@@ -151,6 +151,8 @@ export type BrainWorkSlip = {
   calendarLabel?: string;
   /** "运营：挖稿 · Oct 27", the link back to the schedule. */
   calendarLink?: string;
+  /** Every Worker Session that joined it, oldest first (core/work/workers `workWorkerLines`). */
+  workerSessions?: readonly WorkWorkerSession[];
 };
 
 export type BrainWorkSurface = {
@@ -280,6 +282,7 @@ export function brainWorkSurface(
       replied,
       closed: terminal || undefined,
       calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
+      workerSessions: work.worker_sessions,
     });
   }
   const listed = new Set(slips.map((slip) => slip.workId));
@@ -299,6 +302,7 @@ export function brainWorkSurface(
       updatedAt: work.updated_at,
       unread: false,
       calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
+      workerSessions: work.worker_sessions,
     });
   }
   const rank = (group: BrainWorkGroup) => BRAIN_WORK_GROUP_ORDER.indexOf(group);

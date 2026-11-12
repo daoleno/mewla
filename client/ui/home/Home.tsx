@@ -1,4 +1,5 @@
 import { computed, safeArea, untracked, signal, Text, View } from "nsh";
+import { progressSteps } from "../../core/sessions/progress";
 import { Button } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
@@ -21,6 +22,7 @@ import { brain, brainChat, brainDraft, brainThread, connection, current, current
 import type { WorkCardHandlers } from "../chat/TimelineRows";
 import type { WorkCardModel } from "../../core/timeline/workCardModel";
 import { sessionRowModel } from "../../core/sessions/listRow";
+import { workWorkerLines } from "../../core/work/workers";
 import { presentWorker } from "../../core/sessions/workerPresentation";
 import { Sheet } from "../kit/Sheet";
 import { PillButton } from "../kit/kit";
@@ -74,13 +76,11 @@ const workHandlers: WorkCardHandlers = {
     const worker = sessionId ? workers().find((w) => w.id === sessionId) : undefined;
     if (!worker) return null;
     const row = sessionRowModel(worker);
-    return { kind: row.kind, flavor: row.flavor, name: presentWorker(worker).typeLabel };
+    return { kind: row.kind, flavor: row.flavor, name: presentWorker(worker).typeLabel, progress: progressSteps(worker.phase) ?? undefined };
   },
   onTitle: (workId) => openWorkDetail(workId),
-  onNextStep: (model, text) => {
-    untracked(brainChat)?.send(text);
-    readWork(model.workId);
-  },
+  workers: (rows) => workWorkerLines(rows, new Map(workers().map((w) => [w.id, w] as const))),
+  onSession: (sessionId) => openSession(sessionId),
   onLine: (model) => resultSheet.set(model),
 };
 // A past thread is read-only: its Work cards and messages offer no actions.
@@ -168,13 +168,6 @@ function ResultSheet() {
         <View class="gap-3 px-4">
           <Text class="text-sub text-muted-foreground">{[agent()?.name, model()!.state, when()].filter(Boolean).join(" · ")}</Text>
           {model()!.summary ? <View selectable><Text class="text-body">{model()!.summary}</Text></View> : null}
-          {model()!.nextStep ? (
-            <PillButton testID="work-sheet-next-step" kind="ink" title={model()!.nextStep!} onPress={() => {
-              const shown = untracked(resultSheet)!;
-              workHandlers.onNextStep(shown, shown.nextStep!);
-              close();
-            }} />
-          ) : null}
           {model()!.sessionId && workers().some((w) => w.id === model()!.sessionId) ? (
             <PillButton testID="work-sheet-open-session" title="Open session" onPress={() => {
               const id = untracked(resultSheet)!.sessionId!;
@@ -237,8 +230,8 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
           empty={() => (chatState() === "loading" ? <Notice title="Loading…" /> : <Notice title="What should Brain do?" />)}
           foot={{
             shown: () => !routedBrainThread() && (requests().length > 0 || sealedHere().length > 0),
-            render: () => (
-              <RequestStack thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
+            render: (anchor) => (
+              <RequestStack anchor={anchor} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
                 onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
                 onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
             ),

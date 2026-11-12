@@ -386,7 +386,7 @@ failed send keeps the words and the uploaded files in the box.
 
 **Stuck and stale.** Outcome unknown and No decision are the Warning state
 (triangle) under Needs you; a snoozed slip waits under Waiting with
-"Snoozed" until tomorrow 09:00. A running slip leads its line with the
+"Snoozed" for the hour Snooze asked. A running slip leads its line with the
 Worker's reported phase ("Verifying · Running go test"). These are app
 derivations from `attention_since`, `attention_reason` and `snoozed_until`;
 the daemon writes nothing on a timer.

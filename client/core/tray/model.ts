@@ -3,10 +3,12 @@
  * today, what is idle and what is done, all from one pure model so the pill, the tray's title and
  * its rows always agree. The count counts the rows you can open, not Workers (§1.2 "The count").
  */
+import { progressSteps } from "../sessions/progress";
 import type { BrainHostProblem, BrainSurface, BrainWorkerRef } from "../brain";
 import { sessionRowModel } from "../sessions/listRow";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerApproval, WorkerPrompt } from "../sessions/workers";
+import { liveWorkerIds } from "../work/workers";
 import { brainWorkSurface, type BrainWorkSlip } from "../work/surface";
 import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
 
@@ -14,7 +16,7 @@ import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
 export type TrayConnection = "connected" | "connecting" | "waiting" | "idle";
 
 /** Where a request's card lives, which decides what a tap on its tray row does (§1.1 "Row tap"). */
-export type RequestWhere = "brain" | "session" | "work" | "alert";
+export type RequestWhere = "brain" | "session" | "work" | "alert" | "device";
 
 /** A one-tap answer: only a plain yes/no approval of one command or permission has one (§1.1 "One-tap case"). */
 export type OneTap =
@@ -25,7 +27,7 @@ export type OneTap =
 export interface TrayRequest {
   /** Stable while the request is open: the thread card and the tray row share it. */
   key: string;
-  kind: "choice" | "prompt" | "approval" | "attention" | "work" | "alert";
+  kind: "choice" | "prompt" | "approval" | "attention" | "work" | "alert" | "device";
   where: RequestWhere;
   /** The question, or what is asked ("Run git push?"). */
   title: string;
@@ -35,6 +37,8 @@ export interface TrayRequest {
   workerId?: string;
   workId?: string;
   itemId?: string;
+  /** A new device's request to be let in. */
+  deviceId?: string;
   agent?: AgentKind;
   flavor?: TerminalFlavor;
   /** Approve on the row; absent sends the tap to the card ("Answer"). */
@@ -45,7 +49,8 @@ export type TrayTile =
   | { kind: "agent"; agent: AgentKind; flavor: TerminalFlavor }
   /** Brain's mark: a Work with several Workers or none. */
   | { kind: "brain" }
-  | { kind: "calendar" };
+  | { kind: "calendar" }
+  | { kind: "device" };
 
 /** What a row opens. */
 export type TrayTarget =
@@ -69,6 +74,8 @@ export interface TrayRow {
   quiet?: boolean;
   /** Today: already past (dimmed above the now line). */
   past?: boolean;
+  /** Segments of the progress bar filled (0–5) from the running Worker's phase; absent: no bar. */
+  progress?: number;
 }
 
 /** A Calendar item of today, as the caller reads it with the phone's clock. */
@@ -132,6 +139,8 @@ export interface TrayInput {
   today: readonly TrayTodayInput[];
   /** Calendar alerts nobody answered (core/calendar/alerts `openAlerts`). */
   alerts: readonly { id: string; title: string }[];
+  /** New devices asking the current computer to let them in (ui/enrollment `deviceRequests`). */
+  devices?: readonly { id: string; name: string }[];
   /** Requests answered here that the computer has not cleared yet: sealed everywhere at once (§1.1). */
   answered?: ReadonlySet<string>;
   /** When each Session was last opened here (core/sessions/deviceState `getRecentWorkerOpens`). */
@@ -213,7 +222,7 @@ function titleOf(worker: Worker): string {
  * A request of a Session that works for Brain's delegated Work shows in Brain's thread too, so its
  * row leads there; one of a Session the person started is only in that Session.
  */
-export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "answered" | "now">): TrayRequest[] {
+export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "devices" | "answered" | "now">): TrayRequest[] {
   const out: TrayRequest[] = [];
   if (input.brainChoice) {
     out.push({ key: `brain-choice:${input.brainChoice.callId}`, kind: "choice", where: "brain", title: input.brainChoice.question || "Brain asks", source: "Brain", workerId: input.brainHost?.id });
@@ -241,6 +250,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
     out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question || slip.title, source: slip.title, workId: slip.workId });
   }
   for (const alert of input.alerts) out.push({ key: `alert:${alert.id}`, kind: "alert", where: "alert", title: alert.title, source: "Calendar", itemId: alert.id });
+  for (const device of input.devices ?? []) out.push({ key: `device:${device.id}`, kind: "device", where: "device", title: "Approve new device", source: device.name, deviceId: device.id });
   const answered = input.answered;
   return answered?.size ? out.filter((request) => !answered.has(request.key)) : out;
 }
@@ -265,17 +275,22 @@ function sessionRow(worker: Worker): TrayRow {
     tile: { kind: "agent", agent: model.kind, flavor: model.flavor },
     target: { open: "session", workerId: worker.id },
     done: ended || undefined,
+    progress: ended ? undefined : progressSteps(worker.phase) ?? undefined,
   };
 }
 
 function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>): TrayRow {
-  const session = slip.sessionId ? sessions.get(slip.sessionId) : undefined;
+  const joined = slip.workerSessions ?? [];
+  // A Work with several Workers is one row with Brain's mark, "N Workers", opening Work detail (§1.3).
+  const several = joined.length > 1;
+  const sessionId = several ? undefined : joined[0]?.session_id ?? slip.sessionId;
+  const session = sessionId ? sessions.get(sessionId) : undefined;
   const model = session ? sessionRowModel(session) : null;
   const done = slip.group === "back";
   return {
     key: `work:${slip.workId}`,
     title: slip.title,
-    line: done ? slip.summary || slip.statusLabel : slip.phase || slip.waitFor || slip.who || slip.statusLabel,
+    line: several ? `${joined.length} Workers` : done ? slip.summary || slip.statusLabel : slip.phase || slip.waitFor || slip.who || slip.statusLabel,
     end: slip.group === "running" ? "live" : "",
     // A Work its one Worker runs opens that Session (its logo); with none, Work detail (Brain's mark).
     tile: model ? { kind: "agent", agent: model.kind, flavor: model.flavor } : { kind: "brain" },
@@ -283,6 +298,7 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>): Tr
     unread: done && slip.unread ? true : undefined,
     done: done || undefined,
     quiet: slip.group === "waiting" || slip.group === "queued" || undefined,
+    progress: slip.group === "running" ? progressSteps(session?.phase) ?? undefined : undefined,
   };
 }
 
@@ -324,7 +340,7 @@ export function trayModel(input: TrayInput): TrayModel {
   const sessions = new Map(input.workers.map((worker) => [worker.id, worker] as const));
   const slips = brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now, input.openWork).slips;
   // A Session that runs a listed Work is that Work's row; asking you, it is a Needs you row only.
-  const folded = new Set(slips.map((slip) => slip.sessionId).filter((id): id is string => Boolean(id)));
+  const folded = new Set(slips.flatMap((slip) => [slip.sessionId, ...liveWorkerIds(slip.workerSessions)]).filter((id): id is string => Boolean(id)));
   const opened = (id: string) => input.opened[id] ?? 0;
   const activity = (worker: Worker) => worker.updated_at ?? worker.started_at ?? 0;
   const order = (a: Worker, b: Worker) =>

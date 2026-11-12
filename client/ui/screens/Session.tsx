@@ -563,7 +563,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
                 foot={{
                   shown: () => requests().length > 0 || sealedHere().length > 0,
-                  render: () => <RequestStack thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
+                  render: (anchor) => <RequestStack anchor={anchor} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
                 }}
                 requests={() => requests().length} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}

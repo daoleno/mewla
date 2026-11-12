@@ -1,4 +1,3 @@
-import type { Zones } from "../calendar/zones";
 import { brainWorkSlipStale, type BrainWorkSlip } from "./surface";
 import type { BrainWorkUserActionKind } from "./types";
 
@@ -12,7 +11,7 @@ import type { BrainWorkUserActionKind } from "./types";
  * - ask: open Brain with the Work quoted in the composer
  * - open: open the Worker Session
  * - close / dismiss / stop: close the Work as the user (done / not needed / stop the Worker)
- * - snooze: hide it from Needs you until tomorrow morning
+ * - snooze: hide it from Needs you for an hour
  * - read: mark a closed Work's result read so it leaves
  */
 export type BrainWorkActionKind =
@@ -53,7 +52,7 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
     return [
       ...choices,
       { kind: "reply", label: choices.length ? "Something else…" : "Reply", primary: choices.length === 0 },
-      { kind: "snooze", label: "Snooze" },
+      { kind: "snooze", label: "Snooze 1 hour" },
       { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
     ];
   }
@@ -80,7 +79,7 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
   if (slip.group === "needs") {
     return [
       { kind: "reply", label: "Reply", primary: true },
-      { kind: "snooze", label: "Snooze" },
+      { kind: "snooze", label: "Snooze 1 hour" },
       { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
     ];
   }
@@ -122,15 +121,8 @@ export function brainWorkUserAction(kind: BrainWorkActionKind): BrainWorkUserAct
   }
 }
 
-/** Tomorrow at 09:00 where the phone is, the snooze target. */
-export function brainWorkSnoozeUntil(zones: Zones, now = Date.now()): number {
-  const zone = zones.device;
-  const tomorrow = zones.dateKey(now + 86_400_000, zone);
-  const resolved = zones.resolveLocal(tomorrow, "09:00", zone);
-  if (resolved.status === "resolved") return resolved.instant;
-  if (resolved.status === "ambiguous") return resolved.instants[0];
-  return zones.resolveLocal(tomorrow, "10:00", zone).status === "resolved" ? (zones.resolveLocal(tomorrow, "10:00", zone) as { instant: number }).instant : now + 86_400_000;
-}
+/** Snooze's length: the computer ends it on its own clock (SPEC "Snooze 1 hour"). */
+export const BRAIN_WORK_SNOOZE_SECONDS = 3600;
 
 /**
  * The actions a slip carries in the list, beside the full set on its page: the

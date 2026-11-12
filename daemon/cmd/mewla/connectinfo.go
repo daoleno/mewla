@@ -290,7 +290,7 @@ func printPairing(w io.Writer, status pairingStatus, links pairingLinks, stateDi
 			fmt.Fprintln(w)
 		}
 		fmt.Fprintln(w, "  In the Mewla app, tap “Mewla already running? Scan its code”,")
-		fmt.Fprintln(w, "  or go to Settings → Pair a computer.")
+		fmt.Fprintln(w, "  or tap the cat, then Pair a computer.")
 		fmt.Fprintln(w, "  "+phoneReachLine(links.phoneAddress))
 		fmt.Fprintln(w, "  "+style.dim("The code works once, until "+links.expiresAt.Local().Format("15:04")+"."))
 	} else {
@@ -341,7 +341,7 @@ func printPairingDetails(w io.Writer, title string, links pairingLinks) {
 	fmt.Fprintln(w, "Pairing gives that device access to sessions, terminal, Brain, Workers and files.")
 	fmt.Fprintln(w)
 	if links.phoneLink != "" {
-		fmt.Fprintln(w, "Phone — in Mewla, Settings → Pair a computer, scan:")
+		fmt.Fprintln(w, "Phone — in Mewla, tap the cat, then Pair a computer, and scan:")
 		if width := terminalColumns(w); width == 0 || qrColumns(links.phoneLink) <= width {
 			if err := renderQR(w, style, links.phoneLink); err != nil {
 				fmt.Fprintf(w, "Could not draw the QR code: %v\n", err)

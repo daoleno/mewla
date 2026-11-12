@@ -276,6 +276,76 @@ type TimelineItem struct {
 type timelineReadCache struct {
 	valid bool
 	items []TimelineItem
+	// threads holds what a reader of one thread derives from items. Replacing
+	// or extending the timeline drops it with the rows it was built from.
+	threads map[string]*timelineThreadView
+}
+
+// timelineThreadView is one thread's rows as the readers of a thread need
+// them. It is built from the cached timeline when first asked for and shared
+// by every reader until the timeline changes; it is never modified after it is
+// built except for filling in a window, and its readers never modify it.
+type timelineThreadView struct {
+	// rows are the thread's rows in storage order.
+	rows []TimelineItem
+	// ids are the ids of rows.
+	ids map[string]bool
+	// claimed are the provider inputs that Brain admission rows already name as
+	// their echo; openAdmissions counts the admission rows still waiting for one.
+	claimed        map[string]bool
+	openAdmissions int
+	// windows are the newest rows in chronological order by limit.
+	windows map[int][]TimelineItem
+}
+
+// window returns the newest limit rows in chronological order, shared with the
+// view: the caller must not change them.
+func (v *timelineThreadView) window(limit int) []TimelineItem {
+	if window, ok := v.windows[limit]; ok {
+		return window
+	}
+	out := append([]TimelineItem{}, v.rows...)
+	sortTimelineItems(out)
+	if len(out) > limit {
+		out = out[len(out)-limit:]
+	}
+	if v.windows == nil {
+		v.windows = map[int][]TimelineItem{}
+	}
+	v.windows[limit] = out
+	return out
+}
+
+// timelineThreadViewLocked is the view of one thread of the cached timeline.
+func (s *Store) timelineThreadViewLocked(threadID string) (*timelineThreadView, error) {
+	if err := s.loadTimelineCacheLocked(); err != nil {
+		return nil, err
+	}
+	if view := s.timelineCache.threads[threadID]; view != nil {
+		return view, nil
+	}
+	view := &timelineThreadView{ids: map[string]bool{}, claimed: map[string]bool{}}
+	for _, item := range s.timelineCache.items {
+		if strings.TrimSpace(item.ThreadID) != threadID {
+			continue
+		}
+		item.ID = strings.TrimSpace(item.ID)
+		item.ThreadID = threadID
+		view.rows = append(view.rows, item)
+		view.ids[item.ID] = true
+		if IsBrainInputAdmission(item) {
+			if echoID := strings.TrimSpace(item.AdmissionEchoEventID); echoID != "" {
+				view.claimed[echoID] = true
+			} else {
+				view.openAdmissions++
+			}
+		}
+	}
+	if s.timelineCache.threads == nil {
+		s.timelineCache.threads = map[string]*timelineThreadView{}
+	}
+	s.timelineCache.threads[threadID] = view
+	return view, nil
 }
 
 func (s *Store) AppendTimelineItem(item TimelineItem) (TimelineItem, error) {
@@ -352,6 +422,7 @@ func (s *Store) appendTimelineItemLocked(item TimelineItem) (TimelineItem, error
 			s.timelineCache = timelineReadCache{}
 		} else {
 			s.timelineCache.items = append(s.timelineCache.items, stored)
+			s.timelineCache.threads = nil
 		}
 	}
 	s.rev.Add(1)
@@ -385,6 +456,23 @@ func (s *Store) ThreadTimeline(threadID string, limit int) ([]TimelineItem, erro
 }
 
 func (s *Store) threadTimelineLocked(threadID string, limit int) ([]TimelineItem, error) {
+	window, err := s.threadTimelineViewLocked(threadID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return cloneTimelineItems(window), nil
+}
+
+// ThreadTimelineView is ThreadTimeline for a reader that only looks: the rows
+// are shared with every other reader of the thread and must not be changed,
+// and it costs nothing while the timeline has not.
+func (s *Store) ThreadTimelineView(threadID string, limit int) ([]TimelineItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.threadTimelineViewLocked(threadID, limit)
+}
+
+func (s *Store) threadTimelineViewLocked(threadID string, limit int) ([]TimelineItem, error) {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return []TimelineItem{}, nil
@@ -392,24 +480,11 @@ func (s *Store) threadTimelineLocked(threadID string, limit int) ([]TimelineItem
 	if limit <= 0 {
 		limit = defaultThreadTimelineLimit
 	}
-	items, err := s.readAllTimelineItemsLocked()
+	view, err := s.timelineThreadViewLocked(threadID)
 	if err != nil {
 		return nil, err
 	}
-	out := []TimelineItem{}
-	for _, item := range items {
-		item.ID = strings.TrimSpace(item.ID)
-		item.ThreadID = strings.TrimSpace(item.ThreadID)
-		if item.ThreadID != threadID {
-			continue
-		}
-		out = append(out, item)
-	}
-	sortTimelineItems(out)
-	if len(out) > limit {
-		out = append([]TimelineItem(nil), out[len(out)-limit:]...)
-	}
-	return out, nil
+	return view.window(limit), nil
 }
 
 func sortTimelineItems(items []TimelineItem) {
@@ -439,43 +514,54 @@ func (s *Store) materializeProviderConversationLocked(threadID string, conversat
 		return nil
 	}
 	conversation.Events = work.SuppressPrivateHostTurns(conversation.Events)
-	allItems, err := s.readAllTimelineItemsLocked()
-	if err != nil {
-		return err
-	}
-	database, err := s.loadPresentationLocked()
-	if err != nil {
-		return err
-	}
 	sessionID := strings.TrimSpace(conversation.SessionID)
 	if sessionID == "" {
 		sessionID = "provider"
 	}
-	// Credit echoes before appending so restart/replay stays idempotent.
-	claimed, claims, allItems := reconcileThreadAdmissionEchoes(
-		allItems,
-		database.BrainInputAdmissions,
-		threadID,
-		sessionID,
-		conversation.Events,
-	)
-	if len(claims) > 0 {
-		if err := s.rewriteTimelineLocked(allItems); err != nil {
-			return err
+	view, err := s.timelineThreadViewLocked(threadID)
+	if err != nil {
+		return err
+	}
+	// Credit echoes before appending so restart/replay stays idempotent. With no
+	// admission row waiting for its echo there is nothing to credit, and the
+	// rows already named as echoes are the claimed ones; that is every call but
+	// the few that follow a Brain input, and it reads nothing but the view.
+	claimed := view.claimed
+	if view.openAdmissions > 0 {
+		var claims map[string]string
+		claimed, claims, _ = reconcileAdmissionEchoes(
+			view.rows,
+			s.readPresentationLocked().BrainInputAdmissions,
+			threadID,
+			sessionID,
+			conversation.Events,
+		)
+		if len(claims) > 0 {
+			// Crediting rewrites the thread's rows, which is the one thing here
+			// that changes rows already stored: it works on its own copy.
+			allItems, err := s.readAllTimelineItemsLocked()
+			if err != nil {
+				return err
+			}
+			admissions := s.readPresentationLocked().BrainInputAdmissions
+			claimed, claims, allItems = reconcileThreadAdmissionEchoes(allItems, admissions, threadID, sessionID, conversation.Events)
+			if len(claims) > 0 {
+				if err := s.rewriteTimelineLocked(allItems); err != nil {
+					return err
+				}
+				if view, err = s.timelineThreadViewLocked(threadID); err != nil {
+					return err
+				}
+			}
 		}
 	}
-	known := make(map[string]bool, len(allItems))
-	for _, item := range allItems {
-		if item.ThreadID == threadID {
-			known[item.ID] = true
-		}
-	}
+	var added map[string]bool
 	for _, event := range conversation.Events {
 		if !providerEventMaterializable(event) {
 			continue
 		}
 		id := strings.TrimSpace(event.ID)
-		if id == "" || known[id] {
+		if id == "" || view.ids[id] || added[id] {
 			continue
 		}
 		if strings.TrimSpace(event.Kind) == timelineKindUserMessage && claimed[id] {
@@ -488,7 +574,10 @@ func (s *Store) materializeProviderConversationLocked(threadID string, conversat
 		if _, err := s.appendTimelineItemLocked(item); err != nil {
 			return err
 		}
-		known[id] = true
+		if added == nil {
+			added = map[string]bool{}
+		}
+		added[id] = true
 	}
 	return nil
 }
@@ -691,8 +780,16 @@ func (s *Store) MarkTimelineWorkCardsRead(workID string) error {
 }
 
 func (s *Store) readAllTimelineItemsLocked() ([]TimelineItem, error) {
+	if err := s.loadTimelineCacheLocked(); err != nil {
+		return nil, err
+	}
+	return cloneTimelineItems(s.timelineCache.items), nil
+}
+
+// loadTimelineCacheLocked makes the timeline cache hold every stored row.
+func (s *Store) loadTimelineCacheLocked() error {
 	if s.timelineCache.valid {
-		return cloneTimelineItems(s.timelineCache.items), nil
+		return nil
 	}
 	out := []TimelineItem{}
 	if err := scanBodies(s.db, `SELECT body FROM timeline ORDER BY seq`, func(body []byte) error {
@@ -703,14 +800,14 @@ func (s *Store) readAllTimelineItemsLocked() ([]TimelineItem, error) {
 		out = append(out, item)
 		return nil
 	}); err != nil {
-		return nil, err
+		return err
 	}
-	s.timelineCache = timelineReadCache{valid: true, items: cloneTimelineItems(out)}
-	return out, nil
+	s.timelineCache = timelineReadCache{valid: true, items: out}
+	return nil
 }
 
 func cloneTimelineItems(items []TimelineItem) []TimelineItem {
-	out := append([]TimelineItem(nil), items...)
+	out := append(make([]TimelineItem, 0, len(items)), items...)
 	for index := range out {
 		if out[index].ScheduledFor != nil {
 			scheduledFor := *out[index].ScheduledFor

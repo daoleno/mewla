@@ -1,15 +1,19 @@
-import { cleanup, effect, Scroll, signal, Text, View } from "nsh";
+import { cleanup, computed, effect, Scroll, signal, Text, View } from "nsh";
 import { AlertDialog, Button, Input } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
-import { markWorkRead, workAction } from "../../core/work/brainWork";
+import { markWorkRead, workAction, workDetail } from "../../core/work/brainWork";
+import type { BrainWorkDetail, BrainWorkStatus } from "../../core/work/types";
+import { workWorkerLines, type WorkWorkerLine } from "../../core/work/workers";
+import { AgentIcon } from "../icons/AgentIcon";
+import { ProgressBar } from "../kit/ProgressBar";
 import {
-  brainWorkActions, brainWorkAskDraft, brainWorkSnoozeUntil, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
+  BRAIN_WORK_SNOOZE_SECONDS, brainWorkActions, brainWorkAskDraft, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
 } from "../../core/work/actions";
 import { brainWorkAge, type BrainWorkSlip } from "../../core/work/surface";
 import { clock } from "../calendar/clock";
 import { createAttachmentUploads } from "../more/files/upload";
-import { brainDraft, connection, currentTransport } from "../session";
+import { brainDraft, connection, currentTransport, workers } from "../session";
 import { workSurface } from "./state";
 import { Icon } from "../kit/Icon";
 
@@ -40,7 +44,7 @@ function say(text: string, options: { detail?: string; failed?: boolean } = {}):
   noticeTimer = setTimeout(() => notice.set(null), 5_000);
 }
 
-const SAID: Partial<Record<BrainWorkAction["kind"], string>> = { close: "Closed", stop: "Stopped", dismiss: "Dismissed", snooze: "Snoozed until tomorrow morning" };
+const SAID: Partial<Record<BrainWorkAction["kind"], string>> = { close: "Closed", stop: "Stopped", dismiss: "Dismissed", snooze: "Snoozed for an hour" };
 
 interface ActionContext {
   links: WorkLinks;
@@ -81,7 +85,7 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
     const result = await workAction(transport, slip.workId, kind, {
       text,
       attachments: action.kind === "reply" ? context.reply?.attachments : undefined,
-      snoozeUntil: kind === "snooze" ? brainWorkSnoozeUntil(clock().zones) : undefined,
+      snoozeSeconds: kind === "snooze" ? BRAIN_WORK_SNOOZE_SECONDS : undefined,
     });
     if (kind === "reply") {
       if (result.admission === "uncertain") say("Sent, but Brain may not have it", { detail: "Check Brain's chat before sending again." });
@@ -125,6 +129,40 @@ function ActionRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; 
   );
 }
 
+/** A Worker of the Work (SPEC §11 Work detail): a tray row, "Agent · name", what it does, its progress, the time; pushes its Session. */
+function WorkerRow(props: { line: WorkWorkerLine; first: boolean; onPress: () => void }) {
+  const line = props.line;
+  return (
+    <Button testID="work-worker" accessibilityLabel={[`${line.agentLabel} · ${line.name}`, line.summary, line.time].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
+      class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 active:bg-accent ${props.first ? "" : "border-t border-border"}`}>
+      <View class="size-[28px] items-center justify-center"><AgentIcon kind={line.agent} flavor={line.flavor} size={20} /></View>
+      <View class="min-w-0 flex-1">
+        <Text class="text-body font-semibold line-clamp-1">{`${line.agentLabel} · ${line.name}`}</Text>
+        {line.summary ? <Text class="text-sub text-muted-foreground line-clamp-1">{line.summary}</Text> : null}
+        {line.progress !== undefined ? <ProgressBar filled={line.progress} testID="work-worker-progress" /> : null}
+      </View>
+      <Text class="text-caption text-muted-foreground">{line.time === "live" ? "" : line.time}</Text>
+    </Button>
+  );
+}
+
+function Workers(props: { lines: () => WorkWorkerLine[]; onOpen: (sessionId: string) => void }) {
+  return (
+    <View>
+      {props.lines().length ? (
+        <>
+          <Text role="header" class="mb-2 mt-6 px-4 text-caption font-semibold text-muted-foreground">Workers</Text>
+          <View testID="work-workers" class="overflow-hidden rounded-(--radius-group) bg-card">
+            {props.lines().map((line, index) => <WorkerRow line={line} first={index === 0} onPress={() => props.onOpen(line.sessionId)} />)}
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+const CLOSED_STATUS: Partial<Record<BrainWorkStatus, string>> = { done: "Done", cancelled: "Cancelled" };
+
 function Notice() {
   return (
     <View>
@@ -140,6 +178,18 @@ function Notice() {
 
 export function WorkDetail(props: { workId: string; nav: NavStackState<any>; links: WorkLinks }) {
   const slip = () => workSurface().slips.find((s) => s.workId === props.workId);
+  // A Work no longer open: its page from the computer, with who worked on it.
+  const closed = signal<BrainWorkDetail | null>(null);
+  const closedFailure = signal("");
+  let asked = false;
+  effect(() => {
+    const transport = connection() === "connected" ? currentTransport() : null;
+    if (slip() || asked || !transport) return;
+    asked = true;
+    workDetail(transport, props.workId).then((work) => closed.set(work), (error) => closedFailure.set(error instanceof Error ? error.message : ""));
+  });
+  const sessions = computed(() => new Map(workers().map((w) => [w.id, w] as const)));
+  const workerLines = () => workWorkerLines(slip() ? slip()!.workerSessions : closed()?.worker_sessions, sessions());
   // Opening a result that came back reads it, from whichever way it was opened (the tray, a card, a notification).
   let read = false;
   effect(() => {
@@ -183,10 +233,23 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   return (
     <NavPage title="Work" testID="work-detail">
       <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
-        {!slip() ? (
-          <View class="items-center gap-2 px-6 py-16">
-            <Text class="text-title font-semibold tracking-title">This Work is no longer open</Text>
+        {!slip() && closed() ? (
+          <View class="gap-2 px-4 pb-10 pt-2">
+            <Text class="text-caption font-semibold text-muted-foreground">Work</Text>
+            <View selectable><Text testID="work-title" role="header" class="text-display font-bold tracking-display">{closed()!.title}</Text></View>
+            <View class="flex-row items-center gap-2">
+              <Icon name="check" size={16} tone="soft" />
+              <Text class="text-sub font-semibold">{CLOSED_STATUS[closed()!.status] ?? "Closed"}</Text>
+            </View>
+            <Workers lines={workerLines} onOpen={props.links.openSession} />
           </View>
+        ) : !slip() ? (
+          // Nothing while the computer is asked; what it said, or offline, once there is no asking.
+          closedFailure() || connection() !== "connected" ? (
+            <View class="items-center gap-2 px-6 py-16">
+              <Text class="text-title font-semibold tracking-title">{closedFailure() || "This Work is no longer open"}</Text>
+            </View>
+          ) : null
         ) : (
           <View class="gap-2 px-4 pb-10 pt-2">
             <Text class="text-caption font-semibold text-muted-foreground">{["Work", slip()!.who].filter(Boolean).join(" · ")}</Text>
@@ -215,6 +278,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
                 </View>
               </>
             ) : null}
+            <Workers lines={workerLines} onOpen={props.links.openSession} />
             {slip()!.calendar && slip()!.calendarLink ? (
               <View class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
                 <Button testID="work-calendar-link" accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)}

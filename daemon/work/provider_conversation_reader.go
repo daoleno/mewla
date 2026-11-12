@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -44,6 +45,9 @@ type ProviderConversationReader struct {
 	// the version is unchanged. 0 means unknown (no OpenCode load yet).
 	openCodeLastVersion int64
 
+	// stamp is the parse of the last load; see ConversationStamp.
+	stamp uint64
+
 	// openCodeLastChangedIDs are the event ids changed by the last
 	// content-changing OpenCode load, used for cheap memoized deltas.
 	openCodeLastChangedIDs []string
@@ -57,6 +61,20 @@ type ProviderConversationReader struct {
 	// for this subscription so a newer same-CWD session never leaks into the
 	// active agent's Interface mid-turn.
 	piPinnedSessionPath string
+}
+
+// ConversationStamp names the parsed transcript the last Load or LoadByIdentity
+// answered with: the events of two loads with the same nonzero stamp are the
+// same events, so a caller that already projected them has nothing to redo.
+// Zero means the answer was not a retained parse (another kind of source, an
+// error, a file that changed under its parse) and proves nothing. The fields a
+// load adds around the events (path, session, cwd, activity) are not part of
+// the stamp; a caller that depends on them compares them itself.
+func (r *ProviderConversationReader) ConversationStamp() uint64 {
+	if r == nil {
+		return 0
+	}
+	return r.stamp
 }
 
 // ConversationVersion returns the content version of the last loaded provider
@@ -90,6 +108,9 @@ type providerConversationSource struct {
 	modTime      time.Time
 	fileInfo     os.FileInfo
 	conversation CodexConversation
+	// parse names the parse the conversation came from: two sources with the
+	// same nonzero parse hold the same events.
+	parse uint64
 
 	grokStamp       grokConversationStamp
 	grokUpdatesInfo os.FileInfo
@@ -109,6 +130,7 @@ func (r *ProviderConversationReader) Load(
 	now time.Time,
 ) (CodexConversation, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
+	r.stamp = 0
 	r.bind(worker, provider)
 
 	switch provider {
@@ -221,6 +243,7 @@ func (r *ProviderConversationReader) loadFileConversationStat(
 		r.source.size == info.Size() &&
 		r.source.modTime.Equal(info.ModTime()) &&
 		sameProviderSourceFile(r.source.fileInfo, info) {
+		r.stamp = r.source.parse
 		return r.source.conversation, nil
 	}
 
@@ -235,6 +258,7 @@ func (r *ProviderConversationReader) loadFileConversationStat(
 		shared.mu.Lock()
 		if shared.valid && shared.matches(info) {
 			r.takeShared(shared)
+			r.stamp = r.source.parse
 			shared.mu.Unlock()
 			return r.source.conversation, nil
 		}
@@ -248,6 +272,7 @@ func (r *ProviderConversationReader) loadFileConversationStat(
 				go shared.parse(provider, path, parse, stat, info)
 			}
 			r.takeShared(shared)
+			r.stamp = r.source.parse
 			shared.mu.Unlock()
 			return r.source.conversation, nil
 		}
@@ -269,6 +294,7 @@ func (r *ProviderConversationReader) loadFileConversationStat(
 				// its own events.
 				r.source = shared.source
 				r.source.conversation = conversation
+				r.stamp = r.source.parse
 			}
 			shared.mu.Unlock()
 		}
@@ -358,10 +384,15 @@ func (e *sharedFileConversation) parse(
 		modTime:      before.ModTime(),
 		fileInfo:     before,
 		conversation: withOwnEvents(conversation),
+		parse:        parseSequence.Add(1),
 	}
 	e.valid = true
 	return conversation, nil
 }
+
+// parseSequence numbers the parses that were kept, so a kept parse can be told
+// from the next one of the same file.
+var parseSequence atomic.Uint64
 
 // parseRecovering keeps a panicking parser from leaving the shared parse
 // marked as running forever.
