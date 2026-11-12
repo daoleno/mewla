@@ -142,6 +142,45 @@ describe("Brain's Work", () => {
   }, 20_000);
 });
 
+describe("Ask Brain about this", () => {
+  const quote = "Re: fix sync (work w-back)\n> Fixed the sync race and added a test.\n";
+  // Brain's thread is known: its composer holds that thread's draft.
+  const daemon = () => ({ brain: { ...brain(), chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude" } } });
+  /** Work detail from the tray's row, pushed over home, which stays as it was under it. */
+  async function askFromTray(app: Awaited<ReturnType<typeof workApp>>) {
+    await app.press("id:state-control");
+    await app.waitFor("text:fix sync");
+    await app.press("text:fix sync");
+    await app.waitFor("id:work-detail");
+    await app.press("id:work-action-ask");
+    await app.waitFor("id:home-header");
+  }
+
+  test("the quote lands in Brain's open composer", async () => {
+    const app = await workApp(daemon());
+    await askFromTray(app);
+    await app.waitUntil(() => app.value("id:composer") === quote);
+  }, 20_000);
+
+  test("what was typed in the composer stays, the quote below it", async () => {
+    const app = await workApp(daemon());
+    await app.type("id:composer", "also check the logs");
+    await app.waitUntil(() => app.value("id:composer") === "also check the logs");
+    await askFromTray(app);
+    await app.waitUntil(() => app.value("id:composer") === `also check the logs\n\n${quote}`);
+  }, 20_000);
+
+  test("from a notification's Work page too: what was typed a moment before is kept", async () => {
+    const app = await workApp(daemon());
+    await app.type("id:composer", "also check the logs");
+    await app.waitUntil(() => app.value("id:composer") === "also check the logs");
+    await openWork(app, "w-back");
+    await app.press("id:work-action-ask");
+    await app.waitFor("id:home-header");
+    await app.waitUntil(() => app.value("id:composer") === `also check the logs\n\n${quote}`);
+  }, 20_000);
+});
+
 describe("a Calendar run's Work file", () => {
   const work = {
     id: "wf-1", project: "calendar", path: "calendar/wf-1.md", title: "Daily digest", mtime: "2026-07-17T03:01:00Z",
@@ -252,5 +291,18 @@ describe("a Calendar run's Work file", () => {
     await app.waitFor("id:work-file-body");
     await app.type("id:work-file-body", " Also the fourth.");
     await app.waitFor("text:Save failed. disk is full", { timeout: 10_000 });
+  }, 25_000);
+
+  test("a link in the file opens: a web page in the browser, a path in Brain's file preview, and Back returns to the file", async () => {
+    const linked = { ...work, body: "# Daily digest\n\nSee [the paper](https://example.com/paper) and [my notes](/home/me/worklog/notes.md).\n" };
+    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+    const app = await openWorkFile({ work_items: [linked], brain: { chat_thread_id: "t-now", host_worker } });
+    await app.waitFor("text:the paper", { timeout: 10_000 });
+    await app.press("text:the paper");
+    await app.waitUntil(() => app.openedUrls().includes("https://example.com/paper"));
+    await app.press("text:my notes");
+    await app.waitFor("id:file-preview", { timeout: 10_000 });
+    await app.back();
+    await app.waitFor("id:work-file-page");
   }, 25_000);
 });

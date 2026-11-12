@@ -12,10 +12,13 @@ import { compactAge, latestTimestamp, withDayDividers } from "../../core/timelin
 import { readingPlace, readingPlaceIndex } from "../../core/timeline/readingPlace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
+import { PictureViewer } from "./PictureViewer";
+import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
 import { PlainText } from "./PlainText";
 import { selectingText } from "./messageEdit";
-import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
+import { ActivityRow, CODE_ACTIONS, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
+import { brainFiles, openChatLink, openChatPath } from "./links";
 
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
@@ -24,14 +27,16 @@ export type MessageHandlers = {
   isFinalReply?: (id: string) => boolean;
   /** When the running turn started (the provider's own clock): "Working · 1:05". */
   workingSince?: () => string | undefined;
-  /** A link pressed in a reply: a web page, or a file the Session wrote. */
+  /** A link pressed in a reply: a web page, or a file the Session wrote. None: the chat's own (`openChatLink` on Brain's files). */
   onLink?: (url: string) => void;
-  /** A file a tool call names, pressed. */
+  /** A file a tool call names, pressed. None: the chat's own (`openChatPath` on Brain's files). */
   onFile?: (path: string) => void;
   /** An image a reply shows by its path on the computer, as a data URL. */
   loadImage?: (path: string) => Promise<string | null>;
   /** Brain's thread: where its Work cards lead. */
   work?: WorkCardHandlers;
+  /** A picture pressed (its `pictureKey`): the chat's viewer opens on it. Set by the chat itself. */
+  openPicture?: (key: string) => void;
 };
 
 /** "Working" with the turn's elapsed time, ticking each second while it shows. */
@@ -47,18 +52,30 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
   const it = props.item;
   const failed = () => it().pending && it().pendingLifecycle === "failed";
   const waiting = () => it().pending && !failed();
+  // Sent pictures show as pictures above the bubble (SPEC §1.7); other files stay rows in it.
+  const pictures = () => sentPictures(it().attachments);
+  const files = () => it().attachments.filter((file) => !pictures().includes(file));
   return (
     <View class="max-w-[84%] items-end gap-1 self-end">
-      <Button testID="user-message" onPress={() => !it().pending && props.handlers.onUserMessage?.(it())}
-        class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "border border-foreground" : ""} ${waiting() ? "opacity-55" : ""}`}>
-        {it().body ? <Text class="text-message">{it().body}</Text> : null}
-        {it().attachments.map((file) => (
-          <View class="flex-row items-center gap-1.5 pt-1">
-            <Icon name="document" size={14} />
-            <Text class="text-sub text-muted-foreground line-clamp-1">{file.name}</Text>
-          </View>
-        ))}
-      </Button>
+      {pictures().length ? (
+        <View testID="sent-pictures" class={`flex-row flex-wrap justify-end gap-2 ${waiting() ? "opacity-55" : ""}`}>
+          {pictures().map((file) => (
+            <ChatImage frame="sent" src={file.path} alt={file.name} load={props.handlers.loadImage} onOpen={() => props.handlers.openPicture?.(pictureKey(it().id, file.path))} />
+          ))}
+        </View>
+      ) : null}
+      {it().body || files().length ? (
+        <Button testID="user-message" onPress={() => !it().pending && props.handlers.onUserMessage?.(it())}
+          class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "border border-foreground" : ""} ${waiting() ? "opacity-55" : ""}`}>
+          {it().body ? <Text class="text-message">{it().body}</Text> : null}
+          {files().map((file) => (
+            <View class="flex-row items-center gap-1.5 pt-1">
+              <Icon name="document" size={14} />
+              <Text class="text-sub text-muted-foreground line-clamp-1">{file.name}</Text>
+            </View>
+          ))}
+        </Button>
+      ) : null}
       {waiting() ? <Icon name="time" size={12} /> : null}
       {failed() ? (
         <View class="flex-row items-center gap-3">
@@ -93,8 +110,12 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
         <View class="px-4">
           <View onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
             <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-message"
+              codeBlockActions={CODE_ACTIONS}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
-              renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} width={textWidth} />} />
+              renderImage={(image) => {
+                const key = pictureKey(it().id, image.src);
+                return <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} width={textWidth} onOpen={() => props.handlers.openPicture?.(key)} />;
+              }} />
           </View>
           {!(it() as MessageTimelineItem).streaming && props.handlers.isFinalReply?.(it().id) ? (
             <Button testID="copy-reply" onPress={() => void Clipboard.writeText((it() as MessageTimelineItem).body.replace(/\s+$/u, "")).catch(() => {})}
@@ -106,7 +127,8 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
       ) : isWorkingRow(it()) ? (
         <WorkingRow since={() => props.handlers.workingSince?.()} />
       ) : it().type === "activity" ? (
-        <ActivityRow item={as("activity") as () => ActivityTimelineItem} expansion={props.expansion} onFile={props.handlers.onFile} />
+        <ActivityRow item={as("activity") as () => ActivityTimelineItem} expansion={props.expansion} onFile={props.handlers.onFile}
+          pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} />
       ) : it().type === "plan" ? (
         <PlanRow item={as("plan") as () => PlanTimelineItem} />
       ) : it().type === "task-notification" ? (
@@ -165,7 +187,26 @@ export function ChatTimeline(props: {
   /** Bumped to bring the foot (the open request) into view: a tray row, the cold start with a request open. */
   reveal?: () => number;
 }) {
-  const handlers = props.handlers ?? {};
+  // A note at the foot of the chat for a moment (SPEC §11 Toast): why a link did not open.
+  const notice = signal("");
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  const say = (text: string) => {
+    notice.set(text);
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => notice.set(""), 1500);
+  };
+  cleanup(() => clearTimeout(noticeTimer));
+  // The page's handlers, read live (Brain's are getters); links and paths it does not handle open as
+  // Brain's files: a page without its own is Brain's thread.
+  const given = props.handlers ?? {};
+  const handlers: MessageHandlers = Object.create(given);
+  const files = brainFiles(say);
+  if (!given.onLink) handlers.onLink = (url) => openChatLink(url, files);
+  if (!given.onFile) handlers.onFile = (path) => openChatPath(path, files);
+  // The picture viewer: every picture of the thread, in order; the one shown by its key.
+  const viewing = signal<string | null>(null);
+  const pictures = computed(() => threadPictures(props.items()), { equals: samePictures });
+  handlers.openPicture = (key) => viewing.set(key);
   const expansion = createExpansion();
   let list: ListRef | undefined;
   // Read back from the newest row: the jump button brings it into view again, saying how old it is.
@@ -279,6 +320,7 @@ export function ChatTimeline(props: {
   return (
     <View class="flex-1">
       <SelectTextSheet />
+      <PictureViewer pictures={pictures} open={viewing} load={handlers.loadImage} />
       <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
           list = node;
           mounted.set(true);
@@ -331,6 +373,11 @@ export function ChatTimeline(props: {
             {age() ? <Text class="text-sub text-muted-foreground">{age()}</Text> : null}
           </Button>
         )
+      ) : null}
+      {notice() ? (
+        <View class="absolute bottom-16 left-4 right-4 items-center">
+          <Text testID="chat-notice" onPress={() => notice.set("")} class="rounded-full bg-foreground px-4 py-2.5 text-sub font-semibold text-background">{notice()}</Text>
+        </View>
       ) : null}
     </View>
   );

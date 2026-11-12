@@ -58,6 +58,29 @@ Focus rings and text selection use the Running blue.
 underlined. The conversation is capped at a reading width of 820 pt
 (`ChatCanvas`).
 
+Brain and a Session draw the same rows (`ui/chat`, soft-final SPEC §1.7):
+
+- **Links** open: a web page in the browser, a file path in the file preview
+  pushed over the chat (`ui/chat/links.ts`). A page without its own handler
+  is Brain's, so its files are read through Brain's host Session; the Work
+  file page uses the same function.
+- **Code blocks** carry NSH's built-in Copy (`codeBlockActions`), which shows
+  a check for a moment once copied.
+- **Edited files** list each file once with +/− in `add` and `del`; a rename
+  shows and opens its new path, and a folded run lists its steps' files
+  (`core/timeline/activityFiles.ts`).
+- **Pictures**: sent ones at 168 × 126 above the bubble, a tool call's as
+  thumbnails under its row (96 × 170 tall, 200 × 125 wide), a reply's at the
+  text's width. A failed one keeps its frame with a refresh glyph and loads
+  again on a tap. A tap opens the viewer (`PictureViewer`): black in both
+  themes, ×, "2 of 3", previous and next, arrow keys and swipe, double tap
+  and pinch to zoom, through every picture of the thread in order
+  (`core/timeline/threadPictures.ts`).
+- **Composer**: a pasted picture or file becomes a chip (`onFiles`); Esc
+  leaves an open message edit on every hardware keyboard; text written into
+  a draft from elsewhere (Ask Brain about this) joins what is typed, below
+  it (`writeIntoDraft`).
+
 **Work states.** Each state is a 13 pt glyph plus a word in soft type.
 
 | State | Light | Dark | Glyph | Slip |

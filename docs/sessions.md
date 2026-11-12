@@ -193,7 +193,8 @@ URLs, HTML entities such as `&amp;`, images and code blocks with a copy button. 
 syntax: an unfinished `-`, `1.` or `>` waits for its text.
 
 **Edit** puts the message in the composer with a small bar above it and an x to
-cancel. What sending does depends on the agent:
+cancel; with a hardware keyboard (a phone's too), ↑ in the empty composer edits
+your last message and Esc leaves the edit. What sending does depends on the agent:
 
 | Agent | Sending an edited message |
 | --- | --- |
@@ -224,6 +225,23 @@ names a file, such as `[report](report.pdf)` or `[app](./out/app.apk)`, opens
 that file as above, and the header's Download saves it. Inside a Markdown file
 you opened, a link to another file is relative to that file. Links that can run
 code (`javascript:`, `data:`) never open.
+
+A changed-files list shows each file with the lines it added and removed
+(+12 −3); a renamed file shows, and opens, its new path.
+
+### Pictures in a chat
+
+Pictures you sent show as pictures above your message (other files stay a row
+in it). A picture a tool call produced, such as an agent's screenshot, is a
+thumbnail under its row. Tap any picture to open the viewer: black, with × and
+"2 of 3" on top. Previous and next sit at the sides, and the arrow keys and a
+swipe step through every picture of the chat in order; double-tap or pinch to
+zoom, and Back closes it. A picture that failed to load keeps its frame with a
+refresh mark; tap it to load it again.
+
+On the web, paste a screenshot or a copied picture into the composer and it
+becomes a chip above the field, the same as one you attached; pasted text goes
+in as typed. The phone's keyboard can paste a picture the same way.
 
 A file that is not really what its name says (an `.mp4` that is not an MP4
 container, say) is not played. A codec the device can't decode, such as HEVC

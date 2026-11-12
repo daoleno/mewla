@@ -74,6 +74,18 @@ describe("the composer's keys on a desktop", () => {
     expect(app.value("id:composer")).toBe("Delete the build folder");
   }, 20_000);
 
+  test("Escape leaves an edit before it leaves the box", async () => {
+    const app = await open(APP, desk());
+    await app.waitFor("text:Delete the build folder", { timeout: 10_000 });
+    await app.type("id:composer", "x");
+    await app.clear("id:composer");
+    await app.keyboard.press("up");
+    await app.waitFor("id:edit-chip");
+    await app.keyboard.press("escape");
+    await app.waitUntil(() => !app.shows("id:edit-chip"));
+    expect(app.value("id:composer")).toBe("");
+  }, 20_000);
+
   test("/ on the page goes to the message box; Escape leaves it", async () => {
     const app = await open(APP, desk("/"));
     // Brain's page is up once the computer said where Brain is; `?` opening the cheat sheet
@@ -105,6 +117,20 @@ describe("the composer on a phone", () => {
     await app.keyboard.press("up");
     await app.waitFor("id:edit-chip");
     expect(app.value("id:composer")).toBe("Delete the build folder");
+  }, 20_000);
+
+  test("Escape from a hardware keyboard leaves the edit: the chip goes, the box is as it was, the Session stays", async () => {
+    const app = await open(APP, { host: phoneHost(daemon), storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
+    await app.waitFor("text:Delete the build folder");
+    await app.type("id:composer", "x");
+    await app.clear("id:composer");
+    await app.keyboard.press("up");
+    await app.waitFor("id:edit-chip");
+    await app.keyboard.press("escape");
+    await app.waitUntil(() => !app.shows("id:edit-chip"));
+    expect(app.value("id:composer")).toBe("");
+    expect(app.shows("text:Delete the build folder")).toBe(true);
   }, 20_000);
 
   test("Return is a new line; Send sends", async () => {
