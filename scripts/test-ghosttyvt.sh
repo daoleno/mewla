@@ -30,17 +30,19 @@ go test -tags ghosttyvt -count=1 -run 'TestHostTerminal' "$@" ./terminal/
 # same library: concealed text stays hidden (scripts/tests/terminal_vt_conceal.cpp), soft-wrapped rows
 # are flagged and pastes framed per bracketed-paste mode (terminal_vt_select.cpp), and the render
 # corpus (scripts/terminal-corpus) comes through cell by cell with every attribute and the cursor
-# (scripts/tests/terminal_corpus_cells.cpp). The terminal's own glyphs join their neighbours
+# (scripts/tests/terminal_corpus_cells.cpp), and keys, the mouse and focus encode for the program's
+# modes (terminal_vt_input.cpp). The terminal's own glyphs join their neighbours
 # (scripts/tests/terminal_glyphs.cpp, no library).
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 NATIVE="$ROOT/client/native/terminal"
-for t in terminal_vt_conceal terminal_vt_select terminal_corpus_cells; do
+for t in terminal_vt_conceal terminal_vt_select terminal_vt_input terminal_corpus_cells; do
   "${CXX:-c++}" -std=c++17 -w -D_Nullable= -D_Nonnull= -I"$NATIVE" -I"$CACHE/include" \
     "$NATIVE/TerminalVt.cpp" "$ROOT/scripts/tests/$t.cpp" "$CACHE/$TARGET/libghostty-vt.a" -lpthread -lm -o "$OUT/$t"
 done
 "$OUT/terminal_vt_conceal"
 "$OUT/terminal_vt_select"
+"$OUT/terminal_vt_input"
 "$OUT/terminal_corpus_cells" "$ROOT/scripts/terminal-corpus"
 "${CXX:-c++}" -std=c++17 -Wall -Werror -I"$NATIVE" "$NATIVE/TerminalGlyphs.cpp" "$ROOT/scripts/tests/terminal_glyphs.cpp" -o "$OUT/terminal_glyphs"
 "$OUT/terminal_glyphs"

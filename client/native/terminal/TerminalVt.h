@@ -77,6 +77,21 @@ bool mewla_vt_frame(MewlaVt *vt, bool force_full, MewlaVtFrame *out);
 /// call on `vt`. False when there is nothing to send.
 bool mewla_vt_paste(MewlaVt *vt, const uint8_t *_Nullable data, size_t length, const uint8_t *_Nullable *_Nonnull out, size_t *out_length);
 bool mewla_vt_take_clipboard(MewlaVt *vt, const uint8_t *_Nullable *_Nonnull data, size_t *length);
+/// A key as the bytes to send the program, encoded by libghostty-vt for the program's modes now (cursor
+/// and keypad keys, Kitty keyboard flags, modifyOtherKeys). `key` is a GhosttyKey (the W3C
+/// KeyboardEvent.code set), `mods` GhosttyMods, `action` a GhosttyKeyAction; `text` the UTF-8 the key
+/// types (may be empty), `unshifted` the code point it types without Shift (0 when unknown). In `*out`
+/// until the next call on `vt`; false when the key sends nothing.
+bool mewla_vt_key(MewlaVt *vt, int32_t key, uint16_t mods, int32_t action, const uint8_t *_Nullable text, size_t text_length,
+                  uint32_t unshifted, const uint8_t *_Nullable *_Nonnull out, size_t *out_length);
+/// Whether the program asked for mouse reports (then a plain drag is the program's, not a selection).
+bool mewla_vt_mouse_tracking(MewlaVt *vt);
+/// A mouse press, release or move (a GhosttyMouseAction; `button` a GhosttyMouseButton, 0 for none) at
+/// x, y pixels from the grid's top-left, as the bytes to send; false when the program does not report it.
+bool mewla_vt_mouse(MewlaVt *vt, int32_t action, int32_t button, uint16_t mods, double x, double y,
+                    const uint8_t *_Nullable *_Nonnull out, size_t *out_length);
+/// Focus gained or lost, as the bytes to send when the program asked for focus reports (mode 1004).
+bool mewla_vt_focus(MewlaVt *vt, bool focused, const uint8_t *_Nullable *_Nonnull out, size_t *out_length);
 
 #pragma clang assume_nonnull end
 
