@@ -271,3 +271,18 @@ describe("Back's connection mark (SPEC §1.3)", () => {
     for (const kind of ["quiet", "running", "needs", "starting", "cant_start", "none"] as const) expect(backMark(kind)).toBeNull();
   });
 });
+
+describe("the daemon's run fields (WIRE §7, §9)", () => {
+  test("a running Session says the call it started last and how long this run has gone, not since it was created", () => {
+    const m = trayModel(input({ workers: [
+      worker("r", { started_at: NOW - 26 * 3_600_000, running_since: NOW - 3 * 60_000, activity: "Bash curl -sI https://example.org", summary: "Claude working" }),
+    ] }));
+    expect(m.running[0]).toMatchObject({ key: "session:r", line: "Bash curl -sI https://example.org", end: "3m", live: true });
+  });
+
+  test("a prompt's tray row is titled with the call the daemon names", () => {
+    const prompt = { id: "p1", kind: "permission", provider: "claude", title: "Waiting for Claude permission", tool: "Read", summary: "/etc/hostname",
+      request: "Read file\nRead(/etc/hostname)\nDo you want to proceed?", options: [{ number: 1, label: "Yes" }, { number: 2, label: "No" }] } as never;
+    expect(requestsOf(input({ workers: [worker("q", { status: "blocked", prompt })] }))[0]).toMatchObject({ kind: "prompt", title: "/etc/hostname" });
+  });
+});

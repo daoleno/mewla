@@ -14,6 +14,9 @@ export interface AnsweredRequest {
   work_id?: string;
   thread_id?: string;
   title?: string;
+  /** A permission's or an approval's tool ("Bash") and its line ("curl -sI https://example.org"), on records since WIRE §8. */
+  tool?: string;
+  summary?: string;
   asked: string;
   answer?: string;
   outcome: AnsweredOutcome;
@@ -36,6 +39,7 @@ export function parseAnsweredRequest(raw: unknown): AnsweredRequest | null {
   const anchor = (r.anchor && typeof r.anchor === "object" ? r.anchor : {}) as Record<string, unknown>;
   return {
     id, kind: str(r.kind) ?? "", session_id: str(r.session_id), work_id: str(r.work_id), thread_id: str(r.thread_id), title: str(r.title),
+    tool: str(r.tool), summary: str(r.summary),
     asked: str(r.asked) ?? "", answer: str(r.answer), outcome,
     by: { kind: by.kind as AnsweredRequest["by"]["kind"], device_id: str(by.device_id), device_name: str(by.device_name), basis: str(by.basis) },
     asked_at: str(r.asked_at), answered_at: answeredAt,
@@ -83,10 +87,14 @@ export function sealedOfAnswered(record: AnsweredRequest, at: (ms: number) => st
   // An approval names what was approved, its command in mono, not the button ("Allow"); a prompt or a
   // question answered names the choice: "You chose · Yes" (soft-final SPEC §11 Request card, answered).
   // A terminal prompt's `asked` is its screen text run together, so only an approval's is a command.
-  const approval = record.kind === "approval" && (record.outcome === "approved" || record.outcome === "denied");
-  const chose = record.outcome === "approved" || record.outcome === "denied" || record.outcome === "answered";
+  // A record that names its call (`summary`, WIRE §8) says it whatever answered it, the terminal included:
+  // "Approved · curl …", "Denied · curl …", "Not answered · curl …".
+  const ruled = record.outcome === "approved" || record.outcome === "denied";
+  const named = record.summary && (record.kind === "approval" || record.kind === "permission") && (ruled || record.outcome === "not_answered");
+  const approval = Boolean(named) || (record.kind === "approval" && ruled);
+  const chose = ruled || record.outcome === "answered";
   const verb = approval || !chose ? VERB[record.outcome] : "You chose";
-  const command = approval ? record.asked.split(/\r?\n/).find((line) => line.trim())?.trim() : undefined;
+  const command = named ? record.summary : approval ? record.asked.split(/\r?\n/).find((line) => line.trim())?.trim() : undefined;
   const answer = command || record.answer || (SCREEN_PROMPTS.has(record.kind) ? record.title : record.asked) || record.title || verb;
   return {
     key: answeredKeys(record)[0] ?? `answered:${record.id}`,

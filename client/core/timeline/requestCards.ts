@@ -152,11 +152,18 @@ export const looksLikeCommand = (line: string) => Boolean(line) && !/^[A-Z][a-z]
  * "Tip:" advert and "This command requires approval" are dropped: the card already says Approve. The daemon
  * should send these as fields (its prompt parser has them as lines only).
  */
-export function promptParts(text: string): { question: string; command: string; notes: string } {
+export function promptParts(text: string, known?: string): { question: string; command: string; notes: string } {
   const lines = text.split(/\r?\n/).map((line) => line.trim())
     .filter((line) => line && !isPromptNoise(line));
   const question = [...lines].reverse().find((line) => line.endsWith("?")) ?? "";
   const rest = lines.filter((line) => line !== question);
+  if (known) {
+    // The daemon named the call: it is the command, and the lines that print it ("Read(/etc/hostname)", a
+    // wrapped command's parts) go, compared without whitespace; the rest is the description.
+    const bare = (line: string) => line.replace(/\s+/g, "");
+    const call = bare(known);
+    return { question, command: known, notes: rest.filter((line) => !bare(line).includes(call) && !call.includes(bare(line))).join(" ") };
+  }
   const command = rest.find(looksLikeCommand) ?? rest[0] ?? "";
   return { question, command, notes: rest.filter((line) => line !== command).join(" ") };
 }
@@ -164,7 +171,7 @@ export function promptParts(text: string): { question: string; command: string; 
 /** A sealed line's words for an action card's answer. */
 export function sealAction(card: RequestCard, optionLabel: string, deny: boolean): Pick<SealedRequest, "verb" | "answer" | "mono"> {
   if (card.body.kind !== "action") return { verb: "Answered", answer: optionLabel };
-  const command = promptParts(card.body.prompt.requestText ?? "").command;
+  const command = promptParts(card.body.prompt.requestText ?? "", card.body.prompt.commandText).command;
   if (card.label === "Approve") return deny ? { verb: "Denied", answer: command || optionLabel, mono: Boolean(command) } : { verb: "Approved", answer: command || optionLabel, mono: Boolean(command) };
   return { verb: "You chose", answer: optionLabel };
 }

@@ -83,3 +83,10 @@ describe("a terminal prompt's parts", () => {
     expect(promptParts(above)).toEqual({ question: "Do you want to proceed?", command: "git push origin main", notes: "Push the release branch" });
   });
 });
+
+test("a prompt the daemon names: the card's command is the call's line, and lines that print it are not the description", () => {
+  expect(promptParts("Read file\nRead(/etc/hostname)\nDo you want to proceed?", "/etc/hostname"))
+    .toEqual({ question: "Do you want to proceed?", command: "/etc/hostname", notes: "Read file" });
+  expect(promptParts("Fetch HTTP headers from example.org\ncurl -sI https://example.org\nThis command requires approval\n\nDo you want to proceed?", "curl -sI https://example.org"))
+    .toEqual({ question: "Do you want to proceed?", command: "curl -sI https://example.org", notes: "Fetch HTTP headers from example.org" });
+});

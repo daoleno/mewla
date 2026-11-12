@@ -37,9 +37,11 @@ export function isQuestionApproval(approval: WorkerApproval): boolean {
 /** A prompt line that says nothing about this request: the agent's tips and its "requires approval" boilerplate. */
 export const isPromptNoise = (line: string) => /^tip:/i.test(line) || /^this command requires approval\.?$/i.test(line);
 
-/** What a terminal prompt asks: the open question, else the request's first line past tips, else its title. */
+/** What a terminal prompt asks: the open question, else the call's line (`summary`), else the request's first line past tips, else its title. */
 export function promptTitle(prompt: WorkerPrompt): string {
   if (prompt.kind === "choice") return prompt.questions?.find((q) => !q.answered)?.question || prompt.title || "A question";
+  // The call the prompt is for, as the daemon names it (WIRE §7): "curl -sI https://example.org", "/etc/hostname".
+  if (prompt.summary) return prompt.summary;
   const request = prompt.request?.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !isPromptNoise(line));
   return request || prompt.title || "Waiting for confirmation";
 }
@@ -66,11 +68,13 @@ const PHASE_WORDS: Record<string, string> = {
  * report is the daemon reading the terminal, and a blocked, failed or idle Session's summary is the screen's
  * last line even after a report, so those fall to the word.
  */
-export function sessionActivity(worker: Pick<Worker, "status" | "summary" | "phase" | "event_kind" | "needs_attention" | "prompt" | "approvals">): string {
+export function sessionActivity(worker: Pick<Worker, "status" | "summary" | "phase" | "event_kind" | "needs_attention" | "prompt" | "approvals" | "activity">): string {
   const decision = (worker.approvals ?? []).find((approval) => !isQuestionApproval(approval));
   if (decision) return approvalTitle(decision);
   if (worker.prompt) return promptTitle(worker.prompt);
   if (worker.needs_attention) return "Waiting for you";
+  // The tool call it started last, from its hook (WIRE §9): data, not terminal text, so no footer gate.
+  if (worker.status === "running" && worker.activity) return worker.activity;
   const reported = Boolean(worker.event_kind?.trim() || worker.phase?.trim()) && (worker.status === "running" || worker.status === "done");
   const summary = reported ? readableSummary(worker.summary) : "";
   if (summary) return summary;

@@ -354,3 +354,24 @@ describe("feed frames as store actions", () => {
     expect(isWorkerSessionListFreshForConnection(state, "server")).toBe(false);
   });
 });
+
+describe("the daemon's run and prompt fields (WIRE §7, §9)", () => {
+  const server = { serverId: "server", serverName: "Server", serverUrl: "https://server.test" };
+  const one = (raw: object) => {
+    const state = workerReducer(initialWorkerState, workerSessionFeedAction({ type: "worker_session_list", seq: 1, worker_sessions: [raw] }, server)!);
+    return serverWorkers(state, "server")[0]!;
+  };
+
+  test("a running Session keeps when its run began and the call it started last; an idle one keeps neither", () => {
+    const running = one({ id: "%1", name: "a", status: "running", activity: "Read /etc/hostname", running_since: "2026-11-12T20:47:07.139Z" });
+    expect(running).toMatchObject({ activity: "Read /etc/hostname", running_since: Date.parse("2026-11-12T20:47:07.139Z") });
+    const idle = one({ id: "%1", name: "a", status: "unknown", activity: "Read /etc/hostname", running_since: "2026-11-12T20:47:07.139Z" });
+    expect(idle.activity).toBeUndefined();
+    expect(idle.running_since).toBeUndefined();
+  });
+
+  test("a permission prompt keeps its tool and the call's line", () => {
+    const prompt = normalizePrompt({ id: "p", kind: "permission", provider: "claude", title: "Bash command", tool: "Bash", summary: "curl -sI https://example.org", options: [{ number: 1, label: "Yes" }] });
+    expect(prompt).toMatchObject({ tool: "Bash", summary: "curl -sI https://example.org" });
+  });
+});

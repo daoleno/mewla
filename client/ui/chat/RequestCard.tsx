@@ -210,7 +210,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
       sending.set("");
     }
   };
-  const asked = () => promptParts(prompt.requestText ?? "");
+  const asked = () => promptParts(prompt.requestText ?? "", prompt.commandText);
   const question = () => {
     const text = asked().question || props.card.title;
     return text.trim() === asked().command ? "" : text;
@@ -260,7 +260,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
 function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; notice: RequestNotice; anchor?: (node: ViewRef) => void }) {
   const card = props.card;
   const gone = () => {
-    const command = card.body.kind === "action" ? promptParts(card.body.prompt.requestText ?? "").command : "";
+    const command = card.body.kind === "action" ? promptParts(card.body.prompt.requestText ?? "", card.body.prompt.commandText).command : "";
     sealRequest(sealedOf(card, "Not answered", command || card.title, Boolean(command)));
     props.notice(PASSED);
   };

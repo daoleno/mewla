@@ -65,3 +65,37 @@ describe("an answered row in a thread", () => {
     expect(twice.events[0]).toMatchObject({ kind: "status", source: "request_answered", answered: { id: record.id, outcome: "approved" } });
   });
 });
+
+describe("a record that names its call (WIRE §8)", () => {
+  const named = { ...record, title: "Bash command", tool: "Bash", summary: "curl -sI https://example.org", asked: "curl -sI https://example.org" };
+
+  test("a permission answered in the terminal says how it ended and the command, in mono", () => {
+    const approved = parseAnsweredRequest({ ...named, answer: undefined, by: { kind: "terminal" } })!;
+    expect(sealedOfAnswered(approved, () => "")).toMatchObject({ verb: "Approved", answer: "curl -sI https://example.org", mono: true, source: "In the terminal" });
+    const denied = parseAnsweredRequest({ ...named, answer: undefined, outcome: "denied", by: { kind: "terminal" } })!;
+    expect(sealedOfAnswered(denied, () => "")).toMatchObject({ verb: "Denied", answer: "curl -sI https://example.org", mono: true });
+  });
+
+  test("answered from a phone, it names the command too, not the button", () => {
+    expect(sealedOfAnswered(parseAnsweredRequest(named)!, () => "")).toMatchObject({ verb: "Approved", answer: "curl -sI https://example.org", mono: true });
+  });
+
+  test("a terminal answer not yet ruled, and an old record without the fields, keep today's words", () => {
+    const pending = parseAnsweredRequest({ ...named, answer: undefined, outcome: "answered", by: { kind: "terminal" } })!;
+    expect(sealedOfAnswered(pending, () => "")).toMatchObject({ verb: "You chose", answer: "Bash command" });
+    expect(sealedOfAnswered(parseAnsweredRequest(record)!, () => "")).toMatchObject({ verb: "You chose", answer: "Yes" });
+  });
+});
+
+describe("a record written again under its id (WIRE §8)", () => {
+  test("is the newer version of the same line: the thread keeps one, now ruled", async () => {
+    const { normalizeCodexConversation } = await import("../conversation/conversation");
+    const { buildTimeline } = await import("./model");
+    const first = { ...record, answer: undefined, outcome: "answered", by: { kind: "terminal" }, summary: "curl -sI https://example.org", tool: "Bash" };
+    const row = (seq: number, request: object) => ({ id: `answered:${seq}`, seq, timestamp: record.answered_at, kind: "request_answered", source: "request_answered", role: "system", body: "", request });
+    const conversation = normalizeCodexConversation({ available: true, events: [row(2, first), row(3, { ...first, outcome: "approved" })] });
+    const answered = buildTimeline(conversation.events).filter((item) => item.type === "answered");
+    expect(answered).toHaveLength(1);
+    expect(answered[0]).toMatchObject({ id: "answered:2", record: { outcome: "approved" } });
+  });
+});
