@@ -39,6 +39,9 @@ export function createComposerText(draft: () => Draft | null) {
 }
 export type ComposerText = ReturnType<typeof createComposerText>;
 
+/** The message edit working on a composer's text (`createMessageEdit` registers it): Escape leaves it. */
+export const composerEdits = new WeakMap<ComposerText, { open: () => boolean; cancel: () => void }>();
+
 /**
  * The text field and Send, above the keyboard. While a turn runs and nothing
  * is typed, Send is Stop ("Stopping…" until the turn ends). `children` go
@@ -47,9 +50,9 @@ export type ComposerText = ReturnType<typeof createComposerText>;
  * With a keyboard and a pointer (`platform.desktop`: the desktops, a desktop
  * browser) Return sends and Shift+Return is a new line; Ctrl/⌘+Return sends
  * too; a Return that commits an input method's text never sends (NSH's
- * `submitBehavior`); Escape leaves the field (NSH); `/` on the page focuses the
- * field. ↑ in the empty field edits the last message (`onRecall`) on every
- * platform with a hardware keyboard.
+ * `submitBehavior`); Escape leaves the field; `/` on the page focuses the
+ * field. ↑ in the empty field edits the last message (`onRecall`) and Escape
+ * leaves that edit, on every platform with a hardware keyboard.
  *
  * Text put in from outside (a picked `@agent` or skill, a recalled message) leaves
  * the caret at its end. `disabled` (soft-final/SPEC.md §11): the field and Send at
@@ -121,11 +124,17 @@ export function Composer(props: {
       if (focused()) input?.blur();
     });
   });
-  // Escape leaves the field (the desktop's `/` went into it), so the page's keys work again.
+  // Escape leaves an open message edit (its chip's Cancel), wherever a hardware keyboard is, while the
+  // page is shown (SPEC §1.4); with no edit, it leaves the field on a desktop (the desktop's `/` went
+  // into it), so the page's keys work again. A list open over the field keeps it.
+  const edit = composerEdits.get(props.text);
   effect(() => {
-    if (!desktop || !focused()) return;
+    const editing = Boolean(edit?.open());
+    if (editing ? !(props.active ? props.active() : true) : !(desktop && focused())) return;
     keymap.bind("escape", () => {
-      if (!(props.pickerOpen && untracked(props.pickerOpen))) input?.blur();
+      if (props.pickerOpen && untracked(props.pickerOpen)) return;
+      if (edit && untracked(edit.open)) edit.cancel();
+      else input?.blur();
     }, { when: "always" });
   });
   return (
