@@ -716,14 +716,15 @@ function classifyCommand(command: string): SemanticActionKind {
     return "search_code";
   }
   // A filter after a pipe ("mewla work get | head -c 800") trims output; it reads no file.
-  if (/\b(cat|sed|nl|less|head|tail)\b/.test(bare.replace(PIPED_FILTER_RE, ""))) {
+  if (/\b(cat|sed|nl|less|head|tail)\b/.test(bare.replace(PIPED_FILTER_RE, "$1"))) {
     return "read_files";
   }
   return "run_command";
 }
 
 /** A pipeline stage that only trims or prints what comes in: `| head -c 800`, `| tail -5`. */
-const PIPED_FILTER_RE = /(?<!\|)\|(?!\|)\s*(?:head|tail|sed|cat|nl|less)\b[^|;&]*/g;
+// No lookbehind: older JavaScriptCore cannot parse it. A "||" is no pipe, so its second bar is kept.
+const PIPED_FILTER_RE = /(^|[^|])\|(?!\|)\s*(?:head|tail|sed|cat|nl|less)\b[^|;&]*/g;
 
 function commandActionLabel(command: string, kind: SemanticActionKind): string {
   // Codex commonly uses agent-browser through the exec wrapper. Treat it as a
