@@ -95,9 +95,10 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
 function DelegatedBrief(props: { item: () => MessageTimelineItem; expansion: Expansion }) {
   const task = () => props.item().delegatedTask ?? "";
   const open = () => props.expansion.isOpen(props.item().id);
-  const long = () => task().length > 90 || task().includes("\n");
+  // A chevron where the task likely runs past two lines; a tap opens any task, since a line's width is not known here.
+  const long = () => task().length > 80 || task().includes("\n");
   return (
-    <Button testID="delegated-brief" accessibilityLabel={`Task from Brain: ${task()}`} disabled={!long()} onPress={() => props.expansion.toggle(props.item().id)}
+    <Button testID="delegated-brief" accessibilityLabel={`Task from Brain: ${task()}`} onPress={() => props.expansion.toggle(props.item().id)}
       class="min-h-[44px] flex-row items-start gap-2 py-2.5 active:opacity-70">
       <Icon name="brain" size={18} />
       <Text testID={open() ? "delegated-task-open" : "delegated-task"} class={`min-w-0 flex-1 text-sub ${open() ? "" : "line-clamp-2"}`}>{task()}</Text>
