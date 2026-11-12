@@ -4,6 +4,7 @@
  * its phase); a finished one, the snapshot's row.
  */
 import { listTime, sessionRowModel } from "../sessions/listRow";
+import { sessionActivity } from "../sessions/activity";
 import { progressSteps } from "../sessions/progress";
 import type { TerminalFlavor } from "../sessions/terminalFlavor";
 import { agentKindFromProvider, typeLabel, type AgentKind } from "../sessions/workerPresentation";
@@ -41,6 +42,31 @@ const STATE_LABEL: Partial<Record<WorkWorkerState, string>> = { blocked: "Needs 
 
 const LIVE_STATE: Partial<Record<Worker["status"], WorkWorkerState>> = { running: "running", blocked: "blocked", done: "done", failed: "failed" };
 
+/**
+ * A Worker's name without the Session id the daemon appends ("Hello writer (mh-17b3…)" → "Hello writer"):
+ * the id is no name to show. Only that exact suffix goes; "Fix (macOS)" stays as it is.
+ */
+export function workerName(name: string | undefined): string {
+  return (name ?? "").replace(/\s*\(mh-[0-9a-f]+\)\s*$/, "").trim();
+}
+
+/**
+ * What a Worker does, in words. A live one the list has reads as its Session's line does (never the
+ * terminal: a live row's summary is the daemon reading the screen, its footer "⏵⏵ bypass permissions on"
+ * included); a live one the list lacks, its summary only once it reported a phase; a finished one, its
+ * reported result line.
+ */
+function workerSummary(row: WorkWorkerSession, session: Worker | undefined): string {
+  const text = row.live
+    ? session
+      ? sessionActivity(session)
+      : row.phase?.trim()
+        ? row.summary
+        : ""
+    : row.summary;
+  return text?.replace(/\s+/g, " ").trim() ?? "";
+}
+
 export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, sessions: ReadonlyMap<string, Worker>, now = new Date()): WorkWorkerLine[] {
   return (rows ?? []).map((row) => {
     const session = sessions.get(row.session_id);
@@ -48,13 +74,13 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
     const following = row.live && session;
     const state = following ? LIVE_STATE[session.status] ?? row.state : row.state;
     const working = state === "running";
-    const summary = (following ? session.summary?.trim() || row.summary : row.summary)?.replace(/\s+/g, " ").trim() ?? "";
+    const summary = workerSummary(row, session);
     const at = Date.parse(working ? row.updated_at : row.ended_at ?? row.updated_at);
     const agent = model?.kind ?? agentKindFromProvider(row.provider);
     const flavor = model?.flavor ?? "shell";
     return {
       sessionId: row.session_id,
-      name: row.name?.trim() || model?.title || row.executor_id || "Worker",
+      name: workerName(row.name) || workerName(model?.title) || row.executor_id || "Worker",
       agent,
       flavor,
       agentLabel: typeLabel(agent, flavor),

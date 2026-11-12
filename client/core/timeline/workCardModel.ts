@@ -7,6 +7,7 @@
 import type { BrainWorkEventKind } from "./brainWorkEvent";
 import type { BrainWorkEventTimelineItem } from "./types";
 import type { ResultAction } from "../work/types";
+import { workerName } from "../work/workers";
 
 export type WorkCardKind = "live" | "needs" | "result" | "line";
 
@@ -47,7 +48,7 @@ export function workCardModel(item: Pick<BrainWorkEventTimelineItem, "event" | "
     title: work?.title || event.work_title || "Work",
     at: Number.isFinite(at) && at > 0 ? at : null,
     sessionId: work?.attempt_session_id || event.session_id,
-    sessionName: event.session_name,
+    sessionName: workerName(event.session_name) || undefined,
     actions: event.actions ?? [],
   };
   if (status === "running" || status === "open" || status === "waiting") {
