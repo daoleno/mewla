@@ -47,6 +47,7 @@ function recorder() {
   const handlers: TerminalHandlers = {
     reset: () => log.push("reset"),
     output: (data) => log.push(`out:${data}`),
+    sessionSize: (cols, rows) => log.push(`size:${cols}x${rows}`),
     scrollState: (s) => log.push(`scroll:${s.atBottom}:${s.inCopyMode}`),
     history: (render) => history.push(render),
     historyNotice: (text) => notices.push(text),
@@ -108,6 +109,24 @@ describe("TerminalSession", () => {
     term.close();
     term.claim();
     expect(frames(socket, "terminal_resize")).toHaveLength(1);
+    transport.close();
+  });
+
+  test("the Session's size the computer tells reaches the view before the replay at it, for its own attachment only", async () => {
+    const { transport, socket, term, log } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    await wait(30);
+    const asked = historyRequests(socket).length;
+    // Another viewer took the size: the view hears it, then the full redraw; its own grid is not sent back.
+    socket.receive({ type: "terminal_size", session_id: "t1", cols: 160, rows: 45 });
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "\u001bcwide" });
+    socket.receive({ type: "terminal_size", session_id: "other", cols: 20, rows: 5 });
+    expect(log).toEqual(["reset", "size:160x45", "out:\u001bcwide"]);
+    expect(frames(socket, "terminal_resize")).toHaveLength(0);
+    // Its history reflowed at the other width: asked for again.
+    await until(() => historyRequests(socket).length > asked);
+    expect(historyRequests(socket).length).toBeGreaterThan(asked);
+    term.close();
     transport.close();
   });
 

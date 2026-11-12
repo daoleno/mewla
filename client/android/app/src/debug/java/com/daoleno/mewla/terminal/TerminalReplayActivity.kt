@@ -16,13 +16,17 @@ import kotlin.math.ceil
  *
  *   adb shell am start -n <app>/com.daoleno.mewla.terminal.TerminalReplayActivity \
  *     --es file corpus/sgr.vt --ei cols 52 --ei rows 30 [--ef font 8] [--ez light true] \
- *     [--es history corpus/history.txt --ei top 3000 [--ez retheme true]]
+ *     [--es history corpus/history.txt --ei top 3000 [--ez retheme true]] \
+ *     [--ei sessionCols 160 --ei sessionRows 45 [--ef panX 400]]
  *
  * `file` is relative to the app's files dir. The view's rectangle on screen is logged
  * ("TerminalReplay: rect x y w h") once the bytes are drawn, and what the view sends ("input ...").
  * `history` is a file of styled rows, one a line, handed to the view as the page hands it history;
  * the view then shows row `top` at the top, `retheme` switches to the other theme after that
  * (voiding the rows drawn so far), and the time the view took is logged ("history ...").
+ * `sessionCols`/`sessionRows` tell the view the Session is that size (another viewer holds it), as the
+ * page does before a replay: the file is drawn at that grid, fitted into the view's `cols` x `rows`
+ * area, and `panX` drags it that many pixels sideways.
  */
 class TerminalReplayActivity : Activity() {
   private val dark = listOf("#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea")
@@ -54,7 +58,17 @@ class TerminalReplayActivity : Activity() {
     if (isLight) view.setTheme("#fbfaf7", "#161412", "#161412", "#2C55C055", light)
     else view.setTheme("#141210", "#F4F0EA", "#F4F0EA", "#3D7EFF55", dark)
     view.post {
+      if (intent.hasExtra("sessionCols")) view.setSessionSize(intent.getIntExtra("sessionCols", cols), intent.getIntExtra("sessionRows", rows))
       view.write(file.readText(Charsets.UTF_8))
+      if (intent.hasExtra("panX")) {
+        val pan = intent.getFloatExtra("panX", 0f)
+        val t = android.os.SystemClock.uptimeMillis()
+        val y = view.height / 2f
+        val x0 = view.width * 0.8f
+        view.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_DOWN, x0, y, 0))
+        for (k in 1..10) view.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + k * 16L, android.view.MotionEvent.ACTION_MOVE, x0 - pan * k / 10, y, 0))
+        view.dispatchTouchEvent(android.view.MotionEvent.obtain(t, t + 200L, android.view.MotionEvent.ACTION_UP, x0 - pan, y, 0))
+      }
       intent.getStringExtra("history")?.let { name ->
         val rows = File(filesDir, name).readLines(Charsets.UTF_8)
         val t0 = System.nanoTime()
