@@ -793,6 +793,7 @@ func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID,
 				b.updateToolResult(lineNumber, recordID, index, timestamp, item.ToolUseID, output, true)
 			} else {
 				b.updateToolResult(lineNumber, recordID, index, timestamp, item.ToolUseID, output, false)
+				b.settleFileChange(item.ToolUseID, toolUseResults[strings.TrimSpace(item.ToolUseID)])
 			}
 		}
 	}
@@ -1091,6 +1092,63 @@ func (b *claudeConversationBuilder) settleChoice(callID string, toolUseResult js
 	choice := *b.events[eventIndex].Choice
 	settleClaudeChoice(&choice, toolUseResult, isError)
 	b.events[eventIndex].Choice = &choice
+}
+
+// settleFileChange gives a finished Edit, MultiEdit or Write the file it
+// changed with its line counts, from the hunks Claude recorded for it
+// (toolUseResult.structuredPatch), as a Codex patch carries them.
+func (b *claudeConversationBuilder) settleFileChange(callID string, toolUseResult json.RawMessage) {
+	eventIndex, exists := b.eventByCall[strings.TrimSpace(callID)]
+	if !exists || eventIndex < 0 || eventIndex >= len(b.events) {
+		return
+	}
+	event := &b.events[eventIndex]
+	if change, ok := claudeFileChange(event.ToolName, toolUseResult); ok {
+		event.FileChanges = []CodexConversationFileChange{change}
+	}
+}
+
+func claudeFileChange(toolName string, toolUseResult json.RawMessage) (CodexConversationFileChange, bool) {
+	if toolName != "Edit" && toolName != "MultiEdit" && toolName != "Write" || len(toolUseResult) == 0 {
+		return CodexConversationFileChange{}, false
+	}
+	var result struct {
+		Type            string  `json:"type"`
+		FilePath        string  `json:"filePath"`
+		Content         *string `json:"content"`
+		StructuredPatch []struct {
+			Lines []string `json:"lines"`
+		} `json:"structuredPatch"`
+	}
+	if json.Unmarshal(toolUseResult, &result) != nil || strings.TrimSpace(result.FilePath) == "" {
+		return CodexConversationFileChange{}, false
+	}
+	change := CodexConversationFileChange{Path: strings.TrimSpace(result.FilePath), Operation: "update"}
+	added, removed := 0, 0
+	if result.Type == "create" {
+		// A new file has no hunks: every line of it is added.
+		change.Operation = "add"
+		if result.Content != nil && *result.Content != "" {
+			added = strings.Count(strings.TrimSuffix(*result.Content, "\n"), "\n") + 1
+		}
+	} else {
+		if result.StructuredPatch == nil {
+			return CodexConversationFileChange{}, false
+		}
+		for _, hunk := range result.StructuredPatch {
+			for _, line := range hunk.Lines {
+				switch {
+				case strings.HasPrefix(line, "+"):
+					added++
+				case strings.HasPrefix(line, "-"):
+					removed++
+				}
+			}
+		}
+	}
+	change.Additions = intPointer(added)
+	change.Deletions = intPointer(removed)
+	return change, true
 }
 
 func (b *claudeConversationBuilder) updateToolResult(lineNumber int, recordID string, index int, timestamp, callID, output string, isError bool) {

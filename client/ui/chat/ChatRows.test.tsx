@@ -68,4 +68,22 @@ describe("edited files", () => {
     await app.waitFor("id:file-preview", { timeout: 10_000 });
     expect(app.texts()).toContain("docs/new.md");
   }, 20_000);
+
+  test("a Claude Edit shows its +/− on the row, and its file from the project down, not the whole absolute path", async () => {
+    const edit = {
+      id: "e1", seq: 2, timestamp: at(2), kind: "tool", tool_name: "Edit", title: "Tool", status: "done", source: "claude_transcript",
+      input: JSON.stringify({ file_path: "/home/someone/work/mewla/daemon/work/notes.md", old_string: "a", new_string: "b" }),
+      files: ["/home/someone/work/mewla/daemon/work/notes.md"],
+      file_changes: [{ path: "/home/someone/work/mewla/daemon/work/notes.md", operation: "update", additions: 2, deletions: 1 }],
+    };
+    const app = await brainWith([reply("a0", 1, "Fixing it."), edit, reply("a2", 3, "Done.")]);
+    await app.waitFor("id:activity", { timeout: 10_000 });
+    expect(app.texts().some((text) => text.includes("+2 −1"))).toBe(true);
+    await app.wait(300);
+    await app.press("id:activity");
+    await app.waitFor("id:activity-file");
+    expect(app.texts()).toContain("daemon/work/notes.md");
+    expect(app.texts()).not.toContain("/home/someone/work/mewla/daemon/work/notes.md");
+    expect(app.shows("label:Open /home/someone/work/mewla/daemon/work/notes.md, 2 added, 1 removed")).toBe(true);
+  }, 20_000);
 });

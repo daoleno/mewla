@@ -4,6 +4,8 @@ import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import { activityFileRows, type ActivityFileRow } from "../../core/timeline/activityFiles";
 import { toolPictures } from "../../core/timeline/threadPictures";
+import { distinctivePath } from "../../core/timeline/toolCallSemantics";
+import { compactPathLabel } from "../../core/timeline/pathDisplay";
 import { ChatImage, type PictureLoader } from "./ChatImage";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
 import { workCardModel, type WorkCardModel } from "../../core/timeline/workCardModel";
@@ -48,13 +50,16 @@ const Mono = (props: { text: string }) => (
   <TextView document={{ blocks: [{ type: "codeBlock", code: props.text, language: "" }] }} selectable codeBlockActions={CODE_ACTIONS} />
 );
 
+/** A file as the row titles show it: from its project down (`daemon/watcher/watcher.go`), not the whole absolute path, whose end a line cuts off. */
+const shownPath = (path: string) => distinctivePath(path) ?? compactPathLabel(path);
+
 /** An edited file (SPEC §1.7, §11 Diff card): its path in mono, then +/− in add and del; a rename shows and opens its new path. */
 function FileRow(props: { file: ActivityFileRow; onFile?: (path: string) => void }) {
   const file = props.file;
   return (
     <Button testID="activity-file" accessibilityLabel={[`Open ${file.path}`, file.added !== undefined ? `${file.added} added` : "", file.removed !== undefined ? `${file.removed} removed` : ""].filter(Boolean).join(", ")}
       disabled={!props.onFile} onPress={() => props.onFile?.(file.path)} class="min-h-[44px] flex-row items-center gap-2 active:opacity-60">
-      <Text class={`min-w-0 shrink font-mono text-code line-clamp-1 ${props.onFile ? "text-foreground" : "text-muted-foreground"}`}>{file.path}</Text>
+      <Text class={`min-w-0 shrink font-mono text-code line-clamp-1 ${props.onFile ? "text-foreground" : "text-muted-foreground"}`}>{shownPath(file.path)}</Text>
       {file.added !== undefined ? <Text testID="activity-file-added" class="font-mono text-code text-add">{`+${file.added}`}</Text> : null}
       {file.removed !== undefined ? <Text testID="activity-file-removed" class="font-mono text-code text-del">{`−${file.removed}`}</Text> : null}
     </Button>
