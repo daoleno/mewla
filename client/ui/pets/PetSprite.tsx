@@ -1,4 +1,4 @@
-import { cleanup, effect, Image, type ImageAsset, lifecycle, platform, reduceMotion, signal, untracked, View } from "nsh";
+import { cleanup, effect, Image, type ImageAsset, lifecycle, reduceMotion, signal, untracked, View } from "nsh";
 import { clipFrame, PET_STILLS, type PetClipName, type PetStillName } from "../../core/pets/manifest";
 import { petTransition, type PetState } from "../../core/settings/petPreview";
 import { pet as chosenPet, type Pet } from "./pets";
@@ -112,7 +112,7 @@ export function PetSprite(props: {
         const frame = clipFrame(spec, props.size);
         // A new element each play, so a one-shot (delivered, a hop) starts from its first frame.
         return (
-          <Image testID={`pet-clip-${now.name}`} src={freshPlay(pet.art.clips[now.name], spec.loop, now.play)}
+          <Image testID={`pet-clip-${now.name}`} src={pet.art.clips[now.name]}
             style={frame.left ? { position: "absolute", left: frame.left, top: frame.top, width: frame.width, height: frame.height } : { width: props.size, height: props.size }} />
         );
       }}
@@ -136,13 +136,4 @@ function playMs(pet: Pet, name: PetClipName, once: boolean): number {
   const spec = pet.clips[name];
   if (!spec.loop || !once) return spec.total_ms;
   return Math.ceil(ONCE_MIN_MS / spec.total_ms) * spec.total_ms;
-}
-
-/**
- * A browser keeps one animation per image URL, so a one-shot shown again would hold its last
- * frame. On the web each play of a one-shot gets its own URL.
- */
-function freshPlay(clip: ImageAsset, loop: boolean, play: number): ImageAsset {
-  if (platform.os !== "web" || loop) return clip;
-  return { ...clip, url: `${clip.url}#${play}` };
 }

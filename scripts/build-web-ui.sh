@@ -30,6 +30,8 @@ test -f "$APP/index.html"
 # The page's <base href="/"> (nsh.json web.base) keeps its files at the root, where the daemon
 # serves them, when a deep link such as /sessions/<id> is reloaded or opened.
 grep -q '^<base href="/">$' "$APP/index.html" || { echo "index.html has no <base href=\"/\"> (nsh.json web.base)" >&2; exit 1; }
+# Every pet image the app names is in the package, where index.html's asset map sends it.
+python3 "$ROOT/client/scripts/check-pet-assets.py" web "$APP"
 # The web terminal's page (an NSH web view) loads these from <origin>/terminal/: its script, its VT
 # (libghostty-vt with the phones' packer and glyphs, WebAssembly; built once, then cached) and the
 # phones' face (client/native/terminal/fonts, SIL OFL 1.1).
