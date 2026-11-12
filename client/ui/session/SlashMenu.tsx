@@ -100,8 +100,8 @@ export function SlashMenu(props: {
 export function ComposerPlusButton(props: { pinned: () => boolean; connected: () => boolean; onPress: () => void }) {
   return (
     <Button testID="composer-plus" accessibilityLabel={props.pinned() ? "Close actions" : "Open actions"} disabled={!props.connected()} onPress={props.onPress}
-      class={props.pinned() ? "rounded-full bg-accent p-2" : "rounded-full p-2 active:bg-accent"}>
-      <Icon name={props.pinned() ? "close" : "add"} size={22} color="foreground" />
+      class="h-[52px] w-11 items-center justify-center active:opacity-60">
+      <Icon name={props.pinned() ? "close" : "add"} size={22} color="muted-foreground" />
     </Button>
   );
 }
