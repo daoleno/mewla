@@ -77,10 +77,6 @@ const workHandlers: WorkCardHandlers = {
     return { kind: row.kind, flavor: row.flavor, name: presentWorker(worker).typeLabel };
   },
   onTitle: (workId) => openWorkDetail(workId),
-  onNextStep: (model, text) => {
-    untracked(brainChat)?.send(text);
-    readWork(model.workId);
-  },
   onLine: (model) => resultSheet.set(model),
 };
 // A past thread is read-only: its Work cards and messages offer no actions.
@@ -168,13 +164,6 @@ function ResultSheet() {
         <View class="gap-3 px-4">
           <Text class="text-sub text-muted-foreground">{[agent()?.name, model()!.state, when()].filter(Boolean).join(" · ")}</Text>
           {model()!.summary ? <View selectable><Text class="text-body">{model()!.summary}</Text></View> : null}
-          {model()!.nextStep ? (
-            <PillButton testID="work-sheet-next-step" kind="ink" title={model()!.nextStep!} onPress={() => {
-              const shown = untracked(resultSheet)!;
-              workHandlers.onNextStep(shown, shown.nextStep!);
-              close();
-            }} />
-          ) : null}
           {model()!.sessionId && workers().some((w) => w.id === model()!.sessionId) ? (
             <PillButton testID="work-sheet-open-session" title="Open session" onPress={() => {
               const id = untracked(resultSheet)!.sessionId!;
