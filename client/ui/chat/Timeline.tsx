@@ -28,6 +28,9 @@ import { brainFiles, openChatLink, openChatPath } from "./links";
  */
 const TABLE_BLEED = { tableScroll: "-mr-4 pr-4" };
 
+/** The jump control's band at the thread's foot: 12 below it, its 40, 12 above it. */
+const JUMP_BAND = 64;
+
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
   onUserMessage?: (item: MessageTimelineItem) => void;
@@ -341,43 +344,46 @@ export function ChatTimeline(props: {
     <View class="flex-1">
       <SelectTextSheet />
       <PictureViewer pictures={pictures} open={viewing} load={handlers.loadImage} />
-      <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
-          list = node;
-          mounted.set(true);
-        }}
-        onScrollDragStart={() => (touched = true)}
-        // A chat opens at its newest row (NSH 0.5.0, before the first frame), unless it is read back to a saved row.
-        initialScrollAtEnd={initialIndex === undefined && restore === undefined}
-        initialScrollIndex={initialIndex}
-        onViewableItemsChange={({ viewableItems }) => {
-          // A hidden list's rows (a browser resets its scroll) are not where the person was.
-          if (untracked(shown)) shownFirst = readingPlace(viewableItems);
-        }}
-        maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
-        onScroll={({ offset, contentSize, size }) => {
-          // A hidden list's scroll (a browser resets it) is not where the person was.
-          if (!untracked(shown)) return;
-          // The person's own scrolling holds the header cat still.
-          if (touched) noteScroll();
-          const far = contentSize.height - (offset.y + size.height) > 240;
-          away.set(far);
-          last = { offset: offset.y, atEnd: !far };
-          if (!props.scope || !touched) return;
-          if (far && shownFirst !== undefined) readingPositions.set(props.scope, shownFirst);
-          else readingPositions.delete(props.scope);
-        }}
-        empty={props.empty() as never}>
-        {(item) => {
-          // A recycled cell takes whatever row comes next: the foot's cell can become a row and back,
-          // so which of the two it draws follows its item, not the item it was made for.
-          const foot = computed(() => (item() as FootRow).type === "thread-foot");
-          return (
-            <View>
-              {foot() ? (props.foot!.render((node) => anchor.set(node)) as never) : <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />}
-            </View>
-          );
-        }}
-      </List>
+      {/* While the jump control shows, the thread ends above it: it floats in its own band, never on text. */}
+      <View class="flex-1" style={{ marginBottom: away() ? JUMP_BAND : 0 }}>
+        <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
+            list = node;
+            mounted.set(true);
+          }}
+          onScrollDragStart={() => (touched = true)}
+          // A chat opens at its newest row (NSH 0.5.0, before the first frame), unless it is read back to a saved row.
+          initialScrollAtEnd={initialIndex === undefined && restore === undefined}
+          initialScrollIndex={initialIndex}
+          onViewableItemsChange={({ viewableItems }) => {
+            // A hidden list's rows (a browser resets its scroll) are not where the person was.
+            if (untracked(shown)) shownFirst = readingPlace(viewableItems);
+          }}
+          maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
+          onScroll={({ offset, contentSize, size }) => {
+            // A hidden list's scroll (a browser resets it) is not where the person was.
+            if (!untracked(shown)) return;
+            // The person's own scrolling holds the header cat still.
+            if (touched) noteScroll();
+            const far = contentSize.height - (offset.y + size.height) > 240;
+            away.set(far);
+            last = { offset: offset.y, atEnd: !far };
+            if (!props.scope || !touched) return;
+            if (far && shownFirst !== undefined) readingPositions.set(props.scope, shownFirst);
+            else readingPositions.delete(props.scope);
+          }}
+          empty={props.empty() as never}>
+          {(item) => {
+            // A recycled cell takes whatever row comes next: the foot's cell can become a row and back,
+            // so which of the two it draws follows its item, not the item it was made for.
+            const foot = computed(() => (item() as FootRow).type === "thread-foot");
+            return (
+              <View>
+                {foot() ? (props.foot!.render((node) => anchor.set(node)) as never) : <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />}
+              </View>
+            );
+          }}
+        </List>
+      </View>
       {away() ? (
         (props.requests?.() ?? 0) > 0 ? (
           <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}
