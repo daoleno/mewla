@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { BrainCurrentWork } from "../work/types";
-import { requestsOf, trayModel, type TrayInput } from "./model";
+import { backMark, requestsOf, trayModel, type TrayInput } from "./model";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
 
@@ -180,5 +180,14 @@ describe("tray model", () => {
 
   test("no computer: no state control", () => {
     expect(trayModel(input({ hasServer: false })).state.kind).toBe("none");
+  });
+});
+
+describe("Back's connection mark (SPEC §1.3)", () => {
+  test("offline and connecting are grey, Pair again red; any other state has none", () => {
+    expect(backMark("offline")).toEqual({ tone: "grey", label: "Back · Offline" });
+    expect(backMark("connecting")).toEqual({ tone: "grey", label: "Back · Connecting" });
+    expect(backMark("pair")).toEqual({ tone: "red", label: "Back · Pair again" });
+    for (const kind of ["quiet", "running", "needs", "starting", "cant_start", "none"] as const) expect(backMark(kind)).toBeNull();
   });
 });

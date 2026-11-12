@@ -126,17 +126,14 @@ preference.
   Skills, Stats, Resources. Settings sits apart at the
   bottom, and under it one quiet line names the current server and its
   state. Rows are a soft-ink glyph and a label, no tiles.
-- **Connection status has one home**: the menu. On phone a dot on ☰ (oxblood
-  for a diagnosed issue, amber for Offline or a reconnect that has not landed
-  in 10 s), and in both layouts the footer line, which names the state in
-  the same colour. Both read `connectionAttention`
-  (`components/navigation/connectionAttention.ts`, pure and tested). The
-  footer is read-only (switching lives in Settings); healthy and a short
-  reconnect are quiet. No page, chat or list carries a connection banner or
-  a standing server header (`connectionHome.test.ts`). A page that can't work
-  at all says so in its empty state ("Server disconnected", "Calendar
-  offline"); context the page needs stays, such as the project Skills were
-  read for.
+- **Connection state lives in the header** (SPEC §1.3): the cat and the state
+  control on home (`core/tray/model.ts`), the pane's state line on wide. On
+  every pushed page, while the computer is offline, connecting or must be
+  paired again, Back carries the mark: an 8 pt dot at its top-right (grey; red
+  for Pair again) and the label "Back · Offline" (`backMark`, `ui/shell/NavPage.tsx`;
+  on iOS and Android the page's own Back stands in for the system's while the
+  mark shows). No page, chat or list carries a connection banner. A page that
+  can't work at all says so in its empty state.
 - **Failures show at the action.** Send stays pressable while offline: the
   composer says "Not sent: Mewla can't reach your computer. Your message is
   still here." and keeps the draft; the note clears on reconnect. Drafts also survive a reload
