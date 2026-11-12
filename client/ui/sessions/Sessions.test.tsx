@@ -423,6 +423,18 @@ describe("a Session", () => {
     expect(framesOf(app.host.posts(), "kill_worker")).toEqual([]);
   }, 20_000);
 
+  test("the terminal sits in its surface group over a key bar of tiles in the mock's order, words in mono as the mock writes them", async () => {
+    // A phone (touch: every key shows), the Session last left in its terminal.
+    const host = phoneHost({ brain: {}, worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
+    const app = await open(APP, { host, storage: { ...paired, "mewla:codex_render_modes": JSON.stringify({ w1: "terminal", "s1:w1": "terminal" }) }, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
+    await app.waitFor("id:terminal-group", { timeout: 10_000 });
+    const keys = ["terminal-attach", "terminal-keyboard", "key-esc", "key-tab", "key-ctrl", "key-ctrl-c", "key-ctrl-d", "key-ctrl-b", "key-up", "key-down", "key-left", "key-right", "key-enter", "key-paste"];
+    for (const key of keys) expect(app.count(`id:${key}`)).toBe(1);
+    for (const word of ["esc", "tab", "ctrl", "^C", "^D", "^B"]) expect(app.texts()).toContain(word);
+    for (const label of ["Attach", "Keyboard", "Up", "Down", "Left", "Right", "Enter", "Paste"]) expect(app.count(`label:${label}`)).toBe(1);
+  }, 20_000);
+
   test("a file tapped in a Session without a live generation says why (parity #38)", async () => {
     const reply = [{ id: "a1", seq: 1, kind: "assistant_message", timestamp: new Date().toISOString(), body: "Wrote [the notes](/home/me/mewla/notes.md)." }];
     const app = await sessionsApp({ worker_sessions: [session("w2", { name: "writer" })], conversations: { w2: reply } });
