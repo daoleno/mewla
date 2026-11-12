@@ -142,6 +142,45 @@ describe("Brain's Work", () => {
   }, 20_000);
 });
 
+describe("Ask Brain about this", () => {
+  const quote = "Re: fix sync (work w-back)\n> Fixed the sync race and added a test.\n";
+  // Brain's thread is known: its composer holds that thread's draft.
+  const daemon = () => ({ brain: { ...brain(), chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude" } } });
+  /** Work detail from the tray's row, pushed over home, which stays as it was under it. */
+  async function askFromTray(app: Awaited<ReturnType<typeof workApp>>) {
+    await app.press("id:state-control");
+    await app.waitFor("text:fix sync");
+    await app.press("text:fix sync");
+    await app.waitFor("id:work-detail");
+    await app.press("id:work-action-ask");
+    await app.waitFor("id:home-header");
+  }
+
+  test("the quote lands in Brain's open composer", async () => {
+    const app = await workApp(daemon());
+    await askFromTray(app);
+    await app.waitUntil(() => app.value("id:composer") === quote);
+  }, 20_000);
+
+  test("what was typed in the composer stays, the quote below it", async () => {
+    const app = await workApp(daemon());
+    await app.type("id:composer", "also check the logs");
+    await app.waitUntil(() => app.value("id:composer") === "also check the logs");
+    await askFromTray(app);
+    await app.waitUntil(() => app.value("id:composer") === `also check the logs\n\n${quote}`);
+  }, 20_000);
+
+  test("from a notification's Work page too: what was typed a moment before is kept", async () => {
+    const app = await workApp(daemon());
+    await app.type("id:composer", "also check the logs");
+    await app.waitUntil(() => app.value("id:composer") === "also check the logs");
+    await openWork(app, "w-back");
+    await app.press("id:work-action-ask");
+    await app.waitFor("id:home-header");
+    await app.waitUntil(() => app.value("id:composer") === `also check the logs\n\n${quote}`);
+  }, 20_000);
+});
+
 describe("a Calendar run's Work file", () => {
   const work = {
     id: "wf-1", project: "calendar", path: "calendar/wf-1.md", title: "Daily digest", mtime: "2026-07-17T03:01:00Z",

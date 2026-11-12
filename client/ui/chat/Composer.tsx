@@ -1,18 +1,37 @@
 import { cleanup, effect, keyboardFrame, keymap, platform, safeArea, signal, Text, untracked, View, type InputRef } from "nsh";
 import { Button, Input } from "nsh/base";
 import type { Draft } from "../../core/conversation/draft";
+import { appendToDraft } from "../../core/conversation/draftText";
 import { composerKeyIntent } from "../../core/web/shortcuts";
 import { registerComposer } from "../shell/desktop/keys";
 import { belowSections } from "../shell/Shell";
 
+/** The composers that show a chat's draft now, by its cache key: text written from elsewhere goes into them. */
+const writers = new Map<string, Set<(text: string) => void>>();
+
+/**
+ * Adds `text` to a chat's draft from outside its composer (Work › Ask Brain about this, SPEC §3.4, §3.8):
+ * a composer holding that draft shows it at once, below what is typed there; with none, the saved draft
+ * takes it, and the composer shows it when it opens.
+ */
+export function writeIntoDraft(draft: Draft | null, text: string): void {
+  if (!draft) return;
+  const open = writers.get(draft.cacheKey);
+  if (open?.size) return open.forEach((write) => write(text));
+  void draft.load().then((saved) => draft.save(appendToDraft(saved, text)));
+}
+
 /**
  * A chat's composer text, kept in the chat's `Draft`: the composer is
  * brought to the draft once per chat (typing owns it afterwards), and what was
- * typed before the chat was known becomes its draft.
+ * typed before the chat was known becomes its draft. Text written into the
+ * draft from elsewhere (`writeIntoDraft`) joins what is typed.
  */
 export function createComposerText(draft: () => Draft | null) {
   const text = signal("");
   let shownFor = "";
+  // The saved draft read in: text written from elsewhere waits for it, so it is added to the draft, not lost under it.
+  let loaded: Promise<unknown> = Promise.resolve();
   effect(() => {
     const current = draft();
     const key = current?.cacheKey ?? "";
@@ -22,7 +41,26 @@ export function createComposerText(draft: () => Draft | null) {
     if (!current) return text.set("");
     if (typedBefore) return current.save(typedBefore);
     text.set("");
-    void current.load().then((value) => untracked(draft) === current && !untracked(text) && text.set(value));
+    loaded = current.load().then((value) => untracked(draft) === current && !untracked(text) && text.set(value));
+  });
+  // A page that goes (home is made again when a link replaces the stack) keeps what was just typed: the
+  // next composer of the chat reads it back.
+  cleanup(() => untracked(draft)?.flush());
+  effect(() => {
+    const current = draft();
+    if (!current) return;
+    const write = (added: string) => void loaded.then(() => {
+      if (untracked(draft) !== current) return;
+      text.set(appendToDraft(untracked(text), added));
+      current.save(untracked(text));
+    });
+    const set = writers.get(current.cacheKey) ?? new Set();
+    set.add(write);
+    writers.set(current.cacheKey, set);
+    cleanup(() => {
+      set.delete(write);
+      if (!set.size) writers.delete(current.cacheKey);
+    });
   });
   return {
     text,
