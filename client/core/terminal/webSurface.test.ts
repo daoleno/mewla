@@ -81,6 +81,9 @@ describe("terminalPageHtml", () => {
     expect(html).toContain('<link rel="stylesheet" href="/terminal/xterm.css">');
     expect(html.match(/<script(\s[^>]*)?>/g)!.every((tag) => / src="/.test(tag))).toBe(true);
     expect(html.indexOf("xterm.js")).toBeLessThan(html.indexOf("terminal.js"));
+    // The phones' face, served beside the page.
+    expect(html).toContain('src:url("/terminal/MapleMono-NF-Regular.ttf")');
+    expect(html).toContain('src:url("/terminal/MapleMono-NF-SemiBold.ttf")');
   });
 });
 

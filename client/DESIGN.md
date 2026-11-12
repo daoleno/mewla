@@ -411,7 +411,8 @@ chats keep every row). The composer says "Tell Brain…".
 | `body`, `compact` | Inter Regular | 15/24, 14/22 | everything read at length |
 | `label`, `micro` | Inter Medium | 13/18, 11/15 | controls, chips |
 | `caption` | Inter Regular | 12/17 | metadata |
-| `mono`, terminal | Maple Mono (CN build, CJK removed) | 13/20 | code, terminal grid |
+| `mono` | Maple Mono (CN build, CJK removed) | 13/20 | code |
+| terminal (phones) | Maple Mono NF (bundled, CJK removed) | 8, line = the face's height | terminal grid |
 
 - **CJK on web.** Each family is a stack: Inter, then Source Han Sans SC,
   Noto Sans CJK SC, PingFang SC, Microsoft YaHei. Only the Latin faces are
@@ -429,15 +430,15 @@ chats keep every row). The composer says "Tell Brain…".
   grid. The bundled files are the Maple Mono CN build with every CJK
   codepoint removed by `scripts/subset-maple-mono.py` (about 340 KB per
   weight). CJK comes from the OS face, as in the rest of the UI.
-- **CJK in the terminal.** Rows are text runs, so a fallback glyph advances by
-  its own width (1em for PingFang or Noto Sans CJK, against a 1.2em double
-  cell). The native formatter therefore wraps each wide cell in a 2ch box
-  (`<w>`), and each narrow symbol that is not box drawing, a block, braille
-  or Powerline (✻, ⏺, arrows, Nerd icons) in a 1ch box (`<n>`), so every
-  column stays on the grid whatever face draws it. Underlines on fallback Han
-  show small gaps, since the glyph is 1em inside a 1.2em box. The
-  system `monospace` alone is not enough: Android's Droid Sans Mono has no box
-  drawing, blocks, braille or Powerline glyphs.
+- **The terminal on the phones.** One renderer design on Android and iOS
+  (`client/native/terminal`): cells are whole device pixels and the text size
+  is snapped so one Maple advance is exactly one cell; every glyph is placed
+  at its column. Box drawing, blocks, braille, Powerline and the media marks
+  (⏴⏵⏸⏹⏺) are drawn as shapes for the cell (`TerminalGlyphs.cpp`), so lines
+  and blocks meet across rows. Anything else not one cell wide in the face
+  (CJK, emoji, fallback symbols) is centred in its cells and scaled down if
+  it is wider. The size is 8 (about 83 columns on a phone, the shipped app's
+  density); no setting.
 - **CJK in chat mono.** Highlighted code blocks and inline code are RN
   `Text`, which falls back to the OS CJK face, so Han there takes that face's
   advance instead of exactly two cells. Plain and ASCII-art blocks already

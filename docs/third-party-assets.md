@@ -4,7 +4,7 @@ Inclusion does not imply endorsement. Prefer verifiable upstream license text ov
 
 ## Fonts
 
-The app bundles no fonts: NSH draws with the platform's faces, and the native terminal uses the system monospace face (`Typeface.MONOSPACE` on Android, `UIFont.monospacedSystemFont` on iOS). `scripts/subset-maple-mono.py` is kept for its `PLAIN_RANGES`, which the Android terminal's cell classes follow (`client/android/app/src/main/cpp/jni_bridge.cpp`).
+NSH draws the UI with the platform's faces. The terminal bundles **Maple Mono NF 7.9** ([subframe7536/maple-font](https://github.com/subframe7536/maple-font), SIL OFL 1.1, no Reserved Font Name), Regular and SemiBold, in `client/native/terminal/fonts/` with its `OFL.txt`. `scripts/subset-terminal-font.py` makes both files from the sha256-pinned release zip (`MapleMono-NF.zip`): CJK, hinting, ligatures and alternates are removed; Regular keeps the Nerd Fonts icons Maple patches in, SemiBold is Latin only. The OFL text is also in the in-app license list (`texts/MapleMono-OFL.txt`). The phones draw with it natively; the web terminal (xterm.js) loads the same two files, which `scripts/build-web-ui.sh` copies beside its page (`/terminal/*.ttf`).
 
 ## Images / branding
 
