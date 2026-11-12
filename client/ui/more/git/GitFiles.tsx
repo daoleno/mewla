@@ -143,6 +143,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
     <NavPage
       title=""
       testID="git-files-page"
+      column={listDetail() ? "full" : "page"}
       headerRight={<IconButton testID="git-files-refresh" icon="refresh" label="Refresh" onPress={() => void review.loadPaths()} />}
     >
       <Current review={review} class="flex-1 bg-background">{() => (

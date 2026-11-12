@@ -6,7 +6,7 @@ export const terminalShowing = signal(false);
 /**
  * The terminal owns every key (Ctrl+K is the shell's kill-line, letters are typing), so the
  * desktop's shortcuts step aside for it. In a browser the terminal is its own frame: while it has
- * the focus its keys never reach the page, and with the focus elsewhere (the sidebar, a header)
+ * the focus its keys never reach the page, and with the focus elsewhere (the left pane, a header)
  * the shortcuts work, as the Expo web app's did (parity #27). Elsewhere the terminal showing is enough.
  */
 export const terminalOwnsKeys = computed(() => terminalShowing() && platform.os !== "web");
