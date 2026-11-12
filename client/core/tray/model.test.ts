@@ -133,6 +133,14 @@ describe("tray model", () => {
     expect(m.done[0]).toMatchObject({ key: "work:new", unread: true, done: true, line: "fresh result" });
   });
 
+  test("a request answered here leaves the tray and the count at once", () => {
+    const asking = worker("b", { status: "blocked", prompt: { id: "p1", kind: "permission", provider: "claude", title: "Allow?", request: "git push", options: [{ number: 1, label: "Yes" }, { number: 2, label: "No" }] } });
+    expect(trayModel(input({ workers: [asking] })).state.words).toBe("1 needs you");
+    const m = trayModel(input({ workers: [asking], answered: new Set(["prompt:b:p1"]) }));
+    expect(m.needs).toEqual([]);
+    expect(m.state.kind).not.toBe("needs");
+  });
+
   test("no computer: no state control", () => {
     expect(trayModel(input({ hasServer: false })).state.kind).toBe("none");
   });

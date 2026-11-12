@@ -20,7 +20,6 @@ import {
   emptyChoiceDraft,
   latestPendingChoice,
   awaitingChoiceAnswer,
-  visiblePendingChoice,
   isChoiceGoneError,
   CHOICE_GONE_CODE,
   setChoiceOtherText,
@@ -236,19 +235,11 @@ describe("a pending choice the status has not caught up with", () => {
     // The surface no longer consults the Session status to show or answer the
     // card; only the transcript's pending state and the daemon's verdict count.
     const events = [choiceEvent("toolu_1", "pending")];
-    expect(visiblePendingChoice(events, new Set())?.call_id).toBe("toolu_1");
-  });
-
-  test("goes away once the daemon says the question passed", () => {
-    const events = [choiceEvent("toolu_1", "pending")];
-    expect(visiblePendingChoice(events, new Set(["toolu_1"]))).toBeNull();
-    expect(visiblePendingChoice(events, new Set(["toolu_0"]))?.call_id).toBe("toolu_1");
-    expect(visiblePendingChoice([...events, choiceEvent("toolu_2", "pending")], new Set(["toolu_1"]))?.call_id).toBe("toolu_2");
+    expect(latestPendingChoice(events)?.call_id).toBe("toolu_1");
   });
 
   test("still counts as waiting for the person after the card is hidden as passed", () => {
     const events = [choiceEvent("toolu_1", "pending")];
-    expect(visiblePendingChoice(events, new Set(["toolu_1"]))).toBeNull();
     expect(awaitingChoiceAnswer(events)).toBe(true);
     expect(awaitingChoiceAnswer([choiceEvent("toolu_1", "answered", ["Apple", "Red"])])).toBe(false);
     expect(awaitingChoiceAnswer([])).toBe(false);
