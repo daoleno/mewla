@@ -318,7 +318,7 @@ async function readerMenu(input: {
  */
 export function DiffPage(props: { review: GitReview; entry: string; nav: PageNav }) {
   return (
-    <NavPage title="Diff" testID="git-diff-page">
+    <NavPage title="Diff" testID="git-diff-page" column="full">
       <Current review={props.review} class="flex-1 bg-background">{() => <DiffReader review={props.review} entry={props.entry} nav={props.nav} onEmpty={() => props.nav.pop()} />}</Current>
     </NavPage>
   );
@@ -687,7 +687,7 @@ export function CommitFilePage(props: { review: GitReview; sha: string; path: st
   }
 
   return (
-    <NavPage title={props.sha.slice(0, 7)} testID="git-commit-file-page">
+    <NavPage title={props.sha.slice(0, 7)} testID="git-commit-file-page" column="full">
       <Current review={review} class="flex-1 bg-background">{() => (
           <View class="flex-1 bg-background">
             <ReaderHeader

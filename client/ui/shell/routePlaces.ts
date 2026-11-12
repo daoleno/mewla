@@ -2,7 +2,7 @@ import { isAgentExtensionsScope } from "../../core/extensions/agentExtensionsMod
 import type { PlacePage, WebPlace } from "../../core/web/places";
 import type { Route } from "./routes";
 
-/** The computer page's children that are places of their own (the sidebar's rows). */
+/** The computer page's children that are places of their own (the palette's Go to rows). */
 const PLACE_OF_ROUTE: Partial<Record<Route["name"], Exclude<WebPlace["key"], "session" | "work">>> = {
   allSessions: "sessions",
   calendar: "calendar",

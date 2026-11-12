@@ -173,6 +173,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
     <NavPage
       title={titleAway() ? title() : ""}
       testID="git-page"
+      column={wide() ? "full" : "page"}
       headerRight={headerRight}
       popOnBack={!review.searchOpen()}
       onBackPress={() => {

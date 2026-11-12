@@ -316,7 +316,7 @@ describe("dialogs and popovers on wide (SPEC §14.2)", () => {
     await app.waitFor("id:new-session-sheet", { state: "gone" });
   }, 20_000);
 
-  test("Brain's ⋯ is a popover at its button; Esc closes it. Below 1024 it is the sheet", async () => {
+  test("Brain's ⋯ is a popover at its button; Esc and a press outside close it. Below 1024 it is the sheet", async () => {
     const app = await open(APP, { ...desk, host: webHost({ brain: { host_worker: { id: "host", name: "brain", status: "running" }, chat_thread_id: "t1" } }) });
     await app.waitFor("id:left-pane");
     await settle(app);
@@ -325,6 +325,11 @@ describe("dialogs and popovers on wide (SPEC §14.2)", () => {
     expect(app.shows("id:menu-item-terminal")).toBe(true);
     expect(app.shows("id:brain-menu-sheet")).toBe(false);
     await app.keyboard.press("escape");
+    await app.waitFor("id:brain-menu-popover", { state: "gone" });
+    // A press outside it closes it too.
+    await app.press("id:brain-menu");
+    await app.waitFor("id:brain-menu-popover");
+    await app.press("id:pane-brain");
     await app.waitFor("id:brain-menu-popover", { state: "gone" });
     await app.setViewport(800, 1280);
     await app.press("id:brain-menu");
