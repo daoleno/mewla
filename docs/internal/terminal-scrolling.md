@@ -43,10 +43,15 @@ size for a full reset and a replay at the new size: output drawn for another
 width would otherwise write rows over rows on its grid, and stay so after the
 sizes match again. A viewer never takes the size back on its own (after
 `AttachBehind` or `AttachResized`), or two viewers of different sizes would take
-it from each other. A smaller viewer that is not the one acted on shows the
-other size wrongly until its person acts (a focus-out report is not acting);
-viewers from before `Redraw` keep their stream. A host from before `Redraw`
-(every Session started before the upgrade runs on one until the host restarts)
+it from each other. A viewer that is not the one acted on still shows the
+screen right until its person acts (a focus-out report is not acting): the
+daemon tells the App's view the Session's size (`terminal_size`) before each
+replay, and the view's VT takes that grid and draws it fitted into its area
+(scaled down to 6 dp text, then panned; `TerminalFit`), while `mewla attach`
+mirrors the host's screen cut to its window (`mirrorFrame`) instead of writing
+output meant for another size. Viewers from before `Redraw` keep their stream.
+A host from before `Redraw` (every Session started before the upgrade runs on
+one until the host restarts)
 answers `Attached.Redraw` false and never ends a viewer for a resize: the
 daemon's view and `mewla attach` then ask the Session's size (`Info`) every
 half second and start over the same way when it is not the size their replay
