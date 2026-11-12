@@ -35,12 +35,31 @@ describe("links in Brain's reply", () => {
 });
 
 describe("code in a reply", () => {
-  test("a code block has Copy, and it copies the code", async () => {
+  test("a code block has a header with its language and Copy, which copies the code and says so", async () => {
     const app = await brainWith([reply("a1", 1, "Run:\n\n```sh\nmewla update --channel beta\n```\n")]);
-    await app.waitFor("label:Copy", { timeout: 10_000 });
+    await app.waitFor("id:code-block", { timeout: 10_000 });
+    expect(app.texts()).toContain("sh");
     await app.wait(300);
     await app.press("label:Copy");
     await app.waitUntil(() => (app.clipboard() ?? "").includes("mewla update --channel beta"));
+    await app.waitFor("label:Copied");
+  }, 20_000);
+});
+
+describe("a reply", () => {
+  test("is its text alone: no Copy row under it; a long press offers Copy and Select Text", async () => {
+    const app = await brainWith([reply("a1", 1, "Tonight at 23:30, and it is on the Calendar.")]);
+    await app.waitFor("text:Tonight at 23:30, and it is on the Calendar.", { timeout: 10_000 });
+    expect(app.shows("label:Copy")).toBe(false);
+    let offered: string[] = [];
+    app.onDialog((dialog) => {
+      offered = dialog.buttons;
+      return "Copy";
+    });
+    await app.wait(300);
+    await app.longPress("id:reply");
+    await app.waitUntil(() => (app.clipboard() ?? "") === "Tonight at 23:30, and it is on the Calendar.");
+    expect(offered).toEqual(["Copy", "Select Text", "Cancel"]);
   }, 20_000);
 });
 

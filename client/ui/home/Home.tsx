@@ -5,7 +5,6 @@ import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
-import { finalReplyIdsOf } from "../../core/timeline/model";
 import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
 import { brainHostIdentity } from "../chat/links";
@@ -329,12 +328,10 @@ export function Home() {
   const text = createComposerText(brainDraft);
   // Brain's thread is never rewound: an edited message goes out as a new one.
   const editor = createMessageEdit({ text, brain: true, messageRewind: () => false, send: (value) => brainChat()?.send(value) });
-  const finalReplies = computed(() => finalReplyIdsOf(brainThread().conversation?.events ?? []));
   const handlers = {
     onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) => {
       if (!untracked(routedBrainThread)) void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
     },
-    isFinalReply: (id: string) => finalReplies().has(id),
     // A past thread is read-only: its Work cards only read.
     get work() {
       return routedBrainThread() ? undefined : workHandlers;
