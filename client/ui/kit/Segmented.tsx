@@ -12,6 +12,8 @@ export function Segmented<K extends string>(props: {
   testID?: string;
   /** In a sheet: 40 high, 15 pt labels. */
   inSheet?: boolean;
+  /** Each segment as wide as its label (12 at the sides, 44 at least), not a share of the row: in a header. */
+  fit?: boolean;
 }) {
   const height = () => (props.inSheet ? "h-[40px]" : "h-[34px]");
   const label = () => (props.inSheet ? "text-sub font-semibold" : "text-caption font-semibold");
@@ -23,7 +25,7 @@ export function Segmented<K extends string>(props: {
           role="tab"
           selected={props.value === option.key}
           onPress={() => props.onChange(option.key)}
-          class={`flex-1 flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
+          class={`${props.fit ? "min-w-[44px] px-3" : "flex-1"} flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
         >
           {option.mark ? <Image src={option.mark} style={{ width: 18, height: 18 }} /> : null}
           <Text class={`${label()} ${props.value === option.key ? "text-foreground" : "text-faint"}`}>{option.label}</Text>

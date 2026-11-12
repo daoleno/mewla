@@ -72,16 +72,28 @@ describe("the Calendar tab", () => {
     expect(app.texts()).toContain("None");
   }, 20_000);
 
-  test("the heading says Today, the month picks a day and Hide month goes back to the whole agenda", async () => {
+  test("the heading says Today, Month picks a day and Today goes back to the whole agenda", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
     await app.waitFor("text:Call the bank");
     expect(app.texts()).toContain("Today");
-    await app.press("id:toggle-month");
+    await app.press("id:calendar-view-month");
     await app.waitFor("id:calendar-month");
-    expect(app.texts()).toContain("Hide month");
     await app.press("id:back-to-today").catch(() => undefined);
-    await app.press("id:toggle-month");
-    await app.waitUntil(() => app.texts().includes("Show month"));
+    await app.press("id:calendar-view-today");
+    await app.waitUntil(() => !app.shows("id:calendar-month"));
+    expect(app.texts()).toContain("Pay rent");
+  }, 20_000);
+
+  test("a day picked on the month is let go when Today is chosen", async () => {
+    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    await app.waitFor("text:Call the bank");
+    await app.press("id:calendar-view-month");
+    await app.waitFor("id:calendar-month");
+    // Two days on: in this month's six weeks whatever the date and the zone.
+    await app.press(`id:day-${new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10)}`);
+    await app.waitFor("id:back-to-today");
+    await app.press("id:calendar-view-today");
+    await app.waitUntil(() => !app.shows("id:calendar-month") && !app.shows("id:back-to-today"));
     expect(app.texts()).toContain("Pay rent");
   }, 20_000);
 
