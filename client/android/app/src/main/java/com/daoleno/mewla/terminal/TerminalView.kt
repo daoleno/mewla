@@ -744,7 +744,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
         if (i != to[0]) sb.append('\n')
       }
     }
-    return sb.toString()
+    // Empty rows at the end (Select All over a screen not yet full) are not text.
+    return sb.toString().trimEnd('\n')
   }
 
   // MARK: Selection
