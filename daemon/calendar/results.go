@@ -24,39 +24,75 @@ type ScheduledResult struct {
 	ScheduledFor   time.Time `json:"scheduled_for"`
 }
 
+// scheduledResultIndex is every terminal Run projection of the calendar as of
+// one generation, in the order ScheduledResults returns them, and the same
+// results by Source Thread. A Run's projection is a pure function of the Run,
+// so it is built once per committed change instead of once per read.
+type scheduledResultIndex struct {
+	generation uint64
+	all        []ScheduledResult
+	byThread   map[string][]ScheduledResult
+}
+
+// Generation identifies the committed calendar: it differs after every change
+// to any item and is equal for two reads with no change between them.
+func (s *Store) Generation() uint64 {
+	if s == nil {
+		return 0
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.generation
+}
+
 // ScheduledResults returns canonical terminal Run projections in ascending
 // finished-time/identity order. A positive limit selects the newest results.
+// The slice is the caller's own.
 func (s *Store) ScheduledResults(threadID string, limit int) []ScheduledResult {
 	if s == nil {
 		return []ScheduledResult{}
 	}
-	targetThreadID := strings.TrimSpace(threadID)
+	index := s.scheduledResultIndex()
+	results := index.all
+	if targetThreadID := strings.TrimSpace(threadID); targetThreadID != "" {
+		results = index.byThread[targetThreadID]
+	}
+	if limit > 0 && len(results) > limit {
+		results = results[len(results)-limit:]
+	}
+	return append(make([]ScheduledResult, 0, len(results)), results...)
+}
+
+func (s *Store) scheduledResultIndex() *scheduledResultIndex {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	results := []ScheduledResult{}
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	if s.resultIndex != nil && s.resultIndex.generation == s.generation {
+		return s.resultIndex
+	}
+	index := &scheduledResultIndex{generation: s.generation, all: []ScheduledResult{}, byThread: map[string][]ScheduledResult{}}
 	for _, item := range s.items {
 		if item.Kind != KindScheduledAction {
 			continue
 		}
 		for _, run := range item.Runs {
-			result, ok := scheduledResultFromRun(item.ID, run)
-			if !ok || targetThreadID != "" && result.ThreadID != targetThreadID {
-				continue
+			if result, ok := scheduledResultFromRun(item.ID, run); ok {
+				index.all = append(index.all, result)
 			}
-			results = append(results, result)
 		}
 	}
-	sort.SliceStable(results, func(left, right int) bool {
-		if !results[left].CreatedAt.Equal(results[right].CreatedAt) {
-			return results[left].CreatedAt.Before(results[right].CreatedAt)
+	sort.SliceStable(index.all, func(left, right int) bool {
+		if !index.all[left].CreatedAt.Equal(index.all[right].CreatedAt) {
+			return index.all[left].CreatedAt.Before(index.all[right].CreatedAt)
 		}
-		return results[left].ID < results[right].ID
+		return index.all[left].ID < index.all[right].ID
 	})
-	if limit > 0 && len(results) > limit {
-		results = results[len(results)-limit:]
+	for _, result := range index.all {
+		index.byThread[result.ThreadID] = append(index.byThread[result.ThreadID], result)
 	}
-	return results
+	s.resultIndex = index
+	return index
 }
 
 func scheduledResultFromRun(itemID string, run Run) (ScheduledResult, bool) {

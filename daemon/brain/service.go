@@ -96,6 +96,7 @@ type Service struct {
 
 	conversationMu             sync.Mutex
 	hostConversationReader     *work.ProviderConversationReader
+	hostSuppressed             hostSuppressMemo
 	hostIdentityProof          hostIdentityProof
 	rebinds                    conversationRebinds
 	sessionConversationReaders map[string]*work.ProviderConversationReader
@@ -2788,8 +2789,36 @@ func (s *Service) hostBoundProviderConversation(reader *work.ProviderConversatio
 	if err != nil {
 		return work.CodexConversation{}, err
 	}
-	conversation.Events = work.SuppressPrivateHostTurns(conversation.Events)
+	conversation.Events = s.suppressedHostEvents(reader, conversation)
 	return conversation, nil
+}
+
+// hostSuppressMemo is the events of one parse of the bound transcript with the
+// private Host turns taken out.
+type hostSuppressMemo struct {
+	mu     sync.Mutex
+	reader *work.ProviderConversationReader
+	stamp  uint64
+	count  int
+	out    []work.CodexConversationEvent
+}
+
+// suppressedHostEvents is work.SuppressPrivateHostTurns of the conversation's
+// events, kept for as long as the reader answers with the same parse: the
+// answer is the same events, and the filter is a pure function of them.
+func (s *Service) suppressedHostEvents(reader *work.ProviderConversationReader, conversation work.CodexConversation) []work.CodexConversationEvent {
+	stamp := reader.ConversationStamp()
+	memo := &s.hostSuppressed
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	if stamp != 0 && memo.reader == reader && memo.stamp == stamp && memo.count == len(conversation.Events) {
+		return memo.out
+	}
+	out := work.SuppressPrivateHostTurns(conversation.Events)
+	if stamp != 0 {
+		memo.reader, memo.stamp, memo.count, memo.out = reader, stamp, len(conversation.Events), out
+	}
+	return out
 }
 
 // hostBoundProviderTranscriptIdentity resolves the stable Host Executor
@@ -2805,6 +2834,15 @@ func (s *Service) ThreadTimeline(threadID string, limit int) ([]TimelineItem, er
 		return []TimelineItem{}, nil
 	}
 	return s.store.ThreadTimeline(threadID, limit)
+}
+
+// ThreadTimelineView is ThreadTimeline for a reader that only looks: the rows
+// are shared with every other reader of the thread and must not be changed.
+func (s *Service) ThreadTimelineView(threadID string, limit int) ([]TimelineItem, error) {
+	if s == nil || s.store == nil {
+		return []TimelineItem{}, nil
+	}
+	return s.store.ThreadTimelineView(threadID, limit)
 }
 
 // RouteCalendarEvent projects the existing idempotent Calendar occurrence into

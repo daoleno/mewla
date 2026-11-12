@@ -41,6 +41,15 @@ func messageRewindProvider(provider string) (string, bool) {
 type rewoundMessages struct {
 	mu sync.Mutex
 	at map[string]string
+	// changes counts the marks set and released, so a projection made with the
+	// marks as they were can tell that they have not moved.
+	changes uint64
+}
+
+func (r *rewoundMessages) version() uint64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.changes
 }
 
 func (r *rewoundMessages) set(workerID, eventID string) {
@@ -50,6 +59,7 @@ func (r *rewoundMessages) set(workerID, eventID string) {
 		r.at = map[string]string{}
 	}
 	r.at[workerID] = eventID
+	r.changes++
 }
 
 // apply drops the rewound turns from a freshly loaded conversation. The mark is
@@ -69,6 +79,7 @@ func (r *rewoundMessages) apply(workerID string, conversation work.CodexConversa
 		}
 	}
 	delete(r.at, workerID)
+	r.changes++
 	return conversation
 }
 
