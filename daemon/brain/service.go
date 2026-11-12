@@ -2371,9 +2371,7 @@ func (s *Service) AnnotateWorkResultEvents(events []work.CodexConversationEvent)
 	for workID, lifecycle := range lifecycles {
 		currentByWork[workID] = lifecycle.CurrentEventID
 	}
-	if err := s.annotateWorkResultActions(events, currentByWork); err != nil {
-		return err
-	}
+	s.annotateWorkResultActions(events, currentByWork)
 	for index := range events {
 		lifecycle, found := lifecycles[events[index].WorkID]
 		if !found || events[index].Source != workResultConversationSource {

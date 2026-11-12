@@ -3,6 +3,8 @@ package brain
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,19 +71,23 @@ type resultGitProbes struct {
 }
 
 func (p *resultGitProbes) probe(cwd string) resultGitProbe {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	now := time.Now
 	if p.now != nil {
 		now = p.now
 	}
-	if cached, ok := p.byCwd[cwd]; ok && now().Sub(cached.at) < resultGitProbeTTL {
+	p.mu.Lock()
+	cached, ok := p.byCwd[cwd]
+	run := p.runGit
+	p.mu.Unlock()
+	if ok && now().Sub(cached.at) < resultGitProbeTTL {
 		return cached
 	}
-	run := p.runGit
 	if run == nil {
 		run = runResultGit
 	}
+	// git runs outside the lock: one slow project never holds another's
+	// thread. Two ticks may probe the same project at once; both answers
+	// are true.
 	probe := resultGitProbe{at: now()}
 	if root, err := run(cwd, "rev-parse", "--show-toplevel"); err == nil {
 		probe.root = strings.TrimSpace(root)
@@ -89,10 +95,12 @@ func (p *resultGitProbes) probe(cwd string) resultGitProbe {
 			probe.dirty = strings.TrimSpace(status) != ""
 		}
 	}
+	p.mu.Lock()
 	if p.byCwd == nil {
 		p.byCwd = map[string]resultGitProbe{}
 	}
 	p.byCwd[cwd] = probe
+	p.mu.Unlock()
 	return probe
 }
 
@@ -108,7 +116,7 @@ func runResultGit(dir string, args ...string) (string, error) {
 
 // annotateWorkResultActions sets each Work result row's typed next steps.
 // currentByWork names each Work's current result row.
-func (s *Service) annotateWorkResultActions(events []work.CodexConversationEvent, currentByWork map[string]string) error {
+func (s *Service) annotateWorkResultActions(events []work.CodexConversationEvent, currentByWork map[string]string) {
 	works := map[string]Work{}
 	for index := range events {
 		event := &events[index]
@@ -117,9 +125,11 @@ func (s *Service) annotateWorkResultActions(events []work.CodexConversationEvent
 		}
 		item, ok := works[event.WorkID]
 		if !ok {
+			// A Work that is gone, or a read that fails, leaves its rows
+			// without the Work's own context; the thread still renders.
 			found, err := s.store.Work(event.WorkID)
-			if err != nil && err != ErrWorkNotFound {
-				return err
+			if err != nil && !errors.Is(err, ErrWorkNotFound) {
+				log.Printf("brain Work %s result actions: %v", event.WorkID, err)
 			}
 			item = found
 			works[event.WorkID] = item
@@ -130,7 +140,6 @@ func (s *Service) annotateWorkResultActions(events []work.CodexConversationEvent
 			cwd: s.workWorkerCwd(event.WorkID, event.WorkSession),
 		})
 	}
-	return nil
 }
 
 // workWorkerCwd is where a Work's Worker Session worked: the cwd it joined
@@ -171,8 +180,11 @@ func (s *Service) workResultActions(source workResultSource) []work.ResultAction
 		}
 	}
 
+	// The project is probed only for a Work's current result: an older
+	// result offers neither its changes (they are now, not then) nor its
+	// project's files, and a long thread runs no git for its history.
 	var git resultGitProbe
-	if source.cwd != "" && filepath.IsAbs(source.cwd) {
+	if source.current && source.cwd != "" && filepath.IsAbs(source.cwd) {
 		git = s.resultGit.probe(source.cwd)
 	}
 	if source.current && git.root != "" && git.dirty {

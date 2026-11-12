@@ -80,10 +80,12 @@ func TestWorkResultActionsAreOnlyWhatTheDaemonCanShow(t *testing.T) {
 	if !reflect.DeepEqual(dirty, want) {
 		t.Fatalf("dirty project:\n got %+v\nwant %+v", dirty, want)
 	}
+	// An older result of the same Work runs no git: its project's changes
+	// and files are the project's now, not that result's.
 	older := source
 	older.current = false
-	if got := service.workResultActions(older); !reflect.DeepEqual(got, clean) {
-		t.Fatalf("older result:\n got %+v\nwant %+v", got, clean)
+	if got, want := service.workResultActions(older), []work.ResultAction{clean[0], clean[1], clean[3], clean[4]}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("older result:\n got %+v\nwant %+v", got, want)
 	}
 
 	// A result that names nothing that exists, from a Worker with no known
