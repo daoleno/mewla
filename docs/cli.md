@@ -12,6 +12,7 @@ flags for that command.
 mewla                         # start on 127.0.0.1:9876 (same as mewla serve)
 mewla --lan                   # also listen on Wi-Fi/LAN and Tailscale, for a trusted network
 mewla -addr "$(tailscale ip -4):9876"   # listen on host:port only, here your Tailscale IP
+mewla -loopback-only          # this computer only: no TLS listeners on Wi-Fi/LAN or Tailscale (test daemons)
 mewla doctor [--json]         # is this machine ready? platform, state, port, agents
 mewla deps                    # offer this system's official agent CLI install, then sign-in
 mewla setup                   # guided first run: pick Brain's agent

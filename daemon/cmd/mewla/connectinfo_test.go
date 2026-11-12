@@ -465,6 +465,41 @@ func TestDaemonConfigLANModeAndAddrConflict(t *testing.T) {
 	}
 }
 
+// A loopback daemon also listens on this computer's private addresses (Wi-Fi,
+// LAN, Tailscale) over TLS; -loopback-only keeps it on this computer, and is
+// refused where it cannot be true.
+func TestLoopbackOnlyOpensNoPrivateListener(t *testing.T) {
+	for _, tc := range []struct {
+		args     []string
+		port     int
+		listens  bool
+		rejected string
+	}{
+		{args: nil, port: 9876, listens: true},
+		{args: []string{"-addr", "127.0.0.1:9961"}, port: 9961, listens: true},
+		{args: []string{"-addr", "127.0.0.1:9961", "-loopback-only"}},
+		{args: []string{"-loopback-only", "-addr", "localhost:9961"}},
+		{args: []string{"--lan"}},
+		{args: []string{"-addr", "192.168.1.42:9876"}},
+		{args: []string{"--lan", "-loopback-only"}, rejected: "cannot be used together"},
+		{args: []string{"-addr", "192.168.1.42:9876", "-loopback-only"}, rejected: "needs a loopback -addr"},
+	} {
+		cfg, err := parseDaemonConfig(tc.args, io.Discard)
+		if tc.rejected != "" {
+			if err == nil || !strings.Contains(err.Error(), tc.rejected) {
+				t.Fatalf("%q: err = %v, want %q", tc.args, err, tc.rejected)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%q: %v", tc.args, err)
+		}
+		if port, listens := privateListenerPort(cfg); listens != tc.listens || port != tc.port {
+			t.Fatalf("%q: private listeners on %d = %v, want %d = %v", tc.args, port, listens, tc.port, tc.listens)
+		}
+	}
+}
+
 func TestStartupPairingAddressesNeverReturnsWildcard(t *testing.T) {
 	detected := []privateNetworkAddress{{label: "Same Wi-Fi/LAN", ip: net.ParseIP("10.0.0.7")}}
 	got := startupPairingAddresses("0.0.0.0", detected)
