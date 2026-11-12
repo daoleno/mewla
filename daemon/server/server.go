@@ -417,6 +417,7 @@ type clientMessage struct {
 	SessionID            string                                 `json:"session_id"`
 	Text                 string                                 `json:"text"`
 	SnoozeUntil          *time.Time                             `json:"snooze_until,omitempty"`
+	SnoozeSeconds        int64                                  `json:"snooze_seconds,omitempty"`
 	Key                  string                                 `json:"key"`
 	OptionID             string                                 `json:"option_id"`
 	Data                 string                                 `json:"data"`
@@ -3302,7 +3303,8 @@ func (s *Server) handleBrainWorkAction(conn *websocket.Conn, raw clientMessage) 
 	}
 	result, err := s.brain.ActOnWork(brain.WorkUserActionRequest{
 		WorkID: strings.TrimSpace(raw.ID), Kind: brain.WorkUserActionKind(strings.TrimSpace(raw.Action)),
-		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, RequestID: raw.RequestID, Attachments: files,
+		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, SnoozeFor: time.Duration(raw.SnoozeSeconds) * time.Second,
+		RequestID: raw.RequestID, Attachments: files,
 	})
 	if err != nil && !errors.Is(err, brain.ErrWorkCleanupPending) {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_action_failed", brainWorkActionMessage(err))

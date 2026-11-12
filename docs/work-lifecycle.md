@@ -379,7 +379,7 @@ Event with `source_name: user`, so Brain reads the decision as a fact.
 | `close` (Accept) | `CloseWork` as done, actor `user` | `brain.work_closed` |
 | `dismiss` (Not needed anymore) | `CloseWork` as cancelled, actor `user` | `brain.work_closed` |
 | `stop` | `CloseWork` as cancelled, then the delegated Worker Session is torn down; never the Host | `brain.work_closed` |
-| `snooze` | Records `snoozed_until`; no lifecycle change, nothing scheduled | `user.snoozed` |
+| `snooze` | Records `snoozed_until`: `snooze_seconds` from now on the computer's clock (the app offers the lengths, e.g. an hour), or a `snooze_until` time the app chose (tomorrow morning where the phone is); exactly one, at most a year. No lifecycle change, nothing scheduled | `user.snoozed` |
 
 **Who accepts Work.** Brain accepts Work after review, and the user can
 close it directly; both closes are final. When Brain reads a result and
