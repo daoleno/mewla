@@ -35,4 +35,9 @@ describe("the keyboard goes down with its field", () => {
     expect(pane).toMatch(/onBackPress\(\(\) => \{\s*if \(!props\.active\(\) \|\| !keyboard\(\) \|\| keyboardFrame\(\)\.height <= 0\) return false;\s*command\("blur", \{\}\);/);
     expect(pane).toMatch(/if \(platform\.os === "web"\) return;\s*cleanup\(BackHandler\.on\("press", listener\)\);/);
   });
+  test("opening a file from Browse files (its search field may hold the keyboard) dismisses it (R5#4)", () => {
+    const files = read("more/git/GitFiles.tsx");
+    const open = files.slice(files.indexOf("const openFile ="), files.indexOf("const tapped ="));
+    expect(open).toMatch(/Keyboard\.dismiss\(\);\s*props\.nav\.push\(\{ name: "git-file"/);
+  });
 });

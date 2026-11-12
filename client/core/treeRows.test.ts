@@ -46,4 +46,17 @@ describe("a tree's rows take a tap", () => {
       );
     expect(missing).toEqual([]);
   });
+
+  // The web runtime is no phone (`nsh/mobile` unavailable), and the row took the click there too (R5#3):
+  // the row's press may not depend on the platform.
+  test("on every platform: a row's onPress has no fallback to nothing", () => {
+    const conditional = sources(UI)
+      .filter((path) => /<Tree\b/.test(readFileSync(path, "utf8")))
+      .flatMap((path) =>
+        longPressTags(readFileSync(path, "utf8"))
+          .filter(({ tag }) => /\bonPress=\{[^}]*\?[^}]*:\s*(undefined|null)\s*\}/.test(tag))
+          .map(({ line }) => `${relative(UI, path)}:${line}`),
+      );
+    expect(conditional).toEqual([]);
+  });
 });
