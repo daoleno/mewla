@@ -146,15 +146,47 @@ export function RowButton(props: { label: string; onPress: () => void; disabled?
   );
 }
 
-/** A stat tile (SPEC §15 Metrics): label 13/600 soft, value 28/700, a 13 soft line, an optional 4 pt bar. */
-export function StatTile(props: { label: string; value: string; detail?: string; share?: number; testID?: string }) {
+/**
+ * A stat tile (SPEC §15 Metrics): label 13/600 soft, value 28/700 (soft while it is not known), a 13 soft line,
+ * an optional 4 pt bar, and whatever the tile shows under them (a small history).
+ */
+export function StatTile(props: { label: string; value: string; detail?: string; share?: number; muted?: boolean; testID?: string; valueTestID?: string; children?: JSX.Element }) {
   return (
     <View testID={props.testID} class="min-w-[140px] flex-1 gap-0.5 rounded-(--radius-group) bg-card p-4">
       <Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.label}</Text>
-      <Text class="text-[28px] font-bold leading-[34px] line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
-      {props.detail ? <Text class="text-caption text-muted-foreground line-clamp-1">{props.detail}</Text> : null}
+      <Text testID={props.valueTestID} class={props.muted ? "text-[28px] font-bold leading-[34px] text-muted-foreground line-clamp-1" : "text-[28px] font-bold leading-[34px] line-clamp-1"} style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+      {props.detail ? <Text class="text-caption text-muted-foreground line-clamp-2">{props.detail}</Text> : null}
       {props.share !== undefined ? <View class="mt-2"><Meter share={props.share} /></View> : null}
+      {props.children ? <View class="mt-2 gap-2">{props.children}</View> : null}
     </View>
+  );
+}
+
+/** Stat tiles two across on a phone, four on wide (SPEC §15 Metrics); 12 between them. */
+export function StatGrid(props: { testID?: string; children?: JSX.Element }) {
+  return <View testID={props.testID} class="mt-3 flex-row flex-wrap gap-3">{props.children}</View>;
+}
+
+/** A ranked row (SPEC §15 Metrics): a glyph, the name over its second line, a 72 pt bar of its share, the value. */
+export function RankedRow(props: { title: string; subtitle?: string; share: number; value: string; icon?: IconName; leading?: JSX.Element; testID?: string; accessibilityLabel?: string; accessibilityHint?: string; onPress?: () => void }) {
+  return (
+    <Row
+      testID={props.testID}
+      icon={props.icon}
+      leading={props.leading}
+      title={props.title}
+      subtitle={props.subtitle}
+      accessibilityLabel={props.accessibilityLabel}
+      accessibilityHint={props.accessibilityHint}
+      onPress={props.onPress}
+      chevron={Boolean(props.onPress)}
+      trailing={
+        <View class="flex-row items-center gap-3">
+          <View class="w-[72px]"><Meter share={props.share} /></View>
+          <Text class="min-w-[56px] text-right text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+        </View>
+      }
+    />
   );
 }
 

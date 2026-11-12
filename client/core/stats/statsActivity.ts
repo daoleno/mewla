@@ -73,72 +73,27 @@ export function buildDailyActivitySeries(
   return out;
 }
 
-export type ChartFrame = {
-  width: number;
-  height: number;
-  /** Inset on every side so end dots and the stroke are not clipped. */
-  inset: number;
-};
+/** The chart's frame: its size and the gap between two bars (SPEC §15 Metrics: 4 pt). */
+export type BarFrame = { width: number; height: number; gap: number };
 
-export type ChartPoint = { x: number; y: number };
-
-export function activityChartPoints(values: readonly number[], frame: ChartFrame): ChartPoint[] {
-  const { width, height, inset } = frame;
-  if (values.length === 0 || width <= inset * 2) return [];
-  const max = Math.max(...values, 0);
-  const usableWidth = width - inset * 2;
-  const usableHeight = height - inset * 2;
-  const step = values.length > 1 ? usableWidth / (values.length - 1) : 0;
-  return values.map((value, index) => ({
-    x: values.length > 1 ? inset + index * step : width - inset,
-    y: inset + (1 - (max > 0 ? Math.max(0, value) / max : 0)) * usableHeight,
-  }));
-}
-
-/** Index of the point nearest to x. */
-export function activityIndexAt(x: number, points: readonly ChartPoint[]): number {
-  if (points.length <= 1) return 0;
-  const step = points[1].x - points[0].x;
-  const index = Math.round((x - points[0].x) / step);
-  return Math.min(points.length - 1, Math.max(0, index));
-}
-
-const fixed = (value: number) => value.toFixed(1);
+export type ChartBar = { x: number; width: number; height: number };
 
 /**
- * Monotone cubic curve through the points (Fritsch–Carlson), so the line
- * never overshoots below zero or above a peak between two days.
+ * One bar per day, side by side across the width with `gap` between them, each as tall as its share
+ * of the peak. A day with nothing has no height; the baseline under the bars stands for it.
  */
-export function activityCurvePath(points: readonly ChartPoint[]): string {
-  if (points.length === 0) return '';
-  if (points.length === 1) return `M${fixed(points[0].x)},${fixed(points[0].y)}`;
-  const count = points.length;
-  const slopes: number[] = [];
-  for (let index = 0; index < count - 1; index += 1) {
-    slopes.push((points[index + 1].y - points[index].y) / (points[index + 1].x - points[index].x));
-  }
-  const tangents = points.map((_, index) => {
-    if (index === 0) return slopes[0];
-    if (index === count - 1) return slopes[count - 2];
-    const before = slopes[index - 1];
-    const after = slopes[index];
-    if (before * after <= 0) return 0;
-    return (2 * before * after) / (before + after);
-  });
-  let path = `M${fixed(points[0].x)},${fixed(points[0].y)}`;
-  for (let index = 0; index < count - 1; index += 1) {
-    const from = points[index];
-    const to = points[index + 1];
-    const third = (to.x - from.x) / 3;
-    path += `C${fixed(from.x + third)},${fixed(from.y + tangents[index] * third)} ${fixed(to.x - third)},${fixed(to.y - tangents[index + 1] * third)} ${fixed(to.x)},${fixed(to.y)}`;
-  }
-  return path;
+export function activityBars(values: readonly number[], frame: BarFrame): ChartBar[] {
+  const { width, height, gap } = frame;
+  if (values.length === 0 || width <= 0) return [];
+  const max = Math.max(...values, 0);
+  const slot = (width + gap) / values.length;
+  const barWidth = Math.max(1, slot - gap);
+  return values.map((value, index) => ({ x: index * slot, width: barWidth, height: max > 0 ? (Math.max(0, value) / max) * height : 0 }));
 }
 
-/** The curve closed down to the baseline, for the soft fill under it. */
-export function activityAreaPath(points: readonly ChartPoint[], baseline: number): string {
-  if (points.length < 2) return '';
-  const first = points[0];
-  const last = points[points.length - 1];
-  return `${activityCurvePath(points)}L${fixed(last.x)},${fixed(baseline)}L${fixed(first.x)},${fixed(baseline)}Z`;
+/** The day under a pointer at `x`, clamped to the series. */
+export function activityBarIndexAt(x: number, count: number, frame: Pick<BarFrame, "width" | "gap">): number {
+  if (count <= 1 || frame.width <= 0) return 0;
+  const slot = (frame.width + frame.gap) / count;
+  return Math.min(count - 1, Math.max(0, Math.floor(x / slot)));
 }
