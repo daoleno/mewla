@@ -1,7 +1,6 @@
 package work
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,33 +144,30 @@ func attachSubagentsToEvents(
 	}
 }
 
-// readClaudeSubagent parses one subagent transcript and its meta file.
+// readClaudeSubagent parses one subagent transcript and its meta file. A
+// subagent file is read once and then only for the bytes it grew by: the
+// conversation is parsed again whenever any file of it changes (a subagent
+// works while the conversation is quiet), and re-reading every subagent each
+// time was most of the daemon's CPU on a conversation with a few dozen of them
+// (tens of MB each). See claude_subagent_cache.go.
 func readClaudeSubagent(path string) (*claudeSubagent, bool) {
+	return claudeSubagentCache.read(path)
+}
+
+// claudeSubagentOf is what a subagent's transcript, as the builder consumed
+// it so far, and its meta file say.
+func claudeSubagentOf(path string, meta claudeSubagentMeta, builder *claudeConversationBuilder) *claudeSubagent {
 	base := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 	agentID := strings.TrimPrefix(base, "agent-")
-	rawMeta, err := os.ReadFile(strings.TrimSuffix(path, ".jsonl") + ".meta.json")
-	if err != nil {
-		return nil, false
-	}
-	var meta claudeSubagentMeta
-	if json.Unmarshal(rawMeta, &meta) != nil || strings.TrimSpace(meta.ToolUseID) == "" {
-		return nil, false
-	}
-	builder := newClaudeConversationBuilder(base)
-	builder.sidechain = true
-	if err := consumeClaudeJSONL(path, builder.consumeLine); err != nil {
-		return nil, false
-	}
 	finished := meta.Finished || claudeSubagentEndedOnAnswer(builder.events)
-	steps := make([]CodexConversationEvent, 0, len(builder.events))
-	for _, event := range builder.events {
-		if !claudeSubagentStep(event, meta.ToolUseID) {
-			continue
+	steps := make([]CodexConversationEvent, 0, min(len(builder.events), maxClaudeSubagentSteps))
+	for index := len(builder.events) - 1; index >= 0 && len(steps) < maxClaudeSubagentSteps; index-- {
+		if claudeSubagentStep(builder.events[index], meta.ToolUseID) {
+			steps = append(steps, builder.events[index])
 		}
-		steps = append(steps, event)
 	}
-	if len(steps) > maxClaudeSubagentSteps {
-		steps = steps[len(steps)-maxClaudeSubagentSteps:]
+	for left, right := 0, len(steps)-1; left < right; left, right = left+1, right-1 {
+		steps[left], steps[right] = steps[right], steps[left]
 	}
 	return &claudeSubagent{
 		meta:    meta,
@@ -186,7 +182,7 @@ func readClaudeSubagent(path string) (*claudeSubagent, bool) {
 			EndedAt:     builder.lastTimestamp,
 			Steps:       steps,
 		},
-	}, true
+	}
 }
 
 // claudeSubagentStep keeps a subagent's tool calls. Its words are the answer
