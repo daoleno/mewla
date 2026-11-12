@@ -4,10 +4,12 @@ import { dateKey, formatDate, formatFullDateTime } from "../../../core/more/date
 import { failureText } from "../../../core/more/daemon";
 import { codexPlanLabel, codexRemainingPercent, codexWindowLabel, normalizeCodexUsedPercent } from "../../../core/stats/codexSubscriptionStats";
 import {
-  activityReadout,
   activityUsesTokens,
   activityValue,
   chartDate,
+  chartReadout,
+  chartSeries,
+  chartValue,
   costSourceLabel,
   dayFacts,
   emptyRangeTitle,
@@ -42,7 +44,7 @@ import { loadStats } from "../../../core/stats/load";
 import { activityBarIndexAt, activityBars, buildDailyActivitySeries } from "../../../core/stats/statsActivity";
 import { costEstimateMark, statsModelHeading, statsModelKey } from "../../../core/stats/statsCostPresentation";
 import { EMPTY_RANGE, hasRangeStats, isCostKnown, type CodexSubscriptionUsage, type DayCell, type ModelStat, type PricingStatus, type RangeData, type StatsView } from "../../../core/stats/statsPayload";
-import { INITIAL_STATS_RANGE, STATS_RANGE_TABS, type StatsRange } from "../../../core/stats/statsTabs";
+import { availableRanges, INITIAL_STATS_RANGE, rangeDays, rangeEyebrow, shownRange, type StatsRange } from "../../../core/stats/statsTabs";
 import { color } from "../../kit/colors";
 import { Icon } from "../../kit/Icon";
 import { copyMenu, EmptyState, Meter, Page, RankedRow, Row, Section, ShowMore, StatGrid, StatTile, Tag } from "../../kit/kit";
@@ -132,24 +134,26 @@ function leaveOnSwitch(nav: PageNav): void {
 
 export function Stats(props: { nav: PageNav }) {
   const swipePaging = platform.os !== "web";
-  // Each visit starts on Week, as the range control always has.
+  // Each visit starts on 14 days (SPEC §15 Metrics); a computer without it shows the ranges it has.
   range.set(INITIAL_STATS_RANGE);
+  const tabs = () => availableRanges(view()?.ranges);
+  const picked = () => shownRange(range(), tabs());
   // Load on open and whenever the computer (re)connects.
   effect(() => {
     const current = daemon();
     forgetOtherComputer(current?.server.id ?? "");
     if (current && daemonState() === "connected") untracked(reload);
   });
-  const data = (): RangeData => view()?.ranges[range()] ?? EMPTY_RANGE;
+  const data = (): RangeData => view()?.ranges[picked()] ?? EMPTY_RANGE;
   const anyStats = () => Object.values(view()?.ranges ?? {}).some((r) => hasRangeStats(r));
   const subscriptions = () => view()?.codexSubscriptions ?? [];
   const busy = () => !view() && (loading() || daemonState() === "connecting");
   // The headline answers "how much": the range's total cost, once there is one to read.
   const headline = () => (hasRangeStats(data()) ? formatAvailableCost(data().cost, data().costKnown) : "Stats");
   return (
-    <Page display title="Stats" displayTitle={headline()} eyebrow={RANGE_EYEBROW[range()]} testID="stats" refreshing={loading() && Boolean(view())} onRefresh={pull}>
+    <Page display title="Stats" displayTitle={headline()} eyebrow={rangeEyebrow(picked())} testID="stats" refreshing={loading() && Boolean(view())} onRefresh={pull}>
       <View class="mt-2">
-        <Segmented testID="stats-range" accessibilityLabel="Stats range" options={STATS_RANGE_TABS} value={range()} onChange={(key) => range.set(key)} />
+        <Segmented testID="stats-range" accessibilityLabel="Stats range" options={tabs()} value={picked()} onChange={(key) => range.set(key)} />
       </View>
       {/* A swipe across the page moves to the next or previous range, as the tabs do; on the web the tabs alone do (client/DESIGN.md). */}
       <View
@@ -163,7 +167,7 @@ export function Stats(props: { nav: PageNav }) {
           const fromChart = swipeFromChart || chartTouched;
           swipeFromChart = false;
           if (fromChart || e.cancelled) return;
-          const next = swipedRange(range(), e.translation.x, e.translation.y);
+          const next = swipedRange(picked(), e.translation.x, e.translation.y, tabs());
           if (next) range.set(next);
         } : undefined}
       >
@@ -172,12 +176,12 @@ export function Stats(props: { nav: PageNav }) {
         ) : !view() && failure() ? (
           <EmptyState testID="stats-failed" icon="alert" tone="failed" title="Stats didn't load" detail={failure()} action="Try again" onAction={reload} />
         ) : !hasRangeStats(data()) && subscriptions().length === 0 ? (
-          <EmptyState testID="stats-empty" icon="stats" title={emptyRangeTitle(range(), anyStats())} detail={latestActivity(view())} />
+          <EmptyState testID="stats-empty" icon="stats" title={emptyRangeTitle(rangeDays(picked()), anyStats())} detail={latestActivity(view())} />
         ) : (
           <View>
             {subscriptions().map((s) => <CodexCard subscription={s} />)}
             {hasRangeStats(data()) ? <Summary data={data()} pricing={view()?.pricing} /> : null}
-            {data().days.length > 0 ? <Activity days={range() === "day" ? view()?.ranges.all?.days ?? data().days : data().days} range={range()} nav={props.nav} /> : null}
+            {data().days.length > 0 ? <Activity days={data().days} range={picked()} nav={props.nav} /> : null}
             <Models data={data()} pricing={view()?.pricing} nav={props.nav} />
             <Projects data={data()} />
             <Counted section="skills" title="Skills" items={data().skills.map((s) => ({ name: s.name, calls: s.calls, detail: s.projects.join(" · ") }))} />
@@ -188,9 +192,6 @@ export function Stats(props: { nav: PageNav }) {
     </Page>
   );
 }
-
-/** The eyebrow over the total: the range in words. */
-const RANGE_EYEBROW: Record<StatsRange, string> = { day: "Today", week: "Last 7 days", month: "Last 30 days", all: "All time" };
 
 function latestActivity(stats: StatsView | null): string | undefined {
   const days = stats?.ranges.all?.days ?? [];
@@ -321,7 +322,7 @@ const BAR_GAP = 4;
 const BAR_RADIUS = 4;
 
 /**
- * The one chart (SPEC §15 Metrics): activity by day as ink bars with rounded tops on a square baseline,
+ * The one chart (SPEC §15 Metrics): spend by day (activity, when no day has a known cost) as ink bars with rounded tops on a square baseline,
  * `hair` gridlines, dates at the start, middle and end. The tooltip over the chart names the last day; a
  * finger dragged across it, the pointer over it or ← → while it has the keyboard focus move it day by day,
  * and letting go resets it, opening nothing. A tap opens the tapped day when it had activity. A screen
@@ -333,8 +334,8 @@ function Activity(props: { days: readonly DayCell[]; range: StatsRange; nav: Pag
   const focus = signal<number | null>(null);
   let touch: { x: number; y: number; phase: ScrubPhase } | null = null;
   const series = () => buildDailyActivitySeries(props.days, props.range);
-  const usesTokens = () => activityUsesTokens(series().flatMap((d) => (d.day ? [d.day] : [])));
-  const values = () => series().map((d) => (d.day ? activityValue(d.day, usesTokens()) : 0));
+  const kind = () => chartSeries(series().map((d) => d.day));
+  const values = () => series().map((d) => chartValue(d.day, kind()));
   const last = () => Math.max(0, series().length - 1);
   const index = () => Math.min(focus() ?? last(), last());
   const active = () => series()[index()];
@@ -369,13 +370,13 @@ function Activity(props: { days: readonly DayCell[]; range: StatsRange; nav: Pag
     return [s[0]?.date ?? "", s[Math.floor((s.length - 1) / 2)]?.date ?? "", s[s.length - 1]?.date ?? ""].map(chartDate);
   };
   return (
-    <Section title="Activity" testID="stats-activity">
+    <Section title={kind() === "cost" ? "Spend" : "Activity"} testID="stats-activity">
       <View class="px-4 pt-3">
         <View class="h-[28px] flex-row">
           <View style={{ width: tipLeft() }} />
           <View testID="activity-tooltip" class="flex-row items-center gap-1.5 self-start rounded-full bg-primary px-2.5 py-1" onLayout={({ bounds }) => tipWidth.set(bounds.size.width)}>
-            <Text class="text-caption text-primary-foreground">{active()?.date === today ? "Today" : chartDate(active()?.date ?? "")}</Text>
-            <Text testID="activity-readout" class="text-caption font-semibold text-primary-foreground" style={{ fontVariant: ["tabular-nums"] }}>{activityReadout(active()?.day ?? null, usesTokens())}</Text>
+            <Text class="text-caption text-primary-foreground">{`${active()?.date === today ? "Today" : chartDate(active()?.date ?? "")} ·`}</Text>
+            <Text testID="activity-readout" class="text-caption font-semibold text-primary-foreground" style={{ fontVariant: ["tabular-nums"] }}>{chartReadout(active()?.day ?? null, kind())}</Text>
           </View>
         </View>
         <View
@@ -384,7 +385,7 @@ function Activity(props: { days: readonly DayCell[]; range: StatsRange; nav: Pag
           style={{ height: CHART_HEIGHT }}
           role="adjustable"
           focusable
-          accessibilityLabel="Daily activity"
+          accessibilityLabel={kind() === "cost" ? "Daily spend" : "Daily activity"}
           accessibilityValue={{ text: activityAccessibilityValue(active()?.date ?? "", active()?.day ?? null) }}
           accessibilityHint={ACTIVITY_ACCESSIBILITY_HINT}
           accessibilityActions={ACTIVITY_ACCESSIBILITY_ACTIONS}

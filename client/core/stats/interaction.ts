@@ -1,7 +1,7 @@
 import { formatLongDay, parseDateOnly } from "../more/dates";
 import { costSourceLabel, formatAvailableCost, formatAvailableTokens, rowActivitySummary, sessionSummary } from "./format";
 import type { DayCell, ModelStat } from "./statsPayload";
-import { STATS_RANGE_TABS, statsRangeAt, statsRangeIndex, type StatsRange } from "./statsTabs";
+import { STATS_RANGE_TABS, type StatsRange, type StatsRangeTab } from "./statsTabs";
 
 /** How Stats is read aloud and moved through: the chart's steps, the range swipe, the rows' labels. */
 
@@ -71,11 +71,11 @@ export function scrubPhase(phase: ScrubPhase, dx: number, dy: number): ScrubPhas
 /** A horizontal swipe over the page moves one range on: leftwards to the next, rightwards to the previous. */
 export const RANGE_SWIPE_DISTANCE = 48;
 
-export function swipedRange(range: StatsRange, dx: number, dy: number): StatsRange | null {
+export function swipedRange(range: StatsRange, dx: number, dy: number, tabs: readonly StatsRangeTab[] = STATS_RANGE_TABS): StatsRange | null {
   if (Math.abs(dx) < RANGE_SWIPE_DISTANCE || Math.abs(dx) <= Math.abs(dy)) return null;
-  const next = statsRangeIndex(range) + (dx < 0 ? 1 : -1);
-  if (next < 0 || next >= STATS_RANGE_TABS.length) return null;
-  return statsRangeAt(next);
+  const next = tabs.findIndex((tab) => tab.key === range) + (dx < 0 ? 1 : -1);
+  if (next < 0 || next >= tabs.length) return null;
+  return tabs[next]!.key;
 }
 
 /** A model row read aloud: "gpt-6, openai, Estimated cost $2.50, 250K tokens · 1 session" */
