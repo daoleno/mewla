@@ -431,9 +431,10 @@ came back before you accept it.
 
 In the conversation, every Work result is a full slip (`WorkSlip`):
 executor · project · time, the state, the title and one line. A Work's slip
-moves to when its newest result came back. A turn's tool rows fold into one
-quiet "Worked · N steps" row that expands to the steps (Brain only; Session
-chats keep every row). The composer says "Tell Brain…".
+moves to when its newest result came back. A turn's finished tool rows fold
+into one row that says what they did ("Ran 1 command, edited 1 file") with
+its kind's icon and the files in soft, and opens onto the real rows; Brain and
+a Session fold alike (`core/timeline/foldToolRuns.ts`). The composer says "Tell Brain…".
 
 ## Type
 
