@@ -553,6 +553,7 @@ function isBoundedStreamingFieldDelta(
     previous.work_event_kind === next.work_event_kind &&
     previous.work_details_json === next.work_details_json &&
     sameResultActions(previous.work_actions, next.work_actions) &&
+    JSON.stringify(previous.answered) === JSON.stringify(next.answered) &&
     previous.work_wait_for === next.work_wait_for &&
     previous.explanation === next.explanation &&
     sameStringArray(previous.files, next.files) &&

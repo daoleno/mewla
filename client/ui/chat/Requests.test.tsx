@@ -69,6 +69,39 @@ describe("requests in Brain's thread", () => {
     expect(app.texts()).toContain("14");
   }, 20_000);
 
+  test("answered on another device: the computer's record seals the card here at once, with who answered", async () => {
+    const app = await open(APP, {
+      platform: "android", storage: paired,
+      host: phoneHost({ brain, worker_sessions: [session("docs", { delegated: true, approvals: [approval("a1", "git push origin main")] })] }),
+    });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    await app.host.send("app.daemonPush", { type: "request_answered", request: {
+      id: "approval:docs:a1", kind: "approval", session_id: "docs", work_id: "w1", asked: "git push origin main", answer: "Allow", outcome: "approved",
+      by: { kind: "device", device_name: "Pixel 8" }, answered_at: new Date().toISOString(), anchor: { approval_id: "a1" },
+    } });
+    await app.waitFor("id:request-sealed");
+    expect(app.shows("id:request-card")).toBe(false);
+    expect(app.texts()).toContain("Approved");
+    expect(app.texts()).toContain("Allow");
+    await app.waitUntil(() => !app.texts().includes("1 needs you"));
+  }, 20_000);
+
+  test("after a restart the thread still says what was answered, by whom, where it was asked", async () => {
+    const at = "2026-11-12T07:24:49.000Z";
+    const row = { id: "answered:prompt:brain-host:p1", seq: 2, timestamp: "2026-11-12T07:24:26.000Z", kind: "request_answered", source: "request_answered", role: "system",
+      title: "Waiting for Claude permission", body: "Yes", status: "approved",
+      request: { id: "prompt:brain-host:p1", kind: "permission", session_id: "brain-host", thread_id: "t-now", asked: "Bash command rm -rf build", answer: "Yes", outcome: "approved",
+        by: { kind: "device", device_name: "Proof phone" }, answered_at: at, anchor: { prompt_id: "p1" } } };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": [row] } }) });
+    await app.waitFor("id:request-answered", { timeout: 10_000 });
+    expect(app.texts()).toContain("Approved");
+    expect(app.texts()).toContain("Yes");
+    expect(app.count("id:request-sealed")).toBe(1);
+    await app.wait(500);
+    await app.press("id:request-sealed");
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Bash command rm -rf build · Proof phone")));
+  }, 20_000);
+
   test("a Session the person started asks only in that Session", async () => {
     const app = await open(APP, {
       platform: "android", storage: paired,
