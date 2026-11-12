@@ -246,6 +246,8 @@
   var box = document.getElementById("box");
   var canvas = document.getElementById("vt");
   var ctx = canvas.getContext("2d", { alpha: false });
+  // A restored context (after a GPU reset) starts from the default state: set the face again and repaint.
+  canvas.addEventListener("contextrestored", function () { curFace = ""; schedule(); });
   var input = document.getElementById("input");
   var mac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
   var coarse = window.matchMedia ? window.matchMedia("(any-pointer: coarse)") : null;
@@ -264,7 +266,8 @@
   // The grid, in device pixels.
   var dpr = 1, fontPx = 13, cellW = 8, cellH = 16, baseline = 12, thick = 1, padX = 0, padY = 0;
   var devW = 0, devH = 0, cols = 0, rows = 0;
-  var widths = {};
+  // Each face's character widths, and the face the context has (reading ctx.font back costs a serialization).
+  var widths = {}, faceWidths = {}, curFace = "";
   var glyphs = {};
 
   // The content: history lines above the screen's.
@@ -431,6 +434,7 @@
     padX = Math.round(PAD_X * dpr);
     padY = Math.round(PAD_Y * dpr);
     widths = {};
+    curFace = "";
     glyphs = {};
   }
 
@@ -442,6 +446,7 @@
     if (canvas.width !== devW || canvas.height !== devH) {
       canvas.width = devW;
       canvas.height = devH;
+      curFace = "";
     }
     canvas.style.width = devW / dpr + "px";
     canvas.style.height = devH / dpr + "px";
@@ -539,17 +544,28 @@
     ctx.restore();
   }
 
+  /** Sets the context's face when it changes; a frame draws thousands of runs in a few faces. */
+  function setFace(f) {
+    if (f === curFace) return;
+    ctx.font = curFace = f;
+    faceWidths = widths[f] || (widths[f] = {});
+  }
+
+  /** `text`'s width in the current face, measured once. */
+  function textWidth(text) {
+    var w = faceWidths[text];
+    if (w === undefined) faceWidths[text] = w = ctx.measureText(text).width;
+    return w;
+  }
+
   /** Whether `c` in the current face is exactly one cell wide (then runs of such characters draw as one string). */
   function fits(c) {
-    var key = ctx.font + "\u0000" + c;
-    var w = widths[key];
-    if (w === undefined) widths[key] = w = ctx.measureText(c).width;
-    return Math.abs(w - cellW) < 0.05;
+    return Math.abs(textWidth(c) - cellW) < 0.05;
   }
 
   /** A glyph that is not one cell wide (CJK, emoji, a symbol from a fallback face): centred in its `cells`, scaled down to fit. */
   function drawFitted(text, x0, y, cells) {
-    var room = cells * cellW, w = ctx.measureText(text).width;
+    var room = cells * cellW, w = textWidth(text);
     if (w <= room + 0.5 || w <= 0) {
       ctx.fillText(text, x0 + (room - w) / 2, y + baseline);
       return;
@@ -595,7 +611,7 @@
   /** `next` is the run after this one in its row (a flag's second regional indicator). */
   function drawRun(run, y, color, next) {
     var x0 = padX + run.col * cellW;
-    ctx.font = face(run.flags);
+    setFace(face(run.flags));
     ctx.fillStyle = color;
     if (run.flags & FLAG.FLAG_TAIL) {
       // A flag's second regional indicator: the first draws the flag across both.
@@ -678,7 +694,7 @@
     if (y + cellH <= 0 || y >= canvas.height) return;
     if (composing && preedit) {
       // The composition, at the cursor, over the cells it covers, underlined.
-      ctx.font = face(0);
+      setFace(face(0));
       var w = Math.max(cellW, Math.ceil(ctx.measureText(preedit).width / cellW) * cellW);
       ctx.fillStyle = theme.background;
       ctx.fillRect(x0, y, w, cellH);

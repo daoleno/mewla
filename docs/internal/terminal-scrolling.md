@@ -49,7 +49,8 @@ The response includes pane identity, pane width, history size, alternate-screen
 state, and ANSI history, excluding the live screen.
 
 Captures preserve physical rows and ANSI attributes (`capture-pane -e -N`). The
-view renders them with a second VT in the live terminal's theme. History is not
+view renders them with a second VT in the live terminal's theme, a page of
+rows at a time when first needed (see [terminal rendering](terminal-rendering.md)). History is not
 converted to plain text or reconstructed by comparing live screenshots. The live
 cursor stays in the live grid. History selection/copy uses physical row breaks:
 tmux's ANSI capture does not carry the live grid's soft-wrap metadata.
