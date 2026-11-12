@@ -149,15 +149,19 @@ std::vector<std::vector<PackedCell>> packed(const std::string& bytes, int cols, 
         for (int i = 0; i < n; i++, p += MEWLA_VT_RUN) {
             int col = m[p], cellsN = m[p + 1];
             std::u16string text(reinterpret_cast<const char16_t*>(f.text) + m[p + 6], m[p + 7]);
-            // Plain: one UTF-16 unit per cell. Otherwise a single cell (1 or 2 columns wide).
-            if (int(text.size()) != cellsN && fromUtf16(text).size() != 1 && cellsN > 2) badRuns++;
-            if (int(text.size()) != cellsN && cellsN == 2 && text.size() > 0 && fromUtf16(text).size() == 0) badRuns++;
+            // Plain: one UTF-16 unit per cell, none a surrogate. Flagged MEWLA_VT_CLUSTER: a single cell (1 or 2 columns).
+            if (m[p + 4] & MEWLA_VT_CLUSTER) {
+                if (cellsN < 1 || cellsN > 2 || text.empty()) badRuns++;
+            } else {
+                if (int(text.size()) != cellsN) badRuns++;
+                for (char16_t u : text) if (u >= 0xD800 && u <= 0xDFFF) badRuns++;
+            }
             for (int k = 0; k < cellsN && col + k < cols && row < rows; k++) {
                 PackedCell& c = grid[row][col + k];
                 c.covered = true;
                 c.fg = uint32_t(m[p + 2]) & 0xFFFFFF;
                 c.bg = uint32_t(m[p + 3]);
-                c.flags = m[p + 4];
+                c.flags = m[p + 4] & ~MEWLA_VT_CLUSTER;
                 c.ul = uint32_t(m[p + 5]);
                 if (k == 0) c.text = text;
             }

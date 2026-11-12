@@ -35,6 +35,7 @@ internal object Vt {
   const val STRIKE = 16
   const val OVERLINE = 32
   const val BLINK = 64
+  const val CLUSTER = 128
   const val UNDERLINE_SHIFT = 8
 }
 
