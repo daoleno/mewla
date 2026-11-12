@@ -34,13 +34,16 @@ describe("a Session's line says what it is doing in words", () => {
   });
 });
 
-describe("elapsed time at the row's end", () => {
+describe("elapsed time, one form everywhere (SPEC §11 Elapsed time)", () => {
   const now = Date.UTC(2026, 10, 12, 12, 0);
-  test("minutes, hours, days; at least a minute; nothing without a start", () => {
-    expect(elapsedShort(now - 5_000, now)).toBe("1m");
-    expect(elapsedShort(now - 12 * 60_000, now)).toBe("12m");
-    expect(elapsedShort(now - 3 * 3_600_000 - 59_000, now)).toBe("3h");
-    expect(elapsedShort(now - 50 * 3_600_000, now)).toBe("2d");
+  test("seconds, minutes, hours and minutes, days and hours; never a clock; nothing without a start", () => {
+    expect(elapsedShort(now - 16_000, now)).toBe("16s");
+    expect(elapsedShort(now - 12 * 60_000 - 30_000, now)).toBe("12m");
+    expect(elapsedShort(now - (2 * 60 + 57) * 60_000, now)).toBe("2h 57m");
+    expect(elapsedShort(now - 3 * 3_600_000, now)).toBe("3h");
+    expect(elapsedShort(now - 27 * 3_600_000, now)).toBe("1d 3h");
+    expect(elapsedShort(now - 48 * 3_600_000, now)).toBe("2d");
+    expect(elapsedShort(now + 5_000, now)).toBe("0s");
     expect(elapsedShort(undefined, now)).toBe("");
   });
 });

@@ -381,7 +381,12 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now
   };
 }
 
-function stateOf(input: TrayInput, needs: number, running: number): StateControlModel {
+/** Queued and waiting Work under Running, as the quiet state's words ("1 queued", "2 queued, 1 waiting"). */
+function quietWords(queued: number, waiting: number): string {
+  return [queued ? `${queued} queued` : "", waiting ? `${waiting} waiting` : ""].filter(Boolean).join(", ");
+}
+
+function stateOf(input: TrayInput, needs: number, running: number, quiet = ""): StateControlModel {
   const s = (kind: StateKind, words: string, dot: StateDot, ink: boolean, chevron = true): StateControlModel => ({ kind, words, dot, ink, chevron });
   if (!input.hasServer) return s("none", "", null, false, false);
   if (input.pairAgain) return s("pair", "Pair again", "seal", true, false);
@@ -392,7 +397,8 @@ function stateOf(input: TrayInput, needs: number, running: number): StateControl
   if (needs > 0) return s("needs", needs === 1 ? "1 needs you" : `${needs} need you`, "seal", true);
   if (input.surface === "waking") return s("starting", "Starting…", "ring", false);
   if (running > 0) return s("running", `${running} running`, "ink", true);
-  return s("quiet", "All quiet", null, false);
+  // SPEC §1.2 The count: "All quiet" only when Running is empty; queued or waiting rows say so, soft, no dot.
+  return s("quiet", quiet || "All quiet", null, false);
 }
 
 /**
@@ -474,7 +480,8 @@ export function trayModel(input: TrayInput): TrayModel {
   const today = (upcoming.length ? upcoming : todayRows).slice(0, TODAY_SHOWN);
 
   const runningCount = running.filter((row) => !row.quiet).length;
-  const state = stateOf(input, needs.length, runningCount);
+  const quiet = quietWords(slips.filter((slip) => slip.group === "queued").length, slips.filter((slip) => slip.group === "waiting").length);
+  const state = stateOf(input, needs.length, runningCount, quiet);
   return {
     state,
     title: headlineOf(state, runningCount, needs.length),
