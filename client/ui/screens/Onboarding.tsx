@@ -27,7 +27,7 @@ import {
   type OnboardingStep,
 } from "../../core/onboarding";
 import { Icon, type IconName } from "../icons/Icon";
-import { Field, Spinner } from "../more/kit/kit";
+import { Field, Spinner } from "../kit/kit";
 import { restorePet } from "../more/pet/pets";
 import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
 import { petClip } from "../pets/clips";

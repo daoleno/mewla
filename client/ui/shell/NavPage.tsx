@@ -4,7 +4,7 @@ import { Button, NavPage as BaseNavPage, type NavPageProps, type StatusBar } fro
 import { isAvailable as mobile } from "nsh/mobile";
 import { statusBarForeground } from "../../core/settings/statusBar";
 import { pageColumnWidth, type PageColumn } from "../../core/web/places";
-import { Icon } from "../more/kit/Icon";
+import { Icon } from "../kit/Icon";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
 export const PageStack = context<{ canGoBack: () => boolean; back: () => void }>({ canGoBack: () => false, back: () => {} });

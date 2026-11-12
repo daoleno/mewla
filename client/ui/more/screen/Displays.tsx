@@ -6,9 +6,9 @@ import { displayRoute } from "../../../core/screen/displayRoute";
 import { haltDisplay, listDisplays, resumeDisplay, type AgentDisplay } from "../../../core/screen/screen";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { workers } from "../../session";
-import { EmptyState, Notice, Spinner } from "../kit/kit";
-import { Icon } from "../kit/Icon";
-import { inFront } from "../kit/inFront";
+import { EmptyState, Notice, Spinner } from "../../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { inFront } from "../../kit/inFront";
 import type { PageNav } from "../routes";
 import { modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 

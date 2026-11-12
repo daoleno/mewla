@@ -16,8 +16,8 @@ import { haltDisplay, listDisplays, screenRequest, ScreenRequestError, type Agen
 import { floatedScreenAgents } from "../../core/screen/screenPageModel";
 import { isWorkerActivelyRunning } from "../../core/sessions/workerStatusPresentation";
 import type { StoredServer } from "../../core/storedServerContract";
-import { Icon } from "../more/kit/Icon";
-import { Spinner } from "../more/kit/kit";
+import { Icon } from "../kit/Icon";
+import { Spinner } from "../kit/kit";
 import { LINUX_MODIFIERS, MAC_MODIFIERS, RemoteSession, RemoteView } from "../more/screen/RemoteView";
 import { PhoneLiveView } from "../phone/contract";
 import { phoneAvailable, phoneControl, phoneStatus } from "../phone/state";

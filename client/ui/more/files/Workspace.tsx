@@ -23,8 +23,8 @@ import {
 } from "../../../core/files/workspace";
 import { failureText } from "../../../core/more/daemon";
 import { daemon } from "../daemon";
-import { Icon } from "../kit/Icon";
-import { EmptyState, Row, Section } from "../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { EmptyState, Row, Section } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { ZoomImage } from "./FilePreview";
 import { MediaPlayer } from "./Media";

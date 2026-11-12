@@ -4,8 +4,8 @@ import type { ConnectionTool, PluginAccount } from "../../../core/extensions/con
 import { toolSections, toolsSwitch, type ToolsSwitch } from "../../../core/extensions/pluginConnectionsModel";
 import { formatDateTime } from "../../../core/more/dates";
 import { daemonState } from "../daemon";
-import { EmptyState, Row, Section, Spinner, StatusMark, SwitchRow, type Status } from "../kit/kit";
-import { Icon } from "../kit/Icon";
+import { EmptyState, Row, Section, Spinner, StatusMark, SwitchRow, type Status } from "../../kit/kit";
+import { Icon } from "../../kit/Icon";
 import type { PageNav } from "../routes";
 import { PluginsFrame } from "./Pages";
 import { flowState, plugins } from "./plugins";

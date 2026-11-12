@@ -18,7 +18,7 @@ import { agentKindFromProvider } from "../../../core/sessions/workerPresentation
 import { supportsChatInterface } from "../../../core/session/sessionRoute";
 import { outbox, workers } from "../../session";
 import { daemon } from "../daemon";
-import { confirmDestructive } from "../kit/kit";
+import { confirmDestructive } from "../../kit/kit";
 
 /**
  * Git review of one Session's repository on the current computer: its status,

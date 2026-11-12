@@ -2,8 +2,8 @@ import { cleanup, computed, effect, Image, Scroll, signal, Text, untracked, View
 import { AlertDialog, Button, Input } from "nsh/base";
 import { durationLabel, FRIENDS_POST_LIMIT, relativeTime, type FriendsDraft, type FriendsDraftMedia } from "../../../core/friends/api";
 import { checkDraftText, discardDraft, draftMediaImage, postDraft, removeDraftMedia } from "../../../core/friends/requests";
-import { Icon } from "../kit/Icon";
-import { EmptyState, Spinner } from "../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { EmptyState, Spinner } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { Avatar, FriendsPageFrame, keyboardLift } from "./parts";
 import { currentServerId, followFriends, followPage, friends, refreshFriends, serverFor } from "./state";
@@ -27,7 +27,7 @@ function DraftMediaTile(props: { draftId: string; item: FriendsDraftMedia; busy:
       )}
       {props.item.kind === "video" ? (
         <View class="absolute bottom-1 left-1 flex-row items-center gap-0.5 rounded-md bg-primary/70 px-1 py-0.5">
-          <Icon name="play" size={10} tone="paper" />
+          <Icon name="play" size={10} tone="canvas" />
           <Text class="text-[11px] text-primary-foreground">{durationLabel(props.item.duration_ms ?? 0)}</Text>
         </View>
       ) : null}
@@ -37,7 +37,7 @@ function DraftMediaTile(props: { draftId: string; item: FriendsDraftMedia; busy:
         onPress={props.onRemove}
         class="absolute right-1 top-1 size-6 items-center justify-center rounded-full bg-primary/70 active:opacity-70"
       >
-        <Icon name="close" size={12} tone="paper" />
+        <Icon name="close" size={12} tone="canvas" />
       </Button>
     </View>
   );
@@ -193,7 +193,7 @@ function DraftCard(props: { id: string; nav: PageNav; edits: Edits; onFocus: (in
           onPress={() => void post()}
           class="flex-[2] flex-row items-center justify-center gap-2 rounded-full bg-seal py-3 active:opacity-80 disabled:opacity-40"
         >
-          {busy() ? <Spinner size={16} tone="paper" /> : null}
+          {busy() ? <Spinner size={16} tone="canvas" /> : null}
           <Text class="text-base font-semibold text-primary-foreground">Post</Text>
         </Button>
       </View>

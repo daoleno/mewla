@@ -2,8 +2,8 @@ import { Image, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
 import { failureText } from "../../../../core/more/daemon";
-import { Icon } from "../../kit/Icon";
-import { Spinner } from "../../kit/kit";
+import { Icon } from "../../../kit/Icon";
+import { Spinner } from "../../../kit/kit";
 
 /**
  * The pictures of one Skill copy, read from that copy only. `read` answers a

@@ -16,9 +16,9 @@ import {
   type GitReviewRow,
 } from "../../../core/git/gitReviewModel";
 import { formatGitAge, spokenGitAge } from "../../../core/git/gitReviewTime";
-import { EmptyState, Field, Notice, Page, Row, Section, Spinner, Tag } from "../kit/kit";
-import { Icon } from "../kit/Icon";
-import { Segmented } from "../kit/Segmented";
+import { EmptyState, Field, Notice, Page, Row, Section, Spinner, Tag } from "../../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { CommitFilePage, DiffPage, DiffReader, SPLIT_WIDTH } from "./GitDiff";
 import { FilePage, FilesPage } from "./GitFiles";

@@ -11,7 +11,7 @@ import {
   resolveGlobalKey,
   type DesktopCommand,
 } from "../../../core/web/shortcuts";
-import { Icon } from "../../more/kit/Icon";
+import { Icon } from "../../kit/Icon";
 import { startNewChat } from "../../screens/Brain";
 import { newSessionOpen } from "../../screens/NewSession";
 import { workers } from "../../session";

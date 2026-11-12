@@ -3,7 +3,7 @@ import { Button, Tooltip } from "nsh/base";
 import { sidebarRows, type DesktopPlaceKey, type WebPlace } from "../../../core/web/places";
 import { desktopShortcutTooltip } from "../../../core/web/shortcuts";
 import { friendsEnabled } from "../../more/friends/state";
-import { Icon, type IconName } from "../../more/kit/Icon";
+import { Icon, type IconName } from "../../kit/Icon";
 import { ConnectionLine } from "../../screens/More";
 import { openPlace, selectedPlace } from "../Shell";
 import { needsYou } from "../attention";

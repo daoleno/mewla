@@ -22,9 +22,9 @@ import {
 import type { ProviderClient, ProviderConnection, ProviderModel, ProvidersSnapshot } from "../../../core/providers/types";
 import { AGENT_ASSETS } from "../../icons/agents/assets";
 import { connected, daemon } from "../daemon";
-import { Icon } from "../kit/Icon";
-import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, StatusMark, SwitchRow, Tag } from "../kit/kit";
-import { Segmented } from "../kit/Segmented";
+import { Icon } from "../../kit/Icon";
+import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, StatusMark, SwitchRow, Tag } from "../../kit/kit";
+import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { change, changing, discover, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providerState";
 

@@ -1,7 +1,7 @@
 import { Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { appUpdateRow, type AppUpdateRowModel } from "../../core/update/appUpdate";
-import { Meter, Row, Spinner } from "../more/kit/kit";
+import { Meter, Row, Spinner } from "../kit/kit";
 import { appUpdate, type AppUpdate } from "./update";
 
 /**
