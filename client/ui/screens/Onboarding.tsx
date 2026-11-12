@@ -27,7 +27,7 @@ import {
   type OnboardingStep,
 } from "../../core/onboarding";
 import { Icon, type IconName } from "../icons/Icon";
-import { Field, Spinner } from "../kit/kit";
+import { DisplayTitle, Field, Spinner } from "../kit/kit";
 import { restorePet } from "../pets/pets";
 import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
 import { PetSprite } from "../pets/PetSprite";
@@ -95,8 +95,8 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
       {step() === "welcome" ? (
         <HeroStep frame={frame()} compact={compact()} center={
           <>
-            <Text role="header" class="text-center text-[34px] font-extrabold leading-10 tracking-tight text-foreground">{WELCOME_TITLE.replace(". ", ".\n")}</Text>
-            <Text class="max-w-[320px] text-center text-base text-muted-foreground">{WELCOME_LEDE}</Text>
+            <Text role="header" class="text-center text-display font-bold tracking-display text-foreground">{WELCOME_TITLE.replace(". ", ".\n")}</Text>
+            <Text class="max-w-[320px] text-center text-body text-muted-foreground">{WELCOME_LEDE}</Text>
           </>
         } actions={
           <>
@@ -107,19 +107,17 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
       ) : step() === "install" ? (
         <SplitStep compact={compact()} content={
           <>
-            <StepHeader frame={frame()} compact={compact()} number={1} place="ON YOUR COMPUTER" title="Install Mewla" />
+            <StepHeader frame={frame()} compact={compact()} number={1} place="On your computer" title="Install Mewla" />
             <CommandCard />
-            <Text class="text-xs text-muted-foreground">{INSTALL_NOTE}</Text>
-            <Text class="mt-1.5 text-base text-muted-foreground">
-              Then run <Text class="rounded bg-secondary font-mono text-sm text-foreground">{` ${START_COMMAND} `}</Text>. {START_NOTE}
+            <Text class="text-body text-muted-foreground">
+              Then run <Text class="font-mono text-code text-foreground">{START_COMMAND}</Text>. {START_NOTE}
             </Text>
-            <Text class="text-sm text-muted-foreground">It prints a QR code. Keep it on screen for the next step.</Text>
           </>
         } actions={<FilledButton testID="next-scan" label="Next: scan the code" onPress={() => go("scan")} />} />
       ) : step() === "scan" ? (
         <SplitStep compact={compact()} content={
           <>
-            <StepHeader frame={frame()} compact={compact()} number={2} place="ON THIS PHONE" title="Scan the code in your terminal" />
+            <StepHeader frame={frame()} compact={compact()} number={2} place="On this phone" title="Scan the code in your terminal" />
             <OnboardingScanner compact={compact()} />
             <ScanStatus />
           </>
@@ -127,10 +125,10 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
       ) : (
         <HeroStep frame={frame()} compact={compact()} live center={
           <>
-            <Text testID="connected-title" role="header" class="text-center text-[34px] font-extrabold leading-10 tracking-tight text-foreground">
+            <Text testID="connected-title" role="header" class="text-center text-display font-bold tracking-display text-foreground">
               {connectedCopy(connection(), name(), problem()).title}
             </Text>
-            <Text class="max-w-[320px] text-center text-base text-muted-foreground">{connectedCopy(connection(), name(), problem()).lede}</Text>
+            <Text class="max-w-[320px] text-center text-body text-muted-foreground">{connectedCopy(connection(), name(), problem()).lede}</Text>
             {connection() === "connecting" || connection() === "idle" ? <Spinner /> : null}
           </>
         } actions={
@@ -163,19 +161,25 @@ export function PairPage(props: { onPaired?(): void; onScreen?: () => boolean })
   return (
     <NavPage title="Pair a computer">
       {/* The field keeps its focus after the keyboard goes (Back): a tap on Pair still presses Pair. */}
-      <Scroll class="flex-1 bg-background" contentClass="gap-4 p-5" keyboardShouldPersistTaps="handled">
-        <Text class="text-base text-muted-foreground">
-          {camera ? "On your computer, run mewla pair, then scan the code it shows, or paste the link it prints." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
-        </Text>
-        {camera ? <OnboardingScanner onScreen={props.onScreen} /> : null}
-        <ScanStatus />
-        <View class="rounded-xl border border-border bg-card">
-          <Field testID="pair-link" label="Pairing link" mono multiline keyboardType="url" value={link()} disabled={pairingBusy()}
-            placeholder="mewla://settings?p=… or https://…/#pair=…" onChange={(value) => link.set(value)} onSubmit={pair} />
+      {/* The step flow's 480 column: a display title, one sentence, the finder, the field, the buttons ink last, the quiet ways out. */}
+      <Scroll class="flex-1 bg-background" contentClass="px-4 pb-8 pt-2" keyboardShouldPersistTaps="handled">
+        <View class="w-full max-w-[480px] gap-4 self-center">
+          <DisplayTitle title="Pair a computer" />
+          <Text class="-mt-2 px-1 text-body text-muted-foreground">
+            {camera ? "On your computer, run mewla pair, then scan the code it shows, or paste the link it prints." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
+          </Text>
+          {camera ? <OnboardingScanner onScreen={props.onScreen} /> : null}
+          <ScanStatus />
+          <View class="overflow-hidden rounded-(--radius-group) bg-card">
+            <Field testID="pair-link" label="Pairing link" mono multiline keyboardType="url" value={link()} disabled={pairingBusy()}
+              placeholder="mewla://settings?p=… or https://…/#pair=…" onChange={(value) => link.set(value)} onSubmit={pair} />
+          </View>
+          <View class="gap-2">
+            {camera ? <OutlinedButton testID="pick-qr-image" icon="image" label="Pick QR image" disabled={pairingBusy()} onPress={() => void pairFromPicture()} /> : null}
+            <FilledButton testID="pair-link-submit" label="Pair" disabled={pairingBusy()} onPress={pair} />
+          </View>
+          <OtherWays />
         </View>
-        <FilledButton testID="pair-link-submit" label="Pair" disabled={pairingBusy()} onPress={pair} />
-        {camera ? <OutlinedButton testID="pick-qr-image" icon="image" label="Pick QR image" disabled={pairingBusy()} onPress={() => void pairFromPicture()} /> : null}
-        <OtherWays />
       </Scroll>
     </NavPage>
   );
@@ -200,11 +204,11 @@ function HeroStep(props: { frame: Frame | null; compact: boolean; center: JSX.El
         <View testID="step-compact" class="flex-1 pb-2 pl-0 pr-6" style={{ marginLeft: props.frame ? heroZoneWidth(props.frame) : 0, ...fade.style }}>
           <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow justify-center gap-5 py-3">
             <View class="items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
-            <View class="w-full max-w-[360px] gap-2 self-center">{props.actions}</View>
+            <View class="w-full max-w-[480px] gap-2 self-center">{props.actions}</View>
           </Scroll>
         </View>
       ) : (
-        <View testID="step-tall" class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={{ paddingTop: props.frame ? belowHero(props.frame) : 260, ...fade.style }}>
+        <View testID="step-tall" class="w-full max-w-[480px] flex-1 self-center px-6 pb-4" style={{ paddingTop: props.frame ? belowHero(props.frame) : 260, ...fade.style }}>
           <View class="flex-1 items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
           <View class="gap-2">{props.actions}</View>
         </View>
@@ -224,7 +228,7 @@ function SplitStep(props: { compact: boolean; content: JSX.Element; actions: JSX
           <View class="w-[220px] justify-end gap-2">{props.actions}</View>
         </View>
       ) : (
-        <View testID="split-tall" class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={fade.style}>
+        <View testID="split-tall" class="w-full max-w-[480px] flex-1 self-center px-6 pb-4" style={fade.style}>
           <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
           <View class="gap-2">{props.actions}</View>
         </View>
@@ -237,13 +241,9 @@ function StepHeader(props: { frame: Frame | null; compact: boolean; number: numb
   return (
     <View class={props.compact ? "gap-2.5 pb-1.5 pt-3" : "justify-end gap-2.5 pb-1.5 pr-[100px] pt-[22px]"}
       style={{ minHeight: props.frame && !props.compact ? headerHeight(props.frame) : undefined }}>
-      <View class="flex-row items-center gap-2">
-        <View class="h-5 w-5 items-center justify-center rounded-full border border-border">
-          <Text class="text-[11px] font-semibold text-muted-foreground">{props.number}</Text>
-        </View>
-        <Text class="text-[11px] font-semibold tracking-wider text-muted-foreground">{props.place}</Text>
-      </View>
-      <Text role="header" class="text-[30px] font-extrabold leading-9 tracking-tight text-foreground">{props.title}</Text>
+      {/* The eyebrow (SPEC §15 Step flow): which step of the two, and where it happens. */}
+      <Text testID="step-eyebrow" class="text-caption font-semibold text-muted-foreground">{`Step ${props.number} of 2 · ${props.place}`}</Text>
+      <Text role="header" class="text-display font-bold tracking-display text-foreground">{props.title}</Text>
     </View>
   );
 }
@@ -252,8 +252,9 @@ function StepHeader(props: { frame: Frame | null; compact: boolean; number: numb
 function CommandCard() {
   const copied = signal(false);
   return (
-    <View class="gap-3.5 rounded-xl border border-border bg-card p-4">
-      <Text testID="install-command" style={{ userSelect: "text" }} class="font-mono text-sm leading-[21px] text-foreground">{INSTALL_COMMAND}</Text>
+    <View class="gap-3 rounded-(--radius-group) bg-card p-4">
+      <Text testID="install-command" style={{ userSelect: "text" }} class="font-mono text-code text-foreground">{INSTALL_COMMAND}</Text>
+      <Text class="text-caption text-muted-foreground">{INSTALL_NOTE}</Text>
       <View class="flex-row flex-wrap gap-2">
         <TintedButton testID="copy-command" icon={copied() ? "check" : "copy"} label={copied() ? "Copied" : "Copy"}
           onPress={() => void Clipboard.writeText(INSTALL_COMMAND).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); })} />
@@ -271,12 +272,13 @@ function ScanStatus() {
     <View class="gap-2" android={{ accessibilityLiveRegion: "polite" }}>
       <View class="min-h-6 flex-row items-center justify-center gap-2">
         {pairingBusy() ? <Spinner size={16} /> : null}
-        {pairingBusy() || scannerSearching() ? <Text testID="scan-status" class="text-sm text-muted-foreground">{pairingBusy() ? pairingStatus() || "Pairing…" : "Looking for a Mewla code…"}</Text> : null}
+        {pairingBusy() || scannerSearching() ? <Text testID="scan-status" class="text-sub text-muted-foreground">{pairingBusy() ? pairingStatus() || "Pairing…" : "Looking for a Mewla code…"}</Text> : null}
       </View>
       {pairingIssue() ? (
-        <View testID="pair-issue" class="gap-1 rounded-xl border border-border bg-card p-3">
-          <Text class="text-base font-semibold text-destructive">{pairingIssue()!.title}</Text>
-          <Text style={{ userSelect: "text" }} class="text-sm text-muted-foreground">{pairingIssue()!.detail}</Text>
+        // The issue card, above the ways out; the finder keeps scanning.
+        <View testID="pair-issue" class="gap-1 rounded-(--radius-group) bg-card px-4 py-3.5">
+          <Text class="text-body font-semibold">{pairingIssue()!.title}</Text>
+          <Text style={{ userSelect: "text" }} class="text-sub text-muted-foreground">{pairingIssue()!.detail}</Text>
         </View>
       ) : null}
     </View>
@@ -287,7 +289,7 @@ function ScanStatus() {
 function PairAlternatives() {
   return (
     <>
-      <OutlinedButton testID="paste" icon="clipboard" label="Paste a pairing link" disabled={pairingBusy()} onPress={() => void pasteFromClipboard()} />
+      <PlainButton testID="paste" icon="clipboard" label="Paste a pairing link" disabled={pairingBusy()} onPress={() => void pasteFromClipboard()} />
       <OtherWays />
     </>
   );
@@ -297,7 +299,7 @@ function OtherWays() {
   return (
     <Button testID="other-ways" role="link" accessibilityLabel="Other ways to connect" onPress={() => void openUrl(OTHER_WAYS_URL)}
       class="min-h-11 flex-row items-center justify-center gap-1.5 active:opacity-70">
-      <Text class="text-sm font-semibold text-muted-foreground">Other ways to connect</Text>
+      <Text class="text-sub font-semibold text-muted-foreground">Other ways to connect</Text>
       <Icon name="open-external" size={14} />
     </Button>
   );
@@ -338,8 +340,8 @@ function Cat(props: { step: OnboardingStep; frame: Frame }) {
 function FilledButton(props: { testID: string; label: string; icon?: IconName; disabled?: boolean; onPress(): void }) {
   return (
     <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.label}
-      class="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 active:opacity-80 disabled:opacity-50">
-      <Text class="text-base font-semibold text-primary-foreground">{props.label}</Text>
+      class="h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-5 active:opacity-70 disabled:opacity-40">
+      <Text class="text-body font-semibold text-primary-foreground line-clamp-1">{props.label}</Text>
       {props.icon ? <Icon name={props.icon} color="primary-foreground" size={18} /> : null}
     </Button>
   );
@@ -348,19 +350,20 @@ function FilledButton(props: { testID: string; label: string; icon?: IconName; d
 function OutlinedButton(props: { testID: string; label: string; icon?: IconName; disabled?: boolean; onPress(): void }) {
   return (
     <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.label}
-      class="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl border border-border px-4 py-3.5 active:bg-accent disabled:opacity-50">
+      class="h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-card px-5 active:opacity-70 disabled:opacity-40">
       {props.icon ? <Icon name={props.icon} color="foreground" size={18} /> : null}
-      <Text class="text-base font-semibold text-foreground">{props.label}</Text>
+      <Text class="text-body font-semibold text-foreground line-clamp-1">{props.label}</Text>
     </Button>
   );
 }
 
-function PlainButton(props: { testID: string; label: string; icon?: IconName; onPress(): void }) {
+/** A quiet way out (SPEC §15 Step flow): a text button under the actions. */
+function PlainButton(props: { testID: string; label: string; icon?: IconName; disabled?: boolean; onPress(): void }) {
   return (
-    <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
-      class="min-h-11 flex-row items-center justify-center gap-2 px-4 py-2.5 active:opacity-70">
+    <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.label}
+      class="min-h-11 flex-row items-center justify-center gap-2 px-4 py-2.5 active:opacity-70 disabled:opacity-40">
       {props.icon ? <Icon name={props.icon} color="muted-foreground" size={16} /> : null}
-      <Text class="text-center text-base font-semibold text-muted-foreground">{props.label}</Text>
+      <Text class="text-center text-sub font-semibold text-muted-foreground">{props.label}</Text>
     </Button>
   );
 }
@@ -368,9 +371,10 @@ function PlainButton(props: { testID: string; label: string; icon?: IconName; on
 function TintedButton(props: { testID: string; label: string; icon: IconName; onPress(): void }) {
   return (
     <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
-      class="min-h-9 flex-row items-center gap-1.5 rounded-lg bg-secondary px-3 py-2 active:opacity-80">
+      hitSlop={4}
+      class="h-9 flex-row items-center gap-1.5 rounded-full bg-muted px-3.5 active:opacity-70">
       <Icon name={props.icon} color="foreground" size={16} />
-      <Text class="text-sm font-semibold text-foreground">{props.label}</Text>
+      <Text class="text-sub font-semibold text-foreground">{props.label}</Text>
     </Button>
   );
 }
