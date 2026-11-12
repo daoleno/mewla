@@ -230,7 +230,8 @@ export function placeOfLink(url: string): WebPlace | null {
   const path = match[1].replace(/\/+$/, "");
   const first = path.split("/")[0].toLowerCase();
   if (["", "brain", "sessions", "calendar", "live", "settings", "phone", "more"].includes(first)) return null;
-  if (first === "plugins" && !path.includes("/")) return null;
+  // Plugins' own link, and a sign-in return (`?state=`, whatever its path), are Plugins' to finish.
+  if (first === "plugins" && (!path.includes("/") || new URLSearchParams(match[2] ?? "").has("state"))) return null;
   return placeOfPath(`/${path}${match[2] ?? ""}`);
 }
 

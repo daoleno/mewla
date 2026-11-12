@@ -108,7 +108,7 @@ describe("mewla:// links no other handler takes (parity #48)", () => {
   });
 
   test("the links other handlers take stay theirs", () => {
-    for (const url of ["mewla://brain", "mewla://sessions/w1", "mewla://calendar?id=c1", "mewla://live/brain", "mewla://settings/computer?id=s1", "mewla://phone", "mewla://plugins", "mewla://plugins?state=x", "mewla://more", "https://x.test/stats"]) {
+    for (const url of ["mewla://brain", "mewla://sessions/w1", "mewla://calendar?id=c1", "mewla://live/brain", "mewla://settings/computer?id=s1", "mewla://phone", "mewla://plugins", "mewla://plugins?state=x", "mewla://plugins/callback?state=x", "mewla://more", "https://x.test/stats"]) {
       expect(placeOfLink(url)).toBeNull();
     }
   });
