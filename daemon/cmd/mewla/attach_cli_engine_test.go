@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/sessionhost"
 )
 
@@ -260,8 +262,9 @@ func TestAttachOnAnOlderHostRedrawsToo(t *testing.T) {
 	if info, err := client.Info(context.Background(), "mh-old"); err != nil || info.Cols != 50 || info.Rows != 30 {
 		t.Fatalf("info = %+v, %v; the other viewer's 50x30 should stay until this person acts", info, err)
 	}
-	if n := strings.Count(out.String(), redraw); n != redraws+1 {
-		t.Fatalf("drawn again %d times for one resize", n-redraws)
+	// Once over (the screen cleared, then mirrored at the other size), not again and again.
+	if n := strings.Count(out.String(), redraw); n != redraws+2 {
+		t.Fatalf("cleared %d times for one resize", n-redraws)
 	}
 
 	typing.Write([]byte("hi\r"))
@@ -269,10 +272,113 @@ func TestAttachOnAnOlderHostRedrawsToo(t *testing.T) {
 	if info, err := client.Info(context.Background(), "mh-old"); err != nil || info.Cols != 70 || info.Rows != 20 {
 		t.Fatalf("info = %+v, %v; typing here should take the size back to 70x20", info, err)
 	}
+	mark := strings.Count(out.String(), redraw)
 	time.Sleep(3 * attachSizePoll)
-	if n := strings.Count(out.String(), redraw); n != redraws+1 {
-		t.Fatalf("taking the size back drew this terminal again (%d), though it is drawn at its own size", n-redraws-1)
+	if n := strings.Count(out.String(), redraw); n != mark {
+		t.Fatalf("drawn again %d times at its own size", n-mark)
 	}
+}
+
+// sizeRows is a program that draws its whole screen whenever its size
+// changes: one numbered row per line, each exactly as wide as the screen,
+// and ready-<cols> on the last.
+const sizeRows = `last=""; while :; do s=$(stty size); if [ "$s" != "$last" ]; then last=$s; r=${s% *}; c=${s#* }
+printf '\033[H\033[2J'; i=1; while [ $i -lt $r ]; do printf 'row%02d-' $i; head -c $((c-6)) /dev/zero | tr '\0' x; printf '\r\n'; i=$((i+1)); done; printf 'ready-%s ' "$c"; fi; sleep 0.05; done`
+
+// screenRows is a terminal's screen as plain rows, trailing blanks dropped.
+func screenRows(text string) []string {
+	rows := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	for i := range rows {
+		rows[i] = strings.TrimRight(rows[i], " ")
+	}
+	for len(rows) > 0 && rows[len(rows)-1] == "" {
+		rows = rows[:len(rows)-1]
+	}
+	return rows
+}
+
+// A Session another viewer holds at another size is drawn right on this
+// terminal all the same: its screen as the host has it, cut to this window
+// (the end of a taller screen, the left of a wider one), never the program's
+// output for the other size written over this terminal's rows.
+func TestAttachMirrorsASessionOfAnotherSize(t *testing.T) {
+	client := attachTestHost(t)
+	createAttachSession(t, client, "mh-mirror", sizeRows)
+	in, typing := io.Pipe()
+	defer typing.Close()
+	out := &lockedBuffer{}
+	const w, h = 70, 20
+	go attachLoop(context.Background(), client, "mh-mirror", in, out, func() (int, int) { return w, h }, make(chan os.Signal))
+	waitOutput(t, out, "ready-70")
+
+	// What this terminal shows: everything it was sent, drawn by a terminal of its size.
+	shows := func() []string {
+		t.Helper()
+		term, err := ghosttyvt.New(ghosttyvt.Options{Cols: w, Rows: h})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer term.Close()
+		term.Write([]byte(out.String()))
+		text, err := term.Capture(ghosttyvt.CaptureOptions{Scope: ghosttyvt.ScopeScreen})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return screenRows(text)
+	}
+	// What it should show: the host's screen, its end h rows cut to w columns.
+	want := func() []string {
+		t.Helper()
+		c, err := client.Capture(context.Background(), sessionhost.CaptureParams{ID: "mh-mirror", Scope: sessionhost.ScopeScreen})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows := screenRows(c.Text)
+		screen := gridScreen{rows: rows, cursorY: c.CursorY}
+		var cut []string
+		for _, row := range screen.view(h) {
+			if len(row) > w {
+				row = row[:w]
+			}
+			cut = append(cut, row)
+		}
+		return screenRows(strings.Join(cut, "\n"))
+	}
+	match := func(what string) {
+		t.Helper()
+		var got, expect []string
+		for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+			if got, expect = shows(), want(); strings.Join(got, "\n") == strings.Join(expect, "\n") {
+				return
+			}
+		}
+		t.Fatalf("%s: this terminal shows\n%s\nwant\n%s", what, strings.Join(got, "\n"), strings.Join(expect, "\n"))
+	}
+	match("its own size")
+
+	for _, other := range []struct{ cols, rows int }{{50, 30}, {160, 45}} {
+		viewer, err := client.Attach(context.Background(), sessionhost.AttachParams{ID: "mh-mirror", Cols: other.cols, Rows: other.rows, Redraw: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitHostScreenText(t, client, "mh-mirror", fmt.Sprintf("ready-%d", other.cols))
+		match(fmt.Sprintf("another viewer at %dx%d", other.cols, other.rows))
+		viewer.Close()
+	}
+
+	typing.Write([]byte("x"))
+	waitHostScreenText(t, client, "mh-mirror", "ready-70")
+	match("its size taken back")
+}
+
+func waitHostScreenText(t *testing.T, client *sessionhost.Client, id, want string) {
+	t.Helper()
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		if c, err := client.Capture(context.Background(), sessionhost.CaptureParams{ID: id, Scope: sessionhost.ScopeScreen}); err == nil && strings.Contains(c.Text, want) {
+			return
+		}
+	}
+	t.Fatalf("the Session never showed %q", want)
 }
 
 func TestAttachReportsTheExit(t *testing.T) {
