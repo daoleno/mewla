@@ -6,7 +6,8 @@
 #
 # Boots its own headless emulator (AVD $AVD, default luma_reader_api35; read-only, no snapshot),
 # inside flock /run/user/1000/mewla-emulator.lock, refuses while the Windows VM runs, and kills
-# the emulator by PID at the end. ANDROID_SERIAL is the emulator's own.
+# the emulator by PID at the end. ANDROID_SERIAL is the emulator's own. FONT=<dp> sets the text size
+# (default: the view's own), LIGHT=1 the light theme.
 set -euo pipefail
 apk=$(readlink -f "${1:?apk}"); out=$(mkdir -p "${2:?out dir}" && cd "$2" && pwd); shift 2
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -39,7 +40,7 @@ for n in "${names[@]}"; do
   read -r cols rows < <(python3 -I -c "import json,sys;m=json.load(open(sys.argv[1]));print(m[sys.argv[2]]['cols'],m[sys.argv[2]]['rows'])" "$here/corpus.json" "$n")
   adb logcat -c
   adb shell am start -S -W -n "$app/com.daoleno.mewla.terminal.TerminalReplayActivity" \
-    --es file "corpus/$n.vt" --ei cols "$cols" --ei rows "$rows" ${LIGHT:+--ez light true} > /dev/null
+    --es file "corpus/$n.vt" --ei cols "$cols" --ei rows "$rows" ${LIGHT:+--ez light true} ${FONT:+--ef font "$FONT"} > /dev/null
   rect=""
   for _ in $(seq 1 40); do
     rect=$(adb logcat -d -s TerminalReplay:I | sed -n 's/.*rect \([0-9]*\) \([0-9]*\) \([0-9]*\) \([0-9]*\).*/\3x\4+\1+\2/p' | tail -1)
@@ -49,7 +50,7 @@ for n in "${names[@]}"; do
   [[ -n "$rect" ]] || { echo "$n: no rect"; adb logcat -d | tail -20 >&2; continue; }
   sleep 0.5
   adb exec-out screencap -p > "$out/full-$n.png"
-  convert "$out/full-$n.png" -crop "$rect" +repage "$out/$n.png" && rm "$out/full-$n.png"
+  magick "$out/full-$n.png" -crop "$rect" +repage "$out/$n.png" && rm "$out/full-$n.png"
   echo "$n $rect"
 done
 adb logcat -d -s TerminalReplay:I | grep -m1 'cell' || true

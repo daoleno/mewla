@@ -18,6 +18,8 @@
 
 namespace {
 
+int badRuns = 0;  // runs that break the plain-run contract (TerminalVt.h)
+
 struct TruthCell {
     std::u32string text;  // empty: blank
     int width = 1;        // 2 for a wide cell (its tail is skipped)
@@ -33,6 +35,7 @@ struct PackedCell {
     bool covered = false;
     uint32_t fg = 0, bg = 0;
     int flags = 0;
+    uint32_t ul = 0;
 };
 
 uint32_t rgb(const GhosttyColorRgb& c) { return (uint32_t(c.r) << 16) | (uint32_t(c.g) << 8) | c.b; }
@@ -139,25 +142,45 @@ std::vector<std::vector<PackedCell>> packed(const std::string& bytes, int cols, 
     MewlaVtFrame f{};
     mewla_vt_frame(vt, true, &f);
     const int32_t* m = f.meta;
-    size_t p = 7;
+    size_t p = MEWLA_VT_HEADER;
     for (int r = 0; r < m[6]; r++) {
         int row = m[p], n = m[p + 1];
-        p += 2;
-        for (int i = 0; i < n; i++, p += 7) {
+        p += MEWLA_VT_ROW;
+        for (int i = 0; i < n; i++, p += MEWLA_VT_RUN) {
             int col = m[p], cellsN = m[p + 1];
-            std::u16string text(reinterpret_cast<const char16_t*>(f.text) + m[p + 5], m[p + 6]);
+            std::u16string text(reinterpret_cast<const char16_t*>(f.text) + m[p + 6], m[p + 7]);
+            // Plain: one UTF-16 unit per cell. Otherwise a single cell (1 or 2 columns wide).
+            if (int(text.size()) != cellsN && fromUtf16(text).size() != 1 && cellsN > 2) badRuns++;
+            if (int(text.size()) != cellsN && cellsN == 2 && text.size() > 0 && fromUtf16(text).size() == 0) badRuns++;
             for (int k = 0; k < cellsN && col + k < cols && row < rows; k++) {
                 PackedCell& c = grid[row][col + k];
                 c.covered = true;
                 c.fg = uint32_t(m[p + 2]) & 0xFFFFFF;
                 c.bg = uint32_t(m[p + 3]);
                 c.flags = m[p + 4];
+                c.ul = uint32_t(m[p + 5]);
                 if (k == 0) c.text = text;
             }
         }
     }
     mewla_vt_destroy(vt);
     return grid;
+}
+
+int cursorCode(const GhosttyRenderStateCursor& c) {
+    int style = c.visual_style == GHOSTTY_CURSOR_STYLE_BAR ? 0 : c.visual_style == GHOSTTY_CURSOR_STYLE_UNDERLINE ? 2 : c.visual_style == GHOSTTY_CURSOR_STYLE_BLOCK_HOLLOW ? 3 : 1;
+    return (c.viewport_has_value && c.visible ? 1 : 0) | style << 1 | (c.blinking ? 1 : 0) << 3;
+}
+
+// The packer's cursor, in cursorCode's form.
+int packedCursor(const std::string& bytes, int cols, int rows) {
+    MewlaVt* vt = mewla_vt_create(cols, rows);
+    mewla_vt_write(vt, reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+    MewlaVtFrame f{};
+    mewla_vt_frame(vt, true, &f);
+    int code = f.meta[4] | f.meta[7] << 1 | f.meta[8] << 3;
+    mewla_vt_destroy(vt);
+    return code;
 }
 
 struct Losses {
@@ -201,7 +224,7 @@ int main(int argc, char** argv) {
         }
     }
     int total = 0;
-    std::printf("%-17s %5s %6s %5s %5s %6s %5s %6s %6s %5s  cursor\n", "screen", "cells", "rows!=", "bg-", "dim-", "strike", "over-", "ulsty-", "ulcol-", "blink");
+    std::printf("%-17s %5s %6s %5s %5s %6s %5s %6s %6s %5s  cursor\n", "screen", "cells", "rows!=", "bg-", "dim-", "strike", "over-", "ulsty-", "ulcol-", "blink-");
     for (auto& name : names) {
         std::string bytes = readFile(dir + "/" + name + ".vt");
         // Geometry from corpus.json: "name": {"cols": C, "rows": R
@@ -235,27 +258,30 @@ int main(int argc, char** argv) {
                 if (!tc.text.empty() || tc.bgSet) l.cells++;
                 if (tc.bgSet) {
                     // The renderer's background: packed bg, or fg when it swaps for inverse.
-                    uint32_t drawn = (pc.flags & 8) ? pc.fg : pc.bg & 0xFFFFFF;
+                    uint32_t drawn = pc.bg & 0xFFFFFF;  // inverse is applied by the packer
                     if (!pc.covered || drawn != tc.bg) {
                         l.bgLost++;
                         l.examples[(tc.flags & GHOSTTY_STYLE_FLAG_INVERSE) ? "bg of inverse blank" : "bg"]++;
                     }
                 }
                 bool hasInk = visible && (!tc.text.empty());
-                if (hasInk && (tc.flags & GHOSTTY_STYLE_FLAG_FAINT)) l.faint++;
-                if ((tc.flags & GHOSTTY_STYLE_FLAG_STRIKETHROUGH) && visible) l.strike++;
-                if ((tc.flags & GHOSTTY_STYLE_FLAG_OVERLINE) && visible) l.overline++;
-                if (tc.underline > 1 && visible) l.underlineStyle++;
-                if (tc.underlineColor && tc.underline && visible) l.underlineColor++;
-                if ((tc.flags & GHOSTTY_STYLE_FLAG_BLINK) && hasInk) l.blink++;
+                // An attribute is lost when the cell has it and the packed run does not say so.
+                if (hasInk && (tc.flags & GHOSTTY_STYLE_FLAG_FAINT) && !(pc.flags & MEWLA_VT_FAINT)) l.faint++;
+                if ((tc.flags & GHOSTTY_STYLE_FLAG_STRIKETHROUGH) && visible && !(pc.flags & MEWLA_VT_STRIKE)) l.strike++;
+                if ((tc.flags & GHOSTTY_STYLE_FLAG_OVERLINE) && visible && !(pc.flags & MEWLA_VT_OVERLINE)) l.overline++;
+                if (tc.underline && visible && ((pc.flags >> MEWLA_VT_UNDERLINE_SHIFT) & 7) != tc.underline) l.underlineStyle++;
+                if (tc.underlineColor && tc.underline && visible && pc.ul == 0) l.underlineColor++;
+                if ((tc.flags & GHOSTTY_STYLE_FLAG_BLINK) && hasInk && !(pc.flags & MEWLA_VT_BLINK)) l.blink++;
             }
         }
-        total += l.glyphLost + l.bgLost;
+        bool cursorLost = packedCursor(bytes, cols, rows) != cursorCode(cursor);
+        total += l.glyphLost + l.bgLost + l.faint + l.strike + l.overline + l.underlineStyle + l.underlineColor + l.blink + (cursorLost ? 1 : 0) + badRuns;
+        badRuns = 0;
         std::printf("%-17s %5d %6d %5d %5d %6d %5d %6d %6d %5d  %s%s%s\n", name.c_str(), l.cells, l.glyphLost, l.bgLost, l.faint, l.strike, l.overline,
             l.underlineStyle, l.underlineColor, l.blink, cursor.visible ? cursorName(cursor.visual_style) : "hidden",
-            cursor.blinking ? " blinking" : "", cursor.visible && cursor.visual_style != GHOSTTY_CURSOR_STYLE_BLOCK ? " (packer: block only)" : "");
+            cursor.blinking ? " blinking" : "", packedCursor(bytes, cols, rows) != cursorCode(cursor) ? " (packer differs)" : "");
         for (auto& [what, n] : l.examples) std::printf("    %4d x %s\n", n, what.c_str());
     }
-    std::printf("glyph/bg cells lost in all: %d\n", total);
+    std::printf("cells, attributes and cursors lost in all: %d\n", total);
     return total == 0 ? 0 : 1;
 }

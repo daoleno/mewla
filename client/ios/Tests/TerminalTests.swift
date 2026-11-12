@@ -41,7 +41,7 @@ final class TerminalTests: XCTestCase {
     XCTAssertFalse(texts.contains("XY"))
     XCTAssertTrue(texts.contains("A") && texts.contains("B"))
     let row1 = try XCTUnwrap(frame.dirty.first { $0.row == 1 }).runs
-    XCTAssertTrue(row1.contains { $0.bg != 0 && !$0.underline }, "a concealed run keeps its background")
+    XCTAssertTrue(row1.contains { $0.bg != 0 && $0.underline == 0 }, "a concealed run keeps its background")
   }
 
   func testCssColors() {
@@ -97,8 +97,10 @@ final class TerminalTests: XCTestCase {
     let pixels = try XCTUnwrap(Pixels(image))
     XCTAssertTrue(pixels.near(x: 385, y: 297, 0x141210), "the theme's background, opaque")
     XCTAssertTrue(pixels.near(x: Int(view.cellW * 39.5), y: Int(view.cellH * 1.5), 0xe0685a), "the red background run (palette 1)")
-    // The cursor after "$ ": #f4f0ea at 80% over #141210.
-    XCTAssertTrue(pixels.near(x: Int(view.cellW * 2.5), y: Int(view.cellH * 2.5), 0xc7c4be, tolerance: 4), "the cursor after \"$ \"")
+    // The cursor after "$ ": without the keyboard a hollow block in #f4f0ea, its cell left readable.
+    let cursorEdge = (Int(view.cellW * 2) - 1...Int(view.cellW * 2) + 1).contains { pixels.near(x: $0, y: Int(view.cellH * 2.5), 0xf4f0ea, tolerance: 40) }
+    XCTAssertTrue(cursorEdge, "the cursor's left edge after \"$ \"")
+    XCTAssertTrue(pixels.near(x: Int(view.cellW * 2.5), y: Int(view.cellH * 2.5), 0x141210), "inside the hollow cursor")
     var lit = 0
     for x in 0..<Int(view.cellW * 10) where !pixels.near(x: x, y: Int(view.cellH * 0.5), 0x141210) { lit += 1 }
     XCTAssertGreaterThan(lit, 10, "the first line's text is drawn")

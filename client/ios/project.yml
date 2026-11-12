@@ -48,6 +48,10 @@ targets:
     sources:
       - Sources
       - Shared
+      # The terminal's C++ shared with Android (the VT packer, the drawn glyphs) and its bundled
+      # font, a `fonts` folder in the bundle (TerminalFonts.swift).
+      - { path: ../native/terminal, excludes: ["fonts"] }
+      - { path: ../native/terminal/fonts, type: folder, buildPhase: resources }
       - { path: build/nsh, type: folder, buildPhase: resources }
       - { path: Assets.xcassets }
     dependencies:
@@ -86,8 +90,9 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         OTHER_LDFLAGS: "-ObjC -lc++"
-        # Sources/Terminal: TerminalVt.cpp over libghostty-vt, called from Swift through its C header.
-        SWIFT_OBJC_BRIDGING_HEADER: Sources/Terminal/TerminalVt.h
+        # client/native/terminal: TerminalVt.cpp over libghostty-vt and TerminalGlyphs.cpp, called from
+        # Swift through their C headers.
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/Terminal/TerminalBridge.h
         CLANG_CXX_LANGUAGE_STANDARD: c++20
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     scheme:
