@@ -35,7 +35,7 @@ describe("the tray", () => {
     expect(app.shows("id:state-dot-ink")).toBe(false);
   }, 20_000);
 
-  test("a running row ends in a live dot and how long it has run; its line is words, never the terminal's footer", async () => {
+  test("a running row ends in a live dot and how long it has run; its line is words, never the terminal's footer nor its section's word", async () => {
     const footer = "⏸ manual mode on · ? for shortcuts";
     const app = await open(HARNESS, { host: { params: { workers: [
       worker("alpha", { started_at: NOW - 12 * 60_000, summary: footer, last_output_lines: [footer] }),
@@ -45,8 +45,9 @@ describe("the tray", () => {
     await app.press("id:state-control");
     await app.waitFor("id:tray");
     expect(app.texts()).toContain("12m");
-    expect(app.texts()).toContain("Working");
-    expect(app.texts()).toContain("Idle");
+    // Nothing reported but the footer: each row names its agent and project, not "Working" or "Idle" again.
+    expect(app.texts().filter((t) => t === "Claude Code · mewla").length).toBe(2);
+    expect(app.texts()).not.toContain("Working");
     expect(app.count("id:tray-running >> id:row-live")).toBe(1);
     expect(app.texts()).not.toContain("live");
     expect(app.texts().some((t) => t.includes("manual mode"))).toBe(false);

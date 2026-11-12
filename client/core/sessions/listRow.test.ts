@@ -44,7 +44,7 @@ describe("Sessions list rows", () => {
 
   test("a screen reader hears the row's title, origin, state, line and time (parity #10)", () => {
     const running = worker({ name: "release notes", status: "running", provider: "claude" });
-    expect(sessionRowModel(running).accessibilityLabel).toBe("release notes, Running, Working");
+    expect(sessionRowModel(running).accessibilityLabel).toBe("release notes, Running, Claude Code");
     const updated = new Date(2026, 10, 11, 9, 5).getTime();
     const done = worker({ name: "release notes", status: "done", delegated: true, updated_at: updated });
     const label = sessionRowModel(done, { calendarLabel: "Daily" }).accessibilityLabel;
