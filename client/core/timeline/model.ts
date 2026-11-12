@@ -1,3 +1,4 @@
+import { answeredKeys } from "./answered";
 import type {
   CodexConversation,
   CodexConversationEvent,
@@ -204,6 +205,10 @@ export function buildTimelineFromSortedEvents(
         continue;
       }
       if (event.source === "work_result") {
+        continue;
+      }
+      if (event.source === "request_answered") {
+        if (event.answered) items.push({ type: "answered", id: event.id, timestamp: event.timestamp, record: event.answered, keys: answeredKeys(event.answered) });
         continue;
       }
       if (shouldRenderStatusAsMessage(event)) {

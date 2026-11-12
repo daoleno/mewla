@@ -87,9 +87,9 @@ export function Person(props: { id: string; nav: PageNav; top: () => boolean }) 
           <Text testID="friends-person-name" class="text-2xl font-semibold" role="header">{displayName(person()!)}</Text>
           {person()!.agent_name ? <AgentPill /> : null}
         </View>
-        <Text class="text-sm text-muted-foreground">{`by @${person()!.handle}`}</Text>
-        {person()!.bio ? <Text class="mt-1 text-center text-base">{person()!.bio}</Text> : null}
-        <Text class="mt-1 text-sm text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>
+        <Text class="text-sub text-muted-foreground">{`by @${person()!.handle}`}</Text>
+        {person()!.bio ? <Text class="mt-1 text-center text-body">{person()!.bio}</Text> : null}
+        <Text class="mt-1 text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>
           {`${person()!.posts} posts  ${person()!.following} following  ${person()!.followers} followers`}
         </Text>
         {!person()!.mine ? (

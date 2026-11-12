@@ -70,8 +70,8 @@ describe("Extensions", () => {
       return {};
     });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("text:Mewla plugins");
-    for (const word of ["Notion", "GitHub", "Not yet available", "Your own services"]) expect(app.texts()).toContain(word);
+    await app.waitFor("text:Available");
+    for (const word of ["Notion", "GitHub", "Not yet available", "MCP server"]) expect(app.texts()).toContain(word);
 
     await app.press("id:connect-notion");
     await app.waitFor("text:Waiting for Notion");
@@ -198,7 +198,7 @@ describe("Extensions in a browser", () => {
 });
 
 describe("A service", () => {
-  test("its account's switches tell the computer, and Disconnect asks once with Keep", async () => {
+  test("its account's switches tell the computer, and Disconnect asks once, by name", async () => {
     let accounts = [notionAccount];
     const c = computer({ name: "extensions-service", id: "notion" }, (request) => {
       if (request.action === "list") return { catalog, accounts };
@@ -217,7 +217,7 @@ describe("A service", () => {
 
     app.onDialog((dialog) => {
       expect(dialog.title).toBe("Disconnect Notion?");
-      expect(dialog.buttons).toEqual(["Keep", "Disconnect"]);
+      expect(dialog.buttons).toEqual(["Cancel", "Disconnect"]);
       return "Disconnect";
     });
     // The switch's change is still being saved: Disconnect waits for it.

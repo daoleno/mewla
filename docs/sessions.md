@@ -134,6 +134,40 @@ options (Allow or Deny; OpenCode also offers Always allow). Tapping one answers
 the agent directly, and a request that was already answered, or that belongs to
 another conversation, is refused.
 
+**An answered request stays answered.** The daemon keeps one record for each
+request that is answered: a screen prompt, an agent approval, an agent's
+question, or Brain's question on a Work. The record holds the short form of
+what was asked, the answer, the outcome (`answered`, `approved`, `denied`,
+`dismissed`, or `not_answered` when it timed out), who answered, and when.
+A request from a delegated Worker also names the Work it was working on
+(`work_id`). A Session that asks the same thing again gets a new record for
+each time it asks. Who answered is one of:
+
+- a paired device, with its id and name;
+- Brain, with the sentence of its brief it relied on;
+- an operator using `mewla worker answer`;
+- the Session's own terminal, when the prompt left the screen and no answer
+  came through Mewla within 5 seconds;
+- a timeout.
+
+The records are kept in `<state>/answered_requests.jsonl`: each Session's
+newest 240 (its thread's window), and every Work question. A device can read
+them in three places:
+
+- In the request's thread, as a row of kind `request_answered` placed where
+  the request was asked. The row carries `request`, whose `anchor` names the
+  transcript call, screen prompt or approval when there is one. Brain's thread
+  shows only what was answered in it (`thread_id`): Brain's own prompts, and
+  questions on the Work that thread started. An app that does not know the
+  kind drops the row.
+- In the `request_answered` broadcast, sent to every device the moment a record
+  is written.
+- In `answered_requests`, the history the tray lists, newest first. It takes
+  an optional `session_id` and a `limit`.
+
+The first explicit answer stands. A terminal answer, which is inferred, gives
+way to the app's or Brain's answer if that is recorded a moment later.
+
 ### Copy and edit a message
 
 Press and hold one of your messages on the phone, as in the ChatGPT and Claude

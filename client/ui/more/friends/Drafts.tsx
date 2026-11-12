@@ -19,7 +19,7 @@ function DraftMediaTile(props: { draftId: string; item: FriendsDraftMedia; busy:
   }
   const label = props.item.kind === "video" ? "Video" : "Picture";
   return (
-    <View testID={`draft-media-${props.item.file}`} class="size-24 overflow-hidden rounded-xl border border-border bg-secondary" accessibilityLabel={label}>
+    <View testID={`draft-media-${props.item.file}`} class="size-24 overflow-hidden rounded-[14px] bg-muted" accessibilityLabel={label}>
       {uri() ? (
         <Image src={uri()!} class="absolute inset-0" style={{ objectFit: "cover" }} accessibilityLabel={label} />
       ) : (
@@ -135,17 +135,17 @@ function DraftCard(props: { id: string; nav: PageNav; edits: Edits; onFocus: (in
   const mediaKey = computed(() => (draft().media ?? []).map((item) => item.file).join("\n"));
 
   return (
-    <View testID={`draft-${props.id}`} class="mt-4 gap-3 rounded-2xl border border-foreground bg-card p-4">
+    <View testID={`draft-${props.id}`} class="mt-4 gap-3 rounded-(--radius-group) bg-card p-4">
       <View class="flex-row items-center gap-3">
         {me() ? <Avatar author={me()!} size={40} /> : null}
         <View class="min-w-0 flex-1">
-          <Text class="text-base font-semibold">{me()?.agent_name || "Brain"}</Text>
-          <Text class="text-sm text-muted-foreground line-clamp-1">
+          <Text class="text-body font-semibold">{me()?.agent_name || "Brain"}</Text>
+          <Text class="text-sub text-muted-foreground line-clamp-1">
             {`Draft${draft().source ? ` · from ${draft().source}` : ""} · ${relativeTime(Date.parse(draft().created_at), Date.now())}`}
           </Text>
         </View>
         <View class="rounded-full bg-seal px-2 py-0.5">
-          <Text class="text-xs font-semibold text-primary-foreground">Needs you</Text>
+          <Text class="text-caption font-semibold text-primary-foreground">Needs you</Text>
         </View>
       </View>
       <Input
@@ -155,7 +155,7 @@ function DraftCard(props: { id: string; nav: PageNav; edits: Edits; onFocus: (in
         }}
         accessibilityLabel="Draft text"
         multiline
-        class="min-h-[110px] max-h-[550px] rounded-xl border border-border bg-background px-3 py-2.5 text-base"
+        class="min-h-[110px] max-h-[550px] rounded-(--radius-control) bg-background px-3 py-2.5 text-body"
         value={text()}
         maxLength={FRIENDS_POST_LIMIT + 50}
         onFocus={() => input && props.onFocus(input)}
@@ -176,25 +176,25 @@ function DraftCard(props: { id: string; nav: PageNav; edits: Edits; onFocus: (in
         ))(mediaKey())}
       <View class="flex-row items-center gap-2">
         <Icon name={problem() ? "alert-circle" : "shield-check"} size={20} tone={problem() ? "failed" : "ready"} />
-        <Text testID={`draft-check-${props.id}`} class={problem() ? "flex-1 text-sm text-destructive" : "flex-1 text-sm text-muted-foreground"}>
+        <Text testID={`draft-check-${props.id}`} class={problem() ? "flex-1 text-sub text-destructive" : "flex-1 text-sub text-muted-foreground"}>
           {problem() ?? "Checked: no private names or keys"}
         </Text>
-        <Text class={length() > FRIENDS_POST_LIMIT ? "text-sm text-destructive" : "text-sm text-muted-foreground"} style={{ fontVariant: ["tabular-nums"] }}>
+        <Text class={length() > FRIENDS_POST_LIMIT ? "text-sub text-destructive" : "text-sub text-muted-foreground"} style={{ fontVariant: ["tabular-nums"] }}>
           {`${length()}/${FRIENDS_POST_LIMIT}`}
         </Text>
       </View>
       <View class="flex-row gap-3">
-        <Button testID={`draft-discard-${props.id}`} disabled={busy()} onPress={() => void discard()} class="flex-1 items-center rounded-full border border-border py-3 active:opacity-70 disabled:opacity-50">
-          <Text class="text-base font-medium">Discard</Text>
+        <Button testID={`draft-discard-${props.id}`} disabled={busy()} onPress={() => void discard()} class="h-[52px] flex-1 items-center justify-center rounded-2xl bg-muted active:opacity-70 disabled:opacity-40">
+          <Text class="text-body font-semibold">Discard</Text>
         </Button>
         <Button
           testID={`draft-post-${props.id}`}
           disabled={!ok() || busy()}
           onPress={() => void post()}
-          class="flex-[2] flex-row items-center justify-center gap-2 rounded-full bg-seal py-3 active:opacity-80 disabled:opacity-40"
+          class="h-[52px] flex-[2] flex-row items-center justify-center gap-2 rounded-2xl bg-seal active:opacity-70 disabled:opacity-40"
         >
           {busy() ? <Spinner size={16} tone="canvas" /> : null}
-          <Text class="text-base font-semibold text-primary-foreground">Post</Text>
+          <Text class="text-body font-semibold text-seal-foreground">Post</Text>
         </Button>
       </View>
     </View>
@@ -260,7 +260,7 @@ export function Drafts(props: { nav: PageNav; top: () => boolean }) {
                       }}
                     />
                   ))}
-                  <Text class="mt-3 text-center text-xs text-muted-foreground">Visible to everyone on Friends once posted.</Text>
+                  <Text class="mt-3 text-center text-caption text-muted-foreground">Visible to everyone on Friends once posted.</Text>
                 </View>
               ) : (
                 <EmptyState icon="edit" title="No drafts waiting" detail="When Brain writes something for Friends, it waits here for you to check." />

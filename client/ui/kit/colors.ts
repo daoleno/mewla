@@ -17,6 +17,9 @@ const light = {
   sealInk: "#C93327",
   /** On a seal fill (Approve's check): white in both schemes. */
   onSeal: "#FFFFFF",
+  /** On the full-screen remote's black (SPEC §15): white and its soft, in both schemes. */
+  onBlack: "#FFFFFF",
+  onBlackSoft: "#A2A5AC",
   add: "#1F8A4C",
   del: "#C93327",
   ready: "#62656D",
@@ -36,6 +39,8 @@ const dark: typeof light = {
   seal: "#D23E31",
   sealInk: "#FF7A6B",
   onSeal: "#FFFFFF",
+  onBlack: "#FFFFFF",
+  onBlackSoft: "#A2A5AC",
   add: "#5FCB88",
   del: "#FF7A6B",
   ready: "#A2A5AC",

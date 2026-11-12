@@ -1,4 +1,4 @@
-import { computed, safeArea, untracked, signal, Text, View } from "nsh";
+import { computed, openUrl, safeArea, untracked, signal, Text, View } from "nsh";
 import { progressSteps } from "../../core/sessions/progress";
 import { Button } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
@@ -6,7 +6,7 @@ import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
 import { finalReplyIdsOf } from "../../core/timeline/model";
-import { RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
+import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
 import { chatImage } from "../chat/assets";
 import { stopTurn } from "../../core/conversation/turn";
@@ -19,7 +19,8 @@ import { goHome, homeShown, openBrainTerminal, openPage, openSession, openWorkDe
 import { lastEditablePrompt } from "../../core/web/composer";
 import { workspaceRoute } from "../more/files/routes";
 import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers, workers } from "../session";
-import type { WorkCardHandlers } from "../chat/TimelineRows";
+import { ResultActions, type WorkCardHandlers } from "../chat/TimelineRows";
+import type { ResultAction } from "../../core/work/types";
 import type { WorkCardModel } from "../../core/timeline/workCardModel";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { workWorkerLines } from "../../core/work/workers";
@@ -43,7 +44,6 @@ const startingChat = signal(false);
 const notice = signal("");
 /** Brain's thread's open requests (SPEC §1.1): Brain's own and those of the Sessions working for its Work. */
 const requests = threadRequests({ brain: true });
-const sealedHere = threadSealed({ brain: true });
 /** The request the person (or a tray row) opened in the stack; none opens the oldest. */
 const pickedRequest = signal("");
 /** Bumped to bring the open request into view. */
@@ -71,6 +71,23 @@ const openWorkEvent = (event: BrainWorkResultEvent, canOpenSession: boolean) => 
 };
 /** The result sheet a Work's quiet line opens (SPEC §1.2): who, when, the summary, Next step, Open session. */
 const resultSheet = signal<WorkCardModel | null>(null);
+/** A result's next step: where it names; using it reads the result, so the card becomes its line. */
+function runResultAction(model: WorkCardModel, action: ResultAction): void {
+  if (model.unread) readWork(model.workId);
+  resultSheet.set(null);
+  switch (action.kind) {
+    case "pull_request":
+      return void openUrl(action.url).catch(() => notice.set("Couldn't open the pull request."));
+    case "git_review":
+      return openPage({ name: "git", targetId: action.session_id, cwd: action.cwd });
+    case "file":
+      return openPage({ name: "git-file", targetId: action.session_id, cwd: action.cwd, path: action.path });
+    case "brain_file":
+      return openPage({ name: "files-workspace", file: action.path, hostSession: brainHostIdentity() ?? undefined });
+    case "brain_folder":
+      return openPage({ name: "files-workspace", trail: [action.path], hostSession: brainHostIdentity() ?? undefined });
+  }
+}
 const workHandlers: WorkCardHandlers = {
   agentOf: (sessionId) => {
     const worker = sessionId ? workers().find((w) => w.id === sessionId) : undefined;
@@ -82,6 +99,7 @@ const workHandlers: WorkCardHandlers = {
   workers: (rows) => workWorkerLines(rows, new Map(workers().map((w) => [w.id, w] as const))),
   onSession: (sessionId) => openSession(sessionId),
   onLine: (model) => resultSheet.set(model),
+  onAction: runResultAction,
 };
 // A past thread is read-only: its Work cards and messages offer no actions.
 const items = computed(() => timeline(brainThread(), {
@@ -90,6 +108,8 @@ const items = computed(() => timeline(brainThread(), {
   openSessionIds: new Set(workers().map((w) => w.id)),
   currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
 }));
+const durableHere = durableAnswered(items);
+const sealedHere = threadSealed({ brain: true }, durableHere);
 
 function hostId(): string {
   return brain()?.host_worker?.id ?? "";
@@ -168,6 +188,7 @@ function ResultSheet() {
         <View class="gap-3 px-4">
           <Text class="text-sub text-muted-foreground">{[agent()?.name, model()!.state, when()].filter(Boolean).join(" · ")}</Text>
           {model()!.summary ? <View selectable><Text class="text-body">{model()!.summary}</Text></View> : null}
+          {model()!.actions.length ? <ResultActions actions={model()!.actions} onPress={(action) => runResultAction(untracked(resultSheet)!, action)} /> : null}
           {model()!.sessionId && workers().some((w) => w.id === model()!.sessionId) ? (
             <PillButton testID="work-sheet-open-session" title="Open session" onPress={() => {
               const id = untracked(resultSheet)!.sessionId!;
@@ -231,7 +252,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
           foot={{
             shown: () => !routedBrainThread() && (requests().length > 0 || sealedHere().length > 0),
             render: (anchor) => (
-              <RequestStack anchor={anchor} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
+              <RequestStack anchor={anchor} durable={durableHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
                 onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
                 onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
             ),
@@ -284,10 +305,12 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
 }
 
 /** Brain's menu › Browse workspace: Brain's folder, its host Session playing its media when it runs. */
-function browseWorkspace(): void {
+function brainHostIdentity() {
   const host = untracked(brain)?.host_worker;
-  const identity = host?.id && host.process_id && host.started_at ? { workerId: host.id, processId: host.process_id, startedAt: host.started_at } : null;
-  openPage(workspaceRoute(identity));
+  return host?.id && host.process_id && host.started_at ? { workerId: host.id, processId: host.process_id, startedAt: host.started_at } : null;
+}
+function browseWorkspace(): void {
+  openPage(workspaceRoute(brainHostIdentity()));
 }
 
 export function Home() {

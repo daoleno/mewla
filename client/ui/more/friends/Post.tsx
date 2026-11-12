@@ -171,10 +171,10 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                   <Avatar author={post()!.author} size={48} />
                   <View class="min-w-0 flex-1">
                     <View class="flex-row items-center gap-1.5">
-                      <Text class="shrink text-lg font-semibold line-clamp-1" role="header">{displayName(post()!.author)}</Text>
+                      <Text class="shrink text-title font-bold line-clamp-1" role="header">{displayName(post()!.author)}</Text>
                       {post()!.author.agent_name ? <AgentPill /> : null}
                     </View>
-                    <Text class="text-sm text-muted-foreground">{`by @${post()!.author.handle}`}</Text>
+                    <Text class="text-sub text-muted-foreground">{`by @${post()!.author.handle}`}</Text>
                   </View>
                 </Button>
                 {!post()!.mine && author() ? (
@@ -189,21 +189,22 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                   />
                 ) : null}
               </View>
-              <Text testID="friends-post-text" class="mt-3 text-xl">{post()!.text}</Text>
+              <Text testID="friends-post-text" class="mt-3 text-body">{post()!.text}</Text>
               {mediaCount() ? <PostMedia media={post()!.media!} postId={post()!.id} owner={owner} active={props.top} /> : null}
-              <Text class="mt-3 text-sm text-muted-foreground">
+              <Text class="mt-3 text-sub text-muted-foreground">
                 {`${formatDateTime(post()!.created_at)} · ${post()!.via === "auto" ? "Auto-posted" : "Approved by owner"}`}
               </Text>
-              <Text testID="friends-post-counts" class="mt-1 text-sm">{`${plural(post()!.likes, "like")}   ${plural(post()!.comments, "comment")}`}</Text>
-              <View class="mt-1 flex-row items-center border-b border-border pb-1">
+              <Text testID="friends-post-counts" class="mt-1 text-sub">{`${plural(post()!.likes, "like")}   ${plural(post()!.comments, "comment")}`}</Text>
+              <View class="mt-3 flex-row items-center gap-2 pb-1">
                 <ActionButton
+                  soft
                   testID="friends-post-like"
                   icon={post()!.liked ? "heart-fill" : "heart"}
                   on={post()!.liked}
                   label={post()!.liked ? "Unlike" : "Like"}
                   onPress={() => void togglePost(post()!, "like", handlers())}
                 />
-                <ActionButton testID="friends-post-comment" icon="chat" label="Comment" onPress={() => input?.focus()} />
+                <ActionButton soft testID="friends-post-comment" icon="chat" label="Comment" onPress={() => input?.focus()} />
                 <ActionButton
                   icon={post()!.bookmarked ? "bookmark-fill" : "bookmark"}
                   on={post()!.bookmarked}
@@ -215,7 +216,7 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
               </View>
             </View>
             {comments().length === 0 ? (
-              <EmptyState title="No comments yet" detail="Be the first to say something kind." />
+              <EmptyState title="No comments yet" />
             ) : (
               comments().map((comment) => (
                 <View
@@ -223,12 +224,12 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                   role="button"
                   accessibilityHint="Long press for options"
                   onLongPress={() => void commentMenu(comment)}
-                  class="flex-row gap-3 border-b border-border px-4 py-3"
+                  class="mx-4 mt-2 flex-row gap-3 rounded-(--radius-group) bg-card px-4 py-3"
                 >
                   <Avatar author={{ ...comment.author, pet_id: "" }} size={36} />
                   <View class="min-w-0 flex-1">
-                    <Text class="text-sm text-muted-foreground">{`@${comment.author.handle} · ${relativeTime(comment.created_at, Date.now())}`}</Text>
-                    <Text class="mt-0.5 text-base">{comment.text}</Text>
+                    <Text class="text-sub text-muted-foreground">{`@${comment.author.handle} · ${relativeTime(comment.created_at, Date.now())}`}</Text>
+                    <Text class="mt-0.5 text-body">{comment.text}</Text>
                   </View>
                   <Button testID={`comment-options-${comment.id}`} accessibilityLabel="Comment options" onPress={() => void commentMenu(comment)} class="size-8 items-center justify-center active:opacity-60">
                     <Icon name="more-horizontal" size={18} />
@@ -237,13 +238,13 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
               ))
             )}
           </Scroll>
-          <View testID="friends-composer" class="flex-row items-end gap-2 border-t border-border bg-card px-4 py-2" style={{ marginBottom: keyboard.lift() }}>
+          <View testID="friends-composer" class="flex-row items-end gap-2 bg-background px-4 py-2" style={{ marginBottom: keyboard.lift() }}>
             <Input
               testID="friends-comment"
               ref={(node) => {
                 input = node;
               }}
-              class="min-h-[40px] flex-1 rounded-2xl border border-border bg-background px-3 py-2 text-base"
+              class="min-h-[44px] flex-1 rounded-full bg-card px-4 py-2.5 text-body"
               placeholder="Add a comment"
               value={draft()}
               maxLength={FRIENDS_COMMENT_LIMIT}
@@ -256,7 +257,7 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
               accessibilityLabel="Send comment"
               disabled={!draft().trim() || sending()}
               onPress={() => void send()}
-              class="size-10 items-center justify-center rounded-full bg-primary active:opacity-70 disabled:opacity-40"
+              class="size-11 items-center justify-center rounded-full bg-primary active:opacity-70 disabled:opacity-40"
             >
               <Icon name="arrow-up" tone="canvas" size={18} />
             </Button>

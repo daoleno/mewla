@@ -706,12 +706,14 @@ never on the item; a running run opens its Session. No ids anywhere: the
 thread, the Work and the run are taps. An agenda row reads "Running ·
 summary" on one line, and a running row opens the live Session.
 
-**Stats Activity** is one ink curve with a faint fill, a baseline and the
-first and last dates; there are no gridlines or y-axis. The readout beside the
-heading names today's value ("Today  1.2M tokens", or sessions when tokens
-are unknown); hovering, touching or dragging moves it and a dot to that day,
-and a tap opens the day's detail sheet. Day draws the week ending today,
-because one day has no trend.
+**Stats** has three ranges, 7 / 14 / 30 days (the daemon's `week`,
+`fortnight`, `month`), and opens on 14; a computer whose daemon has no
+`fortnight` shows 7 and 30 and opens on 7. The title is the range's total
+spend under the eyebrow "Last 14 days". The one chart is spend by day: ink
+bars, a tooltip over the day ("Today · $5.20"), moved by hovering, dragging
+or ← →, and a tap opens the day. When no day in the range has a known cost
+it draws activity instead (tokens, or sessions when tokens are unknown),
+titled Activity rather than Spend.
 
 **Resources** answers "what is using my machine, and is anything wrong". It
 leads with the pressure state (mark and word) and its freshness, never the

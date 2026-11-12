@@ -15,14 +15,14 @@ import {
   type GitReviewGroup,
   type GitReviewRow,
 } from "../../../core/git/gitReviewModel";
-import { formatGitAge, spokenGitAge } from "../../../core/git/gitReviewTime";
-import { EmptyState, Field, Notice, Page, Row, Section, Spinner, Tag } from "../../kit/kit";
+import { formatGitAge, gitCommitDays, spokenGitAge } from "../../../core/git/gitReviewTime";
+import { DisplayTitle, EmptyState, Notice, Page, PillButton, Row, RowButton, SearchField, Section, SectionLabel, Spinner, Tag } from "../../kit/kit";
 import { Icon } from "../../kit/Icon";
 import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { CommitFilePage, DiffPage, DiffReader, SPLIT_WIDTH } from "./GitDiff";
 import { FilePage, FilesPage } from "./GitFiles";
-import { Counts, Current, FlashLine, IconButton, PathText, StatusChar, TextButton } from "./parts";
+import { Counts, Current, FileName, FlashLine, IconButton, StatusTile, TextButton } from "./parts";
 import type { GitPage } from "./routes";
 import { BranchSheet, CommitSheet } from "./sheets";
 import { copyText, gitReview, say, type GitReview } from "./state";
@@ -60,7 +60,7 @@ async function entryMenu(review: GitReview, nav: PageNav, entry: GitReviewEntry,
     actions: [
       { id: "view", label: "View diff" },
       { id: "stage", label: staged ? "Unstage" : "Stage" },
-      ...(staged ? [] : [{ id: "discard", label: "Discard changes", role: "destructive" as const }]),
+      ...(staged ? [] : [{ id: "discard", label: "Discard changes" }]),
       { id: "open", label: "Open working file" },
       { id: "copy", label: "Copy path" },
       { id: "cancel", label: "Cancel", role: "cancel" as const },
@@ -79,14 +79,16 @@ async function entryMenu(review: GitReview, nav: PageNav, entry: GitReviewEntry,
 /** More actions on the whole repository. */
 async function overflowMenu(review: GitReview, nav: PageNav): Promise<void> {
   const snapshot = review.status();
-  const actions: Array<{ id: string; label: string; role?: "destructive" | "cancel" }> = [{ id: "refresh", label: "Refresh" }];
+  // SPEC §15 Code review's order: Refresh, Browse files, Fetch, Pull, Push, Copy path, Copy branch, Undo last
+  // discard (only once there is one: a sheet has no disabled actions), then Discard all changes last, in ink.
+  const actions: Array<{ id: string; label: string; role?: "cancel" }> = [{ id: "refresh", label: "Refresh" }];
   if (snapshot?.available) {
     actions.push({ id: "browse", label: "Browse files" });
     if (snapshot.upstream) actions.push({ id: "fetch", label: "Fetch" }, { id: "pull", label: "Pull" }, { id: "push", label: "Push" });
+    if (snapshot.repo_root) actions.push({ id: "copy-root", label: "Copy path" });
+    if (snapshot.branch) actions.push({ id: "copy-branch", label: "Copy branch" });
     if (review.lastDiscard()) actions.push({ id: "undo", label: "Undo last discard" });
-    if (review.groups().changes.length) actions.push({ id: "discard-all", label: "Discard all changes", role: "destructive" });
-    if (snapshot.repo_root) actions.push({ id: "copy-root", label: "Copy repository path" });
-    if (snapshot.branch) actions.push({ id: "copy-branch", label: "Copy branch name" });
+    if (review.groups().changes.length) actions.push({ id: "discard-all", label: "Discard all changes" });
   }
   actions.push({ id: "cancel", label: "Cancel", role: "cancel" });
   const title = [snapshot?.repo_name, snapshot?.branch].filter(Boolean).join(" · ");
@@ -145,6 +147,8 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
   });
   const snapshot = () => review.status();
   const title = () => snapshot()?.repo_name || props.title || "Git";
+  // The project is the eyebrow over "Changes" or "History"; the nav bar names the project once that has scrolled away.
+  const titleAway = signal(false);
   const closeSearch = () => {
     review.searchOpen.set(false);
     review.query.set("");
@@ -164,7 +168,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
   );
   return (
     <NavPage
-      title={title()}
+      title={titleAway() ? title() : ""}
       testID="git-page"
       headerRight={headerRight}
       popOnBack={!review.searchOpen()}
@@ -175,8 +179,10 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
       <Current review={review} class="flex-1 bg-background">{() => (
         <View class="flex-1 flex-row bg-background">
           <View testID="git-list" class={wide() ? "w-[380px] border-r border-border" : "flex-1"}>
-            <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6 pt-2" refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}>
+            <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6 pt-2" refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}
+              onScroll={(e) => titleAway.set(e.offset.y > 56)} scrollEventThrottle={64}>
               <View class="w-full max-w-[720px] self-center">
+                <DisplayTitle eyebrow={title()} title={tab() === "changes" ? "Changes" : "History"} />
                 <FlashLine />
                 <View class="mt-3">
                   <Segmented testID="git-tab" value={tab()} onChange={(next) => {
@@ -186,8 +192,8 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
                 </View>
                 <Strip review={review} tab={tab()} onBranches={() => branchesOpen.set(true)} />
                 {review.searchOpen() && tab() === "changes" ? (
-                  <View class="-mx-4">
-                    <Field testID="git-query" accessibilityLabel="Filter files" placeholder="Filter files" autoFocus value={review.query()} onChange={(value) => review.query.set(value)} />
+                  <View class="mt-3">
+                    <SearchField testID="git-query" accessibilityLabel="Filter files" placeholder="Filter files" autoFocus value={review.query()} onChange={(value) => review.query.set(value)} />
                   </View>
                 ) : null}
                 <View>{tab() === "changes" ? <ChangesBody review={review} nav={props.nav} selected={wide() ? shown() : null} onOpen={open} /> : <HistoryBody review={review} nav={props.nav} />}</View>
@@ -196,7 +202,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
             {tab() === "changes" ? <CommitBar review={review} onCommit={() => commitOpen.set(true)} /> : null}
           </View>
           {wide() ? (
-            <View testID="git-reader" class="flex-1">
+            <View testID="git-reader" class="flex-1 bg-background">
               {chosen() ? (
                 <DiffReader
                   review={review}
@@ -232,11 +238,11 @@ function CommitBar(props: { review: GitReview; onCommit: () => void }) {
         const groups = review.groups();
         if (!groups.staged.length && !groups.changes.length) return null;
         return (
-          <View testID="git-commit-bar" class="border-t border-border bg-background px-4 pb-4 pt-2">
+          <View testID="git-commit-bar" class="bg-background px-4 pb-4 pt-1">
             {groups.staged.length ? (
-              <TextButton testID="git-commit-open" filled label={`Commit ${groups.staged.length} ${groups.staged.length === 1 ? "file" : "files"}`} onPress={props.onCommit} />
+              <PillButton testID="git-commit-open" filled title={`Commit ${groups.staged.length} ${groups.staged.length === 1 ? "file" : "files"}`} onPress={props.onCommit} />
             ) : (
-              <TextButton testID="git-stage-all" label={`Stage all ${groups.changes.length}`} busy={review.isBusy("bulk:changes")} onPress={() => void review.bulk("changes")} />
+              <PillButton testID="git-stage-all" title={`Stage all ${groups.changes.length}`} busy={review.isBusy("bulk:changes")} onPress={() => void review.bulk("changes")} />
             )}
           </View>
         );
@@ -245,33 +251,40 @@ function CommitBar(props: { review: GitReview; onCommit: () => void }) {
   );
 }
 
-/** The branch, what changed in all, how it syncs, and a merge or rebase in progress. */
+/** What the sync button says: "↑ 2 to push", "↓ 1 to pull", or Publish for a branch with no upstream. */
+function syncLabel(sync: { kind: string; label: string }, snapshot: { ahead?: number; behind?: number } | null): string {
+  if (sync.kind === "pull" && snapshot?.behind) return `↓ ${snapshot.behind} to pull`;
+  if (sync.kind === "push" && snapshot?.ahead) return `↑ ${snapshot.ahead} to push`;
+  return sync.label;
+}
+
+/** The branch as a pill (it opens Branches), how it syncs beside it, what changed in all, and a merge or rebase in progress. */
 function Strip(props: { review: GitReview; tab: Tab; onBranches: () => void }) {
   const snapshot = () => props.review.status();
   return (
     <View>
       {snapshot()?.available ? (
-        <View class="mt-3 flex-row flex-wrap items-center gap-2 px-1">
+        <View class="mt-3 flex-row flex-wrap items-center gap-2">
           {(() => {
             const s = snapshot()!;
             const label = s.detached ? `Detached ${s.branch ?? ""}`.trim() : s.branch || "No branch";
             return (
-              <Button testID="git-branch" accessibilityLabel={`Branch ${label}. Switch branch`} onPress={props.onBranches} class="flex-row items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 active:opacity-70">
+              <Button testID="git-branch" accessibilityLabel={`Branch ${label}. Switch branch`} onPress={props.onBranches} class="h-9 max-w-[60%] flex-row items-center gap-1.5 rounded-full bg-card px-3.5 active:opacity-70">
                 <Icon name="git-branch" size={16} tone="ink" />
-                <Text class="font-mono text-sm line-clamp-1">{label}</Text>
+                <Text class="min-w-0 shrink font-mono text-code font-semibold line-clamp-1">{label}</Text>
               </Button>
             );
           })()}
-          <Text testID="git-summary" android={{ accessibilityLiveRegion: "polite" }} class="flex-1 text-sm text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>
-            {props.tab === "changes" ? gitReviewSummary(snapshot()) : gitReviewSync(snapshot())}
-          </Text>
           {(() => {
             const sync = gitSyncAction(snapshot());
-            return sync ? <TextButton testID="git-sync" label={sync.label} busy={props.review.isBusy("sync")} onPress={() => void props.review.sync(sync.kind)} /> : null;
+            return sync ? <TextButton testID="git-sync" label={syncLabel(sync, snapshot())} busy={props.review.isBusy("sync")} onPress={() => void props.review.sync(sync.kind)} /> : null;
           })()}
+          <Text testID="git-summary" android={{ accessibilityLiveRegion: "polite" }} class="ml-auto font-mono text-code text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>
+            {props.tab === "changes" ? gitReviewSummary(snapshot()) : gitReviewSync(snapshot())}
+          </Text>
         </View>
       ) : null}
-      {snapshot()?.operation ? <Text class="mt-2 px-1 text-sm text-destructive">{`${snapshot()!.operation} in progress`}</Text> : null}
+      {snapshot()?.operation ? <Text class="mt-2 px-1 text-sub">{`${snapshot()!.operation} in progress`}</Text> : null}
     </View>
   );
 }
@@ -318,7 +331,7 @@ function ChangesBody(props: { review: GitReview; nav: PageNav; selected: string 
   );
 }
 
-const GROUP_LABEL: Record<GitReviewGroup, string> = { staged: "Staged", changes: "Changes" };
+const GROUP_LABEL: Record<GitReviewGroup, string> = { staged: "Staged", changes: "Not staged" };
 
 /** Staged, or Changes (unstaged and untracked): a header that folds the group, its rows, and the one button for all of them. */
 function Group(props: { review: GitReview; nav: PageNav; group: GitReviewGroup; rows: GitReviewRow[]; entries: GitReviewEntry[]; selected: string | null; onOpen: (entry: GitReviewEntry) => void }) {
@@ -329,29 +342,25 @@ function Group(props: { review: GitReview; nav: PageNav; group: GitReviewGroup; 
   const totals = sumGitReviewEntries(props.entries);
   const label = GROUP_LABEL[props.group];
   return (
-    <View class="mt-6" testID={`git-group-${props.group}`}>
-      <View class="mb-1.5 flex-row items-center gap-2 px-1">
-        <View
-          testID={`git-group-${props.group}-toggle`}
-          role="button"
-          accessibilityLabel={`${label}, ${count} ${count === 1 ? "file" : "files"}`}
-          accessibilityState={{ expanded: !collapsed() }}
-          onPress={() => props.review.toggleCollapsed(key)}
-          class="min-w-0 flex-1 flex-row items-center gap-1.5 py-1 active:opacity-60"
-        >
-          <Icon name={collapsed() ? "chevron-right" : "chevron-down"} size={14} tone="faint" />
-          <Text class="text-sm font-medium text-muted-foreground" role="header">{`${label} · ${count}`}</Text>
-          <Counts additions={totals.additions} deletions={totals.deletions} />
-        </View>
-        {count ? (
-          <Button testID={`git-bulk-${props.group}`} onPress={() => void props.review.bulk(props.group)} disabled={props.review.isBusy(`bulk:${props.group}`)} class="flex-row items-center gap-1.5 active:opacity-60 disabled:opacity-50">
-            {props.review.isBusy(`bulk:${props.group}`) ? <Spinner size={14} /> : null}
-            <Text class="text-sm font-medium">{staged ? "Unstage all" : "Stage all"}</Text>
-          </Button>
-        ) : null}
-      </View>
+    <View testID={`git-group-${props.group}`}>
+      <SectionLabel
+        testID={`git-group-${props.group}-toggle`}
+        title={label}
+        count={count}
+        folded={collapsed()}
+        accessibilityLabel={`${label}, ${count} ${count === 1 ? "file" : "files"}`}
+        onPress={() => props.review.toggleCollapsed(key)}
+        trailing={
+          <View class="flex-row items-center gap-2">
+            <Counts additions={totals.additions} deletions={totals.deletions} />
+            {count ? (
+              props.review.isBusy(`bulk:${props.group}`) ? <Spinner size={16} /> : <RowButton testID={`git-bulk-${props.group}`} label={staged ? "Unstage all" : "Stage all"} onPress={() => void props.review.bulk(props.group)} />
+            ) : null}
+          </View>
+        }
+      />
       {collapsed() ? null : (
-        <View class="overflow-hidden rounded-2xl border border-border bg-card">
+        <View class="overflow-hidden rounded-(--radius-group) bg-card">
           <View class="-mb-px">
             {props.rows.length ? props.rows.map((row) => <ReviewRow review={props.review} nav={props.nav} row={row} selected={props.selected} onOpen={props.onOpen} />) : <Row title="No changes" />}
           </View>
@@ -371,13 +380,14 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
         accessibilityLabel={`${row.label}, ${row.count} files`}
         accessibilityState={{ expanded: !row.collapsed }}
         onPress={() => props.review.toggleCollapsed(row.key)}
-        class="flex-row items-center gap-2 border-b border-border py-2.5 pr-4 active:bg-accent"
+        class="min-h-[48px] flex-row items-center gap-2 py-2.5 pr-4 active:bg-accent"
         style={indent}
       >
         <Icon name={row.collapsed ? "chevron-right" : "chevron-down"} size={14} tone="faint" />
         <Icon name="folder" size={16} tone="soft" />
-        <Text class="flex-1 font-mono text-sm text-muted-foreground line-clamp-1">{row.label}</Text>
-        <Text class="text-xs text-muted-foreground">{String(row.count)}</Text>
+        <Text class="flex-1 font-mono text-code text-muted-foreground line-clamp-1">{row.label}</Text>
+        <Text class="text-caption text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(row.count)}</Text>
+        <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 16 }} />
       </View>
     );
   }
@@ -396,15 +406,15 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
       onLongPress={() => void entryMenu(props.review, props.nav, entry, props.onOpen)}
       // A mouse's right click (the web, the desktops) opens the same menu.
       onContextMenu={() => void entryMenu(props.review, props.nav, entry, props.onOpen)}
-      class={`flex-row items-center gap-2 border-b border-border py-2.5 pr-2 active:bg-accent ${props.selected === entry.key ? "bg-secondary" : ""}`}
+      class={`min-h-[56px] flex-row items-center gap-3 py-2.5 pr-1 active:bg-accent ${props.selected === entry.key ? "bg-accent" : ""}`}
       style={indent}
     >
-      <StatusChar file={entry.file} />
+      <StatusTile file={entry.file} />
       <View class="min-w-0 flex-1">
-        {props.review.tree() ? <Text class="font-mono text-sm line-clamp-1">{name}</Text> : <PathText path={entry.file.path} />}
-        {entry.file.old_path ? <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{`from ${entry.file.old_path}`}</Text> : null}
+        {props.review.tree() ? <Text class="font-mono text-code font-semibold line-clamp-1">{name}</Text> : <FileName path={entry.file.path} />}
+        {entry.file.old_path ? <Text class="font-mono text-caption text-muted-foreground line-clamp-1">{`from ${entry.file.old_path}`}</Text> : null}
       </View>
-      {entry.file.binary ? <Text class="font-mono text-xs text-muted-foreground">bin</Text> : <Counts additions={entry.additions} deletions={entry.deletions} />}
+      {entry.file.binary ? <Text class="font-mono text-code text-muted-foreground">bin</Text> : <Counts additions={entry.additions} deletions={entry.deletions} />}
       <IconButton
         testID={`git-toggle-${entry.key}`}
         icon={staged ? "remove-circle" : "add-circle"}
@@ -412,6 +422,7 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
         busy={props.review.isBusy(entry.key)}
         onPress={() => void props.review.toggleStaged(entry)}
       />
+      <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 16 + row.depth * 16 + 40 }} />
     </View>
   );
 }
@@ -424,12 +435,21 @@ function HistoryBody(props: { review: GitReview; nav: PageNav }) {
         const history = review.history();
         if (!history.commits.length && history.error) return <EmptyState icon="alert" title="Couldn't load history" detail={history.error} action="Retry" onAction={() => void review.loadHistory(0)} />;
         if (!history.commits.length) return history.loading || !history.loaded ? <EmptyState busy title="Loading history" /> : <EmptyState title="No commits yet" />;
+        // A grouped list (SPEC §15): the commits by day, each day's label with its count.
         return (
-          <Section>
-            {history.commits.map((commit) => <CommitRow review={review} nav={props.nav} commit={commit} />)}
-            {history.moreError ? <Row title="Couldn't load more" subtitle={history.moreError} /> : null}
-            {history.hasMore ? <Row testID="git-history-more" title={history.loading ? "Loading history" : "Load more"} disabled={history.loading} onPress={() => void review.loadHistory(history.commits.length)} /> : null}
-          </Section>
+          <View>
+            {gitCommitDays(history.commits).map((day) => (
+              <Section label={<SectionLabel icon="time" title={day.label} count={day.commits.length} />}>
+                {day.commits.map((commit) => <CommitRow review={review} nav={props.nav} commit={commit} />)}
+              </Section>
+            ))}
+            {history.moreError || history.hasMore ? (
+              <Section>
+                {history.moreError ? <Row title="Couldn't load more" subtitle={history.moreError} /> : null}
+                {history.hasMore ? <Row testID="git-history-more" title={history.loading ? "Loading history" : "Load more"} disabled={history.loading} onPress={() => void review.loadHistory(history.commits.length)} /> : null}
+              </Section>
+            ) : null}
+          </View>
         );
       })()}
     </View>
@@ -468,11 +488,10 @@ function CommitPage(props: { review: GitReview; sha: string; nav: PageNav }) {
             if (!detail) return <EmptyState busy title="Loading commit" />;
             return (
               <View>
-                <View class="mt-4 gap-1 px-1">
-                  <Text class="text-lg font-semibold">{detail.subject || "(no message)"}</Text>
-                  {detail.body.trim() ? <Text class="text-sm text-muted-foreground line-clamp-6">{detail.body.trim()}</Text> : null}
-                  <Text class="text-xs text-muted-foreground">{[detail.short, detail.author, formatGitAge(detail.date)].join(" · ")}</Text>
-                  {detail.truncated ? <Text class="text-xs text-destructive">Large commit: the last files are not shown.</Text> : null}
+                <DisplayTitle eyebrow={[detail.short, detail.author, formatGitAge(detail.date)].join(" · ")} title={detail.subject || "(no message)"} />
+                <View class="gap-1 px-1">
+                  {detail.body.trim() ? <Text class="text-body text-muted-foreground line-clamp-6">{detail.body.trim()}</Text> : null}
+                  {detail.truncated ? <Text class="text-sub">Large commit: the last files are not shown.</Text> : null}
                 </View>
                 <Section title={`${detail.files.length} ${detail.files.length === 1 ? "file" : "files"}`}>
                   {detail.files.map((file) => (
@@ -481,12 +500,13 @@ function CommitPage(props: { review: GitReview; sha: string; nav: PageNav }) {
                       role="button"
                       accessibilityLabel={`${splitGitReviewPath(file.path).name}, ${gitDiffStatusWord(gitDiffTone(file))}, ${file.additions} added, ${file.deletions} removed`}
                       onPress={() => props.nav.push({ name: "git-commit-file", ...target(review), sha: props.sha, path: file.path })}
-                      class="flex-row items-center gap-2 border-b border-border px-4 py-3 active:bg-accent"
+                      class="min-h-[56px] flex-row items-center gap-3 px-4 py-2.5 active:bg-accent"
                     >
-                      <StatusChar file={file} />
-                      <View class="min-w-0 flex-1"><PathText path={file.path} /></View>
-                      {file.binary ? <Text class="font-mono text-xs text-muted-foreground">bin</Text> : <Counts additions={file.additions} deletions={file.deletions} />}
+                      <StatusTile file={file} />
+                      <View class="min-w-0 flex-1"><FileName path={file.path} /></View>
+                      {file.binary ? <Text class="font-mono text-code text-muted-foreground">bin</Text> : <Counts additions={file.additions} deletions={file.deletions} />}
                       <Icon name="chevron-right" size={16} tone="faint" />
+                      <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 56 }} />
                     </View>
                   ))}
                 </Section>

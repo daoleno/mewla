@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/answered"
 	"io"
 	"os"
 	"path/filepath"
@@ -281,8 +282,12 @@ type CodexConversationEvent struct {
 	WorkAttention     string `json:"work_attention,omitempty"`
 	WorkEventKind     string `json:"work_event_kind,omitempty"`
 	WorkDetailsJSON   string `json:"work_details_json,omitempty"`
-	WorkNextAction    string `json:"work_next_action,omitempty"`
 	WorkWaitFor       string `json:"work_wait_for,omitempty"`
+	// WorkActions are the result's typed next steps (brain/work_result_actions.go).
+	WorkActions []ResultAction `json:"work_actions,omitempty"`
+	// Request is set only for Source=request_answered rows: a request (a
+	// prompt, an approval, a question) and how it was answered.
+	Request *answered.Request `json:"request,omitempty"`
 	// Task fields are only set for Source=task_notification status items.
 	// CallID carries the provider tool call that launched the task.
 	TaskID         string `json:"task_id,omitempty"`
@@ -302,6 +307,18 @@ type CodexConversationEvent struct {
 	// AdmissionUnwrappedSHA256 preserves an exact alternative only when a provider
 	// adds a recognized whole-message transport envelope. Never a display digest.
 	AdmissionUnwrappedSHA256 string `json:"-"`
+}
+
+// ResultAction is one next step a Work result truthfully offers. Kind is
+// pull_request (URL), git_review (SessionID, Cwd: the repository root),
+// file (SessionID, Cwd, Path relative to Cwd), brain_file or brain_folder
+// (Path relative to the Brain workspace). The client labels and routes them.
+type ResultAction struct {
+	Kind      string `json:"kind"`
+	URL       string `json:"url,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Cwd       string `json:"cwd,omitempty"`
+	Path      string `json:"path,omitempty"`
 }
 
 // CodexConversationSubagent is the work a delegated subagent did, read from the

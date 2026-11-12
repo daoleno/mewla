@@ -53,13 +53,13 @@ export function AgentMarks(props: { agents: readonly ManagedSkillAgent[]; size?:
             props.showLabels ? (
               <View class="flex-row items-center gap-1.5">
                 <AgentMark agent={agent} size={props.size} />
-                <Text class="text-sm">{skillAgentLabel(agent)}</Text>
+                <Text class="text-sub">{skillAgentLabel(agent)}</Text>
               </View>
             ) : (
               <AgentMark agent={agent} size={props.size} />
             ),
           )
-        : <Text class="text-xs text-muted-foreground">Unknown</Text>}
+        : <Text class="text-caption text-muted-foreground">Unknown</Text>}
     </View>
   );
 }

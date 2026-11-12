@@ -2,6 +2,7 @@ package server
 
 import (
 	"strings"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/gorilla/websocket"
@@ -76,6 +77,13 @@ func (s *Server) handleApprovalDecision(conn *websocket.Conn, raw clientMessage)
 		s.sendErrorWithRequestID(conn, raw.RequestID, "approval_invalid", "An approval answer needs a worker, an approval and an option.")
 		return
 	}
+	var asked *ApprovalWire
+	for _, pending := range approvals.Pending(workerID) {
+		if pending.ID == strings.TrimSpace(raw.ID) {
+			copied := pending
+			asked = &copied
+		}
+	}
 	if err := approvals.Decide(workerID, strings.TrimSpace(raw.ID), strings.TrimSpace(raw.OptionID)); err != nil {
 		code, message := "approval_failed", err.Error()
 		if refused, ok := err.(*ApprovalDecisionError); ok {
@@ -83,6 +91,9 @@ func (s *Server) handleApprovalDecision(conn *websocket.Conn, raw clientMessage)
 		}
 		s.sendErrorWithRequestID(conn, raw.RequestID, code, message)
 		return
+	}
+	if asked != nil {
+		s.recordAnswered(ApprovalAnswerRecord(workerID, *asked, strings.TrimSpace(raw.OptionID), s.answeredByConn(conn), time.Now()))
 	}
 	s.sendJSON(conn, map[string]any{
 		"type":        "approval_decided",

@@ -9,6 +9,7 @@ import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { ComputerMessageTimelineItem } from "./computerMessageCardModel";
 import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
 import type { BrainCurrentWork } from "../work/types";
+import type { AnsweredRequest } from "./answered";
 
 // components/terminal/InterfaceTimelineItemView.tsx
 export type TimelineItem =
@@ -18,7 +19,17 @@ export type TimelineItem =
   | PlanTimelineItem
   | BrainWorkEventTimelineItem
   | TaskNotificationTimelineItem
-  | ComputerMessageTimelineItem;
+  | ComputerMessageTimelineItem
+  | AnsweredTimelineItem;
+
+/** An answered request's sealed line, where it was asked (WIRE §2); `keys` are its card keys. */
+export type AnsweredTimelineItem = {
+  type: "answered";
+  id: string;
+  timestamp?: string;
+  record: AnsweredRequest;
+  keys: readonly string[];
+};
 
 // components/terminal/InterfaceTimelineMessage.tsx
 export type DisplayAttachment = {

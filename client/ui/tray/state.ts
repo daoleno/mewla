@@ -1,4 +1,5 @@
-import { computed, signal, Storage } from "nsh";
+import { computed, signal, Storage, untracked } from "nsh";
+import { answeredKeys, parseAnsweredRequest, sealedOfAnswered, type AnsweredRequest } from "../../core/timeline/answered";
 import { brainSurface } from "../../core/brain";
 import { openAlerts } from "../../core/calendar/alerts";
 import { itemInstant, itemsOnDay, rowTime } from "../../core/calendar/model";
@@ -11,8 +12,9 @@ import type { BrainCurrentWork, BrainOpenWork } from "../../core/work/types";
 import { clock } from "../calendar/clock";
 import { calendarItems } from "../calendar/state";
 import { deviceRequests } from "../enrollment/state";
-import { currentConnectionIssue, currentIssue } from "../more/settings/computers";
-import { brain, brainThread, connection, current, problem, workers } from "../session";
+import { currentIssue } from "../more/settings/computers";
+import { currentDiagnosis } from "../computer/computers";
+import { brain, brainThread, connection, current, onTransport, workers } from "../session";
 
 const SORT_KEY = "mewla:tray:sort";
 
@@ -40,11 +42,30 @@ refreshOpened();
  * (SPEC §1.1 "Sealed everywhere at once"). Kept while the app runs; keys are unique per prompt.
  */
 export const sealedRequests = signal<readonly SealedRequest[]>([]);
-const answered = computed(() => new Set(sealedRequests().map((sealed) => sealed.key)));
+/** Keys the computer said were answered (on any device, by Brain, in the terminal): beside each sealed line's own key. */
+const answeredKeysSeen = signal<ReadonlySet<string>>(new Set());
+const answered = computed(() => new Set([...sealedRequests().map((sealed) => sealed.key), ...answeredKeysSeen()]));
 
 export function sealRequest(sealed: SealedRequest): void {
   sealedRequests.set([...sealedRequests().filter((s) => s.key !== sealed.key), sealed]);
 }
+
+/**
+ * The computer recorded an answer (WIRE §2 `request_answered`): its card seals on this device too,
+ * in the same frame, with who answered; the thread's own row of it follows.
+ */
+export function sealAnswered(record: AnsweredRequest): void {
+  const keys = answeredKeys(record);
+  if (!keys.length) return;
+  answeredKeysSeen.set(new Set([...untracked(answeredKeysSeen), ...keys]));
+  const sealed = sealedOfAnswered(record, (ms) => untracked(clock).format.time(ms, untracked(clock).zones.device));
+  sealedRequests.set([...untracked(sealedRequests).filter((s) => !keys.includes(s.key)), sealed]);
+}
+
+onTransport((transport) => transport.on("request_answered", (frame) => {
+  const record = parseAnsweredRequest((frame as Record<string, unknown>).request);
+  if (record) sealAnswered(record);
+}));
 
 /** Brain's own host Session, with the prompt it is blocked on. */
 export const brainHost = computed(() => {
@@ -79,7 +100,7 @@ export const tray = computed(() => {
     computerName: server?.name ?? "",
     connection: connection(),
     pairAgain: issue === "device_not_paired",
-    diagnosis: currentConnectionIssue()?.title || problem() || undefined,
+    diagnosis: currentDiagnosis(),
     surface: brainSurface({ hasServer: Boolean(server), connected: connection() === "connected", snapshot }),
     hostProblem: snapshot?.host_problem,
     workers: workers(),

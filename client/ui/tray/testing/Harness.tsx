@@ -5,7 +5,9 @@ import type { BrainSnapshot } from "../../../core/brain";
 import type { ConnectionState } from "../../../core/transport";
 import type { Worker } from "../../../core/sessions/workers";
 import { nshPlatform } from "../../platform";
-import { testServer } from "../../more/testing/fakeDaemon";
+import { FakeDaemon, testServer } from "../../more/testing/fakeDaemon";
+import { bindDaemon } from "../../more/daemon";
+import type { StoredServer } from "../../../core/storedServerContract";
 import { NavPage } from "../../shell/NavPage";
 import { nav } from "../../shell/nav";
 import { brain, connection, current, servers, workers } from "../../session";
@@ -15,12 +17,15 @@ import { Tray } from "../Tray";
 /**
  * Home's header and tray on the one stack, for `nsh test`: `host.params` sets the computer's
  * Sessions (`workers`), Brain (`brain`) and the connection; `app.workers` / `app.connection`
- * change them. A Session page is a plain page titled by its id.
+ * change them; `server` and `computers` set the computer's record and its `computers` answer.
+ * A Session page is a plain page titled by its id.
  */
 installPlatform(nshPlatform());
 
-const params = host.params as { workers?: Worker[]; brain?: BrainSnapshot; connection?: ConnectionState };
-const server = testServer({ name: "atlas" });
+const params = host.params as { workers?: Worker[]; brain?: BrainSnapshot; connection?: ConnectionState; server?: Partial<StoredServer>; computers?: Record<string, unknown> };
+const server = testServer({ name: "atlas", ...params.server });
+// The computer answers `computers` (WIRE §5) when the test gives its message.
+bindDaemon(new FakeDaemon(params.computers ? { computers: params.computers } : {}, server, "connected"));
 servers.set([server]);
 current.set(server);
 connection.set(params.connection ?? "connected");

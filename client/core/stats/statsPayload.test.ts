@@ -5,7 +5,6 @@ import {
   normalizeStatsPayload,
   type StatsPayload,
 } from './statsPayload';
-import { INITIAL_STATS_RANGE } from './statsTabs';
 
 // Clearly synthetic representative OpenCode model rows for the daemon-payload
 // merge contract. Model names cover the OpenCode feature surface; every value
@@ -153,7 +152,6 @@ describe('Pi owned-session usage contract (daemon payload to App visibility)', (
     const merged = normalizeStatsPayload(
       wirePayload({ week: rangeWith(daemonWeekModels) }),
     );
-    expect(INITIAL_STATS_RANGE).toBe('week');
     expect(merged.ranges.week.models).toHaveLength(5);
     expect(merged.ranges.week.models).toContainEqual(piDeepSeek);
   });

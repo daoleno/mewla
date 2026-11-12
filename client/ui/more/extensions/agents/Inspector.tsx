@@ -20,7 +20,7 @@ import { allSkills, inspectState, mutationOperations, preparing, readSkillCopy }
 export function Block(props: { title: string; children?: JSX.Element }) {
   return (
     <View class="mt-5 gap-2">
-      <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
+      <Text class="text-sub font-semibold text-muted-foreground" role="header">{props.title}</Text>
       {props.children}
     </View>
   );
@@ -32,7 +32,7 @@ export function SheetHeader(props: { title: string; detail?: string; closeLabel:
     <View class="flex-row items-start gap-3">
       <View class="min-w-0 flex-1 gap-1">
         <Text class="text-xl font-semibold" role="header">{props.title}</Text>
-        {props.detail ? <Text class="text-sm text-muted-foreground line-clamp-1">{props.detail}</Text> : null}
+        {props.detail ? <Text class="text-sub text-muted-foreground line-clamp-1">{props.detail}</Text> : null}
         {props.children ?? null}
       </View>
       <Button testID="sheet-close" accessibilityLabel={props.closeLabel} onPress={props.onClose} class="size-11 items-center justify-center rounded-full active:bg-accent">
@@ -46,16 +46,16 @@ export function SheetHeader(props: { title: string; detail?: string; closeLabel:
 function Lifecycle(props: { sentence: string; label: string; busyLabel?: string; accessibilityLabel: string; busy: boolean; disabled: boolean; testID: string; onPress: () => void }) {
   return (
     <View class="mt-6 gap-2 border-t border-border pt-4">
-      <Text class="text-sm text-muted-foreground">{props.sentence}</Text>
+      <Text class="text-sub text-muted-foreground">{props.sentence}</Text>
       <Button
         testID={props.testID}
         accessibilityLabel={props.accessibilityLabel}
         disabled={props.disabled || props.busy}
         onPress={props.onPress}
-        class="min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl bg-secondary px-4 active:opacity-70 disabled:opacity-50"
+        class="h-[48px] flex-row items-center justify-center gap-2 rounded-(--radius-control) bg-muted px-4 active:opacity-70 disabled:opacity-40"
       >
         {props.busy ? <Spinner size={14} /> : <Icon name="trash" size={16} tone="seal" />}
-        <Text class="text-base font-medium text-destructive">{props.busy && props.busyLabel ? props.busyLabel : props.label}</Text>
+        <Text class="text-body font-semibold text-destructive">{props.busy && props.busyLabel ? props.busyLabel : props.label}</Text>
       </Button>
     </View>
   );
@@ -67,9 +67,9 @@ function Protected(props: { reason: string; children?: JSX.Element }) {
     <View testID="protected" class="mt-6 gap-2 border-t border-border pt-4">
       <View class="flex-row items-center gap-1.5">
         <Icon name="lock" size={15} />
-        <Text class="text-sm font-medium">Protected</Text>
+        <Text class="text-sub font-semibold">Protected</Text>
       </View>
-      <Text class="text-sm text-muted-foreground">{props.reason}</Text>
+      <Text class="text-sub text-muted-foreground">{props.reason}</Text>
       {props.children ?? null}
     </View>
   );
@@ -89,8 +89,8 @@ function ancestors(path: string | undefined): Set<string> {
 
 function Code(props: { content: string }) {
   return (
-    <Scroll keyboardShouldPersistTaps="handled" horizontal class="rounded-xl border border-border bg-background">
-      <View selectable><Text class="p-3 font-mono text-xs">{props.content || "This file is empty."}</Text></View>
+    <Scroll keyboardShouldPersistTaps="handled" horizontal class="rounded-(--radius-control) bg-background">
+      <View selectable><Text class="p-3 font-mono text-code">{props.content || "This file is empty."}</Text></View>
     </Scroll>
   );
 }
@@ -138,7 +138,7 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
   return (
     <View class="gap-2">
       {files().length ? (
-        <View class="overflow-hidden rounded-xl border border-border">
+        <View class="overflow-hidden rounded-(--radius-group) bg-sheet-surface">
           {visibleNodes(buildSkillFileTree(files()), expanded()).map(({ node, depth }) =>
             node.kind === "directory" ? (
               <View
@@ -151,7 +151,7 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
                 style={{ paddingLeft: 12 + depth * 14 }}
               >
                 <Icon name={expanded().has(node.path) ? "folder-open" : "folder"} size={16} />
-                <Text class="flex-1 text-sm text-muted-foreground line-clamp-1">{node.name}</Text>
+                <Text class="flex-1 text-sub text-muted-foreground line-clamp-1">{node.name}</Text>
               </View>
             ) : (
               <Button
@@ -162,27 +162,27 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
                 style={{ paddingLeft: 12 + depth * 14 }}
               >
                 <Icon name={node.file?.kind === "binary" ? "attach" : "document-text"} size={16} />
-                <Text class="flex-1 text-sm line-clamp-1">{node.name}</Text>
+                <Text class="flex-1 text-sub line-clamp-1">{node.name}</Text>
               </Button>
             ),
           )}
         </View>
       ) : (
-        <Text class="text-sm text-muted-foreground">This copy contains no readable files.</Text>
+        <Text class="text-sub text-muted-foreground">This copy contains no readable files.</Text>
       )}
       <View class="mt-1 gap-2 border-t border-border pt-3">
-        <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{selected() || "No file selected"}</Text>
+        <Text class="font-mono text-code text-muted-foreground line-clamp-1">{selected() || "No file selected"}</Text>
         {props.loading ? (
           <View class="flex-row items-center gap-2">
             <Spinner size={14} />
-            <Text class="text-sm text-muted-foreground">Loading file</Text>
+            <Text class="text-sub text-muted-foreground">Loading file</Text>
           </View>
         ) : null}
         {props.error ? <Notice tone="failed" title="File unavailable" detail={props.error} /> : null}
         {preview()?.notice ? <Notice title={preview()!.notice!} /> : null}
         {preview()?.dataUrl ? (
           <View role="button" testID="skill-file-image" accessibilityLabel={preview()!.path} accessibilityHint="Opens the image" onPress={() => viewing.set(preview()!.path)} class="active:opacity-80">
-            <Image src={preview()!.dataUrl!} class="h-48 w-full rounded-xl" style={{ objectFit: "contain" }} accessibilityLabel={preview()!.path} />
+            <Image src={preview()!.dataUrl!} class="h-48 w-full rounded-[14px]" style={{ objectFit: "contain" }} accessibilityLabel={preview()!.path} />
           </View>
         ) : null}
         {preview()?.status === "binary" ? (
@@ -194,7 +194,7 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
             testID="skill-markdown"
             markdown={skillMarkdownBody(preview()?.content ?? "") || "This file is empty."}
             selectable
-            class="text-base"
+            class="text-body"
             onLinkPress={(event) => openLink(event.url)}
             renderImage={(image) => {
               let path: string | null = null;
@@ -217,7 +217,7 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
             <Code content={preview()?.content ?? ""} />
           </View>
         ) : null}
-        {preview()?.status === "truncated" ? <Text class="text-xs text-muted-foreground">{`Showing the first ${preview()!.bytesReturned} of ${preview()!.size} bytes.`}</Text> : null}
+        {preview()?.status === "truncated" ? <Text class="text-caption text-muted-foreground">{`Showing the first ${preview()!.bytesReturned} of ${preview()!.size} bytes.`}</Text> : null}
       </View>
       <SkillImageViewer images={images()} start={viewing()} read={read} onClose={() => viewing.set(null)} />
     </View>
@@ -229,7 +229,7 @@ function SkillCopyRow(props: { copy: InstalledSkill; selected: boolean; onInspec
   const location = () => skillCopyLocation(props.copy);
   const deletable = () => skillRowSupportsDelete(props.copy, mutationOperations());
   return (
-    <View class={`flex-row items-center rounded-xl border ${props.selected ? "border-foreground bg-secondary" : "border-border"}`}>
+    <View class={`flex-row items-center rounded-(--radius-control) ${props.selected ? "bg-accent" : "bg-sheet-surface"}`}>
       <Button
         testID={`inspect-copy-${props.copy.id}`}
         accessibilityLabel={location().label}
@@ -239,8 +239,8 @@ function SkillCopyRow(props: { copy: InstalledSkill; selected: boolean; onInspec
       >
         <View class="min-w-0 flex-1 gap-0.5">
           <AgentMarks agents={props.copy.agents as ManagedSkillAgent[]} size={16} />
-          <Text class="text-sm line-clamp-2">{location().label}</Text>
-          <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{location().path}</Text>
+          <Text class="text-sub line-clamp-2">{location().label}</Text>
+          <Text class="font-mono text-code text-muted-foreground line-clamp-1">{location().path}</Text>
         </View>
         {props.selected ? null : <Icon name="chevron-right" size={16} tone="faint" />}
       </Button>
@@ -291,12 +291,12 @@ export function SkillInspector(props: {
   const body = (): JSX.Element => (
     <View>
       <Block title="Overview">
-        {detail()?.description ? <Text class="text-base">{detail()!.description!}</Text> : null}
+        {detail()?.description ? <Text class="text-body">{detail()!.description!}</Text> : null}
         <View class="flex-row items-center gap-2">
           <Tag label={detail()?.enabled ? "Enabled" : "Disabled"} />
-          <Text class="text-sm text-muted-foreground">{scopeLabel(detail()?.scope ?? props.copy.scope)}</Text>
+          <Text class="text-sub text-muted-foreground">{scopeLabel(detail()?.scope ?? props.copy.scope)}</Text>
         </View>
-        {(detail()?.warnings ?? []).map((warning) => <Text class="text-sm text-warning">{warning}</Text>)}
+        {(detail()?.warnings ?? []).map((warning) => <Text class="text-sub text-warning">{warning}</Text>)}
       </Block>
       <Block title="Files">
         <FileBrowser
@@ -333,10 +333,10 @@ export function SkillInspector(props: {
               testID="open-skill-plugin"
               accessibilityLabel={`Open the ${owner()!.displayName} Plugin that provides this Skill`}
               onPress={() => props.onOpenPlugin(owner()!.key)}
-              class="min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl bg-secondary px-4 active:opacity-70"
+              class="h-[48px] flex-row items-center justify-center gap-2 rounded-(--radius-control) bg-muted px-4 active:opacity-70"
             >
               <Icon name="puzzle" size={16} />
-              <Text class="text-base font-medium">{`Open ${owner()!.displayName}`}</Text>
+              <Text class="text-body font-semibold">{`Open ${owner()!.displayName}`}</Text>
             </Button>
           ) : null}
         </Protected>
@@ -379,7 +379,7 @@ function PluginSkillEntryView(props: { entry: PluginSkillEntry }) {
   };
   const shown = computed(() => detail()?.copyId ?? null, { equals: (a, b) => a === b });
   return (
-    <View class="rounded-xl border border-border">
+    <View class="rounded-(--radius-group) bg-sheet-surface">
       <View
         role="button"
         testID={`plugin-skill-${props.entry.name}`}
@@ -394,20 +394,20 @@ function PluginSkillEntryView(props: { entry: PluginSkillEntry }) {
         <Icon name={open() ? "chevron-down" : "chevron-right"} size={15} tone="faint" />
         <Icon name="book" size={16} tone="warning" />
         <View class="min-w-0 flex-1">
-          <Text class="text-sm line-clamp-1">{props.entry.name}</Text>
-          {props.entry.path ? <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{props.entry.path}</Text> : null}
+          <Text class="text-sub line-clamp-1">{props.entry.name}</Text>
+          {props.entry.path ? <Text class="font-mono text-code text-muted-foreground line-clamp-1">{props.entry.path}</Text> : null}
         </View>
         {props.entry.copy ? null : <Icon name="help" size={16} tone="faint" />}
       </View>
       <View class="flex-col px-3 pb-3" style={{ display: open() ? "flex" : "none" }}>
         {!props.entry.copy ? (
-          <Text class="text-sm text-muted-foreground">This Skill copy was not found in the current Skills inventory, so its files cannot be shown here.</Text>
+          <Text class="text-sub text-muted-foreground">This Skill copy was not found in the current Skills inventory, so its files cannot be shown here.</Text>
         ) : null}
-        {error() && !detail() ? <Text class="text-sm text-warning">{error()}</Text> : null}
+        {error() && !detail() ? <Text class="text-sub text-warning">{error()}</Text> : null}
         {loading() && !detail() ? (
           <View class="flex-row items-center gap-2">
             <Spinner size={14} />
-            <Text class="text-sm text-muted-foreground">Loading Skill</Text>
+            <Text class="text-sub text-muted-foreground">Loading Skill</Text>
           </View>
         ) : null}
         {((id) =>
@@ -431,14 +431,14 @@ function ChoosableCopy(props: { label: string; testID: string; selected: boolean
 export function PluginCopyCard(props: { copy: InstalledPluginCopy; selected?: boolean; onChoose?: () => void; onUninstall: (copy: InstalledPluginCopy) => void }) {
   const content = () => (
     <View class="min-w-0 flex-1 gap-0.5">
-      <Text class="text-sm">{pluginCopyLabel(props.copy)}</Text>
+      <Text class="text-sub">{pluginCopyLabel(props.copy)}</Text>
       <AgentMarks agents={props.copy.agents.filter(isManaged)} size={16} />
-      <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{props.copy.rootPath}</Text>
-      {props.copy.capability.canUninstall ? null : <Text class="text-xs text-muted-foreground">{pluginReadonlyReason(props.copy)}</Text>}
+      <Text class="font-mono text-code text-muted-foreground line-clamp-1">{props.copy.rootPath}</Text>
+      {props.copy.capability.canUninstall ? null : <Text class="text-caption text-muted-foreground">{pluginReadonlyReason(props.copy)}</Text>}
     </View>
   );
   return (
-    <View class={`flex-row items-center gap-1 rounded-xl border px-3 py-2 ${props.selected ? "border-foreground bg-secondary" : "border-border"}`}>
+    <View class={`flex-row items-center gap-1 rounded-(--radius-control) px-3 py-2 ${props.selected ? "bg-accent" : "bg-sheet-surface"}`}>
       {props.onChoose ? <ChoosableCopy label={`Select ${pluginCopyLabel(props.copy)} copy`} testID={`select-copy-${props.copy.copyId}`} selected={!!props.selected} onPress={() => props.onChoose?.()}>{content()}</ChoosableCopy> : content()}
       {props.copy.capability.canUninstall ? (
         <Button
@@ -493,7 +493,7 @@ export function PluginDetails(props: { plugin: LogicalPlugin; onUninstall: (copy
         </View>
       </SheetHeader>
       {copy().description || props.plugin.description ? (
-        <Block title="Overview"><Text class="text-base">{copy().description || props.plugin.description || ""}</Text></Block>
+        <Block title="Overview"><Text class="text-body">{copy().description || props.plugin.description || ""}</Text></Block>
       ) : null}
       {entries().length ? (
         <Block title={`Skills (${entries().length})`}>
@@ -506,8 +506,8 @@ export function PluginDetails(props: { plugin: LogicalPlugin; onUninstall: (copy
             <View class="flex-row items-start gap-2">
               <Icon name={componentIcon(component.kind)} size={18} />
               <View class="min-w-0 flex-1">
-                <Text class="text-sm">{component.name}</Text>
-                {component.path ? <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{component.path}</Text> : null}
+                <Text class="text-sub">{component.name}</Text>
+                {component.path ? <Text class="font-mono text-code text-muted-foreground line-clamp-1">{component.path}</Text> : null}
               </View>
             </View>
           ))}
@@ -515,7 +515,7 @@ export function PluginDetails(props: { plugin: LogicalPlugin; onUninstall: (copy
       ) : null}
       <Block title="Available to">
         {managed().length || !unmanaged().length ? <AgentMarks agents={managed()} size={20} showLabels /> : null}
-        {unmanaged().length ? <Text class="text-sm">{unmanaged().map(pluginAgentLabel).join(", ")}</Text> : null}
+        {unmanaged().length ? <Text class="text-sub">{unmanaged().map(pluginAgentLabel).join(", ")}</Text> : null}
       </Block>
       {props.plugin.copies.length > 1 ? (
         <Block title={`Copies (${props.plugin.copies.length})`}>
@@ -525,8 +525,8 @@ export function PluginDetails(props: { plugin: LogicalPlugin; onUninstall: (copy
         </Block>
       ) : (
         <Block title="Location">
-          <Text class="text-sm">{copy().location}</Text>
-          <View selectable><Text class="font-mono text-xs text-muted-foreground">{copy().rootPath}</Text></View>
+          <Text class="text-sub">{copy().location}</Text>
+          <View selectable><Text class="font-mono text-code text-muted-foreground">{copy().rootPath}</Text></View>
         </Block>
       )}
       {copy().capability.canUninstall ? (
