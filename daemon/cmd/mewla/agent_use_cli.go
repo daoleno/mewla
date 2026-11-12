@@ -163,6 +163,8 @@ func printPhone(w io.Writer, status agentuse.Status) {
 		line += "the phone is not connected (open Mewla on it)"
 	case phone.State == "ready":
 		line += "connected (" + phone.Model + "); Workers here have mewla_phone"
+	case phone.State == "setup":
+		line += "connected (" + phone.Model + "), not ready" + setupSince(phone.SetupSince, time.Now()) + ": " + setupReason(phone.Problem)
 	default:
 		line += "connected (" + phone.Model + "), " + phone.State
 	}
@@ -174,6 +176,34 @@ func printPhone(w io.Writer, status agentuse.Status) {
 		}
 		fmt.Fprintf(w, "  %s is using it now.\n", name)
 	}
+}
+
+// setupSince says how long a phone has been in setup: " since 13:38 (4m)".
+func setupSince(since *time.Time, now time.Time) string {
+	if since == nil {
+		return ""
+	}
+	return " since " + since.Local().Format("15:04") + " (" + shortAge(now.Sub(*since)) + ")"
+}
+
+func shortAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "under a minute"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%dh%02dm", int(d/time.Hour), int(d%time.Hour/time.Minute))
+	}
+	return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
+}
+
+// setupReason is the phone's own words for why it is in setup, or says it gave none.
+func setupReason(problem string) string {
+	if problem == "" {
+		return "the phone has not said why (open Mewla on it)"
+	}
+	return strings.TrimSuffix(problem, ".")
 }
 
 // printIPhone says whether iPhone use is on and, when something is missing, the one fix.

@@ -62,6 +62,8 @@ func (e *Error) Is(target error) bool {
 const (
 	notReadyMessage = "Phone use isn't ready on the phone: the person has to open Mewla → Phone on their phone."
 	notReadyAdvice  = " It is often ready within a minute of them opening Mewla: wait about 15 seconds and try again, for up to a minute. If it is still not ready, tell them and stop."
+	// With the phone's own reason the person is not asked to open Mewla: the reason says what, if anything, is theirs to do.
+	notReadyAdviceWithReason = " Mewla on the phone keeps trying by itself: wait about 15 seconds and try again, for up to a minute. If it is still not ready, tell the person that reason and stop."
 )
 
 // What an agent is told when the phone cannot be used now.
@@ -130,6 +132,10 @@ type Status struct {
 	// Display is the agent display's size and density next to the phone's own (a size that looks wrong on the phone starts here).
 	Display string  `json:"display,omitempty"`
 	Active  *Active `json:"active,omitempty"`
+	// Problem is why a phone in setup is not ready, as the phone said it, and SetupSince when it
+	// last fell into setup. Both are empty while the phone is ready.
+	Problem    string     `json:"problem,omitempty"`
+	SetupSince *time.Time `json:"setup_since,omitempty"`
 }
 
 // Reply is the phone's answer to one op. When the phone answered but refused, Do returns it
@@ -205,11 +211,13 @@ type Link struct {
 
 	hello   Hello
 	state   string // the phone's last report
-	problem string // why a phone in setup could not start its helper, as it said
-	stopped bool   // latched by Stop, cleared only by give_back
-	person  bool   // the person is driving the agent's screen
-	w, h    int
-	display string
+	problem string // why a phone in setup is not ready, as it said
+	// setupSince is when the phone last reported setup after being anything else; zero while it is not in setup.
+	setupSince time.Time
+	stopped    bool // latched by Stop, cleared only by give_back
+	person     bool // the person is driving the agent's screen
+	w, h       int
+	display    string
 
 	pending *pending
 }
@@ -252,6 +260,9 @@ func (m *Manager) Attach(hello Hello, conn Conn) (*Link, error) {
 	l := &Link{m: m, gen: m.gen, conn: conn, hello: hello, state: state}
 	l.stopped = state == StateStopped
 	l.person = state == StatePersonInCharge
+	if state == StateSetup {
+		l.setupSince = m.opts.Clock.Now()
+	}
 	old := m.link
 	m.link = l
 	close(m.up)
@@ -329,11 +340,20 @@ func (m *Manager) onState(l *Link, s State) {
 	if !knownState(s.State) {
 		s.State = StateSetup
 	}
+	problem := trimProblem(s.Problem)
 	if l.state != s.State {
-		log.Printf("phone: state %s -> %s%s", l.state, s.State, problemSuffix(trimProblem(s.Problem)))
+		log.Printf("phone: state %s -> %s%s", l.state, s.State, problemSuffix(problem))
+	} else if s.State == StateSetup && l.problem != problem {
+		// The first word of a fall into setup is often "no reason yet"; the reason that follows is what explains it.
+		log.Printf("phone: still in setup%s", problemSuffix(problem))
+	}
+	if s.State == StateSetup && (l.state != StateSetup || l.setupSince.IsZero()) {
+		l.setupSince = m.opts.Clock.Now()
+	} else if s.State != StateSetup {
+		l.setupSince = time.Time{}
 	}
 	l.state = s.State
-	l.problem = trimProblem(s.Problem)
+	l.problem = problem
 	// The phone says whose hands the agent's screen is in; a stop it reports is latched until
 	// give_back, like one the person pressed.
 	l.person = s.State == StatePersonInCharge
@@ -465,18 +485,27 @@ func (l *Link) refusalLocked() error {
 		return ErrPerson
 	case l.state != StateReady:
 		if l.problem != "" {
-			return &Error{CodeNotReady, strings.TrimSuffix(notReadyMessage, ".") + " (" + l.problem + ")." + notReadyAdvice}
+			return &Error{CodeNotReady, "Phone use isn't ready on the phone: " + sentence(l.problem) + notReadyAdviceWithReason}
 		}
 		return ErrNotReady
 	}
 	return nil
 }
 
+// sentence is the phone's reason as a sentence of its own, ending in one full stop.
+func sentence(problem string) string {
+	problem = strings.TrimSpace(problem)
+	if problem == "" || strings.HasSuffix(problem, ".") {
+		return problem
+	}
+	return problem + "."
+}
+
 // trimProblem keeps the phone's reason to a sentence: it goes into an agent's error.
 func trimProblem(problem string) string {
 	problem = strings.TrimSpace(problem)
-	if r := []rune(problem); len(r) > 160 {
-		return string(r[:160])
+	if r := []rune(problem); len(r) > 240 {
+		return string(r[:240])
 	}
 	return problem
 }
@@ -586,6 +615,13 @@ func (m *Manager) Status() Status {
 	status := Status{State: StateOffline}
 	if l := m.link; l != nil {
 		status = Status{Connected: true, State: l.effectiveLocked(), Model: l.hello.Model, SDK: l.hello.SDK, AppVersion: l.hello.AppVersion, W: l.w, H: l.h, Display: l.display}
+		if l.state == StateSetup {
+			status.Problem = l.problem
+			if !l.setupSince.IsZero() {
+				since := l.setupSince
+				status.SetupSince = &since
+			}
+		}
 	}
 	if m.active != nil {
 		active := *m.active
