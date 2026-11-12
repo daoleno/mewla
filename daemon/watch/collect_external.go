@@ -174,7 +174,7 @@ func (c *Collector) collectGitHub(ctx context.Context) (int, error) {
 func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo string, accounts []connections.ReadAccount) (GitHub, map[string]bool) {
 	link := GitHub{Owner: owner, Repo: repo, Endpoints: map[string]string{}}
 	if previous := project.GitHub; previous != nil && previous.Owner == owner && previous.Repo == repo {
-		link.AccountID, link.Branch, link.CheckedAt = previous.AccountID, previous.Branch, previous.CheckedAt
+		link.AccountID, link.Branch, link.CheckedAt, link.Access = previous.AccountID, previous.Branch, previous.CheckedAt, previous.Access
 	}
 	var usable []connections.ReadAccount
 	for _, account := range accounts {
@@ -190,7 +190,7 @@ func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo
 		link.AccountID, link.Coverage, link.Reason = "", CoverageDisabled, "the GitHub plugin is switched off"
 		return link, nil
 	}
-	if link.AccountID != "" && c.now().Sub(link.CheckedAt) < githubRecheck {
+	if link.AccountID != "" && link.Access != "" && c.now().Sub(link.CheckedAt) < githubRecheck {
 		for _, account := range usable {
 			if account.ID == link.AccountID && account.Reads[githubRepoTool] {
 				link.Coverage, link.Reason = CoverageCollecting, "via "+account.Name
@@ -201,6 +201,15 @@ func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo
 	link.AccountID, link.Branch, link.CheckedAt = "", "", c.now()
 	var failures []string
 	allowed := false
+	// Every account that sees the repository answers, so the person's access
+	// is the best any of them has (a repository of the person's own, read
+	// through a work account that only pulls from it, is still theirs), and
+	// the account that reads is one that can push when there is one. A
+	// repository whose accounts all answered read-only is somebody else's
+	// project. An account that could not be reached may be the one that
+	// pushes, so then the earlier Access stands instead of flipping.
+	var chosen *connections.ReadAccount
+	chosenAccess, seen, unreached := "", map[string]bool{}, false
 	for _, account := range usable {
 		if !account.Reads[githubRepoTool] {
 			failures = append(failures, account.Name+": "+githubRepoTool+" is not allowed")
@@ -208,22 +217,37 @@ func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo
 		}
 		allowed = true
 		// GitHub's own tools have no "get repository": a search for exactly
-		// this repository names its default branch, and says nothing for a
-		// repository the account cannot see.
-		result, err := c.external.ReadTool(ctx, account.ID, githubRepoTool, map[string]any{"query": "repo:" + owner + "/" + repo, "perPage": 1})
+		// this repository names its default branch and, unless asked for the
+		// minimal answer, what the account may do there. It says nothing for
+		// a repository the account cannot see.
+		result, err := c.external.ReadTool(ctx, account.ID, githubRepoTool, map[string]any{"query": "repo:" + owner + "/" + repo, "perPage": 1, "minimal_output": false})
 		if err != nil {
+			var answer connections.ServiceError
+			unreached = unreached || !errors.As(err, &answer)
 			failures = append(failures, account.Name+": "+readFailure(err))
 			continue
 		}
 		var found []struct {
 			FullName      string `json:"full_name"`
 			DefaultBranch string `json:"default_branch"`
+			Permissions   *struct {
+				Admin    bool `json:"admin"`
+				Maintain bool `json:"maintain"`
+				Push     bool `json:"push"`
+			} `json:"permissions"`
 		}
-		branch := ""
+		branch, access := "", AccessUnknown
 		if c.decodeList("github repository", toolPayload(result.Body), "items", &found) {
 			for _, item := range found {
-				if strings.EqualFold(item.FullName, owner+"/"+repo) {
-					branch = item.DefaultBranch
+				if !strings.EqualFold(item.FullName, owner+"/"+repo) {
+					continue
+				}
+				branch = item.DefaultBranch
+				if permissions := item.Permissions; permissions != nil {
+					access = AccessRead
+					if permissions.Admin || permissions.Maintain || permissions.Push {
+						access = AccessWrite
+					}
 				}
 			}
 		}
@@ -231,9 +255,28 @@ func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo
 			failures = append(failures, account.Name+": GitHub did not return this repository")
 			continue
 		}
-		link.AccountID, link.Branch = account.ID, branch
-		link.Coverage, link.Reason = CoverageCollecting, "via "+account.Name
-		return link, account.Reads
+		seen[access] = true
+		if chosen == nil || (access == AccessWrite && chosenAccess != AccessWrite) {
+			account := account
+			chosen, chosenAccess, link.Branch = &account, access, branch
+		}
+	}
+	if chosen != nil {
+		link.AccountID = chosen.ID
+		link.Coverage, link.Reason = CoverageCollecting, "via "+chosen.Name
+		switch {
+		case seen[AccessWrite]:
+			link.Access = AccessWrite
+		case seen[AccessUnknown]:
+			link.Access = AccessUnknown
+		case unreached && link.Access != "":
+			// keep the earlier answer
+		case unreached:
+			link.Access = AccessUnknown
+		default:
+			link.Access = AccessRead
+		}
+		return link, chosen.Reads
 	}
 	link.Coverage = CoverageUnreachable
 	if !allowed {
@@ -255,8 +298,13 @@ func (c *Collector) decode(what string, body []byte, into any) bool {
 	return err == nil
 }
 
-// githubRepoTool finds a repository's default branch; see githubLink.
+// githubRepoTool finds a repository's default branch and the person's access
+// to it; see githubLink.
 const githubRepoTool = "search_repositories"
+
+// notResponsible is the state of an endpoint Watch leaves unread because the
+// person cannot push to the repository.
+const notResponsible = "not read: no push access, somebody else's project"
 
 // githubArgs are a repository's coordinates plus the tool's own arguments.
 func githubArgs(owner, repo string, extra map[string]any) map[string]any {
@@ -369,9 +417,19 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	var body []byte
 	pollStarted := c.now()
 
+	// The default branch's health (its CI, its security alerts) is read only
+	// where the person can push to it. Somebody else's project goes red and
+	// green on its own; none of that is theirs to fix.
+	responsible := link.Access != AccessRead
+	if !responsible {
+		for _, endpoint := range []string{"actions", "dependabot", "code-scanning"} {
+			link.Endpoints[endpoint] = notResponsible
+		}
+	}
+
 	// Default-branch CI: each failed run, and each workflow's first pass
 	// after it failed.
-	if link.Branch != "" {
+	if link.Branch != "" && responsible {
 		lastFailed, lastPassed := map[string]time.Time{}, map[string]time.Time{}
 		for kind, latest := range map[string]map[string]time.Time{kindCIFailed: lastFailed, kindCIPassed: lastPassed} {
 			for _, signal := range c.store.Signals(Filter{Source: SourceExternal, Kind: kind}) {
@@ -477,6 +535,9 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	for _, alertKind := range []struct{ endpoint, tool string }{
 		{"dependabot", "list_dependabot_alerts"}, {"code-scanning", "list_code_scanning_alerts"},
 	} {
+		if !responsible {
+			continue
+		}
 		body, answered := c.readGitHub(ctx, link, reads, alertKind.endpoint, alertKind.tool, map[string]any{"state": "open", "perPage": 50})
 		alertsRead = alertsRead && answered
 		if body == nil {

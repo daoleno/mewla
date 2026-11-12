@@ -60,11 +60,21 @@ func evaluateRules(store *Store, now time.Time) (int, error) {
 
 // ruleCIRed flags each default-branch workflow whose latest result is a
 // failure, with how long it has been red. Workflows are judged separately: a
-// passing Pages deploy does not clear a failing test workflow.
+// passing Pages deploy does not clear a failing test workflow. A project
+// whose repository the person cannot push to is somebody else's: its runs stay
+// stored, but are no problem of theirs, so a problem raised before that was
+// known closes on the next pass.
 func ruleCIRed(store *Store, now time.Time) []Problem {
+	foreign := map[string]bool{}
+	for _, project := range store.Projects() {
+		foreign[project.ID] = project.GitHub != nil && project.GitHub.Access == AccessRead
+	}
 	byWorkflow := map[string][]Signal{}
 	for _, kind := range []string{kindCIFailed, kindCIPassed} {
 		for _, signal := range store.Signals(Filter{Source: SourceExternal, Kind: kind}) {
+			if foreign[signal.ProjectID] {
+				continue
+			}
 			key := signal.ProjectID + "|" + signal.Refs["workflow"]
 			byWorkflow[key] = append(byWorkflow[key], signal)
 		}
