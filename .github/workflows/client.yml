@@ -4,7 +4,8 @@ name: Client (NSH)
 # Until it is stable it runs on pull requests and manual dispatch only, never on
 # a push to main, so it cannot turn main red; prove a change on a branch with
 # `gh workflow run client.yml --ref <branch> -f gate=false`. A run builds both hosts: the Android preview APK
-# (debug-signed, com.daoleno.mewla.preview, an artifact to sideload) and the iOS
+# (com.daoleno.mewla.preview, an artifact to sideload; on dispatch signed with the release key so
+# every Preview installs over the last one, client/scripts/preview-signer.sh) and the iOS
 # Simulator app with its upgrade tests. The fast checks (core tests, nsh check,
 # nsh test) run in ci.yml's client job. The upgrade gate runs on manual dispatch:
 # the released Expo APK, then the release-signed NSH app installed over it.
@@ -27,6 +28,8 @@ concurrency:
 
 permissions:
   contents: read
+  # The upgrade gate installs this Preview over the last dispatched run's (its artifact).
+  actions: read
 
 jobs:
   android:
@@ -44,10 +47,33 @@ jobs:
           key: nsh-${{ runner.os }}-${{ hashFiles('client/scripts/fetch-nsh.sh') }}
       - name: Install NSH
         run: client/scripts/fetch-nsh.sh
-      - name: Build the preview APK (arm64, debug-signed)
+      # A Preview is signed with the release key (another package id, the same key), so one Preview
+      # upgrades the last in place and keeps its pairing; a runner's debug key changes every run.
+      # Pull requests build it debug-signed and keep no APK.
+      - name: Materialize the release keystore (temp, mode 0600)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          MEWLA_ANDROID_KEYSTORE_BASE64: ${{ secrets.ZEN_ANDROID_KEYSTORE_BASE64 }}
+          MEWLA_ANDROID_KEYSTORE: ${{ runner.temp }}/mewla-release.p12
+        run: ./scripts/materialize-android-keystore.sh > /dev/null
+      - name: Build the preview APK (arm64; release key on dispatch)
         working-directory: client/android
+        env:
+          MEWLA_ANDROID_KEYSTORE: ${{ github.event_name == 'workflow_dispatch' && format('{0}/mewla-release.p12', runner.temp) || '' }}
+          MEWLA_ANDROID_KEYSTORE_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && secrets.ZEN_ANDROID_KEYSTORE_PASSWORD || '' }}
+          MEWLA_ANDROID_KEY_ALIAS: ${{ github.event_name == 'workflow_dispatch' && secrets.ZEN_ANDROID_KEY_ALIAS || '' }}
+          MEWLA_ANDROID_KEY_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && secrets.ZEN_ANDROID_KEY_PASSWORD || '' }}
         run: ./gradlew --no-daemon --console=plain assemblePreviewRelease -Pmewla.abis=arm64-v8a
+      - name: Shred the keystore
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: |
+          KS="${{ runner.temp }}/mewla-release.p12"
+          [[ -f "$KS" ]] && { shred -u "$KS" 2>/dev/null || rm -f "$KS"; } || true
+      - name: The Preview carries the release key
+        if: github.event_name == 'workflow_dispatch'
+        run: client/scripts/preview-signer.sh client/android/app/build/outputs/apk/preview/release/app-preview-release.apk
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: mewla-preview-android
           path: client/android/app/build/outputs/apk/preview/release/*.apk
@@ -120,8 +146,9 @@ jobs:
           retention-days: 14
 
   upgrade-gate:
-    name: Android upgrade gate (Expo ${{ inputs.old_version || 'latest' }} → NSH)
+    name: Android upgrade gate (Expo ${{ inputs.old_version || 'latest' }} → NSH; Preview → Preview)
     if: github.event_name == 'workflow_dispatch' && inputs.gate
+    needs: android
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -173,6 +200,23 @@ jobs:
         run: |
           KS="${{ runner.temp }}/mewla-release.p12"
           [[ -f "$KS" ]] && { shred -u "$KS" 2>/dev/null || rm -f "$KS"; } || true
+      - name: This Preview and the last dispatched one on this branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/preview/new" "$RUNNER_TEMP/preview/prev"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n mewla-preview-android -D "$RUNNER_TEMP/preview/new"
+          echo "PREVIEW_APK=$(find "$RUNNER_TEMP/preview/new" -name '*.apk' | head -1)" >> "$GITHUB_ENV"
+          prev=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow client.yml --branch "$BRANCH" --event workflow_dispatch \
+            --status success --limit 20 --json databaseId --jq "[.[].databaseId | select(. != $GITHUB_RUN_ID)][0] // empty")
+          if [[ -n "$prev" ]] && gh run download "$prev" --repo "$GITHUB_REPOSITORY" -n mewla-preview-android -D "$RUNNER_TEMP/preview/prev"; then
+            echo "previous Preview: run $prev"
+            echo "PREV_APK=$(find "$RUNNER_TEMP/preview/prev" -name '*.apk' | head -1)" >> "$GITHUB_ENV"
+          else
+            echo "no previous Preview kept for $BRANCH"
+          fi
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -188,7 +232,9 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: client/scripts/upgrade-gate.sh
+          script: |
+            client/scripts/upgrade-gate.sh
+            client/scripts/preview-upgrade.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
