@@ -21,6 +21,37 @@ describe("the tray", () => {
     expect(app.shows("id:tray-done")).toBe(true);
   }, 20_000);
 
+  test("running is an ink dot, connecting and offline a ring: the dot follows the state it opened in", async () => {
+    const app = await open(HARNESS, { host: { params: { workers: [worker("alpha")], connection: "connecting" } }, platform: "android" });
+    await app.waitFor("text:Connecting…");
+    expect(app.shows("id:state-dot-ring")).toBe(true);
+    await app.host.send("app.connection", "connected");
+    await app.waitFor("text:1 running");
+    expect(app.shows("id:state-dot-ink")).toBe(true);
+    expect(app.shows("id:state-dot-ring")).toBe(false);
+    await app.host.send("app.connection", "waiting");
+    await app.waitFor("text:Offline");
+    expect(app.shows("id:state-dot-ring")).toBe(true);
+    expect(app.shows("id:state-dot-ink")).toBe(false);
+  }, 20_000);
+
+  test("a running row ends in a live dot and how long it has run; its line is words, never the terminal's footer", async () => {
+    const footer = "⏸ manual mode on · ? for shortcuts";
+    const app = await open(HARNESS, { host: { params: { workers: [
+      worker("alpha", { started_at: NOW - 12 * 60_000, summary: footer, last_output_lines: [footer] }),
+      worker("beta", { status: "unknown", summary: footer, last_output_lines: [footer] }),
+    ] } }, platform: "android" });
+    await app.waitFor("text:1 running");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray");
+    expect(app.texts()).toContain("12m");
+    expect(app.texts()).toContain("Working");
+    expect(app.texts()).toContain("Idle");
+    expect(app.count("id:tray-running >> id:row-live")).toBe(1);
+    expect(app.texts()).not.toContain("live");
+    expect(app.texts().some((t) => t.includes("manual mode"))).toBe(false);
+  }, 20_000);
+
   test("a running Worker's reported phase draws its progress bar; a Session that reports none has no bar", async () => {
     const app = await open(HARNESS, { host: { params: { workers: [worker("alpha", { phase: "verifying" }), worker("beta")] } }, platform: "android" });
     await app.waitFor("text:2 running");

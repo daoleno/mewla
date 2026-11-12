@@ -7,15 +7,14 @@ import { currentTransport, resumeConnection } from "../session";
 import { decideApproval, answerPrompt } from "../../core/conversation/turn";
 import { isPromptGoneError, PROMPT_GONE_NOTICE } from "../../core/timeline/claudeChoiceModel";
 import { DONE_SHOWN, RUNNING_SHOWN, TODAY_SHOWN, type TrayNoticeAction, type TrayRequest, type TrayRow as Row, type TrayTile } from "../../core/tray/model";
-import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
 import { PillButton } from "../kit/kit";
-import { ProgressBar } from "../kit/ProgressBar";
 import { homeShown, openCalendarItem, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { createMenuAnchor, showMenu } from "../kit/Menu";
 import { rowKey } from "../../core/tray/pane";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { showDeviceRequest } from "../enrollment/state";
+import { RowEnd, RowHair, RowText, RowTile } from "./rowParts";
 import { setTraySort, tray, traySort } from "./state";
 
 /** Where the tray's rows open their pages: pushed over home (the phone's overlay) or in place of the page above Brain (the left pane). */
@@ -55,17 +54,6 @@ function onAndroidBack(listener: () => boolean): void {
   cleanup(BackHandler.on("press", listener));
 }
 
-function Tile(props: { tile: TrayTile }) {
-  return (
-    <View class="size-[28px] items-center justify-center overflow-hidden">
-      {props.tile.kind === "agent" ? <AgentIcon kind={props.tile.agent} flavor={props.tile.flavor} size={20} />
-        : props.tile.kind === "brain" ? <View class="size-[28px] items-center justify-center rounded-lg bg-foreground"><Icon name="brain" size={18} tone="canvas" /></View>
-        : props.tile.kind === "device" ? <Icon name="shield-check" size={22} tone="soft" />
-        : <Icon name="calendar" size={22} tone="soft" />}
-    </View>
-  );
-}
-
 /** A section label (caption 600, soft) with an optional link at the right ("Calendar ›", "All ›"). */
 function Label(props: { title: string; link?: string; onLink?: () => void; testID?: string }) {
   return (
@@ -90,40 +78,27 @@ export function SelectedWell() {
   return <View testID="selected-well" class="absolute inset-0 bg-accent" />;
 }
 
-/** The hair under a row, from 58 pt in; the group hides the last one. */
-function Hair() {
-  return <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 58 }} />;
-}
-
 /** A tray row (SPEC §11 Tray row): 68 pt, a 28 pt tile, a title and a line, the end. */
-function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean }) {
+function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean; last?: boolean }) {
   const row = () => props.row;
   return (
-    <Button testID="tray-row" accessibilityLabel={`${row().title}, ${row().line}`} selected={props.selected} onPress={props.onPress}
+    <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
       class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
       {props.selected ? <SelectedWell /> : null}
-      <Tile tile={row().tile} />
-      <View class="min-w-0 flex-1">
-        <Text class={`text-body line-clamp-1 ${row().done || row().quiet ? "" : "font-semibold"} ${row().quiet ? "text-muted-foreground" : ""}`}>{row().title}</Text>
-        {row().line ? <Text class="text-sub text-muted-foreground line-clamp-1">{row().line}</Text> : null}
-        {row().progress !== undefined ? <ProgressBar filled={row().progress!} testID="tray-progress" /> : null}
-      </View>
-      {row().unread ? <View testID="tray-unread" class="size-2 rounded-full bg-foreground" />
-        : row().done ? <Icon name="check" size={18} tone="soft" />
-        : row().end === "live" ? (
-          <View class="flex-row items-center gap-1.5"><View class="size-1.5 rounded-full bg-foreground" /><Text class="text-sub text-muted-foreground">live</Text></View>
-        ) : row().end ? <Text class="text-sub text-muted-foreground">{row().end}</Text> : null}
-      {props.selected ? null : <Hair />}
+      <RowTile tile={() => row().tile} />
+      <RowText row={row} />
+      <RowEnd row={row} />
+      {props.selected || props.last ? null : <RowHair />}
     </Button>
   );
 }
 
 /** A Needs you row: what is asked and who asks, ending in a red tag: Approve answers, Answer goes to the card. */
-function RequestRow(props: { request: TrayRequest; busy: boolean; onApprove: () => void; onOpen: () => void }) {
+function RequestRow(props: { request: TrayRequest; busy: boolean; last?: boolean; onApprove: () => void; onOpen: () => void }) {
   const r = () => props.request;
   return (
     <Button testID="tray-request" accessibilityLabel={`${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-      <Tile tile={r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" }} />
+      <RowTile tile={(): TrayTile => (r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" })} />
       <View class="min-w-0 flex-1">
         <Text class="text-body font-semibold line-clamp-1">{r().title}</Text>
         <Text class="text-sub text-muted-foreground line-clamp-1">{r().source}</Text>
@@ -132,7 +107,7 @@ function RequestRow(props: { request: TrayRequest; busy: boolean; onApprove: () 
         class="h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 disabled:opacity-40">
         <Text class="text-caption font-semibold text-seal-foreground">{r().oneTap ? "Approve" : "Answer"}</Text>
       </Button>
-      <Hair />
+      {props.last ? null : <RowHair />}
     </Button>
   );
 }
@@ -243,7 +218,9 @@ export function TrayBody(props: TrayBodyProps) {
   const m = () => tray();
   const selected = (key: string) => props.selected?.() === key;
   const running = () => (runningOpen() ? m().running : m().running.slice(0, RUNNING_SHOWN));
-  const row = (item: Row) => <TrayRow row={item} selected={selected(rowKey(item))} onPress={() => openRow(item)} />;
+  // The last row of its group has no hair under it ("N more" follows Running's fifth).
+  const row = (item: Row, index: number, list: readonly Row[], more = false) =>
+    <TrayRow row={item} selected={selected(rowKey(item))} last={!more && index === list.length - 1} onPress={() => openRow(item)} />;
   return (
     <>
       <View class={`flex-row items-center px-4 ${props.pane ? "min-h-[52px] gap-0.5 pr-2" : "gap-2 pb-1 pt-4"}`}>
@@ -258,14 +235,14 @@ export function TrayBody(props: TrayBodyProps) {
           {m().needs.length ? (
             <View testID="tray-needs">
               <Label title="Needs you" />
-              <Group>{m().needs.map((request) => <RequestRow request={request} busy={busy() === request.key} onApprove={() => void approve(request)} onOpen={() => openRequest(request)} />)}</Group>
+              <Group>{m().needs.map((request, index, list) => <RequestRow request={request} last={index === list.length - 1} busy={busy() === request.key} onApprove={() => void approve(request)} onOpen={() => openRequest(request)} />)}</Group>
             </View>
           ) : null}
           {m().running.length ? (
             <View testID="tray-running">
               <Label title="Running" />
               <Group>
-                {running().map(row)}
+                {running().map((item, index, list) => row(item, index, list, m().running.length > RUNNING_SHOWN && !runningOpen()))}
                 {m().running.length > RUNNING_SHOWN && !runningOpen() ? (
                   <Button testID="tray-running-more" onPress={() => runningOpen.set(true)} class="min-h-[52px] justify-center px-4 hover:bg-accent active:bg-accent">
                     <Text class="text-sub text-muted-foreground">{`${m().running.length - RUNNING_SHOWN} more`}</Text>

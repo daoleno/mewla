@@ -5,9 +5,11 @@
  */
 import { progressSteps } from "../sessions/progress";
 import type { BrainHostProblem, BrainSurface, BrainWorkerRef } from "../brain";
-import { sessionRowModel } from "../sessions/listRow";
+import { approvalTitle, elapsedShort, isQuestionApproval, promptTitle, sessionActivity } from "../sessions/activity";
+import { listTime, sessionRowModel } from "../sessions/listRow";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerApproval, WorkerPrompt } from "../sessions/workers";
+import type { WorkWorkerSession } from "../work/types";
 import { liveWorkerIds } from "../work/workers";
 import { brainWorkSurface, type BrainWorkSlip } from "../work/surface";
 import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
@@ -61,14 +63,19 @@ export type TrayTarget =
 export interface TrayRow {
   key: string;
   title: string;
+  /** What it is doing, in words (core/sessions/activity), never the terminal's text. */
   line: string;
-  /** The end: "live", a time, "" when nothing. */
+  /** The end's soft text: how long it has run while live, else when it last changed; "" when nothing. */
   end: string;
+  /** Running: a live 8 pt ink dot before the end. */
+  live?: boolean;
+  /** Waits for you (All Sessions; the tray lists it under Needs you instead): an 8 pt red dot. */
+  needs?: boolean;
   tile: TrayTile;
   target: TrayTarget;
-  /** An unread result (an ink dot at the end). */
+  /** An unread result (an ink dot before the end). */
   unread?: boolean;
-  /** Done rows: 400-weight title and a check. */
+  /** Done rows: 400-weight title, the time and a check. */
   done?: boolean;
   /** Queued and waiting Work: a quiet row under Running. */
   quiet?: boolean;
@@ -176,10 +183,6 @@ export const DONE_SHOWN = 3;
 const NEGATIVE = /^(?:no|deny|reject|cancel|don'?t)\b/i;
 const ALWAYS = /\b(?:always|don'?t ask|for this session|for all|remember)\b/i;
 
-function isQuestionApproval(approval: WorkerApproval): boolean {
-  return approval.tool?.trim().toLowerCase() === "askuserquestion";
-}
-
 /** Approve on the row only for a plain yes/no of one command or permission. */
 function approvalOneTap(workerId: string, approval: WorkerApproval): OneTap | undefined {
   if (approval.options.length !== 2) return undefined;
@@ -199,16 +202,6 @@ function promptOneTap(workerId: string, prompt: WorkerPrompt): OneTap | undefine
   // A default on the negative answer is a destructive default: go to the card.
   if (no.selected) return undefined;
   return { kind: "prompt", workerId, promptId: prompt.id, number: yes.number };
-}
-
-function promptTitle(prompt: WorkerPrompt): string {
-  if (prompt.kind === "choice") return prompt.questions?.find((q) => !q.answered)?.question || prompt.title || "A question";
-  const request = prompt.request?.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
-  return request || prompt.title || "Waiting for confirmation";
-}
-
-function approvalTitle(approval: WorkerApproval): string {
-  return approval.summary?.split(/\r?\n/)[0]?.trim() || approval.tool || "Waiting for confirmation";
 }
 
 function titleOf(worker: Worker): string {
@@ -264,14 +257,21 @@ function hasRequest(worker: Worker): boolean {
   return Boolean(worker.needs_attention || worker.prompt || (worker.approvals ?? []).some((approval) => !isQuestionApproval(approval)));
 }
 
-function sessionRow(worker: Worker): TrayRow {
-  const model = sessionRowModel(worker);
+/**
+ * A Session as a tray row (§11 Tray row), here and in All Sessions: its logo, its title, what it is doing
+ * in words; while it runs a live dot and how long it has run, else when it last changed.
+ */
+export function sessionRow(worker: Worker, now: number, options: { alias?: string; workTitle?: string; calendarLabel?: string } = {}): TrayRow {
+  const model = sessionRowModel(worker, options);
   const ended = worker.status === "done" || worker.status === "failed";
+  const live = worker.status === "running";
   return {
     key: `session:${worker.id}`,
     title: model.title || worker.name || "Session",
-    line: `${model.previewPrefix ?? ""}${model.preview}`,
-    end: model.time === "live" ? "live" : model.time,
+    line: model.line,
+    end: live ? elapsedShort(worker.started_at, now) : listTime(worker.updated_at, new Date(now)),
+    live: live || undefined,
+    needs: hasRequest(worker) || undefined,
     tile: { kind: "agent", agent: model.kind, flavor: model.flavor },
     target: { open: "session", workerId: worker.id },
     done: ended || undefined,
@@ -279,7 +279,13 @@ function sessionRow(worker: Worker): TrayRow {
   };
 }
 
-function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>): TrayRow {
+/** A Work Worker's line: what it reported, else its phase's word, else the Work's state. */
+function workerLine(row: WorkWorkerSession | undefined): string {
+  if (!row) return "";
+  return row.summary?.trim() || sessionActivity({ status: "running", summary: "", phase: row.phase });
+}
+
+function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now: number): TrayRow {
   const joined = slip.workerSessions ?? [];
   // A Work with several Workers is one row with Brain's mark, "N Workers", opening Work detail (§1.3).
   const several = joined.length > 1;
@@ -287,11 +293,21 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>): Tr
   const session = sessionId ? sessions.get(sessionId) : undefined;
   const model = session ? sessionRowModel(session) : null;
   const done = slip.group === "back";
+  const running = slip.group === "running";
+  const lead = joined.find((row) => row.live);
+  // Running: what its Worker does (the first live one of several), as the Session's own row says it.
+  const doing = several ? workerLine(lead) : session ? model!.line : workerLine(lead);
+  const since = lead ? Date.parse(lead.joined_at) : session?.started_at;
   return {
     key: `work:${slip.workId}`,
     title: slip.title,
-    line: several ? `${joined.length} Workers` : done ? slip.summary || slip.statusLabel : slip.phase || slip.waitFor || slip.who || slip.statusLabel,
-    end: slip.group === "running" ? "live" : "",
+    line: several
+      ? [`${joined.length} Workers`, running ? doing : ""].filter(Boolean).join(" · ")
+      : done ? slip.summary || slip.statusLabel
+      : running ? doing || slip.statusLabel
+      : slip.waitFor || slip.statusLabel,
+    end: running ? elapsedShort(since, now) : "",
+    live: running || undefined,
     // A Work its one Worker runs opens that Session (its logo); with none, Work detail (Brain's mark).
     tile: model ? { kind: "agent", agent: model.kind, flavor: model.flavor } : { kind: "brain" },
     target: session ? { open: "session", workerId: session.id } : { open: "work", workId: slip.workId },
@@ -350,14 +366,16 @@ export function trayModel(input: TrayInput): TrayModel {
     input.sort === "activity" ? activity(b) - activity(a) : opened(b.id) - opened(a.id) || activity(b) - activity(a);
 
   const live = input.workers.filter((worker) => !folded.has(worker.id) && !hasRequest(worker));
-  const runningSessions = live.filter((worker) => worker.status === "running").sort(order).map(sessionRow);
-  const runningWork = slips.filter((slip) => slip.group === "running").map((slip) => workRow(slip, sessions));
-  const quietWork = slips.filter((slip) => slip.group === "waiting" || slip.group === "queued").map((slip) => workRow(slip, sessions));
+  const row = (worker: Worker) => sessionRow(worker, input.now);
+  const work = (slip: BrainWorkSlip) => workRow(slip, sessions, input.now);
+  const runningSessions = live.filter((worker) => worker.status === "running").sort(order).map(row);
+  const runningWork = slips.filter((slip) => slip.group === "running").map(work);
+  const quietWork = slips.filter((slip) => slip.group === "waiting" || slip.group === "queued").map(work);
   const running = [...runningSessions, ...runningWork, ...quietWork];
 
-  const idle = live.filter((worker) => worker.status === "blocked" || worker.status === "unknown").sort(order).map(sessionRow);
-  const doneWork = slips.filter((slip) => slip.group === "back").map((slip) => workRow(slip, sessions));
-  const ended = live.filter((worker) => worker.status === "done" || worker.status === "failed").sort((a, b) => activity(b) - activity(a)).map(sessionRow);
+  const idle = live.filter((worker) => worker.status === "blocked" || worker.status === "unknown").sort(order).map(row);
+  const doneWork = slips.filter((slip) => slip.group === "back").map(work);
+  const ended = live.filter((worker) => worker.status === "done" || worker.status === "failed").sort((a, b) => activity(b) - activity(a)).map(row);
   const done = [...doneWork.filter((row) => row.unread), ...doneWork.filter((row) => !row.unread), ...ended];
 
   const todayRows: TrayRow[] = [...input.today]
@@ -366,7 +384,8 @@ export function trayModel(input: TrayInput): TrayModel {
       key: `today:${item.id}`,
       title: item.title,
       line: item.running ? "Running" : item.time,
-      end: item.running ? "live" : item.time,
+      end: item.running ? "" : item.time,
+      live: item.running || undefined,
       tile: { kind: "calendar" as const },
       target: item.running && item.sessionId ? { open: "session" as const, workerId: item.sessionId } : { open: "item" as const, itemId: item.id, sessionId: item.sessionId },
       past: !item.running && item.at < input.now ? true : undefined,

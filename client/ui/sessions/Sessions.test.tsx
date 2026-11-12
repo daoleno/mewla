@@ -29,7 +29,7 @@ async function sessionsApp(daemon: Record<string, unknown>, options: { drawnHead
 }
 
 describe("Sessions", () => {
-  test("lists the computer's Sessions by folder, a caption per folder once there are two", async () => {
+  test("lists the computer's Sessions by folder, each folder's caption with its count; with two, a caption folds", async () => {
     const app = await sessionsApp({ worker_sessions: [session("a", { name: "release notes" }), session("b", { cwd: "/home/me/site", status: "running", provider: "codex", command: "codex" }), session("c", { needs_attention: true, status: "blocked" })] });
     await app.waitFor("text:release notes");
     expect(app.count("id:session-row")).toBe(3);
@@ -52,10 +52,13 @@ describe("Sessions", () => {
     await app.waitFor("id:session-menu");
   }, 20_000);
 
-  test("one folder has no caption; with none, it offers New session", async () => {
-    const one = await sessionsApp({ worker_sessions: [session("a", { name: "only" })] });
+  test("one folder has its caption and count, and does not fold; with none, it offers New session", async () => {
+    const one = await sessionsApp({ worker_sessions: [session("a", { name: "only" }), session("b", { name: "other" })] });
     await one.waitFor("text:only");
-    expect(one.count("id:section")).toBe(0);
+    expect(one.count("id:section")).toBe(1);
+    expect(one.texts()).toContain("mewla");
+    expect(one.texts()).toContain("2");
+    expect(one.count("id:session-row")).toBe(2);
     const none = await sessionsApp({ worker_sessions: [] });
     await none.waitFor("text:No sessions yet");
     // The chosen pet, idle, above it.
@@ -154,7 +157,26 @@ describe("Sessions", () => {
   test("a row names itself to a screen reader: title and state (parity #10)", async () => {
     const app = await sessionsApp({ worker_sessions: [session("a", { name: "release notes", status: "running" })] });
     await app.waitFor("text:release notes");
-    expect(app.count("label:release notes, Running, No recent output")).toBe(1);
+    expect(app.count("label:release notes, Running, Working")).toBe(1);
+  }, 20_000);
+
+  test("a row says what its Session does in words, never its terminal; running, a live dot and how long", async () => {
+    const pasted = '"$MEWLA_WORKER_PROGRESS_CMD" worker progress --turn-id t1 --status running';
+    const footer = "⏸ manual mode on · ? for shortcuts";
+    const app = await sessionsApp({ worker_sessions: [
+      session("a", { name: "pasted", status: "running", delegated: true, started_at: Date.now() - 12 * 60_000, summary: pasted, last_output_lines: [pasted] }),
+      session("b", { name: "quiet one", status: "unknown", summary: footer, last_output_lines: [footer] }),
+      session("c", { name: "reporter", status: "running", phase: "working", summary: "Rerunning the suite", started_at: Date.now() - 4 * 60_000 }),
+    ] });
+    await app.waitFor("text:reporter");
+    expect(app.texts()).toContain("Working");
+    expect(app.texts()).toContain("Idle");
+    expect(app.texts()).toContain("Rerunning the suite");
+    expect(app.texts()).toContain("12m");
+    expect(app.texts()).toContain("4m");
+    expect(app.count("id:row-live")).toBe(2);
+    expect(app.texts()).not.toContain("live");
+    expect(app.texts().some((t) => t.includes("MEWLA_WORKER_PROGRESS") || t.includes("manual mode"))).toBe(false);
   }, 20_000);
 });
 
@@ -275,7 +297,7 @@ describe("a Session", () => {
     await app.waitFor("id:model-row-gpt-6");
   }, 20_000);
 
-  test("a Calendar run's Session is titled by its run, badged, says where it came from, and opens its Work", async () => {
+  test("a Calendar run's Session is titled by its run, says where it came from, and opens its Work", async () => {
     const startedAt = Date.parse("2026-07-17T03:00:30Z");
     const work = {
       id: "wf-1", project: "calendar", path: "calendar/wf-1.md", title: "Daily digest", mtime: "2026-07-17T03:01:00Z", body: "# Daily digest\n\nRead the three papers.\n",
@@ -285,7 +307,8 @@ describe("a Session", () => {
     const app = await sessionsApp({ worker_sessions: [session("w4", { started_at: startedAt })], conversations: { w4: [] }, work_items: [work], calendar_items: [calendarItem] }, { drawnHeader: true });
     // The run's label comes before the Work's title, as in v0.3.1.
     await app.waitFor("text:Paper digest · Jul 17");
-    expect(app.count("id:row-calendar")).toBe(1);
+    // Its tile is its agent's logo (no badge): the run's title and the screen reader say it came from Calendar.
+    expect(app.count("id:session-row")).toBe(1);
     await app.press("id:session-row");
     await app.waitFor("id:session-calendar");
     app.onDialog((dialog) => (dialog.buttons.includes("Open Brain") ? "Open Brain" : null));
