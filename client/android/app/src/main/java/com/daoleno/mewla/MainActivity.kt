@@ -52,9 +52,9 @@ class MainActivity : ComponentActivity() {
     channelHosts = ChannelHosts(this, nsh)
     nsh.setParams(mapOf("deviceName" to deviceName()))
     setContentView(nsh)
-    // scripts/dev-android.sh starts a debug build on `nsh dev`: every save reloads the app.
-    val dev = intent.getStringExtra("devServer")
-    if (!(BuildConfig.DEBUG && dev != null && nsh.connectDevServer(dev))) nsh.loadAssetBundle("nsh")
+    // A debug build started through the start link (DevLaunch) runs from `nsh dev`: every save reloads the app.
+    val dev = if (BuildConfig.DEBUG) DevLaunch.serverFor(intent.getStringExtra(DevLaunch.EXTRA)) else null
+    if (!(dev != null && nsh.connectDevServer(dev))) nsh.loadAssetBundle("nsh")
     openLink(intent)
   }
 
