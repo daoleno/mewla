@@ -34,10 +34,13 @@ export function isQuestionApproval(approval: WorkerApproval): boolean {
   return approval.tool?.trim().toLowerCase() === "askuserquestion";
 }
 
-/** What a terminal prompt asks: the open question, else the request's first line, else its title. */
+/** A prompt line that says nothing about this request: the agent's tips and its "requires approval" boilerplate. */
+export const isPromptNoise = (line: string) => /^tip:/i.test(line) || /^this command requires approval\.?$/i.test(line);
+
+/** What a terminal prompt asks: the open question, else the request's first line past tips, else its title. */
 export function promptTitle(prompt: WorkerPrompt): string {
   if (prompt.kind === "choice") return prompt.questions?.find((q) => !q.answered)?.question || prompt.title || "A question";
-  const request = prompt.request?.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+  const request = prompt.request?.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !isPromptNoise(line));
   return request || prompt.title || "Waiting for confirmation";
 }
 

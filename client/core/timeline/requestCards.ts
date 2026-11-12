@@ -6,6 +6,7 @@
  */
 import type { ConversationChoice } from "../conversation/conversation";
 import { buildApprovalPrompt, buildMenuPrompt, type TerminalActionPrompt } from "../session/terminalActionPrompt";
+import { isPromptNoise } from "../sessions/activity";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerPrompt } from "../sessions/workers";
 import type { TrayRequest } from "../tray/model";
@@ -153,7 +154,7 @@ export const looksLikeCommand = (line: string) => Boolean(line) && !/^[A-Z][a-z]
  */
 export function promptParts(text: string): { question: string; command: string; notes: string } {
   const lines = text.split(/\r?\n/).map((line) => line.trim())
-    .filter((line) => line && !/^tip:/i.test(line) && !/^this command requires approval\.?$/i.test(line));
+    .filter((line) => line && !isPromptNoise(line));
   const question = [...lines].reverse().find((line) => line.endsWith("?")) ?? "";
   const rest = lines.filter((line) => line !== question);
   const command = rest.find(looksLikeCommand) ?? rest[0] ?? "";

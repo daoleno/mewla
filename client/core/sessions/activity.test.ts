@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { elapsedShort, sessionActivity } from "./activity";
+import { elapsedShort, promptTitle, sessionActivity } from "./activity";
 import type { Worker } from "./workers";
 
 const FOOTER = ["⏸ manual mode on · ? for shortcuts"];
@@ -43,4 +43,9 @@ describe("elapsed time at the row's end", () => {
     expect(elapsedShort(now - 50 * 3_600_000, now)).toBe("2d");
     expect(elapsedShort(undefined, now)).toBe("");
   });
+});
+
+test("a prompt's title skips the agent's tip and boilerplate lines", () => {
+  const request = "Tip: auto mode handles this for you\ncurl -sI https://example.edu\nThis command requires approval\nDo you want to proceed?";
+  expect(promptTitle({ id: "p", kind: "confirm", request } as never)).toBe("curl -sI https://example.edu");
 });
