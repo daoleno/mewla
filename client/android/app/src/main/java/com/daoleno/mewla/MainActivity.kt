@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.core.view.WindowCompat
 import com.daoleno.mewla.live.LiveHost
 import com.daoleno.mewla.push.PushHost
 import com.daoleno.mewla.terminal.TerminalComponent
@@ -36,6 +37,14 @@ class MainActivity : ComponentActivity() {
     nsh.handle("secure.set") { data, reply -> answer(reply) { secure.set(key(data), field(data, "value")); null } }
     nsh.handle("secure.remove") { data, reply -> answer(reply) { secure.remove(key(data)); null } }
     nsh.handle("app.legacyStorage") { _, reply -> answer(reply) { legacy.entries() } }
+    // The navigation bar's buttons for the app's appearance (App.tsx); the theme sets them only at start.
+    nsh.handle("app.navigationBar") { data, reply ->
+      answer(reply) {
+        val dark = (data as? Map<*, *>)?.get("dark") == true
+        runOnUiThread { WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = !dark }
+        null
+      }
+    }
     nsh.handle("app.legacyStorageCopied") { _, reply -> answer(reply) { legacy.copied(); null } }
     push = PushHost(this, nsh)
     LiveHost(this, nsh)

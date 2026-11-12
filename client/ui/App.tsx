@@ -1,4 +1,4 @@
-import { cleanup, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, View } from "nsh";
+import { cleanup, colorScheme, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, View } from "nsh";
 import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
 import { nshPlatform } from "./platform";
@@ -36,6 +36,13 @@ async function start(): Promise<void> {
 void start();
 startNotifications();
 startAppUpdate();
+
+// Android's navigation bar draws its buttons for the app's appearance, also when it changes while the app runs
+// (Settings › Appearance, or the system's when it follows it); NSH sets only the status bar. iOS has no such bar.
+effect(() => {
+  const dark = colorScheme() === "dark";
+  if (platform.os === "android" && host.available()) void host.call("app.navigationBar", { dark }).catch(() => undefined);
+});
 
 // Coming back to the app skips the reconnect backoff.
 effect(() => {
