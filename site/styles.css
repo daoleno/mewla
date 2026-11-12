@@ -393,11 +393,17 @@ a.btn:hover{opacity:.88}
 .cmd-card{display:flex;align-items:center;gap:4px;min-height:52px;padding:0 4px 0 16px;border-radius:16px;background:var(--surface);overflow:hidden}
 .cmd-card code{flex:1;min-width:0;font:13px/20px var(--mono);white-space:nowrap;overflow-x:auto;scrollbar-width:none;padding:16px 0}
 .cmd-card code::-webkit-scrollbar{display:none}
+.cmd-card code.more{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent 100%);mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent 100%)}
 .copy{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:12px;color:var(--soft);flex:none}
 .copy.ok{color:var(--add)}
 .small{margin-top:10px;font-size:13px;line-height:18px;color:var(--soft)}
-.mini-term{margin:10px 0 0;font-size:11.5px;line-height:17px;overflow-x:auto;scrollbar-width:none;padding:14px 12px}
-.mini-term::-webkit-scrollbar{display:none}
+.mini-term{margin:10px 0 0;font-size:11.5px;line-height:17px;padding:14px 12px;white-space:normal;word-wrap:break-word;overflow-wrap:break-word}
+.mini-term .ln{display:block}
+.mini-term .gap{height:17px}
+.mini-term .opt{padding-left:5ch;text-indent:-3ch}
+.mini-term .addr{display:inline-block;max-width:100%;word-break:break-all}
+.nw{white-space:nowrap}
+.mini-term .sel{padding:1px 4px;margin:0 -4px;line-height:19px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .scan{background:transparent;border-radius:0;display:flex;flex-direction:column;align-items:center}
 .scanbox{position:relative;width:180px;height:180px;border-radius:28px;background:#0c0c0e;overflow:hidden}
 .scanbox::before{content:"";position:absolute;left:24px;top:24px;right:24px;bottom:24px;border-radius:12px;background:
@@ -457,6 +463,7 @@ a.btn:hover{opacity:.88}
   .step .scan{flex-direction:row;gap:20px;align-items:center;justify-content:flex-start}
   .step .get-links{justify-content:flex-start}
   .mini-term{font-size:12px;line-height:18px}
+  .mini-term .gap{height:18px}
   .foot-nav{width:auto;margin-left:auto}
 }
 

@@ -19,6 +19,16 @@ const onScroll = () => bar.classList.toggle('scrolled', scrollY > 8);
 addEventListener('scroll', onScroll, { passive: true });
 onScroll();
 
+// A one-line command wider than its card scrolls; a fade at the right edge
+// shows there is more until it is scrolled to the end.
+for (const code of $$('.cmd-card code')) {
+  const edge = () => code.classList.toggle('more', code.scrollLeft + code.clientWidth < code.scrollWidth - 2);
+  code.addEventListener('scroll', edge, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(edge).observe(code);
+  else window.addEventListener('resize', edge);
+  edge();
+}
+
 for (const btn of $$('[data-copy]')) {
   btn.addEventListener('click', async () => {
     const text = btn.previousElementSibling.textContent.trim();
