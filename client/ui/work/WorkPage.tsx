@@ -14,6 +14,7 @@ import { brainWorkAge, type BrainWorkSlip } from "../../core/work/surface";
 import { clock } from "../calendar/clock";
 import { createAttachmentUploads } from "../more/files/upload";
 import { brainDraft, connection, currentTransport, workers } from "../session";
+import { writeIntoDraft } from "../chat/Composer";
 import { workSurface } from "./state";
 import { Icon } from "../kit/Icon";
 
@@ -334,7 +335,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   );
 }
 
-/** "Ask Brain about this" until Brain's composer takes text from outside: the thread's draft holds it. */
+/** "Ask Brain about this": the quote joins Brain's composer, below anything typed there (SPEC §3.4). */
 export function draftForBrain(text: string): void {
-  brainDraft()?.save(text);
+  writeIntoDraft(brainDraft(), text);
 }
