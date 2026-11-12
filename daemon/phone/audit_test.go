@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -45,8 +46,25 @@ func TestTheAuditLogHoldsWhatWasDoneNeverWhatWasTypedOrRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
+	// Look at every field that could hold typed or read content. The time is
+	// the one field that holds neither, and its nanoseconds can spell any
+	// four digits ("...070451903Z"), so it is the only one left out.
+	var fields strings.Builder
+	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("an audit line is not JSON: %v\n%s", err, line)
+		}
+		if _, ok := entry["time"].(string); !ok {
+			t.Fatalf("an audit line has no time:\n%s", line)
+		}
+		delete(entry, "time")
+		rest, _ := json.Marshal(entry)
+		fields.Write(rest)
+		fields.WriteByte('\n')
+	}
 	for _, leaked := range []string{secret, "0451", "alice@example.com", "bob@example.com", "Enter the code"} {
-		if strings.Contains(text, leaked) {
+		if strings.Contains(fields.String(), leaked) {
 			t.Fatalf("the audit log holds %q:\n%s", leaked, text)
 		}
 	}
