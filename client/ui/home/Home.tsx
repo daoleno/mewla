@@ -17,7 +17,14 @@ import { markWorkRead } from "../../core/work/brainWork";
 import { goHome, homeShown, openBrainTerminal, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { workspaceRoute } from "../more/files/routes";
-import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers } from "../session";
+import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers, workers } from "../session";
+import type { WorkCardHandlers } from "../chat/TimelineRows";
+import type { WorkCardModel } from "../../core/timeline/workCardModel";
+import { sessionRowModel } from "../../core/sessions/listRow";
+import { presentWorker } from "../../core/sessions/workerPresentation";
+import { Sheet } from "../kit/Sheet";
+import { PillButton } from "../kit/kit";
+import { clock } from "../calendar/clock";
 import { Icon } from "../kit/Icon";
 import { HomeCat } from "./Cat";
 import { StateControl } from "../tray/StateControl";
@@ -50,16 +57,37 @@ const activity = computed(() => brainThread().conversation?.activity);
 /** The activity a Stop was sent for: the button says "Stopping…" until that turn ends. */
 const stoppingFor = signal("");
 const timeline = createChatTimeline("brain");
-// A Work card opens its Work detail (what came back, what it needs).
-const openWorkEvent = (event: BrainWorkResultEvent) => {
-  const transport = currentTransport();
-  if (transport && event.unread) markWorkRead(transport, event.work_id);
-  openWorkDetail(event.work_id);
+function readWork(workId: string): void {
+  const transport = connection() === "connected" ? currentTransport() : null;
+  if (transport) markWorkRead(transport, workId);
+}
+// A Work card's header (or its Session's line) opens the Session that ran it; without one listed, its Work detail.
+const openWorkEvent = (event: BrainWorkResultEvent, canOpenSession: boolean) => {
+  if (event.unread) readWork(event.work_id);
+  if (canOpenSession && event.session_id) openSession(event.session_id);
+  else openWorkDetail(event.work_id);
+};
+/** The result sheet a Work's quiet line opens (SPEC §1.2): who, when, the summary, Next step, Open session. */
+const resultSheet = signal<WorkCardModel | null>(null);
+const workHandlers: WorkCardHandlers = {
+  agentOf: (sessionId) => {
+    const worker = sessionId ? workers().find((w) => w.id === sessionId) : undefined;
+    if (!worker) return null;
+    const row = sessionRowModel(worker);
+    return { kind: row.kind, flavor: row.flavor, name: presentWorker(worker).typeLabel };
+  },
+  onTitle: (workId) => openWorkDetail(workId),
+  onNextStep: (model, text) => {
+    untracked(brainChat)?.send(text);
+    readWork(model.workId);
+  },
+  onLine: (model) => resultSheet.set(model),
 };
 // A past thread is read-only: its Work cards and messages offer no actions.
 const items = computed(() => timeline(brainThread(), {
   onPendingAction: routedBrainThread() ? undefined : (id, action) => untracked(brainChat)?.actOnFailed(id, action),
   onWorkEvent: routedBrainThread() ? undefined : openWorkEvent,
+  openSessionIds: new Set(workers().map((w) => w.id)),
   currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
 }));
 
@@ -125,6 +153,38 @@ function PastThread() {
         <Text class="text-sub font-semibold">Current chat</Text>
       </Button>
     </View>
+  );
+}
+
+/** A Work's result, from its quiet line: who, when, what came back, the next step and its Session. */
+function ResultSheet() {
+  const model = () => resultSheet();
+  const agent = () => workHandlers.agentOf(model()?.sessionId);
+  const when = () => (model()?.at ? clock().format.dateTime(model()!.at!, clock().zones.device) : "");
+  const close = () => resultSheet.set(null);
+  return (
+    <Sheet testID="work-result-sheet" open={() => Boolean(resultSheet())} onClose={close} title={() => model()?.title ?? ""}>
+      {model() ? (
+        <View class="gap-3 px-4">
+          <Text class="text-sub text-muted-foreground">{[agent()?.name, model()!.state, when()].filter(Boolean).join(" · ")}</Text>
+          {model()!.summary ? <View selectable><Text class="text-body">{model()!.summary}</Text></View> : null}
+          {model()!.nextStep ? (
+            <PillButton testID="work-sheet-next-step" kind="ink" title={model()!.nextStep!} onPress={() => {
+              const shown = untracked(resultSheet)!;
+              workHandlers.onNextStep(shown, shown.nextStep!);
+              close();
+            }} />
+          ) : null}
+          {model()!.sessionId && workers().some((w) => w.id === model()!.sessionId) ? (
+            <PillButton testID="work-sheet-open-session" title="Open session" onPress={() => {
+              const id = untracked(resultSheet)!.sessionId!;
+              close();
+              openSession(id);
+            }} />
+          ) : null}
+        </View>
+      ) : null}
+    </Sheet>
   );
 }
 
@@ -247,6 +307,10 @@ export function Home() {
       if (!untracked(routedBrainThread)) void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
     },
     isFinalReply: (id: string) => finalReplies().has(id),
+    // A past thread is read-only: its Work cards only read.
+    get work() {
+      return routedBrainThread() ? undefined : workHandlers;
+    },
     workingSince: () => activity()?.started_at,
     // A reply's image (a Calendar run's result too) is a file on Brain's host.
     loadImage: (path: string) => {
@@ -273,6 +337,7 @@ export function Home() {
           onNewChat={() => startNewChat()}
           onNotice={(text) => notice.set(text)} />
         <BrainHostSheet open={hostSheetOpen} onClose={() => hostSheetOpen.set(false)} />
+        <ResultSheet />
       </View>
     </NavPage>
   );
