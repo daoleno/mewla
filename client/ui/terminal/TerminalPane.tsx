@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, safeArea, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, safeArea, Scroll, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
 import { Button } from "nsh/base";
 import { BackHandler } from "nsh/mobile";
 import { TerminalNavigator } from "../../core/terminal/navigation";
@@ -15,30 +15,43 @@ import { keyboardOnlyWeb, WebTerminalSurface } from "./web/WebTerminalSurface";
 
 /** The phones' native view; the web's is libghostty-vt (WebAssembly) on a canvas in a web view, with the same contract. */
 const Surface: typeof TerminalSurface = platform.os === "web" ? WebTerminalSurface : TerminalSurface;
-/** Text size: the phones draw at 8 (about 83 columns on a phone, so Claude Code and Codex lay out as on a laptop); the web's larger screens at 13. */
+/**
+ * Text size: the phones draw at 8 (inside the terminal group, about 69 columns at 360 dp and 75 at 390, so Claude
+ * Code and Codex lay out as on a laptop; SPEC 11's 12/18 would give about 44 and 49); the web's larger screens at 13.
+ */
 const FONT_SIZE = platform.os === "web" ? 13 : 8;
 
 const PALETTE_DARK = ["#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea"];
 const PALETTE_LIGHT = ["#161412", "#b3372b", "#3f7a33", "#946112", "#2c55c0", "#80428f", "#21787a", "#d8d2c8", "#57514a", "#d24a3c", "#4f9441", "#b37a1a", "#3d6be0", "#9b56ab", "#2a9396", "#fbfaf7"];
 
-/** The terminal's colors from the app's theme, light or dark like the rest of the app. */
+/** The terminal's colors from the app's theme, light or dark like the rest of the app: it sits in a surface group. */
 function theme(): TerminalTheme {
   const dark = colorScheme() === "dark";
-  return { background: token("background"), foreground: token("foreground"), cursor: token("foreground"), selection: dark ? "#3D7EFF55" : "#2C55C055", palette: dark ? PALETTE_DARK : PALETTE_LIGHT };
+  return { background: token("card"), foreground: token("foreground"), cursor: token("foreground"), selection: dark ? "#3D7EFF55" : "#2C55C055", palette: dark ? PALETTE_DARK : PALETTE_LIGHT };
 }
+
+/**
+ * The terminal group's padding inside its surface (SPEC 11 "Terminal group"). Android's view draws it
+ * itself, so scrolled history runs on into it up to the group's edge and its grid is the inner area;
+ * iOS and the web view sit inside it.
+ */
+const GROUP_PADDING = { top: 14, right: 12, bottom: 20, left: 12 };
+const NATIVE_PADDING = platform.os === "android";
 
 type Key = { label?: string; icon?: IconName; data?: string; repeat?: boolean; id: string };
 const KEYS: Key[] = [
-  { id: "esc", label: "Esc", data: "\u001b" },
-  { id: "tab", label: "Tab", data: "\t" },
-  { id: "ctrl", label: "Ctrl" },
-  { id: "ctrl-c", label: "⌃C", data: "\u0003" },
-  { id: "ctrl-d", label: "⌃D", data: "\u0004" },
-  { id: "ctrl-b", label: "⌃B", data: "\u0002" },
-  { id: "left", icon: "chevron-left", data: "\u001b[D", repeat: true },
-  { id: "up", icon: "chevron-up", data: "\u001b[A", repeat: true },
-  { id: "down", icon: "chevron-down", data: "\u001b[B", repeat: true },
-  { id: "right", icon: "chevron-right", data: "\u001b[C", repeat: true },
+  { id: "esc", label: "esc", data: "\u001b" },
+  { id: "tab", label: "tab", data: "\t" },
+  { id: "ctrl", label: "ctrl" },
+  { id: "ctrl-c", label: "^C", data: "\u0003" },
+  { id: "ctrl-d", label: "^D", data: "\u0004" },
+  { id: "ctrl-b", label: "^B", data: "\u0002" },
+  { id: "up", label: "Up", icon: "chevron-up", data: "\u001b[A", repeat: true },
+  { id: "down", label: "Down", icon: "chevron-down", data: "\u001b[B", repeat: true },
+  { id: "left", label: "Left", icon: "chevron-left", data: "\u001b[D", repeat: true },
+  { id: "right", label: "Right", icon: "chevron-right", data: "\u001b[C", repeat: true },
+  { id: "enter", label: "Enter", icon: "enter", data: "\r" },
+  { id: "paste", label: "Paste", icon: "clipboard" },
 ];
 
 /** Ctrl armed by the bar turns the next typed letter into its control character. */
@@ -138,8 +151,16 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   const press = (key: Key) => {
     if (key.repeat) return; // sent on press down
     if (key.id === "ctrl") return ctrl.set(!ctrl());
+    // Through the view, which frames it for bracketed paste (a newline in it is not Enter).
+    if (key.id === "paste") return void Clipboard.readText().then((text) => {
+      if (!text) return;
+      if (scrolledBack()) command("scrollToBottom", {});
+      command("paste", { text });
+    }).catch(() => {});
     if (key.data) type(key.data);
   };
+  /** The key under the finger: drawn inverted, as the mock's pressed key. */
+  const down = signal<string | null>(null);
   // Arrows: one on touch, then repeating while held, like a hardware key.
   const hold = (key: Key) => {
     if (!key.repeat || !key.data) return;
@@ -205,9 +226,10 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
 
   return (
     <View class="flex-1" style={{ backgroundColor: token("background") }}>
-      {/* The surface and what floats over it, above the key bar (and so above the keyboard). */}
-      <View class="flex-1">
-        <Surface class="flex-1" fontSize={FONT_SIZE} theme={theme()}
+      {/* The terminal group (a surface, radius 20) and what floats over it, above the key bar (and so above the keyboard). */}
+      <View testID="terminal-group" class="mx-1.5 mt-1 flex-1 overflow-hidden rounded-(--radius-group) bg-card"
+        style={NATIVE_PADDING ? undefined : { paddingTop: GROUP_PADDING.top, paddingRight: GROUP_PADDING.right, paddingBottom: GROUP_PADDING.bottom, paddingLeft: GROUP_PADDING.left }}>
+        <Surface class="flex-1" fontSize={FONT_SIZE} theme={theme()} padding={NATIVE_PADDING ? GROUP_PADDING : undefined}
           ref={(node) => {
             surface = node;
             for (const [name, args] of pending.splice(0)) node.command(name, args);
@@ -255,37 +277,58 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       </View>
       {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
       {attachProblem() ? <Text testID="terminal-attach-problem" class="px-3 py-1 text-xs text-destructive">{attachProblem()}</Text> : null}
-      <View class="flex-row items-center gap-1 border-t border-border bg-background px-1.5 py-1.5"
+      <View
         style={{
           marginBottom: props.active() ? Math.max(0, keyboardFrame().height - belowSections()) : 0,
           // Clear of the system's navigation bar (three buttons or the gesture handle), as the chat composer is.
-          paddingBottom: 6 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
+          paddingBottom: 10 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
         }}>
-        <Button testID="terminal-attach" accessibilityLabel="Attach" disabled={uploads.picking()} onPress={attach} class="rounded-lg px-2 py-2 active:bg-accent">
-          <Icon name="attach" size={16} />
-        </Button>
-        {/* A physical keyboard has every key here (keyboard-only web): only Attach stays. */}
-        {keyboardOnlyWeb() ? null : (<>
-        <Button testID="terminal-keyboard" onPress={() => {
-          const show = keyboardFrame().height === 0;
-          if (show) focusKeyboard();
-          else {
-            command("blur", {});
-            keyboard.set(false);
-          }
-        }} class="rounded-lg px-2 py-2 active:bg-accent">
-          <Icon name="keyboard" size={18} color="foreground" />
-        </Button>
-        {KEYS.map((key) => (
-          <Button testID={`key-${key.id}`} onPress={() => press(key)} onPressDown={() => hold(key)} onPressUp={release}
-            class={key.id === "ctrl" && ctrl() ? "flex-1 items-center rounded-lg bg-primary py-2" : "flex-1 items-center rounded-lg py-2 active:bg-accent"}>
-            {key.icon ? <Icon name={key.icon} size={18} color="foreground" />
-              : <Text class={key.id === "ctrl" && ctrl() ? "text-sm font-semibold text-primary-foreground" : "text-sm font-semibold"}>{key.label}</Text>}
-          </Button>
-        ))}
-        </>)}
+        {/* The key bar (SPEC 11): 44-high surface keys, radius 12, mono 13/600, 6 apart, scrolling sideways. */}
+        {/* A press that turns into a sideways scroll may never get its press-up: the scroll ends a held key's repeat. */}
+        <Scroll horizontal scrollbar={false} keyboardShouldPersistTaps="handled" class="grow-0" contentClass="flex-row gap-1.5 px-1.5 pt-2"
+          onScroll={() => {
+            if (down() === null) return;
+            down.set(null);
+            release();
+          }} scrollEventThrottle={64}>
+          <KeyTile testID="terminal-attach" label="Attach" icon="attach" disabled={uploads.picking()} onPress={attach} />
+          {/* A physical keyboard has every key here (keyboard-only web): only Attach stays. */}
+          {keyboardOnlyWeb() ? null : (<>
+          <KeyTile testID="terminal-keyboard" label="Keyboard" icon="keyboard" onPress={() => {
+            const show = keyboardFrame().height === 0;
+            if (show) focusKeyboard();
+            else {
+              command("blur", {});
+              keyboard.set(false);
+            }
+          }} />
+          {KEYS.filter((key) => key.id !== "paste" || platform.os !== "web").map((key) => (
+            <KeyTile testID={`key-${key.id}`} label={key.label ?? key.id} icon={key.icon} text={!key.icon}
+              on={() => (key.id === "ctrl" && ctrl()) || down() === key.id}
+              onPress={() => press(key)}
+              onPressDown={() => { down.set(key.id); hold(key); }}
+              onPressUp={() => { down.set(null); release(); }} />
+          ))}
+          </>)}
+        </Scroll>
       </View>
     </View>
+  );
+}
+
+/**
+ * One key of the bar: a surface tile, 44 high and at least 46 wide, radius 12; its word in mono 13/600,
+ * or its icon. On (Ctrl armed, or under the finger) it is inverted ink.
+ */
+function KeyTile(props: { testID: string; label: string; icon?: IconName; text?: boolean; on?: () => boolean; disabled?: boolean; onPress: () => void; onPressDown?: () => void; onPressUp?: () => void }) {
+  const on = () => props.on?.() ?? false;
+  return (
+    <Button testID={props.testID} accessibilityLabel={props.label} disabled={props.disabled} onPress={props.onPress} onPressDown={props.onPressDown} onPressUp={props.onPressUp}
+      class={`h-[44px] min-w-[46px] items-center justify-center rounded-[12px] px-3 ${on() ? "bg-primary" : "bg-card"}`}>
+      {props.text
+        ? <Text class={`font-mono text-[13px] font-semibold ${on() ? "text-card" : "text-foreground"}`}>{props.label}</Text>
+        : <Icon name={props.icon!} size={20} color={on() ? "card" : "foreground"} />}
+    </Button>
   );
 }
 
