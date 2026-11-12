@@ -93,7 +93,7 @@ describe("folding a subagent's steps", () => {
       "sub-1-read-3",
       "sub-1-read-4",
     ]);
-    expect(steps[0].detail).toBe("6 steps · 1 failed");
+    expect(steps[0].detail).toBe("1 failed");
     expect(steps[0].defaultExpanded).toBe(false);
     expect(steps[0].steps?.[3].tone).toBe("failed");
   });

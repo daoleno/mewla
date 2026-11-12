@@ -3,6 +3,7 @@ import { ProgressBar } from "../kit/ProgressBar";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import { activityFileRows, type ActivityFileRow } from "../../core/timeline/activityFiles";
+import { splitActivityStatusDetail } from "../../core/timeline/activityModel";
 import { toolPictures } from "../../core/timeline/threadPictures";
 import { distinctivePath } from "../../core/timeline/toolCallSemantics";
 import { compactPathLabel } from "../../core/timeline/pathDisplay";
@@ -86,11 +87,29 @@ function FileRow(props: { file: ActivityFileRow; onFile?: (path: string) => void
   return (
     <Button testID="activity-file" accessibilityLabel={[`Open ${file.path}`, file.added !== undefined ? `${file.added} added` : "", file.removed !== undefined ? `${file.removed} removed` : ""].filter(Boolean).join(", ")}
       disabled={!props.onFile} onPress={() => props.onFile?.(file.path)} class="min-h-[44px] flex-row items-center gap-2 active:opacity-60">
+      <Icon name="document-text" size={18} color="muted-foreground" />
       <Text class={`min-w-0 shrink font-mono text-code line-clamp-1 ${props.onFile ? "text-foreground" : "text-muted-foreground"}`}>{shownPath(file.path)}</Text>
       {file.added !== undefined ? <Text testID="activity-file-added" class="font-mono text-code text-add">{`+${file.added}`}</Text> : null}
       {file.removed !== undefined ? <Text testID="activity-file-removed" class="font-mono text-code text-del">{`−${file.removed}`}</Text> : null}
     </Button>
   );
+}
+
+/** A tool row's words: what it did in 600, then the detail, soft, on one line that truncates. */
+function ToolLine(props: { title: string; detail?: string; running?: boolean }) {
+  return (
+    <Text class={`min-w-0 flex-1 text-sub line-clamp-1 ${props.running ? "text-foreground" : "text-muted-foreground"}`}>
+      <Text class="font-semibold">{props.title}</Text>
+      {props.detail ? `  ${props.detail}` : ""}
+    </Text>
+  );
+}
+
+/** A row's detail without the "Done" a finished call needs no word for; a failed one says Failed (one word set). */
+function shownDetail(item: ActivityTimelineItem): string | undefined {
+  const { mark, rest } = splitActivityStatusDetail(item.detail, item.tone);
+  if (mark === "failed") return rest ? `Failed · ${rest}` : "Failed";
+  return rest && rest !== item.title ? rest : undefined;
 }
 
 /** A tool call, a reasoning or update line, or a folded run of finished calls. */
@@ -101,12 +120,11 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
   const expandable = () => Boolean(item().commandText || item().queryText || item().body || files().length || item().steps?.length || item().statusLine);
   return (
     <View class="px-4 py-0.5">
-      <Button testID="activity" onPress={() => expandable() && props.expansion.toggle(item().id)} class="flex-row items-center gap-2 py-1">
-        <Icon name={iconOf(item().icon, "construct")} color={toneColor(item().tone)} size={16} />
-        <Text class={`flex-1 text-sm ${item().tone === "running" ? "" : "text-muted-foreground"} ${open() ? "" : "line-clamp-1"}`}>
-          {item().title}{item().detail ? ` · ${item().detail}` : ""}
-        </Text>
-        {expandable() ? <Icon name={open() ? "chevron-up" : "chevron-down"} size={14} /> : null}
+      {/* A tool row (soft-final SPEC §11): 44 tall, an 18 pt icon, what it did in 600 then where in soft, one line, a chevron. */}
+      <Button testID="activity" onPress={() => expandable() && props.expansion.toggle(item().id)} class="min-h-[44px] flex-row items-center gap-2">
+        <Icon name={iconOf(item().icon, "construct")} color={toneColor(item().tone)} size={18} />
+        <ToolLine title={item().title} detail={shownDetail(item())} running={item().tone === "running"} />
+        {expandable() ? <Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" /> : null}
       </Button>
       {/* The pictures the call produced, under its row whether or not it is open (SPEC §1.7). */}
       {toolPictures(item()).length ? (
@@ -119,9 +137,9 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
       {open() ? (
         <View class="gap-1.5 pb-2 pl-6">
           {item().steps?.length ? item().steps!.map((step) => (
-            <View class="flex-row items-center gap-2">
-              <Icon name={iconOf(step.icon, "construct")} color={toneColor(step.tone)} size={14} />
-              <Text class="flex-1 text-sm text-muted-foreground line-clamp-1">{step.title}</Text>
+            <View testID="activity-step" class="min-h-[44px] flex-row items-center gap-2">
+              <Icon name={iconOf(step.icon, "construct")} color={toneColor(step.tone)} size={18} />
+              <ToolLine title={step.title} detail={shownDetail(step)} />
             </View>
           )) : null}
           {item().commandText ? <Mono text={item().commandText!} /> : null}
