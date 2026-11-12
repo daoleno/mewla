@@ -132,6 +132,8 @@ export interface TrayInput {
   today: readonly TrayTodayInput[];
   /** Calendar alerts nobody answered (core/calendar/alerts `openAlerts`). */
   alerts: readonly { id: string; title: string }[];
+  /** Requests answered here that the computer has not cleared yet: sealed everywhere at once (§1.1). */
+  answered?: ReadonlySet<string>;
   /** When each Session was last opened here (core/sessions/deviceState `getRecentWorkerOpens`). */
   opened: Readonly<Record<string, number>>;
   sort?: TraySort;
@@ -211,7 +213,7 @@ function titleOf(worker: Worker): string {
  * A request of a Session that works for Brain's delegated Work shows in Brain's thread too, so its
  * row leads there; one of a Session the person started is only in that Session.
  */
-export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "now">): TrayRequest[] {
+export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "answered" | "now">): TrayRequest[] {
   const out: TrayRequest[] = [];
   if (input.brainChoice) {
     out.push({ key: `brain-choice:${input.brainChoice.callId}`, kind: "choice", where: "brain", title: input.brainChoice.question || "Brain asks", source: "Brain", workerId: input.brainHost?.id });
@@ -239,7 +241,8 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
     out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question || slip.title, source: slip.title, workId: slip.workId });
   }
   for (const alert of input.alerts) out.push({ key: `alert:${alert.id}`, kind: "alert", where: "alert", title: alert.title, source: "Calendar", itemId: alert.id });
-  return out;
+  const answered = input.answered;
+  return answered?.size ? out.filter((request) => !answered.has(request.key)) : out;
 }
 
 /** The Sessions as Brain's Work names them, so a Work finds the live Session that runs it. */
