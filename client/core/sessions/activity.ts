@@ -113,13 +113,20 @@ export function sessionActivity(worker: Pick<Worker, "status" | "summary" | "pha
   }
 }
 
-/** How long something has run, for the row's end: "1m" at least, then "12m", "3h", "2d". Empty without a start. */
+/**
+ * How long the current turn has run, in SPEC §11's one form (the Working line, tray rows, Work card and Work
+ * detail rows): "16s" under a minute, "12m" under an hour, "2h 57m" under a day, then "1d 3h". Units always,
+ * and a space between the parts, so it never reads as a clock. Empty without a start.
+ */
 export function elapsedShort(since: number | undefined, now: number): string {
   if (!since || !Number.isFinite(since)) return "";
-  const minutes = Math.max(1, Math.floor((now - since) / 60_000));
+  const seconds = Math.max(0, Math.floor((now - since) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+  const parts = (big: number, bigUnit: string, small: number, smallUnit: string) => (small ? `${big}${bigUnit} ${small}${smallUnit}` : `${big}${bigUnit}`);
+  return hours < 24 ? parts(hours, "h", minutes % 60, "m") : parts(Math.floor(hours / 24), "d", hours % 24, "h");
 }
 
 /**

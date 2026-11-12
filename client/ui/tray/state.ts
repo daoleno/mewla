@@ -1,3 +1,4 @@
+import { elapsedNow } from "../kit/elapsedClock";
 import { computed, signal, Storage, untracked } from "nsh";
 import { answeredKeys, parseAnsweredRequest, sealedOfAnswered, type AnsweredRequest } from "../../core/timeline/answered";
 import { brainSurface } from "../../core/brain";
@@ -114,6 +115,7 @@ export const tray = computed(() => {
     devices: deviceRequests().map((request) => ({ id: request.id, name: request.deviceName })),
     opened: opened(),
     sort: traySort(),
-    now: clock().now,
+    // The elapsed-time clock (every second), so a row's "● 16s" and the Working line agree.
+    now: elapsedNow(),
   });
 });

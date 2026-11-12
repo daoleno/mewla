@@ -1,6 +1,7 @@
 import { cleanup, Clipboard, colorScheme, computed, effect, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
 import { noteScroll } from "../pets/hold";
-import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
+import { elapsedShort } from "../../core/sessions/activity";
+import { elapsedNow } from "../kit/elapsedClock";
 import { Button, TextView } from "nsh/base";
 import { GuardedSheet as Sheet } from "../shell/AppSheet";
 import { isWorkingRow } from "../../core/conversation/timeline";
@@ -64,13 +65,10 @@ export type MessageHandlers = {
   openPicture?: (key: string) => void;
 };
 
-/** "Working" with the turn's elapsed time, ticking each second while it shows. */
+/** "Working" with the turn's elapsed time, on the clock the tray and Work rows read. */
 function WorkingRow(props: { since: () => string | undefined }) {
-  const now = signal(Date.now());
-  const timer = setInterval(() => now.set(Date.now()), 1000);
-  cleanup(() => clearInterval(timer));
-  const label = () => providerActivityElapsedLabels({ startedAt: props.since(), nowMs: now(), active: true }).visual;
-  return <Text testID="working" class="px-4 text-sub text-muted-foreground">{label() ? `Working · ${label()}` : "Working…"}</Text>;
+  const label = () => elapsedShort(Date.parse(props.since() ?? ""), elapsedNow());
+  return <View class="px-4"><Text testID="working" class="text-sub text-muted-foreground">{label() ? `Working · ${label()}` : "Working…"}</Text></View>;
 }
 
 function UserMessage(props: { item: () => MessageTimelineItem; handlers: MessageHandlers }) {

@@ -52,7 +52,7 @@ describe("tray model", () => {
     const row = m.running.find((r) => r.key === "work:q")!;
     // Never "Queued" under Running, never the footer: the Worker's agent and project.
     expect(row).toMatchObject({ quiet: true, line: "Claude Code · mewla", tile: { kind: "agent", agent: "claude" } });
-    expect(m.state.words).toBe("All quiet");
+    expect(m.state.words).toBe("1 queued");
     expect(JSON.stringify(m)).not.toContain("shift+tab");
     expect(JSON.stringify(m)).not.toContain("(mh-");
     // Without a Session to read, a queued Work says it has not started, not "Queued".
@@ -188,10 +188,14 @@ describe("tray model", () => {
     expect(m.state.words).toBe("3 running");
   });
 
-  test("only quiet Work under Running: All quiet, and the cat naps (the header, the tray and the cat agree)", () => {
+  test("only quiet Work under Running: it says so, soft and without a dot, and the cat naps (the header, the tray and the cat agree)", () => {
     const m = trayModel(input({ openWork: [{ work_id: "q", title: "Queued", status: "open" }, { work_id: "w", title: "Waiting", status: "waiting", wait_for: "the deploy window" }] }));
     expect(m.running.map((r) => r.quiet)).toEqual([true, true]);
-    expect(m.state.words).toBe("All quiet");
+    // SPEC §1.2 The count: never "All quiet" over a Running section that lists rows.
+    expect(m.state).toMatchObject({ kind: "quiet", words: "1 queued, 1 waiting", dot: null, ink: false });
+    expect(m.title).toBe("1 queued, 1 waiting");
+    const one = trayModel(input({ openWork: [{ work_id: "q", title: "Queued", status: "open" }] }));
+    expect([one.state.words, one.title]).toEqual(["1 queued", "1 queued"]);
     expect(m.runningCount).toBe(0);
     const cat = (t: typeof m) => catState({ kind: t.state.kind, starting: false, needs: t.needs.length, brainTurn: false, running: t.runningCount });
     expect(cat(m)).toBe("idle");
