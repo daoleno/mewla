@@ -5,6 +5,30 @@
  */
 import type { Worker, WorkerApproval, WorkerPrompt } from "./workers";
 
+/**
+ * A provider's status footer as the daemon read it off the terminal ("⏵⏵ bypass permissions on (shift+tab
+ * to cycle)", "⏸ manual mode on · ? for shortcuts"): the screen's chrome, never what the thing is doing.
+ * Claude Sessions on current daemons report it as their summary.
+ */
+export function isTerminalFooter(text: string | undefined): boolean {
+  const line = text?.trim() ?? "";
+  if (!line) return false;
+  return /^[⏵⏸⏴⏯▶►]/u.test(line) || /shift\s*\+\s*tab to cycle|\?\s*for shortcuts/i.test(line);
+}
+
+/** A summary as a row shows it: one line, and nothing when it is the terminal's footer. */
+export function readableSummary(text: string | undefined): string {
+  const line = text?.replace(/\s+/g, " ").trim() ?? "";
+  return line && !isTerminalFooter(line) ? line : "";
+}
+
+/**
+ * The words `sessionActivity` falls back to that only name the state: "Working" under Running, "Idle" under
+ * Idle, "Done" under Done. They repeat the row's section and its dot, so a row says something else instead.
+ * A phase ("Verifying"), "Failed" and what it asks you say something, so they are not here.
+ */
+export const BARE_STATE_WORDS: ReadonlySet<string> = new Set(["Working", "Idle", "Waiting", "Done"]);
+
 /** An AskUserQuestion "approval" is a question in the chat, not a decision. */
 export function isQuestionApproval(approval: WorkerApproval): boolean {
   return approval.tool?.trim().toLowerCase() === "askuserquestion";
@@ -45,7 +69,7 @@ export function sessionActivity(worker: Pick<Worker, "status" | "summary" | "pha
   if (worker.prompt) return promptTitle(worker.prompt);
   if (worker.needs_attention) return "Waiting for you";
   const reported = Boolean(worker.event_kind?.trim() || worker.phase?.trim()) && (worker.status === "running" || worker.status === "done");
-  const summary = reported ? worker.summary?.trim() : "";
+  const summary = reported ? readableSummary(worker.summary) : "";
   if (summary) return summary;
   switch (worker.status) {
     case "running": return PHASE_WORDS[worker.phase?.trim().toLowerCase() ?? ""] ?? "Working";

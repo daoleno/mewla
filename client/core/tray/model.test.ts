@@ -26,18 +26,42 @@ function input(patch: Partial<TrayInput> = {}): TrayInput {
 }
 
 describe("tray model", () => {
-  test("a running Session's row: its words, a live dot and how long it has run; never the terminal's text", () => {
+  test("a running Session's row: its words, a live dot and how long it has run; never the terminal's text nor a bare state word", () => {
     const m = trayModel(input({ workers: [
-      worker("a", { started_at: NOW - 12 * 60_000, summary: "⏸ manual mode on · ? for shortcuts", last_output_lines: ["⏸ manual mode on · ? for shortcuts"] }),
+      worker("a", { started_at: NOW - 12 * 60_000, phase: "working", summary: "⏸ manual mode on · ? for shortcuts", last_output_lines: ["⏸ manual mode on · ? for shortcuts"] }),
       worker("b", { started_at: NOW - 4 * 60_000, phase: "working", summary: "Rerunning the suite" }),
       worker("c", { status: "unknown", summary: '"$MEWLA_WORKER_PROGRESS_CMD" worker progress', last_output_lines: ['"$MEWLA_WORKER_PROGRESS_CMD" worker progress'] }),
     ] }));
-    expect(m.running.find((r) => r.key === "session:a")).toMatchObject({ line: "Working", end: "12m", live: true });
+    // Nothing reported but the footer: which agent works where, not "Working" under Running.
+    expect(m.running.find((r) => r.key === "session:a")).toMatchObject({ line: "Claude Code · mewla", end: "12m", live: true });
     expect(m.running.find((r) => r.key === "session:b")).toMatchObject({ line: "Rerunning the suite", end: "4m", live: true, progress: 3 });
-    expect(m.idle[0]).toMatchObject({ key: "session:c", line: "Idle" });
+    expect(m.idle[0]).toMatchObject({ key: "session:c", line: "Claude Code · mewla" });
     expect(m.idle[0]!.live).toBeUndefined();
     expect(JSON.stringify(m)).not.toContain("manual mode");
     expect(JSON.stringify(m)).not.toContain("MEWLA_WORKER_PROGRESS");
+    // A phase still says something.
+    expect(trayModel(input({ workers: [worker("v", { phase: "verifying" })] })).running[0]!.line).toBe("Verifying");
+  });
+
+  test("the live daemon's Claude Session: a footer for a summary, status unknown, an id in its name", () => {
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    const claude = worker("mh-17b3337d43f38037916f0e5b", { name: "Hello writer (mh-17b3337d43f38037916f0e5b)", status: "unknown", summary: footer, last_output_lines: [footer] });
+    const joined = { session_id: claude.id, name: claude.name, provider: "claude", state: "running" as const, summary: footer, live: true, joined_at: "2026-11-12T09:00:00Z", updated_at: "2026-11-12T09:00:00Z" };
+    const m = trayModel(input({ workers: [claude], openWork: [{ work_id: "q", title: "Write the hello", status: "open", worker_sessions: [joined] }] }));
+    const row = m.running.find((r) => r.key === "work:q")!;
+    // Never "Queued" under Running, never the footer: the Worker's agent and project.
+    expect(row).toMatchObject({ quiet: true, line: "Claude Code · mewla", tile: { kind: "agent", agent: "claude" } });
+    expect(m.state.words).toBe("All quiet");
+    expect(JSON.stringify(m)).not.toContain("shift+tab");
+    expect(JSON.stringify(m)).not.toContain("(mh-");
+    // Without a Session to read, a queued Work says it has not started, not "Queued".
+    const bare = trayModel(input({ openWork: [{ work_id: "q", title: "Write the hello", status: "open" }] }));
+    expect(bare.running[0]!.line).toBe("Not started yet");
+    const waiting = trayModel(input({ openWork: [{ work_id: "w", title: "Ship", status: "waiting", wait_for: "the deploy window" }] }));
+    expect(waiting.running[0]!.line).toBe("the deploy window");
+    // A Session blocked on something unreadable asks "Waiting for you", not its footer.
+    const asks = requestsOf({ workers: [{ ...claude, status: "blocked", needs_attention: true }], alerts: [], now: NOW });
+    expect(asks[0]).toMatchObject({ title: "Waiting for you", source: "Hello writer" });
   });
 
   test("All quiet with nothing running", () => {
@@ -92,7 +116,7 @@ describe("tray model", () => {
     }));
     const row = m.running.find((r) => r.key === "work:w1")!;
     // The line says what its first live Worker does; the end, how long that Worker has worked on it.
-    expect(row).toMatchObject({ line: "3 Workers · Working", end: "1h", live: true, tile: { kind: "brain" }, target: { open: "work", workId: "w1" } });
+    expect(row).toMatchObject({ line: "3 Workers · Claude Code", end: "1h", live: true, tile: { kind: "brain" }, target: { open: "work", workId: "w1" } });
     expect(m.running.map((r) => r.key)).toEqual(["work:w1"]);
     expect(m.state.words).toBe("1 running");
     // A result ends in when it came back, then its check.

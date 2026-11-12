@@ -1,4 +1,5 @@
 import type { CalendarClock, CalendarItem } from "../calendar/model";
+import { readableSummary } from "../sessions/activity";
 import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef, WorkWorkerSession } from "./types";
 
 /** How a Work's state reads: a ring, a seal, a check (DESIGN.md's Work states). */
@@ -420,9 +421,9 @@ function slipSummary(
       : group === "back"
         ? [work.summary, worker?.summary, waitFor]
         : [waitFor, work.summary];
-  // A bare reference ("operator:2985…") is plumbing, not something to read.
+  // A bare reference ("operator:2985…") is plumbing, and a terminal's footer chrome: neither is something to read.
   return candidates
-    .map((value) => value?.replace(/\s+/g, " ").trim())
+    .map((value) => readableSummary(value))
     .find((value) => Boolean(value && value.includes(" ")));
 }
 
