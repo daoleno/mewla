@@ -141,7 +141,30 @@ final class TerminalTests: XCTestCase {
       format.preferredRange = .standard
       let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in view.draw(view.bounds) }
       if let out, let png = image.pngData() { try png.write(to: out.appendingPathComponent("\(name).png")) }
+      if name == "box" { try assertWallTouches(image, cols: cols, rows: rows) }
     }
+  }
+}
+
+/// The box screen's wall (scripts/terminal-corpus/gen.py, rows 12-14; the same check as check.py): eight
+/// full blocks, eight light and eight heavy verticals, three rows tall, with no background between the rows.
+@MainActor
+private func assertWallTouches(_ image: UIImage, cols: Int, rows: Int, file: StaticString = #filePath, line: UInt = #line) throws {
+  let pixels = try XCTUnwrap(Pixels(image))
+  let cw = CGFloat(pixels.width) / CGFloat(cols), ch = CGFloat(pixels.height) / CGFloat(rows)
+  let y0 = Int((12 * ch).rounded()) + 1, y1 = Int((15 * ch).rounded()) - 2
+  var holes = 0
+  for y in y0...y1 {
+    for x in Int((0.5 * cw).rounded())..<Int((7.5 * cw).rounded()) where pixels.near(x: x, y: y, 0x141210, tolerance: 24) { holes += 1 }
+  }
+  XCTAssertEqual(holes, 0, "full blocks: background inside the wall", file: file, line: line)
+  let middle = Int((12.5 * ch).rounded())
+  for col in Array(9..<17) + Array(18..<26) {
+    // The x the line is drawn at: its most inked pixel in the first row.
+    let xs = Int((CGFloat(col) * cw).rounded())..<Int((CGFloat(col + 1) * cw).rounded())
+    guard let x = xs.max(by: { pixels.ink(x: $0, y: middle, 0x141210) < pixels.ink(x: $1, y: middle, 0x141210) }) else { continue }
+    let gaps = (y0...y1).filter { pixels.near(x: x, y: $0, 0x141210, tolerance: 24) }.count
+    XCTAssertEqual(gaps, 0, "the vertical in col \(col) breaks between rows", file: file, line: line)
   }
 }
 
@@ -166,6 +189,13 @@ private struct Pixels {
     self.width = width
     self.height = height
     self.data = data
+  }
+
+  /// How far a pixel is from `rgb` (the sum over the channels).
+  func ink(x: Int, y: Int, _ rgb: UInt32) -> Int {
+    let i = (min(max(y, 0), height - 1) * width + min(max(x, 0), width - 1)) * 4
+    let want = [Int(rgb >> 16 & 0xff), Int(rgb >> 8 & 0xff), Int(rgb & 0xff)]
+    return (0..<3).reduce(0) { $0 + abs(Int(data[i + $1]) - want[$1]) }
   }
 
   func near(x: Int, y: Int, _ rgb: UInt32, tolerance: Int = 3) -> Bool {
