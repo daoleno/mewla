@@ -44,6 +44,11 @@ export function PictureViewer(props: { pictures: () => ThreadPicture[]; open: Si
     const next = all[untracked(index) + step];
     if (next) props.open.set(next.key);
   };
+  // The picture it shows went (a new chat, another thread): it closes rather than show another.
+  effect(() => {
+    const key = props.open();
+    if (key !== null && !props.pictures().some((picture) => picture.key === key)) props.open.set(null);
+  });
   effect(() => {
     if (props.open() === null) return;
     keymap.bind("left", () => go(-1), { when: "always" });

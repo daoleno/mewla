@@ -13,7 +13,7 @@ import { readingPlace, readingPlaceIndex } from "../../core/timeline/readingPlac
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
-import { pictureKey, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
+import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
 import { PlainText } from "./PlainText";
 import { selectingText } from "./messageEdit";
 import { ActivityRow, CODE_ACTIONS, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
@@ -205,7 +205,7 @@ export function ChatTimeline(props: {
   if (!given.onFile) handlers.onFile = (path) => openChatPath(path, files);
   // The picture viewer: every picture of the thread, in order; the one shown by its key.
   const viewing = signal<string | null>(null);
-  const pictures = computed(() => threadPictures(props.items()));
+  const pictures = computed(() => threadPictures(props.items()), { equals: samePictures });
   handlers.openPicture = (key) => viewing.set(key);
   const expansion = createExpansion();
   let list: ListRef | undefined;

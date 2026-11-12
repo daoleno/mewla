@@ -56,3 +56,8 @@ export function threadPictures(items: readonly TimelineItem[]): ThreadPicture[] 
   }
   return out;
 }
+
+/** The same pictures in the same order: a streaming reply's next chunk leaves the viewer's slides as they are. */
+export function samePictures(a: readonly ThreadPicture[], b: readonly ThreadPicture[]): boolean {
+  return a.length === b.length && a.every((picture, at) => picture.key === b[at].key && picture.alt === b[at].alt);
+}
