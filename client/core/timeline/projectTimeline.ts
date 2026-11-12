@@ -541,6 +541,7 @@ function isBoundedStreamingFieldDelta(
     previous.exit_code === next.exit_code &&
     previous.transient === next.transient &&
     previous.source === next.source &&
+    previous.origin === next.origin &&
     previous.work_id === next.work_id &&
     previous.work_session_id === next.work_session_id &&
     previous.session_name === next.session_name &&

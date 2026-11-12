@@ -50,6 +50,7 @@ export function timelineItemsSemanticEqual(
       left.onDiscardPending === right.onDiscardPending &&
       left.streaming === right.streaming &&
       left.turnFocusAnchorId === right.turnFocusAnchorId &&
+      left.delegatedTask === right.delegatedTask &&
       attachmentsEqual(left.attachments, right.attachments)
     );
   }
