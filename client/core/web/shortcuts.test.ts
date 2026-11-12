@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   composerKeyIntent,
   desktopShortcutRows,
-  desktopShortcutTooltip,
   goShortcutLabel,
   GLOBAL_KEYSTROKES,
   GO_KEYSTROKES,
@@ -59,7 +58,9 @@ describe("global keys", () => {
     expect(resolveGlobalKey({ key: "c" }, { ...page, pendingGo: true }).command).toEqual({ kind: "go", key: "calendar" });
     expect(resolveGlobalKey({ key: "e" }, { ...page, pendingGo: true }).command).toEqual({ kind: "go", key: "extensions" });
     expect(resolveGlobalKey({ key: "," }, { ...page, pendingGo: true }).command).toEqual({ kind: "go", key: "settings" });
-    expect(resolveGlobalKey({ key: "x" }, { ...page, pendingGo: true })).toEqual({ command: null, pendingGo: false });
+    expect(resolveGlobalKey({ key: "m" }, { ...page, pendingGo: true }).command).toEqual({ kind: "go", key: "computer" });
+    expect(resolveGlobalKey({ key: "x" }, { ...page, pendingGo: true }).command).toEqual({ kind: "go", key: "screen" });
+    expect(resolveGlobalKey({ key: "q" }, { ...page, pendingGo: true })).toEqual({ command: null, pendingGo: false });
   });
 
   test("never while typing in a field, an editable region or the terminal", () => {
@@ -95,9 +96,9 @@ describe("shortcut labels", () => {
   test("G letters for the places that have one", () => {
     expect(goShortcutLabel("calendar")).toBe("G then C");
     expect(goShortcutLabel("settings")).toBe("G then ,");
-    expect(goShortcutLabel("screen")).toBeUndefined();
-    expect(desktopShortcutTooltip("Stats", "stats")).toBe("Stats (G then T)");
-    expect(desktopShortcutTooltip("Friends", "friends")).toBeUndefined();
+    expect(goShortcutLabel("computer")).toBe("G then M");
+    expect(goShortcutLabel("screen")).toBe("G then X");
+    expect(goShortcutLabel("friends")).toBeUndefined();
   });
 
   test("the cheat sheet names the platform's modifier", () => {
@@ -107,5 +108,9 @@ describe("shortcut labels", () => {
     expect(rows[0]).toEqual({ keys: "Ctrl+K", label: "Command palette" });
     expect(rows.find((row) => row.label === "Extensions")?.keys).toBe("G then E");
     expect(rows.every((row) => row.keys.length > 0)).toBe(true);
+    // SPEC §14.3's G row: Brain · All Sessions · Calendar · the computer page · Screen · Extensions · Stats · Resources · Settings.
+    expect(rows.filter((row) => row.keys.startsWith("G then")).map((row) => row.keys)).toEqual(
+      ["G then B", "G then S", "G then C", "G then M", "G then X", "G then E", "G then T", "G then R", "G then ,"],
+    );
   });
 });

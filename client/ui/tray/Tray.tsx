@@ -1,6 +1,6 @@
 import { cleanup, platform, safeArea, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { BackHandler } from "nsh/mobile";
 import { forgetConnectionIssue } from "../more/settings/computers";
 import { currentTransport, resumeConnection } from "../session";
@@ -12,9 +12,31 @@ import { Icon } from "../kit/Icon";
 import { PillButton } from "../kit/kit";
 import { ProgressBar } from "../kit/ProgressBar";
 import { homeShown, openCalendarItem, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
+import { createMenuAnchor, showMenu } from "../kit/Menu";
+import { rowKey } from "../../core/tray/pane";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { showDeviceRequest } from "../enrollment/state";
 import { setTraySort, tray, traySort } from "./state";
+
+/** Where the tray's rows open their pages: pushed over home (the phone's overlay) or in place of the page above Brain (the left pane). */
+export type TrayOpeners = {
+  session: (workerId: string) => void;
+  work: (workId: string) => void;
+  item: (itemId: string) => void;
+  calendar: () => void;
+  allSessions: () => void;
+  computer: () => void;
+};
+
+/** The phone's tray pushes (SPEC §3.2: Back returns to the open tray). */
+const PUSH: TrayOpeners = {
+  session: (workerId) => openSession(workerId),
+  work: (workId) => openWorkDetail(workId),
+  item: (itemId) => openCalendarItem(itemId),
+  calendar: () => openPage({ name: "calendar" }),
+  allSessions: () => openPage({ name: "allSessions" }),
+  computer: () => openPage({ name: "computer" }),
+};
 
 export type TrayProps = {
   onPairAgain: () => void;
@@ -63,16 +85,23 @@ function Group(props: { children: JSX.Element; testID?: string }) {
   return <View testID={props.testID} class="overflow-hidden rounded-(--radius-group) bg-sheet-surface">{props.children}</View>;
 }
 
+/** The pressed well of the row whose page is in the right pane (the wide layout's left pane). */
+export function SelectedWell() {
+  return <View testID="selected-well" class="absolute inset-0 bg-accent" />;
+}
+
 /** The hair under a row, from 58 pt in; the group hides the last one. */
 function Hair() {
   return <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 58 }} />;
 }
 
 /** A tray row (SPEC §11 Tray row): 68 pt, a 28 pt tile, a title and a line, the end. */
-function TrayRow(props: { row: Row; onPress: () => void }) {
+function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean }) {
   const row = () => props.row;
   return (
-    <Button testID="tray-row" accessibilityLabel={`${row().title}, ${row().line}`} onPress={props.onPress} class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 active:bg-accent ${row().past ? "opacity-55" : ""}`}>
+    <Button testID="tray-row" accessibilityLabel={`${row().title}, ${row().line}`} selected={props.selected} onPress={props.onPress}
+      class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring ${row().past ? "opacity-55" : ""}`}>
+      {props.selected ? <SelectedWell /> : null}
       <Tile tile={row().tile} />
       <View class="min-w-0 flex-1">
         <Text class={`text-body line-clamp-1 ${row().done || row().quiet ? "" : "font-semibold"} ${row().quiet ? "text-muted-foreground" : ""}`}>{row().title}</Text>
@@ -84,7 +113,7 @@ function TrayRow(props: { row: Row; onPress: () => void }) {
         : row().end === "live" ? (
           <View class="flex-row items-center gap-1.5"><View class="size-1.5 rounded-full bg-foreground" /><Text class="text-sub text-muted-foreground">live</Text></View>
         ) : row().end ? <Text class="text-sub text-muted-foreground">{row().end}</Text> : null}
-      <Hair />
+      {props.selected ? null : <Hair />}
     </Button>
   );
 }
@@ -93,7 +122,7 @@ function TrayRow(props: { row: Row; onPress: () => void }) {
 function RequestRow(props: { request: TrayRequest; busy: boolean; onApprove: () => void; onOpen: () => void }) {
   const r = () => props.request;
   return (
-    <Button testID="tray-request" accessibilityLabel={`${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 active:bg-accent">
+    <Button testID="tray-request" accessibilityLabel={`${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
       <Tile tile={r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" }} />
       <View class="min-w-0 flex-1">
         <Text class="text-body font-semibold line-clamp-1">{r().title}</Text>
@@ -129,40 +158,46 @@ function Notice(props: { onAction: (id: TrayNoticeAction) => void }) {
   );
 }
 
+export type TrayBodyProps = TrayProps & {
+  /** Where rows open their pages. */
+  open: TrayOpeners;
+  /** The overlay closes when a row leaves for Brain's thread; the pane never opens, so never closes. */
+  onLeave?: () => void;
+  /** The row whose page is in the right pane (`core/tray/pane` keys); the pane only. */
+  selected?: () => string | null;
+  /** The title: the state's words on a phone, the counts in the pane. */
+  title: () => string;
+  /** The pane's smaller title (17/600) and its own scroll padding. */
+  pane?: boolean;
+};
+
 /**
- * Home's tray (SPEC §1.2, §3.2): the index of what is open. Home's own overlay, not a sheet: it
- * rises from the bottom over a scrim that dims home, header included, and stays open with its
- * scroll while a page pushed from it is on the stack, so Back from a Session lands on it again.
+ * The tray itself (SPEC §1.2, §3.2): its title, ⋯ and +, the notice, Needs you, Running, Today,
+ * Idle, Done and All Sessions. The phone's overlay and the wide layout's left pane both show it.
  */
-export function Tray(props: TrayProps) {
+export function TrayBody(props: TrayBodyProps) {
   const runningOpen = signal(false);
   const busy = signal("");
   const said = signal("");
-  // Back closes the tray only while home is the page shown: a pushed page's Back is its stack's.
-  onAndroidBack(() => {
-    if (!untracked(trayOpen) || !untracked(homeShown)) return false;
-    trayOpen.set(false);
-    return true;
-  });
-  const close = () => trayOpen.set(false);
+  const menuAnchor = createMenuAnchor();
   const openRow = (row: Row) => {
     const target = row.target;
-    if (target.open === "session") return openSession(target.workerId);
-    if (target.open === "work") return openWorkDetail(target.workId);
-    return openCalendarItem(target.itemId);
+    if (target.open === "session") return props.open.session(target.workerId);
+    if (target.open === "work") return props.open.work(target.workId);
+    return props.open.item(target.itemId);
   };
   const openRequest = (request: TrayRequest) => {
     if (request.where === "brain") {
-      close();
+      props.onLeave?.();
       return props.onShowCard(request.key);
     }
-    if (request.where === "session" && request.workerId) return openSession(request.workerId);
-    if (request.where === "work" && request.workId) return openWorkDetail(request.workId);
+    if (request.where === "session" && request.workerId) return props.open.session(request.workerId);
+    if (request.where === "work" && request.workId) return props.open.work(request.workId);
     if (request.deviceId) {
-      close();
+      props.onLeave?.();
       return showDeviceRequest(request.deviceId);
     }
-    if (request.itemId) return openCalendarItem(request.itemId);
+    if (request.itemId) return props.open.item(request.itemId);
   };
   const approve = async (request: TrayRequest) => {
     const tap = request.oneTap;
@@ -182,7 +217,7 @@ export function Tray(props: TrayProps) {
   const noticeAction = (id: TrayNoticeAction) => {
     switch (id) {
       case "try_again": forgetConnectionIssue(); return resumeConnection();
-      case "details": return openPage({ name: "computer" });
+      case "details": return props.open.computer();
       case "pair_again": return props.onPairAgain();
       case "use_suggested": {
         const executor = untracked(tray).notice?.actions.find((action) => action.id === "use_suggested")?.executor;
@@ -192,84 +227,104 @@ export function Tray(props: TrayProps) {
     }
   };
   const menu = async () => {
-    const { action } = await AlertDialog.show({
-      title: "Tray",
-      presentation: "actionSheet",
-      actions: [{ id: "sort", label: "Sort" }, { id: "services", label: "Services" }, { id: "cancel", label: "Cancel", role: "cancel" }],
-    });
+    const action = await showMenu({ title: "Tray", anchor: menuAnchor.node(), testID: "tray-menu-popover", items: [{ id: "sort", label: "Sort" }, { id: "services", label: "Services" }] });
     if (action === "services") return servicesOpen.set(true);
     if (action !== "sort") return;
-    const picked = await AlertDialog.show({
+    const picked = await showMenu({
       title: "Sort Running by",
-      presentation: "actionSheet",
-      actions: [
-        { id: "opened", label: `${traySort() === "opened" ? "✓ " : ""}Last opened` },
-        { id: "activity", label: `${traySort() === "activity" ? "✓ " : ""}Last active` },
-        { id: "cancel", label: "Cancel", role: "cancel" },
+      anchor: menuAnchor.node(),
+      items: [
+        { id: "opened", label: "Last opened", checked: traySort() === "opened" },
+        { id: "activity", label: "Last active", checked: traySort() === "activity" },
       ],
     });
-    if (picked.action === "opened" || picked.action === "activity") setTraySort(picked.action);
+    if (picked === "opened" || picked === "activity") setTraySort(picked);
   };
   const m = () => tray();
+  const selected = (key: string) => props.selected?.() === key;
   const running = () => (runningOpen() ? m().running : m().running.slice(0, RUNNING_SHOWN));
+  const row = (item: Row) => <TrayRow row={item} selected={selected(rowKey(item))} onPress={() => openRow(item)} />;
+  return (
+    <>
+      <View class={`flex-row items-center px-4 ${props.pane ? "min-h-[52px] gap-0.5 pr-2" : "gap-2 pb-1 pt-4"}`}>
+        <Text testID="tray-title" role="header" class={`flex-1 line-clamp-1 ${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"}`}>{props.title()}</Text>
+        <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring`}><Icon name="add" size={24} tone="ink" /></Button>
+        <Button ref={menuAnchor.ref} testID="tray-menu" accessibilityLabel="Tray menu" onPress={() => void menu()} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring`}><Icon name="more-horizontal" size={24} tone="ink" /></Button>
+      </View>
+      <Scroll testID="tray-scroll" class={props.pane ? "flex-1" : "shrink"} contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
+        {m().notice ? <Notice onAction={noticeAction} /> : null}
+        {said() ? <Text testID="tray-said" class="mt-2 px-4 text-sub text-muted-foreground" onPress={() => said.set("")}>{said()}</Text> : null}
+        <View class={m().dimmed ? "opacity-45" : ""}>
+          {m().needs.length ? (
+            <View testID="tray-needs">
+              <Label title="Needs you" />
+              <Group>{m().needs.map((request) => <RequestRow request={request} busy={busy() === request.key} onApprove={() => void approve(request)} onOpen={() => openRequest(request)} />)}</Group>
+            </View>
+          ) : null}
+          {m().running.length ? (
+            <View testID="tray-running">
+              <Label title="Running" />
+              <Group>
+                {running().map(row)}
+                {m().running.length > RUNNING_SHOWN && !runningOpen() ? (
+                  <Button testID="tray-running-more" onPress={() => runningOpen.set(true)} class="min-h-[52px] justify-center px-4 hover:bg-accent active:bg-accent">
+                    <Text class="text-sub text-muted-foreground">{`${m().running.length - RUNNING_SHOWN} more`}</Text>
+                  </Button>
+                ) : null}
+              </Group>
+            </View>
+          ) : null}
+          {m().today.length ? (
+            <View testID="tray-today">
+              <Label title="Today" link="Calendar" testID="tray-calendar" onLink={props.open.calendar} />
+              <Group>{m().today.slice(0, TODAY_SHOWN).map(row)}</Group>
+            </View>
+          ) : null}
+          {m().idle.length ? (
+            <View testID="tray-idle">
+              <Label title="Idle" />
+              <Group>{m().idle.map(row)}</Group>
+            </View>
+          ) : null}
+          {m().done.length ? (
+            <View testID="tray-done">
+              <Label title="Done" link="All" testID="tray-all" onLink={props.open.allSessions} />
+              <Group>{m().done.slice(0, DONE_SHOWN).map(row)}</Group>
+            </View>
+          ) : null}
+          <Button testID="tray-all-sessions" selected={selected("all")} onPress={props.open.allSessions}
+            class="mt-6 min-h-[52px] flex-row items-center justify-between overflow-hidden rounded-(--radius-group) bg-sheet-surface px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+            {selected("all") ? <SelectedWell /> : null}
+            <Text class="text-body">All Sessions</Text>
+            <Icon name="chevron-right" size={18} tone="faint" />
+          </Button>
+        </View>
+      </Scroll>
+    </>
+  );
+}
+
+/**
+ * Home's tray on a phone and a narrow window (SPEC §1.2, §3.2): home's own overlay, not a sheet:
+ * it rises from the bottom over a scrim that dims home, header included, and stays open with its
+ * scroll while a page pushed from it is on the stack, so Back from a Session lands on it again.
+ * On wide the tray is the left pane instead (ui/shell/LeftPane.tsx).
+ */
+export function Tray(props: TrayProps) {
+  // Back closes the tray only while home is the page shown: a pushed page's Back is its stack's.
+  onAndroidBack(() => {
+    if (!untracked(trayOpen) || !untracked(homeShown)) return false;
+    trayOpen.set(false);
+    return true;
+  });
+  const close = () => trayOpen.set(false);
   // Read in the JSX: a component runs once.
   return <>{trayOpen() ? (
     <View testID="tray-overlay" class="absolute inset-0">
       <View testID="tray-scrim" class="absolute inset-0 bg-scrim" onPress={close} accessibilityLabel="Close the tray" role="button" />
       <View testID="tray" class="absolute bottom-0 left-0 right-0 rounded-t-(--radius-sheet) bg-sheet"
         style={{ maxHeight: windowSize().height * 0.88 }}>
-        <View class="flex-row items-center gap-2 px-4 pb-1 pt-4">
-          <Text testID="tray-title" role="header" class="flex-1 text-title font-bold tracking-title line-clamp-1">{m().title}</Text>
-          <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class="size-11 items-center justify-center active:opacity-70"><Icon name="add" size={24} tone="ink" /></Button>
-          <Button testID="tray-menu" accessibilityLabel="Tray menu" onPress={() => void menu()} class="size-11 items-center justify-center active:opacity-70"><Icon name="more-horizontal" size={24} tone="ink" /></Button>
-        </View>
-        <Scroll testID="tray-scroll" class="shrink" contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
-          {m().notice ? <Notice onAction={noticeAction} /> : null}
-          {said() ? <Text testID="tray-said" class="mt-2 px-4 text-sub text-muted-foreground" onPress={() => said.set("")}>{said()}</Text> : null}
-          <View class={m().dimmed ? "opacity-45" : ""}>
-            {m().needs.length ? (
-              <View testID="tray-needs">
-                <Label title="Needs you" />
-                <Group>{m().needs.map((request) => <RequestRow request={request} busy={busy() === request.key} onApprove={() => void approve(request)} onOpen={() => openRequest(request)} />)}</Group>
-              </View>
-            ) : null}
-            {m().running.length ? (
-              <View testID="tray-running">
-                <Label title="Running" />
-                <Group>
-                  {running().map((row) => <TrayRow row={row} onPress={() => openRow(row)} />)}
-                  {m().running.length > RUNNING_SHOWN && !runningOpen() ? (
-                    <Button testID="tray-running-more" onPress={() => runningOpen.set(true)} class="min-h-[52px] justify-center px-4 active:bg-accent">
-                      <Text class="text-sub text-muted-foreground">{`${m().running.length - RUNNING_SHOWN} more`}</Text>
-                    </Button>
-                  ) : null}
-                </Group>
-              </View>
-            ) : null}
-            {m().today.length ? (
-              <View testID="tray-today">
-                <Label title="Today" link="Calendar" testID="tray-calendar" onLink={() => openPage({ name: "calendar" })} />
-                <Group>{m().today.slice(0, TODAY_SHOWN).map((row) => <TrayRow row={row} onPress={() => openRow(row)} />)}</Group>
-              </View>
-            ) : null}
-            {m().idle.length ? (
-              <View testID="tray-idle">
-                <Label title="Idle" />
-                <Group>{m().idle.map((row) => <TrayRow row={row} onPress={() => openRow(row)} />)}</Group>
-              </View>
-            ) : null}
-            {m().done.length ? (
-              <View testID="tray-done">
-                <Label title="Done" link="All" testID="tray-all" onLink={() => openPage({ name: "allSessions" })} />
-                <Group>{m().done.slice(0, DONE_SHOWN).map((row) => <TrayRow row={row} onPress={() => openRow(row)} />)}</Group>
-              </View>
-            ) : null}
-            <Button testID="tray-all-sessions" onPress={() => openPage({ name: "allSessions" })} class="mt-6 min-h-[52px] flex-row items-center justify-between rounded-(--radius-group) bg-sheet-surface px-4 active:bg-accent">
-              <Text class="text-body">All Sessions</Text>
-              <Icon name="chevron-right" size={18} tone="faint" />
-            </Button>
-          </View>
-        </Scroll>
+        <TrayBody {...props} open={PUSH} onLeave={close} title={() => tray().title} />
       </View>
     </View>
   ) : null}</>;

@@ -1,22 +1,23 @@
 /**
- * The desktop layout's places: the sidebar rows, the URL of each place, the
- * browser tab's title, and the sidebar's width. Pure, so the shell and the
- * page host agree without a browser (client/DESIGN.md "Desktop web").
+ * The app's places: the URL of each place, the browser tab's title, the wide layout's gate and
+ * its left pane's width. Pure, so the shell and the page host agree without a browser
+ * (client/DESIGN.md "The wide layout", soft-final SPEC §14).
  */
 
-/** From this width a non-phone window gets the desktop layout; below it the phone's one stack. */
-export const DESKTOP_MIN_WIDTH = 1024;
+/** From this window width (points) the app has two panes, on every device: a browser, a tablet, an open foldable. */
+export const WIDE_MIN_WIDTH = 1024;
 
-/** The one gate for the desktop layout: not a phone build, and at least 1024 pt wide. */
-export function isDesktopLayout(input: { mobile: boolean; width: number }): boolean {
-  return !input.mobile && input.width >= DESKTOP_MIN_WIDTH;
+/** The one gate for the wide layout: the window is at least 1024 pt wide, whatever the device (SPEC §14.6). */
+export function isWide(width: number): boolean {
+  return width >= WIDE_MIN_WIDTH;
 }
 
-/** A sidebar row. */
-export type DesktopPlaceKey =
+/** A place you can go to by name: a `G` key, the palette's Go to, a URL. */
+export type PlaceKey =
   | "brain"
   | "sessions"
   | "calendar"
+  | "computer"
   | "extensions"
   | "screen"
   | "stats"
@@ -24,30 +25,21 @@ export type DesktopPlaceKey =
   | "friends"
   | "settings";
 
-export interface SidebarRow {
-  key: DesktopPlaceKey;
-  label: string;
-}
+const LABELS: Record<PlaceKey, string> = {
+  brain: "Brain",
+  sessions: "All Sessions",
+  calendar: "Calendar",
+  computer: "Computer",
+  extensions: "Extensions",
+  screen: "Screen",
+  stats: "Stats",
+  resources: "Resources",
+  friends: "Friends",
+  settings: "Settings",
+};
 
-const ROWS: readonly SidebarRow[] = [
-  { key: "brain", label: "Brain" },
-  { key: "sessions", label: "Sessions" },
-  { key: "calendar", label: "Calendar" },
-  { key: "extensions", label: "Extensions" },
-  { key: "screen", label: "Screen" },
-  { key: "stats", label: "Stats" },
-  { key: "resources", label: "Resources" },
-  { key: "friends", label: "Friends" },
-  { key: "settings", label: "Settings" },
-];
-
-/** The sidebar, top to bottom. Friends is native-only (hidden on the web, as before) and a Labs switch. */
-export function sidebarRows(options: { friends: boolean }): SidebarRow[] {
-  return ROWS.filter((row) => row.key !== "friends" || options.friends);
-}
-
-export function placeLabel(key: DesktopPlaceKey): string {
-  return ROWS.find((row) => row.key === key)?.label ?? key;
+export function placeLabel(key: PlaceKey): string {
+  return LABELS[key] ?? key;
 }
 
 /**
@@ -78,9 +70,9 @@ export type PlacePage =
   | { name: "extensions-agent"; scope: string }
   | { name: "workFile"; id: string };
 
-/** A place with a URL: a sidebar row, the computer page, a Work file, or one Session of the current computer; `page`, a page under it. */
+/** A place with a URL: a named place, a Work file, or one Session of the current computer; `page`, a page under it. */
 export type WebPlace =
-  | { key: Exclude<DesktopPlaceKey, "sessions">; page?: PlacePage }
+  | { key: Exclude<PlaceKey, "sessions" | "computer">; page?: PlacePage }
   | { key: "sessions" }
   | { key: "computer" }
   | { key: "work"; page: PlacePage }
@@ -153,14 +145,6 @@ function pageOfSegments(first: string, rest: string[], params: URLSearchParams):
   }
 }
 
-/** The sidebar row a place selects: a Session selects Sessions, a Work file Brain, the computer page Settings. */
-export function sidebarKeyOf(place: WebPlace): DesktopPlaceKey {
-  if (place.key === "work") return "brain";
-  if (place.key === "computer") return "settings";
-  if (place.key === "session") return "sessions";
-  return place.key;
-}
-
 /**
  * Where a place lives: its name (`/calendar`, `/sessions/<id>`), the same as the
  * daemon's app routes (`/screen`, `/resources`, `/friends`). The page carries
@@ -224,31 +208,43 @@ function placeTitle(place: WebPlace): string {
   switch (place.key) {
     case "work": return "Work";
     case "session": return "Session";
-    case "computer": return "Computer";
     default: return placeLabel(place.key);
   }
 }
 
-/** The sidebar's width: dragged, saved, and clamped to its range. */
-export const SIDEBAR_WIDTH = { initial: 264, min: 216, max: 400 } as const;
-/** Where the sidebar's width is kept. */
-export const SIDEBAR_WIDTH_KEY = "mewla.desktop.sidebarWidth";
+/** The left pane's width on wide (SPEC §14.1): dragged within 280–420, 320 by default, ← and → step 16. */
+export const PANE_WIDTH = { initial: 320, min: 280, max: 420, step: 16 } as const;
+/** Where the left pane's width is kept on this device. */
+export const PANE_WIDTH_KEY = "mewla.wide.paneWidth";
 
-export function clampPanelWidth(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.round(Math.min(max, Math.max(min, value)));
+export function clampPaneWidth(value: number): number {
+  if (!Number.isFinite(value)) return PANE_WIDTH.initial;
+  return Math.round(Math.min(PANE_WIDTH.max, Math.max(PANE_WIDTH.min, value)));
 }
 
 /** A saved width, or the default when nothing (or nothing numeric) was saved. */
-export function storedSidebarWidth(raw: string | null | undefined): number {
+export function storedPaneWidth(raw: string | null | undefined): number {
   const value = raw == null || raw.trim() === "" ? NaN : Number(raw);
-  return clampPanelWidth(Number.isFinite(value) ? value : SIDEBAR_WIDTH.initial, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max);
+  return clampPaneWidth(Number.isFinite(value) ? value : PANE_WIDTH.initial);
 }
 
-/** A page's content column (client/DESIGN.md): 760, 1200 (Calendar, Resources, a Session), 820 (a chat), or the whole pane. */
-export type PageColumn = "page" | "wide" | "reading" | "full";
+/** ← (-1) or → (+1) on the focused handle. */
+export function stepPaneWidth(width: number, direction: -1 | 1): number {
+  return clampPaneWidth(width + direction * PANE_WIDTH.step);
+}
 
-export const PAGE_COLUMN_WIDTH: Record<Exclude<PageColumn, "full">, number> = { page: 760, wide: 1200, reading: 820 };
+/** From this right-pane width a list page shows the item it opens beside it (Git review › diff, Files › file). */
+export const LIST_DETAIL_MIN_WIDTH = 880;
+
+/** The list and its item side by side: on wide, with a right pane of at least 880 pt; otherwise the item pushes. */
+export function showsListDetail(input: { wide: boolean; paneWidth: number }): boolean {
+  return input.wide && input.paneWidth >= LIST_DETAIL_MIN_WIDTH;
+}
+
+/** A page's content column (client/DESIGN.md): 680 for list pages, 760 for a thread and its composer, or the whole pane. */
+export type PageColumn = "page" | "reading" | "full";
+
+export const PAGE_COLUMN_WIDTH: Record<Exclude<PageColumn, "full">, number> = { page: 680, reading: 760 };
 
 /** The header row's width for a column; null for the whole pane. */
 export function pageColumnWidth(column: PageColumn): number | null {

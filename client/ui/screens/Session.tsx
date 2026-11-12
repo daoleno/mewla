@@ -2,6 +2,7 @@ import { cleanup, computed, effect, openUrl, signal, Storage, Text, untracked, V
 import { listSessionServices } from "../../core/sessions/services";
 import { dshWebServiceURL } from "../../core/sessions/servicesPresentation";
 import { AlertDialog, Button, Input, type NavStackState } from "nsh/base";
+import { createMenuAnchor, showMenu, type MenuItem } from "../kit/Menu";
 import { AppSheet } from "../shell/AppSheet";
 import { NavPage } from "../shell/NavPage";
 import { Chat } from "../../core/conversation/chat";
@@ -463,18 +464,18 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     );
   };
 
+  const menuAnchor = createMenuAnchor();
   const menu = async () => {
-    const actions = [
+    const items: MenuItem[] = [
       ...(canChat() ? [{ id: "mode", label: mode() === "chat" ? "Open terminal" : "Open chat" }] : []),
       ...(switchable() ? [{ id: "model", label: "Model & Effect" }] : []),
       ...(dshWeb() ? [{ id: "web", label: "Open Web" }] : []),
       { id: "terminal", label: "New Terminal" },
       { id: "rename", label: "Rename" },
       ...(link() ? [{ id: "work", label: "Open Brain" }] : []),
-      { id: "terminate", label: "Terminate", role: "destructive" as const },
-      { id: "cancel", label: "Cancel", role: "cancel" as const },
+      { id: "terminate", label: "Terminate", destructive: true },
     ];
-    const { action } = await AlertDialog.show({ title: untracked(title), presentation: "actionSheet", actions });
+    const action = await showMenu({ title: untracked(title), items, anchor: menuAnchor.node(), testID: "session-menu-popover" });
     if (action === "mode") chooseMode(untracked(mode) === "chat" ? "terminal" : "chat");
     else if (action === "model") modelOpen.set(true);
     else if (action === "work") {
@@ -494,7 +495,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   };
 
   return (
-    <NavPage title={title()} column="wide"
+    <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"}
       headerTitle={
         <View class="max-w-[260px] flex-row items-center gap-2">
           <AgentIcon kind={kind()} size={22} />
@@ -520,7 +521,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               <Text class="max-w-[120px] text-xs line-clamp-1">{gitChip()!.label}</Text>
             </Button>
           ) : null}
-          {props.brain ? null : <Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>}
+          {props.brain ? null : <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"><Icon name="more-horizontal" size={22} color="primary" /></Button>}
         </View>
       }>
       <View class="flex-1 bg-background">

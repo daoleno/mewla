@@ -3,6 +3,7 @@ import type { JSX } from "nsh";
 import { Button, Menu, MenuItem } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { GuardedSheet as Sheet } from "../../shell/AppSheet";
+import { wide } from "../../shell/layout";
 import { NavPage, PageStack } from "../../shell/NavPage";
 import { failureText } from "../../../core/more/daemon";
 import { directHint, SLOW_NOTE_MS, SlowWatch } from "../../../core/screen/connectionWatch";
@@ -38,8 +39,10 @@ type Phase = "checking" | "failed" | "setup" | "agent" | "local" | "live";
 type How = "auto" | "takeOver" | "watch";
 
 const MENU_POPUP = "rounded-[18px] bg-popover p-1.5 shadow-float";
+/** On wide Screen ⋯ is a popover at its button, 288 wide (SPEC §14.2). */
+const menuPopup = () => (wide() ? `${MENU_POPUP} w-[288px]` : MENU_POPUP);
 const MENU_BACKDROP = "bg-scrim";
-const ITEM = "min-h-[48px] justify-center rounded-xl px-4 py-2.5 active:bg-accent disabled:opacity-40";
+const ITEM = "min-h-[48px] justify-center rounded-xl px-4 py-2.5 hover:bg-accent active:bg-accent focus:bg-accent disabled:opacity-40";
 
 /**
  * Screen: the current computer's own screen (Mac, Windows), or on Linux each
@@ -413,7 +416,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       ) : null,
     );
   const optionsMenu = (testID: string) => (
-    <Menu trigger={<View testID={testID} accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full active:bg-white/15"><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={MENU_POPUP} backdropClass={MENU_BACKDROP}>
+    <Menu trigger={<View testID={testID} accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full active:bg-white/15"><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={menuPopup()} backdropClass={MENU_BACKDROP}>
       <View class="px-4 pb-1 pt-2"><Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{title()}</Text></View>
       {keyed(menuKind, (kind) =>
         kind === "local" ? (
@@ -576,7 +579,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       ) : kind === "linux" && platform.os === "android" ? (
         // Linux: the menu holds only the rows of other surfaces (the Phone); with none, its button is hidden
         // (it opened an empty sheet). The menu itself stays: one made later in the header does not open.
-        <Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full" style={{ display: phoneOn() ? "flex" : "none", flexDirection: "column" }}><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={MENU_POPUP} backdropClass={MENU_BACKDROP}>
+        <Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full" style={{ display: phoneOn() ? "flex" : "none", flexDirection: "column" }}><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={menuPopup()} backdropClass={MENU_BACKDROP}>
           {phoneItem()}
         </Menu>
       ) : null,

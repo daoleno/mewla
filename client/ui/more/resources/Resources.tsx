@@ -1,3 +1,4 @@
+import { wide } from "../../shell/layout";
 import type { JSX } from "nsh";
 import { Canvas, cleanup, effect, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
@@ -119,7 +120,6 @@ export function Resources(props: { nav: PageNav }) {
       hero={telemetry() ? <Headline telemetry={telemetry()!} /> : undefined}
       headerRight={telemetry() ? <HeaderActions onRefresh={refresh} /> : undefined}
       testID="resources"
-      column="wide"
       maxWidth={CONTENT_MAX_WIDTH}
       refreshing={reading().reading && Boolean(telemetry())}
       onRefresh={refresh}
@@ -209,10 +209,10 @@ function Ready(props: { telemetry: ResourceTelemetry; onRefresh: () => void }) {
       ))}
       {/* Four across on a wide screen, one column on the narrowest, else two. */}
       <View class="mt-3 flex-row flex-wrap gap-3">
-        <View style={{ flexGrow: 1, flexBasis: tileBasis(width()) }}><Cpu t={t()} /></View>
-        <View style={{ flexGrow: 1, flexBasis: tileBasis(width()) }}><Memory t={t()} /></View>
-        <View style={{ flexGrow: 1, flexBasis: tileBasis(width()) }}><Disks t={t()} /></View>
-        <View style={{ flexGrow: 1, flexBasis: tileBasis(width()) }}><Pressure t={t()} /></View>
+        <View style={{ flexGrow: 1, flexBasis: tileBasis(width(), wide()) }}><Cpu t={t()} /></View>
+        <View style={{ flexGrow: 1, flexBasis: tileBasis(width(), wide()) }}><Memory t={t()} /></View>
+        <View style={{ flexGrow: 1, flexBasis: tileBasis(width(), wide()) }}><Disks t={t()} /></View>
+        <View style={{ flexGrow: 1, flexBasis: tileBasis(width(), wide()) }}><Pressure t={t()} /></View>
       </View>
       <Consumers t={t()} />
     </View>
@@ -480,7 +480,7 @@ function Consumers(props: { t: ResourceTelemetry }) {
   const filtered = () => (owner() === "all" ? all() : all().filter((c) => c.owner === owner()));
   const keys = () => consumerRowKeys(filtered());
   const counts = () => new Map(groupConsumers(props.t.consumers).map((g) => [g.consumers[0]?.owner, g.consumers.length]));
-  const wide = () => consumersWide(width());
+  const procs = () => consumersWide(width(), wide());
   const choose = (key: string) => {
     owner.set(key);
     shownCount.set(PAGE_SIZE);
@@ -516,14 +516,14 @@ function Consumers(props: { t: ResourceTelemetry }) {
           <View class="flex-1" />
           <Text class="w-[52px] text-right text-caption text-muted-foreground">CPU</Text>
           <Text class="w-[64px] text-right text-caption text-muted-foreground">Memory</Text>
-          {wide() ? <Text class="w-[44px] text-right text-caption text-muted-foreground">Procs</Text> : null}
-          {wide() ? <View class="w-[72px]" /> : null}
+          {procs() ? <Text class="w-[44px] text-right text-caption text-muted-foreground">Procs</Text> : null}
+          {procs() ? <View class="w-[72px]" /> : null}
           <View class="w-[14px]" />
         </View>
         {filtered().length === 0 ? (
           <Text class="px-4 py-4 text-sub text-muted-foreground">{owner() === "all" ? "No consumers reported." : "No consumers reported for this owner."}</Text>
         ) : (
-          filtered().slice(0, shownCount()).map((c, index) => <ConsumerRow consumer={c} rowKey={keys()[index]} wide={wide()} share={consumerShare(c, filtered())} />)
+          filtered().slice(0, shownCount()).map((c, index) => <ConsumerRow consumer={c} rowKey={keys()[index]} wide={procs()} share={consumerShare(c, filtered())} />)
         )}
         {filtered().length > shownCount() ? (
           <Button testID="consumers-more" accessibilityLabel={`Show ${Math.min(PAGE_SIZE, filtered().length - shownCount())} more`} onPress={() => shownCount.set(shownCount() + PAGE_SIZE)} class="flex-row items-center gap-1.5 px-4 py-3 active:bg-accent">

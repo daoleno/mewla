@@ -39,6 +39,8 @@ import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { AttachmentTray } from "../more/files/Pages";
 import { tray } from "../tray/state";
+import { wide } from "../shell/layout";
+import { createMenuAnchor } from "../kit/Menu";
 
 const startingChat = signal(false);
 const notice = signal("");
@@ -211,23 +213,29 @@ export function openBrainHost(): void {
   hostSheetOpen.set(true);
 }
 
+/** Brain's ⋯: where its menu's popover sits on wide. */
+const menuAnchor = createMenuAnchor();
+
 /**
  * Home's header (SPEC §11): the cat (the computer page), "Brain" with the computer's name under
  * it when there are several, the state control (the tray), and ⋯ (Brain's menu). 52 pt, canvas,
- * no line; the tray dims it with the page.
+ * no line; the tray dims it with the page. On wide (§14.1) only "Brain" and ⋯: the left pane holds
+ * the cat, the computer's name and the tray. Each part comes and goes on its own, so crossing
+ * 1024 makes nothing else again.
  */
 function HomeHeader() {
   return (
-    <View testID="home-header" class="bg-background px-2" style={{ paddingTop: mobile ? safeArea().top : 0 }}>
+    <View testID="home-header" class={`bg-background ${wide() ? "px-4" : "px-2"}`} style={{ paddingTop: mobile ? safeArea().top : 0 }}>
       <View class="h-[52px] flex-row items-center gap-1">
-        <HomeCat onPress={() => openPage({ name: "computer" })} />
+        {wide() ? null : <HomeCat onPress={() => openPage({ name: "computer" })} />}
         <View class="min-w-0 shrink-0 justify-center pr-1">
           <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
-          {servers().length > 1 ? <Text testID="home-computer" class="text-caption text-muted-foreground line-clamp-1">{current()?.name ?? ""}</Text> : null}
+          {servers().length > 1 && !wide() ? <Text testID="home-computer" class="text-caption text-muted-foreground line-clamp-1">{current()?.name ?? ""}</Text> : null}
         </View>
-        <View class="min-w-0 shrink"><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} /></View>
+        {wide() ? null : <View class="min-w-0 shrink"><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} /></View>}
         <View class="flex-1" />
-        <Button testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)} class="size-11 items-center justify-center rounded-full active:bg-accent">
+        <Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
+          class="size-11 items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
           <Icon name="more-horizontal" size={22} tone="ink" />
         </Button>
       </View>
@@ -309,7 +317,7 @@ function brainHostIdentity() {
   const host = untracked(brain)?.host_worker;
   return host?.id && host.process_id && host.started_at ? { workerId: host.id, processId: host.process_id, startedAt: host.started_at } : null;
 }
-function browseWorkspace(): void {
+export function browseWorkspace(): void {
   openPage(workspaceRoute(brainHostIdentity()));
 }
 
@@ -341,13 +349,13 @@ export function Home() {
         {routedBrainThread() ? <PastThread /> : null}
         <Body handlers={handlers} />
         {routedBrainThread() ? null : <Composer text={text} editor={editor} />}
-        <Tray onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
+        {wide() ? null : <Tray onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
           onUseExecutor={(id) => {
             const executor = (brain()?.executors ?? []).find((ref) => ref.id === id);
             if (executor) void currentBrain.hostSwitch.switchTo(executor);
           }}
-          onSwitchExecutor={() => hostSheetOpen.set(true)} />
-        <BrainMenu open={menuOpen} onClose={() => menuOpen.set(false)}
+          onSwitchExecutor={() => hostSheetOpen.set(true)} />}
+        <BrainMenu open={menuOpen} onClose={() => menuOpen.set(false)} anchor={menuAnchor.node}
           onOpenTerminal={(hostWorkerId: string) => openBrainTerminal(hostWorkerId)}
           onBrowseWorkspace={browseWorkspace}
           onNewChat={() => startNewChat()}

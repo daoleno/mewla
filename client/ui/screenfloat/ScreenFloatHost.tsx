@@ -42,6 +42,8 @@ export interface ScreenFloatHostProps {
   onOpenScreen: (worker: string | null) => void;
   /** What lies under the window's area at the bottom (the tab bar). */
   bottomInset?: () => number;
+  /** What lies left of it (the wide layout's left pane). */
+  leftInset?: () => number;
 }
 
 /**
@@ -163,7 +165,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
     const first = untracked(source);
     if (!server || !first) return <View />;
     const live = () => sources().find((s) => s.key === first.key) ?? first;
-    if (first.kind === "phone") return <PhoneContent source={live} {...shared(first.key)} onOpen={props.onOpenPhone} bottomInset={props.bottomInset} />;
+    if (first.kind === "phone") return <PhoneContent source={live} {...shared(first.key)} onOpen={props.onOpenPhone} bottomInset={props.bottomInset} leftInset={props.leftInset} />;
     return (
       <RemoteContent
         server={server}
@@ -173,6 +175,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
         onHold={(on) => holding.set(on ? first.key : holding() === first.key ? null : holding())}
         onChanged={refresh}
         bottomInset={props.bottomInset}
+        leftInset={props.leftInset}
         key={key}
       />
     );
@@ -192,6 +195,7 @@ interface FloatProps {
   onCycle: () => void;
   onOpen: () => void;
   bottomInset?: () => number;
+  leftInset?: () => number;
 }
 
 /** Phone use: the native live view, watch only. Taking over is in the Phone page, which Take over opens. */
@@ -224,6 +228,7 @@ function PhoneContent(props: FloatProps) {
       menu={menu}
       attention={() => mode() === "handoff"}
       bottomInset={props.bottomInset}
+      leftInset={props.leftInset}
     >
       {(picture) => (
         <View class="flex-1">
@@ -311,6 +316,7 @@ function RemoteContent(props: RemoteContentProps) {
       typing={typing}
       attention={() => session.holding()}
       bottomInset={props.bottomInset}
+      leftInset={props.leftInset}
     >
       {(picture) => (
         <View class="flex-1">

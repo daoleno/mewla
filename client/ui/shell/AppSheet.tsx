@@ -1,8 +1,7 @@
-import { cleanup, effect, Keyboard, keyboardFrame, signal, untracked } from "nsh";
+import { cleanup, effect, Keyboard, keyboardFrame, platform, signal, untracked } from "nsh";
 import { Dialog, Sheet, type DialogProps, type SheetProps } from "nsh/base";
-import { isAvailable as mobile } from "nsh/mobile";
 import { sheetOpened, switching } from "../session";
-import { desktop } from "./Shell";
+import { wide } from "./layout";
 
 /**
  * Whether a sheet may show: a switch of computer closes it first (NSH 0.4.0 crashes
@@ -61,22 +60,28 @@ export function GuardedSheet(props: SheetProps) {
 /** The theme's ink for a sheet's or dialog's texts that say no color of their own (NSH draws them black; unreadable in Dark). */
 const INK = "text-foreground";
 
-/** The card a sheet becomes on the desktop: centered near the top, one inset all round (client/DESIGN.md). */
-const DIALOG = "mt-24 w-[560px] max-w-[92%] self-center overflow-hidden rounded-xl border border-border";
+/**
+ * The dialog a sheet becomes on wide (soft-final SPEC §14.2): 480 wide, centred, radius 28, over the
+ * same scrim, no grabber. iOS shows it as its own centred form sheet (a dialog there hides what is
+ * behind unless it is a sheet), so the card fills that.
+ */
+const DIALOG = platform.os === "ios"
+  ? "flex-1 overflow-hidden bg-sheet"
+  : "w-[480px] max-w-[92%] max-h-[88%] self-center my-auto overflow-hidden rounded-[28px] bg-sheet shadow-float";
 
 /**
- * A bottom sheet on phones and narrow windows; on the desktop layout a centered
- * dialog with the same content, without the grabber's rounded top. Escape and
- * the backdrop close either.
+ * A bottom sheet below 1024 pt; on wide, on every device, a centred dialog with the same content,
+ * without the grabber's rounded top. Escape and the scrim close either. Crossing 1024 with one open
+ * shows it the other way.
  */
 export function AppSheet(props: SheetProps & { testID?: string }) {
   const open = guardedOpen(props);
-  if (mobile) return <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} popupStyle={aboveKeyboard(props)} open={open()} />;
-  const popup = () => `${DIALOG} ${INK} ${(props.popupClass ?? "").replace(/\brounded-t-\S+/g, "")}`;
+  const popup = () => `${DIALOG} ${INK} ${(props.popupClass ?? "").replace(/\brounded-t-\S+|\bmax-h-\S+|\bbg-\S+/g, "")}`;
   return (
     <>
-      {desktop() ? (
-        <Dialog testID={props.testID} open={open()} animation="fade" class={popup()} backdropClass={props.backdropClass ?? "bg-black/30"}
+      {wide() ? (
+        <Dialog testID={props.testID} open={open()} animation="fade" class={popup()} backdropClass={platform.os === "ios" ? undefined : "bg-scrim"}
+          presentation={platform.os === "ios" ? "formSheet" : undefined}
           closeOnEscape={props.closeOnEscape ?? true} closeOnBackdropPress={props.closeOnBackdropPress ?? true}
           onOpenChange={({ open, reason }) => props.onOpenChange?.({ open, reason })} onCancel={props.onCancel} onClose={props.onClose}>
           {props.children}

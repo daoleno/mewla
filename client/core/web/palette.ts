@@ -1,13 +1,16 @@
-import type { DesktopPlaceKey } from "./places";
+import { placeLabel, type PlaceKey } from "./places";
 import { goShortcutLabel } from "./shortcuts";
 
 /** One row of the ⌘K palette. Pure data; the shell runs `action`. */
 export type PaletteAction =
-  | { kind: "go"; key: DesktopPlaceKey }
+  | { kind: "go"; key: PlaceKey }
   | { kind: "session"; workerId: string }
   | { kind: "work"; workId: string; sessionId?: string }
   | { kind: "new-session" }
-  | { kind: "new-brain-chat" }
+  | { kind: "new-chat" }
+  | { kind: "brain-terminal" }
+  | { kind: "browse-workspace" }
+  | { kind: "switch-executor" }
   | { kind: "shortcuts" };
 
 export type PaletteSection = "Actions" | "Go to" | "Work" | "Sessions";
@@ -22,16 +25,8 @@ export interface PaletteItem {
   action: PaletteAction;
 }
 
-const PLACES: ReadonlyArray<{ key: DesktopPlaceKey; label: string }> = [
-  { key: "brain", label: "Brain" },
-  { key: "sessions", label: "Sessions" },
-  { key: "calendar", label: "Calendar" },
-  { key: "extensions", label: "Extensions" },
-  { key: "screen", label: "Screen" },
-  { key: "stats", label: "Stats" },
-  { key: "resources", label: "Resources" },
-  { key: "settings", label: "Settings" },
-];
+/** Go to: the places with a `G` key, in the shortcuts sheet's order. */
+const PLACES: readonly PlaceKey[] = ["brain", "sessions", "calendar", "computer", "screen", "extensions", "stats", "resources", "settings"];
 
 export interface PaletteSession {
   id: string;
@@ -46,15 +41,18 @@ export interface PaletteWork {
   sessionId?: string;
 }
 
-/** Actions first, then places, Work and Sessions of the current computer. */
+/** Actions first (SPEC §14.3), then places, Work and Sessions of the current computer. */
 export function buildPaletteItems(input: { sessions: readonly PaletteSession[]; work: readonly PaletteWork[] }): PaletteItem[] {
   const items: PaletteItem[] = [
     { id: "action:new-session", section: "Actions", label: "New session", shortcut: "N", action: { kind: "new-session" } },
-    { id: "action:new-brain-chat", section: "Actions", label: "New Brain chat", action: { kind: "new-brain-chat" } },
+    { id: "action:new-chat", section: "Actions", label: "New chat", action: { kind: "new-chat" } },
+    { id: "action:brain-terminal", section: "Actions", label: "Open Brain's terminal", action: { kind: "brain-terminal" } },
+    { id: "action:browse-workspace", section: "Actions", label: "Browse workspace", action: { kind: "browse-workspace" } },
+    { id: "action:switch-executor", section: "Actions", label: "Switch executor", action: { kind: "switch-executor" } },
     { id: "action:shortcuts", section: "Actions", label: "Keyboard shortcuts", shortcut: "?", action: { kind: "shortcuts" } },
   ];
-  for (const place of PLACES) {
-    items.push({ id: `go:${place.key}`, section: "Go to", label: place.label, shortcut: goShortcutLabel(place.key), action: { kind: "go", key: place.key } });
+  for (const key of PLACES) {
+    items.push({ id: `go:${key}`, section: "Go to", label: placeLabel(key), shortcut: goShortcutLabel(key), action: { kind: "go", key } });
   }
   for (const work of input.work) {
     items.push({ id: `work:${work.workId}`, section: "Work", label: work.title, detail: work.statusLabel, action: { kind: "work", workId: work.workId, sessionId: work.sessionId } });

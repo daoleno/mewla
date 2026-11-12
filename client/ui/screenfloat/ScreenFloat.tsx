@@ -61,6 +61,8 @@ export interface ScreenFloatProps {
   attention?: () => boolean;
   /** What lies under the window's area at the bottom (the tab bar). */
   bottomInset?: () => number;
+  /** What lies left of the window's area (the wide layout's left pane): it floats in the right pane. */
+  leftInset?: () => number;
   /** Draws the live view into the picture's exact size. */
   children: (picture: () => { width: number; height: number }) => JSX.Element;
 }
@@ -94,7 +96,7 @@ export function ScreenFloat(props: ScreenFloatProps) {
     const insets = safeArea();
     const keyboard = keyboardFrame().height;
     return {
-      left: insets.left,
+      left: Math.max(insets.left, props.leftInset?.() ?? 0),
       top: insets.top + HEADER,
       right: window.width - insets.right,
       bottom: window.height - (keyboard > 0 ? keyboard : Math.max(insets.bottom, props.bottomInset?.() ?? 0)) - (props.typing?.() ? 0 : COMPOSER),
@@ -103,7 +105,7 @@ export function ScreenFloat(props: ScreenFloatProps) {
   // The picture has the screen's exact shape, so it fills its place; the window never reaches the composer or the keyboard.
   const picture = () => {
     const a = area();
-    return floatSize(ratio(), fraction(), windowSize(), Math.max(0, a.bottom - a.top - 2 * EDGE - BAR - extra()));
+    return floatSize(ratio(), fraction(), { width: a.right - a.left, height: windowSize().height }, Math.max(0, a.bottom - a.top - 2 * EDGE - BAR - extra()));
   };
   const size = () => ({ width: picture().width, height: picture().height + BAR + extra() });
 
@@ -149,7 +151,7 @@ export function ScreenFloat(props: ScreenFloatProps) {
       startWidth = untracked(size).width;
     },
     onPanResponderMove: (_e, g) => {
-      untracked(() => fraction.set(clampFloatFraction(resizedFloatWidth(startWidth, ratio(), { x: g.dx, y: g.dy }, corner()) / windowSize().width)));
+      untracked(() => fraction.set(clampFloatFraction(resizedFloatWidth(startWidth, ratio(), { x: g.dx, y: g.dy }, corner()) / (area().right - area().left))));
     },
     onPanResponderRelease: () => void Storage.setItem(FLOAT_SIZE_KEY, String(untracked(fraction))).catch(() => undefined),
   });
