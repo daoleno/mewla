@@ -81,6 +81,10 @@ type hostSession struct {
 	redraw bool
 	// owned: the Session is this view's size (no other viewer resized it).
 	owned bool
+	// redraws: the host ends this view when another viewer resizes the
+	// Session (AttachResized). A host from before that never does: then the
+	// view takes its size back whenever it attaches again, as it always did.
+	redraws bool
 
 	events    chan Event
 	closeOnce sync.Once
@@ -121,7 +125,7 @@ func (s *hostSession) Start(ctx context.Context) error {
 	}
 	s.client, s.view, s.cancel = client, view, cancel
 	s.size = Size{Cols: view.Cols, Rows: view.Rows}
-	s.owned = true
+	s.owned, s.redraws = true, view.Redraw
 	go s.pump(runCtx, view)
 	return nil
 }
@@ -179,14 +183,19 @@ func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment) {
 
 // reattach opens the view again at the Session's size, whatever it is now:
 // a size this view wants was set before (Resize), and one another viewer set
-// stays until this view's person acts.
+// stays until this view's person acts. A host that does not redraw viewers
+// gets this view's size again, as before.
 func (s *hostSession) reattach(ctx context.Context) (*sessionhost.Attachment, error) {
 	s.mu.Lock()
-	client := s.client
+	client, size, passive := s.client, s.size, s.redraws
 	s.mu.Unlock()
+	params := sessionhost.AttachParams{ID: s.targetID, Redraw: true}
+	if !passive {
+		params.Cols, params.Rows = size.Cols, size.Rows
+	}
 	callCtx, cancel := context.WithTimeout(ctx, hostCallTimeout)
 	defer cancel()
-	view, err := client.Attach(callCtx, sessionhost.AttachParams{ID: s.targetID, Redraw: true})
+	view, err := client.Attach(callCtx, params)
 	if err != nil {
 		return nil, fmt.Errorf("reopen Session %s: %w", s.targetID, err)
 	}
@@ -197,6 +206,7 @@ func (s *hostSession) reattach(ctx context.Context) (*sessionhost.Attachment, er
 		return nil, fmt.Errorf("terminal view of Session %s is closed", s.targetID)
 	}
 	s.view = view
+	s.redraws = view.Redraw
 	s.owned = view.Cols == s.size.Cols && view.Rows == s.size.Rows
 	again := s.redraw // resized while this view was attaching
 	s.mu.Unlock()
@@ -240,6 +250,10 @@ func (s *hostSession) started() (*sessionhost.Client, error) {
 	return s.client, nil
 }
 
+// focusOut is the report a view sends when it loses the keyboard (DEC 1004):
+// the person went elsewhere, so it is no reason to take the size.
+const focusOut = "\x1b[O"
+
 // Write types into the Session. A person typing here while another viewer
 // has the Session at its size takes the size back first, so what they type
 // into is drawn right.
@@ -251,7 +265,7 @@ func (s *hostSession) Write(data string) error {
 	s.mu.Lock()
 	owned, size := s.owned, s.size
 	s.mu.Unlock()
-	if !owned {
+	if !owned && data != focusOut {
 		if err := s.Resize(size.Cols, size.Rows); err != nil {
 			return err
 		}
@@ -264,14 +278,15 @@ func (s *hostSession) Write(data string) error {
 
 // Resize makes cols x rows the Session's size and draws the view again. The
 // App sends its grid again when the terminal is shown: at the size this view
-// already has, nothing happens.
+// already has, nothing happens, unless the host would not have told it of
+// another viewer's resize (then it resizes and redraws, as before).
 func (s *hostSession) Resize(cols, rows int) error {
 	client, err := s.started()
 	if err != nil {
 		return err
 	}
 	s.mu.Lock()
-	if s.owned && s.size == (Size{Cols: cols, Rows: rows}) {
+	if s.redraws && s.owned && s.size == (Size{Cols: cols, Rows: rows}) {
 		s.mu.Unlock()
 		return nil
 	}

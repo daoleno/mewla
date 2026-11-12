@@ -263,6 +263,10 @@ type AttachParams struct {
 type Attached struct {
 	Cols int `json:"cols"`
 	Rows int `json:"rows"`
+	// Redraw: this view will be ended with AttachResized when the Session is
+	// resized (it asked, and this host does that). A host from before Redraw
+	// leaves it false, and the viewer keeps taking its size back itself.
+	Redraw bool `json:"redraw,omitempty"`
 	// OutputSeq is the output the replay already shows.
 	OutputSeq uint64 `json:"output_seq"`
 }

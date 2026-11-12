@@ -53,7 +53,7 @@ func (s *session) attach(redraw bool) (attached Attached, replay []byte, tap *vi
 	} else {
 		s.taps[tap] = struct{}{}
 	}
-	return Attached{Cols: state.Cols, Rows: state.Rows, OutputSeq: s.outputSeq}, replay, tap, true, nil
+	return Attached{Cols: state.Cols, Rows: state.Rows, OutputSeq: s.outputSeq, Redraw: redraw}, replay, tap, true, nil
 }
 
 func (s *session) detach(tap *viewTap) {

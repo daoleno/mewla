@@ -272,11 +272,13 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 	// the person types while another viewer has it; attaching again on its own
 	// (behind, or resized by another viewer) shows the Session at whatever size
 	// it has, so two viewers never take the size from each other.
-	owned := false
+	// A host from before AttachResized never redraws this terminal for another
+	// viewer's resize: then it takes its size whenever it attaches, as before.
+	owned, redraws := false, false
 	attach := func(passive bool) (*sessionhost.Attachment, error) {
 		cols, rows := size()
 		params := sessionhost.AttachParams{ID: id, Redraw: true}
-		if !passive {
+		if !passive || !redraws {
 			params.Cols, params.Rows = cols, rows
 		}
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -287,7 +289,7 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 			return nil, fmt.Errorf("no Session %s in the session host", id)
 		}
 		if err == nil {
-			owned = view.Cols == cols && view.Rows == rows
+			owned, redraws = view.Cols == cols && view.Rows == rows, view.Redraw
 		}
 		return view, err
 	}
