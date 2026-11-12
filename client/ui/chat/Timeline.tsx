@@ -13,7 +13,7 @@ import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PlainText } from "./PlainText";
 import { selectingText } from "./messageEdit";
-import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkEventCard, type Expansion } from "./TimelineRows";
+import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
@@ -28,6 +28,8 @@ export type MessageHandlers = {
   onFile?: (path: string) => void;
   /** An image a reply shows by its path on the computer, as a data URL. */
   loadImage?: (path: string) => Promise<string | null>;
+  /** Brain's thread: where its Work cards lead. */
+  work?: WorkCardHandlers;
 };
 
 /** "Working" with the turn's elapsed time, ticking each second while it shows. */
@@ -110,7 +112,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
       ) : it().type === "computer-message" ? (
         <ComputerMessageCard item={as("computer-message") as () => ComputerMessageTimelineItem} expansion={props.expansion} />
       ) : it().type === "brain-work-event" ? (
-        <WorkEventCard item={as("brain-work-event") as () => BrainWorkEventTimelineItem} />
+        <WorkCard item={as("brain-work-event") as () => BrainWorkEventTimelineItem} handlers={props.handlers.work} />
       ) : null}
     </View>
   );
