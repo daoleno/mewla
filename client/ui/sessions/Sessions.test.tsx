@@ -80,6 +80,22 @@ describe("Sessions", () => {
     expect(active.at(-1)).toBe("w101");
   }, 20_000);
 
+  test("New session's custom command: a Soft group, no uppercase labels; Start launches the typed command", async () => {
+    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("text:first");
+    await app.press("id:tray-new");
+    await app.waitFor("id:preset-codex");
+    expect(app.texts()).toContain("Folder");
+    expect(app.texts().some((text) => text === "WORKING DIRECTORY" || text === "Advanced")).toBe(false);
+    await app.press("id:new-advanced");
+    await app.waitFor("id:new-command");
+    await app.type("id:new-command", "htop");
+    await app.press("id:new-launch");
+    await app.waitFor("id:session-menu");
+    expect(framesOf(app.host.posts(), "create_session").at(-1)).toMatchObject({ command: "htop" });
+  }, 20_000);
+
   test("the tray menu's Services lists ports by project; a port's page opens its terminal and shares it after asking", async () => {
     const web = { id: "svc-1", generation: "g1", worker_id: "a", worker_name: "dev server", project: "mewla", cwd: "/home/me/mewla", process: "vite", pid: 9, port: 5173, protocol: "tcp", binds: ["0.0.0.0"], urls: [{ label: "LAN", url: "http://192.0.2.10:5173", address: "192.0.2.10:5173", kind: "lan" }], local_only: false, source: "session" };
     const app = await sessionsApp({
