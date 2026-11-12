@@ -35,7 +35,9 @@ grep -q '^<base href="/">$' "$APP/index.html" || { echo "index.html has no <base
 # phones' face (client/native/terminal/fonts, SIL OFL 1.1).
 mkdir -p "$APP/terminal"
 cp "$ROOT/client/ui/web/terminal/terminal.js" "$APP/terminal/terminal.js"
-cp "$("$ROOT/scripts/build-libghostty-web.sh" | tail -1)" "$APP/terminal/mewla-vt.wasm"
+# An assignment, so a failed build stops here (pipefail); its last line is the module's path.
+VT_WASM="$("$ROOT/scripts/build-libghostty-web.sh" | tail -1)"
+cp "$VT_WASM" "$APP/terminal/mewla-vt.wasm"
 for file in MapleMono-NF-Regular.ttf MapleMono-NF-SemiBold.ttf MapleMono-NF-Italic.ttf MapleMono-NF-SemiBoldItalic.ttf; do
   cp "$ROOT/client/native/terminal/fonts/$file" "$APP/terminal/$file"
 done
