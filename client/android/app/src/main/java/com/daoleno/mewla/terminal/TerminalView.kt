@@ -80,6 +80,11 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   /** Content pixels the drawing is panned sideways (0..fit.maxPanX). */
   private var panX = 0f
   private var fontDp = 8f
+  /** Pixels kept clear inside the view's edges (the terminal group's padding): the grid is the area inside. */
+  private var padL = 0
+  private var padT = 0
+  private var padR = 0
+  private var padB = 0
   private var grid: Array<Line> = emptyArray()
   private var cursorCol = 0
   private var cursorRow = 0
@@ -222,10 +227,21 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 
   override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) = relayout(w, h)
 
+  /** The `padding` prop, in dp: room inside the edges; scrolled history and a panned grid still draw into it. */
+  fun setContentPadding(top: Float, right: Float, bottom: Float, left: Float) {
+    val d = resources.displayMetrics.density
+    padT = (top * d).roundToInt(); padR = (right * d).roundToInt(); padB = (bottom * d).roundToInt(); padL = (left * d).roundToInt()
+    relayout(width, height)
+    invalidate()
+  }
+
+  private fun innerW() = width - padL - padR
+  private fun innerH() = height - padT - padB
+
   private fun relayout(w: Int, h: Int) {
     if (w <= 0 || h <= 0 || cellW <= 0 || failed) return
-    val c = max(2, w / cellW)
-    val r = max(2, h / cellH)
+    val c = max(2, (w - padL - padR) / cellW)
+    val r = max(2, (h - padT - padB) / cellH)
     val areaChanged = c != areaCols || r != areaRows
     areaCols = c
     areaRows = r
@@ -280,17 +296,17 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   }
 
   private fun refit() {
-    fit = TerminalFit.of(width, height, cols, rows, cellW, cellH, TerminalFit.minScale(fontDp))
+    fit = TerminalFit.of(innerW(), innerH(), cols, rows, cellW, cellH, TerminalFit.minScale(fontDp))
     panX = panX.coerceIn(0f, fit.maxPanX)
     clampScroll()
     reportViewport()
   }
 
-  // The content (cells at full size, lineY's rows) drawn into the view: scaled by fit.scale, panned by
-  // panX, its top cut by fit.topCut. Touches map back through these.
-  private fun contentX(x: Float) = x / fit.scale + panX
-  private fun contentY(y: Float) = y / fit.scale + fit.topCut
-  private fun viewY(y: Float) = (y - fit.topCut) * fit.scale
+  // The content (cells at full size, lineY's rows) drawn into the view: inside the padding, scaled by
+  // fit.scale, panned by panX, its top cut by fit.topCut. Touches map back through these.
+  private fun contentX(x: Float) = (x - padL) / fit.scale + panX
+  private fun contentY(y: Float) = (y - padT) / fit.scale + fit.topCut
+  private fun viewY(y: Float) = (y - fit.topCut) * fit.scale + padT
 
   private fun fail(message: String) {
     failed = true
@@ -493,6 +509,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     canvas.drawColor(background)
     if (cellH <= 0) return
     canvas.save()
+    canvas.translate(padL.toFloat(), padT.toFloat())
     canvas.scale(fit.scale, fit.scale)
     canvas.translate(-panX, -fit.topCut)
     drawContent(canvas)
@@ -515,7 +532,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
       }
       if (i < history.size && i == markRow) {
         fill.color = selectionColor
-        canvas.drawRect(0f, y, max(cols * cellW.toFloat(), contentX(width.toFloat())), y + cellH, fill)
+        canvas.drawRect(contentX(0f), y, max(cols * cellW.toFloat(), contentX(width.toFloat())), y + cellH, fill)
       }
       if (from != null && to != null && i >= from[0] && i <= to[0]) {
         val c0 = if (i == from[0]) from[1] else 0
@@ -983,6 +1000,9 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     if (clip.itemCount == 0) return null
     return clip.getItemAt(0).coerceToText(context)?.toString()?.takeIf { it.isNotEmpty() }
   }
+
+  /** The `paste` command (the key bar's Paste): as the selection menu's Paste. */
+  fun pasteText(text: String) = paste(text)
 
   /** Pasted text to the program, framed for bracketed paste when it asked for it. */
   private fun paste(text: String) {

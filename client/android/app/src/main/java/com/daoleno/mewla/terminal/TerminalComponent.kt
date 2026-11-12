@@ -23,6 +23,10 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
   override fun setProp(name: String, value: Any?) {
     when (name) {
       "fontSize" -> (value as? Number)?.let { view.setFontSize(it.toFloat()) }
+      "padding" -> (value as? Map<*, *>).let { m ->
+        fun side(name: String) = (m?.get(name) as? Number)?.toFloat() ?: 0f
+        view.setContentPadding(side("top"), side("right"), side("bottom"), side("left"))
+      }
       "theme" -> (value as? Map<*, *>)?.let { m ->
         view.setTheme(
           background = m["background"] as? String ?: return,
@@ -58,6 +62,7 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
       "focus" -> view.showKeyboard()
       "blur" -> view.hideKeyboard()
       "retry" -> view.retry()
+      "paste" -> (m?.get("text") as? String)?.let(view::pasteText)
     }
   }
 

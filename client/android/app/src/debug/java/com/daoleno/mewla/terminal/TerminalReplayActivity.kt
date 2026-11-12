@@ -17,7 +17,7 @@ import kotlin.math.ceil
  *   adb shell am start -n <app>/com.daoleno.mewla.terminal.TerminalReplayActivity \
  *     --es file corpus/sgr.vt --ei cols 52 --ei rows 30 [--ef font 8] [--ez light true] \
  *     [--es history corpus/history.txt --ei top 3000 [--ez retheme true]] \
- *     [--ei sessionCols 160 --ei sessionRows 45 [--ef panX 400]]
+ *     [--ei sessionCols 160 --ei sessionRows 45 [--ef panX 400]] [--ez group true]
  *
  * `file` is relative to the app's files dir. The view's rectangle on screen is logged
  * ("TerminalReplay: rect x y w h") once the bytes are drawn, and what the view sends ("input ...").
@@ -26,7 +26,8 @@ import kotlin.math.ceil
  * (voiding the rows drawn so far), and the time the view took is logged ("history ...").
  * `sessionCols`/`sessionRows` tell the view the Session is that size (another viewer holds it), as the
  * page does before a replay: the file is drawn at that grid, fitted into the view's `cols` x `rows`
- * area, and `panX` drags it that many pixels sideways.
+ * area, and `panX` drags it that many pixels sideways. `group` gives the view the terminal group's padding
+ * (14/12/20/12 dp, as the app's Session does) around the same `cols` x `rows` grid.
  */
 class TerminalReplayActivity : Activity() {
   private val dark = listOf("#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea")
@@ -50,10 +51,15 @@ class TerminalReplayActivity : Activity() {
       override fun copy(text: String) {}
     })
     if (intent.hasExtra("font")) view.setFontSize(intent.getFloatExtra("font", 8f))
-    // The grid's pixel size: whole cells, exactly cols x rows.
+    // The grid's pixel size: whole cells, exactly cols x rows, inside the group's padding when asked.
     val cellW = field(view, "cellW")
     val cellH = field(view, "cellH")
-    root.addView(view, FrameLayout.LayoutParams(ceil(cols * cellW).toInt(), ceil(rows * cellH).toInt()))
+    val group = intent.getBooleanExtra("group", false)
+    if (group) view.setContentPadding(14f, 12f, 20f, 12f)
+    val d = resources.displayMetrics.density
+    val padW = if (group) ((12 + 12) * d).toInt() else 0
+    val padH = if (group) ((14 + 20) * d).toInt() else 0
+    root.addView(view, FrameLayout.LayoutParams(ceil(cols * cellW).toInt() + padW + 2, ceil(rows * cellH).toInt() + padH + 2))
     setContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     if (isLight) view.setTheme("#fbfaf7", "#161412", "#161412", "#2C55C055", light)
     else view.setTheme("#141210", "#F4F0EA", "#F4F0EA", "#3D7EFF55", dark)
