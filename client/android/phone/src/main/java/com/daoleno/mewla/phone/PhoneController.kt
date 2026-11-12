@@ -47,6 +47,7 @@ object PhoneController {
     // The agent display has the phone's real pixels; what the agent sees and sends is the picture space, at most this wide.
     private const val MODEL_IMAGE_WIDTH = 720
     private const val REPLACE_EVERY_MS = 60_000L
+    private const val ANNOUNCE_WAIT_MS = 150_000L
     private const val WRITE_SECURE = "android.permission.WRITE_SECURE_SETTINGS"
 
     private lateinit var app: Context
@@ -241,7 +242,15 @@ object PhoneController {
             now = System.currentTimeMillis(),
         )
         override fun helperUp() = client?.isClosed == false
-        override fun startHelper() { ensureHelper() }
+        override fun startHelper() {
+            try {
+                ensureHelper()
+            } catch (e: IllegalStateException) {
+                throw e
+            } catch (e: Exception) {
+                throw IllegalStateException("could not start the helper through Wireless debugging (${e.message ?: e.javaClass.simpleName}); Mewla tries again", e)
+            }
+        }
         override fun grant(): String? = grantThroughWirelessDebugging()
         override fun report(reason: String?) = noteProblem(reason)
     }
@@ -512,7 +521,10 @@ object PhoneController {
 
     private fun connectAdb(): AdbConnection {
         // Right after Wireless debugging was switched on its port may not be announced yet.
-        val announceWaitMs = if (justSwitchedOn) 10_000L else 3_000L
+        // Waiting once for the whole announcement beats trying again after a short wait and a growing pause:
+        // it ends when the port is announced, not at the next try (on an emulator that took one to two minutes).
+        val announceWaitMs = if (justSwitchedOn) ANNOUNCE_WAIT_MS else 3_000L
+        if (justSwitchedOn) noteProblem("Wireless debugging was switched back on; waiting for it to announce its port.")
         justSwitchedOn = false
         val tls = AndroidAdb.tls(AndroidAdb.identity(app))
         val cache = object : PortCache {
@@ -564,6 +576,7 @@ object PhoneController {
     private fun noteProblem(message: String?) {
         if (problem == message) return
         problem = message
+        Log.i(TAG, if (message == null) "ready: no problem" else "not ready: $message")
         if (::app.isInitialized) publish()
     }
 
