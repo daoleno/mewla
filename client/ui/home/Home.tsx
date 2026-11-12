@@ -24,8 +24,13 @@ import { HomeCat } from "./Cat";
 import { StateControl } from "../tray/StateControl";
 import { Tray } from "../tray/Tray";
 import { goneChoices } from "../tray/state";
-import { BrainMenu } from "../brain/BrainMenu";
+import { BrainChatFailed, BrainChatUnavailable, BrainHostSheet, BrainMenu, brainChatState, brainChatUnavailable, brainComposerBlock, createBrainComposer, currentBrain, MentionPanel } from "../brain";
 import { newSessionOpen } from "../screens/NewSession";
+import { ComposerPlusButton, SlashMenu } from "../session/SlashMenu";
+import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
+import { CodexStatusSheet } from "../session/CodexStatusSheet";
+import { AttachmentTray } from "../more/files/Pages";
+import { tray } from "../tray/state";
 
 const startingChat = signal(false);
 const notice = signal("");
@@ -69,21 +74,28 @@ function surface() {
   return brainSurface({ hasServer: Boolean(current()), connected: connection() === "connected", snapshot: brain() });
 }
 
-/** New chat (Brain's menu, the desktop palette). */
+/** New chat (Brain's menu, the desktop palette). Rejects when the computer did not start one: the menu says so. */
 export async function startNewChat(): Promise<void> {
   const transport = currentTransport();
-  if (!transport || startingChat()) return;
+  if (!transport) throw new Error("offline");
+  if (startingChat()) return;
   startingChat.set(true);
   try {
     await newBrainChat(transport);
     // A past thread was showing: the new chat is what the person asked for.
     openBrainThread(null);
-  } catch {
-    // Offline or refused: the current chat stays; the button can be pressed again.
   } finally {
     startingChat.set(false);
   }
 }
+
+/** What the thread area holds while it has no rows (SPEC §1.3): loading, couldn't load, or nothing yet. */
+const chatState = computed(() => brainChatState({
+  itemCount: items().length,
+  loading: brainThread().loading,
+  error: brainThread().error,
+  conversation: brainThread().conversation as { available?: boolean; reason?: string } | null | undefined,
+}));
 
 function Notice(props: { title: string; detail?: string }) {
   return (
@@ -109,10 +121,10 @@ function PastThread() {
 /** Brain's menu is open (the header's ⋯). */
 const menuOpen = signal(false);
 
-/** Home with Brain's menu open, for its Brain host sheet (the computer page's "Claude is not signed in" › Switch). */
+/** Home with the Brain host sheet open (the computer page's "Claude is not signed in" › Switch). */
 export function openBrainHost(): void {
   goHome();
-  menuOpen.set(true);
+  hostSheetOpen.set(true);
 }
 
 /**
@@ -139,18 +151,26 @@ function HomeHeader() {
   );
 }
 
+/** Brain's Brain host sheet (the tray's Switch executor, the computer page's Switch). */
+const hostSheetOpen = signal(false);
+
 function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] }) {
+  const openTerminal = (id: string) => openBrainTerminal(id);
   return (
     <View class="flex-1">
-      {surface() === "chat" ? (
+      {surface() === "chat" && brainChatUnavailable(brain()) ? (
+        <BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} />
+      ) : surface() === "chat" && chatState() === "failed" ? (
+        <BrainChatFailed onOpenTerminal={openTerminal} />
+      ) : surface() === "chat" ? (
         <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown}
-          empty={() => (brainThread().loading ? <Notice title={connection() === "connected" ? "Loading…" : "The conversation shows when your computer is back"} /> : <Notice title="What should Brain do?" detail="Brain plans the work and runs the agents on your computer." />)} />
+          empty={() => (chatState() === "loading" ? <Notice title="Loading…" /> : <Notice title="What should Brain do?" />)} />
       ) : surface() === "waking" ? (
         <Notice title="Brain is starting…" />
       ) : surface() === "host_down" ? (
-        <Notice title="Brain can't start" detail={brain()?.host_problem?.detail} />
+        <Notice title="Brain can't start" />
       ) : surface() === "offline" ? (
-        <Notice title="Your computer is offline" detail={`Mewla reconnects to ${current()?.name || "it"} on its own.`} />
+        <Notice title={`${current()?.name || "Your computer"} is offline`} />
       ) : null}
     </View>
   );
@@ -158,30 +178,48 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
 
 function Composer(props: { text: ReturnType<typeof createComposerText>; editor: ReturnType<typeof createMessageEdit> }) {
   const editor = props.editor;
+  const tools = createBrainComposer({ text: props.text, onOpenTerminal: (id) => openBrainTerminal(id), onNotice: (text) => notice.set(text) });
+  const block = () => brainComposerBlock({ surface: surface(), snapshot: brain(), chat: chatState() });
+  const pairAgain = () => tray().state.kind === "pair";
+  const placeholder = () => (connection() === "connected" ? "Tell Brain…" : "Sends when back online");
   return (
-    <ChatComposer text={props.text} placeholder={connection() === "connected" ? "Tell Brain…" : "Sends when back online"} canSend={() => Boolean(brainChat())}
-      onSend={(value) => (untracked(editor.edit) ? (void editor.send(value), false) : brainChat()?.send(value))}
-      running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"} onStop={() => void stop()}
-      active={() => homeShown() && !trayOpen()}
-      onRecall={() => {
-        const item = lastEditablePrompt(untracked(items), { connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
-        if (item) editor.open(item);
-      }}>
-      {editor.edit() ? <EditChip editor={editor} /> : null}
-      {pendingChoiceKey() ? (
-        <ChoiceCard choice={untracked(pendingChoice)!.choice} connected={() => connection() === "connected"}
-          submit={(answers) => {
-            const transport = currentTransport();
-            const callId = untracked(pendingChoiceKey);
-            return transport ? answerChoice(transport, hostId(), callId, answers) : Promise.reject(new Error("Your computer is offline."));
-          }}
-          onGone={() => {
-            goneChoices.set(new Set([...goneChoices(), untracked(pendingChoiceKey)]));
-            notice.set(CHOICE_GONE_NOTICE);
-          }} />
+    <>
+      <ChatComposer text={props.text} placeholder={placeholder} canSend={tools.canSend}
+        disabled={() => Boolean(block()) || pairAgain()} disabledReason={() => (pairAgain() ? `Pair ${current()?.name || "your computer"} again` : block() ?? "")}
+        onSend={(value) => (untracked(editor.edit) ? (void editor.send(value), false) : tools.send(value))}
+        running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"} onStop={() => void stop()}
+        active={() => homeShown() && !trayOpen()} pickerOpen={tools.pickerOpen}
+        leading={<ComposerPlusButton pinned={tools.pinned} connected={() => connection() === "connected"} onPress={() => tools.pinned.set(!untracked(tools.pinned))} />}
+        onRecall={() => {
+          const item = lastEditablePrompt(untracked(items), { connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
+          if (item) editor.open(item);
+        }}>
+        <MentionPanel text={props.text.text} executors={tools.executors} onPick={(draft) => props.text.set(draft)} />
+        <SlashMenu text={props.text.text} commands={tools.commands} commandsUnavailable={tools.commandsUnavailable} agentKind={tools.kind} connected={() => connection() === "connected"}
+          pinned={tools.pinned} onPick={tools.pick} onAttach={tools.attach} uploading={tools.uploading} />
+        {tools.uploads.items().length > 0 ? <AttachmentTray uploads={tools.uploads} /> : null}
+        {editor.edit() ? <EditChip editor={editor} /> : null}
+        {pendingChoiceKey() ? (
+          <ChoiceCard choice={untracked(pendingChoice)!.choice} connected={() => connection() === "connected"}
+            submit={(answers) => {
+              const transport = currentTransport();
+              const callId = untracked(pendingChoiceKey);
+              return transport ? answerChoice(transport, hostId(), callId, answers) : Promise.reject(new Error("Your computer is offline."));
+            }}
+            onGone={() => {
+              goneChoices.set(new Set([...goneChoices(), untracked(pendingChoiceKey)]));
+              notice.set(CHOICE_GONE_NOTICE);
+            }} />
+        ) : null}
+        {notice() ? <Text testID="brain-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text> : null}
+      </ChatComposer>
+      {hostId() ? (
+        <>
+          <CodexStatusSheet open={tools.statusOpen} onClose={() => tools.statusOpen.set(false)} transport={currentTransport()!} workerId={hostId()} />
+          <CodexSkillsSheet open={tools.skillsOpen} onClose={() => tools.skillsOpen.set(false)} transport={currentTransport()!} cwd={brain()?.host_worker?.cwd} onPick={tools.insertSkill} />
+        </>
       ) : null}
-      {notice() ? <Text testID="brain-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text> : null}
-    </ChatComposer>
+    </>
   );
 }
 
@@ -216,11 +254,18 @@ export function Home() {
         {routedBrainThread() ? <PastThread /> : null}
         <Body handlers={handlers} />
         {routedBrainThread() ? null : <Composer text={text} editor={editor} />}
-        <Tray onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={() => {}} />
+        <Tray onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={() => {}}
+          onUseExecutor={(id) => {
+            const executor = (brain()?.executors ?? []).find((ref) => ref.id === id);
+            if (executor) void currentBrain.hostSwitch.switchTo(executor);
+          }}
+          onSwitchExecutor={() => hostSheetOpen.set(true)} />
         <BrainMenu open={menuOpen} onClose={() => menuOpen.set(false)}
           onOpenTerminal={(hostWorkerId: string) => openBrainTerminal(hostWorkerId)}
           onBrowseWorkspace={browseWorkspace}
-          onNewChat={() => startNewChat()} />
+          onNewChat={() => startNewChat()}
+          onNotice={(text) => notice.set(text)} />
+        <BrainHostSheet open={hostSheetOpen} onClose={() => hostSheetOpen.set(false)} />
       </View>
     </NavPage>
   );
