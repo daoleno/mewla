@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { BrainCurrentWork } from "../work/types";
 import { listTime } from "../sessions/listRow";
-import { backMark, requestsOf, trayModel, type TrayInput } from "./model";
+import { catState } from "../pets/cat";
+import { workWorkerLines } from "../work/workers";
+import { backMark, requestsOf, trayModel, workerRow, type TrayInput } from "./model";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
 
@@ -25,18 +27,42 @@ function input(patch: Partial<TrayInput> = {}): TrayInput {
 }
 
 describe("tray model", () => {
-  test("a running Session's row: its words, a live dot and how long it has run; never the terminal's text", () => {
+  test("a running Session's row: its words, a live dot and how long it has run; never the terminal's text nor a bare state word", () => {
     const m = trayModel(input({ workers: [
-      worker("a", { started_at: NOW - 12 * 60_000, summary: "⏸ manual mode on · ? for shortcuts", last_output_lines: ["⏸ manual mode on · ? for shortcuts"] }),
+      worker("a", { started_at: NOW - 12 * 60_000, phase: "working", summary: "⏸ manual mode on · ? for shortcuts", last_output_lines: ["⏸ manual mode on · ? for shortcuts"] }),
       worker("b", { started_at: NOW - 4 * 60_000, phase: "working", summary: "Rerunning the suite" }),
       worker("c", { status: "unknown", summary: '"$MEWLA_WORKER_PROGRESS_CMD" worker progress', last_output_lines: ['"$MEWLA_WORKER_PROGRESS_CMD" worker progress'] }),
     ] }));
-    expect(m.running.find((r) => r.key === "session:a")).toMatchObject({ line: "Working", end: "12m", live: true });
+    // Nothing reported but the footer: which agent works where, not "Working" under Running.
+    expect(m.running.find((r) => r.key === "session:a")).toMatchObject({ line: "Claude Code · mewla", end: "12m", live: true });
     expect(m.running.find((r) => r.key === "session:b")).toMatchObject({ line: "Rerunning the suite", end: "4m", live: true, progress: 3 });
-    expect(m.idle[0]).toMatchObject({ key: "session:c", line: "Idle" });
+    expect(m.idle[0]).toMatchObject({ key: "session:c", line: "Claude Code · mewla" });
     expect(m.idle[0]!.live).toBeUndefined();
     expect(JSON.stringify(m)).not.toContain("manual mode");
     expect(JSON.stringify(m)).not.toContain("MEWLA_WORKER_PROGRESS");
+    // A phase still says something.
+    expect(trayModel(input({ workers: [worker("v", { phase: "verifying" })] })).running[0]!.line).toBe("Verifying");
+  });
+
+  test("the live daemon's Claude Session: a footer for a summary, status unknown, an id in its name", () => {
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    const claude = worker("mh-17b3337d43f38037916f0e5b", { name: "Hello writer (mh-17b3337d43f38037916f0e5b)", status: "unknown", summary: footer, last_output_lines: [footer] });
+    const joined = { session_id: claude.id, name: claude.name, provider: "claude", state: "running" as const, summary: footer, live: true, joined_at: "2026-11-12T09:00:00Z", updated_at: "2026-11-12T09:00:00Z" };
+    const m = trayModel(input({ workers: [claude], openWork: [{ work_id: "q", title: "Write the hello", status: "open", worker_sessions: [joined] }] }));
+    const row = m.running.find((r) => r.key === "work:q")!;
+    // Never "Queued" under Running, never the footer: the Worker's agent and project.
+    expect(row).toMatchObject({ quiet: true, line: "Claude Code · mewla", tile: { kind: "agent", agent: "claude" } });
+    expect(m.state.words).toBe("All quiet");
+    expect(JSON.stringify(m)).not.toContain("shift+tab");
+    expect(JSON.stringify(m)).not.toContain("(mh-");
+    // Without a Session to read, a queued Work says it has not started, not "Queued".
+    const bare = trayModel(input({ openWork: [{ work_id: "q", title: "Write the hello", status: "open" }] }));
+    expect(bare.running[0]!.line).toBe("Not started yet");
+    const waiting = trayModel(input({ openWork: [{ work_id: "w", title: "Ship", status: "waiting", wait_for: "the deploy window" }] }));
+    expect(waiting.running[0]!.line).toBe("the deploy window");
+    // A Session blocked on something unreadable asks "Waiting for you", not its footer.
+    const asks = requestsOf({ workers: [{ ...claude, status: "blocked", needs_attention: true }], alerts: [], now: NOW });
+    expect(asks[0]).toMatchObject({ title: "Waiting for you", source: "Hello writer" });
   });
 
   test("All quiet with nothing running", () => {
@@ -91,7 +117,7 @@ describe("tray model", () => {
     }));
     const row = m.running.find((r) => r.key === "work:w1")!;
     // The line says what its first live Worker does; the end, how long that Worker has worked on it.
-    expect(row).toMatchObject({ line: "3 Workers · Working", end: "1h", live: true, tile: { kind: "brain" }, target: { open: "work", workId: "w1" } });
+    expect(row).toMatchObject({ line: "3 Workers · Claude Code", end: "1h", live: true, tile: { kind: "brain" }, target: { open: "work", workId: "w1" } });
     expect(m.running.map((r) => r.key)).toEqual(["work:w1"]);
     expect(m.state.words).toBe("1 running");
     // A result ends in when it came back, then its check.
@@ -101,6 +127,22 @@ describe("tray model", () => {
     const one = trayModel(input({ workers: [worker("b")], currentWork: [work("w1", { worker_sessions: [joined("b", true)] })] }));
     expect(one.running).toHaveLength(1);
     expect(one.running[0]).toMatchObject({ key: "work:w1", tile: { kind: "agent", agent: "claude" }, target: { open: "session", workerId: "b" } });
+  });
+
+  test("Work detail's Worker is a tray row: \"Agent · title\" without its id, what it does or where, \"● 12m\" while it works", () => {
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    const id = "mh-17b3337d43f38037916f0e5b";
+    const joined = new Date(NOW - 12 * 60_000).toISOString();
+    const lines = workWorkerLines([
+      { session_id: id, name: `Hello writer (${id})`, provider: "claude", state: "running", summary: footer, live: true, joined_at: joined, updated_at: joined },
+      { session_id: "%8", name: "builder", provider: "codex", state: "failed", summary: "Build broke on Windows", live: false, joined_at: joined, ended_at: joined, updated_at: joined },
+    ], new Map([[id, worker(id, { name: `Hello writer (${id})`, status: "running", summary: footer })]]), new Date(NOW));
+    const [live, failed] = lines.map((line) => workerRow(line, NOW));
+    expect(live).toMatchObject({ title: "Claude Code · Hello writer", line: "mewla", end: "12m", live: true, tile: { kind: "agent", agent: "claude" }, target: { open: "session", workerId: id } });
+    expect(failed).toMatchObject({ title: "OpenAI Codex · builder", line: "Failed · Build broke on Windows" });
+    expect(failed!.live).toBeUndefined();
+    // Under the eyebrow "Work · mewla" the project is not said again.
+    expect(workerRow(lines[0]!, NOW, "mewla").line).toBe("");
   });
 
   test("a new device asking to be let in is a request: no one-tap, its row opens its sheet", () => {
@@ -144,6 +186,19 @@ describe("tray model", () => {
     expect(m.state.words).toBe("3 running");
   });
 
+  test("only quiet Work under Running: All quiet, and the cat naps (the header, the tray and the cat agree)", () => {
+    const m = trayModel(input({ openWork: [{ work_id: "q", title: "Queued", status: "open" }, { work_id: "w", title: "Waiting", status: "waiting", wait_for: "the deploy window" }] }));
+    expect(m.running.map((r) => r.quiet)).toEqual([true, true]);
+    expect(m.state.words).toBe("All quiet");
+    expect(m.runningCount).toBe(0);
+    const cat = (t: typeof m) => catState({ kind: t.state.kind, starting: false, needs: t.needs.length, brainTurn: false, running: t.runningCount });
+    expect(cat(m)).toBe("idle");
+    const busy = trayModel(input({ workers: [worker("a")], openWork: [{ work_id: "q", title: "Queued", status: "open" }] }));
+    expect(busy.runningCount).toBe(1);
+    expect(busy.state.words).toBe("1 running");
+    expect(cat(busy)).toBe("delegating");
+  });
+
   test("Today shows the next three; a running item opens its Session", () => {
     const at = (h: number) => Date.parse(`2026-11-12T${String(h).padStart(2, "0")}:00:00Z`);
     const m = trayModel(input({
@@ -157,6 +212,10 @@ describe("tray model", () => {
     }));
     expect(m.today.map((r) => r.key)).toEqual(["today:run", "today:n1", "today:n2"]);
     expect(m.today[0]!.target).toEqual({ open: "session", workerId: "w9" });
+    // Not "Running": a run whose Session is not listed says when it started.
+    expect(m.today[0]!.line).toBe("Started 9:00");
+    const listed = trayModel(input({ workers: [worker("w9", { started_at: NOW - 12 * 60_000, phase: "reading", summary: "Reading the news" })], today: [{ id: "run", title: "Brief", time: "9:00", at: at(9), running: true, sessionId: "w9" }] }));
+    expect(listed.today[0]).toMatchObject({ line: "Reading the news", end: "12m", live: true });
     expect(m.todayCount).toBe(5);
   });
 

@@ -35,6 +35,14 @@ describe("the Workers of a Work", () => {
     expect(lines.map((l) => l.stateLabel)).toEqual([undefined, "Failed", undefined]);
   });
 
+  test("the live daemon's Claude Worker: no (mh-…) id in its name, never its terminal footer for what it does", () => {
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    const id = "mh-17b3337d43f38037916f0e5b";
+    const row: WorkWorkerSession = { session_id: id, name: `Hello writer (${id})`, provider: "claude", state: "running", summary: footer, live: true, joined_at: "2026-11-12T09:00:00Z", updated_at: "2026-11-12T09:00:00Z" };
+    const [line] = workWorkerLines([row], new Map([[id, session(id, { name: row.name, status: "unknown", summary: "⏸ manual mode on · ? for shortcuts" })]]), NOW);
+    expect(line).toMatchObject({ name: "Hello writer", summary: "", since: Date.parse("2026-11-12T09:00:00Z") });
+  });
+
   test("a row says in words what is not plain running or done: Needs you, Failed, Ended", () => {
     const states = (["running", "blocked", "done", "failed", "ended"] as const).map((state) => workWorkerLines([{ ...rows[0]!, state }], new Map(), NOW)[0]!.stateLabel);
     expect(states).toEqual([undefined, "Needs you", undefined, "Failed", "Ended"]);
@@ -57,9 +65,9 @@ describe("the Workers of a Work", () => {
   test("what a live Worker does is never its terminal's footer", () => {
     const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
     const live = { ...rows[2]!, summary: footer, phase: undefined };
-    // The list has its Session, which reported nothing yet: its state's word.
+    // The list has its Session, which reported nothing yet: nothing, not its state's bare word (the row's dot says it).
     const followed = workWorkerLines([live], new Map([["worker:@c", session("worker:@c", { summary: footer, last_output_lines: [footer] })]]), NOW)[0]!;
-    expect(followed.summary).toBe("Working");
+    expect(followed.summary).toBe("");
     // The list lacks it, and it reported no phase: nothing rather than the screen.
     expect(workWorkerLines([live], new Map(), NOW)[0]!.summary).toBe("");
     const manual = { ...live, summary: "⏸ manual mode on · ? for shortcuts" };

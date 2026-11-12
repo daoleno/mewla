@@ -1,4 +1,5 @@
 import type { CalendarClock, CalendarItem } from "../calendar/model";
+import { readableSummary } from "../sessions/activity";
 import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef, WorkWorkerSession } from "./types";
 
 /** How a Work's state reads: a ring, a seal, a check (DESIGN.md's Work states). */
@@ -414,15 +415,18 @@ function slipSummary(
   const waitFor = (work.wait_for && !work.wake && work.attempt_session_id) || work.calendar
     ? undefined
     : work.wait_for;
+  // A Session's summary is what it reported only once it reported a phase; before, it is the daemon reading
+  // its screen (a pasted command, the provider's footer), as core/sessions/activity says.
+  const reported = worker?.phase?.trim() ? worker.summary : undefined;
   const candidates =
     group === "running"
-      ? [worker?.summary, work.summary]
+      ? [reported, work.summary]
       : group === "back"
-        ? [work.summary, worker?.summary, waitFor]
+        ? [work.summary, reported, waitFor]
         : [waitFor, work.summary];
-  // A bare reference ("operator:2985…") is plumbing, not something to read.
+  // A bare reference ("operator:2985…") is plumbing, and a terminal's footer chrome: neither is something to read.
   return candidates
-    .map((value) => value?.replace(/\s+/g, " ").trim())
+    .map((value) => readableSummary(value))
     .find((value) => Boolean(value && value.includes(" ")));
 }
 

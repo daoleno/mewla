@@ -26,7 +26,7 @@ mount(() => {
   return (
     <View class="flex-1 justify-end bg-background">
       <Text testID="sent">{sent()}</Text>
-      <Composer text={text} placeholder="Tell Brain…" canSend={() => true} attached={() => uploads.ready().length > 0} running={() => false} stopping={() => false} canStop={() => false} onStop={() => {}}
+      <Composer text={text} placeholder="Tell Brain" canSend={() => true} attached={() => uploads.ready().length > 0} running={() => false} stopping={() => false} canStop={() => false} onStop={() => {}}
         onSend={(value) => sent.set(`${value} ${uploads.ready().map((file) => file.path).join(",")}`)}
         onFiles={(files) => {
           try {
