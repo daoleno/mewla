@@ -709,14 +709,21 @@ function classifyCommand(command: string): SemanticActionKind {
   ) {
     return "test_app";
   }
-  if (/\b(rg|grep|ag|ack)\b/.test(lower) || /\bfind\b/.test(lower)) {
+  // What the command runs, not what its quoted arguments say: a Worker's
+  // prompt that mentions "cat -A hello.txt" is no read.
+  const bare = lower.replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, '""');
+  if (/\b(rg|grep|ag|ack)\b/.test(bare) || /\bfind\b/.test(bare)) {
     return "search_code";
   }
-  if (/\b(cat|sed|nl|less|head|tail)\b/.test(lower)) {
+  // A filter after a pipe ("mewla work get | head -c 800") trims output; it reads no file.
+  if (/\b(cat|sed|nl|less|head|tail)\b/.test(bare.replace(PIPED_FILTER_RE, ""))) {
     return "read_files";
   }
   return "run_command";
 }
+
+/** A pipeline stage that only trims or prints what comes in: `| head -c 800`, `| tail -5`. */
+const PIPED_FILTER_RE = /(?<!\|)\|(?!\|)\s*(?:head|tail|sed|cat|nl|less)\b[^|;&]*/g;
 
 function commandActionLabel(command: string, kind: SemanticActionKind): string {
   // Codex commonly uses agent-browser through the exec wrapper. Treat it as a
@@ -816,12 +823,15 @@ function meaningfulCommandSegment(
     segments.find((segment) =>
       label === "Build"
         ? isBuildCommand(segment)
-        : classifyCommand(segment) === kind && !/^cd\s/.test(segment),
+        : classifyCommand(segment) === kind && !/^cd\s/.test(segment) && !SHELL_ASSIGNMENT_RE.test(segment),
     ) ||
-    segments.find((segment) => !/^(?:cd|export)\s/.test(segment)) ||
+    segments.find((segment) => !/^(?:cd|export)\s/.test(segment) && !SHELL_ASSIGNMENT_RE.test(segment)) ||
     command
   );
 }
+
+/** A segment that only sets a shell variable (`M=/path/to/mewla`): it says nothing about what runs. */
+const SHELL_ASSIGNMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*=\S*$/;
 
 function isBuildCommand(command: string): boolean {
   return /(?:^|\s)(?:go\s+build|(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?[^\s]*(?:build|bundle|export)[^\s]*|(?:\.\/)?gradlew\s+[^\s]*(?:assemble|build)[^\s]*|xcodebuild(?:\s|$)|expo\s+export(?:\s|$))/i.test(

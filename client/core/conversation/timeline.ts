@@ -1,5 +1,4 @@
 import { awaitingChoiceAnswer } from "../timeline/claudeChoiceModel";
-import { foldBrainToolRows } from "../timeline/brainToolRows";
 import { createToolRunFolder } from "../timeline/foldToolRuns";
 import type { BrainWorkResultEvent } from "../timeline/brainWorkEvent";
 import {
@@ -26,22 +25,23 @@ const NO_EVENTS: CodexConversationEvent[] = [];
 
 /**
  * A chat's rows, from its thread state: the projected events (messages, tools,
- * plans, task and Work cards), tool runs folded (Brain keeps its "Worked"
- * fold, a Session folds finished runs into one summary row), "Working" while a
+ * plans, task and Work cards), finished tool runs folded into one summary row
+ * ("Ran 1 command, edited 1 file", Brain and a Session alike), "Working" while a
  * reply runs (not while a question waits: its card says what is needed), and
  * what the person sent that the computer has not shown yet.
  *
  * One per chat: it keeps the projection cache, so a streamed reply re-projects
  * only its own message, and returns the previous item object for every row
- * that did not change, so a list redraws only the rows that did.
+ * that did not change, so a list redraws only the rows that did. Which chat it
+ * is does not change the rows (soft-final SPEC §11 Tool row).
  */
-export function createChatTimeline(kind: "brain" | "session") {
+export function createChatTimeline(_kind: "brain" | "session") {
   let projected: { events: CodexConversationEvent[]; items: TimelineItem[]; cache: TimelineProjectionCache | null } = {
     events: NO_EVENTS,
     items: [],
     cache: null,
   };
-  const fold = kind === "brain" ? foldBrainToolRows : createToolRunFolder();
+  const fold = createToolRunFolder();
   let previous: { items: TimelineItem[]; byId: Map<string, TimelineItem> } = { items: [], byId: new Map() };
 
   return (state: InterfaceChatThreadState, options: ChatTimelineOptions = {}): TimelineItem[] => {
