@@ -3,6 +3,8 @@ import { ProgressBar } from "../kit/ProgressBar";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import { activityFileRows, type ActivityFileRow } from "../../core/timeline/activityFiles";
+import { toolPictures } from "../../core/timeline/threadPictures";
+import { ChatImage, type PictureLoader } from "./ChatImage";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
 import { workCardModel, type WorkCardModel } from "../../core/timeline/workCardModel";
 import { WORK_CARD_WORKERS, type WorkWorkerLine } from "../../core/work/workers";
@@ -60,7 +62,7 @@ function FileRow(props: { file: ActivityFileRow; onFile?: (path: string) => void
 }
 
 /** A tool call, a reasoning or update line, or a folded run of finished calls. */
-export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void }) {
+export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void; pictures?: { load?: PictureLoader; open: (src: string) => void } }) {
   const item = props.item;
   const open = () => props.expansion.isOpen(item().id);
   const files = () => activityFileRows(item());
@@ -74,6 +76,14 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
         </Text>
         {expandable() ? <Icon name={open() ? "chevron-up" : "chevron-down"} size={14} /> : null}
       </Button>
+      {/* The pictures the call produced, under its row whether or not it is open (SPEC §1.7). */}
+      {toolPictures(item()).length ? (
+        <View testID="tool-pictures" class="flex-row flex-wrap items-start gap-2 pb-1.5 pl-6">
+          {toolPictures(item()).map((src) => (
+            <ChatImage frame="tool" src={src} alt={item().title} load={props.pictures?.load} onOpen={() => props.pictures?.open(src)} />
+          ))}
+        </View>
+      ) : null}
       {open() ? (
         <View class="gap-1.5 pb-2 pl-6">
           {item().steps?.length ? item().steps!.map((step) => (
