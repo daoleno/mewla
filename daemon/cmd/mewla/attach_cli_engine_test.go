@@ -127,6 +127,44 @@ func TestAttachShowsTypesAndDetaches(t *testing.T) {
 	}
 }
 
+// Another viewer resizes the Session: this terminal starts its screen over at
+// the new size instead of drawing output written for another width, does not
+// take the size back on its own (two viewers would take it from each other
+// forever), and takes it back when its person types.
+func TestAttachRedrawsWhenAnotherViewerResizes(t *testing.T) {
+	client := attachTestHost(t)
+	createAttachSession(t, client, "mh-two", `stty -echo; printf 'ready\r\n'; while read line; do printf 'got %s\r\n' "$line"; done`)
+	in, typing := io.Pipe()
+	defer typing.Close()
+	out := &lockedBuffer{}
+	go attachLoop(context.Background(), client, "mh-two", in, out, func() (int, int) { return 70, 20 }, make(chan os.Signal))
+	waitOutput(t, out, "ready")
+	redraws := strings.Count(out.String(), redraw)
+
+	phone, err := client.Attach(context.Background(), sessionhost.AttachParams{ID: "mh-two", Cols: 50, Rows: 30, Redraw: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer phone.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for strings.Count(out.String(), redraw) == redraws {
+		if time.Now().After(deadline) {
+			t.Fatalf("this terminal was not drawn again after another viewer resized the Session: %q", out.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if info, err := client.Info(context.Background(), "mh-two"); err != nil || info.Cols != 50 || info.Rows != 30 {
+		t.Fatalf("info = %+v, %v; the other viewer's 50x30 should stay until this person acts", info, err)
+	}
+
+	typing.Write([]byte("hi\r"))
+	waitOutput(t, out, "got hi")
+	if info, err := client.Info(context.Background(), "mh-two"); err != nil || info.Cols != 70 || info.Rows != 20 {
+		t.Fatalf("info = %+v, %v; typing here should take the size back to 70x20", info, err)
+	}
+}
+
 func TestAttachReportsTheExit(t *testing.T) {
 	client := attachTestHost(t)
 	createAttachSession(t, client, "mh-exit", `printf 'bye'; read x; exit 3`)

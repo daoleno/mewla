@@ -97,6 +97,15 @@ export class TerminalSession {
     } else this.open();
   }
 
+  /**
+   * The terminal is in front of the person again (shown after the chat or another page): its grid becomes the
+   * Session's size again, if another viewer (mewla attach on a computer) took it meanwhile. The computer does
+   * nothing when the size is already this view's; the history is not asked for again.
+   */
+  claim(): void {
+    if (this.sessionId && this.size) this.send({ type: "terminal_resize", session_id: this.sessionId, ...this.size });
+  }
+
   input(data: string): void {
     if (this.sessionId && data) this.send({ type: "terminal_input", session_id: this.sessionId, data });
   }

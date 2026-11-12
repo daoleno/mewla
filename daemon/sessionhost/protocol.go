@@ -239,6 +239,13 @@ type Capture struct {
 // the viewer that attaches last sets the size, and one that only watches
 // leaves them 0.
 //
+// The program writes for the Session's size, so a viewer whose terminal is
+// another size draws its output wrongly from then on. A viewer that sets
+// Redraw is told: when the Session's size changes, its stream ends with
+// AttachResized, and it attaches again (leaving Cols and Rows 0, unless its
+// person acted on it) for a replay at the new size. One that does not set it
+// keeps its stream, as viewers before Redraw expect.
+//
 // The answer is Attached, then a binary frame with the replay that rebuilds
 // what the Session shows on a fresh terminal of that size, then a binary frame
 // for each output after it. Terminal queries are left out of the output: the
@@ -246,9 +253,10 @@ type Capture struct {
 // as typing. The stream ends with an AttachEnd JSON frame; input goes through
 // the input method as usual.
 type AttachParams struct {
-	ID   string `json:"id"`
-	Cols int    `json:"cols,omitempty"`
-	Rows int    `json:"rows,omitempty"`
+	ID     string `json:"id"`
+	Cols   int    `json:"cols,omitempty"`
+	Rows   int    `json:"rows,omitempty"`
+	Redraw bool   `json:"redraw,omitempty"`
 }
 
 // Attached answers attach.
@@ -268,6 +276,9 @@ const (
 	// AttachBehind: the viewer read too slowly and missed output. Attach
 	// again for a fresh replay.
 	AttachBehind = "behind"
+	// AttachResized: the Session is now another size (only for a viewer that
+	// set Redraw). Attach again for a replay at that size.
+	AttachResized = "resized"
 )
 
 // AttachEnd is the last frame of an attach stream.

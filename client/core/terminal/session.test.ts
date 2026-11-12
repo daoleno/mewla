@@ -96,6 +96,21 @@ describe("TerminalSession", () => {
     transport.close();
   });
 
+  test("shown again, the terminal claims its grid as the Session's size (unchanged) without asking for the history again", async () => {
+    const { transport, socket, term } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    await wait(30);
+    const asked = historyRequests(socket).length;
+    term.claim();
+    expect(frames(socket, "terminal_resize")).toEqual([{ type: "terminal_resize", session_id: "t1", cols: 80, rows: 24 }]);
+    await wait(30);
+    expect(historyRequests(socket)).toHaveLength(asked);
+    term.close();
+    term.claim();
+    expect(frames(socket, "terminal_resize")).toHaveLength(1);
+    transport.close();
+  });
+
   test("only a tmux terminal gets the FocusIn; a session host terminal would show it as text", async () => {
     const transport = await connected();
     const socket = sockets.at(-1)!;

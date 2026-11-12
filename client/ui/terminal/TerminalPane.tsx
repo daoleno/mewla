@@ -167,8 +167,12 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     keyboard.set(true);
   };
   // Leaving the terminal (the chat, another page) lets go of the keyboard; coming back keeps it down until tapped.
+  // Coming back takes the Session's size back for this grid, if another viewer took it meanwhile.
   effect(() => {
-    if (props.active()) return;
+    if (props.active()) {
+      untracked(() => session.claim());
+      return;
+    }
     untracked(() => {
       if (!keyboard()) return;
       command("blur", {});

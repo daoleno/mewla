@@ -89,6 +89,13 @@ mewla host status [--json]                    # the session host and the Session
 into it; Ctrl-\ detaches and the Session keeps running. Every Session runs in
 the session host, which outlives daemon restarts and updates.
 
+A Session has one size, the one its program draws for. The terminal a person
+last acted on sets it: `attach` sets it when it attaches, when its window is
+resized and when you type into it; the app sets it when its terminal opens or
+is shown again and when you type there. Every other terminal showing the
+Session is drawn again at that size; one that is smaller than that size draws
+it wrongly until its person comes back to it (opens it, or types into it).
+
 With no argument it opens a picker of the live Sessions, newest first: name
 (the Worker's name, `Brain` or `Shell`), agent, state (working, idle, needs
 input), directory and age. The arrow keys move, typing filters, Enter attaches
