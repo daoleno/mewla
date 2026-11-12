@@ -40,4 +40,14 @@ describe("Sessions list rows", () => {
     expect(sessionRowModel(worker({ status: "running", updated_at: Date.now() })).time).toBe("live");
     expect(sessionRowModel(worker({ needs_attention: true })).needsYou).toBe(true);
   });
+
+  test("a screen reader hears the row's title, origin, state, preview and time (parity #10)", () => {
+    const running = worker({ name: "release notes", status: "running", provider: "claude" });
+    expect(sessionRowModel(running).accessibilityLabel).toMatch(/^release notes, Running/);
+    const updated = new Date(2026, 10, 11, 9, 5).getTime();
+    const done = worker({ name: "release notes", status: "done", delegated: true, updated_at: updated });
+    const label = sessionRowModel(done, { calendarLabel: "Daily" }).accessibilityLabel;
+    expect(label.startsWith("release notes, From Calendar, Brain delegated, Done")).toBe(true);
+    expect(label.endsWith(listTime(updated))).toBe(true);
+  });
 });

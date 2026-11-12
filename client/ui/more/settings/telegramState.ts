@@ -2,7 +2,7 @@ import { signal } from "nsh";
 import { failureText } from "../../../core/more/daemon";
 import { telegramLabel, telegramRequest, type TelegramConnectionStatus } from "../../../core/settings/telegram";
 import { connected, daemon } from "../daemon";
-import type { Status } from "../kit/kit";
+import type { Status } from "../../kit/kit";
 
 /** The current computer's Telegram connection as Settings last read it. */
 export const telegram = signal<{ serverId: string; status: TelegramConnectionStatus | null; loading: boolean; error: string }>({

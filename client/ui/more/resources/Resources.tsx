@@ -56,10 +56,10 @@ import {
   type SeriesPoint,
   type StateSpan,
 } from "../../../core/resources/resourceTelemetry";
-import { color, withAlpha, type ColorName } from "../kit/colors";
-import { Icon, type IconName } from "../kit/Icon";
-import { copyMenu, EmptyState, Meter, Notice, Page, Section, StatusMark, type Status } from "../kit/kit";
-import { Segmented } from "../kit/Segmented";
+import { color, withAlpha, type ColorName } from "../../kit/colors";
+import { Icon, type IconName } from "../../kit/Icon";
+import { copyMenu, EmptyState, Meter, Notice, Page, Section, StatusMark, type Status } from "../../kit/kit";
+import { Segmented } from "../../kit/Segmented";
 import { connected, daemon, daemonState } from "../daemon";
 import type { PageNav } from "../routes";
 
@@ -218,7 +218,7 @@ function Chart(props: { series: SeriesPoint[]; window: { start: number; end: num
       draw={(cx, size) => {
         const span = Math.max(1, props.window.end - props.window.start);
         if (props.grid !== false) {
-          cx.fillStyle = color("hairline");
+          cx.fillStyle = color("hair");
           cx.fillRect(0, size.height - 1, size.width, 1);
         }
         const points = props.series;
@@ -255,7 +255,7 @@ function PressureStrip(props: { spans: StateSpan[]; window: { start: number; end
       accessibilityElementsHidden
       draw={(cx, size) => {
         const span = Math.max(1, props.window.end - props.window.start);
-        cx.fillStyle = color("hairline");
+        cx.fillStyle = color("hair");
         cx.beginPath();
         cx.roundRect(0, 0, size.width, size.height, 2);
         cx.fill();
@@ -441,7 +441,7 @@ function MemoryPressureTile(props: { t: ResourceTelemetry }) {
       <Chart series={memoryPressureSeries(props.t)} window={chartWindow(props.t)} tone={levelTone(level())} label="Memory pressure history, from normal to critical" />
       <View testID="memory-pressure-meter" class="flex-row gap-[3px]" accessible accessibilityLabel={memoryPressureMeterLabel(level())}>
         {[1, 2, 3].map((step) => (
-          <View class="h-1 flex-1 rounded-full" style={{ backgroundColor: color(step <= lit() ? levelTone(level()) : "hairline") }} />
+          <View class="h-1 flex-1 rounded-full" style={{ backgroundColor: color(step <= lit() ? levelTone(level()) : "hair") }} />
         ))}
       </View>
     </Tile>
@@ -531,7 +531,7 @@ function Chip(props: { label: string; selected: boolean; icon?: IconName; warnin
       onPress={props.onPress}
       class={props.selected ? "flex-row items-center gap-1.5 rounded-full bg-primary px-3 py-1.5" : "flex-row items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 active:bg-accent"}
     >
-      {props.icon ? <Icon name={props.icon} size={14} tone={props.selected ? "paper" : props.warning ? "warning" : "soft"} /> : null}
+      {props.icon ? <Icon name={props.icon} size={14} tone={props.selected ? "canvas" : props.warning ? "warning" : "soft"} /> : null}
       <Text class={props.selected ? "text-sm font-medium text-primary-foreground" : "text-sm font-medium"} style={!props.selected && props.warning ? { color: color("warning") } : undefined}>{props.label}</Text>
     </Button>
   );

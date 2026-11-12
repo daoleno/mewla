@@ -3,7 +3,7 @@ import { formatFullDateTime } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";
 import { decideOutsideAgent, listOutsideAgents, type OutsideAgents as Agents } from "../../../core/settings/outsideAgents";
 import { daemon } from "../daemon";
-import { confirmDestructive, EmptyState, Page, PillButton, Row, Section } from "../kit/kit";
+import { confirmDestructive, EmptyState, Page, PillButton, Row, Section } from "../../kit/kit";
 
 /** Outside agents: approve the ones that ask to hand work to Brain, revoke the ones you no longer trust. */
 export function OutsideAgents() {

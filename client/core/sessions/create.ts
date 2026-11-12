@@ -9,6 +9,9 @@ export type CreateSessionOptions = {
   name?: string;
   /** The Session a "New Terminal" is opened from: the new window joins its tmux session. */
   targetId?: string;
+  /** The Provider connection and model the new Session launches with (New Terminal carries its Provider's). */
+  connectionId?: string;
+  modelId?: string;
 };
 
 export type CreatedSession = CreateSessionReconciliation & { workerSession?: Record<string, unknown> };
@@ -29,6 +32,8 @@ export async function createSession(transport: Transport, options: CreateSession
       cwd: options.cwd ?? "",
       command: options.command ?? "",
       name: options.name ?? "",
+      ...(options.connectionId?.trim() ? { connection_id: options.connectionId.trim() } : {}),
+      ...(options.modelId?.trim() ? { model_id: options.modelId.trim() } : {}),
     }, { reply: "session_created", timeoutMs: 10_000 });
   } catch (error) {
     const code = (error as { code?: unknown }).code;

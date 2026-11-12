@@ -50,12 +50,107 @@ export function placeLabel(key: DesktopPlaceKey): string {
   return ROWS.find((row) => row.key === key)?.label ?? key;
 }
 
-/** A place with a URL: a sidebar row, Brain's Work list, or one Session of the current computer. */
+/**
+ * A page under a place that has a URL of its own, as the Expo app's routes did: a Settings page
+ * (`/settings/computer?id=…`), a Friends post or person, a Plugins service, its tools or a tool's
+ * extensions, a Work file (`/work/<id>`). The values are the shell's own routes.
+ */
+export type PlacePage =
+  | { name: "settings-computer"; id: string }
+  | { name: "settings-telegram" }
+  | { name: "settings-providers" }
+  | { name: "settings-agents" }
+  | { name: "settings-friends" }
+  | { name: "settings-iphone" }
+  | { name: "settings-phone" }
+  | { name: "settings-virtual-screen" }
+  | { name: "settings-pet" }
+  | { name: "settings-licenses" }
+  | { name: "settings-license"; id: string }
+  | { name: "friends-post"; id: string }
+  | { name: "friends-person"; id: string }
+  | { name: "friends-drafts" }
+  | { name: "friends-notifications" }
+  | { name: "friends-bookmarks" }
+  | { name: "friends-blocked" }
+  | { name: "extensions-service"; id: string }
+  | { name: "extensions-tools"; service: string; account?: string }
+  | { name: "extensions-agent"; scope: string }
+  | { name: "workFile"; id: string };
+
+/** A place with a URL: a sidebar row, Brain's Work list, or one Session of the current computer; `page`, a page under it. */
 export type WebPlace =
-  | { key: Exclude<DesktopPlaceKey, "sessions"> }
+  | { key: Exclude<DesktopPlaceKey, "sessions">; page?: PlacePage }
   | { key: "sessions" }
-  | { key: "work" }
+  | { key: "work"; page?: PlacePage }
   | { key: "session"; workerId: string };
+
+/** Settings' pages by their path segment (the Expo app's `app/settings/*.tsx`). */
+const SETTINGS_PAGES: Record<string, PlacePage> = {
+  telegram: { name: "settings-telegram" },
+  "model-providers": { name: "settings-providers" },
+  agents: { name: "settings-agents" },
+  friends: { name: "settings-friends" },
+  iphone: { name: "settings-iphone" },
+  phone: { name: "settings-phone" },
+  "virtual-screen": { name: "settings-virtual-screen" },
+  pet: { name: "settings-pet" },
+  licenses: { name: "settings-licenses" },
+};
+const FRIENDS_LISTS = ["drafts", "notifications", "bookmarks", "blocked"] as const;
+
+/** The place a page belongs to. */
+function placeKeyOfPage(page: PlacePage): "settings" | "friends" | "extensions" | "work" {
+  if (page.name === "workFile") return "work";
+  return page.name.split("-")[0] as "settings" | "friends" | "extensions";
+}
+
+/** The page's path under its place (`computer?id=…`, `post/<id>`), from the place's own. */
+function pagePath(page: PlacePage): string {
+  const e = encodeURIComponent;
+  switch (page.name) {
+    case "settings-computer": return `/settings/computer?id=${e(page.id)}`;
+    case "settings-license": return `/settings/license?id=${e(page.id)}`;
+    case "friends-post": return `/friends/post/${e(page.id)}`;
+    case "friends-person": return `/friends/person/${e(page.id)}`;
+    case "extensions-service": return `/extensions/${e(page.id)}`;
+    case "extensions-tools": return `/extensions/${e(page.service)}/tools${page.account ? `?account=${e(page.account)}` : ""}`;
+    case "extensions-agent": return `/extensions/agents/${e(page.scope)}`;
+    case "workFile": return `/work/${e(page.id)}`;
+    default: {
+      if (page.name.startsWith("friends-")) return `/friends/${page.name.slice("friends-".length)}`;
+      const segment = Object.keys(SETTINGS_PAGES).find((key) => SETTINGS_PAGES[key].name === page.name);
+      return `/settings/${segment}`;
+    }
+  }
+}
+
+/** A page a place's path names below it; null for none (the place's own page). */
+function pageOfSegments(first: string, rest: string[], params: URLSearchParams): PlacePage | null {
+  const [second = "", third = ""] = rest;
+  switch (first) {
+    case "settings": {
+      if (second === "computer" || second === "license") {
+        const id = params.get("id");
+        return id ? { name: second === "computer" ? "settings-computer" : "settings-license", id } : null;
+      }
+      return SETTINGS_PAGES[second] ?? null;
+    }
+    case "friends":
+      if ((second === "post" || second === "person") && third) return { name: second === "post" ? "friends-post" : "friends-person", id: third };
+      return (FRIENDS_LISTS as readonly string[]).includes(second) ? { name: `friends-${second}` as PlacePage["name"] } as PlacePage : null;
+    case "extensions":
+    case "plugins":
+      if (!second) return null;
+      if (second === "agents") return third ? { name: "extensions-agent", scope: third } : null;
+      if (third === "tools") return { name: "extensions-tools", service: second, ...(params.get("account") ? { account: params.get("account")! } : {}) };
+      return { name: "extensions-service", id: second };
+    case "work":
+      return second ? { name: "workFile", id: second } : null;
+    default:
+      return null;
+  }
+}
 
 /** The sidebar row a place selects: a Session selects Sessions, Work selects Brain. */
 export function sidebarKeyOf(place: WebPlace): DesktopPlaceKey {
@@ -71,6 +166,7 @@ export function sidebarKeyOf(place: WebPlace): DesktopPlaceKey {
  * app's paths (`/list`, `/plugins`, `/terminal/<id>`) still open their place.
  */
 export function placePath(place: WebPlace): string {
+  if ("page" in place && place.page) return pagePath(place.page);
   switch (place.key) {
     case "brain": return "/";
     case "session": return `/sessions/${encodeURIComponent(place.workerId)}`;
@@ -94,6 +190,8 @@ export function placeOfPath(location: string): WebPlace | null {
     }
   });
   const first = segments[0] ?? "";
+  const page = pageOfSegments(first, segments.slice(1), url.searchParams);
+  if (page) return { key: placeKeyOfPage(page), page };
   switch (first) {
     case "": return { key: "brain" };
     case "work": return { key: "work" };
@@ -118,6 +216,23 @@ export function placeOfPath(location: string): WebPlace | null {
     case "settings": return { key: "settings" };
     default: return null;
   }
+}
+
+/**
+ * The place a `mewla://` link names that no other part of the app takes: `mewla://stats`,
+ * `…/resources`, `…/screen`, `…/terminal/<id>`, `…/work/<id>`, `…/friends/post/<id>`,
+ * `…/plugins/<service>`, as the Expo app's routes opened them. Brain, Sessions, Calendar, Live,
+ * Settings, Phone and Plugins' own links (and its sign-in returns) have their handlers: null.
+ */
+export function placeOfLink(url: string): WebPlace | null {
+  const match = /^mewla:\/\/([^?#]*)(\?[^#]*)?/i.exec(url.trim());
+  if (!match) return null;
+  const path = match[1].replace(/\/+$/, "");
+  const first = path.split("/")[0].toLowerCase();
+  if (["", "brain", "sessions", "calendar", "live", "settings", "phone", "more"].includes(first)) return null;
+  // Plugins' own link, and a sign-in return (`?state=`, whatever its path), are Plugins' to finish.
+  if (first === "plugins" && (!path.includes("/") || new URLSearchParams(match[2] ?? "").has("state"))) return null;
+  return placeOfPath(`/${path}${match[2] ?? ""}`);
 }
 
 /** The browser tab's title: the page's own when it has one (a Session's name), else the place's. */

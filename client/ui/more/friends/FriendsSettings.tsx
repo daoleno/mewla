@@ -1,6 +1,6 @@
 import { signal, Text, View } from "nsh";
 import { AlertDialog } from "nsh/base";
-import { Page, PillButton, Row, Section, Spinner, SwitchRow } from "../kit/kit";
+import { Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { Avatar } from "./parts";
 import {

@@ -34,8 +34,20 @@ export class FakeDaemon {
 
   constructor(private state: FakeDaemonState) {}
 
+  /** The computer went away (`goDown`): every connection closes and new ones fail. */
+  private down = false;
+
+  goDown(): void {
+    this.down = true;
+    for (const socket of [...this.sockets]) socket.close(1006, "gone");
+  }
+
   open(): SocketLike {
     const socket = new FakeSocket(this);
+    if (this.down) {
+      setTimeout(() => socket.close(1006, "gone"), 5);
+      return socket;
+    }
     this.sockets.add(socket);
     setTimeout(() => {
       socket.readyState = 1;

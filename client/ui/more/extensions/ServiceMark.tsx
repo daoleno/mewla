@@ -1,7 +1,7 @@
 import { Canvas, Path2D, View } from "nsh";
 import { SERVICE_MARKS } from "../../../core/extensions/serviceMarkPaths";
-import { color } from "../kit/colors";
-import { Icon, type IconName } from "../kit/Icon";
+import { color } from "../../kit/colors";
+import { Icon, type IconName } from "../../kit/Icon";
 
 /** Glyphs for the services with no brand mark of their own here. */
 const GLYPHS: Record<string, IconName> = {

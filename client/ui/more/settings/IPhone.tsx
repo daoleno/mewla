@@ -2,7 +2,7 @@ import { cleanup, effect, Image, signal, Text, untracked, View, lifecycle } from
 import { changeIPhone, getIPhoneStatus, type IPhoneChange, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { failureText } from "../../../core/more/daemon";
 import { daemon } from "../daemon";
-import { Notice, Page, Row, Section, SwitchRow } from "../kit/kit";
+import { Notice, Page, Row, Section, SwitchRow } from "../../kit/kit";
 
 /**
  * Settings → iPhone use: agents on the current Mac use your iPhone through iPhone

@@ -3,12 +3,12 @@ import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { effect, Scroll, signal, Text, View } from "nsh";
 import {
-  activeRun, itemSummary, kindLabel, mergeRunResults, nextLine, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel,
+  itemSummary, kindLabel, mergeRunResults, nextLine, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel,
   type CalendarItem, type CalendarRun,
 } from "../../core/calendar/model";
 import { codexAsset } from "../../core/session/sessionRequests";
 import { ChatImage } from "../chat/ChatImage";
-import { brain, currentTransport } from "../session";
+import { brain, currentTransport, workers } from "../session";
 import { clock } from "./clock";
 import { openEditor } from "./Editor";
 import { Row, SectionTitle, StatusDot } from "./parts";
@@ -112,8 +112,9 @@ export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute>;
             <View class="border-t border-border">
               {(allRuns() ? runs() : runs().slice(0, RUNS_SHOWN)).map((run) => (
                 <Button testID={`run-${run.id}`}
-                  // A run still running opens its Session; the others their result.
-                  onPress={() => (run.status === "running" && run.worker_session ? props.openSession(run.worker_session) : props.nav.push({ name: "run", itemId: props.id, runId: run.id }))} class="gap-1 border-b border-border bg-card px-4 py-3 active:bg-accent">
+                  // A run still running opens its Session while the computer lists it; the others, and one whose Session has gone, their result (parity #45).
+                  onPress={() => (run.status === "running" && run.worker_session && workers().some((worker) => worker.id === run.worker_session)
+                    ? props.openSession(run.worker_session) : props.nav.push({ name: "run", itemId: props.id, runId: run.id }))} class="gap-1 border-b border-border bg-card px-4 py-3 active:bg-accent">
                   <View class="flex-row items-center gap-1.5">
                     <StatusDot status={run.status} />
                     <Text class="text-sm text-muted-foreground">{`${runWhen(run, item()!, clock())} · ${statusLabel[run.status]}`}</Text>
@@ -164,7 +165,8 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
                   </View>
                 )
                 : <Text class="text-base text-muted-foreground">{run()!.result_preview ? `${run()!.result_preview}…` : run()!.status === "running" ? "Still running." : "No result."}</Text>}
-            {run()!.worker_session && activeRun(item()!)?.id === run()!.id ? (
+            {/* Its Session while the computer lists it, as the Expo app's run sheet did (parity #45). */}
+            {run()!.worker_session && workers().some((worker) => worker.id === run()!.worker_session) ? (
               <Button testID="open-session" onPress={() => props.openSession(run()!.worker_session!)} class="self-start rounded-full border border-border px-4 py-2 active:bg-accent">
                 <Text class="text-base">Open Session</Text>
               </Button>

@@ -1,11 +1,15 @@
-import { signal } from "nsh";
+import { computed, platform, signal } from "nsh";
+
+/** A Session's terminal is on screen. Set by the Session page. */
+export const terminalShowing = signal(false);
 
 /**
- * A Session's terminal is on screen. The terminal owns every key there (Ctrl+K
- * is the shell's kill-line, letters are typing), so the desktop's shortcuts
- * are unbound while it shows. Set by the Session page.
+ * The terminal owns every key (Ctrl+K is the shell's kill-line, letters are typing), so the
+ * desktop's shortcuts step aside for it. In a browser the terminal is its own frame: while it has
+ * the focus its keys never reach the page, and with the focus elsewhere (the sidebar, a header)
+ * the shortcuts work, as the Expo web app's did (parity #27). Elsewhere the terminal showing is enough.
  */
-export const terminalShowing = signal(false);
+export const terminalOwnsKeys = computed(() => terminalShowing() && platform.os !== "web");
 
 interface ComposerHandle {
   focus(): void;

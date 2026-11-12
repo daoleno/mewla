@@ -1,11 +1,13 @@
-import { computed, createMotion, effect, Image, List, signal, Storage, Text, untracked, View } from "nsh";
+import { cleanup, computed, createMotion, effect, Image, List, platform, signal, Storage, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, type NavStackState } from "nsh/base";
+import { BackHandler } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { workLinkOf } from "../sessions/workLinks";
-import { selectedTab } from "../shell/Shell";
+import { desktop, selectedTab } from "../shell/Shell";
+import { haptic } from "../shell/haptics";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
 import { sessionEmptyCat, sessionEmptyState } from "../../core/sessions/sessionEmptyState";
 import { petClip } from "../pets/clips";
@@ -76,6 +78,7 @@ async function terminateSelected(): Promise<void> {
   const server = current();
   const keys = [...selection()];
   if (!transport || !server || keys.length === 0 || terminating()) return;
+  haptic.notification("warning");
   const { action } = await AlertDialog.show({
     title: "Terminate sessions?",
     description: sessionTerminationConfirmMessage(keys.length),
@@ -98,6 +101,7 @@ async function terminateSelected(): Promise<void> {
       selection.set(failed.size ? new Set([...failed]) : EMPTY_SESSION_SELECTION);
       const titles = summary.failedEntries.map((e) => (byKey.get(e.sessionKey) ? sessionRowModel(byKey.get(e.sessionKey)!, { alias: untracked(aliases)[e.workerId] }).title : ""));
       notice.set(sessionTerminationSummaryMessage(summary, titles));
+      if (!failed.size) haptic.notification("success");
     },
   });
   batch.start();
@@ -134,8 +138,19 @@ function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => voi
   const toneClass = () => (model().tone === "danger" ? "text-destructive" : model().tone === "needs" ? "text-seal" : model().tone === "accent" ? "text-foreground" : "text-muted-foreground");
   return (
     <View testID="session-row" delayLongPress={400} style={motion?.style}
+      accessibilityLabel={model().accessibilityLabel} role={selecting() ? "checkbox" : "button"}
+      accessibilityState={selecting() ? { checked: selected(), disabled: !online() } : undefined}
+      accessibilityHint={selecting() ? "Double tap to toggle selection" : "Opens the terminal session"}
       onPress={() => (selecting() ? online() && toggleSelected(props.worker()) : props.open(props.worker()))}
-      onLongPress={() => !selecting() && online() && toggleSelected(props.worker())}
+      onLongPress={() => {
+        if (selecting() || !online()) return;
+        haptic.impact("medium");
+        toggleSelected(props.worker());
+      }}
+      onContextMenu={() => {
+        // The desktop layout: a right-click starts selecting, as a long press does on a phone (parity #28).
+        if (untracked(desktop) && !selecting() && online()) toggleSelected(props.worker());
+      }}
       class={selecting() && !online() ? "flex-row items-center gap-3 px-4 py-2.5 opacity-50" : "flex-row items-center gap-3 px-4 py-2.5 active:bg-accent"}>
       {selecting() ? <Icon name={selected() ? "check-circle-fill" : "circle"} size={22} color={selected() ? "primary" : "muted-foreground"} /> : null}
       <View class="items-center justify-center">
@@ -200,6 +215,12 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
     if (action === "new") props.onNew();
     else if (action === "services") servicesOpen.set(true);
   };
+  // Android's Back ends selecting first (parity #26), as the Expo list did.
+  onAndroidBack(() => {
+    if (!untracked(selecting) || untracked(selectedTab) !== 1) return false;
+    selection.set(EMPTY_SESSION_SELECTION);
+    return true;
+  });
   // Leaving the tab ends selecting.
   effect(() => {
     if (selectedTab() !== 1 && untracked(selecting)) selection.set(EMPTY_SESSION_SELECTION);
@@ -253,4 +274,10 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
 export function currentSessionKey(workerId: string): string | null {
   const server = current();
   return server ? makeSessionKey(server.id, workerId) : null;
+}
+
+/** Android's Back while the page lives; a browser has its own back (NSH's web runtime has no `BackHandler.on`). */
+function onAndroidBack(listener: () => boolean): void {
+  if (platform.os === "web") return;
+  cleanup(BackHandler.on("press", listener));
 }
