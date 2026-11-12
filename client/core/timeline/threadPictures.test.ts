@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ActivityTimelineItem } from "./activityTypes";
+import { buildTimeline } from "./model";
 import { markdownPictures, pictureKey, samePictures, sentPictures, threadPictures, toolPictures } from "./threadPictures";
 import type { MessageTimelineItem, TimelineItem } from "./types";
 
@@ -27,6 +28,12 @@ describe("the pictures of a thread", () => {
   test("a tool row's picture, and each step's in a folded run, once", () => {
     expect(toolPictures(tool("t", { previewPath: "/tmp/a.png" }))).toEqual(["/tmp/a.png"]);
     expect(toolPictures(tool("run", { steps: [tool("1", { previewPath: "/tmp/a.png" }), tool("2", {}), tool("3", { previewPath: "/tmp/b.png" }), tool("4", { previewPath: "/tmp/a.png" })] }))).toEqual(["/tmp/a.png", "/tmp/b.png"]);
+  });
+
+  test("a picture Claude read is its Read row's picture; a text file it read is none", () => {
+    const read = (id: string, seq: number, path: string) => ({ id, seq, kind: "tool", tool_name: "Read", title: "Tool", input: JSON.stringify({ file_path: path }), files: [path], status: "done", source: "claude_transcript" });
+    const items = buildTimeline([read("r1", 1, "/repo/shots/login.png"), { id: "m1", seq: 2, kind: "agent_message", role: "assistant", body: "Done." }, read("r2", 3, "/repo/notes.md")]);
+    expect(items.flatMap((item) => (item.type === "activity" ? toolPictures(item) : []))).toEqual(["/repo/shots/login.png"]);
   });
 
   test("the viewer steps through every picture of the thread in the order the thread shows them", () => {

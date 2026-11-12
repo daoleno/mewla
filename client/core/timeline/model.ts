@@ -1401,7 +1401,11 @@ function imagePathFromTool(event: CodexConversationEvent) {
   if (!isRecord(parsed)) {
     return undefined;
   }
-  const path = stringField(parsed, "path") || stringField(parsed, "image_url");
+  // Claude's Read names its file `file_path`: a picture it read shows like one a tool made.
+  const path =
+    stringField(parsed, "path") ||
+    stringField(parsed, "image_url") ||
+    (event.tool_name === "Read" ? stringField(parsed, "file_path") : "");
   if (!path || previewableImageUri(path) || !isImageAttachment({ path })) {
     return undefined;
   }
