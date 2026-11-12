@@ -21,13 +21,18 @@ function computer(answer: (n: number) => unknown, state = "connected") {
 const fresh = () => ({ ...dashboard, sampled_at: new Date().toISOString() });
 
 describe("Resources", () => {
-  test("shows the machine: headline, the four tiles and who uses it", async () => {
+  test("shows the machine: its name, the pressure in words, the four tiles and who uses it", async () => {
     const c = computer(() => fresh());
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:resources-headline");
-    for (const tile of ["tile-cpu", "tile-memory", "tile-disk", "tile-pressure", "consumers"]) expect(app.shows(`id:${tile}`)).toBe(true);
-    expect(app.texts().join(" ")).toContain("Using this machine");
-    expect(app.texts().join(" ")).toContain("CPU 100% is one core.");
+    for (const tile of ["tile-cpu", "tile-memory", "tile-disk", "tile-swap", "consumers"]) expect(app.shows(`id:${tile}`)).toBe(true);
+    const texts = app.texts();
+    expect(texts).toContain("Desk");
+    expect(texts).toContain("Elevated pressure");
+    expect(texts.some((t) => t.startsWith("Memory under pressure · updated "))).toBe(true);
+    // CPU 72% of 8 cores; 27 GB of 32 GB; the root disk 367 GB of 512 GB; swap 2 GB of 8 GB.
+    for (const text of ["72%", "8 cores", "27 GB", "of 32 GB", "367 GB", "of 512 GB", "2 GB", "of 8 GB"]) expect(texts).toContain(text);
+    expect(texts.join(" ")).toContain("Using this machine");
   });
 
   test("reads every five seconds while the app is in front, and stops in the background", async () => {
@@ -82,42 +87,42 @@ describe("Resources", () => {
     await app.waitFor("id:settings");
   });
 
-  test("every chart is named for a screen reader, and CPU has its pressure-state strip", async () => {
+  test("the raw metric and the kernel's pressure figures are only behind ⓘ, and no tile draws a chart", async () => {
     const app = await open(HARNESS, computer(() => fresh()).options);
     await app.waitFor("id:resources-headline");
-    for (const label of [
-      "CPU utilization history, scale 0–100%",
-      "Memory utilization history, scale 0–100%",
-      "Disk read throughput history",
-      "Disk write throughput history",
-      "PSI CPU some history, scale 0–100%",
-    ]) expect(app.shows(`label:${label}`)).toBe(true);
-    expect(app.shows("id:cpu-pressure-strip")).toBe(true);
-    // Disk read and write are keyed, and the PSI micro line stands apart from the caption.
-    expect(app.texts()).toContain("CPU · max some 10s");
-    expect(app.texts().some((t) => t.startsWith("R ") && !t.includes("·"))).toBe(true);
-    expect(app.texts()).toContain("CPU 8.4% · Mem 3.2% · I/O 1.1%");
-  });
-
-  test("machine details show a PSI history per resource; the toggle says whether it is open", async () => {
-    const app = await open(HARNESS, computer(() => fresh()).options);
-    await app.waitFor("id:resources-headline");
+    const raw = "psi.memory.some.avg10 · 3.2 / threshold 2";
+    expect(app.texts()).not.toContain(raw);
+    expect(app.shows("label:CPU utilization history, scale 0–100%")).toBe(false);
     expect(app.shows("label:Machine details")).toBe(true);
-    expect(app.shows("label:Mem PSI some history, scale 0–100%")).toBe(false);
     await app.press("id:resources-details");
-    for (const key of ["CPU", "Mem", "I/O"]) expect(app.shows(`label:${key} PSI some history, scale 0–100%`)).toBe(true);
-    expect(app.texts()).toContain("some / full · 10s / 1m / 5m");
+    await app.waitFor("id:resources-machine-details");
+    expect(app.texts()).toContain(raw);
+    expect(app.texts()).toContain("PSI some / full · 10s / 1m / 5m");
+    for (const key of ["CPU", "Mem", "I/O"]) expect(app.texts()).toContain(key);
+    expect(app.texts()).toContain("Load · 1 / 5 / 15 min");
+    await app.press("id:resources-details");
+    expect(app.shows("id:resources-machine-details")).toBe(false);
   });
 
-  test("a Mac shows its memory pressure level on a three-step meter", async () => {
-    const mac = () => ({ ...fresh(), psi: {}, memory_pressure: { level: "warn", free_percent: 41.6 }, cpu: { load1: 2.14, per_core_percent: [10, 20, 30, 40], utilization_percent: 25 } });
+  test("a Mac's memory pressure level is said in words, its level behind ⓘ", async () => {
+    const mac = () => ({ ...fresh(), signals: [], psi: {}, memory_pressure: { level: "warn", free_percent: 41.6 }, cpu: { load1: 2.14, per_core_percent: [10, 20, 30, 40], utilization_percent: 25 } });
     const app = await open(HARNESS, computer(mac).options);
     await app.waitFor("id:resources-headline");
-    expect(app.shows("label:Memory pressure Warning")).toBe(true);
-    expect(app.shows("label:Memory pressure history, from normal to critical")).toBe(true);
-    expect(app.texts()).toContain("Warning");
+    expect(app.texts().some((t) => t.startsWith("Memory under pressure · updated "))).toBe(true);
+    expect(app.texts()).toContain("4 cores");
+    await app.press("id:resources-details");
+    await app.waitFor("id:resources-machine-details");
     expect(app.texts()).toContain("Memory pressure");
+    expect(app.texts()).toContain("Warning");
     expect(app.texts()).toContain("42% free · Load 2.1 · 4 cores");
+  });
+
+  test("a comfortable machine says its pressure is low", async () => {
+    const calm = () => ({ ...fresh(), state: "normal", signals: [] });
+    const app = await open(HARNESS, computer(calm).options);
+    await app.waitFor("id:resources-headline");
+    expect(app.texts()).toContain("Comfortable");
+    expect(app.texts().some((t) => t.startsWith("Pressure low · updated "))).toBe(true);
   });
 
   test("Refresh reads at once, and is off while the computer is offline", async () => {
@@ -129,7 +134,7 @@ describe("Resources", () => {
     await app.wait(50);
     expect(c.calls()).toBe(2);
     await app.host.send("app.daemonState", "waiting");
-    await app.waitFor("text:Last sample · offline", { timeout: 2_000 }).catch(() => {});
+    await app.wait(50);
     expect(app.enabled("id:resources-refresh")).toBe(false);
   });
 
