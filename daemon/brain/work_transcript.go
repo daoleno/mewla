@@ -262,6 +262,7 @@ func (s *Service) recordTurnEndTranscript(fact watcher.TurnFact) {
 		if worker == nil {
 			return
 		}
+		s.recordWorkWorker(item.ID, worker)
 		switch fact.Kind {
 		case "done", "failed", "attention":
 			s.recordWorkTranscript(item, worker, fact.TurnID, true)

@@ -2,6 +2,7 @@ package phone
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -656,7 +657,7 @@ func TestAPhoneInSetupSaysWhatToDoAndWhyWhenItKnows(t *testing.T) {
 	}
 	sendFrame(t, link, State{Type: TypeState, State: StateSetup, Problem: "Wireless debugging is off"})
 	_, err = tap(m, "w1")
-	if code(err) != CodeNotReady || !strings.Contains(err.Error(), "open Mewla → Phone") || !strings.Contains(err.Error(), "(Wireless debugging is off)") {
+	if code(err) != CodeNotReady || !strings.Contains(err.Error(), "ready on the phone: Wireless debugging is off.") || strings.Contains(err.Error(), "open Mewla") || !strings.Contains(err.Error(), "keeps trying by itself") {
 		t.Fatalf("with the phone's reason: %v", err)
 	}
 	if len(conn.ops()) != 0 {
@@ -666,5 +667,46 @@ func TestAPhoneInSetupSaysWhatToDoAndWhyWhenItKnows(t *testing.T) {
 	sendFrame(t, link, State{Type: TypeState, State: StateReady})
 	if _, err := tap(m, "w1"); err != nil {
 		t.Fatalf("after it became ready: %v", err)
+	}
+}
+
+func TestAPhoneInSetupKeepsItsReasonAndSinceWhenItFellThere(t *testing.T) {
+	clock := newClock()
+	m := NewManager(Options{Clock: clock})
+	link, _ := connect(t, m, StateReady, okResult(nil))
+	if st := m.Status(); st.Problem != "" || st.SetupSince != nil {
+		t.Fatalf("a ready phone has no setup: %+v", st)
+	}
+	fell := clock.Now()
+	// The first word of a fall into setup has no reason yet.
+	sendFrame(t, link, State{Type: TypeState, State: StateSetup})
+	clock.Advance(14 * time.Second)
+	sendFrame(t, link, State{Type: TypeState, State: StateSetup, Problem: "Wireless debugging is off and Mewla may not switch it on"})
+	clock.Advance(4 * time.Minute)
+	sendFrame(t, link, State{Type: TypeState, State: StateSetup, Problem: "Wireless debugging is off and Mewla may not switch it on"})
+	st := m.Status()
+	if st.State != StateSetup || st.Problem != "Wireless debugging is off and Mewla may not switch it on" {
+		t.Fatalf("the reason is kept: %+v", st)
+	}
+	if st.SetupSince == nil || !st.SetupSince.Equal(fell) {
+		t.Fatalf("since is when it fell, not when the reason changed: %v want %v", st.SetupSince, fell)
+	}
+	raw, _ := json.Marshal(st)
+	if !strings.Contains(string(raw), `"problem":"Wireless debugging is off`) || !strings.Contains(string(raw), `"setup_since"`) {
+		t.Fatalf("--json carries both: %s", raw)
+	}
+	// Ready again clears them.
+	sendFrame(t, link, State{Type: TypeState, State: StateReady})
+	if st := m.Status(); st.Problem != "" || st.SetupSince != nil {
+		t.Fatalf("ready again: %+v", st)
+	}
+}
+
+func TestAPhoneThatConnectsInSetupIsInSetupSinceItConnected(t *testing.T) {
+	clock := newClock()
+	m := NewManager(Options{Clock: clock})
+	connect(t, m, StateSetup, nil)
+	if st := m.Status(); st.SetupSince == nil || !st.SetupSince.Equal(clock.Now()) {
+		t.Fatalf("since: %+v", st)
 	}
 }

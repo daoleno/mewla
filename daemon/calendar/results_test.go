@@ -277,3 +277,120 @@ func TestScheduledResultProjectionRejectsMalformedTerminalPayloads(t *testing.T)
 		})
 	}
 }
+
+// reference is the projection computed from nothing but the items, the way a
+// read did it before results were kept per generation.
+func referenceScheduledResults(store *Store, threadID string, limit int) []ScheduledResult {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	results := []ScheduledResult{}
+	for _, item := range store.items {
+		if item.Kind != KindScheduledAction {
+			continue
+		}
+		for _, run := range item.Runs {
+			result, ok := scheduledResultFromRun(item.ID, run)
+			if !ok || strings.TrimSpace(threadID) != "" && result.ThreadID != strings.TrimSpace(threadID) {
+				continue
+			}
+			results = append(results, result)
+		}
+	}
+	sort.SliceStable(results, func(left, right int) bool {
+		if !results[left].CreatedAt.Equal(results[right].CreatedAt) {
+			return results[left].CreatedAt.Before(results[right].CreatedAt)
+		}
+		return results[left].ID < results[right].ID
+	})
+	if limit > 0 && len(results) > limit {
+		results = results[len(results)-limit:]
+	}
+	return results
+}
+
+func TestScheduledResultsFollowEveryCommitAndAreReadWithoutRework(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 7, 17, 9, 0, 0, 0, time.UTC)
+	clock := base
+	store.now = func() time.Time { clock = clock.Add(time.Minute); return clock }
+	check := func(step string) {
+		t.Helper()
+		for _, thread := range []string{"", "thread-1", "thread-2", " thread-1 ", "missing"} {
+			for _, limit := range []int{0, 1, 2, 10} {
+				if got, want := store.ScheduledResults(thread, limit), referenceScheduledResults(store, thread, limit); !reflect.DeepEqual(got, want) {
+					t.Fatalf("%s: ScheduledResults(%q, %d) = %#v, want %#v", step, thread, limit, got, want)
+				}
+			}
+		}
+	}
+	check("empty")
+	generation := store.Generation()
+	for range 3 {
+		check("repeated read")
+	}
+	if store.Generation() != generation {
+		t.Fatalf("reading moved the generation: %d -> %d", generation, store.Generation())
+	}
+
+	finish := func(id, thread, result, failure string) Run {
+		t.Helper()
+		due := clock.Add(time.Hour)
+		if _, err := store.Create(Item{
+			ID: id, Title: "Job " + id, Kind: KindScheduledAction, DueAt: &due, Timezone: "UTC",
+			Recurrence: RecurrenceNone, ActionInstruction: "Run", SourceThreadID: thread,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if store.Generation() == generation {
+			t.Fatal("Create did not move the generation")
+		}
+		generation = store.Generation()
+		_, run, err := store.Claim(id, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		check("claimed " + id)
+		if _, err := store.FinishRun(id, run.ID, result, failure); err != nil {
+			t.Fatal(err)
+		}
+		if store.Generation() == generation {
+			t.Fatal("FinishRun did not move the generation")
+		}
+		generation = store.Generation()
+		check("finished " + id)
+		return run
+	}
+	finish("item-1", "thread-1", "First answer.", "")
+	finish("item-2", "thread-2", "", "it broke")
+	finish("item-3", "thread-1", "Second answer.", "")
+	if got := len(store.ScheduledResults("thread-1", 0)); got != 2 {
+		t.Fatalf("thread-1 results = %d, want 2", got)
+	}
+
+	// The slice a caller gets is its own: changing it cannot change what the
+	// next read answers.
+	first := store.ScheduledResults("thread-1", 0)
+	first[0].Body = "tampered"
+	if got := store.ScheduledResults("thread-1", 0); got[0].Body == "tampered" || len(got) != 2 {
+		t.Fatalf("caller edit leaked into the next read: %#v", got)
+	}
+
+	// With nothing committed, a read normalizes no Run: it copies the answer.
+	allocs := testing.AllocsPerRun(50, func() { _ = store.ScheduledResults("thread-1", 0) })
+	if allocs > 1 {
+		t.Fatalf("an unchanged read allocated %.0f times, want 1 (the caller's copy)", allocs)
+	}
+
+	// A commit that changes nothing the projection shows leaves the answer
+	// equal to the reference.
+	store.mu.Lock()
+	err = store.persistLocked()
+	store.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("after a no-op commit")
+}
