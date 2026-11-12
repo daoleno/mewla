@@ -8,6 +8,7 @@ import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdi
 import { finalReplyIdsOf } from "../../core/timeline/model";
 import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
+import { brainHostIdentity } from "../chat/links";
 import { chatImage } from "../chat/assets";
 import { stopTurn } from "../../core/conversation/turn";
 import { brainSurface, newBrainChat } from "../../core/brain";
@@ -285,11 +286,18 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
   const placeholder = () => (connection() === "connected" ? "Tell Brain…" : "Sends when back online");
   return (
     <>
-      <ChatComposer text={props.text} placeholder={placeholder} canSend={tools.canSend}
+      <ChatComposer text={props.text} placeholder={placeholder} canSend={tools.canSend} attached={() => tools.uploads.ready().length > 0}
         disabled={() => Boolean(block()) || pairAgain()} disabledReason={() => (pairAgain() ? `Pair ${current()?.name || "your computer"} again` : block() ?? "")}
         onSend={(value) => (untracked(editor.edit) ? (void editor.send(value), false) : tools.send(value))}
         running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"} onStop={() => void stop()}
         active={() => homeShown() && !trayOpen()} pickerOpen={tools.pickerOpen}
+        onFiles={(files) => {
+          try {
+            tools.uploads.add(files);
+          } catch (error) {
+            notice.set(error instanceof Error ? error.message : "Could not attach the file.");
+          }
+        }}
         leading={<ComposerPlusButton pinned={tools.pinned} connected={() => connection() === "connected"} onPress={() => tools.pinned.set(!untracked(tools.pinned))} />}
         onRecall={() => {
           const item = lastEditablePrompt(untracked(items), { connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
@@ -313,10 +321,6 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
 }
 
 /** Brain's menu › Browse workspace: Brain's folder, its host Session playing its media when it runs. */
-function brainHostIdentity() {
-  const host = untracked(brain)?.host_worker;
-  return host?.id && host.process_id && host.started_at ? { workerId: host.id, processId: host.process_id, startedAt: host.started_at } : null;
-}
 export function browseWorkspace(): void {
   openPage(workspaceRoute(brainHostIdentity()));
 }

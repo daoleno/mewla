@@ -26,7 +26,8 @@ export function homeShown(): boolean {
 
 /** Replaces everything above home with `routes`. */
 export function openPage(...routes: Route[]): void {
-  nav.setRoutes([{ name: "home" }, ...routes.filter((route) => route.name !== "home")]);
+  // Home stays the page it is (its draft, thread scroll and tray, SPEC §3.8): only what is above it changes.
+  nav.setRoutes([untracked(nav.routes)[0] ?? { name: "home" }, ...routes.filter((route) => route.name !== "home")]);
 }
 
 /** Back to home, the tray closed (a computer switch, "Ask Brain about this", a link to Brain). */

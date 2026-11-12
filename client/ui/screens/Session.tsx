@@ -44,20 +44,18 @@ import { slashMenuState } from "../../core/session/composerSlash";
 import { DSHPanel } from "../chat/DSHPanel";
 import { Composer, createComposerText } from "../chat/Composer";
 import { ChatTimeline } from "../chat/Timeline";
+import { openChatLink, openChatPath, type ChatFiles } from "../chat/links";
 import { Icon } from "../icons/Icon";
 import { brain, connection, current, currentTransport, outbox, problem as connectionProblem, resumeConnection, workers, workersHydrated } from "../session";
 import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
-import { filePreviewRoute } from "../more/files/routes";
-import { recognizeSessionFileReference } from "../../core/files/sessionFilePreview";
 import { buildGitDiffChipLabel, type GitDiffStatusSnapshot } from "../../core/git/gitDiff";
 import { getGitStatus } from "../../core/git/requests";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
-const NO_FILE_IDENTITY_NOTICE = "This Session has no live generation identity. Refresh the Session list and try again.";
 
 
 /** The person's chat-or-terminal choice per Session, saved on the device (Expo's key). */
@@ -326,20 +324,17 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     const kept = routes.filter((route) => !(route.name.startsWith("git") && "targetId" in route && "cwd" in route && route.targetId === props.workerId && route.cwd !== cwd));
     if (kept.length !== routes.length) props.nav.setRoutes(kept);
   });
-  // A reply's link: a file the Session wrote opens in the preview; a page opens in the browser.
-  const openLink = (url: string) => {
-    if (recognizeSessionFileReference(url)) return openPath(url);
-    if (/^https?:\/\//i.test(url)) void openUrl(url).catch(() => notice.set("Could not open the link."));
+  // A reply's link and a path the terminal showed (ui/chat/links.ts): a file opens in the preview against
+  // this run of the Session (without one it says why, parity #38); a page opens in the browser.
+  const sessionFiles: ChatFiles = {
+    identity: () => {
+      const w = untracked(worker);
+      return w?.process_id && w.started_at ? { workerId: props.workerId, processId: w.process_id, startedAt: w.started_at } : null;
+    },
+    notice: (text) => notice.set(text),
   };
-  // A path the terminal showed, previewed against this run of the Session.
-  const openPath = (path: string) => {
-    const reference = recognizeSessionFileReference(path);
-    const w = untracked(worker);
-    if (!reference) return;
-    // The Expo app's preview sheet said this; a tap no longer does nothing (parity #38).
-    if (!w?.process_id || !w.started_at) return notice.set(NO_FILE_IDENTITY_NOTICE);
-    props.nav.push(filePreviewRoute(reference, { workerId: props.workerId, processId: w.process_id, startedAt: w.started_at }));
-  };
+  const openLink = (url: string) => openChatLink(url, sessionFiles);
+  const openPath = (path: string) => openChatPath(path, sessionFiles);
   // A preview opened for this Session closes when the Session restarts (another process or start time),
   // as the Expo app's sheet did: it was read with the old generation (parity #44). A generation that is
   // only missing for a moment keeps it.
@@ -568,9 +563,16 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                   render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
                 }}
                 requests={() => requests().length} />
-              <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}
+              <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} attached={() => uploads.ready().length > 0} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}
+                onFiles={(files) => {
+                  try {
+                    uploads.add(files);
+                  } catch (error) {
+                    notice.set(error instanceof Error ? error.message : "Could not attach the file.");
+                  }
+                }}
                 leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
                 <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand}
                   onAttach={attach} uploading={uploading} />
