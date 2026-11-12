@@ -43,6 +43,21 @@ export function alreadyPairedWith(servers: readonly DaemonIdentity[], target: Da
   return servers.some((server) => server.daemonPublicKey.trim().toLowerCase() === key && (!id || server.daemonId?.trim().toLowerCase() === id));
 }
 
+/**
+ * The computers a browser just paired over supersedes (R5#1): entries at the same address with
+ * another daemon key. A page is served by the one computer at its origin, so such an entry is that
+ * address's old install (mewla reinstalled, a new state dir): it is refused for ever
+ * (`wrong-daemon`) and only lists a second, dead computer of the same name. Phones keep them:
+ * a LAN address can pass from one computer to another.
+ */
+export function supersededAtAddress<T extends DaemonIdentity & { id: string; url: string }>(servers: readonly T[], paired: T): string[] {
+  const address = paired.url.trim().toLowerCase();
+  const key = paired.daemonPublicKey.trim().toLowerCase();
+  return servers
+    .filter((server) => server.id !== paired.id && server.url.trim().toLowerCase() === address && server.daemonPublicKey.trim().toLowerCase() !== key)
+    .map((server) => server.id);
+}
+
 /** What the person reads when a code does not pair: a title and the reason. */
 export interface PairingProblem {
   title: string;
