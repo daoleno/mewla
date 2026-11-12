@@ -68,6 +68,12 @@ describe("tray model", () => {
     expect(choice[0]!.oneTap).toBeUndefined();
   });
 
+  test("a new device asking to be let in is a request: no one-tap, its row opens its sheet", () => {
+    const r = requestsOf({ workers: [], alerts: [], devices: [{ id: "r1", name: "Firefox on Linux" }], now: NOW });
+    expect(r).toEqual([{ key: "device:r1", kind: "device", where: "device", title: "Approve new device", source: "Firefox on Linux", deviceId: "r1" }]);
+    expect(trayModel(input({ devices: [{ id: "r1", name: "Firefox on Linux" }] })).state.words).toBe("1 needs you");
+  });
+
   test("a delegated Session's request shows in Brain's thread", () => {
     const r = requestsOf({ workers: [worker("a", { delegated: true, needs_attention: true, status: "blocked" })], alerts: [], now: NOW });
     expect(r[0]).toMatchObject({ key: "attention:a", where: "brain", kind: "attention" });

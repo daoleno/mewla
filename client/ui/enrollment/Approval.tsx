@@ -1,77 +1,25 @@
-import { effect, signal, Text, untracked, View, lifecycle } from "nsh";
+import { effect, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
-import { decideEnrollment, decodePendingEnrollment, pendingEnrollments, verificationChoices, type PendingEnrollment } from "../../core/enrollment";
-import { current, onTransport } from "../session";
-import { forgetOwnEnrollment, ownEnrollmentRequest } from "./ownRequest";
-
-/** The current computer's requests from new devices, newest last; cleared on a switch or a disconnect. */
-const requests = signal<PendingEnrollment[]>([]);
-
-function refresh(): void {
-  const server = untracked(current);
-  if (!server) return;
-  void pendingEnrollments(server)
-    .then((pending) => untracked(current)?.id === server.id && requests.set(pending))
-    .catch(() => {});
-}
-
-onTransport((transport) => {
-  requests.set([]);
-  const add = (request: PendingEnrollment) => requests.set([...untracked(requests).filter((r) => r.id !== request.id), request]);
-  const stops = [
-    transport.on("enrollment_request", (frame) => {
-      const request = decodePendingEnrollment(frame as Record<string, unknown>);
-      if (request) add(request);
-    }),
-    transport.on("enrollment_decision", (frame) => requests.set(untracked(requests).filter((r) => r.id !== frame.request_id))),
-    transport.on("connected", refresh),
-    transport.on("disconnected", () => requests.set([])),
-  ];
-  // Expired requests leave on their own.
-  const timer = setInterval(() => {
-    const live = untracked(requests).filter((r) => Date.parse(r.expiresAt) > Date.now());
-    if (live.length !== untracked(requests).length) requests.set(live);
-  }, 1000);
-  return () => {
-    stops.forEach((stop) => stop());
-    clearInterval(timer);
-    requests.set([]);
-  };
-});
-
-// This browser's own request, left pending when a pairing link paired it instead: it is
-// never shown, and once this browser is paired it is withdrawn, so no device is asked about it.
-const withdrawn = new Set<string>();
-effect(() => {
-  const own = ownEnrollmentRequest();
-  const server = current();
-  const mine = own ? requests().find((r) => r.id === own) : undefined;
-  if (!server || !mine) return;
-  untracked(() => {
-    withdrawn.add(mine.id);
-    requests.set(requests().filter((r) => r.id !== mine.id));
-    forgetOwnEnrollment();
-    void decideEnrollment(server, mine, mine.verificationNumber, false).catch(() => {});
-  });
-});
-
-// Coming back to the app reads what arrived while away.
-effect(() => {
-  if (lifecycle() === "active") untracked(refresh);
-});
+import { decideEnrollment, verificationChoices } from "../../core/enrollment";
+import { current } from "../session";
+import { forgetDeviceRequest, putDeviceRequestAside, shownDeviceRequest } from "./state";
 
 /**
  * "Approve new device": a browser (or another device) asked the current computer to be let in.
- * The person picks the number the new device shows among four, then approves; or denies. It stays
- * until decided: no swipe or backdrop closes it.
+ * The person picks the number the new device shows among four, then approves; or denies. Closed
+ * undecided, the request stays open: a tray row, the count, the cat; the row opens it again.
  */
 export function EnrollmentApproval() {
-  const request = () => requests().find((r) => !withdrawn.has(r.id) && r.id !== ownEnrollmentRequest()) ?? null;
+  const request = shownDeviceRequest;
   const choices = signal<string[]>([]);
   const selected = signal("");
   const busy = signal(false);
   const problem = signal("");
+  const putAside = () => {
+    const shown = untracked(request);
+    if (shown && !untracked(busy)) putDeviceRequestAside(shown.id);
+  };
   let shownFor = "";
   effect(() => {
     const next = request();
@@ -90,7 +38,7 @@ export function EnrollmentApproval() {
     problem.set("");
     try {
       await decideEnrollment(server, pending, approve ? untracked(selected) : pending.verificationNumber, approve);
-      requests.set(untracked(requests).filter((r) => r.id !== pending.id));
+      forgetDeviceRequest(pending.id);
     } catch (error) {
       problem.set(error instanceof Error ? error.message : "Could not send decision.");
     } finally {
@@ -99,7 +47,7 @@ export function EnrollmentApproval() {
   };
 
   return (
-    <AppSheet open={Boolean(request())} onOpenChange={() => {}} popupClass="rounded-t-2xl bg-background px-5 pt-5" backdropClass="bg-black/40">
+    <AppSheet open={Boolean(request())} onOpenChange={({ open }) => !open && putAside()} popupClass="rounded-t-2xl bg-background px-5 pt-5" backdropClass="bg-black/40">
       <View testID="enrollment-approval" class="gap-4 pb-8">
         <Text class="text-xl font-semibold">Approve new device</Text>
         <View class="gap-1">

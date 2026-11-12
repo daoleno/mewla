@@ -13,6 +13,7 @@ import { PillButton } from "../kit/kit";
 import { ProgressBar } from "../kit/ProgressBar";
 import { homeShown, openCalendarItem, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { servicesOpen } from "../sessions/ServicesSheet";
+import { showDeviceRequest } from "../enrollment/state";
 import { setTraySort, tray, traySort } from "./state";
 
 export type TrayProps = {
@@ -37,6 +38,7 @@ function Tile(props: { tile: TrayTile }) {
     <View class="size-[28px] items-center justify-center overflow-hidden">
       {props.tile.kind === "agent" ? <AgentIcon kind={props.tile.agent} flavor={props.tile.flavor} size={20} />
         : props.tile.kind === "brain" ? <View class="size-[28px] items-center justify-center rounded-lg bg-foreground"><Icon name="brain" size={18} tone="canvas" /></View>
+        : props.tile.kind === "device" ? <Icon name="shield-check" size={22} tone="soft" />
         : <Icon name="calendar" size={22} tone="soft" />}
     </View>
   );
@@ -92,7 +94,7 @@ function RequestRow(props: { request: TrayRequest; busy: boolean; onApprove: () 
   const r = () => props.request;
   return (
     <Button testID="tray-request" accessibilityLabel={`${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 active:bg-accent">
-      <Tile tile={r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : { kind: "brain" }} />
+      <Tile tile={r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" }} />
       <View class="min-w-0 flex-1">
         <Text class="text-body font-semibold line-clamp-1">{r().title}</Text>
         <Text class="text-sub text-muted-foreground line-clamp-1">{r().source}</Text>
@@ -156,6 +158,10 @@ export function Tray(props: TrayProps) {
     }
     if (request.where === "session" && request.workerId) return openSession(request.workerId);
     if (request.where === "work" && request.workId) return openWorkDetail(request.workId);
+    if (request.deviceId) {
+      close();
+      return showDeviceRequest(request.deviceId);
+    }
     if (request.itemId) return openCalendarItem(request.itemId);
   };
   const approve = async (request: TrayRequest) => {
