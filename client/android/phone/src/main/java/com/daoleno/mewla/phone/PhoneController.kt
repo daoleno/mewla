@@ -533,7 +533,8 @@ object PhoneController {
         }
         val connect = AdbConnectPort({ null }, finder, cache, keepTryingMs = keepTryingMs)
         return try {
-            runBlocking { connect.connect { port -> AdbConnection.open("127.0.0.1", port, tls) } }
+            // A connection after the switch was turned on means it did not fall back on a prompt: no strike.
+            runBlocking { connect.connect { port -> AdbConnection.open("127.0.0.1", port, tls) } }.also { promptGuard.switchHeld() }
         } catch (e: AdbConnectionException) {
             // The phone no longer knows our key (a revoked authorisation): pairing must be done again.
             if (e.reason == AdbConnectionException.Reason.UNAUTHORIZED) prefs.paired = false
