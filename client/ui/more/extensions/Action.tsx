@@ -10,10 +10,10 @@ export function Action(props: { label: string; onPress: () => void; filled?: boo
       accessibilityLabel={props.accessibilityLabel}
       disabled={props.disabled || props.busy}
       onPress={props.onPress}
-      class={`min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl px-4 active:opacity-70 disabled:opacity-50 ${props.filled ? "bg-primary" : "bg-secondary"}`}
+      class={`h-[52px] flex-row items-center justify-center gap-2 rounded-2xl px-5 active:opacity-70 disabled:opacity-40 ${props.filled ? "bg-primary" : "bg-card"}`}
     >
       {props.busy ? <Spinner size={14} tone={props.filled ? "canvas" : "soft"} /> : null}
-      <Text class={`text-base font-medium ${props.filled ? "text-primary-foreground" : props.destructive ? "text-destructive" : ""}`}>{props.label}</Text>
+      <Text class={`text-body font-semibold ${props.filled ? "text-primary-foreground" : props.destructive ? "text-destructive" : ""}`}>{props.label}</Text>
     </Button>
   );
 }

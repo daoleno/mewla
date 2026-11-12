@@ -1,16 +1,17 @@
-import { Scroll, signal, Text, View } from "nsh";
-import { GuardedSheet as Sheet } from "../../shell/AppSheet";
+import { Scroll, signal, View } from "nsh";
 import type { GitBranchesPayload, GitBranchInfo } from "../../../core/git/gitDiff";
 import { formatGitAge } from "../../../core/git/gitReviewTime";
 import { EmptyState, Field, Notice, Row } from "../../kit/kit";
 import { Icon } from "../../kit/Icon";
-import { BACKDROP, SHEET, TextButton } from "./parts";
+import { Sheet } from "../../kit/Sheet";
+import { PillButton } from "../../kit/kit";
+import { TextButton } from "./parts";
 import type { GitReview } from "./state";
 
 /** `Commit N files`: the message, then Commit, or Commit & push when the branch can sync. */
 export function CommitSheet(props: { review: GitReview; open: boolean; count: number; canPush: boolean; onClose: () => void }) {
   return (
-    <Sheet open={props.open} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+    <Sheet open={() => props.open} onClose={props.onClose} title={() => `Commit ${props.count} ${props.count === 1 ? "file" : "files"}`}>
       <CommitForm review={props.review} count={props.count} canPush={props.canPush} onDone={props.onClose} />
     </Sheet>
   );
@@ -34,15 +35,15 @@ function CommitForm(props: { review: GitReview; count: number; canPush: boolean;
     }
   };
   return (
-    <View testID="commit-sheet" class="gap-2">
-      <Text class="px-1 pt-1 text-lg font-semibold" role="header">{`Commit ${props.count} ${props.count === 1 ? "file" : "files"}`}</Text>
+    <View testID="commit-sheet" class="gap-2 px-4">
       <View class="-mx-4">
         <Field testID="commit-message" accessibilityLabel="Commit message" placeholder="Message" multiline autoFocus disabled={busy() !== ""} value={message()} onChange={(value) => { message.set(value); error.set(""); }} />
       </View>
       {error() ? <Notice tone="failed" title="Couldn't commit" detail={error()} /> : null}
-      <View class="mt-1 flex-row gap-2">
-        <View class="flex-1"><TextButton testID="commit-submit" label="Commit" filled={!props.canPush} busy={busy() === "commit"} disabled={!message().trim() || busy() !== ""} onPress={() => void submit(false)} /></View>
-        {props.canPush ? <View class="flex-1"><TextButton testID="commit-push" label="Commit & push" filled busy={busy() === "push"} disabled={!message().trim() || busy() !== ""} onPress={() => void submit(true)} /></View> : null}
+      {/* Full-width buttons, the ink one last (SPEC §11). */}
+      <View>
+        {props.canPush ? <PillButton testID="commit-submit" title="Commit" busy={busy() === "commit"} disabled={!message().trim() || busy() !== ""} onPress={() => void submit(false)} /> : null}
+        <PillButton testID={props.canPush ? "commit-push" : "commit-submit"} title={props.canPush ? "Commit & push" : "Commit"} filled busy={busy() === (props.canPush ? "push" : "commit")} disabled={!message().trim() || busy() !== ""} onPress={() => void submit(props.canPush)} />
       </View>
     </View>
   );
@@ -57,7 +58,7 @@ export function gitBranchDetail(branch: GitBranchInfo): string {
 /** Find a branch to switch to, or create one; a remote branch switches to a local one tracking it. */
 export function BranchSheet(props: { review: GitReview; open: boolean; onClose: () => void }) {
   return (
-    <Sheet open={props.open} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+    <Sheet open={() => props.open} onClose={props.onClose} title="Branches">
       <BranchPicker review={props.review} onDone={props.onClose} />
     </Sheet>
   );
@@ -95,8 +96,7 @@ function BranchPicker(props: { review: GitReview; onDone: () => void }) {
     return !!name && !/\s/.test(name) && !(payload()?.branches ?? []).some((branch) => branch.name === name);
   };
   return (
-    <View testID="branch-sheet" class="gap-2">
-      <Text class="px-1 pt-1 text-lg font-semibold" role="header">Branches</Text>
+    <View testID="branch-sheet" class="gap-2 px-4">
       <View class="-mx-4">
         <Field testID="branch-query" accessibilityLabel="Find or create a branch" placeholder="Find or create a branch" value={query()} onChange={(value) => query.set(value)} />
       </View>
@@ -104,7 +104,7 @@ function BranchPicker(props: { review: GitReview; onDone: () => void }) {
       {creatable() ? <TextButton testID="branch-create" label={`Create ${query().trim()}`} busy={busy() === query().trim()} onPress={() => void run(query().trim(), true)} /> : null}
       {!payload() && !error() ? <EmptyState busy title="Loading branches" /> : null}
       {payload() && !shown().length ? <EmptyState title="No matching branches" /> : null}
-      <Scroll keyboardShouldPersistTaps="handled" class="max-h-[420px] overflow-hidden rounded-2xl border border-border">
+      <Scroll keyboardShouldPersistTaps="handled" class="max-h-[420px] overflow-hidden rounded-(--radius-group) bg-sheet-surface">
         {shown().map((branch) => (
           <Row
             testID={`branch-${branch.name}`}

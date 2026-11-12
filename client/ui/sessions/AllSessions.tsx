@@ -1,5 +1,6 @@
 import { cleanup, computed, createMotion, effect, List, platform, signal, Storage, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, type NavStackState } from "nsh/base";
+import { DisplayTitle, PillButton, SectionLabel, Tile } from "../kit/kit";
 import { BackHandler } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
@@ -51,14 +52,15 @@ void getCollapsedSessionSections(Storage).then((keys) => collapsed.set(new Set(k
 
 const selecting = computed(() => countSessionSelection(selection()) > 0);
 
-type Row = { key: string; kind: "header"; section: SessionListSection } | { key: string; kind: "row"; worker: Worker };
+/** A row knows where it sits in its folder's surface group: the first rounds the top, the last the bottom and has no hair. */
+type Row = { key: string; kind: "header"; section: SessionListSection } | { key: string; kind: "row"; worker: Worker; first: boolean; last: boolean };
 
 const rows = computed<Row[]>(() => {
   const sections = buildSessionListSections(groupWorkersByDirectory(workers()), collapsed(), selecting());
   const out: Row[] = [];
   for (const section of sections) {
     if (sections.length > 1) out.push({ key: `h:${section.key}`, kind: "header", section });
-    for (const worker of section.data) out.push({ key: worker.key, kind: "row", worker });
+    section.data.forEach((worker, i) => out.push({ key: worker.key, kind: "row", worker, first: i === 0, last: i === section.data.length - 1 }));
   }
   return out;
 });
@@ -80,10 +82,12 @@ async function terminateSelected(): Promise<void> {
   const keys = [...selection()];
   if (!transport || !server || keys.length === 0 || terminating()) return;
   haptic.notification("warning");
+  // Named by what it ends; the action keeps the normal role (red is for what waits for you).
+  const only = keys.length === 1 ? workers().find((w) => w.key === keys[0]) : undefined;
   const { action } = await AlertDialog.show({
-    title: "Terminate sessions?",
+    title: only ? `Terminate ${sessionRowModel(only, { alias: untracked(aliases)[only.id] }).title}?` : `Terminate ${keys.length} sessions?`,
     description: sessionTerminationConfirmMessage(keys.length),
-    actions: [{ id: "cancel", label: "Cancel", role: "cancel" }, { id: "terminate", label: "Terminate", role: "destructive" }],
+    actions: [{ id: "cancel", label: "Cancel", role: "cancel" }, { id: "terminate", label: "Terminate" }],
   });
   if (action !== "terminate") return;
   const byKey = new Map(workers().map((w) => [w.key, w] as const));
@@ -114,19 +118,24 @@ const STATUS_MARK: Record<string, { icon: IconName; color: ColorToken } | undefi
   blocked: { icon: "pause-circle", color: "warning" },
 };
 
+/** A folder's section label (SPEC §15 Grouped list): a folder icon, the name, the count at the right; a tap folds it. */
 function SectionHeader(props: { section: () => SessionListSection }) {
   const s = props.section;
   return (
-    <Button testID="section" onPress={() => !selecting() && toggleSection(s().key)} class="flex-row items-center gap-2 px-4 pb-1 pt-4">
-      <Text class="flex-1 text-xs font-semibold uppercase text-muted-foreground line-clamp-1">{s().title}</Text>
-      {s().collapsed ? <Text class="text-xs text-muted-foreground">{String(s().count)}</Text> : null}
-      {s().mark === "needs" ? <Icon name="hand" size={14} color="seal" /> : s().mark === "failed" ? <Icon name="close-circle-fill" size={14} color="destructive" /> : s().mark === "running" ? <Icon name="time" size={14} /> : null}
-      <Icon name={s().collapsed ? "chevron-right" : "chevron-down"} size={14} />
-    </Button>
+    <SectionLabel
+      testID="section"
+      icon="folder"
+      title={s().title}
+      count={s().count}
+      folded={s().collapsed}
+      onPress={() => !selecting() && toggleSection(s().key)}
+      trailing={s().mark === "needs" ? <Icon name="hand" size={14} color="seal" /> : s().mark === "failed" ? <Icon name="close-circle-fill" size={14} color="destructive" /> : s().mark === "running" ? <Icon name="time" size={14} /> : undefined}
+    />
   );
 }
 
-function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => void }) {
+/** A Session as a tray row (SPEC §11): 68 pt, a 28 pt tile, the title over its line, the end; in its folder's surface group. */
+function SessionRow(props: { worker: () => Worker; first: () => boolean; last: () => boolean; open: (worker: Worker) => void }) {
   const model = () => {
     const link = workLinkOf(props.worker());
     return sessionRowModel(props.worker(), { alias: aliases()[props.worker().id], workTitle: link?.workTitle, calendarLabel: link?.calendarLabel });
@@ -152,23 +161,24 @@ function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => voi
         // The desktop layout: a right-click starts selecting, as a long press does on a phone (parity #28).
         if (untracked(desktop) && !selecting() && online()) toggleSelected(props.worker());
       }}
-      class={selecting() && !online() ? "flex-row items-center gap-3 px-4 py-2.5 opacity-50" : "flex-row items-center gap-3 px-4 py-2.5 active:bg-accent"}>
+      class={`mx-4 min-h-[68px] flex-row items-center gap-3.5 bg-card px-4 py-3 ${props.first() ? "rounded-t-(--radius-group)" : ""} ${props.last() ? "rounded-b-(--radius-group)" : ""} ${selecting() && !online() ? "opacity-50" : "active:bg-accent"}`}>
       {selecting() ? <Icon name={selected() ? "check-circle-fill" : "circle"} size={22} color={selected() ? "primary" : "muted-foreground"} /> : null}
       <View class="items-center justify-center">
-        <AgentIcon kind={model().kind} flavor={model().flavor} size={24} />
+        <Tile size={28}><AgentIcon kind={model().kind} flavor={model().flavor} size={18} /></Tile>
         {model().fromCalendar ? <View testID="row-calendar" class="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5"><Icon name="calendar" size={10} color="primary" /></View>
           : model().delegated ? <View class="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5"><Icon name="git-network" size={10} color="primary" /></View> : null}
       </View>
-      <View class="flex-1 gap-0.5">
-        <Text class="text-base font-semibold line-clamp-1">{model().title}</Text>
-        <Text class={`text-sm line-clamp-1 ${toneClass()}`}>{`${model().previewPrefix ?? ""}${model().preview}`}</Text>
+      <View class="min-w-0 flex-1">
+        <Text class="text-body font-semibold line-clamp-1">{model().title}</Text>
+        <Text class={`text-sub line-clamp-1 ${toneClass()}`}>{`${model().previewPrefix ?? ""}${model().preview}`}</Text>
       </View>
       <View class="items-end gap-1">
-        {model().time !== "live" ? <Text class="text-xs text-muted-foreground">{model().time}</Text> : null}
+        {model().time !== "live" ? <Text class="text-sub text-muted-foreground">{model().time}</Text> : null}
         {model().needsYou ? <Icon name="hand" size={16} color="seal" />
           : model().status === "running" ? <View class="h-2 w-2 rounded-full bg-primary" />
           : STATUS_MARK[model().status] ? <Icon name={STATUS_MARK[model().status]!.icon} size={16} color={STATUS_MARK[model().status]!.color} /> : null}
       </View>
+      {props.last() ? null : <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: selecting() ? 94 : 58 }} />}
     </View>
   );
 }
@@ -182,11 +192,11 @@ function Empty(props: { onPair: () => void; onNew: () => void }) {
       {/* The chosen pet, in the state's clip (waking while it loads); a filter that matches nothing keeps its icon. */}
       {cat() ? <PetSprite testID="sessions-empty-cat" state={() => cat()!} size={104} />
         : <Icon name={(loading() ? "server" : state().icon) as IconName} size={40} />}
-      <Text testID="sessions-empty" class="text-center text-lg font-semibold">{loading() ? "Loading sessions" : state().title}</Text>
+      <Text testID="sessions-empty" class="text-center text-title font-bold">{loading() ? "Loading sessions" : state().title}</Text>
       {!loading() && state().action ? (
         <Button testID="sessions-empty-action" onPress={() => (state().action === "pair" ? props.onPair() : state().action === "retry" ? resumeConnection() : props.onNew())}
-          class="rounded-full bg-primary px-4 py-2.5 active:opacity-80">
-          <Text class="text-base font-semibold text-primary-foreground">{state().label}</Text>
+          class="h-[48px] items-center justify-center rounded-(--radius-control) bg-primary px-5 active:opacity-80">
+          <Text class="text-body font-semibold text-primary-foreground">{state().label}</Text>
         </Button>
       ) : null}
     </View>
@@ -221,20 +231,23 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
     const next = pruneSessionSelection(selection(), workers().map((w) => w.key));
     if (next !== untracked(selection)) selection.set(next);
   });
+  // The nav bar names the page once the list has scrolled past its display title.
+  const titleAway = signal(false);
   return (
-    <NavPage title="All Sessions">
+    <NavPage title={titleAway() && !selecting() ? "All Sessions" : ""}>
       <View class="flex-1 bg-background">
         {selecting() ? (
-          <View class="flex-row items-center gap-3 border-b border-border px-4 py-2">
-            <Button testID="selection-cancel" onPress={() => selection.set(EMPTY_SESSION_SELECTION)}><Text class="text-base text-primary">Cancel</Text></Button>
-            <Text class="flex-1 text-center text-base font-semibold">{selectionCountLabel(countSessionSelection(selection()))}</Text>
-            <Button testID="selection-terminate" onPress={() => void terminateSelected()} disabled={terminating() || connection() !== "connected"}>
-              <Text class="text-base font-semibold text-destructive">{terminating() ? "Terminating…" : "Terminate"}</Text>
+          <View class="min-h-[52px] flex-row items-center gap-2 px-2">
+            <Button testID="selection-cancel" accessibilityLabel="Cancel" onPress={() => selection.set(EMPTY_SESSION_SELECTION)} class="size-11 items-center justify-center rounded-full active:bg-accent">
+              <Icon name="close" size={22} color="foreground" />
             </Button>
+            <Text class="flex-1 text-title font-bold" role="header">{selectionCountLabel(countSessionSelection(selection()))}</Text>
           </View>
         ) : null}
-        {notice() ? <Text testID="sessions-notice" class="px-4 py-2 text-sm text-destructive" onPress={() => notice.set("")}>{notice()}</Text> : null}
-        <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-24"
+        {notice() ? <Text testID="sessions-notice" class="px-4 py-2 text-sub text-destructive" onPress={() => notice.set("")}>{notice()}</Text> : null}
+        <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-28"
+          header={<View class="px-4"><DisplayTitle title="All Sessions" /></View>}
+          onViewableItemsChange={({ viewableItems }) => titleAway.set(viewableItems.length > 0 && !viewableItems.some((t) => t.index === 0))}
           empty={<Empty onPair={onPair} onNew={onNew} />}>
           {(row) => {
             // Cells are recycled: what a cell shows follows the row it holds now. A Session's update makes new
@@ -242,14 +255,25 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
             // an update lands on the row, not on one being replaced. Each side keeps its last value while it goes.
             const header = computed(() => row().kind === "header");
             const section = computed<SessionListSection>((last) => (row().kind === "header" ? (row() as Extract<Row, { kind: "header" }>).section : last!));
-            const worker = computed<Worker>((last) => (row().kind === "header" ? last! : (row() as Extract<Row, { kind: "row" }>).worker));
+            const item = computed<Extract<Row, { kind: "row" }>>((last) => (row().kind === "header" ? last! : (row() as Extract<Row, { kind: "row" }>)));
             return (
               <View>
-                {header() ? <SectionHeader section={section} /> : <SessionRow worker={worker} open={open} />}
+                {header() ? <SectionHeader section={section} /> : <SessionRow worker={() => item().worker} first={() => item().first} last={() => item().last} open={open} />}
               </View>
             );
           }}
         </List>
+        {selecting() ? (
+          <View class="absolute bottom-0 left-0 right-0 bg-background px-4 pb-4 pt-2">
+            <PillButton
+              testID="selection-terminate"
+              filled
+              title={terminating() ? "Terminating…" : `Terminate ${countSessionSelection(selection())} ${countSessionSelection(selection()) === 1 ? "session" : "sessions"}`}
+              disabled={terminating() || connection() !== "connected"}
+              onPress={() => void terminateSelected()}
+            />
+          </View>
+        ) : null}
       </View>
     </NavPage>
   );

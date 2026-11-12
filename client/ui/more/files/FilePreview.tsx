@@ -196,11 +196,12 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
       }
     >
       <View class="flex-1 bg-background">
-        <View class="border-b border-border px-4 py-2">
-          <Text testID="file-meta" class="font-mono text-xs text-muted-foreground line-clamp-1">{sessionFileMetaLine(metadata(), props.reference)}</Text>
-          {status() ? <Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class={download() === "saved" ? "mt-0.5 text-xs" : "mt-0.5 text-xs text-destructive"}>{status()!}</Text> : null}
+        <View class="px-5 pb-2 pt-1">
+          <Text testID="file-meta" class="font-mono text-caption text-muted-foreground line-clamp-1">{sessionFileMetaLine(metadata(), props.reference)}</Text>
+          {status() ? <Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class="mt-0.5 text-caption">{status()!}</Text> : null}
         </View>
-        <>{body()}</>
+        {/* The content on a surface card (SPEC §15 File browser): text in mono, Markdown, pictures, PDF and media alike. */}
+        <View class="mx-4 mb-4 flex-1 overflow-hidden rounded-(--radius-group) bg-card">{body()}</View>
       </View>
     </NavPage>
   );
@@ -250,7 +251,7 @@ function MarkdownBody(props: { text: SessionFileTextPreview; onLink: (href: stri
   return (
     <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-10 pt-3">
       <TextView testID="file-markdown" markdown={props.text.content} selectable onLinkPress={(event) => props.onLink(event.url)} />
-      {note ? <Text testID="file-truncated" class="pt-2 text-xs text-muted-foreground">{note}</Text> : null}
+      {note ? <Text testID="file-truncated" class="pt-2 text-caption text-muted-foreground">{note}</Text> : null}
     </Scroll>
   );
 }
@@ -262,10 +263,10 @@ function TextBody(props: { text: SessionFileTextPreview }) {
     <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="pb-10">
       <Scroll keyboardShouldPersistTaps="handled" horizontal class="w-full" contentClass="px-4 py-3">
         <View selectable>
-          <Text testID="file-text" class="font-mono text-sm">{props.text.content || " "}</Text>
+          <Text testID="file-text" class="font-mono text-code">{props.text.content || " "}</Text>
         </View>
       </Scroll>
-      {note ? <Text testID="file-truncated" class="px-4 pt-2 text-xs text-muted-foreground">{note}</Text> : null}
+      {note ? <Text testID="file-truncated" class="px-4 pt-2 text-caption text-muted-foreground">{note}</Text> : null}
     </Scroll>
   );
 }
