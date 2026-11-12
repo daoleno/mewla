@@ -114,6 +114,33 @@ final class TerminalTests: XCTestCase {
     view.reset()
     XCTAssertEqual(view.lineText(0), "", "reset starts an empty screen")
   }
+
+  /// The render corpus (scripts/terminal-corpus, `MEWLA_CORPUS`): every screen drawn at its grid at
+  /// 3x, saved as `MEWLA_TEST_OUT`/corpus/<name>.png for the side-by-side with the reference.
+  @MainActor
+  func testCorpusScreensDraw() throws {
+    guard let corpus = ProcessInfo.processInfo.environment["MEWLA_CORPUS"] else { throw XCTSkip("MEWLA_CORPUS is not set") }
+    let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: corpus).appendingPathComponent("corpus.json"))) as? [String: [String: Any]] ?? [:]
+    let out = ProcessInfo.processInfo.environment["MEWLA_TEST_OUT"].map { URL(fileURLWithPath: $0).appendingPathComponent("corpus") }
+    if let out { try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true) }
+    for name in manifest.keys.sorted() {
+      let cols = manifest[name]?["cols"] as? Int ?? 52, rows = manifest[name]?["rows"] as? Int ?? 30
+      let bytes = try String(contentsOf: URL(fileURLWithPath: corpus).appendingPathComponent("\(name).vt"), encoding: .utf8)
+      let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+      view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                    palette: palette.map { String(format: "#%06x", $0) })
+      view.setFontSize(13)
+      view.frame = CGRect(x: 0, y: 0, width: ceil(CGFloat(cols) * view.cellW), height: ceil(CGFloat(rows) * view.cellH))
+      view.setNeedsLayout()
+      view.layoutIfNeeded()
+      view.write(bytes)
+      let format = UIGraphicsImageRendererFormat()
+      format.scale = 3
+      format.preferredRange = .standard
+      let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in view.draw(view.bounds) }
+      if let out, let png = image.pngData() { try png.write(to: out.appendingPathComponent("\(name).png")) }
+    }
+  }
 }
 
 /// An image's pixels, read as 0xRRGGBB at top-left-origin coordinates.
