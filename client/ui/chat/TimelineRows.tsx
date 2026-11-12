@@ -1,4 +1,5 @@
 import { signal, Text, View } from "nsh";
+import { ProgressBar } from "../kit/ProgressBar";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
@@ -143,7 +144,7 @@ export function ComputerMessageCard(props: { item: () => ComputerMessageTimeline
 /** Where a Work card leads outside the thread; none (a past thread) leaves it to read. */
 export type WorkCardHandlers = {
   /** The agent that ran a Session, for the card's logo and "Agent · Done 11:20". */
-  agentOf: (sessionId: string | undefined) => { kind: AgentKind; flavor: TerminalFlavor; name: string } | null;
+  agentOf: (sessionId: string | undefined) => { kind: AgentKind; flavor: TerminalFlavor; name: string; progress?: number } | null;
   /** The title of a Work: its detail page. */
   onTitle: (workId: string) => void;
   /** The quiet line: the result sheet. */
@@ -205,7 +206,10 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
           {model().sessionId ? (
             <Button testID="work-card-session" disabled={!props.item().onPress} onPress={open} class="min-h-[44px] flex-row items-center gap-2.5 border-t border-border px-4 active:opacity-70">
               <WorkLogo agent={agent()} size={20} />
-              <Text class="min-w-0 flex-1 text-sub line-clamp-1"><Text class="font-semibold">{agent()?.name ?? model().sessionName ?? "Session"}</Text><Text class="text-muted-foreground">{model().summary ? `  ${model().summary}` : ""}</Text></Text>
+              <View class="min-w-0 flex-1">
+                <Text class="text-sub line-clamp-1"><Text class="font-semibold">{agent()?.name ?? model().sessionName ?? "Session"}</Text><Text class="text-muted-foreground">{model().summary ? `  ${model().summary}` : ""}</Text></Text>
+                {model().kind === "live" && agent()?.progress !== undefined ? <ProgressBar filled={agent()!.progress!} testID="work-card-progress" /> : null}
+              </View>
             </Button>
           ) : model().summary ? <Text class="border-t border-border px-4 py-3 text-sub text-muted-foreground line-clamp-2">{model().summary}</Text> : null}
         </View>

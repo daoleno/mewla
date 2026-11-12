@@ -3,6 +3,7 @@
  * today, what is idle and what is done, all from one pure model so the pill, the tray's title and
  * its rows always agree. The count counts the rows you can open, not Workers (§1.2 "The count").
  */
+import { progressSteps } from "../sessions/progress";
 import type { BrainHostProblem, BrainSurface, BrainWorkerRef } from "../brain";
 import { sessionRowModel } from "../sessions/listRow";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
@@ -69,6 +70,8 @@ export interface TrayRow {
   quiet?: boolean;
   /** Today: already past (dimmed above the now line). */
   past?: boolean;
+  /** Segments of the progress bar filled (0–5) from the running Worker's phase; absent: no bar. */
+  progress?: number;
 }
 
 /** A Calendar item of today, as the caller reads it with the phone's clock. */
@@ -265,6 +268,7 @@ function sessionRow(worker: Worker): TrayRow {
     tile: { kind: "agent", agent: model.kind, flavor: model.flavor },
     target: { open: "session", workerId: worker.id },
     done: ended || undefined,
+    progress: ended ? undefined : progressSteps(worker.phase) ?? undefined,
   };
 }
 
@@ -283,6 +287,7 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>): Tr
     unread: done && slip.unread ? true : undefined,
     done: done || undefined,
     quiet: slip.group === "waiting" || slip.group === "queued" || undefined,
+    progress: slip.group === "running" ? progressSteps(session?.phase) ?? undefined : undefined,
   };
 }
 

@@ -10,6 +10,7 @@ import { DONE_SHOWN, RUNNING_SHOWN, TODAY_SHOWN, type TrayNoticeAction, type Tra
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
 import { PillButton } from "../kit/kit";
+import { ProgressBar } from "../kit/ProgressBar";
 import { homeShown, openCalendarItem, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { setTraySort, tray, traySort } from "./state";
@@ -74,6 +75,7 @@ function TrayRow(props: { row: Row; onPress: () => void }) {
       <View class="min-w-0 flex-1">
         <Text class={`text-body line-clamp-1 ${row().done || row().quiet ? "" : "font-semibold"} ${row().quiet ? "text-muted-foreground" : ""}`}>{row().title}</Text>
         {row().line ? <Text class="text-sub text-muted-foreground line-clamp-1">{row().line}</Text> : null}
+        {row().progress !== undefined ? <ProgressBar filled={row().progress!} testID="tray-progress" /> : null}
       </View>
       {row().unread ? <View testID="tray-unread" class="size-2 rounded-full bg-foreground" />
         : row().done ? <Icon name="check" size={18} tone="soft" />
