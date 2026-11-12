@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/sessionhost"
@@ -566,4 +567,53 @@ func (s *sizesTold) last() string {
 		return ""
 	}
 	return s.told[len(s.told)-1]
+}
+
+// The host cuts its output anywhere, a character's bytes included, and the App
+// gets each piece as JSON text: a piece that ends inside a character would
+// arrive as U+FFFD and push the rest of the row over (a divider "─" drawn
+// as three diamonds, the footer under it starting "──"). Every piece the view
+// sends is whole characters.
+func TestHostTerminalViewNeverSendsHalfACharacter(t *testing.T) {
+	socket, client := startTestHost(t)
+	dir := t.TempDir()
+	const id = "mh-0123456789abcdef76543213"
+	script := `printf 'ready\r\n'; read x; printf 'a\342\224'; sleep 0.3; printf '\200b \360\237'; sleep 0.3; printf '\220\261c\r\n'; read y`
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if _, err := client.Create(ctx, sessionhost.CreateParams{
+		ID: id, Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/bin:/bin", "HOME=" + dir}, Dir: dir, Cols: 80, Rows: 24,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitHostScreen(t, client, id, "ready")
+	sent := make(chan map[string]any, 1024)
+	manager := NewManager(&HostBackend{Version: "test-daemon"})
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 80, Rows: 24, Socket: socket}, func(v any) { sent <- v.(map[string]any) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Input("owner", view.ID(), "\r"); err != nil {
+		t.Fatal(err)
+	}
+	var got strings.Builder
+	deadline := time.After(10 * time.Second)
+	for !strings.Contains(got.String(), "c\r") {
+		select {
+		case msg := <-sent:
+			if msg["type"] != "terminal_output" {
+				continue
+			}
+			data := msg["data"].(string)
+			if !utf8.ValidString(data) {
+				t.Fatalf("the view sent half a character: %q", data)
+			}
+			got.WriteString(data)
+		case <-deadline:
+			t.Fatalf("timed out; got %q", got.String())
+		}
+	}
+	if !strings.Contains(got.String(), "a─b 🐱c") {
+		t.Fatalf("output %q, want a─b 🐱c whole", got.String())
+	}
 }
