@@ -208,12 +208,12 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
     if (action === "new") props.onNew();
     else if (action === "services") servicesOpen.set(true);
   };
-  // Android's Back ends selecting first (parity #26), as the Expo list did; a browser has its own back.
-  if (platform.os !== "web") cleanup(BackHandler.on("press", () => {
+  // Android's Back ends selecting first (parity #26), as the Expo list did.
+  onAndroidBack(() => {
     if (!untracked(selecting) || untracked(selectedTab) !== 1) return false;
     selection.set(EMPTY_SESSION_SELECTION);
     return true;
-  }));
+  });
   // Leaving the tab ends selecting.
   effect(() => {
     if (selectedTab() !== 1 && untracked(selecting)) selection.set(EMPTY_SESSION_SELECTION);
@@ -267,4 +267,10 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
 export function currentSessionKey(workerId: string): string | null {
   const server = current();
   return server ? makeSessionKey(server.id, workerId) : null;
+}
+
+/** Android's Back while the page lives; a browser has its own back (NSH's web runtime has no `BackHandler.on`). */
+function onAndroidBack(listener: () => boolean): void {
+  if (platform.os === "web") return;
+  cleanup(BackHandler.on("press", listener));
 }
