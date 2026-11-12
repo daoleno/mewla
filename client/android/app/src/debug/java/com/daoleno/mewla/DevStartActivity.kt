@@ -25,7 +25,7 @@ class DevStartActivity : Activity() {
       return
     }
     val where = Uri.parse(server).let { "${it.host}:${it.port}" }
-    AlertDialog.Builder(this)
+    AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
       .setTitle("Load Mewla Dev from $where?")
       .setMessage("The app runs the code that server sends, until you start it from its icon again.")
       .setNegativeButton("Cancel") { _, _ -> finish() }
