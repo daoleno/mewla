@@ -523,7 +523,7 @@ object PhoneController {
         // Right after Wireless debugging was switched on its port may not be announced yet.
         // Waiting once for the whole announcement beats trying again after a short wait and a growing pause:
         // it ends when the port is announced, not at the next try (on an emulator that took one to two minutes).
-        val announceWaitMs = if (justSwitchedOn) ANNOUNCE_WAIT_MS else 3_000L
+        val keepTryingMs = if (justSwitchedOn) ANNOUNCE_WAIT_MS else 20_000L
         if (justSwitchedOn) noteProblem("Wireless debugging was switched back on; waiting for it to announce its port.")
         justSwitchedOn = false
         val tls = AndroidAdb.tls(AndroidAdb.identity(app))
@@ -531,7 +531,7 @@ object PhoneController {
             override fun load() = prefs.adbPort.takeIf { it > 0 }
             override fun save(port: Int) { prefs.adbPort = port }
         }
-        val connect = AdbConnectPort({ null }, finder, cache, announceWaitMs)
+        val connect = AdbConnectPort({ null }, finder, cache, keepTryingMs = keepTryingMs)
         return try {
             runBlocking { connect.connect { port -> AdbConnection.open("127.0.0.1", port, tls) } }
         } catch (e: AdbConnectionException) {
