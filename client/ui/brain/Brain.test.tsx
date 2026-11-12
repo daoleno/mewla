@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering } from "../testing/fixtures";
+import { answering, pressUntil } from "../testing/fixtures";
 
 // Brain's own things as components (soft-final/SPEC.md §1.3, §1.4, §1.6), driven on their own: the
 // ⋯ menu and its pages, the can't-start notice, the thread states, and what the composer hosts.
@@ -193,7 +193,7 @@ describe("Brain's composer (§1.4)", () => {
       "files.cancel": () => null,
     });
     const app = await open(HARNESS, { platform: "android", host: c.host });
-    await app.press("id:composer-plus");
+    await pressUntil(app, "id:composer-plus", "id:attach-file");
     await app.press("id:attach-file");
     await app.waitFor("text:Ready");
     await app.type("id:composer", "What is on this screen?");
