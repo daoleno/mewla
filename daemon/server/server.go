@@ -1103,6 +1103,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainGC(conn, raw)
 	case "brain_work_read":
 		s.handleBrainWorkRead(conn, raw)
+	case "brain_work_detail":
+		s.handleBrainWorkDetail(conn, raw)
 	case "brain_work_action":
 		// A reply waits on the Brain host's input admission; keep reading.
 		go s.handleBrainWorkAction(conn, raw)
@@ -3262,6 +3264,24 @@ func (s *Server) handleBrainWorkRead(conn *websocket.Conn, raw clientMessage) {
 		"type":       "brain_work_read",
 		"request_id": raw.RequestID,
 		"work_id":    strings.TrimSpace(raw.ID),
+	})
+}
+
+// handleBrainWorkDetail answers one Work's detail page, current or closed.
+func (s *Server) handleBrainWorkDetail(conn *websocket.Conn, raw clientMessage) {
+	if s.brain == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_unavailable", "Brain is not configured")
+		return
+	}
+	detail, err := s.brain.WorkDetail(strings.TrimSpace(raw.ID))
+	if err != nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_detail_failed", brainWorkActionMessage(err))
+		return
+	}
+	s.sendJSON(conn, map[string]any{
+		"type":       "brain_work_detail",
+		"request_id": raw.RequestID,
+		"work":       detail,
 	})
 }
 

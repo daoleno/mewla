@@ -294,6 +294,9 @@ type CurrentWork struct {
 	// Calendar names the schedule and run a Calendar occurrence's Work came
 	// from, so the app can say which schedule it belongs to.
 	Calendar *WorkCalendarRef `json:"calendar,omitempty"`
+	// WorkerSessions are every Worker Session that joined this Work, live and
+	// finished, in the order they joined (work_workers.go).
+	WorkerSessions []WorkWorkerSession `json:"worker_sessions,omitempty"`
 }
 
 // WorkCalendarRef is the Calendar item and run behind a Calendar occurrence's
@@ -339,6 +342,8 @@ type OpenWork struct {
 	Wake         *WorkWake        `json:"wake,omitempty"`
 	UpdatedAt    time.Time        `json:"updated_at,omitempty"`
 	Calendar     *WorkCalendarRef `json:"calendar,omitempty"`
+	// WorkerSessions are as on CurrentWork.
+	WorkerSessions []WorkWorkerSession `json:"worker_sessions,omitempty"`
 }
 
 type WorkInventory struct {
@@ -3304,21 +3309,32 @@ func (s *Store) ActiveWork() ([]ActiveWork, error) {
 const currentWorkQueuedAttentionLimit = 4
 
 // ProjectWorkInventory separates bounded current operational relationships
-// from the durable Work ledger. presentSessions must come from one successful,
-// fresh delegated Session inventory; a stored Session string is never enough
-// to manufacture an endpoint.
-func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInventory, error) {
+// from the durable Work ledger. workers must come from one successful, fresh
+// Session inventory; its delegated Sessions are the present ones, and a
+// stored Session string is never enough to manufacture an endpoint.
+func (s *Store) ProjectWorkInventory(workers []WorkerRef) (WorkInventory, error) {
+	records, err := s.workWorkerRecords()
+	if err != nil {
+		return WorkInventory{}, fmt.Errorf("read Work Workers: %w", err)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	database, err := s.loadPresentationLocked()
 	if err != nil {
 		return WorkInventory{}, err
 	}
-	present := map[string]bool{}
-	for sessionID, isPresent := range presentSessions {
-		if normalized := strings.TrimSpace(sessionID); normalized != "" && isPresent {
-			present[normalized] = true
+	present := presentDelegatedSessions(workers)
+	host, err := s.readHostSessionLocked()
+	if err != nil {
+		return WorkInventory{}, err
+	}
+	workerIndex := newWorkWorkerIndex(database, records, workers, host.ID)
+	workerSessions := func(workID string) []WorkWorkerSession {
+		st, err := s.fsmState(workID)
+		if err != nil {
+			st = nil
 		}
+		return workerIndex.workWorkerSessions(workID, st)
 	}
 
 	unread := map[string]bool{}
@@ -3409,6 +3425,7 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 			SnoozedUntil:     cloneTimePointer(item.SnoozedUntil),
 			UserAction:       userAction,
 			Calendar:         workCalendarRef(item),
+			WorkerSessions:   workerSessions(item.ID),
 		})
 		s.projectWorkAttention(&current[len(current)-1], item)
 	}
@@ -3440,14 +3457,15 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 			continue
 		}
 		open = append(open, OpenWork{
-			ID:           item.ID,
-			Title:        item.Title,
-			Status:       item.Status,
-			ProgressMode: mustDeriveWorkProgressMode(database, item),
-			WaitFor:      item.WaitFor,
-			Wake:         cloneWorkWake(item.Wake),
-			UpdatedAt:    item.UpdatedAt.UTC(),
-			Calendar:     workCalendarRef(item),
+			ID:             item.ID,
+			Title:          item.Title,
+			Status:         item.Status,
+			ProgressMode:   mustDeriveWorkProgressMode(database, item),
+			WaitFor:        item.WaitFor,
+			Wake:           cloneWorkWake(item.Wake),
+			UpdatedAt:      item.UpdatedAt.UTC(),
+			Calendar:       workCalendarRef(item),
+			WorkerSessions: workerSessions(item.ID),
 		})
 	}
 	sort.SliceStable(open, func(left, right int) bool {
