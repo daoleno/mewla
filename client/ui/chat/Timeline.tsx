@@ -16,6 +16,7 @@ import { PictureViewer } from "./PictureViewer";
 import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
 import { PlainText } from "./PlainText";
 import { selectingText, showMessageMenu } from "./messageEdit";
+import { Caption } from "../kit/kit";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
 import { brainFiles, openChatLink, openChatPath } from "./links";
@@ -99,8 +100,9 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
   return (
     <View class="py-1">
       {(it() as TimelineItem | DateDividerItem).type === "date-divider" ? (
-        <View testID="date-divider" class="items-center py-2">
-          <Text class="text-caption text-muted-foreground">{(it() as unknown as DateDividerItem).label}</Text>
+        <View testID="date-divider" class="py-2">
+          {/* The whole row's width, centred, one line: sized to its own word, a release build's measure wrapped "Toda / y". */}
+          <Caption plain center text={(it() as unknown as DateDividerItem).label} />
         </View>
       ) : it().type === "message" && (it() as MessageTimelineItem).role === "user" ? (
         <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>

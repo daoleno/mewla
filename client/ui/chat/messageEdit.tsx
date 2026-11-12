@@ -1,4 +1,5 @@
 import { Clipboard, signal, Text, untracked, View } from "nsh";
+import { Icon } from "../icons/Icon";
 import { Button } from "nsh/base";
 import type { MessageTimelineItem } from "../../core/timeline/types";
 import { isEditablePrompt, messageCopyText, messageEditMode, type MessageEdit } from "../../core/timeline/messageActionsModel";
@@ -73,17 +74,25 @@ export function createMessageEdit(options: {
 }
 export type MessageEditor = ReturnType<typeof createMessageEdit>;
 
-/** "Editing message" above the composer, with what it was and Cancel. */
+/**
+ * The edit's chip above the composer (soft-final SPEC §1.4, §11 chips): 56 pt, radius 14, "Editing" and
+ * the message's first words, × to leave it (Esc too). The field holds the text being edited.
+ */
 export function EditChip(props: { editor: MessageEditor }) {
   const e = props.editor;
   return (
-    <View testID="edit-chip" class="mb-1.5 gap-1 rounded-xl bg-secondary px-3 py-2">
-      <View class="flex-row items-center gap-2">
-        <Text class="flex-1 text-xs font-semibold uppercase text-muted-foreground">{e.busy() ? "Rewinding…" : e.edit()?.mode === "rewind" && !e.edit()?.rewound ? "Editing · rewinds the agent" : "Editing message"}</Text>
-        <Button testID="edit-cancel" onPress={e.cancel} disabled={e.busy()}><Text class="text-sm text-primary">Cancel</Text></Button>
+    <View class="mb-2 gap-1">
+      <View testID="edit-chip" class="h-14 max-w-full flex-row items-center gap-2 self-start rounded-[14px] bg-card pl-3">
+        <Icon name="edit" size={18} color="muted-foreground" />
+        <Text class="min-w-0 shrink text-sub text-foreground line-clamp-1">
+          <Text class="font-semibold">{e.busy() ? "Rewinding…" : "Editing"}</Text>
+          {`  ${e.edit()?.original ?? ""}`}
+        </Text>
+        <Button testID="edit-cancel" accessibilityLabel="Stop editing" onPress={e.cancel} disabled={e.busy()} class="size-11 items-center justify-center">
+          <Icon name="close" size={16} color="muted-foreground" />
+        </Button>
       </View>
-      <Text class="text-sm text-muted-foreground line-clamp-2">{e.edit()?.original ?? ""}</Text>
-      {e.error() ? <Text testID="edit-error" class="text-sm text-destructive">{e.error()}</Text> : null}
+      {e.error() ? <Text testID="edit-error" class="text-sub text-foreground">{e.error()}</Text> : null}
     </View>
   );
 }

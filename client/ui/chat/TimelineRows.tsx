@@ -68,7 +68,7 @@ export function CodeBlock(props: { code: string; language?: string }) {
         </Button>
       </View>
       <TextView document={{ blocks: [{ type: "codeBlock", code: props.code, language: props.language ?? "" }] }}
-        classes={{ codeBlock: "m-0 rounded-none border-0 bg-transparent px-4 pb-4 pt-0" }} />
+        classes={{ codeBlock: "m-0 rounded-none border-0 bg-transparent p-0", codeBlockScroll: "m-0 p-0", codeBlockCode: "m-0 px-4 pb-4 pt-0" }} />
     </View>
   );
 }
