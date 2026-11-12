@@ -80,6 +80,8 @@ android {
   sourceSets {
     getByName("main") {
       jniLibs.directories.add(ghostty.resolve("libs/android").path)
+      // The terminal's font (client/native/terminal/fonts, scripts/subset-terminal-font.py), shared with iOS and the web.
+      assets.directories.add("${rootDir}/../native/terminal/fonts")
       // ChannelHosts: what this channel adds to the app (src/github or src/play).
       java.directories.add("src/$channel/java")
       kotlin.directories.add("src/$channel/java")

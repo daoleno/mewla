@@ -12,10 +12,10 @@ import kotlin.math.ceil
 /**
  * Debug builds only: one render-corpus screen (scripts/terminal-corpus) replayed into the real
  * TerminalView at the screen's grid, for side-by-side shots and the corpus check
- * (client/scripts/terminal-corpus-android.sh). No daemon, no page: the bytes go straight in.
+ * (scripts/terminal-corpus/android.sh). No daemon, no page: the bytes go straight in.
  *
  *   adb shell am start -n <app>/com.daoleno.mewla.terminal.TerminalReplayActivity \
- *     --es file corpus/sgr.vt --ei cols 52 --ei rows 30 [--ez light true]
+ *     --es file corpus/sgr.vt --ei cols 52 --ei rows 30 [--ef font 8] [--ez light true]
  *
  * `file` is relative to the app's files dir. The view's rectangle on screen is logged
  * ("TerminalReplay: rect x y w h") once the bytes are drawn.
@@ -40,6 +40,7 @@ class TerminalReplayActivity : Activity() {
       override fun tapCell(col: Int, row: Int, text: String, index: Int) {}
       override fun copy(text: String) {}
     })
+    if (intent.hasExtra("font")) view.setFontSize(intent.getFloatExtra("font", 8f))
     // The grid's pixel size: whole cells, exactly cols x rows.
     val cellW = field(view, "cellW")
     val cellH = field(view, "cellH")

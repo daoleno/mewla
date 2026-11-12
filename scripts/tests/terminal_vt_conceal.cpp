@@ -1,5 +1,5 @@
-// The app's terminal cell packer (client/ios/Sources/Terminal/TerminalVt.cpp, the twin of
-// client/android/app/src/main/cpp/jni_bridge.cpp) against the desktop libghostty-vt: concealed
+// The app's terminal cell packer (client/native/terminal/TerminalVt.cpp, Android's and iOS's)
+// against the desktop libghostty-vt: concealed
 // text (SGR 8, as the daemon prints its "mewla-origin" marker) is not in the frame, and a
 // concealed run on a coloured background keeps its background. Built and run by
 // scripts/test-ghosttyvt.sh.
@@ -18,10 +18,11 @@ int main() {
   std::string text;
   for (size_t i = 0; i < frame.text_count; i++) text.push_back(frame.text[i] < 128 ? char(frame.text[i]) : '?');
   bool background = false;
-  size_t at = 7;
+  size_t at = MEWLA_VT_HEADER;
   for (int32_t r = 0; r < frame.meta[6]; r++) {
-    const int32_t row = frame.meta[at++], runs = frame.meta[at++];
-    for (int32_t k = 0; k < runs; k++, at += 7) {
+    const int32_t row = frame.meta[at], runs = frame.meta[at + 1];
+    at += MEWLA_VT_ROW;
+    for (int32_t k = 0; k < runs; k++, at += MEWLA_VT_RUN) {
       if (row == 1 && frame.meta[at + 3] != 0) background = true;
     }
   }
