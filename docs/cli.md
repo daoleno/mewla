@@ -95,9 +95,10 @@ resized and when you type into it; the app sets it when its terminal opens or
 is shown again and when you type there. Every other terminal showing the
 Session is drawn again at that size and keeps showing it right: `attach` shows
 the host's screen cut to its window (the bottom rows of a taller screen, the
-left columns of a wider one), and the app scales the screen down to a size you
-can still read and lets you drag sideways for the rest. Typing there, or
-resizing that window, makes its size the Session's again.
+left columns of a wider one), and the Android app scales the screen down to a
+size you can still read and lets you drag sideways for the rest (the iOS app
+and the web still show that size on their own grid until you act there).
+Typing there, or resizing that window, makes its size the Session's again.
 
 With no argument it opens a picker of the live Sessions, newest first: name
 (the Worker's name, `Brain` or `Shell`), agent, state (working, idle, needs
