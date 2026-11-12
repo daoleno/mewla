@@ -1,7 +1,7 @@
 # Calendar
 
 Calendar is Mewla's view of time: what happens when. Open it from the menu
-(☰, or the sidebar on a wide screen). It lives on the daemon and syncs to the
+(☰; on a wide screen, **Calendar ›** in the left pane or `G` then `C`). It lives on the daemon and syncs to the
 app, so it belongs to the current server like everything else.
 
 ## Item kinds

@@ -94,9 +94,9 @@ machine with secrets, read [Permission bypass risks](executors.md#permission-byp
 
 ## Find your way
 
-| On a phone | With room for two panes (a tablet, an unfolded foldable) |
+| On a phone | From 1024 pt wide (a browser, a tablet in landscape, an open foldable) |
 | --- | --- |
-| ☰ opens the menu, or swipe right anywhere on Brain; swipe or tap **Brain · Sessions** in the top bar; ⋮ holds the current page's actions | The menu is a sidebar with Brain and Sessions on top; ⋮ is the same |
+| ☰ opens the menu, or swipe right anywhere on Brain; swipe or tap **Brain · Sessions** in the top bar; ⋮ holds the current page's actions | The tray stays open as a left pane beside Brain: what needs you, what runs, today and every Session. **Search or run** (Ctrl K, ⌘ K on a Mac) opens any place, Session or Work |
 
 The menu holds everything else, each in exactly one place: Calendar,
 Extensions, Stats, Resources and Settings.

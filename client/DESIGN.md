@@ -86,26 +86,21 @@ preference.
   on Sessions when a Session needs you) and one ⋮ page action. The menu
   slides over the page. Nothing else is pinned under the app bar: no status
   strip, no goal line, no connection banner.
-- **Room for two panes (≥ 640 pt wide and ≥ 500 pt tall).** The menu docks as
-  a permanent sidebar and the app bar shows the page title. This follows the
-  window's size alone, never the device or its orientation: a tablet, a
-  foldable's inner screen and a resized window dock; a phone, held either way,
-  does not. Folding or unfolding only adds or removes the sidebar, and the
-  page keeps its state. On native it docks beside Brain and Sessions; on
-  desktop web it docks beside every page (see Desktop web). The thresholds
-  live in `constants/windowRoom.ts`.
+- **Two panes from 1024 pt.** A window at least 1024 pt wide, on any device
+  (a browser, a tablet in landscape, an open foldable), gets the wide layout
+  (see The wide layout): the tray as a left pane beside the one stack. It
+  follows the window's width alone, never the device or its orientation, and
+  crossing 1024 only adds or removes the pane: the page keeps its state.
 - **Side insets.** Every page sits inside the left and right safe areas (a
   foldable's rail, a landscape notch): one frame around each screen in the root
   Stack (`HorizontalSafeAreaFrame`), and floating layers (toasts, sheets, the
   phone float) add the insets themselves.
 - **Brain and Sessions have one home per layout.** On phone it is the app
-  bar's switch, so the menu does not list them. Docked (wide), the sidebar
-  lists them and the app bar shows the page title instead of the switch.
-  Never both on one screen.
-- **Menu.** One ordered list without captions or cards: on a docked sidebar
-  Brain and Sessions lead (selected in place, tint on the current one, the
-  same seal dots as the switch), then Calendar, Plugins, Skills, Stats,
-  Resources; the phone menu starts at Calendar. Settings sits apart at the
+  bar's switch, so the menu does not list them. On wide the left pane holds
+  the Brain row and the tray's Sessions (see The wide layout). Never both on
+  one screen.
+- **Menu.** One ordered list without captions or cards: Calendar, Plugins,
+  Skills, Stats, Resources. Settings sits apart at the
   bottom, and under it one quiet line names the current server and its
   state. Rows are a soft-ink glyph and a label, no tiles.
 - **Connection status has one home**: the menu. On phone a dot on ☰ (oxblood
@@ -211,70 +206,87 @@ palette prop to a component.
   (Skills, a later Stats range) takes a rightward swipe as paging, so the
   stack's back swipe works from the first page. Claude Code and Codex with
   no Plugins open straight on Skills, so there a rightward swipe shows
-  Plugins before it can go back. Web is outside this rule: desktop web
+  Plugins before it can go back. Web is outside this rule: the web
   turns Brain · Sessions swiping off, and Plugins · Skills stays a
   tap-only switch on web.
 
-## Desktop web
+## The wide layout
 
-A desktop browser (web, at least 1024 pt wide) gets a web app, not a stretched
-phone. `isDesktopWeb` (`components/navigation/desktopWeb.ts`) is the one gate;
-phone web and native, tablets included, keep the model above. Rules:
+From a 1024 pt window the app has two panes (soft-final SPEC §14). It is the
+same app, the same routes and the same stack as on the phone; only the frame
+changes. `wide` (`ui/shell/layout.ts`, from `isWide` in
+`core/web/places.ts`) is the one gate: the window's width, whatever the
+device. Touch (a tablet, an open foldable) and a pointer with a keyboard (a
+browser, a desktop) get the same frame.
 
-1. **The sidebar never disappears.** It wraps the whole app, not only Brain
-   and Sessions. Every row and list item opens in the main pane beside it, and
-   the row for where you are is selected (a Session selects Sessions, a
-   service selects Plugins).
-2. **Every place has a URL.** Back, forward and reload return to it. Brain ↔
-   Sessions is a history step. A Session's URL is `/terminal/<id>?serverId=…`
-   and carries no launch state.
-3. **Nothing takes over the window.** Menu destinations have no Back: the
-   sidebar is the way out. Sub-pages (a service, Model Providers, a Session)
-   keep Back to their parent. Pages switch without a slide.
-4. **One chat layout.** Brain and Session chats sit in the main pane at the
-   820 pt reading width. Brain's Work column is a resizable side panel; the
-   sidebar is resizable too, and both widths persist.
-5. **Sheets become dialogs; menus become popovers.** `BottomSheetFrame`
-   renders a centered dialog without a grabber, with one inset of at least
-   `Spacing.xl` whatever the phone sheet uses (`dialogCardInset`); Esc and the
-   backdrop close it. An `ActionMenu` opens as a 280 pt popover beside the
-   button that opened it (`menuAnchor.ts`), below it unless there is no room;
-   Esc and a click outside close it. Confirmations (`Alert.alert`) are a
-   hairline card with the float shadow.
-6. **Keyboard first.** Enter sends and Shift+Enter is a new line (Ctrl/⌘+Enter
-   always sends); nothing sends during IME composition. ⌘K / Ctrl+K opens the
-   command palette, `?` lists every shortcut, Esc closes the top overlay, and
-   focus rings are visible and follow the control's shape (round buttons get
-   a round ring). Tab reaches only what is on screen: the page the pager is
-   not showing takes no focus. Shortcuts never fire while typing in a field or
-   the terminal, and tooltips name them. Web with no touch pointer at all
-   drops the terminal's phone keys (keyboard toggle, Ctrl, Esc, Tab, ^C,
-   arrows) and keeps Attach; phones, tablets and touch laptops keep them.
-7. **Desktop affordances.** Rows show hover and a pointer, chats are
-   selectable, and each tab has a title ("Calendar · Mewla").
-8. **One header, centered columns.** Every page has a 52 pt header bar that
-   spans the pane, and its row (title in `TypeScale.pageTitle` on the left,
-   actions on the right, 40 pt buttons) sits on the page's own centered
-   column, so the title lines up with the content below it and the actions
-   with its right edge. Brain and Sessions included (`DesktopPageHeader`, the
-   docked `PrimaryAppBar`, a Session's header); the sidebar and Back stay put.
-   A wide window gets balanced margins, never an empty right side. Widths are
-   tokens, never literals: `ContentWidth.page` (760: Settings, Stats,
-   Sessions, Extensions and sub-pages), `ContentWidth.wide` (1200: Calendar,
-   Resources, a Session) and `ContentWidth.reading` (820: Brain's chat). Menu destinations center their own column inside a full-width
-   scroll area, so the scrollbar stays at the window edge; sub-pages with no
-   column of their own are framed by the Stack (`desktopFramedRoute`). Phones
-   and tablets keep their centered columns.
-   The two views of one thing share one frame: a Session's chat and its
-   terminal sit in the same header and the same 1200 pt `wide` frame, so toggling
-   changes neither width, gutter nor header position
-   (`TerminalScreenLayout`, `SESSION_FRAME_WIDTH`). Message text caps its own
-   width inside the frame; frame, header and composer stay at the shared width.
-9. **One way to make a thing.** A page's main action is one header button
-   with its shortcut in the tooltip (Sessions: + "New session (N)"; Calendar:
-   + "Add calendar item"); desktop drops the phone's floating button and the
-   ⋮ menu does not repeat it. Desktop shows what a phone hides behind a
-   toggle when there is room: Calendar keeps its month beside the agenda.
+1. **One tree.** `Shell` (`ui/shell/Shell.tsx`) is one row at every width: the
+   left pane and its handle come and go beside the right pane, which holds the
+   one stack and is never made again. Crossing 1024 (a resized window, a
+   rotated tablet, a fold) keeps the stack, the pages, their scroll and what
+   is typed. Narrow to wide, an open tray becomes the left pane; wide to
+   narrow, the pane goes and Brain's header gets back its cat and state
+   control. Anything that differs by width changes a leaf or a style, never
+   wraps a page in a conditional.
+2. **The left pane is the tray, always open** (`ui/shell/LeftPane.tsx`). The
+   pane header (68): the cat (the computer page), the computer's name and its
+   state line ("Online", "Connecting…", "Offline · Relay unreachable", "Pair
+   again", "Brain is starting", "Brain can't start"); "Search or run" with the
+   palette's key cap; the Brain row (the last thing Brain said, a live dot
+   while its turn runs); then the tray itself (`TrayBody`, the phone's overlay
+   shows the same), its title carrying the counts ("12 running, 3 need you").
+   The row whose page is in the right pane has the pressed well. The pure
+   parts (state line, title, selected row, Brain's line) are
+   `core/tray/pane.ts`.
+3. **A left-pane row replaces the page above Brain.** The stack is never
+   deeper than Brain › that page › what it pushed, and Back always leads to
+   Brain. A link inside the right pane pushes, as on the phone. A request row
+   whose card is in Brain's thread returns the right pane to Brain and scrolls
+   to the card. The palette's picks follow the same rule.
+4. **The handle** between the panes: drag (280–420), double-click or
+   double-tap to reset to 320, ← and → in steps of 16 while it has the focus.
+   The width is kept on the device (`mewla.wide.paneWidth`).
+5. **Brain's header on wide** is "Brain" and ⋯ only: the cat, the computer's
+   name and the state control live in the pane.
+6. **Reading columns.** On wide a page's content sits in its column
+   (`NavPage` `column`, `PAGE_COLUMN_WIDTH`): list pages 680 (`page`), threads
+   and their composer 760 (`reading`), and the whole pane (`full`) for the
+   terminal, a diff and Screen. A Session switches between `reading` (chat)
+   and `full` (terminal) without making its content again. Below 1024 pages
+   take the window, as on a phone.
+7. **Sheets become dialogs; menus become popovers.** Both in the
+   primitives. `AppSheet` (and so `kit/Sheet`) is a 480 pt dialog on wide,
+   centred, radius 28, over the scrim, without the grabber; Esc and the scrim
+   close it (iOS shows it as its own form sheet). An action menu is
+   `showMenu` (`ui/kit/Menu.tsx`): the platform's action sheet below 1024, a
+   288 pt popover with 48 pt rows and radius 18 at its button on wide (the
+   button hands it `createMenuAnchor().node()`); Esc and a press outside
+   close it, and a row that cannot run now stays in place at 40 %. Brain's
+   ⋯, a Session's ⋯, the tray's ⋯ and Git ⋯ use it; Screen ⋯ is NSH's
+   `Menu`, a popup at its button on a pointer device.
+8. **List and detail side by side** when the right pane is 880 or wider
+   (`listDetail`: a 1280 window with the default pane): Git review › diff,
+   Git's files › file, Brain's workspace › file. Below that the item pushes,
+   as on the phone. It follows the pane's width live, the handle included.
+9. **What else moves.** The floating screen stays in the right pane's
+   bottom-right corner (`leftInset`). A page's toast belongs to its page, so
+   it is centred in the right pane. First run and pairing have no left pane
+   (they are not the shell).
+10. **Keys at any width** with a hardware keyboard (`ui/shell/desktop/`):
+    Ctrl/⌘ K the palette (from a field too, not from a focused terminal), `?`
+    the shortcuts sheet, `N` New session, `/` the message box, `G` then B · S
+    · C · M · X · E · T · R · , for Brain · All Sessions · Calendar · the
+    computer page · Screen · Extensions · Stats · Resources · Settings, and
+    Esc closes the top dialog, popover or palette. The palette is a 620
+    dialog 12 % from the top, opening with the focus in its field: Actions
+    (New session, New chat, Open Brain's terminal, Browse workspace, Switch
+    executor, Keyboard shortcuts), Go to, Work, Sessions. A focused terminal
+    owns its keys; one on screen but not focused does not (parity #27).
+11. **Pointer.** Rows and icon buttons show the pressed well on hover; a
+    right-click on a row in All Sessions starts selecting (parity #28); what a
+    key can reach has a 2 pt ring.
+12. **URLs and titles (web).** Every place has a URL (parity #47); Back,
+    Forward and reload return to it, and the tab reads "{page} · Mewla"
+    (`core/web/places.ts`, `ui/shell/webLocation.ts`).
 
 ## Brain and its Work
 
@@ -283,7 +295,7 @@ Brain has one Work surface, built from the daemon's `current_work`, then its
 waiting on something not live) (`components/brain/brainWorkSurface.ts`, pure
 and tested):
 
-- **Wide (≥ 1024 pt, with the sidebar docked).** A 360 pt Work column to the right of the conversation
+- **Wide (≥ 1024 pt).** A 360 pt Work column to the right of the conversation
   (`BrainWorkColumn`): "Work", the goal line when there is one, a count
   line, then slips grouped Needs you ·
   Running · Back · Waiting · Queued. Queued and Waiting slips carry no
@@ -599,12 +611,12 @@ changes that the service must approve all call it.
   own leading column. New session is the page's one ink action: a round
   plus with no words on it, floating at the bottom right
   (`components/workers/SessionsListView.tsx`), never a full-width bar. Its
-  name lives in the accessibility label and the tooltip ("New session (N)" on
-  desktop web). Nothing sits
+  name lives in the accessibility label and the tooltip ("New session (N)" with
+  a keyboard). Nothing sits
   above the list unless the server is unreachable.
-- **Worker chat.** The conversation and the terminal grid share one 1200 pt
-  frame (`wide`), one frame for both views; message text caps at the reading
-  width. The header avatar carries the Session's
+- **Worker chat.** On wide the conversation and its composer sit in the
+  760 pt reading column and the terminal takes the whole pane, the same
+  content in either (see The wide layout). The header avatar carries the Session's
   StatusMark (Running, Blocked, Failed only).
 - **Tool rows.** A bare soft-ink tool glyph, the title, then the StatusMark
   in place of the old mono status word: Running and Waiting spin the arc,
