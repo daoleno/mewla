@@ -3,8 +3,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +18,12 @@ import (
 )
 
 func attachTestHost(t *testing.T) *sessionhost.Client {
+	t.Helper()
+	_, client := attachTestHostSocket(t)
+	return client
+}
+
+func attachTestHostSocket(t *testing.T) (string, *sessionhost.Client) {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "at")
 	if err != nil {
@@ -45,7 +54,58 @@ func attachTestHost(t *testing.T) *sessionhost.Client {
 		}
 	}
 	t.Cleanup(func() { client.Close() })
-	return client
+	return socket, client
+}
+
+// olderHostSocket serves a socket in front of the host at socket that acts as
+// a host from before AttachResized: an attach request loses its "redraw", so
+// the host neither ends the view on another viewer's resize nor says it would.
+func olderHostSocket(t *testing.T, socket string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "oh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	path := filepath.Join(dir, "o.sock")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		for {
+			down, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			up, err := net.Dial("unix", socket)
+			if err != nil {
+				down.Close()
+				continue
+			}
+			go func() { io.Copy(down, up); down.Close() }()
+			go func() {
+				defer up.Close()
+				for {
+					var header [4]byte
+					if _, err := io.ReadFull(down, header[:]); err != nil {
+						return
+					}
+					body := make([]byte, binary.BigEndian.Uint32(header[:]))
+					if _, err := io.ReadFull(down, body); err != nil {
+						return
+					}
+					body = bytes.Replace(body, []byte(`,"redraw":true`), nil, 1)
+					binary.BigEndian.PutUint32(header[:], uint32(len(body)))
+					if _, err := up.Write(append(header[:], body...)); err != nil {
+						return
+					}
+				}
+			}()
+		}
+	}()
+	return path
 }
 
 func createAttachSession(t *testing.T, client *sessionhost.Client, id, script string) {
@@ -162,6 +222,56 @@ func TestAttachRedrawsWhenAnotherViewerResizes(t *testing.T) {
 	waitOutput(t, out, "got hi")
 	if info, err := client.Info(context.Background(), "mh-two"); err != nil || info.Cols != 70 || info.Rows != 20 {
 		t.Fatalf("info = %+v, %v; typing here should take the size back to 70x20", info, err)
+	}
+}
+
+// Every Session open before an upgrade runs on the older host, which never
+// ends this terminal's view for another viewer's resize: the terminal asks
+// the Session's size and starts its screen over just the same, without taking
+// the size back until its person types.
+func TestAttachOnAnOlderHostRedrawsToo(t *testing.T) {
+	socket, client := attachTestHostSocket(t)
+	createAttachSession(t, client, "mh-old", `stty -echo; printf 'ready\r\n'; while read line; do printf 'got %s\r\n' "$line"; done`)
+	older, err := sessionhost.Dial(context.Background(), olderHostSocket(t, socket), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer older.Close()
+	in, typing := io.Pipe()
+	defer typing.Close()
+	out := &lockedBuffer{}
+	go attachLoop(context.Background(), older, "mh-old", in, out, func() (int, int) { return 70, 20 }, make(chan os.Signal))
+	waitOutput(t, out, "ready")
+	redraws := strings.Count(out.String(), redraw)
+
+	phone, err := client.Attach(context.Background(), sessionhost.AttachParams{ID: "mh-old", Cols: 50, Rows: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer phone.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for strings.Count(out.String(), redraw) == redraws {
+		if time.Now().After(deadline) {
+			t.Fatalf("on an older host this terminal was not drawn again after another viewer resized the Session: %q", out.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(3 * attachSizePoll)
+	if info, err := client.Info(context.Background(), "mh-old"); err != nil || info.Cols != 50 || info.Rows != 30 {
+		t.Fatalf("info = %+v, %v; the other viewer's 50x30 should stay until this person acts", info, err)
+	}
+	if n := strings.Count(out.String(), redraw); n != redraws+1 {
+		t.Fatalf("drawn again %d times for one resize", n-redraws)
+	}
+
+	typing.Write([]byte("hi\r"))
+	waitOutput(t, out, "got hi")
+	if info, err := client.Info(context.Background(), "mh-old"); err != nil || info.Cols != 70 || info.Rows != 20 {
+		t.Fatalf("info = %+v, %v; typing here should take the size back to 70x20", info, err)
+	}
+	time.Sleep(3 * attachSizePoll)
+	if n := strings.Count(out.String(), redraw); n != redraws+1 {
+		t.Fatalf("taking the size back drew this terminal again (%d), though it is drawn at its own size", n-redraws-1)
 	}
 }
 
