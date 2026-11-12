@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import { requestsOf } from "../tray/model";
-import { openCardKey, requestCardsOf, sealAction, type RequestCardsInput } from "./requestCards";
+import { openCardKey, promptParts, requestCardsOf, sealAction, type RequestCardsInput } from "./requestCards";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
 
@@ -72,5 +72,14 @@ describe("request cards", () => {
     expect(openCardKey(cards, "gone")).toBe("approval:a:1");
     expect(sealAction(cards[0]!, "Allow", false)).toEqual({ verb: "Approved", answer: "git push", mono: true });
     expect(sealAction(cards[0]!, "Deny", true)).toEqual({ verb: "Denied", answer: "git push", mono: true });
+  });
+});
+
+describe("a terminal prompt's parts", () => {
+  test("the command is the line that is not a sentence, wherever Claude prints the description; no approval boilerplate", () => {
+    const below = "Fetch HTTP headers from example.edu\ncurl -sI https://example.edu\nThis command requires approval\nDo you want to proceed?";
+    expect(promptParts(below)).toEqual({ question: "Do you want to proceed?", command: "curl -sI https://example.edu", notes: "Fetch HTTP headers from example.edu" });
+    const above = "git push origin main\nPush the release branch\nDo you want to proceed?";
+    expect(promptParts(above)).toEqual({ question: "Do you want to proceed?", command: "git push origin main", notes: "Push the release branch" });
   });
 });

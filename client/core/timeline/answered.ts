@@ -3,7 +3,7 @@
  * Work question — what, the answer, who, when. A record seals its card everywhere at once (the
  * `request_answered` broadcast) and stays as its sealed line in the thread, after a restart too.
  */
-import type { SealedRequest } from "./requestCards";
+import { looksLikeCommand, type SealedRequest } from "./requestCards";
 
 export type AnsweredOutcome = "answered" | "approved" | "denied" | "not_answered" | "dismissed";
 
@@ -87,11 +87,13 @@ export function sealedOfAnswered(record: AnsweredRequest, at: (ms: number) => st
   const chose = record.outcome === "approved" || record.outcome === "denied" || record.outcome === "answered";
   const verb = approval || !chose ? VERB[record.outcome] : "You chose";
   const command = approval ? record.asked.split(/\r?\n/).find((line) => line.trim())?.trim() : undefined;
+  const answer = command || record.answer || (SCREEN_PROMPTS.has(record.kind) ? record.title : record.asked) || record.title || verb;
   return {
     key: answeredKeys(record)[0] ?? `answered:${record.id}`,
     verb,
-    answer: command || record.answer || (SCREEN_PROMPTS.has(record.kind) ? record.title : record.asked) || record.title || verb,
-    mono: Boolean(command),
+    answer,
+    // A request that passed unanswered shows what it asked; a command among it is in mono (SPEC §1.1).
+    mono: Boolean(command) || (record.outcome === "not_answered" && looksLikeCommand(answer)),
     title: record.asked || record.title || "",
     source: [answeredBy(record), when].filter(Boolean).join(" · "),
     brain: Boolean(record.thread_id || record.work_id),

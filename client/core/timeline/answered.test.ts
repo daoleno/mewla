@@ -15,6 +15,13 @@ describe("an answered request", () => {
     expect(sealedOfAnswered(approval, () => "")).toMatchObject({ verb: "Approved", answer: "git push origin chore/node-22", mono: true });
   });
 
+  test("a request that passed unanswered shows its command in mono, and prose as prose", () => {
+    const passed = parseAnsweredRequest({ ...record, kind: "approval", asked: "curl -sI https://example.edu", answer: "", outcome: "not_answered" })!;
+    expect(sealedOfAnswered(passed, () => "")).toMatchObject({ verb: "Not answered", answer: "curl -sI https://example.edu", mono: true });
+    const question = parseAnsweredRequest({ ...record, kind: "question", asked: "Which name do we ship?", answer: "", outcome: "not_answered" })!;
+    expect(sealedOfAnswered(question, () => "")).toMatchObject({ verb: "Not answered", mono: false });
+  });
+
   test("seals the card it answers, with the answer and who and when", () => {
     const parsed = parseAnsweredRequest(record)!;
     expect(answeredKeys(parsed)).toEqual(["prompt:mh-5935:c6cd9885f6ca"]);
