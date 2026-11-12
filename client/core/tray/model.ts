@@ -161,6 +161,11 @@ export interface TrayModel {
   /** The tray's title: the same words as the state control. */
   title: string;
   notice: TrayNotice | null;
+  /**
+   * "N running": the Running rows that count (§1.2 "The count"), queued and waiting Work left out. The
+   * state control, the tray's title and the cat all read this one number, so they never disagree.
+   */
+  runningCount: number;
   /** The lists are last known: dimmed under the notice (offline, connecting, pair again). */
   dimmed: boolean;
   needs: TrayRequest[];
@@ -395,11 +400,13 @@ export function trayModel(input: TrayInput): TrayModel {
   const upcoming = todayRows.filter((row) => !row.past);
   const today = (upcoming.length ? upcoming : todayRows).slice(0, TODAY_SHOWN);
 
-  const state = stateOf(input, needs.length, running.filter((row) => !row.quiet).length);
+  const runningCount = running.filter((row) => !row.quiet).length;
+  const state = stateOf(input, needs.length, runningCount);
   return {
     state,
     title: state.words || "Mewla",
     notice: noticeOf(input),
+    runningCount,
     dimmed: input.hasServer && (input.pairAgain || input.connection !== "connected"),
     needs,
     running,
