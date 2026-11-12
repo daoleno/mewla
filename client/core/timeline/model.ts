@@ -829,8 +829,18 @@ function activityFromEvent(
           ? "Waiting"
           : "Finished"
         : semantic.title;
+      // A Claude Edit or Write counts its lines as a patch does: the row says them too.
+      const fileSummaries = structuredFileSummaries(event);
+      const lineTotals = fileSummaries.length
+        ? knownPatchTotals(fileSummaries)
+        : undefined;
+      const lineDetail = lineTotals
+        ? patchLineTotals(lineTotals.totalAdded, lineTotals.totalRemoved)
+        : undefined;
       const detail = safeCollapsedDetail(
-        details.statusLine || (isWait ? details.quietDetail : semantic.detail),
+        (hasDistinctStatus ? details.statusLine : lineDetail) ||
+          details.statusLine ||
+          (isWait ? details.quietDetail : semantic.detail),
       );
       return {
         type: "activity",
@@ -862,6 +872,7 @@ function activityFromEvent(
         queryText: details.query,
         statusLine: details.statusLine,
         files: details.files,
+        ...(fileSummaries.length ? { fileSummaries } : {}),
         previewPath,
         defaultExpanded: false,
         semanticKind: action.kind,
@@ -1187,14 +1198,19 @@ function stripProgressSpinnerPrefix(line: string) {
   return line.replace(/^[ \t]*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◐◓◑◒]+[ \t]*(?=\S)/, "");
 }
 
-function patchSummaryFromEvent(event: CodexConversationEvent): PatchSummary {
-  const structuredFiles = (event.file_changes ?? []).map((change) => ({
+/** The files an event changed as the provider counted them (a Codex patch, a Claude Edit or Write). */
+function structuredFileSummaries(event: CodexConversationEvent): PatchFileSummary[] {
+  return (event.file_changes ?? []).map((change) => ({
     path: change.path,
     movePath: change.move_path,
     operation: change.operation,
     added: change.additions,
     removed: change.deletions,
   }));
+}
+
+function patchSummaryFromEvent(event: CodexConversationEvent): PatchSummary {
+  const structuredFiles = structuredFileSummaries(event);
   const parsed = parseApplyPatchSummary(event.body || "");
   const fallbackFiles =
     structuredFiles.length > 0

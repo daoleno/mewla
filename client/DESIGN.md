@@ -66,8 +66,10 @@ Brain and a Session draw the same rows (`ui/chat`, soft-final SPEC §1.7):
   file page uses the same function.
 - **Code blocks** carry NSH's built-in Copy (`codeBlockActions`), which shows
   a check for a moment once copied.
-- **Edited files** list each file once with +/− in `add` and `del`; a rename
-  shows and opens its new path, and a folded run lists its steps' files
+- **Edited files** list each file once, from its project down, with +/− in
+  `add` and `del` (a Codex patch's counts, or a Claude Edit's or Write's that
+  the daemon reads from its recorded hunks); a rename shows and opens its new
+  path, and a folded run lists its steps' files
   (`core/timeline/activityFiles.ts`).
 - **Pictures**: sent ones at 168 × 126 above the bubble, a tool call's as
   thumbnails under its row (96 × 170 tall, 200 × 125 wide), a reply's at the

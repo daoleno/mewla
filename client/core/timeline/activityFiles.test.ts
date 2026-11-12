@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { activityFileRows } from "./activityFiles";
 import type { ActivityTimelineItem } from "./activityTypes";
+import { buildTimeline } from "./model";
 
 const row = (patch: Partial<ActivityTimelineItem>): ActivityTimelineItem => ({ type: "activity", id: patch.id ?? "r", title: "Edited", tone: "success", icon: "git-compare", ...patch });
 
@@ -31,5 +32,16 @@ describe("edited files in a tool row", () => {
       ],
     });
     expect(activityFileRows(item)).toEqual([{ path: "a.ts", added: 7, removed: 1 }, { path: "README.md" }]);
+  });
+
+  test("a Claude Edit lists its file once with the +/− the daemon counted, and its row says them", () => {
+    const [item] = buildTimeline([{
+      id: "e1", seq: 1, kind: "tool", tool_name: "Edit", title: "Tool", status: "done", source: "claude_transcript",
+      input: JSON.stringify({ file_path: "/repo/notes.md", old_string: "line two", new_string: "line 2 edited" }),
+      files: ["/repo/notes.md"],
+      file_changes: [{ path: "/repo/notes.md", operation: "update", additions: 2, deletions: 1 }],
+    }]) as ActivityTimelineItem[];
+    expect(activityFileRows(item)).toEqual([{ path: "/repo/notes.md", added: 2, removed: 1 }]);
+    expect(item.detail).toBe("+2 −1");
   });
 });
