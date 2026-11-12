@@ -2,6 +2,7 @@ import { signal, Text, View } from "nsh";
 import { ProgressBar } from "../kit/ProgressBar";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
+import { activityFileRows, type ActivityFileRow } from "../../core/timeline/activityFiles";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
 import { workCardModel, type WorkCardModel } from "../../core/timeline/workCardModel";
 import { WORK_CARD_WORKERS, type WorkWorkerLine } from "../../core/work/workers";
@@ -38,15 +39,32 @@ export type Expansion = ReturnType<typeof createExpansion>;
 const iconOf = (name: string | undefined, fallback: IconName): IconName => (name && name in ICON_ASSETS ? (name as IconName) : fallback);
 const toneColor = (tone: string | undefined) => (tone === "failed" || tone === "danger" ? "destructive" : tone === "running" || tone === "accent" ? "foreground" : tone === "attention" ? "warning" : "muted-foreground");
 
+/** Copy on every code block of a chat (SPEC §1.7): NSH's own button, which copies and shows a check for a moment. */
+export const CODE_ACTIONS = [{ id: "copy", label: "Copy" }];
+
 const Mono = (props: { text: string }) => (
-  <TextView document={{ blocks: [{ type: "codeBlock", code: props.text, language: "" }] }} selectable />
+  <TextView document={{ blocks: [{ type: "codeBlock", code: props.text, language: "" }] }} selectable codeBlockActions={CODE_ACTIONS} />
 );
+
+/** An edited file (SPEC §1.7, §11 Diff card): its path in mono, then +/− in add and del; a rename shows and opens its new path. */
+function FileRow(props: { file: ActivityFileRow; onFile?: (path: string) => void }) {
+  const file = props.file;
+  return (
+    <Button testID="activity-file" accessibilityLabel={[`Open ${file.path}`, file.added !== undefined ? `${file.added} added` : "", file.removed !== undefined ? `${file.removed} removed` : ""].filter(Boolean).join(", ")}
+      disabled={!props.onFile} onPress={() => props.onFile?.(file.path)} class="min-h-[32px] flex-row items-center gap-2 active:opacity-60">
+      <Text class={`min-w-0 shrink font-mono text-code line-clamp-1 ${props.onFile ? "text-foreground" : "text-muted-foreground"}`}>{file.path}</Text>
+      {file.added !== undefined ? <Text testID="activity-file-added" class="font-mono text-code text-add">{`+${file.added}`}</Text> : null}
+      {file.removed !== undefined ? <Text testID="activity-file-removed" class="font-mono text-code text-del">{`−${file.removed}`}</Text> : null}
+    </Button>
+  );
+}
 
 /** A tool call, a reasoning or update line, or a folded run of finished calls. */
 export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void }) {
   const item = props.item;
   const open = () => props.expansion.isOpen(item().id);
-  const expandable = () => Boolean(item().commandText || item().queryText || item().body || item().files?.length || item().steps?.length || item().statusLine);
+  const files = () => activityFileRows(item());
+  const expandable = () => Boolean(item().commandText || item().queryText || item().body || files().length || item().steps?.length || item().statusLine);
   return (
     <View class="px-4 py-0.5">
       <Button testID="activity" onPress={() => expandable() && props.expansion.toggle(item().id)} class="flex-row items-center gap-2 py-1">
@@ -67,12 +85,8 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
           {item().commandText ? <Mono text={item().commandText!} /> : null}
           {item().queryText ? <TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText! }] }] }} selectable class="text-sm" /> : null}
           {item().statusLine ? <Text class="text-xs text-muted-foreground">{item().statusLine}</Text> : null}
-          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body!} /> : <TextView markdown={item().body!} selectable class="text-sm" />) : null}
-          {item().files?.length ? item().files!.map((file) => (
-            <Button testID="activity-file" accessibilityLabel={`Open ${file}`} disabled={!props.onFile} onPress={() => props.onFile?.(file)} class="self-start active:opacity-60">
-              <Text class={props.onFile ? "font-mono text-xs text-primary" : "font-mono text-xs text-muted-foreground"}>{file}</Text>
-            </Button>
-          )) : null}
+          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body!} /> : <TextView markdown={item().body!} selectable codeBlockActions={CODE_ACTIONS} class="text-sm" />) : null}
+          {files().map((file) => <FileRow file={file} onFile={props.onFile} />)}
         </View>
       ) : null}
     </View>

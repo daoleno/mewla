@@ -6,6 +6,7 @@ import { readableBody, WorkItemConflict, workItemStatus, workItemStatusLabel, ty
 import { clock } from "../calendar/clock";
 import { calendarItems } from "../calendar/state";
 import { workFiles, workFilesModel } from "./state";
+import { brainFiles, openChatLink } from "../chat/links";
 
 const AUTOSAVE_MS = 600;
 
@@ -31,6 +32,8 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
   const newer = signal(false);
   const failure = signal("");
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // A link in the file: a web page opens in the browser, a path previews Brain's file (a Work file is Brain's).
+  const files = brainFiles((why) => failure.set(why));
 
   effect(() => {
     const current = item();
@@ -147,7 +150,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
                 ) : null}
                 {editingBody()
                   ? <Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} onBlur={() => void save()} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" />
-                  : <TextView testID="work-file-preview" markdown={readableBody(text())} />}
+                  : <TextView testID="work-file-preview" markdown={readableBody(text())} onLinkPress={(event) => openChatLink(event.url, files)} />}
               </View>
             </Scroll>
             <View class="flex-row items-center justify-between border-t border-border px-4 py-3">

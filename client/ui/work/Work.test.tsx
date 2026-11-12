@@ -253,4 +253,17 @@ describe("a Calendar run's Work file", () => {
     await app.type("id:work-file-body", " Also the fourth.");
     await app.waitFor("text:Save failed. disk is full", { timeout: 10_000 });
   }, 25_000);
+
+  test("a link in the file opens: a web page in the browser, a path in Brain's file preview, and Back returns to the file", async () => {
+    const linked = { ...work, body: "# Daily digest\n\nSee [the paper](https://example.com/paper) and [my notes](/home/me/worklog/notes.md).\n" };
+    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+    const app = await openWorkFile({ work_items: [linked], brain: { chat_thread_id: "t-now", host_worker } });
+    await app.waitFor("text:the paper", { timeout: 10_000 });
+    await app.press("text:the paper");
+    await app.waitUntil(() => app.openedUrls().includes("https://example.com/paper"));
+    await app.press("text:my notes");
+    await app.waitFor("id:file-preview", { timeout: 10_000 });
+    await app.back();
+    await app.waitFor("id:work-file-page");
+  }, 25_000);
 });
