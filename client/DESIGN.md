@@ -536,7 +536,7 @@ format, that every glyph stays inside the grid, and the cat ears.
 
 ### Brand assets
 
-Every brand asset is the default pet (`p05`) in the vermilion seal. The art
+Every brand asset is the default pet (`p05`, Dango) in the vermilion seal. The art
 is generated (provenance in `docs/third-party-assets.md`) and committed as
 PNGs in `assets/branding/mewla-*`; `mewlaBrandAssets.test.ts` checks their
 sizes, that App Store icons carry no alpha, and that the config points at
@@ -636,56 +636,36 @@ chat code, inline code and git diffs inherit it.
 
 ## The pet
 
-Brain is a pet the user picks in Settings → Pet: ten pets, `p05` by default,
-one per device (stored like the theme, since Settings does not sync through
-the daemon). Every pet is a pack of animated WebPs, one clip per Brain state
-plus `going_back`, on one square canvas with a shared ground line, so
-switching state or pet never jumps. `scripts/import-pets.py` re-encodes the
-packs into `assets/pets/<id>/` (the default at 256 px, the rest at 192 px),
-regenerates `components/pets/petPacks.ts` and copies what the landing needs
-into `site/pets/`.
+Brain is a pet the user picks in Settings › Pet (soft-final SPEC §5, §15 Picker grid): six pets, each in
+its own medium — Dango (`p05`, the default), Ash (`p11`), Kami (`p12`), Bit (`p13`), Doodle (`p14`) and
+Riso (`p15`) — one per device, stored under `mewla:pet_preference`. A stored pet that is no longer in the
+table (the ten of 0.3.x) falls back to Dango for everyone; a friend's avatar on such a pet shows Dango's
+portrait.
 
-`PetSprite` plays the clip with `expo-image` on Android, iOS and web. Moving
-between the seal and its feet plays the hop first (`petTransition` in
-`components/pets/petModel.ts`): `waking` on the way out, `going_back` on the
-way in. One-shot clips hold their last frame. Motion stops when the screen
-is hidden, the app is in the background or the OS asks for reduced motion;
-native then holds the clip's first frame, while browsers keep playing it.
-Loading screens pass `stillPortrait` and draw the pet's portrait instead,
-so they are still on every platform.
+The table is `client/core/pets/manifest.json` (the pets pack's manifest as delivered, without its file
+lists): per pet its name, frame (256 px for Dango, 192 for the others), `hopBleed` and, per clip, the
+canvas size, frames, delays, loop and bleed. `core/pets/manifest.ts` types it; `ui/pets/assets.ts`
+imports each pet's files from `client/ui/assets/pets/<id>/`: the clips `idle`, `waking`, `going_back`,
+`working`, `delegating`, `attention`, `delivered`, `offline`; a still per state (`<state>-still.webp`,
+the cat's larger side at 90 % of the frame); `portrait`; and `homeless`, the empty bed drawn once at
+each pet's frame size. Adding a pet is its folder, its manifest entry and its imports.
 
-### State map
+**One drawing path.** Every cat is drawn by `ui/pets/PetSprite.tsx`. The hops, `attention` and
+`delivered` sit on a square canvas `1 + 2 × hopBleed` the frame, centred on it, so the sprite draws them
+larger than the box with negative offsets (`clipFrame`) and the cat keeps its size; nothing around it
+clips them. Moving between the nap and its feet plays the hop first (`petTransition`): `waking` on the
+way out, `going_back` on the way in. Modes: `loop` (the state's clip keeps playing: Sessions' empty
+state, the computer page, Onboarding), `once` (the header cat: a change of state or the app coming to
+the front plays the clip for whole passes of at least 2 s, then the state's still holds; a Work coming
+back done plays `delivered` once) and `still` (the picker's poses). Reduced motion, the app in the
+background, a scroll, the keyboard up or a page pushed over home hold the still.
 
-| Product state | Clip | Where | Tap |
-| --- | --- | --- | --- |
-| Brain idle | `idle`: asleep in the seal | Brain empty state; tail row "All quiet" | Says the status: "All quiet. 2 running, nothing needs you." |
-| App start, connecting, loading history | `waking`: hops out of the seal, then stands | App start (`CatSplash`), the Brain chat while it connects or loads history (centred, "Waking up"), Sessions loading/connecting; each only past the 250 ms loading delay | "Still waking up…" |
-| Brain's turn running | `working`: walking | Working row, which also shows Brain's newest step | "Right now: Read routing.md" |
-| Work needs your input | `attention`: waiting on its feet, ears up | **Perched on the newest slip of Work that needs you**; the tail row ("6 need you") only when no such slip is in this conversation; on wide screens, on the first Needs-you slip in the Work column | Opens the first Work that needs you |
-| Delegated Work on Workers | `delegating`: sitting, tail and blink | Tail row, "Waiting on 3 Workers" | The status line |
-| Unread result | `delivered`: a happy hop | Tail row, "Brought 2 things back" | The status line |
-| Offline | `offline`: asleep in a grey seal | Brain status screen, Sessions' offline empty state; tail row "Can't reach your computer" | Retries the connection: "Knocking on your computer…" |
-| No computer paired | `homeless`: the empty seal | Brain status screen, Sessions, Onboarding | Opens pairing |
-| Paired | `idle`: asleep in the seal (moved in) | Onboarding, connected; an empty Work sheet | — |
+### State map (the header cat)
 
-**Tap feedback.** Every tap has a body response (`TappableCat`): a standing
-pet hops 12% of its size and lands on the landing's curve (130 + 220 ms); a
-pet in the seal stirs (a 5% squash). A selection haptic goes with it. The
-answer replaces the row's text for 4.5 s and is announced to screen readers.
-Under reduced motion only the haptic and the words remain. The cat's poses
-still mean only Brain states; a tap never changes the state.
-
-State comes from `resolveBrainCatPresence` (`components/mewla/brainCatState.ts`).
-Placement comes from `mergeBrainPresenceIntoTimeline`
-(`brainPresenceTimeline.ts`): a running turn keeps the cat in the Working
-row; otherwise "attention" perches it on the newest slip of any Work that
-needs you, and the tail row is dropped. The tail row is presence only: a
-count, never one Work's title (a single title went stale for days), and
-pressing the hint beside the cat opens the Work list (`BrainWorkHint`). Every
-tap on the cat also does its own job, a second one included: only a hold that
-already petted the cat answers instead of the tap. Both are pure and tested, and there is
-never more than one cat on screen. Session chats never provide
-`BrainCompanionContext`, so they have no cat.
+Highest first (`core/pets/cat.ts`): no computer `homeless` (the empty bed) · offline, pair again or
+Brain can't start `offline` (the nap, grey, at 72 %) · connecting or Brain starting `waking` · something
+needs you `attention` · Brain's turn `working` · Workers running `delegating` · quiet `idle` (the nap).
+`delivered` plays once over whatever follows. Tapping the cat opens the computer page.
 
 ## Rollout
 

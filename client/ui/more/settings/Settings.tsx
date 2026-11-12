@@ -6,7 +6,7 @@ import { phoneAvailable, phoneLabsWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
 import { Page, Row, Section, StatusMark, SwitchRow } from "../../kit/kit";
 import { followFriends, friendsEnabled } from "../friends/state";
-import { pet } from "../pet/pets";
+import { pet } from "../../pets/pets";
 import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";
 import type { PageNav } from "../routes";
 import { current } from "../../session";
@@ -194,7 +194,7 @@ export function Settings(props: { nav: PageNav }) {
       </Section>
 
       <Section title="Pet">
-        <Row testID="settings-pet" leading={<Image src={pet().portrait} style={{ width: 22, height: 22 }} />} title="Pet" value={pet().name} chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
+        <Row testID="settings-pet" leading={<Image src={pet().art.portrait} style={{ width: 22, height: 22 }} />} title="Pet" value={pet().name} chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
       </Section>
 
       <Section title="About">

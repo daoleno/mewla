@@ -28,6 +28,19 @@ describe("first run", () => {
 });
 
 describe("a paired phone", () => {
+  test("the header cat plays its state's clip once, then holds the still; with less motion only the still", async () => {
+    const app = await open("./App.tsx", { host, storage: paired, platform: "android", clock: {} });
+    // Connecting, then offline: it settles down (going_back) into the grey nap, and holds its still.
+    await app.waitFor("text:Offline");
+    expect(app.count("id:home-cat-sprite >> id:pet-still")).toBe(0);
+    await app.clock!.runFor(6_000);
+    await app.waitFor("id:home-cat-sprite >> id:pet-still");
+    const still = await open("./App.tsx", { host, storage: paired, platform: "android", reducedMotion: true });
+    await still.waitFor("id:home-cat-sprite >> id:pet-still");
+    await still.waitFor("text:Offline");
+    expect(still.count("id:home-cat-sprite >> id:pet-still")).toBe(1);
+  });
+
   test("opens on home: the cat, Brain, the state control and ⋯ over the thread; no tab bar", async () => {
     const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
     await app.waitFor("id:composer");

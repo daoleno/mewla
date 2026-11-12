@@ -1,4 +1,5 @@
 import { cleanup, Clipboard, computed, effect, List, platform, signal, Text, untracked, View, type JSX, type ListRef } from "nsh";
+import { noteScroll } from "../pets/hold";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, TextView } from "nsh/base";
 import { GuardedSheet as Sheet } from "../shell/AppSheet";
@@ -259,6 +260,8 @@ export function ChatTimeline(props: {
         onScroll={({ offset, contentSize, size }) => {
           // A hidden list's scroll (a browser resets it) is not where the person was.
           if (!untracked(shown)) return;
+          // The person's own scrolling holds the header cat still.
+          if (touched) noteScroll();
           const far = contentSize.height - (offset.y + size.height) > 240;
           away.set(far);
           last = { offset: offset.y, atEnd: !far };

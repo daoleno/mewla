@@ -28,6 +28,8 @@ export function Page(props: {
   scrollRef?: (ref: ScrollRef) => void;
   /** A panel beside the scrolling page (a wide screen's details), or nothing. */
   aside?: JSX.Element;
+  /** Laid over the page, not scrolling with it (a toast). */
+  overlay?: JSX.Element;
   children?: JSX.Element;
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
@@ -41,7 +43,10 @@ export function Page(props: {
   const withAside = untracked(() => props.aside !== undefined);
   return (
     <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
-      {withAside ? <View class="flex-1 flex-row bg-background">{scroll}{props.aside}</View> : scroll}
+      <View class="flex-1 bg-background">
+        {withAside ? <View class="flex-1 flex-row">{scroll}{props.aside}</View> : scroll}
+        {props.overlay ?? null}
+      </View>
     </NavPage>
   );
 }

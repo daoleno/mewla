@@ -1,4 +1,4 @@
-import { cleanup, computed, createMotion, effect, Image, List, platform, signal, Storage, Text, untracked, View } from "nsh";
+import { cleanup, computed, createMotion, effect, List, platform, signal, Storage, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, type NavStackState } from "nsh/base";
 import { BackHandler } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
@@ -11,7 +11,7 @@ import { newSessionOpen } from "../screens/NewSession";
 import { haptic } from "../shell/haptics";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
 import { sessionEmptyCat, sessionEmptyState } from "../../core/sessions/sessionEmptyState";
-import { petClip } from "../pets/clips";
+import { PetSprite } from "../pets/PetSprite";
 import { countSessionSelection, EMPTY_SESSION_SELECTION, pruneSessionSelection, selectionCountLabel, toggleSessionSelection, type SessionSelection } from "../../core/sessions/sessionSelection";
 import {
   SessionTerminationBatch,
@@ -180,7 +180,7 @@ function Empty(props: { onPair: () => void; onNew: () => void }) {
   return (
     <View class="flex-1 items-center justify-center gap-3 p-8">
       {/* The chosen pet, in the state's clip (waking while it loads); a filter that matches nothing keeps its icon. */}
-      {cat() ? <Image testID="sessions-empty-cat" src={petClip(cat()!)} accessibilityElementsHidden style={{ width: 104, height: 104 }} />
+      {cat() ? <PetSprite testID="sessions-empty-cat" state={() => cat()!} size={104} />
         : <Icon name={(loading() ? "server" : state().icon) as IconName} size={40} />}
       <Text testID="sessions-empty" class="text-center text-lg font-semibold">{loading() ? "Loading sessions" : state().title}</Text>
       {!loading() && state().action ? (
