@@ -58,8 +58,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 
   /** A run as the packer gives it (TerminalVt.h): its text is chars[start until start + len). */
   private class Run(val col: Int, val cells: Int, val fg: Int, val bg: Int, val flags: Int, val ul: Int, val chars: CharArray, val start: Int, val len: Int) {
-    /** One UTF-16 unit per cell (else a single wide cell, grapheme or astral code point). */
-    val plain get() = len == cells
+    /** One UTF-16 unit per cell (else a single wide cell, grapheme or astral code point: lengths alone cannot tell, a wide emoji is two units in two cells). */
+    val plain get() = (flags and Vt.CLUSTER) == 0
   }
 
   private class Line(val runs: List<Run>, val wrapped: Boolean)

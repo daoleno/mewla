@@ -27,6 +27,8 @@ final class TerminalTests: XCTestCase {
     XCTAssertEqual(row1.map(\.cells), [2, 1, 2, 15])
     XCTAssertEqual(row1[0].text, "中")
     XCTAssertEqual(row1[2].text, "😀")
+    XCTAssertFalse(row1[2].plain, "a wide emoji is two UTF-16 units in two cells, but one cell to draw")
+    XCTAssertTrue(row1[1].plain && !row1[0].plain)
     XCTAssertTrue(try XCTUnwrap(vt.frame(full: false)).dirty.isEmpty, "a second frame without output changes nothing")
   }
 

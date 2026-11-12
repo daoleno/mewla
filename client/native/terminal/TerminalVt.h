@@ -27,8 +27,9 @@ typedef struct MewlaVt MewlaVt;
 /// - flags: MEWLA_VT_BOLD ... ; bits 8-10 the underline style (MEWLA_VT_UNDERLINE_SHIFT): 0 none,
 ///   1 single, 2 double, 3 curly, 4 dotted, 5 dashed.
 /// - A run's text is text[textStart ..< textStart + textLength] in UTF-16. A run is either plain
-///   (one UTF-16 unit per cell, every cell narrow) or a single cell: a wide character, a grapheme of
-///   several code points, or a code point outside the BMP. Blank cells with no background and no
+///   (one UTF-16 unit per cell, every cell narrow) or, flagged MEWLA_VT_CLUSTER, a single cell: a wide
+///   character, a grapheme of several code points, or a code point outside the BMP (lengths alone
+///   cannot tell: a wide emoji is two units in two cells). Blank cells with no background and no
 ///   decoration are left out.
 /// Valid until the next call on `vt`.
 enum {
@@ -42,6 +43,7 @@ enum {
   MEWLA_VT_STRIKE = 16,
   MEWLA_VT_OVERLINE = 32,
   MEWLA_VT_BLINK = 64,
+  MEWLA_VT_CLUSTER = 128,
   MEWLA_VT_UNDERLINE_SHIFT = 8,
 };
 typedef struct {

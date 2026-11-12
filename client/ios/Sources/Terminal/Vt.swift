@@ -12,6 +12,7 @@ enum VtLayout {
   static let strike = 16
   static let overline = 32
   static let blink = 64
+  static let cluster = 128
   static let underlineShift = 8
 }
 
@@ -30,7 +31,8 @@ struct TerminalRun {
   let units: [UInt16]
 
   var text: String { String(decoding: units, as: UTF16.self) }
-  var plain: Bool { units.count == cells }
+  /// One UTF-16 unit per cell; otherwise a single cell (a wide character, a grapheme, an astral code point).
+  var plain: Bool { flags & VtLayout.cluster == 0 }
   var bold: Bool { flags & VtLayout.bold != 0 }
   var italic: Bool { flags & VtLayout.italic != 0 }
   /// SGR 7 (fg and bg are already swapped).

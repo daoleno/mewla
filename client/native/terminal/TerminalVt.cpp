@@ -403,7 +403,7 @@ extern "C" bool mewla_vt_frame(MewlaVt* vt, bool forceFull, MewlaVtFrame* out)
                 if (blank) {
                     text.resize(runStart);
                 } else {
-                    meta.insert(meta.end(), {runCol, runCells, int32_t(runFg), int32_t(runBg), runFlags, int32_t(runUl),
+                    meta.insert(meta.end(), {runCol, runCells, int32_t(runFg), int32_t(runBg), runFlags | (runSingle ? MEWLA_VT_CLUSTER : 0), int32_t(runUl),
                         int32_t(runStart), int32_t(text.size() - runStart)});
                     runs++;
                 }
