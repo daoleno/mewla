@@ -15,7 +15,10 @@ import { keyboardOnlyWeb, WebTerminalSurface } from "./web/WebTerminalSurface";
 
 /** The phones' native view; the web's is libghostty-vt (WebAssembly) on a canvas in a web view, with the same contract. */
 const Surface: typeof TerminalSurface = platform.os === "web" ? WebTerminalSurface : TerminalSurface;
-/** Text size: the phones draw at 8 (about 83 columns on a phone, so Claude Code and Codex lay out as on a laptop); the web's larger screens at 13. */
+/**
+ * Text size: the phones draw at 8 (inside the terminal group, about 69 columns at 360 dp and 75 at 390, so Claude
+ * Code and Codex lay out as on a laptop; SPEC 11's 12/18 would give about 44 and 49); the web's larger screens at 13.
+ */
 const FONT_SIZE = platform.os === "web" ? 13 : 8;
 
 const PALETTE_DARK = ["#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea"];
@@ -148,7 +151,12 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   const press = (key: Key) => {
     if (key.repeat) return; // sent on press down
     if (key.id === "ctrl") return ctrl.set(!ctrl());
-    if (key.id === "paste") return void Clipboard.readText().then((text) => text && session.input(text)).catch(() => {});
+    // Through the view, which frames it for bracketed paste (a newline in it is not Enter).
+    if (key.id === "paste") return void Clipboard.readText().then((text) => {
+      if (!text) return;
+      if (scrolledBack()) command("scrollToBottom", {});
+      command("paste", { text });
+    }).catch(() => {});
     if (key.data) type(key.data);
   };
   /** The key under the finger: drawn inverted, as the mock's pressed key. */
@@ -276,7 +284,13 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
           paddingBottom: 10 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
         }}>
         {/* The key bar (SPEC 11): 44-high surface keys, radius 12, mono 13/600, 6 apart, scrolling sideways. */}
-        <Scroll horizontal scrollbar={false} keyboardShouldPersistTaps="handled" class="grow-0" contentClass="flex-row gap-1.5 px-1.5 pt-2">
+        {/* A press that turns into a sideways scroll may never get its press-up: the scroll ends a held key's repeat. */}
+        <Scroll horizontal scrollbar={false} keyboardShouldPersistTaps="handled" class="grow-0" contentClass="flex-row gap-1.5 px-1.5 pt-2"
+          onScroll={() => {
+            if (down() === null) return;
+            down.set(null);
+            release();
+          }} scrollEventThrottle={64}>
           <KeyTile testID="terminal-attach" label="Attach" icon="attach" disabled={uploads.picking()} onPress={attach} />
           {/* A physical keyboard has every key here (keyboard-only web): only Attach stays. */}
           {keyboardOnlyWeb() ? null : (<>
@@ -288,7 +302,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
               keyboard.set(false);
             }
           }} />
-          {KEYS.map((key) => (
+          {KEYS.filter((key) => key.id !== "paste" || platform.os !== "web").map((key) => (
             <KeyTile testID={`key-${key.id}`} label={key.label ?? key.id} icon={key.icon} text={!key.icon}
               on={() => (key.id === "ctrl" && ctrl()) || down() === key.id}
               onPress={() => press(key)}

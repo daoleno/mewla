@@ -62,6 +62,7 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
       "focus" -> view.showKeyboard()
       "blur" -> view.hideKeyboard()
       "retry" -> view.retry()
+      "paste" -> (m?.get("text") as? String)?.let(view::pasteText)
     }
   }
 
