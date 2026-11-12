@@ -61,7 +61,7 @@ function MenuRow(props: { item: MenuItem; onPress: () => void }) {
   const item = () => props.item;
   return (
     <Button testID={`menu-item-${item().id}`} accessibilityLabel={item().label} role="menuitem" disabled={item().disabled} onPress={props.onPress}
-      class="mx-1.5 min-h-[48px] flex-row items-center gap-3 rounded-[12px] px-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40">
+      class="mx-1.5 min-h-[48px] flex-row items-center gap-3 rounded-[12px] px-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-40">
       {item().icon ? <Icon name={item().icon!} size={20} tone="ink" /> : null}
       <Text class="min-w-0 flex-1 text-body line-clamp-1">{item().label}</Text>
       {item().value ? <Text class="text-sub text-muted-foreground line-clamp-1">{item().value}</Text> : null}

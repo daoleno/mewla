@@ -89,7 +89,7 @@ function PageHeader(props: {
     <View testID="page-header" class="h-[52px] justify-center border-b border-border bg-background px-4">
       <View class="w-full flex-row items-center gap-2 self-center" style={{ maxWidth: wide() ? props.width() ?? undefined : undefined }}>
         {props.canGoBack() ? (
-          <Button testID="page-back" accessibilityLabel="Back" onPress={props.back} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+          <Button testID="page-back" accessibilityLabel="Back" onPress={props.back} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
             <Icon name="chevron-left" size={20} tone="ink" />
           </Button>
         ) : null}

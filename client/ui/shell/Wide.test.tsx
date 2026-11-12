@@ -231,6 +231,27 @@ describe("the wide layout (SPEC §14)", () => {
 
 });
 
+describe("list and detail follow the right pane (SPEC §14.2, §14.6)", () => {
+  test("Browse workspace at 1280 shows its file beside the folder; the handle narrowing the right pane below 880 makes it push, and back", async () => {
+    const tree = { type: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", path: "", entries: [{ name: "current.md", path: "current.md", kind: "file" }] } };
+    const app = await open(APP, { ...desk, host: webHost({ brain: {}, replies: { brain_workspace_tree: tree } }) });
+    await app.waitFor("id:left-pane");
+    await settle(app);
+    await app.keyboard.press("mod+k");
+    await app.waitFor("id:palette");
+    await app.type("label:Search commands", "browse");
+    await app.waitFor("id:palette >> text:Browse workspace");
+    await app.keyboard.press("enter");
+    // 1280 − 320 − the handle: a 952 pt right pane.
+    await app.waitFor("id:workspace-reader");
+    await app.drag("id:pane-handle", { x: 100 });
+    await app.waitFor("id:workspace-reader", { state: "gone" });
+    expect(app.shows("id:workspace-current.md")).toBe(true);
+    await app.drag("id:pane-handle", { x: -100 });
+    await app.waitFor("id:workspace-reader");
+  }, 20_000);
+});
+
 describe("crossing 1024 (SPEC §14.6)", () => {
   for (const platform of ["web", "android", "ios"] as const) {
     test(`${platform}: the same stack, the same page and what is typed, both ways, with nothing made again`, async () => {
