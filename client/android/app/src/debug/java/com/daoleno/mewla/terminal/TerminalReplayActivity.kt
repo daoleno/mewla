@@ -30,6 +30,7 @@ import kotlin.math.ceil
  * (14/12/20/12 dp, as the app's Session does) around the same `cols` x `rows` grid.
  */
 class TerminalReplayActivity : Activity() {
+  private var viewRef: TerminalView? = null
   private val dark = listOf("#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea")
   private val light = listOf("#161412", "#b3372b", "#3f7a33", "#946112", "#2c55c0", "#80428f", "#21787a", "#d8d2c8", "#57514a", "#d24a3c", "#4f9441", "#b37a1a", "#3d6be0", "#9b56ab", "#2a9396", "#fbfaf7")
 
@@ -49,7 +50,10 @@ class TerminalReplayActivity : Activity() {
       override fun viewport(top: Int, atBottom: Boolean) {}
       override fun tapCell(col: Int, row: Int, text: String, index: Int) {}
       override fun copy(text: String) {}
+      // As the page does: a pinch's size comes back as the font size.
+      override fun fontSize(size: Int) { Log.i(TAG, "fontSize $size"); viewRef?.setFontSize(size.toFloat()) }
     })
+    viewRef = view
     if (intent.hasExtra("font")) view.setFontSize(intent.getFloatExtra("font", 8f))
     // The grid's pixel size: whole cells, exactly cols x rows, inside the group's padding when asked.
     val cellW = field(view, "cellW")
@@ -61,8 +65,8 @@ class TerminalReplayActivity : Activity() {
     val padH = if (group) ((14 + 20) * d).toInt() else 0
     root.addView(view, FrameLayout.LayoutParams(ceil(cols * cellW).toInt() + padW + 2, ceil(rows * cellH).toInt() + padH + 2))
     setContentView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-    if (isLight) view.setTheme("#fbfaf7", "#161412", "#161412", "#2C55C055", light)
-    else view.setTheme("#141210", "#F4F0EA", "#F4F0EA", "#3D7EFF55", dark)
+    if (isLight) view.setTheme("#fbfaf7", "#161412", "#161412", "#13141633", "#131416", light)
+    else view.setTheme("#141210", "#F4F0EA", "#F4F0EA", "#F2F3F533", "#F2F3F5", dark)
     view.post {
       if (intent.hasExtra("sessionCols")) view.setSessionSize(intent.getIntExtra("sessionCols", cols), intent.getIntExtra("sessionRows", rows))
       view.write(file.readText(Charsets.UTF_8))
@@ -87,8 +91,8 @@ class TerminalReplayActivity : Activity() {
         view.draw(android.graphics.Canvas(bitmap))
         val t3 = System.nanoTime()
         if (intent.getBooleanExtra("retheme", false)) {
-          if (isLight) view.setTheme("#141210", "#F4F0EA", "#F4F0EA", "#3D7EFF55", dark)
-          else view.setTheme("#fbfaf7", "#161412", "#161412", "#2C55C055", light)
+          if (isLight) view.setTheme("#141210", "#F4F0EA", "#F4F0EA", "#F2F3F533", "#F2F3F5", dark)
+          else view.setTheme("#fbfaf7", "#161412", "#161412", "#13141633", "#131416", light)
         }
         val t4 = System.nanoTime()
         Log.i(TAG, "history ${rows.size} rows: applyHistory %.2f ms, first draw at row %d %.2f ms, theme %.2f ms".format(
