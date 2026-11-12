@@ -20,10 +20,17 @@ export function chatImage(transport: Transport | null, serverId: string, cwd: st
   const key = `${cwd ?? ""}|${path}`;
   let asset = assets.get(key);
   if (!asset) {
-    asset = codexAsset(transport, path, cwd).catch((error) => {
-      assets.delete(key);
-      throw error;
-    });
+    // Only a picture is kept: a failure or "no picture" is asked again (a tap on a failed picture retries it).
+    asset = codexAsset(transport, path, cwd).then(
+      (url) => {
+        if (!url) assets.delete(key);
+        return url;
+      },
+      (error) => {
+        assets.delete(key);
+        throw error;
+      },
+    );
     assets.set(key, asset);
   }
   return asset;

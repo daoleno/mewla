@@ -2,7 +2,7 @@ import { Clipboard, signal, Text, untracked, View } from "nsh";
 import { AlertDialog, Button } from "nsh/base";
 import type { MessageTimelineItem } from "../../core/timeline/types";
 import { isEditablePrompt, messageCopyText, messageEditMode, type MessageEdit } from "../../core/timeline/messageActionsModel";
-import type { ComposerText } from "./Composer";
+import { composerEdits, type ComposerText } from "./Composer";
 
 /** The text the Select Text sheet shows; "" while it is closed. */
 export const selectingText = signal("");
@@ -67,6 +67,7 @@ export function createMessageEdit(options: {
     options.send(value);
     options.text.set(saved);
   };
+  composerEdits.set(options.text, { open: () => edit() !== null, cancel });
   return { edit, error, busy, open, cancel, send };
 }
 export type MessageEditor = ReturnType<typeof createMessageEdit>;
