@@ -6,7 +6,7 @@
  */
 import type { ConversationChoice } from "../conversation/conversation";
 import { buildApprovalPrompt, buildMenuPrompt, type TerminalActionPrompt } from "../session/terminalActionPrompt";
-import { isPromptNoise } from "../sessions/activity";
+import { promptLines } from "../sessions/activity";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerPrompt } from "../sessions/workers";
 import type { TrayRequest } from "../tray/model";
@@ -153,8 +153,7 @@ export const looksLikeCommand = (line: string) => Boolean(line) && !/^[A-Z][a-z]
  * should send these as fields (its prompt parser has them as lines only).
  */
 export function promptParts(text: string, known?: string): { question: string; command: string; notes: string } {
-  const lines = text.split(/\r?\n/).map((line) => line.trim())
-    .filter((line) => line && !isPromptNoise(line));
+  const lines = promptLines(text);
   const question = [...lines].reverse().find((line) => line.endsWith("?")) ?? "";
   const rest = lines.filter((line) => line !== question);
   if (known) {

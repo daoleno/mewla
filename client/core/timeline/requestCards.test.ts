@@ -90,3 +90,8 @@ test("a prompt the daemon names: the card's command is the call's line, and line
   expect(promptParts("Fetch HTTP headers from example.org\ncurl -sI https://example.org\nThis command requires approval\n\nDo you want to proceed?", "curl -sI https://example.org"))
     .toEqual({ question: "Do you want to proceed?", command: "curl -sI https://example.org", notes: "Fetch HTTP headers from example.org" });
 });
+
+test("an older daemon's Tip wrapped by a narrow terminal goes whole, its tail is not taken for the command", () => {
+  const request = 'Tip: auto mode handles these prompts for you — choose "switch to auto\nmode" below\nFetch HTTP headers from example.edu\ncurl -sI https://example.edu\nThis command requires approval\n\nDo you want to proceed?';
+  expect(promptParts(request)).toEqual({ question: "Do you want to proceed?", command: "curl -sI https://example.edu", notes: "Fetch HTTP headers from example.edu" });
+});

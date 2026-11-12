@@ -37,12 +37,35 @@ export function isQuestionApproval(approval: WorkerApproval): boolean {
 /** A prompt line that says nothing about this request: the agent's tips and its "requires approval" boilerplate. */
 export const isPromptNoise = (line: string) => /^tip:/i.test(line) || /^this command requires approval\.?$/i.test(line);
 
+/**
+ * A prompt's request as lines that say something: trimmed, without the noise. Older daemons send Claude's Tip
+ * too, and a narrow terminal wraps it ('… choose "switch to auto' / 'mode" below'): a Tip goes with the lines
+ * that close its open quote.
+ */
+export function promptLines(text: string): string[] {
+  const out: string[] = [];
+  let inTip = false;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (inTip) {
+      if (line && (line.match(/"/g)?.length ?? 0) % 2 === 1) inTip = false;
+      continue;
+    }
+    if (/^tip:/i.test(line)) {
+      inTip = (line.match(/"/g)?.length ?? 0) % 2 === 1;
+      continue;
+    }
+    if (line && !isPromptNoise(line)) out.push(line);
+  }
+  return out;
+}
+
 /** What a terminal prompt asks: the open question, else the call's line (`summary`), else the request's first line past tips, else its title. */
 export function promptTitle(prompt: WorkerPrompt): string {
   if (prompt.kind === "choice") return prompt.questions?.find((q) => !q.answered)?.question || prompt.title || "A question";
   // The call the prompt is for, as the daemon names it (WIRE §7): "curl -sI https://example.org", "/etc/hostname".
   if (prompt.summary) return prompt.summary;
-  const request = prompt.request?.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !isPromptNoise(line));
+  const request = prompt.request ? promptLines(prompt.request)[0] : undefined;
   return request || prompt.title || "Waiting for confirmation";
 }
 
