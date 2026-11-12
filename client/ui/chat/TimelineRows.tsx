@@ -10,7 +10,7 @@ import { compactPathLabel } from "../../core/timeline/pathDisplay";
 import { ChatImage, type PictureLoader } from "./ChatImage";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
 import { workCardModel, type WorkCardModel } from "../../core/timeline/workCardModel";
-import { WORK_CARD_WORKERS, type WorkWorkerLine } from "../../core/work/workers";
+import { WORK_CARD_WORKERS, workerName, type WorkWorkerLine } from "../../core/work/workers";
 import type { ResultAction, WorkWorkerSession } from "../../core/work/types";
 import { resultActionLabel } from "../../core/work/resultActions";
 import type { AgentKind, TerminalFlavor } from "../../core/sessions/workerPresentation";
@@ -237,7 +237,7 @@ export type WorkCardHandlers = {
 /** "Agent · Done 11:20". */
 function resultMeta(model: WorkCardModel, agent: string | undefined): string {
   const at = model.at ? clock().format.time(model.at, clock().zones.device) : "";
-  return [agent, [model.state, at].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+  return [workerName(agent) || undefined, [model.state, at].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
 }
 
 function WorkLogo(props: { agent: { kind: AgentKind; flavor: TerminalFlavor } | null; size: number }) {
@@ -341,7 +341,7 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
             <Button testID="work-card-session" disabled={!props.item().onPress} onPress={open} class="min-h-[44px] flex-row items-center gap-2.5 border-t border-border px-4 active:opacity-70">
               <WorkLogo agent={agent()} size={20} />
               <View class="min-w-0 flex-1">
-                <Text class="text-sub line-clamp-1"><Text class="font-semibold">{agent()?.name ?? model().sessionName ?? "Session"}</Text><Text class="text-muted-foreground">{model().summary ? `  ${model().summary}` : ""}</Text></Text>
+                <Text class="text-sub line-clamp-1"><Text class="font-semibold">{workerName(agent()?.name) || model().sessionName || "Session"}</Text><Text class="text-muted-foreground">{model().summary ? `  ${model().summary}` : ""}</Text></Text>
                 {model().kind === "live" && agent()?.progress !== undefined ? <ProgressBar filled={agent()!.progress!} testID="work-card-progress" /> : null}
               </View>
             </Button>

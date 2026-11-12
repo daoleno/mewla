@@ -88,6 +88,26 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
 }
 
 /**
+ * A delegated Worker's brief (BRAIN-LOOK item 6): the task Brain gave it, two lines at most and a tap
+ * opens the rest, never Mewla's protocol and never as if the person had typed it. Open or not lives in
+ * `expansion` by id, so a recycled cell does not carry it to another row.
+ */
+function DelegatedBrief(props: { item: () => MessageTimelineItem; expansion: Expansion }) {
+  const task = () => props.item().delegatedTask ?? "";
+  const open = () => props.expansion.isOpen(props.item().id);
+  // A chevron where the task likely runs past two lines; a tap opens any task, since a line's width is not known here.
+  const long = () => task().length > 80 || task().includes("\n");
+  return (
+    <Button testID="delegated-brief" accessibilityLabel={`Task from Brain: ${task()}`} onPress={() => props.expansion.toggle(props.item().id)}
+      class="min-h-[44px] flex-row items-start gap-2 py-2.5 active:opacity-70">
+      <Icon name="brain" size={18} />
+      <Text testID={open() ? "delegated-task-open" : "delegated-task"} class={`min-w-0 flex-1 text-sub ${open() ? "" : "line-clamp-2"}`}>{task()}</Text>
+      {long() ? <Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" /> : null}
+    </Button>
+  );
+}
+
+/**
  * One recycled cell. Every branch reads `item()` inside JSX, so a reused cell
  * shows the item it was given next; per-row state (open or not) lives in
  * `expansion`, by id.
@@ -104,6 +124,8 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
           {/* The whole row's width, centred, one line: sized to its own word, a release build's measure wrapped "Toda / y". */}
           <Caption plain center text={(it() as unknown as DateDividerItem).label} />
         </View>
+      ) : it().type === "message" && (it() as MessageTimelineItem).delegatedTask ? (
+        <View class="px-4"><DelegatedBrief item={as("message") as () => MessageTimelineItem} expansion={props.expansion} /></View>
       ) : it().type === "message" && (it() as MessageTimelineItem).role === "user" ? (
         <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>
       ) : it().type === "message" ? (

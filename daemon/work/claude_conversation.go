@@ -991,6 +991,9 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(inner)))
 		} else if brief, delegated := UnwrapClaudeDelegatedInput(exact); delegated {
 			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
+			if event.Origin == "" {
+				event.Origin = ConversationOriginDelegated
+			}
 		}
 	}
 	if b.addEvent(event) {

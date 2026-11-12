@@ -208,6 +208,22 @@ describe("a Work in Brain's thread", () => {
     await app.waitFor("id:work-detail");
   }, 20_000);
 
+  test("a Worker line names the Worker without its Session id and never shows its terminal footer", async () => {
+    const id = "mh-17b3337d43f38037916f0e5b";
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    const current_work = [{ work_id: "w1", revision: 2, title: "Hello file", status: "running", unread_result: false, attempt_session_id: id,
+      worker_sessions: [{ session_id: id, name: `Hello writer (${id})`, provider: "claude", state: "running", summary: footer, live: true, joined_at: "2026-11-12T11:00:00Z", updated_at: "2026-11-12T11:01:00Z" }] }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
+      brain: { ...brain, current_work }, worker_sessions: [session(id, { name: `Hello writer (${id})`, status: "running", summary: footer, last_output_lines: [footer] })],
+      conversations: { "brain-host": [result({ unread: false, title: "Hello file" })] },
+    }) });
+    await app.waitFor("id:work-card-worker", { timeout: 10_000 });
+    const shown = app.texts().join(" ");
+    expect(shown).toContain("Hello writer");
+    expect(shown).not.toContain("(mh-");
+    expect(shown).not.toContain("bypass permissions");
+  }, 20_000);
+
   test("read: the quiet line opens the result sheet, whose Open session opens the Session", async () => {
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [docs], conversations: { "brain-host": [result({ unread: false })] } }) });
     await app.waitFor("id:work-line", { timeout: 10_000 });

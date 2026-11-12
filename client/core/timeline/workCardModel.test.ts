@@ -26,4 +26,8 @@ describe("a Work in Brain's thread", () => {
     expect(workCardModel({ event: event(), currentWork: work({ status: "needs_input", question: "Publish now?" }) })).toMatchObject({ kind: "needs", summary: "Publish now?" });
     expect(workCardModel({ event: event({ kind: "session.needs_input" }) }).kind).toBe("needs");
   });
+
+  test("the Session that ran it is named without the id the daemon appends", () => {
+    expect(workCardModel({ event: event({ session_name: "Hello writer (mh-17b3337d43f38037916f0e5b)" }) }).sessionName).toBe("Hello writer");
+  });
 });

@@ -65,3 +65,48 @@ describe("chat timeline", () => {
     }
   });
 });
+
+describe("Brain's tool rows", () => {
+  // Brain's own calls, as its host Session recorded them on 11-12 (BRAIN-LOOK item 5).
+  const M = "M=/home/me/.mewla/bin/mewla;";
+  const command = (id: string, seq: number, text: string, status = "completed"): CodexConversationEvent =>
+    ({ id, seq, kind: "command", command: text, body: "ok", status, exit_code: status === "failed" ? 1 : 0, timestamp: `2026-11-12T17:28:${10 + seq}.000Z` }) as CodexConversationEvent;
+  const said = (id: string, seq: number, kind: "assistant_message" | "update", body: string): CodexConversationEvent =>
+    ({ id, seq, kind, role: "assistant", body, timestamp: `2026-11-12T17:28:${10 + seq}.000Z` }) as CodexConversationEvent;
+  const activities = (items: ReturnType<ReturnType<typeof createChatTimeline>>) => items.filter((item) => item.type === "activity");
+
+  test("a turn's run folds as a Session's does: what it did, its kind's icon, its files, no steps word", () => {
+    const events = [
+      command("c1", 1, "cat routing.md | head -60; echo ----; cat policies/delegation.md | head -60"),
+      command("c2", 2, `${M} $M brain work create -title "Hello file" | head -c 600`),
+      said("a", 3, "assistant_message", "Opened it."),
+    ];
+    const brain = activities(createChatTimeline("brain")(state(events)));
+    const session = activities(createChatTimeline("session")(state(events)));
+    expect(brain).toEqual(session);
+    expect(brain).toHaveLength(1);
+    const run = brain[0]!;
+    if (run.type !== "activity") throw new Error("not a tool row");
+    expect(run).toMatchObject({ title: "Ran 1 command, read 1 file", detail: "routing.md", icon: "terminal" });
+    expect(run.steps?.map((step) => step.id)).toEqual(["explore:c1", "c2"]);
+    expect(`${run.title} ${run.detail} ${run.icon}`).not.toMatch(/steps|layers|Worked/);
+  });
+
+  test("a single call is its own row and says what it ran, not a bare Read", () => {
+    const spawn = `${M} $M worker spawn -name "Hello writer" -work f97f32b9 -prompt "Create hello.txt. Report back with the output of: cat -A hello.txt" | head -c 800`;
+    const rows = activities(createChatTimeline("brain")(state([said("a", 1, "assistant_message", "Sonnet at low."), command("c3", 2, spawn)])));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.type === "activity" && rows[0]!.title).toMatch(/^Run \$M worker spawn/);
+  });
+
+  test("Brain's words between steps and a running call stay rows of their own", () => {
+    const events = [
+      command("c1", 1, "cat a.md"), command("c2", 2, "git status"),
+      said("u", 3, "update", "Quota is now 256."),
+      command("c3", 4, "cat c.md"), command("c4", 5, "go test ./...", "running"),
+    ];
+    const rows = createChatTimeline("brain")(state(events)).filter((row) => !isWorkingRow(row));
+    expect(rows.map((row) => (row.type === "activity" && row.activityKind !== "update" ? row.title : row.id))).toEqual(["Ran 1 command, read 1 file", "u", "Read c.md", expect.stringMatching(/^Run/)]);
+  });
+});
+
