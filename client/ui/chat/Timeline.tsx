@@ -22,8 +22,11 @@ import { AnsweredRow } from "./RequestCard";
 import { brainFiles, openChatLink, openChatPath } from "./links";
 
 
-/** Tables bleed to the right screen edge (the reply is inset 16): see the reply TextView. */
-const TABLE_BLEED = { tableScroll: "-mr-4", table: "mr-4" };
+/**
+ * Tables bleed to the right screen edge (the reply is inset 16): the scroll runs 16 past the text, the rows
+ * keep 16 at their end, so a table that fits ends at the text's margin and a wide one is cut by the screen.
+ */
+const TABLE_BLEED = { tableScroll: "-mr-4 pr-4" };
 
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
