@@ -338,7 +338,7 @@ func TestPrintPairing(t *testing.T) {
 
 	rendered := output.String()
 	for _, want := range []string{
-		"Phone — in Mewla, Settings → Pair a computer, scan:",
+		"Phone — in Mewla, tap the cat, then Pair a computer, and scan:",
 		"or paste:  mewla://settings?p=compact-payload",
 		"Address:   https://mewla.example.com",
 		"Browser on this computer:  http://127.0.0.1:9876/#pair=x",
@@ -961,7 +961,7 @@ func TestFirstDeviceStartupPrintsQRAndLink(t *testing.T) {
 		"Pair your phone",
 		"█",
 		"Mewla already running? Scan its code",
-		"Settings → Pair a computer",
+		"tap the cat, then Pair a computer",
 		"Phone connects to mewla.example.",
 		"Browser on this computer\n  http://127.0.0.1:9876/p/",
 		"mewla pair --details",

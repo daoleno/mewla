@@ -2619,7 +2619,7 @@ func runPair(cfg pairConfig, stderr io.Writer) error {
 	devices, _ := listDevices(cfg.stateDir)
 	printPairing(stderr, pairingStatusFor(stateDir, len(devices)), links, cfg.stateDir)
 	if cfg.showLink && links.phoneLink != "" {
-		fmt.Fprintln(stderr, "Or paste this link into the app (Settings → Pair a computer):")
+		fmt.Fprintln(stderr, "Or paste this link into the app (tap the cat, then Pair a computer):")
 		fmt.Fprintln(stderr, links.phoneLink)
 		fmt.Fprintln(stderr)
 	}
@@ -2763,7 +2763,6 @@ Agents and tools
   connections  Plugins shared by Brain and Workers
   calendar     List, create, update, cancel or run scheduled Brain work
   watch        Inspect what Watch collects about your projects
-  browser      Give a Worker the Browser as an MCP server
   telegram     Set up the Telegram channel to Brain
   service      List or register services Workers can see
   agents       Let Claude Code, Codex or another MCP agent hand work to Brain

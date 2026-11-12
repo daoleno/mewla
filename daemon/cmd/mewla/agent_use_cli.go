@@ -31,7 +31,7 @@ giving Mewla its key once.
   key [-clear]    Paste the Playwright extension's key (shown on its page in
                   Chrome) from stdin; -clear forgets it
 
-The app shows the same status: Settings → Agents on this computer.
+The app shows the same status on this computer's page (tap the cat, then its name).
 `
 
 func runAgentUseCommand(args []string, stderr io.Writer) error {
