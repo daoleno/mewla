@@ -623,12 +623,23 @@ func validatePresentationDatabaseWithSourceThread(database presentationDatabase,
 
 func validateActiveAttempts(database presentationDatabase) error {
 	activeByWork := map[string]map[string]struct{}{}
+	// Every persisted write validates the whole image, so the lookups here are
+	// indexes built once: a scan of all Work, Events and Turns per active Turn
+	// was most of the validation's cost (about 14 ms per write on a 2000-Work
+	// Brain).
+	workAt := make(map[string]int, len(database.BrainWork))
+	for index := range database.BrainWork {
+		if _, seen := workAt[database.BrainWork[index].ID]; !seen {
+			workAt[database.BrainWork[index].ID] = index
+		}
+	}
+	var relinquished *relinquishmentIndex
 	for _, turn := range database.BrainTurns {
 		if watcher.TurnTerminal(turn.Status) || isHostHandlingTurn(turn) {
 			continue
 		}
-		index := workIndex(database.BrainWork, turn.WorkID)
-		if index < 0 {
+		index, found := workAt[turn.WorkID]
+		if !found {
 			continue
 		}
 		item := database.BrainWork[index]
@@ -643,8 +654,10 @@ func validateActiveAttempts(database presentationDatabase) error {
 			// Ready attention, a typed wait, or another canonical Attempt
 			// then owns progress; exact continue may promote this same active
 			// Session again.
-			relinquished := workTurnHasRelinquishmentEvidence(database, item.ID, turn)
-			if !relinquished && !state.Ready && (attemptSessionID != "" || !state.Waiting) {
+			if relinquished == nil {
+				relinquished = newRelinquishmentIndex(database)
+			}
+			if !relinquished.has(item.ID, turn) && !state.Ready && (attemptSessionID != "" || !state.Waiting) {
 				return fmt.Errorf("brain_turns: active Session %q is not the active Attempt of Work %q", turn.SessionID, item.ID)
 			}
 			// Once ready attention, a typed wait, or explicit Session-result
@@ -665,15 +678,60 @@ func validateActiveAttempts(database presentationDatabase) error {
 }
 
 func workTurnHasRelinquishmentEvidence(database presentationDatabase, workID string, turn TurnRecord) bool {
+	return newRelinquishmentIndex(database).has(workID, turn)
+}
+
+type workKey struct{ work, other string }
+
+type relinquishedResult struct{ kind, dedupe string }
+
+type relinquishedTurn struct {
+	turnID     string
+	acceptedAt time.Time
+}
+
+// relinquishmentIndex answers workTurnHasRelinquishmentEvidence for many
+// Turns of one image without rescanning its Events and Turns for each.
+type relinquishmentIndex struct {
+	results map[workKey][]relinquishedResult // (Work, Session) result Events
+	turns   map[workKey][]relinquishedTurn   // (Work, Session) Turns
+	lost    map[workKey]struct{}             // (Work, Turn) handled loss reviews
+}
+
+func newRelinquishmentIndex(database presentationDatabase) *relinquishmentIndex {
+	index := &relinquishmentIndex{
+		results: map[workKey][]relinquishedResult{},
+		turns:   map[workKey][]relinquishedTurn{},
+		lost:    map[workKey]struct{}{},
+	}
+	for _, event := range database.BrainWorkEvents {
+		if isProjectedWorkResultEvent(event.Kind) {
+			key := workKey{event.WorkID, strings.TrimSpace(event.SourceName)}
+			index.results[key] = append(index.results[key], relinquishedResult{event.Kind, strings.TrimSpace(event.DedupeKey)})
+		}
+		if event.HandledAt != nil {
+			switch strings.TrimSpace(event.Kind) {
+			case "turn_lost", "lease_expired":
+				index.lost[workKey{event.WorkID, strings.TrimSpace(event.PayloadRef)}] = struct{}{}
+			}
+		}
+	}
+	for _, candidate := range database.BrainTurns {
+		key := workKey{candidate.WorkID, strings.TrimSpace(candidate.SessionID)}
+		index.turns[key] = append(index.turns[key], relinquishedTurn{candidate.TurnID, candidate.AcceptedAt})
+	}
+	return index
+}
+
+func (index *relinquishmentIndex) has(workID string, turn TurnRecord) bool {
 	workID = strings.TrimSpace(workID)
 	sessionID := strings.TrimSpace(turn.SessionID)
 	if workID == "" || sessionID == "" {
 		return false
 	}
-	for _, event := range database.BrainWorkEvents {
-		if event.WorkID == workID && strings.TrimSpace(event.SourceName) == sessionID &&
-			isProjectedWorkResultEvent(event.Kind) &&
-			strings.TrimSpace(event.DedupeKey) == sessionTurnEventDedupeKey(sessionID, turn.TurnID, event.Kind) {
+	key := workKey{workID, sessionID}
+	for _, event := range index.results[key] {
+		if event.dedupe == sessionTurnEventDedupeKey(sessionID, turn.TurnID, event.kind) {
 			return true
 		}
 	}
@@ -682,10 +740,8 @@ func workTurnHasRelinquishmentEvidence(database presentationDatabase, workID str
 	// lifecycle evidence even if the provider never emitted a terminal fact for
 	// it. The exact newer admission is sufficient: a result from merely an older
 	// Turn must not relinquish a later rogue Turn.
-	for _, candidate := range database.BrainTurns {
-		if candidate.WorkID == workID &&
-			strings.TrimSpace(candidate.SessionID) == sessionID &&
-			candidate.TurnID != turn.TurnID && candidate.AcceptedAt.After(turn.AcceptedAt) {
+	for _, candidate := range index.turns[key] {
+		if candidate.turnID != turn.TurnID && candidate.acceptedAt.After(turn.AcceptedAt) {
 			return true
 		}
 	}
@@ -705,20 +761,8 @@ func workTurnHasRelinquishmentEvidence(database presentationDatabase, workID str
 	if turnID == "" {
 		return false
 	}
-	for _, event := range database.BrainWorkEvents {
-		if event.WorkID != workID || event.HandledAt == nil {
-			continue
-		}
-		switch strings.TrimSpace(event.Kind) {
-		case "turn_lost", "lease_expired":
-		default:
-			continue
-		}
-		if strings.TrimSpace(event.PayloadRef) == turnID {
-			return true
-		}
-	}
-	return false
+	_, lost := index.lost[workKey{workID, turnID}]
+	return lost
 }
 
 func isHostHandlingTurn(turn TurnRecord) bool {

@@ -41,6 +41,8 @@ bun run daemon:build
 `CGO_ENABLED=0`. The development watcher rebuilds Go source changes and restarts
 the daemon with its existing arguments. No display libraries are required.
 
+`mewla-dev` also serves the daemon's profiler on a free loopback port (printed as `Dev     Profiler http://127.0.0.1:<port>/debug/pprof/` when it starts, the same after every restart); `go tool pprof "http://127.0.0.1:<port>/debug/pprof/profile?seconds=10"` answers where CPU goes. Set `MEWLA_PPROF_ADDR` (empty turns it off) to choose another address; release daemons never serve it unless that variable is set.
+
 While `daemon/ghostty-libs` exists (made by `scripts/build-libghostty-desktop.sh`),
 `mewla-dev` builds with `CGO_ENABLED=1 -tags ghosttyvt` instead, so the session
 host, a Labs feature, has its terminal engine; that needs a C compiler. If the
