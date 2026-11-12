@@ -30,10 +30,11 @@ iPhone, agents on a Mac use it through iPhone Mirroring instead: see
    ticks **Always allow on this network** and waits for your tap on **Allow**.
    If a step doesn't move, that one row falls back to its manual button.
 5. When every line is ticked the page says **Ready**, and Mewla returns you to
-   it. That is the last time: the first helper start also grants Mewla the
-   permission to switch Wireless debugging back on, so after a restart or a
-   Wi‑Fi change the helper and the connection to your computer come back by
-   themselves, with Mewla closed.
+   it. That is the last time: Mewla also grants itself the permission to switch
+   Wireless debugging back on, at the first helper start or, if a helper was
+   already running, as soon as Wireless debugging is on and it can ask, so after
+   a restart or a Wi‑Fi change the helper and the connection to your computer
+   come back by themselves, with Mewla closed.
 
 Without Accessibility the manual path still works: each row opens the right
 place in Settings, and a notification asks for the pairing code (pull it down
@@ -148,10 +149,17 @@ back on when it can.
   helper keeps working, and the Phone use page offers one **Start**, or, if
   Mewla may not switch Wireless debugging on yet, that one switch. A phone that
   is not ready tells an agent so (*Phone use isn't ready on the phone: the
-  person has to open Mewla → Phone on their phone*, with the reason when it
-  knows it) instead of showing a black screen. The agent is told to wait about 15 seconds and try again for up to a
-  minute, since the phone is often ready within a minute of the person opening
-  Mewla, and to tell the person only if it still is not.
+  person has to open Mewla → Phone on their phone*, or, when the phone knows
+  why, that reason alone) instead of showing a black screen. The agent is told
+  to wait about 15 seconds and try again for up to a minute, since Mewla on the
+  phone keeps trying by itself, and to tell the person the reason only if it
+  still is not ready.
+- Why a phone is not ready is never just "setup": the phone says it in a
+  sentence (not on Wi‑Fi, Wireless debugging off and Mewla has not been given the
+  permission to switch it on, switching it keeps falling back on this network,
+  not paired, setting up). `mewla agent-use status` shows it with the time the
+  phone fell into setup, `--json` has `problem` and `setup_since`, and the daemon
+  log notes each change.
 - The hidden screen draws only when something changes. After an action with no new frame, the answer says the picture may be older than the screen. Apps that draw their own UI (WeChat) are given a longer settle and always come with a picture.
 - If an app reports none of its views as visible (WeChat on the hidden screen did), the reader trusts each element's position instead, and elements also carry their state description and tooltip as their description.
 - Apps that block screen capture (banking, some video apps) show a black
@@ -160,7 +168,8 @@ back on when it can.
   Settings and the system's prompt, and never answers a system prompt for you.
 - On a network Android hasn't been told to allow, switching Wireless debugging on
   raises the system's prompt. Mewla only does that by itself on a network where
-  it worked, and stops asking after the prompt is dismissed twice.
+  it worked, and stops asking for five minutes after the prompt is dismissed
+  twice in a row; the phone says when it tries again.
 - iOS has no Phone use; agents on a Mac can use an iPhone through
   [iPhone use](#iphone-use).
 

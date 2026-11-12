@@ -124,6 +124,7 @@ func (r *ProviderConversationReader) LoadByIdentity(identity HostTranscriptIdent
 	if r == nil {
 		r = NewProviderConversationReader()
 	}
+	r.stamp = 0
 	identity = normalizeHostTranscriptIdentity(identity)
 	if HostTranscriptIdentityConflictsWithProvider(identity, identity.Provider) {
 		r.resetSource()
@@ -402,22 +403,35 @@ func SuppressPrivateHostTurns(events []CodexConversationEvent) []CodexConversati
 		return events
 	}
 	suppressPrivateOutput := true
-	out := make([]CodexConversationEvent, 0, len(events))
-	for _, event := range events {
+	// out stays nil, and the caller keeps the events it passed, until the first
+	// event is dropped: a conversation with nothing private in it is the usual
+	// one, and copying it for every read would be the cost of reading it.
+	var out []CodexConversationEvent
+	for index, event := range events {
+		keep := true
 		switch strings.TrimSpace(event.Kind) {
 		case "user_message":
 			if IsPrivateHostPrompt(event.Body) {
 				suppressPrivateOutput = true
-				continue
+				keep = false
+			} else {
+				suppressPrivateOutput = false
 			}
-			suppressPrivateOutput = false
-			out = append(out, event)
 		default:
-			if suppressPrivateOutput {
-				continue
+			keep = !suppressPrivateOutput
+		}
+		if !keep {
+			if out == nil {
+				out = append(make([]CodexConversationEvent, 0, len(events)), events[:index]...)
 			}
+			continue
+		}
+		if out != nil {
 			out = append(out, event)
 		}
+	}
+	if out == nil {
+		return events
 	}
 	return out
 }

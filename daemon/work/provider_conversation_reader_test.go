@@ -1,6 +1,7 @@
 package work
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -295,4 +296,96 @@ func conversationContainsBody(conversation CodexConversation, value string) bool
 		}
 	}
 	return false
+}
+
+func appendClaudeReaderLine(t *testing.T, path, cwd, sessionID, uuid, body string) {
+	t.Helper()
+	line, err := json.Marshal(map[string]any{
+		"type": "user", "cwd": cwd, "sessionId": sessionID,
+		"uuid": uuid, "timestamp": "2026-07-17T00:00:09Z",
+		"message": map[string]any{"role": "user", "content": body},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if _, err := file.Write(append(line, '\n')); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A reader names the parse its last answer came from: the same while the
+// transcript holds still, whichever way it is reached, and another one once it
+// has grown, so a caller can leave an unchanged answer alone without reading it.
+func TestProviderConversationReaderStampNamesTheParse(t *testing.T) {
+	home := t.TempDir()
+	cwd := "/repo/provider-reader-stamp"
+	t.Setenv("HOME", home)
+	path := claudeReaderTranscriptPath(home, cwd, "stamped")
+	writeClaudeReaderTranscript(t, path, cwd, "stamped", "first")
+	forceReaderFixtureModTime(t, path, time.Now().Add(-time.Minute))
+
+	reader := NewProviderConversationReader()
+	if reader.ConversationStamp() != 0 {
+		t.Fatalf("a reader that loaded nothing has stamp %d", reader.ConversationStamp())
+	}
+	worker := classifier.Worker{ID: "agent", Cwd: cwd, Command: "claude --resume stamped"}
+	if _, err := reader.Load(worker, WorkerProviderClaude, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	first := reader.ConversationStamp()
+	if first == 0 {
+		t.Fatal("a retained parse has no stamp")
+	}
+	for range 3 {
+		if _, err := reader.Load(worker, WorkerProviderClaude, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if got := reader.ConversationStamp(); got != first {
+			t.Fatalf("an unchanged transcript changed the stamp: %d then %d", first, got)
+		}
+	}
+
+	// Another reader of the same bytes takes the shared parse and names it the
+	// same way; the bound form of the same file does too.
+	other := NewProviderConversationReader()
+	if _, err := other.Load(worker, WorkerProviderClaude, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if got := other.ConversationStamp(); got != first {
+		t.Fatalf("a second reader names the shared parse %d, want %d", got, first)
+	}
+	if _, err := other.LoadByIdentity(HostTranscriptIdentity{Provider: WorkerProviderClaude, SessionID: "stamped", Path: path}); err != nil {
+		t.Fatal(err)
+	}
+	if got := other.ConversationStamp(); got != first {
+		t.Fatalf("LoadByIdentity names the parse %d, want %d", got, first)
+	}
+
+	appendClaudeReaderLine(t, path, cwd, "stamped", "user-two", "second")
+	forceReaderFixtureModTime(t, path, time.Now())
+	conversation, err := reader.Load(worker, WorkerProviderClaude, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := reader.ConversationStamp()
+	if second == 0 || second == first {
+		t.Fatalf("a grown transcript kept stamp %d (was %d)", second, first)
+	}
+	if !conversationContainsBody(conversation, "second") {
+		t.Fatalf("the answer with the new stamp lacks the new line: %#v", conversation.Events)
+	}
+
+	// A load that finds nothing retains no parse and proves nothing.
+	missing := classifier.Worker{ID: "agent", Cwd: cwd, Command: "claude --resume nowhere"}
+	if _, err := reader.Load(missing, WorkerProviderClaude, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if got := reader.ConversationStamp(); got != 0 {
+		t.Fatalf("a load that found no transcript has stamp %d", got)
+	}
 }

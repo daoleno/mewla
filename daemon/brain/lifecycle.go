@@ -1212,6 +1212,7 @@ func (s *Store) persistPresentationLocked(database presentationDatabase) error {
 			// stale. Fail the command and resume from what is durable.
 			if image, generation, readErr := readPresentationImage(s.db); readErr == nil {
 				s.presentation, s.presentationGen = image, generation
+				s.presentationSeq++
 				s.turnCache = turnReadCache{}
 				s.rev.Add(1)
 			}
@@ -1219,6 +1220,7 @@ func (s *Store) persistPresentationLocked(database presentationDatabase) error {
 		return err
 	}
 	s.presentation = committed
+	s.presentationSeq++
 	s.presentationGen++
 	s.turnCache = turnReadCache{}
 	s.rev.Add(1)
@@ -2951,18 +2953,50 @@ func (s *Store) WorkEvent(eventID string) (WorkEvent, bool, error) {
 // canonical Work state. Card IDs identify timeline facts; lifecycle identity
 // is Work-scoped and must never be recovered from an Event kind or ID.
 func (s *Store) WorkResultLifecycles(workIDs []string) (map[string]WorkResultLifecycle, error) {
-	wanted := map[string]bool{}
-	for _, workID := range workIDs {
-		if workID = strings.TrimSpace(workID); workID != "" {
-			wanted[workID] = true
-		}
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	database, err := s.loadPresentationLocked()
-	if err != nil {
-		return nil, err
+	database := s.readPresentationLocked()
+	if s.lifecycleMemo.image != s.presentationSeq || s.lifecycleMemo.byWork == nil {
+		s.lifecycleMemo = workResultLifecycleMemo{image: s.presentationSeq, byWork: map[string]workResultLifecycleEntry{}}
 	}
+	memo := &s.lifecycleMemo
+	out := map[string]WorkResultLifecycle{}
+	for _, workID := range workIDs {
+		workID = strings.TrimSpace(workID)
+		if workID == "" {
+			continue
+		}
+		entry, known := memo.byWork[workID]
+		if !known {
+			if memo.latestResult == nil {
+				memo.latestResult = latestWorkResultEvents(database)
+			}
+			entry.lifecycle, entry.found = workResultLifecycle(database, memo.latestResult, workID)
+			memo.byWork[workID] = entry
+		}
+		if entry.found {
+			out[workID] = entry.lifecycle
+		}
+	}
+	return out, nil
+}
+
+// workResultLifecycleMemo is what WorkResultLifecycles derived from one
+// committed presentation image. The image is replaced, never changed, so the
+// answer for a Work stays right until the Store holds another one.
+type workResultLifecycleMemo struct {
+	image        uint64
+	latestResult map[string]WorkEvent
+	byWork       map[string]workResultLifecycleEntry
+}
+
+type workResultLifecycleEntry struct {
+	lifecycle WorkResultLifecycle
+	found     bool
+}
+
+// latestWorkResultEvents is the newest result Event of every Work that has one.
+func latestWorkResultEvents(database presentationDatabase) map[string]WorkEvent {
 	latestResult := map[string]WorkEvent{}
 	for _, event := range database.BrainWorkEvents {
 		if !isProjectedWorkResultEvent(event.Kind) {
@@ -2972,54 +3006,55 @@ func (s *Store) WorkResultLifecycles(workIDs []string) (map[string]WorkResultLif
 			latestResult[event.WorkID] = event
 		}
 	}
-	out := map[string]WorkResultLifecycle{}
-	for workID := range wanted {
-		event := latestResult[workID]
-		if event.ID == "" || workID == "" {
-			continue
-		}
-		itemIndex := workIndex(database.BrainWork, workID)
-		item := Work{}
-		if itemIndex >= 0 {
-			item = database.BrainWork[itemIndex]
-		}
-		reviewState := WorkReviewResolved
-		review := item.Review
-		if review != nil {
-			reviewState = WorkReviewQueued
-			if reviewDeliveredAwaitingDisposition(review) {
-				reviewState = WorkReviewReviewing
-			}
-		}
-		sessionState := WorkResultSessionNotRequired
-		if itemIndex >= 0 {
-			sessionID := firstNonEmpty(event.SourceName, strings.TrimPrefix(event.PayloadRef, "session:"))
-			if item.Status == WorkDone || item.Status == WorkCancelled {
-				sessionState = WorkResultSessionFinalized
-			} else if sessionID != "" && item.AttemptSessionID == sessionID &&
-				!sessionHasImmutableTurn(database, sessionID) {
-				// "Session open" reflects a live delegated owner only: a completed
-				// Session (immutable canonical Turn) or a terminal Work is never
-				// shown as open.
-				sessionState = WorkResultSessionOpen
-			} else if sessionHasImmutableTurn(database, sessionID) {
-				// The Session completed/closed; teardown is owed or done. It is
-				// never shown as open.
-				sessionState = WorkResultSessionClosing
-			}
-		}
-		out[workID] = WorkResultLifecycle{
-			CurrentEventID: event.ID,
-			ReviewState:    reviewState,
-			SessionState:   sessionState,
-		}
-		if review != nil {
-			current := out[workID]
-			current.CurrentEventID = review.EventID
-			out[workID] = current
+	return latestResult
+}
+
+// workResultLifecycle is the lifecycle of one Work's current result Event, and
+// false when the Work has no result Event.
+func workResultLifecycle(database presentationDatabase, latestResult map[string]WorkEvent, workID string) (WorkResultLifecycle, bool) {
+	event := latestResult[workID]
+	if event.ID == "" || workID == "" {
+		return WorkResultLifecycle{}, false
+	}
+	itemIndex := workIndex(database.BrainWork, workID)
+	item := Work{}
+	if itemIndex >= 0 {
+		item = database.BrainWork[itemIndex]
+	}
+	reviewState := WorkReviewResolved
+	review := item.Review
+	if review != nil {
+		reviewState = WorkReviewQueued
+		if reviewDeliveredAwaitingDisposition(review) {
+			reviewState = WorkReviewReviewing
 		}
 	}
-	return out, nil
+	sessionState := WorkResultSessionNotRequired
+	if itemIndex >= 0 {
+		sessionID := firstNonEmpty(event.SourceName, strings.TrimPrefix(event.PayloadRef, "session:"))
+		if item.Status == WorkDone || item.Status == WorkCancelled {
+			sessionState = WorkResultSessionFinalized
+		} else if sessionID != "" && item.AttemptSessionID == sessionID &&
+			!sessionHasImmutableTurn(database, sessionID) {
+			// "Session open" reflects a live delegated owner only: a completed
+			// Session (immutable canonical Turn) or a terminal Work is never
+			// shown as open.
+			sessionState = WorkResultSessionOpen
+		} else if sessionHasImmutableTurn(database, sessionID) {
+			// The Session completed/closed; teardown is owed or done. It is
+			// never shown as open.
+			sessionState = WorkResultSessionClosing
+		}
+	}
+	lifecycle := WorkResultLifecycle{
+		CurrentEventID: event.ID,
+		ReviewState:    reviewState,
+		SessionState:   sessionState,
+	}
+	if review != nil {
+		lifecycle.CurrentEventID = review.EventID
+	}
+	return lifecycle, true
 }
 
 func sessionHasImmutableTurn(database presentationDatabase, sessionID string) bool {
