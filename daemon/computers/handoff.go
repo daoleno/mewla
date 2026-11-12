@@ -1,6 +1,7 @@
 package computers
 
 import (
+	"hash/fnv"
 	"regexp"
 	"strings"
 	"time"
@@ -44,6 +45,51 @@ func (m *Manager) Handoffs(thread string) []Handoff {
 		})
 	}
 	return out
+}
+
+// ProjectionToken is a number that differs whenever what Handoffs(thread) and
+// DaemonIDForReceipt would answer differs: the handoffs of the thread with
+// their states, and the daemon id every peer has said. It costs one pass over
+// both and allocates nothing, so a projection that shows them can ask it
+// instead of building them.
+func (m *Manager) ProjectionToken(thread string) uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	hash := fnv.New64a()
+	write := func(value string) {
+		_, _ = hash.Write([]byte(value))
+		_, _ = hash.Write([]byte{0})
+	}
+	var live map[string]string
+	if len(m.state.Outbox) > 0 {
+		live = make(map[string]string, len(m.state.Outbox))
+		for _, item := range m.state.Outbox {
+			live[item.Message.ID] = item.State
+		}
+	}
+	for _, h := range m.state.Handoffs {
+		if h.Thread != thread {
+			continue
+		}
+		state := h.State
+		if current, ok := live[h.ID]; ok {
+			state = current
+		}
+		write(h.ID)
+		write(h.Computer)
+		write(m.daemonIDLocked(h.PeerKey))
+		write(state)
+	}
+	token := hash.Sum64()
+	// Peers are a map: fold them in an order-free way.
+	for key, hello := range m.hellos {
+		peer := fnv.New64a()
+		_, _ = peer.Write([]byte(key))
+		_, _ = peer.Write([]byte{0})
+		_, _ = peer.Write([]byte(hello.DaemonID))
+		token ^= peer.Sum64()
+	}
+	return token
 }
 
 // DaemonIDForReceipt names the computer a delivered message came from, by

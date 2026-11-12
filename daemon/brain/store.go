@@ -46,6 +46,10 @@ type Store struct {
 	db              *sql.DB
 	presentation    presentationDatabase
 	presentationGen int64
+	// presentationSeq counts the images the Store has held, so what is derived
+	// from an image can be told from what is derived from the next one.
+	presentationSeq uint64
+	lifecycleMemo   workResultLifecycleMemo
 	rev             atomic.Uint64
 
 	// fsm is the canonical delegated-Work lifecycle engine (docs/work-lifecycle.md).
@@ -103,6 +107,7 @@ func NewStore(root string) (*Store, error) {
 		return nil, fmt.Errorf("open Brain presentation database: %w", err)
 	}
 	store.presentation, store.presentationGen = image, generation
+	store.presentationSeq = 1
 	// The canonical delegated-Work lifecycle engine keeps its Event log and
 	// Work rows in the same database. Startup reads the current rows
 	// directly; reducer determinism remains an audit/test property.
