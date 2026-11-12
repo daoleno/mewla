@@ -1,4 +1,5 @@
 import type { Transport } from "./transport";
+import { isConversationSyncingReason } from "./session/timelinePhase";
 
 /** A Session as Brain lists it; also Brain's own hidden host (`host_worker`). */
 export type BrainWorkerRef = {
@@ -97,4 +98,49 @@ export function brainSurface(input: { hasServer: boolean; connected: boolean; sn
   if (snapshot?.host_problem) return input.connected ? "host_down" : "offline";
   if (snapshot?.host_worker?.id && snapshot.chat_thread_id) return "chat";
   return input.connected ? "waking" : "offline";
+}
+
+/**
+ * Brain runs on an agent without structured chat events: its chat cannot be read,
+ * only its terminal ("Chat isn't available for {agent}", soft-final/SPEC.md §1.3).
+ * The computer always states `structured_events`; a snapshot without it reads as a chat.
+ */
+export function brainChatUnavailable(snapshot: BrainSnapshot | null | undefined): boolean {
+  return snapshot?.host_executor?.capabilities?.structured_events === false;
+}
+
+/**
+ * What Brain's chat area shows when it has no rows (soft-final/SPEC.md §1.3):
+ * "loading", "failed" ("Couldn't load the chat": a load error, or a transcript the
+ * computer cannot read), or "empty". A transcript still syncing reads as loading.
+ */
+export type BrainChatState = "content" | "loading" | "failed" | "empty";
+
+export function brainChatState(input: {
+  itemCount: number;
+  loading: boolean;
+  error?: string | null;
+  conversation?: { available?: boolean; reason?: string } | null;
+}): BrainChatState {
+  if (input.itemCount > 0) return "content";
+  if (input.loading) return "loading";
+  if (input.error) return "failed";
+  const conversation = input.conversation;
+  if (conversation && conversation.available === false) {
+    // No transcript yet is a chat with nothing in it (a fresh thread), as a Session reads it.
+    if (conversation.reason === "transcript_not_found") return "empty";
+    return isConversationSyncingReason(conversation.reason) ? "loading" : "failed";
+  }
+  return "empty";
+}
+
+/**
+ * Why Brain's composer cannot send now, for its placeholder (soft-final/SPEC.md
+ * §1.3); null when it can. Offline is not a reason: sends queue.
+ */
+export function brainComposerBlock(input: { surface: BrainSurface; snapshot: BrainSnapshot | null | undefined; chat: BrainChatState }): string | null {
+  if (input.surface === "host_down") return "Brain can't start";
+  if (input.surface !== "chat") return null;
+  if (brainChatUnavailable(input.snapshot)) return "Chat isn't available";
+  return input.chat === "failed" ? "Chat didn't load" : null;
 }
