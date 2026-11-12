@@ -1,7 +1,6 @@
-import { computed, openUrl, safeArea, untracked, signal, Text, View } from "nsh";
+import { computed, openUrl, untracked, signal, Text, View } from "nsh";
 import { progressSteps } from "../../core/sessions/progress";
 import { Button } from "nsh/base";
-import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
@@ -31,7 +30,7 @@ import { clock } from "../calendar/clock";
 import { Icon } from "../kit/Icon";
 import { HomeCat } from "./Cat";
 import { StateControl } from "../tray/StateControl";
-import { Tray } from "../tray/Tray";
+import { HOME_HEADER_HEIGHT, homeHeaderInset, Tray } from "../tray/Tray";
 import { BrainChatFailed, BrainChatUnavailable, BrainHostSheet, BrainMenu, brainChatState, brainChatUnavailable, brainComposerBlock, createBrainComposer, currentBrain, MentionPanel } from "../brain";
 import { newSessionOpen } from "../screens/NewSession";
 import { ComposerPlusButton, SlashMenu } from "../session/SlashMenu";
@@ -225,8 +224,9 @@ const menuAnchor = createMenuAnchor();
  */
 function HomeHeader() {
   return (
-    <View testID="home-header" class={`bg-background ${wide() ? "px-4" : "px-2"}`} style={{ paddingTop: mobile ? safeArea().top : 0 }}>
-      <View class="h-[52px] flex-row items-center gap-1">
+    <View testID="home-header" class={`bg-background ${wide() ? "px-4" : "px-2"}`} style={{ paddingTop: homeHeaderInset() }}>
+      {/* The tray hangs from this row's bottom (HOME_HEADER_HEIGHT). */}
+      <View class="flex-row items-center gap-1" style={{ height: HOME_HEADER_HEIGHT }}>
         {wide() ? null : <HomeCat onPress={() => openPage({ name: "computer" })} />}
         <View class="min-w-0 shrink-0 justify-center pr-1">
           <Text role="header" class="text-title font-bold tracking-title">Brain</Text>

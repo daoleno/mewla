@@ -1,7 +1,7 @@
-import { cleanup, platform, safeArea, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
+import { cleanup, createMotion, Easing, platform, safeArea, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
-import { BackHandler } from "nsh/mobile";
+import { BackHandler, isAvailable as mobile } from "nsh/mobile";
 import { forgetConnectionIssue } from "../more/settings/computers";
 import { currentTransport, resumeConnection } from "../session";
 import { decideApproval, answerPrompt } from "../../core/conversation/turn";
@@ -47,6 +47,14 @@ export type TrayProps = {
   /** Brain can't start: the "Brain host" sheet. */
   onSwitchExecutor?: () => void;
 };
+
+/** Home's header row (SPEC §11 Home header): 52 pt under the top safe area. */
+export const HOME_HEADER_HEIGHT = 52;
+
+/** The top safe area home's header sits under: a phone's status bar; none in a browser or a desktop window. */
+export function homeHeaderInset(): number {
+  return mobile ? safeArea().top : 0;
+}
 
 /** Android's Back while the tray lives; a browser has its own back (NSH's web runtime has no `BackHandler.on`). */
 function onAndroidBack(listener: () => boolean): void {
@@ -147,7 +155,7 @@ export type TrayBodyProps = TrayProps & {
 };
 
 /**
- * The tray itself (SPEC §1.2, §3.2): its title, ⋯ and +, the notice, Needs you, Running, Today,
+ * The tray itself (SPEC §1.2, §3.2): its title, the options glyph and +, the notice, Needs you, Running, Today,
  * Idle, Done and All Sessions. The phone's overlay and the wide layout's left pane both show it.
  */
 export function TrayBody(props: TrayBodyProps) {
@@ -225,10 +233,11 @@ export function TrayBody(props: TrayBodyProps) {
     <>
       <View class={`flex-row items-center px-4 ${props.pane ? "min-h-[52px] gap-0.5 pr-2" : "gap-2 pb-1 pt-4"}`}>
         <Text testID="tray-title" role="header" class={`flex-1 line-clamp-1 ${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"}`}>{props.title()}</Text>
+        {/* The mock's order: the options glyph (Sort, Services), then + (New Session). */}
+        <Button ref={menuAnchor.ref} testID="tray-menu" accessibilityLabel="Options" onPress={() => void menu()} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="options" size={24} tone="ink" /></Button>
         <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="add" size={24} tone="ink" /></Button>
-        <Button ref={menuAnchor.ref} testID="tray-menu" accessibilityLabel="Tray menu" onPress={() => void menu()} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="more-horizontal" size={24} tone="ink" /></Button>
       </View>
-      <Scroll testID="tray-scroll" class={props.pane ? "flex-1" : "shrink"} contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
+      <Scroll testID="tray-scroll" class="flex-1" contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
         {m().notice ? <Notice onAction={noticeAction} /> : null}
         {said() ? <Text testID="tray-said" class="mt-2 px-4 text-sub text-muted-foreground" onPress={() => said.set("")}>{said()}</Text> : null}
         <View class={m().dimmed ? "opacity-45" : ""}>
@@ -285,6 +294,8 @@ export function TrayBody(props: TrayBodyProps) {
  * Home's tray on a phone and a narrow window (SPEC §1.2, §3.2): home's own overlay, not a sheet:
  * it rises from the bottom over a scrim that dims home, header included, and stays open with its
  * scroll while a page pushed from it is on the stack, so Back from a Session lands on it again.
+ * Its top hangs just under home's header and it fills to the screen's bottom whatever it lists
+ * (tray-light-390.png), so the index always opens at the same place under the control that opened it.
  * On wide the tray is the left pane instead (ui/shell/LeftPane.tsx).
  */
 export function Tray(props: TrayProps) {
@@ -299,10 +310,18 @@ export function Tray(props: TrayProps) {
   return <>{trayOpen() ? (
     <View testID="tray-overlay" class="absolute inset-0">
       <View testID="tray-scrim" class="absolute inset-0 bg-scrim" onPress={close} accessibilityLabel="Close the tray" role="button" />
-      <View testID="tray" class="absolute bottom-0 left-0 right-0 rounded-t-(--radius-sheet) bg-sheet"
-        style={{ maxHeight: windowSize().height * 0.88 }}>
-        <TrayBody {...props} open={PUSH} onLeave={close} title={() => tray().title} />
-      </View>
+      <TrayPanel {...props} onClose={close} />
     </View>
   ) : null}</>;
+}
+
+/** The panel: made each time the tray opens, so it rises once per opening and not when a pushed page pops back to it. */
+function TrayPanel(props: TrayProps & { onClose: () => void }) {
+  const top = () => homeHeaderInset() + HOME_HEADER_HEIGHT;
+  const rise = createMotion({ enter: { keyframes: { translateY: [untracked(() => windowSize().height - top()), 0] }, duration: 280, easing: Easing.out(Easing.cubic) } });
+  return (
+    <View testID="tray" class="absolute bottom-0 left-0 right-0 rounded-t-(--radius-sheet) bg-sheet" style={{ top: top(), transform: rise.transform }}>
+      <TrayBody {...props} open={PUSH} onLeave={props.onClose} title={() => tray().title} />
+    </View>
+  );
 }

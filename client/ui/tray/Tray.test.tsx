@@ -21,6 +21,18 @@ describe("the tray", () => {
     expect(app.shows("id:tray-done")).toBe(true);
   }, 20_000);
 
+  test("the header's options glyph opens Sort and Services; + is New session", async () => {
+    const app = await open(HARNESS, { host: { params: { workers: [worker("alpha")] } }, platform: "android" });
+    await app.waitFor("text:1 running");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray");
+    expect(app.shows("label:Options")).toBe(true);
+    expect(app.shows("label:New session")).toBe(true);
+    app.onDialog(() => null);
+    await app.press("id:tray-menu");
+    await app.waitUntil(() => app.dialogs().some((dialog) => dialog.buttons.includes("Sort") && dialog.buttons.includes("Services")));
+  }, 20_000);
+
   test("running is an ink dot, connecting and offline a ring: the dot follows the state it opened in", async () => {
     const app = await open(HARNESS, { host: { params: { workers: [worker("alpha")], connection: "connecting" } }, platform: "android" });
     await app.waitFor("text:Connecting…");
