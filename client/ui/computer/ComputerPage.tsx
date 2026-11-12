@@ -74,7 +74,7 @@ function CatHeader(props: { nav: PageNav }) {
         <PetSprite testID="computer-cat" state={() => (connection() === "connected" ? "idle" : connection() === "connecting" ? "waking" : "offline")} size={72} />
         <View class="min-w-0 flex-1 gap-0.5">
           <Button testID="computer-details" accessibilityLabel={`${current()?.name ?? "This computer"}, details`} onPress={() => current() && props.nav.push({ name: "settings-computer", id: current()!.id })}
-            class="self-start active:opacity-70">
+            class="self-stretch active:opacity-70">
             <Text role="header" class="text-display font-bold tracking-display line-clamp-1">{current()?.name || current()?.url || "Computer"}</Text>
           </Button>
           <View testID="computer-connection" class="flex-row items-center gap-2" onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
