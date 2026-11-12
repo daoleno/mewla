@@ -75,6 +75,7 @@ describe("brainWorkSurface", () => {
     expect(slip).toMatchObject({
       title: "perpetuo browser reopen 2",
       who: "Claude Code · perpetuo",
+      project: "perpetuo",
       summary: "Fix v1 passes 7/9 at cpus 0.7",
       status: "running",
       statusLabel: "Working",

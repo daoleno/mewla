@@ -125,9 +125,55 @@ describe("Brain's Work", () => {
     await app.waitFor("id:work-workers");
     expect(framesOf(app.host.posts(), "brain_work_detail")[0]).toMatchObject({ id: "w-old" });
     expect(app.texts()).toContain("rename-the-app");
-    expect(app.texts()).toContain("Done");
+    // The state line: how it ended, and since when.
+    expect(app.texts().some((text) => /^Done · since /.test(text))).toBe(true);
     expect(app.texts()).toContain("Claude Code · renamer");
     expect(app.texts()).not.toContain("This Work is no longer open");
+  }, 20_000);
+
+  test("Work detail's top block: the eyebrow names the project on one line, then the title and the state line", async () => {
+    const app = await workApp();
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-eyebrow");
+    expect(app.texts()).toContain("Work · perpetuo");
+    expect(app.texts()).toContain("ship the beta");
+    expect(app.shows("id:work-state")).toBe(true);
+    // Ask Brain about this, then the ways to move it on: Stop with them, not with the links.
+    expect(app.count("id:work-links >> id:work-action-ask")).toBe(1);
+    expect(app.count("id:work-moves >> id:work-action-stop")).toBe(1);
+  }, 20_000);
+
+  test("the Work file its Worker writes into is a row with the file's name, and opens the file", async () => {
+    const file = { id: "wf-run", project: "perpetuo", path: "perpetuo/ship-the-beta.md", title: "Ship the beta", mtime: now(), body: "# Ship the beta\n\nRelease checks.\n",
+      frontmatter: { id: "wf-run", created: now(), worker_session: "%7" } };
+    const app = await workApp({ brain: brain(), work_items: [file] });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-file", { timeout: 10_000 });
+    expect(app.texts()).toContain("ship-the-beta.md");
+    await app.press("id:work-file");
+    await app.waitFor("id:work-file-page");
+  }, 20_000);
+
+  test("Stop asks with the Work's title, and only then tells Brain", async () => {
+    const app = await workApp();
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-action-stop");
+    app.onDialog((dialog) => (dialog.title === "Stop “ship the beta”?" ? "Stop" : null));
+    await answering(app, () => app.press("id:work-action-stop"));
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
+    expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-run", action: "stop" });
+  }, 20_000);
+
+  test("the dock replies to Brain about this Work, and the page closes once Brain has it", async () => {
+    const app = await workApp();
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-detail >> id:composer");
+    await app.type("id:work-detail >> id:composer", "check the logs too");
+    await app.waitUntil(() => app.value("id:work-detail >> id:composer") === "check the logs too");
+    await app.press("id:work-detail >> id:send");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
+    expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-run", action: "reply", text: "check the logs too" });
+    await app.waitUntil(() => !app.shows("id:work-detail"));
   }, 20_000);
 
   test("a result that came back is accepted with one tap and its unread mark is cleared on opening", async () => {

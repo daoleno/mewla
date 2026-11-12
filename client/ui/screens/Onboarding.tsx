@@ -27,7 +27,7 @@ import {
   type OnboardingStep,
 } from "../../core/onboarding";
 import { Icon, type IconName } from "../icons/Icon";
-import { DisplayTitle, Field, Spinner } from "../kit/kit";
+import { Caption, DisplayTitle, Field, Spinner } from "../kit/kit";
 import { restorePet } from "../pets/pets";
 import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
 import { PetSprite } from "../pets/PetSprite";
@@ -242,7 +242,7 @@ function StepHeader(props: { frame: Frame | null; compact: boolean; number: numb
     <View class={props.compact ? "gap-2.5 pb-1.5 pt-3" : "justify-end gap-2.5 pb-1.5 pr-[100px] pt-[22px]"}
       style={{ minHeight: props.frame && !props.compact ? headerHeight(props.frame) : undefined }}>
       {/* The eyebrow (SPEC §15 Step flow): which step of the two, and where it happens. */}
-      <Text testID="step-eyebrow" class="text-caption font-semibold text-muted-foreground">{`Step ${props.number} of 2 · ${props.place}`}</Text>
+      <Caption testID="step-eyebrow" text={`Step ${props.number} of 2 · ${props.place}`} />
       <Text role="header" class="text-display font-bold tracking-display text-foreground">{props.title}</Text>
     </View>
   );

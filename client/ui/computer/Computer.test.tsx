@@ -103,6 +103,23 @@ describe("The computer page", () => {
     expect(app.shows("id:computer-s3-dot")).toBe(false);
     // Nothing needs fixing on Desk.
     expect(app.shows("id:needs-fixing")).toBe(false);
+    // Computers lists this computer first, in use, then the others, then Pair a computer.
+    expect(app.count("id:computers >> id:computer-s1")).toBe(1);
+    expect(app.texts()).toContain("In use");
+    expect(app.count("id:computers >> id:pair-another")).toBe(1);
+  });
+
+  test("this computer's row and its ⓘ open its details; they never switch", async () => {
+    const app = await open(HARNESS, setup({ servers: [studio] }, { storage: { "mewla:v3:servers": JSON.stringify([desk, studio]) } }));
+    await app.waitFor("id:computer-s1-info");
+    await app.press("id:computer-s1-info");
+    await app.waitFor("id:computer-remove");
+    expect(app.value("id:computer-name")).toBe("Desk");
+    await app.back();
+    await app.waitFor("id:computer-page");
+    await app.press("id:computer-s1");
+    await app.waitFor("id:computer-remove");
+    expect(app.value("id:computer-name")).toBe("Desk");
   });
 
   test("a tap on another computer switches to it in one tap, and the stack returns to home", async () => {
@@ -214,6 +231,8 @@ describe("The computer page", () => {
   test("the computer in use shows how the phone reaches it; a long press says more", async () => {
     const app = await open(HARNESS, setup({ server: { url: "ws://192.168.1.20:9877/ws" } }, { network: { "GET http://192.168.1.20:9877/auth-check": { status: 503 } } }));
     await app.waitFor("id:computer-path");
+    // In words after Connected, not a glyph: the path while no round trip is measured.
+    expect(app.texts()).toContain("· LAN");
     await app.longPress("id:computer-connection");
     await app.waitFor("text:LAN · 192.168.1.20");
     await app.host.send("app.daemonState", "waiting");

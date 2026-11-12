@@ -1,7 +1,7 @@
 import { announce, cleanup, Image, signal, Text, View, windowSize } from "nsh";
 import { Button } from "nsh/base";
 import type { PetState } from "../../../core/settings/petPreview";
-import { Page } from "../../kit/kit";
+import { Caption, Page } from "../../kit/kit";
 import { PetSprite } from "../../pets/PetSprite";
 import { choosePet, pet, PETS } from "../../pets/pets";
 import { haptic } from "../../shell/haptics";
@@ -60,7 +60,7 @@ export function PetPage() {
         ))}
       </View>
       <View class="mt-6">
-        <Text testID="pet-chosen" role="header" class="mb-2 px-4 text-caption font-semibold text-muted-foreground">{`${pet().name} at work`}</Text>
+        <Caption testID="pet-chosen" role="header" class="mb-2 px-4" text={`${pet().name} at work`} />
         <View class="flex-row flex-wrap rounded-(--radius-group) bg-card px-2 py-3">
           {POSES.map((pose) => (
             <View testID={`pet-pose-${pose.state}`} class="items-center gap-1.5 py-2" style={{ width: tile() }}>

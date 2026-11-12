@@ -29,6 +29,18 @@ export function workFileOfSession(sessionId: string): string | undefined {
     .sort((a, b) => Date.parse(b.mtime) - Date.parse(a.mtime))[0]?.id;
 }
 
+/**
+ * The Work file of a Brain Work (SPEC §11 Work detail's "Work file" row), the newest when there are several:
+ * a Calendar run's file (the run's Work id, or its run), else the one a Worker of it writes into.
+ */
+export function workFileOfWork(work: { workId: string; runId?: string; sessionIds: readonly string[] }): WorkItem | undefined {
+  return workFiles()
+    .filter((item) => item.id === work.workId
+      || (Boolean(work.runId) && item.frontmatter.extra?.calendar_run_id === work.runId)
+      || (Boolean(item.frontmatter.worker_session) && work.sessionIds.includes(item.frontmatter.worker_session!)))
+    .sort((a, b) => Date.parse(b.mtime) - Date.parse(a.mtime))[0];
+}
+
 onTransport((transport) => {
   const model = new WorkItems(transport);
   workFilesModel.set(model);

@@ -70,14 +70,30 @@ export function Page(props: {
 }
 
 /** How far the content scrolls before the display title counts as gone (its eyebrow and most of its line). */
-const DISPLAY_TITLE_AWAY = 56;
+export const DISPLAY_TITLE_AWAY = 56;
+
+/**
+ * A caption's line (SPEC §10.2 caption 13/18): a section label, an eyebrow, a day separator. One line, and as wide as
+ * its place, never as wide as its word: a box measured to the word a hair too narrow wrapped its last letter in release
+ * builds ("Wor / k"). In a column it stretches (`self-stretch`), in a row it takes the rest (`min-w-0 flex-1`). A caption
+ * longer than its place ends in an ellipsis.
+ */
+export const CAPTION_LINE = "text-caption line-clamp-1";
+
+/** A caption (`CAPTION_LINE`): soft, 600 unless `plain`; `inRow` in a row; `center` for a day separator. */
+export function Caption(props: { text: string; plain?: boolean; center?: boolean; inRow?: boolean; class?: string; role?: AccessibilityRole; testID?: string }) {
+  return (
+    <Text testID={props.testID} role={props.role}
+      class={`${CAPTION_LINE} ${props.inRow ? "min-w-0 flex-1" : "self-stretch"} text-muted-foreground ${props.plain ? "" : "font-semibold"} ${props.center ? "text-center" : ""} ${props.class ?? ""}`}>{props.text}</Text>
+  );
+}
 
 /** A pattern page's top block (SPEC §15): an eyebrow (caption 13/600, soft) over the title at display 32/700. */
-export function DisplayTitle(props: { title: string; eyebrow?: string; testID?: string }) {
+export function DisplayTitle(props: { title: string; eyebrow?: string; testID?: string; titleTestID?: string }) {
   return (
     <View testID={props.testID ?? "display-title"} class="gap-1 px-1 pb-2 pt-3">
-      {props.eyebrow ? <Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.eyebrow}</Text> : null}
-      <Text role="header" class="text-display font-bold tracking-display" style={{ numberOfLines: 2 }}>{props.title}</Text>
+      {props.eyebrow ? <Caption testID="display-eyebrow" text={props.eyebrow} /> : null}
+      <Text testID={props.titleTestID} role="header" class="text-display font-bold tracking-display" style={{ numberOfLines: 2 }}>{props.title}</Text>
     </View>
   );
 }
@@ -90,7 +106,7 @@ export function SectionLabel(props: { title: string; icon?: IconName; count?: nu
   const body = (
     <View class="min-h-[44px] flex-row items-center gap-2 px-4 pb-2 pt-6">
       {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
-      <Text class="min-w-0 flex-1 text-caption font-semibold text-muted-foreground line-clamp-1" role="header">{props.title}</Text>
+      <Caption role="header" inRow text={props.title} />
       {props.count !== undefined ? <Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
       {props.trailing ?? null}
       {props.onPress ? <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" /> : null}
@@ -103,7 +119,7 @@ export function SectionLabel(props: { title: string; icon?: IconName; count?: nu
       <View testID={props.testID ? `${props.testID}-row` : undefined} class="min-h-[44px] flex-row items-center gap-2 pb-2 pl-4 pr-2 pt-6">
         <View testID={props.testID} role="button" accessible accessibilityLabel={props.accessibilityLabel} accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-70">
           {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
-          <Text class="min-w-0 flex-1 text-caption font-semibold text-muted-foreground line-clamp-1" role="header">{props.title}</Text>
+          <Caption role="header" inRow text={props.title} />
           {props.count !== undefined ? <Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
           <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" />
         </View>
@@ -215,7 +231,7 @@ export function Section(props: { title?: string; detail?: JSX.Element; footer?: 
       {props.label ?? null}
       {!props.label && (props.title || props.detail) ? (
         <View class="mb-2 min-h-[18px] flex-row items-center justify-between px-4">
-          <Text class="text-caption font-semibold text-muted-foreground" role="header">{props.title ?? ""}</Text>
+          <Caption role="header" inRow text={props.title ?? ""} />
           {props.detail ?? null}
         </View>
       ) : null}
@@ -556,7 +572,7 @@ export function Field(props: {
 }) {
   return (
     <View class="gap-1.5 px-4 py-3">
-      {props.label ? <Text class="text-caption font-semibold text-muted-foreground">{props.label}</Text> : null}
+      {props.label ? <Caption text={props.label} /> : null}
       <View class="flex-row items-center gap-2 rounded-(--radius-control) bg-background px-3">
         <Input
           testID={props.testID}
