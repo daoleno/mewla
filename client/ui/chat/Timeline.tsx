@@ -272,14 +272,14 @@ export function ChatTimeline(props: {
       {away() ? (
         (props.requests?.() ?? 0) > 0 ? (
           <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => list?.scrollToEnd({ animated: true })}
-            class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1.5 rounded-full bg-card px-3.5 shadow-lg active:opacity-70">
+            class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1.5 rounded-full bg-card px-3.5 shadow-float active:opacity-70">
             <View class="size-2 rounded-full bg-seal" />
             <Text class="text-sub font-semibold">{String(props.requests!())}</Text>
             <Icon name="arrow-down" size={16} color="foreground" />
           </Button>
         ) : (
           <Button testID="jump-latest" accessibilityLabel={age() ? `Jump to latest, ${age()} ago` : "Jump to latest"} onPress={() => list?.scrollToEnd({ animated: true })}
-            class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1 rounded-full bg-card px-3 shadow-lg active:opacity-70">
+            class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1 rounded-full bg-card px-3 shadow-float active:opacity-70">
             <Icon name="arrow-down" size={16} color="foreground" />
             {age() ? <Text class="text-sub text-muted-foreground">{age()}</Text> : null}
           </Button>
