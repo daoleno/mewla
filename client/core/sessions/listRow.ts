@@ -1,6 +1,6 @@
 import { DateStyle, formatDate } from "../timeline/dates";
 import { formatWorkerSessionPreview, type SessionPreviewTone } from "./sessionPreview";
-import { isWorkerActivelyRunning } from "./workerStatusPresentation";
+import { buildWorkerSessionAccessibilityLabel, isWorkerActivelyRunning } from "./workerStatusPresentation";
 import { presentWorker, type AgentKind, type TerminalFlavor } from "./workerPresentation";
 import type { Worker, WorkerStatus } from "./workers";
 
@@ -36,6 +36,8 @@ export type SessionRowModel = {
   needsYou: boolean;
   delegated: boolean;
   fromCalendar: boolean;
+  /** What a screen reader says for the row (the Expo app's WorkerSessionRow label): title, origin, status, preview, time. */
+  accessibilityLabel: string;
 };
 
 /**
@@ -60,6 +62,7 @@ export function sessionRowModel(worker: Worker, options: { alias?: string; calen
     ? presented.title
     : workTitle || presented.shortTitle || (generated ? "" : shortWorkerLabel(worker.name)) || presented.title;
   const preview = formatWorkerSessionPreview(worker);
+  const time = isWorkerActivelyRunning(worker.status) ? "live" : listTime(worker.updated_at);
   return {
     title,
     kind: presented.kind,
@@ -67,10 +70,18 @@ export function sessionRowModel(worker: Worker, options: { alias?: string; calen
     preview: preview.text,
     previewPrefix: preview.prefix,
     tone: preview.tone,
-    time: isWorkerActivelyRunning(worker.status) ? "live" : listTime(worker.updated_at),
+    time,
     status: worker.status,
     needsYou: worker.needs_attention === true,
     delegated: Boolean(worker.delegated),
     fromCalendar: Boolean(options.calendarLabel),
+    accessibilityLabel: buildWorkerSessionAccessibilityLabel({
+      title,
+      status: worker.status,
+      preview: `${preview.prefix ?? ""}${preview.text}`,
+      timeLabel: time === "live" ? "" : time,
+      brainDelegated: Boolean(worker.delegated),
+      fromCalendar: Boolean(options.calendarLabel),
+    }),
   };
 }

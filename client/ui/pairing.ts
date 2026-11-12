@@ -4,6 +4,7 @@ import { PairLatch } from "../core/onboarding";
 import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
+import { haptic } from "./shell/haptics";
 
 /**
  * Pairing, one pipeline for every way in: a scanned code, a pasted link, a `mewla://` link the
@@ -16,6 +17,12 @@ export const pairingStatus = signal("");
 export const pairingIssue = signal<PairingProblem | null>(null);
 /** The computer just paired: on a phone the connected step shows over everything until the person goes on. */
 export const justPaired = signal<StoredServer | null>(null);
+/**
+ * A pairing link the system opened while the app runs: "Pairing…" (or what a slow pairing is doing)
+ * while it pairs, then why it did not. The pairing pages show their own; the app shows this one over
+ * the rest, as the Expo app's toasts did (parity #36).
+ */
+export const linkPairing = signal<{ problem: PairingProblem | null } | null>(null);
 /** Counts finished pairings, on every platform: a pairing page closes when it moves. */
 export const pairings = signal(0);
 const device = () => (platform.os === "web" ? "browser" : "phone");
@@ -48,6 +55,7 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
   }
   pairingBusy.set(true);
   pairingStatus.set("");
+  if (source === "link") linkPairing.set({ problem: null });
   try {
     await addPairedServer(await pairWith(payload, (message) => pairingStatus.set(message)));
     const paired = current();
@@ -60,11 +68,15 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     }
     // Settings' Pair page closes on this, while the app is still there under it.
     pairings.set(pairings() + 1);
+    haptic.notification("success");
     // A browser goes straight to the app; a phone sees Brain come home first (the app goes until then).
     if (paired && device() === "phone") justPaired.set(paired);
+    if (source === "link") linkPairing.set(null);
     latch.release();
   } catch (error) {
     pairingIssue.set(pairingProblem(error));
+    haptic.notification("error");
+    if (source === "link") linkPairing.set({ problem: pairingProblem(error) });
     latch.release(value);
   } finally {
     pairingBusy.set(false);

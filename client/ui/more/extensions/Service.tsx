@@ -19,7 +19,7 @@ import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { serverDisplayName } from "../../../core/extensions/serverDisplayName";
 import { formatDateTime, formatFullDateTime } from "../../../core/more/dates";
 import { daemonName } from "../daemon";
-import { EmptyState, Field, Notice, Row, Section, Spinner, StatusMark, SwitchRow } from "../kit/kit";
+import { EmptyState, Field, Notice, Row, Section, Spinner, StatusMark, SwitchRow } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { Action } from "./Action";
 import { connectingService, PluginsFrame, ToolUpdateNotices, toneStatus } from "./Pages";

@@ -24,4 +24,13 @@ describe("what NSH's browser runtime lacks", () => {
       .map((path) => relative(UI, path));
     expect(offenders).toEqual([]);
   });
+
+  // Haptics is a phone's: the web and desktop runtimes have none. ui/shell/haptics.ts plays it only where NSH has it.
+  test("Haptics comes from ui/shell/haptics.ts, never straight from nsh/mobile", () => {
+    const offenders = sources(UI)
+      .filter((path) => !path.endsWith(join("shell", "haptics.ts")))
+      .filter((path) => /import\s*\{[^}]*\bHaptics\b[^}]*\}\s*from\s*"nsh\/mobile"/.test(readFileSync(path, "utf8")))
+      .map((path) => relative(UI, path));
+    expect(offenders).toEqual([]);
+  });
 });

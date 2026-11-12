@@ -1,7 +1,7 @@
 import { host, mount, Text, View } from "nsh";
 import type { AppUpdateState } from "../../../core/update/appUpdate";
 import nacl from "../../../core/vendor/nacl";
-import { Section } from "../../more/kit/kit";
+import { Section } from "../../kit/kit";
 import { AboutUpdateRow } from "../AboutUpdateRow";
 import { type AppUpdate, createAppUpdate } from "../update";
 

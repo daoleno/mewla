@@ -37,9 +37,9 @@ import {
 } from "../../../core/files/sessionFilePreviewDownload";
 import { failureText } from "../../../core/more/daemon";
 import { daemon } from "../daemon";
-import { color } from "../kit/colors";
-import { Icon, type IconName } from "../kit/Icon";
-import { EmptyState, Spinner } from "../kit/kit";
+import { color } from "../../kit/colors";
+import { Icon, type IconName } from "../../kit/Icon";
+import { EmptyState, Spinner } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { cancelDownload, downloadHost, MewlaPdf } from "./host";
 import { MediaPlayer } from "./Media";
@@ -329,7 +329,7 @@ function SvgBody(props: { source: SessionFileBinarySource; onFail: (message: str
         <WebView
           testID="file-svg"
           class="flex-1"
-          html={svgPreviewHtml(preview()!, color("paper"))}
+          html={svgPreviewHtml(preview()!, color("canvas"))}
           baseUrl={viewerBaseUrl}
           javaScriptEnabled={false}
           accessibilityLabel="Zoomable image preview"

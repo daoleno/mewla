@@ -11,8 +11,8 @@ import { findGitPatchMatches, followGitReviewEntry, gitAskContext, gitFindLabel,
 import { splitGitReviewPath, type GitReviewEntry, type GitReviewGroup } from "../../../core/git/gitReviewModel";
 import { getGitFileContent, getGitPatch } from "../../../core/git/requests";
 import { daemon } from "../daemon";
-import { EmptyState, Field, SwitchRow } from "../kit/kit";
-import { Segmented } from "../kit/Segmented";
+import { EmptyState, Field, SwitchRow } from "../../kit/kit";
+import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { BACKDROP, Counts, Current, FlashLine, IconButton, SHEET, TextButton } from "./parts";
 import { copyDiff, copyText, say, type GitReview } from "./state";

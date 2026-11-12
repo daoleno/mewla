@@ -2,9 +2,9 @@ import { cleanup, effect, Scroll, signal, Text, untracked, View, type JSX } from
 import { Button, NavPage, Switch } from "nsh/base";
 import { pageStatusBar } from "../shell/NavPage";
 import { phoneMode, phoneSetupPlan, phoneSteps, type PhoneMode, type PhoneStepId } from "../../core/phone/setup";
-import { color } from "../more/kit/colors";
-import { Icon, type IconName } from "../more/kit/Icon";
-import { Notice, Row, Section, Spinner } from "../more/kit/kit";
+import { color } from "../kit/colors";
+import { Icon, type IconName } from "../kit/Icon";
+import { Notice, Row, Section, Spinner } from "../kit/kit";
 import { PhoneLiveView } from "./contract";
 import {
   allowPhoneAccessibility,
@@ -251,7 +251,7 @@ function BigButton(props: {
       onPress={props.onPress}
       class={`h-12 flex-row items-center justify-center gap-2 rounded-full px-6 active:opacity-70 disabled:opacity-60 ${props.grow ? "flex-1" : ""} ${props.filled ? "bg-primary" : "bg-secondary"}`}
     >
-      {props.busy ? <Spinner size={18} tone={props.filled ? "paper" : "soft"} /> : props.icon ? <Icon name={props.icon} size={18} tone={props.filled ? "paper" : props.destructive ? "seal" : "ink"} /> : null}
+      {props.busy ? <Spinner size={18} tone={props.filled ? "canvas" : "soft"} /> : props.icon ? <Icon name={props.icon} size={18} tone={props.filled ? "canvas" : props.destructive ? "seal" : "ink"} /> : null}
       <Text class={`text-base font-semibold ${props.filled ? "text-primary-foreground" : props.destructive ? "text-destructive" : ""}`}>{props.label}</Text>
     </Button>
   );

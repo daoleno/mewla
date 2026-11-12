@@ -119,6 +119,22 @@ describe("Sessions", () => {
     expect(framesOf(app.host.posts(), "kill_worker").map((f) => f.worker_id).sort()).toEqual(["a", "b"]);
     expect(app.dialogs()[0]).toMatchObject({ title: "Terminate sessions?" });
   }, 20_000);
+  test("Back while selecting ends selecting and stays on Sessions (parity #26)", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("a", { name: "one" }), session("b", { name: "two" })] });
+    await app.waitFor("text:one");
+    await app.longPress("text:one");
+    await app.waitFor("text:1 selected");
+    await app.back();
+    await app.waitUntil(() => !app.shows("text:1 selected"));
+    expect(app.count("id:session-row")).toBe(2);
+    expect(app.shows("id:selection-terminate")).toBe(false);
+  }, 20_000);
+
+  test("a row names itself to a screen reader: title and state (parity #10)", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("a", { name: "release notes", status: "running" })] });
+    await app.waitFor("text:release notes");
+    expect(app.count("label:release notes, Running, No recent output")).toBe(1);
+  }, 20_000);
 });
 
 describe("a Session", () => {
@@ -328,5 +344,85 @@ describe("a Session", () => {
     await app.waitUntil(() => framesOf(app.host.posts(), "codex_asset").length === 1);
     expect(framesOf(app.host.posts(), "codex_asset")[0]).toMatchObject({ path: "out/chart.png", cwd: "/home/me/mewla" });
     expect(app.texts()).toContain("Today");
+  }, 20_000);
+  test("in the terminal, Terminate offline says the computer is offline instead of doing nothing (parity #37)", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
+    await app.waitFor("text:notes", { timeout: 10_000 });
+    await app.press("text:notes");
+    await app.waitFor("id:session-chat");
+    app.onDialog((dialog) => (dialog.buttons.includes("Open terminal") ? "Open terminal" : dialog.buttons.includes("Terminate") ? "Terminate" : null));
+    await answering(app, () => app.press("id:session-menu"));
+    await app.waitUntil(() => !app.shows("id:session-chat"));
+    await app.host.send("app.daemonDown");
+    await app.waitFor("id:terminal-offline", { timeout: 10_000 });
+    await answering(app, () => app.press("id:session-menu"));
+    await app.waitFor("id:terminal-notice");
+    expect(app.texts()).toContain("Your computer is offline.");
+    expect(app.dialogs().some((dialog) => dialog.title === "Terminate this session?")).toBe(false);
+    expect(framesOf(app.host.posts(), "kill_worker")).toEqual([]);
+  }, 20_000);
+
+  test("a file tapped in a Session without a live generation says why (parity #38)", async () => {
+    const reply = [{ id: "a1", seq: 1, kind: "assistant_message", timestamp: new Date().toISOString(), body: "Wrote [the notes](/home/me/mewla/notes.md)." }];
+    const app = await sessionsApp({ worker_sessions: [session("w2", { name: "writer" })], conversations: { w2: reply } });
+    await app.waitFor("text:writer", { timeout: 10_000 });
+    await app.press("text:writer");
+    await app.waitFor("text:the notes");
+    await app.press("text:the notes");
+    await app.waitFor("text:This Session has no live generation identity. Refresh the Session list and try again.");
+    expect(app.shows("id:file-preview")).toBe(false);
+  }, 20_000);
+
+  test("a file preview opened from a Session closes when the Session restarts (parity #44)", async () => {
+    const reply = [{ id: "a1", seq: 1, kind: "assistant_message", timestamp: new Date().toISOString(), body: "Wrote [the notes](/home/me/mewla/notes.md)." }];
+    const live = session("w3", { name: "writer", status: "running", process_id: 42, started_at: 1_700_000_000_000 });
+    const app = await sessionsApp({ worker_sessions: [live], conversations: { w3: reply } });
+    await app.waitFor("text:writer", { timeout: 10_000 });
+    await app.press("text:writer");
+    await app.waitFor("text:the notes");
+    await app.press("text:the notes");
+    await app.waitFor("id:file-preview");
+    // The same generation again (a status update) keeps it open.
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...live, status: "done" } });
+    await app.wait(300);
+    expect(app.shows("id:file-preview")).toBe(true);
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...live, process_id: 43, started_at: 1_700_000_100_000 } });
+    await app.waitUntil(() => !app.shows("id:file-preview"), { timeout: 5_000 });
+    expect(app.shows("id:session-menu")).toBe(true);
+  }, 20_000);
+  test("New Terminal from a Session starts in its folder with its agent's Provider connection (parity #39, #40)", async () => {
+    const providers = {
+      type: "providers", revision: 1,
+      connections: [{ id: "gw", name: "Gateway", preset_id: "custom", clients: ["claude"], credential_ready: true, advanced: false }],
+      defaults: { claude: { connection_id: "gw" } },
+      presets: [{ id: "custom", label: "Custom Gateway", clients: ["claude"], advanced: true }],
+      models: {},
+    };
+    const app = await sessionsApp({ worker_sessions: [session("w4", { name: "site work", cwd: "/home/me/site" }), session("w0", { name: "other", cwd: "/home/me/mewla" })], conversations: { w4: transcript }, replies: { list_providers: providers } });
+    await app.waitFor("text:site work", { timeout: 10_000 });
+    await app.press("text:site work");
+    await app.waitFor("id:session-chat");
+    app.onDialog((dialog) => (dialog.buttons.includes("New Terminal") ? "New Terminal" : null));
+    await answering(app, () => app.press("id:session-menu"));
+    await app.waitFor("id:new-cwd");
+    expect(app.value("id:new-cwd")).toBe("/home/me/site");
+    await app.press("id:preset-claude");
+    await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
+    expect(framesOf(app.host.posts(), "create_session").at(-1)).toMatchObject({ target_id: "w4", cwd: "/home/me/site", connection_id: "gw" });
+  }, 20_000);
+  test("an open Git review closes when its Session changes folder; the chip reads the new one (parity #43)", async () => {
+    const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }];
+    const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 1, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 0, additions: 3, deletions: 1, files };
+    const repo = session("w8", { name: "repo work" });
+    const app = await sessionsApp({ worker_sessions: [repo], conversations: { w8: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } });
+    await app.waitFor("text:repo work", { timeout: 10_000 });
+    await app.press("text:repo work");
+    await app.waitFor("id:session-git");
+    await app.press("id:session-git");
+    await app.waitFor("id:git-page");
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...repo, cwd: "/home/me/site" } });
+    await app.waitUntil(() => !app.shows("id:git-page"), { timeout: 5_000 });
+    expect(app.shows("id:session-menu")).toBe(true);
+    await app.waitUntil(() => framesOf(app.host.posts(), "git_diff_status").at(-1)?.cwd === "/home/me/site", { timeout: 5_000 });
   }, 20_000);
 });

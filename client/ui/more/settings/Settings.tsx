@@ -4,8 +4,8 @@ import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/
 import manifest from "../../nsh.json";
 import { phoneAvailable, phoneLabsWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
-import { Icon } from "../kit/Icon";
-import { Notice, Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { Notice, Page, Row, Section, StatusMark, SwitchRow } from "../../kit/kit";
 import { followFriends, friendsEnabled } from "../friends/state";
 import { pet } from "../pet/pets";
 import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";

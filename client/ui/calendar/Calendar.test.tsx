@@ -187,6 +187,30 @@ describe("the Calendar tab", () => {
     // (What a TextView draws through renderImage is not in `nsh test`'s tree; the picture itself is for the device.)
   }, 20_000);
 
+  test("a running item opens its Session while the computer lists it, and its page once the Session has gone (parity #45)", async () => {
+    const run = { id: "r1", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w1" };
+    const gone = { id: "r2", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w-gone" };
+    const sessions = [{ id: "w1", name: "digest run", status: "running", cwd: "/home/me", command: "claude", provider: "claude", updated_at: Date.now() }];
+    const app = await calendarApp({
+      calendar_items: [item("Digest", 0.5, { kind: "scheduled_action", status: "running", runs: [run] }), item("Brief", 1, { kind: "scheduled_action", status: "running", runs: [gone] })],
+      worker_sessions: sessions, conversations: { w1: [] },
+    });
+    await app.waitFor("id:calendar-item-Brief", SLOW);
+    await app.press("id:calendar-item-Brief");
+    await app.waitFor("id:calendar-item-page", SLOW);
+    // Its run's Session is not on the computer: the run opens its result, not a dead Session page.
+    await app.press("id:run-r2");
+    await app.waitFor("text:Still running.", SLOW);
+    expect(app.shows("id:open-session")).toBe(false);
+    expect(app.shows("id:session-menu")).toBe(false);
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.back();
+    await app.back();
+    await app.waitFor("id:calendar-item-Digest", SLOW);
+    await app.press("id:calendar-item-Digest");
+    await app.waitFor("id:session-menu", SLOW);
+  }, 30_000);
+
   test("a title is required, and the editor says so instead of saving", async () => {
     const app = await calendarApp({ calendar_items: [] });
     await app.press("id:add-item");

@@ -3,8 +3,8 @@ import { AlertDialog, Button, Input } from "nsh/base";
 import { displayName, FRIENDS_COMMENT_LIMIT, relativeTime, type FriendsComment, type FriendsPerson, type FriendsPost } from "../../../core/friends/api";
 import { friendsCall } from "../../../core/friends/requests";
 import { formatDateTime } from "../../../core/more/dates";
-import { Icon } from "../kit/Icon";
-import { EmptyState, PillButton } from "../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { EmptyState, PillButton } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { ActionButton, AgentPill, Avatar, fail, FriendsPageFrame, keyboardLift, postMenu, PostMedia, report, togglePost, videoOwner, type PostHandlers } from "./parts";
 import { currentServerId, followFriends, followPage, serverFor } from "./state";
@@ -258,7 +258,7 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
               onPress={() => void send()}
               class="size-10 items-center justify-center rounded-full bg-primary active:opacity-70 disabled:opacity-40"
             >
-              <Icon name="arrow-up" tone="paper" size={18} />
+              <Icon name="arrow-up" tone="canvas" size={18} />
             </Button>
           </View>
         </View>

@@ -20,6 +20,10 @@
 //   out of the address bar, so a reload or Back doesn't replay it.
 // - links.openHere: opens a sign-in page in this tab ({url}, http or https); its provider returns
 //   the tab to `/plugins`.
+// - web.fullscreen: shows a view full size ({testID, label}: the element NSH drew for it), and locks
+//   the keyboard where the browser can (Chrome), so ⌘W, Ctrl+T and Esc reach a remote screen; a
+//   frame cannot do it itself (NSH's web views are sandboxed frames without fullscreen), and the
+//   click's user activation belongs to this page. Leaving full size unlocks the keyboard.
 //
 // The web player has no host posts (only calls reach the page), so the app sends `files.cancel`
 // and `files.cancelDownload` as calls in the browser.
@@ -319,11 +323,36 @@ function openHere(args) {
   return null;
 }
 
+/** `web.fullscreen`: the element of the view `testID` (with `label`, when several) full size; then the keyboard locked. */
+async function fullscreen(args) {
+  const testID = String(args && args.testID ? args.testID : "");
+  const label = args && typeof args.label === "string" ? args.label : null;
+  if (!testID) throw new Error("web.fullscreen: testID is required");
+  const views = Array.from(document.querySelectorAll("[data-testid]")).filter((el) => el.dataset.testid === testID);
+  const view = views.find((el) => label === null || el.getAttribute("aria-label") === label) || views[0];
+  if (!view || typeof view.requestFullscreen !== "function") throw new Error("web.fullscreen: this browser cannot show it full size");
+  await view.requestFullscreen();
+  let keyboardLocked = false;
+  if (navigator.keyboard && typeof navigator.keyboard.lock === "function") {
+    keyboardLocked = await navigator.keyboard.lock().then(() => true, () => false);
+  }
+  const frame = view.querySelector("iframe");
+  if (frame) frame.focus();
+  return { keyboardLocked };
+}
+
+function unlockKeyboardOnExit() {
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && navigator.keyboard && typeof navigator.keyboard.unlock === "function") navigator.keyboard.unlock();
+  });
+}
+
 export function createHost(player) {
   // `nsh test` loads this module outside a browser: the page's objects are only touched in one.
   if (typeof window !== "undefined") {
     takeHistory(player);
     if (player) listenForSteps(player);
+    unlockKeyboardOnExit();
   }
   const handlers = {
     "secure.get": (args) => storage()?.getItem(keyOf(args)) ?? null,
@@ -353,6 +382,7 @@ export function createHost(player) {
     "files.thumbnail": (args) => thumbnail(args),
     "links.pluginReturn": () => pluginReturn(),
     "links.openHere": (args) => openHere(args),
+    "web.fullscreen": (args) => fullscreen(args),
   };
   return {
     call(name, args) {

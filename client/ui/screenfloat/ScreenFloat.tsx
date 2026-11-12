@@ -15,7 +15,7 @@ import {
   toggledFloatFraction,
   type FloatCorner,
 } from "../../core/screen/float";
-import { Icon } from "../more/kit/Icon";
+import { Icon } from "../kit/Icon";
 
 const EDGE = 12;
 /** Under the page header. */
@@ -216,14 +216,14 @@ export function ScreenFloat(props: ScreenFloatProps) {
         {props.keyboard?.() ? (
           <Button testID="screen-float-keyboard" accessibilityLabel={props.keyboard!()!.open ? "Hide keyboard" : "Show keyboard"} onPress={() => props.keyboard?.()?.toggle()}
             class="size-7 items-center justify-center rounded-md" style={{ backgroundColor: props.keyboard!()!.open ? "rgba(255,255,255,0.22)" : "transparent" }}>
-            <Icon name="keyboard" size={15} tone="paper" />
+            <Icon name="keyboard" size={15} tone="canvas" />
           </Button>
         ) : null}
         <Button testID="screen-float-options" accessibilityLabel={`Options for ${props.title()}`} onPress={() => void openMenu()} class="size-7 items-center justify-center">
-          <Icon name="more-horizontal" size={15} tone="paper" />
+          <Icon name="more-horizontal" size={15} tone="canvas" />
         </Button>
         <Button testID="screen-float-open" accessibilityLabel="Open" onPress={props.onOpen} class="size-7 items-center justify-center">
-          <Icon name="expand" size={15} tone="paper" />
+          <Icon name="expand" size={15} tone="canvas" />
         </Button>
       </View>
       <View class="bg-popover" style={{ width: picture().width, height: picture().height + extra() }}>{props.children(picture)}</View>

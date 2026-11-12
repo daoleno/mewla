@@ -1,7 +1,7 @@
 import { Canvas, Path2D, Text, View } from "nsh";
 import type { ManagedSkillAgent } from "../../../../core/extensions/skillsManagement";
 import { skillAgentLabel } from "../../../../core/extensions/skillsManagement";
-import { color } from "../../kit/colors";
+import { color } from "../../../kit/colors";
 
 /**
  * Each agent's mark, one color: ink on paper, like every glyph of the app. The

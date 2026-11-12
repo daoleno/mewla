@@ -1,7 +1,7 @@
 import { cleanup, effect, host, nativeComponent, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { cameraRuns, cameraSearching, finderState, readCameraPermission, type CameraPermission } from "../../core/onboarding";
-import { Spinner } from "../more/kit/kit";
+import { Spinner } from "../kit/kit";
 import { pairFromText, pairingBusy } from "../pairing";
 
 /** The host's camera reader (CameraX + ML Kit on Android, AVFoundation on iOS). */

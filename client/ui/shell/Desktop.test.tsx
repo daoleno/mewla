@@ -44,6 +44,36 @@ describe("the desktop layout", () => {
     await app.waitFor("id:computer");
   }, 20_000);
 
+  test("a right-click on a Session row starts selecting, as a long press does on a phone (parity #28)", async () => {
+    const sessions = [{ id: "w1", name: "release", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
+    const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }) });
+    await app.waitFor("id:sidebar-sessions", { timeout: 10_000 });
+    await app.press("id:sidebar-sessions");
+    await app.waitFor("text:release");
+    await app.rightClick("id:session-row");
+    await app.waitFor("text:1 selected");
+  }, 20_000);
+
+  test("a shared URL to a sub-page opens that page, and the page keeps its URL (parity #47)", async () => {
+    const app = await open(APP, { ...desk, host: webHost({ brain: {} }, { "web.initialPath": { path: "/settings/computer?id=s1", state: null } }) });
+    await app.waitFor("id:computer", { timeout: 10_000 });
+    await app.waitUntil(() => last(app)?.path === "/settings/computer?id=s1", { timeout: 10_000 });
+    await app.press("id:sidebar-stats");
+    await app.waitUntil(() => last(app)?.path === "/stats");
+  }, 20_000);
+
+  test("mewla:// links to Stats, Resources and a terminal open them (parity #48)", async () => {
+    const sessions = [{ id: "w1", name: "release", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain: {}, worker_sessions: sessions, conversations: { w1: [] } }) });
+    await app.waitFor("text:Brain is starting…", { timeout: 10_000 });
+    await app.host.send("links.open", { url: "mewla://stats" });
+    await app.waitFor("id:stats");
+    await app.host.send("links.open", { url: "mewla://resources" });
+    await app.waitFor("id:resources");
+    await app.host.send("links.open", { url: "mewla://terminal/w1" });
+    await app.waitFor("id:session-menu");
+  }, 20_000);
+
   test("a place that waits on you has a dot beside its name", async () => {
     const sessions = [{ id: "w1", name: "release", status: "blocked", needs_attention: true, cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }) });

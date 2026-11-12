@@ -3,6 +3,7 @@ import { Button, Input } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
 import { LAUNCH_PRESETS } from "../../core/sessions/agentCommands";
 import { createSession } from "../../core/sessions/create";
+import { resolveLaunchSelection } from "../../core/session/providerLaunch";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../icons/Icon";
@@ -92,8 +93,10 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   const problem = signal("");
 
   const reset = () => {
-    // From a Session, an empty folder means that pane's current folder.
-    cwd.set(untracked(newSessionTarget) ? "" : untracked(workers).find((w) => w.cwd)?.cwd ?? "");
+    // From a Session, its folder (the Expo app's New Terminal did so; parity #40); an empty one means that pane's current folder.
+    const target = untracked(newSessionTarget);
+    const list = untracked(workers);
+    cwd.set((target ? list.find((w) => w.id === target)?.cwd : list.find((w) => w.cwd)?.cwd) ?? "");
     command.set("");
     name.set("");
     advanced.set(false);
@@ -115,7 +118,13 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     problem.set("");
     const startedAt = Date.now();
     const targetId = untracked(newSessionTarget);
-    const result = await createSession(transport, { cwd: cwd().trim(), command: launchCommand.trim(), name: launchName.trim(), targetId: targetId || undefined });
+    // A New Terminal carries its agent's Provider connection, as the Expo app's did (parity #39).
+    const selection = targetId ? await resolveLaunchSelection(transport, launchCommand) : null;
+    if (untracked(currentTransport) !== transport) return busy.set(false);
+    const result = await createSession(transport, {
+      cwd: cwd().trim(), command: launchCommand.trim(), name: launchName.trim(), targetId: targetId || undefined,
+      connectionId: selection?.connectionId, modelId: selection?.modelId,
+    });
     busy.set(false);
     if (result.workerSession) store.added(result.workerSession);
     if (result.kind === "ambiguous") {

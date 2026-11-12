@@ -449,6 +449,16 @@ describe("Screen in a browser", () => {
     expect(app.shows("id:remote-key-bar")).toBe(false);
   });
 
+  test("Full size asks the page to show the picture full size, with the keyboard locked (parity #29)", async () => {
+    const opts = options({ [`GET ${SCREEN}`]: json(base) }, web);
+    const app = await open(HARNESS, { ...opts, host: { ...opts.host, handlers: { ...opts.host.handlers, "web.fullscreen": () => ({ keyboardLocked: true }) } } });
+    await goLive(app);
+    await app.press("id:screen-options");
+    await app.press("text:Full size");
+    await app.waitUntil(() => app.host.calls().some((call) => call.name === "web.fullscreen"));
+    expect(app.host.calls().find((call) => call.name === "web.fullscreen")?.data).toEqual({ testID: "remote-view", label: "Screen of Studio" });
+  });
+
   test("a wide window keeps its header and the picture at the top", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base) }, { ...web, height: 420 }));
     await goLive(app);

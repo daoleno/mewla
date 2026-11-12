@@ -6,8 +6,8 @@
       "radius-group": "1.25rem",
       "radius-bubble": "1.375rem",
       "radius-sheet": "1.75rem",
-      "font-sans": "-apple-system, BlinkMacSystemFont, \"Adwaita Sans\", system-ui, \"Segoe UI\", Roboto, \"Noto Sans\", sans-serif",
-      "font-mono": "ui-monospace, \"SF Mono\", Menlo, \"JetBrains Mono\", \"Roboto Mono\", monospace"
+      "font-sans": "system-ui",
+      "font-mono": "ui-monospace"
     },
     "light": {
       "background": "#F2F3F5",

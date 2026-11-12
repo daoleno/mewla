@@ -1,13 +1,14 @@
-import { effect, host, mount, platform, Storage, View, lifecycle } from "nsh";
+import { cleanup, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, View } from "nsh";
 import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
 import { nshPlatform } from "./platform";
-import { justPaired, pairFromText } from "./pairing";
+import { justPaired, linkPairing, pairFromText, pairingStatus } from "./pairing";
 import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
 import { current, loadSession, ready, resumeConnection } from "./session";
-import { FirstRun, openPhonePage, openSettingsLink, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
+import { FirstRun, openPhonePage, openPlace, openSettingsLink, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
+import { placeOfLink } from "../core/web/places";
 import { startNotifications } from "./push/push";
 import { startAppUpdate } from "./update/update";
 
@@ -49,9 +50,33 @@ host.on("links.open", (payload) => {
   if (readPairingLink(url)) return void pairFromText(url);
   if (isPhoneLink(url)) return void openPhonePage();
   if (openSettingsLink(url)) return;
+  // `mewla://stats`, `…/screen`, `…/terminal/<id>`, `…/work/<id>`…: the page it names, as the Expo app's routes did (parity #48).
+  const place = placeOfLink(url);
+  if (place) return void openPlace(place);
   const section = sectionOfLink(url);
   if (section !== null) selectedTab.set(section);
 });
+
+/** A pairing link opened while the app runs: what it is doing, then why it failed (tap or 8 s to dismiss). */
+function LinkPairingNote() {
+  effect(() => {
+    if (!linkPairing()?.problem) return;
+    const timer = setTimeout(() => linkPairing.set(null), 8_000);
+    cleanup(() => clearTimeout(timer));
+  });
+  return (
+    <View class="absolute left-3 right-3" style={{ top: safeArea().top + 8 }}>
+      {linkPairing() ? (
+        <View testID="link-pairing" onPress={() => linkPairing()?.problem && linkPairing.set(null)} class="gap-0.5 rounded-xl border border-border bg-card px-3 py-2.5">
+          <Text class={linkPairing()!.problem ? "text-sm font-semibold text-destructive" : "text-sm font-semibold"}>
+            {linkPairing()!.problem?.title ?? (pairingStatus() || "Pairing…")}
+          </Text>
+          {linkPairing()!.problem ? <Text class="text-sm text-muted-foreground">{linkPairing()!.problem!.detail}</Text> : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 mount(() => (
   // The ink every text takes unless it says its own (NSH draws a bare Text black, unreadable in Dark).
@@ -61,6 +86,7 @@ mount(() => (
     {!ready() ? null : current() && !justPaired() ? <Shell /> : null}
     {/* First run, and on a phone the connected step after any pairing. */}
     {ready() && (!current() || justPaired()) ? <View class="absolute inset-0 bg-background"><FirstRun /></View> : null}
+    {ready() && current() && !justPaired() ? <LinkPairingNote /> : null}
     <CrashReportSheet />
   </View>
 ));

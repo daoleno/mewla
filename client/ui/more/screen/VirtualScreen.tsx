@@ -2,7 +2,7 @@ import { effect, signal, untracked, View } from "nsh";
 import { failureText } from "../../../core/more/daemon";
 import { virtualScreen } from "../../../core/screen/screen";
 import { daemon } from "../daemon";
-import { Notice, Page, Section, SwitchRow } from "../kit/kit";
+import { Notice, Page, Section, SwitchRow } from "../../kit/kit";
 
 /**
  * Linux: whether the agents' browsers get a screen of their own (the computer's

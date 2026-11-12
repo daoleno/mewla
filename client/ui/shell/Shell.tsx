@@ -4,7 +4,8 @@ import { Button, createNavStack, NavStack, ResizablePanel, ResizablePanelGroup, 
 import { PageStack } from "./NavPage";
 import { isAvailable as mobile, TabBar } from "nsh/mobile";
 import { reuseRoutes, type PoppedPage } from "../../core/web/history";
-import { clampPanelWidth, isDesktopLayout, SIDEBAR_WIDTH, SIDEBAR_WIDTH_KEY, sidebarKeyOf, storedSidebarWidth, type DesktopPlaceKey, type WebPlace } from "../../core/web/places";
+import { clampPanelWidth, isDesktopLayout, SIDEBAR_WIDTH, SIDEBAR_WIDTH_KEY, sidebarKeyOf, storedSidebarWidth, type DesktopPlaceKey, type PlacePage, type WebPlace } from "../../core/web/places";
+import { isAgentExtensionsScope } from "../../core/extensions/agentExtensionsModel";
 import { DesktopOverlays } from "./desktop/Overlays";
 import { Sidebar } from "./desktop/Sidebar";
 import { syncWebLocation, type PageSnapshot } from "./webLocation";
@@ -108,15 +109,41 @@ const PLACE_ROUTES: Record<Exclude<DesktopPlaceKey, "brain" | "sessions" | "cale
   settings: { name: "settings" },
 };
 
-/** Goes to a place at its root: a sidebar row, the palette, `G` then a letter, a URL. */
+/** A page under a place as the More pages it opens (a license under Licenses). */
+function morePagesOf(page: PlacePage): MoreRoute[] {
+  switch (page.name) {
+    case "workFile": return [];
+    case "settings-license": return [{ name: "settings-licenses" }, page];
+    case "extensions-agent": return [{ name: "extensions-agent", scope: isAgentExtensionsScope(page.scope) ? page.scope : "shared" }];
+    default: return [page];
+  }
+}
+
+/** The page a More route is, when it has a URL of its own (parity #47). */
+function placePageOf(route: MoreRoute): PlacePage | null {
+  switch (route.name) {
+    case "settings-computer": case "settings-license": return { name: route.name, id: route.id };
+    case "friends-post": case "friends-person": case "extensions-service": return { name: route.name, id: route.id };
+    case "extensions-tools": return { name: route.name, service: route.service, ...(route.account ? { account: route.account } : {}) };
+    case "extensions-agent": return { name: route.name, scope: route.scope };
+    case "settings-telegram": case "settings-providers": case "settings-agents": case "settings-friends": case "settings-iphone": case "settings-phone":
+    case "settings-virtual-screen": case "settings-pet": case "settings-licenses":
+    case "friends-drafts": case "friends-notifications": case "friends-bookmarks": case "friends-blocked":
+      return { name: route.name };
+    default: return null;
+  }
+}
+
+/** Goes to a place at its root, or to the page under it a URL or a link names: a sidebar row, the palette, `G` then a letter, a URL. */
 export function openPlace(place: WebPlace) {
+  const page = "page" in place ? place.page : undefined;
   switch (place.key) {
     case "brain":
       selectedTab.set(0);
       return brainNav.popToRoot();
     case "work":
       selectedTab.set(0);
-      return brainNav.setRoutes([brainNav.routes()[0], { name: "work" }]);
+      return brainNav.setRoutes([brainNav.routes()[0], { name: "work" }, ...(page?.name === "workFile" ? [{ name: "workFile" as const, id: page.id }] : [])]);
     case "sessions":
       selectedTab.set(1);
       return sessionsNav.popToRoot();
@@ -126,25 +153,32 @@ export function openPlace(place: WebPlace) {
       selectedTab.set(2);
       return calendarNav.popToRoot();
     default:
-      return openMore(PLACE_ROUTES[place.key]);
+      return openMore(PLACE_ROUTES[place.key], ...(page ? morePagesOf(page) : []));
   }
 }
 
 /** The place a More stack shows: the first page above the More list decides. */
 function placeOfMore(routes: readonly MoreRoute[]): WebPlace {
   const name = routes.find((route) => route.name !== "more")?.name ?? "settings";
-  if (name.startsWith("extensions")) return { key: "extensions" };
-  if (name.startsWith("stats")) return { key: "stats" };
-  if (name.startsWith("friends")) return { key: "friends" };
-  if (name === "screen" || name === "resources") return { key: name };
-  return { key: "settings" };
+  const key = name.startsWith("extensions") ? "extensions" : name.startsWith("stats") ? "stats" : name.startsWith("friends") ? "friends"
+    : name === "screen" || name === "resources" ? name : "settings";
+  // The topmost page with a URL of its own names it (a page under it without one keeps it).
+  for (const route of [...routes].reverse()) {
+    const page = placePageOf(route);
+    if (page && (key === "settings" || key === "friends" || key === "extensions") && page.name.startsWith(key)) return { key, page };
+  }
+  return { key };
 }
 
 /** Where the person is: what the URL, the tab title and the sidebar's selected row follow. */
 export const currentPlace = computed<WebPlace>(() => {
   switch (selectedTab()) {
-    case 0:
-      return brainNav.routes().length > 1 ? { key: "work" } : { key: "brain" };
+    case 0: {
+      const routes = brainNav.routes();
+      if (routes.length <= 1) return { key: "brain" };
+      const file = [...routes].reverse().find((route) => route.name === "workFile");
+      return file?.name === "workFile" ? { key: "work", page: { name: "workFile", id: file.id } } : { key: "work" };
+    }
     case 1: {
       const session = [...sessionsNav.routes()].reverse().find((route) => route.name === "session");
       return session?.name === "session" ? { key: "session", workerId: session.workerId } : { key: "sessions" };
