@@ -36,14 +36,15 @@ describe("Sessions list rows", () => {
     expect(sessionRowModel(worker({ id: "%3", name: hostId, cwd: "/home/me/mewla", provider: "claude" })).title).toBe("mewla");
   });
 
-  test("a running Session is live; one waiting on you says so", () => {
-    expect(sessionRowModel(worker({ status: "running", updated_at: Date.now() })).time).toBe("live");
-    expect(sessionRowModel(worker({ needs_attention: true })).needsYou).toBe(true);
+  test("one waiting on you says so, in its flag and its line", () => {
+    const waiting = sessionRowModel(worker({ needs_attention: true }));
+    expect(waiting.needsYou).toBe(true);
+    expect(waiting.line).toBe("Waiting for you");
   });
 
-  test("a screen reader hears the row's title, origin, state, preview and time (parity #10)", () => {
+  test("a screen reader hears the row's title, origin, state, line and time (parity #10)", () => {
     const running = worker({ name: "release notes", status: "running", provider: "claude" });
-    expect(sessionRowModel(running).accessibilityLabel).toMatch(/^release notes, Running/);
+    expect(sessionRowModel(running).accessibilityLabel).toBe("release notes, Running, Working");
     const updated = new Date(2026, 10, 11, 9, 5).getTime();
     const done = worker({ name: "release notes", status: "done", delegated: true, updated_at: updated });
     const label = sessionRowModel(done, { calendarLabel: "Daily" }).accessibilityLabel;

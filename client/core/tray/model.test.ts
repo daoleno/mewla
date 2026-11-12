@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { BrainCurrentWork } from "../work/types";
+import { listTime } from "../sessions/listRow";
 import { backMark, requestsOf, trayModel, type TrayInput } from "./model";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
@@ -24,6 +25,20 @@ function input(patch: Partial<TrayInput> = {}): TrayInput {
 }
 
 describe("tray model", () => {
+  test("a running Session's row: its words, a live dot and how long it has run; never the terminal's text", () => {
+    const m = trayModel(input({ workers: [
+      worker("a", { started_at: NOW - 12 * 60_000, summary: "⏸ manual mode on · ? for shortcuts", last_output_lines: ["⏸ manual mode on · ? for shortcuts"] }),
+      worker("b", { started_at: NOW - 4 * 60_000, phase: "working", summary: "Rerunning the suite" }),
+      worker("c", { status: "unknown", summary: '"$MEWLA_WORKER_PROGRESS_CMD" worker progress', last_output_lines: ['"$MEWLA_WORKER_PROGRESS_CMD" worker progress'] }),
+    ] }));
+    expect(m.running.find((r) => r.key === "session:a")).toMatchObject({ line: "Working", end: "12m", live: true });
+    expect(m.running.find((r) => r.key === "session:b")).toMatchObject({ line: "Rerunning the suite", end: "4m", live: true, progress: 3 });
+    expect(m.idle[0]).toMatchObject({ key: "session:c", line: "Idle" });
+    expect(m.idle[0]!.live).toBeUndefined();
+    expect(JSON.stringify(m)).not.toContain("manual mode");
+    expect(JSON.stringify(m)).not.toContain("MEWLA_WORKER_PROGRESS");
+  });
+
   test("All quiet with nothing running", () => {
     const m = trayModel(input());
     expect(m.state).toMatchObject({ kind: "quiet", words: "All quiet", dot: null, ink: false, chevron: true });
@@ -75,9 +90,13 @@ describe("tray model", () => {
       currentWork: [work("w1", { attempt_session_id: "c", worker_sessions: [joined("a", false), joined("b", true), joined("c", true)] })],
     }));
     const row = m.running.find((r) => r.key === "work:w1")!;
-    expect(row).toMatchObject({ line: "3 Workers", tile: { kind: "brain" }, target: { open: "work", workId: "w1" } });
+    // The line says what its first live Worker does; the end, how long that Worker has worked on it.
+    expect(row).toMatchObject({ line: "3 Workers · Working", end: "1h", live: true, tile: { kind: "brain" }, target: { open: "work", workId: "w1" } });
     expect(m.running.map((r) => r.key)).toEqual(["work:w1"]);
     expect(m.state.words).toBe("1 running");
+    // A result ends in when it came back, then its check.
+    const back = trayModel(input({ currentWork: [work("w2", { status: "done", unread_result: true, updated_at: "2026-11-12T09:30:00Z" })] }));
+    expect(back.done.find((r) => r.key === "work:w2")).toMatchObject({ end: listTime(Date.parse("2026-11-12T09:30:00Z"), new Date(NOW)), done: true, unread: true });
     // One Worker: the row is that Session's.
     const one = trayModel(input({ workers: [worker("b")], currentWork: [work("w1", { worker_sessions: [joined("b", true)] })] }));
     expect(one.running).toHaveLength(1);

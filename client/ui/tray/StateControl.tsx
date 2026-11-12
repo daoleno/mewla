@@ -4,12 +4,16 @@ import { Icon } from "../kit/Icon";
 import { trayOpen } from "../shell/nav";
 import { refreshOpened, tray } from "./state";
 
-/** The state's 8 pt mark: red waits for you, ink runs, a soft ring is on its way or away (SPEC §11 State control). */
+/**
+ * The state's 8 pt mark: red waits for you, ink runs, a soft ring is on its way or away (SPEC §11 State control).
+ * Read in the JSX: a component runs once, so a mark chosen at the top stayed the first state's (a ring while
+ * connecting, kept beside "1 running").
+ */
 export function StateDotMark(props: { dot: StateDot }) {
-  return props.dot === "seal" ? <View testID="state-dot-seal" class="size-2 rounded-full bg-seal" />
+  return <>{props.dot === "seal" ? <View testID="state-dot-seal" class="size-2 rounded-full bg-seal" />
     : props.dot === "ink" ? <View testID="state-dot-ink" class="size-2 rounded-full bg-foreground" />
     : props.dot === "ring" ? <View testID="state-dot-ring" class="size-2 rounded-full border-[1.5px] border-muted-foreground" />
-    : null;
+    : null}</>;
 }
 
 /**

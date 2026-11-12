@@ -7,7 +7,8 @@ import { Icon } from "./Icon";
 /**
  * A Session's agent logo in the Expo app's avatar slot (AgentKindIcon, variant
  * "avatar": a 24pt mark centred in a 40pt slot; Grok and the plain terminal sit
- * in a rounded, bordered tile). `size` is the mark; the slot is size + 16.
+ * in a rounded, bordered tile). `size` is the mark; the slot is size + 16 unless `slot` sets it
+ * (a tray row's 28 pt tile).
  *
  * Where agents/*.svg come from (paths copied verbatim, root fill-rule kept):
  * - claude.svg   @lobehub/icons-rn 2.21.0 `Claude.Color` (ClaudeColor), brand #D97757
@@ -24,9 +25,9 @@ import { Icon } from "./Icon";
  * glyph. Of the terminal flavors only the letter badges (bun, redis, nginx)
  * are drawn; the font-icon flavors fall back to the terminal glyph.
  */
-export function AgentIcon(props: { kind: AgentKind; flavor?: TerminalFlavor; size?: number; class?: string }) {
+export function AgentIcon(props: { kind: AgentKind; flavor?: TerminalFlavor; size?: number; slot?: number; class?: string }) {
   const size = props.size ?? 24;
-  const slot = size + 16;
+  const slot = props.slot ?? size + 16;
   return (
     <View class={`items-center justify-center overflow-hidden ${props.class ?? ""}`} style={{ width: slot, height: slot }}>
       {mark(props.kind, props.flavor ?? "shell", size)}
