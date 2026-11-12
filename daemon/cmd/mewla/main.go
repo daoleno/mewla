@@ -728,6 +728,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 			caps.ComputerUse = agentUse.ComputerReady()
 			return caps
 		},
+		// What waits for the person here, for the other computers' pages;
+		// their channels and this computer's count reach the app at once.
+		OpenRequests: srv.OpenRequestCount,
+		OnChange:     srv.NotifyComputers,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize computers: %w", err)
@@ -1062,6 +1066,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 			Handler:     srv.Handler(),
 			AddressBook: book,
 			Logf:        log.Printf,
+			OnStatus:    func(remote.Status) { srv.NotifyComputers() },
 		}).Run,
 	})
 
