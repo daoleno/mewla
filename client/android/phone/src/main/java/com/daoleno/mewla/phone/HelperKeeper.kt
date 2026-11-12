@@ -114,7 +114,7 @@ class HelperKeeper(private val env: Env) {
         fun report(reason: String?)
     }
 
-    private var backoff = FIRST_BACKOFF_MS
+    @Volatile private var backoff = FIRST_BACKOFF_MS
     private var lastFailure: String? = null
     private var grantFailure: String? = null
     private var nextGrantAt = 0L
