@@ -30,14 +30,18 @@ for (const name of names) {
   await page.route("http://corpus.test/**", async (route: any) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/") return route.fulfill({ contentType: "text/html", body: html });
-    const file = join(root, "client/ui/web", path);
-    route.fulfill({ body: readFileSync(file), contentType: path.endsWith(".css") ? "text/css" : "text/javascript" });
+    const font = path.endsWith(".ttf");
+    const file = font ? join(root, "client/native/terminal/fonts", path.split("/").pop()!) : join(root, "client/ui/web", path);
+    route.fulfill({ body: readFileSync(file), contentType: font ? "font/ttf" : path.endsWith(".css") ? "text/css" : "text/javascript" });
   });
   await page.goto("http://corpus.test/");
   const post = (batch: unknown[]) => page.evaluate((data: string) => window.postMessage(data, "*"), JSON.stringify(batch));
   await page.waitForFunction(() => (window as any).__ev?.some((e: any) => e.type === "ready"));
   await post([{ type: "theme", theme }, { type: "font", size: 13, family }]);
   await page.waitForFunction(() => (window as any).__ev?.some((e: any) => e.type === "size"));
+  // The bundled face loads on demand: measure the cells once it is in.
+  await page.evaluate(async () => { await document.fonts.load('13px "Maple Mono NF"'); await document.fonts.ready; });
+  await page.waitForTimeout(300);
   // Fit the page to exactly cols x rows.
   const cell = await page.evaluate(() => {
     const s = document.querySelector(".xterm-screen") as HTMLElement;

@@ -243,6 +243,22 @@
     term.options.fontFamily = next.family;
     term.options.fontSize = next.size;
     fit();
+    loadFont();
+  }
+
+  // The bundled face (an @font-face of the page) loads only once something asks for it: ask, then measure
+  // the cells again (xterm measures only when the family changes, so through another one).
+  function loadFont() {
+    if (!document.fonts || !document.fonts.load) return;
+    var wanted = font.size + "px " + font.family;
+    Promise.all([document.fonts.load(wanted), document.fonts.load("bold " + wanted)]).then(remeasure, function () {});
+  }
+
+  function remeasure() {
+    if (!term) return;
+    term.options.fontFamily = "monospace";
+    term.options.fontFamily = font.family;
+    fit();
   }
 
   // History and scrolling.
@@ -561,7 +577,7 @@
   if (window.ResizeObserver) new ResizeObserver(function () { fit(); }).observe(screen);
   else addEventListener("resize", fit);
   // Cells measured with a fallback face are wrong once the real one arrives.
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (term) { term.options.fontFamily = font.family; fit(); } });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(remeasure);
   if (coarse) coarse.addEventListener("change", function () { send({ type: "pointer", touch: coarse.matches }); });
 
   create();
