@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -163,11 +164,29 @@ func (s *Server) brainThreadAnsweredRequests(threadID string) []work.CodexConver
 	return out
 }
 
+// promptRecordID names one time a prompt was shown. A prompt's id is drawn
+// from what it shows, so a Session that asks the same thing again shows the
+// same id; when it appeared tells the two apart. askedAt is the prompt
+// watch's time for it (PromptAskedAt), which every answer path reads.
+func promptRecordID(sessionID, promptID string, askedAt *time.Time) string {
+	id := "prompt:" + sessionID + ":" + promptID
+	if askedAt != nil && !askedAt.IsZero() {
+		id += ":" + strconv.FormatInt(askedAt.UnixMilli(), 10)
+	}
+	return id
+}
+
+// PromptAskedAt is when the prompt promptID was shown in sessionID, while it
+// is open or is the last one that left the screen; nil when not seen.
+func (s *Server) PromptAskedAt(sessionID, promptID string) *time.Time {
+	return s.prompts.since(strings.TrimSpace(sessionID), strings.TrimSpace(promptID))
+}
+
 // PromptAnswerRecord is the record of a screen prompt answered with answer.
 // recorded are the answers a choice prompt's agent wrote, when known.
 func PromptAnswerRecord(sessionID string, prompt classifier.Prompt, answer PromptAnswer, recorded []string, by answered.Answerer, askedAt *time.Time, now time.Time) answered.Request {
 	record := answered.Request{
-		ID: "prompt:" + sessionID + ":" + prompt.ID, Kind: string(prompt.Kind), SessionID: sessionID,
+		ID: promptRecordID(sessionID, prompt.ID, askedAt), Kind: string(prompt.Kind), SessionID: sessionID,
 		Title: prompt.Title, Asked: firstNonEmpty(prompt.Request, prompt.Title), Outcome: answered.OutcomeAnswered,
 		By: by, AskedAt: askedAt, AnsweredAt: now,
 		Anchor: answered.Anchor{PromptID: prompt.ID, CallID: prompt.CallID},
@@ -403,6 +422,9 @@ func firstNonEmpty(values ...string) string {
 type promptWatch struct {
 	mu   sync.Mutex
 	open map[string]watchedPrompt
+	// left is each Session's prompt that last left the screen: an answer that
+	// lands after it left still names the same showing.
+	left map[string]watchedPrompt
 }
 
 type watchedPrompt struct {
@@ -417,6 +439,10 @@ func (w *promptWatch) since(sessionID, promptID string) *time.Time {
 		at := open.since
 		return &at
 	}
+	if left, ok := w.left[sessionID]; ok && left.prompt.ID == promptID {
+		at := left.since
+		return &at
+	}
 	return nil
 }
 
@@ -426,11 +452,14 @@ func (w *promptWatch) observe(sessionID string, prompt *classifier.Prompt, now t
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.open == nil {
-		w.open = map[string]watchedPrompt{}
+		w.open, w.left = map[string]watchedPrompt{}, map[string]watchedPrompt{}
 	}
 	previous, had := w.open[sessionID]
 	if prompt != nil && had && previous.prompt.ID == prompt.ID {
 		return watchedPrompt{}, false
+	}
+	if had {
+		w.left[sessionID] = previous
 	}
 	if prompt != nil {
 		w.open[sessionID] = watchedPrompt{prompt: *prompt, since: now}
@@ -451,6 +480,7 @@ func (w *promptWatch) forget(sessionID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	delete(w.open, sessionID)
+	delete(w.left, sessionID)
 }
 
 // promptLeftGrace is how long a prompt must stay off the screen before it
@@ -491,7 +521,7 @@ func (s *Server) observePromptLifecycle(ev watcher.SessionEvent) {
 			return
 		}
 		ledger := s.answeredLedger()
-		id := "prompt:" + sessionID + ":" + left.prompt.ID
+		id := promptRecordID(sessionID, left.prompt.ID, &left.since)
 		if _, recorded := ledger.Get(id); recorded {
 			return
 		}

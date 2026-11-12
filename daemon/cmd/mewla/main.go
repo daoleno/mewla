@@ -607,6 +607,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	srv.SetAnsweredRequests(answeredRequests)
 	agentEvents.answered = answeredRequests
+	agentEvents.askedAt = srv.PromptAskedAt
 	eventHub.OnApprovalResolved(func(workerID string, approval agentevents.Approval, e agentevents.Event) {
 		recordAgentResolution(answeredRequests, workerID, approval, e)
 	})

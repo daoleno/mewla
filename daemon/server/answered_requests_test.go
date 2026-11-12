@@ -87,17 +87,24 @@ func TestPromptLeavingTheScreenIsAnsweredInTheTerminal(t *testing.T) {
 	s.observePromptLifecycle(blocked("%2", prompt))
 	time.Sleep(100 * time.Millisecond)
 
-	got, ok := ledger.Get("prompt:%1:perm1")
+	shown := s.PromptAskedAt("%1", "perm1")
+	if shown == nil {
+		t.Fatal("the prompt that left has no showing")
+	}
+	got, ok := ledger.Get(promptRecordID("%1", "perm1", shown))
 	if !ok || got.By.Kind != answered.ByTerminal || got.Asked != "git push origin main" || got.Answer != "" || got.AskedAt == nil {
 		t.Fatalf("terminal answer = %+v %v", got, ok)
 	}
-	if _, ok := ledger.Get("prompt:%2:perm1"); ok {
-		t.Fatal("a prompt that came back was sealed")
+	if rows := ledger.List(answered.Filter{SessionID: "%2"}); len(rows) != 0 {
+		t.Fatalf("a prompt that came back was sealed: %+v", rows)
 	}
 	// The app's explicit answer, a moment late, replaces the inference.
-	explicit := PromptAnswerRecord("%1", *prompt, PromptAnswer{PromptID: "perm1", Number: 1}, nil, answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone"}, nil, time.Now())
+	explicit := PromptAnswerRecord("%1", *prompt, PromptAnswer{PromptID: "perm1", Number: 1}, nil, answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone"}, s.PromptAskedAt("%1", "perm1"), time.Now())
 	if stood, wrote, _ := ledger.Record(explicit); !wrote || stood.Answer != "Yes" || stood.Outcome != answered.OutcomeApproved || stood.AskedAt == nil {
 		t.Fatalf("explicit after terminal = %+v %v", stood, wrote)
+	}
+	if rows := ledger.List(answered.Filter{SessionID: "%1"}); len(rows) != 1 {
+		t.Fatalf("the late answer added a second record: %+v", rows)
 	}
 
 	choice := &classifier.Prompt{ID: "c1", Kind: classifier.PromptChoice}
@@ -106,11 +113,60 @@ func TestPromptLeavingTheScreenIsAnsweredInTheTerminal(t *testing.T) {
 	delete(live, "%2")
 	s.observePromptLifecycle(running("%2"))
 	time.Sleep(100 * time.Millisecond)
-	if _, ok := ledger.Get("prompt:%1:c1"); ok {
-		t.Fatal("a choice was inferred from the screen")
+	if rows := ledger.List(answered.Filter{SessionID: "%1"}); len(rows) != 1 {
+		t.Fatalf("a choice was inferred from the screen: %+v", rows)
 	}
-	if _, ok := ledger.Get("prompt:%2:perm1"); ok {
-		t.Fatal("an ended Session's prompt was sealed")
+	if rows := ledger.List(answered.Filter{SessionID: "%2"}); len(rows) != 0 {
+		t.Fatalf("an ended Session's prompt was sealed: %+v", rows)
+	}
+}
+
+// A Session that asks the same thing twice (the same command, the same
+// menu) gets two records: the second answer is not taken for the first.
+func TestTheSamePromptAskedTwiceIsAnsweredTwice(t *testing.T) {
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := map[string]*classifier.Worker{"%1": {ID: "%1"}}
+	s := &Server{promptLeftGrace: 20 * time.Millisecond, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
+	s.answered = ledger
+	prompt := permissionPrompt()
+	prompt.Title, prompt.Request = "Bash command", "npm test"
+	event := func(p *classifier.Prompt) watcher.SessionEvent {
+		state := classifier.StateRunning
+		if p != nil {
+			state = classifier.StateBlocked
+		}
+		return watcher.SessionEvent{Type: "worker_state_change", Worker: &classifier.Worker{ID: "%1", State: state, Prompt: p}}
+	}
+	answer := func(number int) {
+		t.Helper()
+		record := PromptAnswerRecord("%1", *prompt, PromptAnswer{PromptID: prompt.ID, Number: number}, nil,
+			answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone"}, s.PromptAskedAt("%1", prompt.ID), time.Now())
+		if _, wrote, err := ledger.Record(record); err != nil || !wrote {
+			t.Fatalf("answer %d not recorded: %v", number, err)
+		}
+	}
+	s.observePromptLifecycle(event(prompt))
+	answer(1)
+	s.observePromptLifecycle(event(nil))
+	time.Sleep(5 * time.Millisecond)
+	s.observePromptLifecycle(event(prompt))
+	answer(2)
+	s.observePromptLifecycle(event(nil))
+	time.Sleep(100 * time.Millisecond)
+
+	rows := ledger.List(answered.Filter{SessionID: "%1"})
+	if len(rows) != 2 {
+		t.Fatalf("records = %+v", rows)
+	}
+	answers := map[string]bool{}
+	for _, row := range rows {
+		answers[row.Answer] = row.By.Kind == answered.ByDevice
+	}
+	if !answers["Yes"] || !answers["Yes, and don't ask again for this command"] {
+		t.Fatalf("answers = %+v", rows)
 	}
 }
 
