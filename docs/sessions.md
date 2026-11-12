@@ -128,7 +128,8 @@ request that is answered: a screen prompt, an agent approval, an agent's
 question, or Brain's question on a Work. The record holds the short form of
 what was asked, the answer, the outcome (`answered`, `approved`, `denied`,
 `dismissed`, or `not_answered` when it timed out), who answered, and when.
-Who answered is one of:
+A request from a delegated Worker also names the Work it was working on
+(`work_id`). Who answered is one of:
 
 - a paired device, with its id and name;
 - Brain, with the sentence of its brief it relied on;
