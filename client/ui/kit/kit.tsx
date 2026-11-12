@@ -86,7 +86,7 @@ export function DisplayTitle(props: { title: string; eyebrow?: string; testID?: 
  * A section label with what the section holds (SPEC §15 Grouped list): an icon, the name, the count at the right.
  * Caption 13/600, soft, inset 16, 24 above and 8 below; pressing it folds the section when it can.
  */
-export function SectionLabel(props: { title: string; icon?: IconName; count?: number | string; testID?: string; onPress?: () => void; folded?: boolean; trailing?: JSX.Element }) {
+export function SectionLabel(props: { title: string; icon?: IconName; count?: number | string; testID?: string; onPress?: () => void; folded?: boolean; trailing?: JSX.Element; accessibilityLabel?: string }) {
   const body = (
     <View class="min-h-[44px] flex-row items-center gap-2 px-4 pb-2 pt-6">
       {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
@@ -96,9 +96,23 @@ export function SectionLabel(props: { title: string; icon?: IconName; count?: nu
       {props.onPress ? <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" /> : null}
     </View>
   );
-  if (!props.onPress) return <View testID={props.testID}>{body}</View>;
+  if (!props.onPress) return <View testID={props.testID} accessibilityLabel={props.accessibilityLabel}>{body}</View>;
+  // The fold is the label's own button; what sits at its end (a group's Stage all) stays its own.
+  if (props.trailing) {
+    return (
+      <View testID={props.testID ? `${props.testID}-row` : undefined} class="min-h-[44px] flex-row items-center gap-2 pb-2 pl-4 pr-2 pt-6">
+        <View testID={props.testID} role="button" accessible accessibilityLabel={props.accessibilityLabel} accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-70">
+          {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
+          <Text class="min-w-0 flex-1 text-caption font-semibold text-muted-foreground line-clamp-1" role="header">{props.title}</Text>
+          {props.count !== undefined ? <Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
+          <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" />
+        </View>
+        {props.trailing}
+      </View>
+    );
+  }
   return (
-    <View testID={props.testID} role="button" accessible accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="active:opacity-70">{body}</View>
+    <View testID={props.testID} role="button" accessible accessibilityLabel={props.accessibilityLabel} accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="active:opacity-70">{body}</View>
   );
 }
 
@@ -114,7 +128,7 @@ export function Tile(props: { size?: 28 | 36 | 64; icon?: IconName; mark?: strin
 }
 
 /** The search field under a collection's title (SPEC §15): 44 pt on the surface, radius 14, a clear button once it holds text. */
-export function SearchField(props: { value: string; placeholder: string; onChange: (value: string) => void; accessibilityLabel?: string; testID?: string }) {
+export function SearchField(props: { value: string; placeholder: string; onChange: (value: string) => void; accessibilityLabel?: string; testID?: string; autoFocus?: boolean }) {
   return (
     <View class="min-h-[44px] flex-row items-center gap-2 rounded-[14px] bg-card px-3">
       <Icon name="search" size={16} tone="soft" />
@@ -124,6 +138,7 @@ export function SearchField(props: { value: string; placeholder: string; onChang
         class="min-h-[44px] flex-1 py-2 text-body"
         value={props.value}
         placeholder={props.placeholder}
+        autoFocus={props.autoFocus}
         autoCapitalize="none"
         autoCorrect={false}
         onChange={({ value }) => props.onChange(value)}

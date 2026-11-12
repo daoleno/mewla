@@ -23,3 +23,23 @@ export function spokenGitAge(unixSeconds: number, now: number = Date.now()): str
   const unit = { m: "minute", h: "hour", d: "day", w: "week", mo: "month", y: "year" }[match[2]]!;
   return `${count} ${unit}${count === 1 ? "" : "s"} ago`;
 }
+
+/** History's groups (SPEC §15 Grouped list): commits by the day they were made, newest first, "Today" and "Yesterday" by name. */
+export function gitCommitDays<T extends { date: number }>(commits: readonly T[], now: number = Date.now()): { key: string; label: string; commits: T[] }[] {
+  const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const today = new Date(now);
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const groups: { key: string; label: string; commits: T[] }[] = [];
+  for (const commit of commits) {
+    const at = new Date(commit.date * 1000);
+    const key = dayKey(at);
+    let group = groups.at(-1);
+    if (!group || group.key !== key) {
+      const label = key === dayKey(today) ? "Today" : key === dayKey(yesterday) ? "Yesterday" : at.toLocaleDateString("en-US", at.getFullYear() === today.getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+      group = { key, label, commits: [] };
+      groups.push(group);
+    }
+    group.commits.push(commit);
+  }
+  return groups;
+}

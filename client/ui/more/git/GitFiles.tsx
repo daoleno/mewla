@@ -10,7 +10,7 @@ import { matchesGitReviewQuery } from "../../../core/git/gitReviewModel";
 import { EmptyState, Field, Notice } from "../../kit/kit";
 import { Icon } from "../../kit/Icon";
 import type { PageNav } from "../routes";
-import { Current, FlashLine, IconButton, StatusChar } from "./parts";
+import { Current, FlashLine, IconButton, StatusTile } from "./parts";
 import { copyText, type GitReview } from "./state";
 
 const DIR = "dir:";
@@ -130,8 +130,8 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
         style={{ paddingLeft: 16 + entry.depth * 16 }}
       >
         <Icon name={entry.folder ? (shownExpanded().includes(entry.id) ? "folder-open" : "folder") : "document-text"} size={16} tone={entry.folder ? "soft" : "faint"} />
-        <Text class={`flex-1 font-mono text-sm line-clamp-1 ${changed || holds ? "font-semibold" : ""}`}>{entry.label}</Text>
-        {changed ? <StatusChar file={changed} /> : holds ? <View testID={`git-file-dot-${entry.id}`} class="size-1.5 rounded-full bg-foreground" /> : null}
+        <Text class={`flex-1 font-mono text-code line-clamp-1 ${changed || holds ? "font-semibold" : ""}`}>{entry.label}</Text>
+        {changed ? <StatusTile file={changed} /> : holds ? <View testID={`git-file-dot-${entry.id}`} class="size-1.5 rounded-full bg-foreground" /> : null}
       </View>
     );
   };
