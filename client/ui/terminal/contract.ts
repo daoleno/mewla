@@ -30,6 +30,12 @@ export type TerminalProps = {
   /** In points. The view derives its grid from it and its size. */
   fontSize: number;
   theme: TerminalTheme;
+  /**
+   * In points: room the view keeps clear inside its edges (the terminal group's padding). The grid is
+   * the area inside it; scrolled history and a panned grid still draw on into it, up to the view's edges.
+   * Android draws it; iOS and the web view leave it unset and sit inside the padding instead.
+   */
+  padding?: { top: number; right: number; bottom: number; left: number };
 };
 
 export type TerminalEvents = {
@@ -76,6 +82,6 @@ export type TerminalEvents = {
  * - `retry {}`: make the VT again after `failed`.
  */
 export const TerminalSurface = nativeComponent<TerminalProps, TerminalEvents>("mewla.terminal", {
-  props: ["fontSize", "theme"],
+  props: ["fontSize", "theme", "padding"],
   events: ["size", "failed", "input", "scroll", "viewport", "tapCell", "copy"],
 });
