@@ -54,3 +54,5 @@ for n in "${names[@]}"; do
   echo "$n $rect"
 done
 adb logcat -d -s TerminalReplay:I | grep -m1 'cell' || true
+# Rows of block and line glyphs touch (the box screen's wall).
+if [[ -f "$out/box.png" ]]; then uv run -q --no-project --with pillow python -I "$here/check.py" "$out"; fi
