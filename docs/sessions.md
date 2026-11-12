@@ -141,9 +141,12 @@ The records are kept in `<state>/answered_requests.jsonl`: each Session's
 newest 240 (its thread's window), and every Work question. A device can read
 them in three places:
 
-- In the request's thread, as a row with `source: request_answered` placed
-  where the request was asked. It carries `request` and `call_id` when the
-  request has a transcript call.
+- In the request's thread, as a row of kind `request_answered` placed where
+  the request was asked. The row carries `request`, whose `anchor` names the
+  transcript call, screen prompt or approval when there is one. Brain's thread
+  shows only what was answered in it (`thread_id`): Brain's own prompts, and
+  questions on the Work that thread started. An app that does not know the
+  kind drops the row.
 - In the `request_answered` broadcast, sent to every device the moment a record
   is written.
 - In `answered_requests`, the history the tray lists, newest first. It takes

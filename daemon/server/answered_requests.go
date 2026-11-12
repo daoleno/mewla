@@ -24,14 +24,38 @@ import (
 
 const answeredRequestsDefaultLimit = 100
 
+// answeredConversationKind is the kind and source of an answered request's
+// row in its thread.
+const answeredConversationKind = "request_answered"
+
 // SetAnsweredRequests gives the server the answered-request ledger.
 func (s *Server) SetAnsweredRequests(ledger *answered.Ledger) {
 	s.mu.Lock()
 	s.answered = ledger
 	s.mu.Unlock()
+	ledger.OnStamp(s.stampAnsweredThread)
 	ledger.OnRecord(func(record answered.Request) {
 		s.broadcastJSON(map[string]any{"type": "request_answered", "request": record})
 	})
+}
+
+// stampAnsweredThread names the Brain thread a request was answered in: the
+// current chat for Brain's own Session, the Work's own thread for its
+// question.
+func (s *Server) stampAnsweredThread(record *answered.Request) {
+	if record.ThreadID != "" || s.brain == nil {
+		return
+	}
+	switch {
+	case record.Kind == answered.KindWorkQuestion && record.WorkID != "":
+		if item, err := s.brain.Work(record.WorkID); err == nil {
+			record.ThreadID = strings.TrimSpace(item.SourceThreadID)
+		}
+	case record.SessionID != "" && record.SessionID == s.brain.CurrentHostSessionID():
+		if threadID, err := s.brain.ChatThreadID(); err == nil {
+			record.ThreadID = strings.TrimSpace(threadID)
+		}
+	}
 }
 
 func (s *Server) answeredLedger() *answered.Ledger {
@@ -83,15 +107,15 @@ func answeredConversationEvent(record answered.Request) work.CodexConversationEv
 	return work.CodexConversationEvent{
 		ID:        "answered:" + record.ID,
 		Timestamp: record.At().Format(time.RFC3339Nano),
-		Kind:      "status",
-		Role:      "system",
-		Title:     record.Title,
-		Body:      record.Answer,
-		Status:    record.Outcome,
-		CallID:    record.Anchor.CallID,
-		Source:    "request_answered",
-		WorkID:    record.WorkID,
-		Request:   &copied,
+		// Its own kind: an app that does not know it drops the row.
+		Kind:    answeredConversationKind,
+		Role:    "system",
+		Title:   record.Title,
+		Body:    record.Answer,
+		Status:  record.Outcome,
+		Source:  answeredConversationKind,
+		WorkID:  record.WorkID,
+		Request: &copied,
 	}
 }
 
@@ -116,22 +140,17 @@ func (s *Server) withAnsweredRequests(sessionID string, conversation work.CodexC
 }
 
 // brainThreadAnsweredRequests are the answered requests Brain's thread
-// shows: its host Session's, and the questions of Work that thread started.
+// shows: those answered in it (Brain's own prompts and the questions of the
+// Work the thread started).
 func (s *Server) brainThreadAnsweredRequests(threadID string) []work.CodexConversationEvent {
 	ledger := s.answeredLedger()
-	if ledger == nil || s.brain == nil {
+	if ledger == nil || threadID == "" {
 		return nil
 	}
-	var out []work.CodexConversationEvent
-	if hostID := s.brain.CurrentHostSessionID(); hostID != "" {
-		for _, record := range ledger.List(answered.Filter{SessionID: hostID}) {
-			out = append(out, answeredConversationEvent(record))
-		}
-	}
-	for _, record := range ledger.List(answered.Filter{Kind: answered.KindWorkQuestion}) {
-		if item, err := s.brain.Work(record.WorkID); err == nil && strings.TrimSpace(item.SourceThreadID) == threadID {
-			out = append(out, answeredConversationEvent(record))
-		}
+	records := ledger.List(answered.Filter{ThreadID: threadID})
+	out := make([]work.CodexConversationEvent, 0, len(records))
+	for index := len(records) - 1; index >= 0; index-- {
+		out = append(out, answeredConversationEvent(records[index]))
 	}
 	return out
 }

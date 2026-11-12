@@ -150,3 +150,101 @@ func TestAnswerRecordShapes(t *testing.T) {
 		t.Fatalf("dsh dismissed = %+v", got)
 	}
 }
+
+// Through the real subscription: a Session's answered request is a row of
+// its thread snapshot, and a write to the ledger alone (the app's answer
+// replacing a terminal one) reaches the open thread as a delta.
+func TestAnsweredRequestRowsReachTheSubscribedThread(t *testing.T) {
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{
+		watcher: watcher.New(time.Second),
+		providerConversationLoader: func(_ *work.ProviderConversationReader, workerID string) (work.CodexConversation, error) {
+			return work.CodexConversation{Available: true, Source: "claude_transcript", SessionID: "conv-1", Events: []work.CodexConversationEvent{
+				{ID: "m1", Kind: "assistant_message", Role: "assistant", Body: "Pushing now.", Timestamp: "2026-11-12T13:39:00Z"},
+			}}, nil
+		},
+	}
+	srv.answered = ledger
+	asked := time.Date(2026, 11, 12, 13, 39, 30, 0, time.UTC)
+	terminal := answered.Request{ID: "prompt:provider-agent:p1", Kind: answered.KindPermission, SessionID: "provider-agent",
+		Asked: "git push origin main", Outcome: answered.OutcomeAnswered, By: answered.Answerer{Kind: answered.ByTerminal},
+		AskedAt: &asked, AnsweredAt: asked.Add(10 * time.Second), Anchor: answered.Anchor{PromptID: "p1"}}
+	if _, _, err := ledger.Record(terminal); err != nil {
+		t.Fatal(err)
+	}
+	conn := openThinProxyTestSocket(t, srv)
+	if err := conn.WriteJSON(clientMessage{Type: "codex_conversation_subscribe", RequestID: "sub", TargetID: "provider-agent",
+		Cwd: "/repo", Command: "claude", StartedAt: json.RawMessage(`"2026-11-12T13:00:00Z"`)}); err != nil {
+		t.Fatal(err)
+	}
+	read := func(want string) map[string]any {
+		t.Helper()
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		for {
+			var message map[string]any
+			if err := conn.ReadJSON(&message); err != nil {
+				t.Fatalf("no %s: %v", want, err)
+			}
+			if message["type"] == want {
+				return message
+			}
+		}
+	}
+	findRow := func(events []any) map[string]any {
+		for _, raw := range events {
+			if event, _ := raw.(map[string]any); event["id"] == "answered:prompt:provider-agent:p1" {
+				return event
+			}
+		}
+		return nil
+	}
+	snapshot := read("codex_conversation_snapshot")
+	conversation, _ := snapshot["conversation"].(map[string]any)
+	events, _ := conversation["events"].([]any)
+	row := findRow(events)
+	if row == nil || row["kind"] != "request_answered" || row["timestamp"] != "2026-11-12T13:39:30Z" || row["call_id"] != nil {
+		t.Fatalf("snapshot row = %#v (events %v)", row, events)
+	}
+
+	device := terminal
+	device.By, device.Answer, device.Outcome = answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone-2"}, "Yes", answered.OutcomeApproved
+	if _, wrote, err := ledger.Record(device); err != nil || !wrote {
+		t.Fatalf("device record: %v %v", wrote, err)
+	}
+	delta := read("codex_conversation_delta")
+	upserts, _ := delta["upserts"].([]any)
+	row = findRow(upserts)
+	request, _ := row["request"].(map[string]any)
+	by, _ := request["by"].(map[string]any)
+	if row == nil || request["outcome"] != "approved" || by["device_id"] != "phone-2" {
+		t.Fatalf("delta = %#v", delta)
+	}
+}
+
+// Brain's thread shows only what was answered in it: a new chat starts with
+// none of the old thread's sealed lines.
+func TestBrainThreadShowsOnlyItsOwnAnsweredRequests(t *testing.T) {
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{answered: ledger}
+	for id, thread := range map[string]string{"prompt:host:p1": "thread-old", "prompt:host:p2": "thread-new", "work:w1:q": "thread-new"} {
+		if _, _, err := ledger.Record(answered.Request{ID: id, Kind: answered.KindPermission, SessionID: "host", ThreadID: thread,
+			Outcome: answered.OutcomeAnswered, By: answered.Answerer{Kind: answered.ByDevice}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := s.brainThreadAnsweredRequests("thread-new")
+	if len(got) != 2 {
+		t.Fatalf("thread-new rows = %+v", got)
+	}
+	for _, event := range got {
+		if event.Request.ThreadID != "thread-new" {
+			t.Fatalf("row from another thread: %+v", event.Request)
+		}
+	}
+}

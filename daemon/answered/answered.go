@@ -78,6 +78,10 @@ type Request struct {
 	Kind      string `json:"kind"`
 	SessionID string `json:"session_id,omitempty"`
 	WorkID    string `json:"work_id,omitempty"`
+	// ThreadID is the Brain chat thread the request was answered in, for
+	// Brain's own requests and Work questions: a new chat shows only what
+	// was answered there.
+	ThreadID string `json:"thread_id,omitempty"`
 	// Title is the card's kind line when the request names one (a tool, a
 	// question header); Asked is the short form of what was asked.
 	Title      string     `json:"title,omitempty"`
@@ -114,6 +118,18 @@ type Ledger struct {
 	lines   int
 	version atomic.Uint64
 	subs    []func(Request)
+	stamp   func(*Request)
+}
+
+// OnStamp lets the owner fill fields the answer path does not know (the
+// Brain thread) on each record before it is kept.
+func (l *Ledger) OnStamp(fn func(*Request)) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.stamp = fn
+	l.mu.Unlock()
 }
 
 // Open loads the ledger in stateDir.
@@ -180,6 +196,12 @@ func (l *Ledger) Record(r Request) (Request, bool, error) {
 	if l == nil {
 		return Request{}, false, nil
 	}
+	l.mu.Lock()
+	stamp := l.stamp
+	l.mu.Unlock()
+	if stamp != nil {
+		stamp(&r)
+	}
 	r = normalize(r)
 	if r.ID == "" || r.Kind == "" || r.Outcome == "" {
 		return Request{}, false, errors.New("answered: a record needs an id, a kind and an outcome")
@@ -228,6 +250,7 @@ func (l *Ledger) Get(id string) (Request, bool) {
 // Filter selects records; empty fields match all.
 type Filter struct {
 	SessionID string
+	ThreadID  string
 	WorkIDs   map[string]bool
 	Kind      string
 	Limit     int
@@ -242,6 +265,9 @@ func (l *Ledger) List(filter Filter) []Request {
 	out := make([]Request, 0, len(l.byID))
 	for _, r := range l.byID {
 		if filter.SessionID != "" && r.SessionID != filter.SessionID {
+			continue
+		}
+		if filter.ThreadID != "" && r.ThreadID != filter.ThreadID {
 			continue
 		}
 		if filter.WorkIDs != nil && !filter.WorkIDs[r.WorkID] {
@@ -329,6 +355,7 @@ func normalize(r Request) Request {
 	r.Kind = strings.TrimSpace(r.Kind)
 	r.SessionID = strings.TrimSpace(r.SessionID)
 	r.WorkID = strings.TrimSpace(r.WorkID)
+	r.ThreadID = strings.TrimSpace(r.ThreadID)
 	r.Title = Short(r.Title)
 	r.Asked = Short(r.Asked)
 	r.Answer = Short(r.Answer)
