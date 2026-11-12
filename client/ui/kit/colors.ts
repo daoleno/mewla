@@ -15,6 +15,8 @@ const light = {
   surface: "#FFFFFF",
   seal: "#D63C2F",
   sealInk: "#C93327",
+  /** On a seal fill (Approve's check): white in both schemes. */
+  onSeal: "#FFFFFF",
   add: "#1F8A4C",
   del: "#C93327",
   ready: "#62656D",
@@ -33,6 +35,7 @@ const dark: typeof light = {
   surface: "#1C1D20",
   seal: "#D23E31",
   sealInk: "#FF7A6B",
+  onSeal: "#FFFFFF",
   add: "#5FCB88",
   del: "#FF7A6B",
   ready: "#A2A5AC",

@@ -95,7 +95,8 @@ export function formatWorkerSessionPreview(
   };
 }
 
-function extractLastOutputLine(lines: string[]): string {
+function extractLastOutputLine(lines: string[] | undefined): string {
+  if (!lines) return '';
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const cleaned = stripAnsiText(lines[index] ?? '');
     if (!cleaned || isNoiseLine(cleaned)) {

@@ -53,6 +53,10 @@ describe('Session row preview hierarchy', () => {
     ).toBe('Fix v1 passes 7/9 at cpus 0.7');
   });
 
+  test('a Session the list sent without output lines reads as no recent output (the tray reads every Session)', () => {
+    expect(formatWorkerSessionPreview(agent({ status: 'done', last_output_lines: undefined as unknown as string[] })).text).toBe('No recent output');
+  });
+
   test('does not synthesize Brain ownership into delegated preview text', () => {
     expect(
       formatWorkerSessionPreview(agent({ status: 'running', delegated: true }))

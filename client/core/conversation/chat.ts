@@ -98,6 +98,11 @@ export class Chat {
     outbox.enqueue({ id: requestId, serverId, workerId: target.targetId, conversationScopeKey: target.conversationScopeKey, text: message.sentText, attachments: sendAttachments(message.attachments) });
   }
 
+  /** Reads the conversation again ("Try again" on a chat that did not load); a no-op while disconnected. */
+  reload(): void {
+    this.follow();
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;

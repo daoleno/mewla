@@ -109,9 +109,11 @@ from this endpoint, so a revoked token stops it for good.
 
 ## On the phone (Android)
 
-- One native module, `app/modules/mewla-live`, owns the surface. Its own FCM
-  service takes the live data message with the app closed and hands every other
-  message to expo-notifications unchanged.
+- The Android host (`client/android`, package `live`, with `LiveController`,
+  `LiveNotifier` and `WidgetSync`) owns the surface. Its FCM service
+  (`MewlaFirebaseMessagingService`) takes the live data message with the app
+  closed; a calendar alert push goes to the calendar alert code, and any other
+  message is drawn as a notification.
 - The notification is one ongoing notification (id 7101) that asks to be
   promoted: a status-bar chip (the seal icon and the elapsed time, or the count
   of open questions), a pinned card, and a segmented bar from `done` / `total`.
@@ -132,9 +134,9 @@ from this endpoint, so a revoked token stops it for good.
 
 ## On the phone (iOS)
 
-- The same `app/modules/mewla-live` module (Swift side in `ios/`) and a WidgetKit
-  extension, `MewlaLiveWidgets` (`app/targets/mewla-live`, generated into the Xcode
-  project by `@bacons/apple-targets`). The app and the extension compile the same
+- The iOS host (`client/ios/Sources/Live`) and a WidgetKit extension,
+  `MewlaLiveWidgets` (`client/ios/LiveExtension`, a target of
+  `client/ios/project.yml`). The app and the extension compile the same
   `MewlaLiveState.swift`, so the state has one shape.
 - The Live Activity shows the Dynamic Island (compact, minimal, expanded) and the
   Lock Screen card from the state: Work title and phase, a clock that runs by
@@ -147,9 +149,8 @@ from this endpoint, so a revoked token stops it for good.
   writes on every state, and, on a plain URL, fetch `/widget/snapshot` with the
   same revocable token as Android. A refused token clears them and they ask to
   open Mewla; Mewla Relay servers show only what the app and pushes applied.
-- The extension is built only when `MEWLA_IOS_LIVE=1` (repository variable
-  `MEWLA_IOS_LIVE` for releases), after its App IDs, App Group and provisioning
-  profile exist: see `docs/ios-ci-release.md`. A build without it behaves as before.
+- The extension is always built and embedded, so every iOS build needs its App ID,
+  App Group and provisioning profile: see `docs/ios-ci-release.md`.
 
 ## Limits
 

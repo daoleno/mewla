@@ -7,7 +7,7 @@ import { NavPage } from "../shell/NavPage";
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
 import { createChatTimeline } from "../../core/conversation/timeline";
-import { answerChoice, answerPrompt, decideApproval, rewindMessage, stopTurn } from "../../core/conversation/turn";
+import { rewindMessage, stopTurn } from "../../core/conversation/turn";
 import { finalReplyIdsOf } from "../../core/timeline/model";
 import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
 import { resolveBlockedTerminal } from "../../core/session/blockedTerminalSurface";
@@ -18,8 +18,6 @@ import { sessionRowModel } from "../../core/sessions/listRow";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { presentWorker } from "../../core/sessions/workerPresentation";
 import { workerStatusLabel } from "../../core/sessions/workerStatusPresentation";
-import { buildTerminalActionPrompt, type TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
-import { CHOICE_GONE_NOTICE, choiceFromPrompt, isPromptGoneError, latestPendingChoice, PROMPT_GONE_NOTICE, visiblePendingChoice, type ChoiceAnswer } from "../../core/timeline/claudeChoiceModel";
 import type { CodexSlashCommand } from "../../core/session/codexSlashCommands";
 import type { ComposerAlert, ComposerSendRoute } from "../../core/session/composerSlash";
 import { resolveComposerModelControl } from "../../core/session/sessionModelHelpers";
@@ -30,26 +28,24 @@ import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { ModelSheet } from "../session/ModelSheet";
 import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
-import { ActionPromptCard } from "../chat/ActionPromptCard";
+import { RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
 import { buildChatComposerPlaceholder } from "../../core/session/chatComposerPresentation";
 import { terminalFallback } from "../../core/session/terminalFallback";
 import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
 import { compactPathLabel } from "../../core/timeline/pathDisplay";
 import { AgentIcon } from "../icons/AgentIcon";
-import { showCalendarItem } from "../calendar/routes";
 import { workLinkOf } from "../sessions/workLinks";
-import { selectedTab } from "../shell/Shell";
+import { openCalendarItem } from "../shell/nav";
 import { terminalShowing } from "../shell/desktop/keys";
 import { haptic } from "../shell/haptics";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { slashMenuState } from "../../core/session/composerSlash";
 import { DSHPanel } from "../chat/DSHPanel";
-import { ChoiceCard } from "../chat/ChoiceCard";
 import { Composer, createComposerText } from "../chat/Composer";
 import { ChatTimeline } from "../chat/Timeline";
 import { Icon } from "../icons/Icon";
 import { brain, connection, current, currentTransport, outbox, problem as connectionProblem, resumeConnection, workers, workersHydrated } from "../session";
-import type { SessionsRoute } from "../shell/routes";
+import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
 import { filePreviewRoute } from "../more/files/routes";
@@ -57,7 +53,7 @@ import { recognizeSessionFileReference } from "../../core/files/sessionFilePrevi
 import { buildGitDiffChipLabel, type GitDiffStatusSnapshot } from "../../core/git/gitDiff";
 import { getGitStatus } from "../../core/git/requests";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
-import { reloadAliases } from "./Sessions";
+import { reloadAliases } from "../sessions/AllSessions";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 const NO_FILE_IDENTITY_NOTICE = "This Session has no live generation identity. Refresh the Session list and try again.";
@@ -70,9 +66,11 @@ void getInterfaceRenderModes(Storage).then((modes) => storedModes.set(modes)).ca
 /**
  * One Session of the current computer: its chat (structured agents) or its
  * terminal, with the terminal kept attached under the chat so switching is
- * instant. The computer is told which Session is on screen.
+ * instant. The computer is told which Session is on screen. `brain`: Brain's
+ * own Session (Brain's menu › Open terminal), its terminal only, titled
+ * "Brain", "{agent} · workspace" (SPEC §1.6, §4).
  */
-export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: string; hint?: TerminalRouteSessionHint; active: () => boolean }) {
+export function Session(props: { nav: NavStackState<Route>; workerId: string; hint?: TerminalRouteSessionHint; brain?: boolean; active: () => boolean }) {
   const server = untracked(current);
   const transport = untracked(currentTransport);
   if (!server || !transport) return <NavPage title="Session"><View class="flex-1 bg-background" /></NavPage>;
@@ -102,7 +100,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     identity: `${props.workerId}|${worker()?.process_id ?? ""}|${worker()?.started_at ?? ""}`,
     dismissedKey: dismissedBlock(),
   }));
-  const mode = computed(() => (!canChat() ? "terminal" : blocked().forceTerminal ? "terminal" : chosenMode()));
+  const mode = computed(() => (props.brain || !canChat() ? "terminal" : blocked().forceTerminal ? "terminal" : chosenMode()));
   const chooseMode = (next: "chat" | "terminal") => {
     if (next === "chat" && untracked(blocked).blockKey) dismissedBlock.set(untracked(blocked).blockKey);
     storedModes.set({ ...untracked(storedModes), [sessionKey]: next });
@@ -153,59 +151,16 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const durability = signal(hint.durabilityWarning ?? "");
   const fallback = computed(() => terminalFallback(connection(), connectionProblem()));
   const notice = signal("");
-  // What the Session waits on. Brain's hidden host has no terminal prompt: its question is read from the
-  // transcript and answered with answer_choice. A listed Session's prompt is the one the daemon read off its
-  // terminal (only from a list received on this connection): a question card, or the menu/approval card.
-  const gone = signal<ReadonlySet<string>>(new Set());
-  const isHost = computed(() => !workers().some((w) => w.id === props.workerId) && brain()?.host_worker?.id === props.workerId);
-  const livePrompt = computed(() => {
-    const prompt = worker()?.prompt;
-    return connection() === "connected" && workersHydrated() && prompt && !gone().has(prompt.id) ? prompt : undefined;
-  });
-  const question = computed(() => {
-    const events = thread().conversation?.events;
-    if (isHost()) {
-      const pending = visiblePendingChoice(events, gone());
-      const callId = pending?.call_id;
-      return pending && callId
-        ? { key: callId, choice: pending.choice, goneKey: callId, goneNotice: CHOICE_GONE_NOTICE, submit: (answers: ChoiceAnswer[]) => answerChoice(transport, props.workerId, callId, answers) }
-        : null;
-    }
-    const prompt = livePrompt();
-    if (!prompt) return null;
-    const transcript = latestPendingChoice(events);
-    const choice = choiceFromPrompt(prompt, transcript?.call_id ? { callId: transcript.call_id, choice: transcript.choice } : null);
-    return choice
-      ? { key: prompt.call_id ?? prompt.id, choice, goneKey: prompt.id, goneNotice: PROMPT_GONE_NOTICE, submit: (answers: ChoiceAnswer[]) => answerPrompt(transport, props.workerId, prompt.id, { answers }) }
-      : null;
-  });
-  const questionKey = computed(() => question()?.key ?? "");
+  // What the Session waits on: its requests, from the same model as the tray (an agent's reported
+  // decisions, the prompt the daemon read off its terminal, a question its transcript fills in).
+  const requests = threadRequests({ workerId: props.workerId }, () => thread().conversation?.events);
+  const sealedHere = threadSealed({ workerId: props.workerId });
+  const pickedRequest = signal("");
   // A DSH Session asks through its own channel; one panel per run of it.
   const dshRun = computed(() => {
     const w = worker();
     return thread().conversation?.source === "dsh_session_jsonl" && w?.process_id && w.started_at ? `${w.process_id}|${w.started_at}` : "";
   });
-  const actionPrompt = computed(() => (question() || !workersHydrated() || connection() !== "connected" ? null : buildTerminalActionPrompt({
-    prompt: livePrompt(),
-    approvals: worker()?.approvals,
-    scopeKey: `${props.workerId}|${worker()?.process_id ?? ""}|${worker()?.started_at ?? ""}`,
-  })));
-  const actionKey = computed(() => actionPrompt()?.id ?? "");
-  const answerAction = async (option: TerminalActionPromptOption) => {
-    const prompt = untracked(actionPrompt);
-    if (!prompt) return;
-    try {
-      if (option.approvalOptionId && prompt.approvalId) await decideApproval(transport, props.workerId, prompt.approvalId, option.approvalOptionId);
-      else if (option.number !== undefined && prompt.promptId) await answerPrompt(transport, props.workerId, prompt.promptId, { number: option.number });
-    } catch (error) {
-      if (isPromptGoneError(error) && prompt.promptId) {
-        gone.set(new Set([...untracked(gone), prompt.promptId]));
-        notice.set(PROMPT_GONE_NOTICE);
-        return;
-      }
-      throw error;
-    }
-  };
 
   const stop = async () => {
     const running = activity();
@@ -250,14 +205,14 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   // The Work this Session runs, and the Calendar run that started it.
   const link = computed(() => (worker() ? workLinkOf(worker()!) : null));
   const title = computed(() => {
+    if (props.brain) return "Brain";
     const w = worker();
     return w ? sessionRowModel(w, { alias: aliasOf(props.workerId), workTitle: link()?.workTitle, calendarLabel: link()?.calendarLabel }).title : hint.name || "Session";
   });
   const openCalendarOrigin = () => {
     const id = untracked(link)?.calendarItemId;
     if (!id) return;
-    showCalendarItem(id);
-    selectedTab.set(2);
+    openCalendarItem(id);
   };
 
   const saveRename = async () => {
@@ -544,7 +499,9 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           <AgentIcon kind={kind()} size={22} />
           <View class="flex-1">
             <Text class="text-base font-semibold line-clamp-1">{title()}</Text>
-            {link()?.calendarLabel ? (
+            {props.brain ? (
+              <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text>
+            ) : link()?.calendarLabel ? (
               <Text testID="session-calendar" class="text-xs text-primary line-clamp-1" onPress={openCalendarOrigin}>{link()!.calendarLabel!}</Text>
             ) : worker() ? (
               <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">
@@ -562,7 +519,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
               <Text class="max-w-[120px] text-xs line-clamp-1">{gitChip()!.label}</Text>
             </Button>
           ) : null}
-          <Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>
+          {props.brain ? null : <Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>}
         </View>
       }>
       <View class="flex-1 bg-background">
@@ -603,7 +560,12 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
-              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"} />
+              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
+                foot={{
+                  shown: () => requests().length > 0 || sealedHere().length > 0,
+                  render: () => <RequestStack thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
+                }}
+                requests={() => requests().length} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}
@@ -620,17 +582,6 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
                 ) : null}
                 {editor.edit() ? <EditChip editor={editor} /> : null}
                 {dshRun() ? <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(dshRun().split("|")[0]), startedAt: Number(dshRun().split("|")[1]) }} /> : null}
-                {questionKey() ? (
-                  <ChoiceCard choice={untracked(question)!.choice} connected={() => connection() === "connected"}
-                    submit={(answers) => untracked(question)!.submit(answers)}
-                    onGone={() => {
-                      const passed = untracked(question);
-                      if (!passed) return;
-                      gone.set(new Set([...untracked(gone), passed.goneKey]));
-                      notice.set(passed.goneNotice);
-                    }} />
-                ) : null}
-                {actionKey() ? <ActionPromptCard prompt={untracked(actionPrompt)!} connected={() => connection() === "connected"} answer={answerAction} /> : null}
                 {notice() ? <Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text> : null}
               </Composer>
             </View>

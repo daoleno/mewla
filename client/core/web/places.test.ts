@@ -4,7 +4,6 @@ import {
   documentTitle,
   isDesktopLayout,
   pageColumnWidth,
-  placeOfLink,
   placeOfPath,
   placePath,
   sidebarKeyOf,
@@ -27,16 +26,17 @@ describe("sidebar", () => {
     expect(sidebarRows({ friends: false }).map((row) => row.key)).not.toContain("friends");
   });
 
-  test("a Session selects Sessions and Work selects Brain", () => {
+  test("a Session selects Sessions, a Work file Brain, the computer page Settings", () => {
     expect(sidebarKeyOf({ key: "session", workerId: "w1" })).toBe("sessions");
-    expect(sidebarKeyOf({ key: "work" })).toBe("brain");
+    expect(sidebarKeyOf({ key: "work", page: { name: "workFile", id: "w1" } })).toBe("brain");
+    expect(sidebarKeyOf({ key: "computer" })).toBe("settings");
     expect(sidebarKeyOf({ key: "calendar" })).toBe("calendar");
   });
 });
 
 describe("paths", () => {
   const places: WebPlace[] = [
-    { key: "brain" }, { key: "work" }, { key: "sessions" }, { key: "session", workerId: "w 1/x" }, { key: "calendar" },
+    { key: "brain" }, { key: "computer" }, { key: "sessions" }, { key: "session", workerId: "w 1/x" }, { key: "calendar" },
     { key: "extensions" }, { key: "screen" }, { key: "stats" }, { key: "resources" }, { key: "friends" }, { key: "settings" },
   ];
 
@@ -53,16 +53,18 @@ describe("paths", () => {
     expect(placePath({ key: "session", workerId: "a/b c" })).toBe("/sessions/a%2Fb%20c");
   });
 
-  test("the Expo web app's paths and odd ones still land somewhere sensible", () => {
-    expect(placeOfPath("/list")).toEqual({ key: "sessions" });
+  test("the computer page and the OAuth return have paths; odd ones land somewhere sensible", () => {
+    expect(placeOfPath("/computer")).toEqual({ key: "computer" });
+    expect(placePath({ key: "computer" })).toBe("/computer");
     expect(placeOfPath("/plugins")).toEqual({ key: "extensions" });
-    expect(placeOfPath("/terminal/w9?serverId=s1")).toEqual({ key: "session", workerId: "w9" });
-    expect(placeOfPath("/terminal?id=w8")).toEqual({ key: "session", workerId: "w8" });
-    expect(placeOfPath("/terminal")).toEqual({ key: "sessions" });
-    expect(placeOfPath("/phone")).toEqual({ key: "screen" });
     expect(placeOfPath("/settings/")).toEqual({ key: "settings" });
     expect(placeOfPath("/onboarding")).toBeNull();
+    expect(placeOfPath("/work")).toBeNull();
     expect(placeOfPath("")).toEqual({ key: "brain" });
+  });
+
+  test("only the paths something sends: not the Expo web app's /list, /terminal or /phone", () => {
+    for (const path of ["/list", "/terminal/w9?serverId=s1", "/terminal", "/phone"]) expect(placeOfPath(path)).toBeNull();
   });
 });
 
@@ -93,24 +95,6 @@ describe("sub-pages have URLs of their own (parity #47)", () => {
     expect(placeOfPath("/plugins/agents/claude-code")).toEqual({ key: "extensions", page: { name: "extensions-agent", scope: "claude-code" } });
     expect(placeOfPath("/work/w1")).toEqual({ key: "work", page: { name: "workFile", id: "w1" } });
     expect(placeOfPath("/friends/nowhere")).toEqual({ key: "friends" });
-  });
-});
-
-describe("mewla:// links no other handler takes (parity #48)", () => {
-  test("stats, resources, screen, a terminal, a Work file, a Friends post, a Plugins service", () => {
-    expect(placeOfLink("mewla://stats")).toEqual({ key: "stats" });
-    expect(placeOfLink("mewla://resources/")).toEqual({ key: "resources" });
-    expect(placeOfLink("mewla://screen")).toEqual({ key: "screen" });
-    expect(placeOfLink("mewla://terminal/w9?serverId=s1")).toEqual({ key: "session", workerId: "w9" });
-    expect(placeOfLink("mewla://work/w1")).toEqual({ key: "work", page: { name: "workFile", id: "w1" } });
-    expect(placeOfLink("mewla://friends/post/p1")).toEqual({ key: "friends", page: { name: "friends-post", id: "p1" } });
-    expect(placeOfLink("mewla://plugins/notion")).toEqual({ key: "extensions", page: { name: "extensions-service", id: "notion" } });
-  });
-
-  test("the links other handlers take stay theirs", () => {
-    for (const url of ["mewla://brain", "mewla://sessions/w1", "mewla://calendar?id=c1", "mewla://live/brain", "mewla://settings/computer?id=s1", "mewla://phone", "mewla://plugins", "mewla://plugins?state=x", "mewla://plugins/callback?state=x", "mewla://more", "https://x.test/stats"]) {
-      expect(placeOfLink(url)).toBeNull();
-    }
   });
 });
 

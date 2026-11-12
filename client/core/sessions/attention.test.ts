@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrainCurrentWork } from "../work/types";
-import { brainNeedsYou, sessionsNeedYou, tabTitle } from "./attention";
+import { brainNeedsYou, sessionsNeedYou } from "./attention";
 
 describe("the needs-you dots", () => {
   test("Sessions: one of the computer's Sessions waits on you", () => {
@@ -26,9 +26,4 @@ describe("the needs-you dots", () => {
     expect(brainNeedsYou(undefined, now)).toBe(false);
   });
 
-  test("a tab says it in its title, unless it is the one shown", () => {
-    expect(tabTitle("Brain", true, false)).toBe("Brain •");
-    expect(tabTitle("Brain", true, true)).toBe("Brain");
-    expect(tabTitle("Brain", false, false)).toBe("Brain");
-  });
 });

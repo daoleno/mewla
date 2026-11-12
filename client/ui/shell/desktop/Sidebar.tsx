@@ -4,9 +4,11 @@ import { sidebarRows, type DesktopPlaceKey, type WebPlace } from "../../../core/
 import { desktopShortcutTooltip } from "../../../core/web/shortcuts";
 import { friendsEnabled } from "../../more/friends/state";
 import { Icon, type IconName } from "../../kit/Icon";
-import { ConnectionLine } from "../../screens/More";
+import { ConnectionLine } from "../../computer/ConnectionLine";
 import { openPlace, selectedPlace } from "../Shell";
-import { needsYou } from "../attention";
+import { brainNeedsYou, sessionsNeedYou } from "../../../core/sessions/attention";
+import type { BrainCurrentWork } from "../../../core/work/types";
+import { brain, workers } from "../../session";
 import { paletteOpen } from "./Overlays";
 
 const ICONS: Record<DesktopPlaceKey, IconName> = {
@@ -23,6 +25,12 @@ const ICONS: Record<DesktopPlaceKey, IconName> = {
 
 function Hint(props: { text: string }) {
   return <Tooltip class="rounded-md bg-popover px-2 py-1 border border-border"><Text class="text-xs text-popover-foreground">{props.text}</Text></Tooltip>;
+}
+
+/** Brain's Work or a Session of the current computer waits on you: the row's dot. */
+function needsYou(key: DesktopPlaceKey): boolean {
+  if (key === "brain") return brainNeedsYou(brain()?.current_work as BrainCurrentWork[] | undefined);
+  return key === "sessions" && sessionsNeedYou(workers());
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired, phoneHost } from "../testing/fixtures";
+import { paired, phoneHost, settle } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -62,18 +62,6 @@ describe("the desktop layout", () => {
     await app.waitUntil(() => last(app)?.path === "/stats");
   }, 20_000);
 
-  test("mewla:// links to Stats, Resources and a terminal open them (parity #48)", async () => {
-    const sessions = [{ id: "w1", name: "release", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain: {}, worker_sessions: sessions, conversations: { w1: [] } }) });
-    await app.waitFor("text:Brain is starting…", { timeout: 10_000 });
-    await app.host.send("links.open", { url: "mewla://stats" });
-    await app.waitFor("id:stats");
-    await app.host.send("links.open", { url: "mewla://resources" });
-    await app.waitFor("id:resources");
-    await app.host.send("links.open", { url: "mewla://terminal/w1" });
-    await app.waitFor("id:session-menu");
-  }, 20_000);
-
   test("a place that waits on you has a dot beside its name", async () => {
     const sessions = [{ id: "w1", name: "release", status: "blocked", needs_attention: true, cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }) });
@@ -86,12 +74,11 @@ describe("the desktop layout", () => {
     await app.waitFor("id:sidebar");
     for (const key of ["brain", "sessions", "calendar", "extensions", "screen", "stats", "resources", "settings"]) expect(app.shows(`id:sidebar-${key}`)).toBe(true);
     expect(app.shows("id:sidebar-friends")).toBe(false);
-    expect(app.shows("id:tab-row")).toBe(false);
+    expect(app.count("id:tabs")).toBe(0);
     await app.waitUntil(() => locations(app).length > 0);
     expect(locations(app)[0]).toMatchObject({ path: "/", title: "Brain · Mewla", mode: "replace", state: { index: 0, serverId: "s1" } });
 
     const first = (path: string) => locations(app).find((location) => location.path === path);
-    // Hidden sections stay mounted (their pages count as shown): the URL says where the app is.
     await app.press("id:sidebar-calendar");
     await app.waitUntil(() => last(app)?.path === "/calendar");
     expect(first("/calendar")).toMatchObject({ title: "Calendar · Mewla", mode: "push", state: { index: 1 } });
@@ -122,12 +109,12 @@ describe("the desktop layout", () => {
     await app.waitUntil(() => last(app)?.path === "/resources");
   }, 20_000);
 
-  test("a reload opens the place its URL names, as the root of the page (no Back)", async () => {
+  test("a reload opens the place its URL names, on its natural stack (Settings under the computer page, over home)", async () => {
     const app = await open(APP, { ...desk, host: webHost({ brain: {} }, { "web.initialPath": { path: "/settings", state: null } }) });
     await app.waitFor("id:settings");
     await app.waitUntil(() => locations(app).length > 0);
     expect(locations(app)[0]).toMatchObject({ path: "/settings", title: "Settings · Mewla", mode: "replace" });
-    expect((locations(app)[0].state.snapshot as { tab: number; routes: { name: string }[] }).routes.map((route) => route.name)).toEqual(["settings"]);
+    expect((locations(app)[0].state.snapshot as { routes: { name: string }[] }).routes.map((route) => route.name)).toEqual(["home", "computer", "settings"]);
   }, 20_000);
 
   test("a Session the daemon named after its id has the title its page shows, not the id twice", async () => {
@@ -151,19 +138,20 @@ describe("the desktop layout", () => {
     await app.waitUntil(() => last(app)?.path === "/sessions");
   }, 20_000);
 
-  test("the Expo web app's bookmark of a Session still opens it", async () => {
+  test("the Expo web app's /terminal bookmark is not a place any more: it opens Brain", async () => {
     const sessions = [{ id: "w1", name: "api server", cwd: "/home/me/api", status: "running", started_at: 1 }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }, { "web.initialPath": { path: "/terminal/w1?serverId=old", state: null } }) });
-    await app.waitUntil(() => last(app)?.path === "/sessions/w1");
+    await app.waitUntil(() => last(app)?.path === "/");
     expect(locations(app)[0].mode).toBe("replace");
   }, 20_000);
 
-  test("below 1024 pt the tabs stay; the URL still follows", async () => {
+  test("below 1024 pt the phone's one stack, no sidebar; the URL still follows", async () => {
     const app = await open(APP, { ...desk, width: 800, host: webHost() });
-    await app.waitFor("id:tab-row");
+    await app.waitFor("id:home-header");
     expect(app.shows("id:sidebar")).toBe(false);
-    await app.press("id:tab-Calendar");
-    await app.waitUntil(() => last(app)?.path === "/calendar");
+    await settle(app);
+    await app.press("id:home-cat");
+    await app.waitUntil(() => last(app)?.path === "/computer");
   }, 20_000);
 
   test("the sidebar's width is dragged and saved", async () => {
@@ -176,16 +164,14 @@ describe("the desktop layout", () => {
 });
 
 describe("page headers on the web", () => {
-  test("a place has its title and actions and no Back; a page under it has Back, which goes back a history step", async () => {
+  test("every page over home has Back, which goes back a history step", async () => {
     const sessions = [{ id: "w1", name: "api server", status: "done", cwd: "/home/me/api", command: "claude", provider: "claude", updated_at: Date.now() }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions, conversations: { w1: [] } }) });
     await app.waitUntil(() => locations(app).length > 0);
+    expect(app.count("id:page-back")).toBe(0);
     await app.press("id:sidebar-sessions");
     await app.waitUntil(() => last(app)?.path === "/sessions");
-    // The Sessions header's own buttons, which the web had no header for.
-    expect(app.shows("id:new-session")).toBe(true);
-    expect(app.shows("id:sessions-menu")).toBe(true);
-    expect(app.count("id:page-back")).toBe(0);
+    await app.waitUntil(() => app.count("id:page-back") === 1);
     await app.waitFor("text:api server", { timeout: 10_000 });
     await app.press("text:api server");
     await app.waitUntil(() => last(app)?.path === "/sessions/w1");
@@ -194,7 +180,7 @@ describe("page headers on the web", () => {
     await app.press("id:page-back");
     // Back to the list is the browser's step back, so Forward still reopens the Session.
     await app.waitUntil(() => last(app)?.path === "/sessions" && last(app)?.mode === "back");
-    await app.waitUntil(() => app.count("id:page-back") === 0);
+    await app.waitUntil(() => app.count("id:page-back") === 1);
   }, 20_000);
 });
 
@@ -202,7 +188,7 @@ describe("Phone use's link", () => {
   test("mewla://phone opens the Phone use page", async () => {
     const status = { supported: true, sdk: 35, enabled: true, link: true, link_state: "online", developer_options: true, wireless_debugging: true, wifi: true, paired: true, helper: true, problem: null, accessibility: true, restricted: false, self_healing: true, guide: null, notifications: true, state: "ready", w: 720, h: 1600, display_info: null, agent: null, handoff: null, drawn: true, opening: null, launch_failed: null };
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain: {} }, { "phone.status": () => status, "phone.follow": () => null, "phone.setPipAuto": () => null }) });
-    await app.waitFor("text:New chat");
+    await app.waitFor("id:home-header");
     await app.host.send("links.open", { url: "mewla://phone" });
     await app.waitFor("id:phone-page");
   }, 20_000);

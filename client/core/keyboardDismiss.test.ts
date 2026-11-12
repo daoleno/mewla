@@ -15,15 +15,9 @@ describe("the keyboard goes down with its field", () => {
     expect(guarded).toMatch(/dismissed\.set\(true\);\s*Keyboard\.dismiss\(\);/);
   });
 
-  test("leaving a page (a pop) and changing tabs dismiss it", () => {
-    const shell = read("shell/Shell.tsx");
-    const paged = shell.slice(shell.indexOf("function Paged"), shell.indexOf("function Section"));
-    // Before the phone's early return: phones take that branch.
-    expect(paged.indexOf("Keyboard.dismiss()")).toBeGreaterThan(-1);
-    expect(paged.indexOf("Keyboard.dismiss()")).toBeLessThan(paged.indexOf("if (mobile) return"));
-    expect(paged).toMatch(/if \(now < depth\) Keyboard\.dismiss\(\);/);
-    const shellFn = shell.slice(shell.indexOf("export function Shell()"));
-    expect(shellFn.slice(0, shellFn.indexOf("if (!mobile)"))).toMatch(/if \(tab !== shownTab\) Keyboard\.dismiss\(\);/);
+  test("leaving a page (a pop) dismisses it: the one stack watches its depth", () => {
+    const nav = read("shell/nav.ts");
+    expect(nav).toMatch(/if \(now < depth\) Keyboard\.dismiss\(\);/);
   });
 
   test("a composer whose page is covered lets go of its field", () => {

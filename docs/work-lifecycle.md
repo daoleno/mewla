@@ -349,7 +349,7 @@ or ⋮ → Work); see
 `current_work`, then `open_work` (every unfinished Work `current_work` leaves
 out, newest first, with its status, progress mode and wait; Brain's own
 context keeps only the bounded `current_work`), and maps each lifecycle onto six marks in
-`brainWorkLifecycleStatus` (`app/components/brain/brainWorkEventPresentation.ts`).
+`brainWorkLifecycleStatus` (`client/core/work/surface.ts`).
 
 ### User Decisions
 

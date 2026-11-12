@@ -1,12 +1,30 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering, framesOf, paired, phoneHost } from "../testing/fixtures";
+import { answering, framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
+const WEB = {
+  "app.origin": () => "http://127.0.0.1:1",
+  "links.initial": () => null,
+  "web.initialPath": () => ({ path: "/", state: null }),
+  "web.setLocation": () => null,
+};
 const session = (id: string, patch: Record<string, unknown> = {}) => ({ id, name: "", status: "done", cwd: "/home/me/mewla", command: "claude --permission-mode bypassPermissions", provider: "claude", updated_at: Date.now(), ...patch });
 
-async function sessionsApp(daemon: Record<string, unknown>) {
-  const app = await open(APP, { host: phoneHost({ brain: {}, ...daemon }), storage: paired, platform: "android" });
+/**
+ * `drawnHeader`: the phone-width web app, whose page header is the app's own laid-out row. NSH 0.5.0's
+ * headless Android model lays a native header's items at the screen's origin, so a Session's title covers
+ * ⋯ and the Git chip there (nsh-upstream-1111/DRAFT-headless-header-item-order.md); a test that presses a
+ * header action runs here until NSH places them. Back to Android when it does.
+ */
+async function sessionsApp(daemon: Record<string, unknown>, options: { drawnHeader?: boolean } = {}) {
+  const host = phoneHost({ brain: {}, ...daemon }, options.drawnHeader ? WEB : {});
+  const app = await open(APP, options.drawnHeader
+    ? { host, storage: paired, platform: "web", width: 390, height: 844 }
+    : { host, storage: paired, platform: "android" });
+  // The inbox link opens the tray; its last row is All Sessions, by folder.
   await app.host.send("links.open", { url: "mewla://sessions" });
+  await app.waitFor("id:tray-all-sessions");
+  await pressUntil(app, "id:tray-all-sessions", "id:sessions");
   return app;
 }
 
@@ -45,10 +63,11 @@ describe("Sessions", () => {
     expect(none.texts()).toContain("New session");
   }, 20_000);
 
-  test("New session starts the agent in the folder shown and opens it", async () => {
-    const app = await sessionsApp({ worker_sessions: [session("a", { name: "first" })] });
+  test("New session (the tray's +) starts the agent in the folder shown and opens it", async () => {
+    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
     await app.waitFor("text:first");
-    await app.press("id:new-session");
+    await app.press("id:tray-new");
     await app.waitFor("id:preset-codex");
     await app.press("id:preset-codex");
     await app.waitFor("id:session-menu");
@@ -58,7 +77,7 @@ describe("Sessions", () => {
     expect(active.at(-1)).toBe("w101");
   }, 20_000);
 
-  test("the menu's Services lists ports by project; a port's page opens its terminal and shares it after asking", async () => {
+  test("the tray menu's Services lists ports by project; a port's page opens its terminal and shares it after asking", async () => {
     const web = { id: "svc-1", generation: "g1", worker_id: "a", worker_name: "dev server", project: "mewla", cwd: "/home/me/mewla", process: "vite", pid: 9, port: 5173, protocol: "tcp", binds: ["0.0.0.0"], urls: [{ label: "LAN", url: "http://192.0.2.10:5173", address: "192.0.2.10:5173", kind: "lan" }], local_only: false, source: "session" };
     const app = await sessionsApp({
       worker_sessions: [session("a", { name: "dev server" })],
@@ -69,7 +88,9 @@ describe("Sessions", () => {
     });
     await app.waitFor("text:dev server");
     app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : dialog.buttons.includes("Start tunnel") ? "Start tunnel" : null));
-    await answering(app, () => app.press("id:sessions-menu"));
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("id:tray-menu");
+    await answering(app, () => app.press("id:tray-menu"));
     await app.waitFor("id:service-row");
     expect(app.texts()).toContain("5173");
     expect(app.texts()).toContain("1 port");
@@ -94,7 +115,7 @@ describe("Sessions", () => {
     app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : dialog.buttons.includes("Cancel") ? "Cancel" : null));
     // The menu offers Services once the computer is connected; a slow runner may get there after the list shows.
     for (let tries = 0; !app.shows("id:services-sheet") && tries < 5; tries += 1) {
-      await app.press("id:sessions-menu");
+      await app.press("id:tray-menu");
       await app.waitFor("id:services-sheet", { timeout: 2_000 }).catch(() => {});
     }
     expect(app.shows("id:services-sheet")).toBe(true);
@@ -147,18 +168,22 @@ describe("a Session", () => {
     prompt: { id: "p-1", kind: "permission", provider: "claude", title: "Run this command?", request: "rm -rf build", options: [{ number: 1, label: "Yes", selected: true }, { number: 2, label: "No" }] },
   });
 
-  test("shows its chat, and the prompt open in its terminal as a card the person can answer", async () => {
+  test("shows its chat, and the prompt open in its terminal as a request card in its thread the person can answer", async () => {
     const app = await sessionsApp({ worker_sessions: [blocked], conversations: { w9: transcript } });
     await app.waitFor("text:cleanup");
     await app.waitFor("text:cleanup", { timeout: 10_000 });
     await app.press("text:cleanup");
-    await app.waitFor("id:action-prompt");
-    expect(app.texts()).toContain("Run this command?");
+    await app.waitFor("id:request-card");
+    // The terminal's permission menu: what it runs, then No and Yes (the default).
+    expect(app.texts()).toContain("Approve");
+    expect(app.texts()).toContain("rm -rf build");
     expect(app.texts()).toContain("Delete the build folder");
+    await app.wait(500);
     await app.press("id:prompt-option-2");
     await app.waitFor("text:Running");
     expect(framesOf(app.host.posts(), "answer_prompt").at(-1)).toMatchObject({ worker_id: "w9", prompt_answer: { prompt_id: "p-1", number: 2 } });
-    expect(app.shows("id:action-prompt")).toBe(false);
+    await app.waitFor("id:request-sealed");
+    expect(app.shows("id:request-card")).toBe(false);
   }, 20_000);
 
   test("a long chat read back up, left and reopened shows its messages at the row it was read to (FAILURES R4#9)", async () => {
@@ -187,7 +212,7 @@ describe("a Session", () => {
   }, 30_000);
 
   test("the menu switches to the terminal and renames it on this phone", async () => {
-    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
+    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } }, { drawnHeader: true });
     await app.waitFor("text:notes", { timeout: 10_000 });
     await app.press("text:notes");
     await app.waitFor("id:session-chat");
@@ -257,7 +282,7 @@ describe("a Session", () => {
       frontmatter: { id: "wf-1", kind: "calendar_action", created: "2026-07-17T03:00:00Z", worker_session: "w4", extra: { calendar_item_id: "c1", calendar_run_id: "r1" } },
     };
     const calendarItem = { id: "c1", title: "Paper digest", kind: "scheduled_action", status: "scheduled", timezone: "UTC", due_at: "2026-07-18T03:00:00Z", runs: [{ id: "r1", status: "running", scheduled_for: "2026-07-17T03:00:00Z", work_id: "wf-1" }] };
-    const app = await sessionsApp({ worker_sessions: [session("w4", { started_at: startedAt })], conversations: { w4: [] }, work_items: [work], calendar_items: [calendarItem] });
+    const app = await sessionsApp({ worker_sessions: [session("w4", { started_at: startedAt })], conversations: { w4: [] }, work_items: [work], calendar_items: [calendarItem] }, { drawnHeader: true });
     // The run's label comes before the Work's title, as in v0.3.1.
     await app.waitFor("text:Paper digest · Jul 17");
     expect(app.count("id:row-calendar")).toBe(1);
@@ -299,7 +324,7 @@ describe("a Session", () => {
   test("a Session in a repository shows its changes on a chip that opens Git review", async () => {
     const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }, { path: "notes.md", staged: false, unstaged: false, untracked: true, additions: 0, deletions: 0 }];
     const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 2, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 1, additions: 3, deletions: 1, files };
-    const app = await sessionsApp({ worker_sessions: [session("w5", { name: "repo work" })], conversations: { w5: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } });
+    const app = await sessionsApp({ worker_sessions: [session("w5", { name: "repo work" })], conversations: { w5: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } }, { drawnHeader: true });
     await app.waitFor("text:repo work", { timeout: 10_000 });
     await app.press("text:repo work");
     await app.waitFor("id:session-git");
@@ -319,9 +344,7 @@ describe("a Session", () => {
       storage: paired,
       platform: "android",
     });
-    await app.host.send("links.open", { url: "mewla://sessions" });
-    await app.waitFor("text:attach", { timeout: 10_000 });
-    await app.press("text:attach");
+    await app.host.send("links.open", { url: "mewla://sessions/w6" });
     await app.waitFor("id:composer");
     await app.press("id:composer-plus");
     await app.press("id:attach-file");
@@ -346,7 +369,7 @@ describe("a Session", () => {
     expect(app.texts()).toContain("Today");
   }, 20_000);
   test("in the terminal, Terminate offline says the computer is offline instead of doing nothing (parity #37)", async () => {
-    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
+    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } }, { drawnHeader: true });
     await app.waitFor("text:notes", { timeout: 10_000 });
     await app.press("text:notes");
     await app.waitFor("id:session-chat");
@@ -398,7 +421,7 @@ describe("a Session", () => {
       presets: [{ id: "custom", label: "Custom Gateway", clients: ["claude"], advanced: true }],
       models: {},
     };
-    const app = await sessionsApp({ worker_sessions: [session("w4", { name: "site work", cwd: "/home/me/site" }), session("w0", { name: "other", cwd: "/home/me/mewla" })], conversations: { w4: transcript }, replies: { list_providers: providers } });
+    const app = await sessionsApp({ worker_sessions: [session("w4", { name: "site work", cwd: "/home/me/site" }), session("w0", { name: "other", cwd: "/home/me/mewla" })], conversations: { w4: transcript }, replies: { list_providers: providers } }, { drawnHeader: true });
     await app.waitFor("text:site work", { timeout: 10_000 });
     await app.press("text:site work");
     await app.waitFor("id:session-chat");
@@ -414,7 +437,7 @@ describe("a Session", () => {
     const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }];
     const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 1, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 0, additions: 3, deletions: 1, files };
     const repo = session("w8", { name: "repo work" });
-    const app = await sessionsApp({ worker_sessions: [repo], conversations: { w8: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } });
+    const app = await sessionsApp({ worker_sessions: [repo], conversations: { w8: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } }, { drawnHeader: true });
     await app.waitFor("text:repo work", { timeout: 10_000 });
     await app.press("text:repo work");
     await app.waitFor("id:session-git");

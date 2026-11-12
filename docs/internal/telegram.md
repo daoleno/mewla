@@ -339,7 +339,7 @@ policy above; Brain and user-created topics are excluded.
 
 Android and iOS share the channel behavior and Settings contract. Actual
 signed-in client UI proof requires a user-owned Telegram client session; an
-API receipt or bundle export is not a client screenshot.
+API receipt or app build is not a client screenshot.
 
 ## Official References
 

@@ -21,6 +21,5 @@ loss replaces the Work lineage card even without a provider result; reviewing
 and resolved states follow canonical lifecycle state. Input is never replayed by
 this presentation repair.
 
-Regression coverage lives outside runtime routes in `app/services/appChromeCopy.test.ts`,
-`app/components/brain/brainWorkEventPresentation.test.ts`, and
-`daemon/brain/turn_loss_presentation_test.go`.
+Regression coverage is in `client/core/timeline/brainWorkEventCardProjection.test.ts`
+and `daemon/brain/turn_loss_presentation_test.go`.

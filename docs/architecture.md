@@ -41,7 +41,7 @@ LAN, Tailscale, Cloudflare Tunnel, and reverse-proxy origins continue to call
 the exact same daemon HTTP handler without Mewla Relay. The daemon opens no new
 public listener for Mewla Relay.
 
-The same handler also serves the app's web export (`daemon/webui`) to loopback
+The same handler also serves the client's web build (`daemon/webui`, built by `scripts/build-web-ui.sh`) to loopback
 and to the HTTPS addresses in the daemon's address book (`mewla address`). A
 browser pairs as one more device and uses the same signed requests; see
 [In a browser](connect-and-pair.md#in-a-browser).
@@ -318,7 +318,8 @@ Existing identity, pairing token, trusted-device, upload, Work, Brain, Calendar,
 and agent state remain owned by the daemon. The relay has no database and
 persists none of them.
 
-The app keeps its Ed25519 device seed in secure storage. AsyncStorage keeps one
+The app keeps its Ed25519 device seed in secure storage. The app's key-value
+storage (`client/core/servers.ts`) keeps one
 server record with daemon trust plus optional Relay route, SPKI pin, and
 transport candidates.
 

@@ -1,4 +1,5 @@
-import { cleanup, Clipboard, computed, effect, List, platform, signal, Text, untracked, View, type ListRef } from "nsh";
+import { cleanup, Clipboard, computed, effect, List, platform, signal, Text, untracked, View, type JSX, type ListRef } from "nsh";
+import { noteScroll } from "../pets/hold";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, TextView } from "nsh/base";
 import { GuardedSheet as Sheet } from "../shell/AppSheet";
@@ -13,7 +14,7 @@ import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PlainText } from "./PlainText";
 import { selectingText } from "./messageEdit";
-import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkEventCard, type Expansion } from "./TimelineRows";
+import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
@@ -28,6 +29,8 @@ export type MessageHandlers = {
   onFile?: (path: string) => void;
   /** An image a reply shows by its path on the computer, as a data URL. */
   loadImage?: (path: string) => Promise<string | null>;
+  /** Brain's thread: where its Work cards lead. */
+  work?: WorkCardHandlers;
 };
 
 /** "Working" with the turn's elapsed time, ticking each second while it shows. */
@@ -36,7 +39,7 @@ function WorkingRow(props: { since: () => string | undefined }) {
   const timer = setInterval(() => now.set(Date.now()), 1000);
   cleanup(() => clearInterval(timer));
   const label = () => providerActivityElapsedLabels({ startedAt: props.since(), nowMs: now(), active: true }).visual;
-  return <Text testID="working" class="px-4 text-base text-muted-foreground">{label() ? `Working · ${label()}` : "Working…"}</Text>;
+  return <Text testID="working" class="px-4 text-sub text-muted-foreground">{label() ? `Working · ${label()}` : "Working…"}</Text>;
 }
 
 function UserMessage(props: { item: () => MessageTimelineItem; handlers: MessageHandlers }) {
@@ -44,22 +47,23 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
   const failed = () => it().pending && it().pendingLifecycle === "failed";
   const waiting = () => it().pending && !failed();
   return (
-    <View class="max-w-[85%] items-end gap-1 self-end">
-      <Button testID="user-message" onPress={() => !it().pending && props.handlers.onUserMessage?.(it())} class={failed() ? "rounded-2xl border border-destructive px-3.5 py-2.5" : waiting() ? "rounded-2xl bg-secondary px-3.5 py-2.5 opacity-60" : "rounded-2xl bg-secondary px-3.5 py-2.5"}>
-        {it().body ? <Text class="text-base">{it().body}</Text> : null}
+    <View class="max-w-[84%] items-end gap-1 self-end">
+      <Button testID="user-message" onPress={() => !it().pending && props.handlers.onUserMessage?.(it())}
+        class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "border border-foreground" : ""} ${waiting() ? "opacity-55" : ""}`}>
+        {it().body ? <Text class="text-message">{it().body}</Text> : null}
         {it().attachments.map((file) => (
           <View class="flex-row items-center gap-1.5 pt-1">
             <Icon name="document" size={14} />
-            <Text class="text-sm text-muted-foreground line-clamp-1">{file.name}</Text>
+            <Text class="text-sub text-muted-foreground line-clamp-1">{file.name}</Text>
           </View>
         ))}
       </Button>
       {waiting() ? <Icon name="time" size={12} /> : null}
       {failed() ? (
         <View class="flex-row items-center gap-3">
-          <Text class="text-sm text-destructive">Not sent</Text>
-          <Button testID="retry" onPress={() => it().onRetryPending?.()}><Text class="text-sm font-semibold text-primary">Send again</Text></Button>
-          <Button testID="discard" onPress={() => it().onDiscardPending?.()}><Text class="text-sm text-muted-foreground">Delete</Text></Button>
+          <Text class="text-sub font-semibold">Not sent</Text>
+          <Button testID="retry" onPress={() => it().onRetryPending?.()} class="min-h-[44px] justify-center"><Text class="text-sub font-semibold">Send again</Text></Button>
+          <Button testID="discard" onPress={() => it().onDiscardPending?.()} class="min-h-[44px] justify-center"><Text class="text-sub text-muted-foreground">Delete</Text></Button>
         </View>
       ) : null}
     </View>
@@ -79,22 +83,22 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
   return (
     <View class="py-1">
       {(it() as TimelineItem | DateDividerItem).type === "date-divider" ? (
-        <View testID="date-divider" class="items-center py-1.5">
-          <Text class="rounded-full bg-accent px-2.5 py-0.5 text-xs text-muted-foreground">{(it() as unknown as DateDividerItem).label}</Text>
+        <View testID="date-divider" class="items-center py-2">
+          <Text class="text-caption text-muted-foreground">{(it() as unknown as DateDividerItem).label}</Text>
         </View>
       ) : it().type === "message" && (it() as MessageTimelineItem).role === "user" ? (
         <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>
       ) : it().type === "message" ? (
         <View class="px-4">
           <View onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
-            <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-base"
+            <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-message"
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
               renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} width={textWidth} />} />
           </View>
           {!(it() as MessageTimelineItem).streaming && props.handlers.isFinalReply?.(it().id) ? (
             <Button testID="copy-reply" onPress={() => void Clipboard.writeText((it() as MessageTimelineItem).body.replace(/\s+$/u, "")).catch(() => {})}
-              class="mt-1 self-start rounded-lg p-1.5 active:bg-accent">
-              <Icon name="copy" size={16} />
+              class="mt-1 size-11 items-center justify-center self-start rounded-full active:bg-accent">
+              <Icon name="copy" size={18} />
             </Button>
           ) : null}
         </View>
@@ -109,7 +113,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
       ) : it().type === "computer-message" ? (
         <ComputerMessageCard item={as("computer-message") as () => ComputerMessageTimelineItem} expansion={props.expansion} />
       ) : it().type === "brain-work-event" ? (
-        <WorkEventCard item={as("brain-work-event") as () => BrainWorkEventTimelineItem} />
+        <WorkCard item={as("brain-work-event") as () => BrainWorkEventTimelineItem} handlers={props.handlers.work} />
       ) : null}
     </View>
   );
@@ -129,6 +133,10 @@ function SelectTextSheet() {
   );
 }
 
+/** The thread's foot as a row of its list. */
+type FootRow = { type: "thread-foot"; id: string };
+const FOOT: FootRow = { type: "thread-foot", id: "thread-foot" };
+
 /** Where each chat was read to (its first row on screen, by key), by scope, while the app runs: reopening it comes back there. */
 const readingPositions = new Map<string, string>();
 
@@ -143,17 +151,30 @@ export function ChatTimeline(props: {
   sent?: () => number;
   /** Whether the chat is on screen: its tab or page can stay mounted, hidden, under another. */
   shown?: () => boolean;
+  /**
+   * The thread's foot, after the newest row: its open requests and what was just answered (SPEC §1.2).
+   * A row of the list (not its footer), so it measures again as cards open, stack and seal.
+   */
+  foot?: { shown: () => boolean; render: () => JSX.Element };
+  /** The open requests: with the foot out of view, the jump control shows a red dot and their count. */
+  requests?: () => number;
+  /** Bumped to bring the foot (the open request) into view: a tray row, the cold start with a request open. */
+  reveal?: () => number;
 }) {
   const handlers = props.handlers ?? {};
   const expansion = createExpansion();
   let list: ListRef | undefined;
   // Read back from the newest row: the jump button brings it into view again, saying how old it is.
   const away = signal(false);
-  const rows = computed(() => withDayDividers(props.items()));
+  const rows = computed((): (TimelineItem | DateDividerItem | FootRow)[] => {
+    const all = withDayDividers(props.items());
+    return props.foot?.shown() ? [...all, FOOT] : all;
+  });
   // Back at the row the person left it at; at the newest row, nothing to restore. The list opens there
   // itself when the row is already in (`initialScrollIndex`); rows that come later are scrolled to by index.
   // Only the person's own scrolling moves the saved place, not the list settling as it mounts.
   let restore = props.scope ? readingPositions.get(props.scope) : undefined;
+  const hadPlace = restore !== undefined;
   const initialIndex = untracked(() => readingPlaceIndex(rows(), restore));
   if (initialIndex !== undefined) restore = undefined;
   let touched = false;
@@ -164,6 +185,21 @@ export function ChatTimeline(props: {
     if (index === undefined || !mounted()) return;
     restore = undefined;
     untracked(() => list?.scrollToIndex({ index, viewPosition: 0, animated: false }));
+  });
+  // A chat with no place to go back to opens at its newest row. The list does that itself when its rows
+  // are in as it mounts; rows that come after (a Session's transcript loads once the chat is open) are
+  // brought to the newest here, once, unless the person has already moved: on a slow phone the list
+  // stayed on the oldest rows it had laid out (the test for a long chat opened at "Message 0" under load).
+  let opened = false;
+  effect(() => {
+    if (rows().length === 0 || !mounted() || opened) return;
+    opened = true;
+    if (hadPlace || touched) return;
+    untracked(() => list?.scrollToEnd({ animated: false }));
+  });
+  effect(() => {
+    if (!props.reveal || props.reveal() === 0 || !mounted()) return;
+    untracked(() => list?.scrollToEnd({ animated: true }));
   });
   effect(() => {
     if (!props.sent || props.sent() === 0) return;
@@ -224,6 +260,8 @@ export function ChatTimeline(props: {
         onScroll={({ offset, contentSize, size }) => {
           // A hidden list's scroll (a browser resets it) is not where the person was.
           if (!untracked(shown)) return;
+          // The person's own scrolling holds the header cat still.
+          if (touched) noteScroll();
           const far = contentSize.height - (offset.y + size.height) > 240;
           away.set(far);
           last = { offset: offset.y, atEnd: !far };
@@ -232,14 +270,23 @@ export function ChatTimeline(props: {
           else readingPositions.delete(props.scope);
         }}
         empty={props.empty() as never}>
-        {(item) => <TimelineRow item={item} expansion={expansion} handlers={handlers} />}
+        {(item) => ((item() as FootRow).type === "thread-foot" ? (props.foot!.render() as never) : <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />)}
       </List>
       {away() ? (
-        <Button testID="jump-latest" accessibilityLabel={age() ? `Jump to latest, ${age()} ago` : "Jump to latest"} onPress={() => list?.scrollToEnd({ animated: true })}
-          class="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 active:bg-accent">
-          <Icon name="arrow-down" size={16} />
-          {age() ? <Text class="text-sm text-muted-foreground">{age()}</Text> : null}
-        </Button>
+        (props.requests?.() ?? 0) > 0 ? (
+          <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => list?.scrollToEnd({ animated: true })}
+            class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1.5 rounded-full bg-card px-3.5 shadow-float active:opacity-70">
+            <View class="size-2 rounded-full bg-seal" />
+            <Text class="text-sub font-semibold">{String(props.requests!())}</Text>
+            <Icon name="arrow-down" size={16} color="foreground" />
+          </Button>
+        ) : (
+          <Button testID="jump-latest" accessibilityLabel={age() ? `Jump to latest, ${age()} ago` : "Jump to latest"} onPress={() => list?.scrollToEnd({ animated: true })}
+            class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1 rounded-full bg-card px-3 shadow-float active:opacity-70">
+            <Icon name="arrow-down" size={16} color="foreground" />
+            {age() ? <Text class="text-sub text-muted-foreground">{age()}</Text> : null}
+          </Button>
+        )
       ) : null}
     </View>
   );

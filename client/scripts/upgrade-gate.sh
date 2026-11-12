@@ -103,12 +103,13 @@ adb shell am start -W -n "$PKG/.MainActivity" > /dev/null
 sleep 10
 shot 3-opened
 shows "Pair a computer" && fail "the NSH app asks to pair again"
-tap "^More$" 10 || true
-for _ in $(seq 1 30); do shows "· Connected" && break; sleep 1; done
-shot 3-more
-shows "· Connected" || fail "the NSH app does not show the computer as connected"
+# Home is Brain's thread; the cat (labelled Computer) opens the computer page, which says the connection.
+tap "^Computer$" 20 || { shot 3-no-cat; fail "home has no cat to open the computer page"; }
+for _ in $(seq 1 30); do shows "\"Connected\"" && break; sleep 1; done
+shot 3-computer
+shows "\"Connected\"" || fail "the NSH app does not show the computer as connected"
 log "the app shows the computer as Connected"
-tap "^Brain$" 10 || true
+adb shell input keyevent KEYCODE_BACK
 for _ in $(seq 1 60); do shows "$DRAFT" && break; sleep 1; done
 shot 3-brain-draft
 shows "$DRAFT" || fail "Brain's composer does not show the draft typed in the Expo app"
@@ -143,9 +144,8 @@ print("draft and computers came over")
 # with the camera looking for a code.
 log "4. the scanner runs in the release build"
 adb logcat -c
-adb shell am start -W -a android.intent.action.VIEW -d "mewla://more" "$PKG" > /dev/null
-tap "^Settings$" 20 || { shot 4-no-settings; fail "More has no Settings row"; }
-tap "^Pair a computer$" 20 || { shot 4-no-pair; fail "Settings has no Pair a computer"; }
+tap "^Computer$" 20 || { shot 4-no-cat; fail "home has no cat to open the computer page"; }
+tap "^Pair a computer$" 20 || { shot 4-no-pair; fail "the computer page has no Pair a computer"; }
 tap "^While using the app$" 20 || { shot 4-no-prompt; fail "the scanner did not ask for the camera"; }
 for _ in $(seq 1 20); do shows "Looking for a Mewla code" && break; sleep 1; done
 sleep 3

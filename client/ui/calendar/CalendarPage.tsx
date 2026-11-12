@@ -9,7 +9,7 @@ import { clock } from "./clock";
 import { CalendarEditor, openEditor } from "./Editor";
 import { StatusDot } from "./parts";
 import { ReminderBanner } from "./ReminderBanner";
-import type { CalendarRoute } from "./routes";
+import type { Route } from "../shell/routes";
 import { calendar, calendarItems, calendarLoaded } from "./state";
 
 type AgendaRow = { kind: "section"; title: string } | { kind: "item"; item: CalendarItem };
@@ -136,7 +136,7 @@ function Empty() {
   );
 }
 
-export function CalendarPage(props: { nav: NavStackState<CalendarRoute>; openSession: (sessionId: string) => void }) {
+export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (sessionId: string) => void }) {
   const toggleMonth = () => {
     // Hiding the month goes back to the whole agenda.
     if (showMonth()) pickedDay.set(null);
