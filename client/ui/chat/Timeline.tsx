@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, computed, effect, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, computed, effect, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
 import { noteScroll } from "../pets/hold";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, TextView } from "nsh/base";
@@ -23,10 +23,30 @@ import { brainFiles, openChatLink, openChatPath } from "./links";
 
 
 /**
- * Tables bleed to the right screen edge (the reply is inset 16): the scroll runs 16 past the text, the rows
- * keep 16 at their end, so a table that fits ends at the text's margin and a wide one is cut by the screen.
+ * A reply's table (soft-final SPEC §11 Table): a surface card, radius 20, inside the text's margins like a code
+ * block; hair lines between rows, none between columns; cells 15/22 that keep to one line, the header 13/600 soft.
+ * Wider than the card, it scrolls sideways inside it. The scroll ends in 24 of padding under the edge fade, so
+ * the fade lies on text only while more is hidden to the right.
  */
-const TABLE_BLEED = { tableScroll: "-mr-4 pr-4" };
+const TABLE = {
+  table: "m-0 overflow-hidden rounded-[20px] border-0 bg-card",
+  tableScroll: "m-0 pr-6",
+  tableRow: "border-0 border-t border-border",
+  tableHead: "border-t-0",
+  tableCell: "border-0 px-4 py-3 text-[15px] leading-[22px] whitespace-nowrap",
+  tableHeaderCell: "text-[13px] font-semibold leading-4 text-muted-foreground",
+};
+
+/** The table card's right-edge fade, over the scroll (it takes no touches). */
+const tableFade = () => <View class="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-6 bg-linear-to-l from-card to-transparent" />;
+
+/**
+ * The jump control floats over the thread, often over a bubble, so it must read as floating: the sheet-surface
+ * fill (lighter than a bubble in dark) and the full float shadow (SPEC 11 Jump control).
+ */
+const jumpFloat = () => colorScheme() === "dark"
+  ? "bg-sheet-surface shadow-[0_16px_48px_-12px_rgb(0_0_0_/_0.7)]"
+  : "bg-sheet-surface shadow-[0_16px_48px_-12px_rgb(19_20_22_/_0.22)]";
 
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
@@ -142,9 +162,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
             onLongPress={() => !(it() as MessageTimelineItem).streaming && void showMessageMenu(it() as MessageTimelineItem, { connected: true, running: false })}>
             <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} class="text-message"
               renderCodeBlock={renderCode}
-              // A table wider than the column scrolls sideways; its scroll runs to the screen's edge, so a wide one
-              // is cut by the screen, which reads as "there is more", not by the text's margin.
-              classes={TABLE_BLEED}
+              classes={TABLE} renderTableActions={tableFade}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
               renderImage={(image) => {
                 const key = pictureKey(it().id, image.src);
@@ -381,14 +399,14 @@ export function ChatTimeline(props: {
       {away() ? (
         (props.requests?.() ?? 0) > 0 ? (
           <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}
-            class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1.5 rounded-full bg-card px-3.5 shadow-float active:opacity-70">
+            class={`absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1.5 rounded-full px-3.5 active:opacity-70 ${jumpFloat()}`}>
             <View class="size-2 rounded-full bg-seal" />
             <Text class="text-sub font-semibold">{String(props.requests!())}</Text>
             <Icon name="arrow-down" size={16} color="foreground" />
           </Button>
         ) : (
           <Button testID="jump-latest" accessibilityLabel="Jump to latest" onPress={() => list?.scrollToEnd({ animated: true })}
-            class="absolute bottom-3 right-4 size-11 items-center justify-center rounded-full bg-card shadow-float active:opacity-70">
+            class={`absolute bottom-3 right-4 size-11 items-center justify-center rounded-full active:opacity-70 ${jumpFloat()}`}>
             <Icon name="arrow-down" size={18} color="foreground" />
           </Button>
         )
