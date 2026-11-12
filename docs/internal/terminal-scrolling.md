@@ -52,9 +52,11 @@ never takes the size back on its own (after `AttachBehind` or `AttachResized`),
 or two viewers of different sizes would take it from each other. A smaller
 viewer that is not the one acted on shows the other size wrongly until its
 person acts (a focus-out report is not acting); viewers from before `Redraw`
-keep their stream. A host from before `Redraw` answers `Attached.Redraw` false:
-the daemon's view and `mewla attach` then take their size back whenever they
-attach again and on every resize, as before.
+keep their stream. A host from before `Redraw` (every Session started before the
+upgrade runs on one until the host restarts) answers `Attached.Redraw` false
+and never ends a viewer for a resize: the daemon's view and `mewla attach` then
+ask the Session's size (`Info`) every half second and start over the same way
+when it is not the size their replay was drawn at.
 
 ## History and live output (tmux Sessions)
 
