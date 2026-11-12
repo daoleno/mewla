@@ -16,7 +16,7 @@ export function withDayDividers(items: readonly TimelineItem[]): TimelineRow[] {
   const rows: TimelineRow[] = [];
   let day: string | null = null;
   for (const item of items) {
-    const label = labelOf(item) ?? (day === null ? firstLabel(items) : null);
+    const label: string | null = labelOf(item) ?? (day === null ? firstLabel(items) : null);
     if (label && label !== day) {
       day = label;
       rows.push({ type: "date-divider", id: `date-divider:${label}`, label });
