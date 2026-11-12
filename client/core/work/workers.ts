@@ -6,7 +6,7 @@
 import { listTime, sessionRowModel } from "../sessions/listRow";
 import { progressSteps } from "../sessions/progress";
 import type { TerminalFlavor } from "../sessions/terminalFlavor";
-import { agentKindFromProvider, type AgentKind } from "../sessions/workerPresentation";
+import { agentKindFromProvider, typeLabel, type AgentKind } from "../sessions/workerPresentation";
 import type { Worker } from "../sessions/workers";
 import type { WorkWorkerSession, WorkWorkerState } from "./types";
 
@@ -16,6 +16,8 @@ export interface WorkWorkerLine {
   name: string;
   agent: AgentKind;
   flavor: TerminalFlavor;
+  /** "Claude Code": Work detail's rows read "Agent · name". */
+  agentLabel: string;
   state: WorkWorkerState;
   /** What it does now, or its result line. */
   summary: string;
@@ -41,11 +43,14 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
     const working = state === "running";
     const summary = (following ? session.summary?.trim() || row.summary : row.summary)?.replace(/\s+/g, " ").trim() ?? "";
     const at = Date.parse(working ? row.updated_at : row.ended_at ?? row.updated_at);
+    const agent = model?.kind ?? agentKindFromProvider(row.provider);
+    const flavor = model?.flavor ?? "shell";
     return {
       sessionId: row.session_id,
       name: row.name?.trim() || model?.title || row.executor_id || "Worker",
-      agent: model?.kind ?? agentKindFromProvider(row.provider),
-      flavor: model?.flavor ?? "shell",
+      agent,
+      flavor,
+      agentLabel: typeLabel(agent, flavor),
       state,
       summary,
       progress: working ? progressSteps(following ? session.phase ?? row.phase : row.phase) ?? undefined : undefined,
