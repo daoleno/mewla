@@ -5,31 +5,31 @@
     "component": "libghostty-vt",
     "api": "C",
     "repository": "https://github.com/ghostty-org/ghostty.git",
-    "version": "1.0.0",
-    "tag": "vt-1.0.0",
-    "tag_object": "6b38d55f04e66ebecc472d8be19946edcc6d2e9d",
-    "commit": "0fa3d577a5614150ff8e2c152de5fb9d5c6d2dec",
+    "version": "1.0.1",
+    "tag": "vt-1.0.1",
+    "tag_object": "e9dc690b08bde7e2ec9c7aff8a18a85c9cade46d",
+    "commit": "108cacb17ed8990840cd14abfce43d8ed8503ca1",
     "commit_note": "The commit the signed tag points at, for traceability. Builds use the signed release tarballs below, never a git checkout.",
     "release": {
-      "base_url": "https://release.files.ghostty.org/libghostty-vt/1.0.0",
+      "base_url": "https://release.files.ghostty.org/libghostty-vt/1.0.1",
       "packaging_doc": "PACKAGING-LIBGHOSTTY.md inside the source tarball",
       "minisign_public_key": "RWQlAjJC23149WL2sEpT/l0QKy7hMIFhYdQOFy0Z7z7PbneUgvlsnYcV",
-      "signature_verified_at_lock_time": "minisign over SHA256SUMS and over both tarballs, 2026-11-07",
+      "signature_verified_at_lock_time": "minisign over SHA256SUMS and over both tarballs, 2026-11-12",
       "source": {
-        "file": "libghostty-vt-1.0.0.tar.gz",
-        "sha256": "4a6ef758be721923e1969e7b81b443dcc92d8dd3fb5a39600c03a8817a753676",
-        "archive_root": "libghostty-vt-1.0.0"
+        "file": "libghostty-vt-1.0.1.tar.gz",
+        "sha256": "333dfce97641ef9b536bb9e08907ad86abaaada50e8f7417b70d9284adef37aa",
+        "archive_root": "libghostty-vt-1.0.1"
       },
       "deps": {
-        "file": "libghostty-vt-1.0.0-deps.tar.gz",
-        "sha256": "4d5ea5e448e4c7ea8fb55ccbaa8668f2a97d44f438cee831e2b7ecd162d85c29",
-        "archive_root": "libghostty-vt-1.0.0-deps"
+        "file": "libghostty-vt-1.0.1-deps.tar.gz",
+        "sha256": "91a4e10960a52bf5bf4b15aa2a2cddaff8a89d6cd903d3055bda4fd17de3356d",
+        "archive_root": "libghostty-vt-1.0.1-deps"
       }
     },
-    "headers_sha256": "8f5d205067ba1bcbd3dc6ad14abf2d5e3fef01e62e25c5ba91d4e652166192c7",
+    "headers_sha256": "c1f145edfbec0492566b31d4d3fc35537a0b016794f3eb1957439b165018420e",
     "headers_sha256_note": "sha256 of the sorted '<sha256>  <path>' lines of every file under include/ghostty in the source tarball (scripts/lib/ghostty_release.py headers-digest)",
     "license": "MIT",
-    "license_url": "https://github.com/ghostty-org/ghostty/blob/0fa3d577a5614150ff8e2c152de5fb9d5c6d2dec/LICENSE",
+    "license_url": "https://github.com/ghostty-org/ghostty/blob/108cacb17ed8990840cd14abfce43d8ed8503ca1/LICENSE",
     "license_sha256": "386211873e5b7a02f663ae4d7adf96285999f91608f8f9f31fecfd0f4095e6f1",
     "copyright_line": "Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors",
     "third_party_manifest": "deps/libghostty-vt-third-party.json inside the source tarball; linked: highway (Apache-2.0 OR BSD-3-Clause), simdutf (Apache-2.0 OR MIT), uucode (MIT AND Unicode-3.0), wuffs (Apache-2.0 OR MIT), translate_c (MIT)"
@@ -54,16 +54,16 @@
         "archive_root": "zig-aarch64-macos-0.17.0"
       }
     },
-    "minimum_zig_version_source": "minimum_zig_version in build.zig.zon of the source tarball; 1.0.0 needs 0.17.x (same minor, any newer patch)"
+    "minimum_zig_version_source": "minimum_zig_version in build.zig.zon of the source tarball; 1.0.1 needs 0.17.x (same minor, any newer patch)"
   },
   "android": {
     "min_api": 29,
-    "ndk_note": "Verified via ELF .note.android.ident API level 29 (0x1d) on libghostty_vt.so built from the vt-1.0.0 release; file(1) reports 'for Android 29'.",
+    "ndk_note": "Verified via ELF .note.android.ident API level 29 (0x1d) on libghostty_vt.so built from the vt-1.0.0 release (re-verify on 1.0.1); file(1) reports 'for Android 29'.",
     "forbidden_undefined_symbols": [
       "shm_open",
       "shm_unlink"
     ],
-    "source_patches_note": "None: the Android shm_open fix (ghostty adb0d793) is part of vt-1.0.0, and the build now takes the signed release tarball unmodified."
+    "source_patches_note": "None: the Android shm_open fix (ghostty adb0d793) is part of vt-1.0.1, and the build now takes the signed release tarball unmodified."
   },
   "abis": [
     {
