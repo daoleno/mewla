@@ -5,18 +5,18 @@ import { gitDiffStatusMark, gitDiffStatusWord, gitDiffTone, type GitDiffStatusTo
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
 import { color, type ColorName } from "../../kit/colors";
 import { Icon, type IconName } from "../../kit/Icon";
-import { EmptyState, Spinner } from "../../kit/kit";
+import { EmptyState, Spinner, Tile } from "../../kit/kit";
 import { gitFlash, type GitReview } from "./state";
 import { haptic } from "../../shell/haptics";
 
-/** Added and deleted keep the change colours; modified and renamed are ink (amber reads as Warning). */
+/** Added and deleted keep the change colours (`add`, `del`); modified and renamed are ink. */
 export function toneColor(tone: GitDiffStatusTone): ColorName {
   switch (tone) {
     case "added":
-      return "ready";
+      return "add";
     case "deleted":
     case "conflict":
-      return "failed";
+      return "del";
     case "renamed":
     case "modified":
       return "ink";
@@ -25,13 +25,15 @@ export function toneColor(tone: GitDiffStatusTone): ColorName {
   }
 }
 
-/** The one-character status of a file, coloured by what happened to it. */
-export function StatusChar(props: { file: Pick<GitDiffFileInfo, "status" | "binary"> }) {
+/** A file's status as a 28 pt tile (SPEC §15 Code review): M, A, D or R in mono, coloured by what happened to it. */
+export function StatusTile(props: { file: Pick<GitDiffFileInfo, "status" | "binary"> }) {
   const tone = gitDiffTone(props.file);
   return (
-    <Text class="w-4 text-center font-mono text-sm font-semibold" style={{ color: color(toneColor(tone)) }} accessibilityLabel={gitDiffStatusWord(tone)}>
-      {gitDiffStatusMark(tone)}
-    </Text>
+    <Tile size={28}>
+      <Text class="font-mono text-caption font-semibold" style={{ color: color(toneColor(tone)) }} accessibilityLabel={gitDiffStatusWord(tone)}>
+        {gitDiffStatusMark(tone)}
+      </Text>
+    </Tile>
   );
 }
 
@@ -40,22 +42,20 @@ export function Counts(props: { additions: number; deletions: number; binary?: b
   if (props.binary) return null;
   return (
     <View class="flex-row gap-1.5">
-      {props.additions > 0 ? <Text class="font-mono text-xs" style={{ color: color("ready") }}>{`+${props.additions}`}</Text> : null}
-      {props.deletions > 0 ? <Text class="font-mono text-xs" style={{ color: color("failed") }}>{`−${props.deletions}`}</Text> : null}
+      {props.additions > 0 ? <Text class="font-mono text-code" style={{ color: color("add"), fontVariant: ["tabular-nums"] }}>{`+${props.additions}`}</Text> : null}
+      {props.deletions > 0 ? <Text class="font-mono text-code" style={{ color: color("del"), fontVariant: ["tabular-nums"] }}>{`−${props.deletions}`}</Text> : null}
     </View>
   );
 }
 
-/** A path as a dim folder and its name. */
-export function PathText(props: { path: string; class?: string }) {
+/** A file's name over its folder (a file row's two lines). */
+export function FileName(props: { path: string }) {
   const index = props.path.lastIndexOf("/");
-  const dir = index === -1 ? "" : props.path.slice(0, index + 1);
-  const name = index === -1 ? props.path : props.path.slice(index + 1);
   return (
-    <Text class={`font-mono text-sm line-clamp-1 ${props.class ?? ""}`}>
-      {dir ? <Text class="text-muted-foreground">{dir}</Text> : null}
-      {name}
-    </Text>
+    <View class="min-w-0">
+      <Text class="font-mono text-code font-semibold line-clamp-1">{index === -1 ? props.path : props.path.slice(index + 1)}</Text>
+      {index > 0 ? <Text class="font-mono text-caption text-muted-foreground line-clamp-1">{props.path.slice(0, index)}</Text> : null}
+    </View>
   );
 }
 
@@ -71,14 +71,14 @@ export function IconButton(props: { icon: IconName; label: string; onPress: () =
         haptic.selection();
         props.onPress();
       }}
-      class={`size-10 items-center justify-center rounded-full active:bg-accent disabled:opacity-40 ${props.selected ? "bg-secondary" : ""}`}
+      class={`size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-40 ${props.selected ? "bg-muted" : ""}`}
     >
       {props.busy ? <Spinner size={16} /> : <Icon name={props.icon} size={20} tone="ink" />}
     </Button>
   );
 }
 
-/** A capsule with text, tinted when it is the next step. */
+/** A small capsule with text (SPEC §15 Code review's ghost buttons): ink when it is the next step. */
 export function TextButton(props: { label: string; onPress: () => void; filled?: boolean; busy?: boolean; disabled?: boolean; testID?: string; accessibilityLabel?: string }) {
   return (
     <Button
@@ -86,10 +86,11 @@ export function TextButton(props: { label: string; onPress: () => void; filled?:
       accessibilityLabel={props.accessibilityLabel ?? props.label}
       disabled={props.disabled || props.busy}
       onPress={props.onPress}
-      class={`flex-row items-center justify-center gap-1.5 rounded-full px-3 py-1.5 active:opacity-70 disabled:opacity-50 ${props.filled ? "bg-primary" : "bg-secondary"}`}
+      hitSlop={4}
+      class={`h-9 flex-row items-center justify-center gap-1.5 rounded-full px-3.5 active:opacity-70 disabled:opacity-40 ${props.filled ? "bg-primary" : "bg-muted"}`}
     >
       {props.busy ? <Spinner size={14} tone={props.filled ? "canvas" : "soft"} /> : null}
-      <Text class={`text-sm font-medium ${props.filled ? "text-primary-foreground" : ""}`}>{props.label}</Text>
+      <Text class={`text-sub font-semibold line-clamp-1 ${props.filled ? "text-primary-foreground" : ""}`}>{props.label}</Text>
     </Button>
   );
 }
@@ -99,15 +100,15 @@ export function FlashLine() {
   return (
     <View>
       {gitFlash() ? (
-        <View testID="git-flash" class="mt-3 flex-row items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+        <View testID="git-flash" class="mt-3 min-h-[52px] flex-row items-center gap-3 rounded-(--radius-group) bg-card px-4 py-3">
           <Icon name={gitFlash()!.tone === "error" ? "alert-circle" : gitFlash()!.tone === "success" ? "check-circle" : "info"} size={18} tone={gitFlash()!.tone === "error" ? "failed" : gitFlash()!.tone === "success" ? "ready" : "soft"} />
           <View class="min-w-0 flex-1">
-            <Text class="text-sm font-medium">{gitFlash()!.title}</Text>
-            {gitFlash()!.detail ? <Text class="text-sm text-muted-foreground line-clamp-3">{gitFlash()!.detail!}</Text> : null}
+            <Text class="text-body font-semibold">{gitFlash()!.title}</Text>
+            {gitFlash()!.detail ? <Text class="text-sub text-muted-foreground line-clamp-3">{gitFlash()!.detail!}</Text> : null}
           </View>
           {gitFlash()!.action ? (
             <Button testID="git-flash-action" onPress={() => gitFlash()!.action!.run()} class="active:opacity-60">
-              <Text class="text-sm font-semibold">{gitFlash()!.action!.label}</Text>
+              <Text class="text-sub font-semibold">{gitFlash()!.action!.label}</Text>
             </Button>
           ) : null}
         </View>
@@ -118,11 +119,8 @@ export function FlashLine() {
 
 /** A labelled block inside a page: what a state card is in the old sheet. */
 export function Block(props: { children?: JSX.Element; class?: string }) {
-  return <View class={`mt-4 overflow-hidden rounded-2xl border border-border bg-card ${props.class ?? ""}`}>{props.children}</View>;
+  return <View class={`mt-4 overflow-hidden rounded-(--radius-group) bg-card ${props.class ?? ""}`}>{props.children}</View>;
 }
-
-export const SHEET = "max-h-[90%] rounded-t-3xl bg-card px-4 pb-8 pt-3";
-export const BACKDROP = "bg-black/30";
 
 /**
  * A page's content while its review's computer is current. After a switch the

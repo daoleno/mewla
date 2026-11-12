@@ -57,7 +57,8 @@ describe("Stats", () => {
     const texts = app.texts().join(" | ");
     expect(texts).toContain("$12.50");
     expect(texts).toContain("1.3M");
-    expect(texts).toContain("Cost · Reported");
+    expect(app.texts()).toContain("Cost");
+    expect(app.texts()).toContain("Reported");
     expect(texts).toContain("claude-opus-5-5");
     expect(texts).toContain("≈$2.50");
     expect(texts).toContain("mewla");

@@ -58,7 +58,7 @@ import {
 } from "../../../core/resources/resourceTelemetry";
 import { color, withAlpha, type ColorName } from "../../kit/colors";
 import { Icon, type IconName } from "../../kit/Icon";
-import { copyMenu, EmptyState, Meter, Notice, Page, Section, StatusMark, type Status } from "../../kit/kit";
+import { copyMenu, DisplayTitle, EmptyState, Meter, Notice, Page, Section, SectionLabel, StatTile, StatusMark } from "../../kit/kit";
 import { Segmented } from "../../kit/Segmented";
 import { connected, daemon, daemonState } from "../daemon";
 import type { PageNav } from "../routes";
@@ -113,7 +113,17 @@ export function Resources(props: { nav: PageNav }) {
   const refresh = () => poller?.refresh();
   const telemetry = () => reading().telemetry;
   return (
-    <Page title="Resources" testID="resources" column="wide" maxWidth={CONTENT_MAX_WIDTH} refreshing={reading().reading && Boolean(telemetry())} onRefresh={refresh}>
+    <Page
+      display
+      title="Resources"
+      hero={telemetry() ? <Headline telemetry={telemetry()!} /> : undefined}
+      headerRight={telemetry() ? <HeaderActions onRefresh={refresh} /> : undefined}
+      testID="resources"
+      column="wide"
+      maxWidth={CONTENT_MAX_WIDTH}
+      refreshing={reading().reading && Boolean(telemetry())}
+      onRefresh={refresh}
+    >
       {telemetry() ? <Ready telemetry={telemetry()!} onRefresh={refresh} /> : <NotReady onRetry={refresh} onOpenSettings={() => props.nav.push({ name: "settings" })} />}
     </Page>
   );
@@ -136,11 +146,45 @@ function NotReady(props: { onRetry: () => void; onOpenSettings: () => void }) {
   );
 }
 
-function headline(t: ResourceTelemetry): { status: Status; title: string } {
-  if (!hasMachineReading(t)) return { status: "neutral", title: "No reading" };
-  if (t.state === "critical") return { status: "failed", title: "Critical pressure" };
-  if (t.state === "elevated") return { status: "warning", title: "Elevated pressure" };
-  return { status: "ready", title: "Normal" };
+/** The headline is the pressure in words (SPEC §15 Metrics). */
+function headline(t: ResourceTelemetry): string {
+  if (!hasMachineReading(t)) return "No reading";
+  if (t.state === "critical") return "Critical pressure";
+  if (t.state === "elevated") return "Elevated pressure";
+  return "Comfortable";
+}
+
+/** The page's top block: when the sample is from and the window it covers, over the pressure in words. */
+function Headline(props: { telemetry: ResourceTelemetry }) {
+  const t = () => props.telemetry;
+  const caption = () => {
+    const status = !connected() ? "Last sample · offline" : reading().error ? "Last sample" : sampledAgoLabel(t().sampledAt, now());
+    return [status, historyWindowLabel(t())].filter(Boolean).join(" · ");
+  };
+  return <DisplayTitle testID="resources-headline" eyebrow={caption()} title={headline(t())} />;
+}
+
+/** Refresh and the machine details, in the header. */
+function HeaderActions(props: { onRefresh: () => void }) {
+  const refreshDisabled = () => reading().reading || !connected();
+  return (
+    <View class="flex-row items-center gap-1">
+      <Button testID="resources-refresh" accessibilityLabel="Refresh resources" disabled={refreshDisabled()} onPress={props.onRefresh} class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-40">
+        <Icon name="refresh" size={20} />
+      </Button>
+      <View
+        testID="resources-details"
+        role="button"
+        accessibilityLabel="Machine details"
+        accessibilityState={{ expanded: details() }}
+        tooltip={<Text class="text-caption">{details() ? "Hide machine details" : "Show machine details"}</Text>}
+        onPress={() => details.set(!details())}
+        class={`size-11 items-center justify-center rounded-full active:bg-accent ${details() ? "bg-muted" : ""}`}
+      >
+        <Icon name="info" size={20} tone={details() ? "ink" : "soft"} />
+      </View>
+    </View>
+  );
 }
 
 /** Pressure charts are ink until the machine is actually under pressure. */
@@ -154,45 +198,17 @@ function levelTone(level: MemoryPressureLevel): ColorName {
 
 function Ready(props: { telemetry: ResourceTelemetry; onRefresh: () => void }) {
   const t = () => props.telemetry;
-  const caption = () => {
-    const status = !connected() ? "Last sample · offline" : reading().error ? "Last sample" : sampledAgoLabel(t().sampledAt, now());
-    return [status, historyWindowLabel(t())].filter(Boolean).join(" · ");
-  };
-  const refreshDisabled = () => reading().reading || !connected();
   return (
     <View onLayout={({ bounds }) => width.set(bounds.size.width)}>
       {connected() && reading().error ? <Notice testID="resources-refresh-failed" title="Refresh failed" detail={reading().error} action="Try again" onAction={props.onRefresh} /> : null}
-      <View class="mt-4 flex-row items-center gap-2 px-1">
-        <View class="flex-1 gap-1">
-          <View class="flex-row items-center gap-2">
-            <StatusMark status={headline(t()).status} />
-            <Text testID="resources-headline" class="text-2xl font-bold" role="header">{headline(t()).title}</Text>
-          </View>
-          <Text testID="resources-caption" class="text-sm text-muted-foreground line-clamp-1">{caption()}</Text>
-        </View>
-        <Button testID="resources-refresh" accessibilityLabel="Refresh resources" disabled={refreshDisabled()} onPress={props.onRefresh} class="rounded-full p-2 active:opacity-60 disabled:opacity-40">
-          <Icon name="refresh" size={18} />
-        </Button>
-        <View
-          testID="resources-details"
-          role="button"
-          accessibilityLabel="Machine details"
-          accessibilityState={{ expanded: details() }}
-          tooltip={<Text class="text-xs">{details() ? "Hide machine details" : "Show machine details"}</Text>}
-          onPress={() => details.set(!details())}
-          class="rounded-full bg-secondary p-2 active:opacity-60"
-        >
-          <Icon name={details() ? "chevron-up" : "chevron-down"} size={18} />
-        </View>
-      </View>
       {t().signals.map((s) => (
         <View class="mt-2 flex-row items-center gap-2 px-1">
           <StatusMark status={s.state === "critical" ? "failed" : "warning"} />
-          <Text class="text-sm">{`${s.name} · ${trim2(s.value)} / threshold ${trim2(s.threshold)}`}</Text>
+          <Text class="text-sub">{`${s.name} · ${trim2(s.value)} / threshold ${trim2(s.threshold)}`}</Text>
         </View>
       ))}
       {/* Four across on a wide screen, one column on the narrowest, else two. */}
-      <View class="flex-row flex-wrap gap-x-2">
+      <View class="mt-3 flex-row flex-wrap gap-3">
         <View style={{ flexGrow: 1, flexBasis: tileBasis(width()) }}><Cpu t={t()} /></View>
         <View style={{ flexGrow: 1, flexBasis: tileBasis(width()) }}><Memory t={t()} /></View>
         <View style={{ flexGrow: 1, flexBasis: tileBasis(width()) }}><Disks t={t()} /></View>
@@ -278,25 +294,19 @@ function Legend(props: { tone: ColorName; label: string }) {
   return (
     <View class="flex-row items-center gap-1.5">
       <View class="h-2 w-2 rounded-full" style={{ backgroundColor: color(props.tone) }} />
-      <Text class="text-xs text-muted-foreground">{props.label}</Text>
+      <Text class="text-caption text-muted-foreground">{props.label}</Text>
     </View>
   );
 }
 
+/** A stat tile with its small history under the figure, and its facts while the machine details are open. */
 function Tile(props: { title: string; value: string; testID: string; children?: JSX.Element; caption?: string; micro?: string; detail?: JSX.Element }) {
   return (
-    <Section testID={props.testID}>
-      <View class="gap-2 px-4 py-3">
-        <View class="flex-row flex-wrap items-baseline justify-between gap-x-2">
-          <Text class="shrink text-sm font-medium text-muted-foreground">{props.title}</Text>
-          <Text class="ml-auto shrink-0 text-2xl font-bold" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
-        </View>
-        {props.children}
-        {props.caption ? <Text class="text-xs text-muted-foreground">{props.caption}</Text> : null}
-        {props.micro ? <Text class="text-xs text-muted-foreground">{props.micro}</Text> : null}
-        {details() ? props.detail ?? null : null}
-      </View>
-    </Section>
+    <StatTile testID={props.testID} label={props.title} value={props.value} detail={props.caption}>
+      {props.children}
+      {props.micro ? <Text class="text-caption text-muted-foreground">{props.micro}</Text> : null}
+      {details() ? props.detail ?? null : null}
+    </StatTile>
   );
 }
 
@@ -304,8 +314,8 @@ function Tile(props: { title: string; value: string; testID: string; children?: 
 function Fact(props: { label: string; value: string }) {
   return (
     <View class="flex-row flex-wrap justify-between gap-x-3">
-      <Text class="shrink text-sm text-muted-foreground">{props.label}</Text>
-      <Text class="ml-auto shrink-0 text-right font-mono text-sm" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+      <Text class="shrink text-sub text-muted-foreground">{props.label}</Text>
+      <Text class="ml-auto shrink-0 text-right font-mono text-code" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
     </View>
   );
 }
@@ -372,12 +382,12 @@ function Disks(props: { t: ResourceTelemetry }) {
       detail={
         <View class="gap-2 pt-1">
           <Fact label="Chart scale" value={formatRate(series().peak)} />
-          {props.t.disks.length === 0 ? <Text class="text-sm text-muted-foreground">Mount data unavailable</Text> : null}
+          {props.t.disks.length === 0 ? <Text class="text-sub text-muted-foreground">Mount data unavailable</Text> : null}
           {props.t.disks.map((d) => (
             <View class="gap-1">
               <Fact label={d.mount} value={`${formatBytes(d.freeBytes)} free / ${formatBytes(d.totalBytes)}`} />
               <Meter share={d.totalBytes ? d.usedBytes / d.totalBytes : 0} tone={d.totalBytes && d.freeBytes / d.totalBytes < 0.1 ? "warning" : "ink"} height={4} />
-              <Text class="text-xs text-muted-foreground">{`R ${formatRate(d.readBytesPerSecond)} · W ${formatRate(d.writeBytesPerSecond)}`}</Text>
+              <Text class="text-caption text-muted-foreground">{`R ${formatRate(d.readBytesPerSecond)} · W ${formatRate(d.writeBytesPerSecond)}`}</Text>
             </View>
           ))}
         </View>
@@ -415,10 +425,10 @@ function PsiTile(props: { t: ResourceTelemetry }) {
       micro={PSI_KEYS.map((key) => `${PSI_LABEL[key]} ${formatPressurePercent(props.t.psi[key]?.some?.avg10)}`).join(" · ")}
       detail={
         <View class="gap-2 pt-1">
-          <Text class="text-xs text-muted-foreground">some / full · 10s / 1m / 5m</Text>
+          <Text class="text-caption text-muted-foreground">some / full · 10s / 1m / 5m</Text>
           {PSI_KEYS.map((key) => (
             <View class="gap-0.5">
-              <Text class="text-sm font-medium">{PSI_LABEL[key]}</Text>
+              <Text class="text-sub font-semibold">{PSI_LABEL[key]}</Text>
               <Fact label="some" value={triple(props.t.psi[key]?.some)} />
               <Fact label="full" value={triple(props.t.psi[key]?.full)} />
               <Chart series={psiHistorySeries(props.t, key)} window={chartWindow(props.t)} tone={stateTone(props.t)} height={24} label={psiResourceChartLabel(key)} />
@@ -476,14 +486,18 @@ function Consumers(props: { t: ResourceTelemetry }) {
     shownCount.set(PAGE_SIZE);
   };
   return (
-    <View class="mt-8">
-      <View class="flex-row items-center justify-between px-1">
-        <Text class="text-lg font-semibold" role="header">{`Using this machine ${props.t.consumers.length}`}</Text>
-        <View class="w-[150px]">
-          <Segmented testID="consumer-sort" options={[{ key: "rss", label: "Memory" }, { key: "cpu", label: "CPU" }]} value={sort()} onChange={(key) => sort.set(key as ConsumerSort)} />
-        </View>
-      </View>
-      <View class="mt-3 flex-row flex-wrap gap-2" accessibilityLabel="Filter by owner">
+    <View class="mt-2">
+      <SectionLabel
+        title="Using this machine"
+        icon="layers"
+        count={props.t.consumers.length}
+        trailing={
+          <View class="ml-2 w-[150px]">
+            <Segmented testID="consumer-sort" options={[{ key: "rss", label: "Memory" }, { key: "cpu", label: "CPU" }]} value={sort()} onChange={(key) => sort.set(key as ConsumerSort)} />
+          </View>
+        }
+      />
+      <View class="flex-row flex-wrap gap-2" accessibilityLabel="Filter by owner">
         <Chip testID="owner-all" label={`All ${props.t.consumers.length}`} accessibilityLabel="Filter All" selected={owner() === "all"} onPress={() => choose("all")} />
         {OWNERS.filter((o) => counts().has(o.key)).map((o) => (
           <Chip
@@ -500,24 +514,25 @@ function Consumers(props: { t: ResourceTelemetry }) {
       <Section testID="consumers">
         <View testID="consumers-header" class="flex-row items-center gap-3 px-4 pb-1 pt-2.5">
           <View class="flex-1" />
-          <Text class="w-[52px] text-right text-xs text-muted-foreground">CPU</Text>
-          <Text class="w-[64px] text-right text-xs text-muted-foreground">Memory</Text>
-          {wide() ? <Text class="w-[44px] text-right text-xs text-muted-foreground">Procs</Text> : null}
+          <Text class="w-[52px] text-right text-caption text-muted-foreground">CPU</Text>
+          <Text class="w-[64px] text-right text-caption text-muted-foreground">Memory</Text>
+          {wide() ? <Text class="w-[44px] text-right text-caption text-muted-foreground">Procs</Text> : null}
+          {wide() ? <View class="w-[72px]" /> : null}
           <View class="w-[14px]" />
         </View>
         {filtered().length === 0 ? (
-          <Text class="px-4 py-4 text-sm text-muted-foreground">{owner() === "all" ? "No consumers reported." : "No consumers reported for this owner."}</Text>
+          <Text class="px-4 py-4 text-sub text-muted-foreground">{owner() === "all" ? "No consumers reported." : "No consumers reported for this owner."}</Text>
         ) : (
-          filtered().slice(0, shownCount()).map((c, index) => <ConsumerRow consumer={c} rowKey={keys()[index]} wide={wide()} />)
+          filtered().slice(0, shownCount()).map((c, index) => <ConsumerRow consumer={c} rowKey={keys()[index]} wide={wide()} share={consumerShare(c, filtered())} />)
         )}
         {filtered().length > shownCount() ? (
           <Button testID="consumers-more" accessibilityLabel={`Show ${Math.min(PAGE_SIZE, filtered().length - shownCount())} more`} onPress={() => shownCount.set(shownCount() + PAGE_SIZE)} class="flex-row items-center gap-1.5 px-4 py-3 active:bg-accent">
             <Icon name="chevron-down" size={16} />
-            <Text class="text-sm font-medium text-muted-foreground">{`${filtered().length - shownCount()} more`}</Text>
+            <Text class="text-sub font-semibold text-muted-foreground">{`${filtered().length - shownCount()} more`}</Text>
           </Button>
         ) : null}
       </Section>
-      <Text class="mt-1.5 px-4 text-xs text-muted-foreground">CPU 100% is one core. Memory is resident size and may count shared pages twice.</Text>
+      <Text class="mt-1.5 px-4 text-caption text-muted-foreground">CPU 100% is one core. Memory is resident size and may count shared pages twice.</Text>
     </View>
   );
 }
@@ -529,15 +544,22 @@ function Chip(props: { label: string; selected: boolean; icon?: IconName; warnin
       accessibilityLabel={props.accessibilityLabel}
       selected={props.selected}
       onPress={props.onPress}
-      class={props.selected ? "flex-row items-center gap-1.5 rounded-full bg-primary px-3 py-1.5" : "flex-row items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 active:bg-accent"}
+      class={props.selected ? "h-9 flex-row items-center gap-1.5 rounded-full bg-primary px-3.5" : "h-9 flex-row items-center gap-1.5 rounded-full bg-card px-3.5 active:bg-accent"}
     >
       {props.icon ? <Icon name={props.icon} size={14} tone={props.selected ? "canvas" : props.warning ? "warning" : "soft"} /> : null}
-      <Text class={props.selected ? "text-sm font-medium text-primary-foreground" : "text-sm font-medium"} style={!props.selected && props.warning ? { color: color("warning") } : undefined}>{props.label}</Text>
+      <Text class={props.selected ? "text-sub font-semibold text-primary-foreground" : "text-sub font-semibold"} style={!props.selected && props.warning ? { color: color("warning") } : undefined}>{props.label}</Text>
     </Button>
   );
 }
 
-function ConsumerRow(props: { consumer: ResourceConsumer; rowKey: string; wide: boolean }) {
+/** A consumer's share of the largest one by the chosen sort: the ranked row's bar. */
+function consumerShare(c: ResourceConsumer, all: readonly ResourceConsumer[]): number {
+  const value = (x: ResourceConsumer) => (sort() === "cpu" ? x.cpuPercent ?? 0 : x.rssBytes ?? 0);
+  const max = Math.max(0, ...all.map(value));
+  return max > 0 ? value(c) / max : 0;
+}
+
+function ConsumerRow(props: { consumer: ResourceConsumer; rowKey: string; wide: boolean; share: number }) {
   const c = () => props.consumer;
   const title = () => consumerTitle(c());
   const orphaned = () => c().owner === "orphaned_worker";
@@ -562,12 +584,13 @@ function ConsumerRow(props: { consumer: ResourceConsumer; rowKey: string; wide: 
         <View class="flex-row items-center gap-3 px-4 py-3">
           <Icon name={OWNER_ICON[c().owner]} size={16} tone={orphaned() ? "warning" : "faint"} />
           <View class="min-w-0 flex-1">
-            <Text class="text-base line-clamp-1">{title()}</Text>
-            {consumerRowMeta(c()) ? <Text testID="consumer-meta" class="text-sm text-muted-foreground line-clamp-1" style={orphaned() ? { color: color("warning") } : undefined}>{consumerRowMeta(c())}</Text> : null}
+            <Text class="text-body line-clamp-1">{title()}</Text>
+            {consumerRowMeta(c()) ? <Text testID="consumer-meta" class="text-sub text-muted-foreground line-clamp-1" style={orphaned() ? { color: color("warning") } : undefined}>{consumerRowMeta(c())}</Text> : null}
           </View>
-          <Text class="w-[52px] text-right font-mono text-xs" style={{ fontVariant: ["tabular-nums"] }}>{formatPercent(c().cpuPercent)}</Text>
-          <Text class="w-[64px] text-right font-mono text-sm" style={{ fontVariant: ["tabular-nums"] }}>{formatBytes(c().rssBytes)}</Text>
-          {props.wide ? <Text class="w-[44px] text-right font-mono text-xs" style={{ fontVariant: ["tabular-nums"] }}>{String(c().processCount)}</Text> : null}
+          <Text class="w-[52px] text-right font-mono text-code" style={{ fontVariant: ["tabular-nums"] }}>{formatPercent(c().cpuPercent)}</Text>
+          <Text class="w-[64px] text-right font-mono text-code" style={{ fontVariant: ["tabular-nums"] }}>{formatBytes(c().rssBytes)}</Text>
+          {props.wide ? <Text class="w-[44px] text-right font-mono text-code" style={{ fontVariant: ["tabular-nums"] }}>{String(c().processCount)}</Text> : null}
+          {props.wide ? <View class="w-[72px]"><Meter share={props.share} /></View> : null}
           <Icon name={expandedNow() ? "chevron-up" : "chevron-down"} size={14} tone="faint" />
         </View>
       </View>
@@ -575,36 +598,36 @@ function ConsumerRow(props: { consumer: ResourceConsumer; rowKey: string; wide: 
         <View class="gap-1 bg-secondary px-4 py-3">
           {/* A long press copies the title, the IDs or the commands, as selecting them did. */}
           <View testID="consumer-details" class="gap-1" onLongPress={() => void copyMenu(title(), consumerCopyChoices(c(), title()))}>
-            <Text class="text-base font-medium">{title()}</Text>
-            <Text class="text-sm">{`${CONSUMER_OWNER_LABEL[c().owner]} · ${c().processCount} ${c().processCount === 1 ? "process" : "processes"}`}</Text>
+            <Text class="text-body font-semibold">{title()}</Text>
+            <Text class="text-sub">{`${CONSUMER_OWNER_LABEL[c().owner]} · ${c().processCount} ${c().processCount === 1 ? "process" : "processes"}`}</Text>
             {c().id ? <Fact label="ID" value={c().id!} /> : null}
             {c().workerId ? <Fact label="Worker" value={c().workerId!} /> : null}
             {c().workId ? <Fact label="Work" value={c().workId!} /> : null}
-            {consumerMeta(c()) ? <Text class="text-sm text-muted-foreground">{consumerMeta(c())}</Text> : null}
-            {consumerCommands(c()).length ? <Text class="text-sm text-muted-foreground">{`Commands · ${consumerCommands(c()).join(", ")}`}</Text> : null}
-            {kinds() ? <Text class="text-sm text-muted-foreground">{`Kinds · ${kinds()}`}</Text> : null}
+            {consumerMeta(c()) ? <Text class="text-sub text-muted-foreground">{consumerMeta(c())}</Text> : null}
+            {consumerCommands(c()).length ? <Text class="text-sub text-muted-foreground">{`Commands · ${consumerCommands(c()).join(", ")}`}</Text> : null}
+            {kinds() ? <Text class="text-sub text-muted-foreground">{`Kinds · ${kinds()}`}</Text> : null}
           </View>
           {c().processes.length ? (
             <View class="gap-0.5 pt-1">
-              <Text class="text-xs text-muted-foreground">{`${c().processes.length} / ${c().processCount} processes reported · largest memory`}</Text>
+              <Text class="text-caption text-muted-foreground">{`${c().processes.length} / ${c().processCount} processes reported · largest memory`}</Text>
               <View class="flex-row gap-2 pt-1">
-                <Text class="w-[64px] text-xs text-muted-foreground">PID</Text>
-                <Text class="flex-1 text-xs text-muted-foreground">Command / start token</Text>
-                <Text class="text-xs text-muted-foreground">Memory</Text>
+                <Text class="w-[64px] text-caption text-muted-foreground">PID</Text>
+                <Text class="flex-1 text-caption text-muted-foreground">Command / start token</Text>
+                <Text class="text-caption text-muted-foreground">Memory</Text>
               </View>
               {processesByMemory(c()).map((p) => (
                 <View testID={`process-${p.pid ?? "unknown"}`} class="flex-row gap-2 py-0.5" onLongPress={() => void copyMenu(p.pid ? `PID ${p.pid}` : p.command ?? "Unknown process", processCopyChoices(p))}>
-                  <Text class="w-[64px] font-mono text-xs">{p.pid ? String(p.pid) : "—"}</Text>
+                  <Text class="w-[64px] font-mono text-code">{p.pid ? String(p.pid) : "—"}</Text>
                   <View class="min-w-0 flex-1 gap-0.5">
-                    <Text class="font-mono text-xs line-clamp-2">{p.command ?? "Unknown process"}</Text>
-                    {p.start ? <Text class="font-mono text-xs text-muted-foreground">{`start ${p.start}`}</Text> : null}
+                    <Text class="font-mono text-code line-clamp-2">{p.command ?? "Unknown process"}</Text>
+                    {p.start ? <Text class="font-mono text-code text-muted-foreground">{`start ${p.start}`}</Text> : null}
                   </View>
-                  <Text class="font-mono text-xs">{formatBytes(p.rssBytes)}</Text>
+                  <Text class="font-mono text-code">{formatBytes(p.rssBytes)}</Text>
                 </View>
               ))}
             </View>
           ) : (
-            <Text class="text-sm text-muted-foreground">Process details unavailable in this sample.</Text>
+            <Text class="text-sub text-muted-foreground">Process details unavailable in this sample.</Text>
           )}
         </View>
       ) : null}

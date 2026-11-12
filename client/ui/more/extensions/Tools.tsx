@@ -66,7 +66,7 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
   return (
     <View>
       <Section title={a.name}>
-        <SwitchRow testID="account-on" accessibilityLabel="Account on" title="On" subtitle="Brain and Workers can use this account." checked={a.enabled} busy={running() === `enabled:${a.id}`} disabled={busy() && running() !== `enabled:${a.id}`} onChange={(on) => plugins()?.setEnabled(a, on)} />
+        <SwitchRow testID="account-on" accessibilityLabel="Account on" title="On" checked={a.enabled} busy={running() === `enabled:${a.id}`} disabled={busy() && running() !== `enabled:${a.id}`} onChange={(on) => plugins()?.setEnabled(a, on)} />
         <Row
           testID="check-tools"
           icon="pulse"
@@ -132,19 +132,19 @@ function ToolRow(props: { tool: ConnectionTool; locked: boolean; onToggle: (allo
       >
         <View class="w-4">{expandable ? <Icon name={expanded() ? "chevron-down" : "chevron-right"} size={14} tone="faint" /> : null}</View>
         <View class="min-w-0 flex-1">
-          <Text class="font-mono text-sm">{props.tool.name}</Text>
-          <Text class={`mt-0.5 text-sm text-muted-foreground ${expanded() ? "" : "line-clamp-2"}`}>{`${props.tool.updated ? "Updated, waits for your confirmation · " : ""}${description}`}</Text>
+          <Text class="font-mono text-code">{props.tool.name}</Text>
+          <Text class={`mt-0.5 text-sub text-muted-foreground ${expanded() ? "" : "line-clamp-2"}`}>{`${props.tool.updated ? "Updated, waits for your confirmation · " : ""}${description}`}</Text>
         </View>
         <View class="-mr-4">
           <SwitchRowInline testID={`tool-${props.tool.name}`} label={`Allow ${props.tool.name}`} checked={props.tool.allowed} disabled={props.locked} onChange={props.onToggle} />
         </View>
       </View>
       {expanded() && inputs.length ? (
-        <View class="mb-2 ml-10 mr-4 gap-1 rounded-xl border border-border px-3 py-2">
+        <View class="mb-2 ml-10 mr-4 gap-1 rounded-(--radius-control) bg-background px-3 py-2">
           {inputs.map((input) => (
             <View>
-              <Text class="font-mono text-xs">{`${input.name}: ${input.type}${input.required ? " (required)" : ""}`}</Text>
-              {input.description ? <Text class="text-xs text-muted-foreground">{input.description}</Text> : null}
+              <Text class="font-mono text-code">{`${input.name}: ${input.type}${input.required ? " (required)" : ""}`}</Text>
+              {input.description ? <Text class="text-caption text-muted-foreground">{input.description}</Text> : null}
             </View>
           ))}
         </View>

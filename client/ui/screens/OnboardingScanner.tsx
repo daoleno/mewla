@@ -56,7 +56,7 @@ export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => b
 
   const openSettings = () => void host.call("app.openSettings").catch(() => {});
   return (
-    <View testID="finder" class="w-full items-center justify-center self-center overflow-hidden rounded-3xl border border-border"
+    <View testID="finder" class="w-full items-center justify-center self-center overflow-hidden rounded-(--radius-sheet)"
       style={{ backgroundColor: DARK, aspectRatio: 1, maxHeight: 320, maxWidth: props.compact ? 200 : 320 }}>
       {state() === "camera" ? (running() ? (
         <CodeScanner testID="qr-camera" active={!pairingBusy()} class="absolute inset-0"
@@ -69,7 +69,7 @@ export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => b
         <Spinner />
       ) : (
         <View class="items-center gap-3.5 px-7">
-          <Text class="text-center text-sm" style={{ color: LIGHT }}>
+          <Text class="text-center text-sub" style={{ color: LIGHT }}>
             {state() === "request" ? "Mewla reads the code with the camera."
               : state() === "denied" ? "The camera is off for Mewla. Turn it on in Settings, or paste the link instead."
               : "The camera could not start. Check that Mewla may use it in Settings, or paste the link instead."}
@@ -95,7 +95,7 @@ function FinderButton(props: { testID: string; label: string; onPress(): void })
   return (
     <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
       class="min-h-11 justify-center rounded-full px-[18px] py-2.5 active:opacity-80" style={{ backgroundColor: LIGHT }}>
-      <Text class="text-sm font-semibold" style={{ color: DARK }}>{props.label}</Text>
+      <Text class="text-sub font-semibold" style={{ color: DARK }}>{props.label}</Text>
     </Button>
   );
 }

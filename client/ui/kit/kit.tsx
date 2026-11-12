@@ -1,5 +1,5 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
-import { announce, Canvas, Clipboard, effect, platform, Scroll, Text, untracked, View } from "nsh";
+import { announce, Canvas, Clipboard, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, Input, Switch } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import type { PageColumn } from "../../core/web/places";
@@ -16,6 +16,17 @@ import { spinnerRadius } from "../../core/more/spinner";
 
 export function Page(props: {
   title: string;
+  /**
+   * The pattern pages' top block (SPEC §15): the title at display size in the content, with an optional
+   * eyebrow over it (a range, a project, a path). The nav bar shows Back and the actions, and the title only
+   * once the display title has scrolled away.
+   */
+  display?: boolean;
+  eyebrow?: string;
+  /** The display title when it is not the page's name (Stats' total, a folder's name). */
+  displayTitle?: string;
+  /** A detail page's own top block in place of the display title (a service's tile, name and state). */
+  hero?: JSX.Element;
   testID?: string;
   headerRight?: JSX.Element;
   refreshing?: boolean;
@@ -34,15 +45,22 @@ export function Page(props: {
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
   const width = () => (mobile ? (props.maxWidth ?? 720) : props.column === "wide" ? 1200 : 760);
+  // Whether the display title is on screen: the nav bar names the page once it has scrolled away.
+  const display = untracked(() => Boolean(props.display));
+  const titleAway = signal(!display);
   const scroll = (
-    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
-      <View class="w-full self-center" style={{ maxWidth: width() }}>{props.children}</View>
+    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}
+      onScroll={display ? (e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY) : undefined} scrollEventThrottle={display ? 64 : undefined}>
+      <View class="w-full self-center" style={{ maxWidth: width() }}>
+        {display ? (props.hero ?? <DisplayTitle eyebrow={props.eyebrow} title={props.displayTitle ?? props.title} />) : null}
+        {props.children}
+      </View>
     </Scroll>
   );
   // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
   const withAside = untracked(() => props.aside !== undefined);
   return (
-    <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
+    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
       <View class="flex-1 bg-background">
         {withAside ? <View class="flex-1 flex-row">{scroll}{props.aside}</View> : scroll}
         {props.overlay ?? null}
@@ -51,17 +69,157 @@ export function Page(props: {
   );
 }
 
-/** A section label (caption, soft), one surface group of rows with inset hair dividers, an optional footnote. */
-export function Section(props: { title?: string; detail?: JSX.Element; footer?: string; testID?: string; children?: JSX.Element }) {
+/** How far the content scrolls before the display title counts as gone (its eyebrow and most of its line). */
+const DISPLAY_TITLE_AWAY = 56;
+
+/** A pattern page's top block (SPEC §15): an eyebrow (caption 13/600, soft) over the title at display 32/700. */
+export function DisplayTitle(props: { title: string; eyebrow?: string; testID?: string }) {
   return (
-    <View class="mt-6" testID={props.testID}>
-      {props.title || props.detail ? (
+    <View testID={props.testID ?? "display-title"} class="gap-1 px-1 pb-2 pt-3">
+      {props.eyebrow ? <Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.eyebrow}</Text> : null}
+      <Text role="header" class="text-display font-bold tracking-display" style={{ numberOfLines: 2 }}>{props.title}</Text>
+    </View>
+  );
+}
+
+/**
+ * A section label with what the section holds (SPEC §15 Grouped list): an icon, the name, the count at the right.
+ * Caption 13/600, soft, inset 16, 24 above and 8 below; pressing it folds the section when it can.
+ */
+export function SectionLabel(props: { title: string; icon?: IconName; count?: number | string; testID?: string; onPress?: () => void; folded?: boolean; trailing?: JSX.Element; accessibilityLabel?: string }) {
+  const body = (
+    <View class="min-h-[44px] flex-row items-center gap-2 px-4 pb-2 pt-6">
+      {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
+      <Text class="min-w-0 flex-1 text-caption font-semibold text-muted-foreground line-clamp-1" role="header">{props.title}</Text>
+      {props.count !== undefined ? <Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
+      {props.trailing ?? null}
+      {props.onPress ? <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" /> : null}
+    </View>
+  );
+  if (!props.onPress) return <View testID={props.testID} accessibilityLabel={props.accessibilityLabel}>{body}</View>;
+  // The fold is the label's own button; what sits at its end (a group's Stage all) stays its own.
+  if (props.trailing) {
+    return (
+      <View testID={props.testID ? `${props.testID}-row` : undefined} class="min-h-[44px] flex-row items-center gap-2 pb-2 pl-4 pr-2 pt-6">
+        <View testID={props.testID} role="button" accessible accessibilityLabel={props.accessibilityLabel} accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-70">
+          {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
+          <Text class="min-w-0 flex-1 text-caption font-semibold text-muted-foreground line-clamp-1" role="header">{props.title}</Text>
+          {props.count !== undefined ? <Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
+          <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" />
+        </View>
+        {props.trailing}
+      </View>
+    );
+  }
+  return (
+    <View testID={props.testID} role="button" accessible accessibilityLabel={props.accessibilityLabel} accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="active:opacity-70">{body}</View>
+  );
+}
+
+/** A square tile (SPEC §15): a glyph or a short mark on the canvas, radius 11 (36 pt) or 8 (28 pt). */
+export function Tile(props: { size?: 28 | 36 | 64; icon?: IconName; mark?: string; children?: JSX.Element; testID?: string }) {
+  const size = () => props.size ?? 36;
+  const radius = () => (size() === 64 ? 18 : size() === 36 ? 11 : 8);
+  return (
+    <View testID={props.testID} class="items-center justify-center bg-background" style={{ width: size(), height: size(), borderRadius: radius() }}>
+      {props.children ?? (props.icon ? <Icon name={props.icon} size={size() === 64 ? 32 : size() === 36 ? 20 : 16} tone="ink" /> : props.mark ? <Text class="font-mono text-caption font-semibold">{props.mark}</Text> : null)}
+    </View>
+  );
+}
+
+/** The search field under a collection's title (SPEC §15): 44 pt on the surface, radius 14, a clear button once it holds text. */
+export function SearchField(props: { value: string; placeholder: string; onChange: (value: string) => void; accessibilityLabel?: string; testID?: string; autoFocus?: boolean }) {
+  return (
+    <View class="min-h-[44px] flex-row items-center gap-2 rounded-[14px] bg-card px-3">
+      <Icon name="search" size={16} tone="soft" />
+      <Input
+        testID={props.testID}
+        accessibilityLabel={props.accessibilityLabel ?? props.placeholder}
+        class="min-h-[44px] flex-1 py-2 text-body"
+        value={props.value}
+        placeholder={props.placeholder}
+        autoFocus={props.autoFocus}
+        autoCapitalize="none"
+        autoCorrect={false}
+        onChange={({ value }) => props.onChange(value)}
+      />
+      {props.value ? (
+        <Button accessibilityLabel="Clear search" onPress={() => props.onChange("")} class="size-8 items-center justify-center active:opacity-60">
+          <Icon name="close-circle" size={16} tone="faint" />
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
+/** A small ghost button on a row (Connect, Reconnect, Allow): 32 pt, canvas pill, 15/600. */
+export function RowButton(props: { label: string; onPress: () => void; disabled?: boolean; accessibilityLabel?: string; testID?: string }) {
+  return (
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} hitSlop={6} class="h-8 items-center justify-center rounded-full bg-background px-3.5 active:opacity-70 disabled:opacity-40">
+      <Text class="text-sub font-semibold">{props.label}</Text>
+    </Button>
+  );
+}
+
+/**
+ * A stat tile (SPEC §15 Metrics): label 13/600 soft, value 28/700 (soft while it is not known), a 13 soft line,
+ * an optional 4 pt bar, and whatever the tile shows under them (a small history).
+ */
+export function StatTile(props: { label: string; value: string; detail?: string; share?: number; muted?: boolean; testID?: string; valueTestID?: string; children?: JSX.Element }) {
+  return (
+    <View testID={props.testID} class="min-w-[140px] flex-1 gap-0.5 rounded-(--radius-group) bg-card p-4">
+      <Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.label}</Text>
+      <Text testID={props.valueTestID} class={props.muted ? "text-[28px] font-bold leading-[34px] text-muted-foreground line-clamp-1" : "text-[28px] font-bold leading-[34px] line-clamp-1"} style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+      {props.detail ? <Text class="text-caption text-muted-foreground line-clamp-2">{props.detail}</Text> : null}
+      {props.share !== undefined ? <View class="mt-2"><Meter share={props.share} /></View> : null}
+      {props.children ? <View class="mt-2 gap-2">{props.children}</View> : null}
+    </View>
+  );
+}
+
+/** Stat tiles two across on a phone, four on wide (SPEC §15 Metrics); 12 between them. */
+export function StatGrid(props: { testID?: string; children?: JSX.Element }) {
+  return <View testID={props.testID} class="mt-3 flex-row flex-wrap gap-3">{props.children}</View>;
+}
+
+/** A ranked row (SPEC §15 Metrics): a glyph, the name over its second line, a 72 pt bar of its share, the value. */
+export function RankedRow(props: { title: string; subtitle?: string; share: number; value: string; icon?: IconName; leading?: JSX.Element; testID?: string; accessibilityLabel?: string; accessibilityHint?: string; onPress?: () => void }) {
+  return (
+    <Row
+      testID={props.testID}
+      icon={props.icon}
+      leading={props.leading}
+      title={props.title}
+      subtitle={props.subtitle}
+      accessibilityLabel={props.accessibilityLabel}
+      accessibilityHint={props.accessibilityHint}
+      onPress={props.onPress}
+      chevron={Boolean(props.onPress)}
+      trailing={
+        <View class="flex-row items-center gap-3">
+          <View class="w-[72px]"><Meter share={props.share} /></View>
+          <Text class="min-w-[56px] text-right text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+        </View>
+      }
+    />
+  );
+}
+
+/**
+ * A section label (caption, soft), one surface group of rows with inset hair dividers, an optional footnote.
+ * `label` puts a SectionLabel (icon, name, count) in place of the plain one; `sheet` draws the group on a sheet's surface.
+ */
+export function Section(props: { title?: string; detail?: JSX.Element; footer?: string; testID?: string; label?: JSX.Element; sheet?: boolean; children?: JSX.Element }) {
+  return (
+    <View class={props.label ? "" : "mt-6"} testID={props.testID}>
+      {props.label ?? null}
+      {!props.label && (props.title || props.detail) ? (
         <View class="mb-2 min-h-[18px] flex-row items-center justify-between px-4">
           <Text class="text-caption font-semibold text-muted-foreground" role="header">{props.title ?? ""}</Text>
           {props.detail ?? null}
         </View>
       ) : null}
-      <View class="overflow-hidden rounded-(--radius-group) bg-card">
+      <View class={props.sheet ? "overflow-hidden rounded-(--radius-group) bg-sheet-surface" : "overflow-hidden rounded-(--radius-group) bg-card"}>
         <View class="-mb-px">{props.children}</View>
       </View>
       {props.footer ? <Text class="mt-2 px-4 text-caption text-muted-foreground">{props.footer}</Text> : null}
@@ -199,13 +357,14 @@ export function Spinner(props: { size?: number; tone?: ColorName }) {
 }
 
 /** What a page shows instead of its content: busy, empty or failed, with at most one way out. */
-export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string }) {
+/** A page's state (busy, empty, failed) and its one way on. `onBlack`: on the full-screen remote's black, in white. */
+export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string; onBlack?: boolean }) {
   return (
     <View testID={props.testID} class="items-center gap-2 px-6 py-16">
-      {props.busy ? <Spinner size={24} /> : props.icon ? <Icon name={props.icon} size={28} tone={props.tone} /> : null}
-      {props.title ? <Text class="mt-1 text-center text-title font-semibold tracking-title">{props.title}</Text> : null}
-      {props.detail ? <Text class="text-center text-sub text-muted-foreground">{props.detail}</Text> : null}
-      {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} onCanvas /> : null}
+      {props.busy ? <Spinner size={24} tone={props.onBlack ? "onBlackSoft" : undefined} /> : props.icon ? <Icon name={props.icon} size={28} tone={props.onBlack ? "onBlack" : props.tone} /> : null}
+      {props.title ? <Text class={`mt-1 text-center text-title font-semibold tracking-title ${props.onBlack ? "text-white" : ""}`}>{props.title}</Text> : null}
+      {props.detail ? <Text class={props.onBlack ? "text-center text-sub text-white/60" : "text-center text-sub text-muted-foreground"}>{props.detail}</Text> : null}
+      {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} kind={props.onBlack ? "white" : undefined} onCanvas /> : null}
     </View>
   );
 }
@@ -220,7 +379,8 @@ export function PillButton(props: {
   onPress: () => void;
   /** The ink button: the page's or the group's one action. */
   filled?: boolean;
-  kind?: "ink" | "ghost" | "seal";
+  /** `white`: the one action on the full-screen remote's black. */
+  kind?: "ink" | "ghost" | "seal" | "white";
   small?: boolean;
   onCanvas?: boolean;
   busy?: boolean;
@@ -229,12 +389,12 @@ export function PillButton(props: {
   testID?: string;
 }) {
   const kind = () => props.kind ?? (props.filled ? "ink" : "ghost");
-  const fill = () => (kind() === "ink" ? "bg-primary" : kind() === "seal" ? "bg-seal" : props.onCanvas ? "bg-card" : "bg-muted");
+  const fill = () => (kind() === "ink" ? "bg-primary" : kind() === "seal" ? "bg-seal" : kind() === "white" ? "bg-white" : props.onCanvas ? "bg-card" : "bg-muted");
   const size = () => (props.small ? "h-[48px] rounded-(--radius-control) px-4" : "h-[52px] rounded-2xl px-5");
-  const ink = () => (kind() === "ink" ? "text-primary-foreground" : kind() === "seal" ? "text-seal-foreground" : "text-foreground");
+  const ink = () => (kind() === "ink" ? "text-primary-foreground" : kind() === "seal" ? "text-seal-foreground" : kind() === "white" ? "text-black" : "text-foreground");
   return (
     <Button testID={props.testID} disabled={props.disabled || props.busy} onPress={props.onPress} class={`mt-2 flex-row items-center justify-center gap-2 active:opacity-70 disabled:opacity-40 ${size()} ${fill()}`}>
-      {props.busy ? <Spinner size={16} tone={kind() === "ghost" ? "soft" : "canvas"} /> : null}
+      {props.busy ? <Spinner size={16} tone={kind() === "ghost" ? "soft" : kind() === "white" ? "onBlackSoft" : "canvas"} /> : null}
       <Text class={`text-body font-semibold line-clamp-1 ${ink()}`}>{props.title}</Text>
     </Button>
   );
