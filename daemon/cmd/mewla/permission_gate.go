@@ -150,6 +150,12 @@ func (s *agentEventService) ask(ctx context.Context, workerID string, a agenteve
 		defer timer.Stop()
 	}
 	decision, answered = s.hub.Ask(ctx, workerID, a, s.now().UTC())
+	if decision.By == agentevents.ByTerminal {
+		// Answered in the Worker's own prompt: nothing is refused, and the
+		// question Brain was told about is over.
+		s.finishQuestion(workerID, a, "answered_in_terminal", "answered in the terminal: "+describeAction(a), "terminal", "")
+		return decision, false, delegated
+	}
 	if !answered && delegated && !s.stopping() {
 		s.finishQuestion(workerID, a, "timed_out", "nobody answered in time; the action was refused", "", "")
 	}
@@ -303,7 +309,7 @@ func (s *agentEventService) askPrompt(ctx context.Context, workerID string, payl
 	}
 	decision, answered, delegated := s.ask(ctx, workerID, a)
 	if !answered {
-		if delegated && !s.stopping() {
+		if delegated && decision.By != agentevents.ByTerminal && !s.stopping() {
 			// A delegated Worker has nobody at its terminal: refuse with a
 			// reason rather than leave it waiting at a prompt.
 			return control.Response{OK: true, HookOutput: claude.DenyPrompt(noAnswerMessage)}

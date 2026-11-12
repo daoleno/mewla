@@ -446,3 +446,50 @@ func TestTerminalAnswerOutcomeComesFromTheToolCall(t *testing.T) {
 		t.Fatalf("explicit answer changed: %+v", got)
 	}
 }
+
+// A permission prompt answered in the terminal also settles the decision the
+// agent's hook asked Mewla for it, which no agent event ever clears while the
+// call runs or after it was denied: the phone stops asking a question that is
+// already answered. A flicker, a choice or an answer through Mewla settles
+// nothing.
+func TestAPermissionAnsweredInTheTerminalSettlesItsHookApproval(t *testing.T) {
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := map[string]*classifier.Worker{"%1": {ID: "%1"}, "%2": {ID: "%2"}, "%3": {ID: "%3"}}
+	s := &Server{promptLeftGrace: 20 * time.Millisecond, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
+	s.answered = ledger
+	approvals := &recordingApprovals{}
+	s.SetAgentApprovals(approvals)
+	prompt := permissionPrompt()
+	prompt.Tool, prompt.Summary = "Bash", "ping -c 45 127.0.0.1"
+	blocked := func(id string, p *classifier.Prompt) watcher.SessionEvent {
+		return watcher.SessionEvent{Type: "worker_state_change", Worker: &classifier.Worker{ID: id, State: classifier.StateBlocked, Prompt: p}}
+	}
+	idle := func(id string) watcher.SessionEvent {
+		return watcher.SessionEvent{Type: "worker_state_change", Worker: &classifier.Worker{ID: id, State: classifier.StateRunning}}
+	}
+
+	s.observePromptLifecycle(blocked("%1", prompt))
+	s.observePromptLifecycle(idle("%1"))
+	// %2 flickers.
+	s.observePromptLifecycle(blocked("%2", prompt))
+	s.observePromptLifecycle(idle("%2"))
+	s.observePromptLifecycle(blocked("%2", prompt))
+	// %3 was answered from the phone while it showed.
+	s.observePromptLifecycle(blocked("%3", prompt))
+	explicit := PromptAnswerRecord("%3", *prompt, PromptAnswer{PromptID: "perm1", Number: 1}, nil, answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone"}, s.PromptAskedAt("%3", "perm1"), time.Now())
+	if _, _, err := ledger.Record(explicit); err != nil {
+		t.Fatal(err)
+	}
+	s.observePromptLifecycle(idle("%3"))
+	// A choice is not a permission.
+	s.observePromptLifecycle(blocked("%1", &classifier.Prompt{ID: "c1", Kind: classifier.PromptChoice}))
+	s.observePromptLifecycle(idle("%1"))
+	time.Sleep(100 * time.Millisecond)
+
+	if got := approvals.answeredInTerminal(); len(got) != 1 || got[0] != "%1|Bash|ping -c 45 127.0.0.1" {
+		t.Fatalf("hook approvals settled = %q, want only %%1's", got)
+	}
+}

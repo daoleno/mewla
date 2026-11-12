@@ -491,6 +491,34 @@ func (a appApprovals) Pending(workerID string) []server.ApprovalWire {
 	return out
 }
 
+// AnsweredInTerminal settles the hook-held permission whose dialog was
+// answered in the Worker's terminal: the one asking about this tool call, or
+// the only one pending when the prompt could not name its call.
+func (a appApprovals) AnsweredInTerminal(workerID, tool, summary string) {
+	state, ok := a.service.hub.State(workerID)
+	if !ok {
+		return
+	}
+	var permissions []agentevents.Approval
+	for _, pending := range state.Approvals {
+		if pending.Kind == "permission" {
+			permissions = append(permissions, pending)
+		}
+	}
+	if tool != "" {
+		for _, pending := range permissions {
+			if pending.Tool == tool && pending.Summary == summary {
+				a.service.hub.AnsweredInTerminal(workerID, pending.ID, a.service.now().UTC())
+				return
+			}
+		}
+		return
+	}
+	if len(permissions) == 1 {
+		a.service.hub.AnsweredInTerminal(workerID, permissions[0].ID, a.service.now().UTC())
+	}
+}
+
 func (a appApprovals) Decide(workerID, approvalID, optionID string) error {
 	response := a.service.decide(workerID, approvalID, optionID, answeredByApp, "")
 	if response.OK {

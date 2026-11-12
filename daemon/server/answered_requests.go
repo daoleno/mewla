@@ -545,6 +545,17 @@ func (s *Server) observePromptLifecycle(ev watcher.SessionEvent) {
 		record.Answer = ""
 		record.Outcome = answered.OutcomeAnswered
 		s.recordAnswered(s.SettleTerminalAnswer(record, left.prompt.CallID))
+		if left.prompt.Kind == classifier.PromptPermission {
+			// The agent's hook asked Mewla the same question and is never told
+			// it was answered here: without this, the phone keeps asking it
+			// until the agent moves (the call ends) or the hook times out.
+			s.mu.Lock()
+			approvals := s.agentApprovals
+			s.mu.Unlock()
+			if approvals != nil {
+				approvals.AnsweredInTerminal(sessionID, left.prompt.Tool, left.prompt.Summary)
+			}
+		}
 	})
 }
 
