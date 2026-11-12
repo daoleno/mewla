@@ -140,7 +140,7 @@ export function SearchField(props: { value: string; placeholder: string; onChang
 /** A small ghost button on a row (Connect, Reconnect, Allow): 32 pt, canvas pill, 15/600. */
 export function RowButton(props: { label: string; onPress: () => void; disabled?: boolean; accessibilityLabel?: string; testID?: string }) {
   return (
-    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} class="h-8 items-center justify-center rounded-full bg-background px-3.5 active:opacity-70 disabled:opacity-40">
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} hitSlop={6} class="h-8 items-center justify-center rounded-full bg-background px-3.5 active:opacity-70 disabled:opacity-40">
       <Text class="text-sub font-semibold">{props.label}</Text>
     </Button>
   );

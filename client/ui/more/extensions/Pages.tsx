@@ -129,11 +129,12 @@ function Extensions(props: { nav: PageNav }) {
           </View>
           {section("Connected", groups().connected)}
           {section("Needs fixing", groups().fixing)}
+          <AgentToolsSection nav={props.nav} />
           {section("Available", groups().available)}
           {query().trim() && !groups().connected.length && !groups().fixing.length && !groups().available.length ? <EmptyState title="No matching services" /> : null}
         </View>
       )}
-      <AgentToolsSection nav={props.nav} />
+      {catalogLoading() || !flowState().catalog.length ? <AgentToolsSection nav={props.nav} /> : null}
     </PluginsFrame>
   );
 }
