@@ -1,4 +1,4 @@
-import { announce, cleanup, effect, Image, lifecycle, platform, signal, Text, untracked, View } from "nsh";
+import { announce, cleanup, effect, lifecycle, platform, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { fixButtonKind, optionalUpdate, otherComputerState, type FixRow } from "../../core/computer/needsFixing";
 import { failureText } from "../../core/more/daemon";
@@ -10,7 +10,7 @@ import { Notice, Page, PillButton, Row, Section } from "../kit/kit";
 import { followFriends, friendsEnabled } from "../more/friends/state";
 import type { MorePage, PageNav } from "../more/routes";
 import { checks, currentPathMark, forgetConnectionIssue, probeComputers, removedNotice } from "../more/settings/computers";
-import { petClip } from "../pets/clips";
+import { PetSprite } from "../pets/PetSprite";
 import { connection, current, resumeConnection, servers, switchTo } from "../session";
 import { goHome, nav } from "../shell/nav";
 import { updatePending } from "../update/update";
@@ -53,7 +53,7 @@ function CatHeader(props: { nav: PageNav }) {
   const mark = () => currentPathMark();
   return (
     <View class="gap-1 pt-2">
-      <Image testID="computer-cat" src={petClip(connection() === "connected" ? "idle" : connection() === "connecting" ? "waking" : "offline")} accessibilityElementsHidden style={{ width: 72, height: 72 }} />
+      <PetSprite testID="computer-cat" state={() => (connection() === "connected" ? "idle" : connection() === "connecting" ? "waking" : "offline")} size={72} />
       <Button testID="computer-details" accessibilityLabel={`${current()?.name ?? "This computer"}, details`} onPress={() => current() && props.nav.push({ name: "settings-computer", id: current()!.id })}
         class="mt-2 flex-row items-center gap-1.5 self-start active:opacity-70">
         <Text role="header" class="text-display font-bold tracking-display line-clamp-1">{current()?.name || current()?.url || "Computer"}</Text>

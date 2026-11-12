@@ -363,7 +363,7 @@ const done = (path: string, name: string): Answer => ({ status: 200, body: JSON.
 const asset = (name: string, size = 1024) => ({ uri: `content://picker/${name}`, name, mimeType: "application/pdf", size });
 
 /** A picture to paste: `paste`'s paths are the app folder's (client/ui). */
-const PASTED = "assets/pets/p03/working.webp";
+const PASTED = "assets/pets/p13/working.webp";
 
 describe("Files on the web", () => {
   // Cancel mid-upload goes to the page's host as a call (it drops posts): a step can't run while

@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering } from "../testing/fixtures";
+import { answering, pressUntil } from "../testing/fixtures";
 
 const HARNESS = "./testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -89,8 +89,8 @@ describe("The computer page", () => {
     await app.waitFor("id:computer-page");
     await app.host.send("app.brain", { host_problem: { code: "not_signed_in", executor: "claude", detail: "Sign in to Claude Code.", installed_executors: ["claude", "codex"] } });
     await app.waitFor("text:Claude is not signed in");
-    await app.press("id:fix-host-button");
-    await app.waitFor("id:opened-brain-host");
+    // The cat settles from waking into its nap as the page connects: a press during that swap is the harness's to lose.
+    await pressUntil(app, "id:fix-host-button", "id:opened-brain-host");
   });
 
   test("an update the app requires is red on the page and installs with Update", async () => {

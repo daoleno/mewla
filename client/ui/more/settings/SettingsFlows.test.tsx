@@ -246,25 +246,14 @@ describe("Settings rows", () => {
 });
 
 describe("Pet", () => {
-  test("the preview acts out Brain's states, hopping out of the seal and back", async () => {
-    const s = setup({ page: { name: "settings-pet" } }, none, { clock: {} });
+  test("six pets by their portrait, Dango chosen, then its six poses as stills", async () => {
+    const s = setup({ page: { name: "settings-pet" } }, none);
     const app = await open(HARNESS, s.options);
-    const clock = app.clock!;
-    await app.waitFor("id:pet-clip-delegating");
-    await clock.runFor(3_200);
-    await app.waitFor("id:pet-clip-working");
-    await clock.runFor(3_200);
-    await app.waitFor("id:pet-clip-delivered");
-    await clock.runFor(3_200);
-    await app.waitFor("id:pet-clip-going_back");
-    await clock.runFor(1_400);
-    await app.waitFor("id:pet-clip-idle");
-  });
-
-  test("with less motion asked for, the pet stands still", async () => {
-    const s = setup({ page: { name: "settings-pet" } }, none, { reducedMotion: true });
-    const app = await open(HARNESS, s.options);
-    await app.waitFor("id:pet-still");
+    await app.waitFor("text:Dango at work");
+    for (const id of ["p05", "p11", "p12", "p13", "p14", "p15"]) expect(app.shows(`id:pet-${id}`)).toBe(true);
+    for (const caption of ["Quiet", "Waking", "Working", "Delegating", "Needs you", "Offline"]) expect(app.texts()).toContain(caption);
+    expect(app.count("id:pet-still")).toBe(6);
+    expect(app.count("id:pet-clip-idle")).toBe(0);
   });
 });
 
