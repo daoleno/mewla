@@ -15,10 +15,14 @@ import kotlin.math.ceil
  * (scripts/terminal-corpus/android.sh). No daemon, no page: the bytes go straight in.
  *
  *   adb shell am start -n <app>/com.daoleno.mewla.terminal.TerminalReplayActivity \
- *     --es file corpus/sgr.vt --ei cols 52 --ei rows 30 [--ef font 8] [--ez light true]
+ *     --es file corpus/sgr.vt --ei cols 52 --ei rows 30 [--ef font 8] [--ez light true] \
+ *     [--es history corpus/history.txt --ei top 3000 [--ez retheme true]]
  *
  * `file` is relative to the app's files dir. The view's rectangle on screen is logged
  * ("TerminalReplay: rect x y w h") once the bytes are drawn, and what the view sends ("input ...").
+ * `history` is a file of styled rows, one a line, handed to the view as the page hands it history;
+ * the view then shows row `top` at the top, `retheme` switches to the other theme after that
+ * (voiding the rows drawn so far), and the time the view took is logged ("history ...").
  */
 class TerminalReplayActivity : Activity() {
   private val dark = listOf("#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea")
@@ -51,6 +55,26 @@ class TerminalReplayActivity : Activity() {
     else view.setTheme("#141210", "#F4F0EA", "#F4F0EA", "#3D7EFF55", dark)
     view.post {
       view.write(file.readText(Charsets.UTF_8))
+      intent.getStringExtra("history")?.let { name ->
+        val rows = File(filesDir, name).readLines(Charsets.UTF_8)
+        val t0 = System.nanoTime()
+        view.applyHistory(true, 0, rows, cols, false)
+        val t1 = System.nanoTime()
+        view.scrollTo(intent.getIntExtra("top", 0))
+        // Drawing the rows in sight draws their pages first.
+        val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+        val t2 = System.nanoTime()
+        view.draw(android.graphics.Canvas(bitmap))
+        val t3 = System.nanoTime()
+        if (intent.getBooleanExtra("retheme", false)) {
+          if (isLight) view.setTheme("#141210", "#F4F0EA", "#F4F0EA", "#3D7EFF55", dark)
+          else view.setTheme("#fbfaf7", "#161412", "#161412", "#2C55C055", light)
+        }
+        val t4 = System.nanoTime()
+        Log.i(TAG, "history ${rows.size} rows: applyHistory %.2f ms, first draw at row %d %.2f ms, theme %.2f ms".format(
+          (t1 - t0) / 1e6, intent.getIntExtra("top", 0), (t3 - t2) / 1e6, (t4 - t3) / 1e6))
+        bitmap.recycle()
+      }
       view.postDelayed({
         val at = IntArray(2)
         view.getLocationOnScreen(at)

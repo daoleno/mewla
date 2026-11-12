@@ -106,13 +106,14 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   /** [foreground, background, cursor] and the 256-color palette, 0xRRGGBB, for the VTs. */
   private var theme: Pair<IntArray, IntArray>? = null
 
-  // The history above the live screen: its styled rows as the page sent them (drawn again on a
-  // theme change) and as lines, oldest first. Content line i is history[i] below H, the live row i - H above.
+  // The history above the live screen: its styled rows as the page sent them and, as long, the ones
+  // drawn as lines (null until first needed: historyLine), oldest first. Content line i is history
+  // row i below H, the live row i - H above.
   private val historyAnsi = ArrayList<String>()
-  private val history = ArrayList<Line>()
+  private val history = ArrayList<Line?>()
   private var historyCols = 0
   private var alternate = false
-  /** The VT that renders history rows, `PAGE` rows tall at the history's width; it keeps styling from one row to the next. */
+  /** The VT that renders history rows, `PAGE` rows tall at the history's width. */
   private var scratch = 0L
   /** Pixels the content is scrolled down from the live screen (0 = live screen at the bottom). */
   private var scrollPx = 0f
@@ -189,11 +190,9 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     selectionColor = cssColor(selection)
     theme = intArrayOf(this.foreground, this.background, cursorColor) to palette256(palette.map { cssColor(it) and 0xFFFFFF })
     applyTheme()
-    // The history's colors are the VT's: draw its rows again.
+    // The history's colors are the VT's: its rows are drawn again when next needed.
     destroyScratch()
-    val again = renderHistory(historyAnsi)
-    history.clear()
-    history.addAll(again)
+    history.replaceAll { null }
     invalidate()
   }
 
@@ -290,10 +289,12 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     if (cols > 0 && cols != historyCols) {
       historyCols = cols
       destroyScratch()
+      history.replaceAll { null }
     }
     this.alternate = alternate
+    // Kept as sent; drawn when first needed (historyLine).
     historyAnsi.addAll(rows)
-    history.addAll(renderHistory(rows))
+    repeat(rows.size) { history.add(null) }
     // Scrolled up, the rows above the screen grew: the reader's rows stay where they are.
     if (scrollPx > 0 && !reset) scrollPx += rows.size * cellH
     if (alternate) scrollPx = 0f
@@ -357,27 +358,27 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     scratch = 0L
   }
 
-  /** History rows as lines, a page at a time through the scratch VT (styling carries over from row to row, as tmux captures it). */
-  private fun renderHistory(lines: List<String>): List<Line> {
-    if (lines.isEmpty()) return emptyList()
+  /**
+   * History row [i] as a line, drawn through the scratch VT with the rows of its page when it is first
+   * needed (drawn, selected, tapped): history arrives in thousands of rows while output floods, and
+   * nobody looks at most of them. Rows stand alone (core/terminal/history.ts), so a page starts from a reset.
+   */
+  private fun historyLine(i: Int): Line {
+    history[i]?.let { return it }
+    val start = i - i % PAGE
+    val end = min(start + PAGE, historyAnsi.size)
     if (scratch == 0L) {
       scratch = try { Vt.nativeCreateTerminal(historyCols.coerceIn(2, 1000), PAGE) } catch (e: Throwable) { 0L }
-      if (scratch == 0L) return lines.map { EMPTY }
-      themeVt(scratch)
+      if (scratch != 0L) themeVt(scratch)
     }
-    val out = ArrayList<Line>(lines.size)
-    var at = 0
-    while (at < lines.size) {
-      val page = lines.subList(at, min(at + PAGE, lines.size))
-      // Clear and home without resetting the styling the page before left.
-      Vt.nativeWriteBytes(scratch, ("\u001b[2J\u001b[H" + page.joinToString("\r\n")).toByteArray(Charsets.UTF_8))
-      val rendered = arrayOfNulls<Line>(PAGE)
+    val rendered = arrayOfNulls<Line>(PAGE)
+    if (scratch != 0L) {
+      Vt.nativeWriteBytes(scratch, ("\u001b[0m\u001b[2J\u001b[H" + historyAnsi.subList(start, end).joinToString("\r\n")).toByteArray(Charsets.UTF_8))
       decode(Vt.nativeFrame(scratch, true)) { row, line -> if (row < PAGE) rendered[row] = line }
-      // A history row is a whole line (the computer joined wrapped rows).
-      for (i in page.indices) out.add(rendered[i]?.let { Line(it.runs, false) } ?: EMPTY)
-      at += PAGE
     }
-    return out
+    // A history row is a whole line (the computer joined wrapped rows).
+    for (r in start until end) history[r] = rendered[r - start]?.let { Line(it.runs, false) } ?: EMPTY
+    return history[i] ?: EMPTY
   }
 
   /** Reads nativeFrame's result row by row; its meta, or null. */
@@ -420,7 +421,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 
   private fun lineCount() = history.size + rows
 
-  private fun lineAt(i: Int): Line = if (i < history.size) history.getOrNull(i) ?: EMPTY else grid.getOrNull(i - history.size) ?: EMPTY
+  private fun lineAt(i: Int): Line = if (i < 0) EMPTY else if (i < history.size) historyLine(i) else grid.getOrNull(i - history.size) ?: EMPTY
 
   /** The y of content line `i` (whole pixels). */
   private fun lineY(i: Int): Int = (i - history.size) * cellH + scrollPx.roundToInt()
