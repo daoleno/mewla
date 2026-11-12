@@ -438,16 +438,22 @@ export function trayModel(input: TrayInput): TrayModel {
 
   const todayRows: TrayRow[] = [...input.today]
     .sort((a, b) => a.at - b.at)
-    .map((item) => ({
+    .map((item) => {
+      // A running item says what its run's Session does and how long it has run ("● 12m"), as Running's rows do.
+      const run = item.running && item.sessionId ? sessions.get(item.sessionId) : undefined;
+      const live = run ? sessionRow(run, input.now) : null;
+      return {
       key: `today:${item.id}`,
       title: item.title,
-      line: item.running ? "Running" : item.time,
-      end: item.running ? "" : item.time,
+      line: item.running ? live?.line || `Started ${item.time}` : item.time,
+      end: item.running ? live?.end ?? "" : item.time,
       live: item.running || undefined,
+      progress: live?.progress,
       tile: { kind: "calendar" as const },
       target: item.running && item.sessionId ? { open: "session" as const, workerId: item.sessionId } : { open: "item" as const, itemId: item.id, sessionId: item.sessionId },
       past: !item.running && item.at < input.now ? true : undefined,
-    }));
+      };
+    });
   // The next three: running and still to come, before what has passed.
   const upcoming = todayRows.filter((row) => !row.past);
   const today = (upcoming.length ? upcoming : todayRows).slice(0, TODAY_SHOWN);
