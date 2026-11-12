@@ -90,7 +90,22 @@ type notifyState struct {
 	BriefSeeded  bool      `json:"brief_seeded,omitempty"`
 	LastTriageAt time.Time `json:"last_triage_at,omitzero"`
 	Device       Device    `json:"device"`
+	// Pending holds the input Brain has not taken yet, by what it is about.
+	// A retry sends the same receipt and the same text, which is what Brain
+	// requires of a retried input; a new occurrence about the same problems
+	// gets a receipt of its own.
+	Pending map[string]pendingInput `json:"pending,omitempty"`
 }
+
+// pendingInput is one input sent to Brain and not yet taken.
+type pendingInput struct {
+	Receipt string    `json:"receipt"`
+	Body    string    `json:"body"`
+	At      time.Time `json:"at"`
+}
+
+// pendingTTL is how long an input Brain did not take is retried as it was.
+const pendingTTL = 24 * time.Hour
 
 // Calendar is where the morning brief lives.
 type Calendar interface {
@@ -404,13 +419,24 @@ func briefRank(problem Problem) int {
 	return rank
 }
 
-func receiptFor(kind string, problems []Problem) string {
+// inputKey names what an input is about: its kind and its problems as they
+// are now. It is not the receipt; the same key comes back on another day.
+func inputKey(kind string, problems []Problem) string {
 	parts := make([]string, 0, len(problems))
 	for _, problem := range problems {
 		parts = append(parts, problem.ID+":"+fingerprint(problem))
 	}
 	sort.Strings(parts)
 	sum := sha256.Sum256([]byte(kind + "|" + strings.Join(parts, ",")))
+	return kind + ":" + hex.EncodeToString(sum[:])[:16]
+}
+
+// newReceipt names one occurrence of an input. Brain keeps a receipt for good
+// and refuses it with a different text, so a brief about the problems an
+// earlier brief was about must not reuse that brief's receipt.
+func newReceipt(key string, at time.Time) string {
+	sum := sha256.Sum256([]byte(key + "|" + at.UTC().Format(time.RFC3339Nano)))
+	kind, _, _ := strings.Cut(key, ":")
 	return "watch:" + kind + ":" + hex.EncodeToString(sum[:])[:16]
 }
 
@@ -470,7 +496,27 @@ func (n *notifier) envelope(kind string, problems []Problem, now time.Time) stri
 
 func (n *notifier) submit(kind string, problems []Problem) (brain.ExternalInputDisposition, error) {
 	now := n.now()
-	return n.brain.SubmitExternalUserInput(receiptFor(kind, problems), n.envelope(kind, problems, now))
+	key := inputKey(kind, problems)
+	for k, p := range n.state.Pending {
+		if now.Sub(p.At) > pendingTTL {
+			delete(n.state.Pending, k)
+		}
+	}
+	input, retry := n.state.Pending[key]
+	if !retry {
+		input = pendingInput{Receipt: newReceipt(key, now), Body: n.envelope(kind, problems, now), At: now}
+		if n.state.Pending == nil {
+			n.state.Pending = map[string]pendingInput{}
+		}
+		n.state.Pending[key] = input
+		n.persistLocked() // a restart retries this input, not a second one
+	}
+	disposition, err := n.brain.SubmitExternalUserInput(input.Receipt, input.Body)
+	if err == nil && delivered(disposition) {
+		delete(n.state.Pending, key)
+		n.persistLocked()
+	}
+	return disposition, err
 }
 
 func delivered(disposition brain.ExternalInputDisposition) bool {

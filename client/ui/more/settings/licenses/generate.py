@@ -37,6 +37,8 @@ sections = [
          "text": text("libghostty-wuffs.txt"), "note": "Compiled into libghostty-vt, the terminal core of the app."},
         {"name": "translate-c", "version": "2.0.0", "license": "MIT", "url": "https://ziglang.org", "platforms": ["android", "ios"],
          "text": text("libghostty-translate-c.txt"), "note": "Compiled into libghostty-vt, the terminal core of the app."},
+        {"name": "Maple Mono NF", "version": "7.9", "license": "OFL-1.1", "url": "https://github.com/subframe7536/maple-font", "platforms": ["android", "ios"],
+         "text": text("MapleMono-OFL.txt"), "note": "The terminal's font, with the Nerd Fonts icons Maple patches in; subset by scripts/subset-terminal-font.py."},
         {"name": "noVNC", "version": "1.7.0", "license": "MPL-2.0", "url": "https://github.com/novnc/noVNC", "text": text("noVNC-MPL-2.0.txt"),
          "note": "Draws a computer's screen in Screen. Its source is the published 1.7.0 release, unmodified apart from how it is bundled."},
         {"name": "xterm.js", "version": "6.0.0", "license": "MIT", "url": "https://github.com/xtermjs/xterm.js", "platforms": ["web"], "text": text("xterm-MIT.txt"),

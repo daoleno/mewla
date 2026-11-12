@@ -461,3 +461,34 @@ func TestStateReportsKeyModes(t *testing.T) {
 		t.Fatalf("after ?1l ?1007h: app_cursor=%v alt_scroll=%v", again.AppCursor, again.AltScroll)
 	}
 }
+
+// libghostty-vt decodes UTF-8 in bulk with simdutf, whose AVX-512 kernels
+// (built since 1.0.1, chosen at run time on CPUs that have them) leave the
+// output undefined when the input has an error. An invalid sequence inside a
+// long valid run must still come out as one U+FFFD with every valid character
+// around it intact, whatever its offset against the 16/32/64-byte blocks.
+func TestInvalidUTF8InsideLongRuns(t *testing.T) {
+	const bad = "\xff"
+	for _, unit := range []string{"a", "é", "日", "😀"} {
+		for _, n := range []int{1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 100} {
+			for pad := 0; pad < 4; pad++ {
+				run := strings.Repeat("x", pad) + strings.Repeat(unit, n)
+				for _, c := range []struct{ name, in, want string }{
+					{"one byte", run + bad + run, run + "\uFFFD" + run},
+					{"stray continuation", run + "\x80" + run, run + "\uFFFD" + run},
+					{"cut sequence", run + "\xe2\x94" + run, run + "\uFFFD" + run},
+					{"two in a row", run + bad + bad + run, run + "\uFFFD\uFFFD" + run},
+					{"three apart", run + bad + run + "\x80" + run + "\xe2\x94" + run, run + "\uFFFD" + run + "\uFFFD" + run + "\uFFFD" + run},
+					{"at the start", bad + run, "\uFFFD" + run},
+					{"at the end", run + bad, run + "\uFFFD"},
+				} {
+					term := newTerminal(t, 1000, 2)
+					term.Write([]byte(c.in))
+					if got := capture(t, term, CaptureOptions{Scope: ScopeScreen, Trim: true}); got != c.want {
+						t.Fatalf("%s, unit %q x%d, pad %d:\n got %q\nwant %q", c.name, unit, n, pad, got, c.want)
+					}
+				}
+			}
+		}
+	}
+}
