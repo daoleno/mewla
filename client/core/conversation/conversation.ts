@@ -1,3 +1,5 @@
+import { parseResultActions } from "../work/resultActions";
+import type { ResultAction } from "../work/types";
 export type CodexConversationEventKind =
   | "user_message"
   | "assistant_message"
@@ -124,7 +126,8 @@ export interface CodexConversationEvent {
   work_attention?: string;
   work_event_kind?: string;
   work_details_json?: string;
-  work_next_action?: string;
+  /** A Work result's next steps (WIRE §4). */
+  work_actions?: ResultAction[];
   work_wait_for?: string;
   /** Task fields are set only for source "task_notification" status events. */
   task_id?: string;
@@ -387,10 +390,7 @@ function normalizeCodexConversationEvent(
       typeof event.work_details_json === "string"
         ? event.work_details_json
         : undefined,
-    work_next_action:
-      typeof event.work_next_action === "string"
-        ? event.work_next_action
-        : undefined,
+    work_actions: parseResultActions(event.work_actions),
     work_wait_for:
       typeof event.work_wait_for === "string"
         ? event.work_wait_for

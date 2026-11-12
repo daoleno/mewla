@@ -50,6 +50,16 @@ export type WorkWorkerSession = {
   updated_at: string;
 };
 
+/** A Work result's next step (daemon WIRE §4): what the result truthfully offers. */
+export type ResultAction =
+  | { kind: "pull_request"; url: string }
+  | { kind: "git_review"; session_id: string; cwd: string }
+  /** A file of the Worker's project, `path` relative to `cwd`. */
+  | { kind: "file"; session_id: string; cwd: string; path: string }
+  /** Brain's workspace, relative to it. */
+  | { kind: "brain_file"; path: string }
+  | { kind: "brain_folder"; path: string };
+
 /** `brain_work_detail`'s Work: one Work's page, current or closed. */
 export type BrainWorkDetail = {
   work_id: string;
@@ -59,6 +69,8 @@ export type BrainWorkDetail = {
   created_at: string;
   updated_at: string;
   worker_sessions: WorkWorkerSession[];
+  /** Its newest result's next steps. */
+  result_actions?: ResultAction[];
 };
 
 export type BrainCurrentWork = {

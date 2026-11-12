@@ -66,7 +66,7 @@ describe("Brain Work Event dedicated card projection", () => {
       { work_review_state: "resolved" }, { work_session_state: "not_required" },
       { work_result_current: false }, { work_phase: "verifying" },
       { work_attention: "user_input" }, { work_event_kind: "verification" },
-      { work_details_json: '{"offline_tests":22}' }, { work_next_action: "验证结果" }, { work_wait_for: "发布验证" },
+      { work_details_json: '{"offline_tests":22}' }, { work_actions: [{ kind: "pull_request", url: "https://github.com/o/r/pull/7" }] }, { work_wait_for: "发布验证" },
     ];
     for (const change of changes) {
       const next = { ...before, ...change };
@@ -130,7 +130,7 @@ describe("Brain Work Event dedicated card projection", () => {
       work_attention: "none",
       work_event_kind: "artifact",
       work_details_json: '{"ci_run":32645890201}',
-      work_next_action: "Promote verified build",
+      work_actions: [{ kind: "brain_folder", path: "worklog/release" }],
       work_wait_for: "Preview iOS archive",
       work_result_current: true,
     };
@@ -146,7 +146,7 @@ describe("Brain Work Event dedicated card projection", () => {
         phase: "working",
         event_kind: "artifact",
         details_json: '{"ci_run":32645890201}',
-        next_action: "Promote verified build",
+        actions: [{ kind: "brain_folder", path: "worklog/release" }],
         wait_for: "Preview iOS archive",
       },
     });

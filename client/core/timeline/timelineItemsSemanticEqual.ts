@@ -5,6 +5,7 @@
  * From the Expo app's components/terminal/timelineItemsSemanticEqual.ts.
  */
 
+import { sameResultActions } from "../work/resultActions";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { ToolDeveloperDetails } from "./toolCallDetails";
 import type {
@@ -368,7 +369,7 @@ export function brainWorkResultEventsEqual(
     left.attention === right.attention &&
     left.event_kind === right.event_kind &&
     left.details_json === right.details_json &&
-    left.next_action === right.next_action &&
+    sameResultActions(left.actions, right.actions) &&
     left.wait_for === right.wait_for
   );
 }

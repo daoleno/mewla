@@ -6,6 +6,7 @@
  */
 import type { BrainWorkEventKind } from "./brainWorkEvent";
 import type { BrainWorkEventTimelineItem } from "./types";
+import type { ResultAction } from "../work/types";
 
 export type WorkCardKind = "live" | "needs" | "result" | "line";
 
@@ -23,6 +24,8 @@ export interface WorkCardModel {
   sessionId?: string;
   sessionName?: string;
   unread: boolean;
+  /** A result's next steps, as the computer found them truthfully offered (WIRE §4). */
+  actions: readonly ResultAction[];
 }
 
 const RESULT_STATE: Record<BrainWorkEventKind, string> = {
@@ -45,6 +48,7 @@ export function workCardModel(item: Pick<BrainWorkEventTimelineItem, "event" | "
     at: Number.isFinite(at) && at > 0 ? at : null,
     sessionId: work?.attempt_session_id || event.session_id,
     sessionName: event.session_name,
+    actions: event.actions ?? [],
   };
   if (status === "running" || status === "open" || status === "waiting") {
     return { ...base, kind: "live", summary: work?.wait_for || work?.summary || event.summary, state: status === "running" ? "Running" : "Waiting", unread: false };

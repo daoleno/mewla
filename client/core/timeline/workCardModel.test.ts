@@ -10,10 +10,11 @@ const event = (patch: Partial<BrainWorkResultEvent> = {}): BrainWorkResultEvent 
 const work = (patch: Partial<BrainCurrentWork> = {}): BrainCurrentWork => ({ work_id: "w1", revision: 1, title: "Ship the docs", status: "done", unread_result: true, ...patch });
 
 describe("a Work in Brain's thread", () => {
-  test("came back and new: a result card; read: its quiet line. Brain's next_action is never shown to a person", () => {
-    const card = workCardModel({ event: event({ next_action: "Announce it" }), currentWork: work() });
-    expect(card).toMatchObject({ kind: "result", state: "Done", sessionId: "s1", unread: true });
-    expect(JSON.stringify(card)).not.toContain("Announce it");
+  test("came back and new: a result card with its typed next steps; read: its quiet line", () => {
+    const actions = [{ kind: "pull_request" as const, url: "https://github.com/o/r/pull/7" }];
+    const card = workCardModel({ event: event({ actions }), currentWork: work() });
+    expect(card).toMatchObject({ kind: "result", state: "Done", sessionId: "s1", unread: true, actions });
+    expect(workCardModel({ event: event(), currentWork: work() }).actions).toEqual([]);
     expect(workCardModel({ event: event(), currentWork: work({ unread_result: false }) }).kind).toBe("line");
     // Left current Work once read: the event's own flag.
     expect(workCardModel({ event: event({ unread: false }) }).kind).toBe("line");

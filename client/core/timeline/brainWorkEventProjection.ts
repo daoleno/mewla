@@ -31,7 +31,7 @@ export function brainWorkEventFromConversationEvent(
     attention: event.work_attention?.trim() || undefined,
     event_kind: event.work_event_kind?.trim() || undefined,
     details_json: event.work_details_json?.trim() || undefined,
-    next_action: event.work_next_action?.trim() || undefined,
+    actions: event.work_actions,
     wait_for: event.work_wait_for?.trim() || undefined,
   };
 }
