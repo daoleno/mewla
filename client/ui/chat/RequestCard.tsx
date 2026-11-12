@@ -14,7 +14,7 @@ import {
 import type { CodexConversationEvent } from "../../core/conversation/conversation";
 import type { TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
 import {
-  openCardKey, requestCardsOf, sealAction, sealedInThread, type RequestCard as Card, type RequestThread, type SealedRequest,
+  openCardKey, promptParts, requestCardsOf, sealAction, sealedInThread, type RequestCard as Card, type RequestThread, type SealedRequest,
 } from "../../core/timeline/requestCards";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
@@ -189,18 +189,6 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
 }
 
 /** An approval or a terminal menu: the command, then Deny and Approve (a plain yes/no) or the menu's rows. */
-/**
- * A terminal prompt's request as the card shows it: the question (its last line that asks), the command
- * (the first line), and anything else in between. The agent's own "Tip:" advert is dropped; the daemon
- * should send these as fields (its prompt parser has them as lines only).
- */
-function askedParts(text: string): { question: string; command: string; notes: string } {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !/^tip:/i.test(line));
-  const asking = [...lines].reverse().find((line) => line.endsWith("?")) ?? "";
-  const rest = lines.filter((line) => line !== asking);
-  return { question: asking, command: rest[0] ?? "", notes: rest.slice(1).join(" ") };
-}
-
 function ActionBody(props: { card: Card; connected: () => boolean; onDone: (option: TerminalActionPromptOption) => void; onGone: () => void }) {
   const body = props.card.body as Extract<Card["body"], { kind: "action" }>;
   const prompt = body.prompt;
@@ -222,7 +210,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
       sending.set("");
     }
   };
-  const asked = () => askedParts(prompt.requestText ?? "");
+  const asked = () => promptParts(prompt.requestText ?? "");
   const question = () => {
     const text = asked().question || props.card.title;
     return text.trim() === asked().command ? "" : text;
@@ -272,7 +260,8 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
 function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; notice: RequestNotice; anchor?: (node: ViewRef) => void }) {
   const card = props.card;
   const gone = () => {
-    sealRequest(sealedOf(card, "Not answered", card.title));
+    const command = card.body.kind === "action" ? promptParts(card.body.prompt.requestText ?? "").command : "";
+    sealRequest(sealedOf(card, "Not answered", command || card.title, Boolean(command)));
     props.notice(PASSED);
   };
   const submit = (answers: ChoiceAnswer[]) => {
@@ -325,7 +314,8 @@ function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; o
     <Button testID="request-sealed" accessibilityLabel={`${s().verb}: ${s().answer}`} onPress={props.onToggle} class="gap-1 py-1.5 active:opacity-70">
       {/* The mock's answered line: a 20 pt check, then the caption over the answer (a command in mono). */}
       <View class="flex-row items-start gap-2.5">
-        <View class="pt-0.5"><Icon name="check-circle-fill" size={20} tone="soft" /></View>
+        {/* "Not answered" is not something the person did: a dash-circle, not the check (SPEC §1.1). */}
+        <View class="pt-0.5"><Icon name={s().verb === "Not answered" ? "remove-circle" : "check-circle-fill"} size={20} tone="soft" /></View>
         <View class="min-w-0 flex-1">
           <Text class="text-caption text-muted-foreground">{s().verb}</Text>
           <Text class={s().mono ? "font-mono text-code text-foreground" : "text-sub font-semibold text-foreground"}>{s().answer}</Text>
