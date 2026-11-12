@@ -13,6 +13,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // WorkWorkerRecord is what a Worker Session was when it joined a Work: the
@@ -362,6 +363,9 @@ type WorkDetail struct {
 	CreatedAt      time.Time           `json:"created_at"`
 	UpdatedAt      time.Time           `json:"updated_at"`
 	WorkerSessions []WorkWorkerSession `json:"worker_sessions"`
+	// ResultActions are the next steps of the Work's newest result, as its
+	// result row carries them (work_result_actions.go); [] when none.
+	ResultActions []work.ResultAction `json:"result_actions"`
 }
 
 // WorkDetail projects one Work. workers is a fresh Session inventory, as for
@@ -398,5 +402,6 @@ func (s *Store) WorkDetail(workID string, workers []WorkerRef) (WorkDetail, erro
 	return WorkDetail{
 		ID: item.ID, Revision: item.Revision, Title: item.Title, Status: item.Status,
 		CreatedAt: item.CreatedAt.UTC(), UpdatedAt: item.UpdatedAt.UTC(), WorkerSessions: sessions,
+		ResultActions: []work.ResultAction{},
 	}, nil
 }

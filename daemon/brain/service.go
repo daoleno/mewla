@@ -69,6 +69,8 @@ type Service struct {
 	watcher Watcher
 	execs   *work.ExecutorConfig
 	now     func() time.Time
+	// resultGit probes Worker projects for a result's git_review action.
+	resultGit resultGitProbes
 	// defaultHostLogged logs once which agent Brain picked by default when
 	// more than one is installed and none was chosen.
 	defaultHostLogged sync.Once
@@ -2263,7 +2265,36 @@ func (s *Service) WorkDetail(workID string) (WorkDetail, error) {
 	if err != nil {
 		return WorkDetail{}, err
 	}
-	return s.store.WorkDetail(workID, s.workerRefs(hostID))
+	detail, err := s.store.WorkDetail(workID, s.workerRefs(hostID))
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	item, err := s.store.Work(detail.ID)
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	events, err := s.store.ListWorkEvents(detail.ID)
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	for index := len(events) - 1; index >= 0; index-- {
+		event := events[index]
+		if !isProjectedWorkResultEvent(event.Kind) {
+			continue
+		}
+		sessionID := strings.TrimSpace(strings.TrimPrefix(event.PayloadRef, "session:"))
+		if sessionID == strings.TrimSpace(event.PayloadRef) {
+			sessionID = ""
+		}
+		if actions := s.workResultActions(workResultSource{
+			sessionID: sessionID, summary: event.Summary, details: event.DetailsJSON,
+			contextRef: item.ContextRef, current: true, cwd: s.workWorkerCwd(item.ID, sessionID),
+		}); len(actions) > 0 {
+			detail.ResultActions = actions
+		}
+		break
+	}
+	return detail, nil
 }
 
 func (s *Service) MarkWorkRead(workID string) error {
@@ -2326,6 +2357,13 @@ func (s *Service) AnnotateWorkResultEvents(events []work.CodexConversationEvent)
 	}
 	lifecycles, err := s.store.WorkResultLifecycles(workIDs)
 	if err != nil {
+		return err
+	}
+	currentByWork := make(map[string]string, len(lifecycles))
+	for workID, lifecycle := range lifecycles {
+		currentByWork[workID] = lifecycle.CurrentEventID
+	}
+	if err := s.annotateWorkResultActions(events, currentByWork); err != nil {
 		return err
 	}
 	for index := range events {

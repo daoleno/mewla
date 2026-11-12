@@ -366,6 +366,24 @@ Work is in neither list; `brain_work_detail` (`id`: the Work id) answers its
 `work` with the same `worker_sessions`. `attempt_session_id` stays: it is the
 one Session that owns the Work right now.
 
+**A result's next steps.** Each Work result row in Brain's thread
+(`source: work_result`) carries `work_actions`, and `brain_work_detail`
+carries the newest result's as `result_actions`. They are only what the daemon
+can show is there (`brain/work_result_actions.go`):
+
+| Kind | When | Fields |
+| --- | --- | --- |
+| `pull_request` | A GitHub pull request or GitLab merge request URL is written in the result's summary or details | `url` |
+| `git_review` | The Worker's project has uncommitted changes now; only on the Work's current result | `session_id`, `cwd` (the repository root) |
+| `file` | The result names a file that exists inside the Worker's project | `session_id`, `cwd`, `path` (relative to `cwd`) |
+| `brain_file` | The result names a file in the Brain workspace, or the Work's context is one | `path` (relative to the workspace) |
+| `brain_folder` | The Work's context is a Brain workspace folder (its worklog) | `path` |
+
+A result that names none of these, from a Worker whose project is unknown or
+clean, has none. The project is the cwd the Worker joined with
+(`work_workers.jsonl`), else its live cwd. `Work.next_action` is Brain's own
+note: it is not on the wire and never fills a result's text.
+
 ### User Decisions
 
 The user acts on a Work from its slip. Each action is one typed request

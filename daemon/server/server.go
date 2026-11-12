@@ -2916,8 +2916,15 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 	writeFingerprintString(w, event.WorkAttention)
 	writeFingerprintString(w, event.WorkEventKind)
 	writeFingerprintString(w, event.WorkDetailsJSON)
-	writeFingerprintString(w, event.WorkNextAction)
 	writeFingerprintString(w, event.WorkWaitFor)
+	for _, action := range event.WorkActions {
+		writeFingerprintString(w, action.Kind)
+		writeFingerprintString(w, action.URL)
+		writeFingerprintString(w, action.SessionID)
+		writeFingerprintString(w, action.Cwd)
+		writeFingerprintString(w, action.Path)
+	}
+	writeFingerprintInt(w, len(event.WorkActions))
 	writeFingerprintString(w, event.TaskID)
 	for _, count := range []*int{event.TaskTokens, event.TaskToolUses, event.TaskDurationMS} {
 		if count == nil {
