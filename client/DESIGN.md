@@ -72,7 +72,8 @@ Brain and a Session draw the same rows (`ui/chat`, soft-final SPEC §1.7):
   path, and a folded run lists its steps' files
   (`core/timeline/activityFiles.ts`).
 - **Pictures**: sent ones at 168 × 126 above the bubble, a tool call's as
-  thumbnails under its row (96 × 170 tall, 200 × 125 wide), a reply's at the
+  thumbnails under its row (96 × 170 tall, 200 × 125 wide; radius 16 on the
+  canvas, no fill or padding behind), a reply's at the
   text's width. A failed one keeps its frame with a refresh glyph and loads
   again on a tap. A tap opens the viewer (`PictureViewer`): black in both
   themes, ×, "2 of 3", previous and next, arrow keys and swipe, double tap
