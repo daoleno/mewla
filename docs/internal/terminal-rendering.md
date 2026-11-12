@@ -17,7 +17,10 @@ the frame's opaque origin and refuses them otherwise. `scripts/terminal-corpus/w
 renders the corpus through that page in Chromium, Firefox or WebKit (`ENGINE`) at a
 real device scale. All three draw the packer's runs on a grid of
 whole device pixels and draw box, block, braille and Powerline glyphs themselves, so
-rows of lines and blocks meet. PTY output and input use the canonical server's
+rows of lines and blocks meet. Each keeps a character's width per face, measured
+once (whether it fills exactly one cell decides how a run is drawn), and sets the
+face only when a run's differs: a desktop-size grid draws tens of thousands of
+cells a frame. PTY output and input use the canonical server's
 authenticated WebSocket connection; the view has no connection or credentials of
 its own.
 
@@ -42,7 +45,13 @@ The history above the live screen is not the VT's. The computer keeps it
 (`terminal_history`, `client/core/terminal/history.ts`) and the page hands its
 rows to the view (`history`: void with `reset`, drop `removed` rows from the
 front, append `rows` as styled ANSI), which draws them above the live screen
-through a second VT and scrolls through them itself. Search and the prompt jumps
+through a second VT and scrolls through them itself. The view keeps the rows'
+ANSI and draws a page of 64 rows the first time one of its rows is needed (on
+screen, selected or copied), so a flood that hands over thousands of rows costs
+only an append; a theme or width change voids the drawn pages. Each row
+therefore has to stand on its own: session-host rows start and end their style
+with a reset, and core's `standAloneRows` carries a tmux capture's style from
+the rows above into each row. Search and the prompt jumps
 run in the page over the same rows and move the view (`scrollTo`, `mark`). See
 [terminal scrolling](terminal-scrolling.md) for that contract and its limits.
 
