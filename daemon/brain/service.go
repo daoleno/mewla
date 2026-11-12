@@ -2255,6 +2255,14 @@ func (s *Service) UnsubscribeWork(id int) {
 	}
 }
 
+// Work reads one Work.
+func (s *Service) Work(workID string) (Work, error) {
+	if s == nil || s.store == nil {
+		return Work{}, fmt.Errorf("brain service is not configured")
+	}
+	return s.store.Work(workID)
+}
+
 // WorkDetail is one Work's detail, current or closed, with its Workers'
 // live state from the current Session inventory.
 func (s *Service) WorkDetail(workID string) (WorkDetail, error) {

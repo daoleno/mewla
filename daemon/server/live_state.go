@@ -286,6 +286,7 @@ func (s *Server) handleLiveAnswer(conn *websocket.Conn, message liveClientMessag
 		"type": "live_answer", "request_id": requestID, "ok": true,
 		"kind": question.Kind, "question_id": question.ID, "text": choice,
 	}
+	asked, _ := s.workQuestionBefore(question.WorkID)
 	result, err := s.liveReply(brain.WorkUserActionRequest{
 		WorkID: question.WorkID, Kind: brain.WorkUserReply, Text: choice, RequestID: requestID,
 	})
@@ -293,6 +294,7 @@ func (s *Server) handleLiveAnswer(conn *websocket.Conn, message liveClientMessag
 		s.sendErrorWithRequestID(conn, requestID, "live_answer_failed", brainWorkActionMessage(err))
 		return
 	}
+	s.recordWorkReply(asked, result, s.answeredByConn(conn))
 	reply["work_id"] = question.WorkID
 	reply["status"] = result.Work.Status
 	reply["admission"] = result.Admission

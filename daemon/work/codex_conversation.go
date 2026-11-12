@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/answered"
 	"io"
 	"os"
 	"path/filepath"
@@ -284,6 +285,9 @@ type CodexConversationEvent struct {
 	WorkWaitFor       string `json:"work_wait_for,omitempty"`
 	// WorkActions are the result's typed next steps (brain/work_result_actions.go).
 	WorkActions []ResultAction `json:"work_actions,omitempty"`
+	// Request is set only for Source=request_answered rows: a request (a
+	// prompt, an approval, a question) and how it was answered.
+	Request *answered.Request `json:"request,omitempty"`
 	// Task fields are only set for Source=task_notification status items.
 	// CallID carries the provider tool call that launched the task.
 	TaskID         string `json:"task_id,omitempty"`
