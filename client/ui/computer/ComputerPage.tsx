@@ -1,4 +1,4 @@
-import { announce, cleanup, effect, lifecycle, platform, signal, Text, untracked, View } from "nsh";
+import { announce, cleanup, effect, Image, lifecycle, platform, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { fixButtonKind, optionalUpdate, type FixRow } from "../../core/computer/needsFixing";
 import { failureText } from "../../core/more/daemon";
@@ -12,7 +12,7 @@ import { flowState } from "../more/extensions/plugins";
 import type { MorePage, PageNav } from "../more/routes";
 import { currentPathMark, forgetConnectionIssue, probeComputers, removedNotice, statusWord } from "../more/settings/computers";
 import { otherState } from "./computers";
-import { PetSprite } from "../pets/PetSprite";
+import { pet } from "../pets/pets";
 import { connection, current, resumeConnection, servers, switchTo, transportPath } from "../session";
 import { goHome, nav } from "../shell/nav";
 import { updatePending } from "../update/update";
@@ -71,7 +71,8 @@ function CatHeader(props: { nav: PageNav }) {
   return (
     <View class="gap-1 pt-2">
       <View class="flex-row items-center gap-3">
-        <PetSprite testID="computer-cat" state={() => (connection() === "connected" ? "idle" : connection() === "connecting" ? "waking" : "offline")} size={72} />
+        {/* The cat does not move here: its portrait, sitting (SPEC §5), not the nap the idle header shows. */}
+        <Image testID="computer-cat" src={pet().art.portrait} accessibilityElementsHidden style={{ width: 72, height: 72 }} />
         <View class="min-w-0 flex-1 gap-0.5">
           <Button testID="computer-details" accessibilityLabel={`${current()?.name ?? "This computer"}, details`} onPress={() => current() && props.nav.push({ name: "settings-computer", id: current()!.id })}
             class="self-stretch active:opacity-70">
@@ -80,8 +81,11 @@ function CatHeader(props: { nav: PageNav }) {
           <View testID="computer-connection" class="flex-row items-center gap-2" onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
             accessible accessibilityLabel={[WORDS[connection()], connectionTail()].filter(Boolean).join(", ")}>
             <View class={connection() === "connected" ? "size-2 rounded-full bg-add" : "size-2 rounded-full border-2 border-muted-foreground"} />
-            <Text class="text-sub text-muted-foreground">{WORDS[connection()]}</Text>
-            {connectionTail() ? <Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{`· ${connectionTail()}`}</Text> : null}
+            {/* One space each side of the dot: "Connected · LAN", the row's gap is only the status dot's. */}
+            <View class="min-w-0 shrink flex-row">
+              <Text class="text-sub text-muted-foreground">{WORDS[connection()]}</Text>
+              {connectionTail() ? <Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{` · ${connectionTail()}`}</Text> : null}
+            </View>
           </View>
         </View>
       </View>
