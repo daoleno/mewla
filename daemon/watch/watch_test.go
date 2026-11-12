@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -460,6 +461,10 @@ type fakeExternal struct {
 	// responses are keyed "tool owner/repo"; an absent key is GitHub saying it
 	// has no such repository.
 	responses map[string]fakeResponse
+	// byAccount overrides responses for one account, keyed "account tool
+	// owner/repo"; down lists accounts whose network is out.
+	byAccount map[string]fakeResponse
+	down      map[string]bool
 	linear    map[string]string
 	accounts  map[string][]connections.ReadAccount
 	// args records the arguments each GitHub call was sent, by tool.
@@ -517,7 +522,13 @@ func (f *fakeExternal) ReadTool(_ context.Context, accountID, tool string, args 
 	f.args[tool] = args
 	key := tool + " " + slug
 	f.calls = append(f.calls, key)
+	if f.down[accountID] {
+		return connections.ReadResult{}, errors.New("connection timed out")
+	}
 	response, ok := f.responses[key]
+	if own, found := f.byAccount[accountID+" "+key]; found {
+		response, ok = own, true
+	}
 	if !ok {
 		return connections.ReadResult{}, connections.ServiceError{Service: "GitHub", Detail: "404 Not Found"}
 	}
