@@ -120,7 +120,7 @@ Every slip carries its next step:
 | The Work | You can |
 | --- | --- |
 | Asks a question | Tap one of Brain's answers ("Keep both"), reply in your own words, snooze it for an hour, or say it is not needed anymore |
-| Came back | **Accept** it, which closes it, or **Ask Brain about this**, which opens Brain's composer with the Work quoted |
+| Came back | **Accept** it, which closes it, or **Ask Brain about this**, which goes back to Brain with the Work quoted in the composer, below anything you had typed there |
 | Is running | Open its Worker, ask Brain about it, or **Stop** it (after a confirmation; the Worker closes and the Work is cancelled) |
 | Failed | Retry it through Brain, or dismiss it |
 | Ended with no result | "Outcome unknown": ask Brain to check, or close it |
