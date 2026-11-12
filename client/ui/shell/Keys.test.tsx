@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired, settle } from "../testing/fixtures";
+import { paired, settle, typeUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -146,7 +146,8 @@ describe("the desktop's keys", () => {
   test("the bare keys never fire while typing in a field", async () => {
     const app = await open(APP, desk());
     await app.waitFor("id:left-pane");
-    await app.type("id:composer", "gn");
+    // Typed until the field holds it: the harness can drop the first keys of a fresh page.
+    await typeUntil(app, "id:composer", "gn", "id:composer");
     await app.wait(100);
     expect(app.shows("id:new-cwd")).toBe(false);
     expect(app.value("id:composer")).toBe("gn");
