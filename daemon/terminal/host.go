@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/daoleno/mewla/daemon/sessionhost"
 )
@@ -183,8 +184,19 @@ func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment, do
 			!s.send(ctx, Event{Type: EventOutput, Data: prefix + string(view.Replay)}) {
 			return
 		}
+		// The host cuts its output anywhere, a character's bytes included: a
+		// character cut in two waits for its other part, since the App gets
+		// the output as JSON text and each lone byte would arrive as U+FFFD
+		// (three cells for one, the rest of the row pushed over).
+		var tail []byte
 		for chunk := range view.Output() {
-			if !s.send(ctx, Event{Type: EventOutput, Data: string(chunk)}) {
+			data := append(tail, chunk...)
+			cut := completeUTF8(data)
+			tail = append([]byte(nil), data[cut:]...)
+			if cut == 0 {
+				continue
+			}
+			if !s.send(ctx, Event{Type: EventOutput, Data: string(data[:cut])}) {
 				return
 			}
 		}
@@ -222,6 +234,20 @@ func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment, do
 			return
 		}
 	}
+}
+
+// completeUTF8 is the length of data without a character cut off at its
+// end (all of it when it ends whole, or with bytes that are not UTF-8).
+func completeUTF8(data []byte) int {
+	for i := len(data) - 1; i >= 0 && i >= len(data)-utf8.UTFMax; i-- {
+		if utf8.RuneStart(data[i]) {
+			if !utf8.FullRune(data[i:]) {
+				return i
+			}
+			break
+		}
+	}
+	return len(data)
 }
 
 // reattach opens the view again at the Session's size, whatever it is now:
