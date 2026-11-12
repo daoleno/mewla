@@ -24,7 +24,7 @@ function messageOf(error: unknown, fallback: string): string {
 }
 
 /**
- * Model & Effect: the Session's models (from its connection's catalog, or a dsh
+ * Model & Effort: the Session's models (from its connection's catalog, or a dsh
  * Session's own), each "Use <model>"; a model with effects opens its Effect list
  * (Back returns). A current model that is no longer offered is listed and
  * flagged. A switch closes the sheet once the computer saved it; a failure says
@@ -150,11 +150,11 @@ export function ModelPanel(props: {
     <View testID="model-sheet" class="gap-3 pb-8">
       <View class="flex-row items-center gap-2">
         {effectTarget() ? (
-          <Button testID="model-back" accessibilityLabel="Back to Model and Effect" onPress={() => effectKey.set("")} class="rounded-lg p-1 active:bg-accent">
+          <Button testID="model-back" accessibilityLabel="Back to Model and Effort" onPress={() => effectKey.set("")} class="rounded-lg p-1 active:bg-accent">
             <Icon name="chevron-left" size={22} color="foreground" />
           </Button>
         ) : null}
-        <Text class="flex-1 text-lg font-semibold">{effectTarget() ? "Effect" : "Model & Effect"}</Text>
+        <Text class="flex-1 text-lg font-semibold">{effectTarget() ? "Effort" : "Model & Effort"}</Text>
         <Button testID="model-close" accessibilityLabel="Close runtime selection" onPress={props.onClose} class="rounded-full p-1.5 active:bg-accent">
           <Icon name="close" size={20} color="foreground" />
         </Button>

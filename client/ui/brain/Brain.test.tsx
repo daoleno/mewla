@@ -112,7 +112,7 @@ describe("Brain's menu (§1.6)", () => {
     await app.waitUntil(() => said(app) === "switched");
   }, 20_000);
 
-  test("Model opens the Model & Effect panel for Brain's own Session, in the same sheet", async () => {
+  test("Model opens the Model & Effort panel for Brain's own Session, in the same sheet", async () => {
     const c = computer({});
     const app = await menu(c);
     await app.press("id:brain-menu-model");

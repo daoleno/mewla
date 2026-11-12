@@ -33,7 +33,7 @@ import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../
 import { buildChatComposerPlaceholder } from "../../core/session/chatComposerPresentation";
 import { terminalFallback } from "../../core/session/terminalFallback";
 import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
-import { compactPathLabel } from "../../core/timeline/pathDisplay";
+import { compactPathLabel, pathBasename } from "../../core/timeline/pathDisplay";
 import { AgentIcon } from "../icons/AgentIcon";
 import { workLinkOf } from "../sessions/workLinks";
 import { openCalendarItem } from "../shell/nav";
@@ -49,8 +49,7 @@ import { brain, connection, current, currentTransport, outbox, problem as connec
 import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
-import { buildGitDiffChipLabel, type GitDiffStatusSnapshot } from "../../core/git/gitDiff";
-import { getGitStatus } from "../../core/git/requests";
+import { Segmented } from "../kit/Segmented";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
 import { showAlert } from "../shell/alert";
@@ -288,28 +287,6 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     if (!dshLive()) return dshWeb.set(null);
     untracked(() => void listSessionServices(transport).then((snapshot) => dshWeb.set(dshWebServiceURL(snapshot.services))).catch(() => dshWeb.set(null)));
   });
-  // Git: the folder's changes on a chip in the header, read every 15 s while the Session is on screen.
-  const git = signal<{ status: GitDiffStatusSnapshot | null; error: boolean } | null>(null);
-  const gitTarget = computed(() => (props.active() && connected() && worker()?.cwd ? worker()!.cwd! : ""));
-  effect(() => {
-    const cwd = gitTarget();
-    if (!cwd) return;
-    let live = true;
-    const read = () => void getGitStatus(transport, { targetId: props.workerId, cwd })
-      .then((status) => live && git.set({ status, error: false }))
-      .catch(() => live && git.set({ status: untracked(git)?.status ?? null, error: true }));
-    read();
-    const timer = setInterval(read, 15_000);
-    cleanup(() => {
-      live = false;
-      clearInterval(timer);
-    });
-  });
-  const gitChip = computed(() => {
-    const state = git();
-    if (!state || state.status?.reason === "not_git_repo" || (!state.status?.available && !state.error)) return null;
-    return { label: buildGitDiffChipLabel(state.status, false), dirty: Boolean(state.status?.available && !state.status.clean), error: state.error };
-  });
   const openGit = () => {
     const cwd = untracked(worker)?.cwd;
     if (cwd) props.nav.push({ name: "git", targetId: props.workerId, cwd, title: untracked(title) });
@@ -461,16 +438,16 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const menuAnchor = createMenuAnchor();
   const menu = async () => {
     const items: MenuItem[] = [
-      ...(canChat() ? [{ id: "mode", label: mode() === "chat" ? "Open terminal" : "Open chat" }] : []),
-      ...(switchable() ? [{ id: "model", label: "Model & Effect" }] : []),
+      ...(worker()?.cwd ? [{ id: "changes", label: "Changes" }] : []),
+      ...(switchable() ? [{ id: "model", label: "Model & Effort" }] : []),
       ...(dshWeb() ? [{ id: "web", label: "Open Web" }] : []),
       { id: "terminal", label: "New Terminal" },
       { id: "rename", label: "Rename" },
-      ...(link() ? [{ id: "work", label: "Open Brain" }] : []),
+      ...(link() ? [{ id: "work", label: "Open its Work" }] : []),
       { id: "terminate", label: "Terminate", destructive: true },
     ];
     const action = await showMenu({ title: untracked(title), items, anchor: menuAnchor.node(), testID: "session-menu-popover" });
-    if (action === "mode") chooseMode(untracked(mode) === "chat" ? "terminal" : "chat");
+    if (action === "changes") openGit();
     else if (action === "model") modelOpen.set(true);
     else if (action === "work") {
       const work = untracked(link)?.work;
@@ -491,31 +468,31 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   return (
     <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"}
       headerTitle={
-        <View class="max-w-[260px] flex-row items-center gap-2">
-          <AgentIcon kind={kind()} size={22} />
-          <View class="flex-1">
-            <Text class="text-base font-semibold line-clamp-1">{title()}</Text>
+        <View class="min-w-0 flex-1 flex-row items-center gap-2.5">
+          <AgentIcon kind={kind()} size={28} />
+          <View class="min-w-0 flex-1">
+            <Text role="header" class="text-body font-semibold text-foreground line-clamp-1">{title()}</Text>
             {props.brain ? (
-              <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text>
+              <Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text>
             ) : link()?.calendarLabel ? (
-              <Text testID="session-calendar" class="text-xs text-primary line-clamp-1" onPress={openCalendarOrigin}>{link()!.calendarLabel!}</Text>
+              <Text testID="session-calendar" class="text-sub text-muted-foreground line-clamp-1" onPress={openCalendarOrigin}>{link()!.calendarLabel!}</Text>
             ) : worker() ? (
-              <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">
-                {[workerStatusLabel(worker()!.status), worker()!.delegated ? "Delegated" : "", connection() !== "connected" ? "Offline" : ""].filter(Boolean).join(" · ")}
+              // "{project} · {state}" (soft-final SPEC §11): the folder, then what it is doing; the connection mark's word when offline.
+              <Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">
+                {[worker()!.cwd ? pathBasename(worker()!.cwd!) : "", connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)].filter(Boolean).join(" · ")}
               </Text>
             ) : null}
           </View>
         </View>
       }
       headerRight={
-        <View class="flex-row items-center gap-3">
-          {gitChip() ? (
-            <Button testID="session-git" accessibilityLabel={`Git: ${gitChip()!.label}`} onPress={openGit} class="flex-row items-center gap-1 rounded-full border border-border px-2 py-1 active:bg-accent">
-              <Icon name={gitChip()!.error ? "alert-circle" : "git-branch"} size={14} color={gitChip()!.dirty ? "primary" : undefined} />
-              <Text class="max-w-[120px] text-xs line-clamp-1">{gitChip()!.label}</Text>
-            </Button>
+        <View class="flex-row items-center gap-2">
+          {/* Chat or terminal, remembered per Session (SPEC §4): only where the Session has a chat. */}
+          {!props.brain && canChat() ? (
+            <Segmented testID="session-mode" accessibilityLabel="View" value={mode()} onChange={(key) => chooseMode(key)}
+              options={[{ key: "chat", label: "Chat", icon: "chat" }, { key: "terminal", label: "Terminal", icon: "terminal" }]} />
           ) : null}
-          {props.brain ? null : <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="primary" /></Button>}
+          {props.brain ? null : <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button>}
         </View>
       }>
       <View class="flex-1 bg-background">

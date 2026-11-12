@@ -1,11 +1,12 @@
 import { Image, Text, View } from "nsh";
 import type { ImageAsset } from "nsh";
 import { Button } from "nsh/base";
+import { Icon, type IconName } from "../icons/Icon";
 
 /** A small exclusive choice (SPEC §11): a surface track, the chosen segment canvas with ink text; taller in a sheet. */
 export function Segmented<K extends string>(props: {
-  /** `mark`: a logo before the label (an agent's). */
-  options: ReadonlyArray<{ key: K; label: string; mark?: ImageAsset }>;
+  /** `mark`: a logo before the label (an agent's). `icon`: the segment is that icon alone, its label read out. */
+  options: ReadonlyArray<{ key: K; label: string; mark?: ImageAsset; icon?: IconName }>;
   value: K;
   onChange: (key: K) => void;
   accessibilityLabel?: string;
@@ -21,12 +22,17 @@ export function Segmented<K extends string>(props: {
         <Button
           testID={props.testID ? `${props.testID}-${option.key}` : undefined}
           role="tab"
+          accessibilityLabel={option.icon ? option.label : undefined}
           selected={props.value === option.key}
           onPress={() => props.onChange(option.key)}
-          class={`flex-1 flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
+          class={`${option.icon ? "min-w-[44px] px-3" : "flex-1"} flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
         >
           {option.mark ? <Image src={option.mark} style={{ width: 18, height: 18 }} /> : null}
-          <Text class={`${label()} ${props.value === option.key ? "text-foreground" : "text-faint"}`}>{option.label}</Text>
+          {option.icon ? (
+            <Icon name={option.icon} size={18} color={props.value === option.key ? "foreground" : "faint"} />
+          ) : (
+            <Text class={`${label()} ${props.value === option.key ? "text-foreground" : "text-faint"}`}>{option.label}</Text>
+          )}
         </Button>
       ))}
     </View>
