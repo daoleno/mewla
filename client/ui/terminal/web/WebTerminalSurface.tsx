@@ -19,8 +19,9 @@ const NOT_READY = "The terminal page did not load (terminal/terminal.js).";
 let html: string | null = null;
 
 /**
- * The terminal view on the web (contract.ts): xterm.js in a web view, the
- * page client/ui/web/terminal/terminal.js. The same props, events and
+ * The terminal view on the web (contract.ts): libghostty-vt with the phones'
+ * packer and glyphs on a canvas, in a web view (the page
+ * client/ui/web/terminal/terminal.js). The same props, events and
  * commands as the phones' native view (`probe` besides, for checks), so
  * TerminalPane does not tell them apart. Commands wait for the page; writes
  * go to it once a frame, in order with the rest.

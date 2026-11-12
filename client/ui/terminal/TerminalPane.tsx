@@ -13,7 +13,7 @@ import { TerminalSurface, type TerminalTheme } from "./contract";
 import { TerminalJumpControls, TerminalRendererFailure, TerminalSearchBar } from "./TerminalOverlays";
 import { keyboardOnlyWeb, WebTerminalSurface } from "./web/WebTerminalSurface";
 
-/** The phones' native view; the web's is xterm.js in a web view, with the same contract. */
+/** The phones' native view; the web's is libghostty-vt (WebAssembly) on a canvas in a web view, with the same contract. */
 const Surface: typeof TerminalSurface = platform.os === "web" ? WebTerminalSurface : TerminalSurface;
 /** Text size: the phones draw at 8 (about 83 columns on a phone, so Claude Code and Codex lay out as on a laptop); the web's larger screens at 13. */
 const FONT_SIZE = platform.os === "web" ? 13 : 8;

@@ -90,6 +90,8 @@ bool mewla_vt_mouse_tracking(MewlaVt *vt);
 /// x, y pixels from the grid's top-left, as the bytes to send; false when the program does not report it.
 bool mewla_vt_mouse(MewlaVt *vt, int32_t action, int32_t button, uint16_t mods, double x, double y,
                     const uint8_t *_Nullable *_Nonnull out, size_t *out_length);
+/// The URI of the hyperlink (OSC 8) on screen cell col, row; false when it has none.
+bool mewla_vt_link(MewlaVt *vt, uint16_t col, uint16_t row, const uint8_t *_Nullable *_Nonnull out, size_t *out_length);
 /// Focus gained or lost, as the bytes to send when the program asked for focus reports (mode 1004).
 bool mewla_vt_focus(MewlaVt *vt, bool focused, const uint8_t *_Nullable *_Nonnull out, size_t *out_length);
 

@@ -420,6 +420,23 @@ extern "C" bool mewla_vt_mouse(MewlaVt* vt, int32_t action, int32_t button, uint
     });
 }
 
+extern "C" bool mewla_vt_link(MewlaVt* vt, uint16_t col, uint16_t row, const uint8_t** out, size_t* outLength)
+{
+    *out = nullptr;
+    *outLength = 0;
+    GhosttyPoint point{};
+    point.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+    point.value.coordinate.x = col;
+    point.value.coordinate.y = row;
+    GhosttyGridRef ref{};
+    if (col >= vt->cols || row >= vt->rows || ghostty_terminal_grid_ref(vt->terminal, point, &ref) != GHOSTTY_SUCCESS) {
+        return false;
+    }
+    return encodeInto(vt, out, outLength, [&](uint8_t* buf, size_t cap, size_t* written) {
+        return ghostty_grid_ref_hyperlink_uri(&ref, buf, cap, written);
+    });
+}
+
 extern "C" bool mewla_vt_focus(MewlaVt* vt, bool focused, const uint8_t** out, size_t* outLength)
 {
     *out = nullptr;

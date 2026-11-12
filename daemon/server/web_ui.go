@@ -125,8 +125,24 @@ func (s *Server) webUIHandler() http.Handler {
 		header.Set("X-Frame-Options", "DENY")
 		header.Set("Referrer-Policy", "no-referrer")
 		header.Set("Cross-Origin-Opener-Policy", "same-origin")
+		if isTerminalPageFile(r.URL.Path) {
+			// The terminal's page runs in NSH's web view, a frame sandboxed to an opaque
+			// origin: its faces and its VT (fetched, as fonts and WebAssembly are) are read
+			// cross-origin. They are public build files, the same for everyone.
+			header.Set("Access-Control-Allow-Origin", "*")
+		}
 		assets.ServeHTTP(w, r)
 	})
+}
+
+// isTerminalPageFile reports whether path is one of the terminal page's own files under /terminal/
+// (scripts/build-web-ui.sh): its script, its VT and its faces. /terminal/<id> is an app route.
+func isTerminalPageFile(path string) bool {
+	name, ok := strings.CutPrefix(path, "/terminal/")
+	if !ok || strings.Contains(name, "/") {
+		return false
+	}
+	return name == "terminal.js" || name == "mewla-vt.wasm" || (strings.HasPrefix(name, "MapleMono-") && strings.HasSuffix(name, ".ttf"))
 }
 
 func (s *Server) webUIAdmitted(r *http.Request) bool {

@@ -75,6 +75,13 @@ int main()
     ok = mewla_vt_focus(vt, false, &out, &n);
     expect("focus out", ok, ok ? std::string(reinterpret_cast<const char*>(out), n) : "", "\x1b[O");
 
+    // OSC 8: the cell's link, none beside it.
+    write(vt, "\x1b[2J\x1b[H\x1b]8;;https://example.com/a\x1b\\link\x1b]8;;\x1b\\ plain");
+    ok = mewla_vt_link(vt, 2, 0, &out, &n);
+    expect("OSC 8 link under a cell", ok, ok ? std::string(reinterpret_cast<const char*>(out), n) : "", "https://example.com/a");
+    ok = mewla_vt_link(vt, 6, 0, &out, &n);
+    expect("no link on plain text", ok, "", "");
+
     mewla_vt_destroy(vt);
     if (failures) {
         std::printf("terminal_vt_input: %d failures\n", failures);

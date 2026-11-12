@@ -207,3 +207,27 @@ func TestAppRoutesServeTheWebUIToPageLoadsOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalPageFilesAreReadableFromTheTerminalsFrame(t *testing.T) {
+	s := webUITestServer(t)
+	for path, want := range map[string]string{
+		"/terminal/terminal.js":              "*",
+		"/terminal/mewla-vt.wasm":            "*",
+		"/terminal/MapleMono-NF-Regular.ttf": "*",
+		"/terminal/MapleMono-NF-Italic.ttf":  "*",
+		"/terminal/worker-1":                 "",
+		"/terminal/":                         "",
+		"/terminal/sub/terminal.js":          "",
+		"/terminal.js":                       "",
+		"/assets/MapleMono-NF-Regular.ttf":   "",
+	} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Host = "127.0.0.1:9876"
+		request.RemoteAddr = "127.0.0.1:50000"
+		recorder := httptest.NewRecorder()
+		s.webUIHandler().ServeHTTP(recorder, request)
+		if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != want {
+			t.Fatalf("%s: Access-Control-Allow-Origin = %q, want %q", path, got, want)
+		}
+	}
+}
