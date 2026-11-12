@@ -634,7 +634,7 @@ ANSI colours are warm-tuned for TUIs and tested in `terminalThemes.test.ts`:
 - red is a crimson at OKLab ΔE > 0.075 from the seal and its text, so a
   deleted line never reads as "Needs you".
 
-Both renderers (xterm.js on web, ghostty on native) read the same palette, and
+Every renderer (libghostty-vt on the phones and, as WebAssembly, on the web) reads the same palette, and
 chat code, inline code and git diffs inherit it.
 
 ## The pet
@@ -728,7 +728,7 @@ web tooltip.
 
 Risky areas to watch:
 
-- **Terminal.** The palette is checked on web (xterm.js) with a git diff,
+- **Terminal.** The palette is checked on web with a git diff,
   ls, htop and vim sample (`screenshot-demo?state=chat&fixture=terminal`).
   The native ghostty grid still needs a device check.
 - **Markdown.** Chat messages (Brain, Sessions, Work) are one marked parse

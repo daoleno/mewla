@@ -176,6 +176,14 @@ for target in desktop["targets"]:
     desktop_targets.add(target["go"])
     assert target["zig_target"]
 assert "linux_amd64" in desktop_targets, "CI tests the engine on linux_amd64"
+web = lock["web"]
+assert web["zig_target"] == "wasm32-freestanding", "the browser build is Ghostty's Tier 1 wasm target"
+assert web["packer_target"] == "wasm32-wasi"
+assert web["output"] == "mewla-vt.wasm", "terminal.js loads /terminal/mewla-vt.wasm"
+for name in web["packer_sources"]:
+    assert (root / "client" / "native" / "terminal" / name).is_file(), f"web packer source {name} is missing"
+assert {"mewla_vt_create", "mewla_vt_frame", "mewla_vt_key"} <= set(web["exports"]), "the page's calls are exported"
+assert (root / "scripts" / "build-libghostty-web.sh").is_file(), "the web build script is missing"
 assert (root / "daemon" / "ghosttyvt").is_dir(), "desktop libraries without the daemon/ghosttyvt package"
 
 # Notice must embed exact upstream MIT body (sha256 of LICENSE text).

@@ -4,16 +4,32 @@ The terminal view (`client/ui/terminal/contract.ts`) has one contract and three
 renderers. Android (Kotlin: Canvas text and an `InputConnection`,
 `client/android/app/src/main/java/com/daoleno/mewla/terminal`) and iOS (Swift:
 CoreText and `UITextInput`, `client/ios/Sources/Terminal`) are native components
-that hold libghostty-vt; the web draws it in a web view page running xterm.js
-(`client/ui/terminal/web`, `client/ui/web/terminal`). PTY output and input use the canonical server's
+that hold libghostty-vt. The web runs the same libghostty-vt, with the phones'
+packer and glyphs (`client/native/terminal`), as WebAssembly in a web view page
+that draws on a canvas (`client/ui/terminal/web`, `client/ui/web/terminal`;
+`scripts/build-libghostty-web.sh` builds `mewla-vt.wasm` from the release pinned in
+`native/terminal-vt/native.lock.json`). The page is NSH's web view, a srcdoc frame
+sandboxed to an opaque origin that inherits the app's Content-Security-Policy: its
+script, faces and VT come from the app's `/terminal/`, read cross-origin (the daemon
+marks those files `Access-Control-Allow-Origin: *`), and the policy names the app's
+own origin beside `'self'`, because WebKit matches an inherited `'self'` against
+the frame's opaque origin and refuses them otherwise. `scripts/terminal-corpus/web.ts`
+renders the corpus through that page in Chromium, Firefox or WebKit (`ENGINE`) at a
+real device scale. All three draw the packer's runs on a grid of
+whole device pixels and draw box, block, braille and Powerline glyphs themselves, so
+rows of lines and blocks meet. PTY output and input use the canonical server's
 authenticated WebSocket connection; the view has no connection or credentials of
 its own.
 
 The VT lives in the view. The page passes the computer's output in (`write`,
 `reset` for a new attachment) and sends what the view reports to the computer:
 `input` (committed text, keys, pasted text), `size`, `scroll`, `tapCell`. IME
-composition happens inside the view and only committed text becomes `input`.
-Selection and copy are the platform's own (long press, system menu). Text a
+composition happens inside the view and only committed text becomes `input`
+(on the web, a hidden textarea at the cursor takes the keyboard and the input
+method, the composition is drawn at the cursor, and keys are encoded by
+libghostty-vt for the program's modes). Selection and copy are the platform's own
+(long press and the system menu on the phones; drag, double-click a word and
+triple-click a line, then the browser's copy, on the web). Text a
 program copies (OSC 52, OSC 1337 Copy, OSC 5522) arrives as `copy`. If the VT
 cannot be made, the view reports `failed` and `retry` tries again.
 

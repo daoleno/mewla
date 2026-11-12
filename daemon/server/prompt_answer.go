@@ -152,7 +152,7 @@ func (s *Server) handleAnswerPrompt(conn *websocket.Conn, raw clientMessage) {
 	}
 	if asked != nil && asked.ID == strings.TrimSpace(answer.PromptID) {
 		s.recordAnswered(PromptAnswerRecord(resolved.targetID, *asked, answer, recorded, s.answeredByConn(conn),
-			s.prompts.since(resolved.targetID, asked.ID), time.Now()))
+			s.PromptAskedAt(resolved.targetID, asked.ID), time.Now()))
 	}
 	s.sendJSON(conn, map[string]any{
 		"type":       "prompt_answered",

@@ -80,7 +80,7 @@ comes back.
 | Feature                          | Web                                                     |
 | -------------------------------- | ------------------------------------------------------- |
 | Brain, Sessions, Work, Settings  | Same as mobile                                          |
-| Terminal                         | xterm.js renderer with the same terminal protocol       |
+| Terminal                         | libghostty-vt (WebAssembly) on a canvas, same protocol  |
 | Pairing                          | `mewla pair` browser link or paste a `mewla://` link; no QR camera scan |
 | Mewla Relay (pinned TLS) | Unsupported; browsers cannot pin the daemon certificate |
 | Push notifications               | Unsupported                                             |
