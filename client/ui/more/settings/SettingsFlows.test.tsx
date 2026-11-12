@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { pressUntil } from "../../testing/fixtures";
+import { pressUntil, typeUntil } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -122,7 +122,7 @@ describe("Telegram", () => {
     });
     const app = await open(HARNESS, s.options);
     await app.waitFor("id:telegram-token");
-    await app.type("id:telegram-token", "123:bad");
+    await typeUntil(app, "id:telegram-token", "123:bad", "id:telegram-verify");
     await app.press("id:telegram-verify");
     await app.waitFor("text:Telegram setup failed");
     expect(app.texts()).toContain("Telegram rejected the token: Unauthorized");

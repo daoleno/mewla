@@ -115,3 +115,22 @@ export async function answering(app: Awaited<ReturnType<typeof open>>, step: () 
   await stepUntil(app, () => app.dialogs().length >= before + count, timeout);
   await app.wait(50);
 }
+
+/**
+ * Types `text` into `selector` until `ready` is enabled (its button, say). On a loaded runner the first
+ * keys after a page opens can be lost, as the first press can (`pressUntil`).
+ */
+export async function typeUntil(app: Awaited<ReturnType<typeof open>>, selector: string, text: string, ready: string, timeout = 10_000): Promise<void> {
+  for (const end = Date.now() + timeout; ; ) {
+    if (app.value(selector) !== text) {
+      await app.clear(selector);
+      await app.type(selector, text);
+    }
+    try {
+      await app.waitUntil(() => app.enabled(ready), { timeout: 400 });
+      return;
+    } catch (error) {
+      if (Date.now() > end) throw error;
+    }
+  }
+}
