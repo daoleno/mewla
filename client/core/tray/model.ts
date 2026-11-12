@@ -8,6 +8,7 @@ import type { BrainHostProblem, BrainSurface, BrainWorkerRef } from "../brain";
 import { sessionRowModel } from "../sessions/listRow";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerApproval, WorkerPrompt } from "../sessions/workers";
+import { liveWorkerIds } from "../work/workers";
 import { brainWorkSurface, type BrainWorkSlip } from "../work/surface";
 import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
 
@@ -279,13 +280,17 @@ function sessionRow(worker: Worker): TrayRow {
 }
 
 function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>): TrayRow {
-  const session = slip.sessionId ? sessions.get(slip.sessionId) : undefined;
+  const joined = slip.workerSessions ?? [];
+  // A Work with several Workers is one row with Brain's mark, "N Workers", opening Work detail (§1.3).
+  const several = joined.length > 1;
+  const sessionId = several ? undefined : joined[0]?.session_id ?? slip.sessionId;
+  const session = sessionId ? sessions.get(sessionId) : undefined;
   const model = session ? sessionRowModel(session) : null;
   const done = slip.group === "back";
   return {
     key: `work:${slip.workId}`,
     title: slip.title,
-    line: done ? slip.summary || slip.statusLabel : slip.phase || slip.waitFor || slip.who || slip.statusLabel,
+    line: several ? `${joined.length} Workers` : done ? slip.summary || slip.statusLabel : slip.phase || slip.waitFor || slip.who || slip.statusLabel,
     end: slip.group === "running" ? "live" : "",
     // A Work its one Worker runs opens that Session (its logo); with none, Work detail (Brain's mark).
     tile: model ? { kind: "agent", agent: model.kind, flavor: model.flavor } : { kind: "brain" },
@@ -335,7 +340,7 @@ export function trayModel(input: TrayInput): TrayModel {
   const sessions = new Map(input.workers.map((worker) => [worker.id, worker] as const));
   const slips = brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now, input.openWork).slips;
   // A Session that runs a listed Work is that Work's row; asking you, it is a Needs you row only.
-  const folded = new Set(slips.map((slip) => slip.sessionId).filter((id): id is string => Boolean(id)));
+  const folded = new Set(slips.flatMap((slip) => [slip.sessionId, ...liveWorkerIds(slip.workerSessions)]).filter((id): id is string => Boolean(id)));
   const opened = (id: string) => input.opened[id] ?? 0;
   const activity = (worker: Worker) => worker.updated_at ?? worker.started_at ?? 0;
   const order = (a: Worker, b: Worker) =>

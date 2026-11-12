@@ -4,6 +4,8 @@ import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
 import { workCardModel, type WorkCardModel } from "../../core/timeline/workCardModel";
+import { WORK_CARD_WORKERS, type WorkWorkerLine } from "../../core/work/workers";
+import type { WorkWorkerSession } from "../../core/work/types";
 import type { AgentKind, TerminalFlavor } from "../../core/sessions/workerPresentation";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon as KitIcon } from "../kit/Icon";
@@ -147,6 +149,10 @@ export type WorkCardHandlers = {
   agentOf: (sessionId: string | undefined) => { kind: AgentKind; flavor: TerminalFlavor; name: string; progress?: number } | null;
   /** The title of a Work: its detail page. */
   onTitle: (workId: string) => void;
+  /** The Workers that joined a Work, as the Session list has them now. */
+  workers: (rows: readonly WorkWorkerSession[] | undefined) => WorkWorkerLine[];
+  /** A Worker line: its Session. */
+  onSession: (sessionId: string) => void;
   /** The quiet line: the result sheet. */
   onLine: (model: WorkCardModel) => void;
 };
@@ -163,6 +169,22 @@ function WorkLogo(props: { agent: { kind: AgentKind; flavor: TerminalFlavor } | 
     : <View class="items-center justify-center rounded-lg bg-foreground" style={{ width: props.size, height: props.size }}><KitIcon name="brain" size={props.size - 10} tone="canvas" /></View>;
 }
 
+/** A Worker of a Work on its card (SPEC §11): 44 pt, its logo, name, what it does, the time; pushes its Session. */
+function WorkerLine(props: { line: WorkWorkerLine; onPress: () => void }) {
+  const line = props.line;
+  return (
+    <Button testID="work-card-worker" accessibilityLabel={[line.name, line.summary, line.time].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
+      class="min-h-[44px] flex-row items-center gap-2.5 border-t border-border px-4 py-2 active:opacity-70">
+      <AgentIcon kind={line.agent} flavor={line.flavor} size={20} />
+      <View class="min-w-0 flex-1">
+        <Text class="text-sub line-clamp-1"><Text class="font-semibold">{line.name}</Text><Text class="text-muted-foreground">{line.summary ? `  ${line.summary}` : ""}</Text></Text>
+        {line.progress !== undefined ? <ProgressBar filled={line.progress} testID="work-card-progress" /> : null}
+      </View>
+      <Text class="text-caption text-muted-foreground">{line.time === "live" ? "" : line.time}</Text>
+    </Button>
+  );
+}
+
 /**
  * A Work in Brain's thread (SPEC §1.2, §11 Work card and Work result card): live while it runs (its
  * title opens Work detail, its Session's line the Session); waiting on a decision, the card says so
@@ -172,6 +194,7 @@ function WorkLogo(props: { agent: { kind: AgentKind; flavor: TerminalFlavor } | 
 export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handlers?: WorkCardHandlers }) {
   const model = () => workCardModel(props.item());
   const agent = () => props.handlers?.agentOf(model().sessionId) ?? null;
+  const lines = () => props.handlers?.workers(props.item().currentWork?.worker_sessions) ?? [];
   const open = () => props.item().onPress?.();
   return (
     <View class="px-4 py-1">
@@ -203,7 +226,17 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
             <Text class="text-sub text-muted-foreground">{model().state}</Text>
             <KitIcon name="chevron-right" size={16} tone="faint" />
           </Button>
-          {model().sessionId ? (
+          {lines().length ? (
+            <>
+              {lines().slice(0, WORK_CARD_WORKERS).map((line) => <WorkerLine line={line} onPress={() => props.handlers?.onSession(line.sessionId)} />)}
+              {lines().length > WORK_CARD_WORKERS ? (
+                <Button testID="work-card-more" onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[44px] flex-row items-center border-t border-border px-4 active:opacity-70">
+                  <Text class="min-w-0 flex-1 text-sub text-muted-foreground">{`${lines().length - WORK_CARD_WORKERS} more`}</Text>
+                  <KitIcon name="chevron-right" size={16} tone="faint" />
+                </Button>
+              ) : null}
+            </>
+          ) : model().sessionId ? (
             <Button testID="work-card-session" disabled={!props.item().onPress} onPress={open} class="min-h-[44px] flex-row items-center gap-2.5 border-t border-border px-4 active:opacity-70">
               <WorkLogo agent={agent()} size={20} />
               <View class="min-w-0 flex-1">

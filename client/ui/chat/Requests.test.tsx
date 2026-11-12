@@ -99,6 +99,30 @@ describe("a Work in Brain's thread", () => {
     expect(framesOf(app.host.posts(), "brain_work_read")[0]).toMatchObject({ id: "w1" });
   }, 20_000);
 
+  test("live with several Workers: three Worker lines and \"N more\"; a line pushes its Session, \"more\" Work detail", async () => {
+    const joined = (id: string, live: boolean) => ({ session_id: id, name: `Worker ${id}`, provider: "claude", state: live ? "running" : "done", summary: live ? `working on ${id}` : `${id} done`, live, joined_at: "2026-11-12T11:00:00Z", ended_at: live ? undefined : "2026-11-12T11:10:00Z", updated_at: "2026-11-12T11:10:00Z" });
+    const current_work = [{ work_id: "w1", revision: 3, title: "Ship the docs", status: "running", unread_result: false, attempt_session_id: "d",
+      worker_sessions: [joined("a", false), joined("b", false), joined("c", true), joined("d", true)] }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
+      brain: { ...brain, current_work }, worker_sessions: ["a", "b", "c", "d"].map((id) => session(id, { status: id === "a" || id === "b" ? "done" : "running", phase: "verifying" })),
+      conversations: { "brain-host": [result({ unread: false, status: "session.done" })] },
+    }) });
+    await app.waitFor("id:work-card", { timeout: 10_000 });
+    expect(app.count("id:work-card-worker")).toBe(3);
+    expect(app.texts()).toContain("1 more");
+    expect(app.texts()).toContain("Worker a  a done");
+    expect(app.texts().join(" ")).not.toContain("Worker d");
+    expect(app.count("id:work-card-progress")).toBe(1);
+    await app.wait(500);
+    await app.press("id:work-card-worker >> nth=2");
+    await app.waitFor("id:session-status");
+    await app.back();
+    await app.waitFor("id:work-card-more");
+    await app.wait(500);
+    await app.press("id:work-card-more");
+    await app.waitFor("id:work-detail");
+  }, 20_000);
+
   test("read: the quiet line opens the result sheet, whose Open session opens the Session", async () => {
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [docs], conversations: { "brain-host": [result({ unread: false })] } }) });
     await app.waitFor("id:work-line", { timeout: 10_000 });
