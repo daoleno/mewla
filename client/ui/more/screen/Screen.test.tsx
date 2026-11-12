@@ -1,5 +1,6 @@
 import { describe, expect, open, test, type StubResponse } from "nsh/test";
 import { KEYBOARD_SENTINEL } from "../../../core/screen/screenPageModel";
+import { pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "./testing/ScreenHarness.tsx";
 const SCREEN = "http://desk.test:9877/screen";
@@ -106,8 +107,7 @@ describe("Screen: setup", () => {
       "POST http://desk.test:9877/browser": json({ virtual_screen: false }),
     }));
     await app.waitFor("id:virtual-screen");
-    await app.waitUntil(() => app.enabled("id:virtual-screen"));
-    await app.press("id:virtual-screen");
+    await pressWhenEnabled(app, "id:virtual-screen");
     await app.waitUntil(() => app.requests().filter((r) => r.url === "http://desk.test:9877/browser").length === 2);
     const last = app.requests().filter((r) => r.url === "http://desk.test:9877/browser").at(-1)!;
     expect(JSON.parse(String(last.body))).toEqual({ action: "settings", enabled: true });
@@ -121,8 +121,7 @@ describe("Screen: setup", () => {
     }));
     // `enabled` throws while no view matches: the switch first, then that it takes a press.
     await app.waitFor("id:virtual-screen");
-    await app.waitUntil(() => app.enabled("id:virtual-screen"));
-    await app.press("id:virtual-screen");
+    await pressWhenEnabled(app, "id:virtual-screen");
     await app.waitFor("text:Nothing on screen");
   });
 });

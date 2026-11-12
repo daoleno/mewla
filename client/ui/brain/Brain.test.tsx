@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering, pressUntil } from "../testing/fixtures";
+import { answering, pressUntil, pressWhenEnabled, typeUntil } from "../testing/fixtures";
 
 // Brain's own things as components (soft-final/SPEC.md §1.3, §1.4, §1.6), driven on their own: the
 // ⋯ menu and its pages, the can't-start notice, the thread states, and what the composer hosts.
@@ -194,11 +194,10 @@ describe("Brain's composer (§1.4)", () => {
     });
     const app = await open(HARNESS, { platform: "android", host: c.host });
     await pressUntil(app, "id:composer-plus", "id:attach-file");
-    await app.press("id:attach-file");
-    await app.waitFor("text:Ready");
-    await app.type("id:composer", "What is on this screen?");
-    await app.waitUntil(() => app.enabled("id:send"));
-    await app.press("id:send");
+    // Under a full suite's load a press or the first keys after a sheet closes can be lost: each step waits for what it does.
+    await pressUntil(app, "id:attach-file", "text:Ready");
+    await typeUntil(app, "id:composer", "What is on this screen?", "id:send");
+    await pressWhenEnabled(app, "id:send");
     await app.waitUntil(() => said(app) === "send:What is on this screen? +/state/uploads/shot.png");
   }, 20_000);
 

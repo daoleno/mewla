@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering } from "../../testing/fixtures";
+import { answering, pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "./testing/Harness.tsx";
 const DOOR = "POST http://desk.test:9877/friends";
@@ -193,8 +193,7 @@ describe("a draft", () => {
     await app.clear("id:draft-text-d1");
     await app.type("id:draft-text-d1", "Fixed it.");
     await app.waitFor("text:Checked: no private names or keys", { timeout: 4000 });
-    await app.waitUntil(() => app.enabled("id:draft-post-d1"));
-    await app.press("id:draft-post-d1");
+    await pressWhenEnabled(app, "id:draft-post-d1");
     await app.waitFor("id:friends-post-text");
     expect(c.ops.find((op) => op.op === "post_draft")).toEqual({ op: "post_draft", draft_id: "d1", text: "Fixed it.", reviewed: ["a.jpg"] });
   });

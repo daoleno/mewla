@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering } from "../../testing/fixtures";
+import { answering, pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 
@@ -221,8 +221,7 @@ describe("A service", () => {
       return "Disconnect";
     });
     // The switch's change is still being saved: Disconnect waits for it.
-    await app.waitUntil(() => app.enabled("id:disconnect-n1"));
-    await answering(app, () => app.press("id:disconnect-n1"));
+    await answering(app, () => pressWhenEnabled(app, "id:disconnect-n1"));
     await app.waitUntil(() => c.asked.some((r) => r.action === "disconnect"));
     await app.waitFor("id:service-connect");
     expect(app.texts()).toContain("What Brain can do");

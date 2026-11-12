@@ -104,6 +104,24 @@ export async function pressUntil(app: Awaited<ReturnType<typeof open>>, selector
 }
 
 /**
+ * Presses `selector` once it takes the press. A control that waits for a save in flight reads enabled
+ * between two frames of a loaded runner and disabled again when the press lands; the press is retried
+ * while the harness says "is disabled", never once it went through.
+ */
+export async function pressWhenEnabled(app: Awaited<ReturnType<typeof open>>, selector: string, timeout = 10_000): Promise<void> {
+  for (const end = Date.now() + timeout; ; ) {
+    try {
+      await app.waitUntil(() => app.enabled(selector), { timeout: Math.max(0, end - Date.now()) });
+      await app.press(selector);
+      return;
+    } catch (error) {
+      if (Date.now() > end || !String(error).includes("is disabled")) throw error;
+      await app.wait(50);
+    }
+  }
+}
+
+/**
  * Runs `step` (a press, a long press, a sent event), which opens `count` dialogs or action sheets one after
  * another that the test's `onDialog` answers, and resolves once they have been answered: shown (`dialogs()`),
  * then one more step, as the runner answers a dialog only while a step runs. After it, a plain `waitFor` or
@@ -117,7 +135,7 @@ export async function answering(app: Awaited<ReturnType<typeof open>>, step: () 
 }
 
 /**
- * Types `text` into `selector` until `ready` is enabled (its button, say). On a loaded runner the first
+ * Types `text` into `selector` until the field holds it and `ready` is enabled (its button, say). On a loaded runner the first
  * keys after a page opens can be lost, as the first press can (`pressUntil`).
  */
 export async function typeUntil(app: Awaited<ReturnType<typeof open>>, selector: string, text: string, ready: string, timeout = 10_000): Promise<void> {
@@ -127,7 +145,7 @@ export async function typeUntil(app: Awaited<ReturnType<typeof open>>, selector:
       await app.type(selector, text);
     }
     try {
-      await app.waitUntil(() => app.enabled(ready), { timeout: 400 });
+      await app.waitUntil(() => app.value(selector) === text && app.enabled(ready), { timeout: 400 });
       return;
     } catch (error) {
       if (Date.now() > end) throw error;
