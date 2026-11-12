@@ -28,7 +28,9 @@ export function Segmented<K extends string>(props: {
           class={`${props.fit ? "min-w-[44px] px-3" : "flex-1"} flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
         >
           {option.mark ? <Image src={option.mark} style={{ width: 18, height: 18 }} /> : null}
-          <Text class={`${label()} ${props.value === option.key ? "text-foreground" : "text-faint"}`}>{option.label}</Text>
+          <Text class={`${label()} ${props.value === option.key ? "text-foreground" : "text-faint"}`}
+            // Sized to its word in fit mode: one line, clipped, so a measure a hair short never wraps or ends in "…".
+            style={props.fit ? { numberOfLines: 1, textOverflow: "clip" } : undefined}>{option.label}</Text>
         </Button>
       ))}
     </View>

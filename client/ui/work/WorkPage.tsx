@@ -181,13 +181,13 @@ function since(at: string | undefined): string {
  * The top block (SPEC §11 Work detail): the eyebrow "Work · {project}", the title at display size, the state line
  * (a red dot and Needs you, a live dot and the running word, or a check and Done; then "· since 13:20").
  */
-function TopBlock(props: { project: () => string | undefined; title: () => string; dot: () => "seal" | "live" | null; state: () => string; since: () => string }) {
+function TopBlock(props: { project: () => string | undefined; title: () => string; dot: () => "seal" | "live" | null; done: () => boolean; state: () => string; since: () => string }) {
   return (
     <View class="gap-1 px-1 pb-1 pt-3">
       <Caption testID="work-eyebrow" text={["Work", props.project()].filter(Boolean).join(" · ")} />
       <View selectable><Text testID="work-title" role="header" class="text-display font-bold tracking-display">{props.title()}</Text></View>
       <View testID="work-state" class="mt-1 flex-row items-center gap-2">
-        {props.dot() ? <View class={`size-2 rounded-full ${props.dot() === "seal" ? "bg-seal" : "bg-foreground"}`} /> : <Icon name="check" size={16} tone="soft" />}
+        {props.dot() ? <View class={`size-2 rounded-full ${props.dot() === "seal" ? "bg-seal" : "bg-foreground"}`} /> : props.done() ? <Icon name="check" size={16} tone="soft" /> : null}
         <Text class="min-w-0 flex-1 text-sub text-muted-foreground line-clamp-1">
           <Text class="font-semibold text-foreground">{props.state()}</Text>
           {props.since() ? ` · ${props.since()}` : ""}
@@ -279,7 +279,17 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   // Snooze, Stop and the other ways to move the Work on. The dock replies; the Workers' rows open their Sessions.
   const moves = () => actions().filter((action) => action.kind !== "answer" && action.kind !== "reply" && action.kind !== "ask" && !(action.kind === "open" && workerLines().length));
   const file = () => (slip() ? workFileOfWork({ workId: slip()!.workId, runId: slip()!.calendar?.runId, sessionIds: [slip()!.sessionId, ...(slip()!.workerSessions ?? []).map((w) => w.session_id)].filter((id): id is string => Boolean(id)) }) : undefined);
-  const dot = (): "seal" | "live" | null => (slip()!.group === "needs" ? "seal" : slip()!.closed ? null : "live");
+  // The ink dot is for running Work only; Queued, Waiting, Back and the like say their word with no dot.
+  const dot = (): "seal" | "live" | null => (slip()!.group === "needs" ? "seal" : slip()!.group === "running" ? "live" : null);
+  // "N running" while Workers run (SPEC §11), else the Work's own word.
+  const stateWord = () => {
+    const running = workerLines().filter((line) => line.state === "running").length;
+    return slip()!.group === "running" && running ? `${running} running` : slip()!.statusLabel;
+  };
+  // Since it began waiting, else since its first Worker joined; never updated_at, which moves on every sync.
+  const startedAt = () => slip()!.attentionSince ?? (slip()!.workerSessions ?? []).map((w) => w.joined_at).filter(Boolean).sort()[0];
+  // The dock is made once while the Work is open: snapshots and the clock rebuild the slip, never the field under a reply.
+  const docked = computed(() => Boolean(slip() && !slip()!.closed));
 
   return (
     <NavPage title={titleAway() ? title() : ""} testID="work-detail">
@@ -288,7 +298,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
           onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
           {!slip() && closed() ? (
             <View>
-              <TopBlock project={project} title={title} dot={() => null} state={() => CLOSED_STATUS[closed()!.status] ?? "Closed"} since={() => since(closed()!.updated_at)} />
+              <TopBlock project={project} title={title} dot={() => null} done={() => closed()!.status === "done"} state={() => CLOSED_STATUS[closed()!.status] ?? "Closed"} since={() => since(closed()!.updated_at)} />
               <Workers lines={workerLines} onOpen={props.links.openSession} />
             </View>
           ) : !slip() ? (
@@ -300,7 +310,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
             ) : null
           ) : (
             <View>
-              <TopBlock project={project} title={title} dot={dot} state={() => slip()!.statusLabel} since={() => since(slip()!.updatedAt)} />
+              <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />
               {slip()!.summary && !slip()!.question ? <View selectable><Text testID="work-question" class="px-1 pt-3 text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View> : null}
               {brainWorkWaitForLine(slip()!) ? <View selectable><Text testID="work-wait-for" class="px-1 pt-2 text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View> : null}
               {slip()!.question ? (
@@ -344,7 +354,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
             </View>
           )}
         </Scroll>
-        {slip() && !slip()!.closed ? (
+        {docked() ? (
           <Composer text={text} placeholder="Reply about this Work" active={shown}
             canSend={() => !busy() && !uploading()} attached={() => files.ready().length > 0}
             disabled={() => connection() !== "connected"} disabledReason={() => "Offline"}

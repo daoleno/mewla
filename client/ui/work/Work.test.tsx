@@ -143,6 +143,17 @@ describe("Brain's Work", () => {
     expect(app.count("id:work-moves >> id:work-action-stop")).toBe(1);
   }, 20_000);
 
+  test("the Work file its Worker writes into is a row with the file's name, and opens the file", async () => {
+    const file = { id: "wf-run", project: "perpetuo", path: "perpetuo/ship-the-beta.md", title: "Ship the beta", mtime: now(), body: "# Ship the beta\n\nRelease checks.\n",
+      frontmatter: { id: "wf-run", created: now(), worker_session: "%7" } };
+    const app = await workApp({ brain: brain(), work_items: [file] });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-file", { timeout: 10_000 });
+    expect(app.texts()).toContain("ship-the-beta.md");
+    await app.press("id:work-file");
+    await app.waitFor("id:work-file-page");
+  }, 20_000);
+
   test("Stop asks with the Work's title, and only then tells Brain", async () => {
     const app = await workApp();
     await openWork(app, "w-run");
