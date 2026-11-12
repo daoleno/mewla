@@ -25,8 +25,8 @@ TLS session but sees only encrypted inner records.
 
 A client that asks for the computer's own hosted hostname and verifies its WebPKI
 certificate (a phone saved with a direct address, a browser) may also use TLS 1.2
-with ECDHE AEAD suites only (`remote.ServerTLSConfig`). An iPhone's React Native
-WebSocket (CFStream/Secure Transport) cannot speak TLS 1.3 and failed with -9836
+with ECDHE AEAD suites only (`remote.ServerTLSConfig`). An iPhone's
+WebSocket stack (CFStream/Secure Transport) cannot speak TLS 1.3 and failed with -9836
 against a TLS 1.3-only computer. Any other server name, which is what pinned
 phones and relays use, stays TLS 1.3 only.
 
@@ -122,16 +122,3 @@ separate two-minute GET and HEAD daemon signatures. Each signature is bound to
 daemon, enrolled device, live Session/process/start, exact path, inspected file
 generation, method, and expiry. Range may repeat within that exact file and
 method scope; changed fields, expiry, or device revocation fail with 401.
-
-## Device administration protocol
-
-```
-
-## Untrusted Markdown diagrams
-
-Fenced Mermaid flowcharts are untrusted input. Mewla strips init/frontmatter
-overrides and `click` statements, disables HTML labels except line breaks,
-locks `securityLevel` to `strict`, and renders in a local WebView that cannot
-navigate, fetch, open windows, or expose host bridge methods. Render jobs share
-one engine WebView with a bounded queue; preview WebViews are also capped.
-Unsupported diagram types and oversize sources fall back to readable code.

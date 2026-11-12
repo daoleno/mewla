@@ -144,8 +144,7 @@ finger, so a slightly drifting tap still counts.
 Messages are read as standard GitHub-flavored Markdown on every platform:
 headings, quotes (including a line that continues a quote without its `>`),
 nested and numbered lists, task lists, tables, strikethrough, links and bare
-URLs, HTML entities such as `&amp;`, images, code blocks with a copy button,
-and Mermaid diagrams. A reply that is still arriving never shows half-typed
+URLs, HTML entities such as `&amp;`, images and code blocks with a copy button. A reply that is still arriving never shows half-typed
 syntax: an unfinished `-`, `1.` or `>` waits for its text.
 
 **Edit** puts the message in the composer with a small bar above it and an x to

@@ -31,7 +31,7 @@ None.
 
 ### `theme-image-provenance-unknown` (resolved)
 
-- All unknown `app/assets/theme/*.webp` rasters removed.
+- All unknown theme rasters removed.
 
 ## Non-blockers recorded for honesty
 
