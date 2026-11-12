@@ -61,7 +61,7 @@ Wiring (source of truth for packaging):
 
 - NSH: `client/scripts/fetch-nsh.sh` (pinned, into `~/.nsh`)
 - JDK 17 and the Android SDK, NDK 27.1 and CMake 3.22 (`.github/actions/android-native` lists the packages)
-- For the native terminal: the signed **libghostty-vt `vt-1.0.0` release tarballs** (downloaded on demand into `~/.cache/mewla/ghostty`, sha256-pinned in the lock, minisign-checked when `minisign` or Python `cryptography` is available) and Zig **0.17.0** (see lock). `build-libghostty.sh` uses a matching `zig` from `PATH` or downloads the pinned, checksum-verified one into `.cache/mewla-tools` (`MEWLA_TOOL_CACHE`). The build is offline (`zig build --system` with the dependency tarball); `MEWLA_GHOSTTY_RELEASE_DIR` points it at pre-downloaded tarballs
+- For the native terminal: the signed **libghostty-vt `vt-1.0.1` release tarballs** (downloaded on demand into `~/.cache/mewla/ghostty`, sha256-pinned in the lock, minisign-checked when `minisign` or Python `cryptography` is available) and Zig **0.17.0** (see lock). `build-libghostty.sh` uses a matching `zig` from `PATH` or downloads the pinned, checksum-verified one into `.cache/mewla-tools` (`MEWLA_TOOL_CACHE`). The build is offline (`zig build --system` with the dependency tarball); `MEWLA_GHOSTTY_RELEASE_DIR` points it at pre-downloaded tarballs
 
 ## Day-to-day workflow
 

@@ -487,15 +487,75 @@ func (s *Service) RunLifecycleScheduler(ctx context.Context) {
 		return
 	}
 	engine := s.store.FSM()
+	runWakeLoop(ctx, wakeLoop{
+		next:    engine.NextWakeAt,
+		wakeups: engine.Wakeups(),
+		now:     time.Now,
+		pass:    s.lifecyclePass,
+		base:    schedulerBackoffBase,
+		max:     schedulerBackoffMax,
+		logf:    log.Printf,
+	})
+}
+
+// lifecyclePass is one scheduler pass over the whole Work inventory.
+func (s *Service) lifecyclePass() {
+	if s.watcher != nil {
+		// Reconcile due producers before admitting clock-only exceptions.
+		s.ReconcileDelegatedSessions(s.watcher.Workers())
+		return
+	}
+	s.reconcileMu.Lock()
+	err := s.store.SweepLifecycle()
+	s.reconcileMu.Unlock()
+	if err != nil {
+		log.Printf("brain lifecycle timer: %v", err)
+	}
+	if _, err := s.ReconcileHostLane(); err != nil {
+		log.Printf("brain lifecycle event delivery: %v", err)
+	}
+}
+
+const (
+	schedulerBackoffBase = time.Second
+	schedulerBackoffMax  = 30 * time.Second
+)
+
+// wakeLoop is the scheduler's timing: sleep until the earliest durable wake
+// time or a lifecycle commit, then run one pass.
+type wakeLoop struct {
+	next    func() (time.Time, bool)
+	wakeups <-chan struct{}
+	now     func() time.Time
+	pass    func()
+	base    time.Duration // first retry delay of a wake time a pass could not settle
+	max     time.Duration // cap of the doubling retry delay
+	logf    func(format string, args ...any)
+}
+
+// runWakeLoop re-arms from next() after every pass. A wake time is a promise
+// that a pass will settle something at that time; a held claim (an ambiguous
+// review whose Host never answers) or a failing reconcile leaves it in the
+// past, and re-arming on it would run passes back to back forever. A pass
+// that leaves the wake time due is retried with a doubling delay (base..max,
+// one log line per step). The item stays due and is retried, never dropped;
+// a lifecycle commit made by someone else restarts the delay, a commit made
+// by the pass itself does not.
+func runWakeLoop(ctx context.Context, l wakeLoop) {
+	var (
+		stuckAt   time.Time // the wake time the last pass failed to settle
+		notBefore time.Time // earliest start of the next pass while stuck
+		delay     time.Duration
+	)
 	for {
 		var timer *time.Timer
 		var timerC <-chan time.Time
-		if next, ok := engine.NextWakeAt(); ok {
-			delay := time.Until(next)
-			if delay < 0 {
-				delay = 0
+		if next, ok := l.next(); ok {
+			wait := next.Sub(l.now())
+			if next.Equal(stuckAt) {
+				wait = max(wait, notBefore.Sub(l.now()))
 			}
-			timer = time.NewTimer(delay)
+			timer = time.NewTimer(max(wait, 0))
 			timerC = timer.C
 		}
 		select {
@@ -504,28 +564,42 @@ func (s *Service) RunLifecycleScheduler(ctx context.Context) {
 				timer.Stop()
 			}
 			return
-		case <-engine.Wakeups():
+		case <-l.wakeups:
 			if timer != nil {
 				timer.Stop()
 			}
+			stuckAt, notBefore, delay = time.Time{}, time.Time{}, 0
 			continue
 		case <-timerC:
 		}
 
-		if s.watcher != nil {
-			// Reconcile due producers before admitting clock-only exceptions.
-			s.ReconcileDelegatedSessions(s.watcher.Workers())
+		l.pass()
+
+		next, ok := l.next()
+		if !ok || next.After(l.now()) {
+			stuckAt, notBefore, delay = time.Time{}, time.Time{}, 0
 			continue
 		}
-		s.reconcileMu.Lock()
-		err := s.store.SweepLifecycle()
-		s.reconcileMu.Unlock()
-		if err != nil {
-			log.Printf("brain lifecycle timer: %v", err)
+		// Still due: back off. Commits the pass made itself are not news.
+		select {
+		case <-l.wakeups:
+		default:
 		}
-		if _, err := s.ReconcileHostLane(); err != nil {
-			log.Printf("brain lifecycle event delivery: %v", err)
+		if !next.Equal(stuckAt) {
+			stuckAt, delay = next, 0
 		}
+		switch {
+		case delay == 0:
+			delay = l.base
+		case delay < l.max:
+			delay = min(delay*2, l.max)
+		default:
+			notBefore = l.now().Add(delay)
+			continue
+		}
+		notBefore = l.now().Add(delay)
+		l.logf("brain lifecycle scheduler: wake due since %s is not settled by a pass; retrying in %s",
+			next.UTC().Format(time.RFC3339), delay)
 	}
 }
 
