@@ -30,7 +30,12 @@ type workerSessionWire struct {
 	// it instead of reading the agent out of the command line.
 	Provider string `json:"provider,omitempty"`
 	// Approvals are the decisions the agent is waiting on right now.
-	Approvals    []ApprovalWire                `json:"approvals,omitempty"`
+	Approvals []ApprovalWire `json:"approvals,omitempty"`
+	// Activity is what the agent is doing right now, in its own words (the
+	// tool call it started last: "Bash curl -sI https://example.org"), while
+	// the Session runs and its agent reports it through its hooks. Absent
+	// otherwise; never read off the screen.
+	Activity     string                        `json:"activity,omitempty"`
 	Capabilities workerSessionWireCapabilities `json:"capabilities"`
 }
 
@@ -53,6 +58,7 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 		Worker:    worker,
 		Provider:  provider,
 		Approvals: approvalsOf(worker, s),
+		Activity:  s.agentActivityOf(worker),
 		Capabilities: workerSessionWireCapabilities{
 			StructuredEvents:         s.workerSupportsStructuredEvents(worker),
 			ModelProfileManaged:      managed,
@@ -212,6 +218,29 @@ func (s *Server) workerSupportsMessageRewind(worker *classifier.Worker) bool {
 	}
 	_, ok := messageRewindProvider(s.structuredProviderForWorker(worker))
 	return ok
+}
+
+// SetAgentActivity installs the function that says, for one Worker, what its
+// agent reports it is doing now.
+func (s *Server) SetAgentActivity(activity func(workerID string) string) {
+	s.mu.Lock()
+	s.agentActivityFn = activity
+	s.mu.Unlock()
+}
+
+// agentActivityOf is what the Worker's agent says it is doing, only while the
+// Session is running: a line left from the last turn is not news.
+func (s *Server) agentActivityOf(worker *classifier.Worker) string {
+	if worker == nil || worker.State != classifier.StateRunning {
+		return ""
+	}
+	s.mu.Lock()
+	fn := s.agentActivityFn
+	s.mu.Unlock()
+	if fn == nil {
+		return ""
+	}
+	return fn(worker.ID)
 }
 
 // SetAgentLevels installs the function that says, for one Worker, how Mewla

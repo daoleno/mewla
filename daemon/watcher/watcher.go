@@ -1734,6 +1734,20 @@ func (w *Watcher) projectPollResultsLocked(results []probedPollWorker) []Session
 		}
 		worker.State = newState
 		worker.Summary = summary
+		// A Session whose own terminal says it works carries when that run
+		// began, and keeps it across a prompt it stopped at: the run goes on
+		// once the prompt is answered. A delegated Worker's turn has its own
+		// times in the ledger.
+		switch {
+		case newState == classifier.StateRunning && activity.State == classifier.StateRunning && !r.hasTurn:
+			if worker.RunningSince == nil {
+				since := r.now
+				worker.RunningSince = &since
+			}
+		case newState == classifier.StateBlocked && !r.hasTurn:
+		default:
+			worker.RunningSince = nil
+		}
 		worker.Prompt, worker.PromptUnidentified = nil, ""
 		if newState == classifier.StateBlocked && activity.State == classifier.StateBlocked {
 			worker.Prompt = activity.Prompt
@@ -1899,7 +1913,7 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 			toolChild := isCursorAgentCommand(item.workerSnap.Command) && cursorToolChildActive(item.panePID, processes)
 			activity = probe.Infer(classifier.ActivityInput{Worker: item.workerSnap, PaneContent: item.content, ToolChildActive: toolChild})
 			activity = w.withDialogCapture(item.id, item.workerSnap, activity)
-			activity = w.enrichChoicePrompt(item.id, withChoicePrompt(activity, item.content))
+			activity = w.enrichPrompt(item.id, withChoicePrompt(activity, item.content))
 		}
 		turn, hasTurn, turnErr := w.ledgerTurnFor(item.id, item.now)
 		pendingList, pendingErr := w.pendingInputAdmissions(item.id)
@@ -2644,6 +2658,10 @@ func cloneWorker(worker *classifier.Worker) *classifier.Worker {
 		at := *worker.ExpectedNextCheckAt
 		cp.ExpectedNextCheckAt = &at
 	}
+	if worker.RunningSince != nil {
+		at := *worker.RunningSince
+		cp.RunningSince = &at
+	}
 	return &cp
 }
 
@@ -2665,18 +2683,22 @@ type workerMetadataSnapshot struct {
 	leaseSeconds        int
 	delegated           bool
 	promptID            string
+	promptTool          string
+	promptSummary       string
 }
 
 func workerMetadataSnapshotFor(worker *classifier.Worker) workerMetadataSnapshot {
 	if worker == nil {
 		return workerMetadataSnapshot{}
 	}
-	promptID := ""
+	promptID, promptTool, promptSummary := "", "", ""
 	if worker.Prompt != nil {
-		promptID = worker.Prompt.ID
+		promptID, promptTool, promptSummary = worker.Prompt.ID, worker.Prompt.Tool, worker.Prompt.Summary
 	}
 	return workerMetadataSnapshot{
 		promptID:            promptID,
+		promptTool:          promptTool,
+		promptSummary:       promptSummary,
 		name:                worker.Name,
 		project:             worker.Project,
 		cwd:                 worker.Cwd,

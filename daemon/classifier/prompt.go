@@ -45,13 +45,22 @@ type Prompt struct {
 	// Request is what is being asked about: the command and why it needs
 	// approval, the plan, the folder.
 	Request string `json:"request,omitempty"`
+	// Tool and Summary say what a permission prompt asks, as the agent's own
+	// tool call gives it (never the screen): the tool's name ("Bash") and the
+	// one line an approval card shows for it (the command, the file path),
+	// the same strings an approval from the agent's hook carries. They arrive
+	// after the prompt when the provider transcript is read, and are absent
+	// when it cannot name the call.
+	Tool    string `json:"tool,omitempty"`
+	Summary string `json:"summary,omitempty"`
 	// Options is the numbered menu of a permission, plan, startup or
 	// approval prompt. A choice prompt carries its menus in Questions.
 	Options []PromptOption `json:"options,omitempty"`
 	// Questions is a choice prompt's questions in tab order. The pane shows
 	// one at a time, so only the transcript can fill all of them.
 	Questions []PromptQuestion `json:"questions,omitempty"`
-	// CallID is the provider tool call behind a choice prompt, when known.
+	// CallID is the provider tool call behind a choice or permission prompt,
+	// when known.
 	CallID string `json:"call_id,omitempty"`
 	// Unnumbered says the menu shows no numbers (Claude's folder trust since
 	// 2.1.322): Options are numbered by position, and an answer moves the

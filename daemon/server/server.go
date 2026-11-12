@@ -226,6 +226,7 @@ type Server struct {
 	refusals           refusalLog
 	enrollmentRates    map[string][]time.Time
 	agentLevelsFn      func(*classifier.Worker) map[string]string
+	agentActivityFn    func(workerID string) string
 	agentApprovals     AgentApprovals
 	// answered is the answered-request ledger (answered_requests.go);
 	// prompts tracks open screen prompts for it.

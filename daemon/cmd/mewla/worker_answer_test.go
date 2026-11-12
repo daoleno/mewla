@@ -207,3 +207,41 @@ func TestPromptWithTranscriptChoiceListsEveryQuestion(t *testing.T) {
 		t.Fatalf("an answered choice must not enrich: %+v", untouched)
 	}
 }
+
+// A permission prompt asks about a tool call the transcript already has, with
+// no result yet, and is tied to it by the line the prompt shows (parallel calls
+// included; a wrapped command still matches). A call the prompt does not show is
+// not taken: a sub-agent's prompt is not for the Task that started the
+// sub-agent.
+func TestPromptWithTranscriptToolNamesTheCallThePromptShows(t *testing.T) {
+	pane := classifier.Prompt{ID: "p1", Kind: classifier.PromptPermission, Title: "Bash command",
+		Request: "Fetch headers\ncurl -sI https://example.org/a-long-url\n/and-more\nThis command requires approval\n\nDo you want to proceed?"}
+	call := func(id, command, status string) work.CodexConversationEvent {
+		return work.CodexConversationEvent{ID: id, Kind: "command", CallID: id, Command: command, Status: status}
+	}
+	conversation := work.CodexConversation{Available: true, Events: []work.CodexConversationEvent{
+		call("toolu_old", "ls", "done"),
+		call("toolu_asks", "curl -sI  https://example.org/a-long-url/and-more", "running"),
+		{ID: "toolu_read", Kind: "tool", CallID: "toolu_read", ToolName: "Read", Input: `{"file_path":"/etc/hostname"}`, Status: "running"},
+	}}
+	got := promptWithTranscriptTool(pane, conversation)
+	if got.ID != "p1" || got.CallID != "toolu_asks" || got.Tool != "Bash" || got.Summary != "curl -sI  https://example.org/a-long-url/and-more" || got.Request != pane.Request {
+		t.Fatalf("prompt = %+v", got)
+	}
+	read := classifier.Prompt{ID: "p2", Kind: classifier.PromptPermission, Request: "Read file\nRead(/etc/hostname)\nDo you want to proceed?"}
+	if got = promptWithTranscriptTool(read, conversation); got.CallID != "toolu_read" || got.Tool != "Read" || got.Summary != "/etc/hostname" {
+		t.Fatalf("read prompt = %+v", got)
+	}
+	// A sub-agent's Bash prompt: the main transcript's only pending call is the Task that started it.
+	subagent := work.CodexConversation{Available: true, Events: []work.CodexConversationEvent{
+		{ID: "toolu_task", Kind: "tool", CallID: "toolu_task", ToolName: "Task", Input: `{"description":"Explore codebase","prompt":"go"}`, Status: "running"},
+	}}
+	if untouched := promptWithTranscriptTool(pane, subagent); !reflect.DeepEqual(untouched, pane) {
+		t.Fatalf("a call the prompt does not show was taken: %+v", untouched)
+	}
+	// Nothing pending: as the pane showed it.
+	conversation.Events[1].Status, conversation.Events[2].Status = "done", "done"
+	if untouched := promptWithTranscriptTool(pane, conversation); !reflect.DeepEqual(untouched, pane) {
+		t.Fatalf("nothing pending must not enrich: %+v", untouched)
+	}
+}

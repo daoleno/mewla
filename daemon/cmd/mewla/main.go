@@ -600,6 +600,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetExecutorResolver(execs.IDForCommand)
 	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
+	srv.SetAgentActivity(hubActivity(eventHub))
 	srv.SetAgentApprovals(appApprovals{service: agentEvents})
 	answeredRequests, err := answered.Open(stateDir)
 	if err != nil {
@@ -609,7 +610,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	agentEvents.answered = answeredRequests
 	agentEvents.askedAt = srv.PromptAskedAt
 	eventHub.OnApprovalResolved(func(workerID string, approval agentevents.Approval, e agentevents.Event) {
-		recordAgentResolution(answeredRequests, workerID, approval, e)
+		recordAgentResolution(answeredRequests, workerID, approval, e, srv.SettleTerminalAnswer)
 	})
 	if codexFollow != nil {
 		srv.SetCodexStatus(func(ctx context.Context, workerID string) (any, error) {

@@ -71,7 +71,8 @@ func TestPromptLeavingTheScreenIsAnsweredInTheTerminal(t *testing.T) {
 	s := &Server{promptLeftGrace: 20 * time.Millisecond, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
 	s.answered = ledger
 	prompt := permissionPrompt()
-	prompt.Title, prompt.Request = "Bash command", "git push origin main"
+	prompt.Title, prompt.Request = "Bash command", "Tip: auto mode handles these prompts\ngit push origin main"
+	prompt.Tool, prompt.Summary = "Bash", "git push origin main"
 	blocked := func(id string, p *classifier.Prompt) watcher.SessionEvent {
 		return watcher.SessionEvent{Type: "worker_state_change", Worker: &classifier.Worker{ID: id, State: classifier.StateBlocked, Prompt: p}}
 	}
@@ -79,6 +80,11 @@ func TestPromptLeavingTheScreenIsAnsweredInTheTerminal(t *testing.T) {
 		return watcher.SessionEvent{Type: "worker_state_change", Worker: &classifier.Worker{ID: id, State: classifier.StateRunning}}
 	}
 
+	// The prompt is first seen before the transcript names its tool call, and
+	// read again with it: the record of the answer says what was asked.
+	bare := *prompt
+	bare.Tool, bare.Summary = "", ""
+	s.observePromptLifecycle(blocked("%1", &bare))
 	s.observePromptLifecycle(blocked("%1", prompt))
 	s.observePromptLifecycle(running("%1"))
 	// %2 flickers: gone for one read, back before the grace ends.
@@ -92,7 +98,7 @@ func TestPromptLeavingTheScreenIsAnsweredInTheTerminal(t *testing.T) {
 		t.Fatal("the prompt that left has no showing")
 	}
 	got, ok := ledger.Get(promptRecordID("%1", "perm1", shown))
-	if !ok || got.By.Kind != answered.ByTerminal || got.Asked != "git push origin main" || got.Answer != "" || got.AskedAt == nil {
+	if !ok || got.By.Kind != answered.ByTerminal || got.Asked != "git push origin main" || got.Tool != "Bash" || got.Summary != "git push origin main" || got.Answer != "" || got.AskedAt == nil {
 		t.Fatalf("terminal answer = %+v %v", got, ok)
 	}
 	if rows := ledger.List(answered.Filter{SessionID: "%2"}); len(rows) != 0 {
@@ -371,5 +377,72 @@ func TestAPromptAnsweredThroughItsApprovalIsRecordedOnce(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if rows := ledger.List(answered.Filter{SessionID: "%1"}); len(rows) != 2 || rows[0].By.Kind != answered.ByTerminal {
 		t.Fatalf("records after a terminal answer = %+v", rows)
+	}
+}
+
+// A request says what it asked as the agent's own tool call gives it, so a
+// sealed line can read "Approved · curl -sI https://example.org" without the
+// terminal's text run together.
+func TestAnswerRecordsCarryTheToolAndItsLine(t *testing.T) {
+	now := time.Date(2026, 11, 13, 4, 0, 0, 0, time.UTC)
+	device := answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone"}
+	prompt := classifier.Prompt{
+		ID: "perm1", Kind: classifier.PromptPermission, Title: "Bash command", CallID: "toolu_1",
+		Request: "Run shell command\ncurl -sI https://example.org\nThis command requires approval\n\nDo you want to proceed?",
+		Tool:    "Bash", Summary: "curl -sI https://example.org",
+		Options: []classifier.PromptOption{{Number: 1, Label: "Yes"}, {Number: 4, Label: "No"}},
+	}
+	got := PromptAnswerRecord("%1", prompt, PromptAnswer{Number: 1}, nil, device, nil, now)
+	if got.Tool != "Bash" || got.Summary != "curl -sI https://example.org" || got.Asked != "curl -sI https://example.org" ||
+		got.Title != "Bash command" || got.Answer != "Yes" || got.Outcome != answered.OutcomeApproved || got.Anchor.CallID != "" || got.Anchor.PromptID != "perm1" {
+		t.Fatalf("permission record = %+v", got)
+	}
+	// A prompt whose tool call the transcript could not name asks as the screen said.
+	prompt.Tool, prompt.Summary, prompt.CallID = "", "", ""
+	if bare := PromptAnswerRecord("%1", prompt, PromptAnswer{Number: 4}, nil, device, nil, now); bare.Tool != "" || bare.Summary != "" ||
+		bare.Asked != prompt.Request || bare.Outcome != answered.OutcomeDenied {
+		t.Fatalf("bare record = %+v", bare)
+	}
+	approval := ApprovalAnswerRecord("%1", ApprovalWire{ID: "a1", Kind: "permission", Tool: "Bash", Summary: "git push origin main",
+		Options: []ApprovalOptionWire{{ID: "allow", Label: "Allow"}}}, "allow", device, now)
+	if approval.Tool != "Bash" || approval.Summary != "git push origin main" || approval.Asked != "git push origin main" {
+		t.Fatalf("approval record = %+v", approval)
+	}
+}
+
+// A permission answered in the terminal says how it ended from what the
+// provider recorded for the call: it ran, or it was refused. (The transcript
+// side, from a real session's records, is in work/claude_tool_call_test.go.)
+func TestTerminalAnswerOutcomeComesFromTheToolCall(t *testing.T) {
+	call := func(id, command, status string, rejected bool) work.CodexConversationEvent {
+		return work.CodexConversationEvent{ID: id, Kind: "command", CallID: id, Command: command, Status: status, Rejected: rejected}
+	}
+	conversation := work.CodexConversation{Events: []work.CodexConversationEvent{
+		call("toolu_ran", "curl -sI https://example.org", "done", false),
+		call("toolu_refused", "curl -sI https://example.net", "failed", true),
+		call("toolu_failed", "false", "failed", false),
+		call("toolu_pending", "sleep 600", "running", false),
+	}}
+	record := func(summary string) answered.Request {
+		return answered.Request{ID: "prompt:%1:p", Kind: "permission", SessionID: "%1", Tool: "Bash", Summary: summary,
+			Outcome: answered.OutcomeAnswered, By: answered.Answerer{Kind: answered.ByTerminal}}
+	}
+	for _, tc := range []struct{ name, callID, summary, want string }{
+		{"ran", "toolu_ran", "curl -sI https://example.org", answered.OutcomeApproved},
+		{"ran and failed: it was still allowed", "toolu_failed", "false", answered.OutcomeApproved},
+		{"refused at the prompt", "toolu_refused", "curl -sI https://example.net", answered.OutcomeDenied},
+		{"refused, found by its line (a hook's approval has no call id)", "", "curl  -sI https://example.net", answered.OutcomeDenied},
+		{"no result yet: not known", "toolu_pending", "sleep 600", answered.OutcomeAnswered},
+		{"not in the transcript: not known", "toolu_other", "curl -sI https://example.net", answered.OutcomeAnswered},
+	} {
+		if got := settleFromConversation(record(tc.summary), tc.callID, conversation); got.Outcome != tc.want || got.Answer != "" {
+			t.Fatalf("%s: %+v", tc.name, got)
+		}
+	}
+	// An explicit answer is never second-guessed by the transcript.
+	explicit := record("curl -sI https://example.net")
+	explicit.By.Kind, explicit.Outcome = answered.ByDevice, answered.OutcomeApproved
+	if got := settleFromConversation(explicit, "toolu_refused", conversation); got.Outcome != answered.OutcomeApproved {
+		t.Fatalf("explicit answer changed: %+v", got)
 	}
 }

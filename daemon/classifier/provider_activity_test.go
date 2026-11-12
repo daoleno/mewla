@@ -171,10 +171,10 @@ func TestProviderAdapters_RetainPaneAndProcessEvidence(t *testing.T) {
 			wantSource: "claude_idle",
 		},
 		{
-			name:       "claude conversation about permissions is not blocked",
+			name:       "claude conversation about permissions is not blocked, its footer says it works",
 			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n● The AskUserQuestion prompt needs permission required to allow the user to answer.\n  Do you want to proceed with the plan?\n────\n❯ \n────\n  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt\n"},
-			wantState:  StateUnknown,
-			wantSource: "claude_idle",
+			wantState:  StateRunning,
+			wantSource: "claude_pane_working",
 		},
 		{
 			name:       "cursor workspace trust",

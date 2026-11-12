@@ -439,6 +439,16 @@ func agentLevelsFor(execs *work.ExecutorConfig, adapters *agentevents.Registry, 
 	}
 }
 
+// hubActivity says, for one Worker, what its agent reported it started last.
+func hubActivity(hub *agentevents.Hub) func(string) string {
+	return func(workerID string) string {
+		if state, ok := hub.State(workerID); ok && !state.Exited {
+			return state.Activity
+		}
+		return ""
+	}
+}
+
 // providerOf is the provider of an executor, or of the program in a command no
 // executor claims.
 func providerOf(execs *work.ExecutorConfig, executorID, command string) string {

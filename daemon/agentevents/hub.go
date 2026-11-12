@@ -44,6 +44,9 @@ type State struct {
 	Terminals []Turn
 	Admission *Admission
 	Approvals []Approval
+	// Activity is what the agent said it started last, within the turn that
+	// is running; empty between turns.
+	Activity  string
 	Exited    bool
 	ExitCode  *int
 	LastEvent time.Time
@@ -203,13 +206,19 @@ func (w *workerState) apply(e Event) {
 			}
 			w.Binding, w.Bound = *e.Binding, true
 		}
+	case KindActivity:
+		if w.Current != nil && !w.Current.Status.Terminal() {
+			w.Activity = e.Activity
+		}
 	case KindTurnStarted:
+		w.Activity = ""
 		w.Current = &Turn{ID: e.TurnID, Status: TurnRunning, StartedAt: e.At, ProgressAt: e.At}
 	case KindProgress:
 		if w.Current != nil && !w.Current.Status.Terminal() && e.At.After(w.Current.ProgressAt) {
 			w.Current.ProgressAt = e.At
 		}
 	case KindTurnFinished:
+		w.Activity = ""
 		turn := Turn{ID: e.TurnID, Status: e.Status, SettledAt: e.At, Error: e.Error, ProgressAt: e.At}
 		if w.Current != nil && (w.Current.ID == e.TurnID || e.TurnID == "") {
 			turn.ID, turn.StartedAt = w.Current.ID, w.Current.StartedAt
