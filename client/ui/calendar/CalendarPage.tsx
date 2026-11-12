@@ -1,6 +1,7 @@
 import { computed, List, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
+import { Segmented } from "../kit/Segmented";
 import type { NavStackState } from "nsh/base";
 import { monthTitle } from "../../core/calendar/format";
 import { activeRun, groupAgenda, itemsOnDay, itemSummary, kindLabel, rowTime, statusLabel, type CalendarItem } from "../../core/calendar/model";
@@ -8,6 +9,7 @@ import { connection, workers } from "../session";
 import { clock } from "./clock";
 import { CalendarEditor, openEditor } from "./Editor";
 import { StatusDot } from "./parts";
+import { Icon } from "../kit/Icon";
 import { ReminderBanner } from "./ReminderBanner";
 import type { Route } from "../shell/routes";
 import { calendar, calendarItems, calendarLoaded } from "./state";
@@ -137,10 +139,10 @@ function Empty() {
 }
 
 export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (sessionId: string) => void }) {
-  const toggleMonth = () => {
-    // Hiding the month goes back to the whole agenda.
-    if (showMonth()) pickedDay.set(null);
-    showMonth.set(!showMonth());
+  // Today ⇄ Month switches in place (SPEC §3.5); Today is the whole agenda again, no day picked.
+  const show = (view: "today" | "month") => {
+    if (view === "today") pickedDay.set(null);
+    showMonth.set(view === "month");
   };
   // A running item opens its Session while the computer lists it; the others, and a run whose Session
   // has gone, their page (the Expo app checked the same; parity #45).
@@ -150,9 +152,18 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
     else props.nav.push({ name: "item", id: item.id });
   };
   return (
+    // The mock's header: Back · "Calendar" · the Today | Month control · +. The system header holds the control at
+    // its end beside +, so Back and the title lead on both platforms (no leading item for Android to move).
     <NavPage title="Calendar" testID="calendar-page"
-      headerLeft={<Button testID="toggle-month" accessibilityLabel={showMonth() ? "Hide month" : "Show month"} onPress={toggleMonth}><Text class="text-base text-primary">{showMonth() ? "Hide month" : "Show month"}</Text></Button>}
-      headerRight={<Button testID="add-item" accessibilityLabel="Add calendar item" disabled={!calendar()} onPress={() => openEditor(null)}><Text class={calendar() ? "text-2xl text-primary" : "text-2xl text-muted-foreground"}>+</Text></Button>}>
+      headerRight={
+        <View class="flex-row items-center gap-1">
+          <Segmented testID="calendar-view" accessibilityLabel="Calendar view" fit value={showMonth() ? "month" : "today"} onChange={show}
+            options={[{ key: "today", label: "Today" }, { key: "month", label: "Month" }]} />
+          <Button testID="add-item" accessibilityLabel="Add calendar item" disabled={!calendar()} onPress={() => openEditor(null)} class="size-11 items-center justify-center active:opacity-70 disabled:opacity-40">
+            <Icon name="add" size={24} tone="ink" />
+          </Button>
+        </View>
+      }>
       <View class="flex-1 bg-background">
         <List keyboardShouldPersistTaps="handled" testID="agenda" class="flex-1" each={rows()}
           keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
