@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { WorkWorkerSession } from "./types";
-import { liveWorkerIds, workWorkerLines } from "./workers";
+import { liveWorkerIds, workProject, workWorkerLines } from "./workers";
 
 const NOW = new Date("2026-11-12T09:10:00Z");
 
@@ -50,5 +50,16 @@ describe("the Workers of a Work", () => {
   test("only live Workers fold into the Work's row", () => {
     expect(liveWorkerIds(rows)).toEqual(["worker:@c"]);
     expect(liveWorkerIds(undefined)).toEqual([]);
+  });
+});
+
+describe("the project a Work is about", () => {
+  test("its live Session's, else the first Worker the list still has, else none", () => {
+    const sessions = new Map([["worker:@c", session("worker:@c", { cwd: "/home/me/atlas-docs/" })]]);
+    const lines = workWorkerLines(rows, sessions, NOW);
+    expect(lines.map((l) => l.project)).toEqual([undefined, undefined, "atlas-docs"]);
+    expect(workProject("perpetuo", lines)).toBe("perpetuo");
+    expect(workProject(undefined, lines)).toBe("atlas-docs");
+    expect(workProject(undefined, workWorkerLines(rows, new Map(), NOW))).toBeUndefined();
   });
 });

@@ -13,6 +13,8 @@ export function Segmented<K extends string>(props: {
   testID?: string;
   /** In a sheet: 40 high, 15 pt labels. */
   inSheet?: boolean;
+  /** Each segment as wide as its label (12 at the sides, 44 at least), not a share of the row: in a header. */
+  fit?: boolean;
 }) {
   const height = () => (props.inSheet ? "h-[40px]" : "h-[34px]");
   const label = () => (props.inSheet ? "text-sub font-semibold" : "text-caption font-semibold");
@@ -25,13 +27,15 @@ export function Segmented<K extends string>(props: {
           accessibilityLabel={option.icon ? option.label : undefined}
           selected={props.value === option.key}
           onPress={() => props.onChange(option.key)}
-          class={`${option.icon ? "min-w-[44px] px-3" : "flex-1"} flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
+          class={`${option.icon || props.fit ? "min-w-[44px] px-3" : "flex-1"} flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
         >
           {option.mark ? <Image src={option.mark} style={{ width: 18, height: 18 }} /> : null}
           {option.icon ? (
             <Icon name={option.icon} size={18} color={props.value === option.key ? "foreground" : "faint"} />
           ) : (
-            <Text class={`${label()} ${props.value === option.key ? "text-foreground" : "text-faint"}`}>{option.label}</Text>
+            <Text class={`${label()} ${props.value === option.key ? "text-foreground" : "text-faint"}`}
+              // Sized to its word in fit mode: one line, clipped, so a measure a hair short never wraps or ends in "…".
+              style={props.fit ? { numberOfLines: 1, textOverflow: "clip" } : undefined}>{option.label}</Text>
           )}
         </Button>
       ))}

@@ -24,9 +24,9 @@ describe("the connection mark follows you (SPEC §1.3)", () => {
     await app.host.send("links.open", { url: "mewla://calendar" });
     await app.waitFor("id:calendar-empty", { timeout: 10_000 });
     expect(app.shows("id:back-mark")).toBe(false);
-    // Android draws a header's leading item after the title: the page's own leading item still leads.
-    const texts = app.texts();
-    expect(texts.indexOf("Show month")).toBeGreaterThanOrEqual(0);
-    expect(texts.indexOf("Show month")).toBeLessThan(texts.indexOf("Calendar"));
+    // The header reads Back · the title · Today | Month · + (the mock's order): no leading item for Android to
+    // put after the title, the control and + at the header's end.
+    expect(app.shows("id:calendar-view")).toBe(true);
+    expect(app.shows("id:add-item")).toBe(true);
   }, 30_000);
 });

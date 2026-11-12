@@ -8,6 +8,7 @@ import { progressSteps } from "../sessions/progress";
 import type { TerminalFlavor } from "../sessions/terminalFlavor";
 import { agentKindFromProvider, typeLabel, type AgentKind } from "../sessions/workerPresentation";
 import type { Worker } from "../sessions/workers";
+import { projectName } from "./surface";
 import type { WorkWorkerSession, WorkWorkerState } from "./types";
 
 export interface WorkWorkerLine {
@@ -29,6 +30,8 @@ export interface WorkWorkerLine {
   time: string;
   /** Its Session is in the list: the line pushes it. */
   openable: boolean;
+  /** Its Session's project ("perpetuo"), while the list has the Session. */
+  project?: string;
 }
 
 /** The card shows this many; the rest are "N more". */
@@ -61,6 +64,7 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
       progress: working ? progressSteps(following ? session.phase ?? row.phase : row.phase) ?? undefined : undefined,
       time: working ? "live" : listTime(Number.isFinite(at) ? at : undefined, now),
       openable: Boolean(session),
+      project: projectName(session?.cwd) || undefined,
     };
   });
 }
@@ -68,4 +72,12 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
 /** The Sessions that work for a Work now: the tray shows the Work's row, not theirs. */
 export function liveWorkerIds(rows: readonly WorkWorkerSession[] | undefined): string[] {
   return (rows ?? []).filter((row) => row.live).map((row) => row.session_id);
+}
+
+/**
+ * The project a Work is about, for Work detail's eyebrow (SPEC §11 "Work · {project}"): its live Session's,
+ * else the first of its Workers whose Session the list has; none when nothing says.
+ */
+export function workProject(slipProject: string | undefined, lines: readonly WorkWorkerLine[]): string | undefined {
+  return slipProject || lines.find((line) => line.project)?.project;
 }
