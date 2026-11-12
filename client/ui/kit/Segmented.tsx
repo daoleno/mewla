@@ -27,15 +27,16 @@ export function Segmented<K extends string>(props: {
           accessibilityLabel={option.icon ? option.label : undefined}
           selected={props.value === option.key}
           onPress={() => props.onChange(option.key)}
-          class={`${option.icon || props.fit ? "min-w-[44px] px-3" : "flex-1"} flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
+          class={`${option.icon ? "min-w-[44px] px-3" : props.fit ? "min-w-[64px] px-2" : "flex-1"} flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
         >
           {option.mark ? <Image src={option.mark} style={{ width: 18, height: 18 }} /> : null}
           {option.icon ? (
             <Icon name={option.icon} size={18} color={props.value === option.key ? "foreground" : "faint"} />
           ) : (
-            <Text class={`${label()} ${props.value === option.key ? "text-foreground" : "text-faint"}`}
-              // Sized to its word in fit mode: one line, clipped, so a measure a hair short never wraps or ends in "…".
-              style={props.fit ? { numberOfLines: 1, textOverflow: "clip" } : undefined}>{option.label}</Text>
+            // In fit mode the word fills its segment (64 at least), not its own measure: a release build measured
+            // "Today" a hair short and clipped it to "Toda" (fidelity round 2, Calendar at 360 dp).
+            <Text class={`${label()} ${props.fit ? "flex-1 text-center" : ""} ${props.value === option.key ? "text-foreground" : "text-faint"}`}
+              style={props.fit ? { numberOfLines: 1 } : undefined}>{option.label}</Text>
           )}
         </Button>
       ))}
