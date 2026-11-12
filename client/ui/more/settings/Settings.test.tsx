@@ -66,14 +66,20 @@ describe("Settings", () => {
 });
 
 describe("Pet", () => {
-  test("the pet the Expo app chose stays chosen, and a new choice is kept in the same key", async () => {
+  test("the pet the Expo app chose stays chosen, and a new choice applies at once and is kept in the same key", async () => {
+    const c = computer({ name: "settings-pet" }, () => null, { storage: { "mewla:pet_preference": "p13" } });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Bit at work");
+    await app.press("id:pet-p14");
+    await app.waitFor("text:Doodle at work");
+    await app.waitFor("text:Doodle moved in");
+    await app.waitUntil(() => app.storage()["mewla:pet_preference"] === "p14");
+  });
+
+  test("a pet that was removed falls back to Dango", async () => {
     const c = computer({ name: "settings-pet" }, () => null, { storage: { "mewla:pet_preference": "p03" } });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("id:pet-chosen");
-    await app.waitUntil(() => app.texts()[0] === "Pip");
-    await app.press("id:pet-p09");
-    await app.waitUntil(() => app.texts()[0] === "Tama");
-    await app.waitUntil(() => app.storage()["mewla:pet_preference"] === "p09");
+    await app.waitFor("text:Dango at work");
   });
 });
 

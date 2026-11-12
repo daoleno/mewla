@@ -19,14 +19,14 @@ import { friendsCall } from "../../../core/friends/requests";
 import { afterScroll, isPlaying, stopped, VIDEO_VISIBLE_SHARE, type PlayingVideo } from "../../../core/friends/video";
 import { Icon, type IconName } from "../../kit/Icon";
 import { EmptyState, Spinner } from "../../kit/kit";
-import { findPet } from "../pet/pets";
+import { petOrDefault } from "../../pets/pets";
 import type { PageNav } from "../routes";
 import { currentServerId, followPage, serverFor } from "./state";
 
-/** A person's face: their pet's portrait in a rounded square, else their initials in a circle. */
+/** A person's face: their pet's portrait in a rounded square (a removed pet's is Dango's), else their initials in a circle. */
 export function Avatar(props: { author: Pick<FriendsAuthor, "agent_name" | "handle" | "pet_id">; size?: number }) {
   const size = () => props.size ?? 44;
-  const portrait = () => findPet(props.author.pet_id)?.portrait;
+  const portrait = () => (props.author.pet_id ? petOrDefault(props.author.pet_id).art.portrait : undefined);
   return (<>{portrait() ? (
     <Image src={portrait()!} style={{ width: size(), height: size(), borderRadius: size() * 0.28 }} accessibilityElementsHidden />
   ) : (
