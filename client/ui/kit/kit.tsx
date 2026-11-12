@@ -1,5 +1,5 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
-import { announce, Canvas, Clipboard, effect, platform, Scroll, Text, untracked, View } from "nsh";
+import { announce, Canvas, Clipboard, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, Input, Switch } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import type { PageColumn } from "../../core/web/places";
@@ -16,6 +16,15 @@ import { spinnerRadius } from "../../core/more/spinner";
 
 export function Page(props: {
   title: string;
+  /**
+   * The pattern pages' top block (SPEC §15): the title at display size in the content, with an optional
+   * eyebrow over it (a range, a project, a path). The nav bar shows Back and the actions, and the title only
+   * once the display title has scrolled away.
+   */
+  display?: boolean;
+  eyebrow?: string;
+  /** The display title when it is not the page's name (Stats' total, a folder's name). */
+  displayTitle?: string;
   testID?: string;
   headerRight?: JSX.Element;
   refreshing?: boolean;
@@ -34,20 +43,83 @@ export function Page(props: {
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
   const width = () => (mobile ? (props.maxWidth ?? 720) : props.column === "wide" ? 1200 : 760);
+  // Whether the display title is on screen: the nav bar names the page once it has scrolled away.
+  const display = untracked(() => Boolean(props.display));
+  const titleAway = signal(!display);
   const scroll = (
-    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}>
-      <View class="w-full self-center" style={{ maxWidth: width() }}>{props.children}</View>
+    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}
+      onScroll={display ? (e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY) : undefined} scrollEventThrottle={display ? 64 : undefined}>
+      <View class="w-full self-center" style={{ maxWidth: width() }}>
+        {display ? <DisplayTitle eyebrow={props.eyebrow} title={props.displayTitle ?? props.title} /> : null}
+        {props.children}
+      </View>
     </Scroll>
   );
   // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
   const withAside = untracked(() => props.aside !== undefined);
   return (
-    <NavPage title={props.title} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
+    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column={props.column ?? "page"} frame={false}>
       <View class="flex-1 bg-background">
         {withAside ? <View class="flex-1 flex-row">{scroll}{props.aside}</View> : scroll}
         {props.overlay ?? null}
       </View>
     </NavPage>
+  );
+}
+
+/** How far the content scrolls before the display title counts as gone (its eyebrow and most of its line). */
+const DISPLAY_TITLE_AWAY = 56;
+
+/** A pattern page's top block (SPEC §15): an eyebrow (caption 13/600, soft) over the title at display 32/700. */
+export function DisplayTitle(props: { title: string; eyebrow?: string; testID?: string }) {
+  return (
+    <View testID={props.testID ?? "display-title"} class="gap-1 px-1 pb-2 pt-3">
+      {props.eyebrow ? <Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.eyebrow}</Text> : null}
+      <Text role="header" class="text-display font-bold tracking-display" style={{ numberOfLines: 2 }}>{props.title}</Text>
+    </View>
+  );
+}
+
+/**
+ * A section label with what the section holds (SPEC §15 Grouped list): an icon, the name, the count at the right.
+ * Caption 13/600, soft, inset 16, 24 above and 8 below; pressing it folds the section when it can.
+ */
+export function SectionLabel(props: { title: string; icon?: IconName; count?: number | string; testID?: string; onPress?: () => void; folded?: boolean; trailing?: JSX.Element }) {
+  const body = (
+    <View class="min-h-[44px] flex-row items-center gap-2 px-4 pb-2 pt-6">
+      {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
+      <Text class="min-w-0 flex-1 text-caption font-semibold text-muted-foreground line-clamp-1" role="header">{props.title}</Text>
+      {props.count !== undefined ? <Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
+      {props.trailing ?? null}
+      {props.onPress ? <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" /> : null}
+    </View>
+  );
+  if (!props.onPress) return <View testID={props.testID}>{body}</View>;
+  return (
+    <View testID={props.testID} role="button" accessible accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="active:opacity-70">{body}</View>
+  );
+}
+
+/** A square tile (SPEC §15): a glyph or a short mark on the canvas, radius 11 (36 pt) or 8 (28 pt). */
+export function Tile(props: { size?: 28 | 36 | 64; icon?: IconName; mark?: string; children?: JSX.Element; testID?: string }) {
+  const size = () => props.size ?? 36;
+  const radius = () => (size() === 64 ? 18 : size() === 36 ? 11 : 8);
+  return (
+    <View testID={props.testID} class="items-center justify-center bg-background" style={{ width: size(), height: size(), borderRadius: radius() }}>
+      {props.children ?? (props.icon ? <Icon name={props.icon} size={size() === 64 ? 32 : size() === 36 ? 20 : 16} tone="ink" /> : props.mark ? <Text class="font-mono text-caption font-semibold">{props.mark}</Text> : null)}
+    </View>
+  );
+}
+
+/** A stat tile (SPEC §15 Metrics): label 13/600 soft, value 28/700, a 13 soft line, an optional 4 pt bar. */
+export function StatTile(props: { label: string; value: string; detail?: string; share?: number; testID?: string }) {
+  return (
+    <View testID={props.testID} class="min-w-[140px] flex-1 gap-0.5 rounded-(--radius-group) bg-card p-4">
+      <Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.label}</Text>
+      <Text class="text-[28px] font-bold leading-[34px] line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+      {props.detail ? <Text class="text-caption text-muted-foreground line-clamp-1">{props.detail}</Text> : null}
+      {props.share !== undefined ? <View class="mt-2"><Meter share={props.share} /></View> : null}
+    </View>
   );
 }
 
