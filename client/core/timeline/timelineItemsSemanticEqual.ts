@@ -87,6 +87,10 @@ export function timelineItemsSemanticEqual(
       left.body === right.body
     );
   }
+  if (left.type === "answered" && right.type === "answered") {
+    // A stronger answer (who, not "in the terminal") replaces the record under the same id.
+    return JSON.stringify(left.record) === JSON.stringify(right.record);
+  }
   return false;
 }
 

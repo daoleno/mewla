@@ -1,3 +1,4 @@
+import { parseAnsweredRequest, type AnsweredRequest } from "../timeline/answered";
 import { parseResultActions } from "../work/resultActions";
 import type { ResultAction } from "../work/types";
 export type CodexConversationEventKind =
@@ -93,6 +94,8 @@ export interface ConversationAttachment {
 export interface CodexConversationEvent {
   id: string;
   seq: number;
+  /** A `request_answered` row (WIRE §2): the record, sealed where the request was asked. */
+  answered?: AnsweredRequest;
   timestamp?: string;
   kind: CodexConversationEventKind;
   role?: CodexConversationRole;
@@ -391,6 +394,8 @@ function normalizeCodexConversationEvent(
         ? event.work_details_json
         : undefined,
     work_actions: parseResultActions(event.work_actions),
+    // Normalized again later (a snapshot's reconciliation): the record is then already `answered`.
+    answered: event.source === "request_answered" ? parseAnsweredRequest(event.request ?? event.answered) ?? undefined : undefined,
     work_wait_for:
       typeof event.work_wait_for === "string"
         ? event.work_wait_for
@@ -583,6 +588,9 @@ function normalizeKind(value: unknown): CodexConversationEventKind | null {
     case "plan":
     case "status":
       return value;
+    // An answered request's row: a status whose `source` is "request_answered", carrying the record.
+    case "request_answered":
+      return "status";
     // The OpenCode, Pi and DSH adapters still emit these kinds; they map onto
     // the canonical projection vocabulary at this single wire boundary, so
     // Interface tool/reasoning cards render without a per-provider UI fork.

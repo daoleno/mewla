@@ -28,7 +28,7 @@ import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { ModelSheet } from "../session/ModelSheet";
 import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
-import { RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
+import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
 import { buildChatComposerPlaceholder } from "../../core/session/chatComposerPresentation";
 import { terminalFallback } from "../../core/session/terminalFallback";
 import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
@@ -127,6 +127,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
 
   const timeline = createChatTimeline("session");
   const items = computed(() => timeline(thread(), { onPendingAction: (id, action) => chat.actOnFailed(id, action) }));
+  const durableHere = durableAnswered(items);
   const activity = computed(() => thread().conversation?.activity);
   const editor = createMessageEdit({
     text,
@@ -154,7 +155,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   // What the Session waits on: its requests, from the same model as the tray (an agent's reported
   // decisions, the prompt the daemon read off its terminal, a question its transcript fills in).
   const requests = threadRequests({ workerId: props.workerId }, () => thread().conversation?.events);
-  const sealedHere = threadSealed({ workerId: props.workerId });
+  const sealedHere = threadSealed({ workerId: props.workerId }, () => durableHere());
   const pickedRequest = signal("");
   // A DSH Session asks through its own channel; one panel per run of it.
   const dshRun = computed(() => {
@@ -563,7 +564,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
                 foot={{
                   shown: () => requests().length > 0 || sealedHere().length > 0,
-                  render: (anchor) => <RequestStack anchor={anchor} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
+                  render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
                 }}
                 requests={() => requests().length} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}

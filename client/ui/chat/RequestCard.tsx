@@ -1,5 +1,8 @@
 import { computed, signal, Text, untracked, View } from "nsh";
 import type { Signal, ViewRef } from "nsh";
+import { clock } from "../calendar/clock";
+import { sealedOfAnswered } from "../../core/timeline/answered";
+import type { AnsweredTimelineItem } from "../../core/timeline/types";
 import { Button, Input } from "nsh/base";
 import type { ConversationChoice } from "../../core/conversation/conversation";
 import { answerChoice, answerPrompt, decideApproval } from "../../core/conversation/turn";
@@ -38,8 +41,17 @@ export function threadRequests(thread: RequestThread, events?: () => readonly Co
 }
 
 /** Requests answered here that this thread shows as quiet lines (the five newest). */
-export function threadSealed(thread: RequestThread) {
-  return computed(() => sealedRequests().filter((s) => sealedInThread(s, thread)).slice(-5));
+export function threadSealed(thread: RequestThread, durable?: () => ReadonlySet<string>) {
+  // A line the thread already holds as its own answered row (kept by the computer) is not repeated at the foot.
+  return computed(() => {
+    const held = durable?.();
+    return sealedRequests().filter((s) => sealedInThread(s, thread) && !held?.has(s.key)).slice(-5);
+  });
+}
+
+/** The card keys a thread's own answered rows (WIRE §2) seal. */
+export function durableAnswered(items: () => readonly { type: string }[]) {
+  return computed(() => new Set(items().flatMap((item) => (item.type === "answered" ? (item as AnsweredTimelineItem).keys : []))));
 }
 
 /** What the person did with a card, for the thread to say ("That question has already passed."). */
@@ -304,6 +316,17 @@ function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; o
   );
 }
 
+/** An answered request's line where it was asked (WIRE §2): kept by the computer, so it survives a restart. */
+export function AnsweredRow(props: { item: () => AnsweredTimelineItem }) {
+  const open = signal(false);
+  const sealed = () => sealedOfAnswered(props.item().record, (ms) => clock().format.time(ms, clock().zones.device));
+  return (
+    <View testID="request-answered" class="px-4">
+      <SealedLine sealed={sealed} open={open} onToggle={() => open.set(!open())} />
+    </View>
+  );
+}
+
 /**
  * The requests at the foot of a thread (never docked above the composer, SPEC §1.4): the quiet lines
  * of what was answered here, then the open request and the others stacked under it. `picked` is
@@ -316,6 +339,8 @@ export function RequestStack(props: {
   onSource?: (card: Card) => void;
   onOpenTerminal: (workerId: string) => void;
   notice: RequestNotice;
+  /** Keys the thread holds as answered rows: their sealed lines are in the thread, not the foot. */
+  durable?: () => ReadonlySet<string>;
   /** The open card's view: the thread centres it (SPEC §3.1 cold start, a tray row). */
   anchor?: (node: ViewRef) => void;
 }) {
@@ -323,7 +348,7 @@ export function RequestStack(props: {
   // The open card is made once per key (its draft survives every update of the request list).
   const openKey = computed(() => openCardKey(props.cards(), props.picked()));
   const openCard = () => props.cards().find((card) => card.key === untracked(openKey));
-  const sealed = threadSealed(props.thread);
+  const sealed = threadSealed(props.thread, props.durable);
   const shown = signal<ReadonlySet<string>>(new Set());
   const toggle = (key: string) => {
     const next = new Set(shown());

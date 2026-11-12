@@ -6,7 +6,7 @@ import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
 import { finalReplyIdsOf } from "../../core/timeline/model";
-import { RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
+import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
 import { chatImage } from "../chat/assets";
 import { stopTurn } from "../../core/conversation/turn";
@@ -44,7 +44,6 @@ const startingChat = signal(false);
 const notice = signal("");
 /** Brain's thread's open requests (SPEC §1.1): Brain's own and those of the Sessions working for its Work. */
 const requests = threadRequests({ brain: true });
-const sealedHere = threadSealed({ brain: true });
 /** The request the person (or a tray row) opened in the stack; none opens the oldest. */
 const pickedRequest = signal("");
 /** Bumped to bring the open request into view. */
@@ -109,6 +108,8 @@ const items = computed(() => timeline(brainThread(), {
   openSessionIds: new Set(workers().map((w) => w.id)),
   currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
 }));
+const durableHere = durableAnswered(items);
+const sealedHere = threadSealed({ brain: true }, durableHere);
 
 function hostId(): string {
   return brain()?.host_worker?.id ?? "";
@@ -251,7 +252,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
           foot={{
             shown: () => !routedBrainThread() && (requests().length > 0 || sealedHere().length > 0),
             render: (anchor) => (
-              <RequestStack anchor={anchor} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
+              <RequestStack anchor={anchor} durable={durableHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
                 onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
                 onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
             ),

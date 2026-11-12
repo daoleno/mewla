@@ -7,7 +7,7 @@ import { isWorkingRow } from "../../core/conversation/timeline";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
-import type { BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
+import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { compactAge, latestTimestamp, withDayDividers } from "../../core/timeline/dayDividers";
 import { readingPlace, readingPlaceIndex } from "../../core/timeline/readingPlace";
 import { Icon } from "../icons/Icon";
@@ -15,6 +15,7 @@ import { ChatImage } from "./ChatImage";
 import { PlainText } from "./PlainText";
 import { selectingText } from "./messageEdit";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
+import { AnsweredRow } from "./RequestCard";
 
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
@@ -112,6 +113,8 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
         <TaskNotificationCard item={as("task-notification") as () => TaskNotificationTimelineItem} expansion={props.expansion} />
       ) : it().type === "computer-message" ? (
         <ComputerMessageCard item={as("computer-message") as () => ComputerMessageTimelineItem} expansion={props.expansion} />
+      ) : it().type === "answered" ? (
+        <AnsweredRow item={as("answered") as () => AnsweredTimelineItem} />
       ) : it().type === "brain-work-event" ? (
         <WorkCard item={as("brain-work-event") as () => BrainWorkEventTimelineItem} handlers={props.handlers.work} />
       ) : null}
