@@ -210,6 +210,10 @@ describe("tray model", () => {
     }));
     expect(m.today.map((r) => r.key)).toEqual(["today:run", "today:n1", "today:n2"]);
     expect(m.today[0]!.target).toEqual({ open: "session", workerId: "w9" });
+    // Not "Running": a run whose Session is not listed says when it started.
+    expect(m.today[0]!.line).toBe("Started 9:00");
+    const listed = trayModel(input({ workers: [worker("w9", { started_at: NOW - 12 * 60_000, phase: "reading", summary: "Reading the news" })], today: [{ id: "run", title: "Brief", time: "9:00", at: at(9), running: true, sessionId: "w9" }] }));
+    expect(listed.today[0]).toMatchObject({ line: "Reading the news", end: "12m", live: true });
     expect(m.todayCount).toBe(5);
   });
 
