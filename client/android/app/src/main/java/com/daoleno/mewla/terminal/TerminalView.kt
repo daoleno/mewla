@@ -80,6 +80,12 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   // The font: the cell is whole pixels, and the text size is set so one advance is exactly one cell.
   private val paint = textPaint(Fonts.regular(context))
   private val boldPaint = textPaint(Fonts.bold(context))
+  // Italic: Maple's real italic (Latin, Greek, Cyrillic, punctuation; scripts/subset-terminal-font.py);
+  // a character it lacks is drawn from the upright face, slanted.
+  private val italicPaint = textPaint(Fonts.italic(context))
+  private val boldItalicPaint = textPaint(Fonts.boldItalic(context))
+  private val slantPaint = textPaint(Fonts.regular(context)).apply { textSkewX = -0.2f }
+  private val boldSlantPaint = textPaint(Fonts.bold(context)).apply { textSkewX = -0.2f }
   private val fill = Paint()
   private val shape = Paint(Paint.ANTI_ALIAS_FLAG)
   private val path = Path()
@@ -88,8 +94,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   private var cellH = 0
   private var baseline = 0
   private var thickness = 1
-  /** Each BMP character's advance per paint, NaN until measured: a character whose advance is not one cell is drawn on its own, centred. */
-  private val advances = arrayOf(FloatArray(0x10000) { Float.NaN }, FloatArray(0x10000) { Float.NaN })
+  /** Each BMP character's advance per face (regular, bold, italic, bold italic), NaN until measured: a character whose advance is not one cell is drawn on its own, centred. */
+  private val advances = Array(4) { FloatArray(0x10000) { Float.NaN } }
   /** TerminalGlyphs' steps per code point, for the current cell size. */
   private val glyphOps = HashMap<Int, FloatArray>()
 
@@ -158,7 +164,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     val advance = paint.measureText("M")
     cellW = max(1, advance.roundToInt())
     paint.textSize = fontPx * cellW / advance
-    boldPaint.textSize = paint.textSize
+    for (other in arrayOf(boldPaint, italicPaint, boldItalicPaint, slantPaint, boldSlantPaint)) other.textSize = paint.textSize
     val m = paint.fontMetrics
     val textH = m.descent - m.ascent
     cellH = max(1, textH.roundToInt())
@@ -454,42 +460,75 @@ class TerminalView(context: Context, private val events: Events) : View(context)
           canvas.drawRect((c0 * cellW).toFloat(), y, ((c1 + 1) * cellW).toFloat(), y + cellH, fill)
         }
       }
-      for (run in line.runs) drawRun(canvas, run, y, run.fg)
+      line.runs.forEachIndexed { k, run -> drawRun(canvas, run, y, run.fg, line.runs.getOrNull(k + 1)) }
     }
     drawCursor(canvas)
     drawHandles(canvas)
   }
 
-  private fun drawRun(canvas: Canvas, run: Run, y: Float, color: Int) {
-    val p = if (run.flags and Vt.BOLD != 0) boldPaint else paint
+  /** `next` is the run after this one in its row (a flag's second regional indicator). */
+  private fun drawRun(canvas: Canvas, run: Run, y: Float, color: Int, next: Run? = null) {
+    val bold = run.flags and Vt.BOLD != 0
+    val italic = run.flags and Vt.ITALIC != 0
+    val p = when {
+      italic -> if (bold) boldItalicPaint else italicPaint
+      else -> if (bold) boldPaint else paint
+    }
+    // What draws a character the run's face lacks: the upright face (slanted in an italic run) and its fallbacks.
+    val upright = if (italic) (if (bold) boldSlantPaint else slantPaint) else p
     p.color = color
-    p.textSkewX = if (run.flags and Vt.ITALIC != 0) -0.2f else 0f
+    upright.color = color
     val x0 = run.col * cellW
     val base = y + baseline
+    if (run.flags and Vt.FLAG_TAIL != 0) {
+      // A flag's second regional indicator: the first draws the flag across both.
+      decorate(canvas, run, x0.toFloat(), y, color)
+      return
+    }
     if (run.plain) {
-      val table = advances[if (p === boldPaint) 1 else 0]
+      val table = advances[(if (bold) 1 else 0) + (if (italic) 2 else 0)]
+      val uprightTable = advances[if (bold) 1 else 0]
       var seg = -1
+      var segPaint = p
       var k = 0
       while (k <= run.len) {
         val c = if (k < run.len) run.chars[run.start + k] else ' '
-        val special = k == run.len || c == ' ' || isDrawn(c.code) || !fits(table, p, c)
-        if (special && seg >= 0) {
-          canvas.drawText(run.chars, run.start + seg, k - seg, (x0 + seg * cellW).toFloat(), base, p)
+        val drawn = k < run.len && isDrawn(c.code)
+        // The paint that draws c in exactly one cell; null: drawn on its own (a glyph, a space, a fallback face).
+        val one: Paint? = when {
+          k == run.len || c == ' ' || drawn -> null
+          fits(table, p, c) -> p
+          italic && fits(uprightTable, upright, c) -> upright
+          else -> null
+        }
+        if (seg >= 0 && one !== segPaint) {
+          canvas.drawText(run.chars, run.start + seg, k - seg, (x0 + seg * cellW).toFloat(), base, segPaint)
           seg = -1
         }
         if (k < run.len && c != ' ') {
           when {
-            isDrawn(c.code) -> drawGlyph(canvas, c.code, x0 + k * cellW, y, color)
-            special -> drawFitted(canvas, p, run.chars, run.start + k, 1, x0 + k * cellW, y, 1)
-            seg < 0 -> seg = k
+            drawn -> drawGlyph(canvas, c.code, x0 + k * cellW, y, color)
+            one == null -> drawFitted(canvas, upright, run.chars, run.start + k, 1, x0 + k * cellW, y, 1)
+            seg < 0 -> { seg = k; segPaint = one }
           }
         }
         k++
       }
     } else if (run.len > 0) {
       val cp = Character.codePointAt(run.chars, run.start)
-      if (Character.charCount(cp) == run.len && isDrawn(cp)) drawGlyph(canvas, cp, x0, y, color)
-      else drawFitted(canvas, p, run.chars, run.start, run.len, x0, y, run.cells)
+      when {
+        Character.charCount(cp) == run.len && isDrawn(cp) -> drawGlyph(canvas, cp, x0, y, color)
+        // Two regional indicators: the one flag, centred across both runs' cells.
+        run.flags and Vt.FLAG_HEAD != 0 && next != null -> {
+          val flag = CharArray(run.len + next.len)
+          System.arraycopy(run.chars, run.start, flag, 0, run.len)
+          System.arraycopy(next.chars, next.start, flag, run.len, next.len)
+          drawFitted(canvas, upright, flag, 0, flag.size, x0, y, run.cells + next.cells)
+        }
+        // An emoji the VT gives one cell, with a blank cell after it: full size across both.
+        run.flags and Vt.EMOJI_WIDE != 0 -> drawFitted(canvas, upright, run.chars, run.start, run.len, x0, y, 2)
+        else -> drawFitted(canvas, upright, run.chars, run.start, run.len, x0, y, run.cells)
+      }
     }
     decorate(canvas, run, x0.toFloat(), y, color)
   }
@@ -656,7 +695,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
         if (run != null) {
           canvas.save()
           canvas.clipRect(cx, y, cx + w, y + cellH)
-          drawRun(canvas, run, y, background)
+          val runs = grid[cursorRow].runs
+          drawRun(canvas, run, y, background, runs.getOrNull(runs.indexOf(run) + 1))
           canvas.restore()
         }
       }
@@ -1082,10 +1122,16 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 internal object Fonts {
   private var regular: Typeface? = null
   private var bold: Typeface? = null
+  private var italic: Typeface? = null
+  private var boldItalic: Typeface? = null
 
   fun regular(context: Context): Typeface = regular ?: load(context, "MapleMono-NF-Regular.ttf", Typeface.MONOSPACE).also { regular = it }
 
   fun bold(context: Context): Typeface = bold ?: load(context, "MapleMono-NF-SemiBold.ttf", Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)).also { bold = it }
+
+  fun italic(context: Context): Typeface = italic ?: load(context, "MapleMono-NF-Italic.ttf", Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC)).also { italic = it }
+
+  fun boldItalic(context: Context): Typeface = boldItalic ?: load(context, "MapleMono-NF-SemiBoldItalic.ttf", Typeface.create(Typeface.MONOSPACE, Typeface.BOLD_ITALIC)).also { boldItalic = it }
 
   private fun load(context: Context, name: String, fallback: Typeface): Typeface = try {
     Typeface.createFromAsset(context.assets, name)

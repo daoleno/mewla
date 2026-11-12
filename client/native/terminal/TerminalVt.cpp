@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <ghostty/vt.h>
 
@@ -188,6 +189,44 @@ static void appendUtf16(std::u16string* out, uint32_t cp)
         cp -= 0x10000;
         out->push_back(char16_t(0xD800 + (cp >> 10)));
         out->push_back(char16_t(0xDC00 + (cp & 0x3FF)));
+    }
+}
+
+// Drawing hints for one row's runs (meta[first ...], `runs` of them; TerminalVt.h), from the cells as
+// the VT grids them: the grid and the text stay as they are.
+// - MEWLA_VT_EMOJI_WIDE: a one-cell cluster with VS16 or a keycap (an emoji the VT gives one cell, as
+//   with grapheme clustering off) whose next cell is blank: drawn at full size across both cells.
+// - MEWLA_VT_FLAG_HEAD / _TAIL: two adjacent regional indicators, paired from the left: the head draws
+//   the flag across both runs' cells, the tail draws no glyph.
+static void markDrawingHints(std::vector<int32_t>& meta, size_t first, int32_t runs, const std::u16string& text, int32_t cols)
+{
+    auto at = [&](int32_t k) { return first + size_t(k) * MEWLA_VT_RUN; };
+    auto units = [&](int32_t k) { return std::u16string_view(text).substr(size_t(meta[at(k) + 6]), size_t(meta[at(k) + 7])); };
+    auto regional = [&](int32_t k) {
+        auto u = units(k);
+        return (meta[at(k) + 4] & MEWLA_VT_CLUSTER) && u.size() == 2 && u[0] == 0xD83C && u[1] >= 0xDDE6 && u[1] <= 0xDDFF;
+    };
+    for (int32_t k = 0; k < runs; k++) {
+        const size_t r = at(k);
+        if (!(meta[r + 4] & MEWLA_VT_CLUSTER) || meta[r + 1] != 1) continue;
+        auto u = units(k);
+        if (u.find(char16_t(0xFE0F)) == std::u16string_view::npos && u.find(char16_t(0x20E3)) == std::u16string_view::npos) continue;
+        const int32_t next = meta[r] + 1;
+        if (next >= cols) continue;
+        bool blank = true;
+        if (k + 1 < runs && meta[at(k + 1)] == next) {
+            // A kept run there (a background or a decoration) is blank only where its text is a space.
+            auto v = units(k + 1);
+            blank = !(meta[at(k + 1) + 4] & MEWLA_VT_CLUSTER) && !v.empty() && v[0] == u' ';
+        }
+        if (blank) meta[r + 4] |= MEWLA_VT_EMOJI_WIDE;
+    }
+    for (int32_t k = 0; k + 1 < runs; k++) {
+        if (regional(k) && regional(k + 1) && meta[at(k + 1)] == meta[at(k)] + meta[at(k) + 1]) {
+            meta[at(k) + 4] |= MEWLA_VT_FLAG_HEAD;
+            meta[at(k + 1) + 4] |= MEWLA_VT_FLAG_TAIL;
+            k++;
+        }
     }
 }
 
@@ -497,6 +536,7 @@ extern "C" bool mewla_vt_frame(MewlaVt* vt, bool forceFull, MewlaVtFrame* out)
             }
             flush();
             meta[runCountAt] = runs;
+            markDrawingHints(meta, runCountAt + 2, runs, text, int32_t(vt->cols));
             index++;
         }
         ghostty_render_state_row_cells_free(cells);

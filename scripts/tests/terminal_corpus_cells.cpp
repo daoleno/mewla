@@ -13,7 +13,9 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -161,7 +163,7 @@ std::vector<std::vector<PackedCell>> packed(const std::string& bytes, int cols, 
                 c.covered = true;
                 c.fg = uint32_t(m[p + 2]) & 0xFFFFFF;
                 c.bg = uint32_t(m[p + 3]);
-                c.flags = m[p + 4] & ~MEWLA_VT_CLUSTER;
+                c.flags = m[p + 4] & ~(MEWLA_VT_CLUSTER | MEWLA_VT_EMOJI_WIDE | MEWLA_VT_FLAG_HEAD | MEWLA_VT_FLAG_TAIL);
                 c.ul = uint32_t(m[p + 5]);
                 if (k == 0) c.text = text;
             }
@@ -169,6 +171,38 @@ std::vector<std::vector<PackedCell>> packed(const std::string& bytes, int cols, 
     }
     mewla_vt_destroy(vt);
     return grid;
+}
+
+// The drawing hints (TerminalVt.h) the packer marks on rows 0-3 of the emoji screen (gen.py): a one-cell
+// emoji with a blank cell after it is drawn wide; regional indicators pair from the left (each is two
+// cells in libghostty). Returns how many differ; prints them.
+int hintsDiffer(const std::string& bytes, int cols, int rows) {
+    const char* hints[] = {"wide", "head", "tail"};
+    std::set<std::tuple<int, int, int>> want = {
+        {0, 7, 0}, {0, 9, 0}, {0, 11, 0}, {0, 13, 0}, {0, 15, 0},
+        {2, 7, 1}, {2, 9, 2}, {2, 12, 1}, {2, 14, 2}, {2, 17, 1}, {2, 19, 2}, {2, 21, 1}, {2, 23, 2},
+    }, got;
+    MewlaVt* vt = mewla_vt_create(cols, rows);
+    mewla_vt_write(vt, reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+    MewlaVtFrame f{};
+    mewla_vt_frame(vt, true, &f);
+    const int32_t* m = f.meta;
+    size_t p = MEWLA_VT_HEADER;
+    for (int r = 0; r < m[6]; r++) {
+        int row = m[p], n = m[p + 1];
+        p += MEWLA_VT_ROW;
+        for (int i = 0; i < n; i++, p += MEWLA_VT_RUN) {
+            if (row > 3) continue;
+            if (m[p + 4] & MEWLA_VT_EMOJI_WIDE) got.insert({row, m[p], 0});
+            if (m[p + 4] & MEWLA_VT_FLAG_HEAD) got.insert({row, m[p], 1});
+            if (m[p + 4] & MEWLA_VT_FLAG_TAIL) got.insert({row, m[p], 2});
+        }
+    }
+    mewla_vt_destroy(vt);
+    int differ = 0;
+    for (auto& h : want) if (!got.count(h)) { differ++; std::printf("    missing hint %s at row %d col %d\n", hints[std::get<2>(h)], std::get<0>(h), std::get<1>(h)); }
+    for (auto& h : got) if (!want.count(h)) { differ++; std::printf("    unexpected hint %s at row %d col %d\n", hints[std::get<2>(h)], std::get<0>(h), std::get<1>(h)); }
+    return differ;
 }
 
 int cursorCode(const GhosttyRenderStateCursor& c) {
@@ -279,6 +313,11 @@ int main(int argc, char** argv) {
             }
         }
         bool cursorLost = packedCursor(bytes, cols, rows) != cursorCode(cursor);
+        if (name == "emoji") {
+            int differ = hintsDiffer(bytes, cols, rows);
+            if (differ) std::printf("emoji: %d drawing hints differ\n", differ);
+            total += differ;
+        }
         total += l.glyphLost + l.bgLost + l.faint + l.strike + l.overline + l.underlineStyle + l.underlineColor + l.blink + (cursorLost ? 1 : 0) + badRuns;
         badRuns = 0;
         std::printf("%-17s %5d %6d %5d %5d %6d %5d %6d %6d %5d  %s%s%s\n", name.c_str(), l.cells, l.glyphLost, l.bgLost, l.faint, l.strike, l.overline,

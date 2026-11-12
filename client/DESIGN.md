@@ -437,8 +437,11 @@ chats keep every row). The composer says "Tell Brain…".
   (⏴⏵⏸⏹⏺) are drawn as shapes for the cell (`TerminalGlyphs.cpp`), so lines
   and blocks meet across rows. Anything else not one cell wide in the face
   (CJK, emoji, fallback symbols) is centred in its cells and scaled down if
-  it is wider. The size is 8 (about 83 columns on a phone, the shipped app's
-  density); no setting.
+  it is wider. An emoji the VT gives one cell (❤️, ⚠️, 1️⃣) is drawn at full
+  size across the next cell when that one is blank, and fitted otherwise; two
+  regional indicators draw one flag across their cells. Italic is Maple's real
+  italic where it has the glyph. The size is 8 (about 83 columns on a phone,
+  the shipped app's density); no setting.
 - **CJK in chat mono.** Highlighted code blocks and inline code are RN
   `Text`, which falls back to the OS CJK face, so Han there takes that face's
   advance instead of exactly two cells. Plain and ASCII-art blocks already

@@ -216,6 +216,25 @@ def build_log():
     return s
 
 
+def emoji_screen():
+    """Narrow emoji and flags as the VT grids them (no grapheme clustering): each VS16 or keycap emoji
+    is one cell, each regional indicator one cell. Rows 0-3 are what the cell check's hint table expects."""
+    out = []
+    # Row 0: each emoji has a blank cell after it, so it is drawn at full size across both.
+    out.append("spill: \u2764\ufe0f \u263a\ufe0f \u26a0\ufe0f 1\ufe0f\u20e3 \u2714\ufe0f end")
+    # Row 1: packed together, each is fitted to its one cell.
+    out.append("tight: \u2764\ufe0f\u263a\ufe0f\u26a0\ufe0f1\ufe0f\u20e3x")
+    # Row 2: regional indicators pair from the left into flags; a lone one stays a letter.
+    out.append("flags: \U0001F1E8\U0001F1F3 \U0001F1FA\U0001F1F8 \U0001F1EF\U0001F1F5\U0001F1F0\U0001F1F7 lone \U0001F1E8 x")
+    # Row 3: without VS16 they are text.
+    out.append("text: \u2764 \u263a \u26a0 \u2714 1 end")
+    out.append("zwj stays split: \U0001F468\u200d\U0001F469\u200d\U0001F467 |end")
+    out.append("wide: \u2705 \U0001F600 \U0001F389 ok")
+    out.append("agent: \u2705 Tests pass  \u26a0\ufe0f 2 warnings  \u2764\ufe0f thanks")
+    out.append("\u2714\ufe0f done \u274c failed \u2139\ufe0f info \u27a1\ufe0f next")
+    return screen(out)
+
+
 def reflow():
     """Long logical lines (soft wrapped) for resize and reflow."""
     return screen(["reflow: " + " ".join(f"w{i:02d}" for i in range(40)), "next " + "中文" * 20, "$ "])
@@ -225,6 +244,7 @@ SCREENS = {
     "sgr": (sgr_screen, "Colors (16/256/rgb) and every attribute"),
     "box": (box_screen, "Box drawing, blocks, braille, Powerline, Nerd and TUI symbols"),
     "cjk": (cjk_screen, "Wide CJK, emoji (VS16, ZWJ, flags), combining marks, wrap at the edge"),
+    "emoji": (emoji_screen, "Narrow emoji (VS16, keycap) spilling into a blank cell or fitted, flags from regional-indicator pairs"),
     "prompt": (prompt_screen, "A Powerline prompt, git log --graph, git diff"),
     "meters": (htop_like, "htop-style meters, inverse header, selected row, footer"),
     "vim": (alt_vim, "Editor on the alternate screen, inverse status line, bar cursor"),

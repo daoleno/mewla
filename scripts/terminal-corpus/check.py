@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""The corpus shots' pixel check: rows of block and line glyphs must touch.
+"""The corpus shots' pixel checks: rows of block and line glyphs must touch; narrow emoji and flags
+are drawn at full size.
 
     check.py <shots dir>     # box.png from android.sh, web.ts or the iOS test (MEWLA_TEST_OUT/corpus)
 
@@ -7,7 +8,11 @@ The box screen (gen.py) has a wall three rows tall at rows 12-14: eight full blo
 light verticals (9-16) and eight heavy verticals (18-25). A renderer whose cells are not whole pixels,
 or whose line glyphs come from a font shorter than the row, leaves a seam between the rows: a pixel of
 background inside the wall. The cell size is the image's size over the screen's grid, so any scale works.
-Exits 1 on a seam. Needs Pillow (uv run --with pillow).
+The emoji screen (gen.py, when emoji.png is there): the VS16 heart at row 0 col 7 has a blank cell
+after it, so it is drawn at full size and inks col 8; the text heart at row 3 col 6 (no VS16) stays in
+its cell, so col 7 is background; the two regional indicators at row 2 cols 7-10 are one flag, so
+those cells carry its colors (saturated pixels), not two letters.
+Exits 1 on a failure. Needs Pillow (uv run --with pillow).
 """
 import json
 import pathlib
@@ -53,7 +58,36 @@ def main() -> int:
                 break
 
     print(f"{shots / 'box.png'}: cell {cw:.2f}x{ch:.2f} px, wall y {y0}-{y1}: " + ("seams: " + "; ".join(failures) if failures else "rows touch"))
+    if (shots / "emoji.png").exists():
+        failures += emoji(shots / "emoji.png", corpus["emoji"]["cols"], corpus["emoji"]["rows"])
     return 1 if failures else 0
+
+
+def emoji(path, cols, rows):
+    image = Image.open(path).convert("RGB")
+    W, H = image.size
+    cw, ch = W / cols, H / rows
+    px = image.load()
+    background = px[2, H - 2]
+
+    def cells(row, c0, c1, test):
+        return sum(1 for y in range(round(row * ch) + 1, round((row + 1) * ch) - 1)
+                   for x in range(round(c0 * cw) + 1, round((c1 + 1) * cw) - 1) if test(px[x, y]))
+
+    ink = lambda p: not near(p, background, 40)
+    saturated = lambda p: max(p) - min(p) > 80
+    spill = cells(0, 8, 8, ink)
+    stays = cells(3, 7, 7, ink)
+    flag = cells(2, 7, 10, saturated)
+    failures = []
+    if spill < 4:
+        failures.append(f"the VS16 heart does not reach the blank cell after it ({spill} inked pixels)")
+    if stays > 0:
+        failures.append(f"the text heart spills into the next cell ({stays} inked pixels)")
+    if flag < 20:
+        failures.append(f"no flag across the regional indicators ({flag} colored pixels)")
+    print(f"{path}: emoji spill {spill} px, text heart spill {stays} px, flag {flag} colored px: " + ("; ".join(failures) if failures else "ok"))
+    return failures
 
 
 if __name__ == "__main__":
