@@ -1,4 +1,4 @@
-import { cleanup, effect, keyboardFrame, keymap, platform, signal, Text, untracked, View, type InputRef } from "nsh";
+import { cleanup, effect, keyboardFrame, keymap, platform, safeArea, signal, Text, untracked, View, type InputRef } from "nsh";
 import { Button, Input } from "nsh/base";
 import type { Draft } from "../../core/conversation/draft";
 import { composerKeyIntent } from "../../core/web/shortcuts";
@@ -129,8 +129,12 @@ export function Composer(props: {
     }, { when: "always" });
   });
   return (
-    <View class="border-t border-border bg-background px-3 py-2"
-      style={{ marginBottom: props.active && !props.active() ? 0 : Math.max(0, keyboardFrame().height - belowSections()) }}>
+    <View class="border-t border-border bg-background px-3 pt-2"
+      // Above the keyboard when it is up; else clear of the gesture bar (Android draws edge to edge), which lies under the stack.
+      style={{
+        marginBottom: props.active && !props.active() ? 0 : Math.max(0, keyboardFrame().height - belowSections()),
+        paddingBottom: 8 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
+      }}>
       {props.children as never}
       <View class="flex-row items-end gap-2">
         {props.leading as never}

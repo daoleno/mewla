@@ -21,6 +21,15 @@ describe("the tray", () => {
     expect(app.shows("id:tray-done")).toBe(true);
   }, 20_000);
 
+  test("a running Worker's reported phase draws its progress bar; a Session that reports none has no bar", async () => {
+    const app = await open(HARNESS, { host: { params: { workers: [worker("alpha", { phase: "verifying" }), worker("beta")] } }, platform: "android" });
+    await app.waitFor("text:2 running");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray");
+    expect(app.count("id:tray-progress")).toBe(1);
+    expect(app.shows("label:Step 4 of 5")).toBe(true);
+  }, 20_000);
+
   test("a request is counted, needs you outranks running, and a plain yes/no gets Approve", async () => {
     const app = await open(HARNESS, { host: { params: { workers: [worker("alpha"), worker("beta", { status: "blocked", prompt: permission("p1") })] } }, platform: "android" });
     await app.waitFor("text:1 needs you");

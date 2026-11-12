@@ -68,6 +68,28 @@ describe("tray model", () => {
     expect(choice[0]!.oneTap).toBeUndefined();
   });
 
+  test("a Work with several Workers is one row: Brain's mark, \"N Workers\", Work detail; its live Workers are not rows of their own", () => {
+    const joined = (id: string, live: boolean) => ({ session_id: id, name: id, provider: "claude", state: live ? "running" as const : "done" as const, live, joined_at: "2026-11-12T09:00:00Z", updated_at: "2026-11-12T09:00:00Z" });
+    const m = trayModel(input({
+      workers: [worker("a", { status: "done" }), worker("b"), worker("c")],
+      currentWork: [work("w1", { attempt_session_id: "c", worker_sessions: [joined("a", false), joined("b", true), joined("c", true)] })],
+    }));
+    const row = m.running.find((r) => r.key === "work:w1")!;
+    expect(row).toMatchObject({ line: "3 Workers", tile: { kind: "brain" }, target: { open: "work", workId: "w1" } });
+    expect(m.running.map((r) => r.key)).toEqual(["work:w1"]);
+    expect(m.state.words).toBe("1 running");
+    // One Worker: the row is that Session's.
+    const one = trayModel(input({ workers: [worker("b")], currentWork: [work("w1", { worker_sessions: [joined("b", true)] })] }));
+    expect(one.running).toHaveLength(1);
+    expect(one.running[0]).toMatchObject({ key: "work:w1", tile: { kind: "agent", agent: "claude" }, target: { open: "session", workerId: "b" } });
+  });
+
+  test("a new device asking to be let in is a request: no one-tap, its row opens its sheet", () => {
+    const r = requestsOf({ workers: [], alerts: [], devices: [{ id: "r1", name: "Firefox on Linux" }], now: NOW });
+    expect(r).toEqual([{ key: "device:r1", kind: "device", where: "device", title: "Approve new device", source: "Firefox on Linux", deviceId: "r1" }]);
+    expect(trayModel(input({ devices: [{ id: "r1", name: "Firefox on Linux" }] })).state.words).toBe("1 needs you");
+  });
+
   test("a delegated Session's request shows in Brain's thread", () => {
     const r = requestsOf({ workers: [worker("a", { delegated: true, needs_attention: true, status: "blocked" })], alerts: [], now: NOW });
     expect(r[0]).toMatchObject({ key: "attention:a", where: "brain", kind: "attention" });

@@ -113,42 +113,45 @@ type notificationRecorder interface {
 
 // Server handles WebSocket connections from the Mewla mobile app.
 type Server struct {
-	browsers                     *browser.Manager
-	displays                     *vdisplay.Service
-	screen                       *screen.Service
-	phone                        *phone.Manager
-	phonePing                    time.Duration // the phone's ping interval; zero is the default
-	connections                  *connections.Manager
-	auth                         *auth.Manager
-	watcher                      *watcher.Watcher
-	terminal                     *terminal.Manager
-	hostTerminal                 *terminal.HostBackend // opens session host Sessions; SetVersion names the daemon to the host
-	terminalTarget               func(id string) (watcher.TerminalTarget, error)
-	pusher                       notificationPusher
-	deviceHook                   func(timeZone, locale string)
-	notifications                notificationRecorder
-	appStates                    map[*websocket.Conn]string
-	doneNotified                 map[string]bool        // Work ID -> its done push already went out this run
-	workerPushed                 map[string]*workerPush // Worker -> its last blocked or failed push; see worker_push_dedupe.go
-	workerPushPath               string
-	workerPushNow                func() time.Time
-	stats                        *stats.Collector
-	work                         *work.Store
-	execs                        *work.ExecutorConfig
-	brain                        *brain.Service
-	resourceSampler              *watcher.ResourceSampler
-	profiles                     *modelprofiles.Owner
-	calendar                     *calendar.Store
-	calendarScheduler            *calendar.Scheduler
-	telegram                     *telegramchannel.Manager
-	computers                    *computers.Manager
-	outsideAgents                *outsideagents.Manager
-	outsideAgentsDoor            http.Handler
-	computerName                 string
-	agentUse                     *agentuse.Service
-	daemonUpdater                DaemonUpdater
-	version                      string
-	providerConversationLoader   func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
+	browsers                   *browser.Manager
+	displays                   *vdisplay.Service
+	screen                     *screen.Service
+	phone                      *phone.Manager
+	phonePing                  time.Duration // the phone's ping interval; zero is the default
+	connections                *connections.Manager
+	auth                       *auth.Manager
+	watcher                    *watcher.Watcher
+	terminal                   *terminal.Manager
+	hostTerminal               *terminal.HostBackend // opens session host Sessions; SetVersion names the daemon to the host
+	terminalTarget             func(id string) (watcher.TerminalTarget, error)
+	pusher                     notificationPusher
+	deviceHook                 func(timeZone, locale string)
+	notifications              notificationRecorder
+	appStates                  map[*websocket.Conn]string
+	doneNotified               map[string]bool        // Work ID -> its done push already went out this run
+	workerPushed               map[string]*workerPush // Worker -> its last blocked or failed push; see worker_push_dedupe.go
+	workerPushPath             string
+	workerPushNow              func() time.Time
+	stats                      *stats.Collector
+	work                       *work.Store
+	execs                      *work.ExecutorConfig
+	brain                      *brain.Service
+	resourceSampler            *watcher.ResourceSampler
+	profiles                   *modelprofiles.Owner
+	calendar                   *calendar.Store
+	calendarScheduler          *calendar.Scheduler
+	telegram                   *telegramchannel.Manager
+	computers                  *computers.Manager
+	outsideAgents              *outsideagents.Manager
+	outsideAgentsDoor          http.Handler
+	computerName               string
+	agentUse                   *agentuse.Service
+	daemonUpdater              DaemonUpdater
+	version                    string
+	providerConversationLoader func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
+	// brainTickObserve, when set by a test, hears what each Brain-scoped
+	// subscription tick did; see the brainTick constants.
+	brainTickObserve             func(brainTick)
 	promptPaneOverride           PanePrompts
 	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
 	rewindMessageOverride        func(workerID string, request watcher.MessageRewindRequest) error
@@ -414,6 +417,7 @@ type clientMessage struct {
 	SessionID            string                                 `json:"session_id"`
 	Text                 string                                 `json:"text"`
 	SnoozeUntil          *time.Time                             `json:"snooze_until,omitempty"`
+	SnoozeSeconds        int64                                  `json:"snooze_seconds,omitempty"`
 	Key                  string                                 `json:"key"`
 	OptionID             string                                 `json:"option_id"`
 	Data                 string                                 `json:"data"`
@@ -1100,6 +1104,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainGC(conn, raw)
 	case "brain_work_read":
 		s.handleBrainWorkRead(conn, raw)
+	case "brain_work_detail":
+		s.handleBrainWorkDetail(conn, raw)
 	case "brain_work_action":
 		// A reply waits on the Brain host's input admission; keep reading.
 		go s.handleBrainWorkAction(conn, raw)
@@ -2000,12 +2006,41 @@ func (s *Server) cancelCodexSubscriptionsLocked(conn *websocket.Conn) {
 	}
 }
 
+// brainTick says how much of a Brain-scoped conversation a tick had to project.
+type brainTick string
+
+const (
+	// brainTickIdle: nothing the conversation is made from had moved.
+	brainTickIdle brainTick = "idle"
+	// brainTickSame: something had moved and the projection that followed was
+	// the answer already sent.
+	brainTickSame brainTick = "same"
+	// brainTickBrain: only the Brain side had moved; the provider conversation
+	// was not read again.
+	brainTickBrain brainTick = "brain"
+	// brainTickProvider: the provider conversation had moved.
+	brainTickProvider brainTick = "provider"
+)
+
+func (s *Server) observeBrainTick(tick brainTick) {
+	if s.brainTickObserve != nil {
+		s.brainTickObserve(tick)
+	}
+}
+
 type codexConversationSubscriptionSnapshot struct {
-	conversation           work.CodexConversation
-	fingerprint            string
-	providerFingerprint    string
-	brainProjectionVersion string
-	eventsByID             map[string]work.CodexConversationEvent
+	conversation        work.CodexConversation
+	fingerprint         string
+	providerFingerprint string
+	eventsByID          map[string]work.CodexConversationEvent
+	// A Brain-scoped snapshot also remembers what the last projection that ran
+	// was made from, whether or not it changed the answer: the provider
+	// conversation it read (sanitized, as the Brain overlay takes it) with the
+	// key that names it, and the key of the Brain side. A tick whose keys equal
+	// these has nothing to project.
+	providerConversation work.CodexConversation
+	providerKey          providerProjectionKey
+	brainKey             brainProjectionKey
 	// eventFingerprints memoizes per-event content fingerprints so unchanged
 	// history is never re-hashed on later polls or deltas.
 	eventFingerprints map[string]string
@@ -2097,6 +2132,7 @@ func (s *Server) publishCodexConversationSubscription(
 	}
 
 	now := time.Now()
+	rewoundVersion := s.rewound.version()
 	conversation, err := s.loadProviderConversation(reader, resolved, now)
 	if took := time.Since(now); took >= slowSessionInputLog {
 		// A snapshot cannot arrive before this load returns; the phone only
@@ -2138,19 +2174,55 @@ func (s *Server) publishCodexConversationSubscription(
 	}
 
 	projectionStart := time.Now()
-	conversation = work.SanitizeConversationProjection(conversation)
-	conversation = conversationForProviderAttachment(conversation, resolved.fromWatcher)
-	providerFingerprint := codexConversationSubscriptionFingerprint(conversation)
-	brainProjectionVersion := ""
+	var (
+		providerKey         providerProjectionKey
+		brainKey            brainProjectionKey
+		providerFingerprint string
+		reusedProvider      bool
+	)
 	if brainScoped {
-		brainProjectionVersion = s.brainConversationProjectionVersion(raw.ConversationScopeKey)
-		if (*previous) != nil && (*previous).providerFingerprint == providerFingerprint &&
-			(*previous).brainProjectionVersion == brainProjectionVersion &&
-			(*previous).attached == resolved.fromWatcher {
+		// The keys are read before anything is projected: a write that lands
+		// while the projection runs is then newer than its key and the next tick
+		// projects again, where a key read afterwards would call it seen.
+		providerKey = newProviderProjectionKey(reader.ConversationStamp(), resolved.fromWatcher, rewoundVersion, conversation)
+		brainKey = s.brainProjectionKey(raw.ConversationScopeKey)
+		if last := *previous; last != nil && providerKey.stamp != 0 && last.providerKey == providerKey {
+			if last.brainKey == brainKey {
+				s.observeBrainTick(brainTickIdle)
+				return
+			}
+			// Only the Brain side moved: the provider conversation is the one
+			// the last projection sanitized.
+			conversation = last.providerConversation
+			providerFingerprint = last.providerFingerprint
+			reusedProvider = true
+		}
+	}
+	if !reusedProvider {
+		conversation = work.SanitizeConversationProjection(conversation)
+		conversation = conversationForProviderAttachment(conversation, resolved.fromWatcher)
+		// A Brain-scoped provider conversation with no parse stamp can only be
+		// told unchanged by its content; one with a stamp that moved is projected
+		// whole, and the answer's own fingerprint below decides what is sent.
+		if brainScoped && providerKey.stamp == 0 {
+			providerFingerprint = codexConversationSubscriptionFingerprint(conversation)
+		}
+		if last := *previous; brainScoped && providerKey.stamp == 0 && last != nil &&
+			last.providerFingerprint == providerFingerprint &&
+			last.brainKey == brainKey && last.attached == resolved.fromWatcher {
+			last.providerKey = providerKey
+			s.observeBrainTick(brainTickSame)
 			return
 		}
+	}
+	providerConversation := conversation
+	if brainScoped {
 		conversation = s.brainScopedConversation(raw.ConversationScopeKey, conversation, now)
-		brainProjectionVersion = s.brainConversationProjectionVersion(raw.ConversationScopeKey)
+		if reusedProvider {
+			s.observeBrainTick(brainTickBrain)
+		} else {
+			s.observeBrainTick(brainTickProvider)
+		}
 	}
 	if took := time.Since(projectionStart); took >= slowSessionInputLog {
 		// The other half of a slow first snapshot: the load above is logged
@@ -2201,18 +2273,29 @@ func (s *Server) publishCodexConversationSubscription(
 		}
 	}
 	if (*previous) != nil && (*previous).fingerprint == fingerprint.fingerprint {
+		if brainScoped {
+			// The answer is the one already sent, and what it was made from has
+			// moved on: remember that, or every tick would find the keys behind
+			// and project again until the answer next changed.
+			last := *previous
+			last.providerKey, last.brainKey = providerKey, brainKey
+			last.providerFingerprint, last.providerConversation = providerFingerprint, providerConversation
+			last.attached = resolved.fromWatcher
+		}
 		return
 	}
 	next := codexConversationSubscriptionSnapshot{
-		conversation:           conversation,
-		fingerprint:            fingerprint.fingerprint,
-		providerFingerprint:    providerFingerprint,
-		brainProjectionVersion: brainProjectionVersion,
-		eventsByID:             codexConversationEventsByID(conversation.Events),
-		eventFingerprints:      fingerprint.eventFingerprints,
-		revision:               1,
-		readerVersion:          readerVersion,
-		attached:               resolved.fromWatcher,
+		conversation:         conversation,
+		fingerprint:          fingerprint.fingerprint,
+		providerFingerprint:  providerFingerprint,
+		providerConversation: providerConversation,
+		providerKey:          providerKey,
+		brainKey:             brainKey,
+		eventsByID:           codexConversationEventsByID(conversation.Events),
+		eventFingerprints:    fingerprint.eventFingerprints,
+		revision:             1,
+		readerVersion:        readerVersion,
+		attached:             resolved.fromWatcher,
 	}
 	if (*previous) != nil {
 		next.revision = (*previous).revision + 1
@@ -2265,23 +2348,79 @@ func (s *Server) publishCodexConversationSubscription(
 	*previous = &next
 }
 
-func (s *Server) brainConversationProjectionVersion(scopeKey string) string {
+// brainProjectionKey names the Brain side of a Brain-scoped conversation: what
+// the overlay reads besides the provider conversation. Each part is a counter
+// of the thing that owns the data, so comparing keys reads none of it. The
+// Store's moves with every write that can change the timeline, the Work and
+// Event rows, the chat state and the Host binding; the calendar's with every
+// committed change to a scheduled result; the computers' with the handoffs of
+// the thread and the peers that name them.
+type brainProjectionKey struct {
+	store     uint64
+	calendar  uint64
+	computers uint64
+}
+
+func (s *Server) brainProjectionKey(scopeKey string) brainProjectionKey {
 	const prefix = "brain-thread:"
 	if s.brain == nil || !strings.HasPrefix(strings.TrimSpace(scopeKey), prefix) {
-		return ""
+		return brainProjectionKey{}
 	}
 	threadID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(scopeKey), prefix))
-	hash := fnv.New64a()
-	writeFingerprintString(hash, strconv.FormatUint(s.brain.ConversationProjectionVersion(), 10))
+	key := brainProjectionKey{store: s.brain.ConversationProjectionVersion()}
 	if s.calendar != nil {
-		for _, result := range s.calendar.ScheduledResults(threadID, 0) {
-			writeFingerprintString(hash, result.ID)
-			writeFingerprintString(hash, string(result.Status))
-			writeFingerprintString(hash, result.Body)
-			writeFingerprintString(hash, result.CreatedAt.Format(time.RFC3339Nano))
+		key.calendar = s.calendar.Generation()
+	}
+	if s.computers != nil {
+		key.computers = s.computers.ProjectionToken(threadID)
+	}
+	return key
+}
+
+// providerProjectionKey names a loaded provider conversation by what is cheap
+// to read of it: the parse its events came from (zero when the load was not a
+// retained parse, which proves nothing), the facts the load adds around the
+// events, the overlay that was applied to them and whether the Session is
+// attached. Equal keys with a nonzero stamp are the same conversation. The
+// file's modification time is not part of it: the Brain overlay replaces
+// Updated, and a transcript that is still being written moves its time faster
+// than a large one parses.
+type providerProjectionKey struct {
+	stamp     uint64
+	attached  bool
+	rewound   uint64
+	available bool
+	path      string
+	sessionID string
+	cwd       string
+	source    string
+	reason    string
+	events    int
+	activity  providerActivityKey
+}
+
+type providerActivityKey struct {
+	present   bool
+	id        string
+	status    work.ProviderActivityStatus
+	startedAt string
+	settledAt string
+}
+
+func newProviderProjectionKey(stamp uint64, attached bool, rewound uint64, conversation work.CodexConversation) providerProjectionKey {
+	key := providerProjectionKey{
+		stamp: stamp, attached: attached, rewound: rewound,
+		available: conversation.Available, path: conversation.Path, sessionID: conversation.SessionID,
+		cwd: conversation.CWD, source: conversation.Source, reason: conversation.Reason,
+		events: len(conversation.Events),
+	}
+	if activity := conversation.Activity; activity != nil {
+		key.activity = providerActivityKey{
+			present: true, id: activity.ID, status: activity.Status,
+			startedAt: activity.StartedAt, settledAt: activity.SettledAt,
 		}
 	}
-	return fmt.Sprintf("%016x", hash.Sum64())
+	return key
 }
 
 func conversationForProviderAttachment(conversation work.CodexConversation, attached bool) work.CodexConversation {
@@ -2420,7 +2559,7 @@ func (s *Server) brainScopedConversation(scopeKey string, conversation work.Code
 		liveActivity = nil
 	}
 
-	timelineItems, timelineErr := s.brain.ThreadTimeline(threadID, 0)
+	timelineItems, timelineErr := s.brain.ThreadTimelineView(threadID, 0)
 	if timelineErr != nil {
 		conversation.Available = false
 		conversation.Reason = "brain_timeline_unavailable"
@@ -2762,7 +2901,41 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 	writeFingerprintPlan(w, event.Plan)
 	writeFingerprintChoice(w, event.Choice)
 	writeFingerprintString(w, event.Source)
+	writeFingerprintString(w, event.Origin)
 	writeFingerprintSubagent(w, event.Subagent)
+	// The Work card and the other typed rows. A change in any of these alone
+	// (a review settling, a Session closing, a card read) is a change to send.
+	writeFingerprintString(w, event.WorkID)
+	writeFingerprintString(w, event.WorkSession)
+	writeFingerprintString(w, event.SessionName)
+	writeFingerprintBool(w, event.Unread)
+	writeFingerprintString(w, event.WorkReviewState)
+	writeFingerprintString(w, event.WorkSessionState)
+	writeFingerprintBool(w, event.WorkResultCurrent)
+	writeFingerprintString(w, event.WorkPhase)
+	writeFingerprintString(w, event.WorkAttention)
+	writeFingerprintString(w, event.WorkEventKind)
+	writeFingerprintString(w, event.WorkDetailsJSON)
+	writeFingerprintString(w, event.WorkNextAction)
+	writeFingerprintString(w, event.WorkWaitFor)
+	writeFingerprintString(w, event.TaskID)
+	for _, count := range []*int{event.TaskTokens, event.TaskToolUses, event.TaskDurationMS} {
+		if count == nil {
+			writeFingerprintString(w, "")
+		} else {
+			writeFingerprintInt(w, *count)
+		}
+	}
+	if computer := event.Computer; computer == nil {
+		writeFingerprintString(w, "")
+	} else {
+		for _, value := range []string{
+			computer.Direction, computer.Computer, computer.DaemonID, computer.MessageID,
+			computer.Kind, computer.ReplyTo, computer.UserSaid, computer.State,
+		} {
+			writeFingerprintString(w, value)
+		}
+	}
 }
 
 func writeFingerprintSubagent(w io.Writer, subagent *work.CodexConversationSubagent) {
@@ -2808,7 +2981,8 @@ func writeFingerprintFileChanges(w io.Writer, changes []work.CodexConversationFi
 }
 
 func writeFingerprintString(w io.Writer, value string) {
-	_, _ = fmt.Fprintf(w, "%d:", len(value))
+	var buffer [24]byte
+	_, _ = w.Write(append(strconv.AppendInt(buffer[:0], int64(len(value)), 10), ':'))
 	_, _ = io.WriteString(w, value)
 	_, _ = io.WriteString(w, "\x00")
 }
@@ -3094,6 +3268,24 @@ func (s *Server) handleBrainWorkRead(conn *websocket.Conn, raw clientMessage) {
 	})
 }
 
+// handleBrainWorkDetail answers one Work's detail page, current or closed.
+func (s *Server) handleBrainWorkDetail(conn *websocket.Conn, raw clientMessage) {
+	if s.brain == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_unavailable", "Brain is not configured")
+		return
+	}
+	detail, err := s.brain.WorkDetail(strings.TrimSpace(raw.ID))
+	if err != nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_detail_failed", brainWorkActionMessage(err))
+		return
+	}
+	s.sendJSON(conn, map[string]any{
+		"type":       "brain_work_detail",
+		"request_id": raw.RequestID,
+		"work":       detail,
+	})
+}
+
 // handleBrainWorkAction applies one user action from a Work slip. The reply
 // carries the Brain admission outcome so the slip never claims Brain heard an
 // answer whose delivery is unknown.
@@ -3111,7 +3303,8 @@ func (s *Server) handleBrainWorkAction(conn *websocket.Conn, raw clientMessage) 
 	}
 	result, err := s.brain.ActOnWork(brain.WorkUserActionRequest{
 		WorkID: strings.TrimSpace(raw.ID), Kind: brain.WorkUserActionKind(strings.TrimSpace(raw.Action)),
-		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, RequestID: raw.RequestID, Attachments: files,
+		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, SnoozeFor: time.Duration(raw.SnoozeSeconds) * time.Second,
+		RequestID: raw.RequestID, Attachments: files,
 	})
 	if err != nil && !errors.Is(err, brain.ErrWorkCleanupPending) {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_action_failed", brainWorkActionMessage(err))

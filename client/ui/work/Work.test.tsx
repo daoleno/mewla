@@ -82,6 +82,50 @@ describe("Brain's Work", () => {
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "dismiss" });
   }, 20_000);
 
+  test("Snooze 1 hour tells the computer the length, which ends it on its own clock", async () => {
+    const app = await workApp();
+    await openWork(app, "w-q");
+    await app.waitFor("text:Snooze 1 hour");
+    await app.press("id:work-action-snooze");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
+    expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "snooze", snooze_seconds: 3600 });
+    expect("snooze_until" in framesOf(app.host.posts(), "brain_work_action")[0]!).toBe(false);
+  }, 20_000);
+
+  test("Workers: every Session that joined, oldest first; a live one with its progress, and it opens its Session", async () => {
+    const daemon = brain();
+    const at = now();
+    (daemon.current_work[1] as Record<string, unknown>).worker_sessions = [
+      { session_id: "%5", name: "planner", provider: "codex", state: "done", summary: "Plan written", live: false, joined_at: at, ended_at: at, updated_at: at },
+      { session_id: "%7", name: "release", provider: "claude", state: "running", summary: "Running the release checks", phase: "verifying", live: true, joined_at: at, updated_at: at },
+    ];
+    const app = await workApp({ brain: daemon, worker_sessions: [{ id: "%7", name: "release", status: "running", phase: "verifying", summary: "Running the release checks", command: "claude", provider: "claude", cwd: "/home/me/perpetuo", updated_at: Date.now() }] });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-workers");
+    expect(app.count("id:work-worker")).toBe(2);
+    expect(app.texts()).toContain("OpenAI Codex · planner");
+    expect(app.texts()).toContain("Claude Code · release");
+    expect(app.count("id:work-worker-progress")).toBe(1);
+    expect(app.enabled("id:work-worker >> nth=0")).toBe(false);
+    await app.press("id:work-worker >> nth=1");
+    await app.waitFor("id:session-status");
+  }, 20_000);
+
+  test("a closed Work's page comes from the computer: its title, how it ended, who worked on it", async () => {
+    const at = now();
+    const app = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work: {
+      work_id: "w-old", revision: 9, title: "rename-the-app", status: "done", created_at: at, updated_at: at,
+      worker_sessions: [{ session_id: "%3", name: "renamer", provider: "claude", state: "done", summary: "Renamed everywhere", live: false, joined_at: at, ended_at: at, updated_at: at }],
+    } } } });
+    await openWork(app, "w-old");
+    await app.waitFor("id:work-workers");
+    expect(framesOf(app.host.posts(), "brain_work_detail")[0]).toMatchObject({ id: "w-old" });
+    expect(app.texts()).toContain("rename-the-app");
+    expect(app.texts()).toContain("Done");
+    expect(app.texts()).toContain("Claude Code · renamer");
+    expect(app.texts()).not.toContain("This Work is no longer open");
+  }, 20_000);
+
   test("a result that came back is accepted with one tap and its unread mark is cleared on opening", async () => {
     const app = await workApp();
     await openWork(app, "w-back");

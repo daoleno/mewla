@@ -22,8 +22,6 @@ export interface WorkCardModel {
   /** The Session that ran it: the header opens it, its logo is the card's. */
   sessionId?: string;
   sessionName?: string;
-  /** The next step Brain offers, sent to Brain as the person's message. */
-  nextStep?: string;
   unread: boolean;
 }
 
@@ -54,6 +52,5 @@ export function workCardModel(item: Pick<BrainWorkEventTimelineItem, "event" | "
   const needs = status === "needs_input" || (!status && event.kind === "session.needs_input");
   if (needs) return { ...base, kind: "needs", summary: work?.question || event.summary, state: "Needs you", unread: false };
   const unread = work ? work.unread_result : event.unread;
-  const nextStep = event.next_action?.trim() || undefined;
-  return { ...base, kind: unread ? "result" : "line", summary: work?.summary || event.summary, state: RESULT_STATE[event.kind] ?? "Done", nextStep, unread };
+  return { ...base, kind: unread ? "result" : "line", summary: work?.summary || event.summary, state: RESULT_STATE[event.kind] ?? "Done", unread };
 }

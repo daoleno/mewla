@@ -45,6 +45,14 @@ type Store struct {
 	subs    map[int]chan Event
 	nextSub int
 	changed chan struct{}
+	// generation moves with every committed change to items (persistLocked is
+	// the one commit point), so a reader that derived something from the
+	// calendar can tell it is still current without looking at the items.
+	generation uint64
+	// resultIndex is the terminal Run projection of the calendar as of
+	// generation; see results.go.
+	resultsMu   sync.Mutex
+	resultIndex *scheduledResultIndex
 }
 
 func DefaultRoot() (string, error) {
@@ -723,6 +731,7 @@ func (s *Store) persistLocked() error {
 	if err := commit(s.db, s.stored, s.items); err != nil {
 		return err
 	}
+	s.generation++
 	for id, item := range s.items {
 		if !reflect.DeepEqual(s.stored[id], item) {
 			s.stored[id] = cloneItem(item)
