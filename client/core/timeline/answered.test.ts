@@ -36,7 +36,13 @@ describe("an answered request", () => {
 
   test("answered in the terminal reads so; a record without what it needs is none", () => {
     const terminal = parseAnsweredRequest({ ...record, answer: undefined, outcome: "answered", by: { kind: "terminal" } })!;
-    expect(sealedOfAnswered(terminal, () => "")).toMatchObject({ verb: "You chose", answer: record.asked, source: "In the terminal" });
+    expect(sealedOfAnswered(terminal, () => "")).toMatchObject({ verb: "You chose", answer: record.title, source: "In the terminal" });
+    // Main 5cd3ec63's record of a Claude permission answered in the terminal: the screen run together, no answer.
+    const screen = parseAnsweredRequest({ ...record, title: "Bash command", answer: undefined, outcome: "answered", by: { kind: "terminal" },
+      asked: 'Tip: auto mode handles these prompts for you — choose "switch to auto mode" below Fetch HTTP headers from example.org curl -sI https://example.org This command requires approval Do you want to proceed?' })!;
+    expect(sealedOfAnswered(screen, () => "")).toMatchObject({ answer: "Bash command", mono: false });
+    const question = parseAnsweredRequest({ ...record, kind: "question", answer: undefined, outcome: "answered" })!;
+    expect(sealedOfAnswered(question, () => "").answer).toBe(record.asked);
     expect(parseAnsweredRequest({ ...record, outcome: "maybe" })).toBeNull();
     expect(parseAnsweredRequest({ ...record, by: {} })).toBeNull();
     expect(parseAnsweredRequest(null)).toBeNull();
