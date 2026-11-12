@@ -70,8 +70,8 @@ export function isFoldableToolRow(
   return mark === null || mark === "ready" || mark === "failed";
 }
 
-/** "Read 3 files, ran 2 commands and edited a file": what a folded run did. */
-export function summarizeToolRun(steps: readonly ActivityTimelineItem[]): string {
+/** What each kind of call in a run counts: its distinct files for edits and reads, its calls otherwise. */
+function runCounts(steps: readonly ActivityTimelineItem[]): Map<RunBucket, Set<string>> {
   const counts = new Map<RunBucket, Set<string>>();
   for (const step of steps) {
     const bucket = bucketOf(step.semanticKind ?? "use_tool");
@@ -91,6 +91,12 @@ export function summarizeToolRun(steps: readonly ActivityTimelineItem[]): string
       keys.add(`${step.id}:${unit}`);
     }
   }
+  return counts;
+}
+
+/** "Edited 1 file, ran 2 commands": what a folded run did, its most consequential kinds first. */
+export function summarizeToolRun(steps: readonly ActivityTimelineItem[]): string {
+  const counts = runCounts(steps);
   const present = SUMMARY_PRIORITY.filter((bucket) => counts.has(bucket));
   const named = present.slice(0, MAX_NAMED_BUCKETS);
   const phrases = named.map((bucket) =>
@@ -100,7 +106,33 @@ export function summarizeToolRun(steps: readonly ActivityTimelineItem[]): string
     .map((phrase, index) =>
       index === 0 ? phrase : phrase.charAt(0).toLowerCase() + phrase.slice(1),
     )
-    .join(" and ");
+    .join(", ");
+}
+
+/** A run's icon: its most consequential kind's. */
+const RUN_ICONS: Record<RunBucket, string> = {
+  edit: "git-compare",
+  command: "terminal",
+  read: "reader",
+  search: "search",
+  image: "image",
+  other: "construct",
+};
+
+/** The names of the files a run edited or read, each once, the first three ("plan.md, app.ts"). */
+function runFileNames(steps: readonly ActivityTimelineItem[]): string | undefined {
+  const names: string[] = [];
+  for (const step of steps) {
+    const paths = step.fileSummaries?.length
+      ? step.fileSummaries.map((file) => file.movePath || file.path)
+      : (step.files ?? []);
+    for (const path of paths) {
+      const name = path.split(/[\\/]/).filter(Boolean).pop();
+      if (name && !names.includes(name)) names.push(name);
+    }
+  }
+  if (!names.length) return undefined;
+  return names.length > 3 ? `${names.slice(0, 3).join(", ")} + ${names.length - 3}` : names.join(", ");
 }
 
 function phraseFor(bucket: RunBucket, count: number): string {
@@ -135,12 +167,10 @@ export function foldedToolRun(
     timestamp: last.timestamp ?? steps[0].timestamp,
     statusKey: "done",
     title,
-    // How many calls the row stands for, quiet beside the chevron.
-    detail: failed
-      ? `${steps.length} steps · ${failed} failed`
-      : `${steps.length} steps`,
+    // Beside the summary, quiet: what failed, else the files it touched (soft-final SPEC §11 tool row).
+    detail: failed ? `${failed} failed` : runFileNames(steps),
     tone: "neutral",
-    icon: "layers",
+    icon: RUN_ICONS[SUMMARY_PRIORITY.find((bucket) => runCounts(steps).has(bucket)) ?? "other"],
     defaultExpanded: false,
     accessibilityLabel: title,
     steps,

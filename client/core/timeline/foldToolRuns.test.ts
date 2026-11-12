@@ -57,8 +57,8 @@ describe("folding a turn's finished tool rows", () => {
     ]);
     const group = out[1] as ActivityTimelineItem;
     expect(group.steps?.map((step) => step.id)).toEqual(["r1", "r2"]);
-    expect(group.title).toBe("Ran 1 command and read 1 file");
-    expect(group.detail).toBe("2 steps");
+    expect(group.title).toBe("Ran 1 command, read 1 file");
+    expect(group.detail).toBe("a.ts");
     expect(group.defaultExpanded).toBe(false);
   });
 
@@ -93,7 +93,7 @@ describe("folding a turn's finished tool rows", () => {
     expect(out.map((item) => item.id)).toEqual(["a"]);
     const group = out[0] as ActivityTimelineItem;
     expect(group.steps?.map((step) => step.id)).toEqual(["a", "failed", "c"]);
-    expect(group.detail).toBe("3 steps · 1 failed");
+    expect(group.detail).toBe("1 failed");
     // Quiet like any fold: the count says it, the title is not painted.
     expect(group.tone).toBe("neutral");
     expect(group.defaultExpanded).toBe(false);
@@ -102,13 +102,14 @@ describe("folding a turn's finished tool rows", () => {
     expect(shouldAutoExpandActivity(group.steps![1])).toBe(false);
   });
 
-  test("a run with no failure keeps the plain step count", () => {
+  test("a run with no failure names the files it touched, and takes its icon from its main kind", () => {
     const out = createToolRunFolder()([
-      row("a", "read_files"),
-      row("b", "read_files"),
+      row("a", "read_files", { files: ["/repo/docs/plan.md"] }),
+      row("b", "read_files", { files: ["/repo/src/app.ts"] }),
     ]);
     const group = out[0] as ActivityTimelineItem;
-    expect(group.detail).toBe("2 steps");
+    expect(group.detail).toBe("plan.md, app.ts");
+    expect(group.icon).toBe("reader");
     expect(group.tone).toBe("neutral");
   });
 
@@ -207,7 +208,7 @@ describe("summarising a run", () => {
       row("e", "run_command"),
       row("f", "run_command"),
     ]);
-    expect(title).toBe("Edited 1 file and ran 3 commands");
+    expect(title).toBe("Edited 1 file, ran 3 commands");
   });
 
   test("names the two most consequential kinds (tests count as commands)", () => {
@@ -220,7 +221,7 @@ describe("summarising a run", () => {
         row("e", "search_code"),
         row("f", "use_tool"),
       ]),
-    ).toBe("Edited 1 file and ran 2 commands");
+    ).toBe("Edited 1 file, ran 2 commands");
   });
 
   test("an explore row counts every lookup it holds", () => {
@@ -249,7 +250,7 @@ describe("the activity demo fixture", () => {
     ) as ActivityTimelineItem[];
     expect(folded).toHaveLength(1);
     expect(folded[0].steps?.map((step) => step.id)).toContain("activity-failed");
-    expect(folded[0].detail).toBe("5 steps · 1 failed");
+    expect(folded[0].detail).toBe("1 failed");
     expect(
       out.some((item) => item.type === "activity" && item.id === "activity-failed"),
     ).toBe(false);
