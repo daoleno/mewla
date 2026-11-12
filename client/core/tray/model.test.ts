@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { BrainCurrentWork } from "../work/types";
+import { listTime } from "../sessions/listRow";
 import { backMark, requestsOf, trayModel, type TrayInput } from "./model";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
@@ -93,6 +94,9 @@ describe("tray model", () => {
     expect(row).toMatchObject({ line: "3 Workers · Working", end: "1h", live: true, tile: { kind: "brain" }, target: { open: "work", workId: "w1" } });
     expect(m.running.map((r) => r.key)).toEqual(["work:w1"]);
     expect(m.state.words).toBe("1 running");
+    // A result ends in when it came back, then its check.
+    const back = trayModel(input({ currentWork: [work("w2", { status: "done", unread_result: true, updated_at: "2026-11-12T09:30:00Z" })] }));
+    expect(back.done.find((r) => r.key === "work:w2")).toMatchObject({ end: listTime(Date.parse("2026-11-12T09:30:00Z"), new Date(NOW)), done: true, unread: true });
     // One Worker: the row is that Session's.
     const one = trayModel(input({ workers: [worker("b")], currentWork: [work("w1", { worker_sessions: [joined("b", true)] })] }));
     expect(one.running).toHaveLength(1);
