@@ -90,6 +90,20 @@ describe("the wide layout (SPEC §14)", () => {
     expect(app.shows(`id:pane-brain >> id:selected-well`)).toBe(true);
   }, 20_000);
 
+  test("a request row whose card is in Brain's thread returns the right pane to Brain; the pane stays", async () => {
+    const prompt = { id: "p1", kind: "permission", provider: "claude", title: "Run this command?", request: "rm -rf build", options: [{ number: 1, label: "Yes" }, { number: 2, label: "No" }, { number: 3, label: "Tell Claude" }] };
+    const brain = { host_worker: { id: "host", name: "brain", status: "blocked", prompt }, chat_thread_id: "t1" };
+    const app = await open(APP, { ...desk, host: webHost({ brain, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:tray-request", { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    await app.press("id:tray-needs >> text:Brain");
+    await app.waitUntil(() => routes(app).join(" ") === "home");
+    expect(app.shows("id:left-pane")).toBe(true);
+    expect(app.shows("id:pane-brain >> id:selected-well")).toBe(true);
+  }, 20_000);
+
   test("a right-click on a Session row starts selecting, as a long press does on touch (parity #28)", async () => {
     const sessions = [{ id: "w1", name: "release", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }) });
