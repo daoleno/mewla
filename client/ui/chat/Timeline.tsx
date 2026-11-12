@@ -154,6 +154,7 @@ export function ChatTimeline(props: {
   // itself when the row is already in (`initialScrollIndex`); rows that come later are scrolled to by index.
   // Only the person's own scrolling moves the saved place, not the list settling as it mounts.
   let restore = props.scope ? readingPositions.get(props.scope) : undefined;
+  const hadPlace = restore !== undefined;
   const initialIndex = untracked(() => readingPlaceIndex(rows(), restore));
   if (initialIndex !== undefined) restore = undefined;
   let touched = false;
@@ -164,6 +165,17 @@ export function ChatTimeline(props: {
     if (index === undefined || !mounted()) return;
     restore = undefined;
     untracked(() => list?.scrollToIndex({ index, viewPosition: 0, animated: false }));
+  });
+  // A chat with no place to go back to opens at its newest row. The list does that itself when its rows
+  // are in as it mounts; rows that come after (a Session's transcript loads once the chat is open) are
+  // brought to the newest here, once, unless the person has already moved: on a slow phone the list
+  // stayed on the oldest rows it had laid out (the test for a long chat opened at "Message 0" under load).
+  let opened = false;
+  effect(() => {
+    if (rows().length === 0 || !mounted() || opened) return;
+    opened = true;
+    if (hadPlace || touched) return;
+    untracked(() => list?.scrollToEnd({ animated: false }));
   });
   effect(() => {
     if (!props.sent || props.sent() === 0) return;
