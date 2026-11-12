@@ -263,6 +263,10 @@ func startInputPump(ctx context.Context, in io.Reader) <-chan []byte {
 	return typed
 }
 
+// attachSizePoll is how often a terminal on a host from before AttachResized
+// asks the Session's size.
+var attachSizePoll = 500 * time.Millisecond
+
 // attachLoopTyped is attachLoop over keys that arrive on typed. A nonzero
 // backKey ends it too, with back set, for a caller that shows a Session from a
 // grid; keys after it in the same read are dropped, as after Ctrl-\.
@@ -272,13 +276,15 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 	// the person types while another viewer has it; attaching again on its own
 	// (behind, or resized by another viewer) shows the Session at whatever size
 	// it has, so two viewers never take the size from each other.
-	// A host from before AttachResized never redraws this terminal for another
-	// viewer's resize: then it takes its size whenever it attaches, as before.
+	// A host from before AttachResized never ends this terminal's view for
+	// another viewer's resize: then it asks the Session's size every
+	// attachSizePoll and redraws when it changed.
 	owned, redraws := false, false
+	var shown [2]int // the size the view's replay was drawn at
 	attach := func(passive bool) (*sessionhost.Attachment, error) {
 		cols, rows := size()
 		params := sessionhost.AttachParams{ID: id, Redraw: true}
-		if !passive || !redraws {
+		if !passive {
 			params.Cols, params.Rows = cols, rows
 		}
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -290,6 +296,7 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 		}
 		if err == nil {
 			owned, redraws = view.Cols == cols && view.Rows == rows, view.Redraw
+			shown = [2]int{view.Cols, view.Rows}
 		}
 		return view, err
 	}
@@ -303,7 +310,7 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 		if err := client.Resize(callCtx, id, cols, rows); err != nil {
 			return err
 		}
-		owned = true
+		owned, shown = true, [2]int{cols, rows}
 		return nil
 	}
 	view, err := attach(false)
@@ -314,6 +321,23 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 	io.WriteString(out, enterAttach)
 	defer io.WriteString(out, leaveAttach)
 	out.Write(view.Replay)
+	// This terminal fell behind, or the Session is another size now: start the screen over.
+	startOver := func() error {
+		view.Close()
+		var err error
+		if view, err = attach(true); err != nil {
+			return err
+		}
+		io.WriteString(out, redraw)
+		out.Write(view.Replay)
+		return nil
+	}
+	var poll <-chan time.Time
+	if !redraws {
+		tick := time.NewTicker(attachSizePoll)
+		defer tick.Stop()
+		poll = tick.C
+	}
 
 	send := func(data []byte) error {
 		if len(data) == 0 {
@@ -341,13 +365,9 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 			case err != nil:
 				return "", false, fmt.Errorf("the session host stopped showing %s: %w", id, err)
 			case end.Reason == sessionhost.AttachBehind || end.Reason == sessionhost.AttachResized:
-				// This terminal fell behind, or the Session is another size now: start the screen over.
-				view.Close()
-				if view, err = attach(true); err != nil {
+				if err := startOver(); err != nil {
 					return "", false, err
 				}
-				io.WriteString(out, redraw)
-				out.Write(view.Replay)
 			case end.Reason == sessionhost.AttachExited && end.ExitCode != nil:
 				return fmt.Sprintf("[%s exited with code %d]", id, *end.ExitCode), false, nil
 			default:
@@ -375,6 +395,15 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 		case <-resized:
 			if err := takeSize(); err != nil {
 				return "", false, err
+			}
+		case <-poll:
+			callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			info, err := client.Info(callCtx, id)
+			cancel()
+			if err == nil && (info.Cols != shown[0] || info.Rows != shown[1]) {
+				if err := startOver(); err != nil {
+					return "", false, err
+				}
 			}
 		case <-ctx.Done():
 			return "", false, ctx.Err()
