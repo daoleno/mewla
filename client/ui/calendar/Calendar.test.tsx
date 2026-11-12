@@ -203,7 +203,7 @@ describe("the Calendar tab", () => {
     await app.waitFor("text:Still running.", SLOW);
     expect(app.shows("id:open-session")).toBe(false);
     expect(app.shows("id:session-menu")).toBe(false);
-    await app.host.send("links.open", { url: "mewla://calendar" });
+    // Back from the run, then from the item, to the agenda.
     await app.back();
     await app.back();
     await app.waitFor("id:calendar-item-Digest", SLOW);
@@ -322,15 +322,14 @@ describe("notifications", () => {
     expect(app.shows("id:work-detail")).toBe(true);
   }, 20_000);
 
-  test("another computer: the last one's Calendar item and Work pages close", async () => {
+  test("another computer: the last one's pages close (the stack returns home)", async () => {
     const brain = { current_work: [{ work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() }] };
     const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)], brain }), storage: pairedTwo, platform: "android", network: expoTokenService });
     await app.host.send("links.open", { url: "mewla://brain/work/w-q?serverId=s1" });
     await app.waitFor("id:work-detail", SLOW);
+    // A notification's link replaces what is above home: the item, over the Calendar.
     await app.host.send("links.open", { url: "mewla://calendar?id=Call%20the%20bank&serverId=s1" });
     await app.waitFor("id:calendar-item-page", SLOW);
-    // Both are open, the Work page on its hidden tab.
-    expect(app.shows("id:work-detail")).toBe(true);
     await app.host.send("links.open", { url: "mewla://sessions?serverId=s2" });
     await app.waitUntil(() => !app.shows("id:calendar-item-page") && !app.shows("id:work-detail"), SLOW);
   }, 20_000);

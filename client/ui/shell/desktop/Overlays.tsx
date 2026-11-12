@@ -12,11 +12,12 @@ import {
   type DesktopCommand,
 } from "../../../core/web/shortcuts";
 import { Icon } from "../../kit/Icon";
-import { startNewChat } from "../../screens/Brain";
+import { startNewChat } from "../../home/Home";
 import { newSessionOpen } from "../../screens/NewSession";
 import { workers } from "../../session";
 import { workSurface } from "../../work/state";
-import { brainNav, desktop, openPlace, openSession, selectedTab } from "../Shell";
+import { desktop, openPlace } from "../Shell";
+import { openSession, openWorkDetail } from "../nav";
 import { focusComposer, terminalOwnsKeys } from "./keys";
 
 /** The ⌘K palette and the `?` cheat sheet are open. */
@@ -40,8 +41,7 @@ function run(action: PaletteAction | DesktopCommand) {
     case "session": return openSession(action.workerId);
     case "work":
       if (action.sessionId) return openSession(action.sessionId);
-      selectedTab.set(0);
-      return brainNav.setRoutes([brainNav.routes()[0], { name: "workDetail", workId: action.workId }]);
+      return openWorkDetail(action.workId);
   }
 }
 

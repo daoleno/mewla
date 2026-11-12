@@ -110,7 +110,7 @@ An invitation alone is not sufficient for CI: the exact role and Certificates, I
 
 ## Live Activity and widget extension
 
-The Dynamic Island, Lock Screen Live Activity and home-screen widgets are one WidgetKit extension, `MewlaLiveWidgets`, embedded in the app. In the NSH client (`client/ios/LiveExtension`, same name, bundle id and widget kinds) it is always built: every release archive has a second signed target and both targets are signed into the App Group, so every run needs the steps below for its identity. The Expo app's `MEWLA_IOS_LIVE` repository variable and `live_extension` input no longer exist in the release workflow.
+The Dynamic Island, Lock Screen Live Activity and home-screen widgets are one WidgetKit extension, `MewlaLiveWidgets`, embedded in the app. It lives in `client/ios/LiveExtension` and is always built: every release archive has a second signed target and both targets are signed into the App Group, so every run needs the steps below for its identity.
 
 Every release so far ships the Preview identity (tag pushes always build `preview` under `app-store-connect-preview`); the Production Environment `app-store-connect` does not exist yet. So the steps below are needed for Production only if Production ever starts being used; a Production dispatch without them fails at the validation step with a named missing-secret error.
 

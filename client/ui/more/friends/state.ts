@@ -14,7 +14,7 @@ import {
 import { signInComputer } from "../../../core/friends/signIn";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { daemon } from "../daemon";
-import { pet } from "../pet/pets";
+import { pet } from "../../pets/pets";
 
 /**
  * Friends as the current computer has it. The computer is the only truth: it holds

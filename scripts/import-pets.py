@@ -36,7 +36,7 @@ DEFAULT_SOURCE = Path.home() / "workspace" / "mewla-cat-lab" / "imagegen" / "pet
 CLIPS = ("homeless", "offline", "waking", "idle", "working", "delegating",
          "attention", "delivered", "going_back")
 # The app canvas: the default pet is tall enough for a 120 pt pet on a 2x
-# screen; the others are smaller so all ten fit the bundle budget.
+# screen; the others are smaller so the set fits the bundle budget.
 APP_SIDE = 256
 OTHER_SIDE = 192
 APP_QUALITY = 78

@@ -4,7 +4,7 @@ DSH is a native New Session launcher, not a normal Mewla Provider Chat or TUI. C
 host and delegated defaults remain unchanged. Mewla supports the current upstream
 release only (`@deepseek-ai/dsh` 0.2.1, installed with `npm i -g @deepseek-ai/dsh@next`).
 It launches the installed `dsh` web profile on loopback behind an exact Session
-bridge; it does not embed Cordis or the DSH web application in React Native. The
+bridge; it does not embed Cordis or the DSH web application in the Mewla client. The
 bridge runs `dsh --profile web --host 127.0.0.1 --port <port> --no-open` and adds a
 private `--patch` that sets the persistence root and restates the `webserver` row on
 loopback, so a user profile layer cannot widen the private listener. It does not

@@ -4,7 +4,7 @@ import { kindLabel } from "../../core/calendar/model";
 import { AppSheet } from "../shell/AppSheet";
 import { openedInCalendar, shownAlert } from "./alerts";
 import { clock, ensureZones } from "./clock";
-import { showCalendarItem } from "./routes";
+import { openCalendarItem } from "../shell/nav";
 import { calendar } from "./state";
 
 /**
@@ -46,7 +46,7 @@ export function CalendarAlertCard() {
     const shown = item();
     if (!shown) return;
     openedInCalendar(shown);
-    showCalendarItem(shown.id);
+    openCalendarItem(shown.id);
   };
   return (
     <AppSheet open={Boolean(shownAlert())} onOpenChange={() => {}} closeOnBackdropPress={false} closeOnEscape={false}

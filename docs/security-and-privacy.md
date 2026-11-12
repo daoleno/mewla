@@ -304,12 +304,6 @@ mewla devices revoke -id <device-id>
 Revocation closes the device's live connections immediately and rejects its
 later requests.
 
-## Diagrams in Markdown
-
-Mermaid diagrams in agent output are treated as untrusted. They render in an
-isolated view that cannot load network resources, open windows or run click
-handlers; unsupported or oversized diagrams are shown as source.
-
 ## Report a vulnerability
 
 Report security issues privately to the Mewla maintainers, as described in the

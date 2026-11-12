@@ -4,7 +4,7 @@
  * page host agree without a browser (client/DESIGN.md "Desktop web").
  */
 
-/** From this width a non-phone window gets the desktop layout; below it the tabs stay. */
+/** From this width a non-phone window gets the desktop layout; below it the phone's one stack. */
 export const DESKTOP_MIN_WIDTH = 1024;
 
 /** The one gate for the desktop layout: not a phone build, and at least 1024 pt wide. */
@@ -78,11 +78,12 @@ export type PlacePage =
   | { name: "extensions-agent"; scope: string }
   | { name: "workFile"; id: string };
 
-/** A place with a URL: a sidebar row, Brain's Work list, or one Session of the current computer; `page`, a page under it. */
+/** A place with a URL: a sidebar row, the computer page, a Work file, or one Session of the current computer; `page`, a page under it. */
 export type WebPlace =
   | { key: Exclude<DesktopPlaceKey, "sessions">; page?: PlacePage }
   | { key: "sessions" }
-  | { key: "work"; page?: PlacePage }
+  | { key: "computer" }
+  | { key: "work"; page: PlacePage }
   | { key: "session"; workerId: string };
 
 /** Settings' pages by their path segment (the Expo app's `app/settings/*.tsx`). */
@@ -152,9 +153,10 @@ function pageOfSegments(first: string, rest: string[], params: URLSearchParams):
   }
 }
 
-/** The sidebar row a place selects: a Session selects Sessions, Work selects Brain. */
+/** The sidebar row a place selects: a Session selects Sessions, a Work file Brain, the computer page Settings. */
 export function sidebarKeyOf(place: WebPlace): DesktopPlaceKey {
   if (place.key === "work") return "brain";
+  if (place.key === "computer") return "settings";
   if (place.key === "session") return "sessions";
   return place.key;
 }
@@ -162,8 +164,8 @@ export function sidebarKeyOf(place: WebPlace): DesktopPlaceKey {
 /**
  * Where a place lives: its name (`/calendar`, `/sessions/<id>`), the same as the
  * daemon's app routes (`/screen`, `/resources`, `/friends`). The page carries
- * `<base href="/">`, so a deep path loads its assets from the root. The Expo web
- * app's paths (`/list`, `/plugins`, `/terminal/<id>`) still open their place.
+ * `<base href="/">`, so a deep path loads its assets from the root. `/plugins` is where the
+ * daemon's OAuth callback returns a web sign-in (daemon/connections/oauth.go).
  */
 export function placePath(place: WebPlace): string {
   if ("page" in place && place.page) return pagePath(place.page);
@@ -194,45 +196,22 @@ export function placeOfPath(location: string): WebPlace | null {
   if (page) return { key: placeKeyOfPage(page), page };
   switch (first) {
     case "": return { key: "brain" };
-    case "work": return { key: "work" };
-    case "sessions":
-    case "list":
-    // The Expo app's Session was `/terminal/<id>?serverId=…`.
-    case "terminal": {
-      const workerId = segments[1] ?? url.searchParams.get("id") ?? "";
+    case "sessions": {
+      const workerId = segments[1] ?? "";
       return workerId ? { key: "session", workerId } : { key: "sessions" };
     }
+    case "computer": return { key: "computer" };
     case "calendar": return { key: "calendar" };
     case "extensions":
     case "plugins":
       return { key: "extensions" };
-    case "screen":
-    // The Phone was a row in Screen.
-    case "phone":
-      return { key: "screen" };
+    case "screen": return { key: "screen" };
     case "stats": return { key: "stats" };
     case "resources": return { key: "resources" };
     case "friends": return { key: "friends" };
     case "settings": return { key: "settings" };
     default: return null;
   }
-}
-
-/**
- * The place a `mewla://` link names that no other part of the app takes: `mewla://stats`,
- * `…/resources`, `…/screen`, `…/terminal/<id>`, `…/work/<id>`, `…/friends/post/<id>`,
- * `…/plugins/<service>`, as the Expo app's routes opened them. Brain, Sessions, Calendar, Live,
- * Settings, Phone and Plugins' own links (and its sign-in returns) have their handlers: null.
- */
-export function placeOfLink(url: string): WebPlace | null {
-  const match = /^mewla:\/\/([^?#]*)(\?[^#]*)?/i.exec(url.trim());
-  if (!match) return null;
-  const path = match[1].replace(/\/+$/, "");
-  const first = path.split("/")[0].toLowerCase();
-  if (["", "brain", "sessions", "calendar", "live", "settings", "phone", "more"].includes(first)) return null;
-  // Plugins' own link, and a sign-in return (`?state=`, whatever its path), are Plugins' to finish.
-  if (first === "plugins" && (!path.includes("/") || new URLSearchParams(match[2] ?? "").has("state"))) return null;
-  return placeOfPath(`/${path}${match[2] ?? ""}`);
 }
 
 /** The browser tab's title: the page's own when it has one (a Session's name), else the place's. */
@@ -245,13 +224,14 @@ function placeTitle(place: WebPlace): string {
   switch (place.key) {
     case "work": return "Work";
     case "session": return "Session";
+    case "computer": return "Computer";
     default: return placeLabel(place.key);
   }
 }
 
 /** The sidebar's width: dragged, saved, and clamped to its range. */
 export const SIDEBAR_WIDTH = { initial: 264, min: 216, max: 400 } as const;
-/** The Expo web app's key: its localStorage entries are copied over once, so the width carries over. */
+/** Where the sidebar's width is kept. */
 export const SIDEBAR_WIDTH_KEY = "mewla.desktop.sidebarWidth";
 
 export function clampPanelWidth(value: number, min: number, max: number): number {

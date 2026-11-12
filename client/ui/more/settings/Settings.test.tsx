@@ -45,15 +45,14 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("Settings", () => {
-  test("lists the computer, the channels, the agents, Labs, Appearance, Pet and About", async () => {
+  test("lists the channels, the agents, Labs, Appearance, Pet and About", async () => {
     const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "connected", enabled: true, bot_username: "mewla_bot", owner_hint: "@me", binding_pending: false } } : null), {
       network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
     });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("id:pair-another");
     await app.waitFor("text:@mewla_bot");
     const texts = app.texts();
-    for (const word of ["Desk", "Current", "Telegram", "Model Providers", "Outside agents", "Friends", "Auto", "Light", "Dark", "Open-source Licenses"]) expect(texts).toContain(word);
+    for (const word of ["Telegram", "Model Providers", "Outside agents", "Friends", "Auto", "Light", "Dark", "Open-source Licenses"]) expect(texts).toContain(word);
   });
 
   test("the appearance chosen is kept in the Expo app's key", async () => {
@@ -67,14 +66,20 @@ describe("Settings", () => {
 });
 
 describe("Pet", () => {
-  test("the pet the Expo app chose stays chosen, and a new choice is kept in the same key", async () => {
+  test("the pet the Expo app chose stays chosen, and a new choice applies at once and is kept in the same key", async () => {
+    const c = computer({ name: "settings-pet" }, () => null, { storage: { "mewla:pet_preference": "p13" } });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Bit at work");
+    await app.press("id:pet-p14");
+    await app.waitFor("text:Doodle at work");
+    await app.waitFor("text:Doodle moved in");
+    await app.waitUntil(() => app.storage()["mewla:pet_preference"] === "p14");
+  });
+
+  test("a pet that was removed falls back to Dango", async () => {
     const c = computer({ name: "settings-pet" }, () => null, { storage: { "mewla:pet_preference": "p03" } });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("id:pet-chosen");
-    await app.waitUntil(() => app.texts()[0] === "Pip");
-    await app.press("id:pet-p09");
-    await app.waitUntil(() => app.texts()[0] === "Tama");
-    await app.waitUntil(() => app.storage()["mewla:pet_preference"] === "p09");
+    await app.waitFor("text:Dango at work");
   });
 });
 
@@ -336,25 +341,12 @@ describe("In a browser", () => {
     for (const name of alertCalls) handlers[name] = () => null;
     const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, handlers } });
     await app.waitFor("id:settings-virtual-screen");
-    await app.waitFor("id:pair-another");
     for (const id of ["settings-friends", "settings-phone", "settings-iphone", "strong-alerts", "full-screen-alerts"]) expect(app.shows(`id:${id}`)).toBe(false);
     expect(app.texts()).not.toContain("Calendar");
     for (const word of ["Appearance", "Pet", "About", "Privacy Policy", "Support", "Open-source Licenses"]) expect(app.texts()).toContain(word);
     await app.wait(200);
     expect(app.requests().some((r) => r.url.startsWith("http://desk.test:9877/iphone"))).toBe(false);
     expect(app.host.calls().filter((call) => alertCalls.includes(call.name))).toEqual([]);
-  });
-
-  test("the computer serving the page has no connection-path mark", async () => {
-    // On a phone this LAN address shows the link mark (SettingsFlows "the computer in use shows how the phone reaches it").
-    const c = computer({ name: "settings" }, () => null, { platform: "web", network: { "GET http://192.168.1.20:9877/auth-check": { status: 503 } } });
-    const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, params: { page: { name: "settings" }, server: { url: "ws://192.168.1.20:9877/ws" } } } });
-    await app.waitFor("id:pair-another");
-    await app.wait(100);
-    expect(app.shows("id:computer-path")).toBe(false);
-    expect(app.texts()).toContain("Current");
-    await app.longPress("id:computer-s1");
-    expect(app.texts()).not.toContain("LAN · 192.168.1.20");
   });
 });
 

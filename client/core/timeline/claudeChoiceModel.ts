@@ -114,18 +114,6 @@ export function choiceFromPrompt(
 }
 
 /**
- * The pending choice the card should show: the latest pending one, unless the
- * daemon already said its question passed (the transcript can lag the screen).
- */
-export function visiblePendingChoice(
-  events: readonly CodexConversationEvent[] | undefined,
-  gone: ReadonlySet<string>,
-): (CodexConversationEvent & { choice: ConversationChoice }) | null {
-  const pending = latestPendingChoice(events);
-  return pending?.call_id && gone.has(pending.call_id) ? null : pending;
-}
-
-/**
  * Whether the agent is waiting on a question: its newest choice has no result
  * yet. Unlike the card, this ignores the daemon's "passed", so the Working row
  * stays away until the transcript settles the question.

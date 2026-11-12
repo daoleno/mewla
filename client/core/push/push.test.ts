@@ -16,6 +16,9 @@ describe("a tapped push opens", () => {
   test("the calendar item, and the Sessions list for the inbox", () => {
     expect(pushLink({ screen: "calendar", server_id: "s1", calendar_id: "item-1" })).toBe("mewla://calendar?id=item-1&serverId=s1");
     expect(pushLink({ screen: "inbox" })).toBe("mewla://sessions");
+    // Friends' pushes (daemon/server/friends.go) open its drafts or its notifications.
+    expect(pushLink({ type: "friends", screen: "drafts" })).toBe("mewla://friends/drafts");
+    expect(pushLink({ type: "friends", screen: "notifications" })).toBe("mewla://friends/notifications");
   });
   test("nothing for a push it does not know", () => {
     expect(pushLink({ screen: "unknown" })).toBeNull();

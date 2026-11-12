@@ -28,23 +28,35 @@ describe("first run", () => {
 });
 
 describe("a paired phone", () => {
-  test("opens on the four sections, with the computer's connection in More", async () => {
-    const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
-    await app.waitFor("id:composer");
-    await app.host.send("links.open", { url: "mewla://more" });
-    await app.waitFor("id:connection");
-    expect(app.texts().join(" ")).toMatch(/Desk · (Connecting…|Offline)/);
+  test("the header cat plays its state's clip once, then holds the still; with less motion only the still", async () => {
+    const app = await open("./App.tsx", { host, storage: paired, platform: "android", clock: {} });
+    // Connecting, then offline: it settles down (going_back) into the grey nap, and holds its still.
+    await app.waitFor("text:Offline");
+    expect(app.count("id:home-cat-sprite >> id:pet-still")).toBe(0);
+    await app.clock!.runFor(6_000);
+    await app.waitFor("id:home-cat-sprite >> id:pet-still");
+    const still = await open("./App.tsx", { host, storage: paired, platform: "android", reducedMotion: true });
+    await still.waitFor("id:home-cat-sprite >> id:pet-still");
+    await still.waitFor("text:Offline");
+    expect(still.count("id:home-cat-sprite >> id:pet-still")).toBe(1);
   });
 
-  test("More lists every destination once, and Settings lists the computers", async () => {
+  test("opens on home: the cat, Brain, the state control and ⋯ over the thread; no tab bar", async () => {
+    const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
+    await app.waitFor("id:composer");
+    for (const id of ["home-cat", "brain-menu"]) expect(app.count(`id:${id}`)).toBe(1);
+    expect(app.texts()).toContain("Brain");
+    expect(app.count("id:tabs")).toBe(0);
+  });
+
+  test("the cat opens the computer page: the computer and its connection, every rare place once, then Settings", async () => {
     const app = await open("./App.tsx", { host, storage: paired, platform: "ios" });
-    await app.host.send("links.open", { url: "mewla://more" });
-    await app.waitFor("id:more-Settings");
-    for (const title of ["Screen", "Extensions", "Stats", "Resources", "Settings"]) expect(app.count(`id:more-${title}`)).toBe(1);
-    await app.press("id:more-Settings");
-    await app.waitFor("id:pair-another");
+    await app.waitFor("id:home-cat");
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-settings");
     expect(app.texts()).toContain("Desk");
-    expect(app.texts()).toContain("Current");
+    for (const id of ["screen", "extensions", "stats", "resources", "settings"]) expect(app.count(`id:computer-${id}`)).toBe(1);
+    expect(app.count("id:pair-another")).toBe(1);
   });
 });
 
@@ -52,19 +64,19 @@ describe("Brain", () => {
   test("says the computer is offline instead of spinning, and the composer is there", async () => {
     const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
     await app.waitFor("id:brain-notice");
-    await app.waitFor("text:Your computer is offline", { timeout: 15_000 });
+    await app.waitFor("text:Desk is offline", { timeout: 15_000 });
     expect(app.shows("id:composer")).toBe(true);
   }, 20_000);
 });
 
-describe("Sessions", () => {
-  test("says the computer is offline with a way to retry, and New session waits for it", async () => {
+describe("the tray", () => {
+  test("offline, it says so with Try again and Details; New session is there", async () => {
     const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
-    await app.waitFor("id:sessions-empty");
-    await app.waitFor("text:Server offline", { timeout: 15_000 });
-    expect(app.texts()).toContain("Retry connection");
-    expect(app.shows("id:new-session")).toBe(true);
+    await app.waitFor("id:tray-notice", { timeout: 15_000 });
+    expect(app.texts()).toContain("Try again");
+    expect(app.texts()).toContain("Details");
+    expect(app.shows("id:tray-new")).toBe(true);
   }, 20_000);
 });
 
@@ -104,15 +116,14 @@ describe("Dark", () => {
     });
   }
 
-  test("no text is drawn black on Brain, More or Settings", async () => {
+  test("no text is drawn black on Brain, the computer page or Settings", async () => {
     const app = await open("./App.tsx", { host, storage: { ...paired, "mewla:theme_preference": "classic-dark" }, platform: "android", colorScheme: "light" });
-    await app.waitFor("text:Your computer is offline", { timeout: 15_000 });
+    await app.waitFor("text:Desk is offline", { timeout: 15_000 });
     expect(blackTexts(app)).toEqual([]);
-    await app.host.send("links.open", { url: "mewla://more" });
-    await app.waitFor("id:more-Settings");
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-settings");
     expect(blackTexts(app)).toEqual([]);
-    await app.press("id:more-Settings");
-    await app.waitFor("id:pair-another");
+    await app.press("id:computer-settings");
     await app.waitFor("text:Dark");
     expect(blackTexts(app)).toEqual([]);
     // The theme's dark ink, from ui/theme.json.

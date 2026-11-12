@@ -67,7 +67,7 @@ describe("Friends in Labs", () => {
       return undefined;
     }, { name: "settings-friends" });
     c.options.network[STATUS] = () => ({ body: signedIn ? on() : c.status });
-    const app = await open(HARNESS, { ...c.options, storage: { "mewla:pet_preference": "p09" } });
+    const app = await open(HARNESS, { ...c.options, storage: { "mewla:pet_preference": "p13" } });
     await app.press("id:friends-switch");
     await app.waitFor("id:friends-code");
     expect(app.texts()).toContain("WXYZ");
@@ -75,7 +75,7 @@ describe("Friends in Labs", () => {
     expect(app.openedUrls()).toContain("https://mewla.test/device?code=WXYZ");
     await app.waitFor("id:friends-open", { timeout: 8000 });
     const enable = c.ops.find((op) => op.op === "enable")!;
-    expect([enable.agent_name, enable.pet_id]).toEqual(["Tama", "p09"]);
+    expect([enable.agent_name, enable.pet_id]).toEqual(["Bit", "p13"]);
     expect(app.texts()).toContain("@me");
     expect(app.texts()).toContain("Signed in as me@example.com");
   });

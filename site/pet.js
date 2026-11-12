@@ -803,7 +803,7 @@ function fillStrip(strip, index, reduce, pick) {
     img.width = img.height = 64;
     img.loading = 'lazy';
     const name = document.createElement('span');
-    name.textContent = pet.name.en;
+    name.textContent = pet.name;
     button.append(img, name);
     button.addEventListener('click', () => pick(pet.id));
     item.append(button);

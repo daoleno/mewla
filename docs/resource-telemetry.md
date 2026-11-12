@@ -337,7 +337,7 @@ interval consumer CPU is unavailable (`—`), while measured zero is `0%`.
 
 ## Resources dashboard presentation
 
-The shared React Native view uses its measured content width: four trend cards
+The shared view (`client/ui/more/resources`) uses its measured content width: four trend cards
 at 1040 pt and above, two below that, and one below 340 pt. Consumers use aligned
 columns at 760 pt and a stacked row on phones. Both use the same normalized data,
 owner filters, sorting and inline process disclosure; there is no web-only view.
@@ -386,4 +386,4 @@ cd client/ui && ~/.nsh/bin/nsh test more/resources
 ```
 
 The Refresh callback is a no-op in this static fixture; real refresh/polling is
-covered by the lifecycle tests (`core/resources/poll.test.ts`).
+covered by the lifecycle tests (`client/core/resources/poll.test.ts`).

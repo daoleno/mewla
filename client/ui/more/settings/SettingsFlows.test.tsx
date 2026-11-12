@@ -1,5 +1,4 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -35,88 +34,7 @@ function setup(params: Record<string, unknown>, answer: Answer, extra: Record<st
   };
 }
 
-const desk = { id: "s1", name: "Desk", url: "ws://desk.test:9877/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64), transportKind: "manual" };
-const studio = { id: "s2", name: "Studio", url: "ws://studio.test:9877/ws", daemonId: "c".repeat(64), daemonPublicKey: "d".repeat(64), transportKind: "manual" };
-const twoComputers = { "mewla:v3:servers": JSON.stringify([desk, studio]) };
 const none = () => null;
-
-describe("Computers", () => {
-  test("removing a computer tells the others to forget it, and names the ones that did not answer", async () => {
-    const s = setup({ page: { name: "settings" }, servers: [studio] }, none, {
-      storage: twoComputers,
-      network: {
-        "GET http://desk.test:9877/auth-check": { status: 503 },
-        "GET http://studio.test:9877/auth-check": { status: 503 },
-        "DELETE http://desk.test:9877/computers": { status: 503, body: "busy" },
-        "DELETE http://studio.test:9877/devices": { status: 200, body: "{}" },
-      },
-    });
-    const app = await open(HARNESS, s.options);
-    app.onDialog((dialog) => (dialog.title === "Remove Studio?" ? "Remove" : null));
-    await app.press("id:computer-s2");
-    await app.waitFor("id:computer-remove");
-    await app.waitFor("id:computer-remove");
-
-    await answering(app, () => app.press("id:computer-remove"));
-    await app.waitFor("id:removed-notice");
-    expect(app.texts()).toContain("Desk didn't answer");
-    expect(app.texts()).toContain('It still works with Studio. On it, run mewla computers remove "Studio".');
-    const told = app.requests().find((r) => r.method === "DELETE" && r.url === "http://desk.test:9877/computers");
-    expect(JSON.parse(String(told?.body))).toEqual({ expected_daemon_id: studio.daemonId });
-    expect(app.requests().some((r) => r.method === "DELETE" && r.url === "http://studio.test:9877/devices")).toBe(true);
-    expect(app.shows("id:computer-s2")).toBe(false);
-    expect(app.storage()["mewla:v3:servers"]).not.toContain("studio.test");
-  });
-
-  test("when every other computer answers, nothing is left to say", async () => {
-    const s = setup({ page: { name: "settings" }, servers: [studio] }, none, {
-      storage: twoComputers,
-      network: {
-        "GET http://desk.test:9877/auth-check": { status: 503 },
-        "GET http://studio.test:9877/auth-check": { status: 503 },
-        "DELETE http://desk.test:9877/computers": { status: 200, body: "{}" },
-        "DELETE http://studio.test:9877/computers": { status: 200, body: "{}" },
-        "DELETE http://studio.test:9877/devices": { status: 200, body: "{}" },
-      },
-    });
-    const app = await open(HARNESS, s.options);
-    app.onDialog(() => "Remove");
-    await app.press("id:computer-s2");
-    await app.waitFor("id:computer-remove");
-
-    await answering(app, () => app.press("id:computer-remove"));
-    await app.waitUntil(() => !app.shows("id:computer-s2") && app.shows("id:pair-another"));
-    // Studio forgets Desk too, both ways.
-    expect(app.requests().some((r) => r.method === "DELETE" && r.url === "http://studio.test:9877/computers")).toBe(true);
-    expect(app.shows("id:removed-notice")).toBe(false);
-  });
-
-  test("each return to Settings asks the computers again", async () => {
-    const s = setup({ page: { name: "settings" } }, none, { network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
-    const app = await open(HARNESS, s.options);
-    const probes = () => app.requests().filter((r) => r.url === "http://desk.test:9877/auth-check").length;
-    await app.waitUntil(() => probes() === 1);
-    await app.press("id:settings-pet");
-    await app.waitFor("id:pet-page");
-    await app.back();
-    await app.waitUntil(() => probes() === 2);
-    await app.setLifecycle("background");
-    await app.setLifecycle("active");
-    await app.waitUntil(() => probes() === 3);
-  });
-
-  test("the computer in use shows how the phone reaches it; a long press says more", async () => {
-    const s = setup({ page: { name: "settings" }, server: { url: "ws://192.168.1.20:9877/ws" } }, none, {
-      network: { "GET http://192.168.1.20:9877/auth-check": { status: 503 } },
-    });
-    const app = await open(HARNESS, s.options);
-    await app.waitFor("id:computer-path");
-    await app.longPress("id:computer-s1");
-    await app.waitFor("text:LAN · 192.168.1.20");
-    await app.host.send("app.daemonState", "waiting");
-    await app.waitUntil(() => !app.shows("id:computer-path"));
-  });
-});
 
 describe("Computer page", () => {
   test("the address shows as typed, and a failed look at agent use says why", async () => {
@@ -328,25 +246,14 @@ describe("Settings rows", () => {
 });
 
 describe("Pet", () => {
-  test("the preview acts out Brain's states, hopping out of the seal and back", async () => {
-    const s = setup({ page: { name: "settings-pet" } }, none, { clock: {} });
+  test("six pets by their portrait, Dango chosen, then its six poses as stills", async () => {
+    const s = setup({ page: { name: "settings-pet" } }, none);
     const app = await open(HARNESS, s.options);
-    const clock = app.clock!;
-    await app.waitFor("id:pet-clip-delegating");
-    await clock.runFor(3_200);
-    await app.waitFor("id:pet-clip-working");
-    await clock.runFor(3_200);
-    await app.waitFor("id:pet-clip-delivered");
-    await clock.runFor(3_200);
-    await app.waitFor("id:pet-clip-going_back");
-    await clock.runFor(1_400);
-    await app.waitFor("id:pet-clip-idle");
-  });
-
-  test("with less motion asked for, the pet stands still", async () => {
-    const s = setup({ page: { name: "settings-pet" } }, none, { reducedMotion: true });
-    const app = await open(HARNESS, s.options);
-    await app.waitFor("id:pet-still");
+    await app.waitFor("text:Dango at work");
+    for (const id of ["p05", "p11", "p12", "p13", "p14", "p15"]) expect(app.shows(`id:pet-${id}`)).toBe(true);
+    for (const caption of ["Quiet", "Waking", "Working", "Delegating", "Needs you", "Offline"]) expect(app.texts()).toContain(caption);
+    expect(app.count("id:pet-still")).toBe(6);
+    expect(app.count("id:pet-clip-idle")).toBe(0);
   });
 });
 
