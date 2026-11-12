@@ -62,7 +62,7 @@ export function ChatImage(props: { src: string; alt?: string; load?: PictureLoad
   };
   const label = () => props.alt || "Picture";
   return (
-    <View testID="chat-image" class={`overflow-hidden bg-card ${props.frame ? "rounded-2xl" : "my-1 rounded-xl"}`} style={box()}>
+    <View testID="chat-image" class={`overflow-hidden ${props.frame ? "rounded-2xl bg-card" : "my-1 rounded-xl"}`} style={box()}>
       {picture.failed() ? (
         <Button testID="chat-image-retry" accessibilityLabel={`Load ${label()} again`} onPress={picture.retry} class="h-full w-full items-center justify-center active:opacity-70">
           <Icon name="refresh" size={22} />
