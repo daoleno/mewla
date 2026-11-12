@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentUseStatus } from "../settings/computer";
 import type { ConnectionIssue } from "../settings/connectionIssue";
-import { catNeedsYouOf, fixButtonKind, needsFixing, optionalUpdate, otherComputerState, type NeedsFixingInput } from "./needsFixing";
+import { catNeedsYouOf, fixButtonKind, needsFixing, optionalUpdate, type NeedsFixingInput } from "./needsFixing";
 
 const base: NeedsFixingInput = {
   connection: "connected",
@@ -42,6 +42,16 @@ describe("needs fixing", () => {
   test("before the phone has looked, a failing connection is Can't connect (Relay unreachable through the relay)", () => {
     expect(needsFixing({ ...base, connection: "waiting", problem: "x" })[0]!.title).toBe("Can't connect");
     expect(needsFixing({ ...base, connection: "waiting", problem: "x", relay: true })[0]!.title).toBe("Relay unreachable");
+  });
+
+  test("through the relay, the computer's own dated word names it; the phone's other findings still win", () => {
+    const dated = { ...base, connection: "waiting" as const, problem: "x", relay: true, relayDiagnosis: "Relay unreachable · 13:40" };
+    expect(needsFixing(dated)[0]!.title).toBe("Relay unreachable · 13:40");
+    expect(needsFixing({ ...dated, issue: issue("network_unreachable") })[0]!.title).toBe("Relay unreachable · 13:40");
+    expect(needsFixing({ ...dated, issue: issue("proxy_error", "Proxy error") })[0]!.title).toBe("Proxy error");
+    expect(needsFixing({ ...dated, issue: issue("device_not_paired") })[0]!.title).toBe("Device not paired");
+    // A computer paired by its address: its relay is not how the phone reaches it.
+    expect(needsFixing({ ...dated, relay: false })[0]!.title).toBe("Can't connect");
   });
 
   test("connecting shows nothing to fix; offline hides what the computer reported before", () => {
@@ -91,18 +101,11 @@ describe("needs fixing", () => {
 });
 
 describe("other computers and the cat", () => {
-  test("states read Online, Pair again (needs you) and Offline (dimmed)", () => {
-    expect(otherComputerState({ state: "online" })).toEqual({ word: "Online", needsYou: false, dim: false });
-    expect(otherComputerState({ state: "unpaired" })).toEqual({ word: "Pair again", needsYou: true, dim: false });
-    expect(otherComputerState({ state: "offline" })).toEqual({ word: "Offline", needsYou: false, dim: true });
-    expect(otherComputerState(undefined).word).toBe("");
-  });
-
-  test("the cat's dot: this computer blocked, or another to pair again; an optional update or offline is no dot", () => {
+  test("the cat's dot: this computer blocked, or another computer's row has one; an optional update or offline is no dot", () => {
     const pair = needsFixing({ ...base, connection: "waiting", issue: issue("device_not_paired") });
-    expect(catNeedsYouOf({ rows: pair, otherChecks: [] })).toBe(true);
-    expect(catNeedsYouOf({ rows: [], otherChecks: [{ state: "offline" }, { state: "unpaired" }] })).toBe(true);
+    expect(catNeedsYouOf({ rows: pair, others: [] })).toBe(true);
+    expect(catNeedsYouOf({ rows: [], others: [{ needsYou: false }, { needsYou: true }] })).toBe(true);
     const offline = needsFixing({ ...base, connection: "waiting", problem: "x" });
-    expect(catNeedsYouOf({ rows: offline, otherChecks: [{ state: "offline" }] })).toBe(false);
+    expect(catNeedsYouOf({ rows: offline, others: [{ needsYou: false }] })).toBe(false);
   });
 });

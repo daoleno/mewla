@@ -16,7 +16,7 @@ import { ComputerPage } from "../ComputerPage";
  * The computer page on the one stack, for `nsh test`: home under it (a stand-in), the computer
  * page on top, its children as the app shows them. The test plays the computer as the More
  * harness does (`app.daemon` answers requests; `app.daemonState`, `app.sessionProblem`), names
- * the other computers (`host.params.servers`) and Brain's state (`app.brain`).
+ * the other computers (`host.params.servers`), Brain's state (`app.brain`) and what it sends unasked (`app.daemonPush`).
  */
 installPlatform(nshPlatform());
 
@@ -40,6 +40,8 @@ host.on("app.daemonState", (state) => {
 });
 host.on("app.sessionProblem", (why) => problem.set(String(why ?? "")));
 host.on("app.brain", (snapshot) => brain.set(snapshot as BrainSnapshot));
+// The computer sends a frame unasked (a `computers` broadcast).
+host.on("app.daemonPush", (frame) => fake.push(frame as Frame));
 
 /** What the page asked its owner to open outside itself. */
 const opened = signal("");

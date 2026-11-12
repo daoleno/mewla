@@ -38,6 +38,8 @@ export interface NeedsFixingInput {
   check: ComputerCheck | undefined;
   /** Paired through Mewla Relay. */
   relay: boolean;
+  /** The computer's own last word on its relay connection, dated ("Relay unreachable · 13:40"; core/computer/computers `relayDiagnosis`). */
+  relayDiagnosis?: string | null;
   /** Brain's host problem from the snapshot (`brain.host_problem`). */
   hostProblem: { code: string; executor: string } | undefined;
   agentUse: AgentUseStatus | null;
@@ -58,12 +60,15 @@ function connectionRow(input: NeedsFixingInput): FixRow | null {
   if (input.issue?.code === "device_not_paired" || input.check?.state === "unpaired") {
     return { key: "pair", title: "Device not paired", button: "Pair", action: { kind: "pair" }, blocking: true };
   }
+  // Through the relay, the computer's own dated word on it says more than "unreachable"; any other
+  // finding of the phone's (the wrong computer, a proxy, a refused upgrade) is the phone's to name.
+  const relayWords = input.relay ? input.relayDiagnosis || "Relay unreachable" : null;
   if (input.issue) {
-    const title = input.issue.code === "network_unreachable" ? (input.relay ? "Relay unreachable" : "Computer unreachable") : input.issue.title;
+    const title = input.issue.code === "network_unreachable" ? relayWords ?? "Computer unreachable" : input.issue.title;
     return { key: "connection", title, button: "Try again", action: { kind: "retry" }, blocking: false };
   }
   if (input.connection === "waiting" && input.problem) {
-    return { key: "connection", title: input.relay ? "Relay unreachable" : "Can't connect", button: "Try again", action: { kind: "retry" }, blocking: false };
+    return { key: "connection", title: relayWords ?? "Can't connect", button: "Try again", action: { kind: "retry" }, blocking: false };
   }
   if (input.connection === "idle") return { key: "connection", title: "Not connected", button: "Try again", action: { kind: "retry" }, blocking: false };
   return null;
@@ -129,24 +134,11 @@ export function fixButtonKind(rows: readonly FixRow[]): "ink" | "ghost" {
   return rows.filter((row) => row.action).length === 1 ? "ink" : "ghost";
 }
 
-/** The word under another computer's name (SPEC §1.3 "Computers"). */
-export function otherComputerState(check: ComputerCheck | undefined): { word: string; needsYou: boolean; dim: boolean } {
-  switch (check?.state) {
-    case "online":
-      return { word: "Online", needsYou: false, dim: false };
-    case "unpaired":
-      return { word: "Pair again", needsYou: true, dim: false };
-    case "offline":
-      return { word: "Offline", needsYou: false, dim: true };
-    default:
-      return { word: "", needsYou: false, dim: false };
-  }
-}
-
 /**
- * The red dot on home's cat: something behind the cat needs the person. Another computer must be
- * paired again, this one must be, or this one needs an update to work with this app.
+ * The red dot on home's cat: something behind the cat needs the person. This computer must be paired
+ * again or updated to work with this app, or another computer must be paired again or has requests
+ * open (its row's dot: core/computer/computers `otherComputerState`).
  */
-export function catNeedsYouOf(input: { rows: readonly FixRow[]; otherChecks: ReadonlyArray<ComputerCheck | undefined> }): boolean {
-  return input.rows.some((row) => row.blocking) || input.otherChecks.some((check) => check?.state === "unpaired");
+export function catNeedsYouOf(input: { rows: readonly FixRow[]; others: ReadonlyArray<{ needsYou: boolean }> }): boolean {
+  return input.rows.some((row) => row.blocking) || input.others.some((other) => other.needsYou);
 }
