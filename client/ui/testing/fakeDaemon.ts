@@ -22,6 +22,8 @@ export interface FakeDaemonState {
   computers?: Record<string, unknown>;
   /** Canned answers by request type (before any built-in one): the reply's `type` and fields, e.g. `{ type: "error", message }`. */
   replies?: Record<string, { type: string } & Record<string, unknown>>;
+  /** Pictures by path, as `codex_asset` answers them (`data_url`); a path not here falls to `replies`. */
+  assets?: Record<string, string>;
 }
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
@@ -101,6 +103,8 @@ export class FakeDaemon {
     host.post("app.testFrame", frame);
     const reply = (type: string, body: Record<string, unknown>) => this.to(socket, { type, request_id: frame.request_id, ...body });
     const fail = (message: string) => reply("error", { message });
+    const asset = frame.type === "codex_asset" ? this.state.assets?.[String(frame.path)] : undefined;
+    if (asset) return reply("codex_asset", { data_url: asset });
     // A canned answer wins over the built-in one: a test makes any request fail this way.
     const canned = this.state.replies?.[frame.type];
     if (canned) return reply(canned.type, canned);
