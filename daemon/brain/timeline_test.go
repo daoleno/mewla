@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -458,8 +459,12 @@ func TestMatchingControlDoneProjectsOneExistingWorkResultCard(t *testing.T) {
 	wire := TimelineItemsToConversationEvents(items)
 	if len(wire) != 1 || wire[0].WorkPhase != fact.Phase || wire[0].WorkAttention != fact.Attention ||
 		wire[0].WorkEventKind != fact.EventKind || wire[0].WorkDetailsJSON != fact.DetailsJSON ||
-		wire[0].WorkNextAction != "Review the delegated Session result." || wire[0].WorkWaitFor != "" {
+		wire[0].WorkWaitFor != "" {
 		t.Fatalf("semantic Work card wire projection = %+v", wire)
+	}
+	// Brain's own next action never reaches a person.
+	if raw, _ := json.Marshal(wire[0]); strings.Contains(string(raw), "Review the delegated Session result.") || strings.Contains(string(raw), "next_action") {
+		t.Fatalf("Work card wire carries Brain's next action: %s", raw)
 	}
 	restarted, err := NewStore(store.Root)
 	if err != nil {
