@@ -21,6 +21,10 @@ import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode,
 import { AnsweredRow } from "./RequestCard";
 import { brainFiles, openChatLink, openChatPath } from "./links";
 
+
+/** Tables bleed to the right screen edge (the reply is inset 16): see the reply TextView. */
+const TABLE_BLEED = { tableScroll: "-mr-4", table: "mr-4" };
+
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
   onUserMessage?: (item: MessageTimelineItem) => void;
@@ -135,6 +139,9 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
             onLongPress={() => !(it() as MessageTimelineItem).streaming && void showMessageMenu(it() as MessageTimelineItem, { connected: true, running: false })}>
             <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} class="text-message"
               renderCodeBlock={renderCode}
+              // A table wider than the column scrolls sideways; its scroll runs to the screen's edge, so a wide one
+              // is cut by the screen, which reads as "there is more", not by the text's margin.
+              classes={TABLE_BLEED}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
               renderImage={(image) => {
                 const key = pictureKey(it().id, image.src);
