@@ -227,8 +227,8 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
           empty={() => (chatState() === "loading" ? <Notice title="Loading…" /> : <Notice title="What should Brain do?" />)}
           foot={{
             shown: () => !routedBrainThread() && (requests().length > 0 || sealedHere().length > 0),
-            render: () => (
-              <RequestStack thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
+            render: (anchor) => (
+              <RequestStack anchor={anchor} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
                 onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
                 onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
             ),

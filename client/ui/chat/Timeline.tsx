@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, computed, effect, List, platform, signal, Text, untracked, View, type JSX, type ListRef } from "nsh";
+import { cleanup, Clipboard, computed, effect, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
 import { noteScroll } from "../pets/hold";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, TextView } from "nsh/base";
@@ -153,9 +153,10 @@ export function ChatTimeline(props: {
   shown?: () => boolean;
   /**
    * The thread's foot, after the newest row: its open requests and what was just answered (SPEC §1.2).
-   * A row of the list (not its footer), so it measures again as cards open, stack and seal.
+   * A row of the list (not its footer), so it measures again as cards open, stack and seal. `anchor`
+   * takes the open card's view, which the thread centres.
    */
-  foot?: { shown: () => boolean; render: () => JSX.Element };
+  foot?: { shown: () => boolean; render: (anchor: (node: ViewRef) => void) => JSX.Element };
   /** The open requests: with the foot out of view, the jump control shows a red dot and their count. */
   requests?: () => number;
   /** Bumped to bring the foot (the open request) into view: a tray row, the cold start with a request open. */
@@ -190,16 +191,47 @@ export function ChatTimeline(props: {
   // are in as it mounts; rows that come after (a Session's transcript loads once the chat is open) are
   // brought to the newest here, once, unless the person has already moved: on a slow phone the list
   // stayed on the oldest rows it had laid out (the test for a long chat opened at "Message 0" under load).
+  const anchor = signal<ViewRef | undefined>(undefined);
+  /**
+   * Brings the foot's open card to the middle of the list, as far as the content lets it (it is near the
+   * end): a card taller than the list shows from its top. Measured where it is laid out; from far up the
+   * foot is not, so the list goes to it first. Without an open card, the end.
+   */
+  const centreRequest = async (animated: boolean) => {
+    const all = untracked(rows);
+    const index = all.length - 1;
+    const view = untracked(anchor);
+    if (!list || all[index] !== FOOT || !view) return void list?.scrollToEnd({ animated });
+    let card = await view.measure();
+    if (!card) {
+      list.scrollToIndex({ index, viewPosition: 1, animated: false });
+      card = (await untracked(anchor)?.measure()) ?? null;
+    }
+    const box = await list?.measure();
+    if (!list || !card || !box) return void list?.scrollToEnd({ animated });
+    const top = Math.max(0, (box.bounds.size.height - card.bounds.size.height) / 2);
+    list.scrollToIndex({ index, viewPosition: 0, viewOffset: top - card.bounds.origin.y, animated });
+  };
   let opened = false;
+  const openRequests = () => Boolean(props.foot?.shown()) && (props.requests?.() ?? 0) > 0;
   effect(() => {
     if (rows().length === 0 || !mounted() || opened) return;
     opened = true;
-    if (hadPlace || touched) return;
+    if (hadPlace || touched || untracked(openRequests)) return;
     untracked(() => list?.scrollToEnd({ animated: false }));
+  });
+  // With a request open, the chat opens on the oldest one, centred (SPEC §3.1 cold start): once, when the
+  // first card is laid out (the requests can come after the rows), unless the person has a place or has moved.
+  let centred = false;
+  effect(() => {
+    if (!openRequests() || !mounted() || !anchor() || centred) return;
+    centred = true;
+    if (hadPlace || touched) return;
+    untracked(() => void centreRequest(false));
   });
   effect(() => {
     if (!props.reveal || props.reveal() === 0 || !mounted()) return;
-    untracked(() => list?.scrollToEnd({ animated: true }));
+    untracked(() => void centreRequest(true));
   });
   effect(() => {
     if (!props.sent || props.sent() === 0) return;
@@ -270,11 +302,11 @@ export function ChatTimeline(props: {
           else readingPositions.delete(props.scope);
         }}
         empty={props.empty() as never}>
-        {(item) => ((item() as FootRow).type === "thread-foot" ? (props.foot!.render() as never) : <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />)}
+        {(item) => ((item() as FootRow).type === "thread-foot" ? (props.foot!.render((node) => anchor.set(node)) as never) : <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />)}
       </List>
       {away() ? (
         (props.requests?.() ?? 0) > 0 ? (
-          <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => list?.scrollToEnd({ animated: true })}
+          <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}
             class="absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1.5 rounded-full bg-card px-3.5 shadow-float active:opacity-70">
             <View class="size-2 rounded-full bg-seal" />
             <Text class="text-sub font-semibold">{String(props.requests!())}</Text>

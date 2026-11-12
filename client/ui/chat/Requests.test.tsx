@@ -57,6 +57,18 @@ describe("requests in Brain's thread", () => {
     expect(app.count("id:request-stacked")).toBe(0);
   }, 20_000);
 
+  test("a cold start with requests open opens on the oldest, centred: the newest stacked rows wait below", async () => {
+    const sessions = Array.from({ length: 14 }, (_, i) => session(`s${i}`, { delegated: true, approvals: [approval(`a${i}`, `step ${i} of the release`)] }));
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: sessions }) });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    await app.wait(800);
+    expect(app.count("id:request-stacked")).toBe(13);
+    expect(app.shows("id:request-card")).toBe(true);
+    // Centred, the thread's end (the newest stacked rows) is below: the jump control shows, with their count.
+    await app.waitFor("id:jump-requests");
+    expect(app.texts()).toContain("14");
+  }, 20_000);
+
   test("a Session the person started asks only in that Session", async () => {
     const app = await open(APP, {
       platform: "android", storage: paired,
