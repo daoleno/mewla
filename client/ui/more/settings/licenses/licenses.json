@@ -81,10 +81,6 @@
      "version": "7.9",
      "license": "OFL-1.1",
      "url": "https://github.com/subframe7536/maple-font",
-     "platforms": [
-      "android",
-      "ios"
-     ],
      "text": "eb2d28d2e565",
      "note": "The terminal's font, with the Nerd Fonts icons Maple patches in; subset by scripts/subset-terminal-font.py."
     },
