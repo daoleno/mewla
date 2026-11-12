@@ -119,13 +119,14 @@ func withChoicePrompt(signal classifier.ActivitySignal, pane string) classifier.
 	return signal
 }
 
-// PromptEnricher completes a choice prompt from the provider transcript: every
-// question with its options, and the tool call behind it. It must keep the
+// PromptEnricher completes a prompt from the provider transcript: a choice
+// prompt with every question and option, and the tool call behind it; a
+// permission prompt with the tool call it asks about. It must keep the
 // prompt's ID.
 type PromptEnricher func(sessionID string, prompt classifier.Prompt) classifier.Prompt
 
-// promptEnrichment caches one Session's enriched choice prompt, so the
-// transcript is read once per prompt and not on every poll.
+// promptEnrichment caches one Session's enriched prompt, so the transcript is
+// read once per prompt and not on every poll.
 type promptEnrichment struct {
 	mu      sync.Mutex
 	enrich  PromptEnricher
@@ -136,6 +137,8 @@ type enrichedPrompt struct {
 	promptID  string
 	questions []classifier.PromptQuestion
 	callID    string
+	tool      string
+	summary   string
 	triedAt   time.Time
 }
 
@@ -143,8 +146,9 @@ type enrichedPrompt struct {
 // could not yet complete.
 const promptEnrichRetry = 2 * time.Second
 
-// SetPromptEnricher installs where a choice prompt gets the questions the
-// pane shows one tab at a time.
+// SetPromptEnricher installs where a prompt gets what the pane does not say:
+// the questions a choice shows one tab at a time, and the tool call a
+// permission prompt asks about.
 func (w *Watcher) SetPromptEnricher(enrich PromptEnricher) {
 	if w == nil {
 		return
@@ -155,11 +159,12 @@ func (w *Watcher) SetPromptEnricher(enrich PromptEnricher) {
 	w.promptEnrich.mu.Unlock()
 }
 
-// enrichChoicePrompt gives a choice prompt every question of its tool call.
-// The pane stays the authority on which tabs are answered.
-func (w *Watcher) enrichChoicePrompt(sessionID string, signal classifier.ActivitySignal) classifier.ActivitySignal {
+// enrichPrompt gives a choice prompt every question of its tool call, and a
+// permission prompt the tool call it asks about. The pane stays the authority
+// on which tabs are answered, and on the prompt's identity.
+func (w *Watcher) enrichPrompt(sessionID string, signal classifier.ActivitySignal) classifier.ActivitySignal {
 	prompt := signal.Prompt
-	if prompt == nil || prompt.Kind != classifier.PromptChoice {
+	if prompt == nil || (prompt.Kind != classifier.PromptChoice && prompt.Kind != classifier.PromptPermission) {
 		return signal
 	}
 	state := &w.promptEnrich
@@ -174,12 +179,13 @@ func (w *Watcher) enrichChoicePrompt(sessionID string, signal classifier.Activit
 		entry = enrichedPrompt{promptID: prompt.ID}
 		cached = false
 	}
-	if !cached || (len(entry.questions) == 0 && time.Since(entry.triedAt) >= promptEnrichRetry) {
+	if !cached || (entry.callID == "" && time.Since(entry.triedAt) >= promptEnrichRetry) {
 		enriched := enrich(sessionID, *prompt)
 		entry = enrichedPrompt{promptID: prompt.ID, triedAt: time.Now()}
 		if enriched.CallID != "" {
 			// Only a prompt tied to its tool call is the transcript's.
 			entry.questions, entry.callID = enriched.Questions, enriched.CallID
+			entry.tool, entry.summary = enriched.Tool, enriched.Summary
 		}
 		state.mu.Lock()
 		if state.entries == nil {
@@ -188,17 +194,20 @@ func (w *Watcher) enrichChoicePrompt(sessionID string, signal classifier.Activit
 		state.entries[sessionID] = entry
 		state.mu.Unlock()
 	}
-	if len(entry.questions) == 0 {
+	if entry.callID == "" {
 		return signal
 	}
 	merged := *prompt
 	merged.CallID = entry.callID
-	merged.Questions = make([]classifier.PromptQuestion, len(entry.questions))
-	for index, question := range entry.questions {
-		if index < len(prompt.Questions) && len(prompt.Questions) > 1 {
-			question.Answered = prompt.Questions[index].Answered
+	merged.Tool, merged.Summary = entry.tool, entry.summary
+	if len(entry.questions) > 0 {
+		merged.Questions = make([]classifier.PromptQuestion, len(entry.questions))
+		for index, question := range entry.questions {
+			if index < len(prompt.Questions) && len(prompt.Questions) > 1 {
+				question.Answered = prompt.Questions[index].Answered
+			}
+			merged.Questions[index] = question
 		}
-		merged.Questions[index] = question
 	}
 	signal.Prompt = &merged
 	return signal
@@ -728,6 +737,11 @@ func (w *Watcher) currentPrompt(pane claudeChoicePane, sessionID string) (*class
 		if signal.Prompt == nil {
 			return nil, refusePrompt("this dialog cannot be identified exactly (%s); no key was sent", unidentifiedReason(signal))
 		}
+	}
+	if signal.Prompt != nil && signal.Prompt.Kind == classifier.PromptPermission {
+		// The tool call it asks about, as the poll already named it (cached per
+		// prompt): the record of the answer says what was approved.
+		signal = w.enrichPrompt(sessionID, signal)
 	}
 	return signal.Prompt, nil
 }

@@ -248,6 +248,9 @@ func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, optio
 	}
 	title, request, _, _ := readMenuRequest(dialog, len(dialog), false)
 	request = withoutSeparatorRows(request)
+	if provider == "claude" {
+		request = withoutLeadingTips(request)
+	}
 	return Prompt{
 		ID:       PromptIdentity(kind, strings.Join(rawRows, "\n"), menuIdentityRows(menu)),
 		Kind:     kind,
@@ -297,6 +300,22 @@ func withoutSeparatorRows(request string) string {
 		}
 	}
 	return strings.Join(kept, "\n")
+}
+
+// providerTipRe is a hint Claude draws inside its permission box ("Tip: auto
+// mode handles these prompts for you ..."): advice about the provider's own
+// modes, not part of what is asked.
+var providerTipRe = regexp.MustCompile(`^Tip: `)
+
+// withoutLeadingTips drops the provider's tips that open the request, so the
+// request starts with what is asked. A line of the command that begins with
+// "Tip: " further down stays: only the lines before the first other line go.
+func withoutLeadingTips(request string) string {
+	lines := strings.Split(request, "\n")
+	for len(lines) > 0 && (providerTipRe.MatchString(strings.TrimSpace(lines[0])) || isBlank(lines[0])) {
+		lines = lines[1:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // ParseClaudePermissionPrompt reads the permission dialog open at the bottom of

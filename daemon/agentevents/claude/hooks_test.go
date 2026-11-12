@@ -133,3 +133,21 @@ func TestSubAgentHooksCarryTheSubAgent(t *testing.T) {
 		t.Fatalf("approval = %+v", a)
 	}
 }
+
+func TestPreToolUseSaysWhatTheAgentStartedWithoutMovingAnyDecision(t *testing.T) {
+	events := mustMap(t, `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Bash","tool_input":{"command":"curl -sI https://example.org","description":"Fetch headers"}}`)
+	if len(events) != 1 || events[0].Kind != agentevents.KindActivity || events[0].Activity != "Bash curl -sI https://example.org" {
+		t.Fatalf("events = %+v", events)
+	}
+	if events := mustMap(t, `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Task","tool_input":{"prompt":"go"}}`); len(events) != 1 || events[0].Activity != "Task" {
+		t.Fatalf("a call with no line is its tool: %+v", events)
+	}
+	if events := mustMap(t, `{"hook_event_name":"PreToolUse","session_id":"s1"}`); len(events) != 0 {
+		t.Fatalf("a call with no tool says nothing: %+v", events)
+	}
+	// The request the approval makes and the activity before it read alike.
+	approval := Approval("a1", Payload{ToolName: "Bash", ToolInput: json.RawMessage(`{"command":"curl -sI https://example.org"}`)})
+	if approval.Tool != "Bash" || approval.Summary != "curl -sI https://example.org" {
+		t.Fatalf("approval = %+v", approval)
+	}
+}
