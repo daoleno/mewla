@@ -1,27 +1,24 @@
-import { computed, effect, host, Keyboard, platform, signal, Storage, Text, untracked, View, windowSize } from "nsh";
+import { computed, effect, host, platform, signal, Storage, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
-import { Button, createNavStack, NavStack, ResizablePanel, ResizablePanelGroup, type NavStackState } from "nsh/base";
+import { createNavStack, NavStack, ResizablePanel, ResizablePanelGroup, type NavStackState } from "nsh/base";
+import { isAvailable as mobile } from "nsh/mobile";
 import { PageStack } from "./NavPage";
-import { isAvailable as mobile, TabBar } from "nsh/mobile";
 import { reuseRoutes, type PoppedPage } from "../../core/web/history";
-import { clampPanelWidth, isDesktopLayout, SIDEBAR_WIDTH, SIDEBAR_WIDTH_KEY, sidebarKeyOf, storedSidebarWidth, type DesktopPlaceKey, type PlacePage, type WebPlace } from "../../core/web/places";
-import { isAgentExtensionsScope } from "../../core/extensions/agentExtensionsModel";
+import { clampPanelWidth, isDesktopLayout, SIDEBAR_WIDTH, SIDEBAR_WIDTH_KEY, sidebarKeyOf, storedSidebarWidth, type WebPlace } from "../../core/web/places";
+import { placeOfRoutes, routesOfPlace } from "./routePlaces";
 import { DesktopOverlays } from "./desktop/Overlays";
 import { Sidebar } from "./desktop/Sidebar";
 import { syncWebLocation, type PageSnapshot } from "./webLocation";
 import { Onboarding, PairPage } from "../screens/Onboarding";
-import { More } from "../screens/More";
 import { MorePageView } from "../more/Pages";
-import { FilesPageView } from "../more/files/Pages";
-import { GitPageView } from "../more/git/GitPages";
-import type { MorePage, PageNav } from "../more/routes";
-import { Brain } from "../screens/Brain";
-import { calendarNav, calendarRoute, showCalendarItem } from "../calendar/routes";
-import { WorkFilePage } from "../work/WorkFilePage";
-import { workRoute, type BrainWorkRoute } from "../work/routes";
+import { Home, openBrainHost } from "../home/Home";
+import { ComputerPage } from "../computer/ComputerPage";
+import { calendarRoute } from "../calendar/routes";
+import { WorkDetail } from "../work/WorkPage";
+import { workLinks } from "../work/links";
 import { Session } from "../screens/Session";
-import { Sessions } from "../screens/Sessions";
-import { NewSession, newSessionOpen } from "../screens/NewSession";
+import { AllSessions } from "../sessions/AllSessions";
+import { NewSession } from "../screens/NewSession";
 import { ServicesSheet } from "../sessions/ServicesSheet";
 import { EnrollmentApproval } from "../enrollment/Approval";
 import { CalendarAlertCard } from "../calendar/AlertCard";
@@ -30,187 +27,69 @@ import { current, onTransport, workers } from "../session";
 import { routeOwner, screenRoute } from "../../core/screen/float";
 import { ScreenFloatHost } from "../screenfloat/ScreenFloatHost";
 import { workFiles } from "../work/state";
-import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
-import type { MoreRoute, SessionsRoute } from "./routes";
-import { needsYou } from "./attention";
 import { settingsLinkRoutes } from "../../core/settings/settingsLink";
 import { setOpenExtensions } from "../more/extensions/plugins";
-import { tabTitle } from "../../core/sessions/attention";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { workLinkOf } from "../sessions/workLinks";
+import { goHome, isTop, nav, openPage, openSession, pageNav } from "./nav";
+import type { Route } from "./routes";
 
-const tabs = [
-  { key: "brain", title: "Brain", ios: "sparkles", android: "tab_brain" },
-  { key: "sessions", title: "Sessions", ios: "list.bullet", android: "tab_sessions" },
-  { key: "calendar", title: "Calendar", ios: "calendar", android: "tab_calendar" },
-  { key: "more", title: "More", ios: "ellipsis", android: "tab_more" },
-];
-
-export const selectedTab = signal(0);
-/** What lies below the sections (the TabBar, the system bar): the keyboard covers it before it reaches a page. */
+/** What lies below the stack (the system bar): the keyboard covers it before it reaches a page. */
 export const belowSections = signal(0);
 /**
- * The desktop layout (a browser or a desktop window at least 1024 pt wide): a
- * sidebar beside every page instead of the tabs (client/DESIGN.md "Desktop web").
+ * The desktop layout (a browser or a desktop window at least 1024 pt wide): the sidebar beside
+ * the stack (client/DESIGN.md "Desktop web"). Below it, and on phones, the stack alone.
  */
 export const desktop = computed(() => isDesktopLayout({ mobile, width: windowSize().width }));
 
-/** The section a `mewla://` link opens: `mewla://brain`, `…/sessions`, `…/calendar`, `…/more`. */
-export function sectionOfLink(url: string): number | null {
-  const match = /^mewla:\/\/([a-z]+)/i.exec(url.trim());
-  const index = match ? ["brain", "sessions", "calendar", "more"].indexOf(match[1].toLowerCase()) : -1;
-  return index < 0 ? null : index;
-}
-const moreNav = createNavStack<MoreRoute>([{ name: "more" }]);
-export const brainNav = createNavStack<{ name: "brain" } | BrainWorkRoute>([{ name: "brain" }]);
-const sessionsNav = createNavStack<SessionsRoute>([{ name: "sessions" }]);
-// A Session page belongs to the computer it was opened on: a switch goes back to the list.
-onTransport(() => () => sessionsNav.popToRoot());
+// A computer switch: sheets close first (they listen to the switch themselves), then the stack
+// returns to the new computer's home (SPEC §3.8).
+onTransport(() => () => goHome());
 
-/** Opens a Session of the current computer on the Sessions tab (New session, Work, Calendar, Brain cards). */
-export function openSession(workerId: string, hint?: TerminalRouteSessionHint) {
-  selectedTab.set(1);
-  sessionsNav.setRoutes([sessionsNav.routes()[0] ?? { name: "sessions" }, { name: "session", workerId, hint }]);
-}
-
-/**
- * More's stack. On a phone it starts at the More list; on the desktop its pages
- * are the sidebar's places, so a place is the stack's root and has no Back.
- */
-function moreRoutes(routes: readonly MoreRoute[]): MoreRoute[] {
-  const pages = routes[0]?.name === "more" ? routes.slice(1) : [...routes];
-  if (!untracked(desktop)) return [routes[0]?.name === "more" ? routes[0] : { name: "more" }, ...pages];
-  return pages.length ? pages : [{ name: "settings" }];
-}
-
-/** Opens a More page (and the ones under it) on the More tab, or as a desktop place. */
-export function openMore(...routes: MoreRoute[]) {
-  selectedTab.set(3);
-  moreNav.setRoutes(moreRoutes(routes));
-}
-
-/** `mewla://settings…` (not a pairing link): the Settings page it names, under More. True when it was one. */
+/** `mewla://settings…` (not a pairing link): the Settings page it names, under the computer page. True when it was one. */
 export function openSettingsLink(url: string): boolean {
   const routes = settingsLinkRoutes(url);
   if (!routes) return false;
-  openMore(...routes);
+  openPage({ name: "computer" }, ...routes);
   return true;
 }
 
 // A Plugins sign-in that came back (a browser tab, a phone's link) opens Extensions, where its card finishes it.
-setOpenExtensions(() => openPlace({ key: "extensions" }));
+setOpenExtensions(() => openPage({ name: "computer" }, { name: "extensions" }));
 
-const PLACE_ROUTES: Record<Exclude<DesktopPlaceKey, "brain" | "sessions" | "calendar">, MoreRoute> = {
-  extensions: { name: "extensions" },
-  screen: { name: "screen" },
-  stats: { name: "stats" },
-  resources: { name: "resources" },
-  friends: { name: "friends" },
-  settings: { name: "settings" },
-};
-
-/** A page under a place as the More pages it opens (a license under Licenses). */
-function morePagesOf(page: PlacePage): MoreRoute[] {
-  switch (page.name) {
-    case "workFile": return [];
-    case "settings-license": return [{ name: "settings-licenses" }, page];
-    case "extensions-agent": return [{ name: "extensions-agent", scope: isAgentExtensionsScope(page.scope) ? page.scope : "shared" }];
-    default: return [page];
-  }
+/** Phone use's page: `mewla://phone` (its notifications) and its floating control open it. */
+export function openPhonePage() {
+  openPage({ name: "computer" }, { name: "settings" }, { name: "settings-phone" });
 }
 
-/** The page a More route is, when it has a URL of its own (parity #47). */
-function placePageOf(route: MoreRoute): PlacePage | null {
-  switch (route.name) {
-    case "settings-computer": case "settings-license": return { name: route.name, id: route.id };
-    case "friends-post": case "friends-person": case "extensions-service": return { name: route.name, id: route.id };
-    case "extensions-tools": return { name: route.name, service: route.service, ...(route.account ? { account: route.account } : {}) };
-    case "extensions-agent": return { name: route.name, scope: route.scope };
-    case "settings-telegram": case "settings-providers": case "settings-agents": case "settings-friends": case "settings-iphone": case "settings-phone":
-    case "settings-virtual-screen": case "settings-pet": case "settings-licenses":
-    case "friends-drafts": case "friends-notifications": case "friends-bookmarks": case "friends-blocked":
-      return { name: route.name };
-    default: return null;
-  }
+/** Screen, where an agent's display and the Mac's screen have their full view: the floating screen's Open. */
+export function openScreenPage(worker: string | null) {
+  openPage({ name: "computer" }, screenRoute(worker));
 }
 
-/** Goes to a place at its root, or to the page under it a URL or a link names: a sidebar row, the palette, `G` then a letter, a URL. */
+/** Goes to a place a URL, the sidebar, the palette or `G` then a letter names. */
 export function openPlace(place: WebPlace) {
-  const page = "page" in place ? place.page : undefined;
-  switch (place.key) {
-    case "brain":
-      selectedTab.set(0);
-      return brainNav.popToRoot();
-    case "work":
-      selectedTab.set(0);
-      return brainNav.setRoutes([brainNav.routes()[0], { name: "work" }, ...(page?.name === "workFile" ? [{ name: "workFile" as const, id: page.id }] : [])]);
-    case "sessions":
-      selectedTab.set(1);
-      return sessionsNav.popToRoot();
-    case "session":
-      return openSession(place.workerId);
-    case "calendar":
-      selectedTab.set(2);
-      return calendarNav.popToRoot();
-    default:
-      return openMore(PLACE_ROUTES[place.key], ...(page ? morePagesOf(page) : []));
-  }
-}
-
-/** The place a More stack shows: the first page above the More list decides. */
-function placeOfMore(routes: readonly MoreRoute[]): WebPlace {
-  const name = routes.find((route) => route.name !== "more")?.name ?? "settings";
-  const key = name.startsWith("extensions") ? "extensions" : name.startsWith("stats") ? "stats" : name.startsWith("friends") ? "friends"
-    : name === "screen" || name === "resources" ? name : "settings";
-  // The topmost page with a URL of its own names it (a page under it without one keeps it).
-  for (const route of [...routes].reverse()) {
-    const page = placePageOf(route);
-    if (page && (key === "settings" || key === "friends" || key === "extensions") && page.name.startsWith(key)) return { key, page };
-  }
-  return { key };
+  nav.setRoutes([{ name: "home" }, ...routesOfPlace(place)]);
 }
 
 /** Where the person is: what the URL, the tab title and the sidebar's selected row follow. */
-export const currentPlace = computed<WebPlace>(() => {
-  switch (selectedTab()) {
-    case 0: {
-      const routes = brainNav.routes();
-      if (routes.length <= 1) return { key: "brain" };
-      const file = [...routes].reverse().find((route) => route.name === "workFile");
-      return file?.name === "workFile" ? { key: "work", page: { name: "workFile", id: file.id } } : { key: "work" };
-    }
-    case 1: {
-      const session = [...sessionsNav.routes()].reverse().find((route) => route.name === "session");
-      return session?.name === "session" ? { key: "session", workerId: session.workerId } : { key: "sessions" };
-    }
-    case 2:
-      return { key: "calendar" };
-    default:
-      return placeOfMore(moreNav.routes());
-  }
-});
+export const currentPlace = computed<WebPlace>(() => placeOfRoutes(nav.routes()));
 export const selectedPlace = computed(() => sidebarKeyOf(currentPlace()));
 
-const stacks = [brainNav, sessionsNav, calendarNav, moreNav] as const;
-
-/** A history entry: the section and its stack. */
+/** A history entry: the stack. */
 function snapshot(): PageSnapshot {
-  const tab = selectedTab();
-  return { tab, routes: stacks[tab]?.routes() ?? [] };
+  return { routes: nav.routes() };
 }
 
 /** Reopens what a history entry showed, or a place a URL names. */
 function restore(page: PoppedPage<PageSnapshot>) {
   if (page.kind === "place") return openPlace(page.place);
-  const { tab, routes } = page.snapshot;
-  const stack = stacks[tab] as (typeof stacks)[number] | undefined;
-  if (!stack || !routes.length) return openPlace({ key: "brain" });
-  selectedTab.set(tab);
-  const next = reuseRoutes(stack.routes() as unknown[], routes);
-  (stack.setRoutes as (routes: unknown[]) => void)(tab === 3 ? moreRoutes(next as MoreRoute[]) : next);
+  const routes = page.snapshot.routes as Route[];
+  if (!routes.length || routes[0]?.name !== "home") return goHome();
+  nav.setRoutes(reuseRoutes(untracked(nav.routes) as unknown[], routes) as Route[]);
 }
 
-/** The sidebar's width: dragged, saved (the Expo web app's key), restored at the next start. */
+/** The sidebar's width: dragged, saved, restored at the next start. */
 export const sidebarWidth = signal<number>(SIDEBAR_WIDTH.initial);
 function saveSidebarWidth(size: number) {
   const width = clampPanelWidth(size, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max);
@@ -218,108 +97,56 @@ function saveSidebarWidth(size: number) {
   void Storage.setItem(SIDEBAR_WIDTH_KEY, String(width)).catch(() => {});
 }
 
-/** Phone use's page, under More › Settings: `mewla://phone` (its notifications) and its floating control open it. */
-export function openPhonePage() {
-  selectedTab.set(3);
-  moreNav.setRoutes([{ name: "more" }, { name: "settings" }, { name: "settings-phone" }]);
-}
-
-/** Screen, where an agent's display and the Mac's screen have their full view: the floating screen's Open. */
-export function openScreenPage(worker: string | null) {
-  selectedTab.set(3);
-  moreNav.setRoutes([{ name: "more" }, screenRoute(worker)]);
-}
-
-/**
- * The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen or the
- * Phone page. From the shown tab's top route: every tab's stack stays mounted, so a Phone page left under More
- * hid the phone's float over the other tabs (phone 19).
- */
+/** The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen or the Phone page. */
 const floatPage = () => {
-  const tab = selectedTab();
-  const top = stacks[tab]?.routes().at(-1) as { name: string; workerId?: string; id?: string } | undefined;
+  const top = nav.routes().at(-1) as { name: string; workerId?: string; id?: string } | undefined;
   return {
     owner: routeOwner(top, (id) => workFiles().find((item) => item.id === id)?.frontmatter.worker_session),
-    screenPage: tab === 3 && top?.name === "screen",
-    phonePage: tab === 3 && top?.name === "settings-phone",
+    screenPage: top?.name === "screen",
+    phonePage: top?.name === "settings-phone",
   };
 };
 
-/**
- * How a Session's Git review and file previews push their next page: theirs stay on the
- * Sessions stack, anything else opens under More.
- */
-const sessionsPageNav: PageNav = {
-  push(route: MorePage) {
-    if (route.name.startsWith("git") || route.name.startsWith("files-")) sessionsNav.push(route as SessionsRoute);
-    else openMore(route);
-  },
-  pop: () => sessionsNav.pop(),
-};
-
-function sessionsRoute(route: SessionsRoute, index: () => number) {
+function page(route: Route, index: () => number): JSX.Element {
   switch (route.name) {
-    case "sessions":
-      return <Sessions nav={sessionsNav} onNew={() => newSessionOpen.set(true)} onPair={() => openMore({ name: "settings" }, { name: "pair" })} />;
+    case "home": return <Home />;
     case "session":
-      return <Session nav={sessionsNav} workerId={route.workerId} hint={route.hint}
-        active={() => selectedTab() === 1 && index() === sessionsNav.routes().length - 1} />;
+      return <Session nav={nav} workerId={route.workerId} hint={route.hint} brain={route.brain} active={() => isTop(index())} />;
+    case "allSessions": return <AllSessions nav={nav} />;
+    case "computer": return <ComputerPage nav={pageNav} onSwitchExecutor={openBrainHost} />;
+    case "pair": return <PairPage onScreen={() => isTop(index())} onPaired={() => goHome()} />;
+    case "workDetail": return <WorkDetail workId={route.workId} nav={nav} links={workLinks} />;
+    case "calendar":
+    case "item":
+    case "run":
     case "workFile":
-      return <WorkFilePage id={route.id} onClose={() => sessionsNav.pop()} openCalendarItem={(id, runId) => {
-        showCalendarItem(id, runId);
-        selectedTab.set(2);
-      }} />;
-    case "files-preview":
-    case "files-workspace":
-      return <FilesPageView route={route} nav={sessionsPageNav} />;
+      return calendarRoute(route, nav);
     default:
-      return <GitPageView route={route} nav={sessionsPageNav} />;
-  }
-}
-
-function moreRoute(route: MoreRoute) {
-  switch (route.name) {
-    case "more": return <More nav={moreNav} />;
-    case "pair": return <PairPage onScreen={() => selectedTab() === 3 && moreNav.routes().at(-1)?.name === "pair"} onPaired={() => moreNav.pop()} />;
-    default: return <MorePageView route={route} nav={moreNav} onPair={() => moreNav.push({ name: "pair" })} />;
+      return <MorePageView route={route} nav={pageNav} onPair={() => nav.push({ name: "pair" })} />;
   }
 }
 
 /**
- * A stack on the desktops and the web, where a page draws its own header: its pages learn
- * whether there is a Back (the stack holds more than its first page; only the top one shows)
- * and what Back does. Around the stack, not each page: a NavStack's page must be its NavPage.
+ * On the desktops and the web a page draws its own header: it learns whether there is a Back
+ * (the stack holds more than home) and what Back does. Around the stack, not each page: a
+ * NavStack's page must be its NavPage.
  */
 function Paged<R>(props: { nav: NavStackState<R>; children: JSX.Element }) {
-  // Leaving a page (Back, a pop) takes its field's keyboard down with it; a page pushed on top
-  // may focus its own field, so only its page's composer lets go then (Composer's `active`).
-  let depth = untracked(() => props.nav.routes().length);
-  effect(() => {
-    const now = props.nav.routes().length;
-    if (now < depth) Keyboard.dismiss();
-    depth = now;
-  });
   if (mobile) return props.children;
   return <PageStack.Provider value={{ canGoBack: () => props.nav.routes().length > 1, back: () => props.nav.pop() }}>{props.children}</PageStack.Provider>;
 }
 
-/** One native stack per tab; every stack stays mounted so a tab keeps its place. */
-function Section(props: { index: number }) {
-  const shown = () => selectedTab() === props.index;
+function Stack() {
   return (
-    <View class="absolute inset-0 flex-col" style={{ display: shown() ? "flex" : "none" }}>
-      {props.index === 0 ? <Paged nav={brainNav}><NavStack state={brainNav} style={{ flex: 1 }}>{(route) => (route.name === "brain" ? <Brain /> : workRoute(route, brainNav))}</NavStack></Paged>
-        : props.index === 1 ? <Paged nav={sessionsNav}><NavStack state={sessionsNav} style={{ flex: 1 }}>{sessionsRoute}</NavStack></Paged>
-        : props.index === 2 ? <Paged nav={calendarNav}><NavStack state={calendarNav} style={{ flex: 1 }}>{calendarRoute}</NavStack></Paged>
-        : <Paged nav={moreNav}><NavStack state={moreNav} style={{ flex: 1 }}>{moreRoute}</NavStack></Paged>}
-    </View>
+    <Paged nav={nav}>
+      <NavStack state={nav} style={{ flex: 1 }}>{page}</NavStack>
+    </Paged>
   );
 }
 
 /**
- * The Session's title for the tab, as its row and its page name it (a Session the daemon named
- * after its id is named by its folder or command, not "mh-… (mh-…)"). A computed: the list changes
- * with every status line, and only a new title may rewrite the history entry.
+ * The Session's title for the browser tab, as its row and its page name it. A computed: the list
+ * changes with every status line, and only a new title may rewrite the history entry.
  */
 const pageTitle = computed((): string | null => {
   const place = currentPlace();
@@ -330,20 +157,25 @@ const pageTitle = computed((): string | null => {
   return sessionRowModel(worker, { workTitle: link?.workTitle, calendarLabel: link?.calendarLabel }).title || null;
 });
 
+/** What every layout lays over the stack. */
+function Overlays(props: { bottomInset?: () => number }) {
+  return (
+    <>
+      <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} bottomInset={props.bottomInset} />
+      <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? nav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
+      <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
+      <EnrollmentApproval />
+      <CalendarAlertCard />
+    </>
+  );
+}
+
 /**
- * A browser or a desktop window. From 1024 pt the sidebar sits beside every
- * page (resizable, its width saved); below it a row of the tabs. One tree for
- * both, so crossing the width never remakes the sections.
+ * A browser or a desktop window: from 1024 pt the sidebar sits beside the stack (resizable, its
+ * width saved); below it the stack alone, as on a phone.
  */
 function WideShell() {
   void Storage.getItem(SIDEBAR_WIDTH_KEY).then((raw) => sidebarWidth.set(storedSidebarWidth(raw))).catch(() => {});
-  // More's pages are places on the desktop and sit under the More list below it.
-  effect(() => {
-    desktop();
-    const routes = untracked(moreNav.routes);
-    const next = moreRoutes(routes);
-    if (next.length !== routes.length || next.some((route, index) => route !== routes[index])) moreNav.setRoutes(next);
-  });
   syncWebLocation({ place: currentPlace, snapshot, pageTitle, serverId: () => current()?.id ?? null, restore });
   return (
     <View class="flex-1 bg-background">
@@ -352,47 +184,21 @@ function WideShell() {
           <Sidebar />
         </ResizablePanel>
         <ResizablePanel minSize={320}>
-          {desktop() ? null : (
-            <View testID="tab-row" class="flex-row gap-1 border-b border-border px-2">
-              {tabs.map((t, i) => (
-                <Button testID={`tab-${t.title}`} onPress={() => selectedTab.set(i)} class="px-3 py-2.5">
-                  <Text class={selectedTab() === i ? "text-base font-semibold" : "text-base text-muted-foreground"}>{t.title}</Text>
-                </Button>
-              ))}
-            </View>
-          )}
-          <View class="flex-1">{tabs.map((_, i) => <Section index={i} />)}</View>
+          <View class="flex-1"><Stack /></View>
         </ResizablePanel>
       </ResizablePanelGroup>
-      <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} />
-      <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
-      <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
-      <EnrollmentApproval />
-      <CalendarAlertCard />
+      <Overlays />
       <DesktopOverlays />
     </View>
   );
 }
 
 export function Shell() {
-  // Another tab hides the page whose field had the keyboard: it goes down too (R4#4).
-  let shownTab = untracked(selectedTab);
-  effect(() => {
-    const tab = selectedTab();
-    if (tab !== shownTab) Keyboard.dismiss();
-    shownTab = tab;
-  });
   if (!mobile) return <WideShell />;
   return (
     <View class="flex-1 bg-background">
-      <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}>{tabs.map((_, i) => <Section index={i} />)}</View>
-      <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} bottomInset={belowSections} />
-      <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
-        <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
-        <EnrollmentApproval />
-        <CalendarAlertCard />
-      <TabBar testID="tabs" items={tabs.map((t, i) => ({ title: tabTitle(t.title, needsYou(t.key), selectedTab() === i), icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
-        selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
+      <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}><Stack /></View>
+      <Overlays bottomInset={belowSections} />
     </View>
   );
 }
@@ -404,16 +210,12 @@ export function Shell() {
 export function FirstRun() {
   const web = platform.os === "web" && host.available();
   // A phone: the guided onboarding, which also shows the connected step after any pairing.
-  const settings = () => {
-    selectedTab.set(3);
-    moreNav.setRoutes([{ name: "more" }, { name: "settings" }]);
-  };
-  if (!web) return <Onboarding onContinue={() => selectedTab.set(0)} onSettings={settings} />;
-  const nav = createNavStack<{ name: "join" } | { name: "pair" }>([{ name: "join" }]);
+  if (!web) return <Onboarding onContinue={() => goHome()} onSettings={() => openPage({ name: "computer" }, { name: "settings" })} />;
+  const join = createNavStack<{ name: "join" } | { name: "pair" }>([{ name: "join" }]);
   return (
-    <Paged nav={nav}>
-      <NavStack state={nav} style={{ flex: 1 }}>
-        {(route) => (route.name === "join" ? <BrowserJoin onPairingLink={() => nav.push({ name: "pair" })} /> : <PairPage />)}
+    <Paged nav={join}>
+      <NavStack state={join} style={{ flex: 1 }}>
+        {(route) => (route.name === "join" ? <BrowserJoin onPairingLink={() => join.push({ name: "pair" })} /> : <PairPage />)}
       </NavStack>
     </Paged>
   );

@@ -10,12 +10,11 @@ import { startCalendarAlerts } from "../calendar/alerts";
 import { deviceZone } from "../calendar/clock";
 import { refreshReminders, reminderLinks, startReminderBanner } from "../calendar/ReminderBanner";
 import { closeEditor } from "../calendar/Editor";
-import { calendarLinks, calendarNav, showCalendarItem } from "../calendar/routes";
 import { clearCalendarAlerts, loadStrongAlerts, onStrongAlertsChange, strongAlerts } from "../calendar/state";
 import { current, currentTransport, onTransport, openBrainThread, ready, servers, switchTo } from "../session";
-import { brainNav, selectedTab, openSession } from "../shell/Shell";
+import { goHome, openPage } from "../shell/nav";
 import { draftForBrain } from "../work/WorkPage";
-import { workLinks } from "../work/routes";
+import { workLinks } from "../work/links";
 
 /**
  * Notifications and the Live surfaces, for the one current computer: this phone's push
@@ -159,39 +158,41 @@ export function openNotificationLink(url: string): void {
     void switchTo(target).then(() => openNotificationLink(url));
     return;
   }
+  // Each opens its page on home, so Back leads home (SPEC §3.8).
   switch (link.section) {
-    case "calendar":
-      selectedTab.set(2);
-      if (link.params.id) showCalendarItem(link.params.id, link.params.run);
-      return;
+    case "calendar": {
+      const id = link.params.id;
+      if (!id) return openPage({ name: "calendar" });
+      return openPage({ name: "calendar" }, { name: "item", id }, ...(link.params.run ? [{ name: "run" as const, itemId: id, runId: link.params.run }] : []));
+    }
     case "live":
-      selectedTab.set(0);
+      goHome();
       pendingAnswer = liveAnswerOf(link);
       sendLiveAnswer(currentTransport());
       return;
     case "brain":
-      selectedTab.set(0);
       // A Brain notification names its thread: a past one opens read-only.
       if (link.params.thread) openBrainThread(link.params.thread);
-      if (link.path[0] === "work") brainNav.setRoutes([{ name: "brain" }, { name: "work" }, ...(link.path[1] ? [{ name: "workDetail" as const, workId: link.path[1] }] : [])]);
-      else brainNav.popToRoot();
-      return;
+      if (link.path[0] === "work" && link.path[1]) return openPage({ name: "workDetail", workId: link.path[1] });
+      return goHome();
     case "sessions":
-      // mewla://sessions/<id> opens that Session of the current computer.
-      if (link.path[0]) openSession(link.path[0]);
-      else selectedTab.set(1);
-      return;
+      // mewla://sessions/<id> opens that Session of the current computer; the inbox push opens the tray.
+      if (link.path[0]) return openPage({ name: "session", workerId: link.path[0] });
+      return goHome({ tray: true });
+    case "friends": {
+      // Friends' own pushes: its drafts or its notifications.
+      const list = link.path[0] === "drafts" ? "friends-drafts" : link.path[0] === "notifications" ? "friends-notifications" : null;
+      return openPage({ name: "computer" }, { name: "friends" }, ...(list ? [{ name: list } as const] : []));
+    }
   }
 }
 
 export function startNotifications(): void {
-  const openSession = (sessionId: string) => openNotificationLink(`mewla://sessions/${encodeURIComponent(sessionId)}`);
-  calendarLinks.openSession = openSession;
-  workLinks.openSession = openSession;
+  workLinks.openSession = (sessionId: string) => openNotificationLink(`mewla://sessions/${encodeURIComponent(sessionId)}`);
   workLinks.openCalendarItem = (itemId, runId) => openNotificationLink(`mewla://calendar?id=${encodeURIComponent(itemId)}${runId ? `&run=${encodeURIComponent(runId)}` : ""}`);
   workLinks.askBrain = (text) => {
     draftForBrain(text);
-    brainNav.popToRoot();
+    goHome();
   };
   startCalendarAlerts();
   // Calendar's Enable granted notifications: register this phone now.
@@ -230,15 +231,11 @@ export function startNotifications(): void {
     if (transport.state === "connected") connected();
     return () => stops.forEach((stop) => stop());
   });
-  // Another computer: the Calendar and Work pages of the last one close.
+  // Another computer: the calendar editor of the last one closes (the stack returns home in the shell).
   let lastServer: string | null = null;
   effect(() => {
     const id = current()?.id ?? null;
-    if (lastServer && id !== lastServer) {
-      closeEditor();
-      calendarNav.popToRoot();
-      brainNav.popToRoot();
-    }
+    if (lastServer && id !== lastServer) closeEditor();
     if (id) lastServer = id;
   });
   // No computer left: nothing of the last one may stay on the phone.

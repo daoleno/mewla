@@ -10,11 +10,3 @@ export function sessionsNeedYou(workers: readonly { needs_attention?: boolean }[
 export function brainNeedsYou(currentWork: readonly BrainCurrentWork[] | undefined, now: number = Date.now()): boolean {
   return brainWorkSurface(currentWork, undefined, now).counts.needs > 0;
 }
-
-/**
- * A tab's title with its dot. NSH's TabBar has no badge (an upstream gap), so a
- * place that waits on you says so in its title; the selected tab needs none.
- */
-export function tabTitle(title: string, needsYou: boolean, selected: boolean): string {
-  return needsYou && !selected ? `${title} •` : title;
-}

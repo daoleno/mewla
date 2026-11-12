@@ -36,9 +36,8 @@ import { terminalFallback } from "../../core/session/terminalFallback";
 import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
 import { compactPathLabel } from "../../core/timeline/pathDisplay";
 import { AgentIcon } from "../icons/AgentIcon";
-import { showCalendarItem } from "../calendar/routes";
 import { workLinkOf } from "../sessions/workLinks";
-import { selectedTab } from "../shell/Shell";
+import { openCalendarItem } from "../shell/nav";
 import { terminalShowing } from "../shell/desktop/keys";
 import { haptic } from "../shell/haptics";
 import { lastEditablePrompt } from "../../core/web/composer";
@@ -49,7 +48,7 @@ import { Composer, createComposerText } from "../chat/Composer";
 import { ChatTimeline } from "../chat/Timeline";
 import { Icon } from "../icons/Icon";
 import { brain, connection, current, currentTransport, outbox, problem as connectionProblem, resumeConnection, workers, workersHydrated } from "../session";
-import type { SessionsRoute } from "../shell/routes";
+import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
 import { filePreviewRoute } from "../more/files/routes";
@@ -57,7 +56,7 @@ import { recognizeSessionFileReference } from "../../core/files/sessionFilePrevi
 import { buildGitDiffChipLabel, type GitDiffStatusSnapshot } from "../../core/git/gitDiff";
 import { getGitStatus } from "../../core/git/requests";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
-import { reloadAliases } from "./Sessions";
+import { reloadAliases } from "../sessions/AllSessions";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 const NO_FILE_IDENTITY_NOTICE = "This Session has no live generation identity. Refresh the Session list and try again.";
@@ -70,9 +69,11 @@ void getInterfaceRenderModes(Storage).then((modes) => storedModes.set(modes)).ca
 /**
  * One Session of the current computer: its chat (structured agents) or its
  * terminal, with the terminal kept attached under the chat so switching is
- * instant. The computer is told which Session is on screen.
+ * instant. The computer is told which Session is on screen. `brain`: Brain's
+ * own Session (Brain's menu › Open terminal), its terminal only, titled
+ * "Brain", "{agent} · workspace" (SPEC §1.6, §4).
  */
-export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: string; hint?: TerminalRouteSessionHint; active: () => boolean }) {
+export function Session(props: { nav: NavStackState<Route>; workerId: string; hint?: TerminalRouteSessionHint; brain?: boolean; active: () => boolean }) {
   const server = untracked(current);
   const transport = untracked(currentTransport);
   if (!server || !transport) return <NavPage title="Session"><View class="flex-1 bg-background" /></NavPage>;
@@ -102,7 +103,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     identity: `${props.workerId}|${worker()?.process_id ?? ""}|${worker()?.started_at ?? ""}`,
     dismissedKey: dismissedBlock(),
   }));
-  const mode = computed(() => (!canChat() ? "terminal" : blocked().forceTerminal ? "terminal" : chosenMode()));
+  const mode = computed(() => (props.brain || !canChat() ? "terminal" : blocked().forceTerminal ? "terminal" : chosenMode()));
   const chooseMode = (next: "chat" | "terminal") => {
     if (next === "chat" && untracked(blocked).blockKey) dismissedBlock.set(untracked(blocked).blockKey);
     storedModes.set({ ...untracked(storedModes), [sessionKey]: next });
@@ -250,14 +251,14 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   // The Work this Session runs, and the Calendar run that started it.
   const link = computed(() => (worker() ? workLinkOf(worker()!) : null));
   const title = computed(() => {
+    if (props.brain) return "Brain";
     const w = worker();
     return w ? sessionRowModel(w, { alias: aliasOf(props.workerId), workTitle: link()?.workTitle, calendarLabel: link()?.calendarLabel }).title : hint.name || "Session";
   });
   const openCalendarOrigin = () => {
     const id = untracked(link)?.calendarItemId;
     if (!id) return;
-    showCalendarItem(id);
-    selectedTab.set(2);
+    openCalendarItem(id);
   };
 
   const saveRename = async () => {
@@ -544,7 +545,9 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           <AgentIcon kind={kind()} size={22} />
           <View class="flex-1">
             <Text class="text-base font-semibold line-clamp-1">{title()}</Text>
-            {link()?.calendarLabel ? (
+            {props.brain ? (
+              <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text>
+            ) : link()?.calendarLabel ? (
               <Text testID="session-calendar" class="text-xs text-primary line-clamp-1" onPress={openCalendarOrigin}>{link()!.calendarLabel!}</Text>
             ) : worker() ? (
               <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">
@@ -562,7 +565,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
               <Text class="max-w-[120px] text-xs line-clamp-1">{gitChip()!.label}</Text>
             </Button>
           ) : null}
-          <Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>
+          {props.brain ? null : <Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>}
         </View>
       }>
       <View class="flex-1 bg-background">
