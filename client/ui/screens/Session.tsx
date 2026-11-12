@@ -358,6 +358,15 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     const cwd = untracked(worker)?.cwd;
     if (cwd) props.nav.push({ name: "git", targetId: props.workerId, cwd, title: untracked(title) });
   };
+  // A Git review of this Session closes when the Session changes folder, as the Expo app's sheet did;
+  // the chip then reads the new folder (parity #43).
+  effect(() => {
+    const cwd = worker()?.cwd;
+    if (!cwd) return;
+    const routes = untracked(props.nav.routes);
+    const kept = routes.filter((route) => !(route.name.startsWith("git") && "targetId" in route && "cwd" in route && route.targetId === props.workerId && route.cwd !== cwd));
+    if (kept.length !== routes.length) props.nav.setRoutes(kept);
+  });
   // A reply's link: a file the Session wrote opens in the preview; a page opens in the browser.
   const openLink = (url: string) => {
     if (recognizeSessionFileReference(url)) return openPath(url);
