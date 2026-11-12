@@ -123,6 +123,67 @@ func TestAttachSetsTheSizeFirst(t *testing.T) {
 	}
 }
 
+// A viewer whose terminal stays one size while another viewer resizes the
+// Session draws the program's output for the other size wrongly (rows written
+// over rows) until it starts over: one that asked to redraw is ended, and its
+// passive attach again replays at the new size without taking the size back.
+func TestResizeEndsTheViewersThatRedraw(t *testing.T) {
+	h := startHost(t, ServerOptions{})
+	c := dialHost(t, h)
+	dir := shortTempDir(t)
+	if _, err := c.Create(ctxT(t), shellSession("two", dir, `printf ready; while read x; do printf "line-$x "; done`)); err != nil {
+		t.Fatal(err)
+	}
+	waitScreen(t, c, "two", "ready")
+	say := func(x string) {
+		t.Helper()
+		if _, err := c.Input(ctxT(t), "two", []InputStep{{Bytes: []byte(x + "\r")}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	phone := attachView(t, c, AttachParams{ID: "two", Cols: 80, Rows: 24, Redraw: true})
+	older := attachView(t, c, AttachParams{ID: "two"}) // a viewer from before Redraw
+
+	// The same size again changes nothing.
+	if err := c.Resize(ctxT(t), "two", 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	say("a")
+	phone.until("line-a")
+	older.until("line-a")
+
+	// Another viewer, another size: the phone is ended; the older viewer keeps its stream.
+	desk := attachView(t, c, AttachParams{ID: "two", Cols: 160, Rows: 45, Redraw: true})
+	if end := phone.end(); end.Reason != AttachResized {
+		t.Fatalf("phone ended with %+v, want %q", end, AttachResized)
+	}
+	say("b")
+	older.until("line-b")
+	desk.until("line-b")
+
+	// Attaching again without a size replays at the Session's size and leaves it there.
+	again := attachView(t, c, AttachParams{ID: "two", Redraw: true})
+	if again.a.Cols != 160 || again.a.Rows != 45 || !strings.Contains(string(again.a.Replay), "line-b") {
+		t.Fatalf("passive attach at %dx%d with replay %q, want 160x45 with the output so far", again.a.Cols, again.a.Rows, again.a.Replay)
+	}
+	say("c")
+	desk.until("line-c")
+	again.until("line-c")
+
+	// A resize that is no viewer's own (the Resize method) ends every viewer that redraws.
+	if err := c.Resize(ctxT(t), "two", 80, 24); err != nil {
+		t.Fatal(err)
+	}
+	if end := desk.end(); end.Reason != AttachResized {
+		t.Fatalf("desk ended with %+v, want %q", end, AttachResized)
+	}
+	if end := again.end(); end.Reason != AttachResized {
+		t.Fatalf("passive viewer ended with %+v, want %q", end, AttachResized)
+	}
+	say("d")
+	older.until("line-d")
+}
+
 func TestAttachEndsWhenTheProgramExits(t *testing.T) {
 	h := startHost(t, ServerOptions{})
 	c := dialHost(t, h)

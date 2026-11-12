@@ -34,6 +34,19 @@ App is sent only what it is missing. `terminal_history` takes an optional
 - `alt_scroll` (DEC 1007) and `app_cursor` (DECCKM) come with every answer
   from a host that reports them, `mouse` always. Absent means unknown.
 
+Several viewers can show one host Session (the App, `mewla attach` on a
+computer), and the program draws for one size: the viewer a person last acted
+on sets it (attaching, a resize, typing, the App's terminal shown again). The
+host ends every other viewer that asked to redraw (`AttachParams.Redraw`) with
+`AttachResized` when the size changes, and the viewer attaches again without a
+size for a full reset and a replay at the new size: output drawn for another
+width would otherwise write rows over rows on its grid, and stay so after the
+sizes match again. A viewer never takes the size back on its own (after
+`AttachBehind` or `AttachResized`), or two viewers of different sizes would take
+it from each other. A smaller viewer that is not the one acted on shows the
+other size wrongly until its person acts; viewers from before `Redraw` keep
+their stream.
+
 A request without `since` (an older App), and every tmux Session, still gets the
 snapshot described below. The App turns both into the same instruction for the
 view: void the history, drop `removed` rows from its front, append `rows`
