@@ -32,6 +32,12 @@ describe("the Workers of a Work", () => {
     expect(lines[0]!.progress).toBeUndefined();
     expect(lines[0]!.openable).toBe(false);
     expect(lines[0]!.time).not.toBe("live");
+    expect(lines.map((l) => l.stateLabel)).toEqual([undefined, "Failed", undefined]);
+  });
+
+  test("a row says in words what is not plain running or done: Needs you, Failed, Ended", () => {
+    const states = (["running", "blocked", "done", "failed", "ended"] as const).map((state) => workWorkerLines([{ ...rows[0]!, state }], new Map(), NOW)[0]!.stateLabel);
+    expect(states).toEqual([undefined, "Needs you", undefined, "Failed", "Ended"]);
   });
 
   test("a live Session that settled reads its settled state; a Worker without a recorded name shows its executor, else Worker", () => {

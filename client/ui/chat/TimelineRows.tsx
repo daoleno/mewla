@@ -190,15 +190,20 @@ export function ResultActions(props: { actions: readonly ResultAction[]; disable
   );
 }
 
+function workerLineText(line: WorkWorkerLine): string {
+  const text = [line.stateLabel, line.summary].filter(Boolean).join(" · ");
+  return text ? `  ${text}` : "";
+}
+
 /** A Worker of a Work on its card (SPEC §11): 44 pt, its logo, name, what it does, the time; pushes its Session. */
 function WorkerLine(props: { line: WorkWorkerLine; onPress: () => void }) {
   const line = props.line;
   return (
-    <Button testID="work-card-worker" accessibilityLabel={[line.name, line.summary, line.time].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
+    <Button testID="work-card-worker" accessibilityLabel={[line.name, line.stateLabel, line.summary, line.time].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
       class="min-h-[44px] flex-row items-center gap-2.5 border-t border-border px-4 py-2 active:opacity-70">
       <AgentIcon kind={line.agent} flavor={line.flavor} size={20} />
       <View class="min-w-0 flex-1">
-        <Text class="text-sub line-clamp-1"><Text class="font-semibold">{line.name}</Text><Text class="text-muted-foreground">{line.summary ? `  ${line.summary}` : ""}</Text></Text>
+        <Text class="text-sub line-clamp-1"><Text class="font-semibold">{line.name}</Text><Text class="text-muted-foreground">{workerLineText(line)}</Text></Text>
         {line.progress !== undefined ? <ProgressBar filled={line.progress} testID="work-card-progress" /> : null}
       </View>
       <Text class="text-caption text-muted-foreground">{line.time === "live" ? "" : line.time}</Text>
