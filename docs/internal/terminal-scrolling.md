@@ -41,6 +41,21 @@ WebView takes them at once, under a finger or a selection, and refreshes 250 ms
 after output. Voiding and dropping rows replace nodes under the finger and wait
 for the touch to end; held instructions merge in order.
 
+Several viewers can show one host Session (the App, `mewla attach` on a
+computer), and the program draws for one size: the viewer a person last acted
+on sets it (attaching, a resize, typing). The host ends every other viewer that
+asked to redraw (`AttachParams.Redraw`) with `AttachResized` when the size
+changes, and the viewer attaches again without a size for a full reset and a
+replay at the new size: output drawn for another width would otherwise write
+rows over rows on its grid, and stay so after the sizes match again. A viewer
+never takes the size back on its own (after `AttachBehind` or `AttachResized`),
+or two viewers of different sizes would take it from each other. A smaller
+viewer that is not the one acted on shows the other size wrongly until its
+person acts (a focus-out report is not acting); viewers from before `Redraw`
+keep their stream. A host from before `Redraw` answers `Attached.Redraw` false:
+the daemon's view and `mewla attach` then take their size back whenever they
+attach again and on every resize, as before.
+
 ## History and live output (tmux Sessions)
 
 The authenticated `terminal_history` request takes an open `session_id` and is
