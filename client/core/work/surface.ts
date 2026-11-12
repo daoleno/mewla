@@ -131,6 +131,8 @@ export type BrainWorkSlip = {
   updatedAt?: string;
   /** The live Session that owns the Work, when it is still open. */
   sessionId?: string;
+  /** A delegated Worker runs its Attempt: the daemon's `stop` cancels the Work and closes that Worker. */
+  stoppable?: boolean;
   unread: boolean;
   /** What Brain asks, with one-tap answers. */
   question?: string;
@@ -275,6 +277,7 @@ export function brainWorkSurface(
       // updated_at moves on every daemon sync; a waiting Work dates from when it began waiting.
       updatedAt: work.attention_since ?? work.updated_at,
       sessionId: worker?.id,
+      stoppable: (Boolean(work.attempt_session_id) && work.attempt_delegated === true) || undefined,
       unread: work.unread_result,
       question: work.question,
       choices: work.choices,

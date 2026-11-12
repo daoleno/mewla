@@ -66,13 +66,18 @@ describe("Sessions", () => {
     expect(none.texts()).toContain("New session");
   }, 20_000);
 
-  test("New session (the tray's +) starts the agent in the folder shown and opens it", async () => {
+  test("New session (the tray's +): a tile chooses the agent, the last folder is chosen, Start starts it and opens it", async () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
     await app.waitFor("text:first");
     await app.press("id:tray-new");
     await app.waitFor("id:preset-codex");
+    // SPEC §11 New session sheet: Agent, Folder (recent projects by name, the path under it), Start; no raw path field.
+    for (const text of ["Agent", "Folder", "mewla", "/home/me/mewla", "Other folder…", "Start"]) expect(app.texts()).toContain(text);
     await app.press("id:preset-codex");
+    await app.wait(100);
+    expect(framesOf(app.host.posts(), "create_session")).toHaveLength(0);
+    await app.press("id:new-launch");
     await app.waitFor("id:session-menu");
     const create = framesOf(app.host.posts(), "create_session").at(-1)!;
     expect(create).toMatchObject({ cwd: "/home/me/mewla", command: "codex --dangerously-bypass-approvals-and-sandbox", name: "" });
@@ -478,8 +483,10 @@ describe("a Session", () => {
     app.onDialog((dialog) => (dialog.buttons.includes("New Terminal") ? "New Terminal" : null));
     await answering(app, () => app.press("id:session-menu"));
     await app.waitFor("id:new-cwd");
-    expect(app.value("id:new-cwd")).toBe("/home/me/site");
+    // Its folder is listed first and chosen; another Session's comes after it.
+    expect(app.texts().indexOf("/home/me/site")).toBeLessThan(app.texts().indexOf("/home/me/mewla"));
     await app.press("id:preset-claude");
+    await app.press("id:new-launch");
     await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
     expect(framesOf(app.host.posts(), "create_session").at(-1)).toMatchObject({ target_id: "w4", cwd: "/home/me/site", connection_id: "gw" });
   }, 20_000);

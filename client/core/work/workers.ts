@@ -3,7 +3,8 @@
  * joined it, oldest first. A live one reads its Session as the list has it now (state, what it does,
  * its phase); a finished one, the snapshot's row.
  */
-import { readableSummary } from "../sessions/activity";
+import { elapsedShort, readableSummary } from "../sessions/activity";
+import type { TrayRow } from "../tray/model";
 import { listTime, sessionRowModel, withoutSessionId } from "../sessions/listRow";
 import { progressSteps } from "../sessions/progress";
 import type { TerminalFlavor } from "../sessions/terminalFlavor";
@@ -18,7 +19,7 @@ export interface WorkWorkerLine {
   name: string;
   agent: AgentKind;
   flavor: TerminalFlavor;
-  /** "Claude Code": Work detail's rows read "Agent · name". */
+  /** "Claude Code": the row's title when the Worker has no name of its own. */
   agentLabel: string;
   state: WorkWorkerState;
   /** What it does now, or its result line. */
@@ -96,4 +97,30 @@ export function liveWorkerIds(rows: readonly WorkWorkerSession[] | undefined): s
  */
 export function workProject(slipProject: string | undefined, lines: readonly WorkWorkerLine[]): string | undefined {
   return slipProject || lines.find((line) => line.project)?.project;
+}
+
+/**
+ * A Worker's row on Work detail (SPEC §11 Work detail, Work card): the logo names the agent, so the title is the
+ * Worker's task name alone ("Quickstart rewrite"), the agent only when it has none; the line is what it does; the
+ * end is its state as a tray row ends: "● 10m" while it works, a red dot and "Needs you" while it waits on you,
+ * else when it finished. Failed and Ended say so in the line.
+ */
+export function workDetailWorkerRow(worker: WorkWorkerLine, now: number, workProject?: string): TrayRow {
+  const live = worker.state === "running";
+  const needs = worker.state === "blocked";
+  const named = worker.name && worker.name !== "Worker";
+  const said = needs ? undefined : worker.stateLabel;
+  return {
+    key: `worker:${worker.sessionId}`,
+    title: named ? worker.name : worker.agentLabel,
+    // The project only where the page's eyebrow ("Work · mewla") does not already say it.
+    line: [said, worker.summary || (worker.project !== workProject ? worker.project : "")].filter(Boolean).join(" · "),
+    end: live ? elapsedShort(worker.since, now) : needs ? "Needs you" : worker.time,
+    live: live || undefined,
+    needs: needs || undefined,
+    tile: { kind: "agent", agent: worker.agent, flavor: worker.flavor },
+    target: { open: "session", workerId: worker.sessionId },
+    done: worker.state === "done" || undefined,
+    progress: worker.progress,
+  };
 }

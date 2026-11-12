@@ -4,8 +4,7 @@ import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { markWorkRead, workAction, workDetail } from "../../core/work/brainWork";
 import type { BrainWorkDetail, BrainWorkStatus } from "../../core/work/types";
-import { workProject, workWorkerLines, type WorkWorkerLine } from "../../core/work/workers";
-import { workerRow } from "../../core/tray/model";
+import { workDetailWorkerRow, workProject, workWorkerLines, type WorkWorkerLine } from "../../core/work/workers";
 import { RowEnd, RowHair, RowText, RowTile } from "../tray/rowParts";
 import {
   BRAIN_WORK_SNOOZE_SECONDS, brainWorkActions, brainWorkAskDraft, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
@@ -117,12 +116,12 @@ function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; 
 }
 
 /**
- * The Workers (SPEC §11 Work detail): a group of tray rows, the tray's own parts and model (`workerRow`): the
- * agent's logo, "Agent · title", what it does, its progress, the time. Each pushes its Session; one the list
- * no longer has is shown but does not open.
+ * The Workers (SPEC §11 Work detail): a group of tray rows, the tray's own parts (`workDetailWorkerRow`): the
+ * agent's logo, the task name, what it does, its progress, its state at the end. Each pushes its Session; one
+ * the list no longer has is shown but does not open.
  */
 function Workers(props: { lines: () => WorkWorkerLine[]; project: () => string | undefined; onOpen: (sessionId: string) => void }) {
-  const rows = () => props.lines().map((line) => ({ line, row: workerRow(line, clock().now, props.project()) }));
+  const rows = () => props.lines().map((line) => ({ line, row: workDetailWorkerRow(line, clock().now, props.project()) }));
   return (
     <View>
       {props.lines().length ? (

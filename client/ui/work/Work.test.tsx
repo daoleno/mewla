@@ -9,7 +9,7 @@ function brain() {
     workers: [{ id: "%7", name: "release", status: "running", phase: "verifying", summary: "Running the release checks", command: "claude", cwd: "/home/me/perpetuo" }],
     current_work: [
       { work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name do we ship?", choices: ["Mewla", "Zen"], attention_since: now(), updated_at: now() },
-      { work_id: "w-run", revision: 1, title: "ship-the-beta", status: "running", progress_mode: "owned", attempt_session_id: "%7", unread_result: false, updated_at: now() },
+      { work_id: "w-run", revision: 1, title: "ship-the-beta", status: "running", progress_mode: "owned", attempt_session_id: "%7", attempt_delegated: true, unread_result: false, updated_at: now() },
       { work_id: "w-back", revision: 1, title: "fix-sync", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: true, summary: "Fixed the sync race and added a test.", attention_since: now(), updated_at: now() },
     ],
     open_work: [{ work_id: "w-queued", title: "write-the-docs", status: "open", progress_mode: "owned" }],
@@ -100,15 +100,22 @@ describe("Brain's Work", () => {
       { session_id: "%7", name: "release", provider: "claude", state: "running", summary: "Running the release checks", phase: "verifying", live: true, joined_at: at, updated_at: at },
       { session_id: "%8", name: "builder", provider: "claude", state: "failed", summary: "Build broke on Windows", live: false, joined_at: at, ended_at: at, updated_at: at },
       { session_id: "%9", name: "verifier", provider: "claude", state: "ended", summary: "", live: false, joined_at: at, ended_at: at, updated_at: at },
+      { session_id: "%6", name: "reviewer", provider: "claude", state: "blocked", summary: "Wants to push a branch", live: true, joined_at: at, updated_at: at },
     ];
     const app = await workApp({ brain: daemon, worker_sessions: [{ id: "%7", name: "release", status: "running", phase: "verifying", summary: "Running the release checks", command: "claude", provider: "claude", cwd: "/home/me/perpetuo", updated_at: Date.now() }] });
     await openWork(app, "w-run");
     await app.waitFor("id:work-workers");
-    expect(app.count("id:work-worker")).toBe(4);
-    expect(app.texts()).toContain("OpenAI Codex · planner");
+    expect(app.count("id:work-worker")).toBe(5);
+    // One that waits on you ends in a red dot and "Needs you", never a clock time.
+    expect(app.count("id:work-workers >> id:row-needs")).toBe(1);
+    expect(app.texts()).toContain("Needs you");
+    expect(app.texts()).toContain("Wants to push a branch");
+    // SPEC §11 Work detail: the logo names the agent, so the title is the task name alone.
+    expect(app.texts()).toContain("planner");
     expect(app.texts()).toContain("Failed · Build broke on Windows");
     expect(app.texts()).toContain("Ended");
-    expect(app.texts()).toContain("Claude Code · release");
+    expect(app.texts()).toContain("release");
+    expect(app.texts().some((text) => text.startsWith("Claude Code ·") || text.startsWith("OpenAI Codex ·"))).toBe(false);
     expect(app.count("id:work-workers >> id:tray-progress")).toBe(1);
     // The live one ends in its live dot and how long it has worked on the Work, as a tray row does.
     expect(app.count("id:work-workers >> id:row-live")).toBe(1);
@@ -117,7 +124,7 @@ describe("Brain's Work", () => {
     await app.waitFor("id:session-status");
   }, 20_000);
 
-  test("the live daemon's Claude Worker: \"Claude Code · Hello writer\", never its (mh-…) id nor its terminal footer", async () => {
+  test("the live daemon's Claude Worker: \"Hello writer\", never its (mh-…) id nor its terminal footer", async () => {
     const daemon = brain();
     const at = now();
     const id = "mh-17b3337d43f38037916f0e5b";
@@ -128,7 +135,7 @@ describe("Brain's Work", () => {
     const app = await workApp({ brain: daemon, worker_sessions: [{ id, name: `Hello writer (${id})`, status: "unknown", summary: footer, command: "claude", provider: "claude", cwd: "/home/me/perpetuo", updated_at: Date.now() }] });
     await openWork(app, "w-run");
     await app.waitFor("id:work-workers");
-    expect(app.texts()).toContain("Claude Code · Hello writer");
+    expect(app.texts()).toContain("Hello writer");
     expect(app.texts().some((text) => text.includes("(mh-") || text.includes("shift+tab") || text.includes("⏵"))).toBe(false);
   }, 20_000);
 
@@ -144,7 +151,7 @@ describe("Brain's Work", () => {
     expect(app.texts()).toContain("rename-the-app");
     // The state line: how it ended, and since when.
     expect(app.texts().some((text) => /^Done · since /.test(text))).toBe(true);
-    expect(app.texts()).toContain("Claude Code · renamer");
+    expect(app.texts()).toContain("renamer");
     expect(app.texts()).not.toContain("This Work is no longer open");
   }, 20_000);
 
@@ -157,6 +164,8 @@ describe("Brain's Work", () => {
     expect(app.shows("id:work-state")).toBe(true);
     // Ask Brain about this, then the ways to move it on: Stop with them, not with the links.
     expect(app.count("id:work-links >> id:work-action-ask")).toBe(1);
+    // SPEC §11 Work detail: Snooze 1 hour and Stop, together.
+    expect(app.count("id:work-moves >> id:work-action-snooze")).toBe(1);
     expect(app.count("id:work-moves >> id:work-action-stop")).toBe(1);
   }, 20_000);
 
