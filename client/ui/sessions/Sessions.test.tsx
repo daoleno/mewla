@@ -410,4 +410,19 @@ describe("a Session", () => {
     await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
     expect(framesOf(app.host.posts(), "create_session").at(-1)).toMatchObject({ target_id: "w4", cwd: "/home/me/site", connection_id: "gw" });
   }, 20_000);
+  test("an open Git review closes when its Session changes folder; the chip reads the new one (parity #43)", async () => {
+    const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }];
+    const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 1, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 0, additions: 3, deletions: 1, files };
+    const repo = session("w8", { name: "repo work" });
+    const app = await sessionsApp({ worker_sessions: [repo], conversations: { w8: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } });
+    await app.waitFor("text:repo work", { timeout: 10_000 });
+    await app.press("text:repo work");
+    await app.waitFor("id:session-git");
+    await app.press("id:session-git");
+    await app.waitFor("id:git-page");
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...repo, cwd: "/home/me/site" } });
+    await app.waitUntil(() => !app.shows("id:git-page"), { timeout: 5_000 });
+    expect(app.shows("id:session-menu")).toBe(true);
+    await app.waitUntil(() => framesOf(app.host.posts(), "git_diff_status").at(-1)?.cwd === "/home/me/site", { timeout: 5_000 });
+  }, 20_000);
 });
