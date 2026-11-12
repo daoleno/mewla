@@ -26,6 +26,7 @@ import { Counts, Current, FlashLine, IconButton, PathText, StatusChar, TextButto
 import type { GitPage } from "./routes";
 import { BranchSheet, CommitSheet } from "./sheets";
 import { copyText, gitReview, say, type GitReview } from "./state";
+import { haptic } from "../../shell/haptics";
 
 /** The page for a Git route, on the computer that was current when it opened. */
 export function GitPageView(props: { route: GitPage; nav: PageNav }) {
@@ -178,7 +179,10 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
               <View class="w-full max-w-[720px] self-center">
                 <FlashLine />
                 <View class="mt-3">
-                  <Segmented testID="git-tab" value={tab()} onChange={(next) => tab.set(next)} options={[{ key: "changes", label: "Changes" }, { key: "history", label: "History" }]} />
+                  <Segmented testID="git-tab" value={tab()} onChange={(next) => {
+                    if (next !== untracked(tab)) haptic.selection();
+                    tab.set(next);
+                  }} options={[{ key: "changes", label: "Changes" }, { key: "history", label: "History" }]} />
                 </View>
                 <Strip review={review} tab={tab()} onBranches={() => branchesOpen.set(true)} />
                 {review.searchOpen() && tab() === "changes" ? (

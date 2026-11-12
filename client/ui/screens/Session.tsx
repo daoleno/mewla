@@ -40,6 +40,7 @@ import { showCalendarItem } from "../calendar/routes";
 import { workLinkOf } from "../sessions/workLinks";
 import { selectedTab } from "../shell/Shell";
 import { terminalShowing } from "../shell/desktop/keys";
+import { haptic } from "../shell/haptics";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { slashMenuState } from "../../core/session/composerSlash";
 import { DSHPanel } from "../chat/DSHPanel";
@@ -273,6 +274,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
       notice.set("Your computer is offline.");
       return;
     }
+    haptic.notification("warning");
     const { action } = await AlertDialog.show({
       title: "Terminate this session?",
       description: "Its terminal and agent stop on your computer.",

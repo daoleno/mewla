@@ -4,6 +4,7 @@ import { PairLatch } from "../core/onboarding";
 import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
+import { haptic } from "./shell/haptics";
 
 /**
  * Pairing, one pipeline for every way in: a scanned code, a pasted link, a `mewla://` link the
@@ -67,12 +68,14 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     }
     // Settings' Pair page closes on this, while the app is still there under it.
     pairings.set(pairings() + 1);
+    haptic.notification("success");
     // A browser goes straight to the app; a phone sees Brain come home first (the app goes until then).
     if (paired && device() === "phone") justPaired.set(paired);
     if (source === "link") linkPairing.set(null);
     latch.release();
   } catch (error) {
     pairingIssue.set(pairingProblem(error));
+    haptic.notification("error");
     if (source === "link") linkPairing.set({ problem: pairingProblem(error) });
     latch.release(value);
   } finally {
