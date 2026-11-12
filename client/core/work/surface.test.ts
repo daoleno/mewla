@@ -47,7 +47,7 @@ const live: BrainCurrentWork[] = [
 ];
 
 const workers: BrainWorkerRef[] = [
-  { id: "%107", name: "perpetuo-browser-reopen-2 (%107)", status: "running", command: "claude", cwd: "/home/me/acelabs/perpetuo", summary: "Fix v1 passes 7/9 at cpus 0.7" },
+  { id: "%107", name: "perpetuo-browser-reopen-2 (%107)", status: "running", command: "claude", cwd: "/home/me/acelabs/perpetuo", phase: "working", summary: "Fix v1 passes 7/9 at cpus 0.7" },
 ];
 
 describe("brainWorkSurface", () => {
@@ -81,6 +81,15 @@ describe("brainWorkSurface", () => {
       statusLabel: "Working",
       sessionId: "%107",
     });
+  });
+
+  test("a running slip never reads its Session's screen: no report, no footer, the Work's own summary instead", () => {
+    const pasted = '"$MEWLA_WORKER_PROGRESS_CMD" worker progress --turn-id t1 --status running';
+    const unreported = workers.map((worker) => (worker.id === "%107" ? { ...worker, phase: undefined, summary: pasted } : worker));
+    const slip = brainWorkSurface(live, unreported).slips.find((item) => item.workId === "reopen")!;
+    expect(slip.summary ?? "").not.toContain("MEWLA_WORKER_PROGRESS");
+    const footer = workers.map((worker) => (worker.id === "%107" ? { ...worker, summary: "⏵⏵ bypass permissions on (shift+tab to cycle)" } : worker));
+    expect(brainWorkSurface(live, footer).slips.find((item) => item.workId === "reopen")!.summary ?? "").not.toContain("shift+tab");
   });
 
   test("a needs-you slip says what Brain is waiting on", () => {

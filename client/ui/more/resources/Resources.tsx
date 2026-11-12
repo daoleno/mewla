@@ -498,7 +498,7 @@ function Consumers(props: { t: ResourceTelemetry }) {
         }
       />
       {/* One row that scrolls sideways, no glyphs (FIDELITY-AUDIT 19): the chips never wrap. */}
-      <Scroll horizontal scrollbar={false} testID="owner-chips" class="grow-0" contentClass="flex-row gap-2 pr-4">
+      <Scroll horizontal scrollbar={false} testID="owner-chips" class="grow-0" contentClass="flex-row gap-2 pr-4" keyboardShouldPersistTaps="handled">
         <Chip testID="owner-all" label={`All ${props.t.consumers.length}`} accessibilityLabel="Filter All" selected={owner() === "all"} onPress={() => choose("all")} />
         {OWNERS.filter((o) => counts().has(o.key)).map((o) => (
           <Chip

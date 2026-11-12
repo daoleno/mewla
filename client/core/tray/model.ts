@@ -5,12 +5,13 @@
  */
 import { progressSteps } from "../sessions/progress";
 import type { BrainHostProblem, BrainSurface, BrainWorkerRef } from "../brain";
-import { approvalTitle, elapsedShort, isQuestionApproval, promptTitle, sessionActivity } from "../sessions/activity";
-import { listTime, sessionRowModel } from "../sessions/listRow";
+import { approvalTitle, BARE_STATE_WORDS, elapsedShort, isQuestionApproval, promptTitle, readableSummary, sessionActivity } from "../sessions/activity";
+import { listTime, sessionRowModel, withoutSessionId } from "../sessions/listRow";
+import { agentKindFromProvider, typeLabel } from "../sessions/workerPresentation";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerApproval, WorkerPrompt } from "../sessions/workers";
 import type { WorkWorkerSession } from "../work/types";
-import { liveWorkerIds } from "../work/workers";
+import { liveWorkerIds, type WorkWorkerLine } from "../work/workers";
 import { brainWorkSurface, type BrainWorkSlip } from "../work/surface";
 import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
 
@@ -161,6 +162,11 @@ export interface TrayModel {
   /** The tray's title: the same words as the state control. */
   title: string;
   notice: TrayNotice | null;
+  /**
+   * "N running": the Running rows that count (§1.2 "The count"), queued and waiting Work left out. The
+   * state control, the tray's title and the cat all read this one number, so they never disagree.
+   */
+  runningCount: number;
   /** The lists are last known: dimmed under the notice (offline, connecting, pair again). */
   dimmed: boolean;
   needs: TrayRequest[];
@@ -205,7 +211,7 @@ function promptOneTap(workerId: string, prompt: WorkerPrompt): OneTap | undefine
 }
 
 function titleOf(worker: Worker): string {
-  return sessionRowModel(worker).title || worker.name || "Session";
+  return sessionRowModel(worker).title || withoutSessionId(worker.name) || "Session";
 }
 
 /**
@@ -227,7 +233,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
   for (const worker of input.workers) {
     const where: RequestWhere = worker.delegated ? "brain" : "session";
     const model = sessionRowModel(worker);
-    const base = { where, source: model.title || worker.name || "Session", workerId: worker.id, agent: model.kind, flavor: model.flavor };
+    const base = { where, source: titleOf(worker), workerId: worker.id, agent: model.kind, flavor: model.flavor };
     const decisions = (worker.approvals ?? []).filter((approval) => !isQuestionApproval(approval));
     if (decisions.length > 0) {
       for (const approval of decisions) out.push({ ...base, key: `approval:${worker.id}:${approval.id}`, kind: "approval", title: approvalTitle(approval), oneTap: approvalOneTap(worker.id, approval) });
@@ -235,7 +241,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
       out.push({ ...base, key: `prompt:${worker.id}:${worker.prompt.id}`, kind: "prompt", title: promptTitle(worker.prompt), oneTap: promptOneTap(worker.id, worker.prompt) });
     } else if (worker.needs_attention) {
       // Blocked on something the computer could not read: its card says "Open terminal".
-      out.push({ ...base, key: `attention:${worker.id}`, kind: "attention", title: worker.summary?.trim() || "Waiting for you" });
+      out.push({ ...base, key: `attention:${worker.id}`, kind: "attention", title: readableSummary(worker.summary) || "Waiting for you" });
     }
   }
   for (const slip of brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now).slips) {
@@ -267,7 +273,7 @@ export function sessionRow(worker: Worker, now: number, options: { alias?: strin
   const live = worker.status === "running";
   return {
     key: `session:${worker.id}`,
-    title: model.title || worker.name || "Session",
+    title: model.title || withoutSessionId(worker.name) || "Session",
     line: model.line,
     end: live ? elapsedShort(worker.started_at, now) : listTime(worker.updated_at, new Date(now)),
     live: live || undefined,
@@ -279,10 +285,53 @@ export function sessionRow(worker: Worker, now: number, options: { alias?: strin
   };
 }
 
-/** A Work Worker's line: what it reported, else its phase's word, else the Work's state. */
+/**
+ * A Work's Worker as a tray row (§11 Work detail, "Workers"): its agent's logo, "Agent · title" (no Session
+ * id), what it does, its progress bar, and "● 12m" while it works, else when it finished; it pushes its
+ * Session. What it does: a state that is news ("Needs you", "Failed", "Ended"), then what it reported; with
+ * nothing reported (a Claude Session on today's daemons reports nothing), the project it works in when the
+ * Work's eyebrow names another, else nothing, rather than a bare "Working" or its terminal's footer.
+ */
+export function workerRow(worker: WorkWorkerLine, now: number, workProject?: string): TrayRow {
+  const live = worker.state === "running";
+  const named = worker.name && worker.name !== worker.agentLabel && worker.name !== "Worker";
+  return {
+    key: `worker:${worker.sessionId}`,
+    title: named ? `${worker.agentLabel} · ${worker.name}` : worker.agentLabel,
+    // The project only where the page's eyebrow ("Work · mewla") does not already say it.
+    line: [worker.stateLabel, worker.summary || (worker.project !== workProject ? worker.project : "")].filter(Boolean).join(" · "),
+    end: live ? elapsedShort(worker.since, now) : worker.time,
+    live: live || undefined,
+    needs: worker.state === "blocked" || undefined,
+    tile: { kind: "agent", agent: worker.agent, flavor: worker.flavor },
+    target: { open: "session", workerId: worker.sessionId },
+    done: worker.state === "done" || undefined,
+    progress: worker.progress,
+  };
+}
+
+/**
+ * What a Work's Worker does, in words: what it reported (never the terminal's footer), else its phase's word
+ * ("Verifying"), else which agent it is ("Claude Code"); never the bare "Working".
+ */
 function workerLine(row: WorkWorkerSession | undefined): string {
   if (!row) return "";
-  return row.summary?.trim() || sessionActivity({ status: "running", summary: "", phase: row.phase });
+  const reported = readableSummary(row.summary);
+  if (reported) return reported;
+  const phase = row.phase ? sessionActivity({ status: "running", summary: "", phase: row.phase }) : "";
+  if (phase && !BARE_STATE_WORDS.has(phase)) return phase;
+  return row.provider ? typeLabel(agentKindFromProvider(row.provider), "shell") : "";
+}
+
+/** What a waiting Work waits for, as Brain wrote it; a bare reference ("operator:2985…") is plumbing. */
+function readableWait(value: string | undefined): string {
+  const line = readableSummary(value);
+  return line.includes(" ") ? line : "";
+}
+
+/** A Work's own word that says something (§11 Tray row): not one that only repeats its section ("Working", "Queued"). */
+function telling(word: string | undefined): string {
+  return word && !BARE_STATE_WORDS.has(word) && word !== "Queued" && word !== "Running" ? word : "";
 }
 
 function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now: number): TrayRow {
@@ -294,18 +343,27 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now
   const model = session ? sessionRowModel(session) : null;
   const done = slip.group === "back";
   const running = slip.group === "running";
-  const lead = joined.find((row) => row.live);
-  // Running: what its Worker does (the first live one of several), as the Session's own row says it.
-  const doing = several ? workerLine(lead) : session ? model!.line : workerLine(lead);
+  const lead = joined.find((row) => row.live) ?? (several ? undefined : joined[0]);
+  // What its Worker does (the first live one of several), as the Session's own row says it.
+  const doing = several ? workerLine(lead) : model ? model.line : workerLine(lead);
   const since = lead ? Date.parse(lead.joined_at) : session?.started_at;
+  // The line never repeats the section (§11 Tray row): a running Work says what its Worker does; a result,
+  // what came back; a queued or waiting one, what it waits for, else what its Worker is (the live case: a
+  // Claude Session reports neither status nor progress), else the Work's own context (Brain's summary, its
+  // Session's agent and project), and only then why it sits quiet ("Not started yet"), never "Queued".
+  const quietLine = () =>
+    (slip.group === "waiting" ? readableWait(slip.waitFor) || telling(slip.statusLabel) : "")
+    || doing || slip.summary || slip.who
+    || (slip.group === "queued" ? "Not started yet" : "Waiting to go on");
+  const line = several
+    ? [`${joined.length} Workers`, running || !done ? doing : ""].filter(Boolean).join(" · ")
+    : done ? slip.summary || doing || slip.who || ""
+    : running ? doing || telling(slip.statusLabel) || slip.summary || slip.who || ""
+    : quietLine();
   return {
     key: `work:${slip.workId}`,
     title: slip.title,
-    line: several
-      ? [`${joined.length} Workers`, running ? doing : ""].filter(Boolean).join(" · ")
-      : done ? slip.summary || slip.statusLabel
-      : running ? doing || slip.statusLabel
-      : slip.waitFor || slip.statusLabel,
+    line,
     // Running: how long; otherwise when it last changed ("11:20" for a result, as a Session's row).
     end: running ? elapsedShort(since, now) : slip.updatedAt ? listTime(Date.parse(slip.updatedAt), new Date(now)) : "",
     live: running || undefined,
@@ -381,25 +439,33 @@ export function trayModel(input: TrayInput): TrayModel {
 
   const todayRows: TrayRow[] = [...input.today]
     .sort((a, b) => a.at - b.at)
-    .map((item) => ({
+    .map((item) => {
+      // A running item says what its run's Session does and how long it has run ("● 12m"), as Running's rows do.
+      const run = item.running && item.sessionId ? sessions.get(item.sessionId) : undefined;
+      const live = run ? sessionRow(run, input.now) : null;
+      return {
       key: `today:${item.id}`,
       title: item.title,
-      line: item.running ? "Running" : item.time,
-      end: item.running ? "" : item.time,
+      line: item.running ? live?.line || `Started ${item.time}` : item.time,
+      end: item.running ? live?.end ?? "" : item.time,
       live: item.running || undefined,
+      progress: live?.progress,
       tile: { kind: "calendar" as const },
       target: item.running && item.sessionId ? { open: "session" as const, workerId: item.sessionId } : { open: "item" as const, itemId: item.id, sessionId: item.sessionId },
       past: !item.running && item.at < input.now ? true : undefined,
-    }));
+      };
+    });
   // The next three: running and still to come, before what has passed.
   const upcoming = todayRows.filter((row) => !row.past);
   const today = (upcoming.length ? upcoming : todayRows).slice(0, TODAY_SHOWN);
 
-  const state = stateOf(input, needs.length, running.filter((row) => !row.quiet).length);
+  const runningCount = running.filter((row) => !row.quiet).length;
+  const state = stateOf(input, needs.length, runningCount);
   return {
     state,
     title: state.words || "Mewla",
     notice: noticeOf(input),
+    runningCount,
     dimmed: input.hasServer && (input.pairAgain || input.connection !== "connected"),
     needs,
     running,

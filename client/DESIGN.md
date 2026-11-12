@@ -137,6 +137,19 @@ preference.
   on iOS and Android the page's own Back stands in for the system's while the
   mark shows). No page, chat or list carries a connection banner. A page that
   can't work at all says so in its empty state.
+- **Home's tray** (SPEC §1.2, §3.2, §11; `ui/tray/Tray.tsx`, `core/tray/model.ts`)
+  rises from the bottom, its top hanging just under home's header and filling
+  to the screen's bottom whatever it lists; the header and the page dim under
+  it. Its title row ends in the options glyph (Sort, Services), then +. "N
+  running" counts the Running rows that are not quiet (`runningCount`): the
+  state control, the tray's title and the cat read that one number, so quiet
+  queued or waiting Work leaves "All quiet" and the napping cat. A row's line
+  says what the thing does: never its section's word ("Working", "Idle",
+  "Queued"), never the terminal's footer (`isTerminalFooter`), never a
+  Session's "(mh-…)" id; with nothing reported, the agent and project
+  ("Claude Code · mewla"), and a queued Work with no Worker "Not started
+  yet". Live rows end in "● 12m". Work detail's Workers are the same rows
+  (`workerRow`).
 - **Failures show at the action.** Send stays pressable while offline: the
   composer says "Not sent: Mewla can't reach your computer. Your message is
   still here." and keeps the draft; the note clears on reconnect. Drafts also survive a reload
@@ -284,7 +297,7 @@ browser, a desktop) get the same frame.
    288 pt popover with 48 pt rows and radius 18 at its button on wide (the
    button hands it `createMenuAnchor().node()`); Esc and a press outside
    close it, and a row that cannot run now stays in place at 40 %. Brain's
-   ⋯, a Session's ⋯, the tray's ⋯ and Git ⋯ use it; Screen ⋯ is NSH's
+   ⋯, a Session's ⋯, the tray's options glyph and Git ⋯ use it; Screen ⋯ is NSH's
    `Menu`, a popup at its button on a pointer device.
 8. **List and detail side by side** when the right pane is 880 or wider
    (`listDetail`: a 1280 window with the default pane): Git review › diff,
@@ -435,7 +448,7 @@ executor · project · time, the state, the title and one line. A Work's slip
 moves to when its newest result came back. A turn's finished tool rows fold
 into one row that says what they did ("Ran 1 command, edited 1 file") with
 its kind's icon and the files in soft, and opens onto the real rows; Brain and
-a Session fold alike (`core/timeline/foldToolRuns.ts`). The composer says "Tell Brain…".
+a Session fold alike (`core/timeline/foldToolRuns.ts`). The composer says "Tell Brain", with no ellipsis.
 
 ## Type
 

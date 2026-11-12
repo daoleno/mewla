@@ -3,8 +3,8 @@
  * joined it, oldest first. A live one reads its Session as the list has it now (state, what it does,
  * its phase); a finished one, the snapshot's row.
  */
-import { listTime, sessionRowModel } from "../sessions/listRow";
-import { sessionActivity } from "../sessions/activity";
+import { readableSummary } from "../sessions/activity";
+import { listTime, sessionRowModel, withoutSessionId } from "../sessions/listRow";
 import { progressSteps } from "../sessions/progress";
 import type { TerminalFlavor } from "../sessions/terminalFlavor";
 import { agentKindFromProvider, typeLabel, type AgentKind } from "../sessions/workerPresentation";
@@ -29,6 +29,8 @@ export interface WorkWorkerLine {
   progress?: number;
   /** "live" while it works; else when it finished. */
   time: string;
+  /** When it joined the Work (ms): a live row's end says how long it has worked on it. */
+  since?: number;
   /** Its Session is in the list: the line pushes it. */
   openable: boolean;
   /** Its Session's project ("perpetuo"), while the list has the Session. */
@@ -47,24 +49,7 @@ const LIVE_STATE: Partial<Record<Worker["status"], WorkWorkerState>> = { running
  * the id is no name to show. Only that exact suffix goes; "Fix (macOS)" stays as it is.
  */
 export function workerName(name: string | undefined): string {
-  return (name ?? "").replace(/\s*\(mh-[0-9a-f]+\)\s*$/, "").trim();
-}
-
-/**
- * What a Worker does, in words. A live one the list has reads as its Session's line does (never the
- * terminal: a live row's summary is the daemon reading the screen, its footer "⏵⏵ bypass permissions on"
- * included); a live one the list lacks, its summary only once it reported a phase; a finished one, its
- * reported result line.
- */
-function workerSummary(row: WorkWorkerSession, session: Worker | undefined): string {
-  const text = row.live
-    ? session
-      ? sessionActivity(session)
-      : row.phase?.trim()
-        ? row.summary
-        : ""
-    : row.summary;
-  return text?.replace(/\s+/g, " ").trim() ?? "";
+  return withoutSessionId(name);
 }
 
 export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, sessions: ReadonlyMap<string, Worker>, now = new Date()): WorkWorkerLine[] {
@@ -74,13 +59,17 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
     const following = row.live && session;
     const state = following ? LIVE_STATE[session.status] ?? row.state : row.state;
     const working = state === "running";
-    const summary = workerSummary(row, session);
+    // What it reported (a live Session's summary only once it reported progress: before, it is the daemon
+    // reading the screen); the terminal's footer ("⏵⏵ bypass permissions on…") is never a summary.
+    const reported = following && Boolean(session.phase?.trim() || session.event_kind?.trim());
+    const summary = (reported ? readableSummary(session.summary) : "") || readableSummary(row.summary);
+    const joined = Date.parse(row.joined_at);
     const at = Date.parse(working ? row.updated_at : row.ended_at ?? row.updated_at);
     const agent = model?.kind ?? agentKindFromProvider(row.provider);
     const flavor = model?.flavor ?? "shell";
     return {
       sessionId: row.session_id,
-      name: workerName(row.name) || workerName(model?.title) || row.executor_id || "Worker",
+      name: withoutSessionId(row.name) || model?.title || row.executor_id || "Worker",
       agent,
       flavor,
       agentLabel: typeLabel(agent, flavor),
@@ -89,6 +78,7 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
       stateLabel: STATE_LABEL[state],
       progress: working ? progressSteps(following ? session.phase ?? row.phase : row.phase) ?? undefined : undefined,
       time: working ? "live" : listTime(Number.isFinite(at) ? at : undefined, now),
+      since: Number.isFinite(joined) ? joined : undefined,
       openable: Boolean(session),
       project: projectName(session?.cwd) || undefined,
     };

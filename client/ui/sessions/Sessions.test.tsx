@@ -173,7 +173,7 @@ describe("Sessions", () => {
   test("a row names itself to a screen reader: title and state (parity #10)", async () => {
     const app = await sessionsApp({ worker_sessions: [session("a", { name: "release notes", status: "running" })] });
     await app.waitFor("text:release notes");
-    expect(app.count("label:release notes, Running, Working")).toBe(1);
+    expect(app.count("label:release notes, Running, Claude Code · mewla")).toBe(1);
   }, 20_000);
 
   test("a row says what its Session does in words, never its terminal; running, a live dot and how long", async () => {
@@ -185,8 +185,9 @@ describe("Sessions", () => {
       session("c", { name: "reporter", status: "running", phase: "working", summary: "Rerunning the suite", started_at: Date.now() - 4 * 60_000 }),
     ] });
     await app.waitFor("text:reporter");
-    expect(app.texts()).toContain("Working");
-    expect(app.texts()).toContain("Idle");
+    // Nothing reported: the agent and project, never the bare "Working" or "Idle".
+    expect(app.texts().filter((t) => t === "Claude Code · mewla").length).toBe(2);
+    expect(app.texts()).not.toContain("Working");
     expect(app.texts()).toContain("Rerunning the suite");
     expect(app.texts()).toContain("12m");
     expect(app.texts()).toContain("4m");
