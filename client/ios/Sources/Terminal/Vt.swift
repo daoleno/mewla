@@ -1,19 +1,47 @@
 import UIKit
 
-/// One run of cells in one style, from libghostty-vt (TerminalVt.h).
+/// TerminalVt.h's frame layout and flags (kept in step with its enum).
+enum VtLayout {
+  static let header = 10
+  static let row = 3
+  static let run = 8
+  static let bold = 1
+  static let italic = 2
+  static let faint = 4
+  static let inverse = 8
+  static let strike = 16
+  static let overline = 32
+  static let blink = 64
+  static let cluster = 128
+  static let underlineShift = 8
+}
+
+/// One run of cells in one style, from libghostty-vt (TerminalVt.h): plain (one UTF-16 unit
+/// per cell) or a single cell (a wide character, a grapheme of several code points, a code point
+/// outside the BMP).
 struct TerminalRun {
   let col: Int
   let cells: Int
-  /// 0xAARRGGBB; `bg` 0 is the theme's background.
+  /// Final 0xAARRGGBB (inverse and faint applied); `bg` 0 is the theme's background.
   let fg: UInt32
   let bg: UInt32
   let flags: Int
-  let text: String
+  /// The underline's color, 0 = `fg`.
+  let underlineColor: UInt32
+  let units: [UInt16]
 
-  var bold: Bool { flags & 1 != 0 }
-  var italic: Bool { flags & 2 != 0 }
-  var underline: Bool { flags & 4 != 0 }
-  var inverse: Bool { flags & 8 != 0 }
+  var text: String { String(decoding: units, as: UTF16.self) }
+  /// One UTF-16 unit per cell; otherwise a single cell (a wide character, a grapheme, an astral code point).
+  var plain: Bool { flags & VtLayout.cluster == 0 }
+  var bold: Bool { flags & VtLayout.bold != 0 }
+  var italic: Bool { flags & VtLayout.italic != 0 }
+  /// SGR 7 (fg and bg are already swapped).
+  var inverse: Bool { flags & VtLayout.inverse != 0 }
+  var faint: Bool { flags & VtLayout.faint != 0 }
+  var strike: Bool { flags & VtLayout.strike != 0 }
+  var overline: Bool { flags & VtLayout.overline != 0 }
+  /// 0 none, 1 single, 2 double, 3 curly, 4 dotted, 5 dashed.
+  var underline: Int { (flags >> VtLayout.underlineShift) & 7 }
 }
 
 /// What changed since the last frame: the rows in `dirty` replace the view's rows.
@@ -23,8 +51,11 @@ struct TerminalFrame {
   let cursorCol: Int
   let cursorRow: Int
   let cursorVisible: Bool
+  /// 0 bar, 1 block, 2 underline, 3 hollow block.
+  let cursorStyle: Int
+  let cursorBlinking: Bool
   let full: Bool
-  let dirty: [(row: Int, runs: [TerminalRun])]
+  let dirty: [(row: Int, wrapped: Bool, runs: [TerminalRun])]
 }
 
 /// libghostty-vt through TerminalVt.cpp. One per terminal view; freed with it.
@@ -67,36 +98,49 @@ final class Vt {
     return String(decoding: UnsafeBufferPointer(start: data, count: length), as: UTF8.self)
   }
 
+  /// Pasted text as the bytes for the program (framed for bracketed paste when it asked), as a String.
+  func paste(_ text: String) -> String? {
+    var text = text
+    return text.withUTF8 { bytes -> String? in
+      var out: UnsafePointer<UInt8>?
+      var length = 0
+      guard mewla_vt_paste(handle, bytes.baseAddress, bytes.count, &out, &length), let out, length > 0 else { return nil }
+      return String(decoding: UnsafeBufferPointer(start: out, count: length), as: UTF8.self)
+    }
+  }
+
   func frame(full: Bool) -> TerminalFrame? {
+    let header = VtLayout.header, rowInts = VtLayout.row, runInts = VtLayout.run
     var out = MewlaVtFrame()
-    guard mewla_vt_frame(handle, full, &out), let metaBase = out.meta, out.meta_count >= 7 else { return nil }
+    guard mewla_vt_frame(handle, full, &out), let metaBase = out.meta, out.meta_count >= header else { return nil }
     let m = UnsafeBufferPointer(start: metaBase, count: out.meta_count)
     let text = UnsafeBufferPointer(start: out.text, count: out.text_count)
-    var dirty: [(row: Int, runs: [TerminalRun])] = []
+    var dirty: [(row: Int, wrapped: Bool, runs: [TerminalRun])] = []
     dirty.reserveCapacity(Int(m[6]))
-    var p = 7
+    var p = header
     for _ in 0..<Int(m[6]) {
-      guard p + 1 < m.count else { break }
+      guard p + rowInts <= m.count else { break }
       let row = Int(m[p])
       let count = Int(m[p + 1])
-      p += 2
+      let wrapped = m[p + 2] == 1
+      p += rowInts
       var runs: [TerminalRun] = []
       runs.reserveCapacity(count)
       for _ in 0..<count {
-        guard p + 6 < m.count else { break }
-        let start = Int(m[p + 5])
-        let length = Int(m[p + 6])
-        let units: UnsafeBufferPointer<UInt16> = start >= 0 && length >= 0 && start + length <= text.count
-          ? UnsafeBufferPointer(rebasing: text[start..<(start + length)]) : UnsafeBufferPointer(start: nil, count: 0)
+        guard p + runInts <= m.count else { break }
+        let start = Int(m[p + 6])
+        let length = Int(m[p + 7])
+        let units: [UInt16] = start >= 0 && length >= 0 && start + length <= text.count ? Array(text[start..<(start + length)]) : []
         runs.append(TerminalRun(col: Int(m[p]), cells: Int(m[p + 1]), fg: UInt32(bitPattern: m[p + 2]),
                                 bg: UInt32(bitPattern: m[p + 3]), flags: Int(m[p + 4]),
-                                text: String(decoding: units, as: UTF16.self)))
-        p += 7
+                                underlineColor: UInt32(bitPattern: m[p + 5]), units: units))
+        p += runInts
       }
-      dirty.append((row, runs))
+      dirty.append((row, wrapped, runs))
     }
     return TerminalFrame(rows: Int(m[0]), cols: Int(m[1]), cursorCol: Int(m[2]), cursorRow: Int(m[3]),
-                         cursorVisible: m[4] == 1, full: m[5] == 1, dirty: dirty)
+                         cursorVisible: m[4] == 1, cursorStyle: Int(m[7]), cursorBlinking: m[8] == 1,
+                         full: m[5] == 1, dirty: dirty)
   }
 }
 

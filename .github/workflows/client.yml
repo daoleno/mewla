@@ -118,6 +118,8 @@ jobs:
         working-directory: client/ios
         env:
           TEST_RUNNER_MEWLA_TEST_OUT: ${{ github.workspace }}/client/ios/out
+          # The render corpus TerminalTests draws into out/corpus (the Simulator reads the checkout).
+          TEST_RUNNER_MEWLA_CORPUS: ${{ github.workspace }}/scripts/terminal-corpus
         run: |
           set -o pipefail
           mkdir -p out

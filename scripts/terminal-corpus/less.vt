@@ -1,0 +1,59 @@
+[?1049h[30;1H[?1h=[33mcommit 4ff4fb73503b5dd750dc99e77568307ab62d7299[m[m
+Merge: 198141b c840746[m
+Author: demo <a@b>[m
+Date:   Thu Nov 12 10:24:26 2026 +0800[m
+[m
+    Merge branch 'feature'[m
+[m
+[33mcommit 198141bf9a6b519297aa9c32138a926b1a85cce2[m[m
+Author: demo <a@b>[m
+Date:   Thu Nov 12 10:24:26 2026 +0800[m
+[m
+    提交 12: change line 12[m
+---[m
+ README.md | 1 [32m+[m[m
+ 1 file changed, 1 insertion(+)[m
+[m
+[1mdiff --git a/README.md b/README.md[m[m
+[1mindex df87ae6..7c744d6 100644[m[m
+[1m--- a/README.md[m[m
+[1m+++ b/README.md[m[m
+[36m@@ -27,3 +27,4 @@[m[m
+ 第 9 行 line 9[m[m
+ 第 10 行 line 10[m[m
+ 第 11 行 line 11[m[m
+[32m+[m[32m第 12 行 line 12[m[m
+[m
+[33mcommit c840746cec90967d53648f8674e31610512e93d0[m[m
+Author: demo <a@b>[m
+Date:   Thu Nov 12 10:24:26 2026 +0800[m
+:[K[K[m
+    feature: 分支提交[m
+---[m
+ main.go | 1 [32m+[m[m
+ 1 file changed, 1 insertion(+)[m
+[m
+[1mdiff --git a/main.go b/main.go[m[m
+[1mindex 7ec2e40..1521b23 100644[m[m
+[1m--- a/main.go[m[m
+[1m+++ b/main.go[m[m
+[36m@@ -5,3 +5,4 @@[m [mimport "fmt"[m[m
+ func main() {[m[m
+        fmt.Println("hello, 世界")[m[m
+ }[m[m
+[32m+[m[32mx[m[m
+[m
+[33mcommit 3d0258f6840c0d4174d7db26978873729c79af3c[m[m
+Author: demo <a@b>[m
+Date:   Thu Nov 12 10:24:26 2026 +0800[m
+[m
+    提交 11: change line 11[m
+---[m
+ README.md | 1 [32m+[m[m
+ 1 file changed, 1 insertion(+)[m
+[m
+[1mdiff --git a/README.md b/README.md[m[m
+[1mindex 634d21d..df87ae6 100644[m[m
+[1m--- a/README.md[m[m
+[1m+++ b/README.md[m[m
+:[K

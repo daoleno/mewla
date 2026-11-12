@@ -1,0 +1,3 @@
+[H[2Jcursor: steady block
+
+$ echo hello world[3;8H[2 q

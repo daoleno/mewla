@@ -29,8 +29,12 @@ export type WebTerminalTheme = {
 export const ANSI_NAMES = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
   "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite"] as const;
 
-/** Latin monospace faces first: xterm sizes its cells from the first family it finds, and Linux's `monospace` can be a CJK face. */
-export const WEB_TERMINAL_FONT = '"SF Mono", Menlo, Monaco, "Cascadia Mono", Consolas, "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", monospace';
+/**
+ * The phones' terminal face (client/native/terminal/fonts, served beside the page as /terminal/*.ttf): Maple Mono NF,
+ * with Powerline and Nerd Fonts icons and no ligatures. Then Latin monospace faces: xterm sizes its cells from the first
+ * family it finds, and Linux's `monospace` can be a CJK face.
+ */
+export const WEB_TERMINAL_FONT = '"Maple Mono NF", "SF Mono", Menlo, Monaco, "Cascadia Mono", Consolas, "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", monospace';
 
 /** `#rrggbbaa` without its alpha (the VT draws opaque colors, as on the phones). */
 export function opaque(color: string): string {
@@ -204,13 +208,18 @@ const PAGE_STYLE = `html,body{margin:0;width:100%;height:100%;overflow:hidden;ba
 #screen{box-sizing:border-box;height:100%;padding:4px 0 0 6px}
 .B{font-weight:bold}.D{opacity:.5}.I{font-style:italic}.U{text-decoration:underline}.S{text-decoration:line-through}.U.S{text-decoration:underline line-through}.O{text-decoration:overline}`;
 
+/** The bundled faces: Regular, and SemiBold for bold. */
+const fontFaces = (url: (file: string) => string) =>
+  `@font-face{font-family:"Maple Mono NF";src:url("${url("MapleMono-NF-Regular.ttf")}") format("truetype");font-weight:100 499;font-display:block}` +
+  `@font-face{font-family:"Maple Mono NF";src:url("${url("MapleMono-NF-SemiBold.ttf")}") format("truetype");font-weight:500 900;font-display:block}`;
+
 /** The page, its files in `dir`. */
 export function terminalPageHtml(dir = TERMINAL_PAGE_DIR): string {
   const url = (file: string) => attr(dir + file);
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link rel="stylesheet" href="${url("xterm.css")}">
-<style>${PAGE_STYLE}</style>
+<style>${fontFaces(url)}${PAGE_STYLE}</style>
 </head><body><div id="scroller"><div id="history"></div><div id="screen"></div></div>
 <script data-xterm src="${url("xterm.js")}"></script>
 <script src="${url("terminal.js")}"></script>

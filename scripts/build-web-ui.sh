@@ -35,6 +35,10 @@ mkdir -p "$APP/terminal"
 for file in terminal.js xterm.js xterm.css LICENSE-xterm.txt; do
   cp "$ROOT/client/ui/web/terminal/$file" "$APP/terminal/$file"
 done
+# Its face is the phones' (client/native/terminal/fonts, SIL OFL 1.1).
+for file in MapleMono-NF-Regular.ttf MapleMono-NF-SemiBold.ttf; do
+  cp "$ROOT/client/native/terminal/fonts/$file" "$APP/terminal/$file"
+done
 # NSH writes .gz and .br beside some files: keep one gzip of every file.
 find "$APP" -type f \( -name '*.gz' -o -name '*.br' \) -delete
 find "$APP" -type f -exec gzip -9 -n {} +

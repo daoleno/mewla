@@ -1,0 +1,26 @@
+*   [33m4ff4fb7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m Merge branch 'feature'
+[31m|[m[32m\[m  
+[31m|[m * [33mc840746[m[33m ([m[1;32mfeature[m[33m)[m feature: 分支提交
+* [32m|[m [33m198141b[m 提交 12: change line 12
+* [32m|[m [33m3d0258f[m 提交 11: change line 11
+* [32m|[m [33ma163523[m 提交 10: change line 10
+[32m|[m[32m/[m  
+* [33mc51c259[m 提交 9: change line 9
+* [33m39c0d1d[m 提交 8: change line 8
+* [33mf4eed26[m 提交 7: change line 7
+* [33m7101d5f[m 提交 6: change line 6
+* [33m8cab18e[m 提交 5: change line 5
+[1mdiff --git a/main.go b/main.go[m
+[1mindex 1521b23..281eaf6 100644[m
+[1m--- a/main.go[m
+[1m+++ b/main.go[m
+[36m@@ -3,6 +3,7 @@[m [mpackage main[m
+ import "fmt"[m
+ [m
+ func main() {[m
+[31m-	fmt.Println("hello, 世界")[m
+[32m+[m	[32mfmt.Println("hello, 世界, 世界")[m
+ }[m
+ x[m
+[32m+[m[32mtrailing[m[41m   [m
+[32m❯[0m 

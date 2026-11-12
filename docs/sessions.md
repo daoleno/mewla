@@ -68,6 +68,17 @@ Open a Session to read it in one of three ways:
 
 What you type in either Chat or Terminal goes to the same terminal.
 
+### Copy and paste in the Terminal on a phone
+
+Press and hold a word to select it. Drag either handle to stretch the selection
+over any rows, including the history above the screen, which scrolls as you
+reach an edge. The menu offers **Copy**, **Paste** and **Select All**; holding
+a blank spot offers **Paste** and **Select All**. A row that wrapped onto the next copies as
+one line. Paste goes to the program as typed text, framed as a paste when the
+program asks for that (bracketed paste), so a shell or an agent never runs a
+pasted line before you press Return. On a hardware keyboard, Ctrl+Shift+C and
+Ctrl+Shift+V copy and paste on Android.
+
 ### Copy from the Terminal in a browser
 
 Select text with the mouse and press **Cmd+C** on a Mac, or **Ctrl+C** or
