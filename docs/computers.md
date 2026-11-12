@@ -148,6 +148,21 @@ for the person on that computer. Fields:
     this while the relay is down. It shows the last one it received.
   - A self-hosted relay (`relay.json`) records no status.
 
+### In the app
+
+Tap the cat on home for the computer page. Its **Computers** section lists every
+other computer with what the connected one reports:
+- "Online";
+- "Online · 1 needs you", which also puts a red dot on that row and on the cat;
+- "Offline · last seen 13:40";
+- "Pair again" when that computer no longer knows the phone, which only the
+  phone can find out.
+
+One tap switches to a computer. While the phone cannot reach the connected
+computer through Mewla's relay, the tray and the page's **Needs fixing** give
+that computer's own last word on its relay, with when it began ("Relay
+unreachable · 13:40"). The page keeps it across a restart of the app.
+
 ## Commands
 
 ```sh

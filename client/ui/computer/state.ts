@@ -5,6 +5,7 @@ import { effectiveMinComputerVersion } from "../../core/update/version";
 import manifest from "../nsh.json";
 import { checks, currentConnectionIssue } from "../more/settings/computers";
 import { brain, connection, current, problem, servers } from "../session";
+import { currentRelayDiagnosis, otherState } from "./computers";
 
 /**
  * What the computer page and home's cat know about the current computer beyond its connection:
@@ -62,6 +63,7 @@ export const fixRows = computed<FixRow[]>(() => {
     issue: currentConnectionIssue(),
     check: checks()[server.id],
     relay: server.transportKind === "link",
+    relayDiagnosis: currentRelayDiagnosis(),
     hostProblem: host ? { code: host.code, executor: host.executor } : undefined,
     agentUse: computerAgentUse(),
     update: computerUpdate(),
@@ -71,10 +73,10 @@ export const fixRows = computed<FixRow[]>(() => {
 
 /**
  * The red dot on home's cat (SPEC §1.3): this computer must be paired again or updated to work
- * with this app, or another computer must be paired again. Another computer's open requests are
- * not known to the phone while it is not connected to it.
+ * with this app, another computer must be paired again, or another has requests open (as the
+ * current computer reports it; offline is unknown, no dot).
  */
 export const catNeedsYou = computed(() => {
   const id = current()?.id;
-  return catNeedsYouOf({ rows: fixRows(), otherChecks: servers().filter((s) => s.id !== id).map((s) => checks()[s.id]) });
+  return catNeedsYouOf({ rows: fixRows(), others: servers().filter((s) => s.id !== id).map(otherState) });
 });

@@ -56,6 +56,20 @@ describe("the tray", () => {
     expect(app.shows("id:state-control")).toBe(true);
   }, 20_000);
 
+  test("offline through the relay, the notice dates the computer's own last word on it", async () => {
+    const at = new Date(Date.now() - 3_600_000).toISOString();
+    const app = await open(HARNESS, { host: { params: {
+      server: { transportKind: "link" },
+      computers: { computers: [], open_requests: 0, connection: { phase: "offline", cause: "relay unreachable", last_failure: "relay unreachable", last_failure_at: at } },
+    } }, platform: "android" });
+    await app.wait(300);
+    await app.host.send("app.connection", "waiting");
+    await app.waitFor("text:Offline");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-notice");
+    expect(app.texts().some((t) => t.startsWith("Relay unreachable · "))).toBe(true);
+  }, 20_000);
+
   test("the scrim closes it; offline shows the notice and dims the lists", async () => {
     const app = await open(HARNESS, { host: { params: { workers: [worker("alpha")], connection: "waiting" } }, platform: "android" });
     await app.waitFor("text:Offline");
