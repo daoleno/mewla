@@ -1,6 +1,8 @@
 import { cleanup, Clipboard, effect, openUrl, Scroll, signal, Text, untracked, View } from "nsh";
 import { AlertDialog, Button } from "nsh/base";
-import { AppSheet } from "../shell/AppSheet";
+import { EmptyState, Notice, Row, Section, SectionLabel, Spinner } from "../kit/kit";
+import { Sheet } from "../kit/Sheet";
+import { Icon } from "../kit/Icon";
 import { listSessionServices, serviceTunnel, type ServiceTunnel } from "../../core/sessions/services";
 import {
   groupSessionServices,
@@ -15,7 +17,6 @@ import {
   serviceWorkerLabel,
   type DiscoveredSessionService,
 } from "../../core/sessions/servicesPresentation";
-import { Icon, type IconName } from "../icons/Icon";
 import { connection, current, currentTransport } from "../session";
 
 /** Open from the Sessions list's menu. */
@@ -27,31 +28,6 @@ const capitalize = (value?: string) => (value ? value.charAt(0).toUpperCase() + 
 
 function open(url: string) {
   void openUrl(url).catch(() => {});
-}
-
-function Section(props: { title: string; footer?: string; children?: unknown }) {
-  return (
-    <View class="gap-1.5">
-      <Text class="px-1 text-xs font-semibold uppercase text-muted-foreground">{props.title}</Text>
-      <View class="overflow-hidden rounded-xl border border-border bg-card">{props.children as never}</View>
-      {props.footer ? <Text class="px-1 text-xs text-muted-foreground">{props.footer}</Text> : null}
-    </View>
-  );
-}
-
-function Row(props: { testID?: string; icon?: IconName; title: string; subtitle?: string; value?: string; chevron?: boolean; destructive?: boolean; disabled?: boolean; onPress?: () => void }) {
-  return (
-    <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled || !props.onPress}
-      class={props.disabled ? "flex-row items-center gap-3 border-b border-border px-3 py-3 opacity-50" : "flex-row items-center gap-3 border-b border-border px-3 py-3 active:bg-accent"}>
-      {props.icon ? <Icon name={props.icon} size={18} color={props.destructive ? "destructive" : "foreground"} /> : null}
-      <View class="flex-1 gap-0.5">
-        <Text class={props.destructive ? "text-base text-destructive" : "text-base"}>{props.title}</Text>
-        {props.subtitle ? <Text class="text-xs text-muted-foreground line-clamp-2">{props.subtitle}</Text> : null}
-      </View>
-      {props.value ? <Text class="text-sm text-muted-foreground line-clamp-1">{props.value}</Text> : null}
-      {props.chevron ? <Icon name="chevron-right" size={16} /> : null}
-    </Button>
-  );
 }
 
 /**
@@ -114,19 +90,11 @@ function ServiceDetail(props: { service: () => DiscoveredSessionService; onBack:
 
   const urls = () => (props.service().urls ?? []).map(presentSessionServiceURL);
   return (
-    <View class="gap-3">
-      <View class="flex-row items-center gap-2">
-        <Button testID="service-back" accessibilityLabel="Back to services" onPress={props.onBack} class="rounded-lg p-1 active:bg-accent">
-          <Icon name="chevron-left" size={22} color="foreground" />
-        </Button>
-        <View class="flex-1">
-          <Text class="text-lg font-semibold line-clamp-1">{serviceProcessLabel(props.service())}</Text>
-          <Text class="text-xs text-muted-foreground line-clamp-1">{`Port ${props.service().port} · ${subtitle()}`}</Text>
-        </View>
-      </View>
+    <View class="px-4">
+      <Text class="px-4 text-sub text-muted-foreground line-clamp-1">{`Port ${props.service().port} · ${subtitle()}`}</Text>
       <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
-        <View class="gap-4 pb-2">
-          <Section title="Open">
+        <View class="pb-2">
+          <Section sheet title="Open">
             {isDSHWebService(props.service()) ? (
               urls().length > 0
                 ? <Row testID="service-open-web" icon="browser" title="Open Web" subtitle={urls()[0]!.address} chevron onPress={() => open(urls()[0]!.url)} />
@@ -141,22 +109,18 @@ function ServiceDetail(props: { service: () => DiscoveredSessionService; onBack:
             ) : null}
           </Section>
           {props.service().generation ? (
-            <Section title="Public access" footer={active() ? undefined : "A temporary Quick Tunnel URL that anyone with the link can open."}>
+            <Section sheet title="Public access">
               {publicURL() ? <Row testID="tunnel-open" icon="browser" title="Open public URL" subtitle={publicURL()} chevron onPress={() => open(publicURL()!)} /> : null}
               {publicURL() ? <Row testID="tunnel-copy" icon={copied() ? "check" : "copy"} title={copied() ? "Copied" : "Copy public URL"} onPress={() => void copy(publicURL()!)} /> : null}
               <Row testID="tunnel-toggle" icon={active() ? "stop-circle" : "share"} destructive={active()} disabled={busy()}
-                title={busy() ? "Working…" : active() ? "Stop public tunnel" : "Share with Quick Tunnel"}
+                trailing={busy() ? <Spinner size={16} /> : undefined}
+                title={active() ? "Stop public tunnel" : "Share with Quick Tunnel"}
                 subtitle={active() && !publicURL() ? capitalize(tunnel()?.status) : undefined}
                 onPress={() => (untracked(active) ? void run("stop") : void start())} />
             </Section>
           ) : null}
-          {problem() || tunnel()?.error ? (
-            <View testID="tunnel-problem" class="gap-1 rounded-xl border border-border bg-card px-3 py-2.5">
-              <Text class="text-sm font-semibold text-destructive">Tunnel unavailable</Text>
-              <Text class="text-sm text-muted-foreground">{problem() || tunnel()?.error || ""}</Text>
-            </View>
-          ) : null}
-          <Section title="Details">
+          {problem() || tunnel()?.error ? <Notice testID="tunnel-problem" tone="failed" title="Tunnel unavailable" detail={problem() || tunnel()?.error || ""} /> : null}
+          <Section sheet title="Details">
             <Row title="Process" value={serviceProcessLabel(props.service())} />
             {serviceCommandDetail(props.service()) ? <Row title="Command" subtitle={serviceCommandDetail(props.service()) ?? undefined} /> : null}
             <Row title="Bind" value={serviceBindLabel(props.service())} />
@@ -217,76 +181,66 @@ export function ServicesSheet(props: { onOpenSession: (workerId: string) => void
   const subtitle = () => (loading() && count() === 0 ? "Looking for listening ports" : count() === 0 ? "" : `${count()} ${count() === 1 ? "port" : "ports"}`);
   const selectedService = () => services().find((service) => keyOf(service) === selected());
 
+  const back = () => {
+    selected.set("");
+    void refresh();
+  };
   return (
-    <AppSheet open={servicesOpen()} onOpenChange={({ open }) => servicesOpen.set(open)} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
-      <View testID="services-sheet" class="pb-8">
-        {selected() && selectedService() ? (
-          <ServiceDetail service={() => selectedService()!} onOpenSession={(workerId) => {
-            servicesOpen.set(false);
-            props.onOpenSession(workerId);
-          }} onBack={() => {
-            selected.set("");
-            void refresh();
-          }} />
-        ) : (
-          <View class="gap-3">
-            <View class="flex-row items-center gap-2">
-              <View class="flex-1">
-                <Text class="text-lg font-semibold">Services</Text>
-                {subtitle() ? <Text class="text-xs text-muted-foreground">{subtitle()}</Text> : null}
+    <Sheet
+      open={servicesOpen}
+      onClose={() => servicesOpen.set(false)}
+      testID="services-sheet"
+      title={() => (selected() && selectedService() ? serviceProcessLabel(selectedService()!) : "Services")}
+      leading={selected() && selectedService() ? (
+        <Button testID="service-back" accessibilityLabel="Back to services" onPress={back} class="-ml-2 size-11 items-center justify-center rounded-full active:bg-accent">
+          <Icon name="chevron-left" size={22} tone="ink" />
+        </Button>
+      ) : undefined}
+      trailing={selected() && selectedService() ? undefined : (
+        <View class="flex-row items-center gap-1">
+          {subtitle() ? <Text class="mr-1 text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{subtitle()}</Text> : null}
+          <Button testID="services-refresh" accessibilityLabel="Refresh services" disabled={loading()} onPress={() => void refresh()} class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-40">
+            <Icon name="refresh" size={20} tone="ink" />
+          </Button>
+          <Button testID="services-close" accessibilityLabel="Close services" onPress={() => servicesOpen.set(false)} class="size-11 items-center justify-center rounded-full active:bg-accent">
+            <Icon name="close" size={20} tone="ink" />
+          </Button>
+        </View>
+      )}
+    >
+      {selected() && selectedService() ? (
+        <ServiceDetail service={() => selectedService()!} onOpenSession={(workerId) => {
+          servicesOpen.set(false);
+          props.onOpenSession(workerId);
+        }} onBack={back} />
+      ) : (
+        <View class="px-4">
+          {problem() ? <Notice testID="services-problem" tone="failed" title="Services could not be loaded" detail={problem()} action="Retry" actionDisabled={loading()} onAction={() => void refresh()} /> : null}
+          {count() === 0 && !problem() ? <EmptyState testID="services-empty" icon="radio" busy={loading()} title={loading() ? "Loading services" : "No listening services"} /> : null}
+          {count() > 0 ? (
+            <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
+              <View class="pb-2">
+                {groupSessionServices(services()).flatMap((section) => section.groups.map((group) => (
+                  <Section sheet label={<SectionLabel icon="folder" title={section.title ? `${section.title} · ${group.project}` : group.project} count={group.services.length} />}>
+                    {group.services.map((service) => (
+                      <Row
+                        testID="service-row"
+                        leading={<View class="h-9 min-w-[52px] items-center justify-center rounded-[11px] bg-background px-2"><Text class="font-mono text-code font-semibold">{String(service.port)}</Text></View>}
+                        title={serviceProcessLabel(service)}
+                        subtitle={!hasServiceTerminal(service) && service.source === "persistent" ? serviceSourceLabel(service) : serviceWorkerLabel(service)}
+                        trailing={service.tunnel?.status === "running" ? <Text class="rounded-full bg-background px-2.5 py-1 text-caption font-semibold">Public</Text> : undefined}
+                        chevron
+                        onPress={() => selected.set(keyOf(service))}
+                      />
+                    ))}
+                  </Section>
+                )))}
+                {loading() ? <Text class="mt-3 text-center text-caption text-muted-foreground">Refreshing</Text> : null}
               </View>
-              <Button testID="services-refresh" accessibilityLabel="Refresh services" disabled={loading()} onPress={() => void refresh()} class="rounded-full p-1.5 active:bg-accent">
-                <Icon name="refresh" size={20} color="foreground" />
-              </Button>
-              <Button testID="services-close" accessibilityLabel="Close services" onPress={() => servicesOpen.set(false)} class="rounded-full p-1.5 active:bg-accent">
-                <Icon name="close" size={20} color="foreground" />
-              </Button>
-            </View>
-            {problem() ? (
-              <View testID="services-problem" class="gap-2 rounded-xl border border-border bg-card px-3 py-3">
-                <Text class="text-sm font-semibold text-destructive">Services could not be loaded</Text>
-                <Text class="text-sm text-muted-foreground">{problem()}</Text>
-                <Button testID="services-retry" disabled={loading()} onPress={() => void refresh()} class="self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
-                  <Text class="text-sm font-semibold text-primary">Retry</Text>
-                </Button>
-              </View>
-            ) : null}
-            {count() === 0 && !problem() ? (
-              <View testID="services-empty" class="items-center gap-2 py-8">
-                <Icon name="radio" size={28} />
-                <Text class="text-base font-semibold">{loading() ? "Loading services" : "No listening services"}</Text>
-                {loading() ? null : <Text class="text-center text-sm text-muted-foreground">Ports opened by Sessions and persistent services appear here.</Text>}
-              </View>
-            ) : null}
-            {count() > 0 ? (
-              <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
-                <View class="gap-4 pb-2">
-                  {groupSessionServices(services()).flatMap((section) => section.groups.map((group) => (
-                    <Section title={section.title ? `${section.title} · ${group.project}` : group.project}>
-                      {group.services.map((service) => (
-                        <Button testID="service-row" onPress={() => selected.set(keyOf(service))} class="flex-row items-center gap-3 border-b border-border px-3 py-2.5 active:bg-accent">
-                          <View class="min-w-[46px] items-center rounded-lg bg-accent px-1.5 py-1">
-                            <Text class="font-mono text-sm text-primary">{String(service.port)}</Text>
-                          </View>
-                          <View class="flex-1 gap-0.5">
-                            <Text class="text-base line-clamp-1">{serviceProcessLabel(service)}</Text>
-                            <Text class="text-xs text-muted-foreground line-clamp-1">
-                              {!hasServiceTerminal(service) && service.source === "persistent" ? serviceSourceLabel(service) : serviceWorkerLabel(service)}
-                            </Text>
-                          </View>
-                          {service.tunnel?.status === "running" ? <Text class="rounded-full bg-accent px-2 py-0.5 text-xs text-primary">Public</Text> : null}
-                          <Icon name="chevron-right" size={16} />
-                        </Button>
-                      ))}
-                    </Section>
-                  )))}
-                  {loading() ? <Text class="text-center text-xs text-muted-foreground">Refreshing</Text> : null}
-                </View>
-              </Scroll>
-            ) : null}
-          </View>
-        )}
-      </View>
-    </AppSheet>
+            </Scroll>
+          ) : null}
+        </View>
+      )}
+    </Sheet>
   );
 }

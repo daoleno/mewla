@@ -190,17 +190,21 @@ export function RankedRow(props: { title: string; subtitle?: string; share: numb
   );
 }
 
-/** A section label (caption, soft), one surface group of rows with inset hair dividers, an optional footnote. */
-export function Section(props: { title?: string; detail?: JSX.Element; footer?: string; testID?: string; children?: JSX.Element }) {
+/**
+ * A section label (caption, soft), one surface group of rows with inset hair dividers, an optional footnote.
+ * `label` puts a SectionLabel (icon, name, count) in place of the plain one; `sheet` draws the group on a sheet's surface.
+ */
+export function Section(props: { title?: string; detail?: JSX.Element; footer?: string; testID?: string; label?: JSX.Element; sheet?: boolean; children?: JSX.Element }) {
   return (
-    <View class="mt-6" testID={props.testID}>
-      {props.title || props.detail ? (
+    <View class={props.label ? "" : "mt-6"} testID={props.testID}>
+      {props.label ?? null}
+      {!props.label && (props.title || props.detail) ? (
         <View class="mb-2 min-h-[18px] flex-row items-center justify-between px-4">
           <Text class="text-caption font-semibold text-muted-foreground" role="header">{props.title ?? ""}</Text>
           {props.detail ?? null}
         </View>
       ) : null}
-      <View class="overflow-hidden rounded-(--radius-group) bg-card">
+      <View class={props.sheet ? "overflow-hidden rounded-(--radius-group) bg-sheet-surface" : "overflow-hidden rounded-(--radius-group) bg-card"}>
         <View class="-mb-px">{props.children}</View>
       </View>
       {props.footer ? <Text class="mt-2 px-4 text-caption text-muted-foreground">{props.footer}</Text> : null}
