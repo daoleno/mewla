@@ -140,7 +140,7 @@ function ToolRow(props: { tool: ConnectionTool; locked: boolean; onToggle: (allo
         </View>
       </View>
       {expanded() && inputs.length ? (
-        <View class="mb-2 ml-10 mr-4 gap-1 rounded-xl border border-border px-3 py-2">
+        <View class="mb-2 ml-10 mr-4 gap-1 rounded-(--radius-control) bg-background px-3 py-2">
           {inputs.map((input) => (
             <View>
               <Text class="font-mono text-code">{`${input.name}: ${input.type}${input.required ? " (required)" : ""}`}</Text>

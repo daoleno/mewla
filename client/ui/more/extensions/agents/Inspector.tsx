@@ -52,7 +52,7 @@ function Lifecycle(props: { sentence: string; label: string; busyLabel?: string;
         accessibilityLabel={props.accessibilityLabel}
         disabled={props.disabled || props.busy}
         onPress={props.onPress}
-        class="min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl bg-secondary px-4 active:opacity-70 disabled:opacity-50"
+        class="h-[48px] flex-row items-center justify-center gap-2 rounded-(--radius-control) bg-muted px-4 active:opacity-70 disabled:opacity-40"
       >
         {props.busy ? <Spinner size={14} /> : <Icon name="trash" size={16} tone="seal" />}
         <Text class="text-body font-semibold text-destructive">{props.busy && props.busyLabel ? props.busyLabel : props.label}</Text>
@@ -89,7 +89,7 @@ function ancestors(path: string | undefined): Set<string> {
 
 function Code(props: { content: string }) {
   return (
-    <Scroll keyboardShouldPersistTaps="handled" horizontal class="rounded-xl border border-border bg-background">
+    <Scroll keyboardShouldPersistTaps="handled" horizontal class="rounded-(--radius-control) bg-background">
       <View selectable><Text class="p-3 font-mono text-code">{props.content || "This file is empty."}</Text></View>
     </Scroll>
   );
@@ -138,7 +138,7 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
   return (
     <View class="gap-2">
       {files().length ? (
-        <View class="overflow-hidden rounded-xl border border-border">
+        <View class="overflow-hidden rounded-(--radius-group) bg-sheet-surface">
           {visibleNodes(buildSkillFileTree(files()), expanded()).map(({ node, depth }) =>
             node.kind === "directory" ? (
               <View
@@ -182,7 +182,7 @@ export function FileBrowser(props: { detail: PackageDetail; loading: boolean; er
         {preview()?.notice ? <Notice title={preview()!.notice!} /> : null}
         {preview()?.dataUrl ? (
           <View role="button" testID="skill-file-image" accessibilityLabel={preview()!.path} accessibilityHint="Opens the image" onPress={() => viewing.set(preview()!.path)} class="active:opacity-80">
-            <Image src={preview()!.dataUrl!} class="h-48 w-full rounded-xl" style={{ objectFit: "contain" }} accessibilityLabel={preview()!.path} />
+            <Image src={preview()!.dataUrl!} class="h-48 w-full rounded-[14px]" style={{ objectFit: "contain" }} accessibilityLabel={preview()!.path} />
           </View>
         ) : null}
         {preview()?.status === "binary" ? (
@@ -229,7 +229,7 @@ function SkillCopyRow(props: { copy: InstalledSkill; selected: boolean; onInspec
   const location = () => skillCopyLocation(props.copy);
   const deletable = () => skillRowSupportsDelete(props.copy, mutationOperations());
   return (
-    <View class={`flex-row items-center rounded-xl border ${props.selected ? "border-foreground bg-secondary" : "border-border"}`}>
+    <View class={`flex-row items-center rounded-(--radius-control) ${props.selected ? "bg-accent" : "bg-sheet-surface"}`}>
       <Button
         testID={`inspect-copy-${props.copy.id}`}
         accessibilityLabel={location().label}
@@ -333,7 +333,7 @@ export function SkillInspector(props: {
               testID="open-skill-plugin"
               accessibilityLabel={`Open the ${owner()!.displayName} Plugin that provides this Skill`}
               onPress={() => props.onOpenPlugin(owner()!.key)}
-              class="min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl bg-secondary px-4 active:opacity-70"
+              class="h-[48px] flex-row items-center justify-center gap-2 rounded-(--radius-control) bg-muted px-4 active:opacity-70"
             >
               <Icon name="puzzle" size={16} />
               <Text class="text-body font-semibold">{`Open ${owner()!.displayName}`}</Text>
@@ -379,7 +379,7 @@ function PluginSkillEntryView(props: { entry: PluginSkillEntry }) {
   };
   const shown = computed(() => detail()?.copyId ?? null, { equals: (a, b) => a === b });
   return (
-    <View class="rounded-xl border border-border">
+    <View class="rounded-(--radius-group) bg-sheet-surface">
       <View
         role="button"
         testID={`plugin-skill-${props.entry.name}`}
@@ -438,7 +438,7 @@ export function PluginCopyCard(props: { copy: InstalledPluginCopy; selected?: bo
     </View>
   );
   return (
-    <View class={`flex-row items-center gap-1 rounded-xl border px-3 py-2 ${props.selected ? "border-foreground bg-secondary" : "border-border"}`}>
+    <View class={`flex-row items-center gap-1 rounded-(--radius-control) px-3 py-2 ${props.selected ? "bg-accent" : "bg-sheet-surface"}`}>
       {props.onChoose ? <ChoosableCopy label={`Select ${pluginCopyLabel(props.copy)} copy`} testID={`select-copy-${props.copy.copyId}`} selected={!!props.selected} onPress={() => props.onChoose?.()}>{content()}</ChoosableCopy> : content()}
       {props.copy.capability.canUninstall ? (
         <Button
