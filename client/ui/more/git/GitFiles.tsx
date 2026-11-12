@@ -1,4 +1,4 @@
-import { List, signal, Text, View } from "nsh";
+import { Keyboard, List, signal, Text, View } from "nsh";
 import { AlertDialog, DiffView, Tree, type TreeItem } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../../shell/NavPage";
@@ -102,9 +102,14 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
   const changes = () => repoTreeChanges(review.status()?.files ?? []);
   // While searching every folder of what was found is open; the person's own folding comes back after.
   const shownExpanded = () => (query().trim() ? repoTreeFolders(items()) : expanded());
-  const openFile = (path: string) => props.nav.push({ name: "git-file", targetId: review.target.targetId, cwd: review.target.cwd, path });
-  // On a phone a row that hears long presses (its menu) takes the touch from the tree, so it hears the tap
-  // too: a folder opens or closes (a search shows every folder open), a file opens.
+  // The file page has no field: the search's keyboard goes down with it (R5#4).
+  const openFile = (path: string) => {
+    Keyboard.dismiss();
+    props.nav.push({ name: "git-file", targetId: review.target.targetId, cwd: review.target.cwd, path });
+  };
+  // A row that hears long presses and right clicks (its menu) takes the press from the tree around it, on a
+  // phone and in a browser alike, so it hears the tap or click too: a folder opens or closes (a search shows
+  // every folder open), a file opens (R4 gitfiles I2 / I10 on Android, R5#3 on the web).
   const tapped = (id: string, folder: boolean) => {
     if (!folder) return openFile(id);
     if (query().trim()) return;
@@ -117,7 +122,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
     return (
       <View
         testID={`git-file-${entry.id}`}
-        onPress={mobile ? () => tapped(entry.id, entry.folder) : undefined}
+        onPress={() => tapped(entry.id, entry.folder)}
         onLongPress={() => void entryMenu(review, props.nav, entry.id)}
         onContextMenu={() => void entryMenu(review, props.nav, entry.id)}
         accessibilityLabel={`${entry.label}${changed ? `, ${gitDiffStatusWord(gitDiffTone(changed))}` : holds ? ", has changes" : ""}`}
