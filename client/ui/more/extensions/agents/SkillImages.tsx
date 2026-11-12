@@ -39,7 +39,7 @@ export function SkillImage(props: { path: string | null; alt?: string; problem?:
     <View class="my-1" style={{ width: props.width?.() || undefined }}>
       {src() ? (
         <View role="button" accessibilityLabel={props.alt || props.path || "Image"} accessibilityHint="Opens the image" onPress={() => props.path && props.onOpen(props.path)} class="active:opacity-80">
-          <Image src={src()} class="h-48 w-full rounded-xl" style={{ objectFit: "contain" }} accessibilityLabel={props.alt || props.path || "Image"} />
+          <Image src={src()} class="h-48 w-full rounded-[14px]" style={{ objectFit: "contain" }} accessibilityLabel={props.alt || props.path || "Image"} />
         </View>
       ) : error() ? (
         <Text class="text-caption text-muted-foreground">{`${props.alt ? `${props.alt}: ` : ""}${error()}`}</Text>
@@ -53,7 +53,7 @@ export function SkillImage(props: { path: string | null; alt?: string; problem?:
 /** One picture of the copy at a time, full width, with the copy's other pictures before and after it. */
 export function SkillImageViewer(props: { images: readonly string[]; start: string | null; read: ImageReader; onClose: () => void }) {
   return (
-    <Sheet open={props.start !== null} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="h-[94%] rounded-t-3xl bg-card px-4 pb-8 pt-3" backdropClass="bg-black/60">
+    <Sheet open={props.start !== null} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="h-[94%] rounded-t-(--radius-sheet) bg-sheet px-4 pb-8 pt-3 shadow-float" backdropClass="bg-scrim">
       {props.start !== null ? <ViewerBody images={props.images} start={props.start} read={props.read} onClose={props.onClose} /> : null}
     </Sheet>
   );

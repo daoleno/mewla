@@ -37,8 +37,8 @@ import {
   uninstallPluginCopy,
 } from "./state";
 
-const SHEET = "max-h-[94%] rounded-t-3xl bg-card px-4 pb-8 pt-3";
-const BACKDROP = "bg-black/30";
+const SHEET = "max-h-[94%] rounded-t-(--radius-sheet) bg-sheet px-4 pb-8 pt-3 shadow-float";
+const BACKDROP = "bg-scrim";
 /** From this width, Skill and Plugin details sit beside the list (a tablet, a phone on its side). */
 const WIDE_DETAILS = 920;
 /** How far a sideways swipe goes before it switches between Plugins and Skills. */
@@ -164,7 +164,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
         const deletable = () => skillRowSupportsDelete(copy, mutationOperations());
         const location = skillCopyLocation(copy);
         return (
-          <View class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2">
+          <View class="flex-row items-center gap-2 rounded-(--radius-control) bg-sheet-surface px-3 py-2">
             <View class="min-w-0 flex-1 gap-0.5">
               <AgentMarks agents={copy.agents as ManagedSkillAgent[]} size={16} />
               <Text class="text-sub line-clamp-2">{location.label}</Text>
