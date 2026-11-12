@@ -306,7 +306,8 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now
       : done ? slip.summary || slip.statusLabel
       : running ? doing || slip.statusLabel
       : slip.waitFor || slip.statusLabel,
-    end: running ? elapsedShort(since, now) : "",
+    // Running: how long; otherwise when it last changed ("11:20" for a result, as a Session's row).
+    end: running ? elapsedShort(since, now) : slip.updatedAt ? listTime(Date.parse(slip.updatedAt), new Date(now)) : "",
     live: running || undefined,
     // A Work its one Worker runs opens that Session (its logo); with none, Work detail (Brain's mark).
     tile: model ? { kind: "agent", agent: model.kind, flavor: model.flavor } : { kind: "brain" },
