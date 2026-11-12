@@ -97,14 +97,14 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   private lazy var editMenu = UIEditMenuInteraction(delegate: self)
   private var failed = false
 
-  // The history above the live screen: its styled rows as the page sent them (drawn again on a
-  // theme change) and as lines, oldest first. Content line i is history[i] below H, live row i - H above.
+  // The history above the live screen: its styled rows as the page sent them and, as long, the ones
+  // drawn as lines (nil until first needed: historyLine), oldest first. Content line i is history
+  // row i below H, live row i - H above.
   private var historyAnsi: [String] = []
-  private var history: [Line] = []
+  private var history: [Line?] = []
   private var historyCols = 0
   private var alternate = false
-  /// The VT that renders history rows, `page` rows tall at the history's width; it keeps
-  /// styling from one row to the next.
+  /// The VT that renders history rows, `page` rows tall at the history's width.
   private var scratch: Vt?
   /// Points the content is scrolled down from the live screen (0 = the live screen at the bottom).
   private var scrollY: CGFloat = 0
@@ -182,7 +182,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     inFont = [[:], [:], [:], [:]]
     glyphOps.removeAll()
     for line in grid { line.cells.forEach { $0.items = nil } }
-    for line in history { line.cells.forEach { $0.items = nil } }
+    for line in history { line?.cells.forEach { $0.items = nil } }
   }
 
   private static func advance(of unit: UniChar, in font: CTFont) -> CGFloat {
@@ -217,9 +217,9 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     let r = CGFloat((bg.rgb >> 16) & 0xff), g = CGFloat((bg.rgb >> 8) & 0xff), b = CGFloat(bg.rgb & 0xff)
     keyboardAppearance = (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5 ? .dark : .light
     applyTheme()
-    // The history's colors are the VT's: draw its rows again.
+    // The history's colors are the VT's: its rows are drawn again when next needed.
     scratch = nil
-    history = renderHistory(historyAnsi)
+    history = Array(repeating: nil, count: historyAnsi.count)
     setNeedsDisplay()
   }
 
@@ -267,10 +267,12 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     if cols > 0, cols != historyCols {
       historyCols = cols
       scratch = nil
+      history = Array(repeating: nil, count: historyAnsi.count)
     }
     self.alternate = alternate
+    // Kept as sent; drawn when first needed (historyLine).
     historyAnsi.append(contentsOf: lines)
-    history.append(contentsOf: renderHistory(lines))
+    history.append(contentsOf: Array(repeating: nil, count: lines.count))
     // Scrolled up, the rows above the screen grew: the reader's rows stay where they are.
     if scrollY > 0, !reset { scrollY += CGFloat(lines.count) * cellH }
     if alternate { scrollY = 0 }
@@ -317,36 +319,32 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     onViewport(top, atBottom)
   }
 
-  /// History rows as lines, a page at a time through the scratch VT (styling carries
-  /// over from row to row, as tmux captures it).
-  private func renderHistory(_ lines: [String]) -> [Line] {
-    guard !lines.isEmpty else { return [] }
-    if scratch == nil {
-      guard let made = Vt(cols: min(max(historyCols, 2), 1000), rows: Self.page) else { return Array(repeating: .empty, count: lines.count) }
+  /// History row `i` as a line, drawn through the scratch VT with the rows of its page when it is
+  /// first needed (drawn, selected, tapped): history arrives in thousands of rows while output
+  /// floods, and nobody looks at most of them. Rows stand alone (core/terminal/history.ts), so a page
+  /// starts from a reset.
+  private func historyLine(_ i: Int) -> Line {
+    if let line = history[i] { return line }
+    let start = i - i % Self.page
+    let end = min(start + Self.page, historyAnsi.count)
+    if scratch == nil, let made = Vt(cols: min(max(historyCols, 2), 1000), rows: Self.page) {
       if let vtPalette {
         made.setTheme(foreground: foreground.rgb, background: background.rgb, cursor: cursorColor.rgb, palette: vtPalette)
       }
       scratch = made
     }
-    guard let scratch else { return [] }
-    var out: [Line] = []
-    out.reserveCapacity(lines.count)
-    var at = 0
-    while at < lines.count {
-      let page = lines[at..<min(at + Self.page, lines.count)]
-      // Clear and home without resetting the styling the page before left.
-      scratch.write("\u{1b}[2J\u{1b}[H" + page.joined(separator: "\r\n"))
-      var rendered = [Line](repeating: .empty, count: Self.page)
+    var rendered = [Line](repeating: .empty, count: Self.page)
+    if let scratch {
+      scratch.write("\u{1b}[0m\u{1b}[2J\u{1b}[H" + historyAnsi[start..<end].joined(separator: "\r\n"))
       if let frame = scratch.frame(full: true) {
         // A history row is a whole line (the computer joined wrapped rows).
         for (row, _, runs) in frame.dirty where row >= 0 && row < Self.page {
           rendered[row] = Line(cells: runs.map(Cell.init), wrapped: false)
         }
       }
-      out.append(contentsOf: rendered.prefix(page.count))
-      at += Self.page
     }
-    return out
+    for r in start..<end { history[r] = rendered[r - start] }
+    return rendered[i - start]
   }
 
   // MARK: Content lines
@@ -356,7 +354,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   private func line(_ i: Int) -> Line {
     // Output written since the last draw is read before anything looks at a row.
     if needsPull { pull() }
-    if i < history.count { return i >= 0 ? history[i] : .empty }
+    if i < history.count { return i >= 0 ? historyLine(i) : .empty }
     let live = i - history.count
     return live >= 0 && live < grid.count ? grid[live] : .empty
   }

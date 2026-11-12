@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { retainedOverlap, TerminalHistoryModel, validateHistoryDelta, type HistoryDelta } from "./history";
+import { retainedOverlap, standAloneRows, TerminalHistoryModel, validateHistoryDelta, type HistoryDelta } from "./history";
 import { findTerminalLink, linkAction, promptRows, promptTarget, rowText, searchCount, searchHistory } from "./text";
 
 const delta = (patch: Partial<HistoryDelta>): HistoryDelta => ({
@@ -61,6 +61,28 @@ describe("links", () => {
     expect(linkAction("open file:///home/me/a%20b.txt", 8)).toEqual({ kind: "path", path: "/home/me/a b.txt" });
     expect(linkAction("go https://x.dev/a now", 5)).toEqual({ kind: "url", url: "https://x.dev/a" });
     expect(linkAction("just words", 2)).toBe(null);
+  });
+});
+
+describe("standAloneRows", () => {
+  const R = "\x1b[0m";
+  test("a row that leans on the style above it starts with a reset and that style", () => {
+    expect(standAloneRows(["\x1b[31mred", "still red", "\x1b[0mplain", "plain too"]))
+      .toEqual(["\x1b[31mred", R + "\x1b[31mstill red", R + "\x1b[31m\x1b[0mplain", "plain too"]);
+  });
+  test("an empty SGR is a reset; a reset in the middle of a sequence keeps what follows it", () => {
+    expect(standAloneRows(["\x1b[1mbold\x1b[m", "plain"])).toEqual(["\x1b[1mbold\x1b[m", "plain"]);
+    expect(standAloneRows(["\x1b[1;0;32mgreen", "next"])).toEqual(["\x1b[1;0;32mgreen", R + "\x1b[32mnext"]);
+  });
+  test("the 0 of an extended color is a color, not a reset", () => {
+    expect(standAloneRows(["\x1b[38;5;0mblack", "next"])).toEqual(["\x1b[38;5;0mblack", R + "\x1b[38;5;0mnext"]);
+    expect(standAloneRows(["\x1b[48;2;0;0;0mbg\x1b[1m", "next"])).toEqual(["\x1b[48;2;0;0;0mbg\x1b[1m", R + "\x1b[48;2;0;0;0m\x1b[1mnext"]);
+    expect(standAloneRows(["\x1b[48:2::0:0:0mbg", "next"])).toEqual(["\x1b[48:2::0:0:0mbg", R + "\x1b[48:2::0:0:0mnext"]);
+    expect(standAloneRows(["\x1b[38;5;0;0mreset after the color", "next"])).toEqual(["\x1b[38;5;0;0mreset after the color", "next"]);
+  });
+  test("rows a session host sends (each on its own) are left as they are", () => {
+    const rows = ["\x1b[0m\x1b[38;5;1mred\x1b[0m", "plain", "\x1b[0m\x1b[1mbold\x1b[0m tail"];
+    expect(standAloneRows(rows)).toEqual(rows);
   });
 });
 

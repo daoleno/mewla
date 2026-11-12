@@ -153,6 +153,31 @@ final class TerminalTests: XCTestCase {
     XCTAssertEqual(input, ["echo a\recho b", "\u{1b}[200~x\ny\u{1b}[201~"])
   }
 
+  /// History is drawn a page (64 rows) at a time when first needed: every row reads back across page
+  /// boundaries, after rows leave the front, and after a theme change voids what was drawn.
+  @MainActor
+  func testHistoryDrawsLazilyByPage() throws {
+    let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+    view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    view.setFontSize(13)
+    view.frame = CGRect(x: 0, y: 0, width: ceil(20 * view.cellW), height: ceil(6 * view.cellH))
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    // Rows as a session host sends them: each on its own, styled.
+    let rows = (0..<200).map { "\u{1b}[0m\u{1b}[38;5;\($0 % 7 + 1)mrow \($0)\u{1b}[0m" }
+    view.applyHistory(reset: true, removed: 0, rows: rows, cols: 20, alternate: false)
+    view.write("live")
+    view.selectAll()
+    XCTAssertEqual(view.selectedText(), ((0..<200).map { "row \($0)" } + ["live"]).joined(separator: "\n"))
+
+    view.applyHistory(reset: false, removed: 70, rows: ["\u{1b}[0m\u{1b}[1mrow 200\u{1b}[0m"], cols: 20, alternate: false)
+    view.setTheme(background: "#ffffff", foreground: "#1c1c1e", cursor: "#1c1c1e", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    view.selectAll()
+    XCTAssertEqual(view.selectedText(), ((70..<201).map { "row \($0)" } + ["live"]).joined(separator: "\n"))
+  }
+
   /// Parity #3 as the person sees it: the terminal in the app's window with a word selected, its
   /// handles and the system edit menu, saved as `MEWLA_TEST_OUT`/selection-ios.png.
   @MainActor
