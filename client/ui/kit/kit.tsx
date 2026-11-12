@@ -70,7 +70,7 @@ export function Page(props: {
 }
 
 /** How far the content scrolls before the display title counts as gone (its eyebrow and most of its line). */
-const DISPLAY_TITLE_AWAY = 56;
+export const DISPLAY_TITLE_AWAY = 56;
 
 /**
  * A caption's line (SPEC §10.2 caption 13/18): a section label, an eyebrow, a day separator. One line, and as wide as
