@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/answered"
 	"hash/fnv"
 	"io"
 	"io/fs"
@@ -142,6 +143,7 @@ type Server struct {
 	calendarScheduler          *calendar.Scheduler
 	telegram                   *telegramchannel.Manager
 	computers                  *computers.Manager
+	openRequests               openRequestsCache
 	outsideAgents              *outsideagents.Manager
 	outsideAgentsDoor          http.Handler
 	computerName               string
@@ -225,7 +227,12 @@ type Server struct {
 	enrollmentRates    map[string][]time.Time
 	agentLevelsFn      func(*classifier.Worker) map[string]string
 	agentApprovals     AgentApprovals
-	codexStatus        func(ctx context.Context, workerID string) (any, error)
+	// answered is the answered-request ledger (answered_requests.go);
+	// prompts tracks open screen prompts for it.
+	answered        *answered.Ledger
+	prompts         promptWatch
+	promptLeftGrace time.Duration
+	codexStatus     func(ctx context.Context, workerID string) (any, error)
 }
 
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.
@@ -1096,6 +1103,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSnoozeCalendarItem(conn, raw)
 	case "done_calendar_item":
 		s.handleDoneCalendarItem(conn, raw)
+	case "computers":
+		s.handleComputersList(conn, raw)
 	case "brain_snapshot":
 		s.sendBrainSnapshot(conn, raw.RequestID)
 	case "brain_context":
@@ -1106,6 +1115,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainWorkRead(conn, raw)
 	case "brain_work_detail":
 		s.handleBrainWorkDetail(conn, raw)
+	case "answered_requests":
+		s.handleAnsweredRequests(conn, raw)
 	case "brain_work_action":
 		// A reply waits on the Brain host's input admission; keep reading.
 		go s.handleBrainWorkAction(conn, raw)
@@ -2048,7 +2059,10 @@ type codexConversationSubscriptionSnapshot struct {
 	// readerVersion is the provider reader content version of this snapshot.
 	// 0 means unknown (test loader or non-cached provider); never skip then.
 	readerVersion int64
-	attached      bool
+	// overlayVersion is the version of the thread's own overlays (rewinds,
+	// answered requests) this snapshot was projected with.
+	overlayVersion uint64
+	attached       bool
 }
 
 func (s *Server) runCodexConversationSubscription(
@@ -2132,7 +2146,9 @@ func (s *Server) publishCodexConversationSubscription(
 	}
 
 	now := time.Now()
-	rewoundVersion := s.rewound.version()
+	// The thread's overlays (a rewind, answered requests) move apart from
+	// the provider transcript; either moving reprojects it.
+	rewoundVersion := s.rewound.version() + s.answeredLedger().Version()
 	conversation, err := s.loadProviderConversation(reader, resolved, now)
 	if took := time.Since(now); took >= slowSessionInputLog {
 		// A snapshot cannot arrive before this load returns; the phone only
@@ -2167,6 +2183,7 @@ func (s *Server) publishCodexConversationSubscription(
 	// sanitize so the unchanged-poll claim is truthful end to end.
 	if readerVersion != 0 && (*previous) != nil &&
 		(*previous).readerVersion == readerVersion &&
+		(*previous).overlayVersion == rewoundVersion &&
 		(*previous).attached == resolved.fromWatcher &&
 		codexConversationIdentity((*previous).conversation) == codexConversationIdentity(conversation) &&
 		!brainScoped {
@@ -2216,6 +2233,11 @@ func (s *Server) publishCodexConversationSubscription(
 		}
 	}
 	providerConversation := conversation
+	if !brainScoped {
+		// Answered requests join the Session's thread after its projection;
+		// Brain's thread takes its own in brainScopedConversation.
+		conversation = s.withAnsweredRequests(resolved.targetID, conversation)
+	}
 	if brainScoped {
 		conversation = s.brainScopedConversation(raw.ConversationScopeKey, conversation, now)
 		if reusedProvider {
@@ -2295,6 +2317,7 @@ func (s *Server) publishCodexConversationSubscription(
 		eventFingerprints:    fingerprint.eventFingerprints,
 		revision:             1,
 		readerVersion:        readerVersion,
+		overlayVersion:       rewoundVersion,
 		attached:             resolved.fromWatcher,
 	}
 	if (*previous) != nil {
@@ -2359,6 +2382,7 @@ type brainProjectionKey struct {
 	store     uint64
 	calendar  uint64
 	computers uint64
+	answered  uint64
 }
 
 func (s *Server) brainProjectionKey(scopeKey string) brainProjectionKey {
@@ -2367,7 +2391,7 @@ func (s *Server) brainProjectionKey(scopeKey string) brainProjectionKey {
 		return brainProjectionKey{}
 	}
 	threadID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(scopeKey), prefix))
-	key := brainProjectionKey{store: s.brain.ConversationProjectionVersion()}
+	key := brainProjectionKey{store: s.brain.ConversationProjectionVersion(), answered: s.answeredLedger().Version()}
 	if s.calendar != nil {
 		key.calendar = s.calendar.Generation()
 	}
@@ -2614,6 +2638,9 @@ func (s *Server) brainScopedConversation(scopeKey string, conversation work.Code
 		appendUnique(calendarResultConversationEvent(result))
 	}
 	s.addComputerMessages(threadID, uniqueEvents, appendUnique)
+	for _, event := range s.brainThreadAnsweredRequests(threadID) {
+		appendUnique(event)
+	}
 	uniqueEvents = withoutWatchEvents(uniqueEvents)
 	if lifecycleErr := s.brain.AnnotateWorkResultEvents(uniqueEvents); lifecycleErr != nil {
 		conversation.Available = false
@@ -2731,8 +2758,9 @@ func codexConversationSubscriptionFingerprintMemoized(
 	writeFingerprintInt(hash, len(conversation.Events))
 	for _, event := range conversation.Events {
 		id := strings.TrimSpace(event.ID)
-		if _, ok := eventFingerprints[id]; !ok {
-			// New or unknown event: its fingerprint must be computed.
+		if _, ok := eventFingerprints[id]; !ok || event.Source == answeredConversationKind {
+			// New or unknown event: its fingerprint must be computed. An
+			// answered request is an overlay the reader does not version.
 			changed[id] = struct{}{}
 		}
 		if _, needs := changed[id]; needs {
@@ -2916,8 +2944,21 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 	writeFingerprintString(w, event.WorkAttention)
 	writeFingerprintString(w, event.WorkEventKind)
 	writeFingerprintString(w, event.WorkDetailsJSON)
-	writeFingerprintString(w, event.WorkNextAction)
 	writeFingerprintString(w, event.WorkWaitFor)
+	for _, action := range event.WorkActions {
+		writeFingerprintString(w, action.Kind)
+		writeFingerprintString(w, action.URL)
+		writeFingerprintString(w, action.SessionID)
+		writeFingerprintString(w, action.Cwd)
+		writeFingerprintString(w, action.Path)
+	}
+	writeFingerprintInt(w, len(event.WorkActions))
+	if request := event.Request; request == nil {
+		writeFingerprintString(w, "")
+	} else {
+		encoded, _ := json.Marshal(request)
+		writeFingerprintString(w, string(encoded))
+	}
 	writeFingerprintString(w, event.TaskID)
 	for _, count := range []*int{event.TaskTokens, event.TaskToolUses, event.TaskDurationMS} {
 		if count == nil {
@@ -3301,6 +3342,7 @@ func (s *Server) handleBrainWorkAction(conn *websocket.Conn, raw clientMessage) 
 		s.sendErrorWithRequestID(conn, raw.RequestID, "attachment_not_uploaded", confineErr.Error())
 		return
 	}
+	asked, _ := s.workQuestionBefore(raw.ID)
 	result, err := s.brain.ActOnWork(brain.WorkUserActionRequest{
 		WorkID: strings.TrimSpace(raw.ID), Kind: brain.WorkUserActionKind(strings.TrimSpace(raw.Action)),
 		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, SnoozeFor: time.Duration(raw.SnoozeSeconds) * time.Second,
@@ -3310,6 +3352,7 @@ func (s *Server) handleBrainWorkAction(conn *websocket.Conn, raw clientMessage) 
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_action_failed", brainWorkActionMessage(err))
 		return
 	}
+	s.recordWorkReply(asked, result, s.answeredByConn(conn))
 	s.sendJSON(conn, map[string]any{
 		"type":       "brain_work_action",
 		"request_id": raw.RequestID,
@@ -3778,14 +3821,17 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 		if ev.Worker != nil {
 			s.publishWorkerSessionChange(ev.Worker)
 		}
+		s.observePromptLifecycle(ev)
 		s.maybeNotifyForSessionEvent(ev)
 		s.routeSessionEventToBrain(ev)
 	case "worker_metadata_change":
 		if ev.Worker != nil {
 			s.publishWorkerSessionChange(ev.Worker)
 		}
+		s.observePromptLifecycle(ev)
 		s.routeSessionEventToBrain(ev)
 	case "worker_removed":
+		s.observePromptLifecycle(ev)
 		if ev.Worker != nil {
 			s.publishWorkerSession("worker_session_archived", ev.Worker)
 		}

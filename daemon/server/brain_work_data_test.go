@@ -23,6 +23,8 @@ type brainWorkFixture struct {
 	store *brain.Store
 	srv   *Server
 	conn  *websocket.Conn
+	// seen are messages read past while waiting for another.
+	seen []map[string]any
 }
 
 func newBrainWorkFixture(t *testing.T) *brainWorkFixture {
@@ -74,6 +76,32 @@ func (f *brainWorkFixture) request(t *testing.T, message map[string]any) map[str
 			t.Fatal(err)
 		}
 		if payload["request_id"] == message["request_id"] {
+			return payload
+		}
+		f.seen = append(f.seen, payload)
+	}
+}
+
+// next returns the next message of one type.
+func (f *brainWorkFixture) next(t *testing.T, kind string) map[string]any {
+	t.Helper()
+	for index, payload := range f.seen {
+		if payload["type"] == kind {
+			f.seen = append(f.seen[:index], f.seen[index+1:]...)
+			return payload
+		}
+	}
+	_ = f.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	for {
+		_, raw, err := f.conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("no %s: %v", kind, err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["type"] == kind {
 			return payload
 		}
 	}
