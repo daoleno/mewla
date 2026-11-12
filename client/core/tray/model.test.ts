@@ -90,6 +90,8 @@ describe("tray model", () => {
       brainHost: { id: "host", prompt: { id: "hp", kind: "permission", provider: "claude", title: "Trust this folder?", options: [{ number: 1, label: "Yes, proceed" }, { number: 2, label: "No, exit" }] } },
     }));
     expect(m.state).toMatchObject({ kind: "needs", words: "2 need you", dot: "seal", ink: true });
+    // The headline counts both, as the mock's "12 running, 3 need you"; the control says only what needs you.
+    expect(m.title).toBe("1 running, 2 need you");
     expect(m.needs.map((r) => r.key)).toEqual(["prompt:host:hp", "prompt:b:p1"]);
     expect(m.needs[0]!.where).toBe("brain");
     expect(m.needs[1]!.where).toBe("session");

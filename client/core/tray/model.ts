@@ -391,6 +391,16 @@ function stateOf(input: TrayInput, needs: number, running: number): StateControl
   return s("quiet", "All quiet", null, false);
 }
 
+/**
+ * The tray's headline (the mock's "12 running, 3 need you"): both counts, the running one being the rows the
+ * Running group shows, so the headline and the group never disagree. Other states keep the control's words.
+ */
+function headlineOf(state: StateControlModel, running: number, needs: number): string {
+  if (state.kind !== "needs" && state.kind !== "running" && state.kind !== "quiet") return state.words || "Mewla";
+  const counts = [running > 0 ? `${running} running` : "", needs > 0 ? (needs === 1 ? "1 needs you" : `${needs} need you`) : ""].filter(Boolean);
+  return counts.join(", ") || state.words || "Mewla";
+}
+
 function noticeOf(input: TrayInput): TrayNotice | null {
   if (!input.hasServer) return null;
   const name = input.computerName || "Your computer";
@@ -463,7 +473,7 @@ export function trayModel(input: TrayInput): TrayModel {
   const state = stateOf(input, needs.length, runningCount);
   return {
     state,
-    title: state.words || "Mewla",
+    title: headlineOf(state, running.length, needs.length),
     notice: noticeOf(input),
     runningCount,
     dimmed: input.hasServer && (input.pairAgain || input.connection !== "connected"),
