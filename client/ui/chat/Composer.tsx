@@ -1,5 +1,6 @@
 import { cleanup, effect, keyboardFrame, keymap, platform, safeArea, signal, Text, untracked, View, type InputRef } from "nsh";
 import { Button, Input } from "nsh/base";
+import { Icon } from "../icons/Icon";
 import type { Draft } from "../../core/conversation/draft";
 import { appendToDraft } from "../../core/conversation/draftText";
 import { composerKeyIntent } from "../../core/web/shortcuts";
@@ -185,20 +186,26 @@ export function Composer(props: {
       else input?.blur();
     }, { when: "always" });
   });
+  const empty = () => !value().trim() && !props.attached?.();
+  // While a turn runs, an empty composer's button is Stop (SPEC §1.4); with text or chips it sends.
+  const stops = () => props.running() && !value().trim() && !props.attached?.();
+  const placeholder = () => (disabled() && props.disabledReason ? props.disabledReason() : typeof props.placeholder === "function" ? props.placeholder() : props.placeholder);
   return (
-    <View class="border-t border-border bg-background px-3 pt-2"
+    // The dock (soft-final SPEC §11 Composer): on the canvas, 8 above and 12 at the sides, no rule above it.
+    <View testID="composer-dock" class="bg-background px-3 pt-2"
       // Above the keyboard when it is up; else clear of the gesture bar (Android draws edge to edge), which lies under the stack.
       style={{
         marginBottom: props.active && !props.active() ? 0 : Math.max(0, keyboardFrame().height - belowSections()),
-        paddingBottom: 8 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
+        paddingBottom: 10 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
       }}>
       {props.children as never}
-      <View class="flex-row items-end gap-2">
+      {/* One surface pill, 52 high and growing to 128: attach inside at the left, Send inside at the right. */}
+      <View testID="composer-field" class={`min-h-[52px] flex-row items-end rounded-[26px] bg-card pl-1 pr-1 ${disabled() ? "opacity-40" : ""}`}>
         {props.leading as never}
         <Input testID="composer" multiline value={value()} autoFocus={props.autoFocus} ref={(ref) => (input = ref)}
-          placeholder={disabled() && props.disabledReason ? props.disabledReason() : typeof props.placeholder === "function" ? props.placeholder() : props.placeholder}
+          placeholder={placeholder()}
           disabled={disabled()}
-          class={disabled() ? "max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base opacity-40" : "max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"}
+          class="max-h-[128px] min-h-[52px] min-w-0 flex-1 bg-transparent px-1 py-3.5 text-body text-foreground placeholder:text-faint"
           submitBehavior={desktop ? "submit" : undefined} onSubmit={returned}
           onFocus={() => focused.set(true)} onBlur={() => focused.set(false)}
           onPaste={props.onFiles ? ({ files }) => void (files.length && !disabled() && props.onFiles?.(files)) : undefined}
@@ -206,16 +213,26 @@ export function Composer(props: {
             typed = value;
             props.text.set(value);
           }} />
-        {props.running() && !value().trim() ? (
-          <Button testID="stop" onPress={props.onStop} disabled={props.stopping() || !props.canStop()} class="rounded-full border border-border px-4 py-2.5 active:bg-accent">
-            <Text class="text-base font-semibold">{props.stopping() ? "Stopping…" : "Stop"}</Text>
-          </Button>
+        {stops() ? (
+          <SendButton testID="stop" label={props.stopping() ? "Stopping…" : "Stop"} onPress={props.onStop} disabled={props.stopping() || !props.canStop()} ready={false}>
+            <View class="size-3 rounded-[3.5px] bg-foreground" />
+          </SendButton>
         ) : (
-          <Button testID="send" onPress={send} disabled={disabled() || !props.canSend() || (!value().trim() && !props.attached?.())} class={disabled() ? "rounded-full bg-primary px-4 py-2.5 opacity-40" : "rounded-full bg-primary px-4 py-2.5 active:opacity-80"}>
-            <Text class="text-base font-semibold text-primary-foreground">Send</Text>
-          </Button>
+          <SendButton testID="send" label="Send" onPress={send} disabled={disabled() || !props.canSend() || empty()} ready={!disabled() && props.canSend() && !empty()}>
+            <Icon name="arrow-up" size={20} color={!disabled() && props.canSend() && !empty() ? "card" : "faint"} />
+          </SendButton>
         )}
       </View>
     </View>
+  );
+}
+
+/** Send (or Stop): a 36 pt circle in a 48 pt hit, canvas when there is nothing to send, ink when ready. */
+function SendButton(props: { testID: string; label: string; ready: boolean; disabled: boolean; onPress: () => void; children: unknown }) {
+  return (
+    <Button testID={props.testID} accessibilityLabel={props.label} onPress={props.onPress} disabled={props.disabled}
+      class="mb-0.5 size-12 items-center justify-center active:opacity-70">
+      <View class={`size-9 items-center justify-center rounded-full ${props.ready ? "bg-primary" : "bg-background"}`}>{props.children as never}</View>
+    </Button>
   );
 }
