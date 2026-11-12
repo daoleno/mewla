@@ -189,6 +189,18 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
 }
 
 /** An approval or a terminal menu: the command, then Deny and Approve (a plain yes/no) or the menu's rows. */
+/**
+ * A terminal prompt's request as the card shows it: the question (its last line that asks), the command
+ * (the first line), and anything else in between. The agent's own "Tip:" advert is dropped; the daemon
+ * should send these as fields (its prompt parser has them as lines only).
+ */
+function askedParts(text: string): { question: string; command: string; notes: string } {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !/^tip:/i.test(line));
+  const asking = [...lines].reverse().find((line) => line.endsWith("?")) ?? "";
+  const rest = lines.filter((line) => line !== asking);
+  return { question: asking, command: rest[0] ?? "", notes: rest.slice(1).join(" ") };
+}
+
 function ActionBody(props: { card: Card; connected: () => boolean; onDone: (option: TerminalActionPromptOption) => void; onGone: () => void }) {
   const body = props.card.body as Extract<Card["body"], { kind: "action" }>;
   const prompt = body.prompt;
@@ -210,16 +222,16 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
       sending.set("");
     }
   };
+  const asked = () => askedParts(prompt.requestText ?? "");
   const allow = prompt.options.find((option) => option.primary);
   const deny = prompt.options.find((option) => option.destructive);
   const yesNo = prompt.options.length === 2 && allow && deny && allow !== deny;
   return (
     <View class="gap-3">
-      {prompt.requestText ? (
-        <View class="max-h-48 overflow-hidden rounded-(--radius-control) bg-muted px-3 py-2.5">
-          <View selectable><Text class="font-mono text-code">{prompt.requestText}</Text></View>
-        </View>
-      ) : <Text class="text-body font-semibold">{props.card.title}</Text>}
+      {/* The question at 17/600, the command in mono, what else the agent said in soft (SPEC §11 Request card). */}
+      <Text testID="request-question" class="text-body font-semibold">{asked().question || props.card.title}</Text>
+      {asked().command ? <View selectable><Text testID="request-command" class="font-mono text-code">{asked().command}</Text></View> : null}
+      {asked().notes ? <Text class="text-sub text-muted-foreground line-clamp-3">{asked().notes}</Text> : null}
       {yesNo ? (
         <View class="flex-row gap-2">
           <Button testID={`prompt-option-${deny!.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(deny!)}
@@ -241,7 +253,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
                 <Text class="text-body">{sending() === option.id ? "Sending…" : option.label}</Text>
                 {option.description ? <Text class="text-sub text-muted-foreground">{option.description}</Text> : null}
               </View>
-              <View class={option.id === prompt.defaultOptionId ? "size-[22px] rounded-full border-[7px] border-primary" : "size-[22px] rounded-full border-2 border-faint"} />
+              <View class="size-[22px] rounded-full border-2 border-faint" />
             </Button>
           ))}
         </View>
@@ -306,12 +318,15 @@ function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; o
   const s = props.sealed;
   return (
     <Button testID="request-sealed" accessibilityLabel={`${s().verb}: ${s().answer}`} onPress={props.onToggle} class="gap-1 py-1.5 active:opacity-70">
-      <View class="min-h-[28px] flex-row items-center gap-2">
-        <Icon name="check-circle" size={20} tone="soft" />
-        <Text class="text-caption text-muted-foreground">{s().verb}</Text>
-        <Text class={`min-w-0 flex-1 text-sub font-semibold line-clamp-1 ${s().mono ? "font-mono" : ""}`}>{s().answer}</Text>
+      {/* The mock's answered line: a 20 pt check, then the caption over the answer (a command in mono). */}
+      <View class="flex-row items-start gap-2.5">
+        <View class="pt-0.5"><Icon name="check-circle-fill" size={20} tone="soft" /></View>
+        <View class="min-w-0 flex-1">
+          <Text class="text-caption text-muted-foreground">{s().verb}</Text>
+          <Text class={s().mono ? "font-mono text-code text-foreground" : "text-sub font-semibold text-foreground"}>{s().answer}</Text>
+        </View>
       </View>
-      {props.open() ? <Text class="pl-7 text-sub text-muted-foreground">{`${s().title} · ${s().source}`}</Text> : null}
+      {props.open() ? <Text class="pl-[30px] text-sub text-muted-foreground">{`${s().title} · ${s().source}`}</Text> : null}
     </Button>
   );
 }

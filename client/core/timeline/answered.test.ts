@@ -10,11 +10,16 @@ const record = {
 };
 
 describe("an answered request", () => {
+  test("an approval names its command in mono, not the button it was answered with", () => {
+    const approval = parseAnsweredRequest({ ...record, kind: "approval", asked: "git push origin chore/node-22", answer: "Allow" })!;
+    expect(sealedOfAnswered(approval, () => "")).toMatchObject({ verb: "Approved", answer: "git push origin chore/node-22", mono: true });
+  });
+
   test("seals the card it answers, with the answer and who and when", () => {
     const parsed = parseAnsweredRequest(record)!;
     expect(answeredKeys(parsed)).toEqual(["prompt:mh-5935:c6cd9885f6ca"]);
     expect(sealedOfAnswered(parsed, () => "15:24")).toEqual({
-      key: "prompt:mh-5935:c6cd9885f6ca", verb: "Approved", answer: "Yes", title: record.asked, source: "Proof phone · 15:24", brain: false, workerId: "mh-5935",
+      key: "prompt:mh-5935:c6cd9885f6ca", verb: "You chose", answer: "Yes", mono: false, title: record.asked, source: "Proof phone · 15:24", brain: false, workerId: "mh-5935",
     });
   });
 
@@ -31,7 +36,7 @@ describe("an answered request", () => {
 
   test("answered in the terminal reads so; a record without what it needs is none", () => {
     const terminal = parseAnsweredRequest({ ...record, answer: undefined, outcome: "answered", by: { kind: "terminal" } })!;
-    expect(sealedOfAnswered(terminal, () => "")).toMatchObject({ verb: "Answered", answer: record.asked, source: "In the terminal" });
+    expect(sealedOfAnswered(terminal, () => "")).toMatchObject({ verb: "You chose", answer: record.asked, source: "In the terminal" });
     expect(parseAnsweredRequest({ ...record, outcome: "maybe" })).toBeNull();
     expect(parseAnsweredRequest({ ...record, by: {} })).toBeNull();
     expect(parseAnsweredRequest(null)).toBeNull();
