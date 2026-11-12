@@ -282,7 +282,7 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
   const tools = createBrainComposer({ text: props.text, onOpenTerminal: (id) => openBrainTerminal(id), onNotice: (text) => notice.set(text) });
   const block = () => brainComposerBlock({ surface: surface(), snapshot: brain(), chat: chatState() });
   const pairAgain = () => tray().state.kind === "pair";
-  const placeholder = () => (connection() === "connected" ? "Tell Brain…" : "Sends when back online");
+  const placeholder = () => (connection() === "connected" ? "Tell Brain" : "Sends when back online");
   return (
     <>
       <ChatComposer text={props.text} placeholder={placeholder} canSend={tools.canSend} attached={() => tools.uploads.ready().length > 0}

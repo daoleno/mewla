@@ -100,7 +100,7 @@ function ComposerHarness(props: { source: BrainSource }) {
     <View class="flex-1 justify-end">
       <Out />
       <MentionPanel text={text.text} executors={composer.executors} onPick={(draft) => text.set(draft)} />
-      <Composer text={text} placeholder="Tell Brain…" canSend={composer.canSend} onSend={composer.send}
+      <Composer text={text} placeholder="Tell Brain" canSend={composer.canSend} onSend={composer.send}
         running={() => false} stopping={() => false} canStop={() => true} onStop={() => {}} pickerOpen={composer.pickerOpen}
         disabled={() => Boolean(params.blocked)} disabledReason={() => params.blocked ?? ""}
         leading={<ComposerPlusButton pinned={composer.pinned} connected={() => true} onPress={() => composer.pinned.set(!untracked(composer.pinned))} />}>
