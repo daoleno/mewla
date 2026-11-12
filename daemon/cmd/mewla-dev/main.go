@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -40,7 +41,10 @@ type devRunner struct {
 	stdout     io.Writer
 	stderr     io.Writer
 	child      *runningProcess
-	webDirty   bool
+	// pprofAddr is the loopback address the daemon child serves Go's profiler
+	// on (MEWLA_PPROF_ADDR); empty leaves the daemon's own setting alone.
+	pprofAddr string
+	webDirty  bool
 	// goBuild runs `go build`; a test seam.
 	goBuild func(dir string, env, args []string) ([]byte, error)
 }
@@ -76,6 +80,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		stderr:     stderr,
 		webDirty:   true,
 		goBuild:    runGoBuild,
+		pprofAddr:  devPprofAddr(),
 	}
 
 	if err := runner.rebuild(); err != nil {
@@ -96,6 +101,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	defer tree.Close()
 
 	fmt.Fprintf(stderr, "  Dev     Watching %s\n", tree.root)
+	if runner.pprofAddr != "" {
+		fmt.Fprintf(stderr, "  Dev     Profiler http://%s/debug/pprof/ (MEWLA_PPROF_ADDR= turns it off)\n", runner.pprofAddr)
+	}
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
@@ -161,6 +169,23 @@ func run(args []string, stdout, stderr io.Writer) error {
 			childDone = runner.child.done
 		}
 	}
+}
+
+// devPprofAddr is where a dev daemon serves its profiler: a free loopback
+// port, the same across restarts of this runner's child, so "what is it
+// spending CPU on" can always be answered with `go tool pprof` and no restart.
+// A MEWLA_PPROF_ADDR already in the environment wins, empty included (off).
+// Release daemons never get this; only mewla-dev sets it.
+func devPprofAddr() string {
+	if _, set := os.LookupEnv("MEWLA_PPROF_ADDR"); set {
+		return ""
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return ""
+	}
+	defer listener.Close()
+	return listener.Addr().String()
 }
 
 func unexpectedDaemonExit(err error) error {
@@ -397,6 +422,9 @@ func (r *devRunner) restart() error {
 func (r *devRunner) start() error {
 	cmd := exec.Command(r.binary, r.daemonArgs...)
 	cmd.Dir = r.root
+	if r.pprofAddr != "" {
+		cmd.Env = append(os.Environ(), "MEWLA_PPROF_ADDR="+r.pprofAddr)
+	}
 	cmd.Stdout = r.stdout
 	cmd.Stderr = r.stderr
 	cmd.Stdin = os.Stdin

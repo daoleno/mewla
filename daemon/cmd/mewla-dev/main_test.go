@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -223,5 +225,39 @@ func TestDevBuildKeepsThePreviousBinaryWhenBothBuildsFail(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(r.binary); string(got) != "previous" {
 		t.Fatalf("binary = %q", got)
+	}
+}
+
+func TestDevDaemonChildGetsALoopbackProfiler(t *testing.T) {
+	t.Setenv("MEWLA_PPROF_ADDR", "")
+	os.Unsetenv("MEWLA_PPROF_ADDR")
+	addr := devPprofAddr()
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host != "127.0.0.1" {
+		t.Fatalf("dev profiler address %q: %v", addr, err)
+	}
+	out := filepath.Join(t.TempDir(), "env")
+	script := filepath.Join(t.TempDir(), "daemon.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf %s \"$MEWLA_PPROF_ADDR\" > "+out+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &devRunner{root: t.TempDir(), binary: script, pprofAddr: addr, stdout: io.Discard, stderr: io.Discard}
+	if err := runner.start(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-runner.child.done; err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(out); string(got) != addr {
+		t.Fatalf("daemon child profiler = %q, want %q", got, addr)
+	}
+}
+
+func TestDevProfilerYieldsToTheEnvironment(t *testing.T) {
+	for _, value := range []string{"", "127.0.0.1:7777"} {
+		t.Setenv("MEWLA_PPROF_ADDR", value)
+		if got := devPprofAddr(); got != "" {
+			t.Fatalf("MEWLA_PPROF_ADDR=%q overridden with %q", value, got)
+		}
 	}
 }
