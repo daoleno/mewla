@@ -345,4 +345,49 @@ describe("a Session", () => {
     expect(framesOf(app.host.posts(), "codex_asset")[0]).toMatchObject({ path: "out/chart.png", cwd: "/home/me/mewla" });
     expect(app.texts()).toContain("Today");
   }, 20_000);
+  test("in the terminal, Terminate offline says the computer is offline instead of doing nothing (parity #37)", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
+    await app.waitFor("text:notes", { timeout: 10_000 });
+    await app.press("text:notes");
+    await app.waitFor("id:session-chat");
+    app.onDialog((dialog) => (dialog.buttons.includes("Open terminal") ? "Open terminal" : dialog.buttons.includes("Terminate") ? "Terminate" : null));
+    await answering(app, () => app.press("id:session-menu"));
+    await app.waitUntil(() => !app.shows("id:session-chat"));
+    await app.host.send("app.daemonDown");
+    await app.waitFor("id:terminal-offline", { timeout: 10_000 });
+    await answering(app, () => app.press("id:session-menu"));
+    await app.waitFor("id:terminal-notice");
+    expect(app.texts()).toContain("Your computer is offline.");
+    expect(app.dialogs().some((dialog) => dialog.title === "Terminate this session?")).toBe(false);
+    expect(framesOf(app.host.posts(), "kill_worker")).toEqual([]);
+  }, 20_000);
+
+  test("a file tapped in a Session without a live generation says why (parity #38)", async () => {
+    const reply = [{ id: "a1", seq: 1, kind: "assistant_message", timestamp: new Date().toISOString(), body: "Wrote [the notes](/home/me/mewla/notes.md)." }];
+    const app = await sessionsApp({ worker_sessions: [session("w2", { name: "writer" })], conversations: { w2: reply } });
+    await app.waitFor("text:writer", { timeout: 10_000 });
+    await app.press("text:writer");
+    await app.waitFor("text:the notes");
+    await app.press("text:the notes");
+    await app.waitFor("text:This Session has no live generation identity. Refresh the Session list and try again.");
+    expect(app.shows("id:file-preview")).toBe(false);
+  }, 20_000);
+
+  test("a file preview opened from a Session closes when the Session restarts (parity #44)", async () => {
+    const reply = [{ id: "a1", seq: 1, kind: "assistant_message", timestamp: new Date().toISOString(), body: "Wrote [the notes](/home/me/mewla/notes.md)." }];
+    const live = session("w3", { name: "writer", status: "running", process_id: 42, started_at: 1_700_000_000_000 });
+    const app = await sessionsApp({ worker_sessions: [live], conversations: { w3: reply } });
+    await app.waitFor("text:writer", { timeout: 10_000 });
+    await app.press("text:writer");
+    await app.waitFor("text:the notes");
+    await app.press("text:the notes");
+    await app.waitFor("id:file-preview");
+    // The same generation again (a status update) keeps it open.
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...live, status: "done" } });
+    await app.wait(300);
+    expect(app.shows("id:file-preview")).toBe(true);
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...live, process_id: 43, started_at: 1_700_000_100_000 } });
+    await app.waitUntil(() => !app.shows("id:file-preview"), { timeout: 5_000 });
+    expect(app.shows("id:session-menu")).toBe(true);
+  }, 20_000);
 });
