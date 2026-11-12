@@ -285,6 +285,25 @@ describe("TerminalSession history", () => {
     transport.close();
   });
 
+  test("a program on the alternate screen from the start: the host's empty answer at epoch 0 holds, and the view is not voided again", async () => {
+    const { transport, socket, term, history } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    const empty = delta({ epoch: 0, alternate: true });
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1", history: empty });
+    await until(() => history.length > 1);
+    expect(history[1]).toEqual({ reset: false, removed: 0, rows: [], cols: 80, alternate: true });
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "x" });
+    await until(() => historyRequests(socket).length > 1);
+    expect(historyRequests(socket)[1].since).toEqual({ epoch: 0, next: 0 });
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[1].request_id, session_id: "t1", history: empty });
+    await wait(historyTiming.snapshotMs * 4);
+    // No void and no request of its own: only output asks again.
+    expect(history.length).toBe(2);
+    expect(historyRequests(socket).length).toBe(2);
+    term.close();
+    transport.close();
+  });
+
   test("a failed history says so and retries on request; an answer for an old attachment is dropped", async () => {
     const { transport, socket, term, history, notices } = await attachedTerminal();
     await until(() => historyRequests(socket).length > 0);

@@ -109,6 +109,18 @@ describe("TerminalHistoryModel", () => {
     expect(model.applyDelta(delta({ from: 3, next: 4, lines: ["d"] }))).toBe("resync");
   });
 
+  test("a host with nothing numbered yet (a program on the alternate screen from the start) is in step, not a resync", () => {
+    const model = new TerminalHistoryModel();
+    const empty = delta({ epoch: 0, alternate: true });
+    expect(model.applyDelta(empty)).toEqual({ reset: false, removed: 0, rows: [], cols: 80, alternate: true });
+    expect(model.cursor()).toEqual({ epoch: 0, next: 0 });
+    expect(model.applyDelta(empty)).toBe(null);
+    // The program leaves the alternate screen: the host numbers its rows from a new epoch.
+    expect(model.applyDelta(delta({ epoch: 5, reset: true, next: 1, lines: ["$ "] }))?.reset).toBe(true);
+    // Rows held, or a delta that names rows, still resync.
+    expect(new TerminalHistoryModel().applyDelta(delta({ epoch: 0, from: 0, next: 1, lines: ["a"] }))).toBe("resync");
+  });
+
   test("a delta outside its bounds is refused before the view allocates", () => {
     expect(() => validateHistoryDelta(delta({ from: 0, next: 5, lines: ["a"] }))).toThrow();
     expect(() => validateHistoryDelta(delta({ cols: 0 }))).toThrow();

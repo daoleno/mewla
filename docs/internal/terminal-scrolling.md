@@ -31,6 +31,11 @@ App is sent only what it is missing. `terminal_history` takes an optional
   another epoch, another view or another daemon run also gets a reset.
 - While the program is on the alternate screen the answer carries no rows and
   the viewer keeps its place; the primary history is unchanged until it leaves.
+  A program that starts on the alternate screen (Claude Code) leaves nothing
+  numbered yet, so the answer to a viewer that holds nothing is empty at epoch
+  0, not a reset. The App takes that as in step. Before it did, the App voided
+  its view and asked again every 750 ms, which dropped a long-press selection
+  half a second after it appeared.
 - `alt_scroll` (DEC 1007) and `app_cursor` (DECCKM) come with every answer
   from a host that reports them, `mouse` always. Absent means unknown.
 
