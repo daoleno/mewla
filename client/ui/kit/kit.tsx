@@ -73,10 +73,8 @@ export function Page(props: {
 export const DISPLAY_TITLE_AWAY = 56;
 
 /**
- * A caption's line (SPEC §10.2 caption 13/18): a section label, an eyebrow, a day separator. One line, and as wide as
- * its place, never as wide as its word: a box measured to the word a hair too narrow wrapped its last letter in release
- * builds ("Wor / k"). In a column it stretches (`self-stretch`), in a row it takes the rest (`min-w-0 flex-1`). A caption
- * longer than its place ends in an ellipsis.
+ * A caption's line (SPEC §10.2 caption 13/18): a section label, an eyebrow, a day separator. One line; in a row it
+ * takes the rest (`min-w-0 flex-1`), and a caption longer than its place ends in an ellipsis.
  */
 export const CAPTION_LINE = "text-caption line-clamp-1";
 
@@ -84,7 +82,7 @@ export const CAPTION_LINE = "text-caption line-clamp-1";
 export function Caption(props: { text: string; plain?: boolean; center?: boolean; inRow?: boolean; class?: string; role?: AccessibilityRole; testID?: string }) {
   return (
     <Text testID={props.testID} role={props.role}
-      class={`${CAPTION_LINE} ${props.inRow ? "min-w-0 flex-1" : "self-stretch"} text-muted-foreground ${props.plain ? "" : "font-semibold"} ${props.center ? "text-center" : ""} ${props.class ?? ""}`}>{props.text}</Text>
+      class={`${CAPTION_LINE} ${props.inRow ? "min-w-0 flex-1" : props.center ? "self-stretch" : ""} text-muted-foreground ${props.plain ? "" : "font-semibold"} ${props.center ? "text-center" : ""} ${props.class ?? ""}`}>{props.text}</Text>
   );
 }
 
