@@ -232,12 +232,7 @@ func (s gridScreen) view(h int) []string {
 	if h <= 0 {
 		return nil
 	}
-	last := len(s.rows) - 1
-	for last >= 0 && strings.TrimSpace(plainText(s.rows[last])) == "" {
-		last--
-	}
-	end := max(last, s.cursorY)
-	start := max(end-h+1, 0)
+	start := s.viewStart(h)
 	out := make([]string, 0, h)
 	for i := start; i < start+h; i++ {
 		if i < len(s.rows) {
@@ -247,6 +242,16 @@ func (s gridScreen) view(h int) []string {
 		}
 	}
 	return out
+}
+
+// viewStart is the first screen row view(h) shows.
+func (s gridScreen) viewStart(h int) int {
+	last := len(s.rows) - 1
+	for last >= 0 && strings.TrimSpace(plainText(s.rows[last])) == "" {
+		last--
+	}
+	end := max(last, s.cursorY)
+	return max(end-h+1, 0)
 }
 
 // gridState is what the grid shows: the live Sessions, newest first, the
