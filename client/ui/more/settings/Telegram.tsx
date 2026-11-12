@@ -127,7 +127,7 @@ export function Telegram() {
   const label = () => telegramLabel(status(), connected(), telegram().loading);
 
   return (
-    <Page title="Telegram" testID="telegram">
+    <Page display title="Telegram" testID="telegram">
       <>
         {!daemon() ? (
           <EmptyState icon="paper-plane" title="No current server" detail="Pair a computer in Settings to connect Telegram." />
@@ -162,7 +162,7 @@ export function Telegram() {
               </View>
             ) : view() === "token" ? (
               <View>
-                <Section title="Bot token" footer="Bot chats are stored by Telegram. Your token stays on the connected server.">
+                <Section title="Bot token">
                   <Field
                     testID="telegram-token"
                     accessibilityLabel="Telegram bot token"
@@ -226,24 +226,28 @@ export function Telegram() {
                         {status()?.last_send_at ? <Row title="Last sent" value={formatFullDateTime(status()!.last_send_at!)} /> : null}
                         <Row icon="refresh" title="Refresh" disabled={blocked()} onPress={loadTelegram} />
                         <Row icon="key" title="Replace token" disabled={blocked()} onPress={() => replacing.set(true)} />
-                        {status()?.owner_hint ? (
-                          <Row
-                            destructive
-                            icon="person-remove"
-                            title="Unlink account"
-                            disabled={blocked()}
-                            onPress={() => void confirmDestructive("Unlink Telegram account", "Remove the verified Telegram owner and require a new binding?", "Unlink").then((yes) => { if (yes) void run("revoke"); })}
-                          />
-                        ) : null}
-                        <Row
-                          destructive
-                          icon="trash"
-                          title="Remove bot"
-                          disabled={blocked()}
-                          onPress={() => void confirmDestructive("Remove Telegram bot", "Remove this server's token, binding and delivery state? Telegram cloud messages are not deleted.", "Remove").then((yes) => { if (yes) void run("remove"); })}
-                        />
                       </View>
                     ) : null}
+                  </Section>
+                ) : null}
+                {connected() && advanced() && !(telegram().loading && !status()) ? (
+                  <Section>
+                    {status()?.owner_hint ? (
+                      <Row
+                        destructive
+                        icon="person-remove"
+                        title="Unlink account"
+                        disabled={blocked()}
+                        onPress={() => void confirmDestructive(`Unlink ${telegramRecipient(status()!)}?`, "Remove the verified Telegram owner and require a new binding?", "Unlink").then((yes) => { if (yes) void run("revoke"); })}
+                      />
+                    ) : null}
+                    <Row
+                      destructive
+                      icon="trash"
+                      title="Remove bot"
+                      disabled={blocked()}
+                      onPress={() => void confirmDestructive(status()?.bot_username ? `Remove @${status()!.bot_username}?` : "Remove the Telegram bot?", "Remove this server's token, binding and delivery state? Telegram cloud messages are not deleted.", "Remove").then((yes) => { if (yes) void run("remove"); })}
+                    />
                   </Section>
                 ) : null}
               </View>

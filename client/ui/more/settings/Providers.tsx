@@ -124,7 +124,7 @@ export function Providers(props: { nav: PageNav }) {
     const current = daemon();
     const s = snapshot();
     if (!current || !s) return;
-    if (!(await confirmDestructive("Delete Provider?", connection.name, "Delete"))) return;
+    if (!(await confirmDestructive(`Delete ${connection.name}?`, "This can't be undone.", "Delete"))) return;
     try {
       await change(`delete:${connection.id}`, () => deleteProviderConnection(current, connection.id, s.revision));
     } catch (error) {
@@ -138,7 +138,7 @@ export function Providers(props: { nav: PageNav }) {
   };
 
   return (
-    <Page title="Model Providers" testID="providers" refreshing={providers().loading && Boolean(snapshot())} onRefresh={refreshProviders}>
+    <Page display title="Model Providers" testID="providers" refreshing={providers().loading && Boolean(snapshot())} onRefresh={refreshProviders}>
       <>
         {!daemon() ? (
           <EmptyState testID="providers-no-server" icon="key" title="No current server" detail="Providers are managed on the connected computer." action="Open Settings" onAction={() => props.nav.pop()} />
@@ -174,8 +174,7 @@ export function Providers(props: { nav: PageNav }) {
             ) : null}
             <Section
               title={`${label()} uses`}
-              detail={<Button testID="provider-add" accessibilityLabel={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} class="active:opacity-60 disabled:opacity-50"><Text class="text-sm font-semibold">Add</Text></Button>}
-              footer={list().length === 0 ? (q() ? "No Providers match this search." : "Add a Provider to route this Agent through your own API key.") : undefined}
+              footer={list().length === 0 && q() ? "No Providers match this search." : undefined}
             >
               <Row
                 testID="provider-official"
@@ -224,6 +223,7 @@ export function Providers(props: { nav: PageNav }) {
                   {rowNote()[c.id] ? <Text class="px-4 pb-3 text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text> : null}
                 </View>
               ))}
+              <Row testID="provider-add" icon="add" title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
             </Section>
             {snapshot()!.gateway ? <Gateway /> : null}
           </View>
@@ -349,7 +349,7 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
   }
 
   return (
-    <Page title={existing() ? "Edit Provider" : "Add Provider"} testID="provider-editor">
+    <Page display title={existing() ? "Edit Provider" : "Add Provider"} testID="provider-editor">
       {props.retry ? <Notice testID="provider-retry" tone="failed" title="The API key was not saved. Check it and try again." /> : null}
       <Section footer={nameIssue() ?? undefined}>
         <Field testID="provider-name" label="Provider name" value={name()} placeholder="e.g. Work gateway" onChange={(v) => edit(name, v)} />
@@ -401,7 +401,7 @@ export function ProviderModels(props: { connectionId: string }) {
   }
 
   return (
-    <Page title="Model access" testID="provider-models">
+    <Page display title="Model access" testID="provider-models">
       <Text class="mt-3 px-1 text-sm text-muted-foreground">{`${connection()?.name ?? ""} · ${on().length} of ${(snapshot()?.models[props.connectionId] ?? []).length} on`}</Text>
       {discovered()[props.connectionId] && discovered()[props.connectionId].models.length === 0 ? (
         <Notice title="Upstream models are unavailable" detail="Showing the local model catalog; Sync can refresh it." />

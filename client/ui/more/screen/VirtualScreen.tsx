@@ -85,7 +85,7 @@ export function VirtualScreenSwitch() {
 /** Settings → Labs → Virtual screen: the one switch; what it does shows on Screen. */
 export function VirtualScreenPage() {
   return (
-    <Page title="Virtual screen" testID="virtual-screen-page">
+    <Page display title="Virtual screen" testID="virtual-screen-page">
       <VirtualScreenSwitch />
     </Page>
   );
