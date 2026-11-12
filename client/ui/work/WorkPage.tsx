@@ -2,15 +2,16 @@ import { cleanup, effect, Scroll, signal, Text, View } from "nsh";
 import { AlertDialog, Button, Input } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
-import { markWorkRead, objectiveLine, workAction } from "../../core/work/brainWork";
+import { markWorkRead, workAction } from "../../core/work/brainWork";
 import {
-  brainWorkActions, brainWorkAskDraft, brainWorkSlipActions, brainWorkSnoozeUntil, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
+  brainWorkActions, brainWorkAskDraft, brainWorkSnoozeUntil, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
 } from "../../core/work/actions";
-import { BRAIN_WORK_GROUP_LABELS, BRAIN_WORK_GROUP_ORDER, brainWorkAge, brainWorkSummaryLine, type BrainWorkSlip, type WorkStatus } from "../../core/work/surface";
+import { brainWorkAge, type BrainWorkSlip } from "../../core/work/surface";
 import { clock } from "../calendar/clock";
 import { createAttachmentUploads } from "../more/files/upload";
 import { brainDraft, connection, currentTransport } from "../session";
 import { workSurface } from "./state";
+import { Icon } from "../kit/Icon";
 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
 export interface WorkLinks {
@@ -20,10 +21,6 @@ export interface WorkLinks {
   /** "Ask Brain about this": Brain's composer with the Work quoted, never sent. */
   askBrain(text: string): void;
 }
-
-const DOT: Record<WorkStatus, string> = {
-  needs: "bg-seal", running: "bg-ring", ready: "bg-muted-foreground", warning: "bg-warning", failed: "bg-destructive", blocked: "border border-muted-foreground",
-};
 
 function meta(slip: BrainWorkSlip): string {
   const at = slip.updatedAt ? Date.parse(slip.updatedAt) : NaN;
@@ -71,7 +68,7 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
     const answer = await AlertDialog.show({
       title: action.kind === "stop" ? `Stop “${slip.title}”?` : `${action.label}?`,
       description: action.confirm,
-      actions: [{ id: "keep", label: "Cancel", role: "cancel" }, { id: "go", label: action.label, role: "destructive" }],
+      actions: [{ id: "keep", label: "Cancel", role: "cancel" }, { id: "go", label: action.label }],
     });
     if (answer.action !== "go") return false;
   }
@@ -100,16 +97,30 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
   }
 }
 
-function ActionButton(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; onPress: () => void; compact?: boolean }) {
-  const key = () => `${props.slip().workId}:${props.action.kind}:${props.action.text ?? ""}`;
-  const off = () => Boolean(busy() && busy().startsWith(`${props.slip().workId}:`)) || (connection() !== "connected" && props.action.kind !== "ask" && props.action.kind !== "open");
-  const pad = props.compact ? "px-3 py-1.5" : "px-4 py-3";
+function actionOff(action: BrainWorkAction, slip: BrainWorkSlip): boolean {
+  return Boolean(busy() && busy().startsWith(`${slip.workId}:`)) || (connection() !== "connected" && action.kind !== "ask" && action.kind !== "open");
+}
+const actionTestID = (action: BrainWorkAction) => `work-action-${action.kind}${action.text ? `-${action.text}` : ""}`;
+const actionBusy = (action: BrainWorkAction, slip: BrainWorkSlip) => busy() === `${slip.workId}:${action.kind}:${action.text ?? ""}`;
+
+/** An answer to what the Work asks: a 54 pt row of its request card, with a ring. */
+function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; onPress: () => void }) {
   return (
-    <Button testID={`work-action-${props.action.kind}${props.action.text ? `-${props.action.text}` : ""}`} disabled={off()} onPress={props.onPress}
-      class={props.action.primary ? `rounded-xl bg-primary ${pad}` : `rounded-xl border border-border ${pad} active:bg-accent`}>
-      <Text class={props.action.primary ? "text-center text-base font-semibold text-primary-foreground" : props.action.confirm ? "text-center text-base text-destructive" : "text-center text-base"}>
-        {busy() === key() ? "…" : props.action.label}
-      </Text>
+    <Button testID={actionTestID(props.action)} disabled={actionOff(props.action, props.slip())} onPress={props.onPress}
+      class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 active:bg-accent disabled:opacity-40">
+      <Text class="min-w-0 flex-1 text-body">{actionBusy(props.action, props.slip()) ? "Sending…" : props.action.label}</Text>
+      <View class="size-[22px] rounded-full border-2 border-faint" />
+    </Button>
+  );
+}
+
+/** Any other action: a 56 pt row of a group (Stop and the like in ink, as every destructive row). */
+function ActionRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; onPress: () => void; first: boolean }) {
+  return (
+    <Button testID={actionTestID(props.action)} disabled={actionOff(props.action, props.slip())} onPress={props.onPress}
+      class={`min-h-[56px] flex-row items-center px-4 active:bg-accent disabled:opacity-40 ${props.first ? "" : "border-t border-border"}`}>
+      <Text class={`min-w-0 flex-1 text-body ${props.action.primary || props.action.confirm ? "font-semibold" : ""}`}>{actionBusy(props.action, props.slip()) ? "…" : props.action.label}</Text>
+      {props.action.confirm ? null : <Icon name="chevron-right" size={18} tone="faint" />}
     </Button>
   );
 }
@@ -118,9 +129,9 @@ function Notice() {
   return (
     <View>
       {notice() ? (
-        <View testID="work-notice" class="gap-0.5 px-4 pt-3">
-          <Text class={notice()!.failed ? "text-base font-semibold text-destructive" : "text-base font-semibold"}>{notice()!.text}</Text>
-          {notice()!.detail ? <Text class="text-sm text-muted-foreground">{notice()!.detail!}</Text> : null}
+        <View testID="work-notice" class="gap-0.5 pt-3">
+          <Text class="text-body font-semibold">{notice()!.text}</Text>
+          {notice()!.detail ? <Text class="text-sub text-muted-foreground">{notice()!.detail!}</Text> : null}
         </View>
       ) : null}
     </View>
@@ -165,57 +176,88 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   const uploading = () => files.items().some((item) => item.status !== "ready");
   const canSend = () => !busy() && !uploading() && Boolean(reply().trim() || files.ready().length);
 
+  const answers = () => brainWorkActions(slip()!).filter((action) => action.kind === "answer");
+  const others = () => brainWorkActions(slip()!).filter((action) => action.kind !== "answer" && !(action.kind === "reply" && (slip()!.closed || Boolean(slip()!.question))));
+  const stateDot = () => (slip()!.group === "needs" ? "bg-seal" : slip()!.group === "running" ? "bg-foreground" : "");
+
   return (
     <NavPage title="Work" testID="work-detail">
       <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         {!slip() ? (
           <View class="items-center gap-2 px-6 py-16">
-            <Text class="text-lg font-semibold">This Work is no longer open</Text>
+            <Text class="text-title font-semibold tracking-title">This Work is no longer open</Text>
           </View>
         ) : (
-          <View class="gap-3 px-4 pb-10 pt-4">
+          <View class="gap-2 px-4 pb-10 pt-2">
+            <Text class="text-caption font-semibold text-muted-foreground">{["Work", slip()!.who].filter(Boolean).join(" · ")}</Text>
+            <View selectable><Text testID="work-title" role="header" class="text-display font-bold tracking-display">{slip()!.title}</Text></View>
             <View class="flex-row items-center gap-2">
-              <View class={`size-2 rounded-full ${DOT[slip()!.status]}`} />
-              <Text class="text-sm text-muted-foreground">{[slip()!.statusLabel, meta(slip()!), slip()!.waitedMs && slip()!.group === "needs" ? `Waiting ${brainWorkAge(slip()!.waitedMs!)}` : ""].filter(Boolean).join(" · ")}</Text>
+              {stateDot() ? <View class={`size-2 rounded-full ${stateDot()}`} /> : <Icon name="check" size={16} tone="soft" />}
+              <Text class="text-sub text-muted-foreground">
+                <Text class="font-semibold text-foreground">{slip()!.statusLabel}</Text>
+                {[meta(slip()!), slip()!.waitedMs && slip()!.group === "needs" ? `Waiting ${brainWorkAge(slip()!.waitedMs!)}` : ""].filter(Boolean).map((part) => ` · ${part}`).join("")}
+              </Text>
             </View>
-            <View selectable><Text testID="work-title" class="text-xl font-semibold">{slip()!.title}</Text></View>
-            {slip()!.calendar && slip()!.calendarLink ? (
-              <Button testID="work-calendar-link" accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)} class="self-start">
-                <Text class="text-base text-primary">{slip()!.calendarLink!}</Text>
-              </Button>
+            {slip()!.summary && !slip()!.question ? <View selectable><Text testID="work-question" class="pt-2 text-sub text-muted-foreground">{slip()!.summary!}</Text></View> : null}
+            {brainWorkWaitForLine(slip()!) ? <View selectable><Text testID="work-wait-for" class="text-sub text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View> : null}
+            {slip()!.question ? (
+              <>
+                <Text role="header" class="mb-2 mt-6 px-4 text-caption font-semibold text-muted-foreground">Waits on you</Text>
+                <View class="overflow-hidden rounded-(--radius-group) bg-card">
+                  <View class="gap-2 p-4">
+                    <View class="flex-row items-center gap-2">
+                      <View class="size-2 rounded-full bg-seal" />
+                      <Text class="text-caption font-semibold">Brain asks</Text>
+                    </View>
+                    <View selectable><Text testID="work-question" class="text-body font-semibold">{slip()!.question!}</Text></View>
+                  </View>
+                  {answers().map((action) => <AnswerRow action={action} slip={() => slip()!} onPress={() => void runWorkAction(action, slip()!, context())} />)}
+                </View>
+              </>
             ) : null}
-            {slip()!.question || slip()!.summary ? <View selectable><Text testID="work-question" class="text-base">{slip()!.question ?? slip()!.summary!}</Text></View> : null}
-            {brainWorkWaitForLine(slip()!) ? <View selectable><Text testID="work-wait-for" class="text-sm text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View> : null}
-            <View class="gap-2 pt-2">
-              {brainWorkActions(slip()!).filter((action) => !(action.kind === "reply" && slip()!.closed)).map((action) => (
-                <ActionButton action={action} slip={() => slip()!} onPress={() => void runWorkAction(action, slip()!, context())} />
-              ))}
-            </View>
+            {slip()!.calendar && slip()!.calendarLink ? (
+              <View class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
+                <Button testID="work-calendar-link" accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)}
+                  class="min-h-[56px] flex-row items-center gap-3 px-4 active:bg-accent">
+                  <Icon name="calendar" size={24} tone="soft" />
+                  <Text class="min-w-0 flex-1 text-body line-clamp-1">{slip()!.calendarLink!}</Text>
+                  <Icon name="chevron-right" size={18} tone="faint" />
+                </Button>
+              </View>
+            ) : null}
+            {others().length ? (
+              <View class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
+                {others().map((action, index) => <ActionRow action={action} slip={() => slip()!} first={index === 0} onPress={() => void runWorkAction(action, slip()!, context())} />)}
+              </View>
+            ) : null}
+            <Notice />
             {!slip()!.closed ? (
-              <View class="gap-2 pt-2">
+              <View class="gap-2 pt-6">
                 {files.items().length ? (
                   <View class="flex-row flex-wrap gap-2">
                     {files.items().map((item) => (
-                      <Button accessibilityLabel={`Remove ${item.asset.name}`} onPress={() => files.remove(item.id)} class="rounded-full border border-border px-3 py-1">
-                        <Text class={item.status === "failed" ? "text-sm text-destructive" : "text-sm"}>{item.status === "ready" ? `${item.asset.name} ×` : item.status === "failed" ? `${item.asset.name}: ${item.error ?? "failed"} ×` : `${item.asset.name} …`}</Text>
+                      <Button accessibilityLabel={`Remove ${item.asset.name}`} onPress={() => files.remove(item.id)} class="h-[44px] justify-center rounded-(--radius-control) bg-card px-3">
+                        <Text class="text-sub">{item.status === "ready" ? `${item.asset.name} ×` : item.status === "failed" ? `${item.asset.name}: ${item.error ?? "failed"} ×` : `${item.asset.name} …`}</Text>
                       </Button>
                     ))}
                   </View>
                 ) : null}
-                <View class="flex-row items-end gap-2">
-                  <Button testID="work-attach" accessibilityLabel="Attach file" disabled={busy() !== "" || files.picking()} onPress={() => void attach()} class="rounded-full border border-border px-3 py-2.5 active:bg-accent">
-                    <Text class="text-base">+</Text>
+                <View class="min-h-[52px] flex-row items-end rounded-full bg-card">
+                  <Button testID="work-attach" accessibilityLabel="Attach file" disabled={busy() !== "" || files.picking()} onPress={() => void attach()} class="h-[52px] w-[44px] items-center justify-center disabled:opacity-40">
+                    <Icon name="add" size={22} tone="soft" />
                   </Button>
-                  <Input testID="work-reply" multiline value={reply()} onChange={({ value }) => reply.set(value)} placeholder={slip()!.question ? "Answer Brain…" : "Tell Brain about this…"}
-                    accessibilityLabel={`Reply to Brain about ${slip()!.title}`} class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base" />
-                  <Button testID="work-send-reply" accessibilityLabel="Send reply" disabled={!canSend()} onPress={() => void runWorkAction({ kind: "reply", label: "Reply" }, slip()!, context())} class="rounded-full bg-primary px-4 py-2.5">
-                    <Text class="text-base font-semibold text-primary-foreground">Send</Text>
+                  <Input testID="work-reply" multiline value={reply()} onChange={({ value }) => reply.set(value)} placeholder={slip()!.question ? "Something else…" : "Reply about this Work"}
+                    accessibilityLabel={`Reply to Brain about ${slip()!.title}`} class="max-h-32 min-h-[52px] flex-1 py-3.5 text-message" />
+                  <Button testID="work-send-reply" accessibilityLabel="Send reply" disabled={!canSend()} onPress={() => void runWorkAction({ kind: "reply", label: "Reply" }, slip()!, context())}
+                    class="size-[52px] items-center justify-center disabled:opacity-40">
+                    <View class={`size-9 items-center justify-center rounded-full ${canSend() ? "bg-primary" : "bg-background"}`}>
+                      <Icon name="arrow-up" size={20} tone={canSend() ? "surface" : "faint"} />
+                    </View>
                   </Button>
                 </View>
-                {attachFailure() ? <Text class="text-sm text-destructive">{attachFailure()}</Text> : null}
+                {attachFailure() ? <Text class="text-sub">{attachFailure()}</Text> : null}
               </View>
             ) : null}
-            <Notice />
           </View>
         )}
       </Scroll>
