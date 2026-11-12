@@ -44,5 +44,19 @@ done
 "$OUT/terminal_vt_select"
 "$OUT/terminal_vt_input"
 "$OUT/terminal_corpus_cells" "$ROOT/scripts/terminal-corpus"
+# The web page names libghostty-vt's keys by W3C code in the header's order (terminal.js KEY_NAMES).
+python3 - "$CACHE/include/ghostty/vt/key/event.h" "$ROOT/client/ui/web/terminal/terminal.js" <<'PY'
+import re, sys
+header, page = open(sys.argv[1]).read(), open(sys.argv[2]).read()
+header = header[header.index("GHOSTTY_KEY_UNIDENTIFIED = 0"):header.index("} GhosttyKey;")]
+keys = [(n, int(v)) for n, v in re.findall(r"GHOSTTY_KEY_([A-Z0-9_]+)\s*=\s*(\d+),", header) if n != "UNIDENTIFIED"]
+w3c = lambda n: "Key" + n if re.fullmatch(r"[A-Z]", n) else "".join(p if p.isdigit() else p[0] + p[1:].lower() for p in n.split("_"))
+want = [w3c(n) for n, v in sorted(keys, key=lambda k: k[1])]
+assert [v for _, v in sorted(keys, key=lambda k: k[1])] == list(range(1, len(keys) + 1)), "GhosttyKey is no longer 1..n"
+got = " ".join(re.findall(r'"([^"]*)"\s*\+?', page[page.index("var KEY_NAMES = ("):page.index(').split(" ");')])).split()
+if got != want:
+    sys.exit(f"terminal.js KEY_NAMES differs from ghostty/vt/key/event.h: first difference at {next(i for i, (a, b) in enumerate(zip(got + [''], want + [''])) if a != b)}")
+print(f"terminal.js: {len(got)} key names match libghostty-vt's")
+PY
 "${CXX:-c++}" -std=c++17 -Wall -Werror -I"$NATIVE" "$NATIVE/TerminalGlyphs.cpp" "$ROOT/scripts/tests/terminal_glyphs.cpp" -o "$OUT/terminal_glyphs"
 "$OUT/terminal_glyphs"

@@ -193,6 +193,7 @@
       "mewla_vt_key",
       "mewla_vt_mouse_tracking",
       "mewla_vt_mouse",
+      "mewla_vt_link",
       "mewla_vt_focus",
       "mewla_glyph_is_drawn",
       "mewla_glyph_ops",
