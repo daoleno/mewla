@@ -159,5 +159,46 @@
       "MEWLA_ANDROID_KEY_PASSWORD"
     ],
     "mechanism": "client/android/app/build.gradle.kts reads them from the environment (CI secrets only); never commit secrets"
+  },
+  "web": {
+    "note": "The browser terminal's VT: libghostty-vt for WebAssembly with the phones' packer and glyphs linked in, one mewla-vt.wasm served beside the terminal page (client/ui/web/terminal). Same signed release and Zig as the app. Built by scripts/build-libghostty-web.sh, which scripts/build-web-ui.sh runs.",
+    "zig_target": "wasm32-freestanding",
+    "zig_target_note": "Ghostty's Tier 1 WebAssembly target; the static library it builds is linked into the packer's module.",
+    "optimize": "ReleaseSmall",
+    "packer_target": "wasm32-wasi",
+    "packer_target_note": "For libc++ (std::vector, std::string); the module imports only wasi fd_write, fd_seek and fd_close, which the page answers itself.",
+    "packer_flags": [
+      "-mexec-model=reactor",
+      "-Oz",
+      "-fno-exceptions",
+      "-std=c++20"
+    ],
+    "packer_sources": [
+      "TerminalVt.cpp",
+      "TerminalVt.h",
+      "TerminalGlyphs.cpp",
+      "TerminalGlyphs.h"
+    ],
+    "exports": [
+      "malloc",
+      "free",
+      "mewla_vt_create",
+      "mewla_vt_destroy",
+      "mewla_vt_resize",
+      "mewla_vt_set_theme",
+      "mewla_vt_write",
+      "mewla_vt_frame",
+      "mewla_vt_paste",
+      "mewla_vt_take_clipboard",
+      "mewla_vt_key",
+      "mewla_vt_mouse_tracking",
+      "mewla_vt_mouse",
+      "mewla_vt_link",
+      "mewla_vt_focus",
+      "mewla_glyph_is_drawn",
+      "mewla_glyph_ops",
+      "mewla_glyph_thickness"
+    ],
+    "output": "mewla-vt.wasm"
   }
 }

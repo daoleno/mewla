@@ -55,6 +55,16 @@ type agentEventService struct {
 
 	// answered keeps the record of every approval answered here.
 	answered *answered.Ledger
+	// askedAt is when a screen prompt was shown (the server's prompt watch),
+	// so an answer from here names the same showing as the app's would.
+	askedAt func(sessionID, promptID string) *time.Time
+}
+
+func (s *agentEventService) promptAskedAt(sessionID, promptID string) *time.Time {
+	if s == nil || s.askedAt == nil {
+		return nil
+	}
+	return s.askedAt(sessionID, promptID)
 }
 
 func newAgentEventService(hub *agentevents.Hub, workers func() []*classifier.Worker) *agentEventService {

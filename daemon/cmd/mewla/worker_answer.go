@@ -160,7 +160,7 @@ func (a *controlApp) handleWorkerAnswer(req control.Request) control.Response {
 	// An answer through the held approval was recorded there.
 	if asked != nil && asked.ID == answer.PromptID && !throughApproval && a.agentEvents != nil {
 		recordAnswered(a.agentEvents.answered, server.PromptAnswerRecord(workerID, *asked, answer, recorded,
-			operatorAnswerer(worker, req.ApprovalBasis), nil, time.Now()))
+			operatorAnswerer(worker, req.ApprovalBasis), a.agentEvents.promptAskedAt(workerID, asked.ID), time.Now()))
 	}
 	resp := control.Response{OK: true, Confirmation: "answered"}
 	if len(recorded) > 0 {

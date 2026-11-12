@@ -94,7 +94,10 @@ func (s *Server) webUIHandler() http.Handler {
 	}
 	assets := webui.Handler(files)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.webUIAdmitted(r) {
+		// Admission vouches for the Host (a loopback host or a known address), so it
+		// may be written into the policy below.
+		origin, admitted := s.webUIOrigin(r)
+		if !admitted {
 			http.NotFound(w, r)
 			return
 		}
@@ -107,12 +110,17 @@ func (s *Server) webUIHandler() http.Handler {
 			// hash, nonce or 'strict-dynamic' here: browsers then ignore 'unsafe-inline',
 			// and NSH's web views (the terminal, Screen's viewer), srcdoc frames that
 			// inherit this policy with an inline bridge, stop running.
-			"script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' blob:",
+			//
+			// The page's own origin is named beside 'self' for those frames too: they are
+			// sandboxed to an opaque origin, and WebKit (Safari) matches an inherited
+			// 'self' against that origin, so without it the terminal's script, faces and
+			// VT are refused there. Chromium and Firefox already allow exactly these loads.
+			"script-src 'self' " + origin + " 'wasm-unsafe-eval' 'unsafe-inline' blob:",
 			"style-src 'self' 'unsafe-inline'",
 			"img-src 'self' data: blob: https:",
-			"font-src 'self' data:",
+			"font-src 'self' " + origin + " data:",
 			"media-src 'self' data: blob: https:",
-			"connect-src 'self' ws://" + host + " wss://" + host,
+			"connect-src 'self' " + origin + " ws://" + host + " wss://" + host,
 			"worker-src 'self' blob:",
 			"frame-src 'none'",
 			"object-src 'none'",
@@ -125,20 +133,43 @@ func (s *Server) webUIHandler() http.Handler {
 		header.Set("X-Frame-Options", "DENY")
 		header.Set("Referrer-Policy", "no-referrer")
 		header.Set("Cross-Origin-Opener-Policy", "same-origin")
+		if isTerminalPageFile(r.URL.Path) {
+			// The terminal's page runs in NSH's web view, a frame sandboxed to an opaque
+			// origin: its faces and its VT (fetched, as fonts and WebAssembly are) are read
+			// cross-origin. They are public build files, the same for everyone.
+			header.Set("Access-Control-Allow-Origin", "*")
+		}
 		assets.ServeHTTP(w, r)
 	})
 }
 
+// isTerminalPageFile reports whether path is one of the terminal page's own files under /terminal/
+// (scripts/build-web-ui.sh): its script, its VT and its faces. /terminal/<id> is an app route.
+func isTerminalPageFile(path string) bool {
+	name, ok := strings.CutPrefix(path, "/terminal/")
+	if !ok || strings.Contains(name, "/") {
+		return false
+	}
+	return name == "terminal.js" || name == "mewla-vt.wasm" || (strings.HasPrefix(name, "MapleMono-") && strings.HasSuffix(name, ".ttf"))
+}
+
 func (s *Server) webUIAdmitted(r *http.Request) bool {
+	_, admitted := s.webUIOrigin(r)
+	return admitted
+}
+
+// webUIOrigin is the origin the browser's page has (http on a loopback host, else
+// the https address the Host names) and whether the web UI is served there.
+func (s *Server) webUIOrigin(r *http.Request) (string, bool) {
 	hostname := strings.ToLower(r.Host)
 	if host, _, err := net.SplitHostPort(r.Host); err == nil {
 		hostname = strings.ToLower(host)
 	}
 	hostname = strings.Trim(hostname, "[]")
 	if hostname == "localhost" || net.ParseIP(hostname).IsLoopback() {
-		return isLoopbackRemote(r.RemoteAddr)
+		return "http://" + strings.ToLower(r.Host), isLoopbackRemote(r.RemoteAddr)
 	}
-	return s.isKnownHTTPSHost(r.Host)
+	return "https://" + strings.TrimSuffix(strings.ToLower(r.Host), ":443"), s.isKnownHTTPSHost(r.Host)
 }
 
 // servesWebOrigin reports whether a browser on origin is served the web UI:

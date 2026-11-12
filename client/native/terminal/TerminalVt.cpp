@@ -2,6 +2,7 @@
 // compact cell runs the native renderers draw (Android TerminalView.kt, iOS TerminalView.swift).
 #include "TerminalVt.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -31,6 +32,15 @@ struct MewlaVt {
     std::string clipboard;
     bool has_clipboard = false;
     std::string taken;
+    // The key and mouse encoders (made on first use) and the bytes the last encode handed out.
+    GhosttyKeyEncoder key_encoder = nullptr;
+    GhosttyKeyEvent key_event = nullptr;
+    GhosttyMouseEncoder mouse_encoder = nullptr;
+    GhosttyMouseEvent mouse_event = nullptr;
+    bool mouse_pressed = false;
+    double cell_width = 1;
+    double cell_height = 1;
+    std::string encoded;
 };
 
 // A program's clipboard write, during ghostty_terminal_vt_write: keep its first text
@@ -304,6 +314,10 @@ extern "C" void mewla_vt_destroy(MewlaVt* vt)
     if (!vt) {
         return;
     }
+    ghostty_key_event_free(vt->key_event);
+    ghostty_key_encoder_free(vt->key_encoder);
+    ghostty_mouse_event_free(vt->mouse_event);
+    ghostty_mouse_encoder_free(vt->mouse_encoder);
     ghostty_render_state_free(vt->render_state);
     ghostty_terminal_free(vt->terminal);
     delete vt;
@@ -317,7 +331,123 @@ extern "C" void mewla_vt_resize(MewlaVt* vt, uint16_t cols, uint16_t rows, doubl
     vt->cols = cols;
     vt->rows = rows;
     ghostty_terminal_resize(vt->terminal, cols, rows, roundPositivePixels(cellWidth), roundPositivePixels(cellHeight));
+    vt->cell_width = cellWidth > 0 ? cellWidth : 1;
+    vt->cell_height = cellHeight > 0 ? cellHeight : 1;
     vt->force_full = true;
+}
+
+// Runs `encode(buf, cap, &written)` into vt->encoded, growing it once if it was too small.
+template <typename Encode>
+static bool encodeInto(MewlaVt* vt, const uint8_t** out, size_t* outLength, Encode encode)
+{
+    *out = nullptr;
+    *outLength = 0;
+    vt->encoded.resize(64);
+    size_t written = 0;
+    GhosttyResult res = encode(reinterpret_cast<uint8_t*>(vt->encoded.data()), vt->encoded.size(), &written);
+    if (res == GHOSTTY_OUT_OF_SPACE) {
+        vt->encoded.resize(written);
+        res = encode(reinterpret_cast<uint8_t*>(vt->encoded.data()), vt->encoded.size(), &written);
+    }
+    if (res != GHOSTTY_SUCCESS || written == 0) {
+        return false;
+    }
+    vt->encoded.resize(written);
+    *out = reinterpret_cast<const uint8_t*>(vt->encoded.data());
+    *outLength = written;
+    return true;
+}
+
+extern "C" bool mewla_vt_key(MewlaVt* vt, int32_t key, uint16_t mods, int32_t action, const uint8_t* text, size_t textLength,
+    uint32_t unshifted, const uint8_t** out, size_t* outLength)
+{
+    *out = nullptr;
+    *outLength = 0;
+    if ((!vt->key_encoder && ghostty_key_encoder_new(nullptr, &vt->key_encoder) != GHOSTTY_SUCCESS) ||
+        (!vt->key_event && ghostty_key_event_new(nullptr, &vt->key_event) != GHOSTTY_SUCCESS)) {
+        return false;
+    }
+    // The program's modes now: cursor and keypad keys, the Kitty keyboard flags, modifyOtherKeys.
+    ghostty_key_encoder_set_from_terminal(vt->key_encoder, vt->terminal);
+    GhosttyKeyEvent event = vt->key_event;
+    ghostty_key_event_set_action(event, GhosttyKeyAction(action));
+    ghostty_key_event_set_key(event, GhosttyKey(key));
+    ghostty_key_event_set_mods(event, mods);
+    ghostty_key_event_set_consumed_mods(event, 0);
+    ghostty_key_event_set_composing(event, false);
+    ghostty_key_event_set_utf8(event, GhosttyString{text, text ? textLength : 0});
+    ghostty_key_event_set_unshifted_codepoint(event, unshifted);
+    return encodeInto(vt, out, outLength, [&](uint8_t* buf, size_t cap, size_t* written) {
+        return ghostty_key_encoder_encode(vt->key_encoder, event, buf, cap, written);
+    });
+}
+
+extern "C" bool mewla_vt_mouse_tracking(MewlaVt* vt)
+{
+    bool tracking = false;
+    return ghostty_terminal_get(vt->terminal, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &tracking) == GHOSTTY_SUCCESS && tracking;
+}
+
+extern "C" bool mewla_vt_mouse(MewlaVt* vt, int32_t action, int32_t button, uint16_t mods, double x, double y,
+    const uint8_t** out, size_t* outLength)
+{
+    *out = nullptr;
+    *outLength = 0;
+    if (!mewla_vt_mouse_tracking(vt) ||
+        (!vt->mouse_encoder && ghostty_mouse_encoder_new(nullptr, &vt->mouse_encoder) != GHOSTTY_SUCCESS) ||
+        (!vt->mouse_event && ghostty_mouse_event_new(nullptr, &vt->mouse_event) != GHOSTTY_SUCCESS)) {
+        return false;
+    }
+    ghostty_mouse_encoder_set_from_terminal(vt->mouse_encoder, vt->terminal);
+    GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+    size.cell_width = std::max<uint32_t>(1, uint32_t(std::lround(vt->cell_width)));
+    size.cell_height = std::max<uint32_t>(1, uint32_t(std::lround(vt->cell_height)));
+    size.screen_width = size.cell_width * vt->cols;
+    size.screen_height = size.cell_height * vt->rows;
+    ghostty_mouse_encoder_set(vt->mouse_encoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+    if (action == GHOSTTY_MOUSE_ACTION_PRESS) vt->mouse_pressed = true;
+    if (action == GHOSTTY_MOUSE_ACTION_RELEASE) vt->mouse_pressed = false;
+    const bool pressed = vt->mouse_pressed;
+    ghostty_mouse_encoder_set(vt->mouse_encoder, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed);
+    GhosttyMouseEvent event = vt->mouse_event;
+    ghostty_mouse_event_set_action(event, GhosttyMouseAction(action));
+    if (button > 0) ghostty_mouse_event_set_button(event, GhosttyMouseButton(button));
+    else ghostty_mouse_event_clear_button(event);
+    ghostty_mouse_event_set_mods(event, mods);
+    ghostty_mouse_event_set_position(event, GhosttyMousePosition{float(x), float(y)});
+    return encodeInto(vt, out, outLength, [&](uint8_t* buf, size_t cap, size_t* written) {
+        return ghostty_mouse_encoder_encode(vt->mouse_encoder, event, buf, cap, written);
+    });
+}
+
+extern "C" bool mewla_vt_link(MewlaVt* vt, uint16_t col, uint16_t row, const uint8_t** out, size_t* outLength)
+{
+    *out = nullptr;
+    *outLength = 0;
+    GhosttyPoint point{};
+    point.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+    point.value.coordinate.x = col;
+    point.value.coordinate.y = row;
+    GhosttyGridRef ref{};
+    if (col >= vt->cols || row >= vt->rows || ghostty_terminal_grid_ref(vt->terminal, point, &ref) != GHOSTTY_SUCCESS) {
+        return false;
+    }
+    return encodeInto(vt, out, outLength, [&](uint8_t* buf, size_t cap, size_t* written) {
+        return ghostty_grid_ref_hyperlink_uri(&ref, buf, cap, written);
+    });
+}
+
+extern "C" bool mewla_vt_focus(MewlaVt* vt, bool focused, const uint8_t** out, size_t* outLength)
+{
+    *out = nullptr;
+    *outLength = 0;
+    GhosttyTerminalModeConfig mode{GHOSTTY_MODE_FOCUS_EVENT, false};
+    if (ghostty_terminal_get(vt->terminal, GHOSTTY_TERMINAL_DATA_MODE, &mode) != GHOSTTY_SUCCESS || !mode.value) {
+        return false;
+    }
+    return encodeInto(vt, out, outLength, [&](uint8_t* buf, size_t cap, size_t* written) {
+        return ghostty_focus_encode(focused ? GHOSTTY_FOCUS_GAINED : GHOSTTY_FOCUS_LOST, buf, cap, written);
+    });
 }
 
 extern "C" bool mewla_vt_set_theme(

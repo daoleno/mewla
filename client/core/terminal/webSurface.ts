@@ -1,38 +1,24 @@
 import type { HistoryRender } from "./history";
-import { ansiSpans, type WebSpan } from "./webAnsi";
 
-// The browser's terminal: the page client/ui/web/terminal/terminal.js runs xterm.js
-// in a web view (an iframe sandboxed to an origin of its own), and
-// client/ui/terminal/web/WebTerminalSurface.tsx speaks the terminal view's
-// contract (client/ui/terminal/contract.ts) for it. What passes between them:
-// the app posts batches of commands (`postMessage`, a JSON array); the page
-// answers one event at a time over the web view's message port.
+// The browser's terminal: the page client/ui/web/terminal/terminal.js runs libghostty-vt (with the
+// phones' packer and glyphs, as WebAssembly) on a canvas in a web view (an iframe sandboxed to an
+// origin of its own), and client/ui/terminal/web/WebTerminalSurface.tsx speaks the terminal view's
+// contract (client/ui/terminal/contract.ts) for it. What passes between them: the app posts batches
+// of commands (`postMessage`, a JSON array); the page answers one event at a time over the web
+// view's message port.
 //
-// The page's scripts are files the computer serves beside the app
-// (`/terminal/`), not inline: the page inherits the app page's
-// Content-Security-Policy, which runs no inline script.
+// The page's scripts are files the computer serves beside the app (`/terminal/`), not inline: the
+// page inherits the app page's Content-Security-Policy, which runs no inline script.
 
 /** The view's colors (contract.ts TerminalTheme): CSS hex, `#rrggbb` or `#rrggbbaa`. */
 export type WebTerminalThemeInput = { background: string; foreground: string; cursor: string; selection: string; palette: string[] };
 
-/** xterm.js's ITheme, as the page takes it. */
-export type WebTerminalTheme = {
-  background: string;
-  foreground: string;
-  cursor: string;
-  cursorAccent: string;
-  selectionBackground: string;
-  black: string; red: string; green: string; yellow: string; blue: string; magenta: string; cyan: string; white: string;
-  brightBlack: string; brightRed: string; brightGreen: string; brightYellow: string; brightBlue: string; brightMagenta: string; brightCyan: string; brightWhite: string;
-};
-
-export const ANSI_NAMES = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-  "brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite"] as const;
+/** The page's colors: opaque, but the selection keeps its alpha (the text shows through it); the palette's first 16. */
+export type WebTerminalTheme = { background: string; foreground: string; cursor: string; selection: string; palette: string[] };
 
 /**
  * The phones' terminal face (client/native/terminal/fonts, served beside the page as /terminal/*.ttf): Maple Mono NF,
- * with Powerline and Nerd Fonts icons and no ligatures. Then Latin monospace faces: xterm sizes its cells from the first
- * family it finds, and Linux's `monospace` can be a CJK face.
+ * with Powerline and Nerd Fonts icons and no ligatures. Then Latin monospace faces, for a page whose faces did not load.
  */
 export const WEB_TERMINAL_FONT = '"Maple Mono NF", "SF Mono", Menlo, Monaco, "Cascadia Mono", Consolas, "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", monospace';
 
@@ -42,17 +28,13 @@ export function opaque(color: string): string {
 }
 
 export function webTheme(theme: WebTerminalThemeInput): WebTerminalTheme {
-  const background = opaque(theme.background);
-  const palette = Object.fromEntries(ANSI_NAMES.map((name, i) => [name, opaque(theme.palette[i] ?? theme.foreground)]));
   return {
-    background,
+    background: opaque(theme.background),
     foreground: opaque(theme.foreground),
     cursor: opaque(theme.cursor),
-    cursorAccent: background,
-    // The selection keeps its alpha: the text shows through it.
-    selectionBackground: theme.selection,
-    ...palette,
-  } as WebTerminalTheme;
+    selection: theme.selection,
+    palette: Array.from({ length: 16 }, (_, i) => opaque(theme.palette[i] ?? theme.foreground)),
+  };
 }
 
 /** What the app tells the page. */
@@ -63,7 +45,8 @@ export type WebTerminalCommand =
   | { type: "reset" }
   | { type: "focus" }
   | { type: "blur" }
-  | { type: "history"; reset: boolean; removed: number; rows: WebSpan[][]; cols: number; alternate: boolean }
+  /** `rows`: whole lines as the computer keeps them (ANSI); the page draws them through its VT. */
+  | { type: "history"; reset: boolean; removed: number; rows: string[]; cols: number; alternate: boolean }
   | { type: "scrollTo"; row: number }
   | { type: "scrollToBottom" }
   | { type: "mark"; row: number }
@@ -163,7 +146,7 @@ export function webCommand(name: string, args: unknown): WebTerminalCommand | nu
         type: "history",
         reset: render.reset === true,
         removed: int(render.removed) ? Math.max(0, render.removed) : 0,
-        rows: render.rows.map((ansi) => ansiSpans(String(ansi))),
+        rows: render.rows.map((ansi) => String(ansi)),
         cols: int(render.cols) ? render.cols : 0,
         alternate: render.alternate === true,
       };
@@ -200,28 +183,27 @@ export const TERMINAL_PAGE_DIR = "/terminal/";
 
 const attr = (value: string) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
-// Styles may be inline (the policy allows them); scripts may not.
-const PAGE_STYLE = `html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg,transparent);color:var(--fg,inherit)}
-#scroller{position:fixed;inset:0;overflow:hidden;overscroll-behavior:none;touch-action:none}
-#history>div{box-sizing:content-box;height:var(--cell-h,16px);line-height:var(--cell-h,16px);width:calc(var(--cols,80) * var(--cell-w,8px));padding-left:6px;white-space:pre;overflow:hidden;font-family:var(--font,monospace);font-size:var(--font-size,13px);cursor:text}
-#history>div.mk{background:var(--sel)}
-#screen{box-sizing:border-box;height:100%;padding:4px 0 0 6px}
-.B{font-weight:bold}.D{opacity:.5}.I{font-style:italic}.U{text-decoration:underline}.S{text-decoration:line-through}.U.S{text-decoration:underline line-through}.O{text-decoration:overline}`;
+// Styles may be inline (the policy allows them); scripts may not. The canvas fills the page; the textarea that takes
+// the keyboard and the input method sits on the cursor, invisible.
+const PAGE_STYLE = `html,body{margin:0;width:100%;height:100%;overflow:hidden}
+#box{position:fixed;inset:0;overflow:hidden;overscroll-behavior:none;touch-action:none}
+#vt{position:absolute;left:0;top:0;cursor:text}
+#input{position:absolute;left:0;top:0;width:2px;height:16px;padding:0;margin:0;border:0;outline:0;resize:none;overflow:hidden;opacity:0;color:transparent;background:transparent;caret-color:transparent;white-space:pre;z-index:-1}`;
 
-/** The bundled faces: Regular, and SemiBold for bold. */
+/** The bundled faces: Regular, SemiBold for bold, and the real Italic and SemiBold Italic. */
 const fontFaces = (url: (file: string) => string) =>
-  `@font-face{font-family:"Maple Mono NF";src:url("${url("MapleMono-NF-Regular.ttf")}") format("truetype");font-weight:100 499;font-display:block}` +
-  `@font-face{font-family:"Maple Mono NF";src:url("${url("MapleMono-NF-SemiBold.ttf")}") format("truetype");font-weight:500 900;font-display:block}`;
+  [["MapleMono-NF-Regular.ttf", "100 499", "normal"], ["MapleMono-NF-SemiBold.ttf", "500 900", "normal"],
+    ["MapleMono-NF-Italic.ttf", "100 499", "italic"], ["MapleMono-NF-SemiBoldItalic.ttf", "500 900", "italic"]]
+    .map(([file, weight, style]) => `@font-face{font-family:"Maple Mono NF";src:url("${url(file)}") format("truetype");font-weight:${weight};font-style:${style};font-display:block}`)
+    .join("");
 
 /** The page, its files in `dir`. */
 export function terminalPageHtml(dir = TERMINAL_PAGE_DIR): string {
   const url = (file: string) => attr(dir + file);
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="stylesheet" href="${url("xterm.css")}">
 <style>${fontFaces(url)}${PAGE_STYLE}</style>
-</head><body><div id="scroller"><div id="history"></div><div id="screen"></div></div>
-<script data-xterm src="${url("xterm.js")}"></script>
+</head><body><div id="box"><canvas id="vt"></canvas><textarea id="input" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Terminal input"></textarea></div>
 <script src="${url("terminal.js")}"></script>
 </body></html>`;
 }
