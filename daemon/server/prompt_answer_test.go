@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -167,9 +168,23 @@ func TestPromptAnswerCode(t *testing.T) {
 }
 
 type recordingApprovals struct {
-	pending []ApprovalWire
-	decided []string
-	err     error
+	mu       sync.Mutex
+	pending  []ApprovalWire
+	decided  []string
+	err      error
+	terminal []string
+}
+
+func (r *recordingApprovals) AnsweredInTerminal(workerID, tool, summary string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.terminal = append(r.terminal, workerID+"|"+tool+"|"+summary)
+}
+
+func (r *recordingApprovals) answeredInTerminal() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.terminal...)
 }
 
 func (r *recordingApprovals) Pending(string) []ApprovalWire { return r.pending }

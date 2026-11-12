@@ -471,3 +471,68 @@ func TestTheHubHoldsTheDialogWhileAnApprovalIsPending(t *testing.T) {
 	s.decide("%4", asked.ID, "deny", answeredByOperator, "no")
 	<-done
 }
+
+// A permission the person answers in the Worker's own dialog, while its hook
+// still asks Mewla, leaves the phone at once: the hook is never told by the
+// agent (Claude Code lets it run on), so the screen watcher tells it. The hook
+// lets go with no decision, nothing is refused, and the question Brain was
+// told about is over.
+func TestAPermissionAnsweredInTheTerminalLeavesThePhone(t *testing.T) {
+	for _, delegated := range []bool{false, true} {
+		s, rec := gateService(t, delegated)
+		done := start(s, askedPush)
+		asked := pending(t, s, false, 1)[0]
+		if delegated {
+			waitUntil(t, "Brain to be told", func() bool { told, _, _, _ := rec.snapshot(); return len(told) == 1 })
+		}
+
+		// Another tool call's prompt settles nothing while this one waits.
+		appApprovals{service: s}.AnsweredInTerminal("%4", "Bash", "rm -rf build")
+		if left := pending(t, s, false, 1); left[0].ID != asked.ID {
+			t.Fatalf("pending = %+v", left)
+		}
+		appApprovals{service: s}.AnsweredInTerminal("%4", "Bash", "git push origin main")
+		select {
+		case resp := <-done:
+			if !resp.OK || resp.HookOutput != "" {
+				t.Fatalf("delegated=%v: the hook answered a question already answered in the terminal: %+v", delegated, resp)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("delegated=%v: the hook kept waiting on a question answered in the terminal", delegated)
+		}
+		if left := s.approvals("%4", false); len(left) != 0 {
+			t.Fatalf("delegated=%v: still pending: %+v", delegated, left)
+		}
+		_, audits, resumed, _ := rec.snapshot()
+		for _, audit := range audits {
+			if strings.HasPrefix(audit, "timed_out") || strings.HasPrefix(audit, "denied") {
+				t.Fatalf("delegated=%v: a terminal answer was taken for a refusal: %q", delegated, audits)
+			}
+		}
+		if delegated && len(resumed) != 1 {
+			t.Fatalf("the Worker stayed marked as needing input: %q", resumed)
+		}
+	}
+}
+
+// When the prompt could not name its tool call, the only permission pending
+// is the one it asked; with two pending, an unnamed prompt settles neither.
+func TestAnUnnamedTerminalAnswerSettlesOnlyALonePermission(t *testing.T) {
+	s, _ := gateService(t, false)
+	first := start(s, askedPush)
+	pending(t, s, false, 1)
+	appApprovals{service: s}.AnsweredInTerminal("%4", "", "")
+	select {
+	case <-first:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a lone permission stayed pending")
+	}
+
+	start(s, askedPush)
+	start(s, askedPush)
+	pending(t, s, false, 2)
+	appApprovals{service: s}.AnsweredInTerminal("%4", "", "")
+	if left := s.approvals("%4", false); len(left) != 2 {
+		t.Fatalf("an unnamed prompt settled one of two: %+v", left)
+	}
+}

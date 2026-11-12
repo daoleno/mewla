@@ -39,6 +39,11 @@ type AgentApprovals interface {
 	Pending(workerID string) []ApprovalWire
 	// Decide answers one with an option the agent offered.
 	Decide(workerID, approvalID, optionID string) error
+	// AnsweredInTerminal says the permission prompt asking about this tool
+	// call (tool and summary, empty when the prompt could not name it) was
+	// answered in the Session's terminal, so the decision the agent's hook
+	// waits on for it is settled.
+	AnsweredInTerminal(workerID, tool, summary string)
 }
 
 // SetAgentApprovals installs where approvals come from and go to.
