@@ -50,6 +50,10 @@ export type ComposerText = ReturnType<typeof createComposerText>;
  * `submitBehavior`); Escape leaves the field (NSH); `/` on the page focuses the
  * field. ↑ in the empty field edits the last message (`onRecall`) on every
  * platform with a hardware keyboard.
+ *
+ * Text put in from outside (a picked `@agent` or skill, a recalled message) leaves
+ * the caret at its end. `disabled` (soft-final/SPEC.md §11): the field and Send at
+ * 40 %, nothing sends, and the placeholder says why (`disabledReason`).
  */
 export function Composer(props: {
   text: ComposerText;
@@ -71,12 +75,17 @@ export function Composer(props: {
   pickerOpen?: () => boolean;
   /** ↑ in the empty field: put the last message in it to edit. */
   onRecall?: () => void;
+  /** Nothing can be sent now (Brain's chat is not available, did not load, can't start). */
+  disabled?: () => boolean;
+  /** The placeholder while disabled: why. */
+  disabledReason?: () => string;
   children?: unknown;
 }) {
   const value = () => props.text.text();
+  const disabled = () => Boolean(props.disabled?.());
   const send = () => {
     const text = value();
-    if (!props.canSend() || !text.trim()) return;
+    if (disabled() || !props.canSend() || !text.trim()) return;
     if (props.onSend(text) !== false) props.text.clear();
   };
   const desktop = platform.desktop;
@@ -86,6 +95,15 @@ export function Composer(props: {
   };
   let input: InputRef | undefined;
   const focused = signal(false);
+  // What the field last reported typing: any other value was put in from outside, and the caret goes to its end
+  // (it stayed where it was, so a key after a picked "@agent " landed inside it).
+  let typed = "";
+  effect(() => {
+    const next = value();
+    if (next === typed) return;
+    typed = next;
+    setTimeout(() => input?.setSelection(next.length), 0);
+  });
   cleanup(registerComposer({ focus: () => input?.focus(), active: () => (props.active ? props.active() : true) }));
   // ↑ is the caret's key: bound only while the field has the focus and is empty, so it moves the caret
   // otherwise. Everywhere a key arrives: the desktops, the web, a phone's hardware keyboard.
@@ -117,17 +135,21 @@ export function Composer(props: {
       <View class="flex-row items-end gap-2">
         {props.leading as never}
         <Input testID="composer" multiline value={value()} autoFocus={props.autoFocus} ref={(ref) => (input = ref)}
-          placeholder={typeof props.placeholder === "function" ? props.placeholder() : props.placeholder}
-          class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"
+          placeholder={disabled() && props.disabledReason ? props.disabledReason() : typeof props.placeholder === "function" ? props.placeholder() : props.placeholder}
+          disabled={disabled()}
+          class={disabled() ? "max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base opacity-40" : "max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"}
           submitBehavior={desktop ? "submit" : undefined} onSubmit={returned}
           onFocus={() => focused.set(true)} onBlur={() => focused.set(false)}
-          onChange={({ value }) => props.text.set(value)} />
+          onChange={({ value }) => {
+            typed = value;
+            props.text.set(value);
+          }} />
         {props.running() && !value().trim() ? (
           <Button testID="stop" onPress={props.onStop} disabled={props.stopping() || !props.canStop()} class="rounded-full border border-border px-4 py-2.5 active:bg-accent">
             <Text class="text-base font-semibold">{props.stopping() ? "Stopping…" : "Stop"}</Text>
           </Button>
         ) : (
-          <Button testID="send" onPress={send} disabled={!props.canSend() || !value().trim()} class="rounded-full bg-primary px-4 py-2.5 active:opacity-80">
+          <Button testID="send" onPress={send} disabled={disabled() || !props.canSend() || !value().trim()} class={disabled() ? "rounded-full bg-primary px-4 py-2.5 opacity-40" : "rounded-full bg-primary px-4 py-2.5 active:opacity-80"}>
             <Text class="text-base font-semibold text-primary-foreground">Send</Text>
           </Button>
         )}

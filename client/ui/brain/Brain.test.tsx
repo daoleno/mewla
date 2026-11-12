@@ -1,8 +1,8 @@
 import { describe, expect, open, test } from "nsh/test";
 import { answering } from "../testing/fixtures";
 
-// Brain's own things as components (soft-final/SPEC.md §1.6), driven on their own: the
-// ⋯ menu and its pages ("Brain host", Model).
+// Brain's own things as components (soft-final/SPEC.md §1.3, §1.4, §1.6), driven on their own: the
+// ⋯ menu and its pages, the can't-start notice, the thread states, and what the composer hosts.
 const HARNESS = "./testing/Harness.tsx";
 
 const claude = { id: "claude", name: "claude", provider: "claude", runtime: "tmux", capabilities: { interactive_tty: true, structured_events: true } };
@@ -132,5 +132,112 @@ describe("Brain's menu (§1.6)", () => {
     await answering(app, () => app.press("id:brain-menu-new-chat"));
     await app.waitUntil(() => said(app) === "notice:Couldn't start a new chat");
     expect(c.of("brain_chat_new")).toHaveLength(1);
+  }, 20_000);
+});
+
+describe("Brain's states (§1.3)", () => {
+  const problem = { code: "not_signed_in", executor: "agent", detail: "Brain is set to run on agent, but agent is not signed in on this computer.", installed_executors: ["claude", "codex"] };
+  const cantStart = { ...brain, host_worker: null, host_executor: agent, host_problem: { ...problem, suggest_executor: "claude" } };
+
+  test("Brain can't start: the computer's reason, Use {suggested} switches to it, and Switch executor is there too", async () => {
+    const c = computer({ view: "cant-start", brain: cantStart }, { brain_set_executor: () => ({ brain: cantStart }) });
+    const app = await open(HARNESS, { platform: "android", host: c.host });
+    await app.waitFor("text:Brain can't start");
+    expect(app.texts()).toContain(problem.detail);
+    expect(app.texts()).toContain("Use claude");
+    await app.press("id:brain-switch-executor");
+    await app.waitUntil(() => said(app) === "switch-executor");
+    await app.press("id:brain-use-suggested");
+    await app.waitFor("text:Switching…");
+    expect(c.of("brain_set_executor").at(-1)).toMatchObject({ executor_id: "claude" });
+    await app.host.send("app.snapshot", brain);
+    await app.waitFor("id:brain-cant-start", { state: "gone" });
+    await app.waitUntil(() => said(app) === "switch-executor | switched");
+  }, 20_000);
+
+  test("Brain can't start, a refused switch: the computer's words under the buttons", async () => {
+    const c = computer({ view: "cant-start", brain: cantStart }, { brain_set_executor: () => ({ error: "claude is not installed" }) });
+    const app = await open(HARNESS, { platform: "android", host: c.host });
+    await app.press("id:brain-use-suggested");
+    await app.waitFor("id:brain-cant-start-error");
+    expect(app.texts()).toContain("claude is not installed");
+  }, 20_000);
+
+  test("chat isn't available for an agent without chat events: Open terminal, Switch executor", async () => {
+    const plain = { id: "plain", name: "plain", provider: "custom", capabilities: { interactive_tty: true, structured_events: false } };
+    const c = computer({ view: "unavailable", brain: { ...brain, host_executor: plain } });
+    const app = await open(HARNESS, { platform: "android", host: c.host });
+    await app.waitFor("text:Chat isn't available for plain");
+    await app.press("id:brain-open-terminal");
+    await app.press("id:brain-switch-executor");
+    await app.waitUntil(() => said(app) === "terminal:brain-host | switch-executor");
+  }, 20_000);
+
+  test("a chat that did not load: Try again, Open terminal", async () => {
+    const app = await open(HARNESS, { platform: "android", host: computer({ view: "failed" }).host });
+    await app.waitFor("text:Couldn't load the chat");
+    await app.press("id:brain-chat-try-again");
+    await app.press("id:brain-chat-open-terminal");
+    await app.waitUntil(() => said(app) === "reload | terminal:brain-host");
+  }, 20_000);
+});
+
+describe("Brain's composer (§1.4)", () => {
+  test("+ › Attach File: the picked file goes with the message", async () => {
+    const c = computer({ view: "composer" }, {}, {
+      "secure.get": () => null,
+      "secure.set": () => undefined,
+      "secure.remove": () => undefined,
+      "files.pick": () => [{ uri: "content://picker/shot.png", name: "shot.png", mimeType: "image/png", size: 2048 }],
+      "files.upload": () => Promise.resolve().then(() => ({ status: 200, body: JSON.stringify({ path: "/state/uploads/shot.png", name: "shot.png" }) })),
+      "files.cancel": () => null,
+    });
+    const app = await open(HARNESS, { platform: "android", host: c.host });
+    await app.press("id:composer-plus");
+    await app.press("id:attach-file");
+    await app.waitFor("text:Ready");
+    await app.type("id:composer", "What is on this screen?");
+    await app.waitUntil(() => app.enabled("id:send"));
+    await app.press("id:send");
+    await app.waitUntil(() => said(app) === "send:What is on this screen? +/state/uploads/shot.png");
+  }, 20_000);
+
+  test("typing @ lists the installed agents; a pick puts its handle in the message and the next key goes after it", async () => {
+    const app = await open(HARNESS, { platform: "android", host: computer({ view: "composer" }).host });
+    await app.type("id:composer", "Ask @");
+    await app.waitFor("id:brain-mention-panel");
+    expect(app.shows("id:brain-mention-claude")).toBe(true);
+    expect(app.shows("id:brain-mention-codex")).toBe(true);
+    expect(app.shows("id:brain-mention-agent")).toBe(true);
+    expect(app.shows("id:brain-mention-grok")).toBe(false);
+    expect(app.texts()).toContain("@codex");
+    await app.type("id:composer", "co");
+    await app.waitUntil(() => !app.shows("id:brain-mention-claude"));
+    await app.press("id:brain-mention-codex");
+    await app.waitUntil(() => app.value("id:composer") === "Ask @codex ");
+    expect(app.shows("id:brain-mention-panel")).toBe(false);
+    await app.type("id:composer", "now");
+    await app.waitUntil(() => app.value("id:composer") === "Ask @codex now");
+  }, 20_000);
+
+  test("on Codex, / lists its slash commands and /status opens Codex's status instead of sending", async () => {
+    const c = computer({ view: "composer", brain: { ...brain, host_worker: { ...hostWorker, provider: "codex" }, host_executor: codex } }, {
+      codex_slash_commands: () => ({ commands: [{ value: "/status", name: "status", description: "Show status", category: "session", chat_supported: true }] }),
+      codex_status: () => ({ status: { thread: { id: "th-1", model: "gpt-6", effort: "high", cwd: "/home/me/brain" }, limits: [{ id: "codex", windows: [{ used_percent: 25, window_minutes: 300 }] }] } }),
+    });
+    const app = await open(HARNESS, { platform: "android", host: c.host });
+    await app.type("id:composer", "/sta");
+    await app.waitFor("id:slash-status");
+    await app.type("id:composer", "tus");
+    await app.press("id:send");
+    await app.waitFor("id:status-meter");
+    expect(said(app)).toBe("");
+    expect(c.of("codex_status").at(-1)).toMatchObject({ target_id: "brain-host" });
+  }, 20_000);
+
+  test("a composer that cannot send says why and sends nothing", async () => {
+    const app = await open(HARNESS, { platform: "android", host: computer({ view: "composer", blocked: "Chat isn't available" }).host });
+    await app.waitFor("text:Chat isn't available");
+    expect(app.enabled("id:send")).toBe(false);
   }, 20_000);
 });
