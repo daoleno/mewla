@@ -521,7 +521,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               <Text class="max-w-[120px] text-xs line-clamp-1">{gitChip()!.label}</Text>
             </Button>
           ) : null}
-          {props.brain ? null : <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"><Icon name="more-horizontal" size={22} color="primary" /></Button>}
+          {props.brain ? null : <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="primary" /></Button>}
         </View>
       }>
       <View class="flex-1 bg-background">

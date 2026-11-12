@@ -55,7 +55,7 @@ function PaneHeader() {
 function SearchOrRun() {
   return (
     <Button testID="pane-search" accessibilityLabel="Search or run" onPress={() => paletteOpen.set(true)}
-      class="mx-4 mb-2 h-[44px] flex-row items-center gap-2 rounded-[14px] bg-card px-3 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+      class="mx-4 mb-2 h-[44px] flex-row items-center gap-2 rounded-[14px] bg-card px-3 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <Icon name="search" size={18} tone="soft" />
       <Text class="flex-1 text-body text-muted-foreground line-clamp-1">Search or run</Text>
       <Text testID="pane-search-key" class="rounded-md border border-border px-1.5 py-0.5 text-caption text-muted-foreground">{keymap.label("mod+k").replace(/\+/g, " ")}</Text>
@@ -71,7 +71,7 @@ function BrainRow() {
   return (
     <View class="mx-4 overflow-hidden rounded-(--radius-group) bg-sheet-surface">
       <Button testID="pane-brain" accessibilityLabel={line() ? `Brain, ${line()}` : "Brain"} selected={on()} onPress={() => goHome()}
-        class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+        class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         {on() ? <SelectedWell /> : null}
         <View class="size-[28px] items-center justify-center rounded-lg bg-foreground"><Icon name="brain" size={18} tone="canvas" /></View>
         <View class="min-w-0 flex-1">

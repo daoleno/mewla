@@ -72,7 +72,7 @@ export function IconButton(props: { icon: IconName; label: string; onPress: () =
         haptic.selection();
         props.onPress();
       }}
-      class={`size-11 items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 ${props.selected ? "bg-muted" : ""}`}
+      class={`size-11 items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-40 ${props.selected ? "bg-muted" : ""}`}
     >
       {props.busy ? <Spinner size={16} /> : <Icon name={props.icon} size={20} tone="ink" />}
     </Button>

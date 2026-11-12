@@ -100,7 +100,7 @@ function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean }) {
   const row = () => props.row;
   return (
     <Button testID="tray-row" accessibilityLabel={`${row().title}, ${row().line}`} selected={props.selected} onPress={props.onPress}
-      class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring ${row().past ? "opacity-55" : ""}`}>
+      class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
       {props.selected ? <SelectedWell /> : null}
       <Tile tile={row().tile} />
       <View class="min-w-0 flex-1">
@@ -122,7 +122,7 @@ function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean }) {
 function RequestRow(props: { request: TrayRequest; busy: boolean; onApprove: () => void; onOpen: () => void }) {
   const r = () => props.request;
   return (
-    <Button testID="tray-request" accessibilityLabel={`${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+    <Button testID="tray-request" accessibilityLabel={`${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <Tile tile={r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" }} />
       <View class="min-w-0 flex-1">
         <Text class="text-body font-semibold line-clamp-1">{r().title}</Text>
@@ -248,8 +248,8 @@ export function TrayBody(props: TrayBodyProps) {
     <>
       <View class={`flex-row items-center px-4 ${props.pane ? "min-h-[52px] gap-0.5 pr-2" : "gap-2 pb-1 pt-4"}`}>
         <Text testID="tray-title" role="header" class={`flex-1 line-clamp-1 ${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"}`}>{props.title()}</Text>
-        <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring`}><Icon name="add" size={24} tone="ink" /></Button>
-        <Button ref={menuAnchor.ref} testID="tray-menu" accessibilityLabel="Tray menu" onPress={() => void menu()} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring`}><Icon name="more-horizontal" size={24} tone="ink" /></Button>
+        <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="add" size={24} tone="ink" /></Button>
+        <Button ref={menuAnchor.ref} testID="tray-menu" accessibilityLabel="Tray menu" onPress={() => void menu()} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="more-horizontal" size={24} tone="ink" /></Button>
       </View>
       <Scroll testID="tray-scroll" class={props.pane ? "flex-1" : "shrink"} contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
         {m().notice ? <Notice onAction={noticeAction} /> : null}
@@ -293,7 +293,7 @@ export function TrayBody(props: TrayBodyProps) {
             </View>
           ) : null}
           <Button testID="tray-all-sessions" selected={selected("all")} onPress={props.open.allSessions}
-            class="mt-6 min-h-[52px] flex-row items-center justify-between overflow-hidden rounded-(--radius-group) bg-sheet-surface px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+            class="mt-6 min-h-[52px] flex-row items-center justify-between overflow-hidden rounded-(--radius-group) bg-sheet-surface px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
             {selected("all") ? <SelectedWell /> : null}
             <Text class="text-body">All Sessions</Text>
             <Icon name="chevron-right" size={18} tone="faint" />
