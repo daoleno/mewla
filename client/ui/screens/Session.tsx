@@ -59,6 +59,7 @@ import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "./Sessions";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
+const NO_FILE_IDENTITY_NOTICE = "This Session has no live generation identity. Refresh the Session list and try again.";
 
 
 /** The person's chat-or-terminal choice per Session, saved on the device (Expo's key). */
@@ -267,6 +268,11 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   };
 
   const terminate = async () => {
+    // As the Expo app did: offline, nothing is asked; the note says why (parity #37).
+    if (untracked(connection) !== "connected") {
+      notice.set("Your computer is offline.");
+      return;
+    }
     const { action } = await AlertDialog.show({
       title: "Terminate this session?",
       description: "Its terminal and agent stop on your computer.",
@@ -361,9 +367,21 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const openPath = (path: string) => {
     const reference = recognizeSessionFileReference(path);
     const w = untracked(worker);
-    if (!reference || !w?.process_id || !w.started_at) return;
+    if (!reference) return;
+    // The Expo app's preview sheet said this; a tap no longer does nothing (parity #38).
+    if (!w?.process_id || !w.started_at) return notice.set(NO_FILE_IDENTITY_NOTICE);
     props.nav.push(filePreviewRoute(reference, { workerId: props.workerId, processId: w.process_id, startedAt: w.started_at }));
   };
+  // A preview opened for this Session closes when the Session restarts (another process or start time),
+  // as the Expo app's sheet did: it was read with the old generation (parity #44). A generation that is
+  // only missing for a moment keeps it.
+  effect(() => {
+    const w = worker();
+    if (!w?.process_id || !w.started_at) return;
+    const stale = untracked(props.nav.routes).filter((route) => route.name === "files-preview" && route.identity?.workerId === props.workerId
+      && (route.identity.processId !== w.process_id || route.identity.startedAt !== w.started_at));
+    for (const route of stale) props.nav.remove(route);
+  });
 
   // Files picked for the next message, uploaded to this computer as they are picked.
   const uploads = createAttachmentUploads();
@@ -552,8 +570,9 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
         <View class="flex-1">
           <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)} />
+            <View class="absolute left-3 right-3 top-3 gap-2" style={{ pointerEvents: "box-none" }}>
             {fallback() ? (
-              <View testID="terminal-offline" class="absolute left-3 right-3 top-3 gap-1.5 rounded-xl border border-border bg-card px-3 py-3">
+              <View testID="terminal-offline" class="gap-1.5 rounded-xl border border-border bg-card px-3 py-3">
                 <Text class="text-base font-semibold">{fallback()!.title}</Text>
                 <Text class="text-sm text-muted-foreground">{fallback()!.detail}</Text>
                 <Text class="text-xs text-muted-foreground">{fallback()!.hint}</Text>
@@ -564,6 +583,12 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
                 )}
               </View>
             ) : null}
+            {/* The chat shows its notes above the composer; the terminal shows them here (parity #37). */}
+            {notice() && mode() === "terminal" ? (
+              <Text testID="terminal-notice" onPress={() => notice.set("")}
+                class="rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground">{notice()}</Text>
+            ) : null}
+            </View>
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
