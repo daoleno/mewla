@@ -24,21 +24,20 @@ import { brainFiles, openChatLink, openChatPath } from "./links";
 
 /**
  * A reply's table (soft-final SPEC §11 Table): a surface card, radius 20, inside the text's margins like a code
- * block; hair lines between rows, none between columns; cells 15/22 that keep to one line, the header 13/600 soft.
- * Wider than the card, it scrolls sideways inside it. The scroll ends in 24 of padding under the edge fade, so
- * the fade lies on text only while more is hidden to the right.
+ * block; hair lines between rows, none between columns; cells 15/22 and at least 132 wide, so a short cell stays
+ * on one line and three columns or more scroll sideways inside the card rather than squeeze, with the scroll
+ * indicator; the header 13/600 soft. The SPEC's 24 pt right-edge fade is not drawn: TextView has no part over its
+ * table scroll (NSH 0.5.0), and a cell's non-breaking spaces do not widen its column (the text is clipped).
  */
 const TABLE = {
   table: "m-0 overflow-hidden rounded-[20px] border-0 bg-card",
-  tableScroll: "m-0 pr-6",
-  tableRow: "border-0 border-t border-border",
-  tableHead: "border-t-0",
-  tableCell: "border-0 px-4 py-3 text-[15px] leading-[22px] whitespace-nowrap",
-  tableHeaderCell: "text-[13px] font-semibold leading-4 text-muted-foreground",
+  tableScroll: "m-0",
+  tableRow: "border-0 bg-transparent",
+  tableHead: "bg-transparent",
+  tableCell: "min-w-[132px] border-0 border-t border-border px-4 py-3 text-[15px] leading-[22px]",
+  tableHeaderCell: "border-t-0 text-[13px] font-semibold leading-4 text-muted-foreground",
 };
 
-/** The table card's right-edge fade, over the scroll (it takes no touches). */
-const tableFade = () => <View class="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-6 bg-linear-to-l from-card to-transparent" />;
 
 /**
  * The jump control floats over the thread, often over a bubble, so it must read as floating: the sheet-surface
@@ -162,7 +161,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
             onLongPress={() => !(it() as MessageTimelineItem).streaming && void showMessageMenu(it() as MessageTimelineItem, { connected: true, running: false })}>
             <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} class="text-message"
               renderCodeBlock={renderCode}
-              classes={TABLE} renderTableActions={tableFade}
+              classes={TABLE}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
               renderImage={(image) => {
                 const key = pictureKey(it().id, image.src);
