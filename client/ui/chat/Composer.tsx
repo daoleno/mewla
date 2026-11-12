@@ -92,6 +92,8 @@ export const composerEdits = new WeakMap<ComposerText, { open: () => boolean; ca
  * field. ↑ in the empty field edits the last message (`onRecall`) and Escape
  * leaves that edit, on every platform with a hardware keyboard.
  *
+ * A picture or file pasted into the field becomes a chip (`onFiles`).
+ *
  * Text put in from outside (a picked `@agent` or skill, a recalled message) leaves
  * the caret at its end. `disabled` (soft-final/SPEC.md §11): the field and Send at
  * 40 %, nothing sends, and the placeholder says why (`disabledReason`).
@@ -120,6 +122,12 @@ export function Composer(props: {
   disabled?: () => boolean;
   /** The placeholder while disabled: why. */
   disabledReason?: () => string;
+  /**
+   * Pictures and files pasted into the field (a screenshot, an image copied from a page; the web, and
+   * a phone keyboard's image): they become chips as picked ones do (`AttachmentUploads.add`). Pasted
+   * text goes in as typed.
+   */
+  onFiles?: (files: File[]) => void;
   children?: unknown;
 }) {
   const value = () => props.text.text();
@@ -191,6 +199,7 @@ export function Composer(props: {
           class={disabled() ? "max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base opacity-40" : "max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"}
           submitBehavior={desktop ? "submit" : undefined} onSubmit={returned}
           onFocus={() => focused.set(true)} onBlur={() => focused.set(false)}
+          onPaste={props.onFiles ? ({ files }) => void (files.length && !disabled() && props.onFiles?.(files)) : undefined}
           onChange={({ value }) => {
             typed = value;
             props.text.set(value);
