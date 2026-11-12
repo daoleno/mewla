@@ -1,5 +1,5 @@
 import { cleanup, Clipboard, effect, openUrl, Scroll, signal, Text, untracked, View } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { EmptyState, Notice, Row, Section, SectionLabel, Spinner } from "../kit/kit";
 import { Sheet } from "../kit/Sheet";
 import { Icon } from "../kit/Icon";
@@ -18,6 +18,7 @@ import {
   type DiscoveredSessionService,
 } from "../../core/sessions/servicesPresentation";
 import { connection, current, currentTransport } from "../session";
+import { showAlert } from "../shell/alert";
 
 /** Open from the Sessions list's menu. */
 export const servicesOpen = signal(false);
@@ -74,7 +75,7 @@ function ServiceDetail(props: { service: () => DiscoveredSessionService; onBack:
     cleanup(() => clearInterval(timer));
   });
   const start = async () => {
-    const { action } = await AlertDialog.show({
+    const { action } = await showAlert({
       title: "Share this service publicly?",
       description: "Anyone with the temporary URL can access this service. Quick Tunnels do not support SSE and allow 200 in-flight requests.",
       actions: [{ id: "cancel", label: "Cancel", role: "cancel" }, { id: "start", label: "Start tunnel" }],

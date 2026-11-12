@@ -16,6 +16,7 @@ import { connection, current, resumeConnection, servers, switchTo } from "../ses
 import { goHome, nav } from "../shell/nav";
 import { updatePending } from "../update/update";
 import { computerAgentUse, computerUpdate, fixRows, minComputerVersion, readComputer } from "./state";
+import { haptic } from "../shell/haptics";
 
 export { catNeedsYou } from "./state";
 
@@ -46,6 +47,7 @@ function showPathDetail(detail: string): void {
 
 /** Another computer: one tap switches to it; the stack returns to home, which says Connecting… until it is up. */
 function useComputer(server: StoredServer): void {
+  haptic.selection();
   void setServerAutoConnect(server.id, true);
   void switchTo(server).then(() => goHome());
 }

@@ -1,6 +1,6 @@
 import { computed, effect, signal, Text, untracked, View, windowSize } from "nsh";
 import type { Signal } from "nsh";
-import { AlertDialog, Button, DiffView, Input, type DiffFile, type DiffLineRange, type DiffViewRef } from "nsh/base";
+import { Button, DiffView, Input, type DiffFile, type DiffLineRange, type DiffViewRef } from "nsh/base";
 import { Sheet } from "../../kit/Sheet";
 import { NavPage } from "../../shell/NavPage";
 import { gitHunkAtLine, gitHunkSelection, parseGitPatch, splitGitPatchByFile, type GitParsedPatch, type GitPatchHunk, type GitPatchSide } from "../../../core/git/gitDiffHunks";
@@ -16,6 +16,7 @@ import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { Counts, Current, FlashLine, IconButton, TextButton } from "./parts";
 import { copyDiff, copyText, say, type GitReview } from "./state";
+import { showAlert } from "../../shell/alert";
 
 /** Split (old beside new) from this width; one over the other below it. */
 export const SPLIT_WIDTH = 720;
@@ -274,7 +275,7 @@ async function readerMenu(input: {
   onCopyDiff: () => void;
 }): Promise<void> {
   const d = input.display;
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title: input.path,
     presentation: "actionSheet",
     actions: [

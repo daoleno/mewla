@@ -1,5 +1,5 @@
 import { cleanup, computed, effect, Image, Scroll, signal, Text, untracked, View, type InputRef, type ScrollRef } from "nsh";
-import { AlertDialog, Button, Input } from "nsh/base";
+import { Button, Input } from "nsh/base";
 import { durationLabel, FRIENDS_POST_LIMIT, relativeTime, type FriendsDraft, type FriendsDraftMedia } from "../../../core/friends/api";
 import { checkDraftText, discardDraft, draftMediaImage, postDraft, removeDraftMedia } from "../../../core/friends/requests";
 import { Icon } from "../../kit/Icon";
@@ -7,6 +7,7 @@ import { EmptyState, Spinner } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { Avatar, FriendsPageFrame, keyboardLift } from "./parts";
 import { currentServerId, followFriends, followPage, friends, refreshFriends, serverFor } from "./state";
+import { showAlert } from "../../shell/alert";
 
 /** One picture (or a video's poster frame) of a draft, read from the computer, with a way to take it off. */
 function DraftMediaTile(props: { draftId: string; item: FriendsDraftMedia; busy: boolean; onRemove: () => void }) {
@@ -112,7 +113,7 @@ function DraftCard(props: { id: string; nav: PageNav; edits: Edits; onFocus: (in
 
   const discard = async () => {
     if (!serverFor(currentServerId()) || busy()) return;
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       title: "Discard this draft?",
       actions: [
         { id: "keep", label: "Keep", role: "cancel" },

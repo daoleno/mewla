@@ -1,5 +1,5 @@
 import { cleanup, computed, effect, Scroll, signal, Text, View } from "nsh";
-import { AlertDialog, Button, Input } from "nsh/base";
+import { Button, Input } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { markWorkRead, workAction, workDetail } from "../../core/work/brainWork";
@@ -17,6 +17,7 @@ import { brainDraft, connection, currentTransport, workers } from "../session";
 import { writeIntoDraft } from "../chat/Composer";
 import { workSurface } from "./state";
 import { Icon } from "../kit/Icon";
+import { showAlert } from "../shell/alert";
 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
 export interface WorkLinks {
@@ -70,7 +71,7 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
   const words = context.reply?.text.trim() ?? "";
   if (action.kind === "reply" && !words && !context.reply?.attachments.length) return context.openDetail(slip.workId, true), false;
   if (action.confirm) {
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       title: action.kind === "stop" ? `Stop “${slip.title}”?` : `${action.label}?`,
       description: action.confirm,
       actions: [{ id: "keep", label: "Cancel", role: "cancel" }, { id: "go", label: action.label }],

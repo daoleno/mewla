@@ -1,4 +1,4 @@
-import { AlertDialog, Button, TextView } from "nsh/base";
+import { Button, TextView } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { effect, Scroll, signal, Text, View } from "nsh";
@@ -14,6 +14,7 @@ import { openEditor } from "./Editor";
 import { Row, SectionTitle, StatusDot } from "./parts";
 import type { Route } from "../shell/routes";
 import { calendar, calendarItems } from "./state";
+import { showAlert } from "../shell/alert";
 
 const RUNS_SHOWN = 5;
 
@@ -65,7 +66,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
   };
 
   const cancel = async (target: CalendarItem) => {
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       title: "Cancel calendar item?",
       description: "It will remain in Calendar as cancelled.",
       actions: [{ id: "keep", label: "Keep", role: "cancel" }, { id: "cancel", label: "Cancel item", role: "destructive" }],

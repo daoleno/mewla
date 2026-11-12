@@ -1,8 +1,9 @@
 import { Clipboard, signal, Text, untracked, View } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import type { MessageTimelineItem } from "../../core/timeline/types";
 import { isEditablePrompt, messageCopyText, messageEditMode, type MessageEdit } from "../../core/timeline/messageActionsModel";
 import { composerEdits, type ComposerText } from "./Composer";
+import { showAlert } from "../shell/alert";
 
 /** The text the Select Text sheet shows; "" while it is closed. */
 export const selectingText = signal("");
@@ -92,7 +93,7 @@ export async function showMessageMenu(item: MessageTimelineItem, env: { editor?:
   const subject = { id: item.id, role: item.role, body: item.body, hasAttachments: item.attachments.length > 0, pending: Boolean(item.pending), streaming: Boolean(item.streaming) };
   if (subject.streaming || !subject.body.trim()) return;
   const editable = env.editor && isEditablePrompt(subject, { messageRewind: false, brain: false, running: env.running, connected: env.connected, canSelectText: false });
-  const { action } = await AlertDialog.show({
+  const { action } = await showAlert({
     presentation: "actionSheet",
     actions: [
       { id: "copy", label: "Copy" },

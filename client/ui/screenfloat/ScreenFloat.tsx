@@ -1,5 +1,5 @@
 import { cleanup, computed, createMotion, effect, keyboardFrame, PanResponder, reduceMotion, safeArea, signal, Storage, Text, untracked, View, windowSize, type JSX } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import {
   DEFAULT_FLOAT_CORNER,
   FLOAT_CORNER_KEY,
@@ -16,6 +16,7 @@ import {
   type FloatCorner,
 } from "../../core/screen/float";
 import { Icon } from "../kit/Icon";
+import { showAlert } from "../shell/alert";
 
 const EDGE = 12;
 /** Under the page header. */
@@ -186,7 +187,7 @@ export function ScreenFloat(props: ScreenFloatProps) {
 
   const openMenu = async () => {
     const items = props.menu();
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       title: props.title(),
       presentation: "actionSheet",
       actions: [...items.map((item) => ({ id: item.id, label: item.label, role: item.destructive ? ("destructive" as const) : undefined })), { id: "cancel", label: "Cancel", role: "cancel" as const }],

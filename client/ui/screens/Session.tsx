@@ -1,7 +1,7 @@
 import { cleanup, computed, effect, openUrl, signal, Storage, Text, untracked, View } from "nsh";
 import { listSessionServices } from "../../core/sessions/services";
 import { dshWebServiceURL } from "../../core/sessions/servicesPresentation";
-import { AlertDialog, Button, Input, type NavStackState } from "nsh/base";
+import { Button, Input, type NavStackState } from "nsh/base";
 import { createMenuAnchor, showMenu, type MenuItem } from "../kit/Menu";
 import { AppSheet } from "../shell/AppSheet";
 import { NavPage } from "../shell/NavPage";
@@ -38,7 +38,6 @@ import { AgentIcon } from "../icons/AgentIcon";
 import { workLinkOf } from "../sessions/workLinks";
 import { openCalendarItem } from "../shell/nav";
 import { terminalShowing } from "../shell/desktop/keys";
-import { haptic } from "../shell/haptics";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { slashMenuState } from "../../core/session/composerSlash";
 import { DSHPanel } from "../chat/DSHPanel";
@@ -54,6 +53,7 @@ import { buildGitDiffChipLabel, type GitDiffStatusSnapshot } from "../../core/gi
 import { getGitStatus } from "../../core/git/requests";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
+import { showAlert } from "../shell/alert";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 
@@ -229,8 +229,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       notice.set("Your computer is offline.");
       return;
     }
-    haptic.notification("warning");
-    const { action } = await AlertDialog.show({
+    const { action } = await showAlert({
       title: "Terminate this session?",
       description: "Its terminal and agent stop on your computer.",
       actions: [{ id: "cancel", label: "Cancel", role: "cancel" }, { id: "terminate", label: "Terminate", role: "destructive" }],

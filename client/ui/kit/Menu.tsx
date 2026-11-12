@@ -1,8 +1,9 @@
 import { cleanup, effect, Overlay, signal, Text, untracked, View, type ViewRef } from "nsh";
 import type { JSX } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { wide } from "../shell/layout";
 import { Icon, type IconName } from "./Icon";
+import { showAlert } from "../shell/alert";
 
 /** One action of an action menu (Brain's ⋯, a Session's ⋯, the tray's ⋯, Git ⋯, Screen ⋯). */
 export interface MenuItem {
@@ -51,7 +52,7 @@ export function showMenu(request: MenuRequest): Promise<string | null> {
   const actions = request.items
     .filter((item) => !item.disabled)
     .map((item) => ({ id: item.id, label: item.checked ? `✓ ${item.label}` : item.label, role: item.destructive ? ("destructive" as const) : undefined }));
-  return AlertDialog.show({ title: request.title, presentation: "actionSheet", actions: [...actions, { id: "cancel", label: "Cancel", role: "cancel" }] })
+  return showAlert({ title: request.title, presentation: "actionSheet", actions: [...actions, { id: "cancel", label: "Cancel", role: "cancel" }] })
     .then((answer) => (answer.action && answer.action !== "cancel" ? answer.action : null))
     .catch(() => null);
 }

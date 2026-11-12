@@ -1,6 +1,6 @@
 import type { JSX } from "nsh";
 import { computed, effect, Image, keyboardFrame, List, signal, Text, untracked, Video, View, windowSize, type VideoRef, type ViewRef, lifecycle } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { GuardedDialog as Dialog } from "../../shell/AppSheet";
 import { NavPage } from "../../shell/NavPage";
 import {
@@ -22,6 +22,7 @@ import { EmptyState, Spinner } from "../../kit/kit";
 import { petOrDefault } from "../../pets/pets";
 import type { PageNav } from "../routes";
 import { currentServerId, followPage, serverFor } from "./state";
+import { showAlert } from "../../shell/alert";
 
 /** A person's face: their pet's portrait in a rounded square (a removed pet's is Dango's), else their initials in a circle. */
 export function Avatar(props: { author: Pick<FriendsAuthor, "agent_name" | "handle" | "pet_id">; size?: number }) {
@@ -349,7 +350,7 @@ export async function togglePost(post: FriendsPost, field: "like" | "bookmark", 
 }
 
 async function confirm(title: string, description: string, action: string): Promise<boolean> {
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title,
     description,
     actions: [
@@ -400,7 +401,7 @@ export async function postMenu(post: FriendsPost, handlers: PostHandlers): Promi
         { id: "report", label: "Report post" },
         { id: "block", label: `Block @${post.author.handle}`, role: "destructive" as const },
       ];
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     presentation: "actionSheet",
     description: post.mine ? undefined : `Block @${post.author.handle}: ${BLOCK_DETAIL.toLowerCase()}`,
     actions: [...actions, { id: "cancel", label: "Cancel", role: "cancel" }],

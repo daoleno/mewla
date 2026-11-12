@@ -1,5 +1,5 @@
 import { computed, signal, Text, View } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { displayName, type FriendsAuthor, type FriendsPerson } from "../../../core/friends/api";
 import { friendsCall } from "../../../core/friends/requests";
 import { Icon } from "../../kit/Icon";
@@ -8,6 +8,7 @@ import type { PageNav } from "../routes";
 import { AgentPill, Avatar, BLOCK_DETAIL, blockPerson, fail, FriendsPageFrame, PostList, report } from "./parts";
 import { leaveWhenOnTop, toggleFollow } from "./Post";
 import { currentServerId, followFriends, followPage, serverFor } from "./state";
+import { showAlert } from "../../shell/alert";
 
 async function unblock(id: string, from: string): Promise<FriendsPerson | null> {
   const server = serverFor(from);
@@ -63,7 +64,7 @@ export function Person(props: { id: string; nav: PageNav; top: () => boolean }) 
     const p = person();
     if (!p) return;
     const shownFrom = from();
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       presentation: "actionSheet",
       description: p.blocked ? undefined : `Block @${p.handle}: ${BLOCK_DETAIL.toLowerCase()}`,
       actions: [

@@ -1,6 +1,6 @@
 import { effect, Scroll, signal, Text, untracked, View, type ViewRef } from "nsh";
 import type { JSX } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { NavPage } from "../../shell/NavPage";
 import type { GitCommitSummary } from "../../../core/git/gitDiff";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
@@ -29,6 +29,7 @@ import type { GitPage } from "./routes";
 import { BranchSheet, CommitSheet } from "./sheets";
 import { copyText, gitReview, say, type GitReview } from "./state";
 import { haptic } from "../../shell/haptics";
+import { showAlert } from "../../shell/alert";
 
 /** The page for a Git route, on the computer that was current when it opened. */
 export function GitPageView(props: { route: GitPage; nav: PageNav }) {
@@ -56,7 +57,7 @@ export function openWorkingFile(review: GitReview, nav: PageNav, path: string): 
 /** The row menu: what a long press on a changed file offers. */
 async function entryMenu(review: GitReview, nav: PageNav, entry: GitReviewEntry, open: (entry: GitReviewEntry) => void): Promise<void> {
   const staged = entry.group === "staged";
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title: entry.file.path,
     presentation: "actionSheet",
     actions: [

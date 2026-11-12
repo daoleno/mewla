@@ -1,5 +1,5 @@
 import { effect, signal, untracked, View, type ViewRef } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { Sheet } from "../kit/Sheet";
 import { MenuPopover } from "../kit/Menu";
 import { wide } from "../shell/layout";
@@ -15,6 +15,7 @@ import { canSwitchModel, getThreadRuntime } from "../../core/session/sessionRequ
 import type { ThreadRuntimeSelection } from "../../core/providers/types";
 import { BrainHostPanel } from "./BrainHostSheet";
 import { currentBrain, type BrainSource } from "./source";
+import { showAlert } from "../shell/alert";
 
 /** What a refused New chat says (soft-final/SPEC.md §1.6). */
 export const NEW_CHAT_FAILED = "Couldn't start a new chat";
@@ -105,7 +106,7 @@ export function BrainMenu(props: {
 
   const newChat = async () => {
     close();
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       title: "Start a new chat?",
       actions: [
         { id: "cancel", label: "Cancel", role: "cancel" },
