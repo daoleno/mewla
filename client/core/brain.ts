@@ -77,7 +77,7 @@ export function requestBrainSnapshot(transport: Transport): void {
 }
 
 /** Starts a new Brain chat; settles with the snapshot that carries the new thread. */
-export function newBrainChat(transport: Transport): Promise<BrainSnapshot> {
+export function newBrainChat(transport: Pick<Transport, "request">): Promise<BrainSnapshot> {
   return transport
     .request<{ brain?: BrainSnapshot }>("brain_chat_new", {}, { reply: "brain_snapshot" })
     .then((frame) => frame.brain ?? {});
