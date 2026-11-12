@@ -4,9 +4,10 @@ import { BackHandler } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
-import { servicesOpen } from "../sessions/ServicesSheet";
-import { workLinkOf } from "../sessions/workLinks";
-import { desktop, selectedTab } from "../shell/Shell";
+import { workLinkOf } from "./workLinks";
+import { desktop } from "../shell/Shell";
+import { openPage } from "../shell/nav";
+import { newSessionOpen } from "../screens/NewSession";
 import { haptic } from "../shell/haptics";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
 import { sessionEmptyCat, sessionEmptyState } from "../../core/sessions/sessionEmptyState";
@@ -25,7 +26,7 @@ import type { Worker } from "../../core/sessions/workers";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon, type ColorToken, type IconName } from "../icons/Icon";
 import { connection, current, currentTransport, resumeConnection, workers, workersHydrated } from "../session";
-import type { SessionsRoute } from "../shell/routes";
+import type { Route } from "../shell/routes";
 
 const aliases = signal<StoredWorkerAliases>({});
 const collapsed = signal<ReadonlySet<string>>(new Set());
@@ -197,33 +198,23 @@ function Empty(props: { onPair: () => void; onNew: () => void }) {
  * directory once there are two; a tap folds it). A tap opens a Session; a
  * long press starts selecting, and the bar terminates what is selected.
  */
-export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () => void; onNew: () => void }) {
+export function AllSessions(props: { nav: NavStackState<Route> }) {
+  const onTop = () => props.nav.routes().at(-1)?.name === "allSessions";
   const open = (worker: Worker) => {
     void markWorkerOpened(Storage, worker.id).catch(() => {});
     props.nav.push({ name: "session", workerId: worker.id, hint: { name: worker.name, cwd: worker.cwd, command: worker.command, startedAt: worker.started_at } });
   };
-  const menu = async () => {
-    const live = untracked(connection) === "connected";
-    const { action } = await AlertDialog.show({
-      title: "Sessions",
-      presentation: "actionSheet",
-      actions: [
-        ...(live ? [{ id: "new", label: "New session" }, { id: "services", label: "Services" }] : []),
-        { id: "cancel", label: "Cancel", role: "cancel" as const },
-      ],
-    });
-    if (action === "new") props.onNew();
-    else if (action === "services") servicesOpen.set(true);
-  };
+  const onPair = () => openPage({ name: "computer" }, { name: "pair" });
+  const onNew = () => newSessionOpen.set(true);
   // Android's Back ends selecting first (parity #26), as the Expo list did.
   onAndroidBack(() => {
-    if (!untracked(selecting) || untracked(selectedTab) !== 1) return false;
+    if (!untracked(selecting) || !untracked(onTop)) return false;
     selection.set(EMPTY_SESSION_SELECTION);
     return true;
   });
-  // Leaving the tab ends selecting.
+  // Leaving the page ends selecting.
   effect(() => {
-    if (selectedTab() !== 1 && untracked(selecting)) selection.set(EMPTY_SESSION_SELECTION);
+    if (!onTop() && untracked(selecting)) selection.set(EMPTY_SESSION_SELECTION);
   });
   // A Session that left the list cannot stay selected.
   effect(() => {
@@ -231,13 +222,7 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
     if (next !== untracked(selection)) selection.set(next);
   });
   return (
-    <NavPage title="Sessions"
-      headerRight={selecting() ? null : (
-        <View class="flex-row items-center gap-4">
-          <Button testID="sessions-menu" accessibilityLabel="Sessions menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>
-          <Button testID="new-session" onPress={props.onNew} disabled={connection() !== "connected"}><Icon name="add" size={22} color="primary" /></Button>
-        </View>
-      )}>
+    <NavPage title="All Sessions">
       <View class="flex-1 bg-background">
         {selecting() ? (
           <View class="flex-row items-center gap-3 border-b border-border px-4 py-2">
@@ -250,7 +235,7 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
         ) : null}
         {notice() ? <Text testID="sessions-notice" class="px-4 py-2 text-sm text-destructive" onPress={() => notice.set("")}>{notice()}</Text> : null}
         <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-24"
-          empty={<Empty onPair={props.onPair} onNew={props.onNew} />}>
+          empty={<Empty onPair={onPair} onNew={onNew} />}>
           {(row) => {
             // Cells are recycled: what a cell shows follows the row it holds now. A Session's update makes new
             // rows, so the cell is rebuilt only when it turns from a heading into a Session or back: a tap during

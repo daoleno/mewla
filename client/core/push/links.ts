@@ -12,6 +12,8 @@ export function pushLink(data: unknown): string | null {
     const parts = Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`);
     return parts.length ? `?${parts.join("&")}` : "";
   };
+  // Friends' pushes name a list of Friends (daemon/server/friends.go).
+  if (fields.type === "friends" && (fields.screen === "drafts" || fields.screen === "notifications")) return `mewla://friends/${fields.screen}`;
   const worker = text("worker_id");
   if (worker && server) return `mewla://sessions/${encodeURIComponent(worker)}${query({ serverId: server })}`;
   switch (fields.screen) {

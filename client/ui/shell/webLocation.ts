@@ -5,9 +5,8 @@ import { documentTitle, placePath, type WebPlace } from "../../core/web/places";
 /** A browser page served by the computer: the page host (client/ui/web/host.js) answers `web.*`. */
 export const webHosted = platform.os === "web" && host.available();
 
-/** What a history entry reopens: a section and its stack's routes. */
+/** What a history entry reopens: the stack's routes. */
 export interface PageSnapshot {
-  tab: number;
   routes: readonly unknown[];
 }
 

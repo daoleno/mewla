@@ -23,13 +23,3 @@ export type Route =
 
 export type RouteName = Route["name"];
 
-// The tab shell's stacks, until the one-stack shell replaces it in this branch's next change.
-import type { FilesPage } from "../more/files/routes";
-import type { GitPage } from "../more/git/routes";
-export type MoreRoute = { name: "more" } | { name: "pair" } | MorePage;
-export type SessionsRoute =
-  | { name: "sessions" }
-  | { name: "session"; workerId: string; hint?: TerminalRouteSessionHint }
-  | { name: "workFile"; id: string }
-  | GitPage
-  | FilesPage;

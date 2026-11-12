@@ -12,7 +12,7 @@ import { brain, currentTransport, workers } from "../session";
 import { clock } from "./clock";
 import { openEditor } from "./Editor";
 import { Row, SectionTitle, StatusDot } from "./parts";
-import type { CalendarRoute } from "./routes";
+import type { Route } from "../shell/routes";
 import { calendar, calendarItems } from "./state";
 
 const RUNS_SHOWN = 5;
@@ -46,7 +46,7 @@ function useFullItem(id: string) {
   };
 }
 
-export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute>; openSession: (sessionId: string) => void }) {
+export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSession: (sessionId: string) => void }) {
   const item = useFullItem(props.id);
   const busy = signal(false);
   const failure = signal("");
@@ -140,7 +140,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<CalendarRoute>;
   );
 }
 
-export function RunPage(props: { itemId: string; runId: string; nav: NavStackState<CalendarRoute>; openSession: (sessionId: string) => void }) {
+export function RunPage(props: { itemId: string; runId: string; nav: NavStackState<Route>; openSession: (sessionId: string) => void }) {
   // The result's width, which its pictures take.
   const resultWidth = signal(0);
   const item = useFullItem(props.itemId);

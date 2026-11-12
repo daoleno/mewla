@@ -12,9 +12,6 @@ import { createAttachmentUploads } from "../more/files/upload";
 import { brainDraft, connection, currentTransport } from "../session";
 import { workSurface } from "./state";
 
-/** Brain's Work: what Brain is doing for you, grouped by what it asks of you. Not the Calendar's items. */
-export type WorkRoute = { name: "work" } | { name: "workDetail"; workId: string };
-
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
 export interface WorkLinks {
   openSession(sessionId: string): void;
@@ -22,16 +19,6 @@ export interface WorkLinks {
   openCalendarItem(itemId: string, runId?: string): void;
   /** "Ask Brain about this": Brain's composer with the Work quoted, never sent. */
   askBrain(text: string): void;
-}
-
-type Row = { kind: "group"; title: string } | { kind: "slip"; slip: BrainWorkSlip };
-
-function rows(): Row[] {
-  const slips = workSurface().slips;
-  return BRAIN_WORK_GROUP_ORDER.flatMap((group): Row[] => {
-    const inGroup = slips.filter((s) => s.group === group);
-    return inGroup.length ? [{ kind: "group", title: BRAIN_WORK_GROUP_LABELS[group] }, ...inGroup.map((slip) => ({ kind: "slip" as const, slip }))] : [];
-  });
 }
 
 const DOT: Record<WorkStatus, string> = {
@@ -127,31 +114,6 @@ function ActionButton(props: { action: BrainWorkAction; slip: () => BrainWorkSli
   );
 }
 
-function SlipRow(props: { slip: () => BrainWorkSlip; onPress: () => void; context: ActionContext }) {
-  const s = () => props.slip();
-  const summary = () => (s().group === "running" && s().phase ? `${s().phase![0].toUpperCase()}${s().phase!.slice(1)} · ${s().summary ?? ""}` : s().summary ?? "");
-  return (
-    <View class="border-b border-border bg-card">
-      <Button testID={`work-${s().workId}`} onPress={props.onPress} class="gap-1 px-4 pb-2 pt-3 active:bg-accent">
-        <View class="flex-row items-center gap-2">
-          <View class={`size-2 rounded-full ${DOT[s().status]}`} />
-          <Text class="flex-1 text-sm text-muted-foreground line-clamp-1">{meta(s())}</Text>
-          {s().statusLabel !== BRAIN_WORK_GROUP_LABELS[s().group] ? <Text class="text-sm text-muted-foreground">{s().statusLabel}</Text> : null}
-          {s().unread && s().group !== "needs" ? <View accessibilityLabel="Unread" class="size-2 rounded-full bg-seal" /> : null}
-        </View>
-        <Text class="text-base font-semibold line-clamp-2">{s().title}</Text>
-        {summary() ? <Text class="text-base text-muted-foreground line-clamp-2">{summary()}</Text> : null}
-      </Button>
-      {/* The answers or the one next step, right on the slip; the rest on its page. */}
-      <View class="flex-row flex-wrap gap-2 px-4 pb-3">
-        {brainWorkSlipActions(s()).map((action) => (
-          <ActionButton compact action={action} slip={s} onPress={() => void runWorkAction(action, s(), props.context)} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
 function Notice() {
   return (
     <View>
@@ -162,58 +124,6 @@ function Notice() {
         </View>
       ) : null}
     </View>
-  );
-}
-
-export function WorkPage(props: { nav: NavStackState<any>; links: WorkLinks }) {
-  const context: ActionContext = {
-    links: props.links,
-    openDetail: (workId) => props.nav.push({ name: "workDetail", workId }),
-    done: () => {},
-  };
-  const open = (slip: BrainWorkSlip) => {
-    const transport = currentTransport();
-    if (slip.unread && transport) markWorkRead(transport, slip.workId);
-    if (slip.group === "running" && slip.sessionId && !slip.replied) return props.links.openSession(slip.sessionId);
-    props.nav.push({ name: "workDetail", workId: slip.workId });
-  };
-  return (
-    <NavPage title="Work" testID="work-page">
-      <View class="flex-1 bg-background">
-        <List keyboardShouldPersistTaps="handled" testID="work-list" class="flex-1" each={rows()} keyExtractor={(row) => (row.kind === "group" ? `g:${row.title}` : `w:${row.slip.workId}`)}
-          header={() => (
-            <View>
-              <Notice />
-              <View class="gap-1 px-4 pb-1 pt-4">
-                {objectiveLine(workSurface().objective) ? <Text class="text-base font-semibold">{objectiveLine(workSurface().objective)!}</Text> : null}
-                {brainWorkSummaryLine(workSurface().counts) ? <Text testID="work-summary" class="text-sm text-muted-foreground">{brainWorkSummaryLine(workSurface().counts)!}</Text> : null}
-              </View>
-            </View>
-          )}
-          empty={() => (
-            <View testID="work-empty" class="items-center gap-2 px-6 py-16">
-              <Text class="text-lg font-semibold">No open Work</Text>
-              {connection() !== "connected" ? <Text class="text-center text-base text-muted-foreground">It shows when your computer is back.</Text> : null}
-            </View>
-          )}>
-          {(row) => {
-            // Every Brain update makes new rows: the cell is rebuilt only when it turns from a heading into a slip or
-            // back, so a tap is never lost to an update (as the Calendar agenda).
-            const group = computed(() => row().kind === "group");
-            // The slip row may read once more after the cell took a heading, before it goes: it keeps its last slip.
-            const slip = computed<BrainWorkSlip>((last) => (row().kind === "group" ? last! : (row() as { slip: BrainWorkSlip }).slip));
-            const title = computed<string>((last) => (row().kind === "group" ? (row() as { title: string }).title : last ?? ""));
-            return (
-              <View>
-                {group()
-                  ? <Text class="bg-background px-4 pb-1.5 pt-4 text-sm font-semibold text-muted-foreground">{title()}</Text>
-                  : <SlipRow slip={slip} onPress={() => open(slip())} context={context} />}
-              </View>
-            );
-          }}
-        </List>
-      </View>
-    </NavPage>
   );
 }
 
@@ -301,15 +211,6 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
         )}
       </Scroll>
     </NavPage>
-  );
-}
-
-/** The Brain header's way into Work: "Work", with how many need you. */
-export function WorkHeaderButton(props: { onPress: () => void }) {
-  return (
-    <Button testID="open-work" onPress={props.onPress} accessibilityLabel="Work">
-      <Text class="text-base text-primary">{workSurface().counts.needs ? `Work · ${workSurface().counts.needs}` : "Work"}</Text>
-    </Button>
   );
 }
 
