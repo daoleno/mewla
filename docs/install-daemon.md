@@ -72,7 +72,7 @@ before it:
 
 | Variable | Effect |
 | --- | --- |
-| `MEWLA_VERSION=v0.3.1` | Install this exact release tag, beta included |
+| `MEWLA_VERSION=vX.Y.Z` | Install this exact release tag (`-beta.N` too) |
 | `MEWLA_INSTALL_DIR=<path>` | Install into this folder (not a system folder) |
 | `MEWLA_NO_PATH_UPDATE=1` | Do not change your user `PATH` |
 | `MEWLA_NO_START=1` | Do not start Mewla or register it to start at login |
