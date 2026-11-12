@@ -169,8 +169,7 @@ viewer uses) with `reason` when the computer cannot run the screen or Chrome, an
 
 ## Verification
 
-Run `go test -race ./agentuse ./browser ./vdisplay`, the app typecheck and both
-Android and iOS Expo exports. Behavioral tests cover the monitors (a program
+Run `go test -race ./agentuse ./browser ./vdisplay`, and `cd client/ui && nsh check`. Behavioral tests cover the monitors (a program
 opens on its Worker's monitor, a viewer is shown only that rectangle, a monitor
 goes with its Worker and the others keep their places), the gate (refusal with a
 reason, notes with the result), a concurrent cold start (the second agent waits

@@ -156,7 +156,7 @@ export MEWLA_ANDROID_KEY_PASSWORD='…'
 
 ## Package identity
 
-The version is `client/ui/nsh.json`'s; `scripts/lib/release_identity.py` derives the version code from it (X·1 000 000 + Y·10 000 + Z·100 + 99, or + N for beta.N). The package is `com.daoleno.mewla`, the Expo app's, so the NSH app replaces it in place.
+The version is `client/ui/nsh.json`'s; `scripts/lib/release_identity.py` derives the version code from it (X·1 000 000 + Y·10 000 + Z·100 + 99, or + N for beta.N). The package is `com.daoleno.mewla`, the one already installed from the store, so an update replaces it in place.
 
 Verify with `./scripts/verify-release-identity.sh` (also `bun run release:identity`).
 
