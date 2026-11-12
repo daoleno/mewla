@@ -348,7 +348,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
         ref={(node: WebViewRef) => props.session.attach(node)}
         testID="remote-view"
         accessibilityLabel={props.label}
-        class="flex-1 bg-background"
+        class="flex-1 bg-black"
         html={html}
         baseUrl={viewerBaseUrl}
         scrollable={false}
@@ -376,7 +376,8 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
       ) : null}
       {soft && props.typing ? (
         // A narrow phone may not fit every key: the bar scrolls sideways.
-        <Scroll horizontal testID="remote-key-bar" class="grow-0 border-t border-border bg-card" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
+        // Translucent white keys on the black (SPEC §15 Full-screen remote).
+        <Scroll horizontal testID="remote-key-bar" class="grow-0 bg-black" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
           {props.modifiers.map((modifier) => {
             const state = () => (mods().locked.includes(modifier.key) ? "locked" : mods().armed.includes(modifier.key) ? "armed" : "off");
             return (
@@ -385,16 +386,16 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
                 accessibilityLabel={modifier.name}
                 selected={state() !== "off"}
                 onPress={() => mods.set(tapModifier(mods(), modifier.key))}
-                class={`min-w-[40px] items-center rounded-lg px-2 py-1.5 ${state() === "locked" ? "border-2 border-primary bg-secondary" : state() === "armed" ? "border border-primary bg-secondary" : "border border-border"}`}
+                class={`h-11 min-w-[44px] items-center justify-center rounded-[10px] px-2.5 ${state() === "locked" ? "border-2 border-white bg-white/35" : state() === "armed" ? "bg-white/35" : "bg-white/15"}`}
               >
-                <Text class="text-sm font-medium">{modifier.label}</Text>
+                <Text class="text-sub font-semibold text-white">{modifier.label}</Text>
               </Button>
             );
           })}
-          <View class="mx-1 h-5 w-px bg-border" />
+          <View class="mx-1 h-5 w-px bg-white/25" />
           {KEYS.map((key) => (
-            <Button testID={`key-${key.key}`} accessibilityLabel={key.name} onPress={() => press(key.key)} class="min-w-[36px] items-center rounded-lg border border-border px-2 py-1.5">
-              <Text class="text-sm">{key.label}</Text>
+            <Button testID={`key-${key.key}`} accessibilityLabel={key.name} onPress={() => press(key.key)} class="h-11 min-w-[44px] items-center justify-center rounded-[10px] bg-white/15 px-2.5 active:bg-white/30">
+              <Text class="text-sub text-white">{key.label}</Text>
             </Button>
           ))}
         </Scroll>

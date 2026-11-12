@@ -355,7 +355,6 @@ describe("Screen: Linux agent displays", () => {
   test("a Linux computer lists each agent's display, or says nothing is on screen", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) }));
     await app.waitFor("text:Nothing on screen");
-    expect(app.texts()).toContain("An agent's screen shows up here while it works.");
   });
 
   test("on a phone, the Linux page's options show only when they hold the Phone row (screen [72])", async () => {

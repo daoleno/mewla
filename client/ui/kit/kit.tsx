@@ -357,13 +357,14 @@ export function Spinner(props: { size?: number; tone?: ColorName }) {
 }
 
 /** What a page shows instead of its content: busy, empty or failed, with at most one way out. */
-export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string }) {
+/** A page's state (busy, empty, failed) and its one way on. `onBlack`: on the full-screen remote's black, in white. */
+export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string; onBlack?: boolean }) {
   return (
     <View testID={props.testID} class="items-center gap-2 px-6 py-16">
-      {props.busy ? <Spinner size={24} /> : props.icon ? <Icon name={props.icon} size={28} tone={props.tone} /> : null}
-      {props.title ? <Text class="mt-1 text-center text-title font-semibold tracking-title">{props.title}</Text> : null}
-      {props.detail ? <Text class="text-center text-sub text-muted-foreground">{props.detail}</Text> : null}
-      {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} onCanvas /> : null}
+      {props.busy ? <Spinner size={24} tone={props.onBlack ? "onBlackSoft" : undefined} /> : props.icon ? <Icon name={props.icon} size={28} tone={props.onBlack ? "onBlack" : props.tone} /> : null}
+      {props.title ? <Text class={`mt-1 text-center text-title font-semibold tracking-title ${props.onBlack ? "text-white" : ""}`}>{props.title}</Text> : null}
+      {props.detail ? <Text class={props.onBlack ? "text-center text-sub text-white/60" : "text-center text-sub text-muted-foreground"}>{props.detail}</Text> : null}
+      {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} kind={props.onBlack ? "white" : undefined} onCanvas /> : null}
     </View>
   );
 }
@@ -378,7 +379,8 @@ export function PillButton(props: {
   onPress: () => void;
   /** The ink button: the page's or the group's one action. */
   filled?: boolean;
-  kind?: "ink" | "ghost" | "seal";
+  /** `white`: the one action on the full-screen remote's black. */
+  kind?: "ink" | "ghost" | "seal" | "white";
   small?: boolean;
   onCanvas?: boolean;
   busy?: boolean;
@@ -387,12 +389,12 @@ export function PillButton(props: {
   testID?: string;
 }) {
   const kind = () => props.kind ?? (props.filled ? "ink" : "ghost");
-  const fill = () => (kind() === "ink" ? "bg-primary" : kind() === "seal" ? "bg-seal" : props.onCanvas ? "bg-card" : "bg-muted");
+  const fill = () => (kind() === "ink" ? "bg-primary" : kind() === "seal" ? "bg-seal" : kind() === "white" ? "bg-white" : props.onCanvas ? "bg-card" : "bg-muted");
   const size = () => (props.small ? "h-[48px] rounded-(--radius-control) px-4" : "h-[52px] rounded-2xl px-5");
-  const ink = () => (kind() === "ink" ? "text-primary-foreground" : kind() === "seal" ? "text-seal-foreground" : "text-foreground");
+  const ink = () => (kind() === "ink" ? "text-primary-foreground" : kind() === "seal" ? "text-seal-foreground" : kind() === "white" ? "text-black" : "text-foreground");
   return (
     <Button testID={props.testID} disabled={props.disabled || props.busy} onPress={props.onPress} class={`mt-2 flex-row items-center justify-center gap-2 active:opacity-70 disabled:opacity-40 ${size()} ${fill()}`}>
-      {props.busy ? <Spinner size={16} tone={kind() === "ghost" ? "soft" : "canvas"} /> : null}
+      {props.busy ? <Spinner size={16} tone={kind() === "ghost" ? "soft" : kind() === "white" ? "onBlackSoft" : "canvas"} /> : null}
       <Text class={`text-body font-semibold line-clamp-1 ${ink()}`}>{props.title}</Text>
     </Button>
   );
