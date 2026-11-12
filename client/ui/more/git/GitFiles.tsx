@@ -3,6 +3,7 @@ import { AlertDialog, DiffView, Tree, type TreeItem } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../../shell/NavPage";
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
+import { padGitDiffText } from "../../../core/git/gitDiffLinePad";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import { formatGitDiffBytes } from "../../../core/git/gitDiffReview";
 import { matchesGitReviewQuery } from "../../../core/git/gitReviewModel";
@@ -209,6 +210,8 @@ export function FilePage(props: { review: GitReview; path: string; nav: PageNav 
               if (snapshot.binary) return <View class="px-4"><EmptyState title="Binary file" detail={formatGitDiffBytes(snapshot.byte_count)} /></View>;
               const content = snapshot.content ?? "";
               if (!content) return <View class="px-4"><EmptyState title="Empty file" /></View>;
+              // Padded for NSH's Android line layout (R4#3, gitDiffLinePad.ts).
+              const shown = padGitDiffText(content);
               return (
                 <View class="flex-1">
                   {snapshot.truncated ? (
@@ -216,7 +219,7 @@ export function FilePage(props: { review: GitReview; path: string; nav: PageNav 
                       <Notice tone="warning" title="Showing part of this file" detail={`First ${formatGitDiffBytes(content.length)} of ${formatGitDiffBytes(snapshot.byte_count)}.`} />
                     </View>
                   ) : null}
-                  <DiffView testID="git-file-view" class="flex-1" oldValue={content} newValue={content} expandAll language={props.path} layout="unified" />
+                  <DiffView testID="git-file-view" class="flex-1" oldValue={shown} newValue={shown} expandAll language={props.path} layout="unified" />
                 </View>
               );
             })()}
