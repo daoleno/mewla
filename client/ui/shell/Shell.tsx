@@ -1,4 +1,4 @@
-import { computed, effect, host, platform, signal, untracked, View, windowSize } from "nsh";
+import { computed, effect, host, platform, safeArea, signal, untracked, View, windowSize } from "nsh";
 import { DevWaitChip } from "./DevWait";
 import type { JSX } from "nsh";
 import { createNavStack, NavStack, type NavStackState } from "nsh/base";
@@ -183,7 +183,10 @@ export function Shell() {
   });
   return (
     <View class="flex-1 bg-background">
-      <View class="flex-1 flex-row">
+      {/* Clear of what the system draws at the sides: a phone's notch or island on its side, the iPhone Duo's
+          84 pt status rail (right of its cover screen, right of its inner screen on its side). Every page, its
+          composer, the tray and their controls lay out between them; the canvas runs on under the system's. */}
+      <View class="flex-1 flex-row" style={{ paddingLeft: safeArea().left, paddingRight: safeArea().right }}>
         <If when={wide()}><LeftPane /></If>
         <If when={wide()}><PaneHandle /></If>
         {/* A floating screen docked on wide has its strip at the pane's right: the page lays out left of it. */}

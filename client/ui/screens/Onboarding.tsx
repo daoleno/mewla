@@ -67,7 +67,7 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
 
   const frame = (): Frame | null => {
     const s = size();
-    return s ? { ...s, top: safeArea().top, bottom: safeArea().bottom } : null;
+    return s ? { ...s, top: safeArea().top, bottom: safeArea().bottom, left: safeArea().left, right: safeArea().right } : null;
   };
   const compact = () => (frame() ? isCompactFrame(frame()!) : false);
   // The computer as saved now: one paired by its address takes the name it reports (asked here, as Settings does).
