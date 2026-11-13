@@ -7,6 +7,14 @@ import dashboard from "../../core/resources/fixtures/dashboard-v2.json";
 import type { FakeDaemonState } from "../testing/fakeDaemon";
 import { SKETCH, TALL, WIDE } from "./pictures";
 
+/**
+ * The fixture's "now" in its test: the mock's day (the 12th) at 14:00 local, after the Work began (13:20) and before
+ * the day's first reminder (15:00), as the mock shows it. The scenario's clock times are today's, so on the wall
+ * clock what needs you changed through the day (from 15:00 the reminder's alert made it "4 need you"); the test
+ * pins the app's clock here instead. On a device (`nsh dev`) the scenario keeps the real clock.
+ */
+export const FIXTURE_NOW = new Date(2026, 10, 12, 14, 0).getTime();
+
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();

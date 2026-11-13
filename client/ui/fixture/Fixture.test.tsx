@@ -1,11 +1,12 @@
 import { describe, expect, open, test } from "nsh/test";
 import { phoneHost } from "../testing/fixtures";
-import { IDS, storage } from "./scenario";
+import { FIXTURE_NOW, IDS, storage } from "./scenario";
 
 const APP = "./FixtureApp.tsx";
 
 async function fixture() {
-  const app = await open(APP, { platform: "android", storage, host: phoneHost({}) });
+  // The scenario's times are today's clock times: the app's clock is pinned to the fixture's "now", never the wall clock.
+  const app = await open(APP, { platform: "android", storage, host: phoneHost({}), clock: { time: FIXTURE_NOW } });
   await app.waitFor("id:composer", { timeout: 10_000 });
   return app;
 }
