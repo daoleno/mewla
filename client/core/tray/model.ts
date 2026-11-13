@@ -271,7 +271,8 @@ function hasRequest(worker: Worker): boolean {
 
 /**
  * A Session as a tray row (§11 Tray row), here and in All Sessions: its logo, its title, what it is doing
- * in words; while it runs a live dot and how long it has run, else when it last changed.
+ * in words; while it runs a live dot and how long this run has gone on (the daemon's running_since; none without it,
+ * never the Session's age), else when it last changed.
  */
 export function sessionRow(worker: Worker, now: number, options: { alias?: string; workTitle?: string; calendarLabel?: string } = {}): TrayRow {
   const model = sessionRowModel(worker, options);
@@ -281,7 +282,7 @@ export function sessionRow(worker: Worker, now: number, options: { alias?: strin
     key: `session:${worker.id}`,
     title: model.title || withoutSessionId(worker.name) || "Session",
     line: model.line,
-    end: live ? elapsedShort(worker.running_since ?? worker.started_at, now) : listTime(worker.updated_at, new Date(now)),
+    end: live ? elapsedShort(worker.running_since, now) : listTime(worker.updated_at, new Date(now)),
     live: live || undefined,
     needs: hasRequest(worker) || undefined,
     tile: { kind: "agent", agent: model.kind, flavor: model.flavor },

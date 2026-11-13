@@ -29,13 +29,16 @@ function input(patch: Partial<TrayInput> = {}): TrayInput {
 describe("tray model", () => {
   test("a running Session's row: its words, a live dot and how long it has run; never the terminal's text nor a bare state word", () => {
     const m = trayModel(input({ workers: [
-      worker("a", { started_at: NOW - 12 * 60_000, phase: "working", summary: "⏸ manual mode on · ? for shortcuts", last_output_lines: ["⏸ manual mode on · ? for shortcuts"] }),
-      worker("b", { started_at: NOW - 4 * 60_000, phase: "working", summary: "Rerunning the suite" }),
+      worker("a", { started_at: NOW - 3 * 3_600_000, running_since: NOW - 12 * 60_000, phase: "working", summary: "⏸ manual mode on · ? for shortcuts", last_output_lines: ["⏸ manual mode on · ? for shortcuts"] }),
+      worker("b", { running_since: NOW - 4 * 60_000, phase: "working", summary: "Rerunning the suite" }),
+      worker("d", { started_at: NOW - 60 * 60_000, phase: "working", summary: "No run start reported" }),
       worker("c", { status: "unknown", summary: '"$MEWLA_WORKER_PROGRESS_CMD" worker progress', last_output_lines: ['"$MEWLA_WORKER_PROGRESS_CMD" worker progress'] }),
     ] }));
     // Nothing reported but the footer: which agent works where, not "Working" under Running.
     expect(m.running.find((r) => r.key === "session:a")).toMatchObject({ line: "Claude Code · mewla", end: "12m", live: true });
     expect(m.running.find((r) => r.key === "session:b")).toMatchObject({ line: "Rerunning the suite", end: "4m", live: true, progress: 3 });
+    // How long this run has gone on, never the Session's age: with no run start, only the live dot.
+    expect(m.running.find((r) => r.key === "session:d")).toMatchObject({ end: "", live: true });
     expect(m.idle[0]).toMatchObject({ key: "session:c", line: "Claude Code · mewla" });
     expect(m.idle[0]!.live).toBeUndefined();
     expect(JSON.stringify(m)).not.toContain("manual mode");
@@ -220,7 +223,7 @@ describe("tray model", () => {
     expect(m.today[0]!.target).toEqual({ open: "session", workerId: "w9" });
     // Not "Running": a run whose Session is not listed says when it started.
     expect(m.today[0]!.line).toBe("Started 9:00");
-    const listed = trayModel(input({ workers: [worker("w9", { started_at: NOW - 12 * 60_000, phase: "reading", summary: "Reading the news" })], today: [{ id: "run", title: "Brief", time: "9:00", at: at(9), running: true, sessionId: "w9" }] }));
+    const listed = trayModel(input({ workers: [worker("w9", { running_since: NOW - 12 * 60_000, phase: "reading", summary: "Reading the news" })], today: [{ id: "run", title: "Brief", time: "9:00", at: at(9), running: true, sessionId: "w9" }] }));
     expect(listed.today[0]).toMatchObject({ line: "Reading the news", end: "12m", live: true });
     expect(m.todayCount).toBe(5);
   });
