@@ -63,6 +63,8 @@ export function showRequestCard(key: string): void {
   revealRequests.set(revealRequests() + 1);
 }
 const activity = computed(() => brainThread().conversation?.activity);
+/** The person's sends from Brain's composer: each brings the sent message to the top of the thread (as a Session's do). */
+const brainSends = signal(0);
 /** The activity a Stop was sent for: the button says "Stopping…" until that turn ends. */
 const stoppingFor = signal("");
 const timeline = createChatTimeline("brain");
@@ -310,7 +312,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
       <Each of={shows().startsWith("chat:") ? [shows()] : []} key={(thread) => thread}>{(thread) => (
         // Its reading place is kept by computer and thread: made again (a hot patch to this page, a past thread and
         // back) it opens where the person had read back to, or at its end.
-        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} capsule={props.capsule} scope={`brain:${untracked(current)?.id ?? ""}:${thread()}`}
+        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} sent={brainSends} capsule={props.capsule} scope={`brain:${untracked(current)?.id ?? ""}:${thread()}`}
           empty={() => (
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
             // 15 s; "What should Brain do?" only after a read that succeeded.
@@ -341,7 +343,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
 
 function Composer(props: { text: ReturnType<typeof createComposerText>; editor: ReturnType<typeof createMessageEdit> }) {
   const editor = props.editor;
-  const tools = createBrainComposer({ text: props.text, onOpenTerminal: (id) => openBrainTerminal(id), onNotice: (text) => notice.set(text) });
+  const tools = createBrainComposer({ text: props.text, onOpenTerminal: (id) => openBrainTerminal(id), onNotice: (text) => notice.set(text), onSent: () => brainSends.set(untracked(brainSends) + 1) });
   const block = () => brainComposerBlock({ surface: surface(), snapshot: brain(), chat: chatState() });
   const pairAgain = () => tray().state.kind === "pair";
   const placeholder = () => (connection() === "connected" ? "Tell Brain" : "Sends when back online");
