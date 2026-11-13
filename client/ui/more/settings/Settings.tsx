@@ -4,7 +4,7 @@ import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/
 import manifest from "../../nsh.json";
 import { phoneAvailable, phoneLabsWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
-import { Page, Row, RowButton, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { Page, Row, RowButton, Section, SwitchRow } from "../../kit/kit";
 import { StateLine, tile } from "../../kit/RowTile";
 import { followFriends, friendsEnabled } from "../friends/state";
 import { pet } from "../../pets/pets";
@@ -128,8 +128,9 @@ export function Settings(props: { nav: PageNav }) {
           title="Telegram"
           subtitle={current() ? telegramRow().subtitle : "No current server"}
           disabled={!current()}
+          // While the first read runs the value stays empty: an endless spinner here kept the app from ever going quiet.
           trailing={!current() ? undefined
-            : telegramRow().loading ? <Spinner size={16} />
+            : telegramRow().loading ? undefined
             : telegramRow().connect ? <RowButton testID="settings-telegram-connect" label="Connect" accessibilityLabel="Connect Telegram" onPress={() => props.nav.push({ name: "settings-telegram" })} />
             : telegramRow().tone && telegramRow().label ? <StateLine testID="settings-telegram-state" tone={telegramRow().tone!} label={telegramRow().label!} />
             : undefined}
