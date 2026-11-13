@@ -193,8 +193,8 @@ export function ComputerPage(props: {
   const updateRow = (): FixRow | null => (optional() ? { key: "update-optional", title: `Update available · ${optional()}`, button: "Update", action: { kind: "update" }, blocking: false } : null);
 
   return (
-    <Page title="" testID="computer-page">
-      <CatHeader nav={props.nav} />
+    // The header block is the page's own title: the name joins Back in the capsule once it has scrolled away.
+    <Page title={current()?.name || current()?.url || "Computer"} display hero={<CatHeader nav={props.nav} />} testID="computer-page">
       {removedNotice() ? (
         <Notice testID="removed-notice" tone="failed" title={removedNotice()!.title} detail={removedNotice()!.detail} action="OK" onAction={() => removedNotice.set(null)} />
       ) : null}

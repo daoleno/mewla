@@ -116,6 +116,13 @@ export interface StateControlModel {
   ink: boolean;
   /** Pair again has no chevron: its tap goes straight to pairing. */
   chevron: boolean;
+  /** "N need you" and "N running": the N, which a collapsed capsule shows after the dot ("● 3"). */
+  count?: number;
+}
+
+/** The state control's words in a collapsed capsule (SPEC §11): the count for need you and running, else the words. */
+export function stateShortWords(state: StateControlModel): string {
+  return (state.kind === "needs" || state.kind === "running") && state.count ? String(state.count) : state.words;
 }
 
 export type TrayNoticeAction = "try_again" | "details" | "pair_again" | "use_suggested" | "switch_executor";
@@ -376,9 +383,9 @@ function stateOf(input: TrayInput, needs: number, running: number, quiet = ""): 
   if (input.connection !== "connected") return s("offline", "Offline", "ring", false);
   if (input.surface === "host_down") return s("cant_start", "Can't start", "seal", true);
   // What waits on you outranks Brain still starting: a Session's request can be answered meanwhile.
-  if (needs > 0) return s("needs", needs === 1 ? "1 needs you" : `${needs} need you`, "seal", true);
+  if (needs > 0) return { ...s("needs", needs === 1 ? "1 needs you" : `${needs} need you`, "seal", true), count: needs };
   if (input.surface === "waking") return s("starting", "Starting…", "ring", false);
-  if (running > 0) return s("running", `${running} running`, "ink", true);
+  if (running > 0) return { ...s("running", `${running} running`, "ink", true), count: running };
   // SPEC §1.2 The count: "All quiet" only when Running is empty; queued or waiting rows say so, soft, no dot.
   return s("quiet", quiet || "All quiet", null, false);
 }

@@ -1,12 +1,14 @@
-import { colorScheme, context, platform, split, Text, View } from "nsh";
+import { colorScheme, context, effect, platform, safeArea, split, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
 import { Button, NavPage as BaseNavPage, type NavPageProps, type StatusBar } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
+import { CAPSULE, capsulePageInset } from "../../core/shell/capsule";
 import { statusBarForeground } from "../../core/settings/statusBar";
 import { backMark } from "../../core/tray/model";
 import { nativeHeaderTitleWidth, pageColumnWidth, type PageColumn } from "../../core/web/places";
 import { tray } from "../tray/state";
 import { Icon } from "../kit/Icon";
+import { Capsule, createCapsule } from "./Capsule";
 import { stackWidth, wide } from "./layout";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
@@ -23,6 +25,13 @@ export type AppNavPageProps = NavPageProps & {
    * and the web keep the page's header from `headerTitle`.
    */
   capsule?: JSX.Element;
+  /**
+   * A pushed page on a phone pads its own scroll for the capsule (`capsulePageInset`) and its content scrolls
+   * under it; without, the page's content starts below the capsule.
+   */
+  capsuleUnder?: boolean;
+  /** Whether the page has controls of its own for the capsule (default: whether it passes `headerRight`). */
+  capsuleControls?: boolean;
 };
 
 /**
@@ -62,13 +71,30 @@ export function NavPage(props: AppNavPageProps) {
   const stack = PageStack();
   /** Back's connection mark on a pushed page (SPEC §1.3); null when connected or on the stack's first page. */
   const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
-  if (mobile && platform.idiom === "phone" && "capsule" in props) {
-    const [own, rest] = split(props, ["capsule", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
+  const phone = mobile && platform.idiom === "phone";
+  if (phone && "capsule" in props) {
+    const [own, rest] = split(props, ["capsule", "capsuleUnder", "capsuleControls", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
     return (
       <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
         <View class="flex-1">
           {own.children}
           {own.capsule}
+        </View>
+      </BaseNavPage>
+    );
+  }
+  // Every other pushed page on a phone (SPEC §11: Settings, the computer page, every pushed page): the capsule
+  // holds Back, and the title and the page's controls whenever the page's own title is not on screen. A page that
+  // shows and hides its header itself (Screen's full bleed, black in both themes) keeps the system's.
+  if (phone && !("headerVisible" in props) && untracked(stack.canGoBack)) {
+    const [own, rest] = split(props, ["capsuleUnder", "capsuleControls", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
+    const under = untracked(() => Boolean(own.capsuleUnder));
+    const controls = "capsuleControls" in props ? untracked(() => Boolean(own.capsuleControls)) : "headerRight" in props;
+    return (
+      <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
+        <View class="flex-1">
+          {under ? own.children : <View class="flex-1" style={{ paddingTop: capsulePageInset(safeArea().top) }}>{own.children}</View>}
+          <PageCapsule title={() => props.title ?? ""} controls={controls} right={() => own.headerRight} />
         </View>
       </BaseNavPage>
     );
@@ -100,10 +126,10 @@ export function NavPage(props: AppNavPageProps) {
       ) : ownTitle ? <View class="flex-row items-center" style={{ width: titleWidth() }}>{slots.headerTitle}</View> : slots.headerTitle;
     // A phone never reaches 1024 pt: its pages stay the system's own, with nothing around their content.
     if (platform.idiom === "phone") {
-      const [own, rest] = split(page, ["column", "frame", "class", "headerClass", "statusBar"]);
+      const [own, rest] = split(page, ["capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar"]);
       return <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;
     }
-    const [own, rest] = split(page, ["column", "frame", "class", "headerClass", "statusBar", "children"]);
+    const [own, rest] = split(page, ["capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar", "children"]);
     return (
       <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)}>
         <Column width={width}>{own.children}</Column>
@@ -111,7 +137,7 @@ export function NavPage(props: AppNavPageProps) {
     );
   }
   // Read once each, into the one header: forwarded too, they would be made twice.
-  const [own, rest] = split(props, ["header", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children", "class"]);
+  const [own, rest] = split(props, ["header", "capsuleUnder", "capsuleControls", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children", "class"]);
   const headerWidth = () => pageColumnWidth(own.column ?? "page");
   return (
     <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`}
@@ -147,6 +173,33 @@ function PageHeader(props: {
         {props.right ? <View class="flex-row items-center gap-3">{props.right}</View> : null}
       </View>
     </View>
+  );
+}
+
+/**
+ * A pushed page's capsule (SPEC §11): Back alone, a 44 circle, while the page's own title is on screen (its
+ * `title` is empty then); with the title, Back, the title 17/600 and the page's controls. A page with
+ * controls of its own keeps them in reach: its capsule holds them with or without the title. It never
+ * collapses while the person reads.
+ */
+function PageCapsule(props: { title: () => string; controls: boolean; right: () => JSX.Element | undefined }) {
+  const alone = () => !props.title() && !props.controls;
+  const capsule = createCapsule({ collapsed: untracked(alone) });
+  effect(() => {
+    const backOnly = alone();
+    untracked(() => (backOnly ? capsule.collapse() : capsule.expand()));
+  });
+  return (
+    <Capsule collapsed={capsule.collapsed} alone={() => true}>
+      <CapsuleBack />
+      {capsule.collapsed() ? null : (
+        <>
+          <Text testID="page-title" role="header" class="min-w-0 flex-1 font-semibold text-foreground line-clamp-1"
+            style={{ fontSize: CAPSULE.pageTitle.size, lineHeight: CAPSULE.pageTitle.line, marginLeft: 4 }}>{props.title()}</Text>
+          {props.controls ? <View class="flex-row items-center pr-1">{props.right() ?? null}</View> : null}
+        </>
+      )}
+    </Capsule>
   );
 }
 

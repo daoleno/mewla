@@ -46,20 +46,21 @@ effect(() => {
  * holds still while the person scrolls or types and while a page is pushed over home. The bleed
  * clips rise above the 40 pt box: nothing here clips them, and the header keeps its height.
  */
-export function HomeCat(props: { onPress?: () => void }) {
+export function HomeCat(props: { onPress?: () => void; /** The still's size (40) and its round target's (48); the capsule's are 32 and 44. */ size?: number; box?: number }) {
   const canMove = () => homeShown() && !scrolling() && keyboardFrame().height === 0;
+  const box = props.box ?? 48;
   const mark = () => (
     <>
-      <PetSprite testID="home-cat-sprite" state={state} size={40} mode="once" canMove={canMove} delivered={delivered} />
+      <PetSprite testID="home-cat-sprite" state={state} size={props.size ?? 40} mode="once" canMove={canMove} delivered={delivered} />
       {catNeedsYou() ? <View testID="home-cat-dot" accessibilityLabel="Needs you" class="absolute right-1 top-1 size-[14px] rounded-full border-2 border-background bg-seal" /> : null}
     </>
   );
   // Without onPress it is part of a larger target (the home header's left block), not a button of its own.
   return props.onPress ? (
-    <Button testID="home-cat" accessibilityLabel="Computer" onPress={props.onPress} class="size-12 items-center justify-center rounded-full active:bg-accent" style={{ overflow: "visible" }}>
+    <Button testID="home-cat" accessibilityLabel="Computer" onPress={props.onPress} class="items-center justify-center rounded-full active:bg-accent" style={{ overflow: "visible", width: box, height: box }}>
       {mark()}
     </Button>
   ) : (
-    <View testID="home-cat-mark" class="size-12 items-center justify-center" style={{ overflow: "visible" }}>{mark()}</View>
+    <View testID="home-cat-mark" class="items-center justify-center" style={{ overflow: "visible", width: box, height: box }}>{mark()}</View>
   );
 }

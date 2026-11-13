@@ -4,16 +4,23 @@ import { expoTokenService, paired, pairedTwo, phoneHost } from "../testing/fixtu
 const APP = "../FakeDaemonApp.tsx";
 
 describe("home's header", () => {
-  test("one computer: its name under \"Brain\" with a chevron, the whole block one target; the composer says \"Tell Brain\", no ellipsis", async () => {
+  test("one computer: the capsule says \"Brain\" alone, the cat its own button to the computer page; the composer says \"Tell Brain\", no ellipsis", async () => {
     const app = await open(APP, { platform: "android", storage: paired, network: expoTokenService, host: phoneHost({ brain: {} }) });
-    await app.waitFor("id:home-header", { timeout: 10_000 });
+    await app.waitFor("id:capsule", { timeout: 10_000 });
     await app.waitFor("text:Starting…", { timeout: 10_000 });
-    // Where I am, as a control of the state control's kind (owner 11-13: the cat alone does not say "tap me").
-    expect(app.shows("id:home-computer")).toBe(true);
+    // SPEC §11: the computer's name only with two or more computers.
+    expect(app.shows("id:home-title")).toBe(true);
+    expect(app.shows("id:home-computer")).toBe(false);
     expect(app.count("id:home-cat")).toBe(1);
-    expect(app.shows("id:home-cat-mark")).toBe(true);
+    expect(app.shows("id:home-cat-sprite")).toBe(true);
     expect(app.shows("text:Tell Brain")).toBe(true);
     expect(app.shows("text:Tell Brain…")).toBe(false);
+    // The cat is the door to the computer page, whose capsule is Back alone while its own title shows.
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-page");
+    await app.waitFor("id:capsule-collapsed");
+    expect(app.shows("id:page-back")).toBe(true);
+    expect(app.shows("id:page-title")).toBe(false);
   }, 20_000);
 
   test("two computers: the current one's name under \"Brain\" (SPEC §11 Home header)", async () => {

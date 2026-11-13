@@ -1,5 +1,7 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
-import { announce, Canvas, Clipboard, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
+import { announce, Canvas, Clipboard, effect, platform, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
+import { isAvailable as mobile } from "nsh/mobile";
+import { CAPSULE, capsulePageInset } from "../../core/shell/capsule";
 import { Button, Input, Switch } from "nsh/base";
 import { PAGE_COLUMN_WIDTH } from "../../core/web/places";
 import { wide } from "../shell/layout";
@@ -53,9 +55,14 @@ export function Page(props: {
   // Whether the display title is on screen: the nav bar names the page once it has scrolled away.
   const display = untracked(() => Boolean(props.display));
   const titleAway = signal(!display);
+  // On a phone the capsule floats over the page (SPEC §11): the content is padded for it and scrolls under it,
+  // and the title joins Back in the capsule once it has scrolled past 50.
+  const capsuled = mobile && platform.idiom === "phone";
+  const away = capsuled ? CAPSULE.titleAway : DISPLAY_TITLE_AWAY;
   const scroll = (
-    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={props.refreshing} onRefresh={props.onRefresh}
-      onScroll={display ? (e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY) : undefined} scrollEventThrottle={display ? 64 : undefined}>
+    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2"
+      contentStyle={capsuled ? { paddingTop: capsulePageInset(safeArea().top) + 8 } : undefined} refreshing={props.refreshing} onRefresh={props.onRefresh}
+      onScroll={display ? (e) => titleAway.set(e.offset.y > away) : undefined} scrollEventThrottle={display ? 64 : undefined}>
       <View class="w-full self-center" style={{ maxWidth: width() }}>
         {display ? (props.hero ?? <DisplayTitle eyebrow={props.eyebrow} title={props.displayTitle ?? props.title} />) : null}
         {props.children}
@@ -65,7 +72,7 @@ export function Page(props: {
   // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
   const withAside = untracked(() => props.aside !== undefined);
   return (
-    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column="page" frame={false}>
+    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column="page" frame={false} capsuleUnder capsuleControls={"headerRight" in props}>
       <View class="flex-1 bg-background">
         {withAside ? <View class="flex-1 flex-row">{scroll}{props.aside}</View> : scroll}
         {props.overlay ?? null}
