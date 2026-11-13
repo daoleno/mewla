@@ -197,6 +197,11 @@ export class TerminalSession {
     if (this.sessionId) this.send({ type: "terminal_focus_pane", session_id: this.sessionId, col, row });
   }
 
+  /** Try again after the attachment failed to open ("Couldn't attach"): opens it now, if it is not open or opening. */
+  retry(): void {
+    this.open();
+  }
+
   /** Ask for the history again (after "History could not load"). */
   retryHistory(): void {
     this.feed.retry();
