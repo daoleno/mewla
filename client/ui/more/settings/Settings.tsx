@@ -2,7 +2,7 @@ import { cleanup, effect, host, openUrl, platform, signal, Storage, setColorSche
 import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
-import { phoneAvailable, phoneLabsWord } from "../../phone";
+import { phoneAvailable, phoneStateWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
 import { Page, Row, RowButton, Section, SwitchRow } from "../../kit/kit";
 import { StateLine, tile } from "../../kit/RowTile";
@@ -50,11 +50,11 @@ function readAlertCapabilities(): void {
 
 /**
  * A browser is served by its computer and has no phone, alerts or iPhone of its own to
- * offer: Labs keeps only Virtual screen there, and the Calendar section goes (as v0.3.1).
+ * offer: Phone use, Labs and the Calendar section go there (as v0.3.1).
  */
 const onWeb = () => platform.os === "web";
 
-/** iPhone use on the current computer; Labs shows the row only where it is offered (a Mac). */
+/** iPhone use on the current computer; its row shows only where it is offered (a Mac). */
 const iphone = signal<IPhoneDaemonStatus | null>(null);
 let iphoneFor = "";
 
@@ -157,14 +157,15 @@ export function Settings(props: { nav: PageNav }) {
           chevron
           onPress={current() ? () => props.nav.push({ name: "settings-agents" }) : undefined}
         />
+        <If when={daemon() && !virtualScreenState().unsupported}><Row testID="settings-virtual-screen" lead={tile("desktop")} title="Virtual screen" value={virtualScreenState().enabled ? "On" : virtualScreenState().enabled === false ? "Off" : undefined} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /></If>
+        <If when={!onWeb() && phoneAvailable()}><Row testID="settings-phone" lead={tile("phone")} title="Phone use" value={phoneStateWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /></If>
       </Section>
 
-      <Section title="Labs">
-        <If when={daemon() && !virtualScreenState().unsupported}><Row testID="settings-virtual-screen" lead={tile("desktop")} title="Virtual screen" value={virtualScreenState().enabled ? "On" : virtualScreenState().enabled === false ? "Off" : undefined} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /></If>
-        <If when={!onWeb()}><Row testID="settings-friends" lead={tile("people")} title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} /></If>
-        <If when={!onWeb() && phoneAvailable()}><Row testID="settings-phone" lead={tile("phone")} title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /></If>
-        <If when={!onWeb() && iphoneOffered(iphone())}><Row testID="settings-iphone" lead={tile("phone")} title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /></If>
-      </Section>
+      {/* Labs: Friends and iPhone use, still trials. A browser offers neither, so there the section goes. */}
+      <If when={!onWeb()}><Section title="Labs">
+        <Row testID="settings-friends" lead={tile("people")} title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
+        <If when={iphoneOffered(iphone())}><Row testID="settings-iphone" lead={tile("phone")} title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /></If>
+      </Section></If>
 
       <If when={!onWeb()}><Section title="Calendar">
           <SwitchRow testID="strong-alerts" lead={tile("bell")} title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />

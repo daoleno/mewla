@@ -165,7 +165,7 @@ func TestPhoneUseThroughTheControlSocket(t *testing.T) {
 	}
 
 	// Phone use is off until the person turns it on, and the tool says where.
-	if r, raw := call(session, "phone_screen", nil); !r.IsError || !strings.Contains(raw, "Phone use is off: turn it on in Settings → Labs") {
+	if r, raw := call(session, "phone_screen", nil); !r.IsError || !strings.Contains(raw, "Phone use is off: turn it on in Settings → Agents → Phone use") {
 		t.Fatalf("off: %s", raw)
 	}
 	if _, err := agents.SetPhoneEnabled(true); err != nil {

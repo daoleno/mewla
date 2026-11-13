@@ -90,7 +90,7 @@ turns it off for Codex Workers started afterwards. See
 
 ## Phone use
 
-With **Phone use** on (Labs, Android, GitHub APK), agents Mewla starts on your
+With **Phone use** on (Android, GitHub APK), agents Mewla starts on your
 computer can use your phone on a hidden screen of its own. The phone connects to
 the computer it is currently using over the same signed connection and takes
 requests from that computer only; a request must name a running Mewla Worker.

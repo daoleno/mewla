@@ -775,7 +775,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
 	// The agent screen: one display for the computer with a monitor for each
-	// agent (Linux, Labs). Desktop apps open on an agent's monitor, and so
+	// agent (Linux, with Virtual screen on). Desktop apps open on an agent's monitor, and so
 	// does its browser window.
 	displayService := vdisplay.NewService("")
 	displayService.SetAlive(controlHandler.liveWorker)

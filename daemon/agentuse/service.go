@@ -104,9 +104,9 @@ type settings struct {
 	// Off is stored instead of "enabled" so a missing file means on.
 	Off bool   `json:"off,omitempty"`
 	Key string `json:"pasted_key,omitempty"`
-	// Phone is Phone use, a Labs feature: stored as on, so a missing file means off.
+	// Phone is Phone use, off until the person turns it on: stored as on, so a missing file means off.
 	Phone bool `json:"phone,omitempty"`
-	// IPhone is iPhone use, a Labs feature, stored the same way.
+	// IPhone is iPhone use (Labs), stored the same way.
 	IPhone bool `json:"iphone,omitempty"`
 }
 

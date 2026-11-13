@@ -46,7 +46,7 @@ func (a *controlApp) handlePhoneControl(req control.Request) control.Response {
 	if !a.agentUse.PhoneReady() {
 		// Turned off from another process: let go of the phone too.
 		a.phone.Release()
-		return control.ErrorResponse("phone_off", "Phone use is off: turn it on in Settings → Labs")
+		return control.ErrorResponse("phone_off", "Phone use is off: turn it on in Settings → Agents → Phone use")
 	}
 	if !a.liveWorker(req.WorkerID) {
 		return control.ErrorResponse("phone_denied", "Only a running Mewla Worker can use the phone")

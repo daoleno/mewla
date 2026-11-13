@@ -288,7 +288,20 @@ describe("iPhone use", () => {
   });
 });
 
-describe("Labs", () => {
+describe("Virtual screen and Phone use", () => {
+  test("Virtual screen is a row of Agents, not of Labs, and Labs keeps Friends", async () => {
+    const c = computer({ name: "settings" }, () => null, {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "POST http://desk.test:9877/browser": json({ virtual_screen: false }) },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:settings-virtual-screen");
+    const texts = app.texts();
+    const at = (word: string) => texts.indexOf(word);
+    expect(at("Agents")).toBeLessThan(at("Virtual screen"));
+    expect(at("Virtual screen")).toBeLessThan(at("Labs"));
+    expect(at("Labs")).toBeLessThan(at("Friends"));
+  });
+
   test("Virtual screen shows the computer's switch and opens its page, which turns it on", async () => {
     let on = false;
     const c = computer({ name: "settings" }, () => null, {
@@ -319,7 +332,7 @@ describe("Labs", () => {
     });
     const app = await open(HARNESS, c.options);
     await app.waitUntil(() => app.requests().some((r) => r.url === "http://desk.test:9877/browser"));
-    await app.waitFor("text:Labs");
+    await app.waitFor("text:Outside agents");
     expect(app.shows("id:settings-virtual-screen")).toBe(false);
   });
 
@@ -330,19 +343,21 @@ describe("Labs", () => {
     const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, handlers } });
     await app.waitFor("id:settings-phone");
     expect(app.texts()).toContain("Off");
+    // A row of Agents, above Labs.
+    expect(app.texts().indexOf("Phone use")).toBeLessThan(app.texts().indexOf("Labs"));
     await app.press("id:settings-phone");
     await app.waitFor("id:phone-page");
 
     const play = computer({ name: "settings" }, () => null, { platform: "android", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
     const other = await open(HARNESS, play.options);
-    await other.waitFor("text:Labs");
+    await other.waitFor("text:Outside agents");
     expect(other.shows("id:settings-phone")).toBe(false);
   });
 
   test("on iOS there is no Phone use row", async () => {
     const c = computer({ name: "settings" }, () => null, { platform: "ios", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("text:Labs");
+    await app.waitFor("text:Outside agents");
     expect(app.shows("id:settings-phone")).toBe(false);
   });
 });
@@ -351,7 +366,7 @@ describe("In a browser", () => {
   const mac = { enabled: true, state: "ready", summary: "Agents on Studio can use your iPhone." };
   const alertCalls = ["calendar.alertsSetStrong", "calendar.alertsCapabilities", "calendar.alertsOpenSettings", "phone.status", "phone.follow"];
 
-  test("Labs offers only Virtual screen; no Friends, Phone use, iPhone use or Calendar section, and nothing asks the device", async () => {
+  test("Virtual screen is offered; no Labs (Friends, iPhone use), Phone use or Calendar section, and nothing asks the device", async () => {
     const c = computer({ name: "settings" }, () => null, {
       platform: "web",
       network: {
@@ -366,6 +381,7 @@ describe("In a browser", () => {
     await app.waitFor("id:settings-virtual-screen");
     for (const id of ["settings-friends", "settings-phone", "settings-iphone", "strong-alerts", "full-screen-alerts"]) expect(app.shows(`id:${id}`)).toBe(false);
     expect(app.texts()).not.toContain("Calendar");
+    expect(app.texts()).not.toContain("Labs");
     for (const word of ["Appearance", "Pet", "About", "Privacy Policy", "Support", "Open-source Licenses"]) expect(app.texts()).toContain(word);
     await app.wait(200);
     expect(app.requests().some((r) => r.url.startsWith("http://desk.test:9877/iphone"))).toBe(false);
