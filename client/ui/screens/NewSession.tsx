@@ -1,4 +1,4 @@
-import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { effect, keyboardFrame, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import { Delayed, Rows } from "../kit/wait";
 import { Button } from "nsh/base";
 import { Sheet } from "../kit/Sheet";
@@ -14,6 +14,13 @@ import { startedWithFirstMessage } from "./firstMessage";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { projectName } from "../../core/work/surface";
 import type { Worker } from "../../core/sessions/workers";
+import { sheetScrollHeight } from "../../core/shell/sheetFit";
+
+/**
+ * The sheet around the list: grabber 13, title 55, the sheet's foot 32, and under the list 8 + Start's 8 + 52,
+ * with a few points to spare.
+ */
+const START_CHROME = 176;
 
 /** Open from the Sessions list (its + and its empty state). */
 export const newSessionOpen = signal(false);
@@ -58,7 +65,8 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
   };
   void load(props.start);
   return (
-    <View class="gap-3 px-4" style={{ height: 440 }}>
+    // Its path row, list and buttons fill the sheet under its title (grabber, title and foot: 100), up to 440.
+    <View class="gap-3 px-4" style={{ height: sheetScrollHeight({ window: windowSize().height, keyboard: keyboardFrame().height, chrome: 100, cap: 440, floor: 200 }) }}>
       <View class="min-h-[44px] flex-row items-center gap-2">
         <Button testID="dir-up" accessibilityLabel="Up a folder" onPress={() => void load(parentDirectoryPath(path()))} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="arrow-up" size={20} tone="ink" /></Button>
         <Text class="min-w-0 flex-1 font-mono text-code line-clamp-1">{path() || "Home"}</Text>
@@ -201,8 +209,8 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     <Sheet testID="new-session-sheet" open={newSessionOpen} onClose={() => newSessionOpen.set(false)}
       title={() => (picking() ? "Choose a folder" : newSessionTarget() ? "New terminal" : "New session")}>
       <If when={picking()} else={<View class="px-4 pb-2">
-          {/* Agent and Folder scroll; Start stays in view under them. */}
-          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
+          {/* Agent and Folder scroll; Start stays in view under them, on a short window and over the keyboard too. */}
+          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: sheetScrollHeight({ window: windowSize().height, keyboard: keyboardFrame().height, chrome: START_CHROME, cap: 520 }) }}>
             <If when={!advanced()} else={<Section sheet title="Command">
                 <Field testID="new-command" accessibilityLabel="Command" mono value={command()} placeholder="Login shell" onChange={(value) => command.set(value)} />
                 <View class="flex-row flex-wrap gap-2 px-4 pb-3">
