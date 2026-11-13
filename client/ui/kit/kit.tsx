@@ -266,7 +266,10 @@ export interface RowProps {
   /** The title is a state's words (a Needs fixing row, SPEC §10.4): `warn` and `error` colour it. */
   titleTone?: StateTone;
   value?: string;
-  /** The value is being read (SPEC §16.2 pattern 4): the 16 pt ring in its place from `wait.quiet`; the row is there from the start. */
+  /**
+   * The value is being read (SPEC §16.2 pattern 4): the 16 pt ring in its place from `wait.quiet`; the row is there
+   * from the start. Only for a read that ends: a ring that keeps turning keeps `nsh test` from ever going quiet.
+   */
   reading?: boolean;
   icon?: IconName;
   /** Behind the first level (SPEC §10.4): the row's mark, art or tiled glyph, in place of a grey `icon`. */
