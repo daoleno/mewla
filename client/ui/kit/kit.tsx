@@ -260,6 +260,8 @@ export interface RowProps {
   subtitle?: string;
   /** The subtitle is a state's words (SPEC §10.4): `warn` and `error` colour it, the rest stay soft. */
   subtitleTone?: StateTone;
+  /** The title is a state's words (a Needs fixing row, SPEC §10.4): `warn` and `error` colour it. */
+  titleTone?: StateTone;
   value?: string;
   icon?: IconName;
   /** Behind the first level (SPEC §10.4): the row's mark, art or tiled glyph, in place of a grey `icon`. */
@@ -292,7 +294,7 @@ export function Row(props: RowProps) {
     <View class={`min-h-[56px] flex-row items-center px-4 py-3 ${props.lead ? "gap-3.5" : "gap-3"}`}>
       {props.leading ?? (props.lead ? <RowTile lead={props.lead} /> : props.icon ? <Icon name={props.icon} size={24} tone={props.destructive ? "ink" : "soft"} /> : null)}
       <View class="min-w-0 flex-1">
-        <Text class={props.destructive ? "text-body text-destructive" : props.mono ? "font-mono text-code" : "text-body"} style={{ numberOfLines: 2 }}>{props.title}</Text>
+        <Text class={props.destructive ? "text-body text-destructive" : props.mono ? "font-mono text-code" : "text-body"} style={props.titleTone === "warn" || props.titleTone === "error" ? { numberOfLines: 2, color: color(stateTextColor(props.titleTone)) } : { numberOfLines: 2 }}>{props.title}</Text>
         {props.subtitle ? <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-3" style={props.subtitleTone ? { color: color(stateTextColor(props.subtitleTone)) } : undefined}>{props.subtitle}</Text> : null}
       </View>
       {props.value ? <Text class="max-w-[50%] text-right text-body text-muted-foreground line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text> : null}
