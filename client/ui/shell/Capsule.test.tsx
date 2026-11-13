@@ -90,6 +90,18 @@ describe("a Session's capsule header (SPEC §11)", () => {
     await app.waitFor("id:session-chat");
     expect(app.shows("id:capsule")).toBe(true);
   }, 30_000);
+
+  test("a terminal Session's collapsed capsule has its mark bare, in its own box, not the terminal's tile (owner 11-13: the tile sat on the name)", async () => {
+    const shell = { id: "t1", name: "mewla-nsh-client", status: "running", cwd: "/home/me/mewla-nsh-client", command: "zsh", updated_at: Date.now() };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [shell], conversations: { "brain-host": [] } }) });
+    await app.host.send("links.open", { url: "mewla://sessions/t1" });
+    await app.waitFor("id:capsule-collapsed", { timeout: 10_000 });
+    expect(app.shows("id:session-status")).toBe(true);
+    expect(app.count("id:capsule-collapsed >> id:agent-tile")).toBe(0);
+    await app.press("id:capsule-name");
+    await app.waitFor("id:capsule");
+    expect(app.count("id:capsule >> id:agent-tile")).toBe(0);
+  }, 30_000);
 });
 
 describe("Brain's capsule header (SPEC §11)", () => {

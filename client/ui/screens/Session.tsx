@@ -536,7 +536,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   // The agent's mark, with a red dot at its corner while it needs you (present or absent: a shape, not a colour pair).
   const mark = () => (
     <View style={{ width: CAPSULE.mark, height: CAPSULE.mark }}>
-      <AgentIcon kind={kind()} size={CAPSULE.mark} />
+      {/* Its slot is the mark's own box: the default slot (16 larger) spilled out of it, low and over the name. */}
+      <AgentIcon kind={kind()} size={CAPSULE.mark} slot={CAPSULE.mark} bare />
       <If when={needsYou()}>
         <View testID="capsule-needs-you" accessibilityLabel="Needs you" class="absolute rounded-full border-sheet-surface bg-seal"
           style={{ width: CAPSULE.dot.size, height: CAPSULE.dot.size, borderWidth: CAPSULE.dot.ring, right: CAPSULE.dot.right, bottom: CAPSULE.dot.bottom }} />
