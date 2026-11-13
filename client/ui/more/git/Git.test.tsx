@@ -163,6 +163,19 @@ describe("Git review", () => {
     await app.waitUntil(() => repo.asked.some((r) => r.type.endsWith("pull")));
   });
 
+  test("pushed on a phone (owner 11-13, shot 09): the capsule is Back and ⋯ side by side while the repository's title shows, and takes the name once it has scrolled under", async () => {
+    const repo = repository([app_ts, notes_md, done_ts, ...Array.from({ length: 20 }, (_, i) => ({ ...app_ts, path: `src/f${i}.ts` }))]);
+    const app = await open(HARNESS, { platform: "android", host: { params: { page: PAGE, below: { name: "stats" }, pageStack: true }, handlers: repo.options.host.handlers } });
+    await app.waitFor("id:git-row-changes:app.ts");
+    await app.waitFor("id:capsule-collapsed");
+    expect(app.shows("id:page-back")).toBe(true);
+    expect(app.shows("id:git-more")).toBe(true);
+    expect(app.shows("id:page-title")).toBe(false);
+    await app.scroll("id:git-list", 400);
+    await app.waitFor("id:page-title");
+    expect(app.texts().filter((t) => t === "repo").length).toBeGreaterThan(0);
+  });
+
   test("in step with its upstream and clean: no sync pill, and the clean state has no button (Browse files is in ⋯)", async () => {
     const repo = repository([]);
     const app = await open(HARNESS, repo.options);

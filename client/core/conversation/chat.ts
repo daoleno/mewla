@@ -85,6 +85,8 @@ export class Chat {
     const message = this.state.pendingUserMessages.find((m) => m.id === rowId && m.lifecycle === "failed");
     if (!message) return;
     const { outbox, serverId, target } = this.options;
+    // A message the computer holds is never the phone's to send (a new Session's first): no retry makes it twice.
+    if (outbox.get(message.dispatchRequestId)?.state === "held") return;
     if (action === "discard") {
       outbox.discard(message.dispatchRequestId);
       this.rowByRequest.delete(message.dispatchRequestId);
