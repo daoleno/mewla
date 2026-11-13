@@ -26,6 +26,21 @@ describe("requests in Brain's thread", () => {
     expect(app.texts()).not.toContain("1 needs you");
   }, 20_000);
 
+  test("answering waits in place, never optimistic: the ring in the pressed button, \"Didn't reach Desk\" at the 8 s bound, the buttons back", async () => {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session("docs", { delegated: true, approvals: [approval("a1", "git push origin main")] })] }) });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    await app.wait(500);
+    await app.press("id:prompt-option-allow");
+    await app.wait(300);
+    expect(app.shows("id:request-ring")).toBe(true);
+    expect(app.texts()).not.toContain("Approved");
+    expect(app.texts().some((text) => /Sending/.test(text))).toBe(false);
+    await app.waitFor("id:request-failed", { timeout: 10_000 });
+    expect(app.texts()).toContain("Didn't reach Desk");
+    expect(app.shows("id:request-ring")).toBe(false);
+    expect(app.enabled("id:prompt-option-allow")).toBe(true);
+  }, 25_000);
+
   test("several open requests stack: the oldest open, the rest as rows; a row opens instead; a tray row brings its card", async () => {
     const app = await open(APP, {
       platform: "android", storage: paired,

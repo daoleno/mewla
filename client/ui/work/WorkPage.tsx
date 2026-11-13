@@ -17,6 +17,8 @@ import { brainDraft, connection, currentTransport, workers } from "../session";
 import { Composer, createComposerText, writeIntoDraft } from "../chat/Composer";
 import { workFileOfWork, workSurface } from "./state";
 import { Icon, type IconName } from "../kit/Icon";
+import { delayed, RING, Spinner } from "../kit/wait";
+import { haptic } from "../shell/haptics";
 import { Caption, DISPLAY_TITLE_AWAY } from "../kit/kit";
 import { AttachmentTray } from "../more/files/Attachments";
 import { showAlert } from "../shell/alert";
@@ -89,6 +91,8 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
       if (result.admission === "uncertain") say("Sent, but Brain may not have it", { detail: "Check Brain's chat before sending again." });
       else say("Sent to Brain");
     } else say(action.kind === "stop" ? `Stopped “${slip.title}”` : SAID[action.kind] ?? "Done");
+    // A request answered and acknowledged: the one light tick (SPEC §16.3 Haptics).
+    if (action.kind === "answer") haptic.impact("light");
     context.done();
     return true;
   } catch (error) {
@@ -107,12 +111,18 @@ const actionBusy = (action: BrainWorkAction, slip: BrainWorkSlip) => busy() === 
 
 /** An answer to what the Work asks: a 54 pt row of its request card, with a ring; Brain's pick wears the request card's tag. */
 function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; onPress: () => void }) {
+  // Not optimistic (SPEC §16.2 pattern 8): the press, then the ring in the row's circle after `wait.quiet`.
+  const ring = delayed(() => actionBusy(props.action, props.slip()));
   return (
     <Button testID={actionTestID(props.action)} disabled={actionOff(props.action, props.slip())} onPress={props.onPress}
-      class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 active:bg-accent disabled:opacity-40">
-      <Text class="min-w-0 flex-1 text-body">{actionBusy(props.action, props.slip()) ? "Sending…" : props.action.label}</Text>
+      class={`min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 active:bg-accent ${actionBusy(props.action, props.slip()) ? "" : "disabled:opacity-40"}`}>
+      <Text class="min-w-0 flex-1 text-body">{props.action.label}</Text>
       {props.action.pick ? <Text testID="work-pick" class="text-caption text-muted-foreground">Brain's pick</Text> : null}
-      <View class="size-[22px] rounded-full border-2 border-faint" />
+      <View class="size-[22px] items-center justify-center">
+        <If when={ring()} else={<View class="size-[22px] rounded-full border-2 border-faint" />}>
+          <Spinner size={RING.button} label={props.action.label} />
+        </If>
+      </View>
     </Button>
   );
 }

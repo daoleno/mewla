@@ -1,9 +1,11 @@
 import type { JSX } from "nsh";
-import { appInfo, cleanup, createAnimatedValue, createMotion, effect, reduceMotion, signal, Text, untracked, View, type Accessor } from "nsh";
+import { appInfo, Canvas, cleanup, createAnimatedValue, createMotion, effect, reduceMotion, signal, Text, untracked, View, type Accessor } from "nsh";
 import { motion, RING } from "../../core/motion/tokens";
 import { loops } from "../../core/motion/transitions";
 import { Wait, type LinkState, type WaitForce, type WaitState, type WaitView } from "../../core/motion/wait";
 import { Icon, type IconName } from "./Icon";
+import { color, type ColorName } from "./colors";
+import { spinnerRadius } from "../../core/more/spinner";
 
 /**
  * The kit of SPEC §16 every place waits with: one wait per place (`useWait`, the state machine of
@@ -317,6 +319,56 @@ export function WaitCell(props: {
         <SlowLine on={props.wait.slow()} />
       </If>
     </View>
+  );
+}
+
+/**
+ * The one spinner (SPEC §16.3): an arc in `soft`, one turn per `loop.spin`; 16 pt in a value's place, 20 pt in
+ * a pressed button. It turns with reduced motion too (it is information). `label` names what is read
+ * ("Reading Model"), never "Loading".
+ */
+export function Spinner(props: { size?: number; tone?: ColorName; label?: string }) {
+  const size = () => props.size ?? RING.button;
+  const turn = createMotion({
+    enter: { keyframes: { rotate: [0, 360] }, duration: motion.loop.spin, easing: "linear", iterations: "infinite", ignoreReduceMotion: true },
+  });
+  return (
+    <View role="progressbar" accessibilityLabel={props.label ?? "Waiting"} style={{ width: size(), height: size(), ...turn.style }}>
+      <Canvas
+        style={{ width: size(), height: size() }}
+        draw={(cx, s) => {
+          const r = spinnerRadius(s.width, s.height);
+          if (r === null) return;
+          cx.lineWidth = 2;
+          cx.lineCap = "round";
+          cx.strokeStyle = color(props.tone ?? "soft");
+          cx.beginPath();
+          cx.arc(s.width / 2, s.height / 2, r, 0, Math.PI * 1.5);
+          cx.stroke();
+        }}
+      />
+    </View>
+  );
+}
+
+/**
+ * A button's words while its press waits (SPEC §16.2 pattern 5), for buttons drawn outside the kit: the
+ * press alone under `wait.quiet`, then the words fade and the 20 pt ring takes their place; the words keep
+ * their room, so the button keeps its size.
+ */
+export function BusyLabel(props: { busy: boolean; label: string; tone?: ColorName; testID?: string; small?: boolean; children: JSX.Element }) {
+  const ring = delayed(() => props.busy);
+  return (
+    <>
+      <View class="flex-row items-center justify-center gap-1.5" style={{ opacity: ring() ? 0 : 1, transitionProperty: "opacity", transitionDuration: motion.dur.fast }}>
+        {props.children}
+      </View>
+      <If when={ring()}>
+        <View testID={props.testID ?? "button-ring"} class="absolute inset-0 items-center justify-center" style={{ pointerEvents: "none" }}>
+          <Spinner size={props.small ? RING.value : RING.button} label={props.label} tone={props.tone} />
+        </View>
+      </If>
+    </>
   );
 }
 

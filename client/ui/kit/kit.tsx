@@ -1,5 +1,5 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
-import { announce, Canvas, Clipboard, createMotion, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
+import { announce, Canvas, Clipboard, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button, Input, Switch } from "nsh/base";
 import { PAGE_COLUMN_WIDTH } from "../../core/web/places";
 import { wide } from "../shell/layout";
@@ -10,9 +10,10 @@ import type { StateTone } from "../../core/more/colour";
 import { RowTile, stateTextColor, type Lead } from "./RowTile";
 import { spinnerRadius } from "../../core/more/spinner";
 import { motion, RING } from "../../core/motion/tokens";
-import { delayed } from "./wait";
+import { delayed, Spinner } from "./wait";
+
+export { Spinner };
 import { showAlert } from "../shell/alert";
-import { haptic } from "../shell/haptics";
 
 /**
  * The building blocks of the pages: a page with the system header, groups of rows
@@ -366,35 +367,6 @@ export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead
   );
 }
 
-/**
- * The one spinner (SPEC §16.3): an arc in `soft`, one turn per `loop.spin`; 16 pt in a value's place, 20 pt in
- * a pressed button. It turns with reduced motion too (it is information). `label` names what is read
- * ("Reading Model"), never "Loading".
- */
-export function Spinner(props: { size?: number; tone?: ColorName; label?: string }) {
-  const size = () => props.size ?? RING.button;
-  const turn = createMotion({
-    enter: { keyframes: { rotate: [0, 360] }, duration: motion.loop.spin, easing: "linear", iterations: "infinite", ignoreReduceMotion: true },
-  });
-  return (
-    <View role="progressbar" accessibilityLabel={props.label ?? "Waiting"} style={{ width: size(), height: size(), ...turn.style }}>
-      <Canvas
-        style={{ width: size(), height: size() }}
-        draw={(cx, s) => {
-          const r = spinnerRadius(s.width, s.height);
-          if (r === null) return;
-          cx.lineWidth = 2;
-          cx.lineCap = "round";
-          cx.strokeStyle = color(props.tone ?? "soft");
-          cx.beginPath();
-          cx.arc(s.width / 2, s.height / 2, r, 0, Math.PI * 1.5);
-          cx.stroke();
-        }}
-      />
-    </View>
-  );
-}
-
 /** What a page shows instead of its content: busy, empty or failed, with at most one way out. */
 /** A page's state (busy, empty, failed) and its one way on. `onBlack`: on the full-screen remote's black, in white. */
 export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string; onBlack?: boolean }) {
@@ -662,7 +634,6 @@ export async function copyMenu(title: string, choices: ReadonlyArray<{ label: st
  * The action keeps the normal role: red is for what waits for you, so iOS must not paint it.
  */
 export async function confirmDestructive(title: string, message: string, action: string): Promise<boolean> {
-  haptic.notification("warning");
   const answer = await showAlert({
     title,
     description: message,
