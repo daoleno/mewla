@@ -34,7 +34,7 @@ import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, 
 import { PetSprite } from "../pets/PetSprite";
 import { connection, problem, resumeConnection, servers } from "../session";
 import { probeComputer } from "../more/settings/computers";
-import { OnboardingScanner, scannerSearching } from "./OnboardingScanner";
+import { OnboardingScanner } from "./OnboardingScanner";
 
 export { pairFromText } from "../pairing";
 
@@ -257,9 +257,13 @@ function CommandCard() {
 function ScanStatus() {
   return (
     <View class="gap-2" android={{ accessibilityLiveRegion: "polite" }}>
+      {/* SPEC §16.4 Scan and Pair: the finder and its scan line say it is looking (no words); a code found is
+          the computer awaited, so the waking cat and its state words, never a spinner beside words. */}
       <View class="min-h-6 flex-row items-center justify-center gap-2">
-        <If when={pairingBusy()}><Spinner size={16} /></If>
-        <If when={pairingBusy() || scannerSearching()}><Text testID="scan-status" class="text-sub text-muted-foreground">{pairingBusy() ? pairingStatus() || "Pairing…" : "Looking for a Mewla code…"}</Text></If>
+        <If when={pairingBusy()}>
+          <PetSprite testID="pairing-cat" state={() => "waking"} size={40} />
+          <Text testID="scan-status" class="text-sub text-muted-foreground">{pairingStatus() || "Connecting…"}</Text>
+        </If>
       </View>
       <If when={pairingIssue()}><View testID="pair-issue" class="gap-1 rounded-(--radius-group) bg-card px-4 py-3.5">
           <Text class="text-body font-semibold">{pairingIssue()!.title}</Text>
