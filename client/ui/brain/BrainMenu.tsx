@@ -1,4 +1,6 @@
 import { effect, signal, untracked, View, type ViewRef } from "nsh";
+import { canForceWait } from "../kit/wait";
+import { pickForcedWait } from "../shell/DevWait";
 import { Button } from "nsh/base";
 import { Sheet } from "../kit/Sheet";
 import { MenuPopover } from "../kit/Menu";
@@ -168,6 +170,15 @@ export function BrainMenu(props: {
               ))}
             </View>
           </View>
+          {/* Dev builds only (never a release): force a wait state for the page in front (SPEC §16.4). */}
+          <If when={canForceWait()}>
+            <View class="mt-4 overflow-hidden rounded-(--radius-group) bg-sheet-surface">
+              <Row testID="brain-menu-wait-states" title="Wait states (dev)" icon="settings" onPress={() => {
+                close();
+                void pickForcedWait();
+              }} />
+            </View>
+          </If>
         </View>}><View class="px-4">
           <ModelPanel shown={() => props.open() && page() === "model"} onClose={() => page.set("menu")} transport={source.transport()!} workerId={hostId()}
             onRuntime={(selection) => runtime.set(selection)} />
