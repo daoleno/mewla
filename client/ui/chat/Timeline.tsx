@@ -14,7 +14,7 @@ import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotif
 import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { withDayDividers } from "../../core/timeline/dayDividers";
 import { FOLDED_TEXT_HEIGHT, messageFolds } from "../../core/timeline/messageFold";
-import { readingPlace, readingPlaceIndex, readingPositions } from "../../core/timeline/readingPlace";
+import { readingPlace, readingPlaceIndex, readingPlaceOf, rememberReadingPlace } from "../../core/timeline/readingPlace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
@@ -337,11 +337,12 @@ export function ChatTimeline(props: {
    * or at its end, so nothing has to scroll it afterwards. (Before, five effects scrolled it as rows came
    * and went, each kept in check by whether the person had touched it.)
    */
-  const saved = props.scope ? readingPositions.get(props.scope) : undefined;
   let opening: { index?: number; centre: boolean } = { centre: false };
   const ready = signal(false);
   const openOnce = () => {
     if (untracked(ready) || untracked(rows).length === 0) return;
+    // Read when the rows are in, not when the list is made: places kept from before a restart load meanwhile.
+    const saved = props.scope ? readingPlaceOf(props.scope) : undefined;
     opening = { index: untracked(() => readingPlaceIndex(rows(), saved)), centre: untracked(openRequests) };
     ready.set(true);
   };
@@ -460,8 +461,7 @@ export function ChatTimeline(props: {
           away.set(far);
           last = { offset: offset.y, atEnd: !far };
           if (!props.scope || !touched) return;
-          if (far && shownFirst !== undefined) readingPositions.set(props.scope, shownFirst);
-          else readingPositions.delete(props.scope);
+          rememberReadingPlace(props.scope, far ? shownFirst : undefined);
         }}
         empty={props.empty() as never}>
         {(item) => {

@@ -1,6 +1,7 @@
 import { cleanup, colorScheme, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, View } from "nsh";
 import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
+import { keepReadingPlaces, loadReadingPlaces } from "../core/timeline/readingPlace";
 import { nshPlatform } from "./platform";
 import { justPaired, linkPairing, pairFromText, pairingStatus } from "./pairing";
 import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
@@ -25,6 +26,8 @@ async function start(): Promise<void> {
       Storage,
     ).catch((error) => console.warn("legacy storage not copied:", error));
   }
+  // Where chats were read to before this start (a reload while reading), before any chat opens.
+  await loadReadingPlaces();
   await loadSession();
   void loadCrashReports();
   // A browser opened with `mewla pair`'s link (`<origin>/#pair=<link>`): pair with it, once.
@@ -56,8 +59,10 @@ export function startApp(): void {
   });
 
   // Coming back to the app skips the reconnect backoff.
+  // Leaving it keeps where chats were read to: the system may make the app anew before it comes back.
   effect(() => {
     if (lifecycle() === "active") resumeConnection();
+    else keepReadingPlaces();
   });
 
   // Links the system opens in the app: a pairing link pairs, like a scan; the others open their page.

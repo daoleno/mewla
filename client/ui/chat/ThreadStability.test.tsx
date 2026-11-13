@@ -56,6 +56,23 @@ describe("Brain's thread, read back up", () => {
     expect(app.texts()).toContain(before!);
     expect(app.texts().some((t) => t.startsWith("Message 59."))).toBe(false);
   }, 30_000);
+
+  test("the app started again (a reload of its code, the system making it anew), it opens where it was read to", async () => {
+    // Owner 11-13: reading history, the screen went blank and came back at the newest message: the place read
+    // to was kept only while the app ran.
+    const app = await readBackUp();
+    const before = firstDrawn(app);
+    await app.wait(800);
+    const kept = app.storage();
+
+    const again = await open(APP, { platform: "android", storage: kept, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
+    await again.waitFor("id:brain-chat", { timeout: 10_000 });
+    await again.waitUntil(() => again.texts().some((t) => t.startsWith("Message ")), { timeout: 10_000 });
+    await again.wait(300);
+    expect(again.shows("id:jump-latest")).toBe(true);
+    expect(again.texts()).toContain(before!);
+    expect(again.texts().some((t) => t.startsWith("Message 59."))).toBe(false);
+  }, 40_000);
 });
 
 /**
