@@ -1,9 +1,11 @@
 import { cleanup, effect, signal, Text, untracked, View, lifecycle } from "nsh";
 import { formatFullDateTime } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";
-import { decideOutsideAgent, listOutsideAgents, type OutsideAgents as Agents } from "../../../core/settings/outsideAgents";
+import { decideOutsideAgent, listOutsideAgents, outsideAgentKind, type OutsideAgents as Agents } from "../../../core/settings/outsideAgents";
 import { daemon } from "../daemon";
 import { confirmDestructive, EmptyState, Page, PillButton, Row, Section } from "../../kit/kit";
+import { LEAD_SLOT, tile } from "../../kit/RowTile";
+import { AgentIcon } from "../../icons/AgentIcon";
 
 /** Outside agents: approve the ones that ask to hand work to Brain, revoke the ones you no longer trust. */
 export function OutsideAgents() {
@@ -79,6 +81,7 @@ export function OutsideAgents() {
               {agents()!.agents.map((a) => (
                 <Row
                   testID={`agent-${a.id}`}
+                  lead={outsideAgentKind(a.name) ? { kind: "logo", node: <AgentIcon kind={outsideAgentKind(a.name)!} size={28} slot={LEAD_SLOT} /> } : tile("violet", "brain")}
                   title={a.name}
                   subtitle={a.last_used_at ? `Used ${formatFullDateTime(a.last_used_at)}` : "Not used yet"}
                   trailing={

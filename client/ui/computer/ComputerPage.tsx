@@ -5,8 +5,12 @@ import { failureText } from "../../core/more/daemon";
 import { setServerAutoConnect, type StoredServer } from "../../core/servers";
 import { changeAgentUse, installDaemonUpdate } from "../../core/settings/computer";
 import { computerProblemsMayChange } from "../../core/settings/computerModel";
+import { connectionTone, fixRowLead, fixRowTone } from "../../core/computer/colour";
+import type { TileHue } from "../../core/more/colour";
+import { color } from "../kit/colors";
 import { Icon, type IconName } from "../kit/Icon";
 import { Notice, Page, PillButton, Row, Section } from "../kit/kit";
+import { stateTextColor, tile } from "../kit/RowTile";
 import { followFriends, friendsEnabled, unread } from "../more/friends/state";
 import { flowState } from "../more/extensions/plugins";
 import type { MorePage, PageNav } from "../more/routes";
@@ -28,12 +32,12 @@ const WORDS = { connected: "Connected", connecting: "Connecting…", waiting: "O
  * The rare places, each with its value (SPEC §11 Computer page row) where the phone already knows it: Extensions'
  * connected accounts once listed, Friends' unread. Screen, Stats and Resources would each need a request of their own.
  */
-const RARE: { title: string; icon: IconName; route: MorePage; lab?: boolean; value?: () => string | undefined }[] = [
-  { title: "Screen", icon: "eye", route: { name: "screen" } },
-  { title: "Extensions", icon: "plugins", route: { name: "extensions" }, value: () => (flowState().loaded && flowState().accounts.length ? String(flowState().accounts.length) : undefined) },
-  { title: "Stats", icon: "stats", route: { name: "stats" } },
-  { title: "Resources", icon: "resources", route: { name: "resources" } },
-  { title: "Friends", icon: "people", route: { name: "friends" }, lab: true, value: () => (unread() > 0 ? `${unread()} new` : undefined) },
+const RARE: { title: string; icon: IconName; hue: TileHue; route: MorePage; lab?: boolean; value?: () => string | undefined }[] = [
+  { title: "Screen", icon: "eye", hue: "blue", route: { name: "screen" } },
+  { title: "Extensions", icon: "plugins", hue: "violet", route: { name: "extensions" }, value: () => (flowState().loaded && flowState().accounts.length ? String(flowState().accounts.length) : undefined) },
+  { title: "Stats", icon: "stats", hue: "teal", route: { name: "stats" } },
+  { title: "Resources", icon: "resources", hue: "teal", route: { name: "resources" } },
+  { title: "Friends", icon: "people", hue: "pink", route: { name: "friends" }, lab: true, value: () => (unread() > 0 ? `${unread()} new` : undefined) },
 ];
 
 /** Friends is asked about once, the first time the computer page shows (not at every start). */
@@ -80,10 +84,13 @@ function CatHeader(props: { nav: PageNav }) {
           </Button>
           <View testID="computer-connection" class="flex-row items-center gap-2" onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
             accessible accessibilityLabel={[WORDS[connection()], connectionTail()].filter(Boolean).join(", ")}>
-            <View class={connection() === "connected" ? "size-2 rounded-full bg-add" : "size-2 rounded-full border-2 border-muted-foreground"} />
+            {/* Connected is green; this computer offline is red with its word, since work stops (SPEC §10.4); else a soft ring. */}
+            {connectionTone(connection()) === "off"
+              ? <View testID="computer-connection-dot" class="size-2 rounded-full border-2 border-muted-foreground" />
+              : <View testID="computer-connection-dot" class="size-2 rounded-full" style={{ backgroundColor: color(connectionTone(connection()) === "ok" ? "ok" : "seal") }} />}
             {/* One space each side of the dot: "Connected · LAN", the row's gap is only the status dot's. */}
             <View class="min-w-0 shrink flex-row">
-              <Text class="text-sub text-muted-foreground">{WORDS[connection()]}</Text>
+              <Text class="text-sub" style={{ color: color(stateTextColor(connectionTone(connection()))) }}>{WORDS[connection()]}</Text>
               {connectionTail() ? <Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{` · ${connectionTail()}`}</Text> : null}
             </View>
           </View>
@@ -201,8 +208,9 @@ export function ComputerPage(props: {
             <View>
               <Row
                 testID={`fix-${row.key}`}
-                leading={<Icon name={row.blocking ? "alert-circle-fill" : row.key.startsWith("update") ? "cloud-download" : "alert-circle"} size={24} tone={row.blocking ? "seal" : "soft"} />}
+                lead={fixRowLead(row)}
                 title={row.title}
+                titleTone={fixRowTone(row)}
                 trailing={row.button && row.action ? (
                   <PillButton testID={`fix-${row.key}-button`} title={row.button} small kind={row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
                     busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} />
@@ -219,7 +227,7 @@ export function ComputerPage(props: {
         {current() ? (
           <Row
             testID={`computer-${current()!.id}`}
-            icon="desktop"
+            lead={tile("blue", "desktop")}
             title={current()!.name || current()!.url}
             subtitle={statusWord(current()!) || undefined}
             onPress={() => props.nav.push({ name: "settings-computer", id: current()!.id })}
@@ -237,7 +245,7 @@ export function ComputerPage(props: {
             <View class={state().dim ? "opacity-[0.55]" : ""}>
               <Row
                 testID={`computer-${server.id}`}
-                icon="desktop"
+                lead={tile("blue", "desktop")}
                 title={server.name || server.url}
                 subtitle={state().word || undefined}
                 accessibilityLabel={[server.name || server.url, state().word].filter(Boolean).join(", ")}
@@ -256,18 +264,18 @@ export function ComputerPage(props: {
             </View>
           );
         })}
-        <Row testID="pair-another" icon="add" title="Pair a computer" chevron onPress={() => nav.push({ name: "pair" })} />
+        <Row testID="pair-another" lead={tile("blue", "add")} title="Pair a computer" chevron onPress={() => nav.push({ name: "pair" })} />
       </Section>
 
       <Section>
         {/* Friends is a phone Lab: v0.3.1's web app had none. */}
         {RARE.filter((place) => !place.lab || (platform.os !== "web" && friendsEnabled())).map((place) => (
-          <Row testID={`computer-${place.route.name}`} icon={place.icon} title={place.title} value={place.value?.()} chevron onPress={() => props.nav.push(place.route)} />
+          <Row testID={`computer-${place.route.name}`} lead={tile(place.hue, place.icon)} title={place.title} value={place.value?.()} chevron onPress={() => props.nav.push(place.route)} />
         ))}
       </Section>
 
       <Section>
-        <Row testID="computer-settings" icon="settings" title="Settings" value={updatePending() ? "Update available" : undefined} chevron onPress={() => props.nav.push({ name: "settings" })} />
+        <Row testID="computer-settings" lead={tile("graphite", "settings")} title="Settings" value={updatePending() ? "Update available" : undefined} chevron onPress={() => props.nav.push({ name: "settings" })} />
       </Section>
       <View class="h-6" />
     </Page>

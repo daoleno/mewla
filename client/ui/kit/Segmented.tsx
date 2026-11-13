@@ -29,7 +29,8 @@ export function Segmented<K extends string>(props: {
           onPress={() => props.onChange(option.key)}
           class={`${option.icon || props.fit ? "min-w-[44px] px-3" : "flex-1"} flex-row items-center justify-center gap-1.5 rounded-[9px] ${height()} ${props.value === option.key ? "bg-background" : "active:opacity-70"}`}
         >
-          {option.mark ? <Image src={option.mark} style={{ width: 18, height: 18 }} /> : null}
+          {/* An agent's logo, 16 pt, at half strength while its segment is not chosen (SPEC §10.4). */}
+          {option.mark ? <Image src={option.mark} style={{ width: 16, height: 16, opacity: props.value === option.key ? 1 : 0.5 }} /> : null}
           {option.icon ? (
             <Icon name={option.icon} size={18} color={props.value === option.key ? "foreground" : "faint"} />
           ) : (

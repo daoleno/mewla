@@ -23,7 +23,8 @@ import type { ProviderClient, ProviderConnection, ProviderModel, ProvidersSnapsh
 import { AGENT_ASSETS } from "../../icons/agents/assets";
 import { connected, daemon } from "../daemon";
 import { Icon } from "../../kit/Icon";
-import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, StatusMark, SwitchRow, Tag } from "../../kit/kit";
+import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { StateLine, tile } from "../../kit/RowTile";
 import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { change, changing, discover, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providerState";
@@ -178,6 +179,7 @@ export function Providers(props: { nav: PageNav }) {
             >
               <Row
                 testID="provider-official"
+                lead={tile("violet", "person-circle")}
                 title="Official login"
                 subtitle="Direct · uses the native account"
                 check={selectedId() === ""}
@@ -193,6 +195,7 @@ export function Providers(props: { nav: PageNav }) {
                 <View>
                   <Row
                     testID={`provider-${c.id}`}
+                    lead={tile("violet", "key")}
                     title={c.name}
                     subtitle={subtitle(c)}
                     check={selectedId() === c.id}
@@ -203,7 +206,7 @@ export function Providers(props: { nav: PageNav }) {
                     onPress={() => void select(c)}
                     trailing={
                       <View class="flex-row items-center gap-2">
-                        {!c.credential_ready ? <StatusMark status="warning" label="Key required" /> : null}
+                        {!c.credential_ready ? <StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /> : null}
                         {changing() === `select:${c.id}` || changing() === `discover:${c.id}` ? <Spinner size={16} /> : null}
                         <Menu
                           trigger={<View testID={`provider-menu-${c.id}`} accessibilityLabel={`${c.name} actions`} class="p-1"><Icon name="more-horizontal" size={18} /></View>}
@@ -223,7 +226,7 @@ export function Providers(props: { nav: PageNav }) {
                   {rowNote()[c.id] ? <View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View> : null}
                 </View>
               ))}
-              <Row testID="provider-add" icon="add" title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
+              <Row testID="provider-add" lead={tile("violet", "add")} title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
             </Section>
             {snapshot()!.gateway ? <Gateway /> : null}
           </View>
@@ -239,10 +242,11 @@ function Gateway() {
   return (
     <Section title="Gateway" footer={`${g().protocols.length ? g().protocols.join(" / ") : "No protocols"} · ${g().model_count} exposed models`}>
       <Row
+        lead={tile("blue", "server")}
         title="Mewla Provider Gateway"
         subtitle={copied() ? "Endpoint copied" : g().endpoint || g().address}
         mono={false}
-        trailing={<Tag label={g().running ? "Ready" : "Unavailable"} />}
+        trailing={<StateLine testID="gateway-state" tone={g().running ? "ok" : "off"} label={g().running ? "Ready" : "Unavailable"} />}
         accessibilityLabel={g().endpoint ? "Copy gateway endpoint" : undefined}
         onPress={g().endpoint ? () => void Clipboard.writeText(g().endpoint!).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); }) : undefined}
       />
