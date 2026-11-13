@@ -10,6 +10,7 @@ import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMe
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { withDayDividers } from "../../core/timeline/dayDividers";
+import { FOLDED_TEXT_HEIGHT, messageFolds } from "../../core/timeline/messageFold";
 import { readingPlace, readingPlaceIndex } from "../../core/timeline/readingPlace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
@@ -85,8 +86,25 @@ function WorkingRow(props: { since: () => string | undefined }) {
   return <View class="px-4"><Text testID="working" class="text-sub text-muted-foreground">{label() ? `Working · ${label()}` : "Working…"}</Text></View>;
 }
 
-function UserMessage(props: { item: () => MessageTimelineItem; handlers: MessageHandlers }) {
+/** The fade at a folded bubble's foot: its text going out into the bubble (the bubble's surface, stepping up). */
+const BUBBLE_FADE = [0.12, 0.3, 0.5, 0.7, 0.86, 0.96];
+function BubbleFade() {
+  return (
+    <View class="absolute bottom-0 left-0 right-0" style={{ pointerEvents: "none" }}>
+      {BUBBLE_FADE.map((opacity) => <View class="h-[4px] bg-card" style={{ opacity }} />)}
+    </View>
+  );
+}
+
+function UserMessage(props: { item: () => MessageTimelineItem; handlers: MessageHandlers; expansion: Expansion }) {
   const it = props.item;
+  // A long message folds (`messageFolds`): its first lines, fading out, and a chevron that opens and closes
+  // it, open or not kept by id while the thread lives. The text stays whole under the fold, so Select all
+  // copies the whole message.
+  const textHeight = signal(0);
+  const folds = () => Boolean(it().body) && messageFolds(textHeight());
+  const open = () => props.expansion.isOpen(it().id);
+  const folded = () => folds() && !open();
   const failed = () => it().pending && it().pendingLifecycle === "failed";
   const waiting = () => it().pending && !failed();
   // Sent pictures show as pictures above the bubble (SPEC §1.7); other files stay rows in it.
@@ -108,7 +126,19 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
         // `TextBox`), handing a tap to its own press and cancelling it once a long press selects.
         <View testID="user-message" selectable onPress={tap}
           class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "border border-foreground" : ""} ${waiting() ? "opacity-55" : ""}`}>
-          {it().body ? <Text testID="user-message-text" onPress={tap} class={`text-message ${SELECTION}`}>{it().body}</Text> : null}
+          {it().body ? (
+            <View testID={folded() ? "user-message-folded" : "user-message-body"} class="overflow-hidden" style={{ maxHeight: folded() ? FOLDED_TEXT_HEIGHT : undefined }}>
+              <Text testID="user-message-text" onPress={tap} onLayout={({ bounds }) => textHeight.set(bounds.size.height)}
+                class={`shrink-0 text-message ${SELECTION}`}>{it().body}</Text>
+              {folded() ? <BubbleFade /> : null}
+            </View>
+          ) : null}
+          {folds() ? (
+            <Button testID="user-message-fold" accessibilityLabel={open() ? "Fold the message" : "Show the whole message"} onPress={() => props.expansion.toggle(untracked(it).id)}
+              class="-mb-2 -mr-2 size-11 items-center justify-center self-end active:opacity-60">
+              <Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" />
+            </Button>
+          ) : null}
           {files().map((file) => (
             <View class="flex-row items-center gap-1.5 pt-1">
               <Icon name="document" size={14} />
@@ -219,7 +249,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
       ) : kind() === "brief" ? (
         <View class="px-4"><DelegatedBrief item={reply} expansion={props.expansion} /></View>
       ) : kind() === "user" ? (
-        <View class="px-4"><UserMessage item={reply} handlers={props.handlers} /></View>
+        <View class="px-4"><UserMessage item={reply} handlers={props.handlers} expansion={props.expansion} /></View>
       ) : kind() === "reply" ? (
         <View class="px-4">
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
