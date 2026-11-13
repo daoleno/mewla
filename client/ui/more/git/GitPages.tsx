@@ -18,6 +18,7 @@ import { formatGitAge, gitCommitDays, spokenGitAge } from "../../../core/git/git
 import { DisplayTitle, EmptyState, Notice, Page, PillButton, Row, SearchField, Section, SectionLabel, Spinner, Tag } from "../../kit/kit";
 import { Icon, type IconName } from "../../kit/Icon";
 import { Segmented } from "../../kit/Segmented";
+import { createTabPager, TabPages } from "../../kit/TabPager";
 import type { PageNav } from "../routes";
 import { CommitFilePage, DiffPage, DiffReader } from "./GitDiff";
 import { listDetail } from "../../shell/layout";
@@ -167,9 +168,11 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
   // List and detail side by side on wide with a right pane of 880 or more (SPEC §14.2), following the pane live.
   const wide = () => listDetail();
   review.open();
-  // History loads the first time its tab is shown.
+  // Changes and History are pages side by side that follow the finger (kit/TabPager.tsx).
+  const pager = createTabPager({ keys: ["changes", "history"] as const, value: tab, onChange: (next) => tab.set(next) });
+  // History loads the first time its page is made: chosen, or a swipe starting towards it.
   effect(() => {
-    if (tab() === "history") untracked(() => !review.history().loaded && !review.history().loading && void review.loadHistory(0));
+    if (pager.made("history")) untracked(() => !review.history().loaded && !review.history().loading && void review.loadHistory(0));
   });
   const snapshot = () => review.status();
   const title = () => snapshot()?.repo_name || props.title || "Git";
@@ -210,13 +213,16 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
                 <DisplayTitle title={title()} />
                 <FlashLine />
                 <View class="mt-3">
-                  <Segmented testID="git-tab" value={tab()} onChange={(next) => tab.set(next)} options={[{ key: "changes", label: "Changes" }, { key: "history", label: "History" }]} />
+                  <Segmented testID="git-tab" value={tab()} onChange={(next) => tab.set(next)} pager={pager} options={[{ key: "changes", label: "Changes" }, { key: "history", label: "History" }]} />
                 </View>
                 <Strip review={review} onBranches={() => branchesOpen.set(true)} />
                 <If when={review.searchOpen() && tab() === "changes"}><View class="mt-3">
                     <SearchField testID="git-query" accessibilityLabel="Filter files" placeholder="Filter files" autoFocus value={review.query()} onChange={(value) => review.query.set(value)} />
                   </View></If>
-                <View><If when={tab() === "changes"} else={<HistoryBody review={review} nav={props.nav} />}><ChangesBody review={review} nav={props.nav} selected={wide() ? shown() : null} onOpen={open} /></If></View>
+                <TabPages testID="git-pages" pager={pager} pages={{
+                  changes: () => <ChangesBody review={review} nav={props.nav} selected={wide() ? shown() : null} onOpen={open} />,
+                  history: () => <HistoryBody review={review} nav={props.nav} />,
+                }} />
               </View>
             </Scroll>
             <If when={tab() === "changes"}><CommitBar review={review} onCommit={() => commitOpen.set(true)} /></If>

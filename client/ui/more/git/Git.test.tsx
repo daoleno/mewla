@@ -283,6 +283,34 @@ describe("Git review", () => {
     await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_diff_patch").at(-1)?.body.path === "notes.md");
   });
 
+  test("Changes and History follow the finger on a phone (owner 11-13 20:05): a swipe turns the page, a short one goes back, a vertical one scrolls, a tap still chooses", async () => {
+    const repo = repository([app_ts, notes_md]);
+    const app = await open(HARNESS, { platform: "android", host: { params: { page: PAGE, below: { name: "stats" }, pageStack: true }, handlers: repo.options.host.handlers } });
+    await app.waitFor("id:git-commit-bar");
+    const logs = () => repo.asked.filter((r) => r.type === "git_log").length;
+    // Up and down is the list's: no page turns and History is not made.
+    await app.drag("id:git-pages-changes", { y: -200 });
+    await app.wait(300);
+    expect(logs()).toBe(0);
+    expect(app.shows("id:git-commit-bar")).toBe(true);
+    // A short swipe makes History (it loads) but settles back on Changes.
+    await app.drag("id:git-pages-changes", { x: -80 });
+    await app.waitUntil(() => logs() === 1);
+    await app.wait(500);
+    expect(app.shows("id:git-commit-bar")).toBe(true);
+    // Past half the page: History, and the switch's shape follows.
+    await app.drag("id:git-pages-changes", { x: -260 });
+    await app.waitUntil(() => !app.shows("id:git-commit-bar"));
+    await app.waitFor("text:Add the parser");
+    expect(app.shows("id:git-tab-marker")).toBe(true);
+    // Back by swipe, then by tap.
+    await app.drag("id:git-pages-history", { x: 260 });
+    await app.waitFor("id:git-commit-bar");
+    await app.press("id:git-tab-history");
+    await app.waitUntil(() => !app.shows("id:git-commit-bar"));
+    expect(logs()).toBe(1);
+  });
+
   test("History lists the commits and a commit opens with its files and their diff", async () => {
     const repo = repository([app_ts]);
     const app = await open(HARNESS, repo.options);
