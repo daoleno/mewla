@@ -22,8 +22,10 @@ describe("MewlaLive iOS native contract", () => {
     for (const key of ["kind", "epoch", "seq", "run_key", "title", "phase", "started_at", "done", "total", "workers", "worker_count", "needs_count", "question", "choices", "work_id"]) {
       expect(wireKeys).toContain(key);
     }
-    // work_id is a Work's id the phone does not need; every other key is decoded under its wire name.
-    for (const key of wireKeys.filter((key) => key !== "work_id" && key !== "name")) {
+    // work_id is a Work's id the phone does not need; items, running, queued and waiting are drawn by the
+    // NSH client's surfaces only (daemon/live/items.go). Every other key is decoded under its wire name.
+    const nshOnly = new Set(["work_id", "name", "items", "running", "queued", "waiting"]);
+    for (const key of wireKeys.filter((key) => !nshOnly.has(key))) {
       const camel = key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
       expect(swift.includes(`"${key}"`) || new RegExp(`\\b${camel}\\b`).test(swift)).toBe(true);
     }
