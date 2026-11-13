@@ -1,7 +1,7 @@
 import { effect, Scroll, signal, Text, untracked, View, type ViewRef } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
-import { NavPage } from "../../shell/NavPage";
+import { capsuleScrollTop, NavPage } from "../../shell/NavPage";
 import { CAPSULE } from "../../../core/shell/capsule";
 import type { GitCommitSummary } from "../../../core/git/gitDiff";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
@@ -197,6 +197,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
     <NavPage
       title={titleAway() ? title() : ""}
       testID="git-page"
+      capsuleUnder
       column={wide() ? "full" : "page"}
       headerRight={headerRight}
       popOnBack={!review.searchOpen()}
@@ -207,7 +208,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
       <Current review={review} class="flex-1 bg-background">{() => (
         <View class="flex-1 flex-row bg-background">
           <View testID="git-list" class={wide() ? "w-[380px] border-r border-border" : "flex-1"}>
-            <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6 pt-2" refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}
+            <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6 pt-2" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() + 8 } : undefined} refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}
               onScroll={(e) => titleAway.set(e.offset.y > CAPSULE.titleAway)} scrollEventThrottle={64}>
               <View class="w-full max-w-[720px] self-center">
                 <DisplayTitle title={title()} />

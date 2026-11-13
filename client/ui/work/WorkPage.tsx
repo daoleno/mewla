@@ -1,7 +1,7 @@
 import { elapsedNow } from "../kit/elapsedClock";
 import { cleanup, computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
-import { NavPage } from "../shell/NavPage";
+import { capsuleScrollTop, NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { markWorkRead, workAction, workDetail } from "../../core/work/brainWork";
 import type { BrainWorkDetail, BrainWorkStatus } from "../../core/work/types";
@@ -341,9 +341,9 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   const docked = computed(() => Boolean(slip() && !slip()!.closed));
 
   return (
-    <NavPage title={titleAway() ? title() : ""} testID="work-detail">
+    <NavPage title={titleAway() ? title() : ""} testID="work-detail" capsuleUnder>
       <View class="flex-1 bg-background">
-        <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-2"
+        <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-2" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() + 8 } : undefined}
           onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
           <If when={!slip() && closed()} else={<If when={!slip()} else={<View>
               <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />

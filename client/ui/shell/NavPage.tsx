@@ -35,6 +35,15 @@ export type AppNavPageProps = NavPageProps & {
 };
 
 /**
+ * A pushed page that runs its own scroll and passes `capsuleUnder`: its content's top padding, so on a phone it
+ * starts below the capsule at rest and scrolls under it as a kit `Page` does (SPEC §11); 0 elsewhere (the
+ * desktops, the web and wide keep a header the content starts under). Read it in JSX: it follows the safe area.
+ */
+export function capsuleScrollTop(): number {
+  return mobile && platform.idiom === "phone" ? capsulePageInset(safeArea().top) : 0;
+}
+
+/**
  * NSH draws a Text with no color of its own black, and the system header in the platform's light
  * colors: in Dark both were unreadable on the dark page (FINAL-VERIFY 6387f88f settings [94]). A
  * page gives its texts the theme's ink (a text's or a button's own color still wins), and its

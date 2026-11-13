@@ -3,7 +3,7 @@ import { Button, type NavStackState } from "nsh/base";
 import { DisplayTitle, PillButton, SectionLabel } from "../kit/kit";
 import { BackHandler } from "nsh/mobile";
 import { BusyPlace } from "../kit/wait";
-import { NavPage } from "../shell/NavPage";
+import { capsuleScrollTop, NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { sessionRow } from "../../core/tray/model";
@@ -231,16 +231,9 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
   // The nav bar names the page once the list has scrolled past its display title.
   const titleAway = signal(false);
   return (
-    <NavPage title={titleAway() && !selecting() ? "All Sessions" : ""}>
+    <NavPage title={titleAway() && !selecting() ? "All Sessions" : ""} capsuleUnder>
       <View class="flex-1 bg-background">
-        <If when={selecting()}><View class="min-h-[52px] flex-row items-center gap-2 px-2">
-            <Button testID="selection-cancel" accessibilityLabel="Cancel" onPress={() => selection.set(EMPTY_SESSION_SELECTION)} class="size-11 items-center justify-center rounded-full active:bg-accent">
-              <Icon name="close" size={22} color="foreground" />
-            </Button>
-            <Text class="flex-1 text-title font-bold" role="header">{selectionCountLabel(countSessionSelection(selection()))}</Text>
-          </View></If>
-        <If when={notice()}><View testID="sessions-notice" onPress={() => notice.set("")} class="px-4 py-2"><Text class="text-sub text-destructive">{notice()}</Text></View></If>
-        <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-28"
+        <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-28" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() } : undefined}
           header={<View class="px-4"><DisplayTitle title="All Sessions" /></View>}
           onViewableItemsChange={({ viewableItems }) => titleAway.set(viewableItems.length > 0 && !viewableItems.some((t) => t.index === 0))}
           empty={<Empty onPair={onPair} onNew={onNew} />}>
@@ -259,6 +252,16 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
             );
           }}
         </List>
+        {/* The list scrolls under the capsule (SPEC §11); while selecting, the count stands over its top, below the capsule. */}
+        <View class="absolute left-0 right-0" style={{ top: capsuleScrollTop() }}>
+        <If when={selecting()}><View class="min-h-[52px] flex-row items-center gap-2 bg-background px-2">
+            <Button testID="selection-cancel" accessibilityLabel="Cancel" onPress={() => selection.set(EMPTY_SESSION_SELECTION)} class="size-11 items-center justify-center rounded-full active:bg-accent">
+              <Icon name="close" size={22} color="foreground" />
+            </Button>
+            <Text class="flex-1 text-title font-bold" role="header">{selectionCountLabel(countSessionSelection(selection()))}</Text>
+          </View></If>
+        <If when={notice()}><View testID="sessions-notice" onPress={() => notice.set("")} class="bg-background px-4 py-2"><Text class="text-sub text-destructive">{notice()}</Text></View></If>
+        </View>
         <If when={selecting()}><View class="absolute bottom-0 left-0 right-0 bg-background px-4 pb-4 pt-2">
             <PillButton
               testID="selection-terminate"

@@ -2,7 +2,7 @@ import { cleanup, Clipboard, effect, Scroll, signal, Text, untracked, View } fro
 import type { JSX } from "nsh";
 import { Button, TextView } from "nsh/base";
 import { listDetail } from "../../shell/layout";
-import { NavPage } from "../../shell/NavPage";
+import { capsuleScrollTop, NavPage } from "../../shell/NavPage";
 import { getBrainWorkspaceFile, getBrainWorkspaceTree, getSessionFileMetadata } from "../../../core/files/requests";
 import {
   bindSessionFileRequestToGeneration,
@@ -74,7 +74,7 @@ export function WorkspacePage(props: { trail?: string[]; file?: string; hostSess
     );
   }
   return (
-    <NavPage title={titleAway() ? name : ""} testID="workspace" column={listDetail() ? "full" : "page"}>
+    <NavPage title={titleAway() ? name : ""} testID="workspace" column={listDetail() ? "full" : "page"} capsuleUnder>
       <View class="flex-1 flex-row bg-background">
         <View testID="workspace-list" class={listDetail() ? "w-[380px] border-r border-border" : "flex-1"}>
           <WorkspaceFolder trail={props.trail ?? []} name={name} hostSession={props.hostSession} nav={props.nav} onOpenFile={openFile} selected={() => (listDetail() ? chosen() : null)} onTitleAway={(away) => titleAway.set(away)} />
@@ -118,7 +118,7 @@ function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: S
   if (!tree()) void read();
 
   return (
-    <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" refreshing={busy() && !!tree()} onRefresh={() => void read()}
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() + 8 } : undefined} refreshing={busy() && !!tree()} onRefresh={() => void read()}
       onScroll={(e) => props.onTitleAway(e.offset.y > 56)} scrollEventThrottle={64}>
       <View class="w-full max-w-[680px] self-center">
         {/* Read with the tree: the workspace's own folder comes with its first answer. */}
