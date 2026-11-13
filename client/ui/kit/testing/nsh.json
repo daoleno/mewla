@@ -1,0 +1,12 @@
+{
+  "name": "Mewla kit tests",
+  "id": "com.daoleno.mewla.kittests",
+  "version": "0.0.0",
+  "appearance": "system",
+  "capabilities": {
+    "host": [
+      "test.*"
+    ]
+  },
+  "theme": "../../theme.json"
+}

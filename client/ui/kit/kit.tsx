@@ -1,5 +1,5 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
-import { announce, Canvas, Clipboard, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
+import { announce, Canvas, Clipboard, createMotion, effect, platform, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button, Input, Switch } from "nsh/base";
 import { PAGE_COLUMN_WIDTH } from "../../core/web/places";
 import { wide } from "../shell/layout";
@@ -9,6 +9,8 @@ import { Icon, type IconName } from "./Icon";
 import type { StateTone } from "../../core/more/colour";
 import { RowTile, stateTextColor, type Lead } from "./RowTile";
 import { spinnerRadius } from "../../core/more/spinner";
+import { motion, RING } from "../../core/motion/tokens";
+import { delayed } from "./wait";
 import { showAlert } from "../shell/alert";
 import { haptic } from "../shell/haptics";
 
@@ -364,25 +366,32 @@ export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead
   );
 }
 
-/** The platform-quiet wait mark: an ink arc turning. */
-export function Spinner(props: { size?: number; tone?: ColorName }) {
-  const size = () => props.size ?? 20;
+/**
+ * The one spinner (SPEC §16.3): an arc in `soft`, one turn per `loop.spin`; 16 pt in a value's place, 20 pt in
+ * a pressed button. It turns with reduced motion too (it is information). `label` names what is read
+ * ("Reading Model"), never "Loading".
+ */
+export function Spinner(props: { size?: number; tone?: ColorName; label?: string }) {
+  const size = () => props.size ?? RING.button;
+  const turn = createMotion({
+    enter: { keyframes: { rotate: [0, 360] }, duration: motion.loop.spin, easing: "linear", iterations: "infinite", ignoreReduceMotion: true },
+  });
   return (
-    <Canvas
-      class="animate-spin"
-      style={{ width: size(), height: size() }}
-      accessibilityLabel="Loading"
-      draw={(cx, s) => {
-        const r = spinnerRadius(s.width, s.height);
-        if (r === null) return;
-        cx.lineWidth = 2;
-        cx.lineCap = "round";
-        cx.strokeStyle = color(props.tone ?? "soft");
-        cx.beginPath();
-        cx.arc(s.width / 2, s.height / 2, r, 0, Math.PI * 1.5);
-        cx.stroke();
-      }}
-    />
+    <View role="progressbar" accessibilityLabel={props.label ?? "Waiting"} style={{ width: size(), height: size(), ...turn.style }}>
+      <Canvas
+        style={{ width: size(), height: size() }}
+        draw={(cx, s) => {
+          const r = spinnerRadius(s.width, s.height);
+          if (r === null) return;
+          cx.lineWidth = 2;
+          cx.lineCap = "round";
+          cx.strokeStyle = color(props.tone ?? "soft");
+          cx.beginPath();
+          cx.arc(s.width / 2, s.height / 2, r, 0, Math.PI * 1.5);
+          cx.stroke();
+        }}
+      />
+    </View>
   );
 }
 
@@ -422,10 +431,17 @@ export function PillButton(props: {
   const fill = () => (kind() === "ink" ? "bg-primary" : kind() === "seal" ? "bg-seal" : kind() === "white" ? "bg-white" : props.onCanvas ? "bg-card" : "bg-muted");
   const size = () => (props.small ? "h-[48px] rounded-(--radius-control) px-4" : "h-[52px] rounded-2xl px-5");
   const ink = () => (kind() === "ink" ? "text-primary-foreground" : kind() === "seal" ? "text-seal-foreground" : kind() === "white" ? "text-black" : "text-foreground");
+  // SPEC §16.2 pattern 5: the press alone under `wait.quiet`, then the label fades and the 20 pt ring takes
+  // its place; the button keeps its size, and it is disabled from the press on.
+  const ring = delayed(() => Boolean(props.busy));
   return (
-    <Button testID={props.testID} disabled={props.disabled || props.busy} onPress={props.onPress} class={`mt-2 flex-row items-center justify-center gap-2 active:opacity-70 disabled:opacity-40 ${size()} ${fill()}`}>
-      {props.busy ? <Spinner size={16} tone={kind() === "ghost" ? "soft" : kind() === "white" ? "onBlackSoft" : "canvas"} /> : null}
-      <Text class={`text-body font-semibold line-clamp-1 ${ink()}`}>{props.title}</Text>
+    <Button testID={props.testID} disabled={props.disabled || props.busy} onPress={props.onPress} class={`mt-2 flex-row items-center justify-center gap-2 active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"} ${size()} ${fill()}`}>
+      <Text class={`text-body font-semibold line-clamp-1 ${ink()}`} style={{ opacity: ring() ? 0 : 1, transitionProperty: "opacity", transitionDuration: motion.dur.fast }}>{props.title}</Text>
+      <If when={ring()}>
+        <View testID={props.testID ? `${props.testID}-ring` : undefined} class="absolute inset-0 items-center justify-center" style={{ pointerEvents: "none" }}>
+          <Spinner size={RING.button} label={props.title} tone={kind() === "ghost" ? "soft" : kind() === "white" ? "onBlackSoft" : "canvas"} />
+        </View>
+      </If>
     </Button>
   );
 }

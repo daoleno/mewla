@@ -54,7 +54,8 @@
       "chart-5": "#8A8D94",
       "ok": "#1B7F45",
       "meter": "#2A78D6",
-      "tile": "#ECEDEF"
+      "tile": "#ECEDEF",
+      "ph": "rgba(19, 20, 22, 0.07)"
     },
     "dark": {
       "background": "#060708",
@@ -101,7 +102,8 @@
       "chart-5": "#6E7179",
       "ok": "#5FCB88",
       "meter": "#3987E5",
-      "tile": "#2C2D31"
+      "tile": "#2C2D31",
+      "ph": "rgba(255, 255, 255, 0.07)"
     }
   }
 }
