@@ -133,15 +133,10 @@ func TestWebConnectReturnsToPlugins(t *testing.T) {
 		t.Fatal("return leaked a credential")
 	}
 
-	// A replay cannot be distinguished from another computer: preserve its address without exchanging it again.
+	// A replay on the web UI's own callback is this origin's sign-in, finished: Plugins says it expired, and nothing is exchanged again.
 	callback := base + "/plugins/oauth/callback?" + url.Values{"state": {authorize.Query().Get("state")}, "code": {"web-code"}}.Encode()
-	replay, err := browser.Get(callback)
-	if err != nil {
-		t.Fatal(err)
-	}
-	replay.Body.Close()
-	if replay.StatusCode != http.StatusBadRequest || replay.Header.Get("Location") != "" {
-		t.Fatal("replay redirected or was accepted")
+	if replay := visit(callback); replay.Path != "/plugins" || replay.Query().Get("plugin_error") != "expired" {
+		t.Fatalf("replay returned to %v", replay)
 	}
 	if mustHandle(t, m, Request{Action: "get", ID: status.Account.ID}).Account.Status != "connected" {
 		t.Fatal("replay disturbed the connected account")
@@ -442,5 +437,117 @@ func TestWebConnectNamesFailedStep(t *testing.T) {
 				t.Fatalf("tools failure log %q does not name the tool", line)
 			}
 		})
+	}
+}
+
+// Gap 3 (11-13): an operator's client with a fixed https callback of this
+// daemon that is not the web origin's. The tab finishes on that callback, not
+// on the web UI: its outcome takes it to the origin's Plugins (absolute),
+// never to a page whose only link is mewla://plugins.
+func TestWebConnectThroughAFixedCallbackReturnsToTheWebOrigin(t *testing.T) {
+	previous := SlackPublicClientID
+	SlackPublicClientID = ""
+	defer func() { SlackPublicClientID = previous }()
+	m, _ := New(t.TempDir())
+	const fixed = "https://desk.example/plugins/oauth/callback"
+	const origin = "https://mewla.example"
+	raw, _ := json.Marshal(OAuthClientConfig{ClientID: "owned", ClientSecret: "operator-secret", RedirectURL: fixed})
+	if err := m.vault.Set("oauth-client:slack", string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	m.SetWebOrigins(func(o string) bool { return o == origin })
+	start := func() (ConnectFlow, string) {
+		flow := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: origin}}).Flow
+		authorize := mustQuery(t, flow.AuthorizationURL)
+		if authorize.Get("redirect_uri") != fixed || flow.WebReturn || flow.AddressRequired {
+			t.Fatalf("operator client flow %+v, redirect %q", flow, authorize.Get("redirect_uri"))
+		}
+		return *flow, authorize.Get("state")
+	}
+	_, state := start()
+	declined := httptest.NewRecorder()
+	m.BrowserOAuthCallback(declined, httptest.NewRequest("GET", fixed+"?"+url.Values{"state": {state}, "error": {"access_denied"}}.Encode(), nil), true)
+	if location, _ := url.Parse(declined.Header().Get("Location")); declined.Code != http.StatusSeeOther || location.Scheme+"://"+location.Host+location.Path != origin+"/plugins" || location.Query().Get("plugin_error") != "denied" || location.Query().Get("service") != "slack" {
+		t.Fatalf("declined callback answered %d %q", declined.Code, declined.Header().Get("Location"))
+	}
+	_, state = start()
+	exchanged := slackRejects(m, t)
+	failed := httptest.NewRecorder()
+	m.BrowserOAuthCallback(failed, httptest.NewRequest("GET", fixed+"?"+url.Values{"state": {state}, "code": {"returned"}}.Encode(), nil), true)
+	if location, _ := url.Parse(failed.Header().Get("Location")); failed.Code != http.StatusSeeOther || location.Scheme+"://"+location.Host+location.Path != origin+"/plugins" || location.Query().Get("plugin_error") != "token" || strings.Contains(failed.Body.String(), "mewla://") {
+		t.Fatalf("failed callback answered %d %q %q", failed.Code, failed.Header().Get("Location"), failed.Body.String())
+	}
+	if exchanged().Get("redirect_uri") != fixed {
+		t.Fatalf("exchange %v", exchanged())
+	}
+	// The phone's sign-in with the same client is unchanged: no web return.
+	if native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow; native.WebReturn {
+		t.Fatalf("the app's sign-in changed: %+v", native)
+	}
+}
+
+// Gap 4 (11-13): a restart forgets pending sign-ins. A web sign-in that comes
+// back after one lands on Plugins as expired, with Connect to start again, not
+// on "belongs to another Mewla computer"; nothing is exchanged. A state this
+// daemon never issued (another computer's on the same loopback port) still
+// gets the copy page.
+func TestWebCallbackAfterARestartSaysExpired(t *testing.T) {
+	dir := t.TempDir()
+	before, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before.SetWebOrigins(func(o string) bool { return o == "https://mewla.example" })
+	mustHandle(t, before, Request{Action: "connect_start", Input: &Input{Integration: "notion", WebOrigin: "https://mewla.example"}})
+	var state string
+	for issued := range before.pending {
+		state = issued
+	}
+	if state == "" {
+		t.Fatal("no pending sign-in")
+	}
+	after, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	after.BrowserOAuthCallback(w, httptest.NewRequest("GET", "https://mewla.example/plugins/oauth/callback?"+url.Values{"state": {state}, "code": {"stale-code"}}.Encode(), nil), true)
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/plugins?plugin_error=expired" || strings.Contains(w.Body.String(), "another Mewla computer") {
+		t.Fatalf("stale web return answered %d %q", w.Code, w.Header().Get("Location"))
+	}
+	if strings.Contains(w.Header().Get("Location"), "stale-code") || len(after.records) != 0 {
+		t.Fatal("stale return leaked its code or made an account")
+	}
+	// Another computer's state on the same web UI host keeps its copy page.
+	foreign := httptest.NewRecorder()
+	after.BrowserOAuthCallback(foreign, httptest.NewRequest("GET", "http://127.0.0.1:9876/plugins/oauth/callback?state="+strings.Repeat("a", 75)+"&code=x", nil), true)
+	if foreign.Code != http.StatusBadRequest || foreign.Header().Get("Location") != "" || !strings.Contains(foreign.Body.String(), "another Mewla computer") {
+		t.Fatalf("another computer's return answered %d %q", foreign.Code, foreign.Header().Get("Location"))
+	}
+}
+
+// Gap 1 (11-13): the web UI on http://localhost (or any 127.x) signs in and
+// is returned to that origin's own callback.
+func TestWebConnectFromLocalhostReturnsToLocalhost(t *testing.T) {
+	for _, callback := range []string{"http://localhost:9876/plugins/oauth/callback", "http://127.0.0.2:9876/plugins/oauth/callback", "http://[::1]:9876/plugins/oauth/callback", "http://127.0.0.1:9876/plugins/oauth/callback"} {
+		if !validCallback(callback) {
+			t.Errorf("validCallback(%q) = false", callback)
+		}
+	}
+	for _, callback := range []string{"http://192.168.1.20:9876/plugins/oauth/callback", "http://localhost.evil.example:9876/plugins/oauth/callback", "http://localhost:9876/elsewhere"} {
+		if validCallback(callback) {
+			t.Errorf("validCallback(%q) = true", callback)
+		}
+	}
+	m, _ := New(t.TempDir())
+	const origin = "http://localhost:9876"
+	m.SetWebOrigins(func(o string) bool { return o == origin })
+	slack := SlackPublicClientID
+	SlackPublicClientID = "public-slack"
+	defer func() { SlackPublicClientID = slack }()
+	// Slack's relay forwards a localhost web state to its callback (pluginreturn.IsLoopbackOrigin).
+	flow := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: origin}}).Flow
+	if !flow.WebReturn || flow.AddressRequired {
+		t.Fatalf("localhost web sign-in %+v", flow)
 	}
 }

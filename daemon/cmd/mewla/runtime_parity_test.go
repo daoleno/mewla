@@ -244,6 +244,34 @@ func parityStartArgs(t *testing.T, binary, cwd, home, tmuxDir string, port int, 
 	return daemon
 }
 
+// parityDevBuilt is the line the DEV runner prints once its own build is done
+// (cmd/mewla-dev devBuiltPrefix).
+const parityDevBuilt = "  Dev     Built in "
+
+// parityDevBuildWait bounds the DEV runner's own go build, which a loaded CI
+// runner can stretch past the health window; the health clock starts after it.
+const parityDevBuildWait = 5 * time.Minute
+
+// parityStarted waits until the entry point has its daemon binary: at once for
+// the direct binary, after the DEV runner's build for mewla-dev.
+func parityStarted(daemon *parityDaemon, dev bool) error {
+	if !dev {
+		return nil
+	}
+	deadline := time.Now().Add(parityDevBuildWait)
+	for time.Now().Before(deadline) {
+		if strings.Contains(daemon.output.String(), parityDevBuilt) {
+			return nil
+		}
+		select {
+		case <-daemon.exited:
+			return fmt.Errorf("DEV runner exited before its build finished: %v", daemon.exitErr)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	return fmt.Errorf("DEV runner did not finish its build within %s", parityDevBuildWait)
+}
+
 func parityHealth(daemon *parityDaemon, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
@@ -407,6 +435,9 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 	identities := map[string]string{}
 	for _, variant := range variants {
 		daemon := parityStart(t, variant.bin, snapshot, stateDir, home, tmuxDir, parityFreePort(t))
+		if err := parityStarted(daemon, variant.name == "mewla-dev"); err != nil {
+			t.Fatalf("%s: %v\noutput: %s", variant.name, err, daemon.output.String())
+		}
 		id, err := parityHealth(daemon, 30*time.Second)
 		if err != nil {
 			t.Fatalf("%s: %v\noutput: %s", variant.name, err, daemon.output.String())
@@ -453,6 +484,9 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 
 		// Identity and state ownership survive a restart of the same entry point.
 		restarted := parityStart(t, variant.bin, snapshot, stateDir, home, tmuxDir, parityFreePort(t))
+		if err := parityStarted(restarted, variant.name == "mewla-dev"); err != nil {
+			t.Fatalf("%s restart: %v\noutput: %s", variant.name, err, restarted.output.String())
+		}
 		restartedID, err := parityHealth(restarted, 30*time.Second)
 		if err != nil {
 			t.Fatalf("%s restart: %v\noutput: %s", variant.name, err, restarted.output.String())

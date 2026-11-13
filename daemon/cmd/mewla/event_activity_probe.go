@@ -76,6 +76,7 @@ func observationFromEvents(hub *agentevents.Hub, workerID string) (watcher.Provi
 		ProgressAt:      state.Current.ProgressAt.UTC(),
 		Structured:      true,
 		FallbackAllowed: true,
+		AgentReported:   true,
 		ProbeState:      watcher.ProbeStateOK,
 	}
 	if state.Current.Status.Terminal() {

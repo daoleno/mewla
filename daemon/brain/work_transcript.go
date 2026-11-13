@@ -218,12 +218,14 @@ func (s *Service) factWork(fact watcher.TurnFact) (Work, bool) {
 	if err != nil {
 		return Work{}, false
 	}
-	if found {
-		return item, item.AttemptDelegated
+	if found && item.AttemptDelegated {
+		return item, true
 	}
 	// The first matching signal admits a pending submission atomically, so
 	// a Worker that finishes quickly has no attempt yet when its terminal
-	// fact arrives. The pending delegated submission names the Work.
+	// fact arrives, and the first report after Brain's next message (a
+	// send-back) arrives while the earlier attempt is already released. The
+	// pending delegated submission names the Work.
 	pending, err := s.store.PendingInputAdmissions(sessionID)
 	if err != nil {
 		return Work{}, false

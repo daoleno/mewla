@@ -521,11 +521,11 @@ func (m *Manager) oauthForm(ctx context.Context, r *record, endpoint string, val
 	req.Header.Set("Accept", "application/json")
 	resp, err := m.oauthHTTP(r).Do(req)
 	if err != nil {
-		return err
+		return refreshUnreachable{err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return errors.New("authorization service rejected the request")
+		return StatusError{Status: resp.StatusCode}
 	}
 	return json.NewDecoder(http.MaxBytesReader(nil, resp.Body, MaxResultBytes)).Decode(out)
 }
@@ -559,10 +559,15 @@ func (m *Manager) slackToken(ctx context.Context, r *record, values url.Values) 
 	var data struct {
 		payload
 		OK         bool    `json:"ok"`
+		Error      string  `json:"error"`
 		AuthedUser payload `json:"authed_user"`
 	}
-	if err := m.oauthForm(ctx, r, r.OAuth.TokenURL, values, &data); err != nil || !data.OK {
-		return nil, errors.New("Slack authorization could not be verified")
+	if err := m.oauthForm(ctx, r, r.OAuth.TokenURL, values, &data); err != nil {
+		return nil, err
+	}
+	if !data.OK {
+		// Slack answered and said no (invalid_refresh_token, token_revoked…).
+		return nil, refreshRefused{oauthCode(data.Error)}
 	}
 	value := data.payload
 	if values.Get("grant_type") != "refresh_token" {

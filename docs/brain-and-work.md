@@ -73,7 +73,11 @@ is computed from those marks.
 
 The judge runs only when there is new evidence: a progress report, a turn
 ending, or Brain's next message to the Worker. It runs at most once every two
-minutes per Work, sooner when a turn ends, and never on a timer alone. The
+minutes per Work, and never on a timer alone. A Worker that keeps reporting is
+still judged within about a minute of its first report. When a turn ends, or
+Brain sends the Worker something new (a send-back, a further ask), the next
+judgment comes within seconds, so a Work that was sent back drops right away
+rather than keeping its last stretch for two minutes. The
 `Work progress` row of `routing.md` picks its model (see
 [Worker routing](#worker-routing)). Each judgment is recorded on the Work as a
 `progress.judged` or `progress.back` event (`mewla brain work list -id`).
@@ -94,6 +98,15 @@ own "back". Closed Work leaves the list. When Work needs you while you are
 elsewhere, "Brain" gets a red dot (like "Sessions" does for a Session; on Brain
 itself the cat's line already says so), and the cat sits on that Work's slip in
 the conversation.
+
+**Who a request is for.** A Worker that Brain started reports to Brain, not to
+you: when it stops on a decision of its own (`--attention user_input`), Brain
+decides, and asks you only through its Work's question, which shows under
+Needs you with its choices. Until then the Work reads Reviewing, and nothing
+for that report reaches you: no card, no tray row, no count, no notification.
+A prompt or an approval on that Worker's terminal that Brain cannot answer (a
+sign-in, an approval outside the brief) still comes to you, and a Session you
+started yourself keeps asking you directly.
 
 **When the computer is unreachable** the cat's line says so, "Can't reach your
 computer", or "Reconnecting" after ten seconds of trying, at the same moment

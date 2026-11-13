@@ -347,7 +347,18 @@ func assertNoServerCalendarEvent(t *testing.T, events <-chan calendar.Event) {
 	}
 }
 
+// notificationTransition is a delegated Worker's state change. Blocked, it is
+// blocked on a terminal prompt (a sign-in), which is the owner's to answer;
+// reportTransition is a Worker blocked on its own report, which is Brain's.
 func notificationTransition(workerID, oldState, newState string) watcher.SessionEvent {
+	ev := reportTransition(workerID, oldState, newState)
+	if newState == "blocked" {
+		ev.Worker.Prompt = &classifier.Prompt{Kind: "permission", Provider: "claude", Title: "Sign in to GitHub?"}
+	}
+	return ev
+}
+
+func reportTransition(workerID, oldState, newState string) watcher.SessionEvent {
 	return watcher.SessionEvent{
 		Type:     "worker_state_change",
 		WorkerID: workerID,
@@ -360,6 +371,56 @@ func notificationTransition(workerID, oldState, newState string) watcher.Session
 			Summary:   "current summary",
 			Delegated: true,
 		},
+	}
+}
+
+// A delegated Worker's own report (--attention user_input) is addressed to
+// Brain: no push reaches the owner, and the suppression is recorded as Brain's
+// to decide. A prompt or an approval on the same Worker's terminal still
+// pushes (owner 2026-11-13, shot 11).
+func TestDelegatedWorkersOwnReportIsBrainsNotTheOwners(t *testing.T) {
+	pusher := &recordingNotificationPusher{}
+	recorder := &suppressionRecorder{}
+	srv, turnID := ledgerNotificationServer(t, "agent-1")
+	srv.pusher = pusher
+	srv.notifications = recorder
+
+	report := reportTransition("agent-1", "running", "blocked")
+	report.TurnID = turnID
+	report.Worker.NeedsAttention = true
+	report.Worker.Summary = "Plaza fix done, no rollback needed. Should I also purge the cache?"
+	srv.maybeNotifyForSessionEvent(report)
+	if calls := pusher.snapshot(); len(calls) != 0 {
+		t.Fatalf("a Worker's own report pushed to the owner: %#v", calls)
+	}
+	if reasons := recorder.snapshot(); !reflect.DeepEqual(reasons, []string{"brain_decides"}) {
+		t.Fatalf("suppressed = %#v", reasons)
+	}
+
+	srv.SetAgentApprovals(fakeApprovals{"agent-1": {{ID: "a-1"}}})
+	srv.maybeNotifyForSessionEvent(report)
+	if calls := pusher.snapshot(); len(calls) != 1 || calls[0].kind != "blocked" {
+		t.Fatalf("an approval on its terminal did not push: %#v", calls)
+	}
+}
+
+func TestOwnersOpenRequestsLeaveADelegatedWorkersReportToBrain(t *testing.T) {
+	report := &classifier.Worker{ID: "w", State: classifier.StateBlocked, NeedsAttention: true, Delegated: true}
+	if asksOwner(report, 0) {
+		t.Fatal("a delegated Worker's own report counted as the owner's")
+	}
+	if !asksOwner(report, 1) {
+		t.Fatal("an approval on a delegated Worker's terminal did not count")
+	}
+	prompted := *report
+	prompted.Prompt = &classifier.Prompt{ID: "p-1", Kind: "permission"}
+	if !asksOwner(&prompted, 0) {
+		t.Fatal("a prompt on a delegated Worker's terminal did not count")
+	}
+	owners := *report
+	owners.Delegated = false
+	if !asksOwner(&owners, 0) {
+		t.Fatal("a Session the owner started stopped asking the owner")
 	}
 }
 

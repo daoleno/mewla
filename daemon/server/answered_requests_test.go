@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -59,6 +60,33 @@ func TestApprovalAnswerIsRecordedWithItsDevice(t *testing.T) {
 	}
 }
 
+// promptTimers holds the checks a prompt leaving the screen schedules, and a
+// test runs them itself where the grace has ended: whether a prompt came back
+// in time, and whether its check finished before the test looks (the check
+// writes the ledger with an fsync), are steps of the test, not races with a
+// loaded machine's clock.
+type promptTimers struct {
+	mu      sync.Mutex
+	pending []func()
+}
+
+func (p *promptTimers) after(_ time.Duration, check func()) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.pending = append(p.pending, check)
+}
+
+// fire runs every scheduled check, oldest first: each grace has ended.
+func (p *promptTimers) fire() {
+	p.mu.Lock()
+	pending := p.pending
+	p.pending = nil
+	p.mu.Unlock()
+	for _, check := range pending {
+		check()
+	}
+}
+
 // A screen prompt that leaves a live Session's screen with no answer through
 // Mewla was answered in its terminal; a flicker, a choice or an ended Session
 // records nothing.
@@ -68,7 +96,8 @@ func TestPromptLeavingTheScreenIsAnsweredInTheTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	live := map[string]*classifier.Worker{"%1": {ID: "%1"}, "%2": {ID: "%2"}}
-	s := &Server{promptLeftGrace: 20 * time.Millisecond, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
+	timers := &promptTimers{}
+	s := &Server{afterPromptLeft: timers.after, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
 	s.answered = ledger
 	prompt := permissionPrompt()
 	prompt.Title, prompt.Request = "Bash command", "Tip: auto mode handles these prompts\ngit push origin main"
@@ -91,7 +120,7 @@ func TestPromptLeavingTheScreenIsAnsweredInTheTerminal(t *testing.T) {
 	s.observePromptLifecycle(blocked("%2", prompt))
 	s.observePromptLifecycle(running("%2"))
 	s.observePromptLifecycle(blocked("%2", prompt))
-	time.Sleep(100 * time.Millisecond)
+	timers.fire()
 
 	shown := s.PromptAskedAt("%1", "perm1")
 	if shown == nil {
@@ -118,7 +147,7 @@ func TestPromptLeavingTheScreenIsAnsweredInTheTerminal(t *testing.T) {
 	s.observePromptLifecycle(running("%1"))
 	delete(live, "%2")
 	s.observePromptLifecycle(running("%2"))
-	time.Sleep(100 * time.Millisecond)
+	timers.fire()
 	if rows := ledger.List(answered.Filter{SessionID: "%1"}); len(rows) != 1 {
 		t.Fatalf("a choice was inferred from the screen: %+v", rows)
 	}
@@ -135,7 +164,8 @@ func TestTheSamePromptAskedTwiceIsAnsweredTwice(t *testing.T) {
 		t.Fatal(err)
 	}
 	live := map[string]*classifier.Worker{"%1": {ID: "%1"}}
-	s := &Server{promptLeftGrace: 20 * time.Millisecond, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
+	timers := &promptTimers{}
+	s := &Server{afterPromptLeft: timers.after, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
 	s.answered = ledger
 	prompt := permissionPrompt()
 	prompt.Title, prompt.Request = "Bash command", "npm test"
@@ -161,7 +191,7 @@ func TestTheSamePromptAskedTwiceIsAnsweredTwice(t *testing.T) {
 	s.observePromptLifecycle(event(prompt))
 	answer(2)
 	s.observePromptLifecycle(event(nil))
-	time.Sleep(100 * time.Millisecond)
+	timers.fire()
 
 	rows := ledger.List(answered.Filter{SessionID: "%1"})
 	if len(rows) != 2 {
@@ -348,7 +378,8 @@ func TestAPromptAnsweredThroughItsApprovalIsRecordedOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	live := map[string]*classifier.Worker{"%1": {ID: "%1"}}
-	s := &Server{promptLeftGrace: 20 * time.Millisecond, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
+	timers := &promptTimers{}
+	s := &Server{afterPromptLeft: timers.after, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
 	s.answered = ledger
 	prompt := permissionPrompt()
 	prompt.Title, prompt.Request = "Bash command", "git push origin main"
@@ -363,7 +394,7 @@ func TestAPromptAnsweredThroughItsApprovalIsRecordedOnce(t *testing.T) {
 		Options: []ApprovalOptionWire{{ID: "allow", Label: "Allow"}, {ID: "deny", Label: "Deny"}}}
 	s.recordAnswered(ApprovalAnswerRecord("%1", approval, "allow", answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone"}, time.Now()))
 	s.observePromptLifecycle(state(nil))
-	time.Sleep(100 * time.Millisecond)
+	timers.fire()
 	rows := ledger.List(answered.Filter{SessionID: "%1"})
 	if len(rows) != 1 || rows[0].By.Kind != answered.ByDevice {
 		t.Fatalf("records = %+v", rows)
@@ -374,7 +405,7 @@ func TestAPromptAnsweredThroughItsApprovalIsRecordedOnce(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 	s.observePromptLifecycle(state(prompt))
 	s.observePromptLifecycle(state(nil))
-	time.Sleep(100 * time.Millisecond)
+	timers.fire()
 	if rows := ledger.List(answered.Filter{SessionID: "%1"}); len(rows) != 2 || rows[0].By.Kind != answered.ByTerminal {
 		t.Fatalf("records after a terminal answer = %+v", rows)
 	}
@@ -458,7 +489,8 @@ func TestAPermissionAnsweredInTheTerminalSettlesItsHookApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	live := map[string]*classifier.Worker{"%1": {ID: "%1"}, "%2": {ID: "%2"}, "%3": {ID: "%3"}}
-	s := &Server{promptLeftGrace: 20 * time.Millisecond, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
+	timers := &promptTimers{}
+	s := &Server{afterPromptLeft: timers.after, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
 	s.answered = ledger
 	approvals := &recordingApprovals{}
 	s.SetAgentApprovals(approvals)
@@ -487,7 +519,7 @@ func TestAPermissionAnsweredInTheTerminalSettlesItsHookApproval(t *testing.T) {
 	// A choice is not a permission.
 	s.observePromptLifecycle(blocked("%1", &classifier.Prompt{ID: "c1", Kind: classifier.PromptChoice}))
 	s.observePromptLifecycle(idle("%1"))
-	time.Sleep(100 * time.Millisecond)
+	timers.fire()
 
 	if got := approvals.answeredInTerminal(); len(got) != 1 || got[0] != "%1|Bash|ping -c 45 127.0.0.1" {
 		t.Fatalf("hook approvals settled = %q, want only %%1's", got)
