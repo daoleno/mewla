@@ -16,3 +16,10 @@ export function readingPlaceIndex(rows: readonly { id: string }[], key: string |
   const index = rows.findIndex((row) => row.id === key);
   return index < 0 ? undefined : index;
 }
+
+/**
+ * Where each chat was read to (its first row on screen, by key), by its scope, while the app runs: reopening it
+ * comes back there. Kept here, not beside the list: a hot patch makes the patched module's Maps anew, and the
+ * list's module is the one patched most.
+ */
+export const readingPositions = new Map<string, string>();

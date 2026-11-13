@@ -12,7 +12,7 @@ import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotif
 import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { withDayDividers } from "../../core/timeline/dayDividers";
 import { FOLDED_TEXT_HEIGHT, messageFolds } from "../../core/timeline/messageFold";
-import { readingPlace, readingPlaceIndex } from "../../core/timeline/readingPlace";
+import { readingPlace, readingPlaceIndex, readingPositions } from "../../core/timeline/readingPlace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
@@ -261,9 +261,6 @@ const AT_END = 120;
 /** The thread's foot as a row of its list. */
 type FootRow = { type: "thread-foot"; id: string };
 const FOOT: FootRow = { type: "thread-foot", id: "thread-foot" };
-
-/** Where each chat was read to (its first row on screen, by key), by scope, while the app runs: reopening it comes back there. */
-const readingPositions = new Map<string, string>();
 
 export function ChatTimeline(props: {
   testID: string;
