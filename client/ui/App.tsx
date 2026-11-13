@@ -10,6 +10,8 @@ import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
 import { openNotificationLink, startNotifications } from "./push/push";
 import { startAppUpdate } from "./update/update";
+// Registers the monospaced face theme.json's `font-mono` names, before the first frame.
+import "./kit/monoFont";
 
 installPlatform(nshPlatform());
 
