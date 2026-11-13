@@ -105,7 +105,7 @@ export interface TrayTodayInput {
 
 export type StateDot = "seal" | "ink" | "ring" | null;
 
-export type StateKind = "none" | "quiet" | "running" | "needs" | "connecting" | "offline" | "pair" | "starting" | "cant_start";
+export type StateKind = "none" | "quiet" | "working" | "running" | "needs" | "connecting" | "offline" | "pair" | "starting" | "cant_start";
 
 /** The header's state control (§11 State control). */
 export interface StateControlModel {
@@ -152,6 +152,8 @@ export interface TrayInput {
   workers: readonly Worker[];
   /** Brain's own host Session, for the prompts it is blocked on. */
   brainHost?: { id: string; prompt?: WorkerPrompt } | null;
+  /** Brain's own turn is running (its reply is being written): the state is not "All quiet" meanwhile. */
+  brainTurn?: boolean;
   /** The question Brain asked in its chat that is still pending (AskUserQuestion). */
   brainChoice?: { callId: string; question: string } | null;
   currentWork?: readonly BrainCurrentWork[];
@@ -386,6 +388,8 @@ function stateOf(input: TrayInput, needs: number, running: number, quiet = ""): 
   if (needs > 0) return { ...s("needs", needs === 1 ? "1 needs you" : `${needs} need you`, "seal", true), count: needs };
   if (input.surface === "waking") return s("starting", "Starting…", "ring", false);
   if (running > 0) return { ...s("running", `${running} running`, "ink", true), count: running };
+  // Nothing else runs, but Brain is answering: it says so, with the ink mark, until the turn ends.
+  if (input.brainTurn) return s("working", "Working", "ink", true);
   // SPEC §1.2 The count: "All quiet" only when Running is empty; queued or waiting rows say so, soft, no dot.
   return s("quiet", quiet || "All quiet", null, false);
 }

@@ -77,6 +77,17 @@ describe("tray model", () => {
     expect(m.title).toBe("All quiet");
   });
 
+  test("never All quiet while Brain is answering: Working, with the ink mark, until the turn ends", () => {
+    // Audit 11-13 (r18-14, duo2-14): the capsule said "All quiet" beside "Working · 2s" in the chat.
+    const working = trayModel(input({ brainTurn: true }));
+    expect(working.state).toMatchObject({ kind: "working", words: "Working", dot: "ink", ink: true });
+    expect(working.title).toBe("Working");
+    expect(stateShortWords(working.state)).toBe("Working");
+    // Running rows and requests still say what they are; the turn's end is quiet again.
+    expect(trayModel(input({ brainTurn: true, workers: [worker("a")] })).state.kind).toBe("running");
+    expect(trayModel(input({ brainTurn: false })).state.kind).toBe("quiet");
+  });
+
   test("a collapsed capsule says the count for running and need you, the words otherwise (SPEC §11)", () => {
     expect(stateShortWords({ kind: "running", words: "3 running", dot: "ink", ink: true, chevron: true, count: 3 })).toBe("3");
     expect(stateShortWords({ kind: "needs", words: "2 need you", dot: "seal", ink: true, chevron: true, count: 2 })).toBe("2");
