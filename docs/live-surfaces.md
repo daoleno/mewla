@@ -75,7 +75,10 @@ One projection, `live.State`, from the Brain snapshot:
 
 `(epoch, seq)` orders states. The epoch is the daemon's boot time, so a restart
 cannot make an old state look newer. Only changes a person would see produce a
-new state; the elapsed clock and bookkeeping do not. A burst of changes is
+new state; the elapsed clock and bookkeeping do not, and neither does a running
+row's line (what a Worker reported it does): that shows with the next new state
+and in every fetch. A row's line is only what its Session reported, never the
+terminal's text, and a Session is titled as the app's rows title it. A burst of changes is
 coalesced for about 1.5 seconds, and a 20-second safety net catches changes no
 broadcast announced.
 
