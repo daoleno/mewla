@@ -17,7 +17,7 @@ import { markWorkRead } from "../../core/work/brainWork";
 import { goHome, homeShown, openBrainTerminal, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { workspaceRoute } from "../more/files/routes";
-import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers, workers } from "../session";
+import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, workers } from "../session";
 import { ResultActions, type WorkCardHandlers } from "../chat/TimelineRows";
 import type { ResultAction } from "../../core/work/types";
 import type { WorkCardModel } from "../../core/timeline/workCardModel";
@@ -227,11 +227,27 @@ function HomeHeader() {
     <View testID="home-header" class={`bg-background ${wide() ? "px-4" : "px-2"}`} style={{ paddingTop: homeHeaderInset() }}>
       {/* The tray hangs from this row's bottom (HOME_HEADER_HEIGHT). */}
       <View class="flex-row items-center gap-1" style={{ height: HOME_HEADER_HEIGHT }}>
-        {wide() ? null : <HomeCat onPress={() => openPage({ name: "computer" })} />}
-        <View class="min-w-0 shrink-0 justify-center pr-1">
-          <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
-          {servers().length > 1 && !wide() ? <Text testID="home-computer" class="text-caption text-muted-foreground line-clamp-1">{current()?.name ?? ""}</Text> : null}
-        </View>
+        {wide() ? (
+          <View class="min-w-0 shrink-0 justify-center pr-1">
+            <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
+          </View>
+        ) : (
+          // Where I am: the cat, "Brain" and the computer's name are one target that opens the computer page,
+          // and the name wears the state control's chevron, so the header reads as two controls of one kind.
+          <Button testID="home-cat" accessibilityLabel={`Computer, ${current()?.name ?? ""}`}
+            onPress={() => openPage({ name: "computer" })} class="min-h-[48px] min-w-0 shrink flex-row items-center pr-2 active:opacity-70">
+            <HomeCat />
+            <View class="min-w-0 shrink justify-center">
+              <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
+              {current()?.name ? (
+                <View class="min-w-0 flex-row items-center gap-0.5">
+                  <Text testID="home-computer" class="shrink text-caption text-muted-foreground line-clamp-1">{current()!.name}</Text>
+                  <Icon name="chevron-down" size={14} tone="faint" />
+                </View>
+              ) : null}
+            </View>
+          </Button>
+        )}
         {wide() ? null : <View class="min-w-0 shrink"><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} /></View>}
         <View class="flex-1" />
         <Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
