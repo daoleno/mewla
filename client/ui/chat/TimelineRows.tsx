@@ -1,4 +1,4 @@
-import { Clipboard, computed, signal, Text, View } from "nsh";
+import { Clipboard, computed, signal, Text, untracked, View } from "nsh";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import { activityFileRows, type ActivityFileRow } from "../../core/timeline/activityFiles";
@@ -399,7 +399,7 @@ function WorkQuestion(props: { work: () => BrainCurrentWork; handlers?: WorkCard
         <View selectable><Text testID="work-asks-question" class="text-body font-semibold">{props.work().question ?? ""}</Text></View>
         <If when={failed()} else={<If when={offline()}><Text testID="work-asks-offline" class="text-sub text-muted-foreground">{`${current()?.name || "Your computer"} is offline`}</Text></If>}><Text testID="work-asks-failed" class="text-sub">{`Didn't reach ${current()?.name || "your computer"}`}</Text></If>
       </View>
-      {choices().map((choice) => <WorkChoiceRow label={choice} pick={choice === props.work().recommended} busy={() => busy() === choice} disabled={() => offline() || Boolean(busy())} onPress={() => void answer(choice)} />)}
+      <Each of={choices()} key={(choice) => choice}>{(choice) => <WorkChoiceRow label={untracked(choice)} pick={untracked(choice) === props.work().recommended} busy={() => busy() === choice()} disabled={() => offline() || Boolean(busy())} onPress={() => void answer(untracked(choice))} />}</Each>
       <Button testID="work-asks-other" disabled={!props.handlers} onPress={() => props.handlers?.onTitle(workId())}
         class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 active:bg-accent">
         <Text class="min-w-0 flex-1 text-body">{choices().length ? "Something else…" : "Reply"}</Text>
