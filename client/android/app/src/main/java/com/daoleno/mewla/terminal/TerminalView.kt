@@ -10,6 +10,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
+import android.os.Trace
 import android.text.InputType
 import android.view.ActionMode
 import android.view.GestureDetector
@@ -335,10 +336,18 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 
   fun write(data: String) {
     if (handle == 0L) return
-    Vt.nativeWriteBytes(handle, data.toByteArray(Charsets.UTF_8))
-    Vt.nativeTakeClipboard(handle)?.let(events::copy)
-    pull(false)
-    restartBlink()
+    // Trace sections cost nothing unless a trace is recording (perfetto): they split a chunk's time.
+    Trace.beginSection("mewla.term.write")
+    try {
+      Trace.beginSection("mewla.term.parse")
+      Vt.nativeWriteBytes(handle, data.toByteArray(Charsets.UTF_8))
+      Trace.endSection()
+      Vt.nativeTakeClipboard(handle)?.let(events::copy)
+      pull(false)
+      restartBlink()
+    } finally {
+      Trace.endSection()
+    }
   }
 
   /** A new attachment: the screen starts empty, at the area's grid. The history is the page's (`history`). */
@@ -449,6 +458,11 @@ class TerminalView(context: Context, private val events: Events) : View(context)
    */
   private fun historyLine(i: Int): Line {
     history[i]?.let { return it }
+    Trace.beginSection("mewla.term.historyPage")
+    try { return renderHistoryPage(i) } finally { Trace.endSection() }
+  }
+
+  private fun renderHistoryPage(i: Int): Line {
     val start = i - i % PAGE
     val end = min(start + PAGE, historyAnsi.size)
     if (scratch == 0L) {
@@ -487,6 +501,11 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   }
 
   private fun pull(full: Boolean) {
+    Trace.beginSection("mewla.term.pull")
+    try { pullFrame(full) } finally { Trace.endSection() }
+  }
+
+  private fun pullFrame(full: Boolean) {
     val res = Vt.nativeFrame(handle, full) ?: return
     val m = res[0] as IntArray
     if (m[0] != grid.size) grid = Array(m[0]) { i -> grid.getOrNull(i) ?: EMPTY }
@@ -518,6 +537,11 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   // MARK: Drawing
 
   override fun onDraw(canvas: Canvas) {
+    Trace.beginSection("mewla.term.draw")
+    try { drawView(canvas) } finally { Trace.endSection() }
+  }
+
+  private fun drawView(canvas: Canvas) {
     canvas.drawColor(background)
     if (cellH <= 0) return
     canvas.save()
@@ -1032,8 +1056,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   // The system keyboard, composition (IME) drawn at the cursor.
   override fun onCheckIsTextEditor() = true
   override fun onCreateInputConnection(out: EditorInfo): InputConnection {
-    out.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-    out.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+    out.inputType = TerminalKeyboard.INPUT_TYPE
+    out.imeOptions = TerminalKeyboard.IME_OPTIONS
     return object : BaseInputConnection(this, false) {
       override fun commitText(t: CharSequence, pos: Int): Boolean { composing = ""; send(t.toString()); invalidate(); return true }
       override fun setComposingText(t: CharSequence, pos: Int): Boolean { composing = t.toString(); invalidate(); return true }
@@ -1106,6 +1130,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
       dragAxis = 0
       scroller.forceFinished(true)
       stopReportedFling()
+      // A finger down stops what a reported drag left waiting on the page (a fling's tail): `scroll` 0.
+      events.scroll(0)
       return true
     }
 

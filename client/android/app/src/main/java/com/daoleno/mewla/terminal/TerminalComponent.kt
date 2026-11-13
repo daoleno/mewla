@@ -1,6 +1,7 @@
 package com.daoleno.mewla.terminal
 
 import android.content.Context
+import android.os.Trace
 import android.view.View
 import com.longbridge.nsh.NshComponent
 import com.longbridge.nsh.NshComponentContext
@@ -11,7 +12,10 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
     override fun size(cols: Int, rows: Int) = ctx.emit("size", mapOf("cols" to cols, "rows" to rows))
     override fun failed(message: String) = ctx.emit("failed", mapOf("message" to message))
     override fun input(data: String) = ctx.emit("input", mapOf("data" to data))
-    override fun scroll(lines: Int) = ctx.emit("scroll", mapOf("lines" to lines))
+    override fun scroll(lines: Int) {
+      Trace.beginSection("mewla.term.scrollReport")
+      try { ctx.emit("scroll", mapOf("lines" to lines)) } finally { Trace.endSection() }
+    }
     override fun viewport(top: Int, atBottom: Boolean) = ctx.emit("viewport", mapOf("top" to top, "atBottom" to atBottom))
     override fun tapCell(col: Int, row: Int, text: String, index: Int) =
       ctx.emit("tapCell", mapOf("col" to col, "row" to row, "text" to text, "index" to index))
@@ -42,7 +46,12 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
   }
 
   override fun command(name: String, args: Any?) {
-    val m = args as? Map<*, *>
+    // A command from the page, as one trace section (free unless perfetto records): how many per frame, and their cost.
+    Trace.beginSection(name)
+    try { run(name, args as? Map<*, *>) } finally { Trace.endSection() }
+  }
+
+  private fun run(name: String, m: Map<*, *>?) {
     when (name) {
       "write" -> (m?.get("data") as? String)?.let(view::write)
       "reset" -> view.reset()
