@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
+import { framesOf, paired, phoneHost } from "../testing/fixtures";
 
 /**
  * Owner 11-13: Brain's whole thread flashed, sometimes several times, and a thread read back up jumped.
@@ -111,4 +111,80 @@ describe("news changes only the rows it is about (owner 11-13: every message fla
     await unchanged();
     await everyKindOfNews(app, "w1", unchanged);
   }, 40_000);
+});
+
+describe("a Session's chat read back up stays where it is (owner 11-13: history jumped)", () => {
+  const session = { id: "w1", name: "longchat", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() };
+  const words = "A long line of words that wraps over several rows in a phone-sized chat. ";
+  const msg = (i: number, extra = "") => ({
+    id: `m${i}`, seq: i + 1, kind: i % 2 ? "assistant_message" : "user_message",
+    timestamp: new Date(Date.UTC(2026, 10, 11, 7, 0, i)).toISOString(), body: `Message ${i}. ${words.repeat(4)}${extra}`,
+  });
+  const history = Array.from({ length: 60 }, (_, i) => msg(i));
+
+  async function readSessionBackUp(events = history.slice(20)) {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: events } }) });
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
+    await app.waitFor("id:session-chat", { timeout: 10_000 });
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
+    await app.wait(300);
+    for (let i = 0; i < 2; i += 1) await app.scroll("id:session-chat", -1500);
+    await app.wait(400);
+    expect(app.shows("id:jump-latest")).toBe(true);
+    return app;
+  }
+  const still = async (app: Awaited<ReturnType<typeof open>>, before: string | undefined, what: string) => {
+    await app.wait(400);
+    expect(`${what}: ${firstDrawn(app)?.slice(0, 11)}`).toBe(`${what}: ${before?.slice(0, 11)}`);
+    // The jump control says there is more below (with a request open, its count).
+    expect(`${what}: ${app.shows("id:jump-latest") || app.shows("id:jump-requests")}`).toBe(`${what}: true`);
+  };
+
+  test("through new messages, a streaming reply, an earlier row growing, older history, a request and a reconnect", async () => {
+    const app = await readSessionBackUp();
+    const before = firstDrawn(app);
+    await app.host.send("app.conversation", { worker: "w1", upserts: [msg(60)] });
+    await still(app, before, "a new message");
+    for (const tail of ["one", "one two three", "one two three four five six seven eight nine ten. ".repeat(6)]) {
+      await app.host.send("app.conversation", { worker: "w1", upserts: [{ ...msg(61), body: tail }], activity: { id: "turn-9", status: "running", started_at: new Date().toISOString() } });
+      await app.wait(100);
+    }
+    await still(app, before, "a streaming reply");
+    // A row above the screen grows (an edited or re-sent event).
+    await app.host.send("app.conversation", { worker: "w1", upserts: [msg(22, words.repeat(8))], activity: null });
+    await still(app, before, "an earlier row grows");
+    // Older history comes in above (a resync with the whole transcript).
+    await app.host.send("app.conversation", { worker: "w1", upserts: history.slice(0, 20) });
+    await still(app, before, "older history");
+    await app.host.send("app.conversation", { worker: "w1", snapshot: true });
+    await still(app, before, "a re-sent snapshot");
+    // The Session asks something: a request card arrives at the foot.
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...session, status: "blocked", prompt: { id: "p-1", kind: "permission", provider: "claude", title: "Run this command?", request: "ls", options: [{ number: 1, label: "Yes", selected: true }, { number: 2, label: "No" }] } } });
+    await still(app, before, "a request card");
+    const subscribed = framesOf(app.host.posts(), "codex_conversation_subscribe").length;
+    await app.host.send("app.daemonDrop");
+    await app.waitUntil(() => framesOf(app.host.posts(), "codex_conversation_subscribe").length > subscribed, { timeout: 10_000 });
+    await still(app, before, "a reconnect");
+  }, 60_000);
+});
+
+describe("a row whose content changes shows the change where it is", () => {
+  test("a tool row goes from running to failed, and a reply's words grow, in the rows already drawn", async () => {
+    const session = { id: "w1", name: "tools", status: "running", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() };
+    const t = (i: number) => new Date(Date.UTC(2026, 10, 13, 2, 0, i)).toISOString();
+    const run = { id: "c1", seq: 2, kind: "command", timestamp: t(1), command: "bun test settings", status: "running" };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: [{ id: "u1", seq: 1, kind: "user_message", timestamp: t(0), body: "Run the tests" }, run] } }) });
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
+    await app.waitFor("text:Run the tests", { timeout: 10_000 });
+    await app.wait(300);
+    const running = app.texts();
+    await app.host.send("app.conversation", { worker: "w1", upserts: [{ ...run, status: "failed", exit_code: 1, output: "1 fail" }] });
+    expect(running).toContain("Run bun test settings");
+    await app.waitFor("text:Run bun test settings  Failed · exit 1");
+    // A reply streams into the row already drawn.
+    for (const body of ["Two", "Two tests failed", "Two tests failed: settings and sync."]) {
+      await app.host.send("app.conversation", { worker: "w1", upserts: [{ id: "a1", seq: 3, kind: "assistant_message", timestamp: t(2), body }] });
+      await app.waitFor(`text:${body}`);
+    }
+  }, 30_000);
 });

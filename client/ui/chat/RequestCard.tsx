@@ -349,11 +349,13 @@ function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; o
 
 /** An answered request's line where it was asked (WIRE §2): kept by the computer, so it survives a restart. */
 export function AnsweredRow(props: { item: () => AnsweredTimelineItem }) {
-  const open = signal(false);
+  // Open is this row's (by id): a recycled cell showing another answered row shows it closed.
+  const openId = signal<string | null>(null);
+  const open = () => openId() === props.item().id;
   const sealed = () => sealedOfAnswered(props.item().record, (ms) => clock().format.time(ms, clock().zones.device));
   return (
     <View testID="request-answered" class="px-4">
-      <SealedLine sealed={sealed} open={open} onToggle={() => open.set(!open())} />
+      <SealedLine sealed={sealed} open={open} onToggle={() => openId.set(open() ? null : untracked(props.item).id)} />
     </View>
   );
 }
