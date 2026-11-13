@@ -460,7 +460,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err := platform.MkdirPrivate(codexControlDir); err != nil {
 		log.Printf("WARN agent events: cannot create %s, Codex Workers will be followed from their transcript: %v", codexControlDir, err)
 	} else {
-		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir})
+		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir, Inline: true, ConfigPath: modelprofiles.DefaultCodexConfigPath()})
 		codexFollow = newCodexEvents(ctx, eventHub)
 		w.ObserveSessions(codexFollow.Observe)
 	}
