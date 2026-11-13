@@ -221,6 +221,12 @@ func (t TurnRecord) snapshot() watcher.TurnSnapshot {
 // turn's expired lease (the false-stale incident).
 const turnLeaseGrace = 10 * time.Minute
 
+// turnEndedWithoutReport is a signal turn's summary once its provider turn
+// ended (Claude's Stop hook, the transcript's end of turn) and the Worker has
+// not reported: the Session is no longer running, and the turn waits for the
+// report, or for the stall supervisor to tell Brain.
+const turnEndedWithoutReport = "Turn ended without a progress report; waiting for the Worker's report"
+
 // PrepareInputAdmission persists one exact pre-mutation input transaction
 // for the current provider pane/process generation. A pending row is a
 // transaction, not a Session or generation mutex: several distinct pending
@@ -1093,6 +1099,11 @@ func reduceTurnFact(turn *TurnRecord, fact watcher.TurnFact, now time.Time) (tur
 					mutation.activityID = fact.ActivityID
 				}
 				hintOnly(kind, "Delegated provider reported "+fact.Kind+"; awaiting the Worker's progress report")
+				// The Session no longer reads as running: its turn ended and
+				// no report came. A late report still settles the turn.
+				if summary != turnEndedWithoutReport {
+					summary = turnEndedWithoutReport
+				}
 				mutation.changed = true
 				break
 			}

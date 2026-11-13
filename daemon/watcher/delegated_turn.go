@@ -53,6 +53,10 @@ type ProviderActivityObservation struct {
 	InputUnwrappedSHA256 string
 	Structured           bool
 	FallbackAllowed      bool
+	// AgentReported marks an observation the agent pushed itself (its hooks or
+	// app-server: a turn it ended is a turn it said it ended), not one read
+	// back from its transcript or screen.
+	AgentReported bool
 	// ProbeState is the channel-health classification of this observation:
 	// OK (read succeeded, possibly no new fact) vs unlocatable/unreadable.
 	ProbeState ProviderProbeState

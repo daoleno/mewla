@@ -111,7 +111,7 @@ func TestSignalTurnProviderTerminalIsEvidenceOnly(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if mutation.status != "" || mutation.eventActionable || mutation.settledAt != nil || mutation.hint == nil {
+			if (mutation.status != "" && mutation.status != watcher.TurnRunning) || mutation.eventActionable || mutation.settledAt != nil || mutation.hint == nil {
 				t.Fatalf("bound provider %s settled the signal turn: %+v", kind, mutation)
 			}
 		})

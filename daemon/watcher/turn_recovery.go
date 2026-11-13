@@ -569,9 +569,12 @@ func stalledDelegatedTurn(item probedPollWorker) (delegatedStall, bool) {
 			return delegatedStall{}, false
 		}
 		stall.turnID, stall.deadline = turn.TurnID, turn.LeaseDeadline
-		// A Blocked turn already holds an actionable request for Brain.
+		// A Blocked turn already holds an actionable request for Brain. A turn
+		// the agent itself said it ended (Claude's Stop hook) has stopped
+		// whatever its composer shows: Claude leaves a dim prompt suggestion
+		// there, which reads as typed text on a plain screen capture.
 		stall.stopped = provider.Error == nil && turn.Status != TurnBlocked &&
-			isWorkerInputReady(item.workerSnap.Command, item.content)
+			(provider.AgentReported || isWorkerInputReady(item.workerSnap.Command, item.content))
 	case (!item.hasTurn || TurnTerminal(turn.Status)) && newestStale != nil:
 		stall.turnID = newestStale.ProposedTurnID
 	default:
@@ -674,7 +677,7 @@ func stallSummary(decision turnRecoveryDecision, failure *ProviderActivityError,
 	case "provider_error":
 		head = "Worker stalled: provider error needs attention; not resumed automatically"
 	case "stopped":
-		head = "Worker stopped; review the result"
+		head = "Worker's turn ended without a progress report; review the result"
 	default:
 		head = "Worker stopped without a terminal progress report"
 	}
