@@ -141,19 +141,20 @@ print("draft and computers came over")
 
 # The M1 preview died on its first "Scan code" in a release build (R8 had dropped ML Kit's registrar):
 # open the scanner in this release build, answer the system's camera prompt, and the app must stay up
-# with the camera looking for a code.
+# with the camera looking for a code: the finder holds the camera view (qr-camera) only while it runs
+# (it no longer says "Looking for a Mewla code…", e22f8ce5).
 log "4. the scanner runs in the release build"
 adb logcat -c
 tap "^Computer$" 20 || { shot 4-no-cat; fail "home has no cat to open the computer page"; }
 tap "^Pair a computer$" 20 || { shot 4-no-pair; fail "the computer page has no Pair a computer"; }
 tap "^While using the app$" 20 || { shot 4-no-prompt; fail "the scanner did not ask for the camera"; }
-for _ in $(seq 1 20); do shows "Looking for a Mewla code" && break; sleep 1; done
+for _ in $(seq 1 20); do shows 'resource-id="qr-camera"' && break; sleep 1; done
 sleep 3
 shot 4-scanner
 if [[ -z "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; then
   adb logcat -d -b crash > "$OUT/scanner-crash.txt"
   fail "the app died with the scanner open (scanner-crash.txt)"
 fi
-shows "Looking for a Mewla code" || fail "the scanner is not looking for a code"
+shows 'resource-id="qr-camera"' || fail "the scanner is not looking for a code"
 log "the scanner runs: camera allowed, app up, looking for a code"
 log "PASS"
