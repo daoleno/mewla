@@ -1,13 +1,9 @@
-import { Clipboard, signal, Text, untracked, View } from "nsh";
+import { signal, Text, untracked, View } from "nsh";
 import { Icon } from "../icons/Icon";
 import { Button } from "nsh/base";
 import type { MessageTimelineItem } from "../../core/timeline/types";
-import { isEditablePrompt, messageCopyText, messageEditMode, type MessageEdit } from "../../core/timeline/messageActionsModel";
+import { isEditablePrompt, messageEditMode, type MessageEdit } from "../../core/timeline/messageActionsModel";
 import { composerEdits, type ComposerText } from "./Composer";
-import { showAlert } from "../shell/alert";
-
-/** The text the Select Text sheet shows; "" while it is closed. */
-export const selectingText = signal("");
 
 const INPUT_NOT_CLEAN = "Rewound, but the agent's input box still has text. Clear it in the Terminal, then send.";
 
@@ -97,21 +93,12 @@ export function EditChip(props: { editor: MessageEditor }) {
   );
 }
 
-/** The menu of a message: Copy, and Edit for a sent prompt of a connected, idle chat. */
-export async function showMessageMenu(item: MessageTimelineItem, env: { editor?: MessageEditor; connected: boolean; running: boolean }): Promise<void> {
-  const subject = { id: item.id, role: item.role, body: item.body, hasAttachments: item.attachments.length > 0, pending: Boolean(item.pending), streaming: Boolean(item.streaming) };
-  if (subject.streaming || !subject.body.trim()) return;
-  const editable = env.editor && isEditablePrompt(subject, { messageRewind: false, brain: false, running: env.running, connected: env.connected, canSelectText: false });
-  const { action } = await showAlert({
-    presentation: "actionSheet",
-    actions: [
-      { id: "copy", label: "Copy" },
-      { id: "select", label: "Select Text" },
-      ...(editable ? [{ id: "edit", label: "Edit" }] : []),
-      { id: "cancel", label: "Cancel", role: "cancel" as const },
-    ],
-  });
-  if (action === "copy") await Clipboard.writeText(messageCopyText(subject)).catch(() => {});
-  else if (action === "select") selectingText.set(subject.body);
-  else if (action === "edit") env.editor?.open(item);
+/**
+ * A tap on one of the person's own sent messages: it goes into the composer to edit (the ✎ Editing chip, ×
+ * leaves it), where it can be edited (a sent text-only prompt of a connected, idle chat). Copying is the
+ * system's: a long press selects the text.
+ */
+export function editOnTap(item: MessageTimelineItem, env: { editor: MessageEditor; connected: boolean; running: boolean }): void {
+  const subject = { role: item.role, body: item.body, hasAttachments: item.attachments.length > 0, pending: Boolean(item.pending) };
+  if (isEditablePrompt(subject, { connected: env.connected, running: env.running })) env.editor.open(item);
 }

@@ -54,6 +54,12 @@ const toneColor = (tone: string | undefined) => (tone === "failed" || tone === "
  * with a 48 pt header (the language or "code" in soft mono, then Copy, which shows a check for a moment),
  * the code in mono 13/20 under it, scrolling sideways. NSH draws and colours the code.
  */
+/**
+ * Selected text in the app's ink, as in the terminal (SPEC §11): the handles take it and the highlight is it at
+ * the platform's wash (NSH 0.5.0 draws it at 33 % on Android; SPEC's 20 % is not settable).
+ */
+export const SELECTION = "selection:bg-foreground";
+
 export function CodeBlock(props: { code: string; language?: string }) {
   const copied = signal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -67,12 +73,12 @@ export function CodeBlock(props: { code: string; language?: string }) {
   return (
     <View testID="code-block" class="my-1 overflow-hidden rounded-(--radius-group) bg-card">
       <View class="h-12 flex-row items-center gap-2 pl-4 pr-1">
-        <Text class="min-w-0 flex-1 font-mono text-code text-muted-foreground line-clamp-1">{props.language || "code"}</Text>
+        <Text class="min-w-0 flex-1 select-none font-mono text-code text-muted-foreground line-clamp-1">{props.language || "code"}</Text>
         <Button testID="code-copy" accessibilityLabel={copied() ? "Copied" : "Copy"} onPress={copy} class="size-11 items-center justify-center rounded-full active:bg-accent">
           <Icon name={copied() ? "check" : "copy"} size={18} color="muted-foreground" />
         </Button>
       </View>
-      <TextView document={{ blocks: [{ type: "codeBlock", code: props.code, language: props.language ?? "" }] }}
+      <TextView document={{ blocks: [{ type: "codeBlock", code: props.code, language: props.language ?? "" }] }} selectable class={SELECTION}
         classes={{ codeBlock: "m-0 rounded-none border-0 bg-transparent p-0", codeBlockScroll: "m-0 p-0", codeBlockCode: "m-0 px-4 pb-4 pt-0" }} />
     </View>
   );
@@ -150,7 +156,7 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
           {item().commandText ? <Mono text={item().commandText!} /> : null}
           {item().queryText ? <TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText! }] }] }} selectable class="text-sm" /> : null}
           {item().statusLine ? <Text class="text-xs text-muted-foreground">{item().statusLine}</Text> : null}
-          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body!} /> : <TextView markdown={item().body!} selectable renderCodeBlock={renderCode} class="text-sm" />) : null}
+          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body!} /> : <TextView markdown={item().body!} selectable renderCodeBlock={renderCode} class={`text-sm ${SELECTION}`} />) : null}
           {files().map((file) => <FileRow file={file} onFile={props.onFile} />)}
         </View>
       ) : null}
@@ -188,7 +194,7 @@ function Card(props: { id: string; expansion: Expansion; icon: IconName; tone: s
         {props.status ? <Text class="text-xs text-muted-foreground">{props.status}</Text> : null}
       </View>
       {props.title ? <Text class="text-base font-semibold">{props.title}</Text> : null}
-      {open() ? <TextView markdown={props.body || props.preview} selectable class="text-sm" /> : props.preview ? <Text class="text-sm text-muted-foreground line-clamp-3">{props.preview}</Text> : null}
+      {open() ? <TextView markdown={props.body || props.preview} selectable class={`text-sm ${SELECTION}`} /> : props.preview ? <Text class="text-sm text-muted-foreground line-clamp-3">{props.preview}</Text> : null}
       {open() && props.extra ? (props.extra() as never) : null}
     </Button>
   );

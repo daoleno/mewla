@@ -47,19 +47,35 @@ describe("code in a reply", () => {
 });
 
 describe("a reply", () => {
-  test("is its text alone: no Copy row under it; a long press offers Copy and Select Text", async () => {
+  test("is its text alone: no Copy row under it, and no sheet of ours on a long press (the system selects it)", async () => {
     const app = await brainWith([reply("a1", 1, "Tonight at 23:30, and it is on the Calendar.")]);
     await app.waitFor("text:Tonight at 23:30, and it is on the Calendar.", { timeout: 10_000 });
     expect(app.shows("label:Copy")).toBe(false);
-    let offered: string[] = [];
-    app.onDialog((dialog) => {
-      offered = dialog.buttons;
-      return "Copy";
-    });
+    // Nothing of ours hears a long press on it: the text is selectable, and the platform's selection takes it
+    // (the headless host draws no selection; not provable here).
+    let refused = "";
+    try {
+      await app.longPress("id:reply");
+    } catch (error) {
+      refused = String((error as Error).message ?? error);
+    }
+    expect(refused).toContain("no pressable view");
+    expect(app.dialogs()).toEqual([]);
+  }, 20_000);
+});
+
+describe("the person's own message", () => {
+  test("a tap puts it in the composer to edit (the Editing chip; × leaves it), with no sheet", async () => {
+    const app = await brainWith([{ id: "u1", seq: 1, timestamp: at(1), kind: "user_message", role: "user", body: "Book the 23:30 train" }, reply("a1", 2, "Booked.")]);
+    await app.waitFor("text:Book the 23:30 train", { timeout: 10_000 });
     await app.wait(300);
-    await app.longPress("id:reply");
-    await app.waitUntil(() => (app.clipboard() ?? "") === "Tonight at 23:30, and it is on the Calendar.");
-    expect(offered).toEqual(["Copy", "Select Text", "Cancel"]);
+    await app.press("id:user-message");
+    await app.waitFor("id:edit-chip");
+    expect(app.value("id:composer")).toBe("Book the 23:30 train");
+    expect(app.dialogs()).toEqual([]);
+    await app.press("id:edit-cancel");
+    await app.waitFor("id:edit-chip", { state: "gone" });
+    expect(app.value("id:composer")).toBe("");
   }, 20_000);
 });
 

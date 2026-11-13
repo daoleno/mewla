@@ -3,7 +3,7 @@ import { progressSteps } from "../../core/sessions/progress";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
-import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
+import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
 import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
 import { brainHostIdentity } from "../chat/links";
@@ -338,8 +338,8 @@ export function Home() {
   // Brain's thread is never rewound: an edited message goes out as a new one.
   const editor = createMessageEdit({ text, brain: true, messageRewind: () => false, send: (value) => brainChat()?.send(value) });
   const handlers = {
-    onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) => {
-      if (!untracked(routedBrainThread)) void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
+    onUserMessage: (item: Parameters<typeof editOnTap>[0]) => {
+      if (!untracked(routedBrainThread)) editOnTap(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
     },
     // A past thread is read-only: its Work cards only read.
     get work() {

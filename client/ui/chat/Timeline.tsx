@@ -3,7 +3,6 @@ import { noteScroll } from "../pets/hold";
 import { elapsedShort } from "../../core/sessions/activity";
 import { elapsedNow } from "../kit/elapsedClock";
 import { Button, TextView } from "nsh/base";
-import { GuardedSheet as Sheet } from "../shell/AppSheet";
 import { isWorkingRow } from "../../core/conversation/timeline";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
@@ -15,8 +14,7 @@ import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
 import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
-import { PlainText } from "./PlainText";
-import { selectingText, showMessageMenu } from "./messageEdit";
+import { SELECTION } from "./TimelineRows";
 import { Caption } from "../kit/kit";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
@@ -63,7 +61,7 @@ function HeaderFade() {
 }
 
 export type MessageHandlers = {
-  /** A tap on one of the person's own messages: its menu (Copy, Edit). */
+  /** A tap on one of the person's own sent messages: Edit, where it can be (the ✎ Editing chip). */
   onUserMessage?: (item: MessageTimelineItem) => void;
   /** When the running turn started (the provider's own clock): "Working · 1:05". */
   workingSince?: () => string | undefined;
@@ -102,16 +100,17 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
         </View>
       ) : null}
       {it().body || files().length ? (
-        <Button testID="user-message" onPress={() => !it().pending && props.handlers.onUserMessage?.(it())}
+        // A long press selects its text (the system's handles and Copy / Select all / Share); a tap edits it.
+        <View testID="user-message" selectable onPress={() => !it().pending && props.handlers.onUserMessage?.(it())}
           class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "border border-foreground" : ""} ${waiting() ? "opacity-55" : ""}`}>
-          {it().body ? <Text class="text-message">{it().body}</Text> : null}
+          {it().body ? <Text class={`text-message ${SELECTION}`}>{it().body}</Text> : null}
           {files().map((file) => (
             <View class="flex-row items-center gap-1.5 pt-1">
               <Icon name="document" size={14} />
               <Text class="text-sub text-muted-foreground line-clamp-1">{file.name}</Text>
             </View>
           ))}
-        </Button>
+        </View>
       ) : null}
       {waiting() ? <Icon name="time" size={12} /> : null}
       {failed() ? (
@@ -180,10 +179,10 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
         <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>
       ) : kind() === "reply" ? (
         <View class="px-4">
-          {/* Brain's reply is its text alone (soft-final SPEC §11 Message); a long press opens Copy and Select Text. */}
-          <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}
-            onLongPress={() => !(it() as MessageTimelineItem).streaming && void showMessageMenu(it() as MessageTimelineItem, { connected: true, running: false })}>
-            <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} class="text-message"
+          {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
+              with the system's handles and menu (Copy, Select all, Share). */}
+          <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
+            <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class={`text-message ${SELECTION}`}
               renderCodeBlock={renderCode}
               classes={TABLE}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
@@ -214,19 +213,6 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
 }
 
 /** A chat's rows, kept at the newest one while the person reads at the bottom. */
-/** Select Text: the message in a sheet, where the system's selection works on it. */
-function SelectTextSheet() {
-  return (
-    <Sheet open={selectingText() !== ""} onOpenChange={({ open }) => !open && selectingText.set("")} closeOnSwipe
-      popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
-      <View class="gap-3 pb-8">
-        <Text class="text-lg font-semibold">Select Text</Text>
-        <PlainText text={selectingText()} class="text-base" />
-      </View>
-    </Sheet>
-  );
-}
-
 /**
  * Within this of its end the list is at its end: it follows new rows there, and further up the jump control
  * shows. One distance for both: between two, the list did neither.
@@ -392,7 +378,6 @@ export function ChatTimeline(props: {
   }
   return (
     <View class="flex-1">
-      <SelectTextSheet />
       <PictureViewer pictures={pictures} open={viewing} load={handlers.loadImage} />
       {ready() ? (
       <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
