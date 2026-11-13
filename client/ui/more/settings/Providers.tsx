@@ -28,6 +28,7 @@ import { LEAD_SLOT, StateLine, tile, type Lead } from "../../kit/RowTile";
 import { AgentIcon } from "../../icons/AgentIcon";
 import { officialLoginLead, providerLead, type ProviderLead } from "../../../core/providers/lead";
 import { Segmented } from "../../kit/Segmented";
+import { createTabPager, TabPages } from "../../kit/TabPager";
 import type { PageNav } from "../routes";
 import { change, changing, discover, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providerState";
 
@@ -76,7 +77,40 @@ export function Providers(props: { nav: PageNav }) {
     });
   });
 
-  const client = () => agent();
+  // Each agent's Providers are a page; the pages follow the finger (kit/TabPager.tsx).
+  const pager = createTabPager({ keys: CLIENTS.map((c) => c.key), value: agent, onChange: (key) => agent.set(key) });
+
+  return (
+    <Page display title="Model Providers" testID="providers" refreshing={providers().loading && Boolean(snapshot())} onRefresh={refreshProviders}>
+      <>
+        <If when={!daemon()} else={<If when={!connected() && !snapshot()} else={<If when={!snapshot() && providers().error} else={<If when={!snapshot()} else={<View>
+            <If when={locked()}><Notice testID="providers-locked" title="Refresh required" detail="Changes are paused until this list is refreshed." action="Refresh" onAction={refreshProviders} /></If>
+            <If when={warning()}><Notice testID="providers-warning" title="Saved with a warning" detail={warning()} /></If>
+            <If when={providers().error}><Notice tone="failed" title={presentProviderError(providers().error).title === "Providers" ? "Refresh required" : presentProviderError(providers().error).title} detail={failureWords(providers().error)} action="Refresh" onAction={refreshProviders} /></If>
+            <View class="mt-3">
+              <Segmented testID="provider-agent" accessibilityLabel="Agent" options={CLIENTS} value={agent()} onChange={(key) => agent.set(key as ProviderClient)} pager={pager} />
+            </View>
+            <TabPages testID="provider-pages" pager={pager} pages={{
+              codex: () => <AgentProviders client="codex" nav={props.nav} />,
+              claude: () => <AgentProviders client="claude" nav={props.nav} />,
+            }} />
+            <If when={snapshot()!.gateway}><Gateway /></If>
+          </View>}><EmptyState busy title="Loading Providers" /></If>}><If when={providers().error!.kind === "unavailable"} else={<EmptyState
+              testID="providers-failed"
+              icon="alert"
+              title={providers().error!.refreshable ? "Refresh required" : "Could not load"}
+              detail={failureWords(providers().error)}
+              action="Refresh"
+              onAction={refreshProviders}
+            />}><EmptyState icon="key" title="Unavailable" detail="Model connections are not available on this daemon." /></If></If>}><EmptyState icon="key" title="Server offline" detail="Providers are managed on the connected computer." /></If>}><EmptyState testID="providers-no-server" icon="key" title="No current server" detail="Providers are managed on the connected computer." action="Open Settings" onAction={() => props.nav.pop()} /></If>
+      </>
+    </Page>
+  );
+}
+
+/** One agent's Providers: the official login and each connection, one of them chosen. A page of Model Providers. */
+function AgentProviders(props: { client: ProviderClient; nav: PageNav }) {
+  const client = () => props.client;
   const all = () => (snapshot() ? connectionsForClient(snapshot()!, client()) : []);
   const q = () => query().trim().toLowerCase();
   const list = () => all().filter((c) => !q() || `${c.name} ${whereOf(snapshot(), c)}`.toLowerCase().includes(q()));
@@ -141,84 +175,66 @@ export function Providers(props: { nav: PageNav }) {
   };
 
   return (
-    <Page display title="Model Providers" testID="providers" refreshing={providers().loading && Boolean(snapshot())} onRefresh={refreshProviders}>
-      <>
-        <If when={!daemon()} else={<If when={!connected() && !snapshot()} else={<If when={!snapshot() && providers().error} else={<If when={!snapshot()} else={<View>
-            <If when={locked()}><Notice testID="providers-locked" title="Refresh required" detail="Changes are paused until this list is refreshed." action="Refresh" onAction={refreshProviders} /></If>
-            <If when={warning()}><Notice testID="providers-warning" title="Saved with a warning" detail={warning()} /></If>
-            <If when={providers().error}><Notice tone="failed" title={presentProviderError(providers().error).title === "Providers" ? "Refresh required" : presentProviderError(providers().error).title} detail={failureWords(providers().error)} action="Refresh" onAction={refreshProviders} /></If>
-            <View class="mt-3">
-              <Segmented testID="provider-agent" accessibilityLabel="Agent" options={CLIENTS} value={client()} onChange={(key) => agent.set(key as ProviderClient)} />
-            </View>
-            <If when={showSearch()}><Section>
-                <Field testID="provider-search" accessibilityLabel="Search Providers" value={query()} placeholder={`Search ${label()} Providers`} onChange={(v) => query.set(v)} />
-              </Section></If>
-            <Section
-              title={`${label()} uses`}
-              footer={list().length === 0 && q() ? "No Providers match this search." : undefined}
-            >
-              <Row
-                testID="provider-official"
-                lead={lead(officialLoginLead(client()))}
-                title="Official login"
-                subtitle="Direct · uses the native account"
-                check={selectedId() === ""}
-                role="radio"
-                selected={selectedId() === ""}
-                accessibilityLabel="Official login, Direct · uses the native account"
-                trailing={<If when={changing() === "select:"}><Spinner size={16} /></If>}
-                disabled={Boolean(changing()) || selectedId() === ""}
-                onPress={() => void select(null)}
-              />
-              <If when={rowNote().official}><View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{rowNote().official}</Text></View></If>
-              {list().map((c) => (
-                <View>
-                  <Row
-                    testID={`provider-${c.id}`}
-                    lead={lead(providerLead(c))}
-                    title={c.name}
-                    subtitle={subtitle(c)}
-                    check={selectedId() === c.id}
-                    role="radio"
-                    selected={selectedId() === c.id}
-                    accessibilityLabel={`${c.name}, ${whereOf(snapshot(), c)}${c.credential_ready ? "" : ", API key required"}`}
-                    disabled={Boolean(changing())}
-                    onPress={() => void select(c)}
-                    trailing={
-                      <View class="flex-row items-center gap-2">
-                        <If when={!c.credential_ready}><StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /></If>
-                        <If when={changing() === `select:${c.id}` || changing() === `discover:${c.id}`}><Spinner size={16} /></If>
-                        <Menu
-                          trigger={<View testID={`provider-menu-${c.id}`} accessibilityLabel={`${c.name} actions`} class="p-1"><Icon name="more-horizontal" size={18} /></View>}
-                          popupClass="rounded-2xl bg-popover p-2"
-                          backdropClass="bg-black/30"
-                        >
-                          <MenuItem disabled={!c.credential_ready} onSelect={() => void openModels(c)} class="rounded-lg px-4 py-3 active:bg-accent disabled:opacity-50">
-                            <Text class="text-base">{`Model access · ${enabledModelIds(snapshot(), c.id).length} of ${(snapshot()?.models[c.id] ?? []).length} on`}</Text>
-                          </MenuItem>
-                          <MenuItem onSelect={() => void test(c)} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Test connection</Text></MenuItem>
-                          <MenuItem onSelect={() => props.nav.push({ name: "settings-provider-editor", client: client(), connectionId: c.id })} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Edit</Text></MenuItem>
-                          <MenuItem onSelect={() => void remove(c)} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base text-destructive">Delete</Text></MenuItem>
-                        </Menu>
-                      </View>
-                    }
-                  />
-                  <If when={rowNote()[c.id]}><View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View></If>
+    <View>
+      <If when={showSearch()}><Section>
+          <Field testID="provider-search" accessibilityLabel="Search Providers" value={query()} placeholder={`Search ${label()} Providers`} onChange={(v) => query.set(v)} />
+        </Section></If>
+      <Section
+        title={`${label()} uses`}
+        footer={list().length === 0 && q() ? "No Providers match this search." : undefined}
+      >
+        <Row
+          testID="provider-official"
+          lead={lead(officialLoginLead(client()))}
+          title="Official login"
+          subtitle="Direct · uses the native account"
+          check={selectedId() === ""}
+          role="radio"
+          selected={selectedId() === ""}
+          accessibilityLabel="Official login, Direct · uses the native account"
+          trailing={<If when={changing() === "select:"}><Spinner size={16} /></If>}
+          disabled={Boolean(changing()) || selectedId() === ""}
+          onPress={() => void select(null)}
+        />
+        <If when={rowNote().official}><View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{rowNote().official}</Text></View></If>
+        {list().map((c) => (
+          <View>
+            <Row
+              testID={`provider-${c.id}`}
+              lead={lead(providerLead(c))}
+              title={c.name}
+              subtitle={subtitle(c)}
+              check={selectedId() === c.id}
+              role="radio"
+              selected={selectedId() === c.id}
+              accessibilityLabel={`${c.name}, ${whereOf(snapshot(), c)}${c.credential_ready ? "" : ", API key required"}`}
+              disabled={Boolean(changing())}
+              onPress={() => void select(c)}
+              trailing={
+                <View class="flex-row items-center gap-2">
+                  <If when={!c.credential_ready}><StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /></If>
+                  <If when={changing() === `select:${c.id}` || changing() === `discover:${c.id}`}><Spinner size={16} /></If>
+                  <Menu
+                    trigger={<View testID={`provider-menu-${c.id}`} accessibilityLabel={`${c.name} actions`} class="p-1"><Icon name="more-horizontal" size={18} /></View>}
+                    popupClass="rounded-2xl bg-popover p-2"
+                    backdropClass="bg-black/30"
+                  >
+                    <MenuItem disabled={!c.credential_ready} onSelect={() => void openModels(c)} class="rounded-lg px-4 py-3 active:bg-accent disabled:opacity-50">
+                      <Text class="text-base">{`Model access · ${enabledModelIds(snapshot(), c.id).length} of ${(snapshot()?.models[c.id] ?? []).length} on`}</Text>
+                    </MenuItem>
+                    <MenuItem onSelect={() => void test(c)} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Test connection</Text></MenuItem>
+                    <MenuItem onSelect={() => props.nav.push({ name: "settings-provider-editor", client: client(), connectionId: c.id })} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Edit</Text></MenuItem>
+                    <MenuItem onSelect={() => void remove(c)} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base text-destructive">Delete</Text></MenuItem>
+                  </Menu>
                 </View>
-              ))}
-              <Row testID="provider-add" lead={tile("add")} title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
-            </Section>
-            <If when={snapshot()!.gateway}><Gateway /></If>
-          </View>}><EmptyState busy title="Loading Providers" /></If>}><If when={providers().error!.kind === "unavailable"} else={<EmptyState
-              testID="providers-failed"
-              icon="alert"
-              title={providers().error!.refreshable ? "Refresh required" : "Could not load"}
-              detail={failureWords(providers().error)}
-              action="Refresh"
-              onAction={refreshProviders}
-            />}><EmptyState icon="key" title="Unavailable" detail="Model connections are not available on this daemon." /></If></If>}><EmptyState icon="key" title="Server offline" detail="Providers are managed on the connected computer." /></If>}><EmptyState testID="providers-no-server" icon="key" title="No current server" detail="Providers are managed on the connected computer." action="Open Settings" onAction={() => props.nav.pop()} /></If>
-      </>
-    </Page>
+              }
+            />
+            <If when={rowNote()[c.id]}><View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View></If>
+          </View>
+        ))}
+        <Row testID="provider-add" lead={tile("add")} title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
+      </Section>
+    </View>
   );
 }
 

@@ -129,6 +129,18 @@ describe("Model Providers", () => {
     expect(sent).toEqual({ client: "codex", executor_id: "codex", connection_id: "c1", revision: 3 });
   });
 
+  test("Codex and Claude Code follow the finger on a phone (owner 11-13 20:05): a swipe shows Claude Code's Providers, a tap goes back", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot() : null), { platform: "android" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Work gateway");
+    expect(app.texts()).not.toContain("Claude Code uses");
+    await app.drag("id:provider-pages-codex", { x: -260 });
+    await app.waitFor("text:Claude Code uses");
+    await app.waitUntil(() => !app.shows("text:Work gateway"));
+    await app.press("id:provider-agent-codex");
+    await app.waitFor("text:Work gateway");
+  });
+
   test("a connection without a key opens its editor instead of being chosen", async () => {
     const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot() : null));
     const app = await open(HARNESS, c.options);
