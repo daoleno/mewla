@@ -1416,6 +1416,13 @@ function imagePathFromTool(event: CodexConversationEvent) {
   return path;
 }
 
+/**
+ * How much of a command's first line its row reads for the executable and its target. Every row is projected
+ * again on each change of its thread, and a call into JS is cut off after 2 s ("Error: interrupted"): on iOS
+ * 300 rows of 5 KB one-line commands took longer than that, all of it in the tokenizer.
+ */
+const COMMAND_HEAD = 1024;
+
 function commandPresentation(command: string): CommandPresentation {
   const normalized = cleanTerminalDisplayText(command);
   const firstLine =
@@ -1423,7 +1430,7 @@ function commandPresentation(command: string): CommandPresentation {
       .split("\n")
       .find((line) => line.trim())
       ?.trim() || "";
-  const tokens = commandTokens(firstLine);
+  const tokens = commandTokens(firstLine.slice(0, COMMAND_HEAD));
   const executable = commandExecutable(tokens);
   const lower = firstLine.toLowerCase();
   const fallbackDetail = commandSummary(command);
@@ -1733,6 +1740,8 @@ function commandSummary(command: string) {
   return truncateRunes(firstLine, 72);
 }
 
+const SPACE = /\s/;
+
 function tokenizeShellLike(value: string): string[] {
   const tokens: string[] = [];
   let current = "";
@@ -1761,7 +1770,7 @@ function tokenizeShellLike(value: string): string[] {
       quote = char;
       continue;
     }
-    if (/\s/.test(char)) {
+    if (SPACE.test(char)) {
       if (current) {
         tokens.push(current);
         current = "";
