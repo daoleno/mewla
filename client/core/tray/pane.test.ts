@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { brainRowLine, paneSelection, paneStateLine, paneTrayTitle, rowKey } from "./pane";
+import { brainRowLine, paneSelection, paneStateLine, paneTrayTitle, requestPaneKey, rowKey } from "./pane";
 import type { TrayRequest, TrayRow } from "./model";
 
 const row = (key: string, quiet?: boolean): TrayRow => ({ key, title: key, line: "", end: "", tile: { kind: "brain" }, target: { open: "work", workId: key }, quiet });
@@ -58,5 +58,17 @@ describe("the Brain row", () => {
       { kind: "assistant_message", seq: 2, body: "older" },
       { kind: "user_message", seq: 4, body: "thanks" },
     ])).toBe("Done shipped v2 to staging");
+  });
+});
+
+describe("a Needs you row's page", () => {
+  test("a Session's or a Work's ask and a Calendar alert own the page they open; Brain's card and a new device own none", () => {
+    expect(requestPaneKey({ where: "session", workerId: "w1" })).toBe("session:w1");
+    expect(requestPaneKey({ where: "work", workId: "k1" })).toBe("work:k1");
+    expect(requestPaneKey({ where: "alert", itemId: "c1" })).toBe("item:c1");
+    expect(requestPaneKey({ where: "brain", itemId: "c1" })).toBeNull();
+    expect(requestPaneKey({ where: "device" })).toBeNull();
+    // The same keys paneSelection gives the pages they open.
+    expect(paneSelection([{ name: "home" }, { name: "session", workerId: "w1" }])).toBe(requestPaneKey({ where: "session", workerId: "w1" }));
   });
 });
