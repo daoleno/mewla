@@ -59,14 +59,14 @@ async function menu(c: ReturnType<typeof computer>) {
 }
 
 describe("Brain's menu (§1.6)", () => {
-  test("five rows in order, Model showing the model and effort; a row it cannot do stays at its place and does nothing", async () => {
+  test("its rows in order, Model showing the model and effort; a row it cannot do is not drawn", async () => {
     const c = computer({ threadLoaded: false });
     const app = await menu(c);
+    // Brain's thread has not loaded: no New chat row yet.
     expect(app.texts().filter((text) => ["Open terminal", "Browse workspace", "Switch executor", "Model", "New chat"].includes(text)))
-      .toEqual(["Open terminal", "Browse workspace", "Switch executor", "Model", "New chat"]);
+      .toEqual(["Open terminal", "Browse workspace", "Switch executor", "Model"]);
     await app.waitFor("text:claude-sonnet-5-5 · High");
-    // Brain's thread has not loaded: New chat is there, not enabled.
-    expect(app.enabled("id:brain-menu-new-chat")).toBe(false);
+    expect(app.shows("id:brain-menu-new-chat")).toBe(false);
     expect(app.enabled("id:brain-menu-model")).toBe(true);
   }, 20_000);
 

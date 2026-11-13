@@ -17,13 +17,15 @@ describe("Brain's menu (soft-final/SPEC.md §1.6)", () => {
   const enabled = (input: Parameters<typeof brainMenuRows>[0]) => brainMenuRows(input).filter((row) => row.enabled).map((row) => row.id);
   const running = { connected: true, snapshot, threadLoaded: true, modelSwitchable: true };
 
-  test("always five rows in their order: Open terminal, Browse workspace, Switch executor, Model, New chat", () => {
+  test("its rows in their order: Open terminal, Browse workspace, Switch executor, Model, New chat", () => {
     expect(brainMenuRows(running).map((row) => row.label)).toEqual(["Open terminal", "Browse workspace", "Switch executor", "Model", "New chat"]);
-    expect(brainMenuRows({ ...running, connected: false, snapshot: null })).toHaveLength(5);
     expect(enabled(running)).toEqual(["terminal", "workspace", "executor", "model", "new-chat"]);
   });
 
-  test("a row the computer cannot do now stays, not enabled", () => {
+  test("a row the computer cannot do now is not drawn", () => {
+    expect(brainMenuRows({ ...running, connected: false, snapshot: null })).toEqual([]);
+    expect(brainMenuRows({ ...running, modelSwitchable: false }).map((row) => row.id)).not.toContain("model");
+    expect(brainMenuRows({ ...running, modelSwitchable: false }).every((row) => row.enabled)).toBe(true);
     // Offline: only Brain's terminal (its offline card).
     expect(enabled({ ...running, connected: false })).toEqual(["terminal"]);
     // Can't start: the workspace and the switch, no terminal, model or new chat.
