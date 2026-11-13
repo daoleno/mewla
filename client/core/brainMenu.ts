@@ -6,6 +6,7 @@
 import type { BrainExecutorRef, BrainExecutorState, BrainSnapshot } from "./brain";
 import type { Transport } from "./transport";
 
+/** An agent provider's product name; an unknown provider keeps its own word. */
 export function brainProviderLabel(value?: string): string {
   switch (value?.trim().toLowerCase()) {
     case "codex":
@@ -16,23 +17,52 @@ export function brainProviderLabel(value?: string): string {
       return "Grok";
     case "claude":
       return "Claude Code";
-    case "tmux":
-      return "tmux";
+    case "pi":
+      return "Pi";
+    case "opencode":
+      return "OpenCode";
+    case "dsh":
+      return "DSH";
     default:
       return value?.trim() || "Custom";
   }
 }
 
-/** An executor's name: its own, else its provider's. */
+const KNOWN_PROVIDERS: ReadonlySet<string> = new Set(["codex", "cursor", "grok", "claude", "pi", "opencode", "dsh"]);
+
+/**
+ * An executor's name: the product it runs (Codex, Claude Code, Cursor Agent…)
+ * unless the computer gave it a name of its own; the raw id ("codex", "agent")
+ * is not one.
+ */
 export function brainExecutorLabel(executor?: BrainExecutorRef | null): string {
   if (!executor) return "";
-  if (executor.name?.trim()) return executor.name.trim();
-  return brainProviderLabel(executor.provider && executor.provider !== "custom" ? executor.provider : executor.id);
+  const provider = executor.provider?.trim().toLowerCase() ?? "";
+  const name = executor.name?.trim() ?? "";
+  const lower = name.toLowerCase();
+  if (KNOWN_PROVIDERS.has(provider) && (!name || lower === executor.id.trim().toLowerCase() || lower === provider)) {
+    return brainProviderLabel(provider);
+  }
+  if (name) return name;
+  return brainProviderLabel(provider && provider !== "custom" ? provider : executor.id);
 }
 
-/** The line under an executor's name: provider, runtime, the account it is signed in as. */
-export function brainExecutorMeta(executor: BrainExecutorRef, state?: BrainExecutorState): string {
-  return [brainProviderLabel(executor.provider), executor.runtime?.trim(), state?.account].filter(Boolean).join(" · ");
+/**
+ * The line under an executor's name, only when it says something the name does
+ * not: "Not signed in" when it needs a sign-in; the account (else the executor's
+ * own id, for an API key) when another choice shows the same name. Otherwise none (the runtime is never shown).
+ */
+export function brainExecutorMeta(
+  executor: BrainExecutorRef,
+  states: Readonly<Record<string, BrainExecutorState>> | undefined,
+  choices: readonly BrainExecutorRef[],
+): string {
+  const state = states?.[executor.id];
+  if (state && !state.signed_in) return "Not signed in";
+  const label = brainExecutorLabel(executor);
+  const shared = choices.some((other) => other.id !== executor.id && brainExecutorLabel(other) === label);
+  if (!shared) return "";
+  return state?.account?.trim() || executor.id;
 }
 
 /**

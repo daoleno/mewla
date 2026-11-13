@@ -91,7 +91,9 @@ describe("Brain's menu (§1.6)", () => {
     expect(app.shows("id:brain-executor-agent")).toBe(true);
     expect(app.shows("id:brain-executor-grok")).toBe(false);
     expect(app.shows("id:brain-executor-install")).toBe(true);
-    expect(app.texts()).toContain("Claude Code · tmux · me@x");
+    // One line per agent, by product name; no runtime, no lone account; a second line only to ask for a sign-in.
+    for (const text of ["Claude Code", "Codex", "Cursor Agent", "Not signed in"]) expect(app.texts()).toContain(text);
+    expect(app.texts().some((t) => t.includes("tmux") || t.includes("me@x"))).toBe(false);
     await app.press("id:brain-executor-codex");
     await app.waitFor("id:brain-executor-error");
     expect(app.texts()).toContain("brain host executor is locked by environment override");
@@ -144,7 +146,7 @@ describe("Brain's states (§1.3)", () => {
     const app = await open(HARNESS, { platform: "android", host: c.host });
     await app.waitFor("text:Brain can't start");
     expect(app.texts()).toContain(problem.detail);
-    expect(app.texts()).toContain("Use claude");
+    expect(app.texts()).toContain("Use Claude Code");
     await app.press("id:brain-switch-executor");
     await app.waitUntil(() => said(app) === "switch-executor");
     await app.press("id:brain-use-suggested");

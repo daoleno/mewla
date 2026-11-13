@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrainSnapshot } from "./brain";
-import { brainExecutorChoices, brainExecutorMeta, brainHostSwitchProgress, brainMenuRows, canSwitchBrainExecutor, canSwitchBrainExecutorFromProblem } from "./brainMenu";
+import { brainExecutorChoices, brainExecutorLabel, brainExecutorMeta, brainHostSwitchProgress, brainMenuRows, canSwitchBrainExecutor, canSwitchBrainExecutorFromProblem } from "./brainMenu";
 
 const claude = { id: "claude", name: "", provider: "claude" };
 const codex = { id: "codex", name: "", provider: "codex", runtime: "gpt-5" };
@@ -45,7 +45,21 @@ describe("Switch executor", () => {
     expect(choices.map((e) => e.id)).toEqual(["claude", "codex"]);
     expect(moreToInstall).toBe(true);
     expect(canSwitchBrainExecutor(snapshot)).toBe(true);
-    expect(brainExecutorMeta(codex, snapshot.executor_states!.codex)).toBe("Codex · gpt-5 · me@x");
+  });
+
+  test("one line per agent: its product name, no runtime; a second line only to tell rows apart or ask for a sign-in", () => {
+    const states = snapshot.executor_states!;
+    expect(brainExecutorLabel({ id: "codex", name: "codex", provider: "codex", runtime: "tmux" })).toBe("Codex");
+    expect(brainExecutorLabel({ id: "agent", name: "agent", provider: "cursor" })).toBe("Cursor Agent");
+    expect(brainExecutorLabel({ id: "oc", name: "", provider: "opencode" })).toBe("OpenCode");
+    expect(brainExecutorLabel({ id: "work", name: "Work Codex", provider: "codex" })).toBe("Work Codex");
+    expect(brainExecutorMeta(claude, states, [claude, codex])).toBe("");
+    expect(brainExecutorMeta(codex, states, [claude, codex])).toBe("Not signed in");
+    const codex2 = { id: "codex2", name: "codex2", provider: "codex" };
+    const both = { ...states, codex: { installed: true, signed_in: true, account: "me@x" }, codex2: { installed: true, signed_in: true, account: "you@y" } };
+    expect(brainExecutorMeta(codex, both, [codex, codex2])).toBe("me@x");
+    expect(brainExecutorMeta(codex2, both, [codex, codex2])).toBe("you@y");
+    expect(brainExecutorMeta(codex2, { ...both, codex2: { installed: true, signed_in: true } }, [codex, codex2])).toBe("codex2");
   });
 
   test("a switch is done when the new host shows up, failed on its host problem", () => {
