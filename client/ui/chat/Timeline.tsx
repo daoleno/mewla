@@ -19,7 +19,7 @@ import { PictureViewer } from "./PictureViewer";
 import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
 import { INLINE_CODE, SELECTION } from "./TimelineRows";
 import { Caption } from "../kit/kit";
-import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, renderPagedCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
+import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
 import { brainFiles, openChatLink, openChatPath } from "./links";
 
@@ -77,8 +77,6 @@ export type MessageHandlers = {
   loadImage?: (path: string) => Promise<string | null>;
   /** Brain's thread: where its Work cards lead. */
   work?: WorkCardHandlers;
-  /** Trial: three pages. The thread is a page of a sideways pager: nothing in it scrolls sideways (code blocks wrap). */
-  paged?: boolean;
   /** A picture pressed (its `pictureKey`): the chat's viewer opens on it. Set by the chat itself. */
   openPicture?: (key: string) => void;
 };
@@ -259,7 +257,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
               with the system's handles and menu (Copy, Select all, Share). */}
           <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
             <TextView markdown={reply().body ?? ""} options={{ streaming: Boolean(reply().streaming) }} selectable class={`text-message ${SELECTION}`}
-              renderCodeBlock={props.handlers.paged ? renderPagedCode : renderCode}
+              renderCodeBlock={renderCode}
               classes={TABLE}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
               renderImage={(image) => {
@@ -271,7 +269,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
       ) : kind() === "working" ? (
         <WorkingRow since={() => props.handlers.workingSince?.()} />
       ) : kind() === "activity" ? (
-        <ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile} paged={props.handlers.paged}
+        <ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
           pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} />
       ) : kind() === "plan" ? (
         <PlanRow item={plan} />
