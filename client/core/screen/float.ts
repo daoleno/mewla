@@ -152,6 +152,24 @@ export function nearestFloatCorner(center: { x: number; y: number }, area: Float
   return `${vertical}-${horizontal}`;
 }
 
+/**
+ * On a wide window the float docks in a strip at the right of the right pane, beside the page, so it
+ * covers none of it (SPEC §14.2, decided 11-13 after the owner's float lay over the thread's top right):
+ * the page keeps its widest column (a thread's 760) left of the strip, and the strip takes the rest, up
+ * to 480 with 16 on each side. A pane too narrow for a 240 strip beside that column keeps the float over
+ * the pane, in its corner, as on a phone. Returns the strip's whole width (gaps included), 0 for none.
+ */
+export const DOCK = { column: 760, gap: 16, min: 240, max: 480 } as const;
+export function screenDockWidth(stackWidth: number): number {
+  const width = Math.min(DOCK.max, stackWidth - DOCK.column - 2 * DOCK.gap);
+  return width >= DOCK.min ? width + 2 * DOCK.gap : 0;
+}
+
+/** Docked, only top and bottom remain: the strip has one side. */
+export function dockedCorner(corner: FloatCorner): FloatCorner {
+  return corner.startsWith("top") ? "top-right" : "bottom-right";
+}
+
 /** The float's width as a share of the window: where it starts, what a double tap enlarges it to, and how far the person may take it. */
 export const FLOAT_DEFAULT = 0.55;
 export const FLOAT_LARGE = 0.8;

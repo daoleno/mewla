@@ -1,4 +1,5 @@
 import { computed, signal, Storage, windowSize } from "nsh";
+import { screenDockWidth } from "../../core/screen/float";
 import { clampPaneWidth, isWide, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
 
 /**
@@ -28,6 +29,12 @@ export const rightPaneWidth = signal(0);
 
 /** The one stack's width: the right pane as laid out, else the window less the tray's pane. */
 export const stackWidth = computed(() => rightPaneWidth() || windowSize().width - (wide() ? paneWidth() : 0));
+
+/** The floating screen's strip at the right of the right pane on wide (core/screen/float.ts screenDockWidth); 0 where it floats over the page. */
+export const screenDock = computed(() => (wide() ? screenDockWidth(windowSize().width - paneWidth()) : 0));
+
+/** How many floating screens are up (0 or 1): while one is, a docked strip is kept free of the page. */
+export const floatsShown = signal(0);
 
 /** A list page shows the item it opens beside it (Git review › diff, Files › file): wide, with a right pane of 880 pt or more. */
 export const listDetail = computed(() => showsListDetail({ wide: wide(), paneWidth: stackWidth() }));

@@ -17,6 +17,21 @@ async function app(daemon: Record<string, unknown>, network: Record<string, Stub
 }
 
 describe("the floating screen: agents' displays and the Mac", () => {
+  test("on a wide window it docks in a strip beside the page, sized by the strip (no resize handle); at 1024 it floats in its corner", async () => {
+    const network = {
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
+      [`GET ${BASE}/screen`]: json(linux),
+    };
+    const daemon = { worker_sessions: [session("%1", { name: "Writer" })] };
+    const docked = await app(daemon, network, "android", { width: 1440, height: 900 });
+    await docked.waitFor("id:screen-float", { timeout: 10_000 });
+    expect(docked.shows("id:left-pane")).toBe(true);
+    expect(docked.shows("id:screen-float-resize")).toBe(false);
+    const cornered = await app(daemon, network, "android", { width: 1024, height: 768 });
+    await cornered.waitFor("id:screen-float", { timeout: 10_000 });
+    expect(cornered.shows("id:screen-float-resize")).toBe(true);
+  }, 25_000);
+
   test("an agent's display floats while its Worker runs, named after it; Stop in its menu stops that display", async () => {
     const shown = await app({ worker_sessions: [session("%1", { name: "Writer" })] }, {
       [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
