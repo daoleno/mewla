@@ -1,4 +1,4 @@
-import { Text, View } from "nsh";
+import { Text, View, untracked } from "nsh";
 import type { TrayRow, TrayTile } from "../../core/tray/model";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
@@ -11,14 +11,20 @@ import { ProgressBar } from "../kit/ProgressBar";
 
 /** The 28 pt tile: the agent's logo; Brain's mark in ink for a Work with several Workers or none; or an icon. */
 export function RowTile(props: { tile: () => TrayTile }) {
+  const agentLogo = () => { const tile = props.tile(); return tile.kind === "agent" ? tile : undefined; };
   return (
     <View class="size-[28px] items-center justify-center">
-      <If when={props.tile().kind === "agent"} else={<If when={props.tile().kind === "brain"} else={<If when={props.tile().kind === "device"} else={<Icon name="calendar" size={24} tone="soft" />}><Icon name="shield-check" size={24} tone="soft" /></If>}><Icon name="brain" size={26} tone="ink" /></If>}>{(() => {
-        const tile = props.tile() as Extract<TrayTile, { kind: "agent" }>;
-        // Grok and a plain terminal draw their own frame around the mark (AgentIcon), so their mark is smaller.
-        const framed = tile.agent === "terminal" || tile.agent === "grok";
-        return <AgentIcon kind={tile.agent} flavor={tile.flavor} size={framed ? 18 : 26} slot={28} />;
-      })()}</If>
+      <If when={props.tile().kind === "agent"} else={<If when={props.tile().kind === "brain"} else={<If when={props.tile().kind === "device"} else={<Icon name="calendar" size={24} tone="soft" />}><Icon name="shield-check" size={24} tone="soft" /></If>}><Icon name="brain" size={26} tone="ink" /></If>}>
+        {/* Kept by agent and flavor: the row's tile is a new object each time the tray is made again (every second). */}
+        <Each of={agentLogo() ? [agentLogo()!] : []} key={(logo) => `${logo.agent}|${logo.flavor}`}>{(logo) => {
+          // Read once: the key is agent and flavor, so they cannot change here, and a read inside JSX would make the
+          // logo again each time the row object is new.
+          const { agent, flavor } = untracked(logo);
+          // Grok and a plain terminal draw their own frame around the mark (AgentIcon), so their mark is smaller.
+          const framed = agent === "terminal" || agent === "grok";
+          return <AgentIcon kind={agent} flavor={flavor} size={framed ? 18 : 26} slot={28} />;
+        }}</Each>
+      </If>
     </View>
   );
 }
