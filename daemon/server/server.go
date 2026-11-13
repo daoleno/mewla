@@ -3991,6 +3991,12 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 		s.noteWorkerMoved(ev)
 		return
 	}
+	// Blocked on its own report, the Worker asks Brain, not the owner: Brain
+	// decides, and reaches the owner only with its Work's question.
+	if kind == push.KindWorkerBlocked && !asksOwner(ev.Worker, len(s.pendingApprovals(ev.WorkerID))) {
+		s.noteSuppressedNotification(ev, "brain_decides")
+		return
+	}
 	if s.hasActiveViewer(ev.WorkerID) {
 		s.noteSuppressedNotification(ev, "person_viewing_session")
 		return
