@@ -404,3 +404,14 @@ describe("reduced motion: fades or cuts", () => {
     expect(settle(400, false)).toEqual({ stiffness: 380, damping: 39, mass: 1, velocity: 400 });
   });
 });
+
+describe("no endless wait for an action", () => {
+  test("bounded rejects with NoAnswer at wait.fail; an answer before keeps its value", async () => {
+    const { bounded, NoAnswer } = await import("./wait");
+    const c = manualClock();
+    const never = bounded(new Promise(() => {}), undefined, c.clock);
+    c.run(motion.wait.fail);
+    await expect(never).rejects.toBeInstanceOf(NoAnswer);
+    expect(await bounded(Promise.resolve(7), undefined, c.clock)).toBe(7);
+  });
+});

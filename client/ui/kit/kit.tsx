@@ -12,7 +12,7 @@ import type { StateTone } from "../../core/more/colour";
 import { RowTile, stateTextColor, type Lead } from "./RowTile";
 import { spinnerRadius } from "../../core/more/spinner";
 import { motion, RING } from "../../core/motion/tokens";
-import { delayed, Spinner } from "./wait";
+import { BusyPlace, Delayed, delayed, Spinner } from "./wait";
 
 export { Spinner };
 import { showAlert } from "../shell/alert";
@@ -266,6 +266,8 @@ export interface RowProps {
   /** The title is a state's words (a Needs fixing row, SPEC §10.4): `warn` and `error` colour it. */
   titleTone?: StateTone;
   value?: string;
+  /** The value is being read (SPEC §16.2 pattern 4): the 16 pt ring in its place from `wait.quiet`; the row is there from the start. */
+  reading?: boolean;
   icon?: IconName;
   /** Behind the first level (SPEC §10.4): the row's mark, art or tiled glyph, in place of a grey `icon`. */
   lead?: Lead;
@@ -370,13 +372,17 @@ export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead
 /** What a page shows instead of its content: busy, empty or failed, with at most one way out. */
 /** A page's state (busy, empty, failed) and its one way on. `onBlack`: on the full-screen remote's black, in white. */
 export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string; onBlack?: boolean }) {
+  // Busy is a wait (SPEC §16.2): no spinner and no words on screen, but the placeholder, the slow line and the
+  // named states of `BusyPlace`; the title names what is read for a screen reader.
   return (
-    <View testID={props.testID} class="items-center gap-2 px-6 py-16">
-      <If when={props.busy} else={<If when={props.icon}>{(icon) => <Icon name={icon()} size={28} tone={props.onBlack ? "onBlack" : props.tone} />}</If>}><Spinner size={24} tone={props.onBlack ? "onBlackSoft" : undefined} /></If>
-      <If when={props.title}>{(titleValue) => <Text class={`mt-1 text-center text-title font-semibold tracking-title ${props.onBlack ? "text-white" : ""}`}>{titleValue()}</Text>}</If>
-      <If when={props.detail}>{(detail) => <Text class={props.onBlack ? "text-center text-sub text-white/60" : "text-center text-sub text-muted-foreground"}>{detail()}</Text>}</If>
-      <If when={props.action && props.onAction}><PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action!} onPress={props.onAction!} kind={props.onBlack ? "white" : undefined} onCanvas /></If>
-    </View>
+    <If when={!props.busy} else={<BusyPlace label={props.title} testID={props.testID} onBlack={props.onBlack} />}>
+      <View testID={props.testID} class="items-center gap-2 px-6 py-16">
+        <If when={props.icon}>{(icon) => <Icon name={icon()} size={28} tone={props.onBlack ? "onBlack" : props.tone} />}</If>
+        <If when={props.title}>{(titleValue) => <Text class={`mt-1 text-center text-title font-semibold tracking-title ${props.onBlack ? "text-white" : ""}`}>{titleValue()}</Text>}</If>
+        <If when={props.detail}>{(detail) => <Text class={props.onBlack ? "text-center text-sub text-white/60" : "text-center text-sub text-muted-foreground"}>{detail()}</Text>}</If>
+        <If when={props.action && props.onAction}><PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action!} onPress={props.onAction!} kind={props.onBlack ? "white" : undefined} onCanvas /></If>
+      </View>
+    </If>
   );
 }
 

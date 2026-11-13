@@ -1,4 +1,5 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { Delayed, Rows } from "../kit/wait";
 import { Button } from "nsh/base";
 import { Sheet } from "../kit/Sheet";
 import { Field, PillButton, Row, Section } from "../kit/kit";
@@ -64,7 +65,8 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
       </View>
       <If when={problem()}><Text class="text-sub text-muted-foreground">{problem()}</Text></If>
       <View class="flex-1 overflow-hidden rounded-(--radius-group) bg-sheet-surface">
-        <If when={loading() && entries().length === 0}><View class="px-4 py-4"><Text class="text-sub text-muted-foreground">Loading…</Text></View></If>
+        {/* SPEC §16.4: placeholder rows from 150 ms, no words; "No folders here" only after a read. */}
+        <If when={loading() && entries().length === 0}><Delayed><View class="px-4"><Rows count={4} lead={false} /></View></Delayed></If>
         <If when={!loading() && entries().length === 0 && !problem()}><View class="px-4 py-4"><Text class="text-sub text-muted-foreground">No folders here</Text></View></If>
         <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
           {entries().map((entry) => (

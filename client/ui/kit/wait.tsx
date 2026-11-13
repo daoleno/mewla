@@ -17,6 +17,9 @@ import { spinnerRadius } from "../../core/more/spinner";
 /** The link to the current computer as the person is told it (session.ts keeps it); every wait follows it. */
 export const linkState = signal<LinkState>("connecting");
 
+/** What the kit needs of the current computer, set by session.ts (the kit cannot import it): its name, the link's Try again. */
+export const linkHooks = { computer: (): string => "", reconnect: (): void => {} };
+
 /**
  * A state forced in dev builds for the screen in front (slow, no answer, error, offline); null in release
  * builds, where it can never be set. Every mounted wait reads again in it.
@@ -60,6 +63,7 @@ export function useWait(options: { read?: () => void; reconnect?: () => void; fa
     if (untracked(reading) !== s.reading) reading.set(s.reading);
   };
   const machine = new Wait({ read: options.read, failMs: options.failMs, link: untracked(linkState), onChange: apply });
+  const reconnect = options.reconnect ?? (() => linkHooks.reconnect());
   if (options.known) machine.showKnown();
   effect(() => machine.setLink(linkState()));
   effect(() => machine.setForce(forcedWait()));
@@ -69,7 +73,7 @@ export function useWait(options: { read?: () => void; reconnect?: () => void; fa
     start: () => machine.start(),
     resolve: (kind, gen) => machine.resolve(kind, gen),
     fail: (gen) => machine.fail(gen),
-    retry: () => machine.retry(options.reconnect),
+    retry: () => machine.retry(reconnect),
     showKnown: (kind) => machine.showKnown(kind),
   };
 }
@@ -86,6 +90,14 @@ export function delayed(on: Accessor<boolean>, ms: number = motion.wait.quiet): 
     return () => clearTimeout(timer);
   });
   return shown;
+}
+
+/** Its children only after `wait.quiet`: under it nothing is drawn (SPEC §16.2 pattern 2). */
+export function Delayed(props: { children: JSX.Element; ms?: number }) {
+  const on = signal(false);
+  const timer = setTimeout(() => on.set(true), props.ms ?? motion.wait.quiet);
+  cleanup(() => clearTimeout(timer));
+  return <If when={on()}>{props.children}</If>;
 }
 
 /**
@@ -369,6 +381,35 @@ export function BusyLabel(props: { busy: boolean; label: string; tone?: ColorNam
         </View>
       </If>
     </>
+  );
+}
+
+/**
+ * A page part still reading, where the place has no wait of its own (the kit's `EmptyState busy`): nothing
+ * under `wait.quiet`, then placeholder rows; the slow line from `wait.slow`; at `wait.fail` on a live link,
+ * "{computer} didn't answer" (with Try again where the place gives one); the computer away at `link.away`.
+ * What it reads names it for a screen reader (`label`), never on screen.
+ */
+export function BusyPlace(props: { label?: string; testID?: string; onBlack?: boolean; rows?: number; onRetry?: () => void }) {
+  const wait = useWait({ read: props.onRetry });
+  wait.start();
+  const computer = () => linkHooks.computer() || "Your computer";
+  return (
+    <View testID={props.testID ?? "busy-place"} accessibilityLabel={props.label} class="relative min-h-[120px] pt-4">
+      <If when={!props.onBlack}>
+        <SlowLine on={wait.slow()} />
+      </If>
+      <If when={wait.view() === "placeholder" && !props.onBlack}>
+        <View class="px-4"><Rows count={props.rows ?? 3} /></View>
+      </If>
+      <If when={wait.view() === "failed"}>
+        <StateView icon="alert-circle" title={`${computer()} didn't answer`} testID="busy-failed"
+          actions={props.onRetry ? [{ title: "Try again", onPress: wait.retry, testID: "busy-retry" }] : []} />
+      </If>
+      <If when={wait.view() === "away"}>
+        <StateView {...states.away(linkHooks.computer() || undefined, undefined, wait.retry)} />
+      </If>
+    </View>
   );
 }
 

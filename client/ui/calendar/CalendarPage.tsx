@@ -1,4 +1,5 @@
 import { computed, List, signal, Text, View } from "nsh";
+import { BusyPlace } from "../kit/wait";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { Segmented } from "../kit/Segmented";
@@ -129,12 +130,14 @@ function Heading() {
   );
 }
 
+/** SPEC §16.4 Calendar: the wait until the list is read (placeholder rows, slow line, offline at `link.away`); "Nothing planned" only after a read. */
 function Empty() {
   return (
-    <View testID="calendar-empty" class="items-center gap-2 px-6 py-16">
-      <Text class="text-lg font-semibold">{!calendarLoaded() ? (connection() === "connected" ? "Loading calendar…" : "Calendar offline") : pickedDay() ? "Nothing planned for this date" : "Nothing planned"}</Text>
-      <If when={!calendarLoaded() && connection() !== "connected"}><Text class="text-center text-base text-muted-foreground">It shows when your computer is back.</Text></If>
-    </View>
+    <If when={calendarLoaded()} else={<BusyPlace label="Reading the calendar" testID="calendar-loading" />}>
+      <View testID="calendar-empty" class="items-center gap-2 px-6 py-16">
+        <Text class="text-lg font-semibold">{pickedDay() ? "Nothing planned for this date" : "Nothing planned"}</Text>
+      </View>
+    </If>
   );
 }
 

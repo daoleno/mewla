@@ -287,7 +287,7 @@ describe("Tools & activity", () => {
     const c = computer({ name: "extensions-tools", service: "notion" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
     const app = await open(HARNESS, c.options);
     await app.waitUntil(() => c.asked.some((r) => r.action === "list"));
-    await app.waitUntil(() => !app.shows("text:Loading tools"));
+    await app.waitUntil(() => !app.shows("label:Loading tools"));
   });
 });
 
@@ -371,7 +371,7 @@ describe("As before the rewrite", () => {
     const c = computer({ name: "extensions" }, () => ({}));
     const options = { host: { ...c.options.host, params: { page: { name: "extensions" }, state: "waiting" } } };
     const app = await open(HARNESS, options);
-    await app.waitFor("text:Loading services");
+    await app.waitFor("label:Loading services");
     await app.waitFor("id:services-unavailable", { timeout: 4_000 });
     expect(app.texts()).toContain("Can't reach your computer.");
   });
