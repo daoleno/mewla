@@ -71,7 +71,7 @@ describe("Extensions", () => {
     });
     const app = await open(HARNESS, c.options);
     await app.waitFor("text:Available");
-    for (const word of ["Notion", "GitHub", "Not yet available", "MCP server"]) expect(app.texts()).toContain(word);
+    for (const word of ["Notion", "GitHub", "Unavailable", "MCP server"]) expect(app.texts()).toContain(word);
 
     await app.press("id:connect-notion");
     await app.waitFor("text:Waiting for Notion");
@@ -87,7 +87,8 @@ describe("Extensions", () => {
     await app.host.send("links.open", { url: "mewla://plugins?state=s123&code=good" });
     await app.waitFor("text:Notion connected");
     expect(c.asked.find((r) => r.action === "connect_finish")).toEqual({ action: "connect_finish", flow_id: "f1", callback: "mewla://plugins?state=s123&code=good" });
-    expect(app.texts()).toContain("Brain can now find and read workspace pages.");
+    // Connected says so, and offers the one next step: changes are off until allowed.
+    expect(app.texts()).toContain("Allow changes");
     expect(c.secure.has("mewla.plugin.authorization.s1")).toBe(false);
   });
 
@@ -96,7 +97,8 @@ describe("Extensions", () => {
     const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [notionAccount, github] } : {}));
     const app = await open(HARNESS, c.options);
     await app.waitFor("text:Needs fixing");
-    expect(app.shows("id:service-notion-state")).toBe(true);
+    // Under Connected the section says it: the row repeats neither its state nor the service's name.
+    expect(app.shows("id:service-notion-state")).toBe(false);
     expect(app.shows("id:connect-github")).toBe(true);
     expect(app.texts()).toContain("Reconnect");
     expect(app.texts()).toContain("Sign-in expired · octocat");
@@ -196,7 +198,7 @@ describe("Extensions in a browser", () => {
     const b = browser(c, { connected: "n1", service: "notion" });
     const app = await open(HARNESS, b.options);
     await app.waitFor("text:Notion connected");
-    expect(app.texts()).toContain("Brain can now find and read workspace pages.");
+    expect(app.texts()).toContain("Allow changes");
     expect(c.secure.has("mewla.plugin.authorization.s1")).toBe(false);
     expect(c.asked.some((r) => r.action === "connect_status")).toBe(false);
   });
@@ -239,7 +241,6 @@ describe("A service", () => {
     await answering(app, () => pressWhenEnabled(app, "id:disconnect-n1"));
     await app.waitUntil(() => c.asked.some((r) => r.action === "disconnect"));
     await app.waitFor("id:service-connect");
-    expect(app.texts()).toContain("What Brain can do");
   });
 
   test("a custom service with a token connects without a sign-in, sending its address and token once", async () => {
@@ -257,7 +258,7 @@ describe("A service", () => {
     await app.press("id:custom-connect");
     await app.waitFor("text:Docs connected");
     expect(c.asked.find((r) => r.action === "add")).toEqual({ action: "add", input: { integration: "mcp", name: "Docs", endpoint: "https://docs.example.com/mcp", credential: "tok_123" } });
-    expect(app.texts()).toContain("Choose which of its tools Brain may use. None are allowed yet.");
+    expect(app.texts()).toContain("Choose tools");
   });
 });
 
@@ -327,11 +328,11 @@ describe("As before the rewrite", () => {
   // FINAL-VERIFY 6387f88f extensions D4: a computer paired by its address took its reported name in
   // Settings, but the pages kept saying "this computer" until the app started again.
   test("a computer that takes its reported name is named by it at once", async () => {
-    const c = computer({ name: "extensions-service", id: "github" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
+    const c = computer({ name: "extensions-service", id: "mcp" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
     const app = await open(HARNESS, { host: { ...c.options.host, params: { ...c.options.host.params, server: { name: "192.168.1.5" } } } });
-    await app.waitFor("text:Your sign-in stays on this computer. Brain only acts on tasks you give it.");
+    await app.waitFor("text:Credentials stay on this computer. Each tool needs your permission.");
     await app.host.send("app.serverRenamed", "claude9983");
-    await app.waitFor("text:Your sign-in stays on claude9983. Brain only acts on tasks you give it.");
+    await app.waitFor("text:Credentials stay on claude9983. Each tool needs your permission.");
   });
 
   test("Hyperliquid offers another key only once an account holds one", async () => {
@@ -374,5 +375,52 @@ describe("As before the rewrite", () => {
     await app.waitFor("label:Loading services");
     await app.waitFor("id:services-unavailable", { timeout: 4_000 });
     expect(app.texts()).toContain("Can't reach your computer.");
+  });
+});
+
+describe("Extensions on the web, as on the phone (owner 11-13)", () => {
+  /** A computer whose list comes late: a reloaded or shared /extensions/<id> opens the page before it. */
+  function slowList(page: unknown, accounts: unknown[] = []) {
+    const secure = new Map<string, string>();
+    return {
+      secure,
+      options: {
+        host: {
+          params: { page },
+          handlers: {
+            ...secureStore(secure),
+            "app.daemon": async ({ type, body }: { type: string; body: Record<string, unknown> }) => {
+              if (type !== "connections") return { error: "not in this test" };
+              const request = body.connection_request as Request;
+              if (request.action === "list") await new Promise((done) => setTimeout(done, 400));
+              return { reply: "connections_result", connections: request.action === "list" ? { catalog, accounts } : {} };
+            },
+          },
+        },
+      },
+    };
+  }
+
+  test("a service page opened before the list names its service and shows its mark once the list comes", async () => {
+    const c = slowList({ name: "extensions-service", id: "notion" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:service-connect");
+    await app.waitFor("id:service-hero-lead");
+    expect(app.texts()).toContain("Notion");
+    expect(app.texts()).not.toContain("Service");
+  });
+
+  test("a sign-in under way shows its card on Extensions and on its own service's page, not over another service's", async () => {
+    const flow = { id: "g1", integration: "github", status: "waiting", user_code: "WDJB-MJHT", authorization_url: "https://github.com/login/device", expires: expires() };
+    for (const [page, card] of [[{ name: "extensions" }, true], [{ name: "extensions-service", id: "github" }, true], [{ name: "extensions-service", id: "notion" }, false]] as const) {
+      const c = computer(page, (request) => (request.action === "list" ? { catalog, accounts: [] } : { flow }));
+      c.secure.set("mewla.plugin.authorization.s1", JSON.stringify({ serverId: "s1", flow }));
+      const app = await open(HARNESS, c.options);
+      await app.waitUntil(() => c.asked.some((r) => r.action === "connect_status"));
+      await app.wait(200);
+      expect(app.shows("id:device-code")).toBe(card);
+      // While it is under way, its own page doesn't offer a second Connect beside the card.
+      if (page.name === "extensions-service" && page.id === "github") expect(app.shows("id:service-connect")).toBe(false);
+    }
   });
 });

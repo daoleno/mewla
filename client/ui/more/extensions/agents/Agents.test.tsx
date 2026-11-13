@@ -348,6 +348,7 @@ describe("From your agents", () => {
     await app.waitFor("id:agent-tool-codex");
     await app.waitFor("text:1 plugin · 1 Skill");
     await app.waitFor("text:1 Skill · used by Codex and Pi");
-    await app.waitFor("text:Claude Code, Cursor, Grok, OpenCode and Pi have nothing installed.");
+    // Agents with nothing installed are not listed, nor said (owner 11-13: no lines that only explain).
+    expect(app.texts().some((text) => text.includes("nothing installed"))).toBe(false);
   });
 });

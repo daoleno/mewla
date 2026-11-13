@@ -1,4 +1,4 @@
-import { effect, Text, untracked, View } from "nsh";
+import { effect, untracked, View } from "nsh";
 import { agentExtensionsCountLabel, agentExtensionsSummaries, joinAgentLabels } from "../../../../core/extensions/agentExtensionsModel";
 import { skillsRequestData } from "../../../../core/extensions/skillsManagement";
 import { daemon, daemonState } from "../../daemon";
@@ -29,8 +29,9 @@ export function AgentToolsSection(props: { nav: PageNav }) {
       return <EmptyState testID="agent-tools-failed" icon="warning" title="Agent plugins and Skills unavailable" detail={state.error} action="Try again" onAction={refreshAll} />;
     }
     if (!inventory()) return <EmptyState busy title="Reading your agents" />;
-    const { rows, empty } = summaries();
-    if (!rows.length) return <Section title="From your agents"><Row title="Nothing installed" /></Section>;
+    const { rows } = summaries();
+    // Nothing the agents installed is nothing to look at: no section.
+    if (!rows.length) return null;
     return (
       <View>
         <Section title="From your agents">
@@ -46,7 +47,6 @@ export function AgentToolsSection(props: { nav: PageNav }) {
           />
         ))}
         </Section>
-        <If when={empty.length}>{(length) => <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{`${joinAgentLabels(empty)} ${length() === 1 ? "has" : "have"} nothing installed.`}</Text></View>}</If>
       </View>
     );
   };

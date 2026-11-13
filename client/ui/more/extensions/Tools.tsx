@@ -37,7 +37,7 @@ export function ToolsPage(props: { service: string; account?: string; nav: PageN
     }
   });
   return (
-    <PluginsFrame title="Tools & activity" testID="tools-page" nav={props.nav} onRefresh={() => accountId() && void plugins()?.load(accountId()!)}>
+    <PluginsFrame title="Tools & activity" testID="tools-page" service={props.service} nav={props.nav} onRefresh={() => accountId() && void plugins()?.load(accountId()!)}>
       {/* Loading only while the account's answer is on its way; a failed one says so above. */}
       {/* The account's answer is drawn once per answer: a new one (a tool switched, a check) draws it again, other news does not. */}
       <Each of={target() ? [target()!] : []} key={(account) => account}>{(account) => <ToolsView account={account()} nav={props.nav} />}</Each>
@@ -62,13 +62,14 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
   };
   return (
     <View>
+      {/* The account's own switch is on its service's page, once (one toggle per feature). */}
       <Section title={a.name}>
-        <SwitchRow testID="account-on" accessibilityLabel="Account on" title="On" checked={a.enabled} busy={running() === `enabled:${a.id}`} disabled={busy() && running() !== `enabled:${a.id}`} onChange={(on) => plugins()?.setEnabled(a, on)} />
         <Row
           testID="check-tools"
           lead={tile("pulse")}
-          title="Check service and tools"
-          subtitle={a.verified_at ? `Last checked ${formatDateTime(a.verified_at)}` : undefined}
+          title="Check now"
+          accessibilityLabel={a.verified_at ? `Check service and tools. Last checked ${formatDateTime(a.verified_at)}` : "Check service and tools"}
+          value={running() === `refresh:${a.id}` || !a.verified_at ? undefined : formatDateTime(a.verified_at)}
           trailing={<If when={running() === `refresh:${a.id}`}><Spinner size={16} /></If>}
           disabled={busy()}
           onPress={() => plugins()?.refresh(a)}
