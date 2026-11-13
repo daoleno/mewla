@@ -424,3 +424,22 @@ describe("Extensions on the web, as on the phone (owner 11-13)", () => {
     }
   });
 });
+
+describe("a sign-in card says what to do in one line", () => {
+  test("a Google client to paste: the console's steps wait behind Steps, the field and Continue are there", async () => {
+    const setup = { id: "w1", integration: "gws", status: "waiting", authorization_url: "https://console.cloud.google.com/auth/overview", code_required: true, setup_required: true, message: "Create a Google Cloud project, then paste its client ID and secret.", expires: expires() };
+    const gwsCatalog = [...catalog, { id: "gws", name: "Google Workspace", available: true, setup_url: "", description: "Mail" }];
+    const c = computer({ name: "extensions-service", id: "gws" }, (request) => (request.action === "list" ? { catalog: gwsCatalog, accounts: [] } : { flow: setup }));
+    const app = await open(HARNESS, c.options);
+    await app.press("id:service-connect");
+    await app.waitFor("text:Paste the client ID and secret");
+    expect(app.texts()).not.toContain(setup.message);
+    expect(app.shows("id:sign-in-code")).toBe(true);
+    expect(app.texts()).toContain("Open console");
+    await app.press("id:sign-in-steps");
+    await app.waitFor(`text:${setup.message}`);
+    // × stops the sign-in.
+    await app.press("id:close-sign-in");
+    await app.waitUntil(() => c.asked.some((r) => r.action === "connect_cancel"));
+  });
+});
