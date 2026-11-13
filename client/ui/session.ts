@@ -11,7 +11,7 @@ import type { Worker } from "../core/sessions/workers";
 import { Transport, type ConnectionState } from "../core/transport";
 import { subscribeTransportPath, transportPathInfo, type TransportPathInfo } from "../core/link/pinnedTransport";
 import { LinkWatch } from "../core/motion/wait";
-import { linkHooks, linkState } from "./kit/wait";
+import { forcedLink, linkHooks, linkState } from "./kit/wait";
 
 /**
  * Everything that belongs to the current computer. There is exactly one; switching
@@ -29,6 +29,9 @@ const linkWatch = new LinkWatch((link) => linkState.set(link));
  * Offline, kept between retries until a socket is up (SPEC §16.1 `link.away`; no flicker back to Connecting).
  */
 export const shownConnection = computed<ConnectionState>(() => {
+  // Dev builds: a forced "offline" (Brain's ⋯ → Wait states) plays here too, so the header and the cat show it.
+  const forced = forcedLink();
+  if (forced && current()) return forced === "away" ? "waiting" : "connecting";
   const real = connection();
   if (real === "connected" || !current()) return real;
   return linkState() === "away" ? "waiting" : "connecting";

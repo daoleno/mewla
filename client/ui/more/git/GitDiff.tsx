@@ -256,7 +256,7 @@ function ReaderHeader(props: {
 
 function ReaderState(props: { reader: Reader; onRetry: () => void; working: boolean }) {
   const r = props.reader;
-  if (r.kind === "loading") return <EmptyState busy title="Loading diff" />;
+  if (r.kind === "loading") return <EmptyState busy title="Loading diff" failMs={31_000} />;
   if (r.kind === "error") return <EmptyState testID="git-diff-error" icon="alert" title="Couldn't load this diff" detail={r.message} action="Retry" onAction={props.onRetry} />;
   if (r.kind === "empty") return <EmptyState title={props.working ? "Nothing left to review here" : "No changes"} />;
   if (r.kind === "too-large") return <EmptyState title="Diff too large to show" detail={formatGitDiffBytes(r.bytes)} />;

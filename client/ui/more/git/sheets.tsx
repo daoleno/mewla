@@ -102,7 +102,7 @@ function BranchPicker(props: { review: GitReview; onDone: () => void }) {
       </View>
       <If when={error()}><Notice tone="failed" title="Couldn't switch" detail={error()} /></If>
       <If when={creatable()}><TextButton testID="branch-create" label={`Create ${query().trim()}`} busy={busy() === query().trim()} onPress={() => void run(query().trim(), true)} /></If>
-      <If when={!payload() && !error()}><EmptyState busy title="Loading branches" /></If>
+      <If when={!payload() && !error()}><EmptyState busy title="Loading branches" failMs={16_000} /></If>
       <If when={payload() && !shown().length}><EmptyState title="No matching branches" /></If>
       <Scroll keyboardShouldPersistTaps="handled" class="max-h-[420px] overflow-hidden rounded-(--radius-group) bg-sheet-surface">
         {shown().map((branch) => (

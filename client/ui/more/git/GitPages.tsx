@@ -443,7 +443,7 @@ function HistoryBody(props: { review: GitReview; nav: PageNav }) {
       {(() => {
         const history = review.history();
         if (!history.commits.length && history.error) return <EmptyState icon="alert" title="Couldn't load history" detail={history.error} action="Retry" onAction={() => void review.loadHistory(0)} />;
-        if (!history.commits.length) return <If when={history.loading || !history.loaded} else={<EmptyState title="No commits yet" />}><EmptyState busy title="Loading history" /></If>;
+        if (!history.commits.length) return <If when={history.loading || !history.loaded} else={<EmptyState title="No commits yet" />}><EmptyState busy title="Loading history" failMs={16_000} /></If>;
         // A grouped list (SPEC §15): the commits by day, each day's label with its count.
         return (
           <View>
@@ -492,7 +492,7 @@ function CommitPage(props: { review: GitReview; sha: string; nav: PageNav }) {
             const state = review.commits()[props.sha];
             if (state?.error && !state.value) return <EmptyState icon="alert" title="Couldn't load this commit" detail={state.error} action="Retry" onAction={() => void review.loadCommit(props.sha)} />;
             const detail = state?.value;
-            if (!detail) return <EmptyState busy title="Loading commit" />;
+            if (!detail) return <EmptyState busy title="Loading commit" failMs={21_000} />;
             return (
               <View>
                 <DisplayTitle eyebrow={[detail.short, detail.author, formatGitAge(detail.date)].join(" · ")} title={detail.subject || "(no message)"} />
