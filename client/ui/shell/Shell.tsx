@@ -9,7 +9,7 @@ import type { WebPlace } from "../../core/web/places";
 import { placeOfRoutes, routesOfPlace } from "./routePlaces";
 import { DesktopOverlays } from "./desktop/Overlays";
 import { LeftPane, PaneHandle } from "./LeftPane";
-import { loadPaneWidth, paneWidth, rightPaneWidth, wide } from "./layout";
+import { floatsShown, loadPaneWidth, paneWidth, rightPaneWidth, screenDock, wide } from "./layout";
 import { MenuHost } from "../kit/Menu";
 import { syncWebLocation, type PageSnapshot } from "./webLocation";
 import { Onboarding, PairPage } from "../screens/Onboarding";
@@ -147,7 +147,7 @@ const pageTitle = computed((): string | null => {
   return sessionRowModel(worker, { workTitle: link?.workTitle, calendarLabel: link?.calendarLabel }).title || null;
 });
 
-/** What every layout lays over the stack. The floating screen stays in the right pane, at its bottom right on wide. */
+/** What every layout lays over the stack. The floating screen stays in the right pane: docked at its right on wide when there is room, else in a corner. */
 function Overlays(props: { bottomInset?: () => number }) {
   return (
     <>
@@ -180,7 +180,8 @@ export function Shell() {
       <View class="flex-1 flex-row">
         <If when={wide()}><LeftPane /></If>
         <If when={wide()}><PaneHandle /></If>
-        <View testID="right-pane" class="flex-1" onLayout={({ bounds }) => {
+        {/* A floating screen docked on wide has its strip at the pane's right: the page lays out left of it. */}
+        <View testID="right-pane" class="flex-1" style={{ paddingRight: floatsShown() > 0 ? screenDock() : 0 }} onLayout={({ bounds }) => {
           rightPaneWidth.set(bounds.size.width);
           belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height));
         }}><Stack /></View>

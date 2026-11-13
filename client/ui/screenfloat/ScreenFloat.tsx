@@ -2,10 +2,12 @@ import { cleanup, computed, createMotion, effect, keyboardFrame, PanResponder, r
 import { Button } from "nsh/base";
 import {
   DEFAULT_FLOAT_CORNER,
+  DOCK,
   FLOAT_CORNER_KEY,
   FLOAT_DEFAULT,
   FLOAT_SIZE_KEY,
   clampFloatFraction,
+  dockedCorner,
   floatOrigin,
   floatSize,
   nearestFloatCorner,
@@ -17,6 +19,7 @@ import {
 } from "../../core/screen/float";
 import { Icon } from "../kit/Icon";
 import { showAlert } from "../shell/alert";
+import { floatsShown, screenDock } from "../shell/layout";
 
 const EDGE = 12;
 /** Under the page header. */
@@ -91,11 +94,27 @@ function loadPlace(): void {
 export function ScreenFloat(props: ScreenFloatProps) {
   loadPlace();
   const extra = () => props.extraHeight?.() ?? 0;
+  untracked(() => floatsShown.set(floatsShown() + 1));
+  cleanup(() => untracked(() => floatsShown.set(Math.max(0, floatsShown() - 1))));
+  // Docked on wide (SPEC §14.2): the strip at the right of the right pane, which the page leaves free.
+  const dock = () => screenDock();
+  const docked = () => dock() > 0;
+  const place = () => (docked() ? dockedCorner(corner()) : corner());
   const ratio = () => (props.ratio() > 0 ? props.ratio() : 9 / 20);
   const area = () => {
     const window = windowSize();
     const insets = safeArea();
     const keyboard = keyboardFrame().height;
+    if (docked()) {
+      // The strip's gaps are DOCK.gap; floatOrigin adds EDGE.
+      const inset = DOCK.gap - EDGE;
+      return {
+        left: window.width - insets.right - dock() + inset,
+        top: insets.top + inset,
+        right: window.width - insets.right - inset,
+        bottom: window.height - (keyboard > 0 ? keyboard : Math.max(insets.bottom, props.bottomInset?.() ?? 0)) - inset,
+      };
+    }
     return {
       left: Math.max(insets.left, props.leftInset?.() ?? 0),
       top: insets.top + HEADER,
@@ -106,6 +125,11 @@ export function ScreenFloat(props: ScreenFloatProps) {
   // The picture has the screen's exact shape, so it fills its place; the window never reaches the composer or the keyboard.
   const picture = () => {
     const a = area();
+    if (docked()) {
+      // The strip's width, unless the height cannot hold that at the screen's shape.
+      const width = Math.max(0, Math.min(a.right - a.left - 2 * EDGE, (a.bottom - a.top - 2 * EDGE - BAR - extra()) * ratio()));
+      return { width, height: width / ratio() };
+    }
     return floatSize(ratio(), fraction(), { width: a.right - a.left, height: windowSize().height }, Math.max(0, a.bottom - a.top - 2 * EDGE - BAR - extra()));
   };
   const size = () => ({ width: picture().width, height: picture().height + BAR + extra() });
@@ -113,7 +137,7 @@ export function ScreenFloat(props: ScreenFloatProps) {
   // While a finger moves it, the window follows the finger; let go, it goes to the nearest corner.
   const drag = signal<{ dx: number; dy: number } | null>(null);
   const origin = () => {
-    const o = floatOrigin(corner(), area(), size(), EDGE);
+    const o = floatOrigin(place(), area(), size(), EDGE);
     const d = drag();
     return d ? { x: o.x + d.dx, y: o.y + d.dy } : o;
   };
@@ -127,12 +151,14 @@ export function ScreenFloat(props: ScreenFloatProps) {
     onPanResponderMove: (_e, g) => drag.set({ dx: g.dx, dy: g.dy }),
     onPanResponderRelease: (_e, g) => {
       untracked(() => {
-        const start = floatOrigin(corner(), area(), size(), EDGE);
+        const start = floatOrigin(place(), area(), size(), EDGE);
         const left = { x: start.x + g.dx, y: start.y + g.dy };
         // A flick carries a little further than the finger.
         const center = { x: left.x + g.vx * 0.08 + size().width / 2, y: left.y + g.vy * 0.08 + size().height / 2 };
-        const next = nearestFloatCorner(center, area());
-        const end = floatOrigin(next, area(), size(), EDGE);
+        const nearest = nearestFloatCorner(center, area());
+        // Docked, the strip has one side: only top or bottom changes, and the side kept is the one it had.
+        const next = docked() ? (`${nearest.split("-")[0]}-${corner().split("-")[1]}` as FloatCorner) : nearest;
+        const end = floatOrigin(docked() ? dockedCorner(next) : next, area(), size(), EDGE);
         settle.translateX.set(left.x - end.x);
         settle.translateY.set(left.y - end.y);
         drag.set(null);
@@ -197,8 +223,8 @@ export function ScreenFloat(props: ScreenFloatProps) {
 
   const cycles = () => props.count() > 1;
   // The handle sits in the corner opposite the one the window is anchored to, so dragging it outward grows the window.
-  const handleLeft = () => corner().endsWith("right");
-  const handleTop = () => corner().startsWith("bottom");
+  const handleLeft = () => place().endsWith("right");
+  const handleTop = () => place().startsWith("bottom");
 
   // Until the window's size is known the float would have none: nothing to press, so nothing is drawn.
   const sized = computed(() => windowSize().width > 0);
@@ -230,14 +256,17 @@ export function ScreenFloat(props: ScreenFloatProps) {
       <View class="bg-popover" style={{ width: picture().width, height: picture().height + extra() }}>{props.children(picture)}</View>
       <View class="absolute inset-0 rounded-[10px] border border-border" style={{ pointerEvents: "none" }} />
       <If when={props.attention?.()}><AttentionRing /></If>
-      <View {...handle.panHandlers} testID="screen-float-resize" accessibilityLabel="Resize" class="absolute p-2"
-        style={{ width: HANDLE, height: HANDLE, ...(handleLeft() ? { left: 0 } : { right: 0 }), ...(handleTop() ? { top: BAR } : { bottom: 0 }) }}>
-        <View class={handleTop() ? "border-white/90" : "border-muted-foreground"} style={{
-          width: 14, height: 14,
-          ...(handleLeft() ? { borderLeftWidth: 3 } : { borderRightWidth: 3 }),
-          ...(handleTop() ? { borderTopWidth: 3 } : { borderBottomWidth: 3 }),
-        }} />
-      </View>
+      {/* Docked, the strip sets the size. */}
+      <If when={!docked()}>
+        <View {...handle.panHandlers} testID="screen-float-resize" accessibilityLabel="Resize" class="absolute p-2"
+          style={{ width: HANDLE, height: HANDLE, ...(handleLeft() ? { left: 0 } : { right: 0 }), ...(handleTop() ? { top: BAR } : { bottom: 0 }) }}>
+          <View class={handleTop() ? "border-white/90" : "border-muted-foreground"} style={{
+            width: 14, height: 14,
+            ...(handleLeft() ? { borderLeftWidth: 3 } : { borderRightWidth: 3 }),
+            ...(handleTop() ? { borderTopWidth: 3 } : { borderBottomWidth: 3 }),
+          }} />
+        </View>
+      </If>
     </View>
   );
   }
