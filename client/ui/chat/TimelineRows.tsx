@@ -1,4 +1,4 @@
-import { Clipboard, signal, Text, View } from "nsh";
+import { Clipboard, computed, signal, Text, View } from "nsh";
 import { ProgressBar } from "../kit/ProgressBar";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
@@ -362,16 +362,19 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
   const lines = () => props.handlers?.workers(props.item().currentWork?.worker_sessions) ?? [];
   const state = () => workCardState(model(), lines());
   const open = () => props.item().onPress?.();
+  // Which card, as one word: made again only when it changes. `lines()` is new on every change of the
+  // computer's Sessions, which drew every Work card of the thread anew when read in the branch.
+  const shape = computed(() => (model().kind === "line" ? "line" : model().kind === "result" ? "result" : lines().length <= 1 && (lines().length === 1 || model().sessionId) ? "one" : "many"));
   return (
     <View class="px-4 py-1">
-      {model().kind === "line" ? (
+      {shape() === "line" ? (
         <Button testID="work-line" accessibilityLabel={`${model().title}, ${model().state}`} disabled={!props.handlers} onPress={() => props.handlers?.onLine(model())}
           class="min-h-[44px] flex-row items-center gap-2.5 active:opacity-70">
           <WorkLogo agent={agent()} size={20} />
           <Text class="min-w-0 flex-1 text-sub text-muted-foreground line-clamp-1"><Text class="font-semibold text-foreground">{model().title}</Text>{model().summary ? ` · ${model().summary}` : ""}</Text>
           <KitIcon name="check" size={18} tone="soft" />
         </Button>
-      ) : model().kind === "result" ? (
+      ) : shape() === "result" ? (
         <View testID="work-result" class="gap-3 rounded-(--radius-group) bg-card p-4">
           <Button testID="work-result-open" accessibilityLabel={`Open ${model().title}`} disabled={!props.item().onPress} onPress={open} class="-my-1 min-h-[52px] flex-row items-center gap-3 active:opacity-70">
             <WorkLogo agent={agent()} size={28} />
@@ -385,7 +388,7 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
           {model().summary ? <View selectable><Text class="text-sub">{model().summary}</Text></View> : null}
           {model().actions.length ? <ResultActions actions={model().actions} disabled={!props.handlers} onPress={(action) => props.handlers?.onAction(model(), action)} /> : null}
         </View>
-      ) : lines().length <= 1 && (lines().length === 1 || model().sessionId) ? (
+      ) : shape() === "one" ? (
         <OneSessionWork model={model} line={() => lines()[0]} agent={agent} handlers={props.handlers} open={() => props.handlers?.onTitle(model().workId)} />
       ) : (
         <View testID={state().dot === "seal" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">
