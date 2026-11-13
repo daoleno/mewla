@@ -1,6 +1,6 @@
 import { context, keyboardFrame, signal, Text, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
-import { sheetBodyRoom, sheetFoot, sheetTitleGivesWay } from "../../core/shell/sheet";
+import { DIALOG_FOOT, dialogBodyRoom, sheetBodyRoom, sheetFoot, sheetTitleGivesWay } from "../../core/shell/sheet";
 import { AppSheet } from "../shell/AppSheet";
 import { wide } from "../shell/layout";
 
@@ -37,11 +37,12 @@ export function Sheet(props: {
   const titled = () => Boolean(props.leading || props.trailing) || (Boolean(title()) && !sheetTitleGivesWay(windowSize().height, keyboardFrame().height));
   // The grabber and the title row as laid out.
   const header = signal(0);
-  const room = () => sheetBodyRoom({ window: windowSize().height, keyboard: keyboardFrame().height, header: header() });
+  // On wide a centred dialog over the keyboard (shell/AppSheet.tsx), with its own cap and foot.
+  const room = () => (wide() ? dialogBodyRoom : sheetBodyRoom)({ window: windowSize().height, keyboard: keyboardFrame().height, header: header() });
   return (
     <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe
       popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet shadow-float" backdropClass="bg-scrim">
-      <View testID={props.testID} class={wide() ? "pt-3" : ""} style={{ paddingBottom: wide() ? 24 : sheetFoot(keyboardFrame().height) }}>
+      <View testID={props.testID} class={wide() ? "pt-3" : ""} style={{ paddingBottom: wide() ? DIALOG_FOOT : sheetFoot(keyboardFrame().height) }}>
         <View onLayout={({ bounds }) => header.set(bounds.size.height)}>
           {/* A dialog on wide has no grabber (SPEC §14.2). */}
           <If when={!wide()}><View class="items-center pt-2">
