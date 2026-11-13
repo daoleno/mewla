@@ -232,15 +232,26 @@ func (s *Server) webUIOrigin(r *http.Request) (string, bool) {
 }
 
 // servesWebOrigin reports whether a browser on origin is served the web UI:
-// a loopback http address, or an https address book entry.
+// this daemon's own loopback http address (localhost, 127.x or ::1, on the
+// port it listens on once it knows it), or an https address book entry.
+// webUIOrigin serves the web UI on localhost as on 127.0.0.1, so a sign-in
+// started there returns there.
 func (s *Server) servesWebOrigin(origin string) bool {
 	parsed, err := url.Parse(origin)
 	if err != nil || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Hostname() == "" {
 		return false
 	}
 	if parsed.Scheme == "http" {
-		ip := net.ParseIP(parsed.Hostname())
-		return ip != nil && ip.IsLoopback()
+		host := parsed.Hostname()
+		if host != "localhost" && !net.ParseIP(host).IsLoopback() || origin != "http://"+strings.ToLower(parsed.Host) {
+			return false
+		}
+		port, err := strconv.Atoi(parsed.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return false
+		}
+		own := s.webPort.Load()
+		return own == 0 || int(own) == port
 	}
 	if canonical, err := parseWebOrigin(origin); err != nil || canonical != origin {
 		return false
