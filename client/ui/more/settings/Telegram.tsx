@@ -38,14 +38,17 @@ export function Telegram() {
   const copied = signal(false);
 
   // Read now, then every five seconds while the page is open and the app in front.
+  // A token typed or pasted goes when the app leaves the front or the computer changes, not when the connection
+  // drops and comes back (a pasted token vanished on a blip, as on Extensions 11-13).
   let timer: ReturnType<typeof setInterval> | null = null;
+  let forServer = untracked(() => daemon()?.server.id ?? "");
   effect(() => {
     if (timer) clearInterval(timer);
     timer = null;
-    if (!daemon() || !connected() || lifecycle() !== "active") {
-      untracked(() => token.set(""));
-      return;
-    }
+    const server = daemon()?.server.id ?? "";
+    if (server !== forServer || lifecycle() !== "active") untracked(() => token.set(""));
+    forServer = server;
+    if (!daemon() || !connected() || lifecycle() !== "active") return;
     untracked(loadTelegram);
     timer = setInterval(loadTelegram, POLL_MS);
   });
