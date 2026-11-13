@@ -28,6 +28,12 @@ async function sessionsApp(daemon: Record<string, unknown>, options: { drawnHead
   return app;
 }
 
+/** A Session's saved composer draft (`mewla.draft.v1:<server>:agent:<id>`), or "". */
+function sessionDraft(app: { storage(): Record<string, string> }, workerId: string): string {
+  const entry = Object.entries(app.storage()).find(([key]) => key.startsWith("mewla.draft.v1:") && key.endsWith(`:agent:${workerId}`));
+  return entry ? String((JSON.parse(entry[1]) as { v?: string }).v ?? "") : "";
+}
+
 describe("Sessions", () => {
   test("lists the computer's Sessions by folder, each folder's caption with its count; with two, a caption folds", async () => {
     const app = await sessionsApp({ worker_sessions: [session("a", { name: "release notes" }), session("b", { cwd: "/home/me/site", status: "running", provider: "codex", command: "codex" }), session("c", { needs_attention: true, status: "blocked" })] });
@@ -84,6 +90,44 @@ describe("Sessions", () => {
     expect(create).toMatchObject({ cwd: "/home/me/mewla", command: "codex --dangerously-bypass-approvals-and-sandbox", name: "" });
     const active = framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id);
     expect(active.at(-1)).toBe("w101");
+  }, 20_000);
+
+  test("New session's Task (What should it do?) goes with create_session; held by the computer, it comes back as the Session's draft only if it did not go", async () => {
+    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("text:first");
+    await app.press("id:tray-new");
+    await app.waitFor("id:preset-claude");
+    await app.press("id:preset-shell");
+    expect(app.shows("id:new-task")).toBe(false);
+    await app.press("id:preset-claude");
+    await app.waitFor("id:new-task");
+    await app.type("id:new-task", "Fix the flaky checkout test");
+    await app.press("id:new-launch");
+    await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
+    const create = framesOf(app.host.posts(), "create_session").at(-1)!;
+    expect(create).toMatchObject({ text: "Fix the flaky checkout test" });
+    await app.waitFor("id:capsule-name", { timeout: 10_000 });
+    // Held: not in the Session's draft, so a second message cannot go before it.
+    const workerId = String(framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id).at(-1));
+    await app.wait(500);
+    expect(sessionDraft(app, workerId)).toBe("");
+    await app.host.send("app.daemonPush", { type: "session_first_message", worker_id: workerId, request_id: create.request_id, outcome: "not_sent", text: "Fix the flaky checkout test" });
+    await app.waitUntil(() => sessionDraft(app, workerId) === "Fix the flaky checkout test", { timeout: 3_000 });
+  }, 20_000);
+
+  test("New session's Task on a computer from before it (no first_message: pending): the text is the new Session's draft at once", async () => {
+    const app = await open(APP, { host: phoneHost({ brain: {}, firstMessages: false, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("text:first");
+    await app.press("id:tray-new");
+    await app.waitFor("id:preset-claude");
+    await app.press("id:preset-claude");
+    await app.type("id:new-task", "Write the release notes");
+    await app.press("id:new-launch");
+    await app.waitFor("id:capsule-name", { timeout: 10_000 });
+    const workerId = String(framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id).at(-1));
+    await app.waitUntil(() => sessionDraft(app, workerId) === "Write the release notes", { timeout: 3_000 });
   }, 20_000);
 
   test("New session's custom command: a Soft group, no uppercase labels; Start launches the typed command", async () => {

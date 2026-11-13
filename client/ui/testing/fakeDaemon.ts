@@ -22,6 +22,8 @@ export interface FakeDaemonState {
   computers?: Record<string, unknown>;
   /** Canned answers by request type (before any built-in one): the reply's `type` and fields, e.g. `{ type: "error", message }`. */
   replies?: Record<string, { type: string } & Record<string, unknown>>;
+  /** false: a computer from before create_session's first message (WIRE §11), which ignores `text` and echoes nothing. */
+  firstMessages?: boolean;
   /** Pictures by path, as `codex_asset` answers them (`data_url`); a path not here falls to `replies`. */
   assets?: Record<string, string>;
 }
@@ -270,7 +272,8 @@ export class FakeDaemon {
         const id = `w${++this.revision}`;
         const session = { id, name: String(frame.name || ""), status: "running", cwd: String(frame.cwd || "/home/me"), command: String(frame.command || ""), started_at: Date.now(), updated_at: Date.now() };
         this.state.worker_sessions = [...(this.state.worker_sessions ?? []), session];
-        reply("session_created", { worker_id: id, worker_session: session });
+        const holds = typeof frame.text === "string" && frame.text.trim() !== "" && this.state.firstMessages !== false;
+        reply("session_created", { worker_id: id, worker_session: session, ...(holds ? { first_message: "pending" } : {}) });
         return this.broadcast({ type: "worker_session_created", seq: ++this.seq, worker_session: session });
       }
       case "kill_worker": {
