@@ -40,6 +40,22 @@ describe("Brain's thread, read back up", () => {
     expect(app.shows("id:jump-latest")).toBe(true);
     expect(firstDrawn(app)).toBe(before);
   }, 30_000);
+
+  test("made again (a hot patch to its page, a past thread and back), it opens where it was read to", async () => {
+    const app = await readBackUp();
+    const before = firstDrawn(app);
+    // Another thread replaces the list; Current chat makes Brain's thread's list anew.
+    await app.host.send("links.open", { url: "mewla://brain?thread=t-old" });
+    await app.waitFor("id:brain-past-thread");
+    await app.press("id:brain-current-thread");
+    await app.waitFor("id:brain-chat");
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message ")), { timeout: 10_000 });
+    await app.wait(300);
+    // Rows the list keeps drawn around the screen differ when it is made again; the row read to is among them, not the end.
+    expect(app.shows("id:jump-latest")).toBe(true);
+    expect(app.texts()).toContain(before!);
+    expect(app.texts().some((t) => t.startsWith("Message 59."))).toBe(false);
+  }, 30_000);
 });
 
 /**

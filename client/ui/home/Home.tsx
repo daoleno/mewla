@@ -287,8 +287,8 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
   // What the page shows, as one word: the branch below is made again only when the word changes. Read as
   // conditions in the JSX, every Brain snapshot (each Work and Worker change) and every chat state made the
   // thread again: its rows all drawn anew (the whole page flashed) and the list back at its end (owner 11-13).
-  // A thread is its own list: another thread (a past one, Current chat, New chat) is made anew and opens at
-  // its end; the same thread under a restarted host is not.
+  // A thread is its own list: another thread (a past one, Current chat, New chat) is made anew and opens where
+  // the person had read it back to, else at its end; the same thread under a restarted host is not made anew.
   const shows = computed(() => {
     const on = surface();
     if (on !== "chat") return on;
@@ -301,8 +301,10 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
       {/* One of these at a time, by `shows`; the thread is made again for each thread it names. */}
       <If when={shows() === "unavailable"}><BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} /></If>
       <If when={shows() === "failed"}><BrainChatFailed onOpenTerminal={openTerminal} /></If>
-      <Each of={shows().startsWith("chat:") ? [shows()] : []} key={(thread) => thread}>{() => (
-        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} capsule={props.capsule}
+      <Each of={shows().startsWith("chat:") ? [shows()] : []} key={(thread) => thread}>{(thread) => (
+        // Its reading place is kept by computer and thread: made again (a hot patch to this page, a past thread and
+        // back) it opens where the person had read back to, or at its end.
+        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} capsule={props.capsule} scope={`brain:${untracked(current)?.id ?? ""}:${thread()}`}
           empty={() => (
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
             // 15 s; "What should Brain do?" only after a read that succeeded.
