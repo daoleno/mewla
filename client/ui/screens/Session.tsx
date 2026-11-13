@@ -511,10 +511,13 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const capsuled = mobile && platform.idiom === "phone";
   const capsule = createCapsule({ collapsed: untracked(mode) === "terminal" });
   const inset = () => capsuleInset(safeArea().top);
-  const needsYou = computed(() => requests().length > 0 || worker()?.status === "blocked");
+  // Blocked, it waits on the person, unless Brain delegated it and it stopped on its own report: that is Brain's
+  // to answer (a prompt or an approval on its terminal is a request above), owner 2026-11-13, shot 11.
+  const blockedOnYou = () => worker()?.status === "blocked" && worker()?.delegated !== true;
+  const needsYou = computed(() => requests().length > 0 || blockedOnYou());
   const offline = computed(() => connection() !== "connected");
   // One more thing that needs the person (a second request too), or the connection going: it expands.
-  const asks = computed(() => requests().length + (worker()?.status === "blocked" ? 1 : 0));
+  const asks = computed(() => requests().length + (blockedOnYou() ? 1 : 0));
   let asked = untracked(asks);
   let wasOffline = untracked(offline);
   effect(() => {
