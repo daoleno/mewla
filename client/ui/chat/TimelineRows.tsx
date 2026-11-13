@@ -153,10 +153,10 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
               <ToolLine title={step.title} detail={shownDetail(step)} />
             </View>
           )) : null}
-          {item().commandText ? <Mono text={item().commandText!} /> : null}
-          {item().queryText ? <TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText! }] }] }} selectable class="text-sm" /> : null}
+          {item().commandText ? <Mono text={item().commandText ?? ""} /> : null}
+          {item().queryText ? <TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText ?? "" }] }] }} selectable class="text-sm" /> : null}
           {item().statusLine ? <Text class="text-xs text-muted-foreground">{item().statusLine}</Text> : null}
-          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body!} /> : <TextView markdown={item().body!} selectable renderCodeBlock={renderCode} class={`text-sm ${SELECTION}`} />) : null}
+          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body ?? ""} /> : <TextView markdown={item().body ?? ""} selectable renderCodeBlock={renderCode} class={`text-sm ${SELECTION}`} />) : null}
           {files().map((file) => <FileRow file={file} onFile={props.onFile} />)}
         </View>
       ) : null}
@@ -253,7 +253,8 @@ function resultMeta(model: WorkCardModel, agent: string | undefined): string {
 
 function WorkLogo(props: { agent: { kind: AgentKind; flavor: TerminalFlavor } | null; size: number }) {
   return props.agent
-    ? <AgentIcon kind={props.agent.kind} flavor={props.agent.flavor} size={props.size - 8} />
+    // Read through `?.`: the Session can leave the computer while its logo is drawn (owner 11-13 10:22).
+    ? <AgentIcon kind={props.agent?.kind ?? "terminal"} flavor={props.agent?.flavor} size={props.size - 8} />
     : <View class="items-center justify-center rounded-lg bg-foreground" style={{ width: props.size, height: props.size }}><KitIcon name="brain" size={props.size - 10} tone="canvas" /></View>;
 }
 
@@ -345,11 +346,11 @@ function OneSessionWork(props: { model: () => WorkCardModel; line: () => WorkWor
     <Button testID="work-card-one" accessibilityLabel={[row().title, request()?.ask ?? row().line].filter(Boolean).join(", ")} disabled={!props.handlers} onPress={press}
       class="min-h-[68px] flex-row items-center gap-3.5 overflow-hidden rounded-(--radius-group) bg-card px-4 py-3 active:opacity-70">
       <RowTile tile={() => row().tile} />
-      <RowText row={() => (request() ? { ...row(), line: request()!.ask ?? request()!.title, progress: undefined } : row())} />
+      <RowText row={() => { const r = request(); return r ? { ...row(), line: r.ask ?? r.title, progress: undefined } : row(); }} />
       {request() ? (
-        <Button testID={request()!.oneTap ? "work-card-approve" : "work-card-answer"} disabled={sending()} onPress={() => (request()!.oneTap ? void approve() : press())}
+        <Button testID={request()?.oneTap ? "work-card-approve" : "work-card-answer"} disabled={sending()} onPress={() => (request()?.oneTap ? void approve() : press())}
           class="h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 disabled:opacity-40">
-          <Text class="text-caption font-semibold text-seal-foreground">{request()!.oneTap ? "Approve" : "Answer"}</Text>
+          <Text class="text-caption font-semibold text-seal-foreground">{request()?.oneTap ? "Approve" : "Answer"}</Text>
         </Button>
       ) : <RowEnd row={row} />}
     </Button>

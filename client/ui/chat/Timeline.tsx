@@ -1,4 +1,5 @@
-import { cleanup, Clipboard, colorScheme, computed, effect, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, computed, effect, ErrorBoundary, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
+import { currentTransport } from "../session";
 import { noteScroll } from "../pets/hold";
 import { elapsedShort } from "../../core/sessions/activity";
 import { elapsedNow } from "../kit/elapsedClock";
@@ -152,6 +153,25 @@ function DelegatedBrief(props: { item: () => MessageTimelineItem; expansion: Exp
  * shows the item it was given next; per-row state (open or not) lives in
  * `expansion`, by id.
  */
+/**
+ * A row whose views threw: nothing in its place, the error to the log and the computer (as a crash's summary
+ * goes), and the row drawn again once its cell is handed another row or this one changes.
+ */
+function FailedRow(props: { error: unknown; reset: () => void; id: () => string }) {
+  const failedOn = untracked(props.id);
+  const error = props.error instanceof Error ? props.error : new Error(String(props.error));
+  console.error(`chat row ${failedOn} failed: ${error.message}\n${error.stack ?? ""}`);
+  try {
+    currentTransport()?.send({ type: "client_diagnostic", name: "chat_row_error", request_id: `row-${Date.now().toString(36)}`, body: `${failedOn}: ${error.message}\n${error.stack ?? ""}`.slice(0, 4000) });
+  } catch {
+    // offline: the log has it
+  }
+  effect(() => {
+    if (props.id() !== failedOn) untracked(props.reset);
+  });
+  return <View testID="row-failed" />;
+}
+
 /** Which view a row is drawn with (`TimelineRow`). */
 function rowKind(item: TimelineItem | DateDividerItem): string {
   if (item.type === "date-divider") return "divider";
@@ -164,11 +184,30 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
   const it = props.item as () => TimelineItem;
   // The reply's width, which its pictures take.
   const textWidth = signal(0);
-  const as = <T extends TimelineItem["type"]>(type: T) => () => it() as Extract<TimelineItem, { type: T }>;
+  // What a view of one type reads: the row's item while it is of that type, else the last one that was. A
+  // recycled cell handed a row of another type reaches the views already drawn one step before the branch
+  // above is made again; read as it is, a Work card read a message's `event` (owner 11-13 10:22).
+  const as = <T extends TimelineItem["type"]>(type: T) => {
+    let last: Extract<TimelineItem, { type: T }> | undefined;
+    return () => {
+      const now = it();
+      if (now.type === type || last === undefined) last = now as Extract<TimelineItem, { type: T }>;
+      return last;
+    };
+  };
   // Which view the row is, as one word: the branch is made again only when the word changes. A new object
   // for the same row (a streaming reply's next words, a status) reaches the views already drawn, which read
   // `item()` themselves; chosen in the JSX, each one drew the whole row anew (owner 11-13: rows flashed).
   const kind = computed(() => rowKind(it()));
+  // Made once per row, here: written in a prop (`item={as(…)}`) the call becomes the prop's getter, and every
+  // read made a new accessor that held nothing (the 10:27 crash came through that).
+  const reply = as("message");
+  const activity = as("activity") as () => ActivityTimelineItem;
+  const plan = as("plan") as () => PlanTimelineItem;
+  const task = as("task-notification") as () => TaskNotificationTimelineItem;
+  const computerMessage = as("computer-message") as () => ComputerMessageTimelineItem;
+  const answered = as("answered") as () => AnsweredTimelineItem;
+  const work = as("brain-work-event") as () => BrainWorkEventTimelineItem;
   return (
     <View class="py-1">
       {kind() === "divider" ? (
@@ -177,20 +216,20 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
           <Caption plain center text={(it() as unknown as DateDividerItem).label} />
         </View>
       ) : kind() === "brief" ? (
-        <View class="px-4"><DelegatedBrief item={as("message") as () => MessageTimelineItem} expansion={props.expansion} /></View>
+        <View class="px-4"><DelegatedBrief item={reply} expansion={props.expansion} /></View>
       ) : kind() === "user" ? (
-        <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>
+        <View class="px-4"><UserMessage item={reply} handlers={props.handlers} /></View>
       ) : kind() === "reply" ? (
         <View class="px-4">
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
               with the system's handles and menu (Copy, Select all, Share). */}
           <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
-            <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class={`text-message ${SELECTION}`}
+            <TextView markdown={reply().body ?? ""} options={{ streaming: Boolean(reply().streaming) }} selectable class={`text-message ${SELECTION}`}
               renderCodeBlock={renderCode}
               classes={TABLE}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
               renderImage={(image) => {
-                const key = pictureKey(it().id, image.src);
+                const key = pictureKey(reply().id, image.src);
                 return <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} width={textWidth} onOpen={() => props.handlers.openPicture?.(key)} />;
               }} />
           </View>
@@ -198,18 +237,18 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
       ) : kind() === "working" ? (
         <WorkingRow since={() => props.handlers.workingSince?.()} />
       ) : kind() === "activity" ? (
-        <ActivityRow item={as("activity") as () => ActivityTimelineItem} expansion={props.expansion} onFile={props.handlers.onFile}
+        <ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
           pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} />
       ) : kind() === "plan" ? (
-        <PlanRow item={as("plan") as () => PlanTimelineItem} />
+        <PlanRow item={plan} />
       ) : kind() === "task-notification" ? (
-        <TaskNotificationCard item={as("task-notification") as () => TaskNotificationTimelineItem} expansion={props.expansion} />
+        <TaskNotificationCard item={task} expansion={props.expansion} />
       ) : kind() === "computer-message" ? (
-        <ComputerMessageCard item={as("computer-message") as () => ComputerMessageTimelineItem} expansion={props.expansion} />
+        <ComputerMessageCard item={computerMessage} expansion={props.expansion} />
       ) : kind() === "answered" ? (
-        <AnsweredRow item={as("answered") as () => AnsweredTimelineItem} />
+        <AnsweredRow item={answered} />
       ) : kind() === "brain-work-event" ? (
-        <WorkCard item={as("brain-work-event") as () => BrainWorkEventTimelineItem} handlers={props.handlers.work} />
+        <WorkCard item={work} handlers={props.handlers.work} />
       ) : null}
     </View>
   );
@@ -415,7 +454,12 @@ export function ChatTimeline(props: {
           const foot = computed(() => (item() as FootRow).type === "thread-foot");
           return (
             <View>
-              {foot() ? (props.foot!.render((node) => anchor.set(node)) as never) : <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />}
+              {foot() ? (props.foot!.render((node) => anchor.set(node)) as never) : (
+                // A row that throws shows nothing and is reported; the rest of the thread stays (owner 11-13 10:22).
+                <ErrorBoundary fallback={(error: unknown, reset: () => void) => <FailedRow error={error} reset={reset} id={() => (item() as TimelineItem).id} />}>
+                  <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />
+                </ErrorBoundary>
+              )}
             </View>
           );
         }}

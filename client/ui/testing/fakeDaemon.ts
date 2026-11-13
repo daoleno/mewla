@@ -105,12 +105,13 @@ export class FakeDaemon {
    * A conversation's news, as the daemon sends it to its followers: `upserts` (new or changed events, by id),
    * `activity` (the running turn, null when it ended), or `snapshot: true` to send the whole conversation again.
    */
-  conversation(update: { worker: string; upserts?: Record<string, unknown>[]; activity?: Record<string, unknown> | null; snapshot?: boolean }): void {
+  conversation(update: { worker: string; upserts?: Record<string, unknown>[]; deletes?: string[]; activity?: Record<string, unknown> | null; snapshot?: boolean }): void {
     const { worker } = update;
     const base = this.revisionOf(worker);
-    if (update.upserts?.length) {
+    if (update.upserts?.length || update.deletes?.length) {
       const byId = new Map(this.events(worker).map((e) => [e.id, e] as const));
-      for (const event of update.upserts) byId.set(event.id, event);
+      for (const event of update.upserts ?? []) byId.set(event.id, event);
+      for (const id of update.deletes ?? []) byId.delete(id);
       const entry = this.state.conversations?.[worker];
       const events = [...byId.values()];
       this.state.conversations = { ...this.state.conversations, [worker]: Array.isArray(entry) || !entry ? events : { ...entry, events } };
@@ -121,7 +122,7 @@ export class FakeDaemon {
       if (update.snapshot) this.to(s.socket, { type: "codex_conversation_snapshot", request_id: s.requestId, worker_id: worker, revision, conversation: this.conversationOf(worker) });
       else this.to(s.socket, {
         type: "codex_conversation_delta", request_id: s.requestId, worker_id: worker, revision, base_revision: base,
-        upserts: update.upserts ?? [], deletes: [], ...(update.activity !== undefined ? { activity: update.activity } : {}),
+        upserts: update.upserts ?? [], deletes: update.deletes ?? [], ...(update.activity !== undefined ? { activity: update.activity } : {}),
       });
     }
   }
