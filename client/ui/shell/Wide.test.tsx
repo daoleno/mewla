@@ -172,6 +172,16 @@ describe("the wide layout (SPEC §14)", () => {
     expect((locations(app)[0].state.snapshot as { routes: { name: string }[] }).routes.map((route) => route.name)).toEqual(["home", "computer", "settings"]);
   }, 20_000);
 
+  test("a Work's detail has a URL: opened at it, the page is that Work over Brain, and the app's own link path reads the same", async () => {
+    const brain = { current_work: [{ work_id: "docsref", revision: 1, title: "docs-refresh", status: "running", progress_mode: "owned", unread_result: false, updated_at: new Date().toISOString() }] };
+    for (const path of ["/work-detail/docsref", "/brain/work/docsref"]) {
+      const app = await open(APP, { ...desk, host: webHost({ brain }, { "web.initialPath": { path, state: null } }) });
+      await app.waitFor("id:work-detail", { timeout: 10_000 });
+      await app.waitUntil(() => last(app)?.path === "/work-detail/docsref");
+      expect(routes(app)).toEqual(["home", "workDetail"]);
+    }
+  }, 30_000);
+
   test("a Session the daemon named after its id has the title its page shows, not the id twice", async () => {
     const id = "mh-c76c35d267c789a94b2d013b";
     const sessions = [{ id, name: `${id} (${id})`, cwd: "/home/me/gitdemo", command: "zsh", status: "running", started_at: 1 }];
