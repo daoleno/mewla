@@ -320,6 +320,18 @@ export function Tray(props: TrayProps) {
   ) : null}</>;
 }
 
+/**
+ * Trial: three pages. The tray as the page right of Brain (`home/Pager.tsx`): the same body, under the status bar,
+ * on the canvas; a row that leaves for Brain's thread returns the pager to Brain.
+ */
+export function TrayPage(props: TrayProps & { onLeave: () => void }) {
+  return (
+    <View testID="tray" class="flex-1 bg-background" style={{ paddingTop: homeHeaderInset() }}>
+      <TrayBody {...props} open={PUSH} onLeave={props.onLeave} title={() => tray().title} />
+    </View>
+  );
+}
+
 /** The panel: made each time the tray opens, so it rises once per opening and not when a pushed page pops back to it. */
 function TrayPanel(props: TrayProps & { onClose: () => void }) {
   const top = () => homeHeaderInset() + HOME_HEADER_HEIGHT;
