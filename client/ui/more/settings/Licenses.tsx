@@ -1,6 +1,7 @@
 import { openUrl, Text, View } from "nsh";
 import { findLicenseItem, licenseItemId, licenseSummary, type LicenseData, type LicenseItem } from "../../../core/settings/licenses";
 import { EmptyState, Page, Row, Section } from "../../kit/kit";
+import { tile } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
 import data from "./licenses/licenses.json";
 
@@ -28,7 +29,7 @@ export function License(props: { id: string; nav: PageNav }) {
     <Page display title={item.name} testID="license-page">
       <Section>
         <Row title={item.name} subtitle={licenseSummary(item)} />
-        {item.url ? <Row icon="open-external" title="Source" value={item.url.replace(/^https?:\/\//, "")} onPress={() => void openUrl(item.url!)} /> : null}
+        {item.url ? <Row lead={tile("graphite", "open-external")} title="Source" value={item.url.replace(/^https?:\/\//, "")} onPress={() => void openUrl(item.url!)} /> : null}
       </Section>
       {item.note ? <View class="mt-3 px-4"><Text class="text-sm text-muted-foreground">{item.note}</Text></View> : null}
       {text ? (
