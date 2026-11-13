@@ -36,9 +36,15 @@ import { sessionRowModel } from "../../core/sessions/listRow";
 import { workLinkOf } from "../sessions/workLinks";
 import { goHome, isTop, nav, openPage, openSession, pageNav, trayOpen } from "./nav";
 import type { Route } from "./routes";
+import { belowStack } from "../../core/shell/belowStack";
 
-/** What lies below the stack (the system bar): the keyboard covers it before it reaches a page. */
-export const belowSections = signal(0);
+/** The stack pane's bottom as last laid out; none before its first layout. */
+const paneBottom = signal<number | null>(null);
+/**
+ * What lies below the stack (the system bar): the keyboard covers it before it reaches a page. Read from the
+ * window and the pane as they are now (core/shell/belowStack.ts): a rotation changes both, in either order.
+ */
+export const belowSections = computed(() => belowStack(windowSize().height, paneBottom()));
 
 // A computer switch: sheets close first (they listen to the switch themselves), then the stack
 // returns to the new computer's home (SPEC §3.8).
@@ -186,7 +192,7 @@ export function Shell() {
         {/* A floating screen docked on wide has its strip at the pane's right: the page lays out left of it. */}
         <View testID="right-pane" class="flex-1" style={{ paddingRight: floatsShown() > 0 ? screenDock() : 0 }} onLayout={({ bounds }) => {
           rightPaneWidth.set(bounds.size.width);
-          belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height));
+          paneBottom.set(bounds.origin.y + bounds.size.height);
         }}><Stack /></View>
       </View>
       <Overlays bottomInset={belowSections} />
