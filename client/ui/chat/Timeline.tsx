@@ -90,6 +90,7 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
   // Sent pictures show as pictures above the bubble (SPEC §1.7); other files stay rows in it.
   const pictures = () => sentPictures(it().attachments);
   const files = () => it().attachments.filter((file) => !pictures().includes(file));
+  const tap = () => !it().pending && props.handlers.onUserMessage?.(it());
   return (
     <View class="max-w-[84%] items-end gap-1 self-end">
       {pictures().length ? (
@@ -101,9 +102,11 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
       ) : null}
       {it().body || files().length ? (
         // A long press selects its text (the system's handles and Copy / Select all / Share); a tap edits it.
-        <View testID="user-message" selectable onPress={() => !it().pending && props.handlers.onUserMessage?.(it())}
+        // The text hears the tap itself: in a selectable area Android's text takes every touch on it (NSH 0.5.0
+        // `TextBox`), handing a tap to its own press and cancelling it once a long press selects.
+        <View testID="user-message" selectable onPress={tap}
           class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "border border-foreground" : ""} ${waiting() ? "opacity-55" : ""}`}>
-          {it().body ? <Text class={`text-message ${SELECTION}`}>{it().body}</Text> : null}
+          {it().body ? <Text testID="user-message-text" onPress={tap} class={`text-message ${SELECTION}`}>{it().body}</Text> : null}
           {files().map((file) => (
             <View class="flex-row items-center gap-1.5 pt-1">
               <Icon name="document" size={14} />

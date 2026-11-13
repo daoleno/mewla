@@ -234,7 +234,9 @@ export class FakeDaemon {
         return reply("widget_token", { token: "widget-token", id: "w1" });
       case "codex_conversation_subscribe":
       {
-        const worker = String(frame.worker_id);
+        // A Brain thread of its own is `<worker>#<scope>` (`brain-host#brain-thread:t-old`); else the worker's.
+        const scoped = `${String(frame.worker_id)}#${String(frame.conversation_scope_key ?? "")}`;
+        const worker = this.state.conversations?.[scoped] ? scoped : String(frame.worker_id);
         this.subscriptions = [...this.subscriptions.filter((s) => s.socket !== socket || s.worker !== worker), { socket, worker, requestId: String(frame.request_id) }];
         return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: this.revisionOf(worker), conversation: this.conversationOf(worker) });
       }
