@@ -39,8 +39,8 @@ export function BrainHostPanel(props: { onClose: () => void; source?: BrainSourc
           </View>
         </View>
       </Scroll>
-      {choices().moreToInstall ? <Text testID="brain-executor-install" class="px-4 text-sub text-muted-foreground">Install more with mewla deps</Text> : null}
-      {source.hostSwitch.error() ? <Text testID="brain-executor-error" class="px-4 text-sub text-foreground">{source.hostSwitch.error()}</Text> : null}
+      {choices().moreToInstall ? <View class="px-4"><Text testID="brain-executor-install" class="text-sub text-muted-foreground">Install more with mewla deps</Text></View> : null}
+      {source.hostSwitch.error() ? <View class="px-4"><Text testID="brain-executor-error" class="text-sub text-foreground">{source.hostSwitch.error()}</Text></View> : null}
     </View>
   );
 }

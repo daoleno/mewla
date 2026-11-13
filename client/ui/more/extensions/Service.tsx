@@ -395,7 +395,7 @@ function CustomServiceForm(props: { plugin: PluginIntegration; again: boolean })
           <View class="mt-4">
             <Action filled testID="custom-connect" label={browser() ? "Continue in browser" : "Connect service"} busy={connectingService() === props.plugin.id} disabled={!endpoint().trim() || (trust() && !networks().trim())} onPress={() => void connect()} />
           </View>
-          <Text testID="custom-note" class="mt-2 px-4 text-caption text-muted-foreground">{`Credentials stay on ${serverDisplayName(daemonName())}. Each tool needs your permission.`}</Text>
+          <View class="mt-2 px-4"><Text testID="custom-note" class="text-caption text-muted-foreground">{`Credentials stay on ${serverDisplayName(daemonName())}. Each tool needs your permission.`}</Text></View>
         </View>
       ) : (
         <View class="mt-4">

@@ -410,7 +410,7 @@ export function ChatTimeline(props: {
       ) : null}
       {notice() ? (
         <View class="absolute bottom-16 left-4 right-4 items-center">
-          <Text testID="chat-notice" onPress={() => notice.set("")} class="rounded-full bg-foreground px-4 py-2.5 text-sub font-semibold text-background">{notice()}</Text>
+          <View testID="chat-notice" onPress={() => notice.set("")} class="rounded-full bg-foreground px-4 py-2.5"><Text class="text-sub font-semibold text-background">{notice()}</Text></View>
         </View>
       ) : null}
     </View>

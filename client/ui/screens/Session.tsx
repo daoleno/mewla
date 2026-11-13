@@ -530,8 +530,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
             ) : null}
             {/* The chat shows its notes above the composer; the terminal shows them here (parity #37). */}
             {notice() && mode() === "terminal" ? (
-              <Text testID="terminal-notice" onPress={() => notice.set("")}
-                class="rounded-xl border border-border bg-card px-3 py-2.5 text-sm text-foreground">{notice()}</Text>
+              <View testID="terminal-notice" onPress={() => notice.set("")}
+                class="rounded-xl border border-border bg-card px-3 py-2.5"><Text class="text-sm text-foreground">{notice()}</Text></View>
             ) : null}
             </View>
           </View>

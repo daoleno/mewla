@@ -92,7 +92,7 @@ function ServiceDetail(props: { service: () => DiscoveredSessionService; onBack:
   const urls = () => (props.service().urls ?? []).map(presentSessionServiceURL);
   return (
     <View class="px-4">
-      <Text class="px-4 text-sub text-muted-foreground line-clamp-1">{`Port ${props.service().port} · ${subtitle()}`}</Text>
+      <View class="px-4"><Text class="text-sub text-muted-foreground line-clamp-1">{`Port ${props.service().port} · ${subtitle()}`}</Text></View>
       <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
         <View class="pb-2">
           <Section sheet title="Open">
@@ -229,7 +229,7 @@ export function ServicesSheet(props: { onOpenSession: (workerId: string) => void
                         leading={<View class="h-9 min-w-[52px] items-center justify-center rounded-[11px] bg-background px-2"><Text class="font-mono text-code font-semibold">{String(service.port)}</Text></View>}
                         title={serviceProcessLabel(service)}
                         subtitle={!hasServiceTerminal(service) && service.source === "persistent" ? serviceSourceLabel(service) : serviceWorkerLabel(service)}
-                        trailing={service.tunnel?.status === "running" ? <Text class="rounded-full bg-background px-2.5 py-1 text-caption font-semibold">Public</Text> : undefined}
+                        trailing={service.tunnel?.status === "running" ? <View class="rounded-full bg-background px-2.5 py-1"><Text class="text-caption font-semibold">Public</Text></View> : undefined}
                         chevron
                         onPress={() => selected.set(keyOf(service))}
                       />

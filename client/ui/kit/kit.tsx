@@ -236,7 +236,7 @@ export function Section(props: { title?: string; detail?: JSX.Element; footer?: 
       <View class={props.sheet ? "overflow-hidden rounded-(--radius-group) bg-sheet-surface" : "overflow-hidden rounded-(--radius-group) bg-card"}>
         <View class="-mb-px">{props.children}</View>
       </View>
-      {props.footer ? <Text class="mt-2 px-4 text-caption text-muted-foreground">{props.footer}</Text> : null}
+      {props.footer ? <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{props.footer}</Text></View> : null}
     </View>
   );
 }

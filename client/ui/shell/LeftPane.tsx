@@ -58,7 +58,7 @@ function SearchOrRun() {
       class="mx-4 mb-2 h-[44px] flex-row items-center gap-2 rounded-[14px] bg-card px-3 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <Icon name="search" size={18} tone="soft" />
       <Text class="flex-1 text-body text-muted-foreground line-clamp-1">Search or run</Text>
-      <Text testID="pane-search-key" class="rounded-md border border-border px-1.5 py-0.5 text-caption text-muted-foreground">{keymap.label("mod+k").replace(/\+/g, " ")}</Text>
+      <View class="rounded-md border border-border px-1.5 py-0.5"><Text testID="pane-search-key" class="text-caption text-muted-foreground">{keymap.label("mod+k").replace(/\+/g, " ")}</Text></View>
     </Button>
   );
 }

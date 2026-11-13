@@ -269,10 +269,10 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
                     <PillButton title={problem.action.label} busy={busy() === problem.key} disabled={Boolean(busy())} onPress={() => perform(problem, problem.action!.does)} />
                   ) : undefined}
                 />
-                {notes()[problem.key] ? <Text class="px-4 pb-3 text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[problem.key]}</Text> : null}
+                {notes()[problem.key] ? <View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[problem.key]}</Text></View> : null}
               </View>
             ))}
-            {notes()["agent-use"] ? <Text class="px-4 pb-3 text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{notes()["agent-use"]}</Text> : null}
+            {notes()["agent-use"] ? <View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{notes()["agent-use"]}</Text></View> : null}
           </Section>
 
           {reachable() && update()?.version ? (

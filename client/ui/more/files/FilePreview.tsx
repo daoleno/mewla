@@ -266,7 +266,7 @@ function TextBody(props: { text: SessionFileTextPreview }) {
           <Text testID="file-text" class="font-mono text-code">{props.text.content || " "}</Text>
         </View>
       </Scroll>
-      {note ? <Text testID="file-truncated" class="px-4 pt-2 text-caption text-muted-foreground">{note}</Text> : null}
+      {note ? <View class="px-4 pt-2"><Text testID="file-truncated" class="text-caption text-muted-foreground">{note}</Text></View> : null}
     </Scroll>
   );
 }

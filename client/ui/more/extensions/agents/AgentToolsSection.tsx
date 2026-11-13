@@ -46,7 +46,7 @@ export function AgentToolsSection(props: { nav: PageNav }) {
           />
         ))}
         </Section>
-        {empty.length ? <Text class="mt-2 px-4 text-caption text-muted-foreground">{`${joinAgentLabels(empty)} ${empty.length === 1 ? "has" : "have"} nothing installed.`}</Text> : null}
+        {empty.length ? <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{`${joinAgentLabels(empty)} ${empty.length === 1 ? "has" : "have"} nothing installed.`}</Text></View> : null}
       </View>
     );
   };

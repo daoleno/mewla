@@ -289,7 +289,7 @@ function Strip(props: { review: GitReview; tab: Tab; onBranches: () => void }) {
           </Text>
         </View>
       ) : null}
-      {snapshot()?.operation ? <Text class="mt-2 px-1 text-sub">{`${snapshot()!.operation} in progress`}</Text> : null}
+      {snapshot()?.operation ? <View class="mt-2 px-1"><Text class="text-sub">{`${snapshot()!.operation} in progress`}</Text></View> : null}
     </View>
   );
 }

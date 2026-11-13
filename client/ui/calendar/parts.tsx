@@ -4,7 +4,7 @@ import type { CalendarStatus } from "../../core/calendar/model";
 
 /** A grouped list's section title, as iOS Settings and Android preferences show them. */
 export function SectionTitle(props: { title: string }) {
-  return <Text class="px-4 pb-1.5 pt-5 text-sm font-semibold text-muted-foreground">{props.title}</Text>;
+  return <View class="px-4 pb-1.5 pt-5"><Text class="text-sm font-semibold text-muted-foreground">{props.title}</Text></View>;
 }
 
 /** A plain row of a grouped list: a title, an optional detail at the end. */

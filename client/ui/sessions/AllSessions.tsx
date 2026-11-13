@@ -248,7 +248,7 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
             <Text class="flex-1 text-title font-bold" role="header">{selectionCountLabel(countSessionSelection(selection()))}</Text>
           </View>
         ) : null}
-        {notice() ? <Text testID="sessions-notice" class="px-4 py-2 text-sub text-destructive" onPress={() => notice.set("")}>{notice()}</Text> : null}
+        {notice() ? <View testID="sessions-notice" onPress={() => notice.set("")} class="px-4 py-2"><Text class="text-sub text-destructive">{notice()}</Text></View> : null}
         <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-28"
           header={<View class="px-4"><DisplayTitle title="All Sessions" /></View>}
           onViewableItemsChange={({ viewableItems }) => titleAway.set(viewableItems.length > 0 && !viewableItems.some((t) => t.index === 0))}

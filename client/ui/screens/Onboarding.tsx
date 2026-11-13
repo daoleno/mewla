@@ -165,9 +165,9 @@ export function PairPage(props: { onPaired?(): void; onScreen?: () => boolean })
       <Scroll class="flex-1 bg-background" contentClass="px-4 pb-8 pt-2" keyboardShouldPersistTaps="handled">
         <View class="w-full max-w-[480px] gap-4 self-center">
           <DisplayTitle title="Pair a computer" />
-          <Text class="-mt-2 px-1 text-body text-muted-foreground">
+          <View class="-mt-2 px-1"><Text class="text-body text-muted-foreground">
             {camera ? "On your computer, run mewla pair, then scan the code it shows, or paste the link it prints." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
-          </Text>
+          </Text></View>
           {camera ? <OnboardingScanner onScreen={props.onScreen} /> : null}
           <ScanStatus />
           <View class="overflow-hidden rounded-(--radius-group) bg-card">
