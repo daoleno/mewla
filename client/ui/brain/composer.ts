@@ -28,6 +28,8 @@ export function createBrainComposer(options: {
   onOpenTerminal?: (hostWorkerId: string) => void;
   /** A message to show (an attach that failed). */
   onNotice?: (text: string) => void;
+  /** A message went out from the composer: the thread brings it to the top, with the reply under it. */
+  onSent?: () => void;
   source?: BrainSource;
 }) {
   const brain = options.source ?? currentBrain;
@@ -79,6 +81,7 @@ export function createBrainComposer(options: {
       case "send":
         source.chat()?.send(route.text, uploads.ready());
         uploads.clear();
+        options.onSent?.();
         return fromDraft;
       case "prefill":
         source.text.set(route.text);
