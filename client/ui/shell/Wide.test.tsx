@@ -172,6 +172,16 @@ describe("the wide layout (SPEC §14)", () => {
     expect((locations(app)[0].state.snapshot as { routes: { name: string }[] }).routes.map((route) => route.name)).toEqual(["home", "computer", "settings"]);
   }, 20_000);
 
+  test("a Needs you row of a Session is selected while its Session is the page, as a running row is", async () => {
+    const ask = { id: "p1", kind: "permission", provider: "claude", title: "Run this command?", request: "git push", options: [{ number: 1, label: "Yes" }, { number: 2, label: "No" }] };
+    const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: [{ ...running("w1", "api"), status: "blocked", prompt: ask }], conversations: { w1: [] } }) });
+    await app.waitFor("id:tray-request", { timeout: 10_000 });
+    expect(app.count("id:tray-request >> id:selected-well")).toBe(0);
+    await app.press("id:tray-request");
+    await app.waitUntil(() => routes(app).includes("session:w1"));
+    await app.waitFor("id:tray-request >> id:selected-well");
+  }, 20_000);
+
   test("a Work's detail has a URL: opened at it, the page is that Work over Brain, and the app's own link path reads the same", async () => {
     const brain = { current_work: [{ work_id: "docsref", revision: 1, title: "docs-refresh", status: "running", progress_mode: "owned", unread_result: false, updated_at: new Date().toISOString() }] };
     for (const path of ["/work-detail/docsref", "/brain/work/docsref"]) {

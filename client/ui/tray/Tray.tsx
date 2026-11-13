@@ -13,7 +13,7 @@ import { Icon } from "../kit/Icon";
 import { PillButton } from "../kit/kit";
 import { homeShown, openCalendarItem, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { createMenuAnchor, showMenu } from "../kit/Menu";
-import { rowKey } from "../../core/tray/pane";
+import { requestPaneKey, rowKey } from "../../core/tray/pane";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { showDeviceRequest } from "../enrollment/state";
 import { RowEnd, RowHair, RowText, RowTile } from "./rowParts";
@@ -108,11 +108,12 @@ function TrayRow(props: { row: () => Row; onPress: () => void; selected?: boolea
  * Work's name, as in every section, and its line the ask (SPEC §11 Tray row); a Calendar alert or a new device keeps
  * what it is over where it comes from.
  */
-function RequestRow(props: { request: () => TrayRequest; busy: boolean; last?: boolean; onApprove: () => void; onOpen: () => void }) {
+function RequestRow(props: { request: () => TrayRequest; busy: boolean; selected?: boolean; last?: boolean; onApprove: () => void; onOpen: () => void }) {
   const r = props.request;
   const named = () => r().ask !== undefined;
   return (
-    <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+    <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} selected={props.selected} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+      <If when={props.selected}><SelectedWell /></If>
       <RowTile tile={(): TrayTile => (r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" })} />
       <View class="min-w-0 flex-1">
         <Text testID="tray-request-title" class="text-body font-semibold line-clamp-1">{named() ? r().source : r().title}</Text>
@@ -125,7 +126,7 @@ function RequestRow(props: { request: () => TrayRequest; busy: boolean; last?: b
           <Text class="text-caption font-semibold text-seal-foreground">{r().oneTap ? "Approve" : "Answer"}</Text>
         </BusyLabel>
       </Button>
-      <If when={!props.last}><RowHair /></If>
+      <If when={!(props.selected || props.last)}><RowHair /></If>
     </Button>
   );
 }
@@ -266,7 +267,7 @@ export function TrayBody(props: TrayBodyProps) {
           <If when={m().needs.length}><View testID="tray-needs">
               <Label title="Needs you" />
               <Group><Each of={m().needs} key={(request) => request.key}>
-                {(request, index) => <RequestRow request={request} last={index() === m().needs.length - 1} busy={busy() === request().key} onApprove={() => void approve(request())} onOpen={() => openRequest(request())} />}
+                {(request, index) => <RequestRow request={request} selected={selected(requestPaneKey(request()) ?? "")} last={index() === m().needs.length - 1} busy={busy() === request().key} onApprove={() => void approve(request())} onOpen={() => openRequest(request())} />}
               </Each></Group>
             </View></If>
           <If when={m().running.length}><View testID="tray-running">

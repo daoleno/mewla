@@ -3,7 +3,7 @@
  * with its counts, and which row's page is in the right pane. Pure, from the tray model and the
  * stack, so the pane, the phone's tray and the tests agree.
  */
-import type { StateDot, StateKind, TrayModel, TrayRow, TrayTarget } from "./model";
+import type { StateDot, StateKind, TrayModel, TrayRequest, TrayRow, TrayTarget } from "./model";
 
 /** The line under the computer's name: the connection, or Brain's own trouble. */
 export interface PaneStateLine {
@@ -54,6 +54,17 @@ export function targetKey(target: TrayTarget): string {
 /** The key of a tray row, matched against `paneSelection`. */
 export function rowKey(row: Pick<TrayRow, "target">): string {
   return targetKey(row.target);
+}
+
+/**
+ * The page a Needs you row opens in the right pane, as paneSelection names it, so the row is selected while that
+ * page shows; null for a request answered in Brain's thread (its card) or a new device (a dialog).
+ */
+export function requestPaneKey(request: Pick<TrayRequest, "where" | "workerId" | "workId" | "itemId">): string | null {
+  if (request.where === "session" && request.workerId) return `session:${request.workerId}`;
+  if (request.where === "work" && request.workId) return `work:${request.workId}`;
+  if (request.where !== "brain" && request.itemId) return `item:${request.itemId}`;
+  return null;
 }
 
 /**
