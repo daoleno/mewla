@@ -4,7 +4,9 @@ import type { ConnectionTool, PluginAccount } from "../../../core/extensions/con
 import { toolSections, toolsSwitch, type ToolsSwitch } from "../../../core/extensions/pluginConnectionsModel";
 import { formatDateTime } from "../../../core/more/dates";
 import { daemonState } from "../daemon";
-import { EmptyState, Row, Section, Spinner, StatusMark, SwitchRow, type Status } from "../../kit/kit";
+import { EmptyState, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { StateLine, tile } from "../../kit/RowTile";
+import { callStateTone } from "../../../core/extensions/colour";
 import { Icon } from "../../kit/Icon";
 import type { PageNav } from "../routes";
 import { PluginsFrame } from "./Pages";
@@ -42,13 +44,6 @@ export function ToolsPage(props: { service: string; account?: string; nav: PageN
   );
 }
 
-function callStatus(status: string): Status {
-  const value = status.toLowerCase();
-  if (value === "ok" || value === "success" || value === "succeeded") return "ready";
-  if (value.includes("fail") || value.includes("error") || value.includes("denied")) return "failed";
-  return "neutral";
-}
-
 function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
   const a = props.account;
   const running = () => flowState().running;
@@ -69,7 +64,7 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
         <SwitchRow testID="account-on" accessibilityLabel="Account on" title="On" checked={a.enabled} busy={running() === `enabled:${a.id}`} disabled={busy() && running() !== `enabled:${a.id}`} onChange={(on) => plugins()?.setEnabled(a, on)} />
         <Row
           testID="check-tools"
-          icon="pulse"
+          lead={tile("violet", "pulse")}
           title="Check service and tools"
           subtitle={a.verified_at ? `Last checked ${formatDateTime(a.verified_at)}` : undefined}
           trailing={running() === `refresh:${a.id}` ? <Spinner size={16} /> : undefined}
@@ -95,7 +90,7 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
         )}
       </Section>
       <Section title="Recent calls">
-        {a.history.length ? a.history.map((event) => <Row title={event.tool} subtitle={event.message || formatDateTime(event.at)} trailing={<StatusMark status={callStatus(event.status)} label={event.status} />} />) : <Row title="No calls yet" />}
+        {a.history.length ? a.history.map((event) => <Row title={event.tool} subtitle={event.message || formatDateTime(event.at)} trailing={<StateLine tone={callStateTone(event.status)} label={event.status} />} />) : <Row title="No calls yet" />}
       </Section>
     </View>
   );

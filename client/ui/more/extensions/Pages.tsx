@@ -1,17 +1,20 @@
-import { computed, effect, signal, untracked, View } from "nsh";
+import { computed, effect, signal, Text, untracked, View } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { cloudProfilesSummary } from "../../../core/extensions/cloudProfilesModel";
-import { isConnecting, pluginCatalogRows, serviceOff, toolUpdates, type ConnectionTone, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
+import { isConnecting, pluginCatalogRows, toolUpdates, type ConnectionTone, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
 import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
+import { connectionStateTone } from "../../../core/extensions/colour";
 import { daemon } from "../daemon";
-import { EmptyState, Notice, Page, Row, RowButton, SearchField, Section, Spinner, StatusMark, Tag, Tile, type Status } from "../../kit/kit";
+import { color } from "../../kit/colors";
+import { EmptyState, Notice, Page, Row, RowButton, SearchField, Section, Spinner, Tag, type Status } from "../../kit/kit";
+import { stateTextColor } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
 import { AgentPage } from "./agents/AgentPage";
 import { AgentToolsSection } from "./agents/AgentToolsSection";
 import { ConnectCard } from "./ConnectCard";
 import { catalogLoading, catalogProblem, deferredFor, flowState, plugins } from "./plugins";
 import type { ExtensionsPage } from "./routes";
-import { ServiceMark } from "./ServiceMark";
+import { serviceRowLead } from "./ServiceMark";
 import { ServicePage } from "./Service";
 import { ToolsPage } from "./Tools";
 
@@ -149,6 +152,8 @@ function accountNames(row: ServiceRow): string {
 function rowSubtitle(row: ServiceRow): string {
   const plugin = row.plugin;
   if (row.state.kind === "unavailable") return plugin.unavailable_reason || "Sign-in is not set up yet.";
+  // What needs fixing says so, in the warn colour (SPEC §10.4), with whose sign-in it is.
+  if (row.state.kind === "reconnect") return [`Sign-in expired`, accountNames(row)].filter(Boolean).join(" · ");
   if (plugin.id === "gcp" && !row.accounts.length) return "Nothing connected yet";
   return accountNames(row);
 }
@@ -191,15 +196,17 @@ function ServiceRowView(props: { row: ServiceRow; nav: PageNav; custom?: boolean
         />
       );
     }
-    return connecting() ? <Spinner size={16} /> : <StatusMark status={toneStatus(state.tone)} label={state.label} />;
+    // Grouped by state, the section label says it: no dot, only a word that needs a look is coloured (SPEC §10.4).
+    return connecting() ? <Spinner size={16} /> : <Text testID={`service-${id}-state`} class="text-sub line-clamp-1" style={{ color: color(stateTextColor(connectionStateTone(state.tone) === "warn" ? "warn" : "off")) }}>{state.label}</Text>;
   };
   const available = row.state.kind !== "unavailable";
   return (
     <Row
       testID={`service-${id}`}
-      leading={<Tile><ServiceMark id={id} size={20} dim={serviceOff(row.accounts)} /></Tile>}
+      lead={serviceRowLead(id)}
       title={row.plugin.name}
       subtitle={rowSubtitle(row) || undefined}
+      subtitleTone={row.state.kind === "reconnect" ? "warn" : undefined}
       trailing={trailing()}
       chevron={available}
       disabled={!available}

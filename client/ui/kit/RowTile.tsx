@@ -52,6 +52,25 @@ export function RowTile(props: { lead: Lead; testID?: string }) {
   );
 }
 
+/**
+ * A detail page's own top block (SPEC §15, §10.4): the same lead at 64 — a mark or a logo at 40 on the surface, a
+ * thing's art at 40, or the glyph at 30 on its hue's wash, radius 20.
+ */
+export function LeadHero(props: { lead: Lead; testID?: string }) {
+  const l = () => props.lead;
+  return (
+    <View testID={props.testID} class="items-center justify-center overflow-hidden" style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: color(l().kind === "tile" ? HUES[(l() as { hue: TileHue }).hue].wash : "surface") }}>
+      {(() => {
+        const x = l();
+        if (x.kind === "tile") return <Icon name={x.glyph} size={30} tone={HUES[x.hue].glyph} />;
+        if (x.kind === "mark") return <MarkView mark={x.mark} size={40} />;
+        if (x.kind === "logo") return x.node;
+        return <Image src={x.src} style={{ width: 40, height: 40 }} />;
+      })()}
+    </View>
+  );
+}
+
 const compiled = new Map<string, Path2D>();
 function path(mark: BrandMark): Path2D {
   let p = compiled.get(mark);

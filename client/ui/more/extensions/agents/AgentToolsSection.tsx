@@ -2,10 +2,10 @@ import { effect, Text, untracked, View } from "nsh";
 import { agentExtensionsCountLabel, agentExtensionsSummaries, joinAgentLabels } from "../../../../core/extensions/agentExtensionsModel";
 import { skillsRequestData } from "../../../../core/extensions/skillsManagement";
 import { daemon, daemonState } from "../../daemon";
-import { Icon } from "../../../kit/Icon";
-import { EmptyState, Row, Section, Tile } from "../../../kit/kit";
+import { AgentIcon } from "../../../icons/AgentIcon";
+import { EmptyState, Row, Section } from "../../../kit/kit";
+import { LEAD_SLOT, tile } from "../../../kit/RowTile";
 import type { PageNav } from "../../routes";
-import { AgentMark } from "./marks";
 import { followComputer, listableSkills, pluginCopies, refreshAll, skillsState } from "./state";
 
 /**
@@ -37,7 +37,7 @@ export function AgentToolsSection(props: { nav: PageNav }) {
         {rows.map((row) => (
           <Row
             testID={`agent-tool-${row.scope}`}
-            leading={<Tile>{row.scope === "shared" ? <Icon name="swap-horizontal" size={20} /> : <AgentMark agent={row.scope} size={20} />}</Tile>}
+            lead={row.scope === "shared" ? tile("violet", "swap-horizontal") : { kind: "logo", node: <AgentIcon kind={row.scope === "claude-code" ? "claude" : row.scope} size={28} slot={LEAD_SLOT} /> }}
             title={row.label}
             subtitle={row.scope === "shared" ? `${agentExtensionsCountLabel(row)} · used by ${joinAgentLabels(row.agents)}` : agentExtensionsCountLabel(row)}
             chevron

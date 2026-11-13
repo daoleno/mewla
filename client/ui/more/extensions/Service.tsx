@@ -18,13 +18,15 @@ import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { serverDisplayName } from "../../../core/extensions/serverDisplayName";
 import { formatDateTime, formatFullDateTime } from "../../../core/more/dates";
 import { daemonName } from "../daemon";
-import { confirmDestructive, EmptyState, Field, Notice, Row, RowButton, Section, Spinner, StatusMark, SwitchRow, Tile } from "../../kit/kit";
+import { confirmDestructive, EmptyState, Field, Notice, Row, RowButton, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { LeadHero, StateLine, tile } from "../../kit/RowTile";
+import { connectionStateTone } from "../../../core/extensions/colour";
 import type { PageNav } from "../routes";
 import { Action } from "./Action";
-import { connectingService, PluginsFrame, ToolUpdateNotices, toneStatus } from "./Pages";
+import { connectingService, PluginsFrame, ToolUpdateNotices } from "./Pages";
 import { ProfileName } from "./ProfileName";
 import { flowState, plugins } from "./plugins";
-import { ServiceMark } from "./ServiceMark";
+import { serviceRowLead } from "./ServiceMark";
 
 const API_WALLETS = "https://app.hyperliquid.xyz/API";
 const CLI_NAMES: Record<string, string> = { aws: "AWS CLI", gws: "Google Workspace CLI", gcp: "Google Cloud CLI" };
@@ -74,12 +76,12 @@ function Header(props: { plugin: PluginIntegration; accounts: PluginAccount[] })
   const cli = props.plugin.cli && CLI_NAMES[props.plugin.id] ? `${CLI_NAMES[props.plugin.id]} ${props.plugin.cli.version} · ${props.plugin.cli.managed ? "managed by Mewla" : "local installation"}` : "";
   return (
     <View testID="service-header" class="gap-3 px-1 pb-2 pt-3">
-      <Tile size={64}><ServiceMark id={props.plugin.id} size={32} /></Tile>
+      <LeadHero testID="service-hero-lead" lead={serviceRowLead(props.plugin.id, 40)} />
       <View class="gap-1">
         <Text class="text-display font-bold tracking-display" role="header" style={{ numberOfLines: 2 }}>{props.plugin.name}</Text>
         {(() => {
           const s = state();
-          return s.kind === "status" ? <StatusMark status={toneStatus(s.tone)} label={s.label} /> : null;
+          return s.kind === "status" ? <StateLine testID="service-state" tone={connectionStateTone(s.tone)} label={s.label} /> : null;
         })()}
         {cli ? <Text class="text-caption text-muted-foreground">{cli}</Text> : null}
       </View>
@@ -91,15 +93,15 @@ function Header(props: { plugin: PluginIntegration; accounts: PluginAccount[] })
 function ConnectOffer(props: { plugin: PluginIntegration }) {
   const job = pluginJobs[props.plugin.id];
   if (!props.plugin.available) {
-    return <Section><Row icon="info" title="Not yet available" subtitle={props.plugin.unavailable_reason || "Sign-in is not set up yet."} /></Section>;
+    return <Section><Row lead={tile("violet", "info")} title="Not yet available" subtitle={props.plugin.unavailable_reason || "Sign-in is not set up yet."} /></Section>;
   }
   const connecting = () => connectingService() === props.plugin.id;
   const busy = () => flowState().running !== null || (connectingService() !== null && !connecting());
   return (
     <View>
       <Section title="What Brain can do" footer={`Your sign-in stays on ${serverDisplayName(daemonName())}. Brain only acts on tasks you give it.`}>
-        <Row icon="eye" title="Read and search" subtitle={job?.read} value="On" />
-        <Row icon="edit" title="Make changes when asked" subtitle={job ? `${job.write}. Off until you allow it.` : "Off until you allow it."} value="Off" />
+        <Row lead={tile("violet", "eye")} title="Read and search" subtitle={job?.read} value="On" />
+        <Row lead={tile("violet", "edit")} title="Make changes when asked" subtitle={job ? `${job.write}. Off until you allow it.` : "Off until you allow it."} value="Off" />
       </Section>
       <View class="mt-4 gap-2">
         <Action filled testID="service-connect" label={connectLabel(props.plugin)} busy={connecting()} disabled={busy()} onPress={() => void plugins()?.connect(props.plugin.id)} />
@@ -133,10 +135,10 @@ function AccountList(props: { plugin: PluginIntegration; accounts: PluginAccount
         <Section>
           <Row
             testID={`account-${account.id}`}
-            icon="person-circle"
+            lead={tile("violet", "person-circle")}
             title={info().name}
             subtitle={[info().identity, info().expiry?.label].filter(Boolean).join(" · ") || undefined}
-            trailing={<StatusMark status={toneStatus(info().status.tone)} label={info().status.label} />}
+            trailing={<StateLine tone={connectionStateTone(info().status.tone)} label={info().status.label} />}
             chevron={!open()}
             accessibilityLabel={[info().name, info().identity, info().status.label].filter(Boolean).join(", ")}
             accessibilityHint="Show account actions"
@@ -209,7 +211,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
     const subtitle = [name === "read" ? job?.read : job?.write, note].filter(Boolean).join(". ");
     const pending = running() === `${name}:${a.id}` || (name === "write" && control.kind === "consent" && running() === `connect:${props.plugin.id}`);
     if (control.kind === "consent") {
-      return <Row icon="edit" title={title} subtitle={subtitle} trailing={pending ? <Spinner size={16} /> : <RowButton label="Allow" accessibilityLabel={`Allow changes in ${props.plugin.name}`} disabled={busy()} onPress={() => flow().setAccess(a, name, true)} />} />;
+      return <Row lead={tile("violet", "edit")} title={title} subtitle={subtitle} trailing={pending ? <Spinner size={16} /> : <RowButton label="Allow" accessibilityLabel={`Allow changes in ${props.plugin.name}`} disabled={busy()} onPress={() => flow().setAccess(a, name, true)} />} />;
     }
     return <SwitchRow testID={`${name}-${a.id}`} title={title} subtitle={subtitle} checked={control.on} busy={pending} disabled={busy() && !pending} onChange={(on) => flow().setAccess(a, name, on)} />;
   };
@@ -242,13 +244,13 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
               onChange={(on) => flow().setEnabled(a, on)}
             />
             </View>
-            {a.integration === "aws" && a.profile ? (renaming() ? <ProfileName account={a} onDone={() => renaming.set(false)} /> : <Row icon="edit" title="Rename profile" onPress={() => renaming.set(true)} />) : null}
-            {a.profile_sign_in_by ? <Row icon="time" title="Sign in again by" subtitle={`${formatFullDateTime(a.profile_sign_in_by)} · ${a.profile_sign_in_limit === "maximum" ? "At latest · AWS allows up to 12h; your session may end sooner." : "SSO session"}`} /> : null}
-            {a.profile ? <Row icon="person-circle" title="Sign in again" subtitle={`Use ${props.plugin.name} remote sign-in for this ${a.integration === "aws" ? "profile" : "account"}.`} trailing={connectingService() === props.plugin.id ? <Spinner size={16} /> : <RowButton label="Sign in again" disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />} /> : null}
+            {a.integration === "aws" && a.profile ? (renaming() ? <ProfileName account={a} onDone={() => renaming.set(false)} /> : <Row lead={tile("violet", "edit")} title="Rename profile" onPress={() => renaming.set(true)} />) : null}
+            {a.profile_sign_in_by ? <Row lead={tile("violet", "time")} title="Sign in again by" subtitle={`${formatFullDateTime(a.profile_sign_in_by)} · ${a.profile_sign_in_limit === "maximum" ? "At latest · AWS allows up to 12h; your session may end sooner." : "SSO session"}`} /> : null}
+            {a.profile ? <Row lead={tile("violet", "person-circle")} title="Sign in again" subtitle={`Use ${props.plugin.name} remote sign-in for this ${a.integration === "aws" ? "profile" : "account"}.`} trailing={connectingService() === props.plugin.id ? <Spinner size={16} /> : <RowButton label="Sign in again" disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />} /> : null}
             {!a.profile && recovery ? (
               <Row
                 testID={`recover-${a.id}`}
-                icon={recovery.tone === "neutral" ? "pause-circle" : "alert-circle"}
+                lead={tile("violet", recovery.tone === "neutral" ? "pause-circle" : "alert-circle")}
                 title={recovery.title}
                 subtitle={recovery.detail}
                 // Whichever fix it is (check, sign in again, finish the removal), its button turns while it runs.
@@ -261,7 +263,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
             ) : null}
             {aws ? (
               <View>
-                <Row icon="info" title="Details" chevron={!showDetails()} onPress={() => showDetails.set(!showDetails())} />
+                <Row lead={tile("violet", "info")} title="Details" chevron={!showDetails()} onPress={() => showDetails.set(!showDetails())} />
                 {showDetails()
                   ? aws.details.map((detail) => (
                       <Row
@@ -279,7 +281,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
             {custom ? null : group("write")}
             <Row
               testID={`tools-${a.id}`}
-              icon="list"
+              lead={tile("violet", "list")}
               title={custom ? `${tools.allowed} of ${tools.total} tools allowed` : "Tools & activity"}
               subtitle={custom && tools.allowed === 0 ? "Choose which tools Brain may use." : undefined}
               value={custom || !tools.total ? undefined : `${tools.allowed}/${tools.total}`}
@@ -422,7 +424,7 @@ function HyperliquidForm(props: { plugin: PluginIntegration; keyed: boolean }) {
     <View>
       {!open() ? (
         <Section title="Trading">
-          <Row testID="hyperliquid-add-key" icon="key" title={props.keyed ? "Add another key" : "Add API wallet key"} chevron onPress={() => open.set(true)} />
+          <Row testID="hyperliquid-add-key" lead={tile("violet", "key")} title={props.keyed ? "Add another key" : "Add API wallet key"} chevron onPress={() => open.set(true)} />
         </Section>
       ) : (
         <View>

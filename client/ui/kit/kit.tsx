@@ -257,6 +257,8 @@ function Hairline(props: { inset: number }) {
 export interface RowProps {
   title: string;
   subtitle?: string;
+  /** The subtitle is a state's words (SPEC §10.4): `warn` and `error` colour it, the rest stay soft. */
+  subtitleTone?: StateTone;
   value?: string;
   icon?: IconName;
   /** Behind the first level (SPEC §10.4): the row's mark, art or tiled glyph, in place of a grey `icon`. */
@@ -290,7 +292,7 @@ export function Row(props: RowProps) {
       {props.leading ?? (props.lead ? <RowTile lead={props.lead} /> : props.icon ? <Icon name={props.icon} size={24} tone={props.destructive ? "ink" : "soft"} /> : null)}
       <View class="min-w-0 flex-1">
         <Text class={props.destructive ? "text-body text-destructive" : props.mono ? "font-mono text-code" : "text-body"} style={{ numberOfLines: 2 }}>{props.title}</Text>
-        {props.subtitle ? <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-3">{props.subtitle}</Text> : null}
+        {props.subtitle ? <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-3" style={props.subtitleTone ? { color: color(stateTextColor(props.subtitleTone)) } : undefined}>{props.subtitle}</Text> : null}
       </View>
       {props.value ? <Text class="max-w-[50%] text-right text-body text-muted-foreground line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text> : null}
       {props.trailing ?? null}
