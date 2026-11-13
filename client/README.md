@@ -24,7 +24,8 @@ cd client/ui && nsh check && nsh test
 ## Run it
 
 - **Android, hot reload:** `client/scripts/dev-android.sh` builds the Dev app (preview debug) with this host's `nsh dev`
-  server (`-Pmewla.devServer=ws://<LAN address>:8790/ws`), installs it on the one device `adb` sees and serves client/.
+  server (`-Pmewla.devServer=ws://<LAN address>:8790/ws`: `DEV_HOST`, or the private LAN address `lan-address.sh` picks and prints,
+  never a proxy's or VPN's tunnel; with none it stops before building), installs it on the one device `adb` sees and serves client/.
   Mewla Dev opens on that server from its icon, asking once (Load); every save reloads it. When the server does not
   answer within two seconds, it starts on its built-in bundle and reopens on the server once it answers and the app
   comes to the front. `mewla-dev://start?server=ws://…` points it at another server, confirmed first.
