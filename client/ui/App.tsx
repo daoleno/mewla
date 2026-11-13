@@ -86,7 +86,7 @@ function LinkPairingNote() {
     cleanup(() => clearTimeout(timer));
   });
   return (
-    <View class="absolute left-3 right-3" style={{ top: safeArea().top + 8 }}>
+    <View class="absolute" style={{ top: safeArea().top + 8, left: safeArea().left + 12, right: safeArea().right + 12 }}>
       <If when={linkPairing()}><View testID="link-pairing" onPress={() => linkPairing()?.problem && linkPairing.set(null)} class="gap-0.5 rounded-(--radius-group) bg-card px-4 py-3">
           <Text class="text-body font-semibold">
             {linkPairing()!.problem?.title ?? (pairingStatus() || "Pairing…")}
