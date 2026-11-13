@@ -185,9 +185,13 @@ export function sealedInThread(sealed: SealedRequest, thread: RequestThread): bo
  * (else the option's description) the soft line under it. The agent's own numbering ("2. ") and a trailing "›"
  * are its terminal's, not the option's.
  */
-export function optionParts(label: string, description?: string): { label: string; detail: string } {
-  const bare = label.replace(/^\s*\d+[.)]\s+/, "").replace(/\s*›\s*$/, "").trim();
+export function optionParts(label: string, description?: string): { label: string; detail: string; recommended: boolean } {
+  let bare = label.replace(/^\s*\d+[.)]\s+/, "").replace(/\s*›\s*$/, "").trim();
+  // Claude's AskUserQuestion marks the option it recommends by ending its label "(Recommended)" (the wire has no
+  // field for it): that is a tag on the row, not the option's text (SPEC §11 "Brain's pick").
+  const recommended = /\s*\(recommended\)$/i.test(bare);
+  if (recommended) bare = bare.replace(/\s*\(recommended\)$/i, "").trim();
   const at = bare.indexOf(" · ");
-  if (at < 0) return { label: bare, detail: description?.trim() ?? "" };
-  return { label: bare.slice(0, at).trim(), detail: bare.slice(at + 3).trim() || description?.trim() || "" };
+  if (at < 0) return { label: bare, detail: description?.trim() ?? "", recommended };
+  return { label: bare.slice(0, at).trim(), detail: bare.slice(at + 3).trim() || description?.trim() || "", recommended };
 }

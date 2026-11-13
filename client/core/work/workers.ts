@@ -30,7 +30,7 @@ export interface WorkWorkerLine {
   progress?: number;
   /** "live" while it works; else when it finished. */
   time: string;
-  /** When it joined the Work (ms): a live row's end says how long it has worked on it. */
+  /** When its current turn began (ms), else when it joined the Work: a live row's end says how long it has worked. */
   since?: number;
   /** Its Session is in the list: the line pushes it. */
   openable: boolean;
@@ -65,6 +65,8 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
     const reported = following && Boolean(session.phase?.trim() || session.event_kind?.trim());
     const summary = (reported ? readableSummary(session.summary) : "") || readableSummary(row.summary);
     const joined = Date.parse(row.joined_at);
+    // A working Session's time counts from its current turn (SPEC §11 Elapsed time), as its tray row and Working line do.
+    const turn = following && working && session.running_since ? session.running_since : NaN;
     const at = Date.parse(working ? row.updated_at : row.ended_at ?? row.updated_at);
     const agent = model?.kind ?? agentKindFromProvider(row.provider);
     const flavor = model?.flavor ?? "shell";
@@ -79,7 +81,7 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
       stateLabel: STATE_LABEL[state],
       progress: working ? progressSteps(following ? session.phase ?? row.phase : row.phase) ?? undefined : undefined,
       time: working ? "live" : listTime(Number.isFinite(at) ? at : undefined, now),
-      since: Number.isFinite(joined) ? joined : undefined,
+      since: Number.isFinite(turn) ? turn : Number.isFinite(joined) ? joined : undefined,
       openable: Boolean(session),
       project: projectName(session?.cwd) || undefined,
     };
