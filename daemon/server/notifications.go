@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
@@ -152,6 +154,47 @@ func (s *Server) noteSuppressedNotification(ev watcher.SessionEvent, reason stri
 	}
 	title, body := push.WorkerMessageText(kind, workerNotice(ev))
 	recorder.NotificationSuppressed(kind, ev.WorkerID, title, body, reason)
+}
+
+// asksOwner reports whether a Session's state is the owner's to answer. A
+// delegated Worker's own report (--attention user_input, blocked) is
+// addressed to Brain, which asks the owner only through its Work's question
+// (`mewla brain work update -question`); a prompt or an approval on its
+// terminal (a sign-in, an approval outside the brief) is the owner's. A
+// Session the owner started keeps asking the owner (owner 2026-11-13).
+func asksOwner(worker *classifier.Worker, approvals int) bool {
+	if worker == nil {
+		return false
+	}
+	if approvals > 0 || worker.State == classifier.StateBlocked && terminalPromptID(worker) != "" {
+		return true
+	}
+	return worker.NeedsAttention && !worker.Delegated
+}
+
+// terminalPromptID is the blocking prompt open in a Session's terminal: its
+// ID, "-" for one without an ID, "" for none.
+func terminalPromptID(worker *classifier.Worker) string {
+	if worker == nil {
+		return ""
+	}
+	if worker.Prompt != nil {
+		if worker.Prompt.ID != "" {
+			return worker.Prompt.ID
+		}
+		return "-"
+	}
+	if worker.DetailsJSON != "" {
+		var details struct {
+			Prompt struct {
+				ID string `json:"id"`
+			} `json:"prompt"`
+		}
+		if json.Unmarshal([]byte(worker.DetailsJSON), &details) == nil && details.Prompt.ID != "" {
+			return details.Prompt.ID
+		}
+	}
+	return ""
 }
 
 // workerNotificationKind is the notification a Worker's new state earns, if any.

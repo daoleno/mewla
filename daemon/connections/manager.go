@@ -51,6 +51,7 @@ type Manager struct {
 	http         *http.Client
 	networkOwned bool
 	pending      map[string]*oauthFlow
+	stateKey     oauthStateKey
 	connectFlows map[string]*connectFlow
 	githubToken  func(context.Context) (string, error)
 	webOrigin    func(origin string) bool

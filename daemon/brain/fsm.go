@@ -367,6 +367,11 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 		case "lease_expired":
 			return WorkNeedsInput, "Inspect the delegated Session lease expiry.", waitFor
 		case "turn_lost":
+			if st.LastSummary == "worker_stalled: stopped" {
+				// The stall supervisor saw the provider's turn end and no
+				// report follow; that is what Brain has to review.
+				return WorkNeedsInput, "The Worker's turn ended without a progress report; review its result. Input will not be replayed.", waitFor
+			}
 			return WorkNeedsInput, "Inspect the delegated Session outcome and exit evidence; input will not be replayed.", waitFor
 		case "submission_ambiguous", "submission_failed":
 			return WorkNeedsInput, "Confirm whether the delegated Session received the prompt; delivery will not be replayed.", waitFor
@@ -385,6 +390,11 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 		next := firstNonEmpty(item.NextAction, "Wait for the delegated Session.")
 		if hint := fsmLiveTurnHint(database, st.Attempt.SessionID); hint != "" {
 			next = hint
+		}
+		if fsmTurnEndedWithoutReport(database, st.Attempt.SessionID) {
+			// The provider's turn ended and the Worker has not reported: the
+			// Work is waiting on that report, not running.
+			return WorkWaiting, "The Worker's turn ended without a progress report; Brain is told if none follows.", waitFor
 		}
 		return WorkRunning, next, waitFor
 	default:
@@ -420,6 +430,16 @@ func fsmLiveTurnHint(database *presentationDatabase, sessionID string) string {
 		}
 	}
 	return ""
+}
+
+// fsmTurnEndedWithoutReport reports a live signal turn whose provider turn
+// ended without the Worker's progress report.
+func fsmTurnEndedWithoutReport(database *presentationDatabase, sessionID string) bool {
+	if database == nil || sessionID == "" {
+		return false
+	}
+	turn, found := currentTurnForSession(*database, sessionID)
+	return found && turn.SignalProtocol && !watcher.TurnTerminal(turn.Status) && turn.Summary == turnEndedWithoutReport
 }
 
 // fsmAdmitTurn admits one delegated turn as the active Attempt. It is

@@ -63,7 +63,9 @@ func ResolveHostTranscriptIdentityForWorker(
 		// A live Claude process may move to a new session in place (/branch);
 		// its registry record is authoritative over the saved binding.
 		if provider == WorkerProviderClaude {
-			if sessionID, path, ok := ClaudeLiveSessionTranscript(worker); ok && sessionID != existing.SessionID {
+			// A saved path Claude does not write (a resumed conversation lives
+			// in the folder it was born in) is replaced the same way.
+			if sessionID, path, ok := ClaudeLiveSessionTranscript(worker); ok && (sessionID != existing.SessionID || path != existing.Path) {
 				return HostTranscriptIdentity{
 					Provider:  provider,
 					SessionID: sessionID,

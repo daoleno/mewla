@@ -528,11 +528,11 @@ func (s *Server) observePromptLifecycle(ev watcher.SessionEvent) {
 	if !ok || left.prompt.ID == "" || left.prompt.Kind == classifier.PromptChoice {
 		return
 	}
-	grace := s.promptLeftGrace
-	if grace == 0 {
-		grace = promptLeftGrace
+	after := s.afterPromptLeft
+	if after == nil {
+		after = func(grace time.Duration, check func()) { time.AfterFunc(grace, check) }
 	}
-	time.AfterFunc(grace, func() {
+	after(promptLeftGrace, func() {
 		if s.prompts.isOpen(sessionID, left.prompt.ID) || s.lookupWorker(sessionID) == nil {
 			return
 		}

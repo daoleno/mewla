@@ -101,10 +101,26 @@ func claudeKnownTranscript(worker classifier.Worker, configDirs []string, resume
 	paths := []string{}
 	if bound := ClaudeBoundTranscript(worker.ID); bound != "" {
 		paths = append(paths, bound)
+		// The reported path is where the conversation would live for the
+		// cwd; a conversation resumed from another folder lives where it was
+		// born, so a reported file that is not there is looked for by its id.
+		if info, err := os.Stat(bound); err != nil || info.IsDir() {
+			id := strings.TrimSuffix(filepath.Base(bound), ".jsonl")
+			root := filepath.Dir(filepath.Dir(filepath.Dir(bound)))
+			if filepath.Base(filepath.Dir(filepath.Dir(bound))) == "projects" {
+				if path, found := claudeConversationTranscript(root, worker.Cwd, id); found {
+					paths = append(paths, path)
+				}
+			}
+		}
 	} else if resumeID != "" {
 		for _, dir := range configDirs {
 			for _, cwd := range transcriptCWDCandidates(strings.TrimSpace(worker.Cwd)) {
 				paths = append(paths, filepath.Join(claudeProjectDir(dir, cwd), resumeID+".jsonl"))
+			}
+			// A conversation resumed from another folder stays where it was born.
+			if path, found := claudeConversationTranscript(dir, worker.Cwd, resumeID); found {
+				paths = append(paths, path)
 			}
 		}
 	}
@@ -279,7 +295,10 @@ func claudeProcessOwnedTranscript(worker classifier.Worker, configDir string) (c
 	if err != nil || !live || !pathsEquivalent(record.Cwd, worker.Cwd) {
 		return claudeTranscriptCandidate{}, false, false
 	}
-	path := filepath.Join(claudeProjectDir(configDir, record.Cwd), record.SessionID+".jsonl")
+	path, found := claudeConversationTranscript(configDir, record.Cwd, record.SessionID)
+	if !found {
+		return claudeTranscriptCandidate{}, true, false
+	}
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() {
 		return claudeTranscriptCandidate{}, true, false
