@@ -57,6 +57,17 @@ describe("first run", () => {
     expect(app.shows("id:paste")).toBe(true);
   });
 
+  test("a camera turned on from outside the app clears the off text by itself, with no return from Settings (11-14)", async () => {
+    // The Mac's re-run: after Allow the finder kept "The camera is off" until the page was entered again.
+    const camera = { permission: "denied" };
+    const app = await open("../App.tsx", { host: phone(camera), platform: "android" });
+    await app.press("id:scan-now");
+    await app.waitFor("id:open-settings");
+    camera.permission = "granted";
+    await app.waitFor("id:qr-camera", { timeout: 5_000 });
+    expect(app.shows("id:open-settings")).toBe(false);
+  });
+
   test("a rotation lays the step out again: beside the cat on its side, above it upright", async () => {
     const app = await open("../App.tsx", { host: phone(), platform: "android" });
     await app.waitFor("id:set-up");
