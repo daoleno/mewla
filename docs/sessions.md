@@ -73,7 +73,11 @@ Open a Session to read it in one of three ways:
   the bottom. A program that fills the whole screen (Claude Code, Codex, `less`)
   has no history to scroll, so the drag goes to it the way a mouse wheel does:
   as wheel presses when it reads the mouse, or as Up and Down when it lets the
-  wheel send arrow keys; it scrolls its own text, one line per row you drag.
+  wheel send arrow keys; it scrolls its own text as far as you drag (Claude
+  Code speeds up wheel presses that come close together, so it gets fewer of
+  them), and stops when you touch the screen. In a program that reads the
+  mouse, a tap is a click there (Claude Code's "Jump to bottom"); the Keyboard
+  key brings up the keyboard.
 - **Git**: read-only All, Working and Staged diffs for the Session's
   repository. Reading a diff never stages or discards anything.
 
