@@ -6,6 +6,7 @@ import { appendToDraft } from "../../core/conversation/draftText";
 import { composerKeyIntent } from "../../core/web/shortcuts";
 import { registerComposer } from "../shell/desktop/keys";
 import { belowSections } from "../shell/Shell";
+import { keyboardLift } from "../../core/shell/belowStack";
 
 /** The composers that show a chat's draft now, by its cache key: text written from elsewhere goes into them. */
 const writers = new Map<string, Set<(text: string) => void>>();
@@ -195,7 +196,7 @@ export function Composer(props: {
     <View testID="composer-dock" class="bg-background px-3 pt-2"
       // Above the keyboard when it is up; else clear of the gesture bar (Android draws edge to edge), which lies under the stack.
       style={{
-        marginBottom: props.active && !props.active() ? 0 : Math.max(0, keyboardFrame().height - belowSections()),
+        marginBottom: props.active && !props.active() ? 0 : keyboardLift(keyboardFrame().height, belowSections()),
         paddingBottom: 10 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
       }}>
       {props.children as never}
