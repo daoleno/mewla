@@ -43,6 +43,16 @@ const STATE_LABEL: Partial<Record<WorkWorkerState, string>> = { blocked: "Needs 
 const LIVE_STATE: Partial<Record<Worker["status"], WorkWorkerState>> = { running: "running", blocked: "blocked", done: "done", failed: "failed" };
 
 /**
+ * A live Worker's state. Blocked needs you only on what Brain cannot answer, a prompt or an approval on its
+ * terminal; blocked on its own report (`--attention user_input`) it waits on Brain, so it still works for the
+ * Work (owner 2026-11-13, shot 11).
+ */
+function liveState(session: Worker): WorkWorkerState | undefined {
+  if (session.status === "blocked" && session.delegated && !session.prompt && !session.approvals?.length) return "running";
+  return LIVE_STATE[session.status];
+}
+
+/**
  * A Worker's name without the Session id the daemon appends ("Hello writer (mh-17b3…)" → "Hello writer"):
  * the id is no name to show. Only that exact suffix goes; "Fix (macOS)" stays as it is.
  */
@@ -55,7 +65,7 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
     const session = sessions.get(row.session_id);
     const model = session ? sessionRowModel(session) : null;
     const following = row.live && session;
-    const state = following ? LIVE_STATE[session.status] ?? row.state : row.state;
+    const state = following ? liveState(session) ?? row.state : row.state;
     const working = state === "running";
     // What it reported (a live Session's summary only once it reported progress: before, it is the daemon
     // reading the screen); the terminal's footer ("⏵⏵ bypass permissions on…") is never a summary.

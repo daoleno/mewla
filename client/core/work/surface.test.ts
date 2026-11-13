@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CalendarItem } from "../calendar/model";
 import { testClock } from "../calendar/testClock";
-import { brainWorkCalendarOrigins, brainWorkGroup, brainWorkSummaryLine, brainWorkSurface } from "./surface";
+import { brainCurrentWorkLifecycle, brainWorkCalendarOrigins, brainWorkGroup, brainWorkSummaryLine, brainWorkSurface } from "./surface";
 import type { BrainCurrentWork, BrainWorkerRef } from "./types";
 
 const clock = testClock("2026-10-27T14:00:00Z", "Asia/Shanghai");
@@ -104,7 +104,7 @@ describe("brainWorkSurface", () => {
   });
 
   test("Work leaves the surface when its status changes to closed", () => {
-    const before = brainWorkSurface([work({ status: "needs_input" })], []);
+    const before = brainWorkSurface([work({ status: "needs_input", question: "Ship it?" })], []);
     const after = brainWorkSurface([work({ status: "done" })], []);
     expect(before.counts.needs).toBe(1);
     expect(after.slips).toEqual([]);
@@ -112,8 +112,10 @@ describe("brainWorkSurface", () => {
     expect(unreadDone.slips.map((slip) => slip.group)).toEqual(["back"]);
   });
 
-  test("an unreviewed Worker question and a user_input wake both need you", () => {
-    expect(brainWorkGroup(work({ status: "needs_input", progress_mode: "waiting" }))).toBe("needs");
+  test("Brain's question and a user_input wake need you; a Worker's request is Brain's (owner 2026-11-13)", () => {
+    expect(brainWorkGroup(work({ status: "needs_input", progress_mode: "waiting" }))).toBe("running");
+    expect(brainCurrentWorkLifecycle(work({ status: "needs_input", progress_mode: "waiting" })).label).toBe("Reviewing");
+    expect(brainWorkSurface([work({ status: "needs_input", progress_mode: "waiting", question: "Which name?" })], []).slips[0]).toMatchObject({ group: "needs", statusLabel: "Needs you" });
     expect(brainWorkGroup(work({ status: "needs_input", attention_state: "reviewing" }))).toBe("running");
     expect(brainWorkGroup(work({ status: "waiting", wake: { kind: "user_input", ref: "x" } }))).toBe("needs");
     expect(brainWorkGroup(work({ status: "waiting", progress_mode: "waiting" }))).toBe("waiting");
