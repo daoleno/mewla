@@ -547,8 +547,9 @@ func (m *Manager) finishMCP(id, tool string, sensitive []string, out mcpOutcome,
 	}
 	if !record {
 		// A routine read leaves status alone, except that an answer proves
-		// the service is reachable: a failure it was marked with is over.
-		healed := err == nil && r.Account.Status == "error"
+		// the service is reachable and takes this sign-in: a failure or an
+		// expiry it was marked with is over.
+		healed := err == nil && (r.Account.Status == "error" || r.Account.Status == "authorization_required")
 		if healed {
 			r.Account.Status = "connected"
 		}
