@@ -85,11 +85,27 @@ type State struct {
 	WorkerCount int       `json:"worker_count"`
 	NeedsCount  int       `json:"needs_count"`
 	Question    *Question `json:"question"`
+
+	// Items are the rows the surfaces draw (items.go): what needs the person,
+	// newest first, then what runs, the one that started last first; at most
+	// three. Running counts the running rows as the app's header does (a Work
+	// with several Workers is one); Queued and Waiting are the quiet rows.
+	Items   []Item `json:"items"`
+	Running int    `json:"running"`
+	Queued  int    `json:"queued,omitempty"`
+	Waiting int    `json:"waiting,omitempty"`
 }
 
-// Project is the pure projection of a Brain snapshot.
+// Project is the pure projection of a Brain snapshot alone.
 func Project(snapshot brain.Snapshot, now time.Time) State {
-	state := State{Kind: KindIdle, Workers: []Worker{}}
+	return ProjectInput(Input{Snapshot: snapshot}, now)
+}
+
+// ProjectInput is the pure projection of a Brain snapshot and the visible
+// Sessions.
+func ProjectInput(in Input, now time.Time) State {
+	snapshot := in.Snapshot
+	state := State{Kind: KindIdle, Workers: []Worker{}, Items: []Item{}}
 	if snapshot.Objective != nil && snapshot.Objective.Total > 0 {
 		state.Total = snapshot.Objective.Total
 		state.Done = snapshot.Objective.Done
@@ -132,14 +148,34 @@ func Project(snapshot brain.Snapshot, now time.Time) State {
 		}
 	}
 
+	surface := project(in, now)
+	state.Items = surface.items()
+	state.Running = len(surface.running)
+	state.Queued, state.Waiting = surface.queued, surface.waiting
+	if state.Kind == KindIdle && state.Running > 0 {
+		newest := surface.running[0]
+		state.Kind = KindRunning
+		state.RunKey = "run:" + newest.Key + "@" + itoa(newest.StartedAt)
+	}
+
 	needs, question := questionFor(snapshot)
 	state.NeedsCount = needs
+	if surface.requests > needs {
+		state.NeedsCount = surface.requests
+	}
 	if question != nil {
 		state.Kind = KindNeedsYou
 		state.Question = question
 		state.RunKey = "ask:" + question.ID
 		if state.Title == "" && question.Kind == QuestionWork {
 			state.Title = clip(workTitle(snapshot.CurrentWork, question.WorkID), maxTextRunes)
+		}
+	} else if len(surface.needs) > 0 {
+		first := surface.needs[0]
+		state.Kind = KindNeedsYou
+		state.RunKey = "ask:" + first.Key + "@" + itoa(millis(first.since))
+		if state.Title == "" {
+			state.Title = first.Title
 		}
 	}
 	return state
@@ -269,6 +305,17 @@ func itoa(value int64) string { return strconv.FormatInt(value, 10) }
 // see change. The elapsed clock (started_at) and the numbering are excluded.
 func materialKey(state State) string {
 	state.Epoch, state.Seq, state.StartedAt = 0, 0, 0
+	// A running row's line moves with each report; it shows on the next new
+	// state and in every fetch, but never makes one. What a request asks does.
+	items := make([]Item, len(state.Items))
+	for index, item := range state.Items {
+		item.StartedAt = 0
+		if item.Needs == "" {
+			item.Line = ""
+		}
+		items[index] = item
+	}
+	state.Items = items
 	data, _ := json.Marshal(state)
 	return string(data)
 }
@@ -294,7 +341,7 @@ type Projector struct {
 func NewProjector(epoch int64, debounce time.Duration, onChange func(State)) *Projector {
 	return &Projector{
 		epoch: epoch, debounce: debounce, onChange: onChange, now: time.Now,
-		current: State{Kind: KindIdle, Epoch: epoch, Workers: []Worker{}},
+		current: State{Kind: KindIdle, Epoch: epoch, Workers: []Worker{}, Items: []Item{}},
 	}
 }
 
@@ -307,8 +354,8 @@ func (p *Projector) Current() State {
 
 // Observe projects a snapshot. A change is reported after the debounce, with
 // the newest projection of the burst; no change reports nothing.
-func (p *Projector) Observe(snapshot brain.Snapshot) {
-	candidate := Project(snapshot, p.now())
+func (p *Projector) Observe(in Input) {
+	candidate := ProjectInput(in, p.now())
 	key := materialKey(candidate)
 
 	p.mu.Lock()
@@ -317,6 +364,7 @@ func (p *Projector) Observe(snapshot brain.Snapshot) {
 		// newest elapsed-clock anchor for the next report.
 		p.pending = nil
 		p.current.StartedAt = candidate.StartedAt
+		p.current.Items = candidate.Items
 		p.mu.Unlock()
 		return
 	}
@@ -334,8 +382,8 @@ func (p *Projector) Observe(snapshot brain.Snapshot) {
 
 // ObserveNow projects a snapshot and reports it at once (no debounce), for a
 // phone that is asking what is happening right now. It returns the state.
-func (p *Projector) ObserveNow(snapshot brain.Snapshot) State {
-	candidate := Project(snapshot, p.now())
+func (p *Projector) ObserveNow(in Input) State {
+	candidate := ProjectInput(in, p.now())
 	key := materialKey(candidate)
 	p.mu.Lock()
 	if p.timer != nil {
@@ -345,6 +393,7 @@ func (p *Projector) ObserveNow(snapshot brain.Snapshot) State {
 	if p.emitted && key == p.emittedKey {
 		p.pending = nil
 		p.current.StartedAt = candidate.StartedAt
+		p.current.Items = candidate.Items
 		current := p.current
 		p.mu.Unlock()
 		return current

@@ -336,7 +336,7 @@ func codexResumeTokenFromArgv(argv []string) (token string, present bool, err er
 
 func codexFlagTakesValue(flag string) bool {
 	switch flag {
-	case "-c", "-C", "-s", "-a", "-p",
+	case "-c", "-C", "-s", "-a", "-p", "-m", "-i",
 		"--config", "--cd", "--model", "--profile",
 		"--sandbox", "--ask-for-approval", "--color",
 		"--image", "--add-dir":

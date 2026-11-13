@@ -54,6 +54,10 @@ type devRunner struct {
 // with them (-tags ghosttyvt), so Settings → Labs → Session host can work.
 const engineLibDir = "ghostty-libs"
 
+// devBuiltPrefix starts the line mewla-dev prints once its first build is done
+// and it starts the daemon.
+const devBuiltPrefix = "  Dev     Built in "
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "mewla-dev: %v\n", err)
@@ -83,9 +87,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 		pprofAddr:  devPprofAddr(),
 	}
 
+	buildStarted := time.Now()
 	if err := runner.rebuild(); err != nil {
 		return err
 	}
+	// Supervisors and tests time the daemon's own start from this line, not
+	// from the build before it.
+	fmt.Fprintf(stderr, "%s%s\n", devBuiltPrefix, time.Since(buildStarted).Round(time.Millisecond))
 	if err := runner.start(); err != nil {
 		return err
 	}

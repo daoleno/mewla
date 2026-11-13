@@ -109,7 +109,17 @@ func findCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscri
 	}
 	openRolloutPaths := openCodexRolloutPathsForProcess(worker.ProcessID)
 
+	// `codex resume <id>` names its thread, which keeps the folder it was
+	// started in: resumed from another folder, no folder query finds it.
+	resumed, hasResumed, err := codexResumedThread(sqlite3, dbPath, worker.Command)
+	if err != nil {
+		return codexTranscriptCandidate{}, false, err
+	}
+
 	var candidates []codexTranscriptCandidate
+	if hasResumed {
+		candidates = append(candidates, resumed)
+	}
 	for _, candidateCWD := range transcriptCWDCandidates(cwd) {
 		rows, err := queryCodexThreads(sqlite3, dbPath, candidateCWD)
 		if err != nil {
@@ -118,6 +128,9 @@ func findCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscri
 		for _, row := range rows {
 			path := strings.TrimSpace(row.RolloutPath)
 			if path == "" {
+				continue
+			}
+			if hasResumed && path == resumed.Path {
 				continue
 			}
 			meta, err := cachedCodexMeta(path)
@@ -144,6 +157,9 @@ func findCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscri
 	}
 	if matched, ok := matchCodexTranscriptToOpenRollouts(candidates, openRolloutPaths); ok {
 		return matched, true, nil
+	}
+	if hasResumed {
+		return resumed, true, nil
 	}
 	freshCandidates := freshCodexTranscriptCandidates(candidates, now)
 	if len(freshCandidates) == 0 {
@@ -448,6 +464,34 @@ func candidateCreatedAt(row codexThreadRow) time.Time {
 	default:
 		return time.Time{}
 	}
+}
+
+// codexResumedThread is the rollout of the thread a `codex resume <id>`
+// command names, wherever that thread was started.
+func codexResumedThread(sqlite3, dbPath, command string) (codexTranscriptCandidate, bool, error) {
+	id, present, err := ProviderResumeToken(WorkerProviderCodex, command)
+	id = strings.TrimSpace(id)
+	if err != nil || !present || id == "" {
+		return codexTranscriptCandidate{}, false, nil
+	}
+	query := fmt.Sprintf(`SELECT id, rollout_path, created_at, coalesce(created_at_ms, 0) AS created_at_ms FROM threads WHERE id = %s LIMIT 1`, sqlString(id))
+	rows, err := queryCodexThreadRows(sqlite3, dbPath, query)
+	if err != nil || len(rows) == 0 {
+		return codexTranscriptCandidate{}, false, err
+	}
+	path := strings.TrimSpace(rows[0].RolloutPath)
+	if path == "" {
+		return codexTranscriptCandidate{}, false, nil
+	}
+	meta, err := cachedCodexMeta(path)
+	if err != nil || strings.EqualFold(meta.Originator, "codex-exec") {
+		return codexTranscriptCandidate{}, false, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return codexTranscriptCandidate{}, false, nil
+	}
+	return codexTranscriptCandidate{Row: rows[0], Meta: meta, Path: path, Updated: info.ModTime()}, true, nil
 }
 
 func queryCodexThreads(sqlite3, dbPath, cwd string) ([]codexThreadRow, error) {
@@ -995,6 +1039,73 @@ func claudeProjectDir(configDir, cwd string) string {
 		}
 	}
 	return exact
+}
+
+// claudeTranscriptMissAge is how long a conversation found in no project
+// folder is not looked for again: a fresh --session-id has no file until its
+// first prompt, and each look stats every project folder.
+const claudeTranscriptMissAge = 15 * time.Second
+
+var claudeTranscriptElsewhere = struct {
+	sync.Mutex
+	found  map[string]string
+	missed map[string]time.Time
+}{found: map[string]string{}, missed: map[string]time.Time{}}
+
+// claudeConversationTranscript is the file Claude keeps conversation id in.
+// Claude writes a conversation under the project folder of the cwd it was
+// started in, and keeps appending there when the conversation is resumed from
+// another folder (claude --resume <id> in a worktree), so the file is looked
+// for by its id in every project folder when cwd's folder does not hold it.
+// found is false when no folder holds it yet; path is then the one Claude
+// writes for cwd ("" without a cwd).
+func claudeConversationTranscript(configDir, cwd, id string) (path string, found bool) {
+	id = strings.TrimSpace(id)
+	if dir := claudeProjectDir(configDir, cwd); dir != "" && id != "" {
+		path = filepath.Join(dir, id+".jsonl")
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path, true
+		}
+	}
+	if id == "" || filepath.Base(id) != id || id == "." || id == ".." || !filepath.IsAbs(configDir) {
+		return path, false
+	}
+	key := configDir + "\x00" + id
+	cache := &claudeTranscriptElsewhere
+	cache.Lock()
+	known, hit := cache.found[key]
+	missedAt, missed := cache.missed[key]
+	cache.Unlock()
+	if hit {
+		if info, err := os.Stat(known); err == nil && !info.IsDir() {
+			return known, true
+		}
+	} else if missed && time.Since(missedAt) < claudeTranscriptMissAge {
+		return path, false
+	}
+	projectsDir := filepath.Join(configDir, "projects")
+	entries, _ := os.ReadDir(projectsDir)
+	located := ""
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		candidate := filepath.Join(projectsDir, entry.Name(), id+".jsonl")
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			located = candidate
+			break
+		}
+	}
+	cache.Lock()
+	defer cache.Unlock()
+	if located == "" {
+		delete(cache.found, key)
+		cache.missed[key] = time.Now()
+		return path, false
+	}
+	delete(cache.missed, key)
+	cache.found[key] = located
+	return located, true
 }
 
 func transcriptCWDCandidates(cwd string) []string {

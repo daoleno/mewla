@@ -221,6 +221,12 @@ func (t TurnRecord) snapshot() watcher.TurnSnapshot {
 // turn's expired lease (the false-stale incident).
 const turnLeaseGrace = 10 * time.Minute
 
+// turnEndedWithoutReport is a signal turn's summary once its provider turn
+// ended (Claude's Stop hook, the transcript's end of turn) and the Worker has
+// not reported: the Session is no longer running, and the turn waits for the
+// report, or for the stall supervisor to tell Brain.
+const turnEndedWithoutReport = "Turn ended without a progress report; waiting for the Worker's report"
+
 // PrepareInputAdmission persists one exact pre-mutation input transaction
 // for the current provider pane/process generation. A pending row is a
 // transaction, not a Session or generation mutex: several distinct pending
@@ -1093,6 +1099,11 @@ func reduceTurnFact(turn *TurnRecord, fact watcher.TurnFact, now time.Time) (tur
 					mutation.activityID = fact.ActivityID
 				}
 				hintOnly(kind, "Delegated provider reported "+fact.Kind+"; awaiting the Worker's progress report")
+				// The Session no longer reads as running: its turn ended and
+				// no report came. A late report still settles the turn.
+				if summary != turnEndedWithoutReport {
+					summary = turnEndedWithoutReport
+				}
 				mutation.changed = true
 				break
 			}
@@ -2174,6 +2185,28 @@ func (s *Store) MarkInputAdmissionTransportStarted(sessionID, turnID string) err
 	if err != nil {
 		return err
 	}
-	_, err = s.fsm.MarkAdmissionTransportStarted(st.ID, lifecycle.TurnToken(turnID))
+	if _, err = s.fsm.MarkAdmissionTransportStarted(st.ID, lifecycle.TurnToken(turnID)); err != nil {
+		return err
+	}
+	return s.answerBlockedTurn(sessionID, turnID)
+}
+
+// answerBlockedTurn ends the question of a Session whose current turn is
+// blocked on its own report (--attention user_input) once new input is typed
+// into its terminal: that input is the answer, and the turn runs again. The
+// new turn still becomes current only with the Worker's next exact check-in
+// (or the provider's admission), which can take minutes or never come; until
+// now the turn stayed blocked, the Work "needs input" and Brain woken, for
+// all that time (owner 2026-11-13, shot 11).
+func (s *Store) answerBlockedTurn(sessionID, answerTurnID string) error {
+	current, found, err := s.Turn(sessionID)
+	if err != nil || !found || current.TurnID == answerTurnID ||
+		current.Status != watcher.TurnBlocked || current.Attention != "user_input" {
+		return err
+	}
+	_, _, err = s.ApplyTurnFact(watcher.TurnFact{
+		SessionID: sessionID, TurnID: current.TurnID, Class: watcher.EvidenceControl, Kind: "running",
+		SourceID: "answered:" + answerTurnID, Summary: "Answered; continuing", At: s.nowUTC(),
+	})
 	return err
 }

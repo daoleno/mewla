@@ -20,6 +20,8 @@ func TestForeignOAuthCallbackPreservesOwnerAndDoesNotLeak(t *testing.T) {
 	previous := log.Writer()
 	log.SetOutput(&logs)
 	defer log.SetOutput(previous)
+	// A state this daemon never issued may be another computer's: its address is kept to paste there, on a
+	// web UI host too. (One it issued and lost to a restart says expired: TestWebCallbackAfterARestartSaysExpired.)
 	for _, web := range []bool{false, true} {
 		w := httptest.NewRecorder()
 		m.BrowserOAuthCallback(w, httptest.NewRequest("GET", "http://127.0.0.1:9876/plugins/oauth/callback?state=another-computer&code=secret-code%3Cscript%3E", nil), web)

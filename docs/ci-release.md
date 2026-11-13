@@ -45,6 +45,18 @@ GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN
 
 Stable tags become normal Latest releases; beta tags remain prereleases. A failed daemon build cannot create a public release, and a failed first upload can leave only a draft. If Android fails, the release stays public with the desktop archives only, until a rerun of the failed jobs attaches the APK. While the Android assets replace the desktop-only `SHA256SUMS` and manifest, an install or update in those few seconds can fail its checksum or signature check and should be retried.
 
+### Holding a stable release
+
+To try the real signed APK before people get it, set the repository variable `MEWLA_RELEASE_HOLD` to `true` before the release is tagged (`gh variable set MEWLA_RELEASE_HOLD --body true`). The tag then publishes as a prerelease with every asset. Everything that looks for a new version follows GitHub's `releases/latest`, which skips prereleases: `mewla update` and the daemon's notice, `install.sh` and `install.ps1`, the app's update check, and the site's download link. So the previous release stays current.
+
+Then:
+1. Download the APK from the release and check it against its `SHA256SUMS`.
+2. Try it.
+3. Promote the same bytes, with no rebuild: `gh release edit vX.Y.Z --prerelease=false --latest=true`.
+4. Delete the variable: `gh variable delete MEWLA_RELEASE_HOLD`.
+
+Do not use a `publish=true` dispatch to promote: it rebuilds and replaces every asset. While the variable is set, any stable release tagged publishes held. A rerun after promotion fails on the prerelease check until the variable is deleted.
+
 ## Repository secrets (names only)
 
 Configure under GitHub → Settings → Secrets and variables → Actions. Values are **not** documented and must never be committed or printed in logs. The secrets keep their original `ZEN_*` names because stored values cannot be read back to copy; each workflow step maps them once into the `MEWLA_*` names that scripts read.
@@ -312,7 +324,7 @@ Daemon archives contain `mewla` (`mewla.exe` in the Windows zip), `LICENSE`, `NO
 ## Safety
 
 - Secrets never appear in docs, commits, or intentional log lines.
-- The updater accepts one public release stream, including prereleases by semantic-version precedence; it has no channel setting.
+- The updater, both installers and the app follow GitHub's `releases/latest` (the newest non-prerelease release); there is no channel setting.
 - The detached Ed25519 signature authenticates manifest version, platform mapping, archive size, and SHA-256 before download installation.
 - CI does not read developer home directories (including `~/.mewla/release-keys`).
 - `Release reviewed version` can change `main` and create a tag only in one atomic push after all preparation gates pass and only while `origin/main` still equals its starting SHA.

@@ -64,13 +64,14 @@ func (s *Server) pendingApprovals(workerID string) []ApprovalWire {
 }
 
 // WorkerApprovalsChanged tells every connected app that a Worker's pending
-// decisions changed.
+// decisions changed, as the Session feed's next change: apps apply only
+// sequenced changes. A hidden Session (Brain's host) is not on the list.
 func (s *Server) WorkerApprovalsChanged(workerID string) {
 	worker := s.lookupWorker(workerID)
-	if worker == nil {
+	if worker == nil || worker.Hidden {
 		return
 	}
-	s.broadcastJSON(map[string]any{"type": "worker_session_updated", "worker_session": s.workerSessionWire(worker)})
+	s.publishWorkerSessionChange(worker)
 }
 
 func (s *Server) handleApprovalDecision(conn *websocket.Conn, raw clientMessage) {

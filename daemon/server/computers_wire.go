@@ -29,8 +29,9 @@ type openRequestsCache struct {
 //   - each Brain Work that asks a question and is not done, cancelled or
 //     snoozed (current_work: question set, snoozed_until absent or past);
 //   - each visible Session: its pending approvals for the app, or one when it
-//     needs you without one (needs_attention, or blocked on an identified
-//     prompt);
+//     needs you without one (blocked on an identified prompt, or
+//     needs_attention on a Session the owner started: a delegated Worker's
+//     own report is Brain's);
 //   - Brain's own Session, one while it is blocked on an identified prompt.
 //
 // A blocked action Brain holds is Brain's, not the person's, until Brain
@@ -65,7 +66,7 @@ func (s *Server) countOpenRequests(now time.Time) int {
 		switch {
 		case approvals > 0:
 			count += approvals
-		case worker.NeedsAttention || worker.State == classifier.StateBlocked && worker.Prompt != nil:
+		case asksOwner(worker, 0):
 			count++
 		}
 	}

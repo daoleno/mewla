@@ -5,7 +5,7 @@ trust boundary and `mewla boot`. The user guide is [Install](../install-daemon.m
 
 ## Installer selection and trust boundary
 
-On every fresh bootstrap run without `MEWLA_VERSION`, the installer queries GitHub at run time and selects the SemVer-highest public nondraft Release whose tag matches supported `vX.Y.Z` or `vX.Y.Z-beta.N` syntax. GitHub's `prerelease` flag does not affect eligibility: strict SemVer ordering makes a stable tag outrank a beta at the same core version, while a beta with a higher core version outranks a stable release with a lower core. The default follows the highest published version without an embedded version that needs routine README or script updates. `MEWLA_VERSION` is optional pinning only.
+On every fresh bootstrap run without `MEWLA_VERSION`, the installer follows GitHub's `releases/latest` redirect: the newest published release that is not a prerelease (betas and a held stable release are skipped). The default follows that without an embedded version that needs routine README or script updates. `MEWLA_VERSION` is optional pinning only.
 
 ### Install location and PATH
 

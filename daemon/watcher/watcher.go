@@ -2200,8 +2200,16 @@ func (w *Watcher) resolvePendingProviderAdmission(
 		return InputAdmission{}, false
 	}
 	admission := AdmissionFromObservation(provider)
+	// A provider that wrapped the submitted bytes in a transport envelope (a
+	// Claude paste behind Mewla's typed prefix) reports the wrapped digest
+	// first; its unwrapped digest is the payload's. The admission records the
+	// exact submitted digest, as the confirm path and admissionForTurn do.
+	payload := strings.TrimSpace(submission.PayloadSHA256)
+	if payload != "" && strings.TrimSpace(provider.InputUnwrappedSHA256) == payload {
+		admission.SHA256 = payload
+	}
 	if strings.TrimSpace(provider.ID) == "" || admission.Empty() ||
-		strings.TrimSpace(admission.SHA256) != submission.PayloadSHA256 {
+		strings.TrimSpace(admission.SHA256) != payload {
 		return InputAdmission{}, false
 	}
 	identity, known := w.targetForSession(submission.SessionID)
