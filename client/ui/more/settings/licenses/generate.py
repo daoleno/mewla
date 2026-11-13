@@ -48,7 +48,7 @@ sections = [
         {"name": "Pi Coding Agent mark", "license": "MIT", "url": "https://pi.dev", "text": text("Pi-mark-MIT.txt")},
         # The named products' marks in ui/kit/marks.ts.
         {"name": "Simple Icons", "version": "16.31.0", "license": "CC0-1.0", "url": "https://simpleicons.org", "text": text("simple-icons-CC0.txt"),
-         "note": "The marks of Telegram, GitHub, Notion, Linear, Node.js, Go, Docker, Python, PostgreSQL, Sentry, Vercel, Cloudflare and Figma. The marks stay their owners' trademarks."},
+         "note": "The marks of Telegram, GitHub, Notion, Linear, Node.js, Go, Docker, Python, PostgreSQL, Sentry, Vercel, Cloudflare, Figma and Tailscale. The marks stay their owners' trademarks."},
     ]},
     {"title": "Native libraries", "items": [
         {"name": "AndroidX (Activity, Core, CameraX, Lifecycle)", "license": "Apache-2.0", "url": "https://developer.android.com/jetpack/androidx", "platforms": ["android"], "text": APACHE},

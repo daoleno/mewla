@@ -14,7 +14,7 @@ export type TileHue = "blue" | "violet" | "teal" | "pink" | "graphite";
 export type StateTone = "ok" | "warn" | "error" | "off";
 
 /** The named products whose real mark the client draws (simple-icons, CC0). */
-export const BRAND_MARKS = ["telegram", "github", "notion", "linear", "nodejs", "go", "docker", "python", "postgresql", "sentry", "vercel", "cloudflare", "figma"] as const;
+export const BRAND_MARKS = ["telegram", "github", "notion", "linear", "nodejs", "go", "docker", "python", "postgresql", "sentry", "vercel", "cloudflare", "figma", "tailscale"] as const;
 export type BrandMark = (typeof BRAND_MARKS)[number];
 
 /** The names a product goes by (a service id, a process name, a label), folded to its mark. */
@@ -44,6 +44,8 @@ const ALIASES: Record<string, BrandMark> = {
   cloudflared: "cloudflare",
   wrangler: "cloudflare",
   figma: "figma",
+  tailscale: "tailscale",
+  tailscaled: "tailscale",
 };
 
 /** The mark a named product is drawn with, or null when the client has none (`Node.js`, `node`, `GitHub` all match). */

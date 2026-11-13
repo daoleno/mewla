@@ -91,6 +91,21 @@ describe("Extensions", () => {
     expect(c.secure.has("mewla.plugin.authorization.s1")).toBe(false);
   });
 
+  test("grouped by state (SPEC §10.4): Connected rows say their state plainly, a sign-in to redo sits under Needs fixing with Reconnect", async () => {
+    const github = { ...notionAccount, id: "g1", integration: "github", name: "octocat", status: "authorization_required" };
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [notionAccount, github] } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Needs fixing");
+    expect(app.shows("id:service-notion-state")).toBe(true);
+    expect(app.shows("id:connect-github")).toBe(true);
+    expect(app.texts()).toContain("Reconnect");
+    expect(app.texts()).toContain("Sign-in expired · octocat");
+    // Its page: the mark on the hero and the state with its dot.
+    await app.press("id:service-notion");
+    await app.waitFor("id:service-hero-lead");
+    expect(app.shows("id:service-state-dot")).toBe(true);
+  });
+
   test("a GitHub code is shown first, then copied as the page opens", async () => {
     const flow = { id: "g1", integration: "github", status: "waiting", user_code: "WDJB-MJHT", authorization_url: "https://github.com/login/device", expires: expires() };
     const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : { flow }));

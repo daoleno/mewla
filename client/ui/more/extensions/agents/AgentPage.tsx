@@ -13,6 +13,8 @@ import { daemon, daemonState } from "../../daemon";
 import { Icon, type IconName } from "../../../kit/Icon";
 import { EmptyState, Notice, Page, PillButton, SearchField, Spinner } from "../../../kit/kit";
 import { Segmented } from "../../../kit/Segmented";
+import { LeadHero, tile } from "../../../kit/RowTile";
+import { AgentIcon } from "../../../icons/AgentIcon";
 import type { PageNav } from "../../routes";
 import { isManaged, PluginCopyCard, PluginDetails, SheetHeader, SkillInspector } from "./Inspector";
 import { AgentMarks } from "./marks";
@@ -179,7 +181,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
                 onPress={() => { skillPicker.set(null); void deleteSkillCopy(copy); }}
                 class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
               >
-                {preparing() === `delete:${copy.id}` ? <Spinner size={16} /> : <Icon name="trash" size={20} tone="seal" />}
+                {preparing() === `delete:${copy.id}` ? <Spinner size={16} /> : <Icon name="trash" size={20} tone="ink" />}
               </Button>
             ) : null}
           </View>
@@ -205,6 +207,12 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
     <Page
       display
       title={agentExtensionsScopeLabel(props.scope)}
+      hero={
+        <View testID="agent-hero" class="gap-3 px-1 pb-2 pt-3">
+          <LeadHero lead={props.scope === "shared" ? tile("violet", "swap-horizontal") : { kind: "logo", node: <AgentIcon kind={props.scope === "claude-code" ? "claude" : props.scope} size={40} slot={40} /> }} />
+          <Text class="text-display font-bold tracking-display" role="header" style={{ numberOfLines: 2 }}>{agentExtensionsScopeLabel(props.scope)}</Text>
+        </View>
+      }
       testID="agent-page"
       refreshing={loadingNow() && Boolean(skillsRequestData(skillsState()))}
       onRefresh={refresh}
@@ -329,7 +337,7 @@ function ItemRow(props: { testID: string; name: string; summary: string; agents:
         <AgentMarks agents={props.agents} size={15} />
       </Button>
       <Button testID={`${props.testID}-action`} accessibilityLabel={props.action.label} disabled={props.action.disabled} onPress={props.action.onPress} class="mr-1 size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50">
-        {props.action.busy ? <Spinner size={16} /> : <Icon name={props.action.icon} size={20} tone={props.action.destructive ? "seal" : "faint"} />}
+        {props.action.busy ? <Spinner size={16} /> : <Icon name={props.action.icon} size={20} tone={props.action.destructive ? "ink" : "faint"} />}
       </Button>
       <View class="absolute bottom-0 left-4 right-0 h-px bg-border" />
     </View>

@@ -54,7 +54,7 @@ function Lifecycle(props: { sentence: string; label: string; busyLabel?: string;
         onPress={props.onPress}
         class="h-[48px] flex-row items-center justify-center gap-2 rounded-(--radius-control) bg-muted px-4 active:opacity-70 disabled:opacity-40"
       >
-        {props.busy ? <Spinner size={14} /> : <Icon name="trash" size={16} tone="seal" />}
+        {props.busy ? <Spinner size={14} /> : <Icon name="trash" size={16} tone="ink" />}
         <Text class="text-body font-semibold text-destructive">{props.busy && props.busyLabel ? props.busyLabel : props.label}</Text>
       </Button>
     </View>
@@ -252,7 +252,7 @@ function SkillCopyRow(props: { copy: InstalledSkill; selected: boolean; onInspec
           onPress={() => props.onDelete(props.copy)}
           class="mr-1 size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
         >
-          {preparing() === `delete:${props.copy.id}` ? <Spinner size={16} /> : <Icon name="trash" size={18} tone="seal" />}
+          {preparing() === `delete:${props.copy.id}` ? <Spinner size={16} /> : <Icon name="trash" size={18} tone="ink" />}
         </Button>
       ) : null}
     </View>
@@ -448,7 +448,7 @@ export function PluginCopyCard(props: { copy: InstalledPluginCopy; selected?: bo
           onPress={() => props.onUninstall(props.copy)}
           class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
         >
-          {preparing() === `uninstall:${props.copy.copyId}` ? <Spinner size={16} /> : <Icon name="trash" size={20} tone="seal" />}
+          {preparing() === `uninstall:${props.copy.copyId}` ? <Spinner size={16} /> : <Icon name="trash" size={20} tone="ink" />}
         </Button>
       ) : null}
     </View>
