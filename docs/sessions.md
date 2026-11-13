@@ -35,6 +35,13 @@ what to run:
 The agent must already be installed and signed in on the computer; Mewla never
 signs in for you.
 
+Codex starts inline (`--no-alt-screen`): its transcript goes into the
+terminal's scrollback, so the phone's Terminal and a computer's own terminal
+scroll it on their own. If your Codex config names `[tui] alternate_screen`, or
+the command chooses the screen itself, Mewla leaves it as you set it. Claude
+Code keeps the renderer it picks for itself, or the `tui` your Claude settings
+name.
+
 ## The list
 
 Sessions are grouped by directory. Each row shows the agent, the Session's
