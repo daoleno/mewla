@@ -95,16 +95,28 @@ const STATE_COLOR: Record<Exclude<StateTone, "off">, { dot: ColorName; text: Col
   error: { dot: "seal", text: "sealInk" },
 };
 
+/** The colour of a state's words: soft for ok and off, `warning` for warn, `seal-ink` for error. */
+export function stateTextColor(tone: StateTone): ColorName {
+  return tone === "off" ? "soft" : STATE_COLOR[tone].text;
+}
+
+/** A meter's fill colour: its own (`meter`, or an agent's series), `warning` over the warning threshold, red over the critical one. */
+export function meterColor(tone: "fill" | "warn" | "error", fill: ColorName = "meter"): ColorName {
+  return tone === "error" ? "seal" : tone === "warn" ? "warning" : fill;
+}
+
 /**
  * A state in its fixed place (§10.4 "State"): an 8 pt dot and the words. `ok` keeps the words soft, `warn` and
  * `error` colour them, `off` is soft words and no dot. The colour is never the only sign: the words say it.
+ * `detail` follows in soft ("· updated 13:41").
  */
-export function StateLine(props: { tone: StateTone; label: string; testID?: string; strong?: boolean }) {
+export function StateLine(props: { tone: StateTone; label: string; detail?: string; testID?: string; strong?: boolean }) {
   const look = () => (props.tone === "off" ? null : STATE_COLOR[props.tone]);
   return (
-    <View testID={props.testID} class="shrink flex-row items-center gap-1.5" accessible accessibilityLabel={props.label}>
+    <View testID={props.testID} class="shrink flex-row items-center gap-1.5" accessible accessibilityLabel={props.detail ? `${props.label} ${props.detail}` : props.label}>
       {look() ? <View testID={props.testID ? `${props.testID}-dot` : undefined} class="size-2 rounded-full" style={{ backgroundColor: color(look()!.dot) }} /> : null}
-      <Text class={`shrink text-sub line-clamp-1 ${props.strong ? "font-semibold" : ""}`} style={{ color: color(look()?.text ?? "soft") }}>{props.label}</Text>
+      <Text testID={props.testID ? `${props.testID}-words` : undefined} class={`shrink text-sub line-clamp-1 ${props.strong ? "font-semibold" : ""}`} style={{ color: color(stateTextColor(props.tone)) }}>{props.label}</Text>
+      {props.detail ? <Text class="shrink text-sub text-muted-foreground line-clamp-1">{props.detail}</Text> : null}
     </View>
   );
 }

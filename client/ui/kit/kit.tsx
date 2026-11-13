@@ -6,7 +6,8 @@ import { wide } from "../shell/layout";
 import { NavPage } from "../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
-import { RowTile, type Lead } from "./RowTile";
+import type { StateTone } from "../../core/more/colour";
+import { RowTile, stateTextColor, type Lead } from "./RowTile";
 import { spinnerRadius } from "../../core/more/spinner";
 import { showAlert } from "../shell/alert";
 import { haptic } from "../shell/haptics";
@@ -180,12 +181,18 @@ export function RowButton(props: { label: string; onPress: () => void; disabled?
  * A stat tile (SPEC §15 Metrics): label 13/600 soft, value 28/700 (soft while it is not known), a 13 soft line,
  * an optional 4 pt bar, and whatever the tile shows under them (a small history).
  */
-export function StatTile(props: { label: string; value: string; detail?: string; share?: number; muted?: boolean; testID?: string; valueTestID?: string; children?: JSX.Element }) {
+export function StatTile(props: { label: string; value: string; detail?: string; status?: { word: string; tone: StateTone }; share?: number; muted?: boolean; testID?: string; valueTestID?: string; children?: JSX.Element }) {
   return (
     <View testID={props.testID} class="min-w-[140px] flex-1 gap-0.5 rounded-(--radius-group) bg-card p-4">
       <Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.label}</Text>
       <Text testID={props.valueTestID} class={props.muted ? "text-[28px] font-bold leading-[34px] text-muted-foreground line-clamp-1" : "text-[28px] font-bold leading-[34px] line-clamp-1"} style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
-      {props.detail ? <Text class="text-caption text-muted-foreground line-clamp-2">{props.detail}</Text> : null}
+      {props.status ? (
+        // A status word beside the number carries the colour, never the number (SPEC §10.4): "High · of 32 GB".
+        <View class="flex-row flex-wrap items-baseline gap-x-1">
+          <Text testID={props.testID ? `${props.testID}-status` : undefined} class="text-caption font-semibold line-clamp-1" style={{ color: color(stateTextColor(props.status.tone)) }}>{props.status.word}</Text>
+          {props.detail ? <Text class="text-caption text-muted-foreground line-clamp-1">{`· ${props.detail}`}</Text> : null}
+        </View>
+      ) : props.detail ? <Text class="text-caption text-muted-foreground line-clamp-2">{props.detail}</Text> : null}
       {props.share !== undefined ? <View class="mt-2"><Meter share={props.share} /></View> : null}
       {props.children ? <View class="mt-2 gap-2">{props.children}</View> : null}
     </View>
