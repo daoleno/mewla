@@ -201,7 +201,7 @@ export function ModelPanel(props: {
               </View></If>
             <If when={!activating() && !problem() && rows().length === 0}><Text class="text-sm text-muted-foreground">No configured runtime is available. Sync models in Settings.</Text></If>
           </View>
-        </Scroll>}><BusyPlace label="Reading models" testID="models-loading" rows={4} /></If>
+        </Scroll>}><BusyPlace label="Reading models" testID="models-loading" rows={4} failMs={31_000 /* the runtime, then the catalog: 15 s each */} /></If>
     </View>
   );
 }

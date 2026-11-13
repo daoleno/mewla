@@ -371,11 +371,11 @@ export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead
 
 /** What a page shows instead of its content: busy, empty or failed, with at most one way out. */
 /** A page's state (busy, empty, failed) and its one way on. `onBlack`: on the full-screen remote's black, in white. */
-export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string; onBlack?: boolean }) {
+export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string; onBlack?: boolean; /** Busy: the read's own bound, when longer than `wait.fail` (git, the model list). */ failMs?: number }) {
   // Busy is a wait (SPEC §16.2): no spinner and no words on screen, but the placeholder, the slow line and the
   // named states of `BusyPlace`; the title names what is read for a screen reader.
   return (
-    <If when={!props.busy} else={<BusyPlace label={props.title} testID={props.testID} onBlack={props.onBlack} />}>
+    <If when={!props.busy} else={<BusyPlace label={props.title} testID={props.testID} onBlack={props.onBlack} failMs={props.failMs} />}>
       <View testID={props.testID} class="items-center gap-2 px-6 py-16">
         <If when={props.icon}>{(icon) => <Icon name={icon()} size={28} tone={props.onBlack ? "onBlack" : props.tone} />}</If>
         <If when={props.title}>{(titleValue) => <Text class={`mt-1 text-center text-title font-semibold tracking-title ${props.onBlack ? "text-white" : ""}`}>{titleValue()}</Text>}</If>

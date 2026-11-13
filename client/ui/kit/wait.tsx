@@ -26,8 +26,14 @@ export const linkHooks = { computer: (): string => "", reconnect: (): void => {}
  */
 export const forcedWait = signal<WaitForce | null>(null);
 export const canForceWait = (): boolean => appInfo().development;
+/** The link as a forced "offline" plays it for the header and the cat: connecting, then away at `link.away`; null otherwise. */
+export const forcedLink = signal<LinkState | null>(null);
+let forcedLinkTimer: ReturnType<typeof setTimeout> | undefined;
 export function forceWait(force: WaitForce | null): void {
   if (!canForceWait()) return;
+  clearTimeout(forcedLinkTimer);
+  forcedLink.set(force === "offline" ? "connecting" : null);
+  if (force === "offline") forcedLinkTimer = setTimeout(() => forcedLink.set("away"), motion.link.away);
   forcedWait.set(force);
 }
 
@@ -188,12 +194,12 @@ export function Thread(props: { testID?: string }) {
  * A named state in the place's own area (SPEC §16.2 pattern 9): an icon in `soft`, the words in ink, one or
  * two actions. Failure is ink, never red.
  */
-export function StateView(props: { icon: IconName; title: string; detail?: string; actions?: Array<{ title: string; onPress: () => void; testID?: string }>; testID?: string }) {
+export function StateView(props: { icon: IconName; title: string; detail?: string; actions?: Array<{ title: string; onPress: () => void; testID?: string }>; testID?: string; /** On the full-screen remote's black: white words (SPEC §15). */ onBlack?: boolean }) {
   return (
     <View testID={props.testID} class="items-center gap-2 px-6 py-12">
-      <Icon name={props.icon} size={28} tone="soft" />
-      <Text class="mt-1 text-center text-title font-semibold tracking-title text-foreground">{props.title}</Text>
-      <If when={props.detail}><Text class="text-center text-sub text-muted-foreground">{props.detail}</Text></If>
+      <Icon name={props.icon} size={28} tone={props.onBlack ? "onBlackSoft" : "soft"} />
+      <Text class={`mt-1 text-center text-title font-semibold tracking-title ${props.onBlack ? "text-white" : "text-foreground"}`}>{props.title}</Text>
+      <If when={props.detail}><Text class={`text-center text-sub ${props.onBlack ? "text-white/60" : "text-muted-foreground"}`}>{props.detail}</Text></If>
       <If when={props.actions?.length}>
         <View class="mt-2 flex-row gap-2">
           <Each of={props.actions}>
@@ -390,8 +396,9 @@ export function BusyLabel(props: { busy: boolean; label: string; tone?: ColorNam
  * "{computer} didn't answer" (with Try again where the place gives one); the computer away at `link.away`.
  * What it reads names it for a screen reader (`label`), never on screen.
  */
-export function BusyPlace(props: { label?: string; testID?: string; onBlack?: boolean; rows?: number; onRetry?: () => void }) {
-  const wait = useWait({ read: props.onRetry });
+export function BusyPlace(props: { label?: string; testID?: string; onBlack?: boolean; rows?: number; onRetry?: () => void; failMs?: number }) {
+  // A place whose read has a longer honest bound keeps it (SPEC §16.1 `wait.fail`): its own error comes first.
+  const wait = useWait({ read: props.onRetry, failMs: props.failMs });
   wait.start();
   const computer = () => linkHooks.computer() || "Your computer";
   return (
@@ -403,11 +410,11 @@ export function BusyPlace(props: { label?: string; testID?: string; onBlack?: bo
         <View class="px-4"><Rows count={props.rows ?? 3} /></View>
       </If>
       <If when={wait.view() === "failed"}>
-        <StateView icon="alert-circle" title={`${computer()} didn't answer`} testID="busy-failed"
+        <StateView icon="alert-circle" title={`${computer()} didn't answer`} testID="busy-failed" onBlack={props.onBlack}
           actions={props.onRetry ? [{ title: "Try again", onPress: wait.retry, testID: "busy-retry" }] : []} />
       </If>
       <If when={wait.view() === "away"}>
-        <StateView {...states.away(linkHooks.computer() || undefined, undefined, wait.retry)} />
+        <StateView {...states.away(linkHooks.computer() || undefined, undefined, wait.retry)} onBlack={props.onBlack} />
       </If>
     </View>
   );

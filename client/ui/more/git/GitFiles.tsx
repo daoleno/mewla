@@ -156,7 +156,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
             {(() => {
               const state = review.paths();
               if (!state.value && state.error) return <View class="px-4"><EmptyState icon="alert" title="Couldn't load files" detail={state.error} action="Retry" onAction={() => void review.loadPaths()} /></View>;
-              if (!state.value) return <View class="px-4"><EmptyState busy title="Loading files" /></View>;
+              if (!state.value) return <View class="px-4"><EmptyState busy title="Loading files" failMs={16_000} /></View>;
               if (!state.value.paths.length) return <View class="px-4"><EmptyState title="No files" /></View>;
               return (
                 <View class="flex-1">
