@@ -47,6 +47,7 @@ export const CAPSULE = {
   /** A pushed page (Settings, the computer page…): Back alone while the page's own title is on screen; the title
    * (17/600) and the page's controls join Back once the content has scrolled past `titleAway`. Never collapses. */
   pageTitle: { size: 17, line: 22 },
+  pageTitleMax: 220,
   titleAway: 50,
   /** How far the person moves the content from where it last came to rest before it collapses. */
   collapseAfter: 24,

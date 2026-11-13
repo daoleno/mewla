@@ -147,9 +147,13 @@ preference.
   end) and expand at the newest end, on a tap, or when something needs the person;
   Brain's collapsed keeps the cat and a short state ("● 3"), a Session's Back, the
   mark and the name. The terminal starts collapsed. Every other pushed page
-  (`NavPage`): Back alone while its own title shows, then the title and its
-  controls; it never collapses. Screen keeps its black system header, wide keeps
-  its own header.
+  (`NavPage`) has the compact capsule, as wide as what it holds and never a
+  hollow middle: Back, the title once the page's own title has scrolled under
+  it, then the page's actions right after; Back alone (a 44 circle) on a page
+  with no actions while its title shows. It never collapses. Every capsule
+  screen stands on the app's canvas (`CapsulePage`): the screen view behind a
+  page is painted in the system's theme. Screen keeps its black system header,
+  wide keeps its own header.
 - **Home's tray** (SPEC §1.2, §3.2, §11; `ui/tray/Tray.tsx`, `core/tray/model.ts`)
   rises from the bottom, its top hanging just under home's header and filling
   to the screen's bottom whatever it lists; the header and the page dim under

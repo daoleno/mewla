@@ -15,7 +15,7 @@ export type CapsuleReading = {
  * `dur.move`; the parts that leave fade over `dur.fast` while the width closes, and the returning ones fade
  * in as it opens. NSH runs it natively for the commit that flips the state. With reduced motion, a cut.
  */
-function animateSwitch() {
+export function animateSwitch() {
   if (reduceMotion()) return;
   LayoutAnimation.configureNext({
     duration: CAPSULE.move,
@@ -68,6 +68,8 @@ export function Capsule(props: {
   twoLines?: () => boolean;
   /** Collapsed to one control (a pushed page's Back): a 44 circle, no inner padding. */
   alone?: () => boolean;
+  /** A pushed page's: always the compact shape (44 high, as wide as what it holds), with or without its title. */
+  compact?: boolean;
   children: JSX.Element;
   /** A note under the capsule (a Session's durability warning). */
   below?: JSX.Element;
@@ -75,7 +77,8 @@ export function Capsule(props: {
   testID?: string;
 }) {
   const top = () => safeArea().top;
-  const height = () => (props.collapsed() ? CAPSULE.compactHeight : props.twoLines?.() ? CAPSULE.heightTwoLines : CAPSULE.height);
+  const compact = () => props.compact || props.collapsed();
+  const height = () => (compact() ? CAPSULE.compactHeight : props.twoLines?.() ? CAPSULE.heightTwoLines : CAPSULE.height);
   return (
     <View testID={props.testID ?? "capsule-layer"} class="absolute left-0 right-0 top-0" style={{ pointerEvents: "box-none" }}>
       <StatusBarStrip top={top} />
@@ -84,7 +87,7 @@ export function Capsule(props: {
         <View testID={props.collapsed() ? "capsule-collapsed" : "capsule"} class="flex-row items-center rounded-full border border-border bg-sheet-surface"
           style={{
             // Alone, it is the 44 circle itself (the hairline inside it, not 2 more around the control).
-            height: height(), alignSelf: props.collapsed() ? "flex-start" : "stretch", paddingHorizontal: props.collapsed() && props.alone?.() ? 0 : CAPSULE.padding,
+            height: height(), alignSelf: compact() ? "flex-start" : "stretch", maxWidth: "100%", paddingHorizontal: props.collapsed() && props.alone?.() ? 0 : CAPSULE.padding,
             width: props.collapsed() && props.alone?.() ? CAPSULE.compactHeight : undefined, justifyContent: props.collapsed() && props.alone?.() ? "center" : undefined,
             boxShadow: colorScheme() === "dark" ? undefined : CAPSULE.lightShadow,
           }}>
