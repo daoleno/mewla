@@ -116,6 +116,67 @@ describe("Sessions", () => {
     await app.waitUntil(() => sessionDraft(app, workerId) === "Fix the flaky checkout test", { timeout: 3_000 });
   }, 20_000);
 
+  test("the held first message shows as sending in the Session; a second message queues behind it and goes once the first went (SPEC §16.4 Sending)", async () => {
+    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("text:first");
+    await app.press("id:tray-new");
+    await app.waitFor("id:preset-claude");
+    await app.press("id:preset-claude");
+    await app.waitFor("id:new-task");
+    await app.type("id:new-task", "Fix the flaky checkout test");
+    await app.press("id:new-launch");
+    await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
+    const create = framesOf(app.host.posts(), "create_session").at(-1)!;
+    await app.waitFor("id:capsule-name", { timeout: 10_000 });
+    const workerId = String(framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id).at(-1));
+    // The computer names its agent (the fake's new Session has none), so the Session shows its chat.
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { id: workerId, name: "", status: "running", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() } });
+    await app.waitFor("id:session-chat", { timeout: 10_000 });
+    // In the thread as the first message, sending.
+    await app.waitFor("text:Fix the flaky checkout test");
+    expect(app.shows("id:user-message")).toBe(true);
+    // The composer stays usable; what the person sends waits behind the held message.
+    await typeUntil(app, "id:composer", "and run it twice", "id:send");
+    await pressWhenEnabled(app, "id:send");
+    await app.waitFor("text:and run it twice");
+    await app.wait(500);
+    expect(framesOf(app.host.posts(), "send_input")).toHaveLength(0);
+    // The agent took the first: the second goes, and the first is never sent from the phone.
+    await app.host.send("app.daemonPush", { type: "session_first_message", worker_id: workerId, request_id: create.request_id, outcome: "sent" });
+    await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1, { timeout: 5_000 });
+    expect(framesOf(app.host.posts(), "send_input")[0]).toMatchObject({ worker_id: workerId, text: "and run it twice" });
+    expect(sessionDraft(app, workerId)).toBe("");
+  }, 25_000);
+
+  test("a held first message that did not go leaves the thread and is the draft again; what queued behind it goes", async () => {
+    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("text:first");
+    await app.press("id:tray-new");
+    await app.waitFor("id:preset-claude");
+    await app.press("id:preset-claude");
+    await app.waitFor("id:new-task");
+    await app.type("id:new-task", "Fix the flaky checkout test");
+    await app.press("id:new-launch");
+    await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
+    const create = framesOf(app.host.posts(), "create_session").at(-1)!;
+    await app.waitFor("id:capsule-name", { timeout: 10_000 });
+    const workerId = String(framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id).at(-1));
+    // The computer names its agent (the fake's new Session has none), so the Session shows its chat.
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { id: workerId, name: "", status: "running", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() } });
+    await app.waitFor("id:session-chat", { timeout: 10_000 });
+    await app.waitFor("text:Fix the flaky checkout test");
+    await typeUntil(app, "id:composer", "and run it twice", "id:send");
+    await pressWhenEnabled(app, "id:send");
+    await app.waitFor("text:and run it twice");
+    await app.host.send("app.daemonPush", { type: "session_first_message", worker_id: workerId, request_id: create.request_id, outcome: "not_sent", text: "Fix the flaky checkout test" });
+    await app.waitUntil(() => sessionDraft(app, workerId) === "Fix the flaky checkout test", { timeout: 3_000 });
+    await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1, { timeout: 5_000 });
+    expect(framesOf(app.host.posts(), "send_input")[0]).toMatchObject({ text: "and run it twice" });
+    expect(app.count("id:user-message")).toBe(1);
+  }, 25_000);
+
   test("New session's Task on a computer from before it (no first_message: pending): the text is the new Session's draft at once", async () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, firstMessages: false, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });

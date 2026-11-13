@@ -393,3 +393,42 @@ async function disconnect_and_reconnect(transport: FakeTransport, outbox: Messag
   outbox.onConnected("s1");
   await tick();
 }
+
+describe("a message the computer holds (a new Session's first message, WIRE §11)", () => {
+  test("is never sent from here or saved; what the person sends meanwhile waits behind it and goes once it went", async () => {
+    const { transport, outbox, connect, send, store, events } = setup();
+    await connect();
+    const first = outbox.hold({ serverId: "s1", workerId: "w1", text: "Fix the flaky test" });
+    expect(outbox.entriesFor("s1", "w1").map((e) => e.state)).toEqual(["held"]);
+    const second = await send("and run it twice");
+    expect(transport.sent).toHaveLength(0);
+    expect(store.saved.map((e) => e.id)).toEqual([second.id]);
+    // Another Session's messages do not wait.
+    await send("elsewhere", "w2");
+    expect(transport.sent.map((s) => s.workerId)).toEqual(["w2"]);
+    outbox.release(first.id, "sent");
+    await tick();
+    expect(events.some((e) => e.kind === "accepted" && e.entry.id === first.id)).toBe(true);
+    expect(transport.sent.map((s) => s.requestId)).toContain(second.id);
+    expect(transport.sent.map((s) => s.text)).not.toContain("Fix the flaky test");
+  });
+
+  test("withdrawn (it did not go, or a dropped connection): it leaves the thread and the queue moves on", async () => {
+    const { transport, outbox, connect, send, events } = setup();
+    await connect();
+    const first = outbox.hold({ serverId: "s1", workerId: "w1", text: "Fix the flaky test" });
+    const second = await send("and run it twice");
+    outbox.release(first.id, "withdrawn");
+    await tick();
+    expect(events.some((e) => e.kind === "withdrawn" && e.entry.id === first.id)).toBe(true);
+    expect(outbox.get(first.id)).toBeUndefined();
+    expect(transport.ids).toEqual([second.id]);
+  });
+
+  test("a held message is not the phone's to send again", async () => {
+    const { outbox } = setup();
+    const first = outbox.hold({ serverId: "s1", workerId: "w1", text: "Fix the flaky test" });
+    expect(outbox.resend(first.id)).toBeUndefined();
+    expect(outbox.get(first.id)?.state).toBe("held");
+  });
+});
