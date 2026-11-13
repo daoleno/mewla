@@ -10,6 +10,8 @@ import { WorkerSessions } from "../core/sessions/store";
 import type { Worker } from "../core/sessions/workers";
 import { Transport, type ConnectionState } from "../core/transport";
 import { subscribeTransportPath, transportPathInfo, type TransportPathInfo } from "../core/link/pinnedTransport";
+import { LinkWatch } from "../core/motion/wait";
+import { linkState } from "./kit/wait";
 
 /**
  * Everything that belongs to the current computer. There is exactly one; switching
@@ -20,6 +22,8 @@ export const servers = signal<StoredServer[]>([]);
 export const current = signal<StoredServer | null>(null);
 export const connection = signal<ConnectionState>("idle");
 export const problem = signal("");
+/** The connection as the person is told it (SPEC §16.1 `link.away`): Offline after 10 s, kept between retries. */
+const linkWatch = new LinkWatch((link) => linkState.set(link));
 export const ready = signal(false);
 /** `brain_snapshot.brain` of the current computer; null until the first one. */
 export const brain = signal<BrainSnapshot | null>(null);
@@ -173,6 +177,7 @@ function applySwitch(server: StoredServer | null): void {
   current.set(server);
   transportPath.set(server ? transportPathInfo(server.id) : null);
   connection.set("idle");
+  linkWatch.reset();
   problem.set("");
   forgetInterfaceConversationsOutsideServer(server?.id ?? "");
   if (!server) return;
@@ -187,6 +192,7 @@ function applySwitch(server: StoredServer | null): void {
   stops = [
     next.onState((state) => {
       connection.set(state);
+      linkWatch.update(state);
       problem.set(next.problem);
     }),
     next.on("connected", () => {
