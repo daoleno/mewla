@@ -35,7 +35,7 @@ const COMMITS = [
  * A computer with one repository: `files` is its status, changed by the Git
  * requests the page sends. Every request is recorded.
  */
-function repository(initial: File[]) {
+function repository(initial: File[], sync: { ahead?: number; behind?: number } = {}) {
   let files = initial.map((f) => ({ ...f }));
   let discarded: File | null = null;
   let reads = 0;
@@ -54,8 +54,8 @@ function repository(initial: File[]) {
             repo_name: "repo",
             branch: "main",
             upstream: "origin/main",
-            ahead: 0,
-            behind: 0,
+            ahead: sync.ahead ?? 0,
+            behind: sync.behind ?? 0,
             has_commits: true,
             clean: files.length === 0,
             file_count: files.length,
@@ -150,12 +150,36 @@ describe("Git review", () => {
     expect(repo.asked.filter((r) => r.type === "git_diff_status")).toHaveLength(2);
   });
 
+  test("the page is the repository's (owner 11-13): its name the title, Changes said once, by the switch; ⋯ alone in the header; a pull is a pill with its arrow and count", async () => {
+    const repo = repository([app_ts], { behind: 1 });
+    const app = await open(HARNESS, repo.options);
+    await app.waitFor("id:git-row-changes:app.ts");
+    expect(app.texts()).toContain("repo");
+    expect(app.texts().filter((t) => t === "Changes")).toHaveLength(1);
+    expect(app.count("id:git-more")).toBe(1);
+    expect(app.count("id:git-search") + app.count("id:git-tree") + app.count("id:git-toggle-changes:app.ts")).toBe(0);
+    expect(app.shows("label:Pull 1 commit")).toBe(true);
+    await app.press("id:git-sync");
+    await app.waitUntil(() => repo.asked.some((r) => r.type.endsWith("pull")));
+  });
+
+  test("in step with its upstream and clean: no sync pill, and the clean state has no button (Browse files is in ⋯)", async () => {
+    const repo = repository([]);
+    const app = await open(HARNESS, repo.options);
+    await app.waitFor("id:git-clean");
+    expect(app.shows("id:git-sync")).toBe(false);
+    expect(app.shows("text:Browse files")).toBe(false);
+    expect(app.shows("id:git-branch")).toBe(true);
+  });
+
   test("staging a file sends its path and reads the status again", async () => {
     const repo = repository([app_ts, notes_md]);
     const app = await open(HARNESS, repo.options);
-    await app.waitFor("id:git-toggle-changes:app.ts");
+    await app.waitFor("id:git-row-changes:app.ts");
     const before = repo.asked.filter((r) => r.type === "git_diff_status").length;
-    await app.press("id:git-toggle-changes:app.ts");
+    // A row's long press stages it (the row carries no toggle; its diff has Stage too).
+    app.onDialog((dialog) => (dialog.sheet ? "Stage" : null));
+    await answering(app, () => app.longPress("id:git-row-changes:app.ts"), 1);
     await app.waitFor("id:git-row-staged:app.ts");
     const stage = repo.asked.find((r) => r.type === "git_stage");
     expect(stage?.body).toEqual({ target_id: "w1", cwd: "/repo", repo_root: "/repo", paths: ["app.ts"] });
@@ -163,8 +187,9 @@ describe("Git review", () => {
     expect(app.shows("label:Staged, 1 file")).toBe(true);
     expect(app.shows("label:Not staged, 1 file")).toBe(true);
 
-    // The group's button stages the rest.
-    await app.press("id:git-bulk-changes");
+    // ⋯ stages the rest.
+    app.onDialog((dialog) => (dialog.sheet ? "Stage all" : null));
+    await answering(app, () => app.press("id:git-more"), 1);
     await app.waitFor("id:git-row-staged:notes.md");
     expect(repo.asked.filter((r) => r.type === "git_stage").at(-1)?.body.paths).toEqual(["notes.md"]);
   });
@@ -416,8 +441,9 @@ describe("Git review: the list", () => {
 
   test("back closes an open filter before it leaves the review", async () => {
     const { app } = await openReview([app_ts, notes_md]);
-    await app.waitFor("id:git-search");
-    await app.press("id:git-search");
+    await app.waitFor("id:git-more");
+    app.onDialog((dialog) => (dialog.sheet ? "Filter files" : null));
+    await answering(app, () => app.press("id:git-more"), 1);
     await app.waitFor("id:git-query");
     await app.type("id:git-query", "notes");
     await app.waitFor("id:git-row-changes:app.ts", { state: "gone" });

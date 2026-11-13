@@ -249,7 +249,7 @@ function ReaderHeader(props: {
           <IconButton testID="git-diff-previous" icon="arrow-up" label="Previous file" disabled={props.position!.index <= 0} onPress={() => props.onNavigate!("previous")} />
           <IconButton testID="git-diff-next" icon="arrow-down" label="Next file" disabled={props.position!.index >= props.position!.total - 1} onPress={() => props.onNavigate!("next")} />
         </></If>
-      <IconButton testID="git-diff-more" icon="more-vertical" label="More actions" onPress={props.onMenu} />
+      <IconButton testID="git-diff-more" icon="more-horizontal" label="Diff options" onPress={props.onMenu} />
     </View>
   );
 }
