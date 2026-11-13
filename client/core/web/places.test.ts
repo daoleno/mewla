@@ -3,6 +3,7 @@ import {
   clampPaneWidth,
   documentTitle,
   isWide,
+  nextWide,
   nativeHeaderTitleWidth,
   pageColumnWidth,
   placeOfPath,
@@ -26,12 +27,28 @@ describe("the wide gate (SPEC §14.6)", () => {
   test("a window on its side from 760 pt and at least 480 high: an open foldable held like a book", () => {
     // iPhone Duo, inner screen on its side: 951 x 669 less the 84 pt side bar.
     expect(isWide({ width: 951 - 84, height: 669 })).toBe(true);
-    // A Galaxy Fold's inner screen on its side (about 823 x 707 dp), a desktop window of 800 x 600.
-    expect(isWide({ width: 823, height: 707 })).toBe(true);
+    // The Android SDK's 7.6" Fold-in on its side (1768 x 2208 px at 420 dpi: 841 x 674 dp) less a 32 dp cutout, a desktop window of 800 x 600.
+    expect(isWide({ width: 841 - 32, height: 674 })).toBe(true);
     expect(isWide({ width: 800, height: 600 })).toBe(true);
     expect(isWide({ width: 760, height: 480 })).toBe(true);
     expect(isWide({ width: 759, height: 480 })).toBe(false);
     expect(isWide({ width: 900, height: 479 })).toBe(false);
+  });
+
+  test("a wide window keeps its pane while only its height shrinks (Android 14 resizes over the keyboard)", () => {
+    const fold = { width: 809, height: 674 };
+    const open = nextWide(null, fold);
+    expect(open).toBe(true);
+    // The keyboard comes up: 674 → 400 at the same width.
+    const typing = nextWide({ wide: open, width: fold.width }, { width: 809, height: 400 });
+    expect(typing).toBe(true);
+    expect(nextWide({ wide: typing, width: 809 }, fold)).toBe(true);
+    // A phone turned on its side starts short and never becomes wide this way.
+    expect(nextWide({ wide: false, width: 390 }, { width: 835, height: 400 })).toBe(false);
+    expect(nextWide({ wide: false, width: 835 }, { width: 835, height: 400 })).toBe(false);
+    // A turn, a fold or a resize changes the width and decides afresh.
+    expect(nextWide({ wide: true, width: 809 }, { width: 674, height: 400 })).toBe(false);
+    expect(nextWide({ wide: true, width: 809 }, { width: 800, height: 400 })).toBe(false);
   });
 
   test("upright, folded or a phone held sideways: one stack", () => {

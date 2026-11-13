@@ -115,7 +115,7 @@ preference.
 - **Two panes from 1024 pt, or 760 on its side.** A window with at least 1024 pt
   of usable width, or 760 when it is wider than tall and at least 480 high (an
   open foldable held like a book: the iPhone Duo's inner screen on its side, a
-  Galaxy Fold's), on any device, gets the wide layout (see The wide layout): the
+  Android 7.6" Fold-in's), on any device, gets the wide layout (see The wide layout): the
   tray as a left pane beside the one stack. It follows the window's shape
   alone, never the device, and crossing the gate only adds or removes the
   pane: the page keeps its state.
@@ -276,8 +276,9 @@ as on the phone; only the frame changes. `wide` (`ui/shell/layout.ts`, from
 - it is at least 760, wider than the window is tall, and the window at least
   480 high.
 
-So an open iPhone Duo on its side (867 usable) and a Galaxy Fold's inner
-screen on its side (about 820 dp) have the pane. Upright, folded shut, or a
+So an open iPhone Duo on its side (867 usable) and the Android SDK's 7.6" Fold-in on its
+side (841 x 674 dp, less a side cutout) have the pane; at Material's 840 that
+fold would have missed it by its cutout. Upright, folded shut, or a
 phone held sideways (under 480 high), they keep the phone layout, as Apple's
 split view tiles only on its side. Touch (a tablet, an open foldable) and a
 pointer with a keyboard (a browser, a desktop) get the same frame.

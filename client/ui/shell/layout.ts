@@ -1,6 +1,6 @@
 import { computed, safeArea, signal, Storage, windowSize } from "nsh";
 import { screenDockWidth } from "../../core/screen/float";
-import { clampPaneWidth, isWide, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
+import { clampPaneWidth, nextWide, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
 
 /**
  * The window's width less what the system draws at its sides (the iPhone Duo's 84 pt side bar, a phone's cutout
@@ -11,10 +11,17 @@ export const usableWidth = computed(() => windowSize().width - safeArea().left -
 /**
  * The wide layout (soft-final SPEC §14, client/DESIGN.md "The wide layout"): from 1024 pt of usable width, or 760
  * on its side (an open foldable held like a book), the tray is a left pane beside the one stack, on every device:
- * a browser, a tablet in landscape, an open iPhone Duo or Galaxy Fold. One tree either way: crossing the gate
+ * a browser, a tablet in landscape, an open iPhone Duo or Android foldable. One tree either way: crossing the gate
  * (a resize, a turn, a fold) only adds or removes the pane.
  */
-export const wide = computed(() => isWide({ width: usableWidth(), height: windowSize().height }));
+let lastWide: { wide: boolean; width: number } | null = null;
+export const wide = computed(() => {
+  const width = usableWidth();
+  // A height-only shrink at the same width (Android 14 resizing over the keyboard) keeps the pane (core/web/places.ts nextWide).
+  const now = nextWide(lastWide, { width, height: windowSize().height });
+  lastWide = { wide: now, width };
+  return now;
+});
 
 /** The left pane's width: dragged, stepped or reset on its handle, kept on this device. */
 export const paneWidth = signal<number>(PANE_WIDTH.initial);
