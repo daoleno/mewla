@@ -578,7 +578,8 @@ func TestUpdateWorkerProgressUpdatesWorkerAndEmitsStateEvent(t *testing.T) {
 	if worker.State != classifier.StateDone || worker.Phase != "reporting" || worker.Attention != "done" {
 		t.Fatalf("worker progress = %#v", worker)
 	}
-	if !worker.NeedsAttention || worker.LastProgressAt == nil || worker.ExpectedNextCheckAt == nil {
+	// Done is a result, not a request: it asks nothing of the person.
+	if worker.NeedsAttention || worker.LastProgressAt == nil || worker.ExpectedNextCheckAt == nil {
 		t.Fatalf("worker progress metadata = %#v", worker)
 	}
 	if worker.TaskClass != "mechanical_change" || worker.EventKind != "verification" || worker.DetailsJSON == "" {

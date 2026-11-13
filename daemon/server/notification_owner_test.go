@@ -533,3 +533,18 @@ func TestDoneStaysQuietWhileAppIsForegroundButBlockedAndFailedPush(t *testing.T)
 		t.Fatalf("background done = %#v", calls)
 	}
 }
+
+// A Session the owner started that reports done has a result, not a request: it is not the owner's to answer (no
+// open-request count, no Needs you on the live surfaces). One that reports failed still is (Brain 2026-11-14).
+func TestOwnersSessionReportingDoneAsksNothingFailedStillAsks(t *testing.T) {
+	done := &classifier.Worker{ID: "w", State: classifier.StateRunning}
+	classifier.ApplyProgress(done, classifier.WorkerProgress{Status: "done", Phase: "reporting", Attention: "done", Summary: "Shipped"}, time.Time{})
+	if asksOwner(done, 0) {
+		t.Fatal("a done report on the owner's Session counted as a request")
+	}
+	failed := &classifier.Worker{ID: "w", State: classifier.StateRunning}
+	classifier.ApplyProgress(failed, classifier.WorkerProgress{Status: "failed", Phase: "reporting", Attention: "failed", Summary: "Tests fail"}, time.Time{})
+	if !asksOwner(failed, 0) {
+		t.Fatal("a failed report on the owner's Session stopped asking the owner")
+	}
+}
