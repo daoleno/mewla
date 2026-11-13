@@ -46,8 +46,10 @@ export function timelineItemsSemanticEqual(
       left.body === right.body &&
       left.pending === right.pending &&
       left.pendingLifecycle === right.pendingLifecycle &&
-      left.onRetryPending === right.onRetryPending &&
-      left.onDiscardPending === right.onDiscardPending &&
+      // An action is made anew on every projection (a closure over the same message): the row is the
+      // same while it has the same actions. Compared by identity, every pending row was new each time.
+      Boolean(left.onRetryPending) === Boolean(right.onRetryPending) &&
+      Boolean(left.onDiscardPending) === Boolean(right.onDiscardPending) &&
       left.streaming === right.streaming &&
       left.turnFocusAnchorId === right.turnFocusAnchorId &&
       left.delegatedTask === right.delegatedTask &&
@@ -70,7 +72,10 @@ export function timelineItemsSemanticEqual(
       left.sourceCount === right.sourceCount &&
       left.catPerched === right.catPerched &&
       brainWorkResultEventArraysEqual(left.events, right.events) &&
-      left.onPress === right.onPress
+      // `onPress` is a new closure on every projection: what it does is its event (above) and where it leads.
+      // Compared by identity, every Work card of Brain's thread was drawn anew on each Brain snapshot (owner 11-13).
+      Boolean(left.onPress) === Boolean(right.onPress) &&
+      left.canOpenSession === right.canOpenSession
     );
   }
   if (

@@ -616,18 +616,20 @@ describe("timelineItemsSemanticEqual", () => {
     ).toBe(false);
   });
 
-  test("Brain Work callback identity is compared separately from event fields", () => {
+  test("a Brain Work card is the same with a new press closure (each projection makes one), not with a press it lacked or another destination", () => {
     const event = makeBrainEvent();
     const onPressA = () => {};
     const onPressB = () => {};
-    const left = makeBrainItem({ event, onPress: onPressA });
-    const sameCallback = makeBrainItem({ event: { ...event }, onPress: onPressA });
+    const left = makeBrainItem({ event, onPress: onPressA, canOpenSession: true });
+    const sameCallback = makeBrainItem({ event: { ...event }, onPress: onPressA, canOpenSession: true });
     const differentCallback = makeBrainItem({
       event: { ...event },
       onPress: onPressB,
+      canOpenSession: true,
     });
     expect(timelineItemsSemanticEqual(left, sameCallback)).toBe(true);
-    expect(timelineItemsSemanticEqual(left, differentCallback)).toBe(false);
+    expect(timelineItemsSemanticEqual(left, differentCallback)).toBe(true);
+    expect(timelineItemsSemanticEqual(left, makeBrainItem({ event, onPress: onPressB, canOpenSession: false }))).toBe(false);
     expect(
       timelineItemsSemanticEqual(
         makeBrainItem({ event, onPress: undefined }),

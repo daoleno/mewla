@@ -67,6 +67,7 @@ export class FakeDaemon {
 
   closed(socket: FakeSocket): void {
     this.sockets.delete(socket);
+    this.subscriptions = this.subscriptions.filter((s) => s.socket !== socket);
   }
 
   private to(socket: FakeSocket, frame: Frame): void {
@@ -81,6 +82,54 @@ export class FakeDaemon {
     if (frame.type === "work_item_deleted") this.state.work_items = (this.state.work_items ?? []).filter((w) => w.id !== frame.id);
     if (frame.type === "work_item_changed") this.state.work_items = [...(this.state.work_items ?? []).filter((w) => w.id !== frame.id), frame.work_item as never];
     this.broadcast(frame.type.startsWith("worker_session_") && frame.seq === undefined ? { ...frame, seq: ++this.seq } : frame);
+  }
+
+  /** Who follows which conversation: deltas and re-sent snapshots go to them under their subscription's id. */
+  private subscriptions: { socket: FakeSocket; worker: string; requestId: string }[] = [];
+  private revisions = new Map<string, number>();
+
+  private revisionOf(worker: string): number {
+    return this.revisions.get(worker) ?? 1;
+  }
+
+  private conversationOf(worker: string): Record<string, unknown> {
+    const entry = this.state.conversations?.[worker] ?? [];
+    return Array.isArray(entry) ? { available: true, events: entry } : { available: true, ...entry };
+  }
+
+  private events(worker: string): Record<string, unknown>[] {
+    return (this.conversationOf(worker).events as Record<string, unknown>[]) ?? [];
+  }
+
+  /**
+   * A conversation's news, as the daemon sends it to its followers: `upserts` (new or changed events, by id),
+   * `activity` (the running turn, null when it ended), or `snapshot: true` to send the whole conversation again.
+   */
+  conversation(update: { worker: string; upserts?: Record<string, unknown>[]; activity?: Record<string, unknown> | null; snapshot?: boolean }): void {
+    const { worker } = update;
+    const base = this.revisionOf(worker);
+    if (update.upserts?.length) {
+      const byId = new Map(this.events(worker).map((e) => [e.id, e] as const));
+      for (const event of update.upserts) byId.set(event.id, event);
+      const entry = this.state.conversations?.[worker];
+      const events = [...byId.values()];
+      this.state.conversations = { ...this.state.conversations, [worker]: Array.isArray(entry) || !entry ? events : { ...entry, events } };
+    }
+    const revision = update.snapshot ? base : base + 1;
+    this.revisions.set(worker, revision);
+    for (const s of this.subscriptions.filter((s) => s.worker === worker)) {
+      if (update.snapshot) this.to(s.socket, { type: "codex_conversation_snapshot", request_id: s.requestId, worker_id: worker, revision, conversation: this.conversationOf(worker) });
+      else this.to(s.socket, {
+        type: "codex_conversation_delta", request_id: s.requestId, worker_id: worker, revision, base_revision: base,
+        upserts: update.upserts ?? [], deletes: [], ...(update.activity !== undefined ? { activity: update.activity } : {}),
+      });
+    }
+  }
+
+  /** Every connection drops and the app connects again (a network change): the daemon forgets the subscriptions. */
+  drop(): void {
+    for (const socket of [...this.sockets]) socket.close(1006, "network changed");
+    this.subscriptions = [];
   }
 
   private broadcast(frame: Frame): void {
@@ -185,9 +234,9 @@ export class FakeDaemon {
         return reply("widget_token", { token: "widget-token", id: "w1" });
       case "codex_conversation_subscribe":
       {
-        const entry = this.state.conversations?.[String(frame.worker_id)] ?? [];
-        const conversation = Array.isArray(entry) ? { available: true, events: entry } : { available: true, ...entry };
-        return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: 1, conversation });
+        const worker = String(frame.worker_id);
+        this.subscriptions = [...this.subscriptions.filter((s) => s.socket !== socket || s.worker !== worker), { socket, worker, requestId: String(frame.request_id) }];
+        return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: this.revisionOf(worker), conversation: this.conversationOf(worker) });
       }
       case "answer_prompt": {
         const answer = frame.prompt_answer as { prompt_id?: string } | undefined;

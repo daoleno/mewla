@@ -150,23 +150,35 @@ function DelegatedBrief(props: { item: () => MessageTimelineItem; expansion: Exp
  * shows the item it was given next; per-row state (open or not) lives in
  * `expansion`, by id.
  */
+/** Which view a row is drawn with (`TimelineRow`). */
+function rowKind(item: TimelineItem | DateDividerItem): string {
+  if (item.type === "date-divider") return "divider";
+  if (item.type === "message") return item.delegatedTask ? "brief" : item.role === "user" ? "user" : "reply";
+  if (isWorkingRow(item)) return "working";
+  return item.type;
+}
+
 export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem; expansion: Expansion; handlers: MessageHandlers }) {
   const it = props.item as () => TimelineItem;
   // The reply's width, which its pictures take.
   const textWidth = signal(0);
   const as = <T extends TimelineItem["type"]>(type: T) => () => it() as Extract<TimelineItem, { type: T }>;
+  // Which view the row is, as one word: the branch is made again only when the word changes. A new object
+  // for the same row (a streaming reply's next words, a status) reaches the views already drawn, which read
+  // `item()` themselves; chosen in the JSX, each one drew the whole row anew (owner 11-13: rows flashed).
+  const kind = computed(() => rowKind(it()));
   return (
     <View class="py-1">
-      {(it() as TimelineItem | DateDividerItem).type === "date-divider" ? (
+      {kind() === "divider" ? (
         <View testID="date-divider" class="py-2">
           {/* The whole row's width, centred, one line: sized to its own word, a release build's measure wrapped "Toda / y". */}
           <Caption plain center text={(it() as unknown as DateDividerItem).label} />
         </View>
-      ) : it().type === "message" && (it() as MessageTimelineItem).delegatedTask ? (
+      ) : kind() === "brief" ? (
         <View class="px-4"><DelegatedBrief item={as("message") as () => MessageTimelineItem} expansion={props.expansion} /></View>
-      ) : it().type === "message" && (it() as MessageTimelineItem).role === "user" ? (
+      ) : kind() === "user" ? (
         <View class="px-4"><UserMessage item={as("message")} handlers={props.handlers} /></View>
-      ) : it().type === "message" ? (
+      ) : kind() === "reply" ? (
         <View class="px-4">
           {/* Brain's reply is its text alone (soft-final SPEC §11 Message); a long press opens Copy and Select Text. */}
           <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}
@@ -181,20 +193,20 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
               }} />
           </View>
         </View>
-      ) : isWorkingRow(it()) ? (
+      ) : kind() === "working" ? (
         <WorkingRow since={() => props.handlers.workingSince?.()} />
-      ) : it().type === "activity" ? (
+      ) : kind() === "activity" ? (
         <ActivityRow item={as("activity") as () => ActivityTimelineItem} expansion={props.expansion} onFile={props.handlers.onFile}
           pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} />
-      ) : it().type === "plan" ? (
+      ) : kind() === "plan" ? (
         <PlanRow item={as("plan") as () => PlanTimelineItem} />
-      ) : it().type === "task-notification" ? (
+      ) : kind() === "task-notification" ? (
         <TaskNotificationCard item={as("task-notification") as () => TaskNotificationTimelineItem} expansion={props.expansion} />
-      ) : it().type === "computer-message" ? (
+      ) : kind() === "computer-message" ? (
         <ComputerMessageCard item={as("computer-message") as () => ComputerMessageTimelineItem} expansion={props.expansion} />
-      ) : it().type === "answered" ? (
+      ) : kind() === "answered" ? (
         <AnsweredRow item={as("answered") as () => AnsweredTimelineItem} />
-      ) : it().type === "brain-work-event" ? (
+      ) : kind() === "brain-work-event" ? (
         <WorkCard item={as("brain-work-event") as () => BrainWorkEventTimelineItem} handlers={props.handlers.work} />
       ) : null}
     </View>
@@ -268,8 +280,15 @@ export function ChatTimeline(props: {
   let list: ListRef | undefined;
   // Read back from the newest row: the jump button brings it into view again.
   const away = signal(false);
+  // A day's label is the same object while its day is: made anew on every update, each one was a new row.
+  const dividers = new Map<string, DateDividerItem>();
   const rows = computed((): (TimelineItem | DateDividerItem | FootRow)[] => {
-    const all = withDayDividers(props.items());
+    const all = withDayDividers(props.items()).map((row) => {
+      if (row.type !== "date-divider") return row;
+      const kept = dividers.get(row.id) ?? row;
+      dividers.set(row.id, kept);
+      return kept;
+    });
     return props.foot?.shown() ? [...all, FOOT] : all;
   });
   // Back at the row the person left it at; at the newest row, nothing to restore. The list opens there

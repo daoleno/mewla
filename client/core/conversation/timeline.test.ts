@@ -110,3 +110,35 @@ describe("Brain's tool rows", () => {
   });
 });
 
+
+describe("a row stays the same object while it is the same (owner 11-13: Brain's whole thread flashed)", () => {
+  const work: CodexConversationEvent = {
+    id: "wr-1", seq: 3, timestamp: "2026-11-13T01:00:00.000Z", kind: "status", title: "Daily digest", body: "Done.", status: "session.done",
+    source: "work_result", work_id: "work-1", work_session_id: "w9", session_name: "digest", unread: true, work_review_state: "queued", work_session_state: "open", work_result_current: true,
+  } as CodexConversationEvent;
+  const events: CodexConversationEvent[] = [
+    { id: "u1", seq: 1, kind: "user_message", timestamp: "2026-11-13T00:59:00.000Z", body: "Run the digest" } as CodexConversationEvent,
+    { id: "a1", seq: 2, kind: "assistant_message", timestamp: "2026-11-13T00:59:05.000Z", body: "On it." } as CodexConversationEvent,
+    work,
+  ];
+
+  test("each Brain snapshot projects the thread again with new handlers: the Work card and pending rows are kept", () => {
+    const timeline = createChatTimeline("brain");
+    const thread = state(events, { pendingUserMessages: [pending("p1", "failed")] });
+    // Home makes its options anew each time: a new handler and a new Set of the computer's Sessions.
+    const project = () => timeline(thread, { onWorkEvent: () => {}, onPendingAction: () => {}, openSessionIds: new Set(["w9"]) });
+    const first = project();
+    expect(first.some((item) => item.type === "brain-work-event")).toBe(true);
+    expect(project()).toBe(first);
+  });
+
+  test("a Work card whose Session goes away is a new row (its press now leads to its Work)", () => {
+    const timeline = createChatTimeline("brain");
+    const thread = state(events);
+    const first = timeline(thread, { onWorkEvent: () => {}, openSessionIds: new Set(["w9"]) });
+    const next = timeline(thread, { onWorkEvent: () => {}, openSessionIds: new Set() });
+    const card = (items: typeof first) => items.find((item) => item.type === "brain-work-event");
+    expect(card(next)).not.toBe(card(first));
+    expect(next[0]).toBe(first[0]);
+  });
+});

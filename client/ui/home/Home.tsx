@@ -248,13 +248,22 @@ const hostSheetOpen = signal(false);
 
 function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] }) {
   const openTerminal = (id: string) => openBrainTerminal(id);
+  // What the page shows, as one word: the branch below is made again only when the word changes. Read as
+  // conditions in the JSX, every Brain snapshot (each Work and Worker change) and every chat state made the
+  // thread again: its rows all drawn anew (the whole page flashed) and the list back at its end (owner 11-13).
+  const shows = computed(() => {
+    const on = surface();
+    if (on !== "chat") return on;
+    if (brainChatUnavailable(brain())) return "unavailable";
+    return chatState() === "failed" ? "failed" : "chat";
+  });
   return (
     <View class="flex-1">
-      {surface() === "chat" && brainChatUnavailable(brain()) ? (
+      {shows() === "unavailable" ? (
         <BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} />
-      ) : surface() === "chat" && chatState() === "failed" ? (
+      ) : shows() === "failed" ? (
         <BrainChatFailed onOpenTerminal={openTerminal} />
-      ) : surface() === "chat" ? (
+      ) : shows() === "chat" ? (
         <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown}
           empty={() => (chatState() === "loading" ? <Notice title="Loading…" /> : <Notice title="What should Brain do?" />)}
           foot={{
@@ -266,11 +275,11 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
             ),
           }}
           requests={() => (routedBrainThread() ? 0 : requests().length)} reveal={revealRequests} />
-      ) : surface() === "waking" ? (
+      ) : shows() === "waking" ? (
         <Notice title="Brain is starting…" />
-      ) : surface() === "host_down" ? (
+      ) : shows() === "host_down" ? (
         <Notice title="Brain can't start" />
-      ) : surface() === "offline" ? (
+      ) : shows() === "offline" ? (
         <Notice title={`${current()?.name || "Your computer"} is offline`} />
       ) : null}
     </View>
