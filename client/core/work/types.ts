@@ -3,6 +3,7 @@
  * what Brain is doing for you, each with where it stands. Not the Calendar's items, and
  * not the Markdown Work files (`workItems.ts`).
  */
+import type { BrainWorkProgress } from "./judgedProgress";
 export type BrainWorkStatus =
   | "open"
   | "running"
@@ -73,6 +74,8 @@ export type BrainWorkDetail = {
   worker_sessions: WorkWorkerSession[];
   /** Its newest result's next steps. */
   result_actions?: ResultAction[];
+  /** The judged progress and its outcomes while it is open (`judgedProgress.ts`); none before a judgment. */
+  progress?: BrainWorkProgress;
 };
 
 export type BrainCurrentWork = {
@@ -108,6 +111,8 @@ export type BrainCurrentWork = {
   calendar?: BrainWorkCalendarRef;
   /** Every Worker Session that joined it; absent until one has. */
   worker_sessions?: WorkWorkerSession[];
+  /** The judged progress while it is open (`judgedProgress.ts`); none before a judgment. */
+  progress?: BrainWorkProgress;
 };
 
 export type BrainWorkCalendarRef = { item_id: string; run_id: string };

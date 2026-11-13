@@ -1,7 +1,6 @@
 import { computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View } from "nsh";
 import { CAPSULE, capsuleInset } from "../../core/shell/capsule";
 import { Capsule, CapsulePage, createCapsule, type CapsuleReading } from "../shell/Capsule";
-import { progressSteps } from "../../core/sessions/progress";
 import { Button } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
@@ -98,7 +97,7 @@ const workHandlers: WorkCardHandlers = {
     const worker = sessionId ? workers().find((w) => w.id === sessionId) : undefined;
     if (!worker) return null;
     const row = sessionRowModel(worker);
-    return { kind: row.kind, flavor: row.flavor, name: presentWorker(worker).typeLabel, progress: progressSteps(worker.phase) ?? undefined };
+    return { kind: row.kind, flavor: row.flavor, name: presentWorker(worker).typeLabel };
   },
   onTitle: (workId) => openWorkDetail(workId),
   workers: (rows) => workWorkerLines(rows, new Map(workers().map((w) => [w.id, w] as const))),

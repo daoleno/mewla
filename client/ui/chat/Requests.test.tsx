@@ -214,7 +214,8 @@ describe("a Work in Brain's thread", () => {
     expect(app.texts()).toContain("1 more");
     expect(app.texts()).toContain("Worker a  a done");
     expect(app.texts().join(" ")).not.toContain("Worker d");
-    expect(app.count("id:work-card-progress")).toBe(1);
+    // No Worker line draws a progress of its own: the judged one is the Work's (SPEC §11 Progress).
+    expect(app.count("id:work-card-worker >> id:progress-mark")).toBe(0);
     await app.wait(500);
     await app.press("id:work-card-worker >> nth=2");
     await app.waitFor("id:session-status");

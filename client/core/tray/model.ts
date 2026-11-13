@@ -3,7 +3,6 @@
  * today, what is idle and what is done, all from one pure model so the pill, the tray's title and
  * its rows always agree. The count counts the rows you can open, not Workers (§1.2 "The count").
  */
-import { progressSteps } from "../sessions/progress";
 import type { BrainHostProblem, BrainSurface, BrainWorkerRef } from "../brain";
 import { approvalAsk, approvalTitle, BARE_STATE_WORDS, promptAsk, elapsedShort, isQuestionApproval, promptTitle, readableSummary, sessionActivity } from "../sessions/activity";
 import { listTime, sessionRowModel, withoutSessionId } from "../sessions/listRow";
@@ -13,6 +12,7 @@ import type { Worker, WorkerApproval, WorkerPrompt } from "../sessions/workers";
 import type { WorkWorkerSession } from "../work/types";
 import { liveWorkerIds } from "../work/workers";
 import { brainWorkSurface, type BrainWorkSlip } from "../work/surface";
+import type { ProgressMark } from "../work/judgedProgress";
 import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
 
 /** The app's connection to the current computer (ui/session `connection`). */
@@ -87,8 +87,8 @@ export interface TrayRow {
   quiet?: boolean;
   /** Today: already past (dimmed above the now line). */
   past?: boolean;
-  /** Segments of the progress bar filled (0–5) from the running Worker's phase; absent: no bar. */
-  progress?: number;
+  /** A Work's judged progress (§11 Progress, `workProgressMark`): Running's and Waiting's Work rows only; absent: none. */
+  mark?: ProgressMark;
 }
 
 /** A Calendar item of today, as the caller reads it with the phone's clock. */
@@ -295,7 +295,6 @@ export function sessionRow(worker: Worker, now: number, options: { alias?: strin
     tile: { kind: "agent", agent: model.kind, flavor: model.flavor },
     target: { open: "session", workerId: worker.id },
     done: ended || undefined,
-    progress: ended ? undefined : progressSteps(worker.phase) ?? undefined,
   };
 }
 
@@ -366,7 +365,8 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now
     unread: done && slip.unread ? true : undefined,
     done: done || undefined,
     quiet: slip.group === "waiting" || slip.group === "queued" || undefined,
-    progress: slip.group === "running" ? progressSteps(session?.phase) ?? undefined : undefined,
+    // Its judged progress while it runs or waits on Brain; a result back, queued or needing you has none.
+    mark: slip.group === "running" || slip.group === "waiting" ? slip.mark : undefined,
   };
 }
 
@@ -458,7 +458,6 @@ export function trayModel(input: TrayInput): TrayModel {
       line: item.running ? live?.line || `Started ${item.time}` : item.time,
       end: item.running ? live?.end ?? "" : item.time,
       live: item.running || undefined,
-      progress: live?.progress,
       tile: { kind: "calendar" as const },
       target: item.running && item.sessionId ? { open: "session" as const, workerId: item.sessionId } : { open: "item" as const, itemId: item.id, sessionId: item.sessionId },
       past: !item.running && item.at < input.now ? true : undefined,

@@ -65,13 +65,23 @@ describe("the tray", () => {
     expect(app.texts().some((t) => t.includes("manual mode"))).toBe(false);
   }, 20_000);
 
-  test("a running Worker's reported phase draws its progress bar; a Session that reports none has no bar", async () => {
-    const app = await open(HARNESS, { host: { params: { workers: [worker("alpha", { phase: "verifying" }), worker("beta")] } }, platform: "android" });
-    await app.waitFor("text:2 running");
+  test("a running Work has its judged progress as a ring round its tile, spoken rounded to 5, never written; a Session on its own has none", async () => {
+    const brain = { host_worker: { id: "host", name: "brain", status: "running" }, chat_thread_id: "t1", current_work: [
+      { work_id: "w1", revision: 1, title: "Ship the docs", status: "running", unread_result: false, attempt_session_id: "alpha", attempt_delegated: true, progress: { stage: "moving", percent: 43 } },
+      { work_id: "w2", revision: 1, title: "Fix sync", status: "running", unread_result: false, progress: { stage: "back", percent: 58, back: "More was asked" } },
+      { work_id: "w3", revision: 1, title: "Write the brief", status: "waiting", unread_result: false, progress: { stage: "last", percent: 99 } },
+    ] };
+    const app = await open(HARNESS, { host: { params: { brain, workers: [worker("alpha", { phase: "verifying" }), worker("beta", { phase: "verifying" })] } }, platform: "android" });
     await app.press("id:state-control");
     await app.waitFor("id:tray");
-    expect(app.count("id:tray-progress")).toBe(1);
-    expect(app.shows("label:Step 4 of 5")).toBe(true);
+    await app.waitFor("label:45 percent");
+    expect(app.count("id:progress-mark")).toBe(3);
+    expect(app.shows("label:60 percent, sent back")).toBe(true);
+    expect(app.shows("label:Last stretch")).toBe(true);
+    // The ring is the only sign: no percentage is written anywhere (the label speaks it).
+    expect(app.texts().some((text) => /\d+ ?%/.test(text))).toBe(false);
+    // The sent-back reason is Work detail's; the row's line stays what the Worker does.
+    expect(app.texts()).not.toContain("More was asked");
   }, 20_000);
 
   test("a request is counted, needs you outranks running, and a plain yes/no gets Approve", async () => {

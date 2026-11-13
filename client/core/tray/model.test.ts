@@ -37,7 +37,9 @@ describe("tray model", () => {
     ] }));
     // Nothing reported but the footer: which agent works where, not "Working" under Running.
     expect(m.running.find((r) => r.key === "session:a")).toMatchObject({ line: "Claude Code · mewla", end: "12m", live: true });
-    expect(m.running.find((r) => r.key === "session:b")).toMatchObject({ line: "Rerunning the suite", end: "4m", live: true, progress: 3 });
+    expect(m.running.find((r) => r.key === "session:b")).toMatchObject({ line: "Rerunning the suite", end: "4m", live: true });
+    // A plain Session has no progress mark: the judged one is a Work's (§11 Progress).
+    expect(m.running.find((r) => r.key === "session:b")?.mark).toBeUndefined();
     // How long this run has gone on, never the Session's age: with no run start, only the live dot.
     expect(m.running.find((r) => r.key === "session:d")).toMatchObject({ end: "", live: true });
     expect(m.idle[0]).toMatchObject({ key: "session:c", line: "Claude Code · mewla" });
@@ -141,6 +143,31 @@ describe("tray model", () => {
     const one = trayModel(input({ workers: [worker("b")], currentWork: [work("w1", { worker_sessions: [joined("b", true)] })] }));
     expect(one.running).toHaveLength(1);
     expect(one.running[0]).toMatchObject({ key: "work:w1", tile: { kind: "agent", agent: "claude" }, target: { open: "session", workerId: "b" } });
+  });
+
+  test("a Work's row carries its judged progress while it runs or waits on Brain; never while a person has a part", () => {
+    const moving = { stage: "moving" as const, percent: 43 };
+    const m = trayModel(input({
+      workers: [worker("b")],
+      currentWork: [
+        work("w1", { attempt_session_id: "b", progress: moving }),
+        // The Worker reported: Brain reads the result, the last stretch.
+        work("w2", { status: "waiting", progress: { stage: "last", percent: 99 } }),
+        // Brain parked it on something it names.
+        work("w3", { status: "waiting", wait_for: "The owner's pick of the look", progress: moving }),
+        // Brain asks the person.
+        work("w4", { question: "Ship it now?", choices: ["Ship", "Wait"], progress: moving }),
+        // No judgment yet.
+        work("w5"),
+      ],
+    }));
+    const mark = (key: string) => [...m.running, ...m.done].find((r) => r.key === key)?.mark;
+    expect(mark("work:w1")).toEqual({ kind: "percent", percent: 45, tone: "moving" });
+    expect(mark("work:w2")).toEqual({ kind: "last" });
+    expect(mark("work:w3")).toBeUndefined();
+    expect(mark("work:w4")).toBeUndefined();
+    expect(mark("work:w5")).toBeUndefined();
+    expect(m.running.some((r) => r.key === "work:w4")).toBe(false);
   });
 
   test("Work detail's Worker is a tray row: its task name without its id (the logo names the agent), what it does or where, \"● 12m\" while it works", () => {

@@ -27,6 +27,13 @@ describe("a Work in Brain's thread", () => {
     expect(workCardModel({ event: event({ kind: "session.needs_input" }) }).kind).toBe("needs");
   });
 
+  test("a live card carries its Work's judged progress, as the tray row does", () => {
+    expect(workCardModel({ event: event(), currentWork: work({ status: "running", progress: { stage: "moving", percent: 58 } }) }).mark).toEqual({ kind: "percent", percent: 60, tone: "moving" });
+    expect(workCardModel({ event: event(), currentWork: work({ status: "waiting", progress: { stage: "last", percent: 99 } }) }).mark).toEqual({ kind: "last" });
+    expect(workCardModel({ event: event(), currentWork: work({ status: "running" }) }).mark).toBeUndefined();
+    expect(workCardModel({ event: event(), currentWork: work({ progress: { stage: "last", percent: 99 } }) }).mark).toBeUndefined();
+  });
+
   test("the Session that ran it is named without the id the daemon appends", () => {
     expect(workCardModel({ event: event({ session_name: "Hello writer (mh-17b3337d43f38037916f0e5b)" }) }).sessionName).toBe("Hello writer");
   });

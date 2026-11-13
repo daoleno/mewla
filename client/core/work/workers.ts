@@ -6,7 +6,6 @@
 import { elapsedShort, readableSummary } from "../sessions/activity";
 import type { TrayRow } from "../tray/model";
 import { listTime, sessionRowModel, withoutSessionId } from "../sessions/listRow";
-import { progressSteps } from "../sessions/progress";
 import type { TerminalFlavor } from "../sessions/terminalFlavor";
 import { agentKindFromProvider, typeLabel, type AgentKind } from "../sessions/workerPresentation";
 import type { Worker } from "../sessions/workers";
@@ -26,8 +25,6 @@ export interface WorkWorkerLine {
   summary: string;
   /** A state the row must say in words: "Needs you", "Failed", "Ended"; none while it runs or once it is done. */
   stateLabel?: string;
-  /** Running with a reported phase: the filled segments. */
-  progress?: number;
   /** "live" while it works; else when it finished. */
   time: string;
   /** When its current turn began (ms), else when it joined the Work: a live row's end says how long it has worked. */
@@ -79,7 +76,6 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
       state,
       summary,
       stateLabel: STATE_LABEL[state],
-      progress: working ? progressSteps(following ? session.phase ?? row.phase : row.phase) ?? undefined : undefined,
       time: working ? "live" : listTime(Number.isFinite(at) ? at : undefined, now),
       since: Number.isFinite(turn) ? turn : Number.isFinite(joined) ? joined : undefined,
       openable: Boolean(session),
@@ -123,6 +119,5 @@ export function workDetailWorkerRow(worker: WorkWorkerLine, now: number, workPro
     tile: { kind: "agent", agent: worker.agent, flavor: worker.flavor },
     target: { open: "session", workerId: worker.sessionId },
     done: worker.state === "done" || undefined,
-    progress: worker.progress,
   };
 }

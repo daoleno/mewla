@@ -5,7 +5,8 @@ import { token, type Tokens } from "nsh";
  * a role of ui/theme.json (soft-final SPEC §10.1 and §10.4), read through `token()` so the values live in the
  * theme once and follow the appearance shown. Red (`seal`) means waiting for you and nothing else; on the first
  * level a state's tone names its role and reads in ink or soft. `ok`, `warning`, `meter`, the neutral tile and
- * the series are for the pages behind the first level only (§10.4).
+ * the series are for the pages behind the first level only (§10.4), with one exception: a Work's judged progress
+ * dial (`ProgressDial`, §9 and §11 Progress) uses `meter`, `warning` and `ok` on the first level too.
  */
 const ROLES = {
   ink: "foreground",

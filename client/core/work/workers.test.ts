@@ -28,7 +28,7 @@ describe("the Workers of a Work", () => {
       ["Builder", "codex", "failed", "Build broke on Windows"],
       ["Fixer", "claude", "running", "Windows build green, checking macOS"],
     ]);
-    expect(lines[2]).toMatchObject({ progress: 5, time: "live", openable: true });
+    expect(lines[2]).toMatchObject({ time: "live", openable: true });
     expect(lines[0]!.progress).toBeUndefined();
     expect(lines[0]!.openable).toBe(false);
     expect(lines[0]!.time).not.toBe("live");
@@ -50,7 +50,7 @@ describe("the Workers of a Work", () => {
 
   test("a live Session that settled reads its settled state; a Worker without a recorded name shows its executor, else Worker", () => {
     const sessions = new Map([["worker:@c", session("worker:@c", { status: "done" })]]);
-    expect(workWorkerLines(rows, sessions, NOW)[2]).toMatchObject({ state: "done", progress: undefined });
+    expect(workWorkerLines(rows, sessions, NOW)[2]).toMatchObject({ state: "done", time: expect.any(String) });
     const nameless = workWorkerLines([{ ...rows[1]!, name: undefined }, { ...rows[1]!, name: undefined, executor_id: undefined, provider: undefined }], new Map(), NOW);
     expect(nameless.map((l) => [l.name, l.agent])).toEqual([["codex", "codex"], ["Worker", "terminal"]]);
   });

@@ -1,5 +1,4 @@
 import { Clipboard, computed, signal, Text, View } from "nsh";
-import { ProgressBar } from "../kit/ProgressBar";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import { activityFileRows, type ActivityFileRow } from "../../core/timeline/activityFiles";
@@ -234,7 +233,7 @@ export function ComputerMessageCard(props: { item: () => ComputerMessageTimeline
 /** Where a Work card leads outside the thread; none (a past thread) leaves it to read. */
 export type WorkCardHandlers = {
   /** The agent that ran a Session, for the card's logo and "Agent · Done 11:20". */
-  agentOf: (sessionId: string | undefined) => { kind: AgentKind; flavor: TerminalFlavor; name: string; progress?: number } | null;
+  agentOf: (sessionId: string | undefined) => { kind: AgentKind; flavor: TerminalFlavor; name: string } | null;
   /** The title of a Work: its detail page. */
   onTitle: (workId: string) => void;
   /** The Workers that joined a Work, as the Session list has them now. */
@@ -288,7 +287,6 @@ function WorkerLine(props: { line: WorkWorkerLine; onPress: () => void }) {
       <AgentIcon kind={line.agent} flavor={line.flavor} size={20} />
       <View class="min-w-0 flex-1">
         <Text class="text-sub line-clamp-1"><Text class="font-semibold">{row().title}</Text><Text class="text-muted-foreground">{row().line ? `  ${row().line}` : ""}</Text></Text>
-        <If when={line.progress !== undefined}><ProgressBar filled={line.progress!} testID="work-card-progress" /></If>
       </View>
       <RowEnd row={row} />
     </Button>
@@ -318,12 +316,13 @@ function OneSessionWork(props: { model: () => WorkCardModel; line: () => WorkWor
   const sending = signal(false);
   const row = (): TrayRow => {
     const line = props.line();
-    if (line) return workDetailWorkerRow(line, elapsedNow());
+    // The Work's judged progress, as its tray row draws it (§11 Progress); never a Worker's own.
+    if (line) return { ...workDetailWorkerRow(line, elapsedNow()), mark: props.model().mark };
     const agent = props.agent();
     return {
       key: `work:${props.model().workId}`, title: workerName(agent?.name) || props.model().sessionName || props.model().title, line: props.model().summary,
       end: "", tile: agent ? { kind: "agent", agent: agent.kind, flavor: agent.flavor } : { kind: "brain" }, target: { open: "work", workId: props.model().workId },
-      progress: agent?.progress,
+      mark: props.model().mark,
     };
   };
   const approve = async () => {
@@ -344,8 +343,8 @@ function OneSessionWork(props: { model: () => WorkCardModel; line: () => WorkWor
   return (
     <Button testID="work-card-one" accessibilityLabel={[row().title, request()?.ask ?? row().line].filter(Boolean).join(", ")} disabled={!props.handlers} onPress={press}
       class="min-h-[68px] flex-row items-center gap-3.5 overflow-hidden rounded-(--radius-group) bg-card px-4 py-3 active:opacity-70">
-      <RowTile tile={() => row().tile} />
-      <RowText row={() => { const r = request(); return r ? { ...row(), line: r.ask ?? r.title, progress: undefined } : row(); }} />
+      <RowTile tile={() => row().tile} mark={() => row().mark} />
+      <RowText row={() => { const r = request(); return r ? { ...row(), line: r.ask ?? r.title, mark: undefined } : row(); }} />
       <If when={request()} else={<RowEnd row={row} />}><Button testID={request()?.oneTap ? "work-card-approve" : "work-card-answer"} disabled={sending()} onPress={() => (request()?.oneTap ? void approve() : press())}
           class="h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 disabled:opacity-40">
           <Text class="text-caption font-semibold text-seal-foreground">{request()?.oneTap ? "Approve" : "Answer"}</Text>
