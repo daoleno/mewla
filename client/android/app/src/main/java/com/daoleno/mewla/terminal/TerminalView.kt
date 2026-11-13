@@ -97,7 +97,9 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   private var cursorStyle = 1
   private var cursorBlinks = false
   private var blinkOn = true
-  private var composing = ""
+  // What the keyboard composes: drawn at the cursor, only committed text goes to the program (TerminalComposition).
+  private val composition = TerminalComposition { send(it) }
+  private val composing get() = composition.text
 
   // The font: the cell is whole pixels, and the text size is set so one advance is exactly one cell.
   private val paint = textPaint(Fonts.regular(context))
@@ -1055,9 +1057,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   /** Text the keyboard is still composing goes out now, and the keyboard is told to start afresh. */
   private fun commitComposing() {
     if (composing.isEmpty()) return
-    val text = composing
-    composing = ""
-    send(text)
+    composition.finish()
     context.getSystemService(InputMethodManager::class.java).restartInput(this)
     invalidate()
   }
@@ -1078,16 +1078,66 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   override fun onCreateInputConnection(out: EditorInfo): InputConnection {
     out.inputType = TerminalKeyboard.INPUT_TYPE
     out.imeOptions = TerminalKeyboard.IME_OPTIONS
-    return object : BaseInputConnection(this, false) {
-      override fun commitText(t: CharSequence, pos: Int): Boolean { composing = ""; send(t.toString()); invalidate(); return true }
-      override fun setComposingText(t: CharSequence, pos: Int): Boolean { composing = t.toString(); invalidate(); return true }
-      override fun finishComposingText(): Boolean { if (composing.isNotEmpty()) { val c = composing; composing = ""; send(c) }; return true }
-      override fun deleteSurroundingText(before: Int, after: Int): Boolean { repeat(max(before, 1)) { send("\u007f") }; return true }
-      override fun sendKeyEvent(e: KeyEvent): Boolean { if (e.action == KeyEvent.ACTION_DOWN) keyToData(e)?.let(::send); return true }
-      override fun performContextMenuAction(id: Int): Boolean {
-        if (id == android.R.id.paste) { clipboardText()?.let(::paste); return true }
-        return super.performContextMenuAction(id)
+    return CompositionConnection()
+  }
+
+  /**
+   * The input method's connection. Its field is the composition and nothing else (TerminalComposition): the
+   * editable holds it with the cursor at its end, and the text before the cursor and the extracted text are
+   * read from it, so an input method that reads the field before an update finds its composition where it
+   * left it. The cursor is not reported (`updateSelection`): Gboard's inline pinyin then committed its
+   * first letter and composed the rest anew (emulator, 11-13).
+   */
+  private inner class CompositionConnection : BaseInputConnection(this, true) {
+    private fun changed(): Boolean {
+      val field = composition.field
+      val editable = editable
+      if (editable != null && editable.toString() != field.text) {
+        editable.replace(0, editable.length, field.text)
       }
+      if (editable != null) {
+        if (field.composingStart >= 0) super.setComposingRegion(field.composingStart, field.composingEnd)
+        else removeComposingSpans(editable)
+      }
+      if (editable != null) android.text.Selection.setSelection(editable, field.cursor)
+      invalidate()
+      return true
+    }
+
+    override fun setComposingText(t: CharSequence, pos: Int): Boolean { composition.compose(t.toString()); return changed() }
+    override fun setComposingRegion(start: Int, end: Int): Boolean {
+      // The field is only the composition, so a region in it is a part of it: the input method takes it back up.
+      val text = composing
+      val from = start.coerceIn(0, text.length)
+      val to = end.coerceIn(0, text.length)
+      composition.compose(text.substring(min(from, to), max(from, to)))
+      return changed()
+    }
+    override fun commitText(t: CharSequence, pos: Int): Boolean { composition.commit(t.toString()); return changed() }
+    override fun finishComposingText(): Boolean { composition.finish(); return changed() }
+    override fun deleteSurroundingText(before: Int, after: Int): Boolean { composition.backspace(max(before, 1)); return changed() }
+    override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = composing.takeLast(max(n, 0))
+    override fun getTextAfterCursor(n: Int, flags: Int): CharSequence = ""
+    override fun getSelectedText(flags: Int): CharSequence? = null
+    override fun getExtractedText(request: android.view.inputmethod.ExtractedTextRequest?, flags: Int): android.view.inputmethod.ExtractedText {
+      val field = composition.field
+      return android.view.inputmethod.ExtractedText().apply {
+        text = field.text
+        startOffset = 0
+        selectionStart = field.cursor
+        selectionEnd = field.cursor
+      }
+    }
+    override fun sendKeyEvent(e: KeyEvent): Boolean {
+      if (e.action != KeyEvent.ACTION_DOWN) return true
+      if (e.keyCode == KeyEvent.KEYCODE_DEL) { composition.backspace(); return changed() }
+      // Enter, Tab, Esc, arrows: what is composed goes first, as committed, then the key.
+      keyToData(e)?.let { composition.key(it) }
+      return changed()
+    }
+    override fun performContextMenuAction(id: Int): Boolean {
+      if (id == android.R.id.paste) { clipboardText()?.let(::paste); return true }
+      return super.performContextMenuAction(id)
     }
   }
 
