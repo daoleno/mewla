@@ -27,116 +27,157 @@ struct MewlaProvider: TimelineProvider {
   }
 }
 
+/// The home-screen and Lock Screen widgets (option A): the small one is the one thing that matters now,
+/// the medium one the tray; each row opens its Session or Work. Quiet, the cat naps; a widget that knows
+/// nothing (not set up, refused, or nothing heard for 12 hours) shows the cat greyed.
 struct MewlaStatusWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "MewlaStatus", provider: MewlaProvider()) { entry in
       MewlaWidgetView(snapshot: entry.snapshot)
     }
     .configurationDisplayName("Mewla")
-    .description("What is running, and when Brain needs you")
-    .supportedFamilies([.systemSmall, .systemMedium])
+    .description("What needs you and what is running")
+    .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular])
   }
 }
 
 private struct MewlaWidgetView: View {
   let snapshot: MewlaWidgetSnapshot
   @Environment(\.widgetFamily) private var family
-  @Environment(\.colorScheme) private var scheme
-
-  private var needs: Bool { snapshot.state?.needsYou ?? false }
-
-  private var background: Color {
-    if needs {
-      return scheme == .dark
-        ? Color(red: 0.16, green: 0.07, blue: 0.06) : Color(red: 0.99, green: 0.91, blue: 0.90)
-    }
-    return scheme == .dark
-      ? Color(red: 0.12, green: 0.11, blue: 0.10) : Color(red: 0.99, green: 0.98, blue: 0.97)
-  }
 
   var body: some View {
+    let state = snapshot.needsApp ? nil : snapshot.state
+    let items = state.map(MewlaLiveView.items) ?? []
     Group {
-      if snapshot.needsApp || snapshot.state == nil {
-        OpenMewlaView()
-      } else if let state = snapshot.state {
-        switch family {
-        case .systemMedium: MediumView(state: state)
-        default: SmallView(state: state)
+      switch family {
+      case .accessoryCircular: CircularView(focus: items.first)
+      case .accessoryRectangular: RectangularView(state: state, focus: items.first)
+      default:
+        if let state, !items.isEmpty {
+          if family == .systemMedium { TrayView(state: state, items: items) } else { FocusView(state: state, focus: items[0]) }
+        } else {
+          QuietView(state: state, wide: family == .systemMedium)
         }
       }
     }
-    .widgetURL(MewlaStyle.openURL)
-    .containerBackground(for: .widget) { background }
+    .widgetURL(items.first.map { MewlaLiveView.link($0) } ?? MewlaLiveView.link(nil))
+    .containerBackground(for: .widget) {
+      if family == .accessoryCircular || family == .accessoryRectangular { AccessoryWidgetBackground() } else { MewlaStyle.surface }
+    }
   }
 }
 
-private struct OpenMewlaView: View {
+/// Nothing to show: the cat naps over the header's words; it is greyed with no words when the widget knows nothing.
+private struct QuietView: View {
+  let state: MewlaLiveState?
+  let wide: Bool
   var body: some View {
-    VStack(spacing: 8) {
-      SealView(size: 30)
-      Text("Open Mewla").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+    let image = Image(state == nil ? "pet-offline" : "pet-idle").resizable().scaledToFit()
+    let words = state.map(MewlaLiveView.headerWords) ?? ""
+    Group {
+      if wide {
+        HStack(spacing: 12) {
+          image.frame(width: 96, height: 96)
+          if !words.isEmpty { Text(words).font(.subheadline).foregroundStyle(.secondary) }
+        }
+      } else {
+        VStack(spacing: 2) {
+          image.frame(width: 88, height: 88)
+          if !words.isEmpty { Text(words).font(.subheadline).foregroundStyle(.secondary) }
+        }
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
-/// One glance: how many things are running; red only when you are needed.
-private struct SmallView: View {
+/// The small widget: the one thing that matters now.
+private struct FocusView: View {
   let state: MewlaLiveState
-
+  let focus: MewlaLiveItem
   var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      SealView(size: 22)
-      Spacer(minLength: 0)
-      Text("\(state.needsYou ? max(state.needsCount, 1) : state.workerCount)")
-        .font(.system(size: 44, weight: .bold, design: .rounded))
-        .foregroundStyle(state.needsYou ? MewlaStyle.seal : Color.primary)
-      Text(state.needsYou ? "Brain needs you" : "running")
-        .font(.footnote.weight(state.needsYou ? .semibold : .regular))
-        .foregroundStyle(state.needsYou ? MewlaStyle.seal : Color.secondary)
-        .lineLimit(1)
+    let line = focus.asks ? focus.line : MewlaLiveView.othersRunning(state, focus)
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(alignment: .top) {
+        RingLogo(item: focus, size: 48)
+        Spacer(minLength: 4)
+        RowEnd(item: focus)
+      }
+      Spacer(minLength: 8)
+      Text(focus.title).font(.headline).lineLimit(2)
+      if !line.isEmpty {
+        Text(line).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+      }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 }
 
-/// The needs-you strip on top, then the running Workers.
-private struct MediumView: View {
+/// The medium widget: the tray. The header's words open it; each row opens its Session or Work.
+private struct TrayView: View {
   let state: MewlaLiveState
-
+  let items: [MewlaLiveItem]
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if state.needsYou, let question = state.question {
-        VStack(alignment: .leading, spacing: 6) {
-          Text(question.text.isEmpty ? "Brain needs you" : question.text)
-            .font(.subheadline.weight(.semibold))
-            .lineLimit(1)
-          ChoiceChips(question: question, compact: true)
-        }
-      }
-      if state.workers.isEmpty && !state.needsYou {
-        HStack(spacing: 8) {
-          SealView(size: 22)
-          Text("Nothing is running").font(.subheadline).foregroundStyle(.secondary)
-        }
-      }
-      ForEach(Array(state.workers.prefix(state.needsYou ? 2 : 3).enumerated()), id: \.offset) { index, worker in
+    let needs = items.first?.asks ?? false
+    VStack(alignment: .leading, spacing: 4) {
+      Link(destination: MewlaLiveView.trayURL) {
         HStack(spacing: 6) {
-          Circle().fill(index == 0 ? Color.primary : Color.secondary).frame(width: 6, height: 6)
-          Text(worker.name).font(.subheadline.weight(.medium)).lineLimit(1)
-          Text(worker.phase).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-          Spacer(minLength: 4)
-          if index == 0, let since = state.startedDate {
-            Text(timerInterval: since...since.addingTimeInterval(12 * 3600), countsDown: false)
-              .monospacedDigit()
-              .font(.subheadline)
-              .foregroundStyle(.secondary)
-              .frame(width: 56, alignment: .trailing)
+          Image(needs ? "pet-attention" : "pet-working").resizable().scaledToFit().frame(width: 22, height: 22)
+          if needs || MewlaLiveView.runningCount(state) > 0 {
+            Circle().fill(needs ? AnyShapeStyle(MewlaStyle.seal) : AnyShapeStyle(HierarchicalShapeStyle.primary)).frame(width: 7, height: 7)
           }
+          Text(MewlaLiveView.headerWords(state)).font(.footnote.weight(.semibold))
+        }
+      }
+      ForEach(items.prefix(3), id: \.key) { item in
+        Link(destination: MewlaLiveView.link(item)) {
+          HStack(spacing: 10) {
+            RingLogo(item: item, size: 28)
+            VStack(alignment: .leading, spacing: 0) {
+              Text(item.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+              if !item.line.isEmpty { Text(item.line).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+            }
+            Spacer(minLength: 4)
+            RowEnd(item: item)
+          }
+          .frame(height: 34)
         }
       }
       Spacer(minLength: 0)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+}
+
+/// Lock Screen, round: the one item's logo in its ring (the system tints it).
+private struct CircularView: View {
+  let focus: MewlaLiveItem?
+  var body: some View {
+    if let focus {
+      RingLogo(item: MewlaLiveItem(key: focus.key, open: focus.open, id: focus.id, title: focus.title, line: focus.line,
+                                   agent: "brain", needs: focus.needs, ring: focus.ring, startedAt: focus.startedAt), size: 44, behind: .clear)
+    } else {
+      AgentMark(agent: "brain").frame(width: 26, height: 26).opacity(0.6)
+    }
+  }
+}
+
+/// Lock Screen, a line: the header's words and the one item.
+private struct RectangularView: View {
+  let state: MewlaLiveState?
+  let focus: MewlaLiveItem?
+  var body: some View {
+    VStack(alignment: .leading, spacing: 1) {
+      Text(state.map(MewlaLiveView.headerWords) ?? "Mewla").font(.headline).lineLimit(1)
+      if let focus {
+        Text(focus.title).font(.subheadline).lineLimit(1)
+        if focus.asks {
+          Text(focus.line).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        } else if let since = focus.startedDate {
+          ElapsedView(since: since).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.leading)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
