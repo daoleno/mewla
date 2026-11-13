@@ -6,6 +6,7 @@ import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
 import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
+import { ThreadWait } from "../chat/ThreadWait";
 import { brainHostIdentity } from "../chat/links";
 import { chatImage } from "../chat/assets";
 import { stopTurn } from "../../core/conversation/turn";
@@ -283,7 +284,13 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
         <BrainChatFailed onOpenTerminal={openTerminal} />
       ) : shows().startsWith("chat:") ? (
         <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown}
-          empty={() => (chatState() === "loading" ? <Notice title="Loading…" /> : <Notice title="What should Brain do?" />)}
+          empty={() => (
+            // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
+            // 15 s; "What should Brain do?" only after a read that succeeded.
+            <ThreadWait waiting={() => chatState() === "loading"} hasRows={() => items().length > 0} empty={() => <Notice title="What should Brain do?" />}
+              reload={() => brainChat()?.reload()} reconnect={() => currentTransport()?.resume()} computer={() => current()?.name}
+              failedAction={{ title: "Open terminal", onPress: () => openTerminal(brain()?.host_worker?.id ?? ""), testID: "brain-chat-open-terminal" }} />
+          )}
           foot={{
             shown: () => !routedBrainThread() && (requests().length > 0 || sealedHere().length > 0),
             render: (anchor) => (
@@ -298,7 +305,9 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
       ) : shows() === "host_down" ? (
         <Notice title="Brain can't start" />
       ) : shows() === "offline" ? (
-        <Notice title={`${current()?.name || "Your computer"} is offline`} />
+        // A start before the computer answers: connecting is a wait (the placeholder), Offline only at `link.away`.
+        <ThreadWait testID="brain-offline" waiting={() => true} empty={() => <View />} reload={() => {}}
+          reconnect={() => currentTransport()?.resume()} computer={() => current()?.name} />
       ) : null}
     </View>
   );

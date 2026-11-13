@@ -52,6 +52,8 @@ import { Composer, createComposerText } from "../chat/Composer";
 import { ChatTimeline } from "../chat/Timeline";
 import { openChatLink, openChatPath, type ChatFiles } from "../chat/links";
 import { Icon } from "../icons/Icon";
+import { ThreadWait } from "../chat/ThreadWait";
+import { StateView } from "../kit/wait";
 import { brain, connection, current, currentTransport, outbox, problem as connectionProblem, resumeConnection, workers, workersHydrated } from "../session";
 import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
@@ -407,16 +409,38 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       unavailable: Boolean(conversation() && !conversation()!.available && !syncing()),
       syncing: syncing() && conversation()?.reason !== "transcript_not_found",
     });
+    // One word per branch, so a branch is made again only when the word changes (loading → empty keeps the wait).
+    const kind = computed(() => (phase() === "error" ? "error" : phase() === "unavailable" ? "unavailable" : "wait"));
     return (
-      <View testID="chat-empty" class="flex-1 items-center justify-center gap-2 p-8">
-        {phase() === "loading" ? <Text class="text-sm text-muted-foreground">Loading conversation…</Text>
-          : phase() === "error" ? (
-            <View class="items-center gap-2">
-              <Icon name="alert-circle" size={28} color="destructive" />
-              <Text class="text-base font-semibold">Could not load this chat</Text>
-              <Text class="text-center text-sm text-muted-foreground">{thread().error ?? ""}</Text>
-            </View>
-          ) : phase() === "unavailable" ? (
+      <View testID="chat-empty" class="flex-1">
+        <If when={kind() === "wait"}>
+          {/* SPEC §16.4: the wait of Brain's thread; the agent's own empty prompt only after a read. */}
+          <ThreadWait waiting={() => phase() === "loading"} hasRows={() => items().length > 0} reload={() => chat.reload()}
+            reconnect={resumeConnection} computer={() => current()?.name}
+            failedAction={{ title: "Open terminal", onPress: () => chooseMode("terminal"), testID: "chat-open-terminal" }}
+            empty={() => (
+              <View class="flex-1 items-center justify-center gap-2 p-8">
+                <View class="items-center gap-1.5">
+                  <Text class="text-lg font-semibold">Ready</Text>
+                  <Text class="text-sm text-muted-foreground">Send a message to start.</Text>
+                  {worker()?.cwd ? (
+                    <View class="mt-1 flex-row items-center gap-1.5 rounded-full bg-accent px-2.5 py-1">
+                      <Icon name="folder" size={13} />
+                      <Text class="text-xs text-muted-foreground line-clamp-1">{compactPathLabel(worker()!.cwd!, { tailSegments: 2, showFullUpTo: 2 })}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            )} />
+        </If>
+        <If when={kind() === "error"}>
+          <View class="flex-1 justify-center">
+            <StateView icon="alert-circle" title="Couldn't load the chat" detail={thread().error ?? undefined} testID="chat-failed"
+              actions={[{ title: "Try again", onPress: () => chat.reload(), testID: "chat-try-again" }, { title: "Open terminal", onPress: () => chooseMode("terminal"), testID: "chat-open-terminal" }]} />
+          </View>
+        </If>
+        <If when={kind() === "unavailable"}>
+          <View class="flex-1 items-center justify-center gap-2 p-8">
             <View class="items-center gap-2">
               <Icon name="layers" size={28} />
               <Text class="text-base font-semibold">Chat view is not available here</Text>
@@ -426,18 +450,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 <Text class="text-sm font-semibold">Open Terminal</Text>
               </Button>
             </View>
-          ) : (
-            <View class="items-center gap-1.5">
-              <Text class="text-lg font-semibold">Ready</Text>
-              <Text class="text-sm text-muted-foreground">Send a message to start.</Text>
-              {worker()?.cwd ? (
-                <View class="mt-1 flex-row items-center gap-1.5 rounded-full bg-accent px-2.5 py-1">
-                  <Icon name="folder" size={13} />
-                  <Text class="text-xs text-muted-foreground line-clamp-1">{compactPathLabel(worker()!.cwd!, { tailSegments: 2, showFullUpTo: 2 })}</Text>
-                </View>
-              ) : null}
-            </View>
-          )}
+          </View>
+        </If>
       </View>
     );
   };
