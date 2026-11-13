@@ -47,6 +47,16 @@ export function createCapsule(options: { collapsed?: boolean } = {}) {
 }
 
 /**
+ * The page under a capsule: the app's canvas, edge to edge. Without a system header nothing else covers the
+ * top of the screen, and the screen view behind a page is painted in the system's theme, not the app's (dark
+ * under a light Mewla on a phone set to dark): an uncovered strip, a page's top padding, showed as a dark band
+ * behind the capsule (owner 11-13 14:45).
+ */
+export function CapsulePage(props: { children: JSX.Element }) {
+  return <View testID="capsule-page" class="flex-1 bg-background">{props.children}</View>;
+}
+
+/**
  * The capsule header (SPEC §11): one opaque shape on the sheet surface with a 1 pt hairline (and in light a
  * 1 pt contact shadow), 6 below the status bar and 8 from the sides, over the page's content. Expanded it is
  * the screen's width less the sides; collapsed it is as wide as what it keeps, at the same top-left. Its

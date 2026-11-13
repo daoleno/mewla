@@ -1,6 +1,6 @@
 import { computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View } from "nsh";
 import { CAPSULE, capsuleInset } from "../../core/shell/capsule";
-import { Capsule, createCapsule, type CapsuleReading } from "../shell/Capsule";
+import { Capsule, CapsulePage, createCapsule, type CapsuleReading } from "../shell/Capsule";
 import { progressSteps } from "../../core/sessions/progress";
 import { Button } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
@@ -441,7 +441,7 @@ export function Home() {
   });
   return (
     <NavPage title="Brain" column="reading" headerVisible={false} header={<View />}>
-      <View class="flex-1 bg-background">
+      <CapsulePage>
         {capsuled() ? null : <HomeHeader />}
         {routedBrainThread() ? <View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View> : null}
         <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
@@ -460,7 +460,7 @@ export function Home() {
           onNotice={(text) => notice.set(text)} />
         <BrainHostSheet open={hostSheetOpen} onClose={() => hostSheetOpen.set(false)} />
         <ResultSheet />
-      </View>
+      </CapsulePage>
     </NavPage>
   );
 }
