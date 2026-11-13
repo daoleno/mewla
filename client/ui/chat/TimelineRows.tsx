@@ -10,7 +10,12 @@ import { compactPathLabel } from "../../core/timeline/pathDisplay";
 import { ChatImage, type PictureLoader } from "./ChatImage";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
 import { workCardModel, type WorkCardModel } from "../../core/timeline/workCardModel";
-import { WORK_CARD_WORKERS, workerName, type WorkWorkerLine } from "../../core/work/workers";
+import { WORK_CARD_WORKERS, workDetailWorkerRow, workerName, type WorkWorkerLine } from "../../core/work/workers";
+import type { TrayRow } from "../../core/tray/model";
+import { RowEnd, RowText, RowTile } from "../tray/rowParts";
+import { tray } from "../tray/state";
+import { elapsedNow } from "../kit/elapsedClock";
+import { answerPrompt, decideApproval } from "../../core/conversation/turn";
 import type { ResultAction, WorkWorkerSession } from "../../core/work/types";
 import { resultActionLabel } from "../../core/work/resultActions";
 import type { AgentKind, TerminalFlavor } from "../../core/sessions/workerPresentation";
@@ -21,7 +26,7 @@ import { serverForComputer, type ComputerMessageTimelineItem } from "../../core/
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import { Icon, type IconName } from "../icons/Icon";
 import { ICON_ASSETS } from "../icons/assets";
-import { current, servers, switchTo } from "../session";
+import { current, currentTransport, servers, switchTo } from "../session";
 
 /**
  * Which rows are open. A list recycles its cells, so a row's own signal would
@@ -264,23 +269,83 @@ export function ResultActions(props: { actions: readonly ResultAction[]; disable
   );
 }
 
-function workerLineText(line: WorkWorkerLine): string {
-  const text = [line.stateLabel, line.summary].filter(Boolean).join(" · ");
-  return text ? `  ${text}` : "";
-}
-
-/** A Worker of a Work on its card (SPEC §11): 44 pt, its logo, name, what it does, the time; pushes its Session. */
+/**
+ * A Worker of a Work on its card (SPEC §11 Work card): 44 pt, its logo, its task name, what it does, then its state as
+ * a tray row ends ("● 10m", a red dot and "Needs you"), never a clock time while it works. Pushes its Session.
+ */
 function WorkerLine(props: { line: WorkWorkerLine; onPress: () => void }) {
   const line = props.line;
+  const row = () => workDetailWorkerRow(line, elapsedNow());
   return (
-    <Button testID="work-card-worker" accessibilityLabel={[line.name, line.stateLabel, line.summary, line.time].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
+    <Button testID="work-card-worker" accessibilityLabel={[row().title, row().line, row().end].filter(Boolean).join(", ")} disabled={!line.openable} onPress={props.onPress}
       class="min-h-[44px] flex-row items-center gap-2.5 border-t border-border px-4 py-2 active:opacity-70">
       <AgentIcon kind={line.agent} flavor={line.flavor} size={20} />
       <View class="min-w-0 flex-1">
-        <Text class="text-sub line-clamp-1"><Text class="font-semibold">{line.name}</Text><Text class="text-muted-foreground">{workerLineText(line)}</Text></Text>
+        <Text class="text-sub line-clamp-1"><Text class="font-semibold">{row().title}</Text><Text class="text-muted-foreground">{row().line ? `  ${row().line}` : ""}</Text></Text>
         {line.progress !== undefined ? <ProgressBar filled={line.progress} testID="work-card-progress" /> : null}
       </View>
-      <Text class="text-caption text-muted-foreground">{line.time === "live" ? "" : line.time}</Text>
+      <RowEnd row={row} />
+    </Button>
+  );
+}
+
+/**
+ * The Work's state, its most urgent Worker's (SPEC §11 Work card): a red dot and "Needs you" if any Worker waits on
+ * you; else "● N running"; else Queued or Waiting; never Running while something inside it needs you.
+ */
+function workCardState(model: WorkCardModel, lines: readonly WorkWorkerLine[]): { words: string; dot: "seal" | "ink" | null } {
+  if (model.kind === "needs" || lines.some((line) => line.state === "blocked")) return { words: "Needs you", dot: "seal" };
+  const running = lines.filter((line) => line.state === "running").length;
+  if (running > 0) return { words: `${running} running`, dot: "ink" };
+  if (model.state === "Waiting") return { words: "Waiting", dot: null };
+  if (model.state === "Running") return lines.length ? { words: "Queued", dot: null } : { words: "1 running", dot: "ink" };
+  return { words: model.state, dot: null };
+}
+
+/**
+ * A Work with one Session (SPEC §11 Work card): that Session's tray row inside a card, so its title is written once.
+ * Needing you, its line is the ask and it ends in the red tag: Approve answers at once, Answer opens the Session.
+ */
+function OneSessionWork(props: { model: () => WorkCardModel; line: () => WorkWorkerLine | undefined; agent: () => ReturnType<WorkCardHandlers["agentOf"]>; handlers?: WorkCardHandlers; open: () => void }) {
+  const sessionId = () => props.line()?.sessionId ?? props.model().sessionId;
+  const request = () => (sessionId() ? tray().needs.find((r) => r.workerId === sessionId()) : undefined);
+  const sending = signal(false);
+  const row = (): TrayRow => {
+    const line = props.line();
+    if (line) return workDetailWorkerRow(line, elapsedNow());
+    const agent = props.agent();
+    return {
+      key: `work:${props.model().workId}`, title: workerName(agent?.name) || props.model().sessionName || props.model().title, line: props.model().summary,
+      end: "", tile: agent ? { kind: "agent", agent: agent.kind, flavor: agent.flavor } : { kind: "brain" }, target: { open: "work", workId: props.model().workId },
+      progress: agent?.progress,
+    };
+  };
+  const approve = async () => {
+    const tap = request()?.oneTap;
+    const transport = currentTransport();
+    if (!tap || !transport || sending()) return;
+    sending.set(true);
+    try {
+      if (tap.kind === "approval") await decideApproval(transport, tap.workerId, tap.approvalId, tap.optionId);
+      else await answerPrompt(transport, tap.workerId, tap.promptId, { number: tap.number });
+    } catch {
+      // The card in the thread still asks; the tray says why.
+    } finally {
+      sending.set(false);
+    }
+  };
+  const press = () => (sessionId() ? props.handlers?.onSession(sessionId()!) : props.open());
+  return (
+    <Button testID="work-card-one" accessibilityLabel={[row().title, request()?.ask ?? row().line].filter(Boolean).join(", ")} disabled={!props.handlers} onPress={press}
+      class="min-h-[68px] flex-row items-center gap-3.5 overflow-hidden rounded-(--radius-group) bg-card px-4 py-3 active:opacity-70">
+      <RowTile tile={() => row().tile} />
+      <RowText row={() => (request() ? { ...row(), line: request()!.ask ?? request()!.title, progress: undefined } : row())} />
+      {request() ? (
+        <Button testID={request()!.oneTap ? "work-card-approve" : "work-card-answer"} disabled={sending()} onPress={() => (request()!.oneTap ? void approve() : press())}
+          class="h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 disabled:opacity-40">
+          <Text class="text-caption font-semibold text-seal-foreground">{request()!.oneTap ? "Approve" : "Answer"}</Text>
+        </Button>
+      ) : <RowEnd row={row} />}
     </Button>
   );
 }
@@ -295,6 +360,7 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
   const model = () => workCardModel(props.item());
   const agent = () => props.handlers?.agentOf(model().sessionId) ?? null;
   const lines = () => props.handlers?.workers(props.item().currentWork?.worker_sessions) ?? [];
+  const state = () => workCardState(model(), lines());
   const open = () => props.item().onPress?.();
   return (
     <View class="px-4 py-1">
@@ -319,12 +385,14 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
           {model().summary ? <View selectable><Text class="text-sub">{model().summary}</Text></View> : null}
           {model().actions.length ? <ResultActions actions={model().actions} disabled={!props.handlers} onPress={(action) => props.handlers?.onAction(model(), action)} /> : null}
         </View>
+      ) : lines().length <= 1 && (lines().length === 1 || model().sessionId) ? (
+        <OneSessionWork model={model} line={() => lines()[0]} agent={agent} handlers={props.handlers} open={() => props.handlers?.onTitle(model().workId)} />
       ) : (
-        <View testID={model().kind === "needs" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">
+        <View testID={state().dot === "seal" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">
           <Button testID="work-card-title" disabled={!props.handlers} onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[52px] flex-row items-center gap-2 px-4 active:opacity-70">
             <Text class="min-w-0 flex-1 text-body font-semibold line-clamp-1">{model().title}</Text>
-            <View class={`size-2 rounded-full ${model().kind === "needs" ? "bg-seal" : "bg-foreground"}`} />
-            <Text class="text-sub text-muted-foreground">{model().state}</Text>
+            {state().dot ? <View class={`size-2 rounded-full ${state().dot === "seal" ? "bg-seal" : "bg-foreground"}`} /> : null}
+            <Text testID="work-card-state" class="text-sub text-muted-foreground">{state().words}</Text>
             <KitIcon name="chevron-right" size={16} tone="faint" />
           </Button>
           {lines().length ? (
@@ -337,15 +405,7 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
                 </Button>
               ) : null}
             </>
-          ) : model().sessionId ? (
-            <Button testID="work-card-session" disabled={!props.item().onPress} onPress={open} class="min-h-[44px] flex-row items-center gap-2.5 border-t border-border px-4 active:opacity-70">
-              <WorkLogo agent={agent()} size={20} />
-              <View class="min-w-0 flex-1">
-                <Text class="text-sub line-clamp-1"><Text class="font-semibold">{workerName(agent()?.name) || model().sessionName || "Session"}</Text><Text class="text-muted-foreground">{model().summary ? `  ${model().summary}` : ""}</Text></Text>
-                {model().kind === "live" && agent()?.progress !== undefined ? <ProgressBar filled={agent()!.progress!} testID="work-card-progress" /> : null}
-              </View>
-            </Button>
-          ) : model().summary ? <Text class="border-t border-border px-4 py-3 text-sub text-muted-foreground line-clamp-2">{model().summary}</Text> : null}
+          ) : model().summary ? <View class="border-t border-border px-4 py-3"><Text class="text-sub text-muted-foreground line-clamp-2">{model().summary}</Text></View> : null}
         </View>
       )}
     </View>
