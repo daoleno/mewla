@@ -1,6 +1,7 @@
-import { cleanup, effect, Keyboard, keyboardFrame, platform, signal, untracked } from "nsh";
+import { cleanup, effect, Keyboard, keyboardFrame, platform, signal, untracked, windowSize } from "nsh";
 import { Dialog, Sheet, type DialogProps, type SheetProps } from "nsh/base";
 import { sheetOpened, switching } from "../session";
+import { dialogFrame } from "../../core/shell/sheet";
 import { wide } from "./layout";
 
 /**
@@ -72,16 +73,27 @@ const DIALOG = platform.os === "ios"
   : "w-[480px] max-w-[92%] max-h-[88%] self-center my-auto overflow-hidden rounded-[28px] bg-sheet shadow-float";
 
 /**
- * A bottom sheet below 1024 pt; on wide, on every device, a centred dialog with the same content,
- * without the grabber's rounded top. Escape and the scrim close either. Crossing 1024 with one open
- * shows it the other way.
+ * The dialog's frame over the software keyboard (core/shell/sheet.ts `dialogFrame`): centred in what the keyboard
+ * leaves, held to its height. iOS presents the dialog as its own form sheet and keeps it clear of the keyboard itself.
+ * Read in the JSX, so it follows the keyboard.
+ */
+function dialogStyle() {
+  if (platform.os === "ios") return undefined;
+  const frame = dialogFrame(windowSize().height, keyboardFrame().height);
+  return frame.lift > 0 ? { marginBottom: frame.lift, maxHeight: frame.max } : undefined;
+}
+
+/**
+ * A bottom sheet below the wide gate; on wide, on every device, a centred dialog with the same content,
+ * without the grabber's rounded top, above the keyboard. Escape and the scrim close either. Crossing the gate
+ * (a resize, a turn, a fold) with one open shows it the other way.
  */
 export function AppSheet(props: SheetProps & { testID?: string }) {
   const open = guardedOpen(props);
   const popup = () => `${DIALOG} ${INK} ${(props.popupClass ?? "").replace(/\brounded-t-\S+|\bmax-h-\S+|\bbg-\S+/g, "")}`;
   return (
     <>
-      <If when={wide()} else={<Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} popupStyle={aboveKeyboard(props)} open={open()} />}><Dialog testID={props.testID} open={open()} animation="fade" class={popup()} backdropClass={platform.os === "ios" ? undefined : "bg-scrim"}
+      <If when={wide()} else={<Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} popupStyle={aboveKeyboard(props)} open={open()} />}><Dialog testID={props.testID} open={open()} animation="fade" class={popup()} style={dialogStyle()} backdropClass={platform.os === "ios" ? undefined : "bg-scrim"}
           presentation={platform.os === "ios" ? "formSheet" : undefined}
           closeOnEscape={props.closeOnEscape ?? true} closeOnBackdropPress={props.closeOnBackdropPress ?? true}
           onOpenChange={({ open, reason }) => props.onOpenChange?.({ open, reason })} onCancel={props.onCancel} onClose={props.onClose}>

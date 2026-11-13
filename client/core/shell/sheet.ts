@@ -46,3 +46,22 @@ export function scrollAboveControl(room: number, control: number, options: { max
   if (beside >= options.minScroll) return { scroll: beside, controlInside: false };
   return { scroll: Math.max(0, Math.min(options.max, room)), controlInside: true };
 }
+
+/**
+ * On wide a sheet is a centred dialog (SPEC §14.2): at most 88 % of the window, and with the software keyboard up
+ * (an open foldable or a tablet, touch) it sits in what the keyboard leaves, 16 pt clear of the keyboard and the top.
+ * A dialog the keyboard covered hid its own field and New session's Start on an iPhone Duo held open (669 pt high,
+ * a 264 pt keyboard). `lift` is the space the dialog keeps under it; `max` its height.
+ */
+export function dialogFrame(window: number, keyboard: number): { lift: number; max: number } {
+  if (keyboard <= 0) return { lift: 0, max: Math.floor(window * SHEET.maxShare) };
+  return { lift: keyboard + SHEET.keyboardGap, max: Math.max(0, window - keyboard - 2 * SHEET.keyboardGap) };
+}
+
+/** The dialog's foot under its content (kit/Sheet.tsx on wide). */
+export const DIALOG_FOOT = 24;
+
+/** A dialog's body room: its height less its header (title, as laid out) and its foot. Never negative. */
+export function dialogBodyRoom(input: { window: number; keyboard: number; header: number }): number {
+  return Math.max(0, dialogFrame(input.window, input.keyboard).max - input.header - DIALOG_FOOT);
+}
