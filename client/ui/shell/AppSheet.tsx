@@ -35,14 +35,16 @@ function guardedOpen(props: { open?: boolean | null; onOpenChange?: (event: { op
 }
 
 /**
- * The panel's style, lifted over the software keyboard. NSH's bottom sheet does not move for it, so a
+ * The panel's style, lifted over the software keyboard and its content clear of the screen's sides. NSH's bottom sheet does not move for it, so a
  * sheet's field and its buttons (Commit, Ask the agent, a branch, a search) sat behind the keyboard.
  * Read in the JSX, so it follows the keyboard.
  */
 function aboveKeyboard(props: SheetProps): SheetProps["popupStyle"] {
+  if ((props.side ?? "bottom") !== "bottom") return props.popupStyle;
+  // Its content clear of the screen's sides (a phone held sideways, the iPhone Duo's side bar); the panel stays edge to edge.
+  const sides = { paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" } as const;
   const height = keyboardFrame().height;
-  if (height <= 0 || (props.side ?? "bottom") !== "bottom") return props.popupStyle;
-  return [props.popupStyle, { paddingBottom: height + 16 }];
+  return [props.popupStyle, height > 0 ? { ...sides, paddingBottom: height + 16 } : sides];
 }
 
 /** NSH's Dialog (a page sheet on iOS), closed by a switch of computer like AppSheet. */
