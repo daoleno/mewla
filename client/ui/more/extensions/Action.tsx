@@ -36,6 +36,22 @@ export function GhostAction(props: { label: string; onPress: () => void; icon?: 
   );
 }
 
+/** A row's one fix, filled so it reads as the thing to tap (SPEC §15: the fix as a small button on the row). */
+export function FixButton(props: { label: string; onPress: () => void; disabled?: boolean; testID?: string; accessibilityLabel?: string }) {
+  return (
+    <Button
+      testID={props.testID}
+      accessibilityLabel={props.accessibilityLabel ?? props.label}
+      disabled={props.disabled}
+      onPress={props.onPress}
+      hitSlop={4}
+      class="h-9 items-center justify-center rounded-xl bg-primary px-3.5 active:opacity-70 disabled:opacity-40"
+    >
+      <Text class="text-sub font-semibold text-primary-foreground">{props.label}</Text>
+    </Button>
+  );
+}
+
 /** An icon-only control (close, paste): 44 round, its name for screen readers. */
 export function IconAction(props: { icon: IconName; label: string; onPress: () => void; disabled?: boolean; testID?: string }) {
   return (
