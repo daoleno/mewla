@@ -26,5 +26,8 @@ export function setPaneWidth(value: number): void {
 /** The right pane's width (the whole window on a phone), as laid out: what list + detail follows. */
 export const rightPaneWidth = signal(0);
 
+/** The one stack's width: the right pane as laid out, else the window less the tray's pane. */
+export const stackWidth = computed(() => rightPaneWidth() || windowSize().width - (wide() ? paneWidth() : 0));
+
 /** A list page shows the item it opens beside it (Git review › diff, Files › file): wide, with a right pane of 880 pt or more. */
-export const listDetail = computed(() => showsListDetail({ wide: wide(), paneWidth: rightPaneWidth() || windowSize().width - (wide() ? paneWidth() : 0) }));
+export const listDetail = computed(() => showsListDetail({ wide: wide(), paneWidth: stackWidth() }));

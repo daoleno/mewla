@@ -3,6 +3,7 @@ import {
   clampPaneWidth,
   documentTitle,
   isWide,
+  nativeHeaderTitleWidth,
   pageColumnWidth,
   placeOfPath,
   placePath,
@@ -125,5 +126,16 @@ describe("the left pane's width (SPEC §14.1)", () => {
     expect(pageColumnWidth("page")).toBe(680);
     expect(pageColumnWidth("reading")).toBe(760);
     expect(pageColumnWidth("full")).toBeNull();
+  });
+});
+
+describe("a native header's own title view (owner 11-13: a long Session title pushed ⋯ off the screen)", () => {
+  test("is as wide as the bar, not as its text: on Android 16 after the edge to 8 before the other", () => {
+    expect(nativeHeaderTitleWidth({ stackWidth: 363, os: "android", systemBack: false })).toBe(339);
+    expect(nativeHeaderTitleWidth({ stackWidth: 363.4, os: "android", systemBack: true })).toBe(339);
+  });
+  test("on iOS, after the system's Back when it shows", () => {
+    expect(nativeHeaderTitleWidth({ stackWidth: 390, os: "ios", systemBack: false })).toBe(358);
+    expect(nativeHeaderTitleWidth({ stackWidth: 390, os: "ios", systemBack: true })).toBe(302);
   });
 });

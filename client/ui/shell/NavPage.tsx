@@ -4,10 +4,10 @@ import { Button, NavPage as BaseNavPage, type NavPageProps, type StatusBar } fro
 import { isAvailable as mobile } from "nsh/mobile";
 import { statusBarForeground } from "../../core/settings/statusBar";
 import { backMark } from "../../core/tray/model";
-import { pageColumnWidth, type PageColumn } from "../../core/web/places";
+import { nativeHeaderTitleWidth, pageColumnWidth, type PageColumn } from "../../core/web/places";
 import { tray } from "../tray/state";
 import { Icon } from "../kit/Icon";
-import { wide } from "./layout";
+import { stackWidth, wide } from "./layout";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
 export const PageStack = context<{ canGoBack: () => boolean; back: () => void }>({ canGoBack: () => false, back: () => {} });
@@ -70,14 +70,17 @@ export function NavPage(props: AppNavPageProps) {
     const ownBack = () => android && Boolean(mark() || (ownTitle && stack.canGoBack()));
     const back = () => (mark() ? markedBack() : ownBack() ? <PlainBack back={stack.back} /> : null);
     const left = () => (android ? undefined : mark() ? <View class="flex-row items-center gap-2">{markedBack()}{slots.headerLeft ?? null}</View> : slots.headerLeft);
+    // A page's own title view is as wide as the bar, not as its content (`nativeHeaderTitleWidth`): its
+    // controls stay on screen and its text ends in "…" before them.
+    const titleWidth = () => (ownTitle ? nativeHeaderTitleWidth({ stackWidth: stackWidth(), os: platform.os, systemBack: stack.canGoBack() && !ownBack() }) : undefined);
     const title = () =>
       android && (ownBack() || hasLeft) ? (
-        <View class={`min-w-0 flex-1 flex-row items-center ${ownTitle ? "gap-1" : "gap-4"}`}>
+        <View class={`min-w-0 flex-1 flex-row items-center ${ownTitle ? "gap-1" : "gap-4"}`} style={{ width: titleWidth() }}>
           {back()}
           {slots.headerLeft ?? null}
           {slots.headerTitle ?? <Text role="header" class="shrink text-[22px] font-medium text-foreground line-clamp-1">{page.title ?? ""}</Text>}
         </View>
-      ) : slots.headerTitle;
+      ) : ownTitle ? <View class="flex-row items-center" style={{ width: titleWidth() }}>{slots.headerTitle}</View> : slots.headerTitle;
     // A phone never reaches 1024 pt: its pages stay the system's own, with nothing around their content.
     if (platform.idiom === "phone") {
       const [own, rest] = split(page, ["column", "frame", "class", "headerClass", "statusBar"]);

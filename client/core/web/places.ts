@@ -246,6 +246,19 @@ export type PageColumn = "page" | "reading" | "full";
 
 export const PAGE_COLUMN_WIDTH: Record<Exclude<PageColumn, "full">, number> = { page: 680, reading: 760 };
 
+/**
+ * The width a page's own title view gets in a native header (iOS, Android). NSH lays a header item out at
+ * its content's width, and the bar takes that size as it is: a long title made the row wider than the
+ * screen, and the Session's switch and ⋯ went past its edge, the title cut there with no "…" (owner
+ * 11-13). Given the bar's width instead, the title ends in "…" before the controls. Android: the toolbar
+ * starts its title 16 after the edge, and the row stops 8 before the other (the mock's nav padding).
+ * iOS: 16 each side, after the system's Back when it shows (not proven on a device).
+ */
+export function nativeHeaderTitleWidth(options: { stackWidth: number; os: string; systemBack: boolean }): number {
+  const sides = options.os === "android" ? 16 + 8 : 16 + 16 + (options.systemBack ? 56 : 0);
+  return Math.max(0, Math.floor(options.stackWidth - sides));
+}
+
 /** The header row's width for a column; null for the whole pane. */
 export function pageColumnWidth(column: PageColumn): number | null {
   return column === "full" ? null : PAGE_COLUMN_WIDTH[column];

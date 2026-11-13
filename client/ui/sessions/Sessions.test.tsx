@@ -333,11 +333,38 @@ describe("a Session", () => {
     // Its tile is its agent's logo (no badge): the run's title and the screen reader say it came from Calendar.
     expect(app.count("id:session-row")).toBe(1);
     await app.press("id:session-row");
-    await app.waitFor("id:session-calendar");
+    // Its title is the run; the second line is where it runs and what it does, not the title again.
+    await app.waitFor("id:session-state");
+    expect(app.count("text:Paper digest · Jul 17")).toBe(1);
     app.onDialog((dialog) => (dialog.buttons.includes("Open its Work") ? "Open its Work" : null));
     await answering(app, () => app.press("id:session-menu"));
     await app.waitFor("id:work-file-page");
     expect(app.texts()).toContain("Read the three papers.");
+  }, 20_000);
+
+  test("a Calendar run's header says the run once, then its project and state; one button shows the other view", async () => {
+    const startedAt = Date.parse("2026-11-13T00:30:00Z");
+    const work = {
+      id: "wf-2", project: "calendar", path: "calendar/wf-2.md", title: "Daily Hacker News Briefing", mtime: "2026-11-13T00:31:00Z", body: "# Daily Hacker News Briefing\n",
+      frontmatter: { id: "wf-2", kind: "calendar_action", created: "2026-11-13T00:30:00Z", worker_session: "w5", extra: { calendar_item_id: "c2", calendar_run_id: "r2" } },
+    };
+    const calendarItem = { id: "c2", title: "Daily Hacker News Briefing", kind: "scheduled_action", status: "scheduled", timezone: "UTC", due_at: "2026-11-14T00:30:00Z", runs: [{ id: "r2", status: "running", scheduled_for: "2026-11-13T00:30:00Z", work_id: "wf-2" }] };
+    const app = await sessionsApp({ worker_sessions: [session("w5", { started_at: startedAt, cwd: "/home/me/briefings" })], conversations: { w5: [] }, work_items: [work], calendar_items: [calendarItem] });
+    await app.setViewport(363, 780);
+    await app.waitFor("text:Daily Hacker News Briefing · Nov 13");
+    await app.press("id:session-row");
+    await app.waitFor("id:session-state");
+    // The title says the run; the second line says where and what, never the title again.
+    expect(app.count("text:Daily Hacker News Briefing · Nov 13")).toBe(1);
+    expect(app.texts()).toContain("briefings");
+    // In the chat the button shows the terminal; pressed, the chat.
+    await app.waitFor("id:session-chat");
+    await app.waitFor("label:Show terminal");
+    await app.press("id:session-mode");
+    await app.waitFor("label:Show chat");
+    await app.waitUntil(() => !app.shows("id:session-chat"));
+    await app.press("id:session-mode");
+    await app.waitFor("id:session-chat");
   }, 20_000);
 
   test("a chat it cannot read says why and opens the terminal; a ready one says where it runs", async () => {
@@ -418,7 +445,7 @@ describe("a Session", () => {
     await app.press("text:notes");
     await app.waitFor("id:session-chat");
     app.onDialog((dialog) => (dialog.buttons.includes("Terminate") ? "Terminate" : null));
-    await app.press("id:session-mode-terminal");
+    await app.press("id:session-mode");
     await app.waitUntil(() => !app.shows("id:session-chat"));
     await app.host.send("app.daemonDown");
     await app.waitFor("id:terminal-offline", { timeout: 10_000 });
