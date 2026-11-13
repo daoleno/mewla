@@ -33,8 +33,8 @@ export function Counts(props: { additions: number; deletions: number; binary?: b
   if (props.binary) return null;
   return (
     <View class="flex-row gap-1.5">
-      {props.additions > 0 ? <Text class="font-mono text-code" style={{ color: color("add"), fontVariant: ["tabular-nums"] }}>{`+${props.additions}`}</Text> : null}
-      {props.deletions > 0 ? <Text class="font-mono text-code" style={{ color: color("del"), fontVariant: ["tabular-nums"] }}>{`−${props.deletions}`}</Text> : null}
+      <If when={props.additions > 0}><Text class="font-mono text-code" style={{ color: color("add"), fontVariant: ["tabular-nums"] }}>{`+${props.additions}`}</Text></If>
+      <If when={props.deletions > 0}><Text class="font-mono text-code" style={{ color: color("del"), fontVariant: ["tabular-nums"] }}>{`−${props.deletions}`}</Text></If>
     </View>
   );
 }
@@ -45,7 +45,7 @@ export function FileName(props: { path: string }) {
   return (
     <View class="min-w-0">
       <Text class="font-mono text-code font-semibold line-clamp-1">{index === -1 ? props.path : props.path.slice(index + 1)}</Text>
-      {index > 0 ? <Text class="font-mono text-caption text-muted-foreground line-clamp-1">{props.path.slice(0, index)}</Text> : null}
+      <If when={index > 0}><Text class="font-mono text-caption text-muted-foreground line-clamp-1">{props.path.slice(0, index)}</Text></If>
     </View>
   );
 }
@@ -62,7 +62,7 @@ export function IconButton(props: { icon: IconName; label: string; onPress: () =
       onPress={() => props.onPress()}
       class={`size-11 items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-40 ${props.selected ? "bg-muted" : ""}`}
     >
-      {props.busy ? <Spinner size={16} /> : <Icon name={props.icon} size={20} tone="ink" />}
+      <If when={props.busy} else={<Icon name={props.icon} size={20} tone="ink" />}><Spinner size={16} /></If>
     </Button>
   );
 }
@@ -78,7 +78,7 @@ export function TextButton(props: { label: string; onPress: () => void; filled?:
       hitSlop={4}
       class={`h-9 flex-row items-center justify-center gap-1.5 rounded-full px-3.5 active:opacity-70 disabled:opacity-40 ${props.filled ? "bg-primary" : "bg-muted"}`}
     >
-      {props.busy ? <Spinner size={14} tone={props.filled ? "canvas" : "soft"} /> : null}
+      <If when={props.busy}><Spinner size={14} tone={props.filled ? "canvas" : "soft"} /></If>
       <Text class={`text-sub font-semibold line-clamp-1 ${props.filled ? "text-primary-foreground" : ""}`}>{props.label}</Text>
     </Button>
   );
@@ -88,20 +88,16 @@ export function TextButton(props: { label: string; onPress: () => void; filled?:
 export function FlashLine() {
   return (
     <View>
-      {gitFlash() ? (
-        <View testID="git-flash" class="mt-3 min-h-[52px] flex-row items-center gap-3 rounded-(--radius-group) bg-card px-4 py-3">
+      <If when={gitFlash()}><View testID="git-flash" class="mt-3 min-h-[52px] flex-row items-center gap-3 rounded-(--radius-group) bg-card px-4 py-3">
           <Icon name={gitFlash()!.tone === "error" ? "alert-circle" : gitFlash()!.tone === "success" ? "check-circle" : "info"} size={18} tone={gitFlash()!.tone === "error" ? "warning" : gitFlash()!.tone === "success" ? "ok" : "soft"} />
           <View class="min-w-0 flex-1">
             <Text class="text-body font-semibold">{gitFlash()!.title}</Text>
-            {gitFlash()!.detail ? <Text class="text-sub text-muted-foreground line-clamp-3">{gitFlash()!.detail!}</Text> : null}
+            <If when={gitFlash()!.detail}><Text class="text-sub text-muted-foreground line-clamp-3">{gitFlash()!.detail!}</Text></If>
           </View>
-          {gitFlash()!.action ? (
-            <Button testID="git-flash-action" onPress={() => gitFlash()!.action!.run()} class="active:opacity-60">
+          <If when={gitFlash()!.action}><Button testID="git-flash-action" onPress={() => gitFlash()!.action!.run()} class="active:opacity-60">
               <Text class="text-sub font-semibold">{gitFlash()!.action!.label}</Text>
-            </Button>
-          ) : null}
-        </View>
-      ) : null}
+            </Button></If>
+        </View></If>
     </View>
   );
 }
@@ -118,11 +114,7 @@ export function Block(props: { children?: JSX.Element; class?: string }) {
 export function Current(props: { review: GitReview; class?: string; children: () => JSX.Element }) {
   return (
     <View class={props.class}>
-      {props.review.current() ? (
-        untracked(props.children)
-      ) : (
-        <EmptyState testID="git-elsewhere" icon="server" title="Not on the current computer" detail="Switch back to the computer this Session runs on." />
-      )}
+      <If when={props.review.current()} else={<EmptyState testID="git-elsewhere" icon="server" title="Not on the current computer" detail="Switch back to the computer this Session runs on." />}>{untracked(props.children)}</If>
     </View>
   );
 }

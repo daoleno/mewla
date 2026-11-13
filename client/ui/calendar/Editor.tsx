@@ -146,17 +146,13 @@ function When(props: { label: string; id: string; date: Signal<string>; time: Si
   return (
     <View class="flex-row items-center justify-between border-b border-border bg-card px-4 py-2.5">
       <Text class="text-base">{props.label}</Text>
-      {native ? (
-        <View class="flex-row gap-2">
-          <Button testID={`${props.id}-date`} onPress={() => void pick("date", props.date, props.time)} class="rounded-lg bg-secondary px-3 py-1.5"><Text class="text-base">{shownDate(props.date())}</Text></Button>
-          <Button testID={`${props.id}-time`} onPress={() => void pick("time", props.date, props.time)} class="rounded-lg bg-secondary px-3 py-1.5"><Text class="text-base">{shownTime(props.time())}</Text></Button>
-        </View>
-      ) : (
-        <View class="flex-row gap-2">
+      <If when={native} else={<View class="flex-row gap-2">
           <Input testID={`${props.id}-date`} value={props.date()} onChange={({ value }) => props.date.set(value)} placeholder="YYYY-MM-DD" class="w-32 rounded-lg border border-border px-2 py-1.5 text-base" />
           <Input testID={`${props.id}-time`} value={props.time()} onChange={({ value }) => props.time.set(value)} placeholder="HH:MM" class="w-20 rounded-lg border border-border px-2 py-1.5 text-base" />
-        </View>
-      )}
+        </View>}><View class="flex-row gap-2">
+          <Button testID={`${props.id}-date`} onPress={() => void pick("date", props.date, props.time)} class="rounded-lg bg-secondary px-3 py-1.5"><Text class="text-base">{shownDate(props.date())}</Text></Button>
+          <Button testID={`${props.id}-time`} onPress={() => void pick("time", props.date, props.time)} class="rounded-lg bg-secondary px-3 py-1.5"><Text class="text-base">{shownTime(props.time())}</Text></Button>
+        </View></If>
     </View>
   );
 }
@@ -181,20 +177,16 @@ function Resolved() {
   const endInstant = () => (clock().zones.knows(zone().trim()) ? instantOf(resolve(endDate(), endTime())) : null);
   return (
     <View class="gap-2 px-4 py-3">
-      {resolution().status === "ambiguous" ? (
-        <View class="gap-2">
+      <If when={resolution().status === "ambiguous"}><View class="gap-2">
           <Text class="text-sm text-muted-foreground">{(resolution() as { message: string }).message}</Text>
           <Choices testID="occurrence" value={String(occurrence()) as "0" | "1"} onChange={(v) => occurrence.set(Number(v))}
             options={(resolution() as { instants: [number, number] }).instants.map((at, i) => ({ value: String(i) as "0" | "1", label: `${i === 0 ? "First" : "Second"} · ${clock().format.time(at, zone().trim(), true)}` }))} />
-        </View>
-      ) : null}
+        </View></If>
       <Text class="text-sm font-semibold text-muted-foreground">Resolved time</Text>
       <Text testID="resolved-time" class={instant() === null ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
         {instant() === null ? (resolution() as { message?: string }).message ?? "" : clock().format.full(instant()!, zone().trim())}
       </Text>
-      {kind() === "event" && instant() !== null && endInstant() !== null ? (
-        <Text testID="resolved-end" class="text-sm text-muted-foreground">{`Ends ${clock().format.full(endInstant()!, zone().trim())}`}</Text>
-      ) : null}
+      <If when={kind() === "event" && instant() !== null && endInstant() !== null}><Text testID="resolved-end" class="text-sm text-muted-foreground">{`Ends ${clock().format.full(endInstant()!, zone().trim())}`}</Text></If>
     </View>
   );
 }
@@ -212,16 +204,14 @@ export function CalendarEditor() {
       </View>
       <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
         <View class="pb-10">
-          {failure() ? <View class="px-4 pt-3"><Text testID="editor-failure" class="text-base text-destructive">{failure()}</Text></View> : null}
+          <If when={failure()}><View class="px-4 pt-3"><Text testID="editor-failure" class="text-base text-destructive">{failure()}</Text></View></If>
           <View class="mt-3 border-t border-border">
             <Field label="Title" id="editor-title" value={title} onChange={(v) => title.set(v)} placeholder="What is the commitment?" />
           </View>
-          {editing()?.owner ? null : (
-            <View class="px-4 pb-1 pt-4"><Choices testID="editor-kind" value={kind()} onChange={(v) => kind.set(v)} options={KINDS.map((k) => ({ value: k, label: kindLabel[k] }))} /></View>
-          )}
+          <If when={!editing()?.owner}><View class="px-4 pb-1 pt-4"><Choices testID="editor-kind" value={kind()} onChange={(v) => kind.set(v)} options={KINDS.map((k) => ({ value: k, label: kindLabel[k] }))} /></View></If>
           <View class="mt-3 border-t border-border">
             <When label={whenLabel()} id="editor-start" date={startDate} time={startTime} />
-            {kind() === "event" ? <When label="Ends" id="editor-end" date={endDate} time={endTime} /> : null}
+            <If when={kind() === "event"}><When label="Ends" id="editor-end" date={endDate} time={endTime} /></If>
             <Field label="Time zone" id="editor-zone" value={zone} onChange={(v) => { zone.set(v); void ensureZones([v.trim()]); }} placeholder="Asia/Shanghai" />
           </View>
           <Resolved />
@@ -232,8 +222,8 @@ export function CalendarEditor() {
           </View>
           <View class="mt-4 border-t border-border">
             <Field label="Notes" id="editor-notes" value={notes} onChange={(v) => notes.set(v)} multiline placeholder="Optional context" />
-            {kind() === "scheduled_action" ? <Field label="Summary" id="editor-summary" value={summary} onChange={(v) => summary.set(v)} maxLength={120} placeholder="What it does, in one line" /> : null}
-            {kind() === "scheduled_action" ? <Field label="Action instruction" id="editor-instruction" value={instruction} onChange={(v) => instruction.set(v)} multiline placeholder="What should Mewla do when the time comes?" /> : null}
+            <If when={kind() === "scheduled_action"}><Field label="Summary" id="editor-summary" value={summary} onChange={(v) => summary.set(v)} maxLength={120} placeholder="What it does, in one line" /></If>
+            <If when={kind() === "scheduled_action"}><Field label="Action instruction" id="editor-instruction" value={instruction} onChange={(v) => instruction.set(v)} multiline placeholder="What should Mewla do when the time comes?" /></If>
           </View>
         </View>
       </Scroll>

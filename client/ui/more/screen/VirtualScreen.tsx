@@ -77,7 +77,7 @@ export function VirtualScreenSwitch() {
           onChange={setVirtualScreen}
         />
       </Section>
-      {state().error ? <Notice tone="failed" title={state().error} action="Retry" onAction={readVirtualScreen} /> : null}
+      <If when={state().error}><Notice tone="failed" title={state().error} action="Retry" onAction={readVirtualScreen} /></If>
     </View>
   );
 }

@@ -401,64 +401,46 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   const phoneOn = computed(() => phoneAvailable() && !!phoneStatus()?.enabled);
   const phoneItem = () =>
     keyed(phoneOn, (on) =>
-      on ? (
-        <MenuItem testID="screen-phone" onSelect={() => props.nav.push({ name: "settings-phone" })} class={ITEM}>
+      <If when={on}><MenuItem testID="screen-phone" onSelect={() => props.nav.push({ name: "settings-phone" })} class={ITEM}>
           <Text class="text-body">Phone</Text>
           <Text class="text-sub text-muted-foreground">{phoneStatus()?.agent || "Ready"}</Text>
-        </MenuItem>
-      ) : null,
+        </MenuItem></If>,
     );
   const keepAwakeItem = () =>
     keyed(approved, (on) =>
-      on ? (
-        <MenuItem disabled={busy()} onSelect={() => setKeepAwake(!status()?.keep_awake)} class={ITEM}>
+      <If when={on}><MenuItem disabled={busy()} onSelect={() => setKeepAwake(!status()?.keep_awake)} class={ITEM}>
           <Text class="text-body">{status()?.keep_awake ? "Let this computer sleep" : "Keep this computer awake"}</Text>
-        </MenuItem>
-      ) : null,
+        </MenuItem></If>,
     );
   const optionsMenu = (testID: string) => (
     <Menu trigger={<View testID={testID} accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full active:bg-white/15"><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={menuPopup()} backdropClass={MENU_BACKDROP}>
       <View class="px-4 pb-1 pt-2"><Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{title()}</Text></View>
       {keyed(menuKind, (kind) =>
-        kind === "local" ? (
-          <>
-            {keepAwakeItem()}
-            {phoneItem()}
-          </>
-        ) : kind === "watch" ? (
-          <>
-            <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-body">Fit screen</Text></MenuItem>
-            <MenuItem testID="screen-stop-watching" onSelect={stopWatching} class={ITEM}><Text class="text-body">Stop watching</Text></MenuItem>
-          </>
-        ) : (
-          <>
+        <If when={kind === "local"} else={<If when={kind === "watch"} else={<>
             <MenuItem onSelect={toggleMode} class={ITEM}><Text class="text-body">{mode() === "touch" ? "Use as trackpad" : "Touch to click"}</Text></MenuItem>
             <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-body">Fit screen</Text></MenuItem>
-            {canShowFullSize() ? (
-              <MenuItem testID="screen-full-size" onSelect={() => void session()?.fullSize(`Screen of ${untracked(title)}`)} class={ITEM}><Text class="text-body">Full size</Text></MenuItem>
-            ) : null}
+            <If when={canShowFullSize()}><MenuItem testID="screen-full-size" onSelect={() => void session()?.fullSize(`Screen of ${untracked(title)}`)} class={ITEM}><Text class="text-body">Full size</Text></MenuItem></If>
             {keepAwakeItem()}
             {phoneItem()}
             {keyed(isLive, (on) =>
-              on ? (
-                <MenuItem onSelect={() => session()?.lose(null)} class={ITEM}><Text class="text-body">Disconnect</Text></MenuItem>
-              ) : (
-                <MenuItem testID="screen-menu-reconnect" onSelect={() => void connect()} class={ITEM}><Text class="text-body">Reconnect</Text></MenuItem>
-              ),
+              <If when={on} else={<MenuItem testID="screen-menu-reconnect" onSelect={() => void connect()} class={ITEM}><Text class="text-body">Reconnect</Text></MenuItem>}><MenuItem onSelect={() => session()?.lose(null)} class={ITEM}><Text class="text-body">Disconnect</Text></MenuItem></If>,
             )}
-          </>
-        ),
+          </>}><>
+            <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-body">Fit screen</Text></MenuItem>
+            <MenuItem testID="screen-stop-watching" onSelect={stopWatching} class={ITEM}><Text class="text-body">Stop watching</Text></MenuItem>
+          </></If>}><>
+            {keepAwakeItem()}
+            {phoneItem()}
+          </></If>,
       )}
     </Menu>
   );
-  const indicator = () => keyed(isLive, (on) => (on ? <ConnectionIndicator tone={tone()} locked={locked()} onPress={() => details.set(true)} /> : null));
+  const indicator = () => keyed(isLive, (on) => (<If when={on}><ConnectionIndicator tone={tone()} locked={locked()} onPress={() => details.set(true)} /></If>));
   const keyboardButton = () =>
     keyed(showKeyboard, (on) =>
-      on ? (
-        <Button testID="screen-keyboard" accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`size-11 items-center justify-center rounded-full active:bg-white/15 ${typing() ? "bg-white/20" : ""}`}>
+      <If when={on}><Button testID="screen-keyboard" accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`size-11 items-center justify-center rounded-full active:bg-white/15 ${typing() ? "bg-white/20" : ""}`}>
           <Icon name="keyboard" size={20} tone={typing() ? "onBlack" : "onBlackSoft"} />
-        </Button>
-      ) : null,
+        </Button></If>,
     );
 
   const iphoneAgent = () => (iphone()?.enabled ? iphone()!.active : undefined);
@@ -527,41 +509,30 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
         <View class="flex-1 flex-row">
           <View class="flex-1">
             <RemoteView session={current} label={`Screen of ${title()}`} modifiers={modifiersFor(status()?.platform)} typing={typing()} onTypingChange={(on) => typing.set(on)} />
-            {current.phase() === "connecting" ? <View class="absolute inset-0 items-center justify-center"><Spinner size={28} tone="onBlackSoft" /></View> : null}
-            {current.phase() === "lost" ? (
-              // The state on black (SPEC §15 Full-screen remote): the message and one button.
-              <View testID="screen-lost" class="absolute inset-0 items-center justify-center gap-2 bg-black px-8">
+            <If when={current.phase() === "connecting"}><View class="absolute inset-0 items-center justify-center"><Spinner size={28} tone="onBlackSoft" /></View></If>
+            <If when={current.phase() === "lost"}><View testID="screen-lost" class="absolute inset-0 items-center justify-center gap-2 bg-black px-8">
                 <Icon name={current.locked() ? "lock" : "cloud-offline"} size={36} tone="onBlack" />
                 <Text class="text-center text-title font-semibold text-white">{current.locked() ? "Computer is locked" : "Disconnected"}</Text>
-                {!current.locked() && current.reason() ? <Text class="text-center text-sub text-white/60 line-clamp-1">{current.reason()!}</Text> : null}
+                <If when={!current.locked() && current.reason()}><Text class="text-center text-sub text-white/60 line-clamp-1">{current.reason()!}</Text></If>
                 <PillButton testID="screen-reconnect" kind="white" title="Reconnect" onPress={() => void connect()} />
-              </View>
-            ) : null}
+              </View></If>
           </View>
-          {fullBleed() && live() ? (
-            // Sideways, the controls stand beside the picture, which is wider
-            // than tall and leaves that strip unused.
-            <Scroll keyboardShouldPersistTaps="handled" testID="screen-rail" class="grow-0 bg-black" contentClass="grow items-center justify-center gap-1 p-1">
+          <If when={fullBleed() && live()}><Scroll keyboardShouldPersistTaps="handled" testID="screen-rail" class="grow-0 bg-black" contentClass="grow items-center justify-center gap-1 p-1">
               {indicator()}
-              {watching() ? (
-                <>
+              <If when={watching()}><>
                   <RailButton icon="hand" label="Take over" disabled={busy()} onPress={takeOver} />
                   <RailButton icon="stop" label={`Stop ${agentLabel()}`} tone="seal" disabled={busy()} onPress={stopWatched} />
-                </>
-              ) : null}
+                </></If>
               {keyboardButton()}
               {optionsMenu("screen-rail-options")}
-            </Scroll>
-          ) : null}
+            </Scroll></If>
         </View>
-        {watching() && live() && !immersive() ? (
-          <View testID="screen-watch-bar" class="min-h-[52px] flex-row items-center gap-2 bg-black px-4 py-1.5">
+        <If when={watching() && live() && !immersive()}><View testID="screen-watch-bar" class="min-h-[52px] flex-row items-center gap-2 bg-black px-4 py-1.5">
             <View class="size-2 rounded-full bg-white" />
             <Text class="flex-1 text-sub text-white/70 line-clamp-1">{`Watching ${agentLabel()}`}</Text>
             <SmallButton testID="watch-take-over" title="Take over" icon="hand" filled disabled={busy()} onPress={takeOver} />
             <SmallButton title="Stop" label={`Stop ${agentLabel()}`} destructive disabled={busy()} onPress={stopWatched} />
-          </View>
-        ) : null}
+          </View></If>
       </View>
     );
   };
@@ -570,20 +541,14 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   const headerRight = () => (
     <View class="flex-row items-center gap-1">
       {keyed(headerKind, (kind) =>
-      kind === "own" ? (
-        <>
-          {keyed(noteTitle, (note) => (note ? <Text testID="screen-slow-note" class="text-caption text-white/70">{note}</Text> : null))}
+      <If when={kind === "own"} else={<If when={kind === "linux" && platform.os === "android"}><Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full" style={{ display: phoneOn() ? "flex" : "none", flexDirection: "column" }}><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={menuPopup()} backdropClass={MENU_BACKDROP}>
+          {phoneItem()}
+        </Menu></If>}><>
+          {keyed(noteTitle, (note) => (<If when={note}>{(note) => <Text testID="screen-slow-note" class="text-caption text-white/70">{note()}</Text>}</If>))}
           {indicator()}
           {keyboardButton()}
           {optionsMenu("screen-options")}
-        </>
-      ) : kind === "linux" && platform.os === "android" ? (
-        // Linux: the menu holds only the rows of other surfaces (the Phone); with none, its button is hidden
-        // (it opened an empty sheet). The menu itself stays: one made later in the header does not open.
-        <Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full" style={{ display: phoneOn() ? "flex" : "none", flexDirection: "column" }}><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={menuPopup()} backdropClass={MENU_BACKDROP}>
-          {phoneItem()}
-        </Menu>
-      ) : null,
+        </></If>,
           )}
     </View>
   );
@@ -596,7 +561,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       headerVisible={!fullBleed()}
       // Black in both themes, like the picture viewer (SPEC §15 Full-screen remote).
       headerClass="bg-black text-white tint-white"
-      header={mobile ? undefined : <BlackHeader title={linuxDisplays() ? "Screen" : title()} right={headerRight()} />}
+      header={<If when={!mobile}><BlackHeader title={linuxDisplays() ? "Screen" : title()} right={headerRight()} /></If>}
       statusBar={{ hidden: fullBleed(), foreground: "light" }}
       headerRight={mobile ? headerRight() : undefined}
     >
@@ -637,7 +602,7 @@ function ConnectionIndicator(props: { tone: IndicatorTone; locked: boolean; onPr
       onPress={props.onPress}
       class="size-11 items-center justify-center"
     >
-      {props.locked ? <Icon name="lock" size={14} tone="onBlack" /> : <View class={`size-2 rounded-full ${props.tone === "warn" ? "bg-white" : "bg-white/30"}`} />}
+      <If when={props.locked} else={<View class={`size-2 rounded-full ${props.tone === "warn" ? "bg-white" : "bg-white/30"}`} />}><Icon name="lock" size={14} tone="onBlack" /></If>
     </Button>
   );
 }
@@ -660,19 +625,15 @@ function ConnectionSheet(props: {
     <Sheet testID="screen-connection" open={props.open} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet px-4 pb-8 pt-4 shadow-float" backdropClass="bg-scrim">
       <View class="gap-4 px-2">
         <Text class="text-title font-bold" role="header">Connection</Text>
-        {props.problem ? (
-          <View class="items-start gap-1">
-            <Text class="text-sub font-semibold text-warning">{props.problem.title}</Text>
-            {props.problem.fix ? <Text class="text-sub text-muted-foreground">{props.problem.fix}</Text> : null}
-          </View>
-        ) : null}
-        {props.locked ? <Text class="text-sub font-semibold text-muted-foreground">Computer is locked</Text> : null}
-        {props.warning ? (
-          <View class="items-start gap-1">
-            <Text class={`text-sub font-semibold ${props.warning.label === "On battery" ? "text-muted-foreground" : "text-warning"}`}>{props.warning.action ? "This computer may sleep" : props.warning.label}</Text>
-            {props.warning.action ? <PillButton testID="screen-keep-awake" title="Keep awake" busy={props.busy} onPress={props.onKeepAwake} /> : null}
-          </View>
-        ) : null}
+        <If when={props.problem}>{(problem) => <View class="items-start gap-1">
+            <Text class="text-sub font-semibold text-warning">{problem().title}</Text>
+            <If when={problem().fix}>{(fix) => <Text class="text-sub text-muted-foreground">{fix()}</Text>}</If>
+          </View>}</If>
+        <If when={props.locked}><Text class="text-sub font-semibold text-muted-foreground">Computer is locked</Text></If>
+        <If when={props.warning}>{(warningValue) => <View class="items-start gap-1">
+            <Text class={`text-sub font-semibold ${warningValue().label === "On battery" ? "text-muted-foreground" : "text-warning"}`}>{warningValue().action ? "This computer may sleep" : warningValue().label}</Text>
+            <If when={warningValue().action}><PillButton testID="screen-keep-awake" title="Keep awake" busy={props.busy} onPress={props.onKeepAwake} /></If>
+          </View>}</If>
         <View class="gap-2">
           {props.rows.map((row) => (
             <View class="flex-row justify-between gap-4">
@@ -702,7 +663,7 @@ function SmallButton(props: { title: string; icon?: IconName; label?: string; fi
       hitSlop={4}
       class={`h-9 flex-row items-center gap-1.5 rounded-full px-3.5 active:opacity-70 disabled:opacity-40 ${fill()}`}
     >
-      {props.icon ? <Icon name={props.icon} size={14} tone={props.onCard ? "soft" : props.filled ? "onBlackSoft" : "onBlack"} /> : null}
+      <If when={props.icon}>{(icon) => <Icon name={icon()} size={14} tone={props.onCard ? "soft" : props.filled ? "onBlackSoft" : "onBlack"} />}</If>
       <Text class={`text-sub font-semibold ${ink()}`}>{props.title}</Text>
     </Button>
   );
@@ -722,11 +683,9 @@ function BlackHeader(props: { title: string; right: JSX.Element }) {
   const stack = PageStack();
   return (
     <View testID="page-header" class="h-[52px] flex-row items-center gap-2 bg-black px-4">
-      {stack.canGoBack() ? (
-        <Button testID="page-back" accessibilityLabel="Back" onPress={stack.back} class="size-10 items-center justify-center rounded-full hover:bg-white/15">
+      <If when={stack.canGoBack()}><Button testID="page-back" accessibilityLabel="Back" onPress={stack.back} class="size-10 items-center justify-center rounded-full hover:bg-white/15">
           <Icon name="chevron-left" size={20} tone="onBlack" />
-        </Button>
-      ) : null}
+        </Button></If>
       <Text role="header" class="min-w-0 flex-1 text-title font-bold text-white line-clamp-1">{props.title}</Text>
       {props.right}
     </View>
@@ -749,7 +708,7 @@ function AgentCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.El
         {keyed(which, () =>
           props.agents.map((agent) => (
             <View class="flex-row flex-wrap items-center justify-center gap-2">
-              {props.agents.length > 1 ? <Text class="text-center text-body text-white">{label(agent)}</Text> : null}
+              <If when={props.agents.length > 1}><Text class="text-center text-body text-white">{label(agent)}</Text></If>
               <SmallButton title="Watch" icon="eye" label={`Watch ${label(agent)}`} disabled={props.busy} onPress={() => props.onWatch(agent)} />
               <SmallButton title="Stop" label={`Stop ${label(agent)}`} destructive disabled={props.busy} onPress={() => props.onStop(agent)} />
             </View>
@@ -772,13 +731,9 @@ function LocalCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.El
       <View testID="screen-local" class="w-full max-w-[440px]">
         <Section>
           {keyed(which, () =>
-            props.agents.length ? (
-              props.agents.map((agent) => (
+            <If when={props.agents.length} else={<Row lead={tile("desktop")} title="No agent on this screen" />}>{props.agents.map((agent) => (
                 <Row lead={tile("desktop")} title={agent.name || "An agent"} trailing={<SmallButton onCard title="Stop" label={`Stop ${agent.name || "An agent"}`} destructive disabled={props.busy} onPress={() => props.onStop(agent)} />} />
-              ))
-            ) : (
-              <Row lead={tile("desktop")} title="No agent on this screen" />
-            ),
+              ))}</If>,
           )}
         </Section>
       </View>
@@ -816,8 +771,8 @@ function Setup(props: {
     return (
       <View class="items-center gap-2 px-6 py-16" testID="screen-enable">
         <Icon name="desktop" size={28} tone="onBlack" />
-        {props.busy ? <Text class="text-center text-title font-semibold text-white">{`Waiting for Allow on ${props.name}…`}</Text> : null}
-        {!props.busy && props.reason ? <Text class="text-center text-sub text-white/60">{props.reason}</Text> : null}
+        <If when={props.busy}><Text class="text-center text-title font-semibold text-white">{`Waiting for Allow on ${props.name}…`}</Text></If>
+        <If when={!props.busy && props.reason}><Text class="text-center text-sub text-white/60">{props.reason}</Text></If>
         <PillButton testID="screen-turn-on" kind="white" title={props.busy ? "Waiting…" : "Turn on Screen"} busy={props.busy} onPress={props.onEnable} />
       </View>
     );
@@ -831,30 +786,24 @@ function Setup(props: {
       <View class="items-center gap-2 py-6">
         <Icon name="shield-check" size={28} tone="onBlack" />
         <Text class="text-center text-title font-semibold text-white">{`Allow Screen on ${props.name}`}</Text>
-        {!restart() ? <PillButton testID="screen-ask" kind="white" title={`Ask on ${props.name}`} busy={props.busy} onPress={props.onEnable} /> : null}
+        <If when={!restart()}><PillButton testID="screen-ask" kind="white" title={`Ask on ${props.name}`} busy={props.busy} onPress={props.onEnable} /></If>
       </View>
       {keyed(rows, () =>
-        missing().length ? (
-          <Section>
+        <If when={missing().length}><Section>
             {missing().map((p) => (
               <Row
                 title={p.name}
                 subtitle={p.guidance}
-                trailing={p.can_open && !p.restart_required ? <SmallButton onCard title="Open settings" onPress={() => props.onOpenSettings(p.id)} /> : undefined}
+                trailing={<If when={p.can_open && !p.restart_required}><SmallButton onCard title="Open settings" onPress={() => props.onOpenSettings(p.id)} /></If>}
               />
             ))}
-          </Section>
-        ) : null,
+          </Section></If>,
       )}
       <View class="mt-4 items-center">
         {keyed(restart, (on) =>
-          on ? (
-            <PillButton testID="screen-restart" kind="white" title={props.busy ? "Restarting Mewla…" : "Restart Mewla"} busy={props.busy} onPress={props.onRestart} />
-          ) : (
-            <PillButton testID="screen-check" kind="white" title="Check again" onPress={props.onCheck} />
-          ),
+          <If when={on} else={<PillButton testID="screen-check" kind="white" title="Check again" onPress={props.onCheck} />}><PillButton testID="screen-restart" kind="white" title={props.busy ? "Restarting Mewla…" : "Restart Mewla"} busy={props.busy} onPress={props.onRestart} /></If>,
         )}
-        {props.reason ? <Text class="mt-2 text-center text-sub text-white/70 line-clamp-2">{props.reason}</Text> : null}
+        <If when={props.reason}>{(reason) => <Text class="mt-2 text-center text-sub text-white/70 line-clamp-2">{reason()}</Text>}</If>
       </View>
     </View>
   );

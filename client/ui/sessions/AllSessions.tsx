@@ -123,17 +123,15 @@ function SectionHeader(props: { section: () => SessionListSection; foldable: () 
   const s = props.section;
   return (
     <View class="px-4">
-      {props.foldable() ? (
-        <SectionLabel
+      <If when={props.foldable()} else={<SectionLabel testID="section" icon="folder" title={s().title} count={s().count} />}><SectionLabel
           testID="section"
           icon="folder"
           title={s().title}
           count={s().count}
           folded={s().collapsed}
           onPress={() => !selecting() && toggleSection(s().key)}
-          trailing={s().mark === "needs" ? <View testID="section-needs" class="size-2 rounded-full bg-seal" /> : undefined}
-        />
-      ) : <SectionLabel testID="section" icon="folder" title={s().title} count={s().count} />}
+          trailing={<If when={s().mark === "needs"}><View testID="section-needs" class="size-2 rounded-full bg-seal" /></If>}
+        /></If>
     </View>
   );
 }
@@ -171,14 +169,12 @@ function SessionRow(props: { worker: () => Worker; first: () => boolean; last: (
         if (!selecting() && online()) toggleSelected(props.worker());
       }}
       class={`mx-4 min-h-[68px] flex-row items-center gap-3.5 bg-card px-4 py-3 ${props.first() ? "rounded-t-(--radius-group)" : ""} ${props.last() ? "rounded-b-(--radius-group)" : ""} ${selecting() && !online() ? "opacity-50" : "active:bg-accent"}`}>
-      {selecting() ? (
-        <View testID="row-check" class="size-[28px] items-center justify-center">
+      <If when={selecting()} else={<RowTile tile={() => row().tile} />}><View testID="row-check" class="size-[28px] items-center justify-center">
           <Icon name={selected() ? "check-circle-fill" : "circle"} size={24} color={selected() ? "foreground" : "muted-foreground"} />
-        </View>
-      ) : <RowTile tile={() => row().tile} />}
+        </View></If>
       <RowText row={row} />
-      {selecting() ? null : <RowEnd row={row} />}
-      {props.last() ? null : <RowHair />}
+      <If when={!selecting()}><RowEnd row={row} /></If>
+      <If when={!props.last()}><RowHair /></If>
     </View>
   );
 }
@@ -190,15 +186,12 @@ function Empty(props: { onPair: () => void; onNew: () => void }) {
   return (
     <View class="flex-1 items-center justify-center gap-3 p-8">
       {/* The chosen pet, in the state's clip (waking while it loads); a filter that matches nothing keeps its icon. */}
-      {cat() ? <PetSprite testID="sessions-empty-cat" state={() => cat()!} size={104} />
-        : <Icon name={(loading() ? "server" : state().icon) as IconName} size={40} />}
+      <If when={cat()} else={<Icon name={(loading() ? "server" : state().icon) as IconName} size={40} />}><PetSprite testID="sessions-empty-cat" state={() => cat()!} size={104} /></If>
       <Text testID="sessions-empty" class="text-center text-title font-bold">{loading() ? "Loading sessions" : state().title}</Text>
-      {!loading() && state().action ? (
-        <Button testID="sessions-empty-action" onPress={() => (state().action === "pair" ? props.onPair() : state().action === "retry" ? resumeConnection() : props.onNew())}
+      <If when={!loading() && state().action}><Button testID="sessions-empty-action" onPress={() => (state().action === "pair" ? props.onPair() : state().action === "retry" ? resumeConnection() : props.onNew())}
           class="h-[48px] items-center justify-center rounded-(--radius-control) bg-primary px-5 active:opacity-80">
           <Text class="text-body font-semibold text-primary-foreground">{state().label}</Text>
-        </Button>
-      ) : null}
+        </Button></If>
     </View>
   );
 }
@@ -236,15 +229,13 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
   return (
     <NavPage title={titleAway() && !selecting() ? "All Sessions" : ""}>
       <View class="flex-1 bg-background">
-        {selecting() ? (
-          <View class="min-h-[52px] flex-row items-center gap-2 px-2">
+        <If when={selecting()}><View class="min-h-[52px] flex-row items-center gap-2 px-2">
             <Button testID="selection-cancel" accessibilityLabel="Cancel" onPress={() => selection.set(EMPTY_SESSION_SELECTION)} class="size-11 items-center justify-center rounded-full active:bg-accent">
               <Icon name="close" size={22} color="foreground" />
             </Button>
             <Text class="flex-1 text-title font-bold" role="header">{selectionCountLabel(countSessionSelection(selection()))}</Text>
-          </View>
-        ) : null}
-        {notice() ? <View testID="sessions-notice" onPress={() => notice.set("")} class="px-4 py-2"><Text class="text-sub text-destructive">{notice()}</Text></View> : null}
+          </View></If>
+        <If when={notice()}><View testID="sessions-notice" onPress={() => notice.set("")} class="px-4 py-2"><Text class="text-sub text-destructive">{notice()}</Text></View></If>
         <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-28"
           header={<View class="px-4"><DisplayTitle title="All Sessions" /></View>}
           onViewableItemsChange={({ viewableItems }) => titleAway.set(viewableItems.length > 0 && !viewableItems.some((t) => t.index === 0))}
@@ -259,13 +250,12 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
             const item = computed<Extract<Row, { kind: "row" }>>((last) => (row().kind === "header" ? last! : (row() as Extract<Row, { kind: "row" }>)));
             return (
               <View>
-                {header() ? <SectionHeader section={section} foldable={foldable} /> : <SessionRow worker={() => item().worker} first={() => item().first} last={() => item().last} open={open} />}
+                <If when={header()} else={<SessionRow worker={() => item().worker} first={() => item().first} last={() => item().last} open={open} />}><SectionHeader section={section} foldable={foldable} /></If>
               </View>
             );
           }}
         </List>
-        {selecting() ? (
-          <View class="absolute bottom-0 left-0 right-0 bg-background px-4 pb-4 pt-2">
+        <If when={selecting()}><View class="absolute bottom-0 left-0 right-0 bg-background px-4 pb-4 pt-2">
             <PillButton
               testID="selection-terminate"
               filled
@@ -273,8 +263,7 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
               disabled={terminating() || connection() !== "connected"}
               onPress={() => void terminateSelected()}
             />
-          </View>
-        ) : null}
+          </View></If>
       </View>
     </NavPage>
   );

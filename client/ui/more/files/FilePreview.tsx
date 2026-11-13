@@ -181,7 +181,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
       testID="file-preview"
       headerRight={
         <View class="flex-row items-center gap-1">
-          {stale() ? <Action testID="file-refresh" label="Refresh changed file" icon="refresh" onPress={() => void load()} /> : null}
+          <If when={stale()}><Action testID="file-refresh" label="Refresh changed file" icon="refresh" onPress={() => void load()} /></If>
           <Action
             testID="file-download"
             label={sessionFileDownloadLabel({ busy: download() === "busy", can: canDownload() })}
@@ -190,7 +190,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
             disabled={!canDownload() || download() === "busy"}
             onPress={onDownload}
           />
-          {canCopy() ? <Action testID="file-copy" label={copied() ? "Copied" : "Copy"} icon={copied() ? "check" : "copy"} onPress={onCopy} /> : null}
+          <If when={canCopy()}><Action testID="file-copy" label={copied() ? "Copied" : "Copy"} icon={copied() ? "check" : "copy"} onPress={onCopy} /></If>
           <Action testID="file-close" label="Close file preview" icon="close" onPress={() => props.nav.pop()} />
         </View>
       }
@@ -198,7 +198,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
       <View class="flex-1 bg-background">
         <View class="px-5 pb-2 pt-1">
           <Text testID="file-meta" class="font-mono text-caption text-muted-foreground line-clamp-1">{sessionFileMetaLine(metadata(), props.reference)}</Text>
-          {status() ? <Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class="mt-0.5 text-caption">{status()!}</Text> : null}
+          <If when={status()}><Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class="mt-0.5 text-caption">{status()!}</Text></If>
         </View>
         {/* The content on a surface card (SPEC §15 File browser): text in mono, Markdown, pictures, PDF and media alike. */}
         <View class="mx-4 mb-4 flex-1 overflow-hidden rounded-(--radius-group) bg-card">{body()}</View>
@@ -251,7 +251,7 @@ function MarkdownBody(props: { text: SessionFileTextPreview; onLink: (href: stri
   return (
     <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-10 pt-3">
       <TextView testID="file-markdown" markdown={props.text.content} selectable onLinkPress={(event) => props.onLink(event.url)} />
-      {note ? <Text testID="file-truncated" class="pt-2 text-caption text-muted-foreground">{note}</Text> : null}
+      <If when={note}>{(note) => <Text testID="file-truncated" class="pt-2 text-caption text-muted-foreground">{note()}</Text>}</If>
     </Scroll>
   );
 }
@@ -266,7 +266,7 @@ function TextBody(props: { text: SessionFileTextPreview }) {
           <Text testID="file-text" class="font-mono text-code">{props.text.content || " "}</Text>
         </View>
       </Scroll>
-      {note ? <View class="px-4 pt-2"><Text testID="file-truncated" class="text-caption text-muted-foreground">{note}</Text></View> : null}
+      <If when={note}>{(note) => <View class="px-4 pt-2"><Text testID="file-truncated" class="text-caption text-muted-foreground">{note()}</Text></View>}</If>
     </Scroll>
   );
 }
@@ -307,7 +307,7 @@ export function ZoomImage(props: { src: string; name: string; testID?: string; o
           />
         </View>
       </Scroll>
-      {shown() ? null : <View class="absolute inset-0 items-center justify-center"><Spinner size={24} /></View>}
+      <If when={!shown()}><View class="absolute inset-0 items-center justify-center"><Spinner size={24} /></View></If>
     </View>
   );
 }
@@ -326,8 +326,7 @@ function SvgBody(props: { source: SessionFileBinarySource; onFail: (message: str
   // A view, not a fragment, holds what changes: read in a fragment, `preview` would remake the page's body.
   return (
     <View class="flex-1">
-      {preview() ? (
-        <WebView
+      <If when={preview()} else={<View class="flex-1 items-center justify-center"><Spinner size={24} /></View>}><WebView
           testID="file-svg"
           class="flex-1"
           html={svgPreviewHtml(preview()!, color("canvas"))}
@@ -335,10 +334,7 @@ function SvgBody(props: { source: SessionFileBinarySource; onFail: (message: str
           javaScriptEnabled={false}
           accessibilityLabel="Zoomable image preview"
           onError={() => props.onFail(SESSION_FILE_STREAM_FAILED)}
-        />
-      ) : (
-        <View class="flex-1 items-center justify-center"><Spinner size={24} /></View>
-      )}
+        /></If>
     </View>
   );
 }
@@ -361,7 +357,7 @@ function PdfBody(props: { source: SessionFileBinarySource; expectedBytes: number
         onLoad={() => shown.set(true)}
         onError={(e) => props.onFail(e.message || "This PDF could not be rendered on this device.")}
       />
-      {shown() ? null : <View class="absolute inset-0 items-center justify-center"><Spinner size={24} /></View>}
+      <If when={!shown()}><View class="absolute inset-0 items-center justify-center"><Spinner size={24} /></View></If>
     </View>
   );
 }
@@ -369,7 +365,7 @@ function PdfBody(props: { source: SessionFileBinarySource; expectedBytes: number
 function Action(props: { label: string; icon: IconName; onPress: () => void; disabled?: boolean; busy?: boolean; testID?: string }) {
   return (
     <Button testID={props.testID} accessibilityLabel={props.label} disabled={props.disabled} onPress={props.onPress} class="size-9 items-center justify-center rounded-full active:bg-accent disabled:opacity-40">
-      {props.busy ? <Spinner size={16} /> : <Icon name={props.icon} size={18} tone="ink" />}
+      <If when={props.busy} else={<Icon name={props.icon} size={18} tone="ink" />}><Spinner size={16} /></If>
     </Button>
   );
 }

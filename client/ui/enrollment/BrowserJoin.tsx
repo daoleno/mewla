@@ -98,16 +98,10 @@ export function BrowserJoin(props: { onPairingLink: () => void }) {
           <Text class="text-center text-sm text-muted-foreground">Connect to Mewla</Text>
           <Text class="text-center text-3xl font-semibold">{title()}</Text>
           <Text testID="join-detail" class="text-center text-base text-muted-foreground">{detail()}</Text>
-          {waiting() && prompt() ? (
-            <Text testID="join-number" accessibilityLabel={`Verification number ${prompt()!.verificationNumber}`} class="text-center font-mono text-6xl tracking-[12px]">{prompt()!.verificationNumber}</Text>
-          ) : null}
-          {waiting() ? (
-            problem() ? <Text class="text-center text-sm text-muted-foreground">{problem()}</Text> : null
-          ) : (
-            <Button testID="join-again" onPress={() => void again()} class="items-center rounded-full bg-primary py-3 active:opacity-80">
+          <If when={waiting() && prompt()}><Text testID="join-number" accessibilityLabel={`Verification number ${prompt()!.verificationNumber}`} class="text-center font-mono text-6xl tracking-[12px]">{prompt()!.verificationNumber}</Text></If>
+          <If when={waiting()} else={<Button testID="join-again" onPress={() => void again()} class="items-center rounded-full bg-primary py-3 active:opacity-80">
               <Text class="text-base font-semibold text-primary-foreground">{state() === "expired" ? "New number" : "Try again"}</Text>
-            </Button>
-          )}
+            </Button>}><If when={problem()}><Text class="text-center text-sm text-muted-foreground">{problem()}</Text></If></If>
           <Text class="text-center text-sm text-muted-foreground">First device? Run <Text class="font-mono">mewla pair</Text> on your computer and open its link.</Text>
           <Button testID="join-pairing-link" onPress={props.onPairingLink} class="items-center py-2">
             <Text class="text-base text-primary">Use a pairing link</Text>

@@ -71,14 +71,12 @@ function LinkPairingNote() {
   });
   return (
     <View class="absolute left-3 right-3" style={{ top: safeArea().top + 8 }}>
-      {linkPairing() ? (
-        <View testID="link-pairing" onPress={() => linkPairing()?.problem && linkPairing.set(null)} class="gap-0.5 rounded-(--radius-group) bg-card px-4 py-3">
+      <If when={linkPairing()}><View testID="link-pairing" onPress={() => linkPairing()?.problem && linkPairing.set(null)} class="gap-0.5 rounded-(--radius-group) bg-card px-4 py-3">
           <Text class="text-body font-semibold">
             {linkPairing()!.problem?.title ?? (pairingStatus() || "Pairing…")}
           </Text>
-          {linkPairing()!.problem ? <Text class="text-sub text-muted-foreground">{linkPairing()!.problem!.detail}</Text> : null}
-        </View>
-      ) : null}
+          <If when={linkPairing()!.problem}><Text class="text-sub text-muted-foreground">{linkPairing()!.problem!.detail}</Text></If>
+        </View></If>
     </View>
   );
 }
@@ -88,10 +86,10 @@ mount(() => (
   <View class="flex-1 bg-background text-foreground">
     {/* The app is not under the connected step: on Android the step vanished behind the app while it still
         held (after the notification prompt, after a Settings pairing), most likely the app's native views. */}
-    {!ready() ? null : current() && !justPaired() ? <Shell /> : null}
+    <If when={ready()}><If when={current() && !justPaired()}><Shell /></If></If>
     {/* First run, and on a phone the connected step after any pairing. */}
-    {ready() && (!current() || justPaired()) ? <View class="absolute inset-0 bg-background"><FirstRun /></View> : null}
-    {ready() && current() && !justPaired() ? <LinkPairingNote /> : null}
+    <If when={ready() && (!current() || justPaired())}><View class="absolute inset-0 bg-background"><FirstRun /></View></If>
+    <If when={ready() && current() && !justPaired()}><LinkPairingNote /></If>
     <CrashReportSheet />
   </View>
 ));

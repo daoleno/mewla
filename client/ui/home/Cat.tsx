@@ -52,15 +52,11 @@ export function HomeCat(props: { onPress?: () => void; /** The still's size (40)
   const mark = () => (
     <>
       <PetSprite testID="home-cat-sprite" state={state} size={props.size ?? 40} mode="once" canMove={canMove} delivered={delivered} />
-      {catNeedsYou() ? <View testID="home-cat-dot" accessibilityLabel="Needs you" class="absolute right-1 top-1 size-[14px] rounded-full border-2 border-background bg-seal" /> : null}
+      <If when={catNeedsYou()}><View testID="home-cat-dot" accessibilityLabel="Needs you" class="absolute right-1 top-1 size-[14px] rounded-full border-2 border-background bg-seal" /></If>
     </>
   );
   // Without onPress it is part of a larger target (the home header's left block), not a button of its own.
-  return props.onPress ? (
-    <Button testID="home-cat" accessibilityLabel="Computer" onPress={props.onPress} class="items-center justify-center rounded-full active:bg-accent" style={{ overflow: "visible", width: box, height: box }}>
+  return <If when={props.onPress} else={<View testID="home-cat-mark" class="items-center justify-center" style={{ overflow: "visible", width: box, height: box }}>{mark()}</View>}>{(onPressValue) => <Button testID="home-cat" accessibilityLabel="Computer" onPress={onPressValue()} class="items-center justify-center rounded-full active:bg-accent" style={{ overflow: "visible", width: box, height: box }}>
       {mark()}
-    </Button>
-  ) : (
-    <View testID="home-cat-mark" class="items-center justify-center" style={{ overflow: "visible", width: box, height: box }}>{mark()}</View>
-  );
+    </Button>}</If>;
 }

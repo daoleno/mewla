@@ -96,36 +96,24 @@ function ServiceDetail(props: { service: () => DiscoveredSessionService; onBack:
       <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
         <View class="pb-2">
           <Section sheet title="Open">
-            {isDSHWebService(props.service()) ? (
-              urls().length > 0
-                ? <Row testID="service-open-web" icon="browser" title="Open Web" subtitle={urls()[0]!.address} chevron onPress={() => open(urls()[0]!.url)} />
-                : <Row icon="browser" title="Web unavailable" disabled />
-            ) : urls().length > 0 ? (
-              urls().map((item) => <Row testID="service-url" icon="open-external" title={item.label} subtitle={item.address} chevron onPress={() => open(item.url)} />)
-            ) : (
-              <Row icon="link" title="Bound locally" value={serviceBindLabel(props.service())} />
-            )}
-            {hasServiceTerminal(props.service()) ? (
-              <Row testID="service-terminal" icon="terminal" title="Open Session terminal" chevron onPress={() => props.onOpenSession(props.service().worker_id)} />
-            ) : null}
+            <If when={isDSHWebService(props.service())} else={<If when={urls().length > 0} else={<Row icon="link" title="Bound locally" value={serviceBindLabel(props.service())} />}>{urls().map((item) => <Row testID="service-url" icon="open-external" title={item.label} subtitle={item.address} chevron onPress={() => open(item.url)} />)}</If>}><If when={urls().length > 0} else={<Row icon="browser" title="Web unavailable" disabled />}><Row testID="service-open-web" icon="browser" title="Open Web" subtitle={urls()[0]!.address} chevron onPress={() => open(urls()[0]!.url)} /></If></If>
+            <If when={hasServiceTerminal(props.service())}><Row testID="service-terminal" icon="terminal" title="Open Session terminal" chevron onPress={() => props.onOpenSession(props.service().worker_id)} /></If>
           </Section>
-          {props.service().generation ? (
-            <Section sheet title="Public access">
-              {publicURL() ? <Row testID="tunnel-open" icon="browser" title="Open public URL" subtitle={publicURL()} chevron onPress={() => open(publicURL()!)} /> : null}
-              {publicURL() ? <Row testID="tunnel-copy" icon={copied() ? "check" : "copy"} title={copied() ? "Copied" : "Copy public URL"} onPress={() => void copy(publicURL()!)} /> : null}
+          <If when={props.service().generation}><Section sheet title="Public access">
+              <If when={publicURL()}><Row testID="tunnel-open" icon="browser" title="Open public URL" subtitle={publicURL()} chevron onPress={() => open(publicURL()!)} /></If>
+              <If when={publicURL()}><Row testID="tunnel-copy" icon={copied() ? "check" : "copy"} title={copied() ? "Copied" : "Copy public URL"} onPress={() => void copy(publicURL()!)} /></If>
               <Row testID="tunnel-toggle" icon={active() ? "stop-circle" : "share"} destructive={active()} disabled={busy()}
-                trailing={busy() ? <Spinner size={16} /> : undefined}
+                trailing={<If when={busy()}><Spinner size={16} /></If>}
                 title={active() ? "Stop public tunnel" : "Share with Quick Tunnel"}
                 subtitle={active() && !publicURL() ? capitalize(tunnel()?.status) : undefined}
                 onPress={() => (untracked(active) ? void run("stop") : void start())} />
-            </Section>
-          ) : null}
-          {problem() || tunnel()?.error ? <Notice testID="tunnel-problem" tone="failed" title="Tunnel unavailable" detail={problem() || tunnel()?.error || ""} /> : null}
+            </Section></If>
+          <If when={problem() || tunnel()?.error}><Notice testID="tunnel-problem" tone="failed" title="Tunnel unavailable" detail={problem() || tunnel()?.error || ""} /></If>
           <Section sheet title="Details">
             <Row title="Process" value={serviceProcessLabel(props.service())} />
-            {serviceCommandDetail(props.service()) ? <Row title="Command" subtitle={serviceCommandDetail(props.service()) ?? undefined} /> : null}
+            <If when={serviceCommandDetail(props.service())}><Row title="Command" subtitle={serviceCommandDetail(props.service()) ?? undefined} /></If>
             <Row title="Bind" value={serviceBindLabel(props.service())} />
-            {persistent() && props.service().status_detail?.trim() ? <Row title="Status" subtitle={props.service().status_detail!.trim()} /> : null}
+            <If when={persistent() && props.service().status_detail?.trim()}><Row title="Status" subtitle={props.service().status_detail!.trim()} /></If>
           </Section>
         </View>
       </Scroll>
@@ -192,34 +180,23 @@ export function ServicesSheet(props: { onOpenSession: (workerId: string) => void
       onClose={() => servicesOpen.set(false)}
       testID="services-sheet"
       title={() => (selected() && selectedService() ? serviceProcessLabel(selectedService()!) : "Services")}
-      leading={selected() && selectedService() ? (
-        <Button testID="service-back" accessibilityLabel="Back to services" onPress={back} class="-ml-2 size-11 items-center justify-center rounded-full active:bg-accent">
+      leading={<If when={selected() && selectedService()}><Button testID="service-back" accessibilityLabel="Back to services" onPress={back} class="-ml-2 size-11 items-center justify-center rounded-full active:bg-accent">
           <Icon name="chevron-left" size={22} tone="ink" />
-        </Button>
-      ) : undefined}
-      trailing={selected() && selectedService() ? undefined : (
-        <View class="flex-row items-center gap-1">
-          {subtitle() ? <Text class="mr-1 text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{subtitle()}</Text> : null}
+        </Button></If>}
+      trailing={<If when={!(selected() && selectedService())}><View class="flex-row items-center gap-1">
+          <If when={subtitle()}><Text class="mr-1 text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{subtitle()}</Text></If>
           <Button testID="services-refresh" accessibilityLabel="Refresh services" disabled={loading()} onPress={() => void refresh()} class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-40">
             <Icon name="refresh" size={20} tone="ink" />
           </Button>
           <Button testID="services-close" accessibilityLabel="Close services" onPress={() => servicesOpen.set(false)} class="size-11 items-center justify-center rounded-full active:bg-accent">
             <Icon name="close" size={20} tone="ink" />
           </Button>
-        </View>
-      )}
+        </View></If>}
     >
-      {selected() && selectedService() ? (
-        <ServiceDetail service={() => selectedService()!} onOpenSession={(workerId) => {
-          servicesOpen.set(false);
-          props.onOpenSession(workerId);
-        }} onBack={back} />
-      ) : (
-        <View class="px-4">
-          {problem() ? <Notice testID="services-problem" tone="failed" title="Services could not be loaded" detail={problem()} action="Retry" actionDisabled={loading()} onAction={() => void refresh()} /> : null}
-          {count() === 0 && !problem() ? <EmptyState testID="services-empty" icon="radio" busy={loading()} title={loading() ? "Loading services" : "No listening services"} /> : null}
-          {count() > 0 ? (
-            <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
+      <If when={selected() && selectedService()} else={<View class="px-4">
+          <If when={problem()}><Notice testID="services-problem" tone="failed" title="Services could not be loaded" detail={problem()} action="Retry" actionDisabled={loading()} onAction={() => void refresh()} /></If>
+          <If when={count() === 0 && !problem()}><EmptyState testID="services-empty" icon="radio" busy={loading()} title={loading() ? "Loading services" : "No listening services"} /></If>
+          <If when={count() > 0}><Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
               <View class="pb-2">
                 {groupSessionServices(services()).flatMap((section) => section.groups.map((group) => (
                   <Section sheet label={<SectionLabel icon="folder" title={section.title ? `${section.title} · ${group.project}` : group.project} count={group.services.length} />}>
@@ -229,19 +206,20 @@ export function ServicesSheet(props: { onOpenSession: (workerId: string) => void
                         leading={<View class="h-9 min-w-[52px] items-center justify-center rounded-[11px] bg-background px-2"><Text class="font-mono text-code font-semibold">{String(service.port)}</Text></View>}
                         title={serviceProcessLabel(service)}
                         subtitle={!hasServiceTerminal(service) && service.source === "persistent" ? serviceSourceLabel(service) : serviceWorkerLabel(service)}
-                        trailing={service.tunnel?.status === "running" ? <View class="rounded-full bg-background px-2.5 py-1"><Text class="text-caption font-semibold">Public</Text></View> : undefined}
+                        trailing={<If when={service.tunnel?.status === "running"}><View class="rounded-full bg-background px-2.5 py-1"><Text class="text-caption font-semibold">Public</Text></View></If>}
                         chevron
                         onPress={() => selected.set(keyOf(service))}
                       />
                     ))}
                   </Section>
                 )))}
-                {loading() ? <Text class="mt-3 text-center text-caption text-muted-foreground">Refreshing</Text> : null}
+                <If when={loading()}><Text class="mt-3 text-center text-caption text-muted-foreground">Refreshing</Text></If>
               </View>
-            </Scroll>
-          ) : null}
-        </View>
-      )}
+            </Scroll></If>
+        </View>}><ServiceDetail service={() => selectedService()!} onOpenSession={(workerId) => {
+          servicesOpen.set(false);
+          props.onOpenSession(workerId);
+        }} onBack={back} /></If>
     </Sheet>
   );
 }

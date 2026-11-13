@@ -143,7 +143,7 @@ export function BrainMenu(props: {
 
   const trailing = (id: BrainMenuRowId) => {
     const provider = source.snapshot()?.host_executor?.provider;
-    return id === "executor" && provider ? <AgentIcon kind={agentKindFromProvider(provider)} size={22} /> : undefined;
+    return <If when={id === "executor" && provider}><AgentIcon kind={agentKindFromProvider(provider)} size={22} /></If>;
   };
 
   // On wide the menu itself is a popover at ⋯; Brain host and Model are dialogs.
@@ -159,15 +159,7 @@ export function BrainMenu(props: {
           <Icon name="chevron-left" size={22} tone="ink" />
         </Button>
       ) : undefined}>
-      {page() === "host" ? (
-        <BrainHostPanel source={source} onClose={() => page.set("menu")} />
-      ) : page() === "model" && source.transport() && hostId() ? (
-        <View class="px-4">
-          <ModelPanel shown={() => props.open() && page() === "model"} onClose={() => page.set("menu")} transport={source.transport()!} workerId={hostId()}
-            onRuntime={(selection) => runtime.set(selection)} />
-        </View>
-      ) : (
-        <View class="px-4">
+      <If when={page() === "host"} else={<If when={page() === "model" && source.transport() && hostId()} else={<View class="px-4">
           <View class="overflow-hidden rounded-(--radius-group) bg-sheet-surface">
             <View class="-mb-px">
               {rows().map((row) => (
@@ -176,8 +168,10 @@ export function BrainMenu(props: {
               ))}
             </View>
           </View>
-        </View>
-      )}
+        </View>}><View class="px-4">
+          <ModelPanel shown={() => props.open() && page() === "model"} onClose={() => page.set("menu")} transport={source.transport()!} workerId={hostId()}
+            onRuntime={(selection) => runtime.set(selection)} />
+        </View></If>}><BrainHostPanel source={source} onClose={() => page.set("menu")} /></If>
     </Sheet>
     </>
   );

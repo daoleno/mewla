@@ -65,22 +65,36 @@ export function CodexStatusSheet(props: {
             <Text class="text-lg font-semibold">Status</Text>
             <Text class="text-xs text-muted-foreground">{ready() ? `Updated ${formatDate(ready()!.fetchedAt, DateStyle.time)}` : "Codex"}</Text>
           </View>
-          {ready() ? (
-            <Button testID="status-refresh" accessibilityLabel="Refresh status" onPress={load} class="rounded-full p-1.5 active:bg-accent">
+          <If when={ready()}><Button testID="status-refresh" accessibilityLabel="Refresh status" onPress={load} class="rounded-full p-1.5 active:bg-accent">
               <Icon name="refresh" size={20} color="foreground" />
-            </Button>
-          ) : null}
+            </Button></If>
           <Button testID="status-close" accessibilityLabel="Close status" onPress={props.onClose} class="rounded-full p-1.5 active:bg-accent">
             <Icon name="close" size={20} color="foreground" />
           </Button>
         </View>
 
-        {ready() ? (
-          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 470 }}>
+        <If when={ready()} else={<If when={failed()} else={<View class="min-h-[190px] items-center justify-center">
+            <Text class="text-sm text-muted-foreground">Asking Codex…</Text>
+          </View>}><View testID="status-failed" class="min-h-[190px] items-center justify-center gap-2 px-4">
+            <Text class={failed()!.unavailable ? "text-base font-semibold" : "text-base font-semibold text-destructive"}>
+              {failed()!.unavailable ? "No status for this chat" : "Couldn't load status"}
+            </Text>
+            <Text class="text-center text-sm text-muted-foreground">
+              {failed()!.unavailable ? "Mewla reads status from the Codex it started. For this chat, type /status in the terminal." : failed()!.message}
+            </Text>
+            <View class="flex-row gap-3 pt-1">
+              <If when={!failed()!.unavailable}><Button testID="status-retry" onPress={load} class="flex-row items-center gap-1.5 rounded-full bg-primary px-4 py-2 active:opacity-80">
+                  <Icon name="refresh" size={16} color="primary-foreground" />
+                  <Text class="text-sm font-semibold text-primary-foreground">Retry</Text>
+                </Button></If>
+              <If when={props.onOpenTerminal}>{(onOpenTerminal) => <Button testID="status-terminal" onPress={() => onOpenTerminal()?.()} class="flex-row items-center gap-1.5 rounded-full border border-border px-4 py-2 active:bg-accent">
+                  <Icon name="terminal" size={16} color="foreground" />
+                  <Text class="text-sm font-semibold">Terminal</Text>
+                </Button>}</If>
+            </View>
+          </View></If>}><Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 470 }}>
             <View class="gap-4">
-              {codexStatusSections(ready()!.status).length === 0 ? (
-                <Text class="py-6 text-center text-sm text-muted-foreground">Codex reported nothing for this chat yet.</Text>
-              ) : null}
+              <If when={codexStatusSections(ready()!.status).length === 0}><Text class="py-6 text-center text-sm text-muted-foreground">Codex reported nothing for this chat yet.</Text></If>
               {codexStatusSections(ready()!.status).map((section) => (
                 <View testID={`status-section-${section.key}`} class="gap-1.5">
                   <Text class="text-xs font-semibold uppercase text-muted-foreground">{section.title}</Text>
@@ -107,35 +121,7 @@ export function CodexStatusSheet(props: {
                 </View>
               ))}
             </View>
-          </Scroll>
-        ) : failed() ? (
-          <View testID="status-failed" class="min-h-[190px] items-center justify-center gap-2 px-4">
-            <Text class={failed()!.unavailable ? "text-base font-semibold" : "text-base font-semibold text-destructive"}>
-              {failed()!.unavailable ? "No status for this chat" : "Couldn't load status"}
-            </Text>
-            <Text class="text-center text-sm text-muted-foreground">
-              {failed()!.unavailable ? "Mewla reads status from the Codex it started. For this chat, type /status in the terminal." : failed()!.message}
-            </Text>
-            <View class="flex-row gap-3 pt-1">
-              {!failed()!.unavailable ? (
-                <Button testID="status-retry" onPress={load} class="flex-row items-center gap-1.5 rounded-full bg-primary px-4 py-2 active:opacity-80">
-                  <Icon name="refresh" size={16} color="primary-foreground" />
-                  <Text class="text-sm font-semibold text-primary-foreground">Retry</Text>
-                </Button>
-              ) : null}
-              {props.onOpenTerminal ? (
-                <Button testID="status-terminal" onPress={() => props.onOpenTerminal?.()} class="flex-row items-center gap-1.5 rounded-full border border-border px-4 py-2 active:bg-accent">
-                  <Icon name="terminal" size={16} color="foreground" />
-                  <Text class="text-sm font-semibold">Terminal</Text>
-                </Button>
-              ) : null}
-            </View>
-          </View>
-        ) : (
-          <View class="min-h-[190px] items-center justify-center">
-            <Text class="text-sm text-muted-foreground">Asking Codex…</Text>
-          </View>
-        )}
+          </Scroll></If>
       </View>
     </AppSheet>
   );

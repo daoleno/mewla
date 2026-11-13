@@ -21,17 +21,11 @@ function DraftMediaTile(props: { draftId: string; item: FriendsDraftMedia; busy:
   const label = props.item.kind === "video" ? "Video" : "Picture";
   return (
     <View testID={`draft-media-${props.item.file}`} class="size-24 overflow-hidden rounded-[14px] bg-muted" accessibilityLabel={label}>
-      {uri() ? (
-        <Image src={uri()!} class="absolute inset-0" style={{ objectFit: "cover" }} accessibilityLabel={label} />
-      ) : (
-        <View class="flex-1 items-center justify-center"><Spinner size={16} /></View>
-      )}
-      {props.item.kind === "video" ? (
-        <View class="absolute bottom-1 left-1 flex-row items-center gap-0.5 rounded-md bg-primary/70 px-1 py-0.5">
+      <If when={uri()} else={<View class="flex-1 items-center justify-center"><Spinner size={16} /></View>}><Image src={uri()!} class="absolute inset-0" style={{ objectFit: "cover" }} accessibilityLabel={label} /></If>
+      <If when={props.item.kind === "video"}><View class="absolute bottom-1 left-1 flex-row items-center gap-0.5 rounded-md bg-primary/70 px-1 py-0.5">
           <Icon name="play" size={10} tone="canvas" />
           <Text class="text-[11px] text-primary-foreground">{durationLabel(props.item.duration_ms ?? 0)}</Text>
-        </View>
-      ) : null}
+        </View></If>
       <Button
         accessibilityLabel="Remove from post"
         disabled={props.busy}
@@ -138,7 +132,7 @@ function DraftCard(props: { id: string; nav: PageNav; edits: Edits; onFocus: (in
   return (
     <View testID={`draft-${props.id}`} class="mt-4 gap-3 rounded-(--radius-group) bg-card p-4">
       <View class="flex-row items-center gap-3">
-        {me() ? <Avatar author={me()!} size={40} /> : null}
+        <If when={me()}><Avatar author={me()!} size={40} /></If>
         <View class="min-w-0 flex-1">
           <Text class="text-body font-semibold">{me()?.agent_name || "Brain"}</Text>
           <Text class="text-sub text-muted-foreground line-clamp-1">
@@ -167,13 +161,11 @@ function DraftCard(props: { id: string; nav: PageNav; edits: Edits; onFocus: (in
       />
       {((key) =>
         untracked(() =>
-          key ? (
-            <View class="flex-row flex-wrap gap-2">
+          <If when={key}><View class="flex-row flex-wrap gap-2">
               {(draft().media ?? []).map((item, index) => (
                 <DraftMediaTile draftId={props.id} item={item} busy={busy()} onRemove={() => removeMedia(index)} />
               ))}
-            </View>
-          ) : null,
+            </View></If>,
         ))(mediaKey())}
       <View class="flex-row items-center gap-2">
         <Icon name={problem() ? "alert-circle" : "shield-check"} size={20} tone={problem() ? "failed" : "ready"} />
@@ -194,7 +186,7 @@ function DraftCard(props: { id: string; nav: PageNav; edits: Edits; onFocus: (in
           onPress={() => void post()}
           class="h-[52px] flex-[2] flex-row items-center justify-center gap-2 rounded-2xl bg-seal active:opacity-70 disabled:opacity-40"
         >
-          {busy() ? <Spinner size={16} tone="canvas" /> : null}
+          <If when={busy()}><Spinner size={16} tone="canvas" /></If>
           <Text class="text-body font-semibold text-seal-foreground">Post</Text>
         </Button>
       </View>
@@ -248,9 +240,8 @@ export function Drafts(props: { nav: PageNav; top: () => boolean }) {
         >
           {((key) =>
             untracked(() =>
-              key ? (
-                <View>
-                  {key.split("\n").map((id) => (
+              <If when={key} else={<EmptyState icon="edit" title="No drafts waiting" detail="When Brain writes something for Friends, it waits here for you to check." />}>{(key) => <View>
+                  {key().split("\n").map((id) => (
                     <DraftCard
                       id={id}
                       nav={props.nav}
@@ -262,10 +253,7 @@ export function Drafts(props: { nav: PageNav; top: () => boolean }) {
                     />
                   ))}
                   <Text class="mt-3 text-center text-caption text-muted-foreground">Visible to everyone on Friends once posted.</Text>
-                </View>
-              ) : (
-                <EmptyState icon="edit" title="No drafts waiting" detail="When Brain writes something for Friends, it waits here for you to check." />
-              ),
+                </View>}</If>,
             ))(ids())}
         </Scroll>
       </View>

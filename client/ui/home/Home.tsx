@@ -164,7 +164,7 @@ function Notice(props: { title: string; detail?: string }) {
   return (
     <View class="flex-1 items-center justify-center gap-2 p-8">
       <Text testID="brain-notice" class="text-center text-title font-semibold tracking-title">{props.title}</Text>
-      {props.detail ? <Text class="text-center text-sub text-muted-foreground">{props.detail}</Text> : null}
+      <If when={props.detail}>{(detail) => <Text class="text-center text-sub text-muted-foreground">{detail()}</Text>}</If>
     </View>
   );
 }
@@ -189,20 +189,16 @@ function ResultSheet() {
   const close = () => resultSheet.set(null);
   return (
     <Sheet testID="work-result-sheet" open={() => Boolean(resultSheet())} onClose={close} title={() => model()?.title ?? ""}>
-      {model() ? (
-        <View class="gap-3 px-4">
+      <If when={model()}><View class="gap-3 px-4">
           <Text class="text-sub text-muted-foreground">{[agent()?.name, model()!.state, when()].filter(Boolean).join(" · ")}</Text>
-          {model()!.summary ? <View selectable><Text class="text-body">{model()!.summary}</Text></View> : null}
-          {model()!.actions.length ? <ResultActions actions={model()!.actions} onPress={(action) => runResultAction(untracked(resultSheet)!, action)} /> : null}
-          {model()!.sessionId && workers().some((w) => w.id === model()!.sessionId) ? (
-            <PillButton testID="work-sheet-open-session" title="Open session" onPress={() => {
+          <If when={model()!.summary}><View selectable><Text class="text-body">{model()!.summary}</Text></View></If>
+          <If when={model()!.actions.length}><ResultActions actions={model()!.actions} onPress={(action) => runResultAction(untracked(resultSheet)!, action)} /></If>
+          <If when={model()!.sessionId && workers().some((w) => w.id === model()!.sessionId)}><PillButton testID="work-sheet-open-session" title="Open session" onPress={() => {
               const id = untracked(resultSheet)!.sessionId!;
               close();
               openSession(id);
-            }} />
-          ) : null}
-        </View>
-      ) : null}
+            }} /></If>
+        </View></If>
     </Sheet>
   );
 }
@@ -231,28 +227,20 @@ function HomeHeader() {
     <View testID="home-header" class={`bg-background ${wide() ? "px-4" : "px-2"}`} style={{ paddingTop: homeHeaderInset() }}>
       {/* The tray hangs from this row's bottom (HOME_HEADER_HEIGHT). */}
       <View class="flex-row items-center gap-1" style={{ height: HOME_HEADER_HEIGHT }}>
-        {wide() ? (
-          <View class="min-w-0 shrink-0 justify-center pr-1">
-            <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
-          </View>
-        ) : (
-          // Where I am: the cat, "Brain" and the computer's name are one target that opens the computer page,
-          // and the name wears the state control's chevron, so the header reads as two controls of one kind.
-          <Button testID="home-cat" accessibilityLabel={`Computer, ${current()?.name ?? ""}`}
+        <If when={wide()} else={<Button testID="home-cat" accessibilityLabel={`Computer, ${current()?.name ?? ""}`}
             onPress={() => openPage({ name: "computer" })} class="min-h-[48px] min-w-0 shrink flex-row items-center pr-2 active:opacity-70">
             <HomeCat />
             <View class="min-w-0 shrink justify-center">
               <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
-              {current()?.name ? (
-                <View class="min-w-0 flex-row items-center gap-0.5">
+              <If when={current()?.name}><View class="min-w-0 flex-row items-center gap-0.5">
                   <Text testID="home-computer" class="shrink text-caption text-muted-foreground line-clamp-1">{current()!.name}</Text>
                   <Icon name="chevron-down" size={14} tone="faint" />
-                </View>
-              ) : null}
+                </View></If>
             </View>
-          </Button>
-        )}
-        {wide() ? null : <View class="min-w-0 shrink"><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} /></View>}
+          </Button>}><View class="min-w-0 shrink-0 justify-center pr-1">
+            <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
+          </View></If>
+        <If when={!wide()}><View class="min-w-0 shrink"><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} /></View></If>
         <View class="flex-1" />
         <Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
           class="size-11 items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
@@ -275,24 +263,18 @@ function BrainCapsule(props: { capsule: ReturnType<typeof createCapsule> }) {
   return (
     <Capsule testID="home-header" collapsed={collapsed} twoLines={() => Boolean(computerName())}>
       <HomeCat size={CAPSULE.cat.size} box={CAPSULE.cat.box} onPress={() => openPage({ name: "computer" })} />
-      {collapsed() ? null : (
-        <>
+      <If when={!collapsed()}><>
           <View testID="home-title" class="min-w-0 shrink justify-center" style={{ marginLeft: 2 }}>
             <Text role="header" class="font-semibold text-foreground line-clamp-1" style={{ fontSize: CAPSULE.brain.size, lineHeight: CAPSULE.brain.line }}>Brain</Text>
-            {computerName() ? (
-              <Text testID="home-computer" class="text-muted-foreground line-clamp-1" style={{ fontSize: CAPSULE.computer.size, lineHeight: CAPSULE.computer.line }}>{computerName()}</Text>
-            ) : null}
+            <If when={computerName()}><Text testID="home-computer" class="text-muted-foreground line-clamp-1" style={{ fontSize: CAPSULE.computer.size, lineHeight: CAPSULE.computer.line }}>{computerName()}</Text></If>
           </View>
           <View class="flex-1" />
-        </>
-      )}
+        </></If>
       <StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} capsule={{ short: collapsed }} />
-      {collapsed() ? null : (
-        <Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
+      <If when={!collapsed()}><Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
           class="size-11 items-center justify-center rounded-full active:bg-accent">
           <Icon name="more-horizontal" size={22} tone="ink" />
-        </Button>
-      )}
+        </Button></If>
     </Capsule>
   );
 }
@@ -316,11 +298,10 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
   return (
     // Under a capsule the thread is padded itself; the other states start below it.
     <View class="flex-1" style={{ paddingTop: props.capsule && !shows().startsWith("chat:") ? props.capsule.top() : 0 }}>
-      {shows() === "unavailable" ? (
-        <BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} />
-      ) : shows() === "failed" ? (
-        <BrainChatFailed onOpenTerminal={openTerminal} />
-      ) : shows().startsWith("chat:") ? (
+      {/* One of these at a time, by `shows`; the thread is made again for each thread it names. */}
+      <If when={shows() === "unavailable"}><BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} /></If>
+      <If when={shows() === "failed"}><BrainChatFailed onOpenTerminal={openTerminal} /></If>
+      <Each of={shows().startsWith("chat:") ? [shows()] : []} key={(thread) => thread}>{() => (
         <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} capsule={props.capsule}
           empty={() => (
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
@@ -338,15 +319,14 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
             ),
           }}
           requests={() => (routedBrainThread() ? 0 : requests().length)} reveal={revealRequests} />
-      ) : shows() === "waking" ? (
-        <Notice title="Brain is starting…" />
-      ) : shows() === "host_down" ? (
-        <Notice title="Brain can't start" />
-      ) : shows() === "offline" ? (
-        // A start before the computer answers: connecting is a wait (the placeholder), Offline only at `link.away`.
+      )}</Each>
+      <If when={shows() === "waking"}><Notice title="Brain is starting…" /></If>
+      <If when={shows() === "host_down"}><Notice title="Brain can't start" /></If>
+      {/* A start before the computer answers: connecting is a wait (the placeholder), Offline only at `link.away`. */}
+      <If when={shows() === "offline"}>
         <ThreadWait testID="brain-offline" waiting={() => true} empty={() => <View />} reload={() => {}}
           reconnect={() => currentTransport()?.resume()} computer={() => current()?.name} />
-      ) : null}
+      </If>
     </View>
   );
 }
@@ -379,16 +359,14 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
         <MentionPanel text={props.text.text} executors={tools.executors} onPick={(draft) => props.text.set(draft)} />
         <SlashMenu text={props.text.text} commands={tools.commands} commandsUnavailable={tools.commandsUnavailable} agentKind={tools.kind} connected={() => connection() === "connected"}
           pinned={tools.pinned} onPick={tools.pick} onAttach={tools.attach} uploading={tools.uploading} />
-        {tools.uploads.items().length > 0 ? <AttachmentTray uploads={tools.uploads} /> : null}
-        {editor.edit() ? <EditChip editor={editor} /> : null}
-        {notice() ? <Text testID="brain-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text> : null}
+        <If when={tools.uploads.items().length > 0}><AttachmentTray uploads={tools.uploads} /></If>
+        <If when={editor.edit()}><EditChip editor={editor} /></If>
+        <If when={notice()}><Text testID="brain-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text></If>
       </ChatComposer>
-      {hostId() ? (
-        <>
+      <If when={hostId()}><>
           <CodexStatusSheet open={tools.statusOpen} onClose={() => tools.statusOpen.set(false)} transport={currentTransport()!} workerId={hostId()} />
           <CodexSkillsSheet open={tools.skillsOpen} onClose={() => tools.skillsOpen.set(false)} transport={currentTransport()!} cwd={brain()?.host_worker?.cwd} onPick={tools.insertSkill} />
-        </>
-      ) : null}
+        </></If>
     </>
   );
 }
@@ -442,17 +420,17 @@ export function Home() {
   return (
     <NavPage title="Brain" column="reading" headerVisible={false} header={<View />}>
       <CapsulePage>
-        {capsuled() ? null : <HomeHeader />}
-        {routedBrainThread() ? <View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View> : null}
+        <If when={!capsuled()}><HomeHeader /></If>
+        <If when={routedBrainThread()}><View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View></If>
         <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
-        {routedBrainThread() ? null : <Composer text={text} editor={editor} />}
-        {capsuled() ? <BrainCapsule capsule={capsule} /> : null}
-        {wide() ? null : <Tray top={capsuled() ? inset : undefined} onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
+        <If when={!routedBrainThread()}><Composer text={text} editor={editor} /></If>
+        <If when={capsuled()}><BrainCapsule capsule={capsule} /></If>
+        <If when={!wide()}><Tray top={capsuled() ? inset : undefined} onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
           onUseExecutor={(id) => {
             const executor = (brain()?.executors ?? []).find((ref) => ref.id === id);
             if (executor) void currentBrain.hostSwitch.switchTo(executor);
           }}
-          onSwitchExecutor={() => hostSheetOpen.set(true)} />}
+          onSwitchExecutor={() => hostSheetOpen.set(true)} /></If>
         <BrainMenu open={menuOpen} onClose={() => menuOpen.set(false)} anchor={menuAnchor.node}
           onOpenTerminal={(hostWorkerId: string) => openBrainTerminal(hostWorkerId)}
           onBrowseWorkspace={browseWorkspace}

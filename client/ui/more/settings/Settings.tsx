@@ -129,11 +129,7 @@ export function Settings(props: { nav: PageNav }) {
           subtitle={current() ? telegramRow().subtitle : "No current server"}
           disabled={!current()}
           // While the first read runs the value stays empty: an endless spinner here kept the app from ever going quiet.
-          trailing={!current() ? undefined
-            : telegramRow().loading ? undefined
-            : telegramRow().connect ? <RowButton testID="settings-telegram-connect" label="Connect" accessibilityLabel="Connect Telegram" onPress={() => props.nav.push({ name: "settings-telegram" })} />
-            : telegramRow().tone && telegramRow().label ? <StateLine testID="settings-telegram-state" tone={telegramRow().tone!} label={telegramRow().label!} />
-            : undefined}
+          trailing={<If when={current()}><If when={!telegramRow().loading}><If when={telegramRow().connect} else={<If when={telegramRow().tone && telegramRow().label}><StateLine testID="settings-telegram-state" tone={telegramRow().tone!} label={telegramRow().label!} /></If>}><RowButton testID="settings-telegram-connect" label="Connect" accessibilityLabel="Connect Telegram" onPress={() => props.nav.push({ name: "settings-telegram" })} /></If></If></If>}
           accessibilityLabel={current() ? telegramRowLabel() : "Telegram, No current server"}
           accessibilityHint={current() ? "Open Telegram details and actions" : undefined}
           chevron={Boolean(current()) && !telegramRow().connect}
@@ -164,26 +160,22 @@ export function Settings(props: { nav: PageNav }) {
       </Section>
 
       <Section title="Labs">
-        {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" lead={tile("desktop")} title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
-        {onWeb() ? null : <Row testID="settings-friends" lead={tile("people")} title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />}
-        {!onWeb() && phoneAvailable() ? <Row testID="settings-phone" lead={tile("phone")} title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
-        {!onWeb() && iphoneOffered(iphone()) ? <Row testID="settings-iphone" lead={tile("phone")} title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
+        <If when={daemon() && !virtualScreenState().unsupported}><Row testID="settings-virtual-screen" lead={tile("desktop")} title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /></If>
+        <If when={!onWeb()}><Row testID="settings-friends" lead={tile("people")} title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} /></If>
+        <If when={!onWeb() && phoneAvailable()}><Row testID="settings-phone" lead={tile("phone")} title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /></If>
+        <If when={!onWeb() && iphoneOffered(iphone())}><Row testID="settings-iphone" lead={tile("phone")} title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /></If>
       </Section>
 
-      {onWeb() ? null : (
-        <Section title="Calendar">
+      <If when={!onWeb()}><Section title="Calendar">
           <SwitchRow testID="strong-alerts" lead={tile("bell")} title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
-          {platform.os === "android" && strongAlerts() && fullScreenAllowed() === false ? (
-            <Row
+          <If when={platform.os === "android" && strongAlerts() && fullScreenAllowed() === false}><Row
               testID="full-screen-alerts"
               lead={tile("lock")}
               title="Allow full-screen alerts"
               chevron
               onPress={() => void host.call("calendar.alertsOpenSettings").catch(() => {})}
-            />
-          ) : null}
-        </Section>
-      )}
+            /></If>
+        </Section></If>
 
       <Section title="Appearance">
         {(["system", "light", "dark"] as const).map((choice) => (

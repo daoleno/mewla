@@ -174,23 +174,15 @@ export function Stats(props: { nav: PageNav }) {
           if (next) range.set(next);
         } : undefined}
       >
-        {busy() ? (
-          <EmptyState busy testID="stats-loading" />
-        ) : !view() && failure() ? (
-          <EmptyState testID="stats-failed" icon="alert" tone="failed" title="Stats didn't load" detail={failure()} action="Try again" onAction={reload} />
-        ) : !hasRangeStats(data()) && subscriptions().length === 0 ? (
-          <EmptyState testID="stats-empty" icon="stats" title={emptyRangeTitle(rangeDays(picked()), anyStats())} detail={latestActivity(view())} />
-        ) : (
-          <View>
+        <If when={busy()} else={<If when={!view() && failure()} else={<If when={!hasRangeStats(data()) && subscriptions().length === 0} else={<View>
             {subscriptions().map((s) => <CodexCard subscription={s} />)}
-            {hasRangeStats(data()) ? <Summary data={data()} pricing={view()?.pricing} /> : null}
-            {data().days.length > 0 ? <Activity days={data().days} range={picked()} nav={props.nav} /> : null}
+            <If when={hasRangeStats(data())}><Summary data={data()} pricing={view()?.pricing} /></If>
+            <If when={data().days.length > 0}><Activity days={data().days} range={picked()} nav={props.nav} /></If>
             <Models data={data()} pricing={view()?.pricing} nav={props.nav} />
             <Projects data={data()} />
             <Counted section="skills" title="Skills" items={data().skills.map((s) => ({ name: s.name, calls: s.calls, detail: s.projects.join(" · ") }))} />
             <Counted section="tools" title="Tools" items={data().tools.map((t) => ({ name: t.name, calls: t.calls, detail: "" }))} />
-          </View>
-        )}
+          </View>}><EmptyState testID="stats-empty" icon="stats" title={emptyRangeTitle(rangeDays(picked()), anyStats())} detail={latestActivity(view())} /></If>}><EmptyState testID="stats-failed" icon="alert" tone="failed" title="Stats didn't load" detail={failure()} action="Try again" onAction={reload} /></If>}><EmptyState busy testID="stats-loading" /></If>
       </View>
     </Page>
   );
@@ -206,10 +198,9 @@ function CodexCard(props: { subscription: CodexSubscriptionUsage }) {
   const s = () => props.subscription;
   const available = () => s().authKind === "official" && s().state === "available";
   return (
-    <Section title="Codex subscription" testID="codex-card" detail={s().stale ? <Tag label="STALE" /> : undefined}>
+    <Section title="Codex subscription" testID="codex-card" detail={<If when={s().stale}><Tag label="STALE" /></If>}>
       <Row testID="codex-plan" lead={{ kind: "logo", node: <AgentIcon kind="codex" size={28} slot={LEAD_SLOT} /> }} title={codexPlanLabel(s().plan)} />
-      {available() ? (
-        <View>
+      <If when={available()} else={<View class="px-4 py-3"><Text class="text-sub text-muted-foreground">{codexNotice(s())}</Text></View>}><View>
           {(s().windows ?? []).map((w) => {
             const used = normalizeCodexUsedPercent(w.usedPercent);
             const remaining = codexRemainingPercent(used);
@@ -225,11 +216,8 @@ function CodexCard(props: { subscription: CodexSubscriptionUsage }) {
               </View>
             );
           })}
-          {s().stale ? <View class="px-4 pb-3"><Text class="text-sub text-muted-foreground">Live usage is temporarily unavailable. Showing the last successful update.</Text></View> : null}
-        </View>
-      ) : (
-        <View class="px-4 py-3"><Text class="text-sub text-muted-foreground">{codexNotice(s())}</Text></View>
-      )}
+          <If when={s().stale}><View class="px-4 pb-3"><Text class="text-sub text-muted-foreground">Live usage is temporarily unavailable. Showing the last successful update.</Text></View></If>
+        </View></If>
     </Section>
   );
 }
@@ -253,7 +241,7 @@ function Summary(props: { data: RangeData; pricing?: PricingStatus }) {
         <StatTile label="Tokens" valueTestID="stats-tokens" value={formatAvailableTokens(props.data.totalTokens, props.data.totalTokensKnown)} muted={unknownTokens()} />
         <StatTile label="Sessions" value={String(props.data.sessions)} />
       </StatGrid>
-      {props.pricing ? <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{pricingLine(props.pricing, formatDate)}</Text></View> : null}
+      <If when={props.pricing}>{(pricing) => <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{pricingLine(pricing(), formatDate)}</Text></View>}</If>
     </View>
   );
 }
@@ -264,8 +252,7 @@ function Models(props: { data: RangeData; pricing?: PricingStatus; nav: PageNav 
   const max = () => Math.max(1, ...models().map((m) => activityValue(m, usesTokens())));
   return (
     <>
-      {models().length === 0 ? null : (
-        <Section title="Models" testID="stats-models">
+      <If when={!(models().length === 0)}><Section title="Models" testID="stats-models">
           {shown("models", models()).map((m: ModelStat) => (
             <RankedRow
               testID={`model-${statsModelKey(m)}`}
@@ -280,9 +267,8 @@ function Models(props: { data: RangeData; pricing?: PricingStatus; nav: PageNav 
               onPress={() => props.nav.push({ name: "stats-model", model: m, pricing: props.pricing })}
             />
           ))}
-          {models().length > MAX_LIST_ITEMS ? <ShowMore testID="more-models" hidden={models().length - MAX_LIST_ITEMS} expanded={expanded().has("models")} onToggle={() => toggle("models")} /> : null}
-        </Section>
-      )}
+          <If when={models().length > MAX_LIST_ITEMS}><ShowMore testID="more-models" hidden={models().length - MAX_LIST_ITEMS} expanded={expanded().has("models")} onToggle={() => toggle("models")} /></If>
+        </Section></If>
     </>
   );
 }
@@ -293,14 +279,12 @@ function Projects(props: { data: RangeData }) {
   const max = () => Math.max(1, ...projects().map((p) => activityValue(p, usesTokens())));
   return (
     <>
-      {projects().length === 0 ? null : (
-        <Section title="Projects" testID="stats-projects">
+      <If when={!(projects().length === 0)}><Section title="Projects" testID="stats-projects">
           {shown("projects", projects()).map((p) => (
             <RankedRow lead={tile("folder")} tone="meter" title={p.name} subtitle={`${rowActivitySummary(p)} · ${costSourceLabel(p.costProvenance)}`} share={activityValue(p, usesTokens()) / max()} value={formatAvailableCost(p.cost, p.costKnown)} />
           ))}
-          {projects().length > MAX_LIST_ITEMS ? <ShowMore hidden={projects().length - MAX_LIST_ITEMS} expanded={expanded().has("projects")} onToggle={() => toggle("projects")} /> : null}
-        </Section>
-      )}
+          <If when={projects().length > MAX_LIST_ITEMS}><ShowMore hidden={projects().length - MAX_LIST_ITEMS} expanded={expanded().has("projects")} onToggle={() => toggle("projects")} /></If>
+        </Section></If>
     </>
   );
 }
@@ -310,14 +294,12 @@ function Counted(props: { section: string; title: string; items: Array<{ name: s
   const max = () => Math.max(1, ...props.items.map((i) => i.calls));
   return (
     <>
-      {props.items.length === 0 || (props.section === "tools" && total() === 0) ? null : (
-        <Section title={props.title} testID={`stats-${props.section}`} detail={<Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{`${total()} calls`}</Text>}>
+      <If when={!(props.items.length === 0 || (props.section === "tools" && total() === 0))}><Section title={props.title} testID={`stats-${props.section}`} detail={<Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{`${total()} calls`}</Text>}>
           {shown(props.section, props.items).map((item) => (
             <RankedRow lead={tile(props.section === "skills" ? "skills" : "construct")} tone="meter" title={item.name} subtitle={item.detail || undefined} share={item.calls / max()} value={String(item.calls)} />
           ))}
-          {props.items.length > MAX_LIST_ITEMS ? <ShowMore hidden={props.items.length - MAX_LIST_ITEMS} expanded={expanded().has(props.section)} onToggle={() => toggle(props.section)} /> : null}
-        </Section>
-      )}
+          <If when={props.items.length > MAX_LIST_ITEMS}><ShowMore hidden={props.items.length - MAX_LIST_ITEMS} expanded={expanded().has(props.section)} onToggle={() => toggle(props.section)} /></If>
+        </Section></If>
     </>
   );
 }
@@ -508,11 +490,7 @@ export function StatsDay(props: { day: DayCell; nav: PageNav }) {
     <Page display title={chartDate(props.day.date)} eyebrow={accessibleDate(props.day.date)} testID="stats-day">
       <Section>
         {dayFacts(props.day).map(([label, value]) =>
-          label === "Cost" && costShown ? (
-            <Row title={label} trailing={<Text testID="day-cost" class="text-body font-semibold" style={{ fontVariant: ["tabular-nums"] }}>{value}</Text>} />
-          ) : (
-            <Row title={label} value={value} />
-          ),
+          <If when={label === "Cost" && costShown} else={<Row title={label} value={value} />}><Row title={label} trailing={<Text testID="day-cost" class="text-body font-semibold" style={{ fontVariant: ["tabular-nums"] }}>{value}</Text>} /></If>,
         )}
       </Section>
     </Page>

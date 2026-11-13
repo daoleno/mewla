@@ -434,13 +434,18 @@ describe("Git review: the list", () => {
   });
 
   test("with a right pane of 880 or more (a 1280 window with the default pane) the reader sits beside the list, and says No file selected until one is", async () => {
-    const { app } = await openReview([app_ts, notes_md], { width: 1280 });
+    const { repo, app } = await openReview([app_ts, notes_md], { width: 1280 });
     await app.waitFor("id:git-no-file");
     expect(app.texts()).toContain("No file selected");
     await app.press("id:git-row-changes:app.ts");
     await app.waitFor("id:git-diff-view");
     expect(app.shows("id:git-diff-page")).toBe(false);
     expect(app.shows("id:git-list")).toBe(true);
+    // Another row opens its own file in the reader (the reader is made again for each choice from the list).
+    expect(app.count("text:app.ts")).toBe(2);
+    await app.press("id:git-row-changes:notes.md");
+    await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_diff_patch").at(-1)?.body.path === "notes.md");
+    await app.waitUntil(() => app.count("text:notes.md") === 2 && app.count("text:app.ts") === 1);
   });
 
   test("below 880 (a 1024 window: 704 beside the pane) the diff pushes, as on a phone; the split follows the width live", async () => {

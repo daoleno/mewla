@@ -114,48 +114,35 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
   const tap = () => !it().pending && props.handlers.onUserMessage?.(it());
   return (
     <View class="max-w-[84%] items-end gap-1 self-end">
-      {pictures().length ? (
-        <View testID="sent-pictures" class={`flex-row flex-wrap justify-end gap-2 ${waiting() ? "opacity-55" : ""}`}>
+      <If when={pictures().length}><View testID="sent-pictures" class={`flex-row flex-wrap justify-end gap-2 ${waiting() ? "opacity-55" : ""}`}>
           {pictures().map((file) => (
             <ChatImage frame="sent" src={file.path} alt={file.name} load={props.handlers.loadImage} onOpen={() => props.handlers.openPicture?.(pictureKey(it().id, file.path))} />
           ))}
-        </View>
-      ) : null}
-      {it().body || files().length ? (
-        // A long press selects its text (the system's handles and Copy / Select all / Share); a tap edits it.
-        // The text hears the tap itself: in a selectable area Android's text takes every touch on it (NSH 0.5.0
-        // `TextBox`), handing a tap to its own press and cancelling it once a long press selects.
-        <View testID="user-message" selectable onPress={tap}
+        </View></If>
+      <If when={it().body || files().length}><View testID="user-message" selectable onPress={tap}
           class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "border border-foreground" : ""} ${waiting() ? "opacity-55" : ""}`}>
-          {it().body ? (
-            <View testID={folded() ? "user-message-folded" : "user-message-body"} class="overflow-hidden" style={{ maxHeight: folded() ? FOLDED_TEXT_HEIGHT : undefined }}>
+          <If when={it().body}><View testID={folded() ? "user-message-folded" : "user-message-body"} class="overflow-hidden" style={{ maxHeight: folded() ? FOLDED_TEXT_HEIGHT : undefined }}>
               <Text testID="user-message-text" onPress={tap} onLayout={({ bounds }) => textHeight.set(bounds.size.height)}
                 class={`shrink-0 text-message ${SELECTION}`}>{it().body}</Text>
-              {folded() ? <BubbleFade /> : null}
-            </View>
-          ) : null}
-          {folds() ? (
-            <Button testID="user-message-fold" accessibilityLabel={open() ? "Fold the message" : "Show the whole message"} onPress={() => props.expansion.toggle(untracked(it).id)}
+              <If when={folded()}><BubbleFade /></If>
+            </View></If>
+          <If when={folds()}><Button testID="user-message-fold" accessibilityLabel={open() ? "Fold the message" : "Show the whole message"} onPress={() => props.expansion.toggle(untracked(it).id)}
               class="-mb-2 -mr-2 size-11 items-center justify-center self-end active:opacity-60">
               <Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" />
-            </Button>
-          ) : null}
+            </Button></If>
           {files().map((file) => (
             <View class="flex-row items-center gap-1.5 pt-1">
               <Icon name="document" size={14} />
               <Text class="text-sub text-muted-foreground line-clamp-1">{file.name}</Text>
             </View>
           ))}
-        </View>
-      ) : null}
-      {waiting() ? <Icon name="time" size={12} /> : null}
-      {failed() ? (
-        <View class="flex-row items-center gap-3">
+        </View></If>
+      <If when={waiting()}><Icon name="time" size={12} /></If>
+      <If when={failed()}><View class="flex-row items-center gap-3">
           <Text class="text-sub font-semibold">Not sent</Text>
           <Button testID="retry" onPress={() => it().onRetryPending?.()} class="min-h-[44px] justify-center"><Text class="text-sub font-semibold">Send again</Text></Button>
           <Button testID="discard" onPress={() => it().onDiscardPending?.()} class="min-h-[44px] justify-center"><Text class="text-sub text-muted-foreground">Delete</Text></Button>
-        </View>
-      ) : null}
+        </View></If>
     </View>
   );
 }
@@ -175,7 +162,7 @@ function DelegatedBrief(props: { item: () => MessageTimelineItem; expansion: Exp
       class="min-h-[44px] flex-row items-start gap-2 py-2.5 active:opacity-70">
       <Icon name="brain" size={18} />
       <Text testID={open() ? "delegated-task-open" : "delegated-task"} class={`min-w-0 flex-1 text-sub ${open() ? "" : "line-clamp-2"}`}>{task()}</Text>
-      {long() ? <Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" /> : null}
+      <If when={long()}><Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" /></If>
     </Button>
   );
 }
@@ -242,17 +229,8 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
   const work = as("brain-work-event") as () => BrainWorkEventTimelineItem;
   return (
     <View class="py-1">
-      {kind() === "divider" ? (
-        <View testID="date-divider" class="py-2">
-          {/* The whole row's width, centred, one line: sized to its own word, a release build's measure wrapped "Toda / y". */}
-          <Caption plain center text={(it() as unknown as DateDividerItem).label} />
-        </View>
-      ) : kind() === "brief" ? (
-        <View class="px-4"><DelegatedBrief item={reply} expansion={props.expansion} /></View>
-      ) : kind() === "user" ? (
-        <View class="px-4"><UserMessage item={reply} handlers={props.handlers} expansion={props.expansion} /></View>
-      ) : kind() === "reply" ? (
-        <View class="px-4">
+      <If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
+          pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} /></If>}><WorkingRow since={() => props.handlers.workingSince?.()} /></If>}><View class="px-4">
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
               with the system's handles and menu (Copy, Select all, Share). */}
           <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
@@ -265,23 +243,10 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
                 return <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} width={textWidth} onOpen={() => props.handlers.openPicture?.(key)} />;
               }} />
           </View>
-        </View>
-      ) : kind() === "working" ? (
-        <WorkingRow since={() => props.handlers.workingSince?.()} />
-      ) : kind() === "activity" ? (
-        <ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
-          pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} />
-      ) : kind() === "plan" ? (
-        <PlanRow item={plan} />
-      ) : kind() === "task-notification" ? (
-        <TaskNotificationCard item={task} expansion={props.expansion} />
-      ) : kind() === "computer-message" ? (
-        <ComputerMessageCard item={computerMessage} expansion={props.expansion} />
-      ) : kind() === "answered" ? (
-        <AnsweredRow item={answered} />
-      ) : kind() === "brain-work-event" ? (
-        <WorkCard item={work} handlers={props.handlers.work} />
-      ) : null}
+        </View></If>}><View class="px-4"><UserMessage item={reply} handlers={props.handlers} expansion={props.expansion} /></View></If>}><View class="px-4"><DelegatedBrief item={reply} expansion={props.expansion} /></View></If>}><View testID="date-divider" class="py-2">
+          {/* The whole row's width, centred, one line: sized to its own word, a release build's measure wrapped "Toda / y". */}
+          <Caption plain center text={(it() as unknown as DateDividerItem).label} />
+        </View></If>
     </View>
   );
 }
@@ -463,8 +428,7 @@ export function ChatTimeline(props: {
   return (
     <View class="flex-1">
       <PictureViewer pictures={pictures} open={viewing} load={handlers.loadImage} />
-      {ready() ? (
-      <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
+      <If when={ready()} else={<View testID={props.testID} class="flex-1">{props.empty() as never}</View>}><List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
           list = node;
           mounted.set(true);
         }}
@@ -503,38 +467,26 @@ export function ChatTimeline(props: {
           const foot = computed(() => (item() as FootRow).type === "thread-foot");
           return (
             <View>
-              {foot() ? (props.foot!.render((node) => anchor.set(node)) as never) : (
-                // A row that throws shows nothing and is reported; the rest of the thread stays (owner 11-13 10:22).
-                <ErrorBoundary fallback={(error: unknown, reset: () => void) => <FailedRow error={error} reset={reset} id={() => (item() as TimelineItem).id} />}>
+              <If when={foot()} else={<ErrorBoundary fallback={(error: unknown, reset: () => void) => <FailedRow error={error} reset={reset} id={() => (item() as TimelineItem).id} />}>
                   <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />
-                </ErrorBoundary>
-              )}
+                </ErrorBoundary>}>{props.foot!.render((node) => anchor.set(node)) as never}</If>
             </View>
           );
         }}
-      </List>
-      ) : <View testID={props.testID} class="flex-1">{props.empty() as never}</View>}
-      {props.capsule ? null : <HeaderFade />}
-      {away() ? (
-        (props.requests?.() ?? 0) > 0 ? (
-          <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}
+      </List></If>
+      <If when={!props.capsule}><HeaderFade /></If>
+      <If when={away()}><If when={(props.requests?.() ?? 0) > 0} else={<Button testID="jump-latest" accessibilityLabel="Jump to latest" onPress={() => list?.scrollToEnd({ animated: true })}
+            class={`absolute bottom-3 right-4 size-11 items-center justify-center rounded-full active:opacity-70 ${jumpFloat()}`}>
+            <Icon name="arrow-down" size={18} color="foreground" />
+          </Button>}><Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}
             class={`absolute bottom-3 right-4 h-[40px] flex-row items-center gap-1.5 rounded-full px-3.5 active:opacity-70 ${jumpFloat()}`}>
             <View class="size-2 rounded-full bg-seal" />
             <Text class="text-sub font-semibold">{String(props.requests!())}</Text>
             <Icon name="arrow-down" size={16} color="foreground" />
-          </Button>
-        ) : (
-          <Button testID="jump-latest" accessibilityLabel="Jump to latest" onPress={() => list?.scrollToEnd({ animated: true })}
-            class={`absolute bottom-3 right-4 size-11 items-center justify-center rounded-full active:opacity-70 ${jumpFloat()}`}>
-            <Icon name="arrow-down" size={18} color="foreground" />
-          </Button>
-        )
-      ) : null}
-      {notice() ? (
-        <View class="absolute bottom-16 left-4 right-4 items-center">
+          </Button></If></If>
+      <If when={notice()}><View class="absolute bottom-16 left-4 right-4 items-center">
           <View testID="chat-notice" onPress={() => notice.set("")} class="rounded-full bg-foreground px-4 py-2.5"><Text class="text-sub font-semibold text-background">{notice()}</Text></View>
-        </View>
-      ) : null}
+        </View></If>
     </View>
   );
 }

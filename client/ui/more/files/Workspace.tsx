@@ -79,13 +79,9 @@ export function WorkspacePage(props: { trail?: string[]; file?: string; hostSess
         <View testID="workspace-list" class={listDetail() ? "w-[380px] border-r border-border" : "flex-1"}>
           <WorkspaceFolder trail={props.trail ?? []} name={name} hostSession={props.hostSession} nav={props.nav} onOpenFile={openFile} selected={() => (listDetail() ? chosen() : null)} onTitleAway={(away) => titleAway.set(away)} />
         </View>
-        {listDetail() ? (
-          <View testID="workspace-reader" class="flex-1 bg-background pt-2">
-            {chosen()
-              ? <WorkspaceFile path={chosen()!} hostSession={props.hostSession} nav={props.nav} />
-              : <View class="flex-1 px-4"><EmptyState testID="workspace-no-file" icon="document" title="No file selected" /></View>}
-          </View>
-        ) : null}
+        <If when={listDetail()}><View testID="workspace-reader" class="flex-1 bg-background pt-2">
+            <If when={chosen()} else={<View class="flex-1 px-4"><EmptyState testID="workspace-no-file" icon="document" title="No file selected" /></View>}><Each of={[chosen()!]} key={(path) => path}>{(path) => <WorkspaceFile path={path()} hostSession={props.hostSession} nav={props.nav} />}</Each></If>
+          </View></If>
       </View>
     </NavPage>
   );
@@ -135,9 +131,7 @@ function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: S
   function content(): JSX.Element {
     const t = tree();
     if (!t) {
-      return error()
-        ? <EmptyState testID="workspace-error" icon="alert-circle" title={error()} action="Try again" onAction={() => void read()} />
-        : <EmptyState testID="workspace-loading" busy title="Loading workspace" />;
+      return <If when={error()} else={<EmptyState testID="workspace-loading" busy title="Loading workspace" />}><EmptyState testID="workspace-error" icon="alert-circle" title={error()} action="Try again" onAction={() => void read()} /></If>;
     }
     const entries = workspaceFolderEntries(t);
     // Folders first, a group of rows that push; then the files with their sizes (SPEC §15 File browser).
@@ -161,9 +155,9 @@ function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: S
     const files = entries.filter((entry) => entry.kind !== "directory");
     return (
       <View>
-        {folders.length ? <Section title="Folders">{folders.map(row)}</Section> : null}
-        {files.length ? <Section title="Files">{files.map(row)}</Section> : null}
-        {entries.length ? null : <EmptyState testID="workspace-empty" icon="folder-open" title="This folder is empty." />}
+        <If when={folders.length}><Section title="Folders">{folders.map(row)}</Section></If>
+        <If when={files.length}><Section title="Files">{files.map(row)}</Section></If>
+        <If when={!entries.length}><EmptyState testID="workspace-empty" icon="folder-open" title="This folder is empty." /></If>
       </View>
     );
   }
@@ -228,13 +222,11 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity;
       <View class="min-h-[60px] flex-row items-center gap-2 px-4">
         <View class="min-w-0 flex-1">
           <Text class="text-title font-bold line-clamp-1" role="header">{props.path.split("/").at(-1)!}</Text>
-          {location(props.path) ? <Text testID="workspace-location" class="font-mono text-caption text-muted-foreground line-clamp-1">{location(props.path)}</Text> : null}
+          <If when={location(props.path)}><Text testID="workspace-location" class="font-mono text-caption text-muted-foreground line-clamp-1">{location(props.path)}</Text></If>
         </View>
-        {file()?.content && !file()?.data_url ? (
-          <Button testID="workspace-copy" accessibilityLabel={copied() ? "Copied" : "Copy"} onPress={copy} class="size-11 items-center justify-center rounded-full active:bg-accent">
+        <If when={file()?.content && !file()?.data_url}><Button testID="workspace-copy" accessibilityLabel={copied() ? "Copied" : "Copy"} onPress={copy} class="size-11 items-center justify-center rounded-full active:bg-accent">
             <Icon name={copied() ? "check" : "copy"} size={20} tone="ink" />
-          </Button>
-        ) : null}
+          </Button></If>
       </View>
       <View class="mx-4 mb-4 flex-1 overflow-hidden rounded-(--radius-group) bg-card">{content()}</View>
     </View>

@@ -57,18 +57,12 @@ export function AgentMark(props: { agent: ManagedSkillAgent; size?: number }) {
 export function AgentMarks(props: { agents: readonly ManagedSkillAgent[]; size?: number; showLabels?: boolean }) {
   return (
     <View class={props.showLabels ? "flex-row flex-wrap items-center gap-x-3 gap-y-1.5" : "flex-row items-center gap-1"} accessibilityLabel={props.agents.length ? `Available to ${props.agents.map(skillAgentLabel).join(", ")}` : "Available to an unknown Agent"}>
-      {props.agents.length
-        ? props.agents.map((agent) =>
-            props.showLabels ? (
-              <View class="flex-row items-center gap-1.5">
+      <If when={props.agents.length} else={<Text class="text-caption text-muted-foreground">Unknown</Text>}>{props.agents.map((agent) =>
+            <If when={props.showLabels} else={<AgentMark agent={agent} size={props.size} />}><View class="flex-row items-center gap-1.5">
                 <AgentMark agent={agent} size={props.size} />
                 <Text class="text-sub">{skillAgentLabel(agent)}</Text>
-              </View>
-            ) : (
-              <AgentMark agent={agent} size={props.size} />
-            ),
-          )
-        : <Text class="text-caption text-muted-foreground">Unknown</Text>}
+              </View></If>,
+          )}</If>
     </View>
   );
 }

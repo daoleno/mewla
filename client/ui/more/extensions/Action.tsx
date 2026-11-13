@@ -12,7 +12,7 @@ export function Action(props: { label: string; onPress: () => void; filled?: boo
       onPress={props.onPress}
       class={`h-[52px] flex-row items-center justify-center gap-2 rounded-2xl px-5 active:opacity-70 disabled:opacity-40 ${props.filled ? "bg-primary" : "bg-card"}`}
     >
-      {props.busy ? <Spinner size={14} tone={props.filled ? "canvas" : "soft"} /> : null}
+      <If when={props.busy}><Spinner size={14} tone={props.filled ? "canvas" : "soft"} /></If>
       <Text class={`text-body font-semibold ${props.filled ? "text-primary-foreground" : props.destructive ? "text-destructive" : ""}`}>{props.label}</Text>
     </Button>
   );

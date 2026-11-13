@@ -136,7 +136,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
       >
         <Icon name={entry.folder ? (shownExpanded().includes(entry.id) ? "folder-open" : "folder") : "document-text"} size={16} tone="ink" />
         <Text class={`flex-1 font-mono text-code line-clamp-1 ${changed || holds ? "font-semibold" : ""}`}>{entry.label}</Text>
-        {changed ? <StatusTile file={changed} /> : holds ? <View testID={`git-file-dot-${entry.id}`} class="size-1.5 rounded-full bg-foreground" /> : null}
+        <If when={changed} else={<If when={holds}><View testID={`git-file-dot-${entry.id}`} class="size-1.5 rounded-full bg-foreground" /></If>}>{(changed) => <StatusTile file={changed()} />}</If>
       </View>
     );
   };
@@ -160,18 +160,12 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
               if (!state.value.paths.length) return <View class="px-4"><EmptyState title="No files" /></View>;
               return (
                 <View class="flex-1">
-                  {state.value.truncated ? <View class="px-4"><Notice tone="warning" title="Showing part of this repository" /></View> : null}
+                  <If when={state.value.truncated}><View class="px-4"><Notice tone="warning" title="Showing part of this repository" /></View></If>
                   <View class="px-4 pb-3 pt-2"><SearchField testID="git-files-query" accessibilityLabel="Search files" placeholder="Search files" value={query()} onChange={(value) => query.set(value)} /></View>
-                  {query().trim() && !items().length ? <View class="px-4"><EmptyState title="No matching files" /></View> : null}
+                  <If when={query().trim() && !items().length}><View class="px-4"><EmptyState title="No matching files" /></View></If>
                   {/* A phone's search: NSH's Tree spends a tap with the keyboard up on hiding it (no
                       keyboardShouldPersistTaps), so what was found is a list that keeps the tap (R4#6). */}
-                  {mobile && query().trim() ? (
-                    <List keyboardShouldPersistTaps="handled" testID="git-files-results" class="mx-4 mb-4 flex-1 rounded-(--radius-group) bg-card" contentClass="py-2"
-                      each={repoTreeRows(items())} keyExtractor={(entry) => entry.id}>
-                      {/* Cells are recycled: the row is read in the JSX, so a cell rebuilds for the entry it holds now. */}
-                      {(entry) => <View>{row(entry())}</View>}
-                    </List>
-                  ) : <Tree
+                  <If when={mobile && query().trim()} else={<Tree
                     testID="git-files-tree"
                     class="mx-4 mb-4 flex-1 overflow-hidden rounded-(--radius-group) bg-card"
                     listClass="py-2"
@@ -187,24 +181,26 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
                     }}
                     itemClass="hover:bg-accent active:bg-accent"
                     renderItem={(entry) => row(entry)}
-                  />}
+                  />}><List keyboardShouldPersistTaps="handled" testID="git-files-results" class="mx-4 mb-4 flex-1 rounded-(--radius-group) bg-card" contentClass="py-2"
+                      each={repoTreeRows(items())} keyExtractor={(entry) => entry.id}>
+                      {/* Cells are recycled: the row is read in the JSX, so a cell rebuilds for the entry it holds now. */}
+                      {(entry) => <View>{row(entry())}</View>}
+                    </List></If>
                 </View>
               );
             })()}
           </View>
-          {listDetail() ? (
-            <View testID="git-file-reader" class="flex-1 bg-background">
-              {chosen() ? (
-                <View class="flex-1">
+          <If when={listDetail()}><View testID="git-file-reader" class="flex-1 bg-background">
+              <If when={chosen()} else={<View class="flex-1 px-4"><EmptyState testID="git-files-no-file" icon="document" title="No file selected" /></View>}>
+                {/* Made again for each file chosen: the body loads its file once. */}
+                <Each of={[chosen()!]} key={(path) => path}>{(path) => <View class="flex-1">
                   <View class="min-h-[52px] flex-row items-center gap-2 border-b border-border px-4">
-                    <Text role="header" class="min-w-0 flex-1 text-[17px] font-semibold line-clamp-1">{chosen()!.split("/").at(-1) || chosen()!}</Text>
-                    <FileActions review={review} path={chosen()!} />
+                    <Text role="header" class="min-w-0 flex-1 text-[17px] font-semibold line-clamp-1">{path().split("/").at(-1) || path()}</Text>
+                    <FileActions review={review} path={path()} />
                   </View>
-                  <FileBody review={review} path={chosen()!} />
-                </View>
-              ) : <View class="flex-1 px-4"><EmptyState testID="git-files-no-file" icon="document" title="No file selected" /></View>}
-            </View>
-          ) : null}
+                  <FileBody review={review} path={path()} />
+                </View>}</Each></If>
+            </View></If>
         </View>
       )}</Current>
     </NavPage>
@@ -251,11 +247,9 @@ function FileBody(props: { review: GitReview; path: string }) {
               const shown = padGitDiffText(content);
               return (
                 <View class="flex-1">
-                  {snapshot.truncated ? (
-                    <View class="px-4">
+                  <If when={snapshot.truncated}><View class="px-4">
                       <Notice tone="warning" title="Showing part of this file" detail={`First ${formatGitDiffBytes(content.length)} of ${formatGitDiffBytes(snapshot.byte_count)}.`} />
-                    </View>
-                  ) : null}
+                    </View></If>
                   <View class="mx-4 mb-4 mt-2 flex-1 overflow-hidden rounded-(--radius-group) bg-card">
                     <DiffView testID="git-file-view" class="flex-1" classes={{ lineNumber: "text-faint" }} oldValue={shown} newValue={shown} expandAll language={props.path} layout="unified" />
                   </View>

@@ -93,7 +93,7 @@ export function NavPage(props: AppNavPageProps) {
     return (
       <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
         <CapsulePage>
-          {under ? own.children : <View class="flex-1" style={{ paddingTop: capsulePageInset(safeArea().top) }}>{own.children}</View>}
+          <If when={under} else={<View class="flex-1" style={{ paddingTop: capsulePageInset(safeArea().top) }}>{own.children}</View>}>{own.children}</If>
           <PageCapsule title={() => props.title ?? ""} controls={controls} right={() => own.headerRight} />
         </CapsulePage>
       </BaseNavPage>
@@ -102,7 +102,7 @@ export function NavPage(props: AppNavPageProps) {
   if (mobile) {
     // The system's Back can't carry a dot: while the mark shows, the page's own Back stands in for it.
     const [slots, page] = split(props, ["headerLeft", "headerTitle"]);
-    const markedBack = () => (mark() ? <MarkedBack mark={mark()!} back={stack.back} /> : null);
+    const markedBack = () => (<If when={mark()}><MarkedBack mark={mark()!} back={stack.back} /></If>);
     // Android draws the header's leading item after the title: there Back and the leading item go into
     // the title's place, ahead of the title, so they lead as on iOS. Read by key, the slots are made once.
     const android = platform.os === "android";
@@ -111,19 +111,17 @@ export function NavPage(props: AppNavPageProps) {
     // with its own title view draws Back itself, in the title's place, right before it.
     const ownTitle = "headerTitle" in props;
     const ownBack = () => android && Boolean(mark() || (ownTitle && stack.canGoBack()));
-    const back = () => (mark() ? markedBack() : ownBack() ? <PlainBack back={stack.back} /> : null);
-    const left = () => (android ? undefined : mark() ? <View class="flex-row items-center gap-2">{markedBack()}{slots.headerLeft ?? null}</View> : slots.headerLeft);
+    const back = () => (<If when={mark()} else={<If when={ownBack()}><PlainBack back={stack.back} /></If>}>{markedBack()}</If>);
+    const left = () => (<If when={!android}><If when={mark()} else={<>{slots.headerLeft}</>}><View class="flex-row items-center gap-2">{markedBack()}{slots.headerLeft ?? null}</View></If></If>);
     // A page's own title view is as wide as the bar, not as its content (`nativeHeaderTitleWidth`): its
     // controls stay on screen and its text ends in "…" before them.
     const titleWidth = () => (ownTitle ? nativeHeaderTitleWidth({ stackWidth: stackWidth(), os: platform.os, systemBack: stack.canGoBack() && !ownBack() }) : undefined);
     const title = () =>
-      android && (ownBack() || hasLeft) ? (
-        <View class={`min-w-0 flex-1 flex-row items-center ${ownTitle ? "gap-1" : "gap-4"}`} style={{ width: titleWidth() }}>
+      <If when={android && (ownBack() || hasLeft)} else={<If when={ownTitle} else={<>{slots.headerTitle}</>}><View class="flex-row items-center" style={{ width: titleWidth() }}>{slots.headerTitle}</View></If>}><View class={`min-w-0 flex-1 flex-row items-center ${ownTitle ? "gap-1" : "gap-4"}`} style={{ width: titleWidth() }}>
           {back()}
           {slots.headerLeft ?? null}
           {slots.headerTitle ?? <Text role="header" class="shrink text-[22px] font-medium text-foreground line-clamp-1">{page.title ?? ""}</Text>}
-        </View>
-      ) : ownTitle ? <View class="flex-row items-center" style={{ width: titleWidth() }}>{slots.headerTitle}</View> : slots.headerTitle;
+        </View></If>;
     // A phone never reaches 1024 pt: its pages stay the system's own, with nothing around their content.
     if (platform.idiom === "phone") {
       const [own, rest] = split(page, ["capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar"]);
@@ -160,17 +158,15 @@ function PageHeader(props: {
   return (
     <View testID="page-header" class="h-[52px] justify-center border-b border-border bg-background px-4">
       <View class="w-full flex-row items-center gap-2 self-center" style={{ maxWidth: wide() ? props.width() ?? undefined : undefined }}>
-        {props.canGoBack() ? (
-          <Button testID="page-back" accessibilityLabel={props.mark()?.label ?? "Back"} onPress={props.back} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+        <If when={props.canGoBack()}><Button testID="page-back" accessibilityLabel={props.mark()?.label ?? "Back"} onPress={props.back} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
             <Icon name="chevron-left" size={20} tone="ink" />
-            {props.mark() ? <MarkDot tone={props.mark()!.tone} /> : null}
-          </Button>
-        ) : null}
+            <If when={props.mark()}><MarkDot tone={props.mark()!.tone} /></If>
+          </Button></If>
         {props.left ?? null}
         <View class="min-w-0 flex-1">
           {props.titleView ?? <Text role="header" class="text-xl font-semibold line-clamp-1">{props.title ?? ""}</Text>}
         </View>
-        {props.right ? <View class="flex-row items-center gap-3">{props.right}</View> : null}
+        <If when={"right" in props}><View class="flex-row items-center gap-3">{props.right}</View></If>
       </View>
     </View>
   );
@@ -192,13 +188,11 @@ function PageCapsule(props: { title: () => string; controls: boolean; right: () 
   return (
     <Capsule collapsed={capsule.collapsed} alone={() => true}>
       <CapsuleBack />
-      {capsule.collapsed() ? null : (
-        <>
-          <Text testID="page-title" role="header" class="min-w-0 flex-1 font-semibold text-foreground line-clamp-1"
-            style={{ fontSize: CAPSULE.pageTitle.size, lineHeight: CAPSULE.pageTitle.line, marginLeft: 4 }}>{props.title()}</Text>
-          {props.controls ? <View class="flex-row items-center pr-1">{props.right() ?? null}</View> : null}
-        </>
-      )}
+      <If when={!capsule.collapsed()}>
+        <Text testID="page-title" role="header" class="min-w-0 flex-1 font-semibold text-foreground line-clamp-1"
+          style={{ fontSize: CAPSULE.pageTitle.size, lineHeight: CAPSULE.pageTitle.line, marginLeft: 4 }}>{props.title()}</Text>
+        <If when={props.controls}><View class="flex-row items-center pr-1">{props.right() ?? null}</View></If>
+      </If>
     </Capsule>
   );
 }
@@ -209,8 +203,8 @@ export function CapsuleBack(props: { testID?: string }) {
   const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
   return (
     <Button testID={props.testID ?? "page-back"} accessibilityLabel={mark()?.label ?? "Back"} onPress={stack.back} class="size-11 items-center justify-center rounded-full active:bg-accent">
-      {platform.os === "ios" ? <Icon name="chevron-left" size={22} tone="ink" /> : <View style={{ transform: [{ scaleX: -1 }] }}><Icon name="arrow-forward" size={22} tone="ink" /></View>}
-      {mark() ? <MarkDot tone={mark()!.tone} /> : null}
+      <If when={platform.os === "ios"} else={<View style={{ transform: [{ scaleX: -1 }] }}><Icon name="arrow-forward" size={22} tone="ink" /></View>}><Icon name="chevron-left" size={22} tone="ink" /></If>
+      <If when={mark()}>{(m) => <MarkDot tone={m().tone} />}</If>
     </Button>
   );
 }
@@ -233,7 +227,7 @@ function PlainBack(props: { back: () => void }) {
 function MarkedBack(props: { mark: { tone: "grey" | "red"; label: string }; back: () => void }) {
   return (
     <Button testID="page-back" accessibilityLabel={props.mark.label} onPress={props.back} class="size-10 items-center justify-center rounded-full active:bg-accent">
-      {platform.os === "ios" ? <Icon name="chevron-left" size={22} tone="ink" /> : <View style={{ transform: [{ scaleX: -1 }] }}><Icon name="arrow-forward" size={22} tone="ink" /></View>}
+      <If when={platform.os === "ios"} else={<View style={{ transform: [{ scaleX: -1 }] }}><Icon name="arrow-forward" size={22} tone="ink" /></View>}><Icon name="chevron-left" size={22} tone="ink" /></If>
       <MarkDot tone={props.mark.tone} />
     </Button>
   );

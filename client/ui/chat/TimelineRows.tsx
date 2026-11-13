@@ -108,8 +108,8 @@ function FileRow(props: { file: ActivityFileRow; onFile?: (path: string) => void
       disabled={!props.onFile} onPress={() => props.onFile?.(file.path)} class="min-h-[44px] flex-row items-center gap-2 active:opacity-60">
       <Icon name="document-text" size={18} color="muted-foreground" />
       <Text class={`min-w-0 shrink font-mono text-code line-clamp-1 ${props.onFile ? "text-foreground" : "text-muted-foreground"}`}>{shownPath(file.path)}</Text>
-      {file.added !== undefined ? <Text testID="activity-file-added" class="font-mono text-code text-add">{`+${file.added}`}</Text> : null}
-      {file.removed !== undefined ? <Text testID="activity-file-removed" class="font-mono text-code text-del">{`−${file.removed}`}</Text> : null}
+      <If when={file.added !== undefined}><Text testID="activity-file-added" class="font-mono text-code text-add">{`+${file.added}`}</Text></If>
+      <If when={file.removed !== undefined}><Text testID="activity-file-removed" class="font-mono text-code text-del">{`−${file.removed}`}</Text></If>
     </Button>
   );
 }
@@ -143,31 +143,27 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
       <Button testID="activity" onPress={() => expandable() && props.expansion.toggle(item().id)} class="min-h-[44px] flex-row items-center gap-2">
         <Icon name={iconOf(item().icon, "construct")} color={toneColor(item().tone)} size={18} />
         <ToolLine title={item().title} detail={shownDetail(item())} running={item().tone === "running"} />
-        {expandable() ? <Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" /> : null}
+        <If when={expandable()}><Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" /></If>
       </Button>
       {/* The pictures the call produced, under its row whether or not it is open (SPEC §1.7). */}
-      {toolPictures(item()).length ? (
-        <View testID="tool-pictures" class="flex-row flex-wrap items-start gap-2 pb-1.5 pl-6">
+      <If when={toolPictures(item()).length}><View testID="tool-pictures" class="flex-row flex-wrap items-start gap-2 pb-1.5 pl-6">
           {toolPictures(item()).map((src) => (
             <ChatImage frame="tool" src={src} alt={item().title} load={props.pictures?.load} onOpen={() => props.pictures?.open(src)} />
           ))}
-        </View>
-      ) : null}
-      {open() ? (
-        <View class="gap-1.5 pb-2 pl-6">
-          {item().steps?.length ? item().steps!.map((step) => (
+        </View></If>
+      <If when={open()}><View class="gap-1.5 pb-2 pl-6">
+          <If when={item().steps?.length}>{item().steps!.map((step) => (
             <View testID="activity-step" class="min-h-[44px] flex-row items-center gap-2">
               <Icon name={iconOf(step.icon, "construct")} color={toneColor(step.tone)} size={18} />
               <ToolLine title={step.title} detail={shownDetail(step)} />
             </View>
-          )) : null}
-          {item().commandText ? <Mono text={item().commandText ?? ""} /> : null}
-          {item().queryText ? <TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText ?? "" }] }] }} selectable class="text-sm" /> : null}
-          {item().statusLine ? <Text class="text-xs text-muted-foreground">{item().statusLine}</Text> : null}
-          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body ?? ""} /> : <TextView markdown={item().body ?? ""} selectable renderCodeBlock={renderCode} class={`text-sm ${SELECTION}`} />) : null}
+          ))}</If>
+          <If when={item().commandText}><Mono text={item().commandText ?? ""} /></If>
+          <If when={item().queryText}><TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText ?? "" }] }] }} selectable class="text-sm" /></If>
+          <If when={item().statusLine}><Text class="text-xs text-muted-foreground">{item().statusLine}</Text></If>
+          <If when={item().body}><If when={item().bodyKind === "terminal"} else={<TextView markdown={item().body ?? ""} selectable renderCodeBlock={renderCode} class={`text-sm ${SELECTION}`} />}><Mono text={item().body ?? ""} /></If></If>
           {files().map((file) => <FileRow file={file} onFile={props.onFile} />)}
-        </View>
-      ) : null}
+        </View></If>
     </View>
   );
 }
@@ -181,7 +177,7 @@ export function PlanRow(props: { item: () => PlanTimelineItem }) {
         <Icon name="list" size={16} />
         <Text class="text-sm font-semibold">Plan</Text>
       </View>
-      {props.item().explanation ? <Text class="text-sm text-muted-foreground">{props.item().explanation}</Text> : null}
+      <If when={props.item().explanation}><Text class="text-sm text-muted-foreground">{props.item().explanation}</Text></If>
       {props.item().steps.map((step) => (
         <View class="flex-row items-start gap-2">
           <Icon name={STEP_ICON[step.status] ?? "circle"} color={step.status === "in_progress" ? "foreground" : "muted-foreground"} size={16} />
@@ -199,10 +195,10 @@ function Card(props: { id: string; expansion: Expansion; icon: IconName; tone: s
       <View class="flex-row items-center gap-2">
         <Icon name={props.icon} color={toneColor(props.tone)} size={16} />
         <Text class="flex-1 text-xs font-semibold uppercase text-muted-foreground line-clamp-1">{props.kind}</Text>
-        {props.status ? <Text class="text-xs text-muted-foreground">{props.status}</Text> : null}
+        <If when={props.status}>{(status) => <Text class="text-xs text-muted-foreground">{status()}</Text>}</If>
       </View>
-      {props.title ? <Text class="text-base font-semibold">{props.title}</Text> : null}
-      {open() ? <TextView markdown={props.body || props.preview} selectable class={`text-sm ${SELECTION}`} /> : props.preview ? <Text class="text-sm text-muted-foreground line-clamp-3">{props.preview}</Text> : null}
+      <If when={props.title}>{(title) => <Text class="text-base font-semibold">{title()}</Text>}</If>
+      <If when={open()} else={<If when={props.preview}>{(preview) => <Text class="text-sm text-muted-foreground line-clamp-3">{preview()}</Text>}</If>}><TextView markdown={props.body || props.preview} selectable class={`text-sm ${SELECTION}`} /></If>
       {open() && props.extra ? (props.extra() as never) : null}
     </Button>
   );
@@ -227,12 +223,10 @@ export function ComputerMessageCard(props: { item: () => ComputerMessageTimeline
     <View>
       <Card id={it().id} expansion={props.expansion} icon="desktop" tone={it().tone} kind={`${it().direction === "to" ? "To" : "From"} ${it().computer} · ${it().kindLabel}`}
         title={it().userSaid ? `“${it().userSaid}”` : ""} status={it().statusLabel} preview={it().preview} body={it().body} />
-      {target() ? (
-        <Button testID="computer-message-open" accessibilityLabel={`Open on ${it().computer}`} onPress={() => { const server = target(); if (server) switchTo(server); }}
+      <If when={target()}><Button testID="computer-message-open" accessibilityLabel={`Open on ${it().computer}`} onPress={() => { const server = target(); if (server) switchTo(server); }}
           class="mx-4 mb-1 self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
           <Text class="text-sm font-semibold text-primary">Open on {it().computer}</Text>
-        </Button>
-      ) : null}
+        </Button></If>
     </View>
   );
 }
@@ -260,10 +254,7 @@ function resultMeta(model: WorkCardModel, agent: string | undefined): string {
 }
 
 function WorkLogo(props: { agent: { kind: AgentKind; flavor: TerminalFlavor } | null; size: number }) {
-  return props.agent
-    // Read through `?.`: the Session can leave the computer while its logo is drawn (owner 11-13 10:22).
-    ? <AgentIcon kind={props.agent?.kind ?? "terminal"} flavor={props.agent?.flavor} size={props.size - 8} />
-    : <View class="items-center justify-center rounded-lg bg-foreground" style={{ width: props.size, height: props.size }}><KitIcon name="brain" size={props.size - 10} tone="canvas" /></View>;
+  return <If when={props.agent} else={<View class="items-center justify-center rounded-lg bg-foreground" style={{ width: props.size, height: props.size }}><KitIcon name="brain" size={props.size - 10} tone="canvas" /></View>}>{(agent) => <AgentIcon kind={agent()?.kind ?? "terminal"} flavor={agent()?.flavor} size={props.size - 8} />}</If>;
 }
 
 /** A result's next steps (SPEC §11): small ghost buttons, canvas fill, an 18 pt glyph, ink words, wrapping. */
@@ -297,7 +288,7 @@ function WorkerLine(props: { line: WorkWorkerLine; onPress: () => void }) {
       <AgentIcon kind={line.agent} flavor={line.flavor} size={20} />
       <View class="min-w-0 flex-1">
         <Text class="text-sub line-clamp-1"><Text class="font-semibold">{row().title}</Text><Text class="text-muted-foreground">{row().line ? `  ${row().line}` : ""}</Text></Text>
-        {line.progress !== undefined ? <ProgressBar filled={line.progress} testID="work-card-progress" /> : null}
+        <If when={line.progress !== undefined}><ProgressBar filled={line.progress!} testID="work-card-progress" /></If>
       </View>
       <RowEnd row={row} />
     </Button>
@@ -355,12 +346,10 @@ function OneSessionWork(props: { model: () => WorkCardModel; line: () => WorkWor
       class="min-h-[68px] flex-row items-center gap-3.5 overflow-hidden rounded-(--radius-group) bg-card px-4 py-3 active:opacity-70">
       <RowTile tile={() => row().tile} />
       <RowText row={() => { const r = request(); return r ? { ...row(), line: r.ask ?? r.title, progress: undefined } : row(); }} />
-      {request() ? (
-        <Button testID={request()?.oneTap ? "work-card-approve" : "work-card-answer"} disabled={sending()} onPress={() => (request()?.oneTap ? void approve() : press())}
+      <If when={request()} else={<RowEnd row={row} />}><Button testID={request()?.oneTap ? "work-card-approve" : "work-card-answer"} disabled={sending()} onPress={() => (request()?.oneTap ? void approve() : press())}
           class="h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 disabled:opacity-40">
           <Text class="text-caption font-semibold text-seal-foreground">{request()?.oneTap ? "Approve" : "Answer"}</Text>
-        </Button>
-      ) : <RowEnd row={row} />}
+        </Button></If>
     </Button>
   );
 }
@@ -382,15 +371,21 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
   const shape = computed(() => (model().kind === "line" ? "line" : model().kind === "result" ? "result" : lines().length <= 1 && (lines().length === 1 || model().sessionId) ? "one" : "many"));
   return (
     <View class="px-4 py-1">
-      {shape() === "line" ? (
-        <Button testID="work-line" accessibilityLabel={`${model().title}, ${model().state}`} disabled={!props.handlers} onPress={() => props.handlers?.onLine(model())}
-          class="min-h-[44px] flex-row items-center gap-2.5 active:opacity-70">
-          <WorkLogo agent={agent()} size={20} />
-          <Text class="min-w-0 flex-1 text-sub text-muted-foreground line-clamp-1"><Text class="font-semibold text-foreground">{model().title}</Text>{model().summary ? ` · ${model().summary}` : ""}</Text>
-          <KitIcon name="check" size={18} tone="soft" />
-        </Button>
-      ) : shape() === "result" ? (
-        <View testID="work-result" class="gap-3 rounded-(--radius-group) bg-card p-4">
+      <If when={shape() === "line"} else={<If when={shape() === "result"} else={<If when={shape() === "one"} else={<View testID={state().dot === "seal" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">
+          <Button testID="work-card-title" disabled={!props.handlers} onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[52px] flex-row items-center gap-2 px-4 active:opacity-70">
+            <Text class="min-w-0 flex-1 text-body font-semibold line-clamp-1">{model().title}</Text>
+            <If when={state().dot}><View class={`size-2 rounded-full ${state().dot === "seal" ? "bg-seal" : "bg-foreground"}`} /></If>
+            <Text testID="work-card-state" class="text-sub text-muted-foreground">{state().words}</Text>
+            <KitIcon name="chevron-right" size={16} tone="faint" />
+          </Button>
+          <If when={lines().length} else={<If when={model().summary}><View class="border-t border-border px-4 py-3"><Text class="text-sub text-muted-foreground line-clamp-2">{model().summary}</Text></View></If>}><>
+              {lines().slice(0, WORK_CARD_WORKERS).map((line) => <WorkerLine line={line} onPress={() => props.handlers?.onSession(line.sessionId)} />)}
+              <If when={lines().length > WORK_CARD_WORKERS}><Button testID="work-card-more" onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[44px] flex-row items-center border-t border-border px-4 active:opacity-70">
+                  <Text class="min-w-0 flex-1 text-sub text-muted-foreground">{`${lines().length - WORK_CARD_WORKERS} more`}</Text>
+                  <KitIcon name="chevron-right" size={16} tone="faint" />
+                </Button></If>
+            </></If>
+        </View>}><OneSessionWork model={model} line={() => lines()[0]} agent={agent} handlers={props.handlers} open={() => props.handlers?.onTitle(model().workId)} /></If>}><View testID="work-result" class="gap-3 rounded-(--radius-group) bg-card p-4">
           <Button testID="work-result-open" accessibilityLabel={`Open ${model().title}`} disabled={!props.item().onPress} onPress={open} class="-my-1 min-h-[52px] flex-row items-center gap-3 active:opacity-70">
             <WorkLogo agent={agent()} size={28} />
             <View class="min-w-0 flex-1">
@@ -400,32 +395,14 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
             <View testID="work-unread" class="size-2 rounded-full bg-foreground" />
             <KitIcon name="chevron-right" size={18} tone="faint" />
           </Button>
-          {model().summary ? <View selectable><Text class="text-sub">{model().summary}</Text></View> : null}
-          {model().actions.length ? <ResultActions actions={model().actions} disabled={!props.handlers} onPress={(action) => props.handlers?.onAction(model(), action)} /> : null}
-        </View>
-      ) : shape() === "one" ? (
-        <OneSessionWork model={model} line={() => lines()[0]} agent={agent} handlers={props.handlers} open={() => props.handlers?.onTitle(model().workId)} />
-      ) : (
-        <View testID={state().dot === "seal" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">
-          <Button testID="work-card-title" disabled={!props.handlers} onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[52px] flex-row items-center gap-2 px-4 active:opacity-70">
-            <Text class="min-w-0 flex-1 text-body font-semibold line-clamp-1">{model().title}</Text>
-            {state().dot ? <View class={`size-2 rounded-full ${state().dot === "seal" ? "bg-seal" : "bg-foreground"}`} /> : null}
-            <Text testID="work-card-state" class="text-sub text-muted-foreground">{state().words}</Text>
-            <KitIcon name="chevron-right" size={16} tone="faint" />
-          </Button>
-          {lines().length ? (
-            <>
-              {lines().slice(0, WORK_CARD_WORKERS).map((line) => <WorkerLine line={line} onPress={() => props.handlers?.onSession(line.sessionId)} />)}
-              {lines().length > WORK_CARD_WORKERS ? (
-                <Button testID="work-card-more" onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[44px] flex-row items-center border-t border-border px-4 active:opacity-70">
-                  <Text class="min-w-0 flex-1 text-sub text-muted-foreground">{`${lines().length - WORK_CARD_WORKERS} more`}</Text>
-                  <KitIcon name="chevron-right" size={16} tone="faint" />
-                </Button>
-              ) : null}
-            </>
-          ) : model().summary ? <View class="border-t border-border px-4 py-3"><Text class="text-sub text-muted-foreground line-clamp-2">{model().summary}</Text></View> : null}
-        </View>
-      )}
+          <If when={model().summary}><View selectable><Text class="text-sub">{model().summary}</Text></View></If>
+          <If when={model().actions.length}><ResultActions actions={model().actions} disabled={!props.handlers} onPress={(action) => props.handlers?.onAction(model(), action)} /></If>
+        </View></If>}><Button testID="work-line" accessibilityLabel={`${model().title}, ${model().state}`} disabled={!props.handlers} onPress={() => props.handlers?.onLine(model())}
+          class="min-h-[44px] flex-row items-center gap-2.5 active:opacity-70">
+          <WorkLogo agent={agent()} size={20} />
+          <Text class="min-w-0 flex-1 text-sub text-muted-foreground line-clamp-1"><Text class="font-semibold text-foreground">{model().title}</Text>{model().summary ? ` · ${model().summary}` : ""}</Text>
+          <KitIcon name="check" size={18} tone="soft" />
+        </Button></If>
     </View>
   );
 }

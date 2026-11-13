@@ -27,7 +27,7 @@ export function BrainChatUnavailable(props: { onOpenTerminal?: (hostWorkerId: st
   return (
     <ThreadState testID="brain-chat-unavailable" title={`Chat isn't available for ${agent()}`}>
       <PillButton testID="brain-open-terminal" title="Open terminal" kind="ink" small onPress={() => props.onOpenTerminal?.(source.snapshot()?.host_worker?.id ?? "")} />
-      {canSwitchBrainExecutor(source.snapshot()) ? <PillButton testID="brain-switch-executor" title="Switch executor" small onCanvas onPress={() => props.onSwitchExecutor?.()} /> : null}
+      <If when={canSwitchBrainExecutor(source.snapshot())}><PillButton testID="brain-switch-executor" title="Switch executor" small onCanvas onPress={() => props.onSwitchExecutor?.()} /></If>
     </ThreadState>
   );
 }
@@ -65,8 +65,7 @@ export function BrainCantStartNotice(props: { onSwitchExecutor?: () => void; sou
   const canSwitch = () => Boolean(problem() && canSwitchBrainExecutor(source.snapshot()) && canSwitchBrainExecutorFromProblem(problem()!));
   return (
     <View>
-      {problem() ? (
-        <View testID="brain-cant-start" class="min-h-[68px] gap-3 rounded-(--radius-group) bg-card px-4 py-3.5">
+      <If when={problem()}><View testID="brain-cant-start" class="min-h-[68px] gap-3 rounded-(--radius-group) bg-card px-4 py-3.5">
           <View class="flex-row items-start gap-3.5">
             <Icon name="alert-circle" size={24} tone="soft" />
             <View class="flex-1">
@@ -74,18 +73,13 @@ export function BrainCantStartNotice(props: { onSwitchExecutor?: () => void; sou
               <Text class="mt-0.5 text-sub text-muted-foreground">{problem()!.detail}</Text>
             </View>
           </View>
-          {suggested() || canSwitch() ? (
-            <View class="flex-row flex-wrap gap-2 pl-[38px]">
-              {suggested() ? (
-                <PillButton testID="brain-use-suggested" kind="ink" small title={source.hostSwitch.switching() ? "Switching…" : `Use ${brainExecutorLabel(suggested())}`}
-                  disabled={Boolean(source.hostSwitch.switching()) || !source.connected()} onPress={() => void source.hostSwitch.switchTo(suggested()!)} />
-              ) : null}
-              {canSwitch() ? <PillButton testID="brain-switch-executor" title="Switch executor" kind={suggested() ? "ghost" : "ink"} small onPress={() => props.onSwitchExecutor?.()} /> : null}
-            </View>
-          ) : null}
-          {source.hostSwitch.error() ? <Text testID="brain-cant-start-error" class="pl-[38px] text-sub text-foreground">{source.hostSwitch.error()}</Text> : null}
-        </View>
-      ) : null}
+          <If when={suggested() || canSwitch()}><View class="flex-row flex-wrap gap-2 pl-[38px]">
+              <If when={suggested()}><PillButton testID="brain-use-suggested" kind="ink" small title={source.hostSwitch.switching() ? "Switching…" : `Use ${brainExecutorLabel(suggested())}`}
+                  disabled={Boolean(source.hostSwitch.switching()) || !source.connected()} onPress={() => void source.hostSwitch.switchTo(suggested()!)} /></If>
+              <If when={canSwitch()}><PillButton testID="brain-switch-executor" title="Switch executor" kind={suggested() ? "ghost" : "ink"} small onPress={() => props.onSwitchExecutor?.()} /></If>
+            </View></If>
+          <If when={source.hostSwitch.error()}><Text testID="brain-cant-start-error" class="pl-[38px] text-sub text-foreground">{source.hostSwitch.error()}</Text></If>
+        </View></If>
     </View>
   );
 }

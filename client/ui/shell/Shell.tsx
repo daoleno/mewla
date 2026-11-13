@@ -176,8 +176,8 @@ export function Shell() {
   return (
     <View class="flex-1 bg-background">
       <View class="flex-1 flex-row">
-        {wide() ? <LeftPane /> : null}
-        {wide() ? <PaneHandle /> : null}
+        <If when={wide()}><LeftPane /></If>
+        <If when={wide()}><PaneHandle /></If>
         <View testID="right-pane" class="flex-1" onLayout={({ bounds }) => {
           rightPaneWidth.set(bounds.size.width);
           belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height));
@@ -202,7 +202,7 @@ export function FirstRun() {
   return (
     <Paged nav={join}>
       <NavStack state={join} style={{ flex: 1 }}>
-        {(route) => (route.name === "join" ? <BrowserJoin onPairingLink={() => join.push({ name: "pair" })} /> : <PairPage />)}
+        {(route) => (<If when={route.name === "join"} else={<PairPage />}><BrowserJoin onPairingLink={() => join.push({ name: "pair" })} /></If>)}
       </NavStack>
     </Paged>
   );

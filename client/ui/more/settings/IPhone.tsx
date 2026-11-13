@@ -68,10 +68,8 @@ export function IPhone() {
       <Section footer={line()}>
         <SwitchRow testID="iphone-switch" title="iPhone use" checked={status()?.enabled === true} busy={busy()} disabled={!status() || status()!.state === "unsupported"} onChange={(on) => change({ enabled: on })} />
       </Section>
-      {agent() ? (
-        <View>
-          {status()?.picture ? (
-            <View class="mt-4 items-center">
+      <If when={agent()}><View>
+          <If when={status()?.picture}><View class="mt-4 items-center">
               <Image
                 src={`data:image/jpeg;base64,${status()!.picture}`}
                 style={{ width: 240, height: Math.round(240 * pictureRatio()) }}
@@ -79,8 +77,7 @@ export function IPhone() {
                 accessibilityLabel={`Your iPhone as ${agent()!.name || "the agent"} last saw it`}
                 onLoad={({ size }) => size.width > 0 && pictureRatio.set(size.height / size.width)}
               />
-            </View>
-          ) : null}
+            </View></If>
           <Section>
             <Row
               title={`${agent()!.name || agent()!.worker} is using your iPhone`}
@@ -92,9 +89,8 @@ export function IPhone() {
               }
             />
           </Section>
-        </View>
-      ) : null}
-      {error() && status() ? <Notice tone="failed" title={error()} /> : null}
+        </View></If>
+      <If when={error() && status()}><Notice tone="failed" title={error()} /></If>
     </Page>
   );
 }

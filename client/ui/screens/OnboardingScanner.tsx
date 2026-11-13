@@ -58,17 +58,7 @@ export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => b
   return (
     <View testID="finder" class="w-full items-center justify-center self-center overflow-hidden rounded-(--radius-sheet)"
       style={{ backgroundColor: DARK, aspectRatio: 1, maxHeight: 320, maxWidth: props.compact ? 200 : 320 }}>
-      {state() === "camera" ? (running() ? (
-        <CodeScanner testID="qr-camera" active={!pairingBusy()} class="absolute inset-0"
-          onScan={({ value }) => void pairFromText(value, "camera")}
-          onUnavailable={({ reason }) => {
-            if (reason === "permission") void check(false);
-            else failed.set(true);
-          }} />
-      ) : null) : state() === "loading" ? (
-        <Spinner />
-      ) : (
-        <View class="items-center gap-3.5 px-7">
+      <If when={state() === "camera"} else={<If when={state() === "loading"} else={<View class="items-center gap-3.5 px-7">
           <Text class="text-center text-sub" style={{ color: LIGHT }}>
             {state() === "request" ? "Mewla reads the code with the camera."
               : state() === "denied" ? "The camera is off for Mewla. Turn it on in Settings, or paste the link instead."
@@ -76,8 +66,12 @@ export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => b
           </Text>
           <FinderButton testID={state() === "request" ? "allow-camera" : "open-settings"} label={state() === "request" ? "Allow camera" : "Open Settings"}
             onPress={() => (state() === "request" ? void ask() : openSettings())} />
-        </View>
-      )}
+        </View>}><Spinner /></If>}><If when={running()}><CodeScanner testID="qr-camera" active={!pairingBusy()} class="absolute inset-0"
+          onScan={({ value }) => void pairFromText(value, "camera")}
+          onUnavailable={({ reason }) => {
+            if (reason === "permission") void check(false);
+            else failed.set(true);
+          }} /></If></If>
       <Corner style={{ top: 18, left: 18, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 10 }} />
       <Corner style={{ top: 18, right: 18, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 10 }} />
       <Corner style={{ bottom: 18, left: 18, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 10 }} />

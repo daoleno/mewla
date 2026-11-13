@@ -74,7 +74,7 @@ export function Page(props: {
   return (
     <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column="page" frame={false} capsuleUnder capsuleControls={"headerRight" in props}>
       <View class="flex-1 bg-background">
-        {withAside ? <View class="flex-1 flex-row">{scroll}{props.aside}</View> : scroll}
+        <If when={withAside} else={<>{scroll}</>}><View class="flex-1 flex-row">{scroll}{props.aside}</View></If>
         {props.overlay ?? null}
       </View>
     </NavPage>
@@ -102,7 +102,7 @@ export function Caption(props: { text: string; plain?: boolean; center?: boolean
 export function DisplayTitle(props: { title: string; eyebrow?: string; testID?: string; titleTestID?: string }) {
   return (
     <View testID={props.testID ?? "display-title"} class="gap-1 px-1 pb-2 pt-3">
-      {props.eyebrow ? <Caption testID="display-eyebrow" text={props.eyebrow} /> : null}
+      <If when={props.eyebrow}>{(eyebrowValue) => <Caption testID="display-eyebrow" text={eyebrowValue()} />}</If>
       <Text testID={props.titleTestID} role="header" class="text-display font-bold tracking-display" style={{ numberOfLines: 2 }}>{props.title}</Text>
     </View>
   );
@@ -115,11 +115,11 @@ export function DisplayTitle(props: { title: string; eyebrow?: string; testID?: 
 export function SectionLabel(props: { title: string; icon?: IconName; count?: number | string; testID?: string; onPress?: () => void; folded?: boolean; trailing?: JSX.Element; accessibilityLabel?: string }) {
   const body = (
     <View class="min-h-[44px] flex-row items-center gap-2 px-4 pb-2 pt-6">
-      {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
+      <If when={props.icon}>{(icon) => <Icon name={icon()} size={16} tone="soft" />}</If>
       <Caption role="header" inRow text={props.title} />
-      {props.count !== undefined ? <Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
+      <If when={props.count !== undefined}><Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text></If>
       {props.trailing ?? null}
-      {props.onPress ? <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" /> : null}
+      <If when={props.onPress}><Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" /></If>
     </View>
   );
   if (!props.onPress) return <View testID={props.testID} accessibilityLabel={props.accessibilityLabel}>{body}</View>;
@@ -128,9 +128,9 @@ export function SectionLabel(props: { title: string; icon?: IconName; count?: nu
     return (
       <View testID={props.testID ? `${props.testID}-row` : undefined} class="min-h-[44px] flex-row items-center gap-2 pb-2 pl-4 pr-2 pt-6">
         <View testID={props.testID} role="button" accessible accessibilityLabel={props.accessibilityLabel} accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="min-w-0 flex-1 flex-row items-center gap-2 active:opacity-70">
-          {props.icon ? <Icon name={props.icon} size={16} tone="soft" /> : null}
+          <If when={props.icon}>{(icon) => <Icon name={icon()} size={16} tone="soft" />}</If>
           <Caption role="header" inRow text={props.title} />
-          {props.count !== undefined ? <Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
+          <If when={props.count !== undefined}><Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text></If>
           <Icon name={props.folded ? "chevron-right" : "chevron-down"} size={16} tone="faint" />
         </View>
         {props.trailing}
@@ -148,7 +148,7 @@ export function Tile(props: { size?: 28 | 36 | 64; icon?: IconName; mark?: strin
   const radius = () => (size() === 64 ? 18 : size() === 36 ? 11 : 8);
   return (
     <View testID={props.testID} class="items-center justify-center bg-background" style={{ width: size(), height: size(), borderRadius: radius() }}>
-      {props.children ?? (props.icon ? <Icon name={props.icon} size={size() === 64 ? 32 : size() === 36 ? 20 : 16} tone="ink" /> : props.mark ? <Text class="font-mono text-caption font-semibold">{props.mark}</Text> : null)}
+      {props.children ?? (<If when={props.icon} else={<If when={props.mark}>{(mark) => <Text class="font-mono text-caption font-semibold">{mark()}</Text>}</If>}>{(icon) => <Icon name={icon()} size={size() === 64 ? 32 : size() === 36 ? 20 : 16} tone="ink" />}</If>)}
     </View>
   );
 }
@@ -169,11 +169,9 @@ export function SearchField(props: { value: string; placeholder: string; onChang
         autoCorrect={false}
         onChange={({ value }) => props.onChange(value)}
       />
-      {props.value ? (
-        <Button accessibilityLabel="Clear search" onPress={() => props.onChange("")} class="size-8 items-center justify-center active:opacity-60">
+      <If when={props.value}><Button accessibilityLabel="Clear search" onPress={() => props.onChange("")} class="size-8 items-center justify-center active:opacity-60">
           <Icon name="close-circle" size={16} tone="faint" />
-        </Button>
-      ) : null}
+        </Button></If>
     </View>
   );
 }
@@ -196,15 +194,12 @@ export function StatTile(props: { label: string; value: string; detail?: string;
     <View testID={props.testID} class="min-w-[140px] flex-1 gap-0.5 rounded-(--radius-group) bg-card p-4">
       <Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.label}</Text>
       <Text testID={props.valueTestID} class={props.muted ? "text-[28px] font-bold leading-[34px] text-muted-foreground line-clamp-1" : "text-[28px] font-bold leading-[34px] line-clamp-1"} style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
-      {props.status ? (
-        // A status word beside the number carries the colour, never the number (SPEC §10.4): "High · of 32 GB".
-        <View class="flex-row flex-wrap items-baseline gap-x-1">
-          <Text testID={props.testID ? `${props.testID}-status` : undefined} class="text-caption font-semibold line-clamp-1" style={{ color: color(stateTextColor(props.status.tone)) }}>{props.status.word}</Text>
-          {props.detail ? <Text class="text-caption text-muted-foreground line-clamp-1">{`· ${props.detail}`}</Text> : null}
-        </View>
-      ) : props.detail ? <Text class="text-caption text-muted-foreground line-clamp-2">{props.detail}</Text> : null}
-      {props.share !== undefined ? <View class="mt-2"><Meter share={props.share} /></View> : null}
-      {props.children ? <View class="mt-2 gap-2">{props.children}</View> : null}
+      <If when={props.status} else={<If when={props.detail}>{(detail) => <Text class="text-caption text-muted-foreground line-clamp-2">{detail()}</Text>}</If>}>{(statusValue) => <View class="flex-row flex-wrap items-baseline gap-x-1">
+          <Text testID={props.testID ? `${props.testID}-status` : undefined} class="text-caption font-semibold line-clamp-1" style={{ color: color(stateTextColor(statusValue().tone)) }}>{statusValue().word}</Text>
+          <If when={props.detail}>{(detail) => <Text class="text-caption text-muted-foreground line-clamp-1">{`· ${detail()}`}</Text>}</If>
+        </View>}</If>
+      <If when={props.share !== undefined}><View class="mt-2"><Meter share={props.share!} /></View></If>
+      <If when={"children" in props}><View class="mt-2 gap-2">{props.children}</View></If>
     </View>
   );
 }
@@ -246,16 +241,14 @@ export function Section(props: { title?: string; detail?: JSX.Element; footer?: 
   return (
     <View class={props.label ? "" : "mt-6"} testID={props.testID}>
       {props.label ?? null}
-      {!props.label && (props.title || props.detail) ? (
-        <View class="mb-2 min-h-[18px] flex-row items-center justify-between px-4">
+      <If when={!props.label && (props.title || props.detail)}><View class="mb-2 min-h-[18px] flex-row items-center justify-between px-4">
           <Caption role="header" inRow text={props.title ?? ""} />
           {props.detail ?? null}
-        </View>
-      ) : null}
+        </View></If>
       <View class={props.sheet ? "overflow-hidden rounded-(--radius-group) bg-sheet-surface" : "overflow-hidden rounded-(--radius-group) bg-card"}>
         <View class="-mb-px">{props.children}</View>
       </View>
-      {props.footer ? <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{props.footer}</Text></View> : null}
+      <If when={props.footer}>{(footer) => <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{footer()}</Text></View>}</If>
     </View>
   );
 }
@@ -302,15 +295,15 @@ export interface RowProps {
 export function Row(props: RowProps) {
   const body = (
     <View class={`min-h-[56px] flex-row items-center px-4 py-3 ${props.lead ? "gap-3.5" : "gap-3"}`}>
-      {props.leading ?? (props.lead ? <RowTile lead={props.lead} /> : props.icon ? <Icon name={props.icon} size={24} tone={props.destructive ? "ink" : "soft"} /> : null)}
+      {props.leading ?? (<If when={props.lead} else={<If when={props.icon}>{(icon) => <Icon name={icon()} size={24} tone={props.destructive ? "ink" : "soft"} />}</If>}>{(leadValue) => <RowTile lead={leadValue()} />}</If>)}
       <View class="min-w-0 flex-1">
         <Text class={props.destructive ? "text-body text-destructive" : props.mono ? "font-mono text-code" : "text-body"} style={props.titleTone === "warn" || props.titleTone === "error" ? { numberOfLines: 2, color: color(stateTextColor(props.titleTone)) } : { numberOfLines: 2 }}>{props.title}</Text>
-        {props.subtitle ? <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-3" style={props.subtitleTone ? { color: color(stateTextColor(props.subtitleTone)) } : undefined}>{props.subtitle}</Text> : null}
+        <If when={props.subtitle}>{(subtitle) => <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-3" style={props.subtitleTone ? { color: color(stateTextColor(props.subtitleTone)) } : undefined}>{subtitle()}</Text>}</If>
       </View>
-      {props.value ? <Text class="max-w-[50%] text-right text-body text-muted-foreground line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text> : null}
+      <If when={props.value}>{(value) => <Text class="max-w-[50%] text-right text-body text-muted-foreground line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{value()}</Text>}</If>
       {props.trailing ?? null}
-      {props.check ? <Icon name="check" tone="ink" size={20} /> : null}
-      {props.chevron ? <Icon name="chevron-right" size={18} tone="faint" /> : null}
+      <If when={props.check}><Icon name="check" tone="ink" size={20} /></If>
+      <If when={props.chevron}><Icon name="chevron-right" size={18} tone="faint" /></If>
       <Hairline inset={props.lead ? 60 : props.icon || props.leading ? 52 : 16} />
     </View>
   );
@@ -357,7 +350,7 @@ export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead
       disabled={props.disabled}
       trailing={
         <View class="flex-row items-center gap-2">
-          {props.busy ? <Spinner size={16} /> : null}
+          <If when={props.busy}><Spinner size={16} /></If>
           <Switch
             testID={props.testID}
             accessibilityLabel={props.accessibilityLabel ?? props.title}
@@ -379,10 +372,10 @@ export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead
 export function EmptyState(props: { title?: string; detail?: string; busy?: boolean; icon?: IconName; tone?: ColorName; action?: string; onAction?: () => void; testID?: string; onBlack?: boolean }) {
   return (
     <View testID={props.testID} class="items-center gap-2 px-6 py-16">
-      {props.busy ? <Spinner size={24} tone={props.onBlack ? "onBlackSoft" : undefined} /> : props.icon ? <Icon name={props.icon} size={28} tone={props.onBlack ? "onBlack" : props.tone} /> : null}
-      {props.title ? <Text class={`mt-1 text-center text-title font-semibold tracking-title ${props.onBlack ? "text-white" : ""}`}>{props.title}</Text> : null}
-      {props.detail ? <Text class={props.onBlack ? "text-center text-sub text-white/60" : "text-center text-sub text-muted-foreground"}>{props.detail}</Text> : null}
-      {props.action && props.onAction ? <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} onPress={props.onAction} kind={props.onBlack ? "white" : undefined} onCanvas /> : null}
+      <If when={props.busy} else={<If when={props.icon}>{(icon) => <Icon name={icon()} size={28} tone={props.onBlack ? "onBlack" : props.tone} />}</If>}><Spinner size={24} tone={props.onBlack ? "onBlackSoft" : undefined} /></If>
+      <If when={props.title}>{(titleValue) => <Text class={`mt-1 text-center text-title font-semibold tracking-title ${props.onBlack ? "text-white" : ""}`}>{titleValue()}</Text>}</If>
+      <If when={props.detail}>{(detail) => <Text class={props.onBlack ? "text-center text-sub text-white/60" : "text-center text-sub text-muted-foreground"}>{detail()}</Text>}</If>
+      <If when={props.action && props.onAction}><PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action!} onPress={props.onAction!} kind={props.onBlack ? "white" : undefined} onCanvas /></If>
     </View>
   );
 }
@@ -459,17 +452,15 @@ export function Notice(props: {
   return (
     <View testID={props.testID} android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }} class="mt-4 min-h-[68px] gap-3 rounded-(--radius-group) bg-card px-4 py-3.5">
       <View class="flex-row items-start gap-3.5">
-        {props.busy ? <Spinner size={24} /> : <Icon name={props.icon ?? glyph().icon} size={24} tone={glyph().tone} />}
+        <If when={props.busy} else={<Icon name={props.icon ?? glyph().icon} size={24} tone={glyph().tone} />}><Spinner size={24} /></If>
         <View class="flex-1">
           <Text class="text-body font-semibold">{props.title}</Text>
-          {props.detail ? <Text class="mt-0.5 text-sub text-muted-foreground">{props.detail}</Text> : null}
+          <If when={props.detail}>{(detail) => <Text class="mt-0.5 text-sub text-muted-foreground">{detail()}</Text>}</If>
         </View>
       </View>
-      {props.action && props.onAction ? (
-        <View class="flex-row flex-wrap gap-2 pl-[38px]">
-          <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action} kind="ink" small disabled={props.actionDisabled || props.busy} onPress={props.onAction} />
-        </View>
-      ) : null}
+      <If when={props.action && props.onAction}><View class="flex-row flex-wrap gap-2 pl-[38px]">
+          <PillButton testID={props.testID ? `${props.testID}-action` : undefined} title={props.action!} kind="ink" small disabled={props.actionDisabled || props.busy} onPress={props.onAction!} />
+        </View></If>
     </View>
   );
 }
@@ -525,7 +516,7 @@ export function StatusMark(props: { status: Status; label?: string }) {
           }
         }}
       />
-      {props.label ? <Text class="text-sub text-muted-foreground">{props.label}</Text> : null}
+      <If when={props.label}>{(label) => <Text class="text-sub text-muted-foreground">{label()}</Text>}</If>
     </View>
   );
 }
@@ -581,7 +572,7 @@ export function Field(props: {
 }) {
   return (
     <View class="gap-1.5 px-4 py-3">
-      {props.label ? <Caption text={props.label} /> : null}
+      <If when={props.label}>{(label) => <Caption text={label()} />}</If>
       <View class="flex-row items-center gap-2 rounded-(--radius-control) bg-background px-3">
         <Input
           testID={props.testID}

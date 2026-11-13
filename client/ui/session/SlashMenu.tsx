@@ -48,12 +48,10 @@ export function SlashMenu(props: {
   const state = () => slashMenuState({ text: props.text(), agentKind: props.agentKind(), commands: props.commands(), connected: props.connected(), pinned: props.pinned() });
   return (
     <View>
-      {state().open ? (
-        <View testID="slash-menu" class="mb-2 overflow-hidden rounded-2xl border border-border bg-card">
+      <If when={state().open}><View testID="slash-menu" class="mb-2 overflow-hidden rounded-2xl border border-border bg-card">
           <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 360 }}>
             <View class="gap-2 p-2">
-              {state().showActions ? (
-                <Button testID="attach-file" accessibilityLabel="Upload file" disabled={!props.onAttach || !props.connected() || Boolean(props.uploading?.())} onPress={() => props.onAttach?.()}
+              <If when={state().showActions}><Button testID="attach-file" accessibilityLabel="Upload file" disabled={!props.onAttach || !props.connected() || Boolean(props.uploading?.())} onPress={() => props.onAttach?.()}
                   class={props.onAttach && props.connected() ? "flex-row items-center gap-3 rounded-xl px-2 py-2 active:bg-accent" : "flex-row items-center gap-3 rounded-xl px-2 py-2 opacity-50"}>
                   <Icon name={props.uploading?.() ? "cloud-upload" : "attach"} size={20} color={props.onAttach && props.connected() ? "primary" : undefined} />
                   <View class="flex-1 gap-0.5">
@@ -61,11 +59,11 @@ export function SlashMenu(props: {
                     <Text class="text-xs text-muted-foreground">{props.uploading?.() ? "Uploading..." : "Add a file to this message"}</Text>
                   </View>
                   <Icon name="chevron-right" size={16} />
-                </Button>
-              ) : null}
-              {state().showCommandList ? (
-                state().visibleCommands.length > 0 ? (
-                  groupSlashCommands(state().visibleCommands).map((group) => (
+                </Button></If>
+              <If when={state().showCommandList}><If when={state().visibleCommands.length > 0} else={<View testID="slash-empty" class="flex-row items-center gap-2 px-2 py-3">
+                    <Icon name="search" size={16} />
+                    <Text class="text-sm text-muted-foreground">{slashCommandEmptyText(Boolean(props.commandsUnavailable?.()))}</Text>
+                  </View>}>{groupSlashCommands(state().visibleCommands).map((group) => (
                     <View testID={`slash-group-${group.key}`} class="gap-0.5">
                       <View class="px-2 pt-1"><Text class="text-xs font-semibold uppercase text-muted-foreground">{group.label}</Text></View>
                       {group.commands.map((command) => (
@@ -74,24 +72,16 @@ export function SlashMenu(props: {
                           <Icon name={commandIcon(command.name)} size={20} color="primary" />
                           <View class="flex-1 gap-0.5">
                             <Text class="font-mono text-base">{command.value}</Text>
-                            {command.description ? <Text class="text-xs text-muted-foreground line-clamp-2">{command.description}</Text> : null}
+                            <If when={command.description}>{(description) => <Text class="text-xs text-muted-foreground line-clamp-2">{description()}</Text>}</If>
                           </View>
-                          {state().commandQuery === command.value ? <Icon name="check" size={18} color="primary" /> : null}
+                          <If when={state().commandQuery === command.value}><Icon name="check" size={18} color="primary" /></If>
                         </Button>
                       ))}
                     </View>
-                  ))
-                ) : (
-                  <View testID="slash-empty" class="flex-row items-center gap-2 px-2 py-3">
-                    <Icon name="search" size={16} />
-                    <Text class="text-sm text-muted-foreground">{slashCommandEmptyText(Boolean(props.commandsUnavailable?.()))}</Text>
-                  </View>
-                )
-              ) : null}
+                  ))}</If></If>
             </View>
           </Scroll>
-        </View>
-      ) : null}
+        </View></If>
     </View>
   );
 }

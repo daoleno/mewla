@@ -55,13 +55,11 @@ export function CalendarAlertCard() {
         <Text testID="alert-kind" class="text-sm font-semibold text-primary" role="header">{kind()}</Text>
         <Text testID="alert-title" class="text-2xl font-semibold">{item()?.title ?? ""}</Text>
         <Text testID="alert-when" class="text-lg text-muted-foreground">{when()}</Text>
-        {notes() ? <Text testID="alert-notes" class="text-base">{notes()}</Text> : null}
-        {failure() ? (
-          <View testID="alert-problem" class="gap-1 rounded-xl border border-border bg-card px-3 py-2.5">
+        <If when={notes()}><Text testID="alert-notes" class="text-base">{notes()}</Text></If>
+        <If when={failure()}><View testID="alert-problem" class="gap-1 rounded-xl border border-border bg-card px-3 py-2.5">
             <Text class="text-sm font-semibold text-destructive">That did not go through</Text>
             <Text class="text-sm text-muted-foreground">{failure()}</Text>
-          </View>
-        ) : null}
+          </View></If>
         <View class="mt-2 gap-2.5">
           <Button testID="alert-done" disabled={busy()} onPress={() => void act((id) => calendar()?.done(id))}
             class={busy() ? "items-center rounded-full bg-primary py-3 opacity-50" : "items-center rounded-full bg-primary py-3 active:opacity-80"}>

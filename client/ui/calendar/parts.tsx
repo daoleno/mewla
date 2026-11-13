@@ -14,7 +14,7 @@ export function Row(props: { title: string; detail?: string; onPress?: () => voi
     <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled || !props.onPress}
       class="flex-row items-center justify-between gap-3 border-b border-border bg-card px-4 py-3.5 active:bg-accent">
       <Text class={`flex-1 text-base ${tone()}`}>{props.title}</Text>
-      {props.detail ? <Text class="text-base text-muted-foreground">{props.detail}</Text> : null}
+      <If when={props.detail}>{(detail) => <Text class="text-base text-muted-foreground">{detail()}</Text>}</If>
     </Button>
   );
 }

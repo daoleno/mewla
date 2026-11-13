@@ -117,7 +117,7 @@ function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; 
     <Button testID={actionTestID(props.action)} disabled={actionOff(props.action, props.slip())} onPress={props.onPress}
       class={`min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 active:bg-accent ${actionBusy(props.action, props.slip()) ? "" : "disabled:opacity-40"}`}>
       <Text class="min-w-0 flex-1 text-body">{props.action.label}</Text>
-      {props.action.pick ? <Text testID="work-pick" class="text-caption text-muted-foreground">Brain's pick</Text> : null}
+      <If when={props.action.pick}><Text testID="work-pick" class="text-caption text-muted-foreground">Brain's pick</Text></If>
       <View class="size-[22px] items-center justify-center">
         <If when={ring()} else={<View class="size-[22px] rounded-full border-2 border-faint" />}>
           <Spinner size={RING.button} label={props.action.label} />
@@ -136,8 +136,7 @@ function Workers(props: { lines: () => WorkWorkerLine[]; project: () => string |
   const rows = () => props.lines().map((line) => ({ line, row: workDetailWorkerRow(line, elapsedNow(), props.project()) }));
   return (
     <View>
-      {props.lines().length ? (
-        <>
+      <If when={props.lines().length}><>
           <Caption role="header" class="mb-2 mt-6 px-4" text="Workers" />
           <View testID="work-workers" class="overflow-hidden rounded-(--radius-group) bg-card">
             {rows().map(({ line, row }, index, list) => (
@@ -146,12 +145,11 @@ function Workers(props: { lines: () => WorkWorkerLine[]; project: () => string |
                 <RowTile tile={() => row.tile} />
                 <RowText row={() => row} />
                 <RowEnd row={() => row} />
-                {index === list.length - 1 ? null : <RowHair />}
+                <If when={!(index === list.length - 1)}><RowHair /></If>
               </Button>
             ))}
           </View>
-        </>
-      ) : null}
+        </></If>
     </View>
   );
 }
@@ -161,12 +159,10 @@ const CLOSED_STATUS: Partial<Record<BrainWorkStatus, string>> = { done: "Done", 
 function Notice() {
   return (
     <View>
-      {notice() ? (
-        <View testID="work-notice" class="gap-0.5 pt-3">
+      <If when={notice()}><View testID="work-notice" class="gap-0.5 pt-3">
           <Text class="text-body font-semibold">{notice()!.text}</Text>
-          {notice()!.detail ? <Text class="text-sub text-muted-foreground">{notice()!.detail!}</Text> : null}
-        </View>
-      ) : null}
+          <If when={notice()!.detail}><Text class="text-sub text-muted-foreground">{notice()!.detail!}</Text></If>
+        </View></If>
     </View>
   );
 }
@@ -190,7 +186,7 @@ function TopBlock(props: { project: () => string | undefined; title: () => strin
       <Caption testID="work-eyebrow" text={["Work", props.project()].filter(Boolean).join(" · ")} />
       <View selectable><Text testID="work-title" role="header" class="text-display font-bold tracking-display">{props.title()}</Text></View>
       <View testID="work-state" class="mt-1 flex-row items-center gap-2">
-        {props.dot() ? <View class={`size-2 rounded-full ${props.dot() === "seal" ? "bg-seal" : "bg-foreground"}`} /> : props.done() ? <Icon name="check" size={16} tone="soft" /> : null}
+        <If when={props.dot()} else={<If when={props.done()}><Icon name="check" size={16} tone="soft" /></If>}><View class={`size-2 rounded-full ${props.dot() === "seal" ? "bg-seal" : "bg-foreground"}`} /></If>
         <Text class="min-w-0 flex-1 text-sub text-muted-foreground line-clamp-1">
           <Text class="font-semibold text-foreground">{props.state()}</Text>
           {props.since() ? ` · ${props.since()}` : ""}
@@ -203,7 +199,7 @@ function TopBlock(props: { project: () => string | undefined; title: () => strin
 /** The brief (SPEC §11 Work detail): a paragraph at 15/22, soft, shown whole; the page scrolls instead. */
 function Brief(props: { text: () => string }) {
   // Read in the JSX: a component runs once, and the brief arrives after the page opens.
-  return <>{props.text() ? <View selectable class="px-1 pt-3"><Text testID="work-brief" class="text-sub leading-[22px] text-muted-foreground">{props.text()}</Text></View> : null}</>;
+  return <><If when={props.text()}><View selectable class="px-1 pt-3"><Text testID="work-brief" class="text-sub leading-[22px] text-muted-foreground">{props.text()}</Text></View></If></>;
 }
 
 /** A row of Work detail's own groups: an icon, the label, a value, a chevron when it opens something. */
@@ -213,8 +209,8 @@ function GroupRow(props: { testID: string; icon: IconName; label: string; value?
       class={`min-h-[56px] flex-row items-center gap-3 px-4 active:bg-accent disabled:opacity-40 ${props.first ? "" : "border-t border-border"}`}>
       <Icon name={props.icon} size={24} tone={props.strong ? "ink" : "soft"} />
       <Text class={`min-w-0 flex-1 text-body line-clamp-1 ${props.strong ? "font-semibold" : ""}`}>{props.label}</Text>
-      {props.value ? <Text class="max-w-[50%] text-body text-muted-foreground line-clamp-1">{props.value}</Text> : null}
-      {props.chevron ? <Icon name="chevron-right" size={18} tone="faint" /> : null}
+      <If when={props.value}>{(value) => <Text class="max-w-[50%] text-body text-muted-foreground line-clamp-1">{value()}</Text>}</If>
+      <If when={props.chevron}><Icon name="chevron-right" size={18} tone="faint" /></If>
     </Button>
   );
 }
@@ -315,27 +311,12 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
       <View class="flex-1 bg-background">
         <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-2"
           onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
-          {!slip() && closed() ? (
-            <View>
-              <TopBlock project={project} title={title} dot={() => null} done={() => closed()!.status === "done"} state={() => CLOSED_STATUS[closed()!.status] ?? "Closed"} since={() => since(closed()!.updated_at)} />
-              <Brief text={brief} />
-              <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
-            </View>
-          ) : !slip() ? (
-            // Nothing while the computer is asked; what it said, or offline, once there is no asking.
-            closedFailure() || connection() !== "connected" ? (
-              <View class="items-center gap-2 px-6 py-16">
-                <Text class="text-title font-semibold tracking-title">{closedFailure() || "This Work is no longer open"}</Text>
-              </View>
-            ) : null
-          ) : (
-            <View>
+          <If when={!slip() && closed()} else={<If when={!slip()} else={<View>
               <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />
               <Brief text={brief} />
-              {slip()!.summary && !slip()!.question ? <View selectable class="px-1 pt-3"><Text testID="work-question" class="text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View> : null}
-              {brainWorkWaitForLine(slip()!) ? <View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View> : null}
-              {slip()!.question ? (
-                <>
+              <If when={slip()!.summary && !slip()!.question}><View selectable class="px-1 pt-3"><Text testID="work-question" class="text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View></If>
+              <If when={brainWorkWaitForLine(slip()!)}><View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View></If>
+              <If when={slip()!.question}><>
                   <Caption role="header" class="mb-2 mt-6 px-4" text="Waits on you" />
                   <View class="overflow-hidden rounded-(--radius-group) bg-card">
                     <View class="gap-2 p-4">
@@ -347,36 +328,33 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
                     </View>
                     {answers().map((action) => <AnswerRow action={action} slip={() => slip()!} onPress={() => void runWorkAction(action, slip()!, context())} />)}
                   </View>
-                </>
-              ) : null}
+                </></If>
               <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
               <View testID="work-links" class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
-                {file() ? (
-                  <GroupRow testID="work-file" icon="document-text" label="Work file" value={file()!.path.split("/").pop()} chevron first
-                    onPress={() => props.nav.push({ name: "workFile", id: file()!.id })} />
-                ) : null}
-                {slip()!.calendar && slip()!.calendarLink ? (
-                  <GroupRow testID="work-calendar-link" icon="calendar" label={slip()!.calendarLink!} accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} chevron first={!file()}
-                    onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)} />
-                ) : null}
+                <If when={file()}><GroupRow testID="work-file" icon="document-text" label="Work file" value={file()!.path.split("/").pop()} chevron first
+                    onPress={() => props.nav.push({ name: "workFile", id: file()!.id })} /></If>
+                <If when={slip()!.calendar && slip()!.calendarLink}><GroupRow testID="work-calendar-link" icon="calendar" label={slip()!.calendarLink!} accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} chevron first={!file()}
+                    onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)} /></If>
                 <GroupRow testID={actionTestID(ask())} icon="chat" label={ask().label} chevron first={!file() && !(slip()!.calendar && slip()!.calendarLink)}
                   onPress={() => void runWorkAction(ask(), slip()!, context())} />
               </View>
-              {moves().length ? (
-                <View testID="work-moves" class="mt-3 overflow-hidden rounded-(--radius-group) bg-card">
+              <If when={moves().length}><View testID="work-moves" class="mt-3 overflow-hidden rounded-(--radius-group) bg-card">
                   {moves().map((action, index) => (
                     <GroupRow testID={actionTestID(action)} icon={ACTION_ICON[action.kind] ?? "chevron-right"} label={actionBusy(action, slip()!) ? "…" : action.label}
                       strong={Boolean(action.primary || action.confirm)} disabled={actionOff(action, slip()!)} first={index === 0}
                       onPress={() => void runWorkAction(action, slip()!, context())} />
                   ))}
-                </View>
-              ) : null}
+                </View></If>
               <Notice />
-            </View>
-          )}
+            </View>}><If when={closedFailure() || connection() !== "connected"}><View class="items-center gap-2 px-6 py-16">
+                <Text class="text-title font-semibold tracking-title">{closedFailure() || "This Work is no longer open"}</Text>
+              </View></If></If>}><View>
+              <TopBlock project={project} title={title} dot={() => null} done={() => closed()!.status === "done"} state={() => CLOSED_STATUS[closed()!.status] ?? "Closed"} since={() => since(closed()!.updated_at)} />
+              <Brief text={brief} />
+              <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
+            </View></If>
         </Scroll>
-        {docked() ? (
-          <Composer text={text} placeholder="Reply about this Work" active={shown}
+        <If when={docked()}><Composer text={text} placeholder="Reply about this Work" active={shown}
             canSend={() => !busy() && !uploading()} attached={() => files.ready().length > 0}
             disabled={() => connection() !== "connected"} disabledReason={() => "Offline"}
             running={() => false} stopping={() => false} canStop={() => false} onStop={() => {}}
@@ -390,10 +368,9 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
                 <Icon name="add" size={22} tone="soft" />
               </Button>
             }>
-            {files.items().length ? <AttachmentTray uploads={files} /> : null}
-            {attachFailure() ? <View class="px-3 pb-1.5"><Text class="text-sub text-muted-foreground">{attachFailure()}</Text></View> : null}
-          </Composer>
-        ) : null}
+            <If when={files.items().length}><AttachmentTray uploads={files} /></If>
+            <If when={attachFailure()}><View class="px-3 pb-1.5"><Text class="text-sub text-muted-foreground">{attachFailure()}</Text></View></If>
+          </Composer></If>
       </View>
     </NavPage>
   );

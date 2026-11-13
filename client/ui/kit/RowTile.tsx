@@ -149,9 +149,9 @@ export function StateLine(props: { tone: StateTone; label: string; detail?: stri
   const look = () => (props.tone === "off" ? null : STATE_COLOR[props.tone]);
   return (
     <View testID={props.testID} class="shrink flex-row items-center gap-1.5" accessible accessibilityLabel={props.detail ? `${props.label} ${props.detail}` : props.label}>
-      {look() ? <View testID={props.testID ? `${props.testID}-dot` : undefined} class="size-2 rounded-full" style={{ backgroundColor: color(look()!.dot) }} /> : null}
+      <If when={look()}><View testID={props.testID ? `${props.testID}-dot` : undefined} class="size-2 rounded-full" style={{ backgroundColor: color(look()!.dot) }} /></If>
       <Text testID={props.testID ? `${props.testID}-words` : undefined} class={`shrink text-sub line-clamp-1 ${props.strong ? "font-semibold" : ""}`} style={{ color: color(stateTextColor(props.tone)) }}>{props.label}</Text>
-      {props.detail ? <Text class="shrink text-sub text-muted-foreground line-clamp-1">{props.detail}</Text> : null}
+      <If when={props.detail}>{(detail) => <Text class="shrink text-sub text-muted-foreground line-clamp-1">{detail()}</Text>}</If>
     </View>
   );
 }

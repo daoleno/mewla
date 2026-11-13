@@ -146,7 +146,7 @@ function Palette() {
           <View class="flex-1 flex-row items-center gap-3">
             <Text class="shrink text-sm line-clamp-1">{entry.label}</Text>
             <Text class="flex-1 text-xs text-muted-foreground line-clamp-1">{detail(byId().get(entry.id))}</Text>
-            {byId().get(entry.id)?.shortcut ? <Key text={byId().get(entry.id)!.shortcut!} /> : null}
+            <If when={byId().get(entry.id)?.shortcut}><Key text={byId().get(entry.id)!.shortcut!} /></If>
           </View>
         )}
         empty={<View class="p-4"><Text testID="palette-empty" class="text-sm text-muted-foreground">{`Nothing matches “${query()}”.`}</Text></View>}

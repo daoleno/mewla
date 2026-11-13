@@ -238,12 +238,10 @@ function PhoneContent(props: FloatProps) {
           <View class="absolute inset-0" style={{ pointerEvents: "none" }}>
             <PhoneLiveView class="flex-1" fps={PHONE_FPS} maxWidth={Math.min(FRAME_MAX, Math.max(FRAME_MIN, Math.ceil((picture().width * 3) / FRAME_STEP) * FRAME_STEP))} />
           </View>
-          {placeholder() ? (
-            <View testID="screen-float-placeholder" class="absolute inset-0 items-center justify-center gap-2 bg-card p-3" style={{ pointerEvents: "none" }}>
-              {placeholder()!.failed ? null : <Spinner size={18} tone="faint" />}
-              {placeholder()!.text ? <Text class={`text-center text-xs ${placeholder()!.failed ? "text-destructive" : "text-muted-foreground"}`}>{placeholder()!.text!}</Text> : null}
-            </View>
-          ) : null}
+          <If when={placeholder()}><View testID="screen-float-placeholder" class="absolute inset-0 items-center justify-center gap-2 bg-card p-3" style={{ pointerEvents: "none" }}>
+              <If when={!placeholder()!.failed}><Spinner size={18} tone="faint" /></If>
+              <If when={placeholder()!.text}><Text class={`text-center text-xs ${placeholder()!.failed ? "text-destructive" : "text-muted-foreground"}`}>{placeholder()!.text!}</Text></If>
+            </View></If>
         </View>
       )}
     </ScreenFloat>
@@ -326,17 +324,11 @@ function RemoteContent(props: RemoteContentProps) {
           <View style={{ width: picture().width, height: picture().height + (typing() ? KEY_BAR : 0) }}>
             <RemoteView session={session} label={`${display ? "Display" : "Screen"} of ${props.source().title}`} modifiers={display ? LINUX_MODIFIERS : MAC_MODIFIERS} typing={typing()} onTypingChange={(on) => typing.set(on)} class="flex-1" />
           </View>
-          {session.phase() !== "live" ? (
-            <View testID="screen-float-cover" class="absolute inset-x-0 top-0 items-center justify-center" style={{ height: picture().height, pointerEvents: session.phase() === "lost" ? "box-none" : "none" }}>
-              {session.phase() === "connecting" ? (
-                <Spinner size={20} tone="faint" />
-              ) : (
-                <Button testID="screen-float-reconnect" accessibilityLabel="Reconnect" onPress={() => session.connect()} class="size-12 items-center justify-center rounded-full bg-secondary">
+          <If when={session.phase() !== "live"}><View testID="screen-float-cover" class="absolute inset-x-0 top-0 items-center justify-center" style={{ height: picture().height, pointerEvents: session.phase() === "lost" ? "box-none" : "none" }}>
+              <If when={session.phase() === "connecting"} else={<Button testID="screen-float-reconnect" accessibilityLabel="Reconnect" onPress={() => session.connect()} class="size-12 items-center justify-center rounded-full bg-secondary">
                   <Icon name="refresh" size={22} />
-                </Button>
-              )}
-            </View>
-          ) : null}
+                </Button>}><Spinner size={20} tone="faint" /></If>
+            </View></If>
         </View>
       )}
     </ScreenFloat>

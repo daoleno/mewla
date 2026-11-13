@@ -40,11 +40,9 @@ export function PetPage() {
 
   return (
     <Page title="Pet" testID="pet-page"
-      overlay={toast() ? (
-        <View class="absolute left-0 right-0 items-center" style={{ bottom: 88, pointerEvents: "none" }}>
+      overlay={<If when={toast()}><View class="absolute left-0 right-0 items-center" style={{ bottom: 88, pointerEvents: "none" }}>
           <View testID="pet-toast" class="rounded-full bg-foreground px-4 py-2.5"><Text class="text-sub font-semibold text-background">{toast()}</Text></View>
-        </View>
-      ) : undefined}>
+        </View></If>}>
       <View class="-mx-1 mt-4 flex-row flex-wrap" role="radiogroup" accessibilityLabel="Pet">
         {PETS.map((item) => (
           <View class="p-1" style={{ width: tile() }}>

@@ -238,20 +238,15 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
 
   return (
     <Page display title={server()?.name || "Computer"} testID="computer">
-      {!server() ? (
-        <EmptyState title="This computer is no longer paired" />
-      ) : (
-        <View>
-          {notice() ?<Notice testID="computer-notice" tone="failed" title={notice()!.title} detail={notice()!.detail} /> : null}
-          {connectionProblem() ? (
-            <Notice
+      <If when={!server()} else={<View>
+          <If when={notice()}><Notice testID="computer-notice" tone="failed" title={notice()!.title} detail={notice()!.detail} /></If>
+          <If when={connectionProblem()}><Notice
               testID={connectionProblem()!.testID}
               title={connectionProblem()!.title}
               detail={connectionProblem()!.detail}
               action={connectionProblem()!.action}
               onAction={busy() ? undefined : connectionProblem()!.onAction}
-            />
-          ) : null}
+            /></If>
 
           <Section footer={notes()["agent-use-load"] && !agentUse() ? notes()["agent-use-load"] : undefined}>
             <SwitchRow
@@ -266,37 +261,28 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
               <View>
                 <Row
                   title={problem.text}
-                  trailing={problem.action && reachable() ? (
-                    <PillButton title={problem.action.label} busy={busy() === problem.key} disabled={Boolean(busy())} onPress={() => perform(problem, problem.action!.does)} />
-                  ) : undefined}
+                  trailing={<If when={problem.action && reachable()}><PillButton title={problem.action!.label} busy={busy() === problem.key} disabled={Boolean(busy())} onPress={() => perform(problem, problem.action!.does)} /></If>}
                 />
-                {notes()[problem.key] ? <View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[problem.key]}</Text></View> : null}
+                <If when={notes()[problem.key]}><View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[problem.key]}</Text></View></If>
               </View>
             ))}
-            {notes()["agent-use"] ? <View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{notes()["agent-use"]}</Text></View> : null}
+            <If when={notes()["agent-use"]}><View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{notes()["agent-use"]}</Text></View></If>
           </Section>
 
-          {reachable() && update()?.version ? (
-            <Section>
+          <If when={reachable() && update()?.version}><Section>
               <Row title="Mewla" value={`Version ${update()!.version}`} accessibilityLabel={`Mewla on this computer, Version ${update()!.version}`} />
-            </Section>
-          ) : null}
+            </Section></If>
 
           <Section title="Name">
             <Field testID="computer-name" accessibilityLabel="Computer name" value={name()} onChange={(v) => name.set(v)} onCommit={() => void saveName()} />
           </Section>
-          {server()!.transportKind !== "link" ? (
-            <Section title="Address" footer={notes().address || undefined}>
-              <Field testID="computer-address" accessibilityLabel="Address" mono keyboardType="url" value={address()} placeholder="https://mewla.example.com" onChange={(v) => address.set(v)} onCommit={() => void saveAddress()} />
-            </Section>
-          ) : (
-            <Section title="Address">
+          <If when={server()!.transportKind !== "link"} else={<Section title="Address">
               <Row testID="computer-link" title="Mewla Relay" value={isCurrent() && connection() === "connected" ? linkPathText(transportPath()) : "Not connected"} />
-            </Section>
-          )}
+            </Section>}><Section title="Address" footer={notes().address || undefined}>
+              <Field testID="computer-address" accessibilityLabel="Address" mono keyboardType="url" value={address()} placeholder="https://mewla.example.com" onChange={(v) => address.set(v)} onCommit={() => void saveAddress()} />
+            </Section></If>
 
-          {!isCurrent() ? (
-            <Section>
+          <If when={!isCurrent()}><Section>
               <Row
                 testID="computer-use"
                 lead={tile("swap-horizontal")}
@@ -307,8 +293,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
                   switchTo(server());
                 }}
               />
-            </Section>
-          ) : null}
+            </Section></If>
           <Section>
             <Row
               testID="computer-remove"
@@ -316,12 +301,11 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
               icon="trash"
               title="Remove computer"
               disabled={Boolean(busy())}
-              trailing={busy() === "remove" ? <Spinner size={16} /> : undefined}
+              trailing={<If when={busy() === "remove"}><Spinner size={16} /></If>}
               onPress={() => void remove()}
             />
           </Section>
-        </View>
-      )}
+        </View>}><EmptyState title="This computer is no longer paired" /></If>
     </Page>
   );
 }

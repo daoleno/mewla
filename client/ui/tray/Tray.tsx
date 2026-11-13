@@ -71,12 +71,10 @@ function Label(props: { title: string; link?: string; onLink?: () => void; testI
   return (
     <View class="mb-2 mt-6 min-h-[18px] flex-row items-center justify-between px-4">
       <Text role="header" class="text-caption font-semibold text-muted-foreground">{props.title}</Text>
-      {props.link ? (
-        <Button testID={props.testID} onPress={props.onLink} class="min-h-[44px] -my-3 flex-row items-center justify-center pl-4 active:opacity-70">
-          <Text class="text-caption font-semibold text-muted-foreground">{props.link}</Text>
+      <If when={props.link}>{(link) => <Button testID={props.testID} onPress={props.onLink} class="min-h-[44px] -my-3 flex-row items-center justify-center pl-4 active:opacity-70">
+          <Text class="text-caption font-semibold text-muted-foreground">{link()}</Text>
           <Icon name="chevron-right" size={14} tone="soft" />
-        </Button>
-      ) : null}
+        </Button>}</If>
     </View>
   );
 }
@@ -96,11 +94,11 @@ function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean; las
   return (
     <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
       class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
-      {props.selected ? <SelectedWell /> : null}
+      <If when={props.selected}><SelectedWell /></If>
       <RowTile tile={() => row().tile} />
       <RowText row={row} />
       <RowEnd row={row} />
-      {props.selected || props.last ? null : <RowHair />}
+      <If when={!(props.selected || props.last)}><RowHair /></If>
     </Button>
   );
 }
@@ -127,7 +125,7 @@ function RequestRow(props: { request: TrayRequest; busy: boolean; last?: boolean
           <Text class="text-caption font-semibold text-seal-foreground">{r().oneTap ? "Approve" : "Answer"}</Text>
         </BusyLabel>
       </Button>
-      {props.last ? null : <RowHair />}
+      <If when={!props.last}><RowHair /></If>
     </Button>
   );
 }
@@ -141,7 +139,7 @@ function Notice(props: { onAction: (id: TrayNoticeAction) => void }) {
         <Icon name={notice().kind === "offline" ? "cloud-offline" : notice().kind === "pair" ? "link" : "alert"} size={24} tone="soft" />
         <View class="min-w-0 flex-1">
           <Text class="text-body font-semibold">{notice().title}</Text>
-          {notice().detail ? <Text class="mt-0.5 text-sub text-muted-foreground">{notice().detail}</Text> : null}
+          <If when={notice().detail}><Text class="mt-0.5 text-sub text-muted-foreground">{notice().detail}</Text></If>
         </View>
       </View>
       <View class="flex-row flex-wrap gap-2 pl-[38px]">
@@ -253,53 +251,41 @@ export function TrayBody(props: TrayBodyProps) {
         <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="add" size={24} tone="ink" /></Button>
       </View>
       <Scroll testID="tray-scroll" class="flex-1" contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
-        {m().notice ? <Notice onAction={noticeAction} /> : null}
+        <If when={m().notice}><Notice onAction={noticeAction} /></If>
         {/* The first read (SPEC §16.4 Tray): three placeholder rows from `wait.quiet` until the Workers are in. */}
         <If when={firstRead()}>
           <View testID="tray-placeholder" class="mt-4"><Rows count={3} /></View>
         </If>
-        {said() ? <View testID="tray-said" onPress={() => said.set("")} class="mt-2 px-4"><Text class="text-sub text-muted-foreground">{said()}</Text></View> : null}
+        <If when={said()}><View testID="tray-said" onPress={() => said.set("")} class="mt-2 px-4"><Text class="text-sub text-muted-foreground">{said()}</Text></View></If>
         <View class={m().dimmed ? "opacity-45" : ""}>
-          {m().needs.length ? (
-            <View testID="tray-needs">
+          <If when={m().needs.length}><View testID="tray-needs">
               <Label title="Needs you" />
               <Group>{m().needs.map((request, index, list) => <RequestRow request={request} last={index === list.length - 1} busy={busy() === request.key} onApprove={() => void approve(request)} onOpen={() => openRequest(request)} />)}</Group>
-            </View>
-          ) : null}
-          {m().running.length ? (
-            <View testID="tray-running">
+            </View></If>
+          <If when={m().running.length}><View testID="tray-running">
               <Label title="Running" />
               <Group>
                 {running().map((item, index, list) => row(item, index, list, m().running.length > RUNNING_SHOWN && !runningOpen()))}
-                {m().running.length > RUNNING_SHOWN && !runningOpen() ? (
-                  <Button testID="tray-running-more" onPress={() => runningOpen.set(true)} class="min-h-[52px] justify-center px-4 hover:bg-accent active:bg-accent">
+                <If when={m().running.length > RUNNING_SHOWN && !runningOpen()}><Button testID="tray-running-more" onPress={() => runningOpen.set(true)} class="min-h-[52px] justify-center px-4 hover:bg-accent active:bg-accent">
                     <Text class="text-sub text-muted-foreground">{`${m().running.length - RUNNING_SHOWN} more`}</Text>
-                  </Button>
-                ) : null}
+                  </Button></If>
               </Group>
-            </View>
-          ) : null}
-          {m().today.length ? (
-            <View testID="tray-today">
+            </View></If>
+          <If when={m().today.length}><View testID="tray-today">
               <Label title="Today" link="Calendar" testID="tray-calendar" onLink={props.open.calendar} />
               <Group>{m().today.slice(0, TODAY_SHOWN).map(row)}</Group>
-            </View>
-          ) : null}
-          {m().idle.length ? (
-            <View testID="tray-idle">
+            </View></If>
+          <If when={m().idle.length}><View testID="tray-idle">
               <Label title="Idle" />
               <Group>{m().idle.map(row)}</Group>
-            </View>
-          ) : null}
-          {m().done.length ? (
-            <View testID="tray-done">
+            </View></If>
+          <If when={m().done.length}><View testID="tray-done">
               <Label title="Done" link="All" testID="tray-all" onLink={props.open.allSessions} />
               <Group>{m().done.slice(0, DONE_SHOWN).map(row)}</Group>
-            </View>
-          ) : null}
+            </View></If>
           <Button testID="tray-all-sessions" selected={selected("all")} onPress={props.open.allSessions}
             class="mt-6 min-h-[52px] flex-row items-center justify-between overflow-hidden rounded-(--radius-group) bg-sheet-surface px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-            {selected("all") ? <SelectedWell /> : null}
+            <If when={selected("all")}><SelectedWell /></If>
             <Text class="text-body">All Sessions</Text>
             <Icon name="chevron-right" size={18} tone="faint" />
           </Button>
@@ -326,12 +312,10 @@ export function Tray(props: TrayProps) {
   });
   const close = () => trayOpen.set(false);
   // Read in the JSX: a component runs once.
-  return <>{trayOpen() ? (
-    <View testID="tray-overlay" class="absolute inset-0">
+  return <><If when={trayOpen()}><View testID="tray-overlay" class="absolute inset-0">
       <View testID="tray-scrim" class="absolute inset-0 bg-scrim" onPress={close} accessibilityLabel="Close the tray" role="button" />
       <TrayPanel {...props} onClose={close} />
-    </View>
-  ) : null}</>;
+    </View></If></>;
 }
 
 /** The panel: made each time the tray opens, so it rises once per opening and not when a pushed page pops back to it. */

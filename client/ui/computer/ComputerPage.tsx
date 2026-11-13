@@ -82,18 +82,16 @@ function CatHeader(props: { nav: PageNav }) {
           <View testID="computer-connection" class="flex-row items-center gap-2" onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
             accessible accessibilityLabel={[WORDS[connection()], connectionTail()].filter(Boolean).join(", ")}>
             {/* Connected is green; this computer offline is red with its word, since work stops (SPEC §10.4); else a soft ring. */}
-            {connectionTone(connection()) === "off"
-              ? <View testID="computer-connection-dot" class="size-2 rounded-full border-2 border-muted-foreground" />
-              : <View testID="computer-connection-dot" class="size-2 rounded-full" style={{ backgroundColor: color(connectionTone(connection()) === "ok" ? "ok" : "seal") }} />}
+            <If when={connectionTone(connection()) === "off"} else={<View testID="computer-connection-dot" class="size-2 rounded-full" style={{ backgroundColor: color(connectionTone(connection()) === "ok" ? "ok" : "seal") }} />}><View testID="computer-connection-dot" class="size-2 rounded-full border-2 border-muted-foreground" /></If>
             {/* One space each side of the dot: "Connected · LAN", the row's gap is only the status dot's. */}
             <View class="min-w-0 shrink flex-row">
               <Text class="text-sub" style={{ color: color(stateTextColor(connectionTone(connection()))) }}>{WORDS[connection()]}</Text>
-              {connectionTail() ? <Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{` · ${connectionTail()}`}</Text> : null}
+              <If when={connectionTail()}><Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{` · ${connectionTail()}`}</Text></If>
             </View>
           </View>
         </View>
       </View>
-      {pathDetail() ? <Text testID="computer-path-detail" class="text-sub text-muted-foreground">{pathDetail()}</Text> : null}
+      <If when={pathDetail()}><Text testID="computer-path-detail" class="text-sub text-muted-foreground">{pathDetail()}</Text></If>
     </View>
   );
 }
@@ -195,12 +193,9 @@ export function ComputerPage(props: {
   return (
     // The header block is the page's own title: the name joins Back in the capsule once it has scrolled away.
     <Page title={current()?.name || current()?.url || "Computer"} display hero={<CatHeader nav={props.nav} />} testID="computer-page">
-      {removedNotice() ? (
-        <Notice testID="removed-notice" tone="failed" title={removedNotice()!.title} detail={removedNotice()!.detail} action="OK" onAction={() => removedNotice.set(null)} />
-      ) : null}
+      <If when={removedNotice()}><Notice testID="removed-notice" tone="failed" title={removedNotice()!.title} detail={removedNotice()!.detail} action="OK" onAction={() => removedNotice.set(null)} /></If>
 
-      {fixRows().length || updateRow() ? (
-        <Section title="Needs fixing" testID="needs-fixing">
+      <If when={fixRows().length || updateRow()}><Section title="Needs fixing" testID="needs-fixing">
           {[...fixRows(), ...(updateRow() ? [updateRow()!] : [])].map((row) => (
             <View>
               <Row
@@ -208,21 +203,17 @@ export function ComputerPage(props: {
                 lead={fixRowLead(row)}
                 title={row.title}
                 titleTone={fixRowTone(row)}
-                trailing={row.button && row.action ? (
-                  <PillButton testID={`fix-${row.key}-button`} title={row.button} small kind={row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
-                    busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} />
-                ) : undefined}
+                trailing={<If when={row.button && row.action}><PillButton testID={`fix-${row.key}-button`} title={row.button!} small kind={row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
+                    busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} /></If>}
               />
-              {notes()[row.key] ? <View class="px-4 pb-3"><Text class="text-sub text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[row.key]}</Text></View> : null}
+              <If when={notes()[row.key]}><View class="px-4 pb-3"><Text class="text-sub text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[row.key]}</Text></View></If>
             </View>
           ))}
-        </Section>
-      ) : null}
+        </Section></If>
 
       <Section title="Computers" testID="computers">
         {/* This computer first: its row and its ⓘ open its details (it is already the one in use). */}
-        {current() ? (
-          <Row
+        <If when={current()}><Row
             testID={`computer-${current()!.id}`}
             lead={tile("desktop")}
             title={current()!.name || current()!.url}
@@ -234,8 +225,7 @@ export function ComputerPage(props: {
                 <Icon name="info" size={22} tone="soft" />
               </Button>
             }
-          />
-        ) : null}
+          /></If>
         {others().map((server) => {
           const state = () => otherState(server);
           return (
@@ -250,7 +240,7 @@ export function ComputerPage(props: {
                 onPress={() => useComputer(server)}
                 trailing={
                   <View class="flex-row items-center gap-1">
-                    {state().needsYou ? <View testID={`computer-${server.id}-dot`} class="size-2.5 rounded-full bg-seal" /> : null}
+                    <If when={state().needsYou}><View testID={`computer-${server.id}-dot`} class="size-2.5 rounded-full bg-seal" /></If>
                     <Button testID={`computer-${server.id}-info`} accessibilityLabel={`${server.name || "Computer"} details`} onPress={() => props.nav.push({ name: "settings-computer", id: server.id })}
                       class="size-11 items-center justify-center active:opacity-70">
                       <Icon name="info" size={22} tone="soft" />

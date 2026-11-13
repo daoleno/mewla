@@ -158,8 +158,7 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
 
   return (
     <FriendsPageFrame title="Post" testID="friends-post">
-      {loaded() ? (
-        <View class="flex-1" ref={keyboard.ref} onLayout={keyboard.onLayout}>
+      <If when={loaded()} else={<EmptyState busy />}><View class="flex-1" ref={keyboard.ref} onLayout={keyboard.onLayout}>
           <Scroll class="flex-1" contentClass="pb-6" keyboardShouldPersistTaps="handled">
             <View class="px-4 pt-3">
               <View class="flex-row items-center gap-3">
@@ -173,13 +172,12 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                   <View class="min-w-0 flex-1">
                     <View class="flex-row items-center gap-1.5">
                       <Text class="shrink text-title font-bold line-clamp-1" role="header">{displayName(post()!.author)}</Text>
-                      {post()!.author.agent_name ? <AgentPill /> : null}
+                      <If when={post()!.author.agent_name}><AgentPill /></If>
                     </View>
                     <Text class="text-sub text-muted-foreground">{`by @${post()!.author.handle}`}</Text>
                   </View>
                 </Button>
-                {!post()!.mine && author() ? (
-                  <PillButton
+                <If when={!post()!.mine && author()}><PillButton
                     testID="friends-follow"
                     title={author()!.followed ? "Following" : "Follow"}
                     filled={!author()!.followed}
@@ -187,11 +185,10 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                       const shownFrom = from();
                       void toggleFollow(author()!, shownFrom).then((next) => next && from() === shownFrom && author.set(next));
                     }}
-                  />
-                ) : null}
+                  /></If>
               </View>
               <Text testID="friends-post-text" class="mt-3 text-body">{post()!.text}</Text>
-              {mediaCount() ? <PostMedia media={post()!.media!} postId={post()!.id} owner={owner} active={props.top} /> : null}
+              <If when={mediaCount()}><PostMedia media={post()!.media!} postId={post()!.id} owner={owner} active={props.top} /></If>
               <Text class="mt-3 text-sub text-muted-foreground">
                 {`${formatDateTime(post()!.created_at)} · ${post()!.via === "auto" ? "Auto-posted" : "Approved by owner"}`}
               </Text>
@@ -216,10 +213,7 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                 <ActionButton testID="friends-post-more" icon="more-horizontal" label="More" onPress={() => void postMenu(post()!, handlers())} />
               </View>
             </View>
-            {comments().length === 0 ? (
-              <EmptyState title="No comments yet" />
-            ) : (
-              comments().map((comment) => (
+            <If when={comments().length === 0} else={<>{comments().map((comment) => (
                 <View
                   testID={`comment-${comment.id}`}
                   role="button"
@@ -236,8 +230,7 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                     <Icon name="more-horizontal" size={18} />
                   </Button>
                 </View>
-              ))
-            )}
+              ))}</>}><EmptyState title="No comments yet" /></If>
           </Scroll>
           <View testID="friends-composer" class="flex-row items-end gap-2 bg-background px-4 py-2" style={{ marginBottom: keyboard.lift() }}>
             <Input
@@ -263,10 +256,7 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
               <Icon name="arrow-up" tone="canvas" size={18} />
             </Button>
           </View>
-        </View>
-      ) : (
-        <EmptyState busy />
-      )}
+        </View></If>
     </FriendsPageFrame>
   );
 }

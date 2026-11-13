@@ -51,7 +51,7 @@ export function ConnectCard(props: { nav: PageNav }) {
           key: `install:${f.id}:${f.message ?? ""}:${f.install_manual}:${f.install_failed}`,
           render: () => (
             <Card title={f.message || `Install ${serviceName} CLI`} detail={f.message ? undefined : "Install the official CLI on this computer, then sign in."}>
-              {f.install_manual && f.install_url ? <Action label={`Download ${serviceName} CLI`} onPress={() => void openUrl(f.install_url!)} /> : null}
+              <If when={f.install_manual && f.install_url}><Action label={`Download ${serviceName} CLI`} onPress={() => void openUrl(f.install_url!)} /></If>
               <Action filled testID="install-cli" label={f.install_manual ? "Check again" : f.install_failed ? "Retry" : "Install and sign in"} busy={starting() || verifying()} onPress={() => void submit("").catch(() => {})} />
               <Action label="Cancel" onPress={cancel} />
             </Card>
@@ -110,7 +110,7 @@ export function ConnectCard(props: { nav: PageNav }) {
                 <Text testID="device-code" class="py-2 text-center font-mono text-2xl font-semibold tracking-widest" accessibilityLabel={`Code ${code.split("").join(" ")}`}>{code}</Text>
               </View>
               <Action filled testID="open-code-page" label={`Copy code and open ${serviceName}`} onPress={open} />
-              {s.service === "github" ? <Action label="Use the GitHub login on this server" onPress={() => void flow().useServerGitHub()} /> : null}
+              <If when={s.service === "github"}><Action label="Use the GitHub login on this server" onPress={() => void flow().useServerGitHub()} /></If>
               <Action label="Cancel" onPress={cancel} />
             </Card>
           ),
@@ -122,7 +122,7 @@ export function ConnectCard(props: { nav: PageNav }) {
           key: `waiting:${f?.id}:${detail ?? ""}`,
           render: () => (
             <Card busy title={`Waiting for ${serviceName}`} detail={detail}>
-              {f?.authorization_url ? <Action testID="open-again" label={`Open ${serviceName} again`} onPress={open} /> : null}
+              <If when={f?.authorization_url}><Action testID="open-again" label={`Open ${serviceName} again`} onPress={open} /></If>
               <Action testID="cancel-sign-in" label="Cancel" onPress={cancel} />
             </Card>
           ),
@@ -152,12 +152,10 @@ export function ConnectCard(props: { nav: PageNav }) {
           key: `connected:${connected.id}:${offerChanges}:${naming}:${detail}`,
           render: () => (
             <Card testID="connected-card" glyph="check-circle-fill" tone="ready" title={`${serviceName} connected`} detail={detail}>
-              {offerChanges ? <Action filled label="Allow changes too" accessibilityLabel={job?.write ? `Allow changes too. ${job.write}` : undefined} busy={flowState().running === `write:${connected.id}`} onPress={() => flow().setAccess(connected, "write", true)} /> : null}
-              {naming ? (
-                <View class="-mx-4">
+              <If when={offerChanges}><Action filled label="Allow changes too" accessibilityLabel={job?.write ? `Allow changes too. ${job.write}` : undefined} busy={flowState().running === `write:${connected.id}`} onPress={() => flow().setAccess(connected, "write", true)} /></If>
+              <If when={naming}><View class="-mx-4">
                   <ProfileName account={connected} suggest onDone={() => flow().dismiss()} />
-                </View>
-              ) : null}
+                </View></If>
               <Action testID="connect-done" label="Done" onPress={() => flow().dismiss()} />
             </Card>
           ),
@@ -203,11 +201,11 @@ function Card(props: { title: string; detail?: string; busy?: boolean; glyph?: I
   return (
     <View testID={props.testID ?? "connect-card"} android={{ accessibilityLiveRegion: "polite" }} class="mt-4 gap-2 rounded-(--radius-group) bg-card px-4 py-4">
       <View class="flex-row items-center gap-2">
-        {props.busy ? <Spinner size={18} /> : props.glyph ? <Icon name={props.glyph} size={20} tone={props.tone ?? "soft"} /> : null}
+        <If when={props.busy} else={<If when={props.glyph}>{(glyph) => <Icon name={glyph()} size={20} tone={props.tone ?? "soft"} />}</If>}><Spinner size={18} /></If>
         <Text class="flex-1 text-lg font-semibold" role="header">{props.title}</Text>
       </View>
-      {props.detail ? <Text class="text-sub text-muted-foreground">{props.detail}</Text> : null}
-      {props.children ? <View class="mt-1 gap-2">{props.children}</View> : null}
+      <If when={props.detail}>{(detail) => <Text class="text-sub text-muted-foreground">{detail()}</Text>}</If>
+      <If when={"children" in props}><View class="mt-1 gap-2">{props.children}</View></If>
     </View>
   );
 }
@@ -263,7 +261,7 @@ function PasteEntry(props: { kind: "address" | "code"; noun: string; label: stri
         onSubmit={() => void submit()}
       />
       <View class="gap-2 px-4">
-        {error() ? <Notice tone="failed" title={props.kind === "address" ? "Check the address" : `Check the ${props.noun}`} detail={error()} /> : null}
+        <If when={error()}><Notice tone="failed" title={props.kind === "address" ? "Check the address" : `Check the ${props.noun}`} detail={error()} /></If>
         <Action label={props.kind === "address" ? "Paste address" : `Paste ${props.noun}`} disabled={busy()} onPress={() => void paste()} />
         <Action filled testID={props.kind === "address" ? "sign-in-address-continue" : "sign-in-code-continue"} label="Continue" busy={busy()} disabled={!text().trim()} onPress={() => void submit()} />
       </View>

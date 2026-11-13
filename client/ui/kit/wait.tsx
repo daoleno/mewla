@@ -141,7 +141,7 @@ export function Rows(props: { count: number; lead?: boolean; testID?: string }) 
       <Each of={Array.from({ length: props.count }, (_, i) => i)} key="index">
         {(i) => (
           <View class="min-h-[64px] flex-row items-center gap-3.5 px-4 py-2">
-            {props.lead === false ? null : <Block width={28} height={28} radius={14} />}
+            <If when={props.lead !== false}><Block width={28} height={28} radius={14} /></If>
             <View class="flex-1">
               <Line width={ROW_WIDTHS[i() % ROW_WIDTHS.length]![0]} />
               <Line width={ROW_WIDTHS[i() % ROW_WIDTHS.length]![1]} />
@@ -181,8 +181,8 @@ export function StateView(props: { icon: IconName; title: string; detail?: strin
     <View testID={props.testID} class="items-center gap-2 px-6 py-12">
       <Icon name={props.icon} size={28} tone="soft" />
       <Text class="mt-1 text-center text-title font-semibold tracking-title text-foreground">{props.title}</Text>
-      {props.detail ? <Text class="text-center text-sub text-muted-foreground">{props.detail}</Text> : null}
-      {props.actions?.length ? (
+      <If when={props.detail}><Text class="text-center text-sub text-muted-foreground">{props.detail}</Text></If>
+      <If when={props.actions?.length}>
         <View class="mt-2 flex-row gap-2">
           <Each of={props.actions}>
             {(a) => (
@@ -192,7 +192,7 @@ export function StateView(props: { icon: IconName; title: string; detail?: strin
             )}
           </Each>
         </View>
-      ) : null}
+      </If>
     </View>
   );
 }
