@@ -49,6 +49,19 @@ sections = [
         # The named products' marks in ui/kit/marks.ts.
         {"name": "Simple Icons", "version": "16.31.0", "license": "CC0-1.0", "url": "https://simpleicons.org", "text": text("simple-icons-CC0.txt"),
          "note": "The marks of Telegram, GitHub, Notion, Linear, Node.js, Go, Docker, Python, PostgreSQL, Sentry, Vercel, Cloudflare, Figma and Tailscale. The marks stay their owners' trademarks."},
+        # Multicolour marks drawn from each vendor's own SVG (ui/kit/marks.ts notes the file per mark).
+        {"name": "Google product logos", "license": "Trademark", "url": "https://cloud.google.com/icons",
+         "note": "The Google Chrome, Google (G) and Google Cloud marks from gstatic.com/images/branding/productlogos, and Vertex AI from the Google Cloud icons. Trademarks of Google LLC, drawn unchanged to name the product. Terms: https://about.google/brand-resource-center/"},
+        {"name": "Slack logo", "license": "Trademark", "url": "https://slack.com/media-kit",
+         "note": "The Slack mark from slack.com's media kit. A trademark of Slack Technologies, LLC, drawn unchanged to name the product. Terms: https://slack.com/media-kit"},
+        {"name": "AWS Architecture Icons", "version": "07312026", "license": "Trademark", "url": "https://aws.amazon.com/architecture/icons/",
+         "note": "The Amazon Bedrock icon. A trademark of Amazon.com, Inc., drawn unchanged to name the product. Terms: https://aws.amazon.com/architecture/icons/"},
+        {"name": "Azure Public Service Icons", "version": "V25", "license": "Microsoft Terms of Use", "url": "https://learn.microsoft.com/azure/architecture/icons/",
+         "note": "The Azure mark. A trademark of Microsoft Corporation, drawn unchanged to name the product. Terms: https://learn.microsoft.com/azure/architecture/icons/"},
+        {"name": "OpenAI logo", "license": "Trademark", "url": "https://openai.com/brand",
+         "note": "The OpenAI blossom from openai.com, drawn in the text colour. A trademark of OpenAI. Terms: https://openai.com/brand"},
+        {"name": "OpenRouter logo", "license": "Trademark", "url": "https://openrouter.ai",
+         "note": "The OpenRouter glyph from openrouter.ai/brand (light and dark). A trademark of OpenRouter, Inc. Source: https://openrouter.ai/brand"},
     ]},
     {"title": "Native libraries", "items": [
         {"name": "AndroidX (Activity, Core, CameraX, Lifecycle)", "license": "Apache-2.0", "url": "https://developer.android.com/jetpack/androidx", "platforms": ["android"], "text": APACHE},

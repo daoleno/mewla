@@ -24,7 +24,9 @@ import { AGENT_ASSETS } from "../../icons/agents/assets";
 import { connected, daemon } from "../daemon";
 import { Icon } from "../../kit/Icon";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
-import { StateLine, tile } from "../../kit/RowTile";
+import { LEAD_SLOT, StateLine, tile, type Lead } from "../../kit/RowTile";
+import { AgentIcon } from "../../icons/AgentIcon";
+import { officialLoginLead, providerLead, type ProviderLead } from "../../../core/providers/lead";
 import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { change, changing, discover, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providerState";
@@ -179,7 +181,7 @@ export function Providers(props: { nav: PageNav }) {
             >
               <Row
                 testID="provider-official"
-                lead={tile("person-circle")}
+                lead={lead(officialLoginLead(client()))}
                 title="Official login"
                 subtitle="Direct · uses the native account"
                 check={selectedId() === ""}
@@ -195,7 +197,7 @@ export function Providers(props: { nav: PageNav }) {
                 <View>
                   <Row
                     testID={`provider-${c.id}`}
-                    lead={tile("key")}
+                    lead={lead(providerLead(c))}
                     title={c.name}
                     subtitle={subtitle(c)}
                     check={selectedId() === c.id}
@@ -234,6 +236,12 @@ export function Providers(props: { nav: PageNav }) {
       </>
     </Page>
   );
+}
+
+/** A provider's lead as the row draws it: its vendor's mark, its agent's logo, or the key on the tile. */
+function lead(l: ProviderLead): Lead {
+  if (l.kind === "agent") return { kind: "logo", node: <AgentIcon kind={l.agent} size={28} slot={LEAD_SLOT} /> };
+  return l;
 }
 
 function Gateway() {

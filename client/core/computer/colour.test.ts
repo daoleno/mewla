@@ -6,7 +6,7 @@ describe("the computer page's colour (SPEC §10.4)", () => {
     expect(fixRowLead({ key: "pair" })).toEqual({ kind: "tile", glyph: "link" });
     expect(fixRowLead({ key: "connection" })).toEqual({ kind: "tile", glyph: "cloud-offline" });
     expect(fixRowLead({ key: "host" })).toEqual({ kind: "tile", glyph: "brain" });
-    expect(fixRowLead({ key: "browser" })).toEqual({ kind: "tile", glyph: "puzzle" });
+    expect(fixRowLead({ key: "browser" })).toEqual({ kind: "mark", mark: "chrome" });
     expect(fixRowLead({ key: "update-optional" })).toEqual({ kind: "tile", glyph: "cloud-download" });
   });
 
