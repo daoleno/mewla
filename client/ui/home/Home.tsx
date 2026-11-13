@@ -368,6 +368,8 @@ export function Home() {
       return routedBrainThread() ? undefined : workHandlers;
     },
     workingSince: () => activity()?.started_at,
+    // Trial: three pages. The thread is a page of the pager: its code blocks wrap.
+    paged: mobile && !untracked(wide),
     // A reply's image (a Calendar run's result too) is a file on Brain's host.
     loadImage: (path: string) => {
       const server = untracked(current);
