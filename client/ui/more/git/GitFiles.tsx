@@ -193,7 +193,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
           <If when={listDetail()}><View testID="git-file-reader" class="flex-1 bg-background">
               <If when={chosen()} else={<View class="flex-1 px-4"><EmptyState testID="git-files-no-file" icon="document" title="No file selected" /></View>}>
                 {/* Made again for each file chosen: the body loads its file once. */}
-                <Each of={[chosen()!]} key={(path) => path}>{(path) => <View class="flex-1">
+                <Each of={chosen() ? [chosen()!] : []} key={(path) => path}>{(path) => <View class="flex-1">
                   <View class="min-h-[52px] flex-row items-center gap-2 border-b border-border px-4">
                     <Text role="header" class="min-w-0 flex-1 text-[17px] font-semibold line-clamp-1">{path().split("/").at(-1) || path()}</Text>
                     <FileActions review={review} path={path()} />

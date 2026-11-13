@@ -203,7 +203,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
           <If when={wide()}><View testID="git-reader" class="flex-1 bg-background">
               <If when={chosen()} else={<View class="flex-1 px-4"><EmptyState testID="git-no-file" icon="document" title="No file selected" /></View>}>
                 {/* Made again for each file opened from the list (a new choice); the reader's own steps keep it. */}
-                <Each of={[chosen()!]} key={(choice) => choice}>{(choice) => <DiffReader
+                <Each of={chosen() ? [chosen()!] : []} key={(choice) => choice}>{(choice) => <DiffReader
                   review={review}
                   entry={untracked(choice).key}
                   nav={props.nav}
