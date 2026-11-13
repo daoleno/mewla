@@ -15,6 +15,7 @@ import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem,
 import { withDayDividers } from "../../core/timeline/dayDividers";
 import { FOLDED_TEXT_HEIGHT, messageFolds } from "../../core/timeline/messageFold";
 import { readingPlace, readingPlaceIndex, readingPlaceOf, rememberReadingPlace } from "../../core/timeline/readingPlace";
+import { fromNewest, roomLeft, sentRowIndex, type SentRowCandidate } from "../../core/conversation/sendRoom";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
@@ -395,16 +396,48 @@ export function ChatTimeline(props: {
     if (!props.reveal || props.reveal() === seenReveal || !mounted()) return;
     untracked(() => void centreRequest(true));
   });
+  /*
+   * A send puts the sent message at the top of what shows, below a capsule header, the reply under it
+   * (core/conversation/sendRoom.ts): the thread ends in room as high as the list, which the reply grows into, so the
+   * newest row can reach the top; scrolling there waits for the sent row (a thread's rows can follow its send).
+   */
+  const room = signal(0);
+  let roomNode: ViewRef | undefined;
+  let sentAt: number | null = null;
+  // The scroll to the sent row runs a moment: measured meanwhile, the room would read the list where it was.
+  let settledAt = 0;
+  const SETTLE_MS = 600;
+  const fitRoom = async () => {
+    if (untracked(room) === 0 || !roomNode || !list || Date.now() < settledAt) return;
+    const [box, top] = await Promise.all([list.measure(), roomNode.measure()]);
+    if (!box || !top || Date.now() < settledAt) return;
+    room.set(roomLeft(untracked(room), box.pagePosition.y + box.bounds.size.height, top.pagePosition.y));
+  };
+  const placeSent = async () => {
+    if (sentAt === null || !list) return;
+    const index = sentRowIndex(untracked(rows) as SentRowCandidate[], sentAt);
+    if (index < 0) return;
+    sentAt = null;
+    const box = await list.measure();
+    if (!box || !list) return;
+    room.set(box.bounds.size.height);
+    settledAt = Date.now() + SETTLE_MS;
+    // Once the room is laid out, the sent row can come to the top.
+    setTimeout(() => list?.scrollToIndex({ index, viewPosition: 0, viewOffset: untracked(() => props.capsule?.top() ?? 0), animated: true }), 0);
+    setTimeout(() => void fitRoom(), SETTLE_MS + 50);
+  };
   const seenSent = props.sent ? untracked(props.sent) : 0;
   effect(() => {
     if (!props.sent || props.sent() === seenSent) return;
+    sentAt = Date.now();
+    untracked(() => void placeSent());
+  });
+  // The sent row coming in after its send, and the reply growing into the room.
+  effect(() => {
+    rows();
     untracked(() => {
-      const all = rows();
-      for (let index = all.length - 1; index >= 0; index -= 1) {
-        const row = all[index] as TimelineItem;
-        // At the top of what shows: below a capsule header, not under it.
-        if (row.type === "message" && (row as MessageTimelineItem).role === "user") return void list?.scrollToIndex({ index, viewPosition: 0, viewOffset: props.capsule?.top() ?? 0, animated: true });
-      }
+      if (sentAt !== null) void placeSent();
+      else if (room() > 0) void fitRoom();
     });
   });
   // Where the list was while on screen. A browser drops a hidden list's scroll (its tab is
@@ -448,22 +481,26 @@ export function ChatTimeline(props: {
           // A hidden list's rows (a browser resets its scroll) are not where the person was.
           if (untracked(shown)) shownFirst = readingPlace(viewableItems);
         }}
-        maintainVisibleContentPosition={{ autoscrollToBottomThreshold: AT_END }} keyboardDismissMode="interactive"
+        // While the reply has room under the sent message, the list holds still (the sent message stays at the top).
+        maintainVisibleContentPosition={room() > 0 ? {} : { autoscrollToBottomThreshold: AT_END }} keyboardDismissMode="interactive"
         contentStyle={{ paddingTop: (props.capsule?.top() ?? 0) + 12, paddingBottom: 12 }}
         onScroll={({ offset, contentSize, size }) => {
           // A hidden list's scroll (a browser resets it) is not where the person was.
           if (!untracked(shown)) return;
-          fromEnd = contentSize.height - (offset.y + size.height);
+          fromEnd = fromNewest(contentSize.height, untracked(room), offset.y, size.height);
           props.capsule?.reading.scroll(offset.y, fromEnd);
           // The person's own scrolling holds the header cat still.
           if (touched) noteScroll();
-          const far = contentSize.height - (offset.y + size.height) > AT_END;
+          const far = fromEnd > AT_END;
           away.set(far);
           last = { offset: offset.y, atEnd: !far };
           if (!props.scope || !touched) return;
           rememberReadingPlace(props.scope, far ? shownFirst : undefined);
         }}
-        footer={<If when={rows().length === 0}>{props.empty() as never}</If>}>
+        footer={<>
+          <If when={rows().length === 0}>{props.empty() as never}</If>
+          <View testID="send-room" ref={(node) => (roomNode = node)} style={{ height: room() }} />
+        </>}>
         {(item) => {
           // A recycled cell takes whatever row comes next: the foot's cell can become a row and back,
           // so which of the two it draws follows its item, not the item it was made for.
