@@ -75,6 +75,37 @@ describe("inline code", () => {
   }, 20_000);
 });
 
+describe("a long message the person sent folds", () => {
+  const long = Array.from({ length: 30 }, (_, i) => `Line ${i + 1} of the pasted brief`).join("\n");
+  const sent = (id: string, seq: number, body: string) => ({ id, seq, timestamp: at(seq), kind: "user_message", role: "user", body });
+
+  test("past 8 lines it shows its first lines and a chevron; a short one never folds", async () => {
+    const app = await brainWith([sent("u1", 1, long), sent("u2", 2, "Short\nand\nsweet"), reply("a1", 3, "Read it.")]);
+    await app.waitFor("id:user-message-folded", { timeout: 10_000 });
+    expect(app.count("id:user-message-fold")).toBe(1);
+    expect(app.count("id:user-message-folded")).toBe(1);
+    expect(app.count("id:user-message-body")).toBe(1);
+    // The text under the fold is the whole message: Select all copies all of it, not the lines that show.
+    expect(app.texts()).toContain(long);
+  }, 20_000);
+
+  test("the chevron opens and closes it, and it stays as left while the thread lives", async () => {
+    const app = await brainWith([sent("u1", 1, long), reply("a1", 2, "Read it.")]);
+    await app.waitFor("id:user-message-folded", { timeout: 10_000 });
+    await app.wait(300);
+    await app.press("id:user-message-fold");
+    await app.waitFor("label:Fold the message");
+    expect(app.shows("id:user-message-folded")).toBe(false);
+    // The chevron is its own target: no edit.
+    expect(app.shows("id:edit-chip")).toBe(false);
+    await app.host.send("app.conversation", { worker: "brain-host", upserts: [reply("a2", 3, "And one more thing.")] });
+    await app.waitFor("text:And one more thing.");
+    expect(app.shows("label:Fold the message")).toBe(true);
+    await app.press("id:user-message-fold");
+    await app.waitFor("id:user-message-folded");
+  }, 20_000);
+});
+
 describe("the person's own message", () => {
   test("a tap puts it in the composer to edit (the Editing chip; × leaves it), with no sheet", async () => {
     const app = await brainWith([{ id: "u1", seq: 1, timestamp: at(1), kind: "user_message", role: "user", body: "Book the 23:30 train" }, reply("a1", 2, "Booked.")]);
