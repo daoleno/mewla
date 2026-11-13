@@ -106,6 +106,7 @@ export const tray = computed(() => {
     hostProblem: snapshot?.host_problem,
     workers: workers(),
     brainHost: brainHost(),
+    brainTurn: brainThread().conversation?.activity?.status === "running",
     brainChoice: brainChoice() ? { callId: brainChoice()!.callId, question: brainChoice()!.choice.questions.find((q) => q.question)?.question ?? "" } : null,
     answered: answered(),
     currentWork: snapshot?.current_work as BrainCurrentWork[] | undefined,
