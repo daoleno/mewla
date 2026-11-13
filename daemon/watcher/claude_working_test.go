@@ -8,8 +8,9 @@ import (
 )
 
 // A Claude Session the person started (no Brain turn) is running while its
-// footer says it works, since the poll that first saw it, and idle again when
-// the footer does not; a Brain-delegated Worker keeps its ledger turn's status.
+// footer says it works, since the poll that first saw it working, and idle again
+// when the footer does not. A prompt ends the run: the wait for the person is not
+// counted, and the answer starts a new run; a Brain-delegated Worker keeps its ledger turn's status.
 func TestPollClaudeSessionRunsWhileItsFooterSaysItWorks(t *testing.T) {
 	const id = "claude-session:@1"
 	w := New(time.Second)
@@ -35,18 +36,18 @@ func TestPollClaudeSessionRunsWhileItsFooterSaysItWorks(t *testing.T) {
 	if worker = workerByID(w.Workers(), id); worker.State != classifier.StateRunning || !worker.RunningSince.Equal(start) {
 		t.Fatalf("the run's start moved on the next poll: %+v", worker)
 	}
-	// It stops at a permission prompt and goes on once it is answered: one run.
+	// It stops at a permission prompt: the wait is the person's, not the agent's.
 	content[id] = "Claude Code v2.1.322\n Bash command\n curl -sI https://example.org\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n Esc to cancel · Tab to amend\n"
 	w.poll()
 	drainWatcherEvents(w)
-	if worker = workerByID(w.Workers(), id); worker.State != classifier.StateBlocked || worker.RunningSince == nil || !worker.RunningSince.Equal(start) {
+	if worker = workerByID(w.Workers(), id); worker.State != classifier.StateBlocked || worker.RunningSince != nil {
 		t.Fatalf("a Session at a prompt = %+v", worker)
 	}
 	content[id] = pane("⏸ manual mode on · esc to interrupt")
 	w.poll()
 	drainWatcherEvents(w)
-	if worker = workerByID(w.Workers(), id); worker.State != classifier.StateRunning || worker.RunningSince == nil || !worker.RunningSince.Equal(start) {
-		t.Fatalf("the run restarted after its prompt: %+v", worker)
+	if worker = workerByID(w.Workers(), id); worker.State != classifier.StateRunning || worker.RunningSince == nil || !worker.RunningSince.Equal(start.Add(6*time.Second)) {
+		t.Fatalf("the answer did not start a new run: %+v", worker)
 	}
 	content[id] = pane("⏸ manual mode on · ? for shortcuts")
 	w.poll()

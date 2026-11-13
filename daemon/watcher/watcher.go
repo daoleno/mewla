@@ -1735,16 +1735,15 @@ func (w *Watcher) projectPollResultsLocked(results []probedPollWorker) []Session
 		worker.State = newState
 		worker.Summary = summary
 		// A Session whose own terminal says it works carries when that run
-		// began, and keeps it across a prompt it stopped at: the run goes on
-		// once the prompt is answered. A delegated Worker's turn has its own
-		// times in the ledger.
+		// began. A prompt ends the run, so the time it waits on the person is
+		// not the agent's: the answer starts a new one. A delegated Worker's
+		// turn has its own times in the ledger.
 		switch {
 		case newState == classifier.StateRunning && activity.State == classifier.StateRunning && !r.hasTurn:
 			if worker.RunningSince == nil {
 				since := r.now
 				worker.RunningSince = &since
 			}
-		case newState == classifier.StateBlocked && !r.hasTurn:
 		default:
 			worker.RunningSince = nil
 		}
