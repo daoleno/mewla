@@ -1,9 +1,19 @@
 # Live surfaces
 
-A running task and a question that needs you can stay on the phone as one
-ongoing notification and as home-screen widgets. The daemon decides what they
-show; the app draws it. Nothing here is new state: it is read from the same
-Brain snapshot the app already receives.
+What needs you and what is running stay on the phone outside the app: a live
+update (Android's ongoing notification and status-bar chip; the Dynamic Island
+and Lock Screen on iOS) and home-screen widgets. Each has one job:
+
+- **The live update** is there only while something runs or needs you. It shows
+  the one thing that matters now (what needs you, newest first, else what
+  started last) with its agent's logo and progress ring, and one tap opens it.
+- **The widgets** are the tray at a glance: the small one is that one thing, the
+  medium one the header's words and three rows, each opening its Session or
+  Work. With nothing to show, the cat naps.
+
+The daemon decides what they show; the app draws it. Nothing here is new state:
+it is read from the same Brain snapshot and Sessions the app already receives,
+and counted the way the app's header counts.
 
 ## live_state
 
@@ -23,9 +33,31 @@ One projection, `live.State`, from the Brain snapshot:
   "workers": [{"name": "main:7", "phase": "releasing"}],
   "worker_count": 1,
   "needs_count": 0,
-  "question": null
+  "question": null,
+  "items": [
+    {"key": "work:w1", "open": "session", "id": "%7", "title": "perpetuo-fre17-18",
+     "line": "Releasing", "agent": "claude", "ring": {"stage": "moving", "percent": 45},
+     "started_at": 1792751300000}
+  ],
+  "running": 1,
+  "queued": 0,
+  "waiting": 0
 }
 ```
+
+- `items` are what the surfaces draw, at most three: what needs the person,
+  newest first, then what runs, the one that started last first. Each has where
+  a tap goes (`open`: `work`, `session` or `brain`, and its `id`), its title, a
+  line (what it does, or what it asks), the Session's `agent` (`brain` for
+  Brain's mark: Brain itself, or a Work with several Workers), `needs`
+  (`answer` or `approve`) while it waits for the person, the Work's progress
+  `ring` as the app draws it (`moving` or `back` rounded to 5 and at most 95, or
+  `last`; never a number for the person to read) and `started_at` for its clock.
+- `running`, `queued` and `waiting` are the header's counts: a Work with several
+  Workers is one row, and a Session the person started counts too.
+  `needs_count` is the open-request count other computers show ("1 needs you"):
+  Work questions, a Session's approvals or prompt (a delegated Worker's own
+  report is Brain's, not the person's) and Brain's own prompt.
 
 - `kind` is `idle`, `running` or `needs_you`. A question outranks running work.
 - **Running** is every visible, delegated Worker the watcher classifies as
