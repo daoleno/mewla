@@ -408,7 +408,7 @@ function CustomServiceForm(props: { plugin: PluginIntegration; again: boolean })
           <If when={props.plugin.id === "openapi"}><Section title="OpenAPI document">
               <Field label="OpenAPI 3 JSON" accessibilityLabel="OpenAPI document" testID="custom-spec" placeholder="Paste the JSON document" multiline mono value={spec()} onChange={(value) => spec.set(value)} />
             </Section></If>
-          <Section title="Network" footer="Only for an internal service you trust.">
+          <Section title="Network">
             <SwitchRow title="Allow a private network" checked={trust()} onChange={(on) => trust.set(on)} />
             <If when={trust()}><Field label="Trusted ranges" accessibilityLabel="Trusted network ranges" placeholder="192.168.1.10/32" value={networks()} onChange={(value) => networks.set(value)} /></If>
           </Section>

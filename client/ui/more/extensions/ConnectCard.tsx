@@ -51,16 +51,16 @@ export function ConnectCard(props: { nav: PageNav }) {
           : none;
       }
       // Open, first and filled while the browser has not opened the page (it blocked a tab that came late); quiet once it has.
-      const openButton = (testID: string, disabled?: boolean) => (
-        <If when={flowState().blocked} else={<GhostAction testID={testID} icon="open-external" label={`Open ${serviceName}`} disabled={disabled} onPress={open} />}>
-          <Action filled testID={testID} label={`Open ${serviceName}`} disabled={disabled} onPress={open} />
+      const openButton = (testID: string, disabled?: boolean, label = `Open ${serviceName}`) => (
+        <If when={flowState().blocked} else={<GhostAction testID={testID} icon="open-external" label={label} disabled={disabled} onPress={open} />}>
+          <Action filled testID={testID} label={label} disabled={disabled} onPress={open} />
         </If>
       );
       if (f?.install_required && f.status === "waiting") {
         return {
           key: `install:${f.id}:${f.message ?? ""}:${f.install_manual}:${f.install_failed}`,
           render: () => (
-            <Card service={service} title={`Install ${serviceName} CLI`} detail={f.message || undefined} onClose={cancel}>
+            <Card service={service} title={f.install_failed ? `Couldn't install ${serviceName} CLI` : `Install ${serviceName} CLI`} detail={f.message || undefined} tone={f.install_failed ? "sealInk" : undefined} glyph={f.install_failed ? "alert-circle-fill" : undefined} onClose={cancel}>
               <Action filled testID="install-cli" label={f.install_manual ? "Check again" : f.install_failed ? "Retry" : "Install and sign in"} busy={starting() || verifying()} onPress={() => void submit("").catch(() => {})} />
               <If when={f.install_manual && f.install_url}><GhostAction icon="download" label="Download" accessibilityLabel={`Download ${serviceName} CLI`} onPress={() => void openUrl(f.install_url!)} /></If>
             </Card>
@@ -74,12 +74,20 @@ export function ConnectCard(props: { nav: PageNav }) {
         const noun = f.setup_required ? "client ID and secret" : secret ? "client secret" : "code";
         return {
           key: `code:${f.id}:${noun}`,
-          render: () => (
-            <Card service={service} title={secret ? `Paste the ${noun}` : `Paste the code from ${serviceName}`} detail={secret ? f.message : undefined} onClose={cancel}>
-              <If when={f.authorization_url}>{openButton("open-again")}</If>
-              <PasteEntry kind="code" noun={noun} label={noun === "code" ? `Code from ${serviceName}` : noun} onSubmit={submit} />
-            </Card>
-          ),
+          render: () => {
+            // The console's steps are the computer's words, a paragraph: behind Steps, for whoever needs them.
+            const steps = signal(false);
+            return (
+              <Card service={service} title={secret ? `Paste the ${noun}` : `Paste the code from ${serviceName}`} onClose={cancel}>
+                <View class="flex-row flex-wrap gap-2">
+                  <If when={f.authorization_url}>{openButton("open-again", false, secret ? "Open console" : `Open ${serviceName}`)}</If>
+                  <If when={secret && flowState().flow?.flow.message}><GhostAction testID="sign-in-steps" icon="help" label="Steps" accessibilityLabel={steps() ? "Hide the steps" : "Show the steps"} onPress={() => steps.set(!steps())} /></If>
+                </View>
+                <If when={steps()}><View selectable><Text testID="sign-in-steps-text" class="text-sub text-muted-foreground">{flowState().flow?.flow.message ?? ""}</Text></View></If>
+                <PasteEntry kind="code" noun={noun} label={noun === "code" ? `Code from ${serviceName}` : noun.charAt(0).toUpperCase() + noun.slice(1)} onSubmit={submit} />
+              </Card>
+            );
+          },
         };
       }
       if (f?.status === "confirm") {
