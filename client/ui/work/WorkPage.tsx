@@ -1,3 +1,4 @@
+import { elapsedNow } from "../kit/elapsedClock";
 import { cleanup, computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
@@ -121,7 +122,7 @@ function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; 
  * the list no longer has is shown but does not open.
  */
 function Workers(props: { lines: () => WorkWorkerLine[]; project: () => string | undefined; onOpen: (sessionId: string) => void }) {
-  const rows = () => props.lines().map((line) => ({ line, row: workDetailWorkerRow(line, clock().now, props.project()) }));
+  const rows = () => props.lines().map((line) => ({ line, row: workDetailWorkerRow(line, elapsedNow(), props.project()) }));
   return (
     <View>
       {props.lines().length ? (

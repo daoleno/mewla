@@ -83,11 +83,15 @@ function TopLine(props: { card: () => Card; onSource?: (card: Card) => void }) {
 }
 
 /** An option row's words (SPEC §11 Request card, "A row"): the label 17/24 up to two lines, the rest one soft 15/20 line. */
-function OptionWords(props: { label: string; description?: string }) {
+function OptionWords(props: { label: string; description?: string; brainAsks?: boolean }) {
   const parts = () => optionParts(props.label, props.description);
   return (
     <View class="min-w-0 flex-1 gap-0.5">
-      <Text class="text-body line-clamp-2">{parts().label}</Text>
+      {/* The recommendation is a 13 soft tag at the right of the label's first line, not a line of its own. */}
+      <View class="flex-row items-start gap-2">
+        <Text class="min-w-0 flex-1 text-body line-clamp-2">{parts().label}</Text>
+        {parts().recommended ? <View class="pt-[3px]"><Text testID="option-pick" class="text-caption text-muted-foreground">{props.brainAsks ? "Brain's pick" : "Recommended"}</Text></View> : null}
+      </View>
       {parts().detail ? <Text class="text-sub text-muted-foreground line-clamp-1">{parts().detail}</Text> : null}
     </View>
   );
@@ -132,7 +136,7 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
           {question.options.map((option, o) => (
             <Button testID={`choice-option-${o}`} disabled={!props.connected()} onPress={() => pick(q.index, o)}
               class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent disabled:opacity-40">
-              <OptionWords label={option.label} description={option.description} />
+              <OptionWords label={option.label} description={option.description} brainAsks={props.card.source === "Brain"} />
               <View class={answer().selected.includes(o) ? "size-[22px] items-center justify-center rounded-full bg-primary" : "size-[22px] rounded-full border-2 border-faint"}>
                 {answer().selected.includes(o) ? <Icon name="check" size={14} tone="canvas" /> : null}
               </View>
@@ -196,7 +200,10 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
   );
 }
 
-/** An approval or a terminal menu: the command, then Deny and Approve (a plain yes/no) or the menu's rows. */
+/**
+ * An approval or a terminal menu: the command, then Deny and Approve (a plain yes/no) or the menu's rows. The two
+ * buttons always read Deny and Approve, whatever the agent calls them ("Allow", "Yes"): one act, one name (SPEC §11).
+ */
 function ActionBody(props: { card: Card; connected: () => boolean; onDone: (option: TerminalActionPromptOption) => void; onGone: () => void }) {
   const body = props.card.body as Extract<Card["body"], { kind: "action" }>;
   const prompt = body.prompt;
@@ -237,12 +244,12 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
         <View class="flex-row gap-2">
           <Button testID={`prompt-option-${deny!.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(deny!)}
             style={{ flex: 2 }} class="h-[48px] items-center justify-center rounded-(--radius-control) bg-muted active:opacity-70 disabled:opacity-40">
-            <Text class="text-body font-semibold line-clamp-1">{sending() === deny!.id ? "Sending…" : deny!.label}</Text>
+            <Text class="text-body font-semibold line-clamp-1">{sending() === deny!.id ? "Sending…" : "Deny"}</Text>
           </Button>
           <Button testID={`prompt-option-${allow!.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(allow!)}
             style={{ flex: 3 }} class="h-[48px] flex-row items-center justify-center gap-1.5 rounded-(--radius-control) bg-seal active:opacity-70 disabled:opacity-40">
             <Icon name="check" size={18} tone="onSeal" />
-            <Text class="text-body font-semibold text-seal-foreground line-clamp-1">{sending() === allow!.id ? "Sending…" : allow!.label}</Text>
+            <Text class="text-body font-semibold text-seal-foreground line-clamp-1">{sending() === allow!.id ? "Sending…" : "Approve"}</Text>
           </Button>
         </View>
       ) : (
@@ -250,7 +257,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
           {prompt.options.map((option) => (
             <Button testID={`prompt-option-${option.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(option)}
               class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent disabled:opacity-40">
-              <OptionWords label={sending() === option.id ? "Sending…" : option.label} description={option.description} />
+              <OptionWords label={sending() === option.id ? "Sending…" : option.label} description={option.description} brainAsks={props.card.source === "Brain"} />
               <View class="size-[22px] rounded-full border-2 border-faint" />
             </Button>
           ))}
@@ -312,6 +319,11 @@ function StackedRow(props: { card: () => Card; onPress: () => void }) {
   );
 }
 
+/** The answered line's 20 pt mark: a check for yes, an x-circle for Denied, a dash-circle for Not answered. */
+export function sealedIcon(verb: string): "check-circle-fill" | "close-circle-fill" | "remove-circle" {
+  return verb === "Not answered" ? "remove-circle" : verb === "Denied" ? "close-circle-fill" : "check-circle-fill";
+}
+
 /** An answered request's quiet line: a check, what was done, the answer. Tap shows the question again. */
 function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; onToggle: () => void }) {
   const s = props.sealed;
@@ -319,8 +331,8 @@ function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; o
     <Button testID="request-sealed" accessibilityLabel={`${s().verb}: ${s().answer}`} onPress={props.onToggle} class="gap-1 py-1.5 active:opacity-70">
       {/* The mock's answered line: a 20 pt check, then the caption over the answer (a command in mono). */}
       <View class="flex-row items-start gap-2.5">
-        {/* "Not answered" is not something the person did: a dash-circle, not the check (SPEC §1.1). */}
-        <View class="pt-0.5"><Icon name={s().verb === "Not answered" ? "remove-circle" : "check-circle-fill"} size={20} tone="soft" /></View>
+        {/* The check means yes: "Denied" takes an x-circle, and "Not answered", which nobody did, a dash-circle (SPEC §1.1). */}
+        <View class="pt-0.5"><Icon name={sealedIcon(s().verb)} size={20} tone="soft" /></View>
         <View class="min-w-0 flex-1">
           <Text class="text-caption text-muted-foreground">{s().verb}</Text>
           <Text class={s().mono ? "font-mono text-code text-foreground" : "text-sub font-semibold text-foreground"}>{s().answer}</Text>

@@ -473,6 +473,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
 
   return (
     <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"}
+      // One row holds the text and the controls (SPEC §11 Session header): the two lines stop before the switch with
+      // "…", never under it; in the second the project truncates and the state word never does.
       headerTitle={
         <View class="min-w-0 flex-1 flex-row items-center gap-2.5">
           <AgentIcon kind={kind()} size={28} />
@@ -483,16 +485,12 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
             ) : link()?.calendarLabel ? (
               <Text testID="session-calendar" class="text-sub text-muted-foreground line-clamp-1" onPress={openCalendarOrigin}>{link()!.calendarLabel!}</Text>
             ) : worker() ? (
-              // "{project} · {state}" (soft-final SPEC §11): the folder, then what it is doing; the connection mark's word when offline.
-              <Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">
-                {[projectWord(), connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)].filter(Boolean).join(" · ")}
-              </Text>
+              <View testID="session-status" class="min-w-0 flex-row">
+                {projectWord() ? <Text testID="session-project" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{projectWord()}</Text> : null}
+                <Text testID="session-state" class="shrink-0 text-sub text-muted-foreground line-clamp-1">{`${projectWord() ? " · " : ""}${connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)}`}</Text>
+              </View>
             ) : null}
           </View>
-        </View>
-      }
-      headerRight={
-        <View class="flex-row items-center gap-2">
           {/* Chat or terminal, remembered per Session (SPEC §4): only where the Session has a chat. */}
           {!props.brain && canChat() ? (
             <Segmented testID="session-mode" accessibilityLabel="View" value={mode()} onChange={(key) => chooseMode(key)}

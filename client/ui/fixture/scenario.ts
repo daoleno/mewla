@@ -87,7 +87,7 @@ function workerSession(s: Sess): Record<string, unknown> {
     options: [{ id: "allow", label: "Approve", scope: "once" }, { id: "deny", label: "Deny", scope: "deny" }] }];
   if (s.id === "pricing") base.prompt = { id: "q-trial", kind: "choice", provider: "claude", title: "14-day or 7-day trial?",
     questions: [{ question: "The pricing copy promises a 14-day trial. Billing is set to 7. Which one ships?",
-      options: [{ number: 1, label: "14 days, fix billing", description: "Brain's pick" }, { number: 2, label: "7 days, fix the copy" }, { number: 3, label: "Hold the page for now" }] }] };
+      options: [{ number: 1, label: "14 days, fix billing (Recommended)" }, { number: 2, label: "7 days, fix the copy" }, { number: 3, label: "Hold the page for now" }] }] };
   if (s.id === "search") base.prompt = { id: "tr-folder", kind: "startup", provider: "codex", title: "Trust this folder?", request: "~/work/search-svc",
     options: [{ number: 1, label: "Yes, trust this folder" }, { number: 2, label: "No, exit", selected: true }] };
   return base;

@@ -102,7 +102,13 @@ test("a Tip the daemon stripped but whose wrapped tail it left first: the tail i
 });
 
 test("an option row: the label up to the first ' · ', the rest its soft line; the agent's number and › dropped", () => {
-  expect(optionParts("Yes, and switch to auto mode · auto mode handles these prompts for")).toEqual({ label: "Yes, and switch to auto mode", detail: "auto mode handles these prompts for" });
-  expect(optionParts("2. Yes, and don’t ask again for: curl * ›")).toEqual({ label: "Yes, and don’t ask again for: curl *", detail: "" });
-  expect(optionParts("No", "Tell Claude what to do instead")).toEqual({ label: "No", detail: "Tell Claude what to do instead" });
+  expect(optionParts("Yes, and switch to auto mode · auto mode handles these prompts for")).toEqual({ label: "Yes, and switch to auto mode", detail: "auto mode handles these prompts for", recommended: false });
+  expect(optionParts("2. Yes, and don’t ask again for: curl * ›")).toEqual({ label: "Yes, and don’t ask again for: curl *", detail: "", recommended: false });
+  expect(optionParts("No", "Tell Claude what to do instead")).toEqual({ label: "No", detail: "Tell Claude what to do instead", recommended: false });
+});
+
+test("the option an agent recommends ('(Recommended)' on its label) is a tag on the row, not its text", () => {
+  expect(optionParts("14 days, fix billing (Recommended)")).toEqual({ label: "14 days, fix billing", detail: "", recommended: true });
+  expect(optionParts("1. Ship it (recommended) · the tests are green")).toEqual({ label: "Ship it (recommended)", detail: "the tests are green", recommended: false });
+  expect(optionParts("Ship it · the tests are green (Recommended)")).toEqual({ label: "Ship it", detail: "the tests are green", recommended: true });
 });
