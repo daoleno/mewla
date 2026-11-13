@@ -295,15 +295,13 @@ describe("crossing 1024 (SPEC §14.6)", () => {
     const app = await open(APP, { platform: "android", width: 800, height: 1280, storage: paired, host: phoneHost({ brain: {}, worker_sessions: [running("w1", "api")] }) });
     await app.waitFor("id:state-control", { timeout: 10_000 });
     await settle(app);
-    // Trial: three pages: on a phone or tablet below 1024 the tray is the page right of Brain.
-    await pressUntil(app, "id:state-control", "id:home-page-running");
+    await pressUntil(app, "id:state-control", "id:tray-overlay");
     await app.setViewport(1280, 800);
     await app.waitFor("id:left-pane");
-    expect(app.shows("id:home-page-running")).toBe(false);
+    expect(app.shows("id:tray-overlay")).toBe(false);
     await app.setViewport(800, 1280);
     await app.waitFor("id:left-pane", { state: "gone" });
-    await app.waitFor("id:composer");
-    expect(app.shows("id:home-page-running")).toBe(false);
+    expect(app.shows("id:tray-overlay")).toBe(false);
   }, 30_000);
 });
 

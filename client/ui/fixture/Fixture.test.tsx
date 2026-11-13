@@ -25,9 +25,7 @@ describe("the mock's scenario on the app (the fidelity sheet's fixture)", () => 
     await app.waitFor("text:3 need you", { timeout: 10_000 });
     await app.press("id:state-control");
     await app.waitFor("text:Cache layer for the catalogue API", { timeout: 10_000 });
-    expect(app.shows("id:home-page-running")).toBe(true);
-    expect(app.shows("id:composer")).toBe(false);
-    for (const name of ["Flaky checkout test", "German translation", "Docs link sweep"]) expect(app.texts().join("\n")).toContain(name);
+    for (const name of ["Docs refresh", "German translation", "Docs link sweep"]) expect(app.texts().join("\n")).toContain(name);
   }, 30_000);
 
   test("the Rate-limit Session opens on its push to approve, with its edited files", async () => {
