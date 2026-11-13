@@ -237,9 +237,11 @@ type Server struct {
 	agentApprovals     AgentApprovals
 	// answered is the answered-request ledger (answered_requests.go);
 	// prompts tracks open screen prompts for it.
-	answered        *answered.Ledger
-	prompts         promptWatch
-	promptLeftGrace time.Duration
+	answered *answered.Ledger
+	prompts  promptWatch
+	// afterPromptLeft runs a prompt's check once it has stayed off the
+	// screen for the grace; nil is time.AfterFunc. Tests run it themselves.
+	afterPromptLeft func(grace time.Duration, check func())
 	codexStatus     func(ctx context.Context, workerID string) (any, error)
 }
 
