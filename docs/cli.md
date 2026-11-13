@@ -64,7 +64,8 @@ mewla memory search "<phrase>" [--from user|brain|context|all] [--since 30d] [--
 mewla memory show <id> [--around 3] [--json]   # a chat message with its neighbours
 mewla brain work update -id <work> -status done
 mewla brain work update -id <work> -status waiting \
-  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins"
+  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins" \
+  -recommend "Newest wins"   # the phone tags that button "Brain's pick"
 ```
 
 See [Brain and Work](brain-and-work.md).

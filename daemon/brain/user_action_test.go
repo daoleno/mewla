@@ -302,3 +302,38 @@ func TestWorkReplyDropsAttachmentTagsTypedInText(t *testing.T) {
 		t.Fatalf("typed tag reached Brain: %q", fw.sentCalls[0].text)
 	}
 }
+
+// Brain may mark one of its choices as the one it recommends; the slip carries
+// it to the phone ("Brain's pick"). It must be one of the choices, survives a
+// restart, and a new question without one, or a cleared question, drops it.
+func TestWorkQuestionCarriesBrainsRecommendedChoice(t *testing.T) {
+	store, _, _, _ := newUserActionService(t)
+	item := askUser(t, store, "billing", "7 days", "14 days")
+	question, choices, pick := "How long a trial?", []string{"7 days", " 14  days "}, "14 days"
+	item, err := store.UpdateWork(item.ID, WorkUpdate{Question: &question, Choices: &choices, Recommended: &pick})
+	if err != nil || item.Recommended != "14 days" {
+		t.Fatalf("recommended = %q, err %v", item.Recommended, err)
+	}
+	if current, _ := currentWorkByID(t, store, item.ID); current.Recommended != "14 days" {
+		t.Fatalf("slip recommended = %q", current.Recommended)
+	}
+	reopened, err := NewStore(store.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := currentWorkByID(t, reopened, item.ID); again.Recommended != "14 days" {
+		t.Fatalf("after a restart = %q", again.Recommended)
+	}
+	store = reopened
+	other := "30 days"
+	if item, err = store.UpdateWork(item.ID, WorkUpdate{Question: &question, Choices: &choices, Recommended: &other}); err != nil || item.Recommended != "" {
+		t.Fatalf("a pick that is not a choice = %q (%v)", item.Recommended, err)
+	}
+	if item, err = store.UpdateWork(item.ID, WorkUpdate{Question: &question, Choices: &choices, Recommended: &pick}); item.Recommended == "" {
+		t.Fatalf("pick not set again: %+v %v", item, err)
+	}
+	next := "Ship now?"
+	if item, err = store.UpdateWork(item.ID, WorkUpdate{Question: &next, Choices: &[]string{"Yes", "No"}}); err != nil || item.Recommended != "" {
+		t.Fatalf("a new question inherited the last pick: %q (%v)", item.Recommended, err)
+	}
+}

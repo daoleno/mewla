@@ -2149,6 +2149,7 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 	fs.StringVar(&item.ContextRef, "context", "", "Brain Worklog/context reference (relative to the configured Brain workspace)")
 	fs.StringVar(&item.Question, "question", "", "what you ask the user about this Work; shown on its slip (empty clears it)")
 	fs.Var((*stringListFlag)(&item.Choices), "choice", "a one-tap answer to -question, repeatable (up to 4)")
+	fs.StringVar(&item.Recommended, "recommend", "", "the -choice you recommend, word for word; the phone tags it \"Brain's pick\"")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2161,12 +2162,21 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 	if len(item.Choices) > 0 && strings.TrimSpace(item.Question) == "" {
 		return fmt.Errorf("-choice needs -question")
 	}
+	if pick := strings.Join(strings.Fields(item.Recommended), " "); pick != "" {
+		named := false
+		for _, choice := range item.Choices {
+			named = named || strings.Join(strings.Fields(choice), " ") == pick
+		}
+		if !named {
+			return fmt.Errorf("-recommend must be one of the -choice values")
+		}
+	}
 	fields := []string{}
 	fieldNames := map[string]string{
 		"title": "title", "objective": "objective", "status": "status", "attempt-session-id": "attempt_session_id",
 		"completion": "completion_policy", "done-criteria": "done_criteria_ref",
 		"next-action": "next_action", "wait-for": "wait_for", "context": "context_ref",
-		"question": "question", "choice": "choices",
+		"question": "question", "choice": "choices", "recommend": "recommended",
 	}
 	fs.Visit(func(value *flag.Flag) {
 		if field := fieldNames[value.Name]; field != "" {

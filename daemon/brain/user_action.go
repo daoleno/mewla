@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -78,16 +79,23 @@ type WorkUserActionResult struct {
 }
 
 // applyWorkQuestion sets or clears what Brain asks the user. Choices are
-// trimmed, de-duplicated and bounded so the slip stays one row of buttons.
-func applyWorkQuestion(item Work, question *string, choices *[]string, now time.Time) Work {
+// trimmed, de-duplicated and bounded so the slip stays one row of buttons; the
+// recommended choice is kept only while it is one of them.
+func applyWorkQuestion(item Work, question *string, choices *[]string, recommended *string, now time.Time) Work {
 	if question != nil {
 		item.Question = strings.TrimSpace(*question)
 	}
 	if choices != nil {
 		item.Choices = normalizeWorkChoices(*choices)
 	}
+	if recommended != nil {
+		item.Recommended = strings.Join(strings.Fields(*recommended), " ")
+	}
+	if !slices.Contains(item.Choices, item.Recommended) {
+		item.Recommended = ""
+	}
 	if item.Question == "" {
-		item.Question, item.Choices, item.QuestionAt = "", nil, nil
+		item.Question, item.Choices, item.QuestionAt, item.Recommended = "", nil, nil, ""
 		return item
 	}
 	at := now.UTC()
@@ -182,7 +190,7 @@ func (s *Store) RecordWorkUserAction(request WorkUserActionRequest, admission Ex
 				return Work{}, WorkEvent{}, err
 			}
 		}
-		database.BrainWork[index] = applyWorkQuestion(database.BrainWork[index], new(string), nil, now)
+		database.BrainWork[index] = applyWorkQuestion(database.BrainWork[index], new(string), nil, nil, now)
 	case WorkUserSnooze:
 		until, err := workSnoozeUntil(request, now)
 		if err != nil {
