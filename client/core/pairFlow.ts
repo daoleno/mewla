@@ -74,6 +74,18 @@ export const NOTHING_TO_PASTE: PairingProblem = {
   detail: "Copy the link from mewla pair --details on your computer, then tap Paste again.",
 };
 
+/**
+ * The system refused to hand over the clipboard (iOS's "Don't Allow Paste", or Paste from Other Apps set to Deny:
+ * PBErrorDomain 13, "Operation not authorized"). It is not empty: say it was refused, with the system's words.
+ */
+export function pasteRefused(error: unknown): PairingProblem {
+  const reason = error instanceof Error ? error.message.trim().replace(/\.$/, "") : "";
+  return {
+    title: "Paste wasn't allowed",
+    detail: `${reason ? `${reason}. ` : ""}Tap Paste again and allow it, or type the link.`,
+  };
+}
+
 export const LINK_REQUIRED: PairingProblem = {
   title: "Pairing link required",
   detail: "Paste the link mewla pair --details prints, or scan its QR code.",
