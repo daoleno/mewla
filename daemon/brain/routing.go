@@ -11,8 +11,9 @@ func (s *Store) routingGuidePath() string {
 	return filepath.Join(s.WorkspacePath(), routingGuideName)
 }
 
-// RoutingGuidePath is routing.md. Watch reads its "Watch judgment" row to pick
-// the judgment executor; nothing else parses the file.
+// RoutingGuidePath is routing.md. Watch reads its "Watch judgment" row and the
+// progress judge its "Work progress" row to pick who judges; nothing else
+// parses the file.
 func (s *Store) RoutingGuidePath() string { return s.routingGuidePath() }
 
 const defaultRoutingGuide = `# Worker Routing
@@ -31,6 +32,7 @@ Read before every mewla worker spawn and pass -executor, -model and -reasoning. 
 | Visual design, frontend, product copy | claude | client default | high |
 | Hard design or debugging | claude | the strongest available | high |
 | Watch judgment | claude | sonnet | low |
+| Work progress | claude | sonnet | low |
 `
 
 // DefaultRoutingGuide is the routing.md a new workspace starts with.
