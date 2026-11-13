@@ -159,3 +159,32 @@ describe("a pushed page's capsule (SPEC §11)", () => {
     await app.waitFor("id:computer-page");
   }, 30_000);
 });
+
+describe("the canvas under the capsule (owner 11-13 14:45: a dark band behind it on a light page)", () => {
+  // The screen view behind a page is painted in the system's theme: Mewla light on a phone set to dark showed
+  // it wherever the page did not cover the top. Every screen with a capsule stands on the app's canvas
+  // (`CapsulePage`, bg-background), whatever the system's theme. Headless NSH reads no view's colour, so this
+  // holds the structure: the capsule is inside the canvas root, on each kind of page, in both cases.
+  for (const [app, system] of [["light", "dark"], ["dark", "light"]] as const) {
+    test(`Mewla ${app} on a system set to ${system}: Brain, a Session, a pushed page and a page with its own bar all stand on the canvas`, async () => {
+      const a = await open(APP, { platform: "android", colorScheme: system, storage: { ...paired, "mewla:theme_preference": `classic-${app}` }, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: thread } }) });
+      await a.waitFor("id:home-header", { timeout: 10_000 });
+      expect(a.shows("id:capsule-page")).toBe(true);
+      // A pushed pattern page (kit Page, its content scrolls under the capsule).
+      await a.press("id:home-cat");
+      await a.waitFor("id:computer-page");
+      expect(a.shows("id:capsule-page")).toBe(true);
+      await a.back();
+      // A page on NavPage itself, with its own display title (All Sessions).
+      await a.press("id:state-control");
+      await a.waitFor("id:tray-all-sessions");
+      await a.press("id:tray-all-sessions");
+      await a.waitFor("id:page-back");
+      expect(a.shows("id:capsule-page")).toBe(true);
+      // A Session.
+      await a.host.send("links.open", { url: "mewla://sessions/w1" });
+      await a.waitFor("id:session-chat", { timeout: 10_000 });
+      expect(a.shows("id:capsule-page")).toBe(true);
+    }, 30_000);
+  }
+});

@@ -8,7 +8,7 @@ import { backMark } from "../../core/tray/model";
 import { nativeHeaderTitleWidth, pageColumnWidth, type PageColumn } from "../../core/web/places";
 import { tray } from "../tray/state";
 import { Icon } from "../kit/Icon";
-import { Capsule, createCapsule } from "./Capsule";
+import { Capsule, CapsulePage, createCapsule } from "./Capsule";
 import { stackWidth, wide } from "./layout";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
@@ -76,10 +76,10 @@ export function NavPage(props: AppNavPageProps) {
     const [own, rest] = split(props, ["capsule", "capsuleUnder", "capsuleControls", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
     return (
       <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
-        <View class="flex-1">
+        <CapsulePage>
           {own.children}
           {own.capsule}
-        </View>
+        </CapsulePage>
       </BaseNavPage>
     );
   }
@@ -92,10 +92,10 @@ export function NavPage(props: AppNavPageProps) {
     const controls = "capsuleControls" in props ? untracked(() => Boolean(own.capsuleControls)) : "headerRight" in props;
     return (
       <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
-        <View class="flex-1">
+        <CapsulePage>
           {under ? own.children : <View class="flex-1" style={{ paddingTop: capsulePageInset(safeArea().top) }}>{own.children}</View>}
           <PageCapsule title={() => props.title ?? ""} controls={controls} right={() => own.headerRight} />
-        </View>
+        </CapsulePage>
       </BaseNavPage>
     );
   }
