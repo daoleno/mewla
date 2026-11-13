@@ -1,5 +1,5 @@
 import { cleanup, Clipboard, createMotion, effect, host, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
-import type { JSX } from "nsh";
+import type { JSX, ScrollRef } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { BackHandler } from "nsh/mobile";
@@ -117,7 +117,7 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
             <OnboardingScanner compact={compact()} />
             <ScanStatus />
           </>
-        } actions={<PairAlternatives />} /></If>}><SplitStep compact={compact()} content={
+        } actions={<PairAlternatives />} reveal={pairingIssue} /></If>}><SplitStep compact={compact()} content={
           <>
             <StepHeader frame={frame()} compact={compact()} number={1} place="On your computer" title="Install Mewla" />
             <CommandCard />
@@ -210,16 +210,23 @@ function HeroStep(props: { frame: Frame | null; compact: boolean; center: JSX.El
   );
 }
 
-/** Install and scan: the content scrolls, the buttons stay in reach (beside it when the window is short). */
-function SplitStep(props: { compact: boolean; content: JSX.Element; actions: JSX.Element }) {
+/**
+ * Install and scan: the content scrolls, the buttons stay in reach (beside it when the window is short). What `reveal`
+ * brings (the scan's problem, at the content's end) scrolls into view: it came under the buttons, unseen (11-14).
+ */
+function SplitStep(props: { compact: boolean; content: JSX.Element; actions: JSX.Element; reveal?: () => unknown }) {
   const fade = createMotion({ enter: "fadeIn", delay: 140, duration: 240 });
+  let scroll: ScrollRef | null = null;
+  effect(() => {
+    if (props.reveal?.()) untracked(() => setTimeout(() => scroll?.scrollToEnd({ animated: true }), 0));
+  });
   return (
     <View class="flex-1">
       <If when={props.compact} else={<View testID="split-tall" class="w-full max-w-[480px] flex-1 self-center px-6 pb-4" style={fade.style}>
-          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+          <Scroll ref={(node) => (scroll = node)} keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
           <View class="gap-2">{props.actions}</View>
         </View>}><View testID="split-compact" class="flex-1 flex-row gap-6 px-6 pb-2" style={fade.style}>
-          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+          <Scroll ref={(node) => (scroll = node)} keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
           <View class="w-[220px] justify-end gap-2">{props.actions}</View>
         </View></If>
     </View>
