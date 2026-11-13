@@ -224,7 +224,10 @@ describe("TerminalSession", () => {
       history: delta({ reset: true, next: 0, alternate: true, mouse: true, cols: 54, rows: 40 }) });
     await until(() => term.history.alternate);
     // (The attachment's own focus report is input too.)
-    const sent = () => frames(socket, "terminal_input").map((f) => f.data).filter((data) => data !== "\u001b[I");
+    const sent = () => frames(socket, "terminal_input").filter((f) => f.scroll === true).map((f) => f.data);
+    // A scroll report is marked as one (the computer does not take the size back for it); typing is not.
+    term.input("x");
+    expect(frames(socket, "terminal_input").filter((f) => f.data === "x").map((f) => f.scroll)).toEqual([undefined]);
     term.drag(2);
     term.drag(-1);
     expect(sent()).toEqual(["\u001b[<64;28;21M\u001b[<64;28;21M", "\u001b[<65;28;21M"]);

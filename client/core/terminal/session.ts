@@ -133,8 +133,13 @@ export class TerminalSession {
    */
   drag(lines: number): void {
     const bytes = wheelBytes(paneForDrag(this.history.panes), lines);
-    if (bytes) this.input(bytes);
+    // Marked as a scroll: reading, so the computer never takes the Session's size from another viewer for it.
+    if (bytes) this.sendScrollInput(bytes);
     else this.scroll(lines);
+  }
+
+  private sendScrollInput(data: string): void {
+    if (this.sessionId) this.send({ type: "terminal_input", session_id: this.sessionId, data, scroll: true });
   }
 
   /** History drag: `lines` > 0 is back in time. The computer's tmux copy mode counts the other way (negative is toward history). */
