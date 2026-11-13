@@ -128,12 +128,14 @@ const PHASE_WORDS: Record<string, string> = {
  * report is the daemon reading the terminal, and a blocked, failed or idle Session's summary is the screen's
  * last line even after a report, so those fall to the word.
  */
-export function sessionActivity(worker: Pick<Worker, "status" | "summary" | "phase" | "event_kind" | "needs_attention" | "prompt" | "approvals" | "activity">): string {
+export function sessionActivity(worker: Pick<Worker, "status" | "summary" | "phase" | "event_kind" | "needs_attention" | "prompt" | "approvals" | "activity" | "activity_tool" | "activity_summary">): string {
   const decision = (worker.approvals ?? []).find((approval) => !isQuestionApproval(approval));
   if (decision) return approvalTitle(decision);
   if (worker.prompt) return promptTitle(worker.prompt);
   if (worker.needs_attention) return "Waiting for you";
-  // The tool call it started last, from its hook (WIRE §9): data, not terminal text, so no footer gate.
+  // The tool call it started last, from its hook (WIRE §9): data, not terminal text, so no footer gate. With its
+  // parts it reads as its tool row does ("Run ping …"); a daemon from before them sends the line alone.
+  if (worker.status === "running" && worker.activity_tool) return toolWords(worker.activity_tool, worker.activity_summary) || worker.activity || "";
   if (worker.status === "running" && worker.activity) return worker.activity;
   const reported = Boolean(worker.event_kind?.trim() || worker.phase?.trim()) && (worker.status === "running" || worker.status === "done");
   const summary = reported ? readableSummary(worker.summary) : "";

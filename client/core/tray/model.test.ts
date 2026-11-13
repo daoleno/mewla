@@ -287,6 +287,15 @@ describe("the daemon's run fields (WIRE §7, §9)", () => {
     expect(m.running[0]).toMatchObject({ key: "session:r", line: "Bash curl -sI https://example.org", end: "3m", live: true });
   });
 
+  test("a call that comes with its parts reads as the thread's tool row does, not the tool's name glued to its input", () => {
+    const m = trayModel(input({ workers: [
+      worker("r", { running_since: NOW - 60_000, activity: "Bash ping -c 50 127.0.0.1", activity_tool: "Bash", activity_summary: "ping -c 50 127.0.0.1" }),
+      worker("f", { running_since: NOW - 60_000, activity: "Read /etc/hostname", activity_tool: "Read", activity_summary: "/etc/hostname" }),
+    ] }));
+    expect(m.running.find((r) => r.key === "session:r")!.line).toBe("Run ping -c 50 127.0.0.1");
+    expect(m.running.find((r) => r.key === "session:f")!.line).not.toMatch(/^Read \/etc/);
+  });
+
   test("a prompt's tray row is titled with the call the daemon names", () => {
     const prompt = { id: "p1", kind: "permission", provider: "claude", title: "Waiting for Claude permission", tool: "Read", summary: "/etc/hostname",
       request: "Read file\nRead(/etc/hostname)\nDo you want to proceed?", options: [{ number: 1, label: "Yes" }, { number: 2, label: "No" }] } as never;

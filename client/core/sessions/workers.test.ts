@@ -363,10 +363,11 @@ describe("the daemon's run and prompt fields (WIRE §7, §9)", () => {
   };
 
   test("a running Session keeps when its run began and the call it started last; an idle one keeps neither", () => {
-    const running = one({ id: "%1", name: "a", status: "running", activity: "Read /etc/hostname", running_since: "2026-11-12T20:47:07.139Z" });
-    expect(running).toMatchObject({ activity: "Read /etc/hostname", running_since: Date.parse("2026-11-12T20:47:07.139Z") });
-    const idle = one({ id: "%1", name: "a", status: "unknown", activity: "Read /etc/hostname", running_since: "2026-11-12T20:47:07.139Z" });
+    const running = one({ id: "%1", name: "a", status: "running", activity: "Read /etc/hostname", activity_tool: "Read", activity_summary: "/etc/hostname", running_since: "2026-11-12T20:47:07.139Z" });
+    expect(running).toMatchObject({ activity: "Read /etc/hostname", activity_tool: "Read", activity_summary: "/etc/hostname", running_since: Date.parse("2026-11-12T20:47:07.139Z") });
+    const idle = one({ id: "%1", name: "a", status: "unknown", activity: "Read /etc/hostname", activity_tool: "Read", activity_summary: "/etc/hostname", running_since: "2026-11-12T20:47:07.139Z" });
     expect(idle.activity).toBeUndefined();
+    expect(idle.activity_tool).toBeUndefined();
     expect(idle.running_since).toBeUndefined();
   });
 
