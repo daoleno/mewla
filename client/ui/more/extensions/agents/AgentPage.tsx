@@ -39,7 +39,9 @@ import {
   uninstallPluginCopy,
 } from "./state";
 
-const SHEET = "max-h-[94%] rounded-t-(--radius-sheet) bg-sheet px-4 pb-8 pt-3 shadow-float";
+const SHEET = "max-h-[94%] rounded-t-(--radius-sheet) bg-sheet pb-8 pt-3 shadow-float";
+/** The sheets' side space (AppSheet adds the screen's side insets to it). */
+const SHEET_SIDES = 16;
 const BACKDROP = "bg-scrim";
 /** From this width, Skill and Plugin details sit beside the list (a tablet, a phone on its side). */
 const WIDE_DETAILS = 920;
@@ -266,25 +268,25 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
         /></If>
       </View>
 
-      <Sheet open={filtersOpen() === "skills"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={filtersOpen() === "skills"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <SkillFilterSheet agents={filterAgents()} filters={skillFilters()} onChange={(next) => skillFilters.set(next)} onClose={() => filtersOpen.set(null)} />
       </Sheet>
-      <Sheet open={filtersOpen() === "plugins"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={filtersOpen() === "plugins"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <PluginFilterSheet agents={MANAGED_SKILL_AGENTS.filter((agent) => plugins().some((plugin) => plugin.agents.includes(agent)))} filters={pluginFilters()} onChange={(next) => pluginFilters.set(next)} onClose={() => filtersOpen.set(null)} />
       </Sheet>
 
-      <Sheet open={skillPicker() !== null} onOpenChange={({ open }) => !open && skillPicker.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={skillPicker() !== null} onOpenChange={({ open }) => !open && skillPicker.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <View>{((skill) => untracked(() => (skill ? skillPickerView(skill) : null)))(skillPicker())}</View>
       </Sheet>
-      <Sheet open={pluginPicker() !== null} onOpenChange={({ open }) => !open && pluginPicker.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={pluginPicker() !== null} onOpenChange={({ open }) => !open && pluginPicker.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <View>{((plugin) => untracked(() => (plugin ? pluginPickerView(plugin) : null)))(pluginPicker())}</View>
       </Sheet>
 
-      <Sheet open={!wide() && panel().startsWith("skill:")} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={!wide() && panel().startsWith("skill:")} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         {/* The sheet takes its content once; the view inside follows the copy shown. */}
         <View class="shrink">{((key) => untracked(() => (<If when={key.startsWith("skill:")}><Scroll keyboardShouldPersistTaps="handled" class="shrink">{inspector()}</Scroll></If>)))(wide() ? "" : panel())}</View>
       </Sheet>
-      <Sheet open={!wide() && panel().startsWith("plugin:")} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={!wide() && panel().startsWith("plugin:")} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <View class="shrink">{((key) => untracked(() => (<If when={key.startsWith("plugin:")}><Scroll keyboardShouldPersistTaps="handled" class="shrink">{pluginDetails()}</Scroll></If>)))(wide() ? "" : panel())}</View>
       </Sheet>
     </Page>

@@ -50,7 +50,7 @@ export function CalendarAlertCard() {
   };
   return (
     <AppSheet open={Boolean(shownAlert())} onOpenChange={() => {}} closeOnBackdropPress={false} closeOnEscape={false}
-      popupClass="rounded-t-2xl bg-background px-5 pt-5" backdropClass="bg-black/40">
+      popupClass="rounded-t-2xl bg-background pt-5" sidePadding={20} backdropClass="bg-black/40">
       <View testID="calendar-alert-card" class="gap-3 pb-8">
         <Text testID="alert-kind" class="text-sm font-semibold text-primary" role="header">{kind()}</Text>
         <Text testID="alert-title" class="text-2xl font-semibold">{item()?.title ?? ""}</Text>

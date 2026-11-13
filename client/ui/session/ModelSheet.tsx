@@ -44,7 +44,7 @@ export function ModelSheet(props: {
   onRuntime?: (selection: ThreadRuntimeSelection) => void;
 }) {
   return (
-    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
+    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background pt-4" sidePadding={16} backdropClass="bg-black/40">
       <ModelPanel shown={props.open} onClose={props.onClose} transport={props.transport} workerId={props.workerId} onRuntime={props.onRuntime} />
     </AppSheet>
   );

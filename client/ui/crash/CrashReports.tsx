@@ -2,6 +2,7 @@ import { Clipboard, host, Scroll, signal, Storage, Text, View } from "nsh";
 import { Button, Sheet, TextView } from "nsh/base";
 import { crashDiagnostic, crashKindLabel, crashTitle, readCrashReports, type CrashReport } from "../../core/crash";
 import { current, onTransport } from "../session";
+import { sheetSides } from "../shell/AppSheet";
 
 /** The reports the hosts kept from the last run (crashes, JS errors), until the person dismisses them. */
 export const crashReports = signal<CrashReport[]>([]);
@@ -54,7 +55,7 @@ export function CrashReportSheet() {
   const all = () => crashReports().map((report) => report.text).join("\n\n----\n\n");
   return (
     <Sheet open={crashReports().length > 0} onOpenChange={({ open }) => { if (!open) void dismiss(); }}
-      closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4 pb-6 gap-3" backdropClass="bg-black/40">
+      closeOnSwipe popupClass="rounded-t-2xl bg-background pt-4 pb-6 gap-3" popupStyle={sheetSides(16)} backdropClass="bg-black/40">
       <View testID="crash-sheet" class="gap-1">
         <Text role="header" class="text-xl font-bold text-foreground">{crashTitle(crashReports())}</Text>
         <Text class="text-sm text-muted-foreground">

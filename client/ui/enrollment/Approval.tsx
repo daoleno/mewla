@@ -47,7 +47,7 @@ export function EnrollmentApproval() {
   };
 
   return (
-    <AppSheet open={Boolean(request())} onOpenChange={({ open }) => !open && putAside()} popupClass="rounded-t-2xl bg-background px-5 pt-5" backdropClass="bg-black/40">
+    <AppSheet open={Boolean(request())} onOpenChange={({ open }) => !open && putAside()} popupClass="rounded-t-2xl bg-background pt-5" sidePadding={20} backdropClass="bg-black/40">
       <View testID="enrollment-approval" class="gap-4 pb-8">
         <Text class="text-xl font-semibold">Approve new device</Text>
         <View class="gap-1">
