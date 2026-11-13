@@ -1095,6 +1095,8 @@ func (a *controlApp) handleBrainWorkUpdate(req control.Request) control.Response
 			update.Question = &source.Question
 		case "choices":
 			update.Choices = &source.Choices
+		case "recommended":
+			update.Recommended = &source.Recommended
 		default:
 			return control.ErrorResponse("invalid_brain_work", "Unknown Brain Work field: "+field)
 		}

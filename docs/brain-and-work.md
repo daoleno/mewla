@@ -137,8 +137,12 @@ Brain asks with buttons by setting a question on the Work:
 
 ```sh
 mewla brain work update -id <work-id> -status waiting \
-  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins"
+  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins" \
+  -recommend "Newest wins"
 ```
+
+`-recommend` names the choice Brain recommends, word for word; the phone tags that button
+"Brain's pick". It must be one of the choices, and a new question starts without one.
 
 ## Who decides that Work is done
 
