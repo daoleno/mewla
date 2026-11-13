@@ -1,8 +1,8 @@
 import { cleanup, Clipboard, computed, openUrl, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
-import { accountRow, endpointHost, openAccountId } from "../../../core/extensions/accountListModel";
+import { accountRow, openAccountId } from "../../../core/extensions/accountListModel";
 import { cloudProfileGroups } from "../../../core/extensions/cloudProfilesModel";
-import { accountStatus, type ConnectionRequest, type PluginAccount, type PluginIntegration } from "../../../core/extensions/connections";
+import { type ConnectionRequest, type PluginAccount, type PluginIntegration } from "../../../core/extensions/connections";
 import {
   accessControl,
   accountRecovery,
@@ -11,18 +11,18 @@ import {
   awsAccountSummary,
   canDisconnect,
   connectLabel,
+  isConnecting,
   networkLabel,
   serviceState,
 } from "../../../core/extensions/pluginConnectionsModel";
-import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { serverDisplayName } from "../../../core/extensions/serverDisplayName";
-import { formatDateTime, formatFullDateTime } from "../../../core/more/dates";
 import { daemonName } from "../daemon";
 import { confirmDestructive, DisplayTitle, EmptyState, Field, Notice, Row, RowButton, Section, Spinner, SwitchRow } from "../../kit/kit";
 import { LeadHero, StateLine, tile } from "../../kit/RowTile";
+import { Icon } from "../../kit/Icon";
 import { connectionStateTone } from "../../../core/extensions/colour";
 import type { PageNav } from "../routes";
-import { Action } from "./Action";
+import { Action, GhostAction } from "./Action";
 import { connectingService, PluginsFrame, ToolUpdateNotices } from "./Pages";
 import { ProfileName } from "./ProfileName";
 import { flowState, plugins } from "./plugins";
@@ -33,7 +33,8 @@ const CLI_NAMES: Record<string, string> = { aws: "AWS CLI", gws: "Google Workspa
 
 /** One service: what Brain may do with it, its accounts, and how to connect another. */
 export function ServicePage(props: { id: string; nav: PageNav }) {
-  const plugin = () => plugins()?.plugin(props.id) ?? null;
+  // Read from the state, so a page opened before the list came (a reloaded or shared /extensions/<id> on the web) names its service when it comes.
+  const plugin = () => flowState().catalog.find((item) => item.id === props.id) ?? null;
   const accounts = () => flowState().accounts.filter((account) => account.integration === props.id && account.status !== "disconnected").sort((a, b) => a.name.localeCompare(b.name));
   const custom = props.id === "mcp" || props.id === "openapi";
   const hasAccounts = computed(() => accounts().length > 0);
@@ -55,14 +56,23 @@ export function ServicePage(props: { id: string; nav: PageNav }) {
         <If when={hasAccounts()} else={<If when={!custom && p.id !== "hyperliquid"}><ConnectOffer plugin={p} /></If>}><AccountList plugin={p} accounts={accounts()} nav={props.nav} /></If>
         <If when={custom}><CustomServiceForm plugin={p} again={untracked(hasAccounts)} /></If>
         <If when={p.id === "hyperliquid"}><HyperliquidForm plugin={p} keyed={keyed()} /></If>
-        <If when={hasAccounts() && !custom && p.id !== "hyperliquid" && p.available}><View class="mt-4">
-            <Action testID="add-another" label={`Add another ${p.name} account`} busy={connectingService() === p.id} disabled={flowState().running !== null || (connectingService() !== null && connectingService() !== p.id)} onPress={() => void plugins()?.connect(p.id)} />
-          </View></If>
+        <If when={hasAccounts() && !custom && p.id !== "hyperliquid" && p.available}><Section>
+            <Row
+              testID="add-another"
+              lead={tile("add")}
+              title="Add account"
+              accessibilityLabel={`Add another ${p.name} account`}
+              trailing={<If when={connectingService() === p.id}><Spinner size={16} /></If>}
+              disabled={flowState().running !== null || connectingService() !== null}
+              onPress={() => void plugins()?.connect(p.id)}
+            />
+          </Section></If>
+        <CliVersion plugin={p} />
       </View>
     );
   };
   return (
-    <PluginsFrame title={plugin()?.name ?? "Service"} testID="service-page" nav={props.nav} hero={<If when={plugin()} else={<DisplayTitle title="Service" />}><Header plugin={plugin()!} accounts={accounts()} /></If>}>
+    <PluginsFrame title={plugin()?.name ?? "Service"} testID="service-page" service={props.id} nav={props.nav} hero={<If when={plugin()} else={<DisplayTitle title="Service" />}><Header plugin={plugin()!} accounts={accounts()} /></If>}>
       {((current) => untracked(() => body(current.plugin)))(view())}
     </PluginsFrame>
   );
@@ -71,7 +81,6 @@ export function ServicePage(props: { id: string; nav: PageNav }) {
 /** The detail's top block (SPEC §15 Collection): a 64 pt tile, the name in display type, the state line. */
 function Header(props: { plugin: PluginIntegration; accounts: PluginAccount[] }) {
   const state = () => serviceState(props.plugin, props.accounts);
-  const cli = props.plugin.cli && CLI_NAMES[props.plugin.id] ? `${CLI_NAMES[props.plugin.id]} ${props.plugin.cli.version} · ${props.plugin.cli.managed ? "managed by Mewla" : "local installation"}` : "";
   return (
     <View testID="service-header" class="gap-3 px-1 pb-2 pt-3">
       <LeadHero testID="service-hero-lead" lead={serviceRowLead(props.plugin.id, 40)} />
@@ -81,31 +90,41 @@ function Header(props: { plugin: PluginIntegration; accounts: PluginAccount[] })
           const s = state();
           return s.kind === "status" ? s : undefined;
         })()}>{(s) => <StateLine testID="service-state" tone={connectionStateTone(s().tone)} label={s().label} />}</If>
-        <If when={cli}>{(cli) => <Text class="text-caption text-muted-foreground">{cli()}</Text>}</If>
       </View>
     </View>
   );
 }
 
-/** A service with nothing connected: what Brain gets, and the one way to connect. */
+/**
+ * Which CLI the service runs through, and whose it is: a fact looked up rarely, so the page's last row.
+ */
+function CliVersion(props: { plugin: PluginIntegration }) {
+  const name = CLI_NAMES[props.plugin.id];
+  const cli = props.plugin.cli;
+  if (!name || !cli) return null;
+  return (
+    <Section>
+      <Row testID="service-cli" lead={tile("terminal")} title={name} value={cli.managed ? cli.version : `${cli.version} · yours`} accessibilityLabel={`${name} ${cli.version}, ${cli.managed ? "managed by Mewla" : "your own installation"}`} />
+    </Section>
+  );
+}
+
+/** A service with nothing connected: the one way to connect, first. While its sign-in runs, the card above is that way. */
 function ConnectOffer(props: { plugin: PluginIntegration }) {
-  const job = pluginJobs[props.plugin.id];
   if (!props.plugin.available) {
-    return <Section><Row lead={tile("info")} title="Not yet available" subtitle={props.plugin.unavailable_reason || "Sign-in is not set up yet."} /></Section>;
+    return <Section><Row testID="service-unavailable" lead={tile("info")} title={props.plugin.unavailable_reason || "Not available yet"} /></Section>;
   }
   const connecting = () => connectingService() === props.plugin.id;
   const busy = () => flowState().running !== null || (connectingService() !== null && !connecting());
+  // The card shows the sign-in under way, or how it failed, with its own buttons: the offer steps aside for it.
+  const signingIn = () => flowState().service === props.plugin.id && (isConnecting(flowState().phase) || flowState().phase === "failed");
   return (
-    <View>
-      <Section title="What Brain can do" footer={`Your sign-in stays on ${serverDisplayName(daemonName())}. Brain only acts on tasks you give it.`}>
-        <Row lead={tile("eye")} title="Read and search" subtitle={job?.read} value="On" />
-        <Row lead={tile("edit")} title="Make changes when asked" subtitle={job ? `${job.write}. Off until you allow it.` : "Off until you allow it."} value="Off" />
-      </Section>
-      <View class="mt-4 gap-2">
+    <If when={!signingIn()}>
+      <View class="mt-2 gap-2">
         <Action filled testID="service-connect" label={connectLabel(props.plugin)} busy={connecting()} disabled={busy()} onPress={() => void plugins()?.connect(props.plugin.id)} />
-        <If when={props.plugin.id === "github"}><Action label="Use the GitHub login on this server" disabled={busy() || connecting()} onPress={() => void plugins()?.useServerGitHub()} /></If>
+        <If when={props.plugin.id === "github"}><View class="items-center"><GhostAction icon="desktop" label="Use this computer's login" accessibilityLabel="Use the GitHub login on this server" disabled={busy() || connecting()} onPress={() => void plugins()?.useServerGitHub()} /></View></If>
       </View>
-    </View>
+    </If>
   );
 }
 
@@ -145,7 +164,8 @@ function AccountList(props: { plugin: PluginIntegration; accounts: PluginAccount
             lead={tile("person-circle")}
             title={info().name}
             subtitle={[info().identity, info().expiry?.label].filter(Boolean).join(" · ") || undefined}
-            trailing={<StateLine tone={connectionStateTone(info().status.tone)} label={info().status.label} />}
+            // Connected is the page's own state line: an account adds a word only when it is something else.
+            trailing={<If when={info().status.tone !== "success"}><StateLine tone={connectionStateTone(info().status.tone)} label={info().status.label} /></If>}
             chevron={!open()}
             accessibilityLabel={[info().name, info().identity, info().status.label].filter(Boolean).join(", ")}
             accessibilityHint="Show account actions"
@@ -185,15 +205,28 @@ function disconnectCopy(account: PluginAccount): { title: string; detail: string
   return { title: `Disconnect ${account.name}?`, detail: "Brain loses access right away, and Mewla removes its saved sign-in.", action: "Disconnect" };
 }
 
+/** What tells one account apart, for its Details: looked up rarely, so behind a tap. */
+function accountFacts(account: PluginAccount, custom: boolean): { label: string; value: string; copy?: boolean }[] {
+  const aws = awsAccountSummary(account);
+  const facts: { label: string; value: string; copy?: boolean }[] = [];
+  if (account.profile) facts.push({ label: "Profile", value: account.profile, copy: true });
+  if (account.profile_kind) facts.push({ label: "Kind", value: account.profile_kind });
+  if (account.project) facts.push({ label: "Project", value: account.project, copy: true });
+  if (account.region) facts.push({ label: "Region", value: account.region });
+  if (aws) facts.push(...aws.details);
+  else if (account.integration === "gcp" && account.identity) facts.push({ label: "Identity", value: account.identity, copy: true });
+  if (custom && account.endpoint) facts.push({ label: "Endpoint", value: account.endpoint, copy: true });
+  return facts;
+}
+
 /**
  * One account: its switch, the one fix it needs if any, what Brain may do, its
- * tools, and Disconnect after one confirm.
+ * tools, then its details behind a tap, and Disconnect after one confirm.
  */
 function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount; nav: PageNav }) {
   const account = () => flowState().accounts.find((item) => item.id === props.account.id) ?? props.account;
   const running = () => flowState().running;
   const busy = () => running() !== null;
-  const job = pluginJobs[props.plugin.id];
   const custom = props.plugin.id === "mcp" || props.plugin.id === "openapi";
   const showDetails = signal(false);
   const copied = signal<string | null>(null);
@@ -204,29 +237,23 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
     const a = account();
     const control = accessControl(a, name);
     if (control.kind === "none") return null;
-    const title = name === "read" ? "Read and search" : "Make changes when asked";
-    const note = control.kind === "consent" ? `${props.plugin.name} asks you to approve this once.` : control.note;
-    const subtitle = [name === "read" ? job?.read : job?.write, note].filter(Boolean).join(". ");
+    const title = name === "read" ? "Read and search" : "Make changes";
     const pending = running() === `${name}:${a.id}` || (name === "write" && control.kind === "consent" && running() === `connect:${props.plugin.id}`);
     if (control.kind === "consent") {
-      return <Row lead={tile("edit")} title={title} subtitle={subtitle} trailing={<If when={pending} else={<RowButton label="Allow" accessibilityLabel={`Allow changes in ${props.plugin.name}`} disabled={busy()} onPress={() => flow().setAccess(a, name, true)} />}><Spinner size={16} /></If>} />;
+      return <Row lead={tile("edit")} title={title} trailing={<If when={pending} else={<RowButton label="Allow" accessibilityLabel={`Allow changes in ${props.plugin.name}. ${props.plugin.name} asks you to approve this once.`} disabled={busy()} onPress={() => flow().setAccess(a, name, true)} />}><Spinner size={16} /></If>} />;
     }
-    return <SwitchRow testID={`${name}-${a.id}`} title={title} subtitle={subtitle} checked={control.on} busy={pending} disabled={busy() && !pending} onChange={(on) => flow().setAccess(a, name, on)} />;
+    return <SwitchRow testID={`${name}-${a.id}`} lead={tile(name === "read" ? "eye" : "edit")} title={title} subtitle={control.note || undefined} checked={control.on} busy={pending} disabled={busy() && !pending} onChange={(on) => flow().setAccess(a, name, on)} />;
   };
 
   return (
     <View>
       {(() => {
         const a = account();
-        const aws = awsAccountSummary(a);
         const recovery = accountRecovery(a, props.plugin.name);
         const network = a.network === "testnet" ? networkLabel(a.network) : null;
-        const subtitle = a.profile
-          ? [a.profile_kind, a.profile_status, a.active ? "Active" : "", a.project, a.integration === "gcp" ? a.identity : "", a.aws?.account_id, a.aws?.account_name].filter(Boolean).join(" · ")
-          : aws
-            ? aws.subtitle
-            : [custom ? endpointHost(a.endpoint) : a.identity !== a.name ? a.identity : "", a.verified_at ? `Checked ${formatDateTime(a.verified_at)}` : ""].filter(Boolean).join(" · ");
         const tools = allowedToolCount(a);
+        const facts = accountFacts(a, custom);
+        const renamable = a.integration === "aws" && !!a.profile;
         return (
           <View>
             {/* An account that is off reads quieter; its switch still turns it on. */}
@@ -234,48 +261,57 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
             <SwitchRow
               testID={`enabled-${a.id}`}
               accessibilityLabel={`${props.plugin.name} ${a.name} on`}
-              title={[network, recovery ? null : accountStatus(a)].filter(Boolean).join(" · ") || "On"}
-              subtitle={subtitle || undefined}
+              lead={tile("power")}
+              title={network ? `On · ${network}` : "On"}
               checked={a.enabled}
               busy={running() === `enabled:${a.id}`}
               disabled={busy() && running() !== `enabled:${a.id}`}
               onChange={(on) => flow().setEnabled(a, on)}
             />
             </View>
-            <If when={a.integration === "aws" && a.profile}><If when={renaming()} else={<Row lead={tile("edit")} title="Rename profile" onPress={() => renaming.set(true)} />}><ProfileName account={a} onDone={() => renaming.set(false)} /></If></If>
-            <If when={a.profile_sign_in_by}>{(profile_sign_in_by) => <Row lead={tile("time")} title="Sign in again by" subtitle={`${formatFullDateTime(profile_sign_in_by())} · ${a.profile_sign_in_limit === "maximum" ? "At latest · AWS allows up to 12h; your session may end sooner." : "SSO session"}`} />}</If>
-            <If when={a.profile}><Row lead={tile("person-circle")} title="Sign in again" subtitle={`Use ${props.plugin.name} remote sign-in for this ${a.integration === "aws" ? "profile" : "account"}.`} trailing={<If when={connectingService() === props.plugin.id} else={<RowButton label="Sign in again" disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />}><Spinner size={16} /></If>} /></If>
+            {/* A cloud profile signs in again often (AWS ends a session within 12 h): its own row, right under the switch. */}
+            <If when={a.profile}><Row
+                testID={`sign-in-again-${a.id}`}
+                lead={tile("refresh")}
+                title="Sign in again"
+                trailing={<If when={connectingService() === props.plugin.id} else={<RowButton label="Sign in" accessibilityLabel={`Sign in to ${props.plugin.name} again`} disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />}><Spinner size={16} /></If>}
+              /></If>
             <If when={!a.profile ? recovery : null}>{(recovery) => <Row
                 testID={`recover-${a.id}`}
                 lead={tile(recovery().tone === "neutral" ? "pause-circle" : "alert-circle")}
                 title={recovery().title}
-                subtitle={recovery().detail}
+                // Only the cause the computer gave (a service out of reach) is worth a line.
+                subtitle={recovery().action === "refresh" && a.unavailable ? a.unavailable : undefined}
+                subtitleTone="warn"
                 // Whichever fix it is (check, sign in again, finish the removal), its button turns while it runs.
                 trailing={<If when={running() === `recover:${a.id}` || (recovery().action === "reconnect" && connectingService() === props.plugin.id) || (recovery().action === "disconnect" && running() === `disconnect:${a.id}`)} else={<RowButton label={recovery().actionLabel} disabled={busy()} onPress={() => flow().recover(a, recovery().action)} />}><Spinner size={16} /></If>}
               />}</If>
-            <If when={aws}>{(aws) => <View>
-                <Row lead={tile("info")} title="Details" chevron={!showDetails()} onPress={() => showDetails.set(!showDetails())} />
-                <If when={showDetails()}>{aws().details.map((detail) => (
-                      <Row
-                        title={detail.label}
-                        accessibilityLabel={detail.copy ? `Copy ${detail.label}` : undefined}
-                        subtitle={detail.value}
-                        value={copied() === detail.label ? "Copied" : undefined}
-                        onPress={detail.copy ? () => void Clipboard.writeText(detail.value).then(() => copied.set(detail.label)) : undefined}
-                      />
-                    ))}</If>
-              </View>}</If>
             {custom ? null : group("read")}
             {custom ? null : group("write")}
             <Row
               testID={`tools-${a.id}`}
               lead={tile("list")}
-              title={custom ? `${tools.allowed} of ${tools.total} tools allowed` : "Tools & activity"}
-              subtitle={custom && tools.allowed === 0 ? "Choose which tools Brain may use." : undefined}
-              value={custom || !tools.total ? undefined : `${tools.allowed}/${tools.total}`}
+              title="Tools & activity"
+              value={!tools.total ? undefined : `${tools.allowed}/${tools.total}`}
               chevron
               onPress={() => props.nav.push({ name: "extensions-tools", service: props.plugin.id, account: a.id })}
             />
+            <If when={facts.length || renamable}><View>
+                <Row testID={`details-${a.id}`} lead={tile("info")} title="Details" chevron={!showDetails()} expanded={showDetails()} onPress={() => showDetails.set(!showDetails())} />
+                <If when={showDetails()}><View>
+                    {facts.map((detail) => (
+                      <Row
+                        title={detail.label}
+                        accessibilityLabel={detail.copy ? `Copy ${detail.label}` : undefined}
+                        subtitle={detail.value}
+                        value={copied() === detail.label ? "Copied" : undefined}
+                        trailing={<If when={detail.copy && copied() !== detail.label}><Icon name="copy" size={16} tone="faint" /></If>}
+                        onPress={detail.copy ? () => void Clipboard.writeText(detail.value).then(() => copied.set(detail.label)) : undefined}
+                      />
+                    ))}
+                    <If when={renamable}><If when={renaming()} else={<Row testID={`rename-${a.id}`} lead={tile("edit")} title="Rename profile" onPress={() => renaming.set(true)} />}><ProfileName account={a} onDone={() => renaming.set(false)} /></If></If>
+                  </View></If>
+              </View></If>
           </View>
         );
       })()}

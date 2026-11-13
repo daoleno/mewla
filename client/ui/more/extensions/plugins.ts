@@ -122,8 +122,9 @@ effect(() => {
       serverId: current.server.id,
       request: (request) => requestConnections(current, request),
       store: secure,
-      // A new tab the browser blocked leaves the card waiting, as in the Expo web app: its "Open <S> again" is a click the browser lets through.
-      openUrl: (url) => openUrl(url).then(() => undefined),
+      // A new tab the browser blocked (it came seconds after the tap) is said by `opened`: the card then leads with Open,
+      // a tap the browser lets through.
+      openUrl: (url) => openUrl(url).then((result) => result.opened),
       copy: (text) => Clipboard.writeText(text),
       now: () => Date.now(),
       every: (ms, run) => {

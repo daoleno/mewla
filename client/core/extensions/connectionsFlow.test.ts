@@ -91,6 +91,21 @@ describe("connecting a service", () => {
     expect(h.opened).toHaveLength(2);
   });
 
+  test("a sign-in page the browser refused to open is remembered, and Open clears it once it opens", async () => {
+    // AWS gives its page seconds after the tap: a browser no longer counts that as the person's and blocks the tab.
+    const h = harness(() => ({ flow: oauth({ integration: "aws", code_required: true, authorization_url: "https://signin.aws.amazon.com/oauth?x=1" }) }));
+    h.deps.openUrl = (url) => { h.opened.push(url); return Promise.resolve(false); };
+    await h.flow.connect("aws");
+    expect(h.opened).toEqual(["https://signin.aws.amazon.com/oauth?x=1"]);
+    expect(h.flow.state.phase).toBe("waiting");
+    expect(h.flow.state.blocked).toBe(true);
+    // The card's Open is a tap of its own: the browser lets it through.
+    h.deps.openUrl = (url) => { h.opened.push(url); return Promise.resolve(true); };
+    await h.flow.openBrowser();
+    expect(h.flow.state.blocked).toBe(false);
+    expect(h.opened).toHaveLength(2);
+  });
+
   test("a GitHub code is shown and copied before the page opens, and the page is polled", async () => {
     const h = harness(() => ({ flow: oauth({ integration: "github", user_code: "ABCD-1234", authorization_url: "https://github.com/login/device" }) }));
     await h.flow.connect("github");

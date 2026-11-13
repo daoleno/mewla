@@ -1,11 +1,14 @@
 import { announce, Clipboard, computed, openUrl, platform, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
 import { accessControl, connectsWithForm, signInAddressFromText } from "../../../core/extensions/pluginConnectionsModel";
-import { brainCanNow, pluginJobs } from "../../../core/extensions/pluginOnboarding";
-import { Field, Notice, Spinner } from "../../kit/kit";
+import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
+import { color, type ColorName } from "../../kit/colors";
+import { Field, Spinner } from "../../kit/kit";
 import { Icon, type IconName } from "../../kit/Icon";
+import { RowTile } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
-import { Action } from "./Action";
+import { Action, GhostAction, IconAction } from "./Action";
+import { serviceRowLead } from "./ServiceMark";
 import { flowState, plugins } from "./plugins";
 import { ProfileName } from "./ProfileName";
 
@@ -36,6 +39,7 @@ export function ConnectCard(props: { nav: PageNav }) {
     () => {
       const s = flowState();
       const serviceName = flow()?.plugin(s.service)?.name ?? null;
+      const service = s.service;
       const f = s.flow?.flow;
       const none: CardView = { key: "none", render: () => null };
       if (!s.service && !s.connectError) return none;
@@ -43,33 +47,37 @@ export function ConnectCard(props: { nav: PageNav }) {
         // A sign-in that came back to a page still loading the list waits for it to name the service.
         if (s.service && !s.loaded) return none;
         return s.connectError
-          ? { key: `ended:${s.connectError}`, render: () => <Card glyph="info-fill" title="That sign-in already ended" detail={s.connectError}><Action label="OK" onPress={() => flow().dismiss()} /></Card> }
+          ? { key: `ended:${s.connectError}`, render: () => <Card glyph="info-fill" title="That sign-in already ended" detail={s.connectError} onClose={() => flow().dismiss()} closeLabel="Dismiss" /> }
           : none;
       }
+      // Open, first and filled while the browser has not opened the page (it blocked a tab that came late); quiet once it has.
+      const openButton = (testID: string, disabled?: boolean) => (
+        <If when={flowState().blocked} else={<GhostAction testID={testID} icon="open-external" label={`Open ${serviceName}`} disabled={disabled} onPress={open} />}>
+          <Action filled testID={testID} label={`Open ${serviceName}`} disabled={disabled} onPress={open} />
+        </If>
+      );
       if (f?.install_required && f.status === "waiting") {
         return {
           key: `install:${f.id}:${f.message ?? ""}:${f.install_manual}:${f.install_failed}`,
           render: () => (
-            <Card title={f.message || `Install ${serviceName} CLI`} detail={f.message ? undefined : "Install the official CLI on this computer, then sign in."}>
-              <If when={f.install_manual && f.install_url}><Action label={`Download ${serviceName} CLI`} onPress={() => void openUrl(f.install_url!)} /></If>
+            <Card service={service} title={`Install ${serviceName} CLI`} detail={f.message || undefined} onClose={cancel}>
               <Action filled testID="install-cli" label={f.install_manual ? "Check again" : f.install_failed ? "Retry" : "Install and sign in"} busy={starting() || verifying()} onPress={() => void submit("").catch(() => {})} />
-              <Action label="Cancel" onPress={cancel} />
+              <If when={f.install_manual && f.install_url}><GhostAction icon="download" label="Download" accessibilityLabel={`Download ${serviceName} CLI`} onPress={() => void openUrl(f.install_url!)} /></If>
             </Card>
           ),
         };
       }
-      if (f?.installing && f.status === "waiting") return { key: `installing:${f.id}`, render: () => <Card busy title={`Installing ${serviceName} CLI…`}><Action label="Cancel" onPress={cancel} /></Card> };
+      if (f?.installing && f.status === "waiting") return { key: `installing:${f.id}`, render: () => <Card busy title={`Installing ${serviceName} CLI`} onClose={cancel} /> };
       if (f?.code_required && (s.phase === "waiting" || s.phase === "verifying")) {
-        // Tailscale and Google Workspace: an OAuth client made in the service's console, pasted here.
+        // Tailscale and Google Workspace: an OAuth client made in the service's console, pasted here; the computer says how.
         const secret = f.integration === "tailscale" || !!f.setup_required;
         const noun = f.setup_required ? "client ID and secret" : secret ? "client secret" : "code";
         return {
           key: `code:${f.id}:${noun}`,
           render: () => (
-            <Card title={secret ? `Connect ${serviceName}` : `Sign in to ${serviceName}`} detail={secret ? f.message : `Open ${serviceName}, sign in, then paste the code shown there.`}>
-              <PasteEntry kind="code" noun={noun} label={noun === "code" ? `Paste the code ${serviceName} shows` : `Paste the ${noun}`} onSubmit={submit} />
-              <Action label={`Open ${serviceName} again`} onPress={open} />
-              <Action label="Cancel" onPress={cancel} />
+            <Card service={service} title={secret ? `Paste the ${noun}` : `Paste the code from ${serviceName}`} detail={secret ? f.message : undefined} onClose={cancel}>
+              <If when={f.authorization_url}>{openButton("open-again")}</If>
+              <PasteEntry kind="code" noun={noun} label={noun === "code" ? `Code from ${serviceName}` : noun} onSubmit={submit} />
             </Card>
           ),
         };
@@ -79,39 +87,36 @@ export function ConnectCard(props: { nav: PageNav }) {
         return {
           key: `confirm:${f.id}`,
           render: () => (
-            <Card glyph="person-circle" title={`Use ${identity}?`} detail="The GitHub login on this server. Mewla keeps its own copy; later sign-ins there don't change it.">
-              <Action filled label={`Connect ${identity}`} busy={starting()} onPress={() => void flow().importGitHub()} />
-              <Action label="Cancel" onPress={cancel} />
+            <Card service={service} title={`Use ${identity}?`} onClose={cancel}>
+              <Action filled label="Connect" accessibilityLabel={`Connect ${identity}`} busy={starting()} onPress={() => void flow().importGitHub()} />
             </Card>
           ),
         };
       }
-      if (s.phase === "opening") return { key: `opening:${serviceName}`, render: () => <Card busy title={`Opening ${serviceName}…`} /> };
+      if (s.phase === "opening") return { key: `opening:${serviceName}`, render: () => <Card busy title={`Opening ${serviceName}`} /> };
       if ((s.phase === "waiting" || s.phase === "verifying") && f?.address_required) {
         return {
           key: `address:${f.id}`,
           render: () => (
-            <Card title={`Finish signing in to ${serviceName}`} detail="After sign-in, copy the full address of the page you land on, paste it below, then choose Continue.">
+            <Card service={service} title="Paste the address you landed on" onClose={cancel}>
+              {openButton("open-again", verifying())}
               <PasteEntry kind="address" noun="address" label="Address from the browser" onSubmit={submit} />
-              <Action label={`Open ${serviceName} again`} disabled={verifying()} onPress={open} />
-              <Action label="Cancel" onPress={cancel} />
             </Card>
           ),
         };
       }
-      if (s.phase === "verifying") return { key: `verifying:${serviceName}`, render: () => <Card busy title={`Checking your ${serviceName} account…`} detail="This takes a moment." /> };
+      if (s.phase === "verifying") return { key: `verifying:${serviceName}`, render: () => <Card busy title={`Checking your ${serviceName} account`} /> };
       if (s.phase === "waiting" && f?.user_code) {
         const code = f.user_code;
         return {
           key: `device:${f.id}:${code}`,
           render: () => (
-            <Card busy title={`Enter this code on ${serviceName}`} detail="Mewla copies it for you. This updates when you're done.">
+            <Card service={service} title={`Enter this code on ${serviceName}`} onClose={cancel}>
               <View selectable>
                 <Text testID="device-code" class="py-2 text-center font-mono text-2xl font-semibold tracking-widest" accessibilityLabel={`Code ${code.split("").join(" ")}`}>{code}</Text>
               </View>
-              <Action filled testID="open-code-page" label={`Copy code and open ${serviceName}`} onPress={open} />
-              <If when={s.service === "github"}><Action label="Use the GitHub login on this server" onPress={() => void flow().useServerGitHub()} /></If>
-              <Action label="Cancel" onPress={cancel} />
+              <Action filled testID="open-code-page" label={`Copy and open ${serviceName}`} onPress={open} />
+              <If when={s.service === "github"}><GhostAction icon="desktop" label="Use this computer's login" accessibilityLabel="Use the GitHub login on this server" onPress={() => void flow().useServerGitHub()} /></If>
             </Card>
           ),
         };
@@ -121,9 +126,8 @@ export function ConnectCard(props: { nav: PageNav }) {
         return {
           key: `waiting:${f?.id}:${detail ?? ""}`,
           render: () => (
-            <Card busy title={`Waiting for ${serviceName}`} detail={detail}>
-              <If when={f?.authorization_url}><Action testID="open-again" label={`Open ${serviceName} again`} onPress={open} /></If>
-              <Action testID="cancel-sign-in" label="Cancel" onPress={cancel} />
+            <Card busy title={`Waiting for ${serviceName}`} detail={detail} onClose={cancel} closeTestID="cancel-sign-in">
+              <If when={f?.authorization_url}>{openButton("open-again")}</If>
             </Card>
           ),
         };
@@ -133,9 +137,8 @@ export function ConnectCard(props: { nav: PageNav }) {
         return {
           key: `custom:${connected.id}`,
           render: () => (
-            <Card glyph="check-circle-fill" tone="ready" title={`${connected.name} connected`} detail="Choose which of its tools Brain may use. None are allowed yet.">
+            <Card glyph="check-circle-fill" tone="ok" title={`${connected.name} connected`} onClose={() => flow().dismiss()} closeLabel="Later">
               <Action filled label="Choose tools" onPress={() => { flow().dismiss(); props.nav.push({ name: "extensions-tools", service: connected.integration, account: connected.id }); }} />
-              <Action label="Later" onPress={() => flow().dismiss()} />
             </Card>
           ),
         };
@@ -144,31 +147,30 @@ export function ConnectCard(props: { nav: PageNav }) {
         const changes = accessControl(connected, "write");
         const changesOn = changes.kind === "switch" && changes.on;
         const job = s.service ? pluginJobs[s.service] : undefined;
-        const detail = `${connected.access?.read === "none" ? `Brain can use ${connected.name} once you allow changes.` : brainCanNow(job?.read, connected.name)}${changes.kind === "consent" ? ` To let it make changes too, ${serviceName} asks you once more.` : ""}`;
         const offerChanges = changes.kind !== "none" && !changesOn;
         // A new AWS profile is offered a readable name before it is left with the CLI's own.
         const naming = connected.integration === "aws" && !!connected.profile;
         return {
-          key: `connected:${connected.id}:${offerChanges}:${naming}:${detail}`,
+          key: `connected:${connected.id}:${offerChanges}:${naming}`,
           render: () => (
-            <Card testID="connected-card" glyph="check-circle-fill" tone="ready" title={`${serviceName} connected`} detail={detail}>
-              <If when={offerChanges}><Action filled label="Allow changes too" accessibilityLabel={job?.write ? `Allow changes too. ${job.write}` : undefined} busy={flowState().running === `write:${connected.id}`} onPress={() => flow().setAccess(connected, "write", true)} /></If>
-              <If when={naming}><View class="-mx-4">
+            <Card testID="connected-card" glyph="check-circle-fill" tone="ok" title={`${serviceName} connected`} onClose={() => flow().dismiss()} closeLabel="Done" closeTestID="connect-done">
+              <If when={naming}><View class="-mx-4 -mt-2">
                   <ProfileName account={connected} suggest onDone={() => flow().dismiss()} />
                 </View></If>
-              <Action testID="connect-done" label="Done" onPress={() => flow().dismiss()} />
+              <If when={offerChanges}><GhostAction icon="edit" label="Allow changes" accessibilityLabel={job?.write ? `Allow changes too. ${job.write}` : "Allow changes too"} busy={flowState().running === `write:${connected.id}`} onPress={() => flow().setAccess(connected, "write", true)} /></If>
             </Card>
           ),
         };
       }
       if ((s.phase === "failed" || s.phase === "cancelled") && s.connectError) {
         const failed = s.phase === "failed";
+        // A cancel the person made needs no card of its own.
+        if (!failed) return none;
         return {
           key: `${s.phase}:${s.connectError}`,
           render: () => (
-            <Card testID="connect-failed" glyph={failed ? "alert-circle-fill" : "info-fill"} tone={failed ? "failed" : undefined} title={failed ? `Couldn't connect ${serviceName}` : "Sign-in cancelled"} detail={s.connectError}>
-              <Action filled label="Start again" busy={starting()} onPress={retry} />
-              <Action label="Dismiss" onPress={() => flow().dismiss()} />
+            <Card testID="connect-failed" glyph="alert-circle-fill" tone="sealInk" title={`Couldn't connect ${serviceName}`} detail={s.connectError} onClose={() => flow().dismiss()} closeLabel="Dismiss">
+              <Action filled label="Try again" busy={starting()} onPress={retry} />
             </Card>
           ),
         };
@@ -188,8 +190,11 @@ function untrackedRender(view: CardView): JSX.Element | null {
 
 let lastAnnounced = "";
 
-/** The sign-in's card. It is made again for each step, and each step is heard: Waiting, then Connected. */
-function Card(props: { title: string; detail?: string; busy?: boolean; glyph?: IconName; tone?: "ready" | "failed"; testID?: string; children?: JSX.Element }) {
+/**
+ * The sign-in's card: the service's mark (a ring while it waits), one line saying what to do, × to stop, then
+ * the one thing to do now. It is made again for each step, and each step is heard: Waiting, then Connected.
+ */
+function Card(props: { title: string; detail?: string; service?: string | null; busy?: boolean; glyph?: IconName; tone?: ColorName; testID?: string; onClose?: () => void; closeLabel?: string; closeTestID?: string; children?: JSX.Element }) {
   if (platform.os === "ios") {
     // Every Plugins page on the stack shows the card: the step is said once.
     const words = untracked(() => [props.title, props.detail].filter(Boolean).join(". "));
@@ -198,14 +203,18 @@ function Card(props: { title: string; detail?: string; busy?: boolean; glyph?: I
       announce(words);
     }
   }
+  const service = untracked(() => props.service);
   return (
-    <View testID={props.testID ?? "connect-card"} android={{ accessibilityLiveRegion: "polite" }} class="mt-4 gap-2 rounded-(--radius-group) bg-card px-4 py-4">
-      <View class="flex-row items-center gap-2">
-        <If when={props.busy} else={<If when={props.glyph}>{(glyph) => <Icon name={glyph()} size={20} tone={props.tone ?? "soft"} />}</If>}><Spinner size={18} /></If>
-        <Text class="flex-1 text-lg font-semibold" role="header">{props.title}</Text>
+    <View testID={props.testID ?? "connect-card"} android={{ accessibilityLiveRegion: "polite" }} class="mt-4 gap-3 rounded-(--radius-group) bg-card px-4 py-4">
+      <View class="min-h-[30px] flex-row items-center gap-3">
+        <View class="size-[30px] items-center justify-center">
+          <If when={props.busy} else={<If when={props.glyph} else={<If when={service}>{(id) => <RowTile lead={serviceRowLead(id(), 28)} />}</If>}>{(glyph) => <Icon name={glyph()} size={24} tone={props.tone ?? "soft"} />}</If>}><Spinner size={18} /></If>
+        </View>
+        <Text class="min-w-0 flex-1 text-body font-semibold" role="header">{props.title}</Text>
+        <If when={props.onClose}><IconAction testID={props.closeTestID ?? "close-sign-in"} icon="close" label={props.closeLabel ?? "Cancel sign-in"} onPress={() => props.onClose?.()} /></If>
       </View>
       <If when={props.detail}>{(detail) => <Text class="text-sub text-muted-foreground">{detail()}</Text>}</If>
-      <If when={"children" in props}><View class="mt-1 gap-2">{props.children}</View></If>
+      <If when={"children" in props}><View class="gap-2">{props.children}</View></If>
     </View>
   );
 }
@@ -224,7 +233,7 @@ function PasteEntry(props: { kind: "address" | "code"; noun: string; label: stri
     if (busy()) return;
     const value = props.kind === "address" ? signInAddressFromText(text()) : text().trim();
     if (!value) {
-      if (props.kind === "address") error.set("Paste the full address of the page opened after sign-in, even if that page could not load.");
+      if (props.kind === "address") error.set("Paste the whole address, even if the page didn't load.");
       return;
     }
     busy.set(true);
@@ -232,7 +241,7 @@ function PasteEntry(props: { kind: "address" | "code"; noun: string; label: stri
     try {
       await props.onSubmit(value);
     } catch (failure) {
-      error.set(failure instanceof Error ? failure.message : props.kind === "address" ? "Could not send the address. Try again." : `Could not send the ${props.noun}. Try again.`);
+      error.set(failure instanceof Error ? failure.message : `Couldn't send the ${props.noun}. Try again.`);
     } finally {
       busy.set(false);
     }
@@ -240,29 +249,30 @@ function PasteEntry(props: { kind: "address" | "code"; noun: string; label: stri
   const paste = async () => {
     try {
       const pasted = await Clipboard.readText();
-      text.set(pasted);
-      error.set(pasted.trim() ? "" : props.kind === "address" ? "The clipboard is empty. Copy the address from the browser first." : `The clipboard is empty. Copy the ${props.noun} first.`);
+      if (pasted.trim()) {
+        text.set(pasted);
+        error.set("");
+      } else error.set(`Nothing to paste. Copy the ${props.noun} first, or paste into the field.`);
     } catch {
-      error.set(`Clipboard access is unavailable. Paste directly into the ${props.kind === "address" ? "address" : "code"} field.`);
+      error.set(`Paste into the field.`);
     }
   };
   return (
-    <View class="-mx-4 gap-2">
+    <View class="-mx-4 -my-3 gap-2">
       <Field
-        label={props.label}
-        accessibilityLabel={props.kind === "address" ? "Address the sign-in ended on" : undefined}
+        accessibilityLabel={props.kind === "address" ? "Address the sign-in ended on" : props.label}
         testID={props.kind === "address" ? "sign-in-address" : "sign-in-code"}
         value={text()}
         mono
         multiline={props.kind === "code"}
         keyboardType={props.kind === "address" ? "url" : "default"}
-        placeholder={props.kind === "address" ? "Address starting with http…" : `Paste ${props.noun} here`}
+        placeholder={props.kind === "address" ? "http://…" : props.label}
         onChange={(value) => { text.set(value); error.set(""); }}
         onSubmit={() => void submit()}
+        trailing={<IconAction testID="sign-in-paste" icon="clipboard" label={`Paste ${props.noun}`} disabled={busy()} onPress={() => void paste()} />}
       />
-      <View class="gap-2 px-4">
-        <If when={error()}><Notice tone="failed" title={props.kind === "address" ? "Check the address" : `Check the ${props.noun}`} detail={error()} /></If>
-        <Action label={props.kind === "address" ? "Paste address" : `Paste ${props.noun}`} disabled={busy()} onPress={() => void paste()} />
+      <View class="gap-2 px-4 pb-3">
+        <If when={error()}><Text testID="sign-in-error" role="alert" class="text-sub" style={{ color: color("sealInk") }}>{error()}</Text></If>
         <Action filled testID={props.kind === "address" ? "sign-in-address-continue" : "sign-in-code-continue"} label="Continue" busy={busy()} disabled={!text().trim()} onPress={() => void submit()} />
       </View>
     </View>

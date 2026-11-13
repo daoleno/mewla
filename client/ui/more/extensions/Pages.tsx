@@ -6,7 +6,7 @@ import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { connectionStateTone } from "../../../core/extensions/colour";
 import { daemon } from "../daemon";
 import { color } from "../../kit/colors";
-import { EmptyState, Notice, Page, Row, RowButton, SearchField, Section, Spinner, Tag, type Status } from "../../kit/kit";
+import { EmptyState, Notice, Page, Row, RowButton, SearchField, Section, Spinner, type Status } from "../../kit/kit";
 import { stateTextColor } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
 import { AgentPage } from "./agents/AgentPage";
@@ -43,8 +43,19 @@ export function connectingService(): string | null {
  * What every Plugins page has above its own content: a return kept for another
  * computer, a request that failed, the sign-in in progress. Without a current
  * computer, only the way to choose one.
+ *
+ * The sign-in's card shows on Extensions (where a browser's return lands) and on the pages of the service it is
+ * for (`service`), not over another service's page.
  */
-export function PluginsFrame(props: { title: string; nav: PageNav; testID?: string; onRefresh?: () => void; hero?: JSX.Element; children?: JSX.Element }) {
+export function PluginsFrame(props: { title: string; nav: PageNav; testID?: string; service?: string; onRefresh?: () => unknown; hero?: JSX.Element; children?: JSX.Element }) {
+  const service = untracked(() => props.service);
+  const cardHere = () => service === undefined || flowState().service === service;
+  // The ring at the top is the person's pull only: the computer's own reads (on connect, after a change) don't show it.
+  const pulled = signal(false);
+  const refresh = () => {
+    pulled.set(true);
+    void Promise.resolve(props.onRefresh ? props.onRefresh() : plugins()?.list()).finally(() => pulled.set(false));
+  };
   let scroll: ScrollRef | null = null;
   // A card that asks for an address, a code or a CLI install comes into view, even
   // when it was started from the bottom of a long page.
@@ -60,10 +71,10 @@ export function PluginsFrame(props: { title: string; nav: PageNav; testID?: stri
     if (asking()) untracked(() => setTimeout(() => scroll?.scrollTo({ y: 0, animated: false }), 0));
   });
   return (
-    <Page display hero={props.hero} title={props.title} testID={props.testID} scrollRef={(ref) => (scroll = ref)} refreshing={flowState().running === "list"} onRefresh={props.onRefresh ?? (() => void plugins()?.list())}>
+    <Page display hero={props.hero} title={props.title} testID={props.testID} scrollRef={(ref) => (scroll = ref)} refreshing={pulled()} onRefresh={refresh}>
       <If when={deferredFor()}><Notice testID="authorization-saved" icon="swap-horizontal" title={`Authorization saved for ${deferredFor()}`} detail="Switch to that server in Settings to finish." action="Settings" onAction={() => props.nav.push({ name: "settings" })} /></If>
       <If when={flowState().error && flowState().catalog.length}><Notice tone="failed" testID="plugins-error" title="That didn't go through" detail={flowState().error} /></If>
-      <If when={daemon()}><ConnectCard nav={props.nav} /></If>
+      <If when={daemon() && cardHere()}><ConnectCard nav={props.nav} /></If>
       <If when={!daemon()} else={<>{props.children}</>}><EmptyState icon="server" title="No current server" detail="Choose one in Settings." action="Open Settings" onAction={() => props.nav.push({ name: "settings" })} /></If>
     </Page>
   );
@@ -115,7 +126,8 @@ function Extensions(props: { nav: PageNav }) {
     return {
       connected: all.filter(({ row }) => row.state.kind === "status"),
       fixing: all.filter(({ row }) => row.state.kind === "reconnect"),
-      available: all.filter(({ row }) => row.state.kind === "connect" || row.state.kind === "unavailable"),
+      // What can't be connected on this computer goes last, quiet: nothing to do there.
+      available: [...all.filter(({ row }) => row.state.kind === "connect"), ...all.filter(({ row }) => row.state.kind === "unavailable")],
     };
   };
   // Rows are kept by service: the computer's news updates a row in place, so its button keeps a tap under way.
@@ -151,13 +163,14 @@ function accountNames(row: ServiceRow): string {
   return accounts.length > 2 ? `${accounts.length} accounts` : accounts.map((account) => account.name).join(" · ");
 }
 
+/** The row's second line: whose accounts are connected (never the service's own name again), or what needs fixing. */
 function rowSubtitle(row: ServiceRow): string {
-  const plugin = row.plugin;
-  if (row.state.kind === "unavailable") return plugin.unavailable_reason || "Sign-in is not set up yet.";
+  if (row.state.kind === "unavailable" || row.state.kind === "connect") return "";
+  const names = accountNames(row);
+  const who = names === row.plugin.name ? "" : names;
   // What needs fixing says so, in the warn colour (SPEC §10.4), with whose sign-in it is.
-  if (row.state.kind === "reconnect") return [`Sign-in expired`, accountNames(row)].filter(Boolean).join(" · ");
-  if (plugin.id === "gcp" && !row.accounts.length) return "Nothing connected yet";
-  return accountNames(row);
+  if (row.state.kind === "reconnect") return ["Sign-in expired", who].filter(Boolean).join(" · ");
+  return who;
 }
 
 /** What a screen reader says for the row: the service and its state, which the row's parts say apart. */
@@ -165,7 +178,7 @@ function rowLabel(row: ServiceRow): string {
   const state = row.state;
   if (state.kind === "reconnect") return `${row.plugin.name}, ${state.account.name} needs sign-in again`;
   if (state.kind === "status") return `${row.plugin.name}, ${accountNames(row)}, ${state.label}`;
-  if (state.kind === "unavailable") return `${row.plugin.name}, ${state.label}. ${rowSubtitle(row)}`;
+  if (state.kind === "unavailable") return `${row.plugin.name}, ${state.label}. ${row.plugin.unavailable_reason ?? ""}`.trim();
   return row.plugin.name;
 }
 
@@ -189,9 +202,11 @@ function ServiceRowView(props: { row: ServiceRow; nav: PageNav; custom?: boolean
   // While one sign-in starts or waits, the other services wait for it.
   const blocked = () => flowState().running !== null || (connectingService() !== null && !connecting());
   const label = () => (kind() === "reconnect" ? "Reconnect" : props.custom ? "Add" : "Connect");
+  // Under Connected the section says it: a row adds a word only when it is something else (Off, Read only, a warning).
   const stateLabel = () => {
     const state = row().state;
-    return state.kind === "status" || state.kind === "unavailable" ? state.label : "";
+    if (state.kind === "unavailable") return "Unavailable";
+    return state.kind === "status" && state.tone !== "success" ? state.label : "";
   };
   const tone = () => {
     const state = row().state;
@@ -202,7 +217,7 @@ function ServiceRowView(props: { row: ServiceRow; nav: PageNav; custom?: boolean
       <If when={connecting()} else={
         <If when={kind() === "connect" || kind() === "reconnect"} else={
           // Grouped by state, the section label says it: no dot, only a word that needs a look is coloured (SPEC §10.4).
-          <Text testID={`service-${id}-state`} class="text-sub line-clamp-1" style={{ color: color(stateTextColor(tone())) }}>{stateLabel()}</Text>
+          <If when={stateLabel()}><Text testID={`service-${id}-state`} class="text-sub line-clamp-1" style={{ color: color(stateTextColor(tone())) }}>{stateLabel()}</Text></If>
         }>
           <RowButton
             testID={`connect-${id}`}
@@ -219,7 +234,7 @@ function ServiceRowView(props: { row: ServiceRow; nav: PageNav; custom?: boolean
         <Spinner size={16} />
       </If>
     }>
-      <Tag label={stateLabel()} />
+      <Text testID={`service-${id}-state`} class="text-sub text-muted-foreground line-clamp-1">{stateLabel()}</Text>
     </If>
   );
   const available = () => kind() !== "unavailable";
