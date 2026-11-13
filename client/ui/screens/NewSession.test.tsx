@@ -23,9 +23,11 @@ describe("New session fits the window (iPhone Duo, 11-14)", () => {
       expect(app.count("id:new-pinned >> id:new-task")).toBe(1);
       expect(app.count("id:new-scroll >> id:new-launch")).toBe(0);
       expect(app.count("id:new-scroll >> id:new-task")).toBe(0);
-      // 466 is the smallest real window (the Duo's cover screen held sideways): the agents still show there. Below it
-      // the scroll gives way first, never Task or Start.
-      expect(app.count("id:new-scroll >> id:preset-claude")).toBe(height >= 466 ? 1 : 0);
+      // The agents still show on every window, down to 300 (the Task caption gives way below 500); when room runs
+      // out, the scroll gives way first, never Task or Start.
+      expect(app.count("id:new-scroll >> id:preset-claude")).toBe(1);
+      // A short window gives the Task caption's room to the agents; the placeholder says it.
+      expect(app.texts().includes("Task")).toBe(height >= 500);
     }, 30_000);
   }
 

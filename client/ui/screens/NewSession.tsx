@@ -1,9 +1,9 @@
-import { computed, effect, keyboardFrame, Scroll, signal, Text, untracked, View } from "nsh";
+import { computed, effect, keyboardFrame, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Delayed, Rows } from "../kit/wait";
 import { Button } from "nsh/base";
 import { Sheet, SheetRoom } from "../kit/Sheet";
-import { agentGridColumns, composing, scrollBesidePinned } from "../../core/shell/sheet";
+import { agentGridColumns, composing, scrollBesidePinned, taskCaptionShows } from "../../core/shell/sheet";
 import { Field, PillButton, Row, Section } from "../kit/kit";
 import { LAUNCH_PRESETS } from "../../core/sessions/agentCommands";
 import { createSession } from "../../core/sessions/create";
@@ -292,7 +292,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
               has risen (a scroll holding it took a keyboard inset before the sheet rose, and ended in blank, 1c). */}
           <View testID="new-pinned" onLayout={({ bounds }) => pinnedHeight.set(bounds.size.height)}>
             <If when={advanced()} else={<If when={takesTask()}><View testID="new-task-group" class="mt-2 rounded-(--radius-group) bg-sheet-surface">
-                  <Field testID="new-task" label={compose() ? undefined : "Task"} accessibilityLabel="What should it do?" multiline value={task()} placeholder="What should it do?" onChange={(value) => task.set(value)}
+                  <Field testID="new-task" label={taskCaptionShows(windowSize().height, compose()) ? "Task" : undefined} accessibilityLabel="What should it do?" multiline value={task()} placeholder="What should it do?" onChange={(value) => task.set(value)}
                     {...focus("task")} trailing={inlineStart("task")} />
                 </View></If>}><View class="mt-2 rounded-(--radius-group) bg-sheet-surface">
                 <View class="flex-col" style={shownWhile("command")}>
