@@ -11,6 +11,7 @@ import type { StoredServer } from "../../../core/storedServerContract";
 import { NavPage } from "../../shell/NavPage";
 import { nav } from "../../shell/nav";
 import { brain, connection, current, servers, workers } from "../../session";
+import { linkState } from "../../kit/wait";
 import { StateControl } from "../StateControl";
 import { Tray } from "../Tray";
 
@@ -28,12 +29,18 @@ const server = testServer({ name: "atlas", ...params.server });
 bindDaemon(new FakeDaemon(params.computers ? { computers: params.computers } : {}, server, "connected"));
 servers.set([server]);
 current.set(server);
+// The harness plays the link as told (Offline is the link past `link.away`): the connection's words follow at once.
+const told = (state: ConnectionState) => linkState.set(state === "connected" ? "up" : state === "waiting" || state === "idle" ? "away" : "connecting");
 connection.set(params.connection ?? "connected");
+told(params.connection ?? "connected");
 workers.set(params.workers ?? []);
 // Brain is running unless the test says otherwise: its host and chat thread are known.
 brain.set(params.brain ?? { host_worker: { id: "host", name: "brain", status: "running" }, chat_thread_id: "t1" });
 host.on("app.workers", (list) => workers.set(list as unknown as Worker[]));
-host.on("app.connection", (state) => connection.set(state as unknown as ConnectionState));
+host.on("app.connection", (state) => {
+  connection.set(state as unknown as ConnectionState);
+  told(state as unknown as ConnectionState);
+});
 
 mount(() => (
   <View class="flex-1 bg-background">
