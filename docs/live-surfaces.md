@@ -183,17 +183,25 @@ from this endpoint, so a revoked token stops it for good.
   `MewlaLiveWidgets` (`client/ios/LiveExtension`, a target of
   `client/ios/project.yml`). The app and the extension compile the same
   `MewlaLiveState.swift`, so the state has one shape.
-- The Live Activity shows the Dynamic Island (compact, minimal, expanded) and the
-  Lock Screen card from the state: Work title and phase, a clock that runs by
-  itself, segments from `done` / `total`, and for "Brain needs you" the question
-  with up to three neutral chips. A chip opens `mewla://live/answer?q=…&c=…`, which
-  sends the answer once, as on Android. It starts while the app is in the
-  foreground (iOS only allows that), updates in the background, and ends when
-  nothing runs or waits. A removed card stays away until a new run key arrives.
-- Widgets (small, medium) read `live_state.json` from the App Group the app
-  writes on every state, and, on a plain URL, fetch `/widget/snapshot` with the
-  same revocable token as Android. A refused token clears them and they ask to
-  open Mewla; Mewla Relay servers show only what the app and pushes applied.
+- The Live Activity shows the first item, as Android's live update does: on the
+  Lock Screen and in the expanded Dynamic Island its logo with the progress ring
+  (or the red dot), its title and what it does or asks, its clock, and either a
+  Work question's choices or the next two items; compact, the logo and the clock
+  or its tag ("Answer", "Approve"); minimal, the logo. A tap opens the item; a
+  choice opens `mewla://live/answer?q=…&c=…`, which sends the answer once. It
+  starts while the app is in the foreground (iOS only allows that), updates in
+  the background, and ends when nothing runs or waits. A removed card stays away
+  until a new run key arrives.
+- Widgets read `live_state.json` from the App Group the app writes on every
+  state, and, on a plain URL, fetch `/widget/snapshot` with the same revocable
+  token as Android. Small is the first item, medium the tray (the header's words
+  and three rows, each a link to its Session or Work); on the Lock Screen a round
+  one shows the first item's ring and a line one the header's words and the
+  item. Quiet, the cat naps; a refused token or nothing heard for 12 hours shows
+  the cat greyed. Mewla Relay servers show only what the app and pushes applied.
+- The app's own logos (`client/ui/icons/agents`, Brain's mark and the terminal
+  glyph) and the cat's stills are vector and PNG sets in the extension's asset
+  catalog.
 - The extension is always built and embedded, so every iOS build needs its App ID,
   App Group and provisioning profile: see `docs/ios-ci-release.md`.
 
