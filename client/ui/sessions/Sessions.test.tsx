@@ -367,6 +367,29 @@ describe("a Session", () => {
     await app.waitFor("id:session-chat");
   }, 20_000);
 
+  test("Brain's terminal says what its host runs, with a Session's controls: the view button goes back to Brain's chat", async () => {
+    // The computer names host_worker's provider only once it sees the host's pane: until then, the executor Brain hosts on.
+    const executor = { id: "claude", name: "claude", provider: "claude", runtime: "tmux", capabilities: { interactive_tty: true, structured_events: true } };
+    const brain = { chat_thread_id: "t1", host_executor: executor, host_worker: { id: "brain-host", name: "Brain", status: "running", cwd: "/home/me/brain", command: "claude" } };
+    const app = await open(APP, { host: phoneHost({ brain, conversations: { "brain-host": [] } }, WEB), storage: paired, platform: "web", width: 390, height: 844 });
+    await app.waitFor("id:brain-menu");
+    await pressUntil(app, "id:brain-menu", "id:brain-menu-terminal");
+    await pressUntil(app, "id:brain-menu-terminal", "id:session-status");
+    expect(app.texts()).toContain("Claude Code · workspace");
+    expect(app.texts()).not.toContain("Shell terminal · workspace");
+    // ⋯ is there; Brain's Session keeps its name and is not stopped from here.
+    app.onDialog(() => null);
+    await answering(app, () => app.press("id:session-menu"));
+    const items = app.dialogs().at(-1)!.buttons;
+    expect(items).toContain("New Terminal");
+    expect(items).not.toContain("Rename");
+    expect(items).not.toContain("Terminate");
+    // The view button shows the other view, Brain's chat, which is home's.
+    await app.press("label:Show chat");
+    await app.waitFor("id:session-status", { state: "gone" });
+    await app.waitFor("id:brain-menu");
+  }, 20_000);
+
   test("a chat it cannot read says why and opens the terminal; a ready one says where it runs", async () => {
     const app = await sessionsApp({
       worker_sessions: [session("w6", { name: "broken" }), session("w8", { name: "fresh", cwd: "/home/me/code/mewla" })],

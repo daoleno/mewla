@@ -36,7 +36,7 @@ import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSy
 import { compactPathLabel, pathBasename } from "../../core/timeline/pathDisplay";
 import { AgentIcon } from "../icons/AgentIcon";
 import { workLinkOf } from "../sessions/workLinks";
-import { openCalendarItem } from "../shell/nav";
+import { goHome, openCalendarItem } from "../shell/nav";
 import { terminalShowing } from "../shell/desktop/keys";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { slashMenuState } from "../../core/session/composerSlash";
@@ -80,7 +80,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     sessionKey,
     serverId: server.id,
     workerId: props.workerId,
-    brainHostWorker: brain()?.host_worker ?? null,
+    // The computer names the host's provider once it sees the host's pane; until then, the executor Brain hosts on.
+    brainHostWorker: brain()?.host_worker ? { ...brain()!.host_worker!, provider: brain()!.host_worker!.provider || brain()!.host_executor?.provider } : null,
     brainHostServerId: brain() ? server.id : null,
   }));
   const kind = computed(() => (worker() ? presentWorker(worker()!).kind : "terminal"));
@@ -441,10 +442,11 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       ...(switchable() ? [{ id: "model", label: "Model & Effort" }] : []),
       ...(dshWeb() ? [{ id: "web", label: "Open Web" }] : []),
       { id: "terminal", label: "New Terminal" },
-      { id: "rename", label: "Rename" },
+      // Brain's Session keeps its name, and stopping it is Brain's to do (Switch executor in Brain's menu).
+      ...(props.brain ? [] : [{ id: "rename", label: "Rename" }]),
       ...(link() ? [{ id: "work", label: "Open its Work" }] : []),
       ...(link()?.calendarItemId ? [{ id: "calendar", label: "Open in Calendar" }] : []),
-      { id: "terminate", label: "Terminate", destructive: true },
+      ...(props.brain ? [] : [{ id: "terminate", label: "Terminate", destructive: true }]),
     ];
     const action = await showMenu({ title: untracked(title), items, anchor: menuAnchor.node(), testID: "session-menu-popover" });
     if (action === "changes") openGit();
@@ -492,14 +494,15 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               </View>
             ) : null}
           </View>
-          {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a chat. */}
-          {!props.brain && canChat() ? (
-            <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => chooseMode(untracked(mode) === "chat" ? "terminal" : "chat")}
+          {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a chat.
+              Brain's chat is home's, so on Brain's terminal the button goes back there. */}
+          {props.brain || canChat() ? (
+            <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
               class="ml-1.5 size-10 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
               <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
             </Button>
           ) : null}
-          {props.brain ? null : <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button>}
+          <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button>
         </View>
       }>
       <View class="flex-1 bg-background">
