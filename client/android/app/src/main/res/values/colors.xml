@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- app/theme/primitives.ts, light -->
+<!-- The Soft tokens (soft-final SPEC §10.1, §10.4; client/ui/theme.json), light. -->
 <resources>
+  <color name="mewla_canvas">#F2F3F5</color>
   <color name="mewla_surface">#FFFFFF</color>
-  <color name="mewla_surface_needs">#FBEBE6</color>
-  <color name="mewla_text_primary">#161412</color>
-  <color name="mewla_text_secondary">#57514A</color>
-  <color name="mewla_text_tertiary">#6C665D</color>
-  <color name="mewla_seal_text">#BC3328</color>
-  <color name="mewla_chip">#EFEBE3</color>
-  <!-- The notification glyph is drawn in seal vermilion. -->
-  <color name="notification_icon_color">#C8372B</color>
+  <color name="mewla_ink">#131416</color>
+  <color name="mewla_soft">#62656D</color>
+  <color name="mewla_faint">#A6A9B0</color>
+  <color name="mewla_track">#E7E8E8</color>
+  <color name="mewla_tile">#ECEDEF</color>
+  <color name="mewla_seal">#D63C2F</color>
+  <color name="mewla_meter">#2A78D6</color>
+  <color name="mewla_warn">#A65C00</color>
+  <color name="mewla_ok">#1B7F45</color>
+  <!-- Pushed notifications' accent: the app's ink, never red (red is only "your move"). -->
+  <color name="notification_icon_color">#131416</color>
 </resources>

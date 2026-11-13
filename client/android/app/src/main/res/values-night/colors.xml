@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- app/theme/primitives.ts, dark -->
+<!-- The Soft tokens (soft-final SPEC §10.1, §10.4; client/ui/theme.json), dark. -->
 <resources>
-  <color name="mewla_surface">#201D19</color>
-  <color name="mewla_surface_needs">#3A1F1B</color>
-  <color name="mewla_text_primary">#F4F0EA</color>
-  <color name="mewla_text_secondary">#C9C1B6</color>
-  <color name="mewla_text_tertiary">#A9A196</color>
-  <color name="mewla_seal_text">#FF9466</color>
-  <color name="mewla_chip">#2C2823</color>
+  <color name="mewla_canvas">#060708</color>
+  <color name="mewla_surface">#1C1D20</color>
+  <color name="mewla_ink">#F2F3F5</color>
+  <color name="mewla_soft">#A2A5AC</color>
+  <color name="mewla_faint">#62656C</color>
+  <color name="mewla_track">#3C3D3F</color>
+  <color name="mewla_tile">#2C2D31</color>
+  <color name="mewla_seal">#D23E31</color>
+  <color name="mewla_meter">#3987E5</color>
+  <color name="mewla_warn">#F0B03C</color>
+  <color name="mewla_ok">#5FCB88</color>
+  <color name="notification_icon_color">#F2F3F5</color>
 </resources>
