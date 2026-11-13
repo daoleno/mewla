@@ -1,4 +1,5 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { BusyPlace } from "../kit/wait";
 import { Button, Input } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
 import type { Daemon } from "../../core/more/daemon";
@@ -89,7 +90,7 @@ export function CodexSkillsSheet(props: {
           </Scroll>}><Text class="py-10 text-center text-sm text-muted-foreground">No matching skills</Text></If>}><View testID="skills-failed" class="items-center gap-1 py-8">
             <Text class="text-base font-semibold text-destructive">Couldn't load skills</Text>
             <Text class="text-center text-sm text-muted-foreground">{problem()}</Text>
-          </View></If>}><Text class="py-10 text-center text-sm text-muted-foreground">Loading skills…</Text></If>
+          </View></If>}><BusyPlace label="Reading skills" testID="skills-loading" rows={4} /></If>
       </View>
     </AppSheet>
   );

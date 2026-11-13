@@ -11,7 +11,7 @@ import type { Worker } from "../core/sessions/workers";
 import { Transport, type ConnectionState } from "../core/transport";
 import { subscribeTransportPath, transportPathInfo, type TransportPathInfo } from "../core/link/pinnedTransport";
 import { LinkWatch } from "../core/motion/wait";
-import { linkState } from "./kit/wait";
+import { linkHooks, linkState } from "./kit/wait";
 
 /**
  * Everything that belongs to the current computer. There is exactly one; switching
@@ -24,6 +24,8 @@ export const connection = signal<ConnectionState>("idle");
 export const problem = signal("");
 /** The connection as the person is told it (SPEC §16.1 `link.away`): Offline after 10 s, kept between retries. */
 const linkWatch = new LinkWatch((link) => linkState.set(link));
+linkHooks.computer = () => current()?.name ?? "";
+linkHooks.reconnect = () => resumeConnection();
 export const ready = signal(false);
 /** `brain_snapshot.brain` of the current computer; null until the first one. */
 export const brain = signal<BrainSnapshot | null>(null);

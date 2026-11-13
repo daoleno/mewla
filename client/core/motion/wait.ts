@@ -409,6 +409,21 @@ export class ActionWait {
   }
 }
 
+/** A call bounded by `ms` (`wait.fail` by default): it rejects with `NoAnswer` when the computer says nothing by then. */
+export class NoAnswer extends Error {
+  constructor() {
+    super("no answer");
+    this.name = "NoAnswer";
+  }
+}
+
+export function bounded<T>(work: Promise<T>, ms: number = motion.wait.fail, clock: Clock = systemClock): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = clock.later(ms, () => reject(new NoAnswer()));
+    work.then((value) => (clock.cancel(timer), resolve(value)), (error) => (clock.cancel(timer), reject(error)));
+  });
+}
+
 /**
  * Optimistic and safe (SPEC §16.2 pattern 7: a switch, a rename, a pin): the result shows at once
  * (`apply(next)`); when the commit rejects or gives no answer by `failMs`, the value goes back (`apply(prev)`)

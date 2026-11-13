@@ -1,4 +1,5 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { BusyPlace } from "../kit/wait";
 import { Button } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
 import type { Daemon } from "../../core/more/daemon";
@@ -200,7 +201,7 @@ export function ModelPanel(props: {
               </View></If>
             <If when={!activating() && !problem() && rows().length === 0}><Text class="text-sm text-muted-foreground">No configured runtime is available. Sync models in Settings.</Text></If>
           </View>
-        </Scroll>}><Text class="py-8 text-center text-sm text-muted-foreground">Loading models…</Text></If>
+        </Scroll>}><BusyPlace label="Reading models" testID="models-loading" rows={4} /></If>
     </View>
   );
 }

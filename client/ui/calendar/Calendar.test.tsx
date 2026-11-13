@@ -278,10 +278,13 @@ describe("the Calendar tab", () => {
     expect(app.shows("id:calendar-alert-card")).toBe(false);
   }, 20_000);
 
-  test("says the calendar is offline when the computer is not reachable", async () => {
+  test("the computer out of reach: a wait (placeholder rows, no words), then the computer is offline; never \"Nothing planned\" before a read", async () => {
     const app = await open("../App.tsx", { host: phoneHost({}), storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://calendar" });
-    await app.waitFor("text:Calendar offline", { timeout: 15_000 });
+    await app.waitFor("id:placeholder-rows", { timeout: 5_000 });
+    expect(app.shows("text:Nothing planned")).toBe(false);
+    await app.waitFor("text:Desk is offline", { timeout: 15_000 });
+    expect(app.shows("text:Nothing planned")).toBe(false);
   }, 20_000);
 });
 

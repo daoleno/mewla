@@ -1,4 +1,5 @@
 import { Clipboard, cleanup, effect, signal, Text, untracked, View } from "nsh";
+import { bounded, NoAnswer } from "../../../core/motion/wait";
 import { failureText } from "../../../core/more/daemon";
 import { serverAddressForDisplay, serverAddressProblem, setServerAutoConnect, updateServer, type StoredServer } from "../../../core/servers";
 import {
@@ -120,9 +121,10 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
     busy.set(key);
     note(key, "");
     try {
-      await work();
+      // No endless wait (SPEC §16.4 Settings actions): at `wait.fail` its line says so, in ink, and it can be tried again.
+      await bounded(work());
     } catch (error) {
-      note(key, failureText(error, "That didn't finish"));
+      note(key, error instanceof NoAnswer ? `${server()?.name || "Your computer"} didn't answer` : failureText(error, "That didn't finish"));
     } finally {
       busy.set("");
     }
