@@ -622,7 +622,7 @@ function ConnectionSheet(props: {
   onKeepAwake: () => void;
 }) {
   return (
-    <Sheet testID="screen-connection" open={props.open} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet px-4 pb-8 pt-4 shadow-float" backdropClass="bg-scrim">
+    <Sheet testID="screen-connection" open={props.open} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet pb-8 pt-4 shadow-float" sidePadding={16} backdropClass="bg-scrim">
       <View class="gap-4 px-2">
         <Text class="text-title font-bold" role="header">Connection</Text>
         <If when={props.problem}>{(problem) => <View class="items-start gap-1">

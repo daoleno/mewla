@@ -694,7 +694,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         }} />
       <CodexSkillsSheet open={skillsOpen} onClose={() => skillsOpen.set(false)} transport={transport} cwd={worker()?.cwd}
         onPick={(name) => text.set(insertSkillMention(untracked(text.text), name))} />
-      <AppSheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3" backdropClass="bg-black/40">
+      <AppSheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background py-4 gap-3" sidePadding={16} backdropClass="bg-black/40">
         <View class="gap-3 pb-6">
           <Text class="text-lg font-semibold">Rename</Text>
           <Text class="text-sm text-muted-foreground">A name for this Session on this phone. Empty uses its own name.</Text>

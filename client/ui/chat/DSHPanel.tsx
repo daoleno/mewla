@@ -65,7 +65,7 @@ export function DSHPanel(props: { transport: Transport; run: DSHSessionRun }) {
         </View></If>
       <If when={error()}><Text class="pb-1.5 text-sm text-destructive">{error()}</Text></If>
       <Sheet open={open() && Boolean(first())} onOpenChange={({ open: next }) => open.set(next)} closeOnSwipe
-        popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
+        popupClass="rounded-t-2xl bg-background pt-4" sidePadding={16} backdropClass="bg-black/40">
         <View class="gap-3 pb-8">
           <If when={first()?.payload.type === "approval/requested"} else={<If when={first()}><View class="gap-3">
               {(first()!.payload.questions ?? []).map((question) => (

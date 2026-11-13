@@ -47,7 +47,7 @@ export function SkillImage(props: { path: string | null; alt?: string; problem?:
 /** One picture of the copy at a time, full width, with the copy's other pictures before and after it. */
 export function SkillImageViewer(props: { images: readonly string[]; start: string | null; read: ImageReader; onClose: () => void }) {
   return (
-    <Sheet open={props.start !== null} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="h-[94%] rounded-t-(--radius-sheet) bg-sheet px-4 pb-8 pt-3 shadow-float" backdropClass="bg-scrim">
+    <Sheet open={props.start !== null} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="h-[94%] rounded-t-(--radius-sheet) bg-sheet pb-8 pt-3 shadow-float" sidePadding={16} backdropClass="bg-scrim">
       <If when={props.start !== null}><ViewerBody images={props.images} start={props.start!} read={props.read} onClose={props.onClose} /></If>
     </Sheet>
   );
