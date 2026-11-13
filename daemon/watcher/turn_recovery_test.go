@@ -419,7 +419,7 @@ func TestSuperviseDelegatedTurnsTellsBrainOnceWhenWorkerStopped(t *testing.T) {
 		t.Fatalf("stalls=%+v submits=%v, want exactly one escalation and no resume", ledger.stalls, submits)
 	}
 	got := ledger.stalls[0]
-	if got.Reason != "stopped" || !strings.HasPrefix(got.Summary, "Worker stopped; review the result") ||
+	if got.Reason != "stopped" || !strings.HasPrefix(got.Summary, "Worker's turn ended without a progress report; review the result") ||
 		!strings.Contains(got.Summary, "Stage 1 is built and checked") {
 		t.Fatalf("stall = %+v", got)
 	}
@@ -642,5 +642,35 @@ func TestSuperviseDelegatedTurnsStoppedWaitsWhileThePaneKeepsChanging(t *testing
 	poll(last.Add(grace+time.Second), "● The protocol map is back, with four key facts:\n- brain_snapshot carries no messages.")
 	if len(ledger.stalls) != 1 || ledger.stalls[0].Reason != "stopped" {
 		t.Fatalf("a pane that stopped moving must escalate once after the grace: %+v", ledger.stalls)
+	}
+}
+
+// Claude leaves a dim prompt suggestion in its composer after a turn, which a
+// plain screen capture reads as typed text. A turn the agent itself said it
+// ended (its Stop hook) has stopped whatever the composer shows, so Brain hears
+// after StoppedAfter, not at the Worker's lease (owner 2026-11-13).
+func TestSuperviseDelegatedTurnsAgentReportedStopIgnoresThePromptSuggestion(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	settled := time.Date(2026, 11, 13, 13, 3, 0, 0, time.UTC)
+	stopped := func(at time.Time, reported bool) probedPollWorker {
+		item := stalledPollItem(at, settled, "a1", nil)
+		item.workerSnap.Command = "claude --session-id 304ebc75-4efb-4742-a93a-7933248a9418"
+		item.content = "● Both commands ran.\n✻ Churned for 8s · done 21:03\n────\n❯ ls hook-proof.txt\n────\n  ⏵⏵ bypass permissions on (shift+tab to cycle)"
+		item.turn.LeaseDeadline = settled.Add(time.Hour)
+		item.provider.AgentReported = reported
+		return item
+	}
+	grace := DefaultTurnRecoveryPolicy().StoppedAfter
+	first := settled.Add(5 * time.Second)
+	w.superviseDelegatedTurns([]probedPollWorker{stopped(first, false)})
+	w.superviseDelegatedTurns([]probedPollWorker{stopped(first.Add(grace+time.Minute), false)})
+	if len(ledger.stalls) != 0 {
+		t.Fatalf("a screen read alone escalated past the composer text: %+v", ledger.stalls)
+	}
+	w.superviseDelegatedTurns([]probedPollWorker{stopped(first.Add(grace+2*time.Minute), true)})
+	if len(ledger.stalls) != 1 || ledger.stalls[0].Reason != "stopped" || len(submits) != 0 {
+		t.Fatalf("stalls=%+v submits=%v, want one stopped escalation", ledger.stalls, submits)
 	}
 }

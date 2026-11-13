@@ -1822,7 +1822,7 @@ func controlWorker(worker *classifier.Worker) control.Worker {
 		ExpectedNextCheckAt: worker.ExpectedNextCheckAt,
 		LeaseSeconds:        worker.LeaseSeconds,
 		Cwd:                 worker.Cwd,
-		Command:             worker.Command,
+		Command:             work.ShownCommand(worker.Command),
 		ExecutorID:          worker.ExecutorID,
 		UpdatedAt:           worker.UpdatedAt,
 		LastSeenAt:          lastSeenAt,

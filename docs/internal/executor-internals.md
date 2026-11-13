@@ -71,7 +71,11 @@ reviews an individual action.
   two `--settings` is left as written and followed from its transcript. Until
   2026-11-13 the route payload made the adapter leave the hook file off, so no
   routed Claude had hooks: no SessionStart binding, hook events or hook-answered
-  permissions; their prompts reached Brain only as screen dialogs.
+  permissions; their prompts reached Brain only as screen dialogs. The hooks are
+  launch plumbing, not something a person reads: every command shown (the app's
+  `worker_session.command`, so `session_created` and the Session list and
+  details, and `mewla worker` output) leaves Mewla's `agent-event` hooks out of
+  the inline JSON (`work.ShownCommand`); the Session keeps the full command.
 - **Reported transcript path of a resumed conversation.** Resumed from another
   folder, Claude 2.1.323 reports on `SessionStart` (source `resume`) the
   transcript path for the new cwd, which does not exist, and the born-in file on
