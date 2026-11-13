@@ -63,6 +63,26 @@ describe("the floating screen: agents' displays and the Mac", () => {
     expect(shown.requests().some((r) => r.url === `${BASE}/display`)).toBe(false);
   }, 25_000);
 
+  test("a running Worker's own news (its activity, its output) does not ask the computer again", async () => {
+    const writer = session("%1", { name: "Writer" });
+    const shown = await app({ worker_sessions: [writer] }, {
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
+      [`GET ${BASE}/screen`]: json(linux),
+    });
+    await shown.waitFor("id:screen-float", { timeout: 10_000 });
+    const asked = () => shown.requests().filter((r) => r.url === `${BASE}/display`).length;
+    const before = asked();
+    for (let i = 0; i < 6; i++) {
+      await shown.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...writer, activity: `Step ${i}`, last_output_lines: [`line ${i}`], updated_at: Date.now() + i } });
+      await shown.wait(50);
+    }
+    await shown.wait(300);
+    expect(asked()).toBe(before);
+    // It stopping is news: nothing runs, so nothing is asked or shown.
+    await shown.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...writer, status: "done" } });
+    await shown.waitUntil(() => !shown.shows("id:screen-float"), { timeout: 5_000 });
+  }, 25_000);
+
   test("a Session's page shows its own Worker's screen only", async () => {
     const shown = await app({ worker_sessions: [session("%1", { name: "Writer" }), session("%2", { name: "Coder" })] }, {
       [`GET ${BASE}/display`]: json({ displays: [display("%2")], available: true }),
