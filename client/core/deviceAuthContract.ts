@@ -62,6 +62,17 @@ export function buildServerAssertionPayload(
   );
 }
 
+/**
+ * The signing key of a seed, made once: deriving it is a scalar multiplication, as long as the signature
+ * itself, and it ran on every signed request (a phone signs one per Files, Git or Screen read; ~40 ms each
+ * in the app's interpreter on an emulator). One device has one seed, so one is kept.
+ */
+let derived: { seed: string; secretKey: Uint8Array } | null = null;
+function secretKeyOf(seed: string): Uint8Array {
+  if (derived?.seed !== seed) derived = { seed, secretKey: nacl.sign.keyPair.fromSeed(hexToBytes(seed)).secretKey };
+  return derived.secretKey;
+}
+
 export function signDeviceAuthorization(input: {
   purpose: string;
   daemonId: string;
@@ -78,10 +89,9 @@ export function signDeviceAuthorization(input: {
   if (!seed || !nonceHex || !daemonId || !deviceId || !timestamp) {
     throw new Error("Invalid device authorization input.");
   }
-  const keyPair = nacl.sign.keyPair.fromSeed(hexToBytes(seed));
   const signature = nacl.sign.detached(
     buildSignaturePayload(input.purpose, daemonId, deviceId, timestamp, nonceHex),
-    keyPair.secretKey,
+    secretKeyOf(seed),
   );
   return `${DEVICE_AUTH_HEADER_PREFIX}v1:${deviceId}:${daemonId}:${timestamp}:${nonceHex}:${bytesToHex(signature)}`;
 }
