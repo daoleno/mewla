@@ -11,6 +11,8 @@ const CodeScanner = nativeComponent<{ active: boolean }, { scan: { value: string
 });
 
 const LIGHT = "#F4F0EA";
+/** How often a finder that says the camera is off asks the system again. */
+const DENIED_RECHECK_MS = 2000;
 const DARK = "#0A0908";
 
 /** Whether the camera is really looking for a code, for the line under the finder. */
@@ -31,26 +33,39 @@ export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => b
   const onScreen = () => props.onScreen?.() ?? true;
   const running = () => cameraRuns(state(), lifecycle() === "active", onScreen());
 
+  // Only the newest question's answer counts: an older one that comes back late never undoes it.
+  let asked = 0;
   const ask = async () => {
     if (!host.available()) return permission.set("denied");
+    const mine = ++asked;
     asking.set(true);
     const answer = readCameraPermission(await host.call("scan.request").catch(() => null));
     asking.set(false);
+    if (mine !== asked) return;
     permission.set(answer ?? "denied");
   };
   const check = async (askIfNew: boolean) => {
     if (!host.available()) return permission.set("denied");
+    const mine = ++asked;
     const answer = readCameraPermission(await host.call("scan.permission").catch(() => null)) ?? "denied";
+    if (mine !== asked) return;
     permission.set(answer);
     if (answer === "undetermined" && askIfNew) await ask();
   };
   void check(true);
-  // Back from Settings (or the system prompt): ask the system again what it says now.
+  // Back from Settings (or the system prompt), or the finder on screen again: ask the system what it says now.
   effect(() => {
-    if (lifecycle() !== "active") return;
+    if (lifecycle() !== "active" || !onScreen()) return;
     untracked(() => {
       if (permission() !== null && !asking()) void check(false);
     });
+  });
+  // Off, the camera can come back on with no sign to the app (a grant from outside it, the Simulator's included):
+  // while the finder says so, it asks again now and then.
+  effect(() => {
+    if (state() !== "denied" || lifecycle() !== "active" || !onScreen()) return;
+    const timer = setInterval(() => void check(false), DENIED_RECHECK_MS);
+    cleanup(() => clearInterval(timer));
   });
   effect(() => scannerSearching.set(cameraSearching(state(), lifecycle() === "active" && onScreen(), pairingBusy())));
   cleanup(() => scannerSearching.set(false));
