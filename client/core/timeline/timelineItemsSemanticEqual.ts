@@ -5,6 +5,7 @@
  * From the Expo app's components/terminal/timelineItemsSemanticEqual.ts.
  */
 
+import { sameProgress } from "../work/judgedProgress";
 import { sameResultActions } from "../work/resultActions";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { ToolDeveloperDetails } from "./toolCallDetails";
@@ -152,6 +153,7 @@ function brainCurrentWorkEqual(
     left.wake?.ref === right.wake?.ref &&
     left.attention_state === right.attention_state &&
     left.unread_result === right.unread_result &&
+    sameProgress(left.progress, right.progress) &&
     brainSessionFinalizationsEqual(
       left.session_finalizations,
       right.session_finalizations,

@@ -11,6 +11,9 @@ import {
   BRAIN_WORK_SNOOZE_SECONDS, brainWorkActions, brainWorkAskDraft, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
 } from "../../core/work/actions";
 import type { BrainWorkSlip } from "../../core/work/surface";
+import { progressBackLine, progressOutcomes, type BrainWorkProgress, type JudgedOutcomeState } from "../../core/work/judgedProgress";
+import { OutcomeMark, ProgressHalo } from "../kit/ProgressHalo";
+import { AgentIcon } from "../icons/AgentIcon";
 import { clock } from "../calendar/clock";
 import { createAttachmentUploads } from "../more/files/upload";
 import { brainDraft, connection, currentTransport, workers } from "../session";
@@ -147,6 +150,37 @@ function Workers(props: { lines: () => WorkWorkerLine[]; project: () => string |
                 <RowEnd row={() => row} />
                 <If when={!(index === list.length - 1)}><RowHair /></If>
               </Button>
+            ))}
+          </View>
+        </></If>
+    </View>
+  );
+}
+
+const OUTCOME_WORDS: Record<JudgedOutcomeState, string> = { done: "done", doing: "under way", todo: "to do" };
+
+/**
+ * Its outcomes (SPEC §11 Progress, Work detail): why it went back when it did, in amber; then the outcomes the
+ * judge keeps, in its order, each marked done, under way or to do. None before a judgment.
+ */
+function Progress(props: { progress: () => BrainWorkProgress | undefined }) {
+  const outcomes = () => progressOutcomes(props.progress());
+  const back = () => progressBackLine(props.progress());
+  return (
+    <View>
+      <If when={outcomes().length}><>
+          <Caption role="header" class="mb-2 mt-6 px-4" text="Outcomes" />
+          <View testID="work-progress" class="overflow-hidden rounded-(--radius-group) bg-card">
+            <If when={back()}><View testID="work-progress-back" class="min-h-[44px] flex-row items-center gap-3 px-4 py-2.5">
+                <View class="size-[20px] items-center justify-center"><View class="size-2 rounded-full bg-warning" /></View>
+                <Text class="min-w-0 flex-1 text-sub font-semibold">{back()}</Text>
+              </View></If>
+            {outcomes().map((outcome, index) => (
+              <View testID={`work-outcome-${outcome.state}`} accessibilityLabel={`${outcome.text}, ${OUTCOME_WORDS[outcome.state]}`}
+                class={`min-h-[44px] flex-row items-center gap-3 px-4 py-2.5 ${index === 0 && !back() ? "" : "border-t border-border"}`}>
+                <OutcomeMark state={() => outcome.state} />
+                <Text class={`min-w-0 flex-1 text-sub ${outcome.state === "done" ? "text-muted-foreground" : ""}`}>{outcome.text}</Text>
+              </View>
             ))}
           </View>
         </></If>
@@ -313,6 +347,11 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
           onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
           <If when={!slip() && closed()} else={<If when={!slip()} else={<View>
               <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />
+              {/* Its progress (§11 Progress): the ring around its Worker's logo (Brain's mark with several or none), no number. */}
+              <If when={slip()!.mark}>{(mark) => <View class="px-1 pt-3"><View class="size-[56px] items-center justify-center">
+                  <View class="absolute" style={{ left: 0, top: 0 }}><ProgressHalo mark={() => mark()!} size={56} testID="work-progress-ring" /></View>
+                  <If when={workerLines().length === 1} else={<Icon name="brain" size={26} tone="ink" />}><AgentIcon kind={workerLines()[0]?.agent ?? "terminal"} flavor={workerLines()[0]?.flavor} size={28} /></If>
+                </View></View>}</If>
               <Brief text={brief} />
               <If when={slip()!.summary && !slip()!.question}><View selectable class="px-1 pt-3"><Text testID="work-question" class="text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View></If>
               <If when={brainWorkWaitForLine(slip()!)}><View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View></If>
@@ -329,6 +368,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
                     {answers().map((action) => <AnswerRow action={action} slip={() => slip()!} onPress={() => void runWorkAction(action, slip()!, context())} />)}
                   </View>
                 </></If>
+              <Progress progress={() => slip()!.progress} />
               <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
               <View testID="work-links" class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
                 <If when={file()}><GroupRow testID="work-file" icon="document-text" label="Work file" value={file()!.path.split("/").pop()} chevron first

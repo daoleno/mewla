@@ -1,3 +1,4 @@
+import { workProgressMark, type BrainWorkProgress, type ProgressMark } from "./judgedProgress";
 import type { CalendarClock, CalendarItem } from "../calendar/model";
 import { readableSummary } from "../sessions/activity";
 import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef, WorkWorkerSession } from "./types";
@@ -143,6 +144,10 @@ export type BrainWorkSlip = {
   waitFor?: string;
   /** A running Worker's reported phase ("verifying"). */
   phase?: string;
+  /** The judged progress (`judgedProgress.ts`), while the Work is open: Work detail lists its outcomes. */
+  progress?: BrainWorkProgress;
+  /** What its row and card draw of it (`workProgressMark`); none while a person has a part, or before a judgment. */
+  mark?: ProgressMark;
   /** Waiting on a decision since then (immutable while it waits). */
   attentionSince?: string;
   waitedMs?: number;
@@ -293,6 +298,8 @@ export function brainWorkSurface(
       closed: terminal || undefined,
       calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
       workerSessions: work.worker_sessions,
+      progress: terminal ? undefined : work.progress,
+      mark: workProgressMark(work),
     });
   }
   const listed = new Set(slips.map((slip) => slip.workId));

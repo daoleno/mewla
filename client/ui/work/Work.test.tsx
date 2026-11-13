@@ -119,12 +119,36 @@ describe("Brain's Work", () => {
     expect(app.texts()).toContain("Ended");
     expect(app.texts()).toContain("release");
     expect(app.texts().some((text) => text.startsWith("Claude Code ·") || text.startsWith("OpenAI Codex ·"))).toBe(false);
-    expect(app.count("id:work-workers >> id:tray-progress")).toBe(1);
+    // A Worker's row has no progress of its own: the judged one is the Work's (SPEC §11 Progress).
+    expect(app.count("id:work-workers >> id:progress-mark")).toBe(0);
     // The live one ends in its live dot and how long it has worked on the Work, as a tray row does.
     expect(app.count("id:work-workers >> id:row-live")).toBe(1);
     expect(app.enabled("id:work-worker >> nth=0")).toBe(false);
     await app.press("id:work-worker >> nth=1");
     await app.waitFor("id:session-status");
+  }, 20_000);
+
+  test("its progress: why it went back, in amber, then the judge's outcomes in order, each done, under way or to do", async () => {
+    const daemon = brain();
+    const current_work = daemon.current_work.map((work) => (work.work_id === "w-run" ? { ...work, progress: { stage: "back", percent: 60, back: "More was asked", outcomes: [
+      { id: "o1", text: "Parser committed with tests", weight: 2, state: "done" },
+      { id: "o2", text: "Crossed tags fixed", weight: 1, state: "doing" },
+      { id: "o3", text: "README updated", weight: 1, state: "todo" },
+    ] } } : work));
+    const app = await workApp({ brain: { ...daemon, current_work } });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-progress");
+    expect(app.texts()).toContain("Outcomes");
+    expect(app.shows("label:60 percent, sent back")).toBe(true);
+    expect(app.texts()).toContain("More was asked");
+    expect(app.count("id:work-outcome-done")).toBe(1);
+    expect(app.count("id:work-outcome-doing")).toBe(1);
+    expect(app.count("id:work-outcome-todo")).toBe(1);
+    expect(app.shows("label:Crossed tags fixed, under way")).toBe(true);
+    // A Work not judged yet has no Progress group.
+    await app.back();
+    await openWork(app, "w-back");
+    expect(app.count("id:work-progress")).toBe(0);
   }, 20_000);
 
   test("the live daemon's Claude Worker: \"Hello writer\", never its (mh-…) id nor its terminal footer", async () => {

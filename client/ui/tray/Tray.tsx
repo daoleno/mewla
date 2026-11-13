@@ -17,6 +17,7 @@ import { requestPaneKey, rowKey } from "../../core/tray/pane";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { showDeviceRequest } from "../enrollment/state";
 import { RowEnd, RowHair, RowText, RowTile } from "./rowParts";
+import { progressMarkLabel } from "../../core/work/judgedProgress";
 import { setTraySort, tray, traySort } from "./state";
 
 /** Where the tray's rows open their pages: pushed over home (the phone's overlay) or in place of the page above Brain (the left pane). */
@@ -92,10 +93,10 @@ export function SelectedWell() {
 function TrayRow(props: { row: () => Row; onPress: () => void; selected?: boolean; last?: boolean }) {
   const row = props.row;
   return (
-    <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
+    <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end, row().mark ? progressMarkLabel(row().mark!) : ""].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
       class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
       <If when={props.selected}><SelectedWell /></If>
-      <RowTile tile={() => row().tile} />
+      <RowTile tile={() => row().tile} mark={() => row().mark} />
       <RowText row={row} />
       <RowEnd row={row} />
       <If when={!(props.selected || props.last)}><RowHair /></If>

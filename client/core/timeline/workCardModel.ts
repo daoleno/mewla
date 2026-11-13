@@ -7,6 +7,7 @@
 import type { BrainWorkEventKind } from "./brainWorkEvent";
 import type { BrainWorkEventTimelineItem } from "./types";
 import type { ResultAction } from "../work/types";
+import { workProgressMark, type ProgressMark } from "../work/judgedProgress";
 import { workerName } from "../work/workers";
 
 export type WorkCardKind = "live" | "needs" | "result" | "line";
@@ -27,6 +28,8 @@ export interface WorkCardModel {
   unread: boolean;
   /** A result's next steps, as the computer found them truthfully offered (WIRE §4). */
   actions: readonly ResultAction[];
+  /** A live Work's judged progress, as its tray row draws it (`workProgressMark`). */
+  mark?: ProgressMark;
 }
 
 const RESULT_STATE: Record<BrainWorkEventKind, string> = {
@@ -52,7 +55,7 @@ export function workCardModel(item: Pick<BrainWorkEventTimelineItem, "event" | "
     actions: event.actions ?? [],
   };
   if (status === "running" || status === "open" || status === "waiting") {
-    return { ...base, kind: "live", summary: work?.wait_for || work?.summary || event.summary, state: status === "running" ? "Running" : "Waiting", unread: false };
+    return { ...base, kind: "live", summary: work?.wait_for || work?.summary || event.summary, state: status === "running" ? "Running" : "Waiting", unread: false, mark: work ? workProgressMark(work) : undefined };
   }
   const needs = status === "needs_input" || (!status && event.kind === "session.needs_input");
   if (needs) return { ...base, kind: "needs", summary: work?.question || event.summary, state: "Needs you", unread: false };
