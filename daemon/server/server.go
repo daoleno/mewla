@@ -178,6 +178,8 @@ type Server struct {
 	live                       liveHub // live state, see live_state.go
 	uploadDir                  string
 	uploadStore                *attachment.Store
+	// firstMessageSend submits a create_session's first message once the agent is ready (tests replace it).
+	firstMessageSend           func(workerID, command, text string) error
 	sessionFileWorkerLoader    func(workerID string) *classifier.Worker
 	sessionFileCapabilityClock func() time.Time
 	authRevocationUnsubscribe  func()
@@ -1256,6 +1258,16 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			}
 			command = ensured
 		}
+		firstMessage, firstErr := s.prepareFirstMessage(command, raw.Text, raw.Attachments)
+		if firstErr != nil {
+			code := "create_session_failed"
+			var refused *firstMessageError
+			if errors.As(firstErr, &refused) {
+				code = refused.code
+			}
+			s.sendErrorWithRequestID(conn, raw.RequestID, code, firstErr.Error())
+			return
+		}
 		connectionID := strings.TrimSpace(raw.ConnectionID)
 		if connectionID == "" {
 			connectionID = strings.TrimSpace(raw.ProfileID)
@@ -1283,8 +1295,15 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			"request_id": raw.RequestID,
 			"worker_id":  workerID,
 		}
+		launched := command
 		if worker := s.watcher.GetWorker(workerID); worker != nil {
 			response["worker_session"] = s.workerSessionWire(worker)
+			if strings.TrimSpace(worker.Command) != "" {
+				launched = worker.Command
+			}
+		}
+		if firstMessage != nil {
+			response["first_message"] = "pending"
 		}
 		if routeSnap != nil {
 			response["session_route"] = routeSnap
@@ -1297,6 +1316,9 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			}
 		}
 		s.sendJSON(conn, response)
+		if firstMessage != nil {
+			go s.deliverFirstMessage(workerID, launched, raw.RequestID, firstMessage)
+		}
 	case "kill_worker":
 		teardown := s.teardownWorkerSession(raw.WorkerID)
 		if teardown.Err != nil {
