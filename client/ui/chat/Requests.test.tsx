@@ -210,7 +210,24 @@ describe("a Work in Brain's thread", () => {
     await app.waitFor("id:work-detail");
   }, 20_000);
 
-  test("a Worker line names the Worker without its Session id and never shows its terminal footer", async () => {
+  test("a Work's state is its most urgent Worker's: Needs you over a running Worker, never Running", async () => {
+    const a = "mh-aaaa", b = "mh-bbbb";
+    const current_work = [{ work_id: "w2", revision: 1, title: "Docs refresh", status: "running", unread_result: false, attempt_session_id: a,
+      worker_sessions: [
+        { session_id: a, name: "Quickstart rewrite", provider: "claude", state: "running", summary: "Rewriting the quickstart", live: true, joined_at: "2026-11-12T11:00:00Z", updated_at: "2026-11-12T11:01:00Z" },
+        { session_id: b, name: "Screenshot refresh", provider: "codex", state: "running", summary: "Retaking screenshots", live: true, joined_at: "2026-11-12T11:00:00Z", updated_at: "2026-11-12T11:01:00Z" },
+      ] }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
+      brain: { ...brain, current_work },
+      worker_sessions: [session(a, { name: "Quickstart rewrite", status: "running" }), session(b, { name: "Screenshot refresh", status: "blocked", needs_attention: true, delegated: true })],
+      conversations: { "brain-host": [result({ unread: false, title: "Docs refresh", work_id: "w2" })] },
+    }) });
+    await app.waitFor("id:work-card-state", { timeout: 10_000 });
+    expect(app.texts()).toContain("Needs you");
+    expect(app.count("id:work-card-worker")).toBe(2);
+  }, 20_000);
+
+  test("a Work with one Session is that Session's row, named without its Session id and never by its terminal footer", async () => {
     const id = "mh-17b3337d43f38037916f0e5b";
     const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
     const current_work = [{ work_id: "w1", revision: 2, title: "Hello file", status: "running", unread_result: false, attempt_session_id: id,
@@ -219,7 +236,9 @@ describe("a Work in Brain's thread", () => {
       brain: { ...brain, current_work }, worker_sessions: [session(id, { name: `Hello writer (${id})`, status: "running", summary: footer, last_output_lines: [footer] })],
       conversations: { "brain-host": [result({ unread: false, title: "Hello file" })] },
     }) });
-    await app.waitFor("id:work-card-worker", { timeout: 10_000 });
+    await app.waitFor("id:work-card-one", { timeout: 10_000 });
+    // No title row: the Work's title is not written over its one Session's row.
+    expect(app.count("id:work-card-title")).toBe(0);
     const shown = app.texts().join(" ");
     expect(shown).toContain("Hello writer");
     expect(shown).not.toContain("(mh-");
