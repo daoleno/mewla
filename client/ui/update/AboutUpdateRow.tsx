@@ -2,6 +2,7 @@ import { Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { appUpdateRow, type AppUpdateRowModel } from "../../core/update/appUpdate";
 import { Meter, Row, Spinner } from "../kit/kit";
+import { tile } from "../kit/RowTile";
 import { appUpdate, type AppUpdate } from "./update";
 
 /**
@@ -19,7 +20,7 @@ function updateRow(model: AppUpdateRowModel, press: () => void) {
   return (
     <Row
       testID="app-update"
-      icon={model.progress !== undefined ? "download" : "refresh"}
+      lead={tile("graphite", model.progress !== undefined ? "download" : "refresh")}
       title={model.title}
       subtitle={model.subtitle}
       value={model.value}
@@ -32,7 +33,7 @@ function updateRow(model: AppUpdateRowModel, press: () => void) {
           </Button>
         ) : model.progress !== undefined ? (
           <View style={{ width: 64 }}>
-            <Meter share={model.progress} tone="ink" height={4} />
+            <Meter share={model.progress} tone="meter" height={4} />
           </View>
         ) : model.busy ? (
           <Spinner size={16} />

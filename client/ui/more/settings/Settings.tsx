@@ -1,10 +1,11 @@
-import { cleanup, effect, host, Image, openUrl, platform, signal, Storage, setColorScheme, untracked, View, lifecycle } from "nsh";
+import { cleanup, effect, host, openUrl, platform, signal, Storage, setColorScheme, untracked, View, lifecycle } from "nsh";
 import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
 import { phoneAvailable, phoneLabsWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
-import { Page, Row, Section, StatusMark, SwitchRow } from "../../kit/kit";
+import { Page, Row, RowButton, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { StateLine, tile } from "../../kit/RowTile";
 import { followFriends, friendsEnabled } from "../friends/state";
 import { pet } from "../../pets/pets";
 import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";
@@ -123,14 +124,18 @@ export function Settings(props: { nav: PageNav }) {
       <Section title="Channels">
         <Row
           testID="settings-telegram"
-          icon="paper-plane"
+          lead={{ kind: "mark", mark: "telegram" }}
           title="Telegram"
           subtitle={current() ? telegramRow().subtitle : "No current server"}
           disabled={!current()}
-          trailing={current() && telegramRow().status ? <StatusMark status={telegramRow().status!} label={telegramRow().label} /> : undefined}
+          trailing={!current() ? undefined
+            : telegramRow().loading ? <Spinner size={16} />
+            : telegramRow().connect ? <RowButton testID="settings-telegram-connect" label="Connect" accessibilityLabel="Connect Telegram" onPress={() => props.nav.push({ name: "settings-telegram" })} />
+            : telegramRow().tone && telegramRow().label ? <StateLine testID="settings-telegram-state" tone={telegramRow().tone!} label={telegramRow().label!} />
+            : undefined}
           accessibilityLabel={current() ? telegramRowLabel() : "Telegram, No current server"}
           accessibilityHint={current() ? "Open Telegram details and actions" : undefined}
-          chevron={Boolean(current())}
+          chevron={Boolean(current()) && !telegramRow().connect}
           onPress={current() ? () => props.nav.push({ name: "settings-telegram" }) : undefined}
         />
       </Section>
@@ -138,7 +143,7 @@ export function Settings(props: { nav: PageNav }) {
       <Section title="Agents">
         <Row
           testID="settings-providers"
-          icon="key"
+          lead={tile("violet", "key")}
           title="Model Providers"
           subtitle={current() ? undefined : "No current server"}
           accessibilityHint="Choose how Codex and Claude connect to models"
@@ -147,7 +152,7 @@ export function Settings(props: { nav: PageNav }) {
         />
         <Row
           testID="settings-outside-agents"
-          icon="brain"
+          lead={tile("violet", "brain")}
           title="Outside agents"
           subtitle={current() ? undefined : "No current server"}
           disabled={!current()}
@@ -158,18 +163,19 @@ export function Settings(props: { nav: PageNav }) {
       </Section>
 
       <Section title="Labs">
-        {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" icon="desktop" title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
-        {onWeb() ? null : <Row testID="settings-friends" icon="people" title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />}
-        {!onWeb() && phoneAvailable() ? <Row testID="settings-phone" icon="phone" title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
-        {!onWeb() && iphoneOffered(iphone()) ? <Row testID="settings-iphone" icon="phone" title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
+        {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" lead={tile("blue", "desktop")} title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
+        {onWeb() ? null : <Row testID="settings-friends" lead={tile("pink", "people")} title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />}
+        {!onWeb() && phoneAvailable() ? <Row testID="settings-phone" lead={tile("blue", "phone")} title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
+        {!onWeb() && iphoneOffered(iphone()) ? <Row testID="settings-iphone" lead={tile("blue", "phone")} title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
       </Section>
 
       {onWeb() ? null : (
         <Section title="Calendar">
-          <SwitchRow testID="strong-alerts" title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
+          <SwitchRow testID="strong-alerts" lead={tile("pink", "bell")} title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
           {platform.os === "android" && strongAlerts() && fullScreenAllowed() === false ? (
             <Row
               testID="full-screen-alerts"
+              lead={tile("pink", "lock")}
               title="Allow full-screen alerts"
               chevron
               onPress={() => void host.call("calendar.alertsOpenSettings").catch(() => {})}
@@ -182,7 +188,7 @@ export function Settings(props: { nav: PageNav }) {
         {(["system", "light", "dark"] as const).map((choice) => (
           <Row
             testID={`appearance-${choice}`}
-            icon={choice === "system" ? "contrast" : choice === "light" ? "sun" : "moon"}
+            lead={tile("graphite", choice === "system" ? "contrast" : choice === "light" ? "sun" : "moon")}
             title={choice === "system" ? "Auto" : choice === "light" ? "Light" : "Dark"}
             check={appearance() === choice}
             role="radio"
@@ -193,15 +199,15 @@ export function Settings(props: { nav: PageNav }) {
       </Section>
 
       <Section title="Pet">
-        <Row testID="settings-pet" leading={<Image src={pet().art.portrait} style={{ width: 22, height: 22 }} />} title="Pet" value={pet().name} chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
+        <Row testID="settings-pet" lead={{ kind: "art", src: pet().art.portrait }} title="Pet" value={pet().name} chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
       </Section>
 
       <Section title="About">
-        <Row title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
+        <Row lead={tile("graphite", "info")} title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
         <AboutUpdateRow />
-        <Row icon="shield-check" title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
-        <Row icon="help" title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
-        <Row testID="settings-licenses" icon="book" title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />
+        <Row lead={tile("graphite", "shield-check")} title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
+        <Row lead={tile("graphite", "help")} title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
+        <Row testID="settings-licenses" lead={tile("graphite", "book")} title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />
       </Section>
       <View class="h-6" />
     </Page>

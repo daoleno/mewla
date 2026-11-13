@@ -6,6 +6,7 @@ import { wide } from "../shell/layout";
 import { NavPage } from "../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
+import { RowTile, type Lead } from "./RowTile";
 import { spinnerRadius } from "../../core/more/spinner";
 import { showAlert } from "../shell/alert";
 import { haptic } from "../shell/haptics";
@@ -166,10 +167,10 @@ export function SearchField(props: { value: string; placeholder: string; onChang
   );
 }
 
-/** A small ghost button on a row (Connect, Reconnect, Allow): 32 pt, canvas pill, 15/600. */
+/** A small ghost button on a row (Connect, Set up, Fix, Sign in): 36 high, radius 12, on the canvas, 15/600 (SPEC §10.4). */
 export function RowButton(props: { label: string; onPress: () => void; disabled?: boolean; accessibilityLabel?: string; testID?: string }) {
   return (
-    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} hitSlop={6} class="h-8 items-center justify-center rounded-full bg-background px-3.5 active:opacity-70 disabled:opacity-40">
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} hitSlop={4} class="h-9 items-center justify-center rounded-xl bg-background px-3.5 active:opacity-70 disabled:opacity-40">
       <Text class="text-sub font-semibold">{props.label}</Text>
     </Button>
   );
@@ -251,6 +252,8 @@ export interface RowProps {
   subtitle?: string;
   value?: string;
   icon?: IconName;
+  /** Behind the first level (SPEC §10.4): the row's mark, art or tiled glyph, in place of a grey `icon`. */
+  lead?: Lead;
   leading?: JSX.Element;
   trailing?: JSX.Element;
   chevron?: boolean;
@@ -276,8 +279,8 @@ export interface RowProps {
 /** One row: a glyph, a title over a subtitle, a value or a control, a chevron when it opens something. */
 export function Row(props: RowProps) {
   const body = (
-    <View class="min-h-[56px] flex-row items-center gap-3 px-4 py-3">
-      {props.leading ?? (props.icon ? <Icon name={props.icon} size={24} tone={props.destructive ? "ink" : "soft"} /> : null)}
+    <View class={`min-h-[56px] flex-row items-center px-4 py-3 ${props.lead ? "gap-3.5" : "gap-3"}`}>
+      {props.leading ?? (props.lead ? <RowTile lead={props.lead} /> : props.icon ? <Icon name={props.icon} size={24} tone={props.destructive ? "ink" : "soft"} /> : null)}
       <View class="min-w-0 flex-1">
         <Text class={props.destructive ? "text-body text-destructive" : props.mono ? "font-mono text-code" : "text-body"} style={{ numberOfLines: 2 }}>{props.title}</Text>
         {props.subtitle ? <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-3">{props.subtitle}</Text> : null}
@@ -286,7 +289,7 @@ export function Row(props: RowProps) {
       {props.trailing ?? null}
       {props.check ? <Icon name="check" tone="ink" size={20} /> : null}
       {props.chevron ? <Icon name="chevron-right" size={18} tone="faint" /> : null}
-      <Hairline inset={props.icon || props.leading ? 52 : 16} />
+      <Hairline inset={props.lead ? 60 : props.icon || props.leading ? 52 : 16} />
     </View>
   );
   if (!props.onPress && !props.onLongPress) {
@@ -323,10 +326,11 @@ export function Row(props: RowProps) {
 }
 
 /** A setting that takes effect at once. `busy` while the computer has not answered yet. */
-export function SwitchRow(props: { title: string; subtitle?: string; checked: boolean; busy?: boolean; disabled?: boolean; testID?: string; accessibilityLabel?: string; onChange: (checked: boolean) => void }) {
+export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead; checked: boolean; busy?: boolean; disabled?: boolean; testID?: string; accessibilityLabel?: string; onChange: (checked: boolean) => void }) {
   return (
     <Row
       title={props.title}
+      lead={props.lead}
       subtitle={props.subtitle}
       disabled={props.disabled}
       trailing={
@@ -339,7 +343,7 @@ export function SwitchRow(props: { title: string; subtitle?: string; checked: bo
             disabled={props.disabled || props.busy}
             onChange={({ checked }) => props.onChange(checked)}
             class="disabled:opacity-40"
-            trackClass="h-[30px] w-[50px] rounded-full bg-track checked:bg-primary"
+            trackClass="h-[30px] w-[50px] rounded-full bg-track checked:bg-ok"
             thumbClass="m-[2px] size-[26px] rounded-full bg-card checked:translate-x-[20px]"
           />
         </View>

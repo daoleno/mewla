@@ -1,3 +1,4 @@
+import type { StateTone } from "../more/colour";
 import type { Daemon } from "../more/daemon";
 
 /** The current computer's Telegram bot: Brain answers you in a private chat with it. */
@@ -81,10 +82,14 @@ export function telegramLabel(status: TelegramConnectionStatus | null, connected
   return "Connected";
 }
 
-/** The status word's colour: a warning while offline or degraded, ready once connected. */
-export function telegramLabelTone(label: string): "warning" | "ready" | "soft" {
-  if (label === "Server offline" || label === "Needs attention") return "warning";
-  return label === "Connected" ? "ready" : "soft";
+/**
+ * The status word's state (SPEC §10.4): `ok` once connected; `warn` while it needs setting up (awaiting the owner),
+ * is degraded, or its computer is away (nothing is blocked: Brain still answers in the app); `off` for nothing set up.
+ */
+export function telegramLabelTone(label: string): StateTone {
+  if (label === "Connected") return "ok";
+  if (label === "Server offline" || label === "Needs attention" || label === "Awaiting connection") return "warn";
+  return "off";
 }
 
 /** Who Brain's Telegram messages go to. */

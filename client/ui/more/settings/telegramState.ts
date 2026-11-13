@@ -1,8 +1,8 @@
 import { signal } from "nsh";
 import { failureText } from "../../../core/more/daemon";
-import { telegramLabel, telegramRequest, type TelegramConnectionStatus } from "../../../core/settings/telegram";
+import type { StateTone } from "../../../core/more/colour";
+import { telegramLabel, telegramLabelTone, telegramRequest, type TelegramConnectionStatus } from "../../../core/settings/telegram";
 import { connected, daemon } from "../daemon";
-import type { Status } from "../../kit/kit";
 
 /** The current computer's Telegram connection as Settings last read it. */
 export const telegram = signal<{ serverId: string; status: TelegramConnectionStatus | null; loading: boolean; error: string }>({
@@ -32,22 +32,21 @@ export function setTelegram(status: TelegramConnectionStatus): void {
   telegram.set({ serverId: daemon()?.server.id ?? "", status, loading: false, error: "" });
 }
 
-/** The row's second line and status mark. */
-export function telegramRow(): { subtitle?: string; status?: Status; label?: string } {
+/**
+ * The Settings row's second line and its state (SPEC §10.4): a spinner while first read, the state words with their
+ * dot once known, and a Connect button while no bot is set up.
+ */
+export function telegramRow(): { subtitle?: string; tone?: StateTone; label?: string; loading?: boolean; connect?: boolean } {
   const t = telegram();
   const status = t.serverId === daemon()?.server.id ? t.status : null;
   // Away from the computer nothing it said last is current.
   if (!connected()) return { subtitle: "Unavailable" };
-  if (t.loading && !status) return { status: "running", label: "Loading" };
-  if (t.error && !status) return { status: "failed", label: "Unavailable" };
+  if (t.loading && !status) return { loading: true, label: "Loading" };
+  if (t.error && !status) return { tone: "warn", label: "Unavailable" };
   if (!status) return {};
-  const word = { connected: "Connected", setup_pending: "Setup pending", degraded: "Degraded", disabled: "Disabled" }[status.state];
-  const tone: Status = status.state === "connected" ? "ready" : status.state === "setup_pending" ? "warning" : status.state === "degraded" ? "failed" : "neutral";
-  return {
-    subtitle: status.bot_username ? `@${status.bot_username}` : telegramLabel(status, connected(), false),
-    status: status.bot_username || status.state !== "disabled" ? tone : undefined,
-    label: word,
-  };
+  if (!status.bot_username) return { connect: true, label: "Not connected" };
+  const label = telegramLabel(status, true, false);
+  return { subtitle: `@${status.bot_username}`, tone: telegramLabelTone(label), label };
 }
 
 /** What a screen reader says for the row: "Telegram, @bot, Connected". */
