@@ -3,7 +3,9 @@ import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { BackHandler, isAvailable as mobile } from "nsh/mobile";
 import { forgetConnectionIssue } from "../more/settings/computers";
-import { currentTransport, resumeConnection } from "../session";
+import { current, currentTransport, resumeConnection, workersHydrated } from "../session";
+import { BusyLabel, delayed, Rows } from "../kit/wait";
+import { haptic } from "../shell/haptics";
 import { decideApproval, answerPrompt } from "../../core/conversation/turn";
 import { isPromptGoneError, PROMPT_GONE_NOTICE } from "../../core/timeline/claudeChoiceModel";
 import { DONE_SHOWN, RUNNING_SHOWN, TODAY_SHOWN, type TrayNoticeAction, type TrayRequest, type TrayRow as Row, type TrayTile } from "../../core/tray/model";
@@ -117,8 +119,11 @@ function RequestRow(props: { request: TrayRequest; busy: boolean; last?: boolean
         <Text testID="tray-request-line" class="text-sub text-muted-foreground line-clamp-1">{named() ? r().ask : r().source}</Text>
       </View>
       <Button testID={r().oneTap ? "tray-approve" : "tray-answer"} disabled={props.busy} onPress={() => (r().oneTap ? props.onApprove() : props.onOpen())}
-        class="h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 disabled:opacity-40">
-        <Text class="text-caption font-semibold text-seal-foreground">{r().oneTap ? "Approve" : "Answer"}</Text>
+        class={`h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"}`}>
+        {/* SPEC §16.2 pattern 5, in a 30 pt pill: the 16 pt ring. */}
+        <BusyLabel busy={props.busy} small label={r().oneTap ? "Approve" : "Answer"} tone="onSeal" testID="tray-request-ring">
+          <Text class="text-caption font-semibold text-seal-foreground">{r().oneTap ? "Approve" : "Answer"}</Text>
+        </BusyLabel>
       </Button>
       {props.last ? null : <RowHair />}
     </Button>
@@ -196,8 +201,9 @@ export function TrayBody(props: TrayBodyProps) {
     try {
       if (tap.kind === "approval") await decideApproval(transport, tap.workerId, tap.approvalId, tap.optionId);
       else await answerPrompt(transport, tap.workerId, tap.promptId, { number: tap.number });
+      haptic.impact("light");
     } catch (error) {
-      said.set(isPromptGoneError(error) ? PROMPT_GONE_NOTICE : "Couldn't send. Try again.");
+      said.set(isPromptGoneError(error) ? PROMPT_GONE_NOTICE : `Didn't reach ${current()?.name || "your computer"}`);
     } finally {
       busy.set("");
     }
@@ -229,6 +235,8 @@ export function TrayBody(props: TrayBodyProps) {
     if (picked === "opened" || picked === "activity") setTraySort(picked);
   };
   const m = () => tray();
+  const listed = () => m().needs.length + m().running.length + m().today.length + m().idle.length + m().done.length > 0;
+  const firstRead = delayed(() => !workersHydrated() && !m().notice && !listed());
   const selected = (key: string) => props.selected?.() === key;
   const running = () => (runningOpen() ? m().running : m().running.slice(0, RUNNING_SHOWN));
   // The last row of its group has no hair under it ("N more" follows Running's fifth).
@@ -244,6 +252,10 @@ export function TrayBody(props: TrayBodyProps) {
       </View>
       <Scroll testID="tray-scroll" class="flex-1" contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
         {m().notice ? <Notice onAction={noticeAction} /> : null}
+        {/* The first read (SPEC §16.4 Tray): three placeholder rows from `wait.quiet` until the Workers are in. */}
+        <If when={firstRead()}>
+          <View testID="tray-placeholder" class="mt-4"><Rows count={3} /></View>
+        </If>
         {said() ? <View testID="tray-said" onPress={() => said.set("")} class="mt-2 px-4"><Text class="text-sub text-muted-foreground">{said()}</Text></View> : null}
         <View class={m().dimmed ? "opacity-45" : ""}>
           {m().needs.length ? (

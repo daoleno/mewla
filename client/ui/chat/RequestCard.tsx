@@ -19,7 +19,9 @@ import {
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
 import { brainChoice, brainHost, sealedRequests, sealRequest, tray } from "../tray/state";
-import { connection, currentTransport, workers } from "../session";
+import { connection, current, currentTransport, workers } from "../session";
+import { BusyLabel, delayed, RING, Spinner } from "../kit/wait";
+import { haptic } from "../shell/haptics";
 
 /**
  * A thread's request cards (soft-final SPEC §1.1, §1.2, §11 Request card): the open requests of
@@ -116,6 +118,7 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
     failure.set("");
     try {
       await props.submit(answers);
+      haptic.impact("light");
       props.onDone(choice.questions.map((question, i) => choiceDraftAnswerText(question, draft()[i]!)).filter(Boolean).join(" · "));
     } catch (error) {
       if (isChoiceGoneError(error) || isPromptGoneError(error)) return props.onGone();
@@ -185,8 +188,8 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
           </Button>
           {step() === review ? (
             <Button testID="choice-submit" onPress={() => void submit()} disabled={sending() || !props.connected() || unansweredChoiceQuestions(choice, draft()).length > 0}
-              class="h-[48px] items-center justify-center rounded-(--radius-control) bg-primary px-4 active:opacity-70 disabled:opacity-40">
-              <Text class="text-body font-semibold text-primary-foreground">{sending() ? "Sending…" : "Submit"}</Text>
+              class={`h-[48px] items-center justify-center rounded-(--radius-control) bg-primary px-4 active:opacity-70 ${sending() ? "" : "disabled:opacity-40"}`}>
+              <BusyLabel busy={sending()} label="Submit" tone="canvas" testID="request-ring"><Text class="text-body font-semibold text-primary-foreground">Submit</Text></BusyLabel>
             </Button>
           ) : (
             <Button testID="choice-next" onPress={() => step.set(nextChoiceStep(choice, step()))} disabled={!choiceQuestionAnswered(choice.questions[step()]!, draft()[step()]!)}
@@ -209,6 +212,10 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
   const prompt = body.prompt;
   const sending = signal("");
   const failed = signal(false);
+  const ringFor = (() => {
+    const on = delayed(() => Boolean(sending()));
+    return () => (on() ? sending() : "");
+  })();
   const choose = async (option: TerminalActionPromptOption) => {
     const transport = currentTransport();
     if (sending() || !transport) return;
@@ -217,6 +224,8 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
     try {
       if (option.approvalOptionId && prompt.approvalId) await decideApproval(transport, body.workerId, prompt.approvalId, option.approvalOptionId);
       else if (option.number !== undefined && prompt.promptId) await answerPrompt(transport, body.workerId, prompt.promptId, { number: option.number });
+      // Answered and acknowledged: the one light tick (SPEC §16.3 Haptics).
+      haptic.impact("light");
       props.onDone(option);
     } catch (error) {
       if (isPromptGoneError(error)) return props.onGone();
@@ -242,28 +251,38 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
       {asked().notes ? <Text class="text-sub text-muted-foreground line-clamp-3">{asked().notes}</Text> : null}
       {yesNo ? (
         <View class="flex-row gap-2">
+          {/* Not optimistic (SPEC §16.2 pattern 8): the press, then the ring in the pressed button; the other is disabled. */}
           <Button testID={`prompt-option-${deny!.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(deny!)}
-            style={{ flex: 2 }} class="h-[48px] items-center justify-center rounded-(--radius-control) bg-muted active:opacity-70 disabled:opacity-40">
-            <Text class="text-body font-semibold line-clamp-1">{sending() === deny!.id ? "Sending…" : "Deny"}</Text>
+            style={{ flex: 2 }} class={`h-[48px] items-center justify-center rounded-(--radius-control) bg-muted active:opacity-70 ${sending() === deny!.id ? "" : "disabled:opacity-40"}`}>
+            <BusyLabel busy={sending() === deny!.id} label="Deny" testID="request-ring"><Text class="text-body font-semibold line-clamp-1">Deny</Text></BusyLabel>
           </Button>
           <Button testID={`prompt-option-${allow!.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(allow!)}
-            style={{ flex: 3 }} class="h-[48px] flex-row items-center justify-center gap-1.5 rounded-(--radius-control) bg-seal active:opacity-70 disabled:opacity-40">
-            <Icon name="check" size={18} tone="onSeal" />
-            <Text class="text-body font-semibold text-seal-foreground line-clamp-1">{sending() === allow!.id ? "Sending…" : "Approve"}</Text>
+            style={{ flex: 3 }} class={`h-[48px] items-center justify-center rounded-(--radius-control) bg-seal active:opacity-70 ${sending() === allow!.id ? "" : "disabled:opacity-40"}`}>
+            <BusyLabel busy={sending() === allow!.id} label="Approve" tone="onSeal" testID="request-ring">
+              <Icon name="check" size={18} tone="onSeal" />
+              <Text class="text-body font-semibold text-seal-foreground line-clamp-1">Approve</Text>
+            </BusyLabel>
           </Button>
         </View>
       ) : (
         <View class="-mx-4">
           {prompt.options.map((option) => (
             <Button testID={`prompt-option-${option.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(option)}
-              class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent disabled:opacity-40">
-              <OptionWords label={sending() === option.id ? "Sending…" : option.label} description={option.description} brainAsks={props.card.source === "Brain"} />
-              <View class="size-[22px] rounded-full border-2 border-faint" />
+              class={`min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent ${sending() === option.id ? "" : "disabled:opacity-40"}`}>
+              <OptionWords label={option.label} description={option.description} brainAsks={props.card.source === "Brain"} />
+              {/* The pressed row's ring takes its circle's place after `wait.quiet`. */}
+              <View class="size-[22px] items-center justify-center">
+                <If when={ringFor() === option.id} else={<View class="size-[22px] rounded-full border-2 border-faint" />}>
+                  <Spinner size={RING.button} label={option.label} />
+                </If>
+              </View>
             </Button>
           ))}
         </View>
       )}
-      {failed() ? <Text testID="request-failed" class="text-sub">Couldn't send. Try again.</Text> : null}
+      {/* One meta line, the same height either way: the answer did not arrive, or the computer is away. */}
+      {failed() ? <Text testID="request-failed" class="text-sub">{`Didn't reach ${current()?.name || "your computer"}`}</Text>
+        : !props.connected() ? <Text testID="request-offline" class="text-sub text-muted-foreground">{`${current()?.name || "Your computer"} is offline`}</Text> : null}
     </View>
   );
 }
