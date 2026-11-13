@@ -12,6 +12,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -27,17 +28,22 @@ const (
 // Hashed build outputs never change content under the same name.
 var immutablePrefixes = []string{"_expo/static/", "assets/"}
 
+// In an NSH web package (`nsh package --target web`) each hashed file, or the
+// folder it is in, is named `<name>.<10 hex>`; its `assets/` keeps plain names.
+var hashedSegment = regexp.MustCompile(`^[^.]+(\.[^.]+)*\.[0-9a-f]{10}(\.[A-Za-z0-9]+)?$`)
+
 var contentTypes = map[string]string{
-	".css":  "text/css; charset=utf-8",
-	".html": "text/html; charset=utf-8",
-	".js":   "text/javascript; charset=utf-8",
-	".json": "application/json",
-	".otf":  "font/otf",
-	".png":  "image/png",
-	".svg":  "image/svg+xml",
-	".ttf":  "font/ttf",
-	".wasm": "application/wasm",
-	".webp": "image/webp",
+	".css":         "text/css; charset=utf-8",
+	".html":        "text/html; charset=utf-8",
+	".js":          "text/javascript; charset=utf-8",
+	".json":        "application/json",
+	".otf":         "font/otf",
+	".png":         "image/png",
+	".svg":         "image/svg+xml",
+	".ttf":         "font/ttf",
+	".wasm":        "application/wasm",
+	".webmanifest": "application/manifest+json",
+	".webp":        "image/webp",
 }
 
 // Embedded returns the bundle compiled into this binary.
@@ -52,6 +58,16 @@ func Embedded() fs.FS {
 // Handler serves a gzip-precompressed bundle. Paths without a file extension
 // are app routes and receive index.html.
 func Handler(files fs.FS) http.Handler {
+	return handler(files, cacheControl)
+}
+
+// PackageHandler serves a gzip-precompressed NSH web package the same way;
+// only its hashed names are cached for good.
+func PackageHandler(files fs.FS) http.Handler {
+	return handler(files, packageCacheControl)
+}
+
+func handler(files fs.FS, cacheControl func(string) string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -110,6 +126,15 @@ func contentType(name string) string {
 func cacheControl(name string) string {
 	for _, prefix := range immutablePrefixes {
 		if strings.HasPrefix(name, prefix) {
+			return immutableAge
+		}
+	}
+	return "no-cache"
+}
+
+func packageCacheControl(name string) string {
+	for _, segment := range strings.Split(name, "/") {
+		if hashedSegment.MatchString(segment) {
 			return immutableAge
 		}
 	}

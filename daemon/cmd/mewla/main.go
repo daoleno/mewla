@@ -642,6 +642,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		}
 	}
 	srv.SetAddressBook(book)
+	srv.SetWebUIDir(filepath.Join(authManager.StorageDir(), "web-ui"))
 	srv.SetDirectEndpoints(func() []server.DirectEndpoint {
 		return directEndpoints(cfg.addr, detectPrivateNetworkAddresses())
 	})

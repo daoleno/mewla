@@ -99,3 +99,24 @@ func TestHandlerRejectsWrites(t *testing.T) {
 		t.Fatalf("status = %d", recorder.Code)
 	}
 }
+
+func TestPackageCacheControlCachesOnlyHashedNames(t *testing.T) {
+	for name, want := range map[string]string{
+		"index.html":                       "no-cache",
+		"manifest.webmanifest":             "no-cache",
+		"app.353e9fdadf.js":                immutableAge,
+		"nsh.3188d92489.wasm":              immutableAge,
+		"browser.bddb1349e4/bootstrap.js":  immutableAge,
+		"assets/icons/icon-192.png":        "no-cache",
+		"terminal/mewla-vt.wasm":           "no-cache",
+		"_expo/static/js/web/entry-abc.js": "no-cache",
+	} {
+		if got := packageCacheControl(name); got != want {
+			t.Fatalf("packageCacheControl(%q) = %q, want %q", name, got, want)
+		}
+	}
+	// The embedded bundle's rules are unchanged.
+	if cacheControl("assets/x.png") != immutableAge || cacheControl("index.html") != "no-cache" {
+		t.Fatal("embedded cache rules changed")
+	}
+}
