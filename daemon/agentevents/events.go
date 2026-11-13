@@ -194,6 +194,11 @@ type Event struct {
 
 	// Activity is the line a KindActivity event says: what the agent is doing.
 	Activity string
+	// ActivityTool and ActivitySummary are that line's parts: the tool the
+	// agent started ("Bash") and what it works on ("curl -sI …"), empty when
+	// the call names nothing. Clients word them as they word that tool's row.
+	ActivityTool    string
+	ActivitySummary string
 
 	// ExitCode is set on KindExit when the agent reports one.
 	ExitCode *int

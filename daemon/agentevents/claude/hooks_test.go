@@ -136,10 +136,11 @@ func TestSubAgentHooksCarryTheSubAgent(t *testing.T) {
 
 func TestPreToolUseSaysWhatTheAgentStartedWithoutMovingAnyDecision(t *testing.T) {
 	events := mustMap(t, `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Bash","tool_input":{"command":"curl -sI https://example.org","description":"Fetch headers"}}`)
-	if len(events) != 1 || events[0].Kind != agentevents.KindActivity || events[0].Activity != "Bash curl -sI https://example.org" {
+	if len(events) != 1 || events[0].Kind != agentevents.KindActivity || events[0].Activity != "Bash curl -sI https://example.org" ||
+		events[0].ActivityTool != "Bash" || events[0].ActivitySummary != "curl -sI https://example.org" {
 		t.Fatalf("events = %+v", events)
 	}
-	if events := mustMap(t, `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Task","tool_input":{"prompt":"go"}}`); len(events) != 1 || events[0].Activity != "Task" {
+	if events := mustMap(t, `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Task","tool_input":{"prompt":"go"}}`); len(events) != 1 || events[0].Activity != "Task" || events[0].ActivityTool != "Task" || events[0].ActivitySummary != "" {
 		t.Fatalf("a call with no line is its tool: %+v", events)
 	}
 	if events := mustMap(t, `{"hook_event_name":"PreToolUse","session_id":"s1"}`); len(events) != 0 {

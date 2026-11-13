@@ -243,13 +243,13 @@ func TestHubKeepsTheActivityOfTheRunningTurnOnly(t *testing.T) {
 	}
 	h.Publish(Event{WorkerID: "w", Kind: KindTurnStarted, TurnID: "t1", At: t0})
 	h.Publish(Event{WorkerID: "w", Kind: KindApprovalRequest, Approval: &Approval{ID: "a1"}})
-	h.Publish(Event{WorkerID: "w", Kind: KindActivity, Activity: "Bash curl -sI https://example.org", At: t0.Add(time.Second)})
+	h.Publish(Event{WorkerID: "w", Kind: KindActivity, Activity: "Bash curl -sI https://example.org", ActivityTool: "Bash", ActivitySummary: "curl -sI https://example.org", At: t0.Add(time.Second)})
 	s, _ := h.State("w")
-	if s.Activity != "Bash curl -sI https://example.org" || len(s.Approvals) != 1 {
+	if s.Activity != "Bash curl -sI https://example.org" || s.ActivityTool != "Bash" || s.ActivitySummary != "curl -sI https://example.org" || len(s.Approvals) != 1 {
 		t.Fatalf("running turn: activity=%q approvals=%+v", s.Activity, s.Approvals)
 	}
 	h.Publish(Event{WorkerID: "w", Kind: KindTurnFinished, TurnID: "t1", Status: TurnCompleted, At: t0.Add(2 * time.Second)})
-	if s, _ = h.State("w"); s.Activity != "" {
-		t.Fatalf("activity after the turn = %q", s.Activity)
+	if s, _ = h.State("w"); s.Activity != "" || s.ActivityTool != "" || s.ActivitySummary != "" {
+		t.Fatalf("activity after the turn = %+v", s)
 	}
 }
