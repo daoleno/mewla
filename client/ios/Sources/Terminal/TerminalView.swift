@@ -778,12 +778,13 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   }
 
   private func drawCursor(in ctx: CGContext) {
-    guard cursorVisible, vt != nil, cursorRow < rows else { return }
+    guard vt != nil, cursorRow < rows else { return }
     let y = lineY(history.count + cursorRow)
     guard y < bounds.height, y + cellH > 0 else { return }
     let x = CGFloat(cursorCol) * cellW
     if !marked.isEmpty {
-      // The composition (IME) at the cursor, underlined; only the committed text is sent.
+      // The composition (IME) at the cursor, underlined; only the committed text is sent. Drawn while the program
+      // hides the cursor too: Claude Code draws its own and hides the terminal's, which hid every pinyin preedit.
       let line = ctLine(Array(marked.utf16)[...], font: ctFont, color: foreground.color.cgColor)
       let w = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
       ctx.setShouldAntialias(false)
@@ -797,6 +798,7 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
       ctx.fill(CGRect(x: x, y: y + cellH - thickness, width: w, height: thickness))
       return
     }
+    guard cursorVisible else { return }
     if cursorBlinks, isFirstResponder, !blinkOn { return }
     // The cell under the cursor (a wide character takes its two cells).
     let under = cursorRow < grid.count ? grid[cursorRow].cells.first(where: { cursorCol >= $0.run.col && cursorCol < $0.run.col + $0.run.cells }) : nil

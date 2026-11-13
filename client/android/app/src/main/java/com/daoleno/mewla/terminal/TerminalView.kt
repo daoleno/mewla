@@ -777,12 +777,13 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   }
 
   private fun drawCursor(canvas: Canvas) {
-    if (!cursorVisible || handle == 0L || cursorRow >= rows) return
+    if (handle == 0L || cursorRow >= rows) return
     val y = lineY(history.size + cursorRow).toFloat()
     if (y >= contentY(height.toFloat()) || y + cellH <= contentY(0f)) return
     val x = (cursorCol * cellW).toFloat()
     if (composing.isNotEmpty()) {
-      // The composition (IME) at the cursor, underlined; only the committed text is sent.
+      // The composition (IME) at the cursor, underlined; only the committed text is sent. Drawn while the program
+      // hides the cursor too: Claude Code draws its own and hides the terminal's, which hid every pinyin preedit.
       val w = paint.measureText(composing)
       fill.color = background
       canvas.drawRect(x, y, x + w, y + cellH, fill)
@@ -793,6 +794,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
       canvas.drawRect(x, y + cellH - thickness, x + w, y + cellH.toFloat(), fill)
       return
     }
+    if (!cursorVisible) return
     if (cursorBlinks && hasFocus() && !blinkOn) return
     // The cell under the cursor (a wide character takes its two cells).
     val run = grid.getOrNull(cursorRow)?.runs?.firstOrNull { cursorCol >= it.col && cursorCol < it.col + it.cells }
