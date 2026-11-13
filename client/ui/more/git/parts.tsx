@@ -8,7 +8,6 @@ import { color, withAlpha } from "../../kit/colors";
 import { Icon, type IconName } from "../../kit/Icon";
 import { EmptyState, Spinner } from "../../kit/kit";
 import { gitFlash, type GitReview } from "./state";
-import { haptic } from "../../shell/haptics";
 
 /**
  * A file's status as a 28 pt tile (SPEC §15 Code review, §10.4): its mark in mono, in its colour on its wash —
@@ -60,10 +59,7 @@ export function IconButton(props: { icon: IconName; label: string; onPress: () =
       accessibilityLabel={props.label}
       selected={props.selected}
       disabled={props.disabled || props.busy}
-      onPress={() => {
-        haptic.selection();
-        props.onPress();
-      }}
+      onPress={() => props.onPress()}
       class={`size-11 items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-40 ${props.selected ? "bg-muted" : ""}`}
     >
       {props.busy ? <Spinner size={16} /> : <Icon name={props.icon} size={20} tone="ink" />}
