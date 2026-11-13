@@ -353,6 +353,7 @@ for required in (
     'needs: [validate, desktop-publish, complete-stage]',
     'RELEASE_IS_PRERELEASE=true',
     'RELEASE_IS_PRERELEASE=false',
+    'RELEASE_HOLD: ${{ vars.MEWLA_RELEASE_HOLD }}',
     '--prerelease="$RELEASE_IS_PRERELEASE"',
     '--latest="$RELEASE_IS_STABLE"',
 ):
