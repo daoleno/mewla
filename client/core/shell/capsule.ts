@@ -44,6 +44,9 @@ export const CAPSULE = {
   fadeStrips: 6,
   /** The terminal is padded for the collapsed capsule, and this below it. */
   terminalGap: 4,
+  /** With the keyboard up, this much window or less above it (a phone held sideways) gives the terminal the
+   * collapsed capsule's row: an iPhone SE's terminal was 49 pt high, its prompt hidden (11-14). */
+  crampedAboveKeyboard: 320,
   /** A pushed page (Settings, the computer page…): Back alone while the page's own title is on screen; the title
    * (17/600) and the page's controls join Back once the content has scrolled past `titleAway`. Never collapses. */
   pageTitle: { size: 17, line: 22 },
@@ -71,6 +74,14 @@ export function capsulePageInset(safeTop: number): number {
 /** Where a Session's terminal starts: below the collapsed capsule, which an expanded one floats over. */
 export function capsuleTerminalInset(safeTop: number): number {
   return safeTop + CAPSULE.top + CAPSULE.compactHeight + CAPSULE.terminalGap;
+}
+
+/**
+ * The keyboard leaves the terminal too little (a phone held sideways): its capsule steps aside until the keyboard
+ * goes down, and the terminal takes the capsule's row (its paddings tighten too: core/terminal/keyboardRoom.ts).
+ */
+export function crampedOverKeyboard(window: number, keyboard: number): boolean {
+  return keyboard > 0 && window - keyboard <= CAPSULE.crampedAboveKeyboard;
 }
 
 /** A Session name in two balanced lines rather than one ("Daily Hacker News Briefing · Nov 13"). */
