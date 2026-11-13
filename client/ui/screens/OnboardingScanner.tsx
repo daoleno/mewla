@@ -1,6 +1,6 @@
 import { cleanup, effect, host, nativeComponent, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
-import { cameraRuns, cameraSearching, finderState, readCameraPermission, type CameraPermission } from "../../core/onboarding";
+import { cameraFailure, cameraRuns, cameraSearching, finderState, readCameraPermission, type CameraFailure, type CameraPermission } from "../../core/onboarding";
 import { Spinner } from "../kit/kit";
 import { pairFromText, pairingBusy } from "../pairing";
 
@@ -19,13 +19,14 @@ export const scannerSearching = signal(false);
 /**
  * The viewfinder. The first time it shows, the system asks for the camera by itself (a finder
  * that waits for a tap reads as a black screen); the camera runs only while its page is on screen
- * (`onScreen`: a tab's page stays mounted under another tab), the app in front and nothing pairing. Refused, failed or missing, it says so and points to Settings;
+ * (`onScreen`: a tab's page stays mounted under another tab), the app in front and nothing pairing. Refused, it points to Settings;
+ * on a device with no camera it says so; one that would not start offers to try again;
  * the link can always be pasted instead.
  */
 export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => boolean }) {
   const permission = signal<CameraPermission | null>(null);
   const asking = signal(false);
-  const failed = signal(false);
+  const failed = signal<CameraFailure>(null);
   const state = () => finderState(permission(), failed(), asking());
   const onScreen = () => props.onScreen?.() ?? true;
   const running = () => cameraRuns(state(), lifecycle() === "active", onScreen());
@@ -59,18 +60,21 @@ export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => b
     <View testID="finder" class="w-full items-center justify-center self-center overflow-hidden rounded-(--radius-sheet)"
       style={{ backgroundColor: DARK, aspectRatio: 1, maxHeight: 320, maxWidth: props.compact ? 200 : 320 }}>
       <If when={state() === "camera"} else={<If when={state() === "loading"} else={<View class="items-center gap-3.5 px-7">
-          <Text class="text-center text-sub" style={{ color: LIGHT }}>
+          <Text testID="finder-words" class="text-center text-sub" style={{ color: LIGHT }}>
             {state() === "request" ? "Mewla reads the code with the camera."
               : state() === "denied" ? "The camera is off for Mewla. Turn it on in Settings, or paste the link instead."
-              : "The camera could not start. Check that Mewla may use it in Settings, or paste the link instead."}
+              : state() === "missing" ? "This device has no camera. Paste the link instead."
+              : "The camera didn't start. Try again, or paste the link instead."}
           </Text>
-          <FinderButton testID={state() === "request" ? "allow-camera" : "open-settings"} label={state() === "request" ? "Allow camera" : "Open Settings"}
-            onPress={() => (state() === "request" ? void ask() : openSettings())} />
+          {/* No camera: nothing to allow, open or retry. */}
+          <If when={state() !== "missing"}><FinderButton testID={state() === "request" ? "allow-camera" : state() === "denied" ? "open-settings" : "camera-retry"}
+            label={state() === "request" ? "Allow camera" : state() === "denied" ? "Open Settings" : "Try again"}
+            onPress={() => (state() === "request" ? void ask() : state() === "denied" ? openSettings() : failed.set(null))} /></If>
         </View>}><Spinner /></If>}><If when={running()}><CodeScanner testID="qr-camera" active={!pairingBusy()} class="absolute inset-0"
           onScan={({ value }) => void pairFromText(value, "camera")}
           onUnavailable={({ reason }) => {
             if (reason === "permission") void check(false);
-            else failed.set(true);
+            else failed.set(cameraFailure(reason));
           }} /></If></If>
       <Corner style={{ top: 18, left: 18, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 10 }} />
       <Corner style={{ top: 18, right: 18, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 10 }} />

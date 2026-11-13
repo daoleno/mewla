@@ -22,7 +22,7 @@ import com.longbridge.nsh.NshComponentContext
  * `mewla.qrScanner`: the camera with a QR reader (CameraX + ML Kit), running while `active`.
  * `scan {value}` for each code read (a value again only after 1.5 s, so a rejected code still
  * in view is not re-sent every frame); `unavailable {reason}` with `permission` (the app asks,
- * through `scan.request`), `camera` (no camera, or it would not start) or `reader`. Nothing here
+ * through `scan.request`), `missing` (the device has no camera), `camera` (it would not start) or `reader`. Nothing here
  * may take the app down: every failure is an event.
  */
 class QrScanner(private val activity: MainActivity, private val events: NshComponentContext) : NshComponent {
@@ -45,6 +45,7 @@ class QrScanner(private val activity: MainActivity, private val events: NshCompo
     if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
       return unavailable("permission", "camera access is off for Mewla")
     }
+    if (!activity.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) return unavailable("missing", "no camera")
     val future = runCatching { ProcessCameraProvider.getInstance(activity) }.getOrElse { return unavailable("camera", it) }
     future.addListener({
       if (!active) return@addListener

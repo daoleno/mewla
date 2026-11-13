@@ -144,16 +144,24 @@ export function readCameraPermission(value: unknown): CameraPermission | null {
 
 /**
  * What the viewfinder shows. One that has no answer yet says so, one that can still ask asks,
- * one the person turned off points to Settings, one that failed says so: none is a dark window
- * that promises a camera.
+ * one the person turned off points to Settings, a device without a camera says so, one that
+ * failed offers to try again: none is a dark window that promises a camera.
  */
-export type FinderState = "loading" | "request" | "denied" | "failed" | "camera";
+export type FinderState = "loading" | "request" | "denied" | "missing" | "failed" | "camera";
 
-export function finderState(permission: CameraPermission | null, failed: boolean, asking: boolean): FinderState {
+/** Why the camera stopped, as the scanner said (`unavailable {reason}`): none, no camera at all, or it would not start. */
+export type CameraFailure = "missing" | "failed" | null;
+
+/** The scanner's `unavailable` reason as a failure; `permission` is not one (the permission is asked again). */
+export function cameraFailure(reason: string): CameraFailure {
+  return reason === "missing" ? "missing" : "failed";
+}
+
+export function finderState(permission: CameraPermission | null, failure: CameraFailure, asking: boolean): FinderState {
   if (permission === null || asking) return "loading";
   if (permission === "denied") return "denied";
   if (permission === "undetermined") return "request";
-  return failed ? "failed" : "camera";
+  return failure ?? "camera";
 }
 
 /**
