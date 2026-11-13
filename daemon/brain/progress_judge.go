@@ -20,15 +20,22 @@ import (
 )
 
 // The progress judge runs only on evidence: a Worker's progress report, a turn
-// ending, or Brain's next message to the Worker (seen as the report or the
-// turn that follows it). Never on a timer alone. Its limits are constants, not
-// settings: a Work is judged at most once per progressMinGap (a turn that
-// ended waits only progressQuietGap), one judgment runs at a time, and a day
-// holds at most progressPerWorkDay judgments of one Work and progressPerDay in
-// all. The model is the person's choice: the "Work progress" row of the Brain
-// workspace's routing.md, as Watch reads its own row.
+// ending, or Brain's next message to the Worker (seen as the first report of
+// the turn it starts). Never on a timer alone. Evidence settles after
+// progressQuietGap without a newer report, or progressMaxWait after the first
+// unjudged one, so a Worker that checks in often is still judged while it
+// runs. A Work is judged at most once per progressMinGap, except when a turn
+// ended or a new one began since its last judgment. A new turn (a send-back, a
+// further ask) settles after progressTurnSettle: until it is judged the row
+// still shows the last stretch of the turn before. One judgment runs at a time, and
+// a day holds at most progressPerWorkDay judgments of one Work and
+// progressPerDay in all. Its limits are constants, not settings. The model is
+// the person's choice: the "Work progress" row of the Brain workspace's
+// routing.md, as Watch reads its own row.
 const (
 	progressQuietGap   = 20 * time.Second
+	progressMaxWait    = 45 * time.Second
+	progressTurnSettle = 5 * time.Second
 	progressMinGap     = 2 * time.Minute
 	progressTick       = 10 * time.Second
 	progressTimeout    = 2 * time.Minute
@@ -52,8 +59,10 @@ type ProgressReport struct {
 }
 
 type progressPending struct {
-	since   time.Time
-	turnEnd bool
+	first, latest time.Time
+	// fresh: a turn ended or a new one began since the last judgment; the
+	// minimum gap does not hold it back. newTurn: a new one began.
+	fresh, newTurn bool
 }
 
 type progressJudge struct {
@@ -61,6 +70,7 @@ type progressJudge struct {
 	ask      ProgressAskFunc
 	pending  map[string]progressPending
 	lastRun  map[string]time.Time
+	turns    map[string]string
 	failed   map[string]time.Time
 	runs     []time.Time
 	perWork  map[string][]time.Time
@@ -101,12 +111,12 @@ func (s *Service) noteProgressFact(fact watcher.TurnFact, reported bool) {
 				log.Printf("brain progress report %s: %v", item.ID, err)
 			}
 		}
-		s.requestProgress(item.ID, turnEnd)
+		s.requestProgress(item.ID, strings.TrimSpace(fact.TurnID), turnEnd)
 	}()
 }
 
-// requestProgress marks a Work as having new evidence.
-func (s *Service) requestProgress(workID string, turnEnd bool) {
+// requestProgress marks a Work as having new evidence from the turn turnID.
+func (s *Service) requestProgress(workID, turnID string, turnEnd bool) {
 	p := &s.progress
 	p.mu.Lock()
 	if p.ask == nil {
@@ -116,12 +126,21 @@ func (s *Service) requestProgress(workID string, turnEnd bool) {
 	if p.pending == nil {
 		p.pending = map[string]progressPending{}
 	}
+	if p.turns == nil {
+		p.turns = map[string]string{}
+	}
+	now := s.nowUTC()
 	pending, ok := p.pending[workID]
 	if !ok {
-		pending.since = s.nowUTC()
+		pending.first = now
 	}
-	pending.turnEnd = pending.turnEnd || turnEnd
-	pending.since = s.nowUTC() // the quiet gap counts from the newest evidence
+	pending.latest = now
+	newTurn := turnID != "" && p.turns[workID] != "" && p.turns[workID] != turnID
+	if turnID != "" {
+		p.turns[workID] = turnID
+	}
+	pending.fresh = pending.fresh || turnEnd || newTurn
+	pending.newTurn = pending.newTurn || newTurn
 	p.pending[workID] = pending
 	wake := p.wake
 	p.mu.Unlock()
@@ -176,13 +195,17 @@ func (s *Service) nextProgressDue() string {
 		return ""
 	}
 	for workID, pending := range p.pending {
-		if now.Sub(pending.since) < progressQuietGap {
+		settled := now.Sub(pending.latest) >= progressQuietGap || now.Sub(pending.first) >= progressMaxWait
+		if pending.newTurn && now.Sub(pending.first) >= progressTurnSettle {
+			settled = true
+		}
+		if !settled {
 			continue
 		}
 		if at, failed := p.failed[workID]; failed && now.Sub(at) < progressRetryAfter {
 			continue
 		}
-		if last, ok := p.lastRun[workID]; ok && !pending.turnEnd && now.Sub(last) < progressMinGap {
+		if last, ok := p.lastRun[workID]; ok && !pending.fresh && now.Sub(last) < progressMinGap {
 			continue
 		}
 		if p.perWork == nil {

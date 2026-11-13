@@ -71,7 +71,11 @@ posted review. The percentage is computed from those marks.
 
 The judge runs only when there is new evidence: a progress report, a turn
 ending, or Brain's next message to the Worker. It runs at most once every two
-minutes per Work, sooner when a turn ends, and never on a timer alone. The
+minutes per Work, and never on a timer alone. A Worker that keeps reporting is
+still judged within about a minute of its first report. When a turn ends, or
+Brain sends the Worker something new (a send-back, a further ask), the next
+judgment comes within seconds, so a Work that was sent back drops right away
+rather than keeping its last stretch for two minutes. The
 `Work progress` row of `routing.md` picks its model (see
 [Worker routing](#worker-routing)). Each judgment is recorded on the Work as a
 `progress.judged` or `progress.back` event (`mewla brain work list -id`).
