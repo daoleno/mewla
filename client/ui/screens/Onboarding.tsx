@@ -28,6 +28,7 @@ import {
 } from "../../core/onboarding";
 import { Icon, type IconName } from "../icons/Icon";
 import { Caption, DisplayTitle, Field, Spinner } from "../kit/kit";
+import { color } from "../kit/colors";
 import { restorePet } from "../pets/pets";
 import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
 import { PetSprite } from "../pets/PetSprite";
@@ -128,7 +129,11 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
             <Text testID="connected-title" role="header" class="text-center text-display font-bold tracking-display text-foreground">
               {connectedCopy(connection(), name(), problem()).title}
             </Text>
-            <Text class="max-w-[320px] text-center text-body text-muted-foreground">{connectedCopy(connection(), name(), problem()).lede}</Text>
+            {/* The pairing's success is the `ok` dot before "Connected to …" (SPEC §10.4: the scan's success is ok). */}
+            <View class="max-w-[320px] flex-row items-center justify-center gap-2">
+              {connection() === "connected" ? <View testID="connected-ok-dot" class="size-2 rounded-full" style={{ backgroundColor: color("ok") }} /> : null}
+              <Text class="shrink text-center text-body text-muted-foreground">{connectedCopy(connection(), name(), problem()).lede}</Text>
+            </View>
             {connection() === "connecting" || connection() === "idle" ? <Spinner /> : null}
           </>
         } actions={

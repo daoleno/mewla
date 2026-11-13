@@ -1,9 +1,9 @@
-import type { ImageAsset, JSX } from "nsh";
+import type { CanvasGradient, CanvasRenderingContext2D, ImageAsset, JSX } from "nsh";
 import { Canvas, Image, Path2D, Text, View, colorScheme } from "nsh";
 import type { BrandMark, RowLeading, StateTone } from "../../core/more/colour";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
-import { MARK_PATHS } from "./marks";
+import { MARKS, type MarkPaint } from "./marks";
 
 /**
  * A row's leading icon behind the first level (soft-final SPEC §10.4 "Row tiles"), one of three things and never
@@ -65,36 +65,59 @@ export function LeadHero(props: { lead: Lead; testID?: string }) {
 }
 
 const compiled = new Map<string, Path2D>();
-function path(mark: BrandMark): Path2D {
-  let p = compiled.get(mark);
+function path(d: string): Path2D {
+  let p = compiled.get(d);
   if (!p) {
-    p = new Path2D(MARK_PATHS[mark].d);
-    compiled.set(mark, p);
+    p = new Path2D(d);
+    compiled.set(d, p);
   }
   return p;
 }
 
-/** A named product's mark at `size`, in its real colours (ink for black marks). */
+type Paint = string | CanvasGradient;
+
+function paint(cx: CanvasRenderingContext2D, p: MarkPaint): Paint {
+  if (p === "ink") return color("ink");
+  if (typeof p === "string") return p;
+  const g = cx.createLinearGradient(p.linear[0], p.linear[1], p.linear[2], p.linear[3]);
+  for (const [offset, c] of p.stops) g.addColorStop(offset, c);
+  return g;
+}
+
+/**
+ * A named product's mark at `size`, in its real colours: each layer filled as its vendor drew it, `ink` for black
+ * marks, a layer's `dark` paint in dark. The mark's tight `box` fills the slot, so marks from different artboards
+ * are optically one size.
+ */
 export function MarkView(props: { mark: BrandMark; size?: number }) {
   const size = () => props.size ?? 28;
-  const mark = props.mark;
+  const mark = MARKS[props.mark];
   return (
     <Canvas
       style={{ width: size(), height: size() }}
       accessibilityElementsHidden
       draw={(cx) => {
-        const fill = MARK_PATHS[mark].fill;
+        const dark = colorScheme() === "dark";
+        const [bx, by, bs] = mark.box;
+        const s = (size() / bs) * (mark.scale ?? 1);
         cx.save();
-        cx.scale(size() / 24, size() / 24);
+        cx.translate(size() / 2, size() / 2);
+        cx.scale(s, s);
+        cx.translate(-(bx + bs / 2), -(by + bs / 2));
         // A knockout mark keeps its cut-out white in dark: a white plate under the plane (§10.4).
-        if (mark === "telegram") {
+        if (props.mark === "telegram") {
           cx.fillStyle = color("onBlack");
           cx.beginPath();
           cx.arc(12, 12, 9.6, 0, Math.PI * 2);
           cx.fill();
         }
-        cx.fillStyle = fill === "ink" ? color("ink") : typeof fill === "string" ? fill : colorScheme() === "dark" ? color("ink") : fill.brand;
-        cx.fill(path(mark), "evenodd");
+        for (const layer of mark.layers) {
+          cx.save();
+          if (layer.at) cx.translate(layer.at[0], layer.at[1]);
+          cx.fillStyle = paint(cx, dark && layer.dark ? layer.dark : layer.fill);
+          cx.fill(path(layer.d), layer.evenOdd ? "evenodd" : "nonzero");
+          cx.restore();
+        }
         cx.restore();
       }}
     />

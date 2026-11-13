@@ -15,6 +15,20 @@ describe("a row's leading icon (SPEC §10.4 row tiles)", () => {
     expect(brandMark(" Docker ")).toBe("docker");
   });
 
+  test("the multicolour marks from each vendor's own kit", () => {
+    expect(brandMark("Slack")).toBe("slack");
+    expect(brandMark("Google Chrome")).toBe("chrome");
+    expect(brandMark("chrome")).toBe("chrome");
+    expect(brandMark("Google Cloud")).toBe("googlecloud");
+    expect(brandMark("Vertex AI")).toBe("vertex");
+    expect(brandMark("Amazon Bedrock")).toBe("bedrock");
+    expect(brandMark("Azure OpenAI")).toBe("azure");
+    expect(brandMark("OpenAI")).toBe("openai");
+    expect(brandMark("OpenRouter")).toBe("openrouter");
+    // Chromium has a mark of its own: Chrome's is not guessed for it.
+    expect(brandMark("chromium")).toBeNull();
+  });
+
   test("a generic row keeps the neutral tile, never a guessed mark", () => {
     expect(brandMark("bash")).toBeNull();
     expect(brandMark("")).toBeNull();

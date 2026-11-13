@@ -140,6 +140,8 @@ describe("after pairing", () => {
     await answering(app, () => app.press("id:paste"));
     await app.waitFor("text:Brain is home.", { timeout: 10_000 });
     expect(app.texts()).toContain("Connected to Desk.");
+    // The pairing's success shows as the ok dot (SPEC §10.4).
+    expect(app.shows("id:connected-ok-dot")).toBe(true);
     expect(app.storage()["mewla:onboarded"]).toBe("true");
     // Nothing of the app is under the step (settings.md [20]: Android drew its native views over it).
     expect(app.count("id:composer")).toBe(0);
@@ -159,6 +161,7 @@ describe("after pairing", () => {
     await app.waitFor("id:connected-title");
     await app.waitFor("text:Can't reach your computer", { timeout: 15_000 });
     expect(app.shows("id:retry")).toBe(true);
+    expect(app.count("id:connected-ok-dot")).toBe(0);
     await app.press("id:server-settings");
     await app.waitFor("id:pair-another");
   }, 20_000);
