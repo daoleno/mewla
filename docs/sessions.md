@@ -171,13 +171,15 @@ way to the app's or Brain's answer if that is recorded a moment later.
 **A Session that is working.** A Claude, Codex or Cursor Session you started
 reports `running` while its own terminal says it works (Claude's footer shows
 "esc to interrupt") and `unknown`, which apps list as idle, when it does not.
-`running_since` is the poll that first saw the run, so a daemon that starts in
-the middle of a run counts from its start. A Claude Session that Mewla's hooks
-follow also carries `activity`, the tool call it started last (`Bash curl -sI
-https://example.org`), from the hook, not the screen. A Session whose agent is
-not followed by hooks (one launched with its own `--settings`, for example)
-has `running_since` and no `activity`. A Brain-delegated Worker keeps the status
-of its turn.
+`running_since` is the poll that first saw the run. A prompt ends the run and
+the answer starts a new one, so the time a Session waits on you is not counted.
+A Claude Session that Mewla's hooks follow also carries `activity`, the tool
+call it started last (`Bash curl -sI https://example.org`), with its parts in
+`activity_tool` (`Bash`) and `activity_summary` (`curl -sI https://example.org`),
+from the hook, not the screen. A Session whose agent is not followed by hooks
+(one launched with its own `--settings`, for example) has `running_since` and
+no `activity`. A Brain-delegated Worker keeps the status of its turn; its
+`running_since` is when its turn was accepted, and after a prompt, the answer.
 
 ### Copy and edit a message
 

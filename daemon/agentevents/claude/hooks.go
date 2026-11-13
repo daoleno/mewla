@@ -86,6 +86,10 @@ func Map(workerID string, p Payload, now time.Time) []agentevents.Event {
 		}
 		started := event(agentevents.KindActivity)
 		started.Activity = line
+		started.ActivityTool = strings.TrimSpace(p.ToolName)
+		if summary := strings.TrimSpace(summarizeToolInput(started.ActivityTool, p.ToolInput)); summary != started.ActivityTool {
+			started.ActivitySummary = summary
+		}
 		return []agentevents.Event{started}
 	case "PostToolUse":
 		return []agentevents.Event{event(agentevents.KindProgress)}
