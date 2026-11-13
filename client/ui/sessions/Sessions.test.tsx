@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering, framesOf, paired, phoneHost, pressUntil, pressWhenEnabled, typeUntil } from "../testing/fixtures";
+import { answering, expoTokenService, framesOf, paired, pairedTwo, phoneHost, pressUntil, pressWhenEnabled, typeUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const WEB = {
@@ -685,4 +685,25 @@ describe("a Session", () => {
     await app.waitUntil(() => !app.shows("id:git-page"), { timeout: 5_000 });
     expect(app.shows("id:session-menu")).toBe(true);
   }, 20_000);
+
+  // Release check 4b (2026-11-13): a computer switch that took away a page waiting with its slow line (the line's bar
+  // sized from a width its own onLayout measured) stopped `nsh test`'s engine here; it hung until the runner's timeout.
+  test("a link for the other computer while All Sessions waits, and one back: the app keeps answering", async () => {
+    const app = await open(APP, { host: phoneHost({ worker_sessions: [session("w-1")] }), storage: pairedTwo, platform: "android", network: expoTokenService });
+    await app.waitFor("id:composer");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-all-sessions");
+    await app.press("id:tray-all-sessions");
+    await app.waitFor("id:sessions");
+    await app.host.send("links.open", { url: "mewla://calendar?serverId=s2" });
+    await app.waitFor("id:calendar-page", { timeout: 10_000 });
+    await app.host.send("links.open", { url: "mewla://sessions?serverId=s1" });
+    await app.waitFor("id:tray-all-sessions", { timeout: 10_000 });
+    await app.press("id:tray-all-sessions");
+    await app.waitFor("id:sessions", { timeout: 10_000 });
+    await app.host.send("links.open", { url: "mewla://calendar?serverId=s2" });
+    await app.waitFor("id:calendar-page", { timeout: 10_000 });
+    await app.wait(500);
+    expect(app.shows("id:calendar-page")).toBe(true);
+  }, 30_000);
 });

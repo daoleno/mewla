@@ -133,7 +133,9 @@ export function SlowLine(props: { on: boolean; testID?: string }) {
       style={{ pointerEvents: "none", opacity: props.on ? 1 : 0, transitionProperty: "opacity", transitionDuration: motion.dur.base }}
       onLayout={(e) => width.set(e.bounds.size.width)}
     >
-      <If when={still()} else={<View class="absolute bottom-0 top-0 rounded-[1px] bg-muted-foreground" style={{ left: 0, width: width() * 0.34, transform: [{ translateX: x }] }} />}>
+      {/* The bar is a third of its line by percent, never by the measured width: a size bound to what onLayout measured
+          stopped `nsh test`'s engine when a computer switch took the page away (Sessions.test, a link for the other computer). */}
+      <If when={still()} else={<View class="absolute bottom-0 top-0 rounded-[1px] bg-muted-foreground" style={{ left: 0, width: "34%", transform: [{ translateX: x }] }} />}>
         <View class="absolute inset-0 bg-muted-foreground opacity-50" />
       </If>
     </View>
