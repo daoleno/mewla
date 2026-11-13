@@ -371,23 +371,28 @@ describe("a Session", () => {
     // The computer names host_worker's provider only once it sees the host's pane: until then, the executor Brain hosts on.
     const executor = { id: "claude", name: "claude", provider: "claude", runtime: "tmux", capabilities: { interactive_tty: true, structured_events: true } };
     const brain = { chat_thread_id: "t1", host_executor: executor, host_worker: { id: "brain-host", name: "Brain", status: "running", cwd: "/home/me/brain", command: "claude" } };
-    const app = await open(APP, { host: phoneHost({ brain, conversations: { "brain-host": [] } }, WEB), storage: paired, platform: "web", width: 390, height: 844 });
-    await app.waitFor("id:brain-menu");
-    await pressUntil(app, "id:brain-menu", "id:brain-menu-terminal");
-    await pressUntil(app, "id:brain-menu-terminal", "id:session-status");
+    const tree = { type: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", path: "", entries: [{ name: "current.md", path: "current.md", kind: "file" }] } };
+    const app = await open(APP, { host: phoneHost({ brain, conversations: { "brain-host": [] }, replies: { brain_workspace_tree: tree } }, WEB), storage: paired, platform: "web", width: 390, height: 844 });
+    const openTerminal = async () => {
+      await app.waitFor("id:brain-menu");
+      await pressUntil(app, "id:brain-menu", "id:brain-menu-terminal");
+      await pressUntil(app, "id:brain-menu-terminal", "id:session-status");
+    };
+    await openTerminal();
     expect(app.texts()).toContain("Claude Code · workspace");
     expect(app.texts()).not.toContain("Shell terminal · workspace");
-    // ⋯ is there; Brain's Session keeps its name and is not stopped from here.
-    app.onDialog(() => null);
-    await answering(app, () => app.press("id:session-menu"));
-    const items = app.dialogs().at(-1)!.buttons;
-    expect(items).toContain("New Terminal");
-    expect(items).not.toContain("Rename");
-    expect(items).not.toContain("Terminate");
     // The view button shows the other view, Brain's chat, which is home's.
     await app.press("label:Show chat");
     await app.waitFor("id:session-status", { state: "gone" });
-    await app.waitFor("id:brain-menu");
+    await openTerminal();
+    // ⋯ has what Brain's menu does there, only what can act now (no executor to switch to, no switchable model here):
+    // not a Session's Rename, Terminate, Changes or New Terminal.
+    app.onDialog((dialog) => (dialog.buttons.includes("Browse workspace") ? "Browse workspace" : null));
+    await answering(app, () => app.press("id:session-menu"));
+    const items = app.dialogs().at(-1)!.buttons;
+    expect(items).toContain("Browse workspace");
+    for (const not of ["Rename", "Terminate", "Changes", "New Terminal", "Switch executor", "Model & Effort"]) expect(items).not.toContain(not);
+    await app.waitFor("text:current.md");
   }, 20_000);
 
   test("a chat it cannot read says why and opens the terminal; a ready one says where it runs", async () => {
