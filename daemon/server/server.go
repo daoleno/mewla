@@ -3847,6 +3847,11 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 	}
 
 	switch ev.Type {
+	case "worker_discovered", "worker_state_change", "worker_metadata_change", "worker_removed":
+		// A Session that starts or stops running or asking changes the live state.
+		defer s.observeLiveSessions()
+	}
+	switch ev.Type {
 	case "worker_discovered":
 		if ev.Worker != nil {
 			s.publishWorkerSession("worker_session_created", ev.Worker)
