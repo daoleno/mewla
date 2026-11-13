@@ -8,7 +8,8 @@ import { resolveLaunchSelection } from "../../core/session/providerLaunch";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
-import { canCreateSession, connection, currentTransport, currentWorkerSessions, workers } from "../session";
+import { canCreateSession, connection, current, currentTransport, currentWorkerSessions, workers } from "../session";
+import { startedWithFirstMessage } from "./firstMessage";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { projectName } from "../../core/work/surface";
 import type { Worker } from "../../core/sessions/workers";
@@ -120,6 +121,8 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   const preset = signal("claude");
   const command = signal("");
   const name = signal("");
+  // SPEC §11 New session sheet, Task: "What should it do?", optional; the Session opens with it as its first message.
+  const task = signal("");
   const advanced = signal(false);
   const picking = signal(false);
   const busy = signal(false);
@@ -138,6 +141,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     preset.set(lastUsedPreset(list));
     command.set("");
     name.set("");
+    task.set("");
     advanced.set(false);
     picking.set(false);
     problem.set("");
@@ -154,7 +158,9 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     return more && !recent.some((folder) => folder.path === more.path) ? [more, ...recent] : recent;
   };
 
-  const launch = async (launchCommand: string, launchName: string) => {
+  // A first message needs an agent: a shell or a custom command takes none (the computer refuses one for a shell).
+  const takesTask = () => !advanced() && preset() !== "shell";
+  const launch = async (launchCommand: string, launchName: string, firstMessage = "") => {
     const transport = currentTransport();
     const store = currentWorkerSessions();
     if (!transport || !store || busy()) return;
@@ -163,12 +169,13 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     problem.set("");
     const startedAt = Date.now();
     const targetId = untracked(newSessionTarget);
+    const serverId = untracked(current)?.id;
     // A New Terminal carries its agent's Provider connection, as the Expo app's did (parity #39).
     const selection = targetId ? await resolveLaunchSelection(transport, launchCommand) : null;
     if (untracked(currentTransport) !== transport) return busy.set(false);
     const result = await createSession(transport, {
       cwd: cwd().trim(), command: launchCommand.trim(), name: launchName.trim(), targetId: targetId || undefined,
-      connectionId: selection?.connectionId, modelId: selection?.modelId,
+      connectionId: selection?.connectionId, modelId: selection?.modelId, text: firstMessage,
     });
     busy.set(false);
     if (result.workerSession) store.added(result.workerSession);
@@ -178,12 +185,13 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     }
     if (result.kind === "failed") return problem.set(result.message);
     newSessionOpen.set(false);
+    if (serverId) startedWithFirstMessage(serverId, result.workerId, firstMessage.trim(), result.firstMessage === "pending");
     props.onCreated(result.workerId, Boolean(targetId), { cwd: cwd().trim() || undefined, command: launchCommand.trim() || undefined, name: launchName.trim() || undefined, startedAt, focusComposer: true, ...(result.durabilityWarning ? { durabilityWarning: result.durabilityWarning } : {}) });
   };
   const start = () => {
     if (advanced()) return void launch(command(), name());
     const chosen = LAUNCH_PRESETS.find((p) => p.key === preset());
-    if (chosen) void launch(chosen.command, "");
+    if (chosen) void launch(chosen.command, "", takesTask() ? task() : "");
   };
 
   const offline = () => connection() !== "connected";
@@ -243,6 +251,11 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
               ))}
               <Row testID="new-pick-dir" icon="folder-open" title="Other folder…" chevron disabled={offline()} onPress={() => picking.set(true)} />
             </Section>
+            {takesTask() ? (
+              <Section sheet title="Task">
+                <Field testID="new-task" accessibilityLabel="What should it do?" multiline value={task()} placeholder="What should it do?" onChange={(value) => task.set(value)} />
+              </Section>
+            ) : null}
             {problem() ? <View class="mt-3 px-4"><Text testID="new-problem" class="text-sub text-muted-foreground">{problem()}</Text></View> : null}
           </Scroll>
           <View class="mt-2">

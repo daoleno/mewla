@@ -12,9 +12,12 @@ export type CreateSessionOptions = {
   /** The Provider connection and model the new Session launches with (New Terminal carries its Provider's). */
   connectionId?: string;
   modelId?: string;
+  /** The Session's first message (New session's "What should it do?"): the computer holds it until the agent is ready. */
+  text?: string;
 };
 
-export type CreatedSession = CreateSessionReconciliation & { workerSession?: Record<string, unknown> };
+/** `firstMessage: "pending"`: the computer holds `text` (WIRE §11); absent, a computer from before it ignored the text. */
+export type CreatedSession = CreateSessionReconciliation & { workerSession?: Record<string, unknown>; firstMessage?: "pending" };
 
 /**
  * `create_session`, settled as the Expo app settled it: the new Session's id
@@ -34,6 +37,7 @@ export async function createSession(transport: Transport, options: CreateSession
       name: options.name ?? "",
       ...(options.connectionId?.trim() ? { connection_id: options.connectionId.trim() } : {}),
       ...(options.modelId?.trim() ? { model_id: options.modelId.trim() } : {}),
+      ...(options.text?.trim() ? { text: options.text.trim() } : {}),
     }, { reply: "session_created", timeoutMs: 10_000 });
   } catch (error) {
     const code = (error as { code?: unknown }).code;
@@ -48,5 +52,5 @@ export async function createSession(transport: Transport, options: CreateSession
   if (persistence && classifyMutationPersistence(persistence) === "not_applied" && reply.code) {
     return { ...reconcileCreateSessionFailure(providerErrorFromPayload({ code: String(reply.code), message: String(reply.persistence_warning || reply.message || "Session was not created.") }), false), workerSession };
   }
-  return { ...reconcileCreateSessionSuccess({ workerId: reply.worker_id, persistence }), workerSession };
+  return { ...reconcileCreateSessionSuccess({ workerId: reply.worker_id, persistence }), workerSession, ...(reply.first_message === "pending" ? { firstMessage: "pending" as const } : {}) };
 }
