@@ -2174,6 +2174,28 @@ func (s *Store) MarkInputAdmissionTransportStarted(sessionID, turnID string) err
 	if err != nil {
 		return err
 	}
-	_, err = s.fsm.MarkAdmissionTransportStarted(st.ID, lifecycle.TurnToken(turnID))
+	if _, err = s.fsm.MarkAdmissionTransportStarted(st.ID, lifecycle.TurnToken(turnID)); err != nil {
+		return err
+	}
+	return s.answerBlockedTurn(sessionID, turnID)
+}
+
+// answerBlockedTurn ends the question of a Session whose current turn is
+// blocked on its own report (--attention user_input) once new input is typed
+// into its terminal: that input is the answer, and the turn runs again. The
+// new turn still becomes current only with the Worker's next exact check-in
+// (or the provider's admission), which can take minutes or never come; until
+// now the turn stayed blocked, the Work "needs input" and Brain woken, for
+// all that time (owner 2026-11-13, shot 11).
+func (s *Store) answerBlockedTurn(sessionID, answerTurnID string) error {
+	current, found, err := s.Turn(sessionID)
+	if err != nil || !found || current.TurnID == answerTurnID ||
+		current.Status != watcher.TurnBlocked || current.Attention != "user_input" {
+		return err
+	}
+	_, _, err = s.ApplyTurnFact(watcher.TurnFact{
+		SessionID: sessionID, TurnID: current.TurnID, Class: watcher.EvidenceControl, Kind: "running",
+		SourceID: "answered:" + answerTurnID, Summary: "Answered; continuing", At: s.nowUTC(),
+	})
 	return err
 }
