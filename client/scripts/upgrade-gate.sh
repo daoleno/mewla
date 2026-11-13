@@ -50,9 +50,9 @@ printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-gate; exit 0; }\nexec sl
 printf '#!/bin/sh\necho "systemd-run is off for the upgrade gate daemon" >&2\nexit 1\n' > "$state/bin/systemd-run"
 chmod +x "$state/bin/cursor-agent" "$state/bin/systemd-run"
 tmux -S "$state/tmux.sock" new-session -d -s gate
-# Loopback only: the emulator reaches it as 10.0.2.2.
+# On loopback (127.0.0.1; the released daemon it runs may predate -loopback-only): the emulator reaches it as 10.0.2.2.
 env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent TMUX="$state/tmux.sock,0,0" \
-  "$MEWLA" serve -addr "127.0.0.1:$PORT" -state-dir "$state/mewla" -loopback-only > "$OUT/daemon.log" 2>&1 &
+  "$MEWLA" serve -addr "127.0.0.1:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
 daemon=$!
 # The session host outlives its daemon: stop it and its Sessions by the pids it reports.
 stop_host() {
