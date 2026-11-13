@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentGridColumns, composing, dialogBodyRoom, dialogFrame, SHEET, scrollBesidePinned, sheetBodyRoom, sheetFoot, sheetTitleGivesWay, taskCaptionShows } from "./sheet";
+import { agentGridColumns, composing, DIALOG_FOOT, dialogBodyRoom, dialogFrame, SHEET, scrollBesidePinned, sheetBodyRoom, sheetFoot, sheetTitleGivesWay, taskCaptionShows } from "./sheet";
 
 // The grabber (8 + 5) and the title row (11 + 25 + 19), as laid out; the title's room alone is 16.
 const HEADER = 68;
@@ -72,6 +72,18 @@ describe("on wide a sheet is a dialog the keyboard never covers (iPhone Duo open
     expect(dialogFrame(800, 0)).toEqual({ lift: 0, max: 704 });
   });
 
+  test("an Android foldable unfolded: the dialog and its body's room both leave out the safe areas, so Start keeps its foot", () => {
+    // 7.6" foldable unfolded, landscape: 701 high, a 24 pt status bar and a 48 pt taskbar (Mac run 11-14: Start flush
+    // on the dialog's bottom edge, clipped by its corner, as the room counted the bars the dialog's box left out).
+    const frame = dialogFrame(701, 0, 24 + 48);
+    expect(frame).toEqual({ lift: 0, max: Math.floor((701 - 72) * 0.88) });
+    // Header, room and foot add up to the box AppSheet gives the dialog: nothing runs past its bottom.
+    const room = dialogBodyRoom({ window: 701, keyboard: 0, header: DIALOG_HEADER, insets: 72 });
+    expect(DIALOG_HEADER + room + DIALOG_FOOT).toBe(frame.max);
+    // Start's foot is the 16 the dialog's content keeps at its sides.
+    expect(DIALOG_FOOT).toBe(16);
+  });
+
   test("with the keyboard up it sits in what the keyboard leaves, 16 clear of it and of the top", () => {
     // iPhone Duo inner screen on its side: 669 high, a 264 pt keyboard.
     expect(dialogFrame(669, 264)).toEqual({ lift: 280, max: 373 });
@@ -80,8 +92,8 @@ describe("on wide a sheet is a dialog the keyboard never covers (iPhone Duo open
 
   test("New session in the dialog on the open Duo: a scroll beside the pinned field and Start; typing, the field and Start fit", () => {
     const flat = dialogBodyRoom({ window: 669, keyboard: 0, header: DIALOG_HEADER });
-    expect(flat).toBe(588 - 67 - 24);
-    expect(scrollBesidePinned(flat, PINNED)).toBe(497 - PINNED);
+    expect(flat).toBe(588 - 67 - 16);
+    expect(scrollBesidePinned(flat, PINNED)).toBe(505 - PINNED);
     const typing = dialogBodyRoom({ window: 669, keyboard: 264, header: DIALOG_HEADER });
     expect(typing).toBeGreaterThanOrEqual(COMPOSE_FIELD);
   });
