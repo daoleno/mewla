@@ -45,7 +45,10 @@ import { activityBarIndexAt, activityBars, buildDailyActivitySeries } from "../.
 import { costEstimateMark, statsModelHeading, statsModelKey } from "../../../core/stats/statsCostPresentation";
 import { EMPTY_RANGE, hasRangeStats, isCostKnown, type CodexSubscriptionUsage, type DayCell, type ModelStat, type PricingStatus, type RangeData, type StatsView } from "../../../core/stats/statsPayload";
 import { availableRanges, INITIAL_STATS_RANGE, rangeDays, rangeEyebrow, shownRange, type StatsRange } from "../../../core/stats/statsTabs";
-import { color } from "../../kit/colors";
+import { meterTone } from "../../../core/more/colour";
+import { AgentIcon } from "../../icons/AgentIcon";
+import { color, withAlpha } from "../../kit/colors";
+import { LEAD_SLOT, meterColor, tile } from "../../kit/RowTile";
 import { Icon } from "../../kit/Icon";
 import { copyMenu, EmptyState, Meter, Page, RankedRow, Row, Section, ShowMore, StatGrid, StatTile, Tag } from "../../kit/kit";
 import { Segmented } from "../../kit/Segmented";
@@ -204,7 +207,7 @@ function CodexCard(props: { subscription: CodexSubscriptionUsage }) {
   const available = () => s().authKind === "official" && s().state === "available";
   return (
     <Section title="Codex subscription" testID="codex-card" detail={s().stale ? <Tag label="STALE" /> : undefined}>
-      <Row title={codexPlanLabel(s().plan)} />
+      <Row testID="codex-plan" lead={{ kind: "logo", node: <AgentIcon kind="codex" size={28} slot={LEAD_SLOT} /> }} title={codexPlanLabel(s().plan)} />
       {available() ? (
         <View>
           {(s().windows ?? []).map((w) => {
@@ -216,7 +219,8 @@ function CodexCard(props: { subscription: CodexSubscriptionUsage }) {
                   <Text class="text-body">{codexWindowLabel(w.windowMinutes)}</Text>
                   <Text class="text-body text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{`${Math.round(remaining)}% left`}</Text>
                 </View>
-                <Meter share={used / 100} height={4} />
+                {/* A plan's meter is its agent's series colour, amber or red over 80 % and 95 % used (SPEC §10.4). */}
+                <Meter share={used / 100} tone={meterColor(meterTone(used / 100), "seriesCodex")} height={4} />
                 <Text class="text-caption text-muted-foreground">{resetLabel(w.resetsAt)}</Text>
               </View>
             );
@@ -265,7 +269,8 @@ function Models(props: { data: RangeData; pricing?: PricingStatus; nav: PageNav 
           {shown("models", models()).map((m: ModelStat) => (
             <RankedRow
               testID={`model-${statsModelKey(m)}`}
-              icon="chip"
+              lead={tile("violet", "chip")}
+              tone="meter"
               title={statsModelHeading(m, models())}
               subtitle={rowActivitySummary(m)}
               share={activityValue(m, usesTokens()) / max()}
@@ -291,7 +296,7 @@ function Projects(props: { data: RangeData }) {
       {projects().length === 0 ? null : (
         <Section title="Projects" testID="stats-projects">
           {shown("projects", projects()).map((p) => (
-            <RankedRow icon="folder" title={p.name} subtitle={`${rowActivitySummary(p)} · ${costSourceLabel(p.costProvenance)}`} share={activityValue(p, usesTokens()) / max()} value={formatAvailableCost(p.cost, p.costKnown)} />
+            <RankedRow lead={tile("teal", "folder")} tone="meter" title={p.name} subtitle={`${rowActivitySummary(p)} · ${costSourceLabel(p.costProvenance)}`} share={activityValue(p, usesTokens()) / max()} value={formatAvailableCost(p.cost, p.costKnown)} />
           ))}
           {projects().length > MAX_LIST_ITEMS ? <ShowMore hidden={projects().length - MAX_LIST_ITEMS} expanded={expanded().has("projects")} onToggle={() => toggle("projects")} /> : null}
         </Section>
@@ -308,7 +313,7 @@ function Counted(props: { section: string; title: string; items: Array<{ name: s
       {props.items.length === 0 || (props.section === "tools" && total() === 0) ? null : (
         <Section title={props.title} testID={`stats-${props.section}`} detail={<Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{`${total()} calls`}</Text>}>
           {shown(props.section, props.items).map((item) => (
-            <RankedRow icon={props.section === "skills" ? "skills" : "construct"} title={item.name} subtitle={item.detail || undefined} share={item.calls / max()} value={String(item.calls)} />
+            <RankedRow lead={tile("violet", props.section === "skills" ? "skills" : "construct")} tone="meter" title={item.name} subtitle={item.detail || undefined} share={item.calls / max()} value={String(item.calls)} />
           ))}
           {props.items.length > MAX_LIST_ITEMS ? <ShowMore hidden={props.items.length - MAX_LIST_ITEMS} expanded={expanded().has(props.section)} onToggle={() => toggle(props.section)} /> : null}
         </Section>
@@ -436,8 +441,8 @@ function Activity(props: { days: readonly DayCell[]; range: StatsRange; nav: Pag
               const chosen = focus();
               bars.forEach((bar, i) => {
                 if (bar.height <= 0) return;
-                // While a day is chosen, the others step back so it reads first.
-                cx.fillStyle = chosen === null || chosen === i ? color("ink") : color("faint");
+                // One hue for magnitude (SPEC §10.4 meter); while a day is chosen, the others step back so it reads first.
+                cx.fillStyle = chosen === null || chosen === i ? color("meter") : withAlpha(color("meter"), 0.35);
                 cx.beginPath();
                 const r = Math.min(BAR_RADIUS, bar.width / 2, bar.height);
                 cx.roundRect(bar.x, baseline - bar.height, bar.width, bar.height, [r, r, 0, 0]);

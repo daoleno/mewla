@@ -120,6 +120,8 @@ describe("Stats", () => {
     await direct.waitFor("id:codex-card");
     expect(direct.texts()).toContain("ChatGPT Pro");
     expect(direct.texts()).toContain("70% left");
+    // The plan is Codex's: its row carries Codex's logo (SPEC §10.4).
+    expect(direct.shows("id:codex-plan")).toBe(true);
     const routed = await open(HARNESS, computer(() => ({ ranges: { week: range() }, codexSubscription: subscription }), { defaults: { codex: { connection_id: "c1" } } }));
     await routed.waitFor("id:stats-summary");
     expect(routed.shows("id:codex-card")).toBe(false);
