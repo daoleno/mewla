@@ -291,3 +291,52 @@ describe("a Work in Brain's thread", () => {
     await app.waitFor("id:session-status");
   }, 20_000);
 });
+
+describe("a real question, as the owner meets it (owner 2026-11-13, shot 11)", () => {
+  const QUESTION = "The plaza fix is live on test. Prod has zero channels, so the plaza stays empty there until a channel is added: do I add the Gemini channel to prod now, with the same group and mappings as test, or wait for your review of the test setup first?";
+
+  test("Brain's question on a Work is that Work's card: the whole question, its choices as rows, Brain's pick; a choice answers at once", async () => {
+    const a = "mh-cccc";
+    const current_work = [{ work_id: "w4", revision: 1, title: "ArcAIProdCloudflare", status: "needs_input", unread_result: false, attempt_session_id: a,
+      question: QUESTION, choices: ["Add it to prod now", "Wait for my review"], recommended: "Wait for my review", attention_since: new Date().toISOString(),
+      worker_sessions: [{ session_id: a, name: "ArcAIProdCloudflare", provider: "claude", state: "running", summary: "Plaza fix done", live: true, joined_at: "2026-11-13T09:00:00Z", updated_at: "2026-11-13T09:01:00Z" }] }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
+      brain: { ...brain, current_work },
+      worker_sessions: [session(a, { name: "ArcAIProdCloudflare", status: "running", delegated: true })],
+      conversations: { "brain-host": [{ id: "wr4", seq: 1, timestamp: new Date().toISOString(), kind: "status", source: "work_result", status: "session.needs_input",
+        title: "ArcAIProdCloudflare", body: "Plaza fix done", work_id: "w4", work_session_id: a, session_name: "ArcAIProdCloudflare", unread: false,
+        work_review_state: "queued", work_session_state: "open", work_result_current: true }] },
+      replies: { brain_work_action: { type: "brain_work_action", status: "ok", admission: "accepted" } },
+    }) });
+    await app.waitFor("id:work-asks", { timeout: 10_000 });
+    // The whole question, never cut; the choices; Brain's pick on its row; no terminal, no docked card.
+    expect(app.texts()).toContain(QUESTION);
+    expect(app.texts()).toContain("Brain asks");
+    expect(app.shows("id:work-asks-pick")).toBe(true);
+    expect(app.texts()).toContain("Something else…");
+    expect(app.count("id:request-open-terminal")).toBe(0);
+    expect(app.count("id:request-card")).toBe(0);
+    expect(app.texts()).toContain("1 needs you");
+    await app.press("id:work-asks-choice-Wait for my review");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length > 0);
+    expect(framesOf(app.host.posts(), "brain_work_action").at(-1)).toMatchObject({ id: "w4", action: "reply", text: "Wait for my review" });
+  }, 20_000);
+
+  test("Later puts a card aside: it leaves the thread's foot, the tray keeps it, and its tray row brings it back", async () => {
+    const app = await open(APP, {
+      platform: "android", storage: paired,
+      host: phoneHost({ brain, worker_sessions: [session("docs", { delegated: true, approvals: [approval("a1", "git push origin main")] })] }),
+    });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    await app.press("id:request-later");
+    await app.waitUntil(() => !app.shows("id:request-card"));
+    // Still open: the count keeps it, and so does the tray.
+    expect(app.texts()).toContain("1 needs you");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-needs");
+    await app.press("id:tray-needs >> id:tray-request >> nth=0");
+    await app.waitUntil(() => !app.shows("id:tray"));
+    await app.waitFor("id:request-card");
+    expect(app.texts()).toContain("git push origin main");
+  }, 20_000);
+});

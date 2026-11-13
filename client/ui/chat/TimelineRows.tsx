@@ -15,7 +15,7 @@ import { RowEnd, RowText, RowTile } from "../tray/rowParts";
 import { tray } from "../tray/state";
 import { elapsedNow } from "../kit/elapsedClock";
 import { answerPrompt, decideApproval } from "../../core/conversation/turn";
-import type { ResultAction, WorkWorkerSession } from "../../core/work/types";
+import type { BrainCurrentWork, ResultAction, WorkWorkerSession } from "../../core/work/types";
 import { resultActionLabel } from "../../core/work/resultActions";
 import type { AgentKind, TerminalFlavor } from "../../core/sessions/workerPresentation";
 import { AgentIcon } from "../icons/AgentIcon";
@@ -25,7 +25,11 @@ import { serverForComputer, type ComputerMessageTimelineItem } from "../../core/
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import { Icon, type IconName } from "../icons/Icon";
 import { ICON_ASSETS } from "../icons/assets";
-import { current, currentTransport, servers, switchTo } from "../session";
+import { connection, current, currentTransport, servers, switchTo } from "../session";
+import { workAction } from "../../core/work/brainWork";
+import { brainWorkTitle } from "../../core/work/surface";
+import { delayed, RING, Spinner } from "../kit/wait";
+import { haptic } from "../shell/haptics";
 
 /**
  * Which rows are open. A list recycles its cells, so a row's own signal would
@@ -354,6 +358,76 @@ function OneSessionWork(props: { model: () => WorkCardModel; line: () => WorkWor
 }
 
 /**
+ * A Work that waits on Brain's question (SPEC §11 Work card, "A Work that asks"; owner 2026-11-13, shot 11): the
+ * question whole, then its choices as rows that answer at once (Brain's pick tagged), then "Something else…",
+ * which opens Work detail with its reply box. It stays where the Work is in the thread, never pinned at its foot;
+ * the source at the top line opens Work detail, where Snooze puts it aside (the tray keeps it).
+ */
+function WorkQuestion(props: { work: () => BrainCurrentWork; handlers?: WorkCardHandlers }) {
+  const busy = signal("");
+  const failed = signal(false);
+  const offline = () => connection() !== "connected";
+  const workId = () => props.work().work_id;
+  const answer = async (choice: string) => {
+    const transport = currentTransport();
+    if (!transport || transport.state !== "connected" || busy()) return;
+    busy.set(choice);
+    failed.set(false);
+    try {
+      await workAction(transport, workId(), "reply", { text: choice });
+      // A request answered and acknowledged: the one light tick (SPEC §16.3 Haptics).
+      haptic.impact("light");
+    } catch {
+      failed.set(true);
+    } finally {
+      busy.set("");
+    }
+  };
+  const choices = () => props.work().choices ?? [];
+  return (
+    <View testID="work-asks" class="overflow-hidden rounded-(--radius-group) bg-card">
+      <View class="gap-2 px-4 pb-4 pt-1">
+        <View class="min-h-[44px] flex-row items-center gap-2">
+          <View class="size-2 rounded-full bg-seal" />
+          <Text class="text-caption font-semibold">Brain asks</Text>
+          <Button testID="work-asks-source" accessibilityLabel={`Open ${brainWorkTitle(props.work().title)}`} disabled={!props.handlers} onPress={() => props.handlers?.onTitle(workId())}
+            class="min-h-[44px] min-w-0 flex-1 flex-row items-center justify-end gap-1 active:opacity-70">
+            <Text class="min-w-0 shrink text-caption text-muted-foreground line-clamp-1">{brainWorkTitle(props.work().title)}</Text>
+            <KitIcon name="chevron-right" size={14} tone="faint" />
+          </Button>
+        </View>
+        <View selectable><Text testID="work-asks-question" class="text-body font-semibold">{props.work().question ?? ""}</Text></View>
+        <If when={failed()} else={<If when={offline()}><Text testID="work-asks-offline" class="text-sub text-muted-foreground">{`${current()?.name || "Your computer"} is offline`}</Text></If>}><Text testID="work-asks-failed" class="text-sub">{`Didn't reach ${current()?.name || "your computer"}`}</Text></If>
+      </View>
+      {choices().map((choice) => <WorkChoiceRow label={choice} pick={choice === props.work().recommended} busy={() => busy() === choice} disabled={() => offline() || Boolean(busy())} onPress={() => void answer(choice)} />)}
+      <Button testID="work-asks-other" disabled={!props.handlers} onPress={() => props.handlers?.onTitle(workId())}
+        class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 active:bg-accent">
+        <Text class="min-w-0 flex-1 text-body">{choices().length ? "Something else…" : "Reply"}</Text>
+        <KitIcon name="chevron-right" size={16} tone="faint" />
+      </Button>
+    </View>
+  );
+}
+
+/** A choice of a Work's question: a 54 pt row with a ring; Brain's pick wears the request card's tag. */
+function WorkChoiceRow(props: { label: string; pick: boolean; busy: () => boolean; disabled: () => boolean; onPress: () => void }) {
+  // Not optimistic (SPEC §16.2 pattern 8): the press, then the ring in the row's circle after `wait.quiet`.
+  const ring = delayed(props.busy);
+  return (
+    <Button testID={`work-asks-choice-${props.label}`} disabled={props.disabled()} onPress={props.onPress}
+      class={`min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent ${props.busy() ? "" : "disabled:opacity-40"}`}>
+      <Text class="min-w-0 flex-1 text-body">{props.label}</Text>
+      <If when={props.pick}><Text testID="work-asks-pick" class="text-caption text-muted-foreground">Brain's pick</Text></If>
+      <View class="size-[22px] items-center justify-center">
+        <If when={ring()} else={<View class="size-[22px] rounded-full border-2 border-faint" />}>
+          <Spinner size={RING.button} label={props.label} />
+        </If>
+      </View>
+    </Button>
+  );
+}
+
+/**
  * A Work in Brain's thread (SPEC §1.2, §11 Work card and Work result card): live while it runs (its
  * title opens Work detail, its Session's line the Session); waiting on a decision, the card says so
  * and opens Work detail; back and new, the result card (the header opens the Session, a next step
@@ -368,9 +442,11 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
   // Which card, as one word: made again only when it changes. `lines()` is new on every change of the
   // computer's Sessions, which drew every Work card of the thread anew when read in the branch.
   const shape = computed(() => (model().kind === "line" ? "line" : model().kind === "result" ? "result" : lines().length <= 1 && (lines().length === 1 || model().sessionId) ? "one" : "many"));
+  // Brain's question on this Work: the card is the question (an open Work only; the model says when it asks).
+  const asks = computed(() => (model().kind === "needs" && props.item().currentWork?.question ? props.item().currentWork : undefined));
   return (
     <View class="px-4 py-1">
-      <If when={shape() === "line"} else={<If when={shape() === "result"} else={<If when={shape() === "one"} else={<View testID={state().dot === "seal" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">
+      <If when={asks()} else={<If when={shape() === "line"} else={<If when={shape() === "result"} else={<If when={shape() === "one"} else={<View testID={state().dot === "seal" ? "work-needs" : "work-card"} class="overflow-hidden rounded-(--radius-group) bg-card">
           <Button testID="work-card-title" disabled={!props.handlers} onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[52px] flex-row items-center gap-2 px-4 active:opacity-70">
             <Text class="min-w-0 flex-1 text-body font-semibold line-clamp-1">{model().title}</Text>
             <If when={state().dot}><View class={`size-2 rounded-full ${state().dot === "seal" ? "bg-seal" : "bg-foreground"}`} /></If>
@@ -401,7 +477,7 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
           <WorkLogo agent={agent()} size={20} />
           <Text class="min-w-0 flex-1 text-sub text-muted-foreground line-clamp-1"><Text class="font-semibold text-foreground">{model().title}</Text>{model().summary ? ` · ${model().summary}` : ""}</Text>
           <KitIcon name="check" size={18} tone="soft" />
-        </Button></If>
+        </Button></If>}>{(work) => <WorkQuestion work={work} handlers={props.handlers} />}</If>
     </View>
   );
 }

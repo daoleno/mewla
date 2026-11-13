@@ -42,6 +42,35 @@ export function threadRequests(thread: RequestThread, events?: () => readonly Co
   });
 }
 
+/**
+ * Requests the person put aside ("Later", SPEC §11 Request card): they leave the thread's foot and its jump count,
+ * nothing else. The tray keeps their row and the count still has them; a tray row brings its card back, and so
+ * does opening the Session that asks (owner 2026-11-13, shot 11: the card "hangs here blocking me").
+ */
+const aside = signal<ReadonlySet<string>>(new Set());
+
+export function putRequestAside(key: string): void {
+  if (!aside().has(key)) aside.set(new Set([...aside(), key]));
+}
+
+export function bringRequestBack(key: string): void {
+  if (!aside().has(key)) return;
+  const next = new Set(aside());
+  next.delete(key);
+  aside.set(next);
+}
+
+/** Opening a Session brings back what it asks that was put aside. */
+export function bringSessionRequestsBack(workerId: string): void {
+  const next = [...aside()].filter((key) => key.split(":")[1] !== workerId);
+  if (next.length !== aside().size) aside.set(new Set(next));
+}
+
+/** The cards a thread's foot shows: its open requests less those put aside. */
+export function requestsInView(cards: () => readonly Card[]) {
+  return computed(() => cards().filter((card) => !aside().has(card.key)));
+}
+
 /** Requests answered here that this thread shows as quiet lines (the five newest). */
 export function threadSealed(thread: RequestThread, durable?: () => ReadonlySet<string>) {
   // A line the thread already holds as its own answered row (kept by the computer) is not repeated at the foot.
@@ -269,7 +298,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
 }
 
 /** One open request: the card the person answers here. */
-function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; notice: RequestNotice; anchor?: (node: ViewRef) => void }) {
+function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; notice: RequestNotice; anchor?: (node: ViewRef) => void; onLater: () => void }) {
   const card = props.card;
   const gone = () => {
     const command = card.body.kind === "action" ? promptParts(card.body.prompt.requestText ?? "", card.body.prompt.commandText).command : "";
@@ -286,10 +315,11 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
     <View testID="request-card" ref={props.anchor} class="gap-3 rounded-(--radius-group) bg-card p-4">
       <TopLine card={() => card} onSource={props.onSource} />
       <If when={card.body.kind === "choice" ? card.body : undefined} else={<If when={card.body.kind === "action"} else={<View class="gap-3">
-          <Text class="text-body font-semibold">{(card.body as { detail: string }).detail}</Text>
+          {/* What it waits for, whole; the terminal is the last resort, so its button is the quiet one. */}
+          <View selectable><Text testID="request-detail" class="text-body font-semibold">{(card.body as { detail: string }).detail}</Text></View>
           <Button testID="request-open-terminal" onPress={() => props.onOpenTerminal((card.body as { workerId: string }).workerId)}
-            class="h-[48px] items-center justify-center self-start rounded-(--radius-control) bg-primary px-4 active:opacity-70">
-            <Text class="text-body font-semibold text-primary-foreground">Open terminal</Text>
+            class="h-[48px] items-center justify-center self-start rounded-(--radius-control) bg-muted px-4 active:opacity-70">
+            <Text class="text-body font-semibold">Open terminal</Text>
           </Button>
         </View>}><ActionBody card={card} connected={props.connected} onGone={gone}
           onDone={(option) => {
@@ -297,6 +327,10 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
             sealRequest(sealedOf(card, words.verb, words.answer, words.mono));
           }} /></If>}>{(body) => <ChoiceBody card={card} choice={body().choice} connected={props.connected} submit={submit}
           onDone={(answer) => sealRequest(sealedOf(card, "You chose", answer))} onGone={gone} />}</If>
+      {/* Put aside: it leaves the thread's foot, the tray keeps it. */}
+      <Button testID="request-later" onPress={props.onLater} class="-mb-2 -mt-1 h-[44px] items-center justify-center self-end px-2 active:opacity-70">
+        <Text class="text-sub text-muted-foreground">Later</Text>
+      </Button>
     </View>
   );
 }
@@ -372,9 +406,14 @@ export function RequestStack(props: {
   anchor?: (node: ViewRef) => void;
 }) {
   const connected = () => connection() === "connected";
+  const cards = requestsInView(props.cards);
   // The open card is made once per key (its draft survives every update of the request list).
-  const openKey = computed(() => openCardKey(props.cards(), props.picked()));
-  const openCard = () => props.cards().find((card) => card.key === untracked(openKey));
+  const openKey = computed(() => openCardKey(cards(), props.picked()));
+  const openCard = () => cards().find((card) => card.key === untracked(openKey));
+  const later = (key: string) => {
+    putRequestAside(key);
+    if (untracked(props.picked) === key) props.picked.set("");
+  };
   const sealed = threadSealed(props.thread, props.durable);
   const shown = signal<ReadonlySet<string>>(new Set());
   const toggle = (key: string) => {
@@ -386,8 +425,8 @@ export function RequestStack(props: {
   return (
     <View testID="request-stack" class="gap-2 px-4 pb-2">
       {sealed().map((s) => <SealedLine sealed={() => s} open={() => shown().has(s.key)} onToggle={() => toggle(s.key)} />)}
-      <Each of={openKey() ? [openKey()!] : []} key={(key) => key}>{() => <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} notice={props.notice} anchor={props.anchor} />}</Each>
-      {props.cards().filter((card) => card.key !== openKey()).map((card) => <StackedRow card={() => card} onPress={() => props.picked.set(card.key)} />)}
+      <Each of={openKey() ? [openKey()!] : []} key={(key) => key}>{(key) => <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} notice={props.notice} anchor={props.anchor} onLater={() => later(untracked(key))} />}</Each>
+      {cards().filter((card) => card.key !== openKey()).map((card) => <StackedRow card={() => card} onPress={() => props.picked.set(card.key)} />)}
     </View>
   );
 }

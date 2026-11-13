@@ -34,7 +34,7 @@ import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { ModelSheet } from "../session/ModelSheet";
 import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
-import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
+import { bringSessionRequestsBack, durableAnswered, RequestStack, requestsInView, threadRequests, threadSealed } from "../chat/RequestCard";
 import { buildChatComposerPlaceholder } from "../../core/session/chatComposerPresentation";
 import { terminalFallback } from "../../core/session/terminalFallback";
 import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
@@ -162,6 +162,9 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   // What the Session waits on: its requests, from the same model as the tray (an agent's reported
   // decisions, the prompt the daemon read off its terminal, a question its transcript fills in).
   const requests = threadRequests({ workerId: props.workerId }, () => thread().conversation?.events);
+  // Opened, the Session shows again what it asks that was put aside; the foot leaves out what is put aside here.
+  bringSessionRequestsBack(props.workerId);
+  const requestsHere = requestsInView(requests);
   const sealedHere = threadSealed({ workerId: props.workerId }, () => durableHere());
   const pickedRequest = signal("");
   // A DSH Session asks through its own channel; one panel per run of it.
@@ -651,10 +654,10 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
                 capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
                 foot={{
-                  shown: () => requests().length > 0 || sealedHere().length > 0,
+                  shown: () => requestsHere().length > 0 || sealedHere().length > 0,
                   render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
                 }}
-                requests={() => requests().length} />
+                requests={() => requestsHere().length} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} attached={() => uploads.ready().length > 0} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}

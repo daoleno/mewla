@@ -6,7 +6,7 @@ import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
-import { durableAnswered, RequestStack, threadRequests, threadSealed } from "../chat/RequestCard";
+import { bringRequestBack, durableAnswered, RequestStack, requestsInView, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
 import { ThreadWait } from "../chat/ThreadWait";
 import { brainHostIdentity } from "../chat/links";
@@ -48,6 +48,8 @@ const startingChat = signal(false);
 const notice = signal("");
 /** Brain's thread's open requests (SPEC §1.1): Brain's own and those of the Sessions working for its Work. */
 const requests = threadRequests({ brain: true });
+/** Those the foot shows: the ones put aside ("Later") stay in the tray only. */
+const requestsHere = requestsInView(requests);
 /** The request the person (or a tray row) opened in the stack; none opens the oldest. */
 const pickedRequest = signal("");
 /** Bumped to bring the open request into view. */
@@ -55,6 +57,7 @@ const revealRequests = signal(0);
 
 /** A tray row of a request in Brain's thread (the tray has closed): the thread scrolls to that card, open. */
 export function showRequestCard(key: string): void {
+  bringRequestBack(key);
   pickedRequest.set(key);
   if (!homeShown()) goHome();
   revealRequests.set(revealRequests() + 1);
@@ -316,14 +319,14 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
               failedAction={{ title: "Open terminal", onPress: () => openTerminal(brain()?.host_worker?.id ?? ""), testID: "brain-chat-open-terminal" }} />
           )}
           foot={{
-            shown: () => !routedBrainThread() && (requests().length > 0 || sealedHere().length > 0),
+            shown: () => !routedBrainThread() && (requestsHere().length > 0 || sealedHere().length > 0),
             render: (anchor) => (
               <RequestStack anchor={anchor} durable={durableHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
                 onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
                 onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
             ),
           }}
-          requests={() => (routedBrainThread() ? 0 : requests().length)} reveal={revealRequests} />
+          requests={() => (routedBrainThread() ? 0 : requestsHere().length)} reveal={revealRequests} />
       )}</Each>
       <If when={shows() === "waking"}><Notice title="Brain is starting…" /></If>
       <If when={shows() === "host_down"}><Notice title="Brain can't start" /></If>
