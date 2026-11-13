@@ -64,6 +64,17 @@ describe("a reply", () => {
   }, 20_000);
 });
 
+describe("inline code", () => {
+  test("reads at the body's optical size in the mono face, on the surface chip", async () => {
+    const app = await brainWith([reply("a1", 1, "Run `bun test core` first.\n\n- item `zq-b`\n\n# Head `x`")]);
+    await app.waitFor("text:Run bun test core first.", { timeout: 10_000 });
+    // 15 in the 17 body (mono's x-height meets the body's), on the surface chip; the same in a list item.
+    expect(app.spanStyle("text:Run bun test core first.").fontSize).toBe(17);
+    expect(app.spanStyle("text:bun test core")).toMatchObject({ fontSize: 15, backgroundColor: "#ffffffff", color: "#131416ff" });
+    expect(app.spanStyle("text:zq-b")).toMatchObject({ fontSize: 15, backgroundColor: "#ffffffff" });
+  }, 20_000);
+});
+
 describe("the person's own message", () => {
   test("a tap puts it in the composer to edit (the Editing chip; × leaves it), with no sheet", async () => {
     const app = await brainWith([{ id: "u1", seq: 1, timestamp: at(1), kind: "user_message", role: "user", body: "Book the 23:30 train" }, reply("a1", 2, "Booked.")]);
