@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/daoleno/mewla/daemon/live"
 	"github.com/daoleno/mewla/daemon/push"
@@ -44,6 +45,10 @@ type liveHub struct {
 
 	mu       sync.Mutex
 	prevKind string
+	// last is the newest Brain snapshot observed, so a Session's change
+	// re-projects without building a new snapshot.
+	last    brain.Snapshot
+	hasLast bool
 
 	answerMu sync.Mutex
 	answers  map[string]map[string]any
@@ -100,7 +105,7 @@ func (s *Server) startLive(ctx context.Context) {
 				return
 			case <-ticker.C:
 				if snapshot, err := s.liveSnapshot(); err == nil {
-					hub.projector.Observe(snapshot)
+					s.observeLive(snapshot)
 				}
 			}
 		}
@@ -119,7 +124,87 @@ func (s *Server) liveSnapshot() (brain.Snapshot, error) {
 
 // observeLive is called wherever a Brain snapshot is broadcast.
 func (s *Server) observeLive(snapshot brain.Snapshot) {
-	s.liveRuntime().projector.Observe(snapshot)
+	hub := s.liveRuntime()
+	hub.mu.Lock()
+	hub.last, hub.hasLast = snapshot, true
+	hub.mu.Unlock()
+	hub.projector.Observe(s.liveInput(snapshot))
+}
+
+// observeLiveSessions re-projects after a Session changed (it started or
+// stopped running, or began or stopped asking), on the newest snapshot.
+func (s *Server) observeLiveSessions() {
+	hub := s.liveRuntime()
+	hub.mu.Lock()
+	snapshot, ok := hub.last, hub.hasLast
+	hub.mu.Unlock()
+	if ok {
+		hub.projector.Observe(s.liveInput(snapshot))
+	}
+}
+
+// liveInput is what the live state is projected from: the Brain snapshot,
+// every visible Session and Brain's own prompt, read the way the open
+// request count reads them (computers_wire.go).
+func (s *Server) liveInput(snapshot brain.Snapshot) live.Input {
+	in := live.Input{Snapshot: snapshot}
+	providers := map[string]string{}
+	for _, ref := range snapshot.Workers {
+		providers[ref.ID] = ref.Provider
+	}
+	hostID := ""
+	if s.brain != nil {
+		hostID = s.brain.CurrentHostSessionID()
+		if hostID != "" {
+			if host := s.lookupWorker(hostID); host != nil && host.State == classifier.StateBlocked && host.Prompt != nil {
+				in.HostAsk = firstLiveText(host.Prompt.Summary, host.Prompt.Title, host.Prompt.Request, "Brain asks")
+				in.HostAskSince = host.UpdatedAt
+			}
+		}
+	}
+	for _, worker := range s.currentVisibleWorkerSessions() {
+		if worker == nil || worker.ID == hostID {
+			continue
+		}
+		session := live.Session{
+			ID: worker.ID, Title: strings.TrimSpace(worker.Name), Provider: providers[worker.ID],
+			Line: firstLiveText(worker.Summary, worker.Phase), Delegated: worker.Delegated,
+			Running: worker.State == classifier.StateRunning, StartedAt: worker.StartedAt,
+		}
+		if worker.RunningSince != nil {
+			session.StartedAt = *worker.RunningSince
+		}
+		approvals := s.pendingApprovals(worker.ID)
+		if asksOwner(worker, len(approvals)) {
+			session.AskSince = worker.UpdatedAt
+			session.Requests = len(approvals)
+			switch {
+			case len(approvals) > 0:
+				session.Asks = live.NeedsApprove
+				session.Ask = firstLiveText(approvals[0].Summary, approvals[0].Tool, "Wants your approval")
+			case worker.Prompt != nil:
+				session.Asks = live.NeedsAnswer
+				if worker.Prompt.Kind == classifier.PromptPermission || worker.Prompt.Kind == classifier.PromptApproval {
+					session.Asks = live.NeedsApprove
+				}
+				session.Ask = firstLiveText(worker.Prompt.Summary, worker.Prompt.Title, worker.Prompt.Request)
+			default:
+				session.Asks = live.NeedsAnswer
+				session.Ask = firstLiveText(worker.Summary, "Waiting for you")
+			}
+		}
+		in.Sessions = append(in.Sessions, session)
+	}
+	return in
+}
+
+func firstLiveText(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // onLiveChange reports one new state to connected phones and, for a phone that
@@ -201,7 +286,7 @@ func (s *Server) handleLiveMessage(conn *websocket.Conn, msg []byte, raw clientM
 		}
 		s.sendJSON(conn, map[string]any{
 			"type": "live_state", "request_id": message.RequestID,
-			"live": hub.projector.ObserveNow(snapshot),
+			"live": hub.projector.ObserveNow(s.liveInput(snapshot)),
 		})
 	case "widget_token_issue":
 		s.handleWidgetTokenIssue(conn, message)
@@ -349,7 +434,7 @@ func (s *Server) handleWidgetSnapshot(w http.ResponseWriter, r *http.Request) {
 	state := hub.projector.Current()
 	if state.Seq == 0 {
 		if snapshot, err := s.liveSnapshot(); err == nil {
-			state = hub.projector.ObserveNow(snapshot)
+			state = hub.projector.ObserveNow(s.liveInput(snapshot))
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
