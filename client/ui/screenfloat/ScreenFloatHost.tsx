@@ -64,7 +64,10 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
   let shown = new Set<string>();
   let missing = { server: "", display: false, mac: false };
 
-  const running = () => workers().some((worker) => isWorkerActivelyRunning(worker.status));
+  // A computed: only whether something runs. A Session's own news (its activity, its output, several a second
+  // while Workers run) must not run the reads below again: each one signs two requests on the JS thread, and
+  // Brain's thread stuttered under them (owner 11-13).
+  const running = computed(() => workers().some((worker) => isWorkerActivelyRunning(worker.status)));
   const mayUse = () => running() || holding() !== null;
 
   // A new computer, or nothing that could use a screen: nothing to show until the next read.
