@@ -192,6 +192,8 @@ type Server struct {
 	enrollments                *enrollment.Manager
 	enrollmentObserver         func(enrollment.Request)
 	webUIFiles                 fs.FS
+	webUIDir                   string
+	webUIOverrideSeen          atomic.Bool
 
 	workSubID                   int
 	workSub                     <-chan work.Event
