@@ -517,7 +517,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         ) : null}
         <View class="flex-1">
           <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
-            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)} />
+            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)}
+              program={() => (props.brain ? brain()?.host_worker?.provider : undefined) ?? (kind() === "terminal" ? undefined : kind())} />
             <View class="absolute left-3 right-3 top-3 gap-2" style={{ pointerEvents: "box-none" }}>
             {fallback() ? (
               <View testID="terminal-offline" class="gap-1.5 rounded-xl border border-border bg-card px-3 py-3">

@@ -15,6 +15,8 @@ export type PaneScrollMode = {
   mouse: boolean;
   alt_scroll?: boolean;
   app_cursor?: boolean;
+  /** How the program wants mouse reports encoded ("sgr", "urxvt", "utf8", "x10"); absent from older computers. */
+  mouse_format?: string;
 };
 
 /** A tmux Session's answer: one bounded snapshot of the active pane's history, newest last. */
@@ -41,6 +43,7 @@ export type HistoryDelta = {
   mouse: boolean;
   alt_scroll?: boolean;
   app_cursor?: boolean;
+  mouse_format?: string;
   epoch: number;
   reset: boolean;
   first: number;
@@ -270,7 +273,8 @@ export class TerminalHistoryModel {
     this.alternate = delta.alternate;
     this.panes = [{ id: delta.pane_id, left: 0, top: 0, cols: delta.cols, rows: delta.rows, alternate: delta.alternate, mouse: delta.mouse,
       ...(typeof delta.alt_scroll === "boolean" ? { alt_scroll: delta.alt_scroll } : {}),
-      ...(typeof delta.app_cursor === "boolean" ? { app_cursor: delta.app_cursor } : {}) }];
+      ...(typeof delta.app_cursor === "boolean" ? { app_cursor: delta.app_cursor } : {}),
+      ...(typeof delta.mouse_format === "string" && delta.mouse_format.length <= 16 ? { mouse_format: delta.mouse_format } : {}) }];
     // A reset with what was held changes nothing the view shows only if both are empty.
     return unchanged ? null : render;
   }

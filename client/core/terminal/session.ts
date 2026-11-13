@@ -1,8 +1,15 @@
 import type { Frame, Transport } from "../transport";
 import { TerminalHistoryFeed, type HistoryRender, type TerminalHistoryModel } from "./history";
-import { paneForDrag, wheelBytes } from "./wheel";
+import { clickBytes, paneForDrag, wheelBytes, wheelKind } from "./wheel";
+import { ClaudeWheel, LinePlanner, WheelGate, type GateClock } from "./wheelGate";
 
 export type TerminalScrollState = { atBottom: boolean; inCopyMode: boolean; position: number };
+
+/**
+ * What the page knows of the Session: `program` is the agent running in it ("claude", "codex", …), which
+ * says what one wheel press does there (Claude Code accelerates them: core/terminal/wheelGate.ts).
+ */
+export type TerminalSessionOptions = { program?: () => string | undefined; clock?: GateClock };
 
 export interface TerminalHandlers {
   /** A new attachment: clear the view before its output arrives. */
@@ -51,12 +58,18 @@ export class TerminalSession {
   private exited = false;
   private readonly stops: Array<() => void> = [];
   private readonly feed: TerminalHistoryFeed;
+  /** A drag on the program's own screen: one write in flight, one a frame (core/terminal/wheelGate.ts). */
+  private readonly wheel: WheelGate;
+  private readonly lines = new LinePlanner();
+  private readonly claude = new ClaudeWheel();
 
   constructor(
     private readonly transport: Transport,
     private readonly targetId: string,
     private readonly handlers: TerminalHandlers,
+    private readonly options: TerminalSessionOptions = {},
   ) {
+    this.wheel = new WheelGate((presses) => this.sendWheel(presses), this.lines, options.clock);
     this.feed = new TerminalHistoryFeed(transport, { rows: (render) => handlers.history(render), notice: (text) => handlers.historyNotice(text) });
     const mine = (frame: Frame) => this.sessionId !== null && frame.session_id === this.sessionId;
     this.stops.push(
@@ -64,12 +77,15 @@ export class TerminalSession {
       transport.on("disconnected", () => {
         this.sessionId = null;
         this.opening = false;
+        this.wheel.reset();
         if (!this.exited && !this.closed) this.feed.attach(null);
       }),
       transport.on("terminal_output", (frame) => {
         if (!mine(frame) || typeof frame.data !== "string") return;
         handlers.output(frame.data);
         this.feed.output();
+        // The program answered: the travel made meanwhile may go.
+        this.wheel.answered();
       }),
       transport.on("terminal_size", (frame) => {
         const cols = Number(frame.cols), rows = Number(frame.rows);
@@ -129,13 +145,39 @@ export class TerminalSession {
 
   /**
    * A drag the view did not take (it holds no history, or the program is on the alternate screen), `lines` > 0
-   * back in time: what the program scrolls with (core/terminal/wheel.ts), else tmux copy mode.
+   * back in time: what the program scrolls with (core/terminal/wheel.ts), paced by the wheel gate, else tmux
+   * copy mode. `lines` 0 is a finger coming down: travel still waiting (a fling's tail) is dropped.
    */
   drag(lines: number): void {
-    const bytes = wheelBytes(paneForDrag(this.history.panes), lines);
+    if (lines === 0) return this.wheel.stop();
+    const pane = paneForDrag(this.history.panes);
+    const kind = wheelKind(pane);
+    if (kind === "none") return this.scroll(lines);
+    this.wheel.use(kind === "mouse" && this.options.program?.() === "claude" ? this.claude : this.lines);
+    this.wheel.add(lines);
+  }
+
+  private sendWheel(presses: number): void {
+    const bytes = wheelBytes(paneForDrag(this.history.panes), presses);
     // Marked as a scroll: reading, so the computer never takes the Session's size from another viewer for it.
     if (bytes) this.sendScrollInput(bytes);
-    else this.scroll(lines);
+    else this.wheel.answered();
+  }
+
+  /** Whether a tap at a live cell is a click: the program asked for mouse reports. */
+  get clickable(): boolean {
+    return Boolean(paneForDrag(this.history.panes)?.mouse);
+  }
+
+  /**
+   * A tap at a live cell (0-based) as a click for the program (core/terminal/wheel.ts, clickBytes). It is
+   * acting, like typing: it takes the Session's size back from another viewer.
+   */
+  click(col: number, row: number): boolean {
+    const bytes = clickBytes(paneForDrag(this.history.panes), col, row);
+    if (!bytes || !this.sessionId) return false;
+    this.input(bytes);
+    return true;
   }
 
   private sendScrollInput(data: string): void {
@@ -174,6 +216,7 @@ export class TerminalSession {
     this.closed = true;
     if (this.sessionId) this.send({ type: "terminal_close", session_id: this.sessionId });
     this.sessionId = null;
+    this.wheel.reset();
     this.feed.close();
     this.stops.splice(0).forEach((stop) => stop());
   }
@@ -206,6 +249,7 @@ export class TerminalSession {
         // Closed while it was opening: give the attachment back.
         if (this.closed) return this.send({ type: "terminal_close", session_id: id });
         this.sessionId = id;
+        this.wheel.reset();
         this.handlers.reset();
         this.feed.attach(id);
         const cols = Number(frame.cols), rows = Number(frame.rows);
