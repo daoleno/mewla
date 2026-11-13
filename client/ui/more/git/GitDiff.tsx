@@ -316,9 +316,15 @@ async function readerMenu(input: {
  * the file leaves its group the reader moves to the entry now at its place.
  */
 export function DiffPage(props: { review: GitReview; entry: string; nav: PageNav }) {
+  // The page is the file it shows (SPEC §15, #diff/0): its name is the title, in the capsule; previous and next move it.
+  const shown = signal(props.entry);
+  const name = () => {
+    const entry = props.review.order().find((e) => e.key === shown());
+    return entry ? splitGitReviewPath(entry.file.path).name : "Diff";
+  };
   return (
-    <NavPage title="Diff" testID="git-diff-page" column="full">
-      <Current review={props.review} class="flex-1 bg-background">{() => <DiffReader review={props.review} entry={props.entry} nav={props.nav} onEmpty={() => props.nav.pop()} />}</Current>
+    <NavPage title={name()} testID="git-diff-page" column="full">
+      <Current review={props.review} class="flex-1 bg-background">{() => <DiffReader review={props.review} entry={props.entry} nav={props.nav} onEmpty={() => props.nav.pop()} onShow={(key) => shown.set(key)} />}</Current>
     </NavPage>
   );
 }

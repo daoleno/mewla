@@ -1,5 +1,6 @@
 import { host, mount, View } from "nsh";
 import { createNavStack, NavStack } from "nsh/base";
+import { PageStack } from "../../shell/NavPage";
 import { installPlatform } from "../../../core/platform";
 import type { ConnectionState, Frame } from "../../../core/transport";
 import { nshPlatform } from "../../platform";
@@ -20,7 +21,7 @@ import type { StoredServer } from "../../../core/storedServerContract";
  */
 installPlatform(nshPlatform());
 
-const params = host.params as { page?: MorePage; below?: MorePage; state?: ConnectionState; server?: Partial<StoredServer> };
+const params = host.params as { page?: MorePage; below?: MorePage; pageStack?: boolean; state?: ConnectionState; server?: Partial<StoredServer> };
 const fake = new FakeDaemon({}, testServer(params.server ?? {}), params.state ?? "connected");
 fake.request = (async (type: string, body: Record<string, unknown>, options: { reply: string }) => {
   fake.asked.push({ type, body });
@@ -78,7 +79,10 @@ host.on("app.navPop", () => nav.pop());
 
 mount(() => (
   <View class="flex-1 bg-background">
-    <NavStack state={nav} style={{ flex: 1 }}>{(route) => <MorePageView route={route} nav={nav} onPair={() => {}} />}</NavStack>
+    {/* `host.params.pageStack`: the app's page stack, as Shell gives it, so a pushed page has Back (and on a phone its capsule). */}
+    <PageStack.Provider value={{ canGoBack: () => Boolean(params.pageStack) && nav.routes().length > 1, back: () => nav.pop() }}>
+      <NavStack state={nav} style={{ flex: 1 }}>{(route) => <MorePageView route={route} nav={nav} onPair={() => {}} />}</NavStack>
+    </PageStack.Provider>
     <MenuHost />
   </View>
 ));
