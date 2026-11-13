@@ -36,14 +36,14 @@ export type ServiceGlyph = "chat" | "apps" | "cloud" | "server" | "code" | "puzz
 /**
  * A service's leading icon: its mark in its real colours when the client has it (GitHub, Notion, Linear,
  * Cloudflare, Tailscale), its own one-colour mark drawn in ink (`service`: AWS, Hyperliquid, Onlora), else its
- * glyph on the extensions' violet tile.
+ * glyph on the neutral tile.
  */
 export type ServiceLead = RowLeading<ServiceGlyph> | { kind: "service"; id: string };
 
 export function serviceLead(id: string): ServiceLead {
-  if (MULTICOLOUR[id]) return { kind: "tile", hue: "violet", glyph: MULTICOLOUR[id] };
+  if (MULTICOLOUR[id]) return { kind: "tile", glyph: MULTICOLOUR[id] };
   const mark = brandMark(id);
   if (mark) return { kind: "mark", mark };
   if (hasServiceMark(id)) return { kind: "service", id };
-  return { kind: "tile", hue: "violet", glyph: GLYPHS[id] ?? "puzzle" };
+  return { kind: "tile", glyph: GLYPHS[id] ?? "puzzle" };
 }

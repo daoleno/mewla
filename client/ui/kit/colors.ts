@@ -4,8 +4,8 @@ import { token, type Tokens } from "nsh";
  * The colours the pages draw with outside classes (canvas strokes, status marks, icons), by name. Every one is
  * a role of ui/theme.json (soft-final SPEC §10.1 and §10.4), read through `token()` so the values live in the
  * theme once and follow the appearance shown. Red (`seal`) means waiting for you and nothing else; on the first
- * level a state's tone names its role and reads in ink or soft. `ok`, `warning`, `meter`, the tiles and the
- * series are for the pages behind the first level only (§10.4).
+ * level a state's tone names its role and reads in ink or soft. `ok`, `warning`, `meter`, the neutral tile and
+ * the series are for the pages behind the first level only (§10.4).
  */
 const ROLES = {
   ink: "foreground",
@@ -31,16 +31,8 @@ const ROLES = {
   warning: "warning",
   /** A meter's fill under its threshold. */
   meter: "meter",
-  tileBlue: "tile-blue",
-  tileBlueWash: "tile-blue-wash",
-  tileViolet: "tile-violet",
-  tileVioletWash: "tile-violet-wash",
-  tileTeal: "tile-teal",
-  tileTealWash: "tile-teal-wash",
-  tilePink: "tile-pink",
-  tilePinkWash: "tile-pink-wash",
-  tileGraphite: "tile-graphite",
-  tileGraphiteWash: "tile-graphite-wash",
+  /** The one neutral tile under a generic row's ink glyph (§10.4). */
+  tile: "tile",
   /** The agent series (§10.4): Claude, Codex, OpenCode, Cursor (and the fourth agent), Other. */
   seriesClaude: "chart-1",
   seriesCodex: "chart-2",

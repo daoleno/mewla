@@ -37,7 +37,7 @@ export function ServiceMark(props: { id: string; size?: number }) {
   );
 }
 
-/** A service's lead (SPEC §10.4): its real mark, its own mark in ink, or its glyph on the violet tile. `size` is the mark's. */
+/** A service's lead (SPEC §10.4): its real mark, its own mark in ink, or its glyph on the neutral tile. `size` is the mark's. */
 export function serviceRowLead(id: string, size = 28): Lead {
   const lead = serviceLead(id);
   return lead.kind === "service" ? { kind: "logo", node: <ServiceMark id={id} size={size} /> } : lead;

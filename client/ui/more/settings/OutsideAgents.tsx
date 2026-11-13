@@ -81,7 +81,7 @@ export function OutsideAgents() {
               {agents()!.agents.map((a) => (
                 <Row
                   testID={`agent-${a.id}`}
-                  lead={outsideAgentKind(a.name) ? { kind: "logo", node: <AgentIcon kind={outsideAgentKind(a.name)!} size={28} slot={LEAD_SLOT} /> } : tile("violet", "brain")}
+                  lead={outsideAgentKind(a.name) ? { kind: "logo", node: <AgentIcon kind={outsideAgentKind(a.name)!} size={28} slot={LEAD_SLOT} /> } : tile("brain")}
                   title={a.name}
                   subtitle={a.last_used_at ? `Used ${formatFullDateTime(a.last_used_at)}` : "Not used yet"}
                   trailing={

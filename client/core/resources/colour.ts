@@ -58,7 +58,7 @@ export function meterWord(tone: "fill" | "warn" | "error"): string | null {
 
 /**
  * A "Using this machine" row's leading icon: an agent's logo for a Worker or Brain run by a known agent, Mewla's
- * own for Brain, a process's mark when the client has it (node, go, docker…), else the teal `cube` tile.
+ * own for Brain, a process's mark when the client has it (node, go, docker…), else `cube` on the neutral tile.
  */
 export type ConsumerLead = { kind: "agent"; agent: AgentKind } | { kind: "mewla" } | RowLeading<"cube">;
 
@@ -69,7 +69,7 @@ export function consumerLead(c: ResourceConsumer): ConsumerLead {
   if (c.owner === "docker") return { kind: "mark", mark: "docker" };
   const program = programName(c.commands[0] ?? c.processes.find((p) => p.command)?.command);
   if (program?.toLowerCase() === "mewla") return { kind: "mewla" };
-  return rowLeading(program, { hue: "teal", glyph: "cube" });
+  return rowLeading(program, { glyph: "cube" });
 }
 
 /** The program of a command line: its first word without its path ("/usr/bin/node server.js" → "node"). */

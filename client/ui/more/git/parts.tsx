@@ -12,7 +12,7 @@ import { haptic } from "../../shell/haptics";
 
 /**
  * A file's status as a 28 pt tile (SPEC §15 Code review, §10.4): its mark in mono, in its colour on its wash —
- * added on `add` at 13 %, deleted on `del` at 11 %, modified on the blue tile, renamed on the violet.
+ * added on `add` at 13 %, deleted on `del` at 11 %, modified in the meter blue at 12 %, renamed in ink on the neutral tile.
  */
 export function StatusTile(props: { file: Pick<GitDiffFileInfo, "status" | "binary"> }) {
   const tone = () => gitDiffTone(props.file);

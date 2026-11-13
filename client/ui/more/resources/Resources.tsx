@@ -363,7 +363,7 @@ const OWNERS: ReadonlyArray<{ key: ResourceConsumerOwner; label: string }> = [
   { key: "user", label: "User processes" },
 ];
 
-/** A row's mark (SPEC §10.4): an agent's logo, Mewla's own (the pet) for Brain and the daemon, a program's mark, or the teal cube. */
+/** A row's mark (SPEC §10.4): an agent's logo, Mewla's own (the pet) for Brain and the daemon, a program's mark, or the cube on the neutral tile. */
 function consumerRowLead(c: ResourceConsumer): Lead {
   const lead = consumerLead(c);
   if (lead.kind === "agent") return { kind: "logo", node: <AgentIcon kind={lead.agent} size={28} slot={LEAD_SLOT} /> };

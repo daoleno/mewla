@@ -144,7 +144,7 @@ export function Settings(props: { nav: PageNav }) {
       <Section title="Agents">
         <Row
           testID="settings-providers"
-          lead={tile("violet", "key")}
+          lead={tile("key")}
           title="Model Providers"
           subtitle={current() ? undefined : "No current server"}
           accessibilityHint="Choose how Codex and Claude connect to models"
@@ -153,7 +153,7 @@ export function Settings(props: { nav: PageNav }) {
         />
         <Row
           testID="settings-outside-agents"
-          lead={tile("violet", "brain")}
+          lead={tile("brain")}
           title="Outside agents"
           subtitle={current() ? undefined : "No current server"}
           disabled={!current()}
@@ -164,19 +164,19 @@ export function Settings(props: { nav: PageNav }) {
       </Section>
 
       <Section title="Labs">
-        {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" lead={tile("blue", "desktop")} title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
-        {onWeb() ? null : <Row testID="settings-friends" lead={tile("pink", "people")} title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />}
-        {!onWeb() && phoneAvailable() ? <Row testID="settings-phone" lead={tile("blue", "phone")} title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
-        {!onWeb() && iphoneOffered(iphone()) ? <Row testID="settings-iphone" lead={tile("blue", "phone")} title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
+        {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" lead={tile("desktop")} title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
+        {onWeb() ? null : <Row testID="settings-friends" lead={tile("people")} title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />}
+        {!onWeb() && phoneAvailable() ? <Row testID="settings-phone" lead={tile("phone")} title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
+        {!onWeb() && iphoneOffered(iphone()) ? <Row testID="settings-iphone" lead={tile("phone")} title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
       </Section>
 
       {onWeb() ? null : (
         <Section title="Calendar">
-          <SwitchRow testID="strong-alerts" lead={tile("pink", "bell")} title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
+          <SwitchRow testID="strong-alerts" lead={tile("bell")} title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
           {platform.os === "android" && strongAlerts() && fullScreenAllowed() === false ? (
             <Row
               testID="full-screen-alerts"
-              lead={tile("pink", "lock")}
+              lead={tile("lock")}
               title="Allow full-screen alerts"
               chevron
               onPress={() => void host.call("calendar.alertsOpenSettings").catch(() => {})}
@@ -189,7 +189,7 @@ export function Settings(props: { nav: PageNav }) {
         {(["system", "light", "dark"] as const).map((choice) => (
           <Row
             testID={`appearance-${choice}`}
-            lead={tile("graphite", choice === "system" ? "contrast" : choice === "light" ? "sun" : "moon")}
+            lead={tile(choice === "system" ? "contrast" : choice === "light" ? "sun" : "moon")}
             title={choice === "system" ? "Auto" : choice === "light" ? "Light" : "Dark"}
             check={appearance() === choice}
             role="radio"
@@ -204,11 +204,11 @@ export function Settings(props: { nav: PageNav }) {
       </Section>
 
       <Section title="About">
-        <Row lead={tile("graphite", "info")} title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
+        <Row lead={tile("info")} title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
         <AboutUpdateRow />
-        <Row lead={tile("graphite", "shield-check")} title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
-        <Row lead={tile("graphite", "help")} title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
-        <Row testID="settings-licenses" lead={tile("graphite", "book")} title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />
+        <Row lead={tile("shield-check")} title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
+        <Row lead={tile("help")} title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
+        <Row testID="settings-licenses" lead={tile("book")} title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />
       </Section>
       <View class="h-6" />
     </Page>

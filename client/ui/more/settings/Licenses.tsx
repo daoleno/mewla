@@ -29,7 +29,7 @@ export function License(props: { id: string; nav: PageNav }) {
     <Page display title={item.name} testID="license-page">
       <Section>
         <Row title={item.name} subtitle={licenseSummary(item)} />
-        {item.url ? <Row lead={tile("graphite", "open-external")} title="Source" value={item.url.replace(/^https?:\/\//, "")} onPress={() => void openUrl(item.url!)} /> : null}
+        {item.url ? <Row lead={tile("open-external")} title="Source" value={item.url.replace(/^https?:\/\//, "")} onPress={() => void openUrl(item.url!)} /> : null}
       </Section>
       {item.note ? <View class="mt-3 px-4"><Text class="text-sm text-muted-foreground">{item.note}</Text></View> : null}
       {text ? (

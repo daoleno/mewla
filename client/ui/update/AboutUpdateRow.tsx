@@ -20,7 +20,7 @@ function updateRow(model: AppUpdateRowModel, press: () => void) {
   return (
     <Row
       testID="app-update"
-      lead={tile("graphite", model.progress !== undefined ? "download" : "refresh")}
+      lead={tile(model.progress !== undefined ? "download" : "refresh")}
       title={model.title}
       subtitle={model.subtitle}
       value={model.value}
