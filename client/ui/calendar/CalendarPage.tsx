@@ -1,7 +1,9 @@
 import { computed, List, signal, Text, View } from "nsh";
+import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { Segmented } from "../kit/Segmented";
+import { createTabPager, TabPages } from "../kit/TabPager";
 import type { NavStackState } from "nsh/base";
 import { monthTitle } from "../../core/calendar/format";
 import { activeRun, groupAgenda, itemsOnDay, itemSummary, kindLabel, rowTime, statusLabel, type CalendarItem } from "../../core/calendar/model";
@@ -23,10 +25,10 @@ const showMonth = signal(false);
 const pickedDay = signal<string | null>(null);
 const viewedMonth = signal<{ year: number; month: number } | null>(null);
 
-function rows(): AgendaRow[] {
+/** The agenda's rows: one day's items (a day picked on the month), else every day's. */
+function rows(day: string | null): AgendaRow[] {
   const items = calendarItems();
   const c = clock();
-  const day = pickedDay();
   if (day) return itemsOnDay(items, day, c).map((item) => ({ kind: "item", item }));
   // "Today" is the heading's word, so its section has no title of its own.
   return groupAgenda(items, c).flatMap((section): AgendaRow[] => [
@@ -115,35 +117,62 @@ function Month() {
   );
 }
 
-function Heading() {
+function Heading(props: { day: () => string | null }) {
   return (
     <View class="px-4 pb-1 pt-4">
-      <If when={pickedDay()} else={<View accessibilityLabel={`Today, ${clock().format.longDay(clock().now, clock().zones.device)}, ${clock().format.time(clock().now, clock().zones.device, true)}`} class="gap-1">
+      <If when={props.day()} else={<View accessibilityLabel={`Today, ${clock().format.longDay(clock().now, clock().zones.device)}, ${clock().format.time(clock().now, clock().zones.device, true)}`} class="gap-1">
           <Text class="text-2xl font-semibold">Today</Text>
           <Text class="text-sm text-muted-foreground">{`${clock().format.longDay(clock().now, clock().zones.device)} · ${clock().format.time(clock().now, clock().zones.device, true)}`}</Text>
         </View>}><View class="flex-row items-center justify-between">
-          <Text class="text-lg font-semibold">{clock().format.longDay(Date.parse(`${pickedDay()}T12:00:00Z`), "UTC")}</Text>
+          <Text class="text-lg font-semibold">{clock().format.longDay(Date.parse(`${props.day()}T12:00:00Z`), "UTC")}</Text>
           <Button testID="back-to-today" accessibilityLabel="Return to today" onPress={() => pickedDay.set(null)} class="px-2 py-1"><Text class="text-base text-primary">Today</Text></Button>
         </View></If>
     </View>
   );
 }
 
-function Empty() {
+function Empty(props: { day: () => string | null }) {
   return (
     <View testID="calendar-empty" class="items-center gap-2 px-6 py-16">
-      <Text class="text-lg font-semibold">{!calendarLoaded() ? (connection() === "connected" ? "Loading calendar…" : "Calendar offline") : pickedDay() ? "Nothing planned for this date" : "Nothing planned"}</Text>
+      <Text class="text-lg font-semibold">{!calendarLoaded() ? (connection() === "connected" ? "Loading calendar…" : "Calendar offline") : props.day() ? "Nothing planned for this date" : "Nothing planned"}</Text>
       <If when={!calendarLoaded() && connection() !== "connected"}><Text class="text-center text-base text-muted-foreground">It shows when your computer is back.</Text></If>
     </View>
   );
 }
 
+/** One page's agenda: its rows under its header (the month, the day's heading). */
+function Agenda(props: { testID: string; day: () => string | null; header: () => JSX.Element; onOpen: (item: CalendarItem) => void }) {
+  return (
+    <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows(props.day())}
+      keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
+      header={props.header}
+      empty={() => <Empty day={props.day} />}>
+      {(row) => {
+        // Cells are recycled: what a cell shows follows the row it holds now. The clock makes new rows every
+        // 30 s, so the cell is rebuilt only when it turns from a heading into an item or back: a tap at the
+        // tick lands on the row, not on one being replaced.
+        const section = computed(() => row().kind === "section");
+        // The item row may read once more after the cell took a heading, before it goes: it keeps its last item.
+        const item = computed<CalendarItem>((last) => (row().kind === "section" ? last! : (row() as { item: CalendarItem }).item));
+        const title = computed<string>((last) => (row().kind === "section" ? (row() as { title: string }).title : last ?? ""));
+        return (
+          <View>
+            <If when={section()} else={<ItemRow item={item} onPress={() => props.onOpen(item())} />}><View class="bg-background px-4 pb-1.5 pt-4"><Text class="text-sm font-semibold text-muted-foreground">{title()}</Text></View></If>
+          </View>
+        );
+      }}
+    </List>
+  );
+}
+
 export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (sessionId: string) => void }) {
-  // Today ⇄ Month switches in place (SPEC §3.5); Today is the whole agenda again, no day picked.
+  // Today ⇄ Month switches in place (SPEC §3.5); Today is the whole agenda again, no day picked. The two are
+  // pages side by side that follow the finger (kit/TabPager.tsx): the agenda, and the month over its agenda.
   const show = (view: "today" | "month") => {
     if (view === "today") pickedDay.set(null);
     showMonth.set(view === "month");
   };
+  const pager = createTabPager({ keys: ["today", "month"] as const, value: () => (showMonth() ? "month" : "today"), onChange: show });
   // A running item opens its Session while the computer lists it; the others, and a run whose Session
   // has gone, their page (the Expo app checked the same; parity #45).
   const open = (item: CalendarItem) => {
@@ -157,7 +186,7 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
     <NavPage title="Calendar" testID="calendar-page"
       headerRight={
         <View class="flex-row items-center gap-1">
-          <Segmented testID="calendar-view" accessibilityLabel="Calendar view" fit value={showMonth() ? "month" : "today"} onChange={show}
+          <Segmented testID="calendar-view" accessibilityLabel="Calendar view" fit value={showMonth() ? "month" : "today"} onChange={show} pager={pager}
             options={[{ key: "today", label: "Today" }, { key: "month", label: "Month" }]} />
           <Button testID="add-item" accessibilityLabel="Add calendar item" disabled={!calendar()} onPress={() => openEditor(null)} class="size-11 items-center justify-center active:opacity-70 disabled:opacity-40">
             <Icon name="add" size={24} tone="ink" />
@@ -165,25 +194,12 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
         </View>
       }>
       <View class="flex-1 bg-background">
-        <List keyboardShouldPersistTaps="handled" testID="agenda" class="flex-1" each={rows()}
-          keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
-          header={() => <View><ReminderBanner /><If when={showMonth()}><Month /></If><Heading /></View>}
-          empty={() => <Empty />}>
-          {(row) => {
-            // Cells are recycled: what a cell shows follows the row it holds now. The clock makes new rows every
-            // 30 s, so the cell is rebuilt only when it turns from a heading into an item or back: a tap at the
-            // tick lands on the row, not on one being replaced.
-            const section = computed(() => row().kind === "section");
-            // The item row may read once more after the cell took a heading, before it goes: it keeps its last item.
-            const item = computed<CalendarItem>((last) => (row().kind === "section" ? last! : (row() as { item: CalendarItem }).item));
-            const title = computed<string>((last) => (row().kind === "section" ? (row() as { title: string }).title : last ?? ""));
-            return (
-              <View>
-                <If when={section()} else={<ItemRow item={item} onPress={() => open(item())} />}><View class="bg-background px-4 pb-1.5 pt-4"><Text class="text-sm font-semibold text-muted-foreground">{title()}</Text></View></If>
-              </View>
-            );
-          }}
-        </List>
+        {/* About the whole Calendar, so above both pages. */}
+        <ReminderBanner />
+        <TabPages fill testID="calendar-pages" pager={pager} pages={{
+          today: () => <Agenda testID="agenda" day={() => null} header={() => <Heading day={() => null} />} onOpen={open} />,
+          month: () => <Agenda testID="agenda-month" day={pickedDay} header={() => <View><Month /><Heading day={pickedDay} /></View>} onOpen={open} />,
+        }} />
         <CalendarEditor />
       </View>
     </NavPage>

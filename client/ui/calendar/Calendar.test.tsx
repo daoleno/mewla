@@ -100,6 +100,19 @@ describe("the Calendar tab", () => {
     expect(app.texts()).toContain("Pay rent");
   }, 20_000);
 
+  test("Today and Month follow the finger (owner 11-13 20:05): a swipe shows the month, a swipe back the whole agenda again", async () => {
+    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    await app.waitFor("text:Call the bank");
+    await app.drag("id:calendar-pages-today", { x: -260 });
+    await app.waitFor("id:calendar-month");
+    // Two days on: in this month's six weeks whatever the date and the zone.
+    await app.press(`id:day-${new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10)}`);
+    await app.waitFor("id:back-to-today");
+    await app.drag("id:calendar-pages-month", { x: 260 });
+    await app.waitUntil(() => !app.shows("id:calendar-month") && !app.shows("id:back-to-today"));
+    expect(app.texts()).toContain("Pay rent");
+  }, 20_000);
+
   test("a tap that spans the clock's 30 s tick still opens its item: the tick does not rebuild the row under the finger", async () => {
     const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)] }), storage: paired, platform: "android", network: expoTokenService, clock: {} });
     await app.host.send("links.open", { url: "mewla://calendar" });
