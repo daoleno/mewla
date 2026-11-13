@@ -24,7 +24,9 @@ describe("a Work in Brain's thread", () => {
   test("a new attempt runs: the live card; waiting on a decision: Needs you, which is a request", () => {
     expect(workCardModel({ event: event(), currentWork: work({ status: "running", attempt_session_id: "s2", summary: "Building" }) })).toMatchObject({ kind: "live", state: "Running", sessionId: "s2", summary: "Building" });
     expect(workCardModel({ event: event(), currentWork: work({ status: "needs_input", question: "Publish now?" }) })).toMatchObject({ kind: "needs", summary: "Publish now?" });
-    expect(workCardModel({ event: event({ kind: "session.needs_input" }) }).kind).toBe("needs");
+    // A Worker's request is Brain's: without Brain's question it asks nothing of you.
+    expect(workCardModel({ event: event({ kind: "session.needs_input" }) })).toMatchObject({ state: "Asked Brain" });
+    expect(workCardModel({ event: event({ kind: "session.needs_input" }), currentWork: work({ status: "needs_input" }) })).toMatchObject({ kind: "live", state: "Reviewing" });
   });
 
   test("a live card carries its Work's judged progress, as the tray row does", () => {

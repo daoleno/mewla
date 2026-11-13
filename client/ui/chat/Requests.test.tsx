@@ -3,6 +3,7 @@ import { framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const brain = { chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-11T07:00:00.000Z" } };
+const SIGN_IN = { id: "p-1", kind: "permission", provider: "claude", title: "Sign in to GitHub?", request: "gh auth login", options: [{ number: 1, label: "Yes", selected: true }, { number: 2, label: "No" }] };
 const session = (id: string, patch: Record<string, unknown> = {}) => ({ id, name: id, status: "blocked", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now(), ...patch });
 const approval = (id: string, summary: string) => ({ id, tool: "Bash", summary, options: [{ id: "allow", label: "Allow", scope: "once" }, { id: "deny", label: "Deny", scope: "deny" }] });
 
@@ -235,12 +236,30 @@ describe("a Work in Brain's thread", () => {
       ] }];
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
       brain: { ...brain, current_work },
-      worker_sessions: [session(a, { name: "Quickstart rewrite", status: "running" }), session(b, { name: "Screenshot refresh", status: "blocked", needs_attention: true, delegated: true })],
+      worker_sessions: [session(a, { name: "Quickstart rewrite", status: "running" }), session(b, { name: "Screenshot refresh", status: "blocked", needs_attention: true, delegated: true, prompt: SIGN_IN })],
       conversations: { "brain-host": [result({ unread: false, title: "Docs refresh", work_id: "w2" })] },
     }) });
     await app.waitFor("id:work-card-state", { timeout: 10_000 });
     expect(app.texts()).toContain("Needs you");
     expect(app.count("id:work-card-worker")).toBe(2);
+  }, 20_000);
+
+  test("a delegated Worker's own report (--attention user_input) is Brain's: no card, no Needs you, no count (owner 2026-11-13, shot 11)", async () => {
+    const a = "mh-cccc";
+    const current_work = [{ work_id: "w3", revision: 1, title: "Plaza fix", status: "needs_input", unread_result: false, attempt_session_id: a,
+      worker_sessions: [{ session_id: a, name: "ArcAIProdCloudflare", provider: "claude", state: "running", summary: "Plaza fix done, no rollback needed", live: true, joined_at: "2026-11-13T09:00:00Z", updated_at: "2026-11-13T09:01:00Z" }] }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
+      brain: { ...brain, current_work },
+      worker_sessions: [session(a, { name: "ArcAIProdCloudflare", status: "blocked", needs_attention: true, attention: "user_input", delegated: true, summary: "Plaza fix done, no rollback needed. Should I also purge the cache?" })],
+      conversations: { "brain-host": [result({ unread: false, title: "Plaza fix", work_id: "w3" })] },
+    }) });
+    await app.waitFor("text:Plaza fix done, no rollback needed", { timeout: 10_000 });
+    await app.wait(300);
+    expect(app.texts()).toContain("1 running");
+    expect(app.texts()).not.toContain("Needs you");
+    expect(app.count("id:request-card")).toBe(0);
+    expect(app.count("id:request-open-terminal")).toBe(0);
+    expect(app.count("id:home-cat-dot")).toBe(0);
   }, 20_000);
 
   test("a Work with one Session is that Session's row, named without its Session id and never by its terminal footer", async () => {

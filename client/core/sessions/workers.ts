@@ -505,7 +505,10 @@ function normalizeWorker(
     task_class: typeof agent.task_class === 'string' ? agent.task_class : undefined,
     event_kind: typeof agent.event_kind === 'string' ? agent.event_kind : undefined,
     details_json: typeof agent.details_json === 'string' ? agent.details_json : undefined,
-    needs_attention: agent.needs_attention === true,
+    // Whether it waits on the person. A delegated Worker's own report (`--attention user_input`, done, blocked) is
+    // addressed to Brain, which decides and asks the person only through its Work's question (owner 2026-10-26,
+    // 11-13): it raises no card, tray row, count or dot here. A prompt or an approval on its terminal still does.
+    needs_attention: agent.needs_attention === true && agent.delegated !== true,
     last_output_lines: Array.isArray(agent.last_output_lines) ? agent.last_output_lines : [],
     started_at: normalizeTimestamp(agent.started_at),
     updated_at: normalizeTimestamp(agent.updated_at),

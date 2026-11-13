@@ -35,7 +35,7 @@ export interface WorkCardModel {
 const RESULT_STATE: Record<BrainWorkEventKind, string> = {
   "session.done": "Done",
   "session.failed": "Failed",
-  "session.needs_input": "Needs you",
+  "session.needs_input": "Asked Brain",
   "session.stale": "Stalled",
   "session.uncertain": "Unclear",
   "session.ownership_lost": "Lost",
@@ -54,11 +54,12 @@ export function workCardModel(item: Pick<BrainWorkEventTimelineItem, "event" | "
     sessionName: workerName(event.session_name) || undefined,
     actions: event.actions ?? [],
   };
-  if (status === "running" || status === "open" || status === "waiting") {
-    return { ...base, kind: "live", summary: work?.wait_for || work?.summary || event.summary, state: status === "running" ? "Running" : "Waiting", unread: false, mark: work ? workProgressMark(work) : undefined };
+  // Only Brain's question asks you; a Worker's request without one is Brain's to resolve (owner 2026-11-13).
+  if (work?.question && status !== "done" && status !== "cancelled") return { ...base, kind: "needs", summary: work.question, state: "Needs you", unread: false };
+  if (status === "running" || status === "open" || status === "waiting" || status === "needs_input") {
+    const state = status === "running" ? "Running" : status === "needs_input" ? "Reviewing" : "Waiting";
+    return { ...base, kind: "live", summary: work?.wait_for || work?.summary || event.summary, state, unread: false, mark: work ? workProgressMark(work) : undefined };
   }
-  const needs = status === "needs_input" || (!status && event.kind === "session.needs_input");
-  if (needs) return { ...base, kind: "needs", summary: work?.question || event.summary, state: "Needs you", unread: false };
   const unread = work ? work.unread_result : event.unread;
   return { ...base, kind: unread ? "result" : "line", summary: work?.summary || event.summary, state: RESULT_STATE[event.kind] ?? "Done", unread };
 }
