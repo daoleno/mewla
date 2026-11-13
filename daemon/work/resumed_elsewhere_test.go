@@ -125,3 +125,40 @@ INSERT INTO threads VALUES ('019eee5e-0000-0000-0000-000000000000', `+sqlString(
 		t.Fatalf("conversation = available %v reason %q path %q, want %q", got.Available, got.Reason, got.Path, rollout)
 	}
 }
+
+// Claude's SessionStart hook reports transcript_path for the cwd. For a
+// conversation resumed from another folder that file is not where Claude
+// writes; the bound conversation is then found by its id.
+func TestClaudeHookBoundTranscriptOfAConversationResumedElsewhereIsFoundByID(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	configDir := filepath.Join(home, ".claude")
+	bornIn := filepath.Join(home, "workspace", "mewla")
+	worktree := filepath.Join(home, ".mewla", "worktrees", "mewla-progress-client")
+	for _, dir := range []string{bornIn, worktree} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now()
+	const id = "68197d1b-d079-4cd2-9c44-c93a18189b6e"
+	path := writeResumedClaudeTranscript(t, configDir, bornIn, id, now)
+	reported := filepath.Join(claudeProjectDir(configDir, worktree), id+".jsonl")
+	ClaudeBoundTranscript = func(workerID string) string {
+		if workerID == "%12" {
+			return reported
+		}
+		return ""
+	}
+	t.Cleanup(func() { ClaudeBoundTranscript = func(string) string { return "" } })
+
+	worker := classifier.Worker{ID: "%12", Name: "claude", Cwd: worktree, StartedAt: now.Add(-time.Minute), Command: "claude --resume " + id}
+	got, err := NewProviderConversationReader().Load(worker, WorkerProviderClaude, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Available || got.Path != path {
+		t.Fatalf("conversation = available %v reason %q path %q, want %q", got.Available, got.Reason, got.Path, path)
+	}
+}

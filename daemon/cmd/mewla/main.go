@@ -464,7 +464,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	} else if err := claudeadapter.WriteHookSettings(claudeSettingsPath(authManager.StorageDir()), claudeHook(runtime.GOOS, executable, authManager.StorageDir())); err != nil {
 		log.Printf("WARN agent events: cannot write the Claude hook file, Claude Workers will be followed from their transcript: %v", err)
 	} else {
-		adapters.Register(claudeadapter.Provider, claudeadapter.Adapter{SettingsPath: claudeSettingsPath(authManager.StorageDir())})
+		adapters.Register(claudeadapter.Provider, claudeadapter.Adapter{
+			SettingsPath: claudeSettingsPath(authManager.StorageDir()),
+			Hook:         claudeHook(runtime.GOOS, executable, authManager.StorageDir()),
+		})
 	}
 	codexControlDir := filepath.Join(authManager.StorageDir(), "codex-ctl")
 	var codexFollow *codexEvents
