@@ -25,7 +25,7 @@ describe("a Work in Brain's thread", () => {
     expect(workCardModel({ event: event(), currentWork: work({ status: "running", attempt_session_id: "s2", summary: "Building" }) })).toMatchObject({ kind: "live", state: "Running", sessionId: "s2", summary: "Building" });
     expect(workCardModel({ event: event(), currentWork: work({ status: "needs_input", question: "Publish now?" }) })).toMatchObject({ kind: "needs", summary: "Publish now?" });
     // A Worker's request is Brain's: without Brain's question it asks nothing of you.
-    expect(workCardModel({ event: event({ kind: "session.needs_input" }) })).toMatchObject({ state: "Asked Brain" });
+    expect(workCardModel({ event: event({ kind: "session.needs_input" }) })).toMatchObject({ kind: "line", summary: "" });
     expect(workCardModel({ event: event({ kind: "session.needs_input" }), currentWork: work({ status: "needs_input" }) })).toMatchObject({ kind: "live", state: "Reviewing" });
   });
 
@@ -38,5 +38,16 @@ describe("a Work in Brain's thread", () => {
 
   test("the Session that ran it is named without the id the daemon appends", () => {
     expect(workCardModel({ event: event({ session_name: "Hello writer (mh-17b3337d43f38037916f0e5b)" }) }).sessionName).toBe("Hello writer");
+  });
+
+  test("a lost or uncertain turn is Brain's to handle: no result card, none of the daemon's words (owner 11-13 19:4x)", () => {
+    const lost = event({ kind: "session.uncertain", summary: "Delegated Session ended; outcome is unknown", unread: true });
+    for (const current of [undefined, work({ status: "cancelled", unread_result: true })]) {
+      const model = workCardModel({ event: lost, currentWork: current });
+      expect(model.kind).toBe("line");
+      expect(model.summary).not.toContain("outcome is unknown");
+    }
+    expect(workCardModel({ event: lost, currentWork: work({ status: "needs_input" }) })).toMatchObject({ kind: "live", state: "Reviewing" });
+    expect(workCardModel({ event: lost, currentWork: work({ status: "needs_input" }) }).summary).not.toContain("outcome is unknown");
   });
 });
