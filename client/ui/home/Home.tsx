@@ -1,6 +1,9 @@
-import { computed, openUrl, untracked, signal, Text, View } from "nsh";
+import { computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View } from "nsh";
+import { CAPSULE, capsuleInset } from "../../core/shell/capsule";
+import { Capsule, createCapsule, type CapsuleReading } from "../shell/Capsule";
 import { progressSteps } from "../../core/sessions/progress";
 import { Button } from "nsh/base";
+import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
@@ -18,7 +21,7 @@ import { markWorkRead } from "../../core/work/brainWork";
 import { goHome, homeShown, openBrainTerminal, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { workspaceRoute } from "../more/files/routes";
-import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, workers } from "../session";
+import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers, workers } from "../session";
 import { ResultActions, type WorkCardHandlers } from "../chat/TimelineRows";
 import type { ResultAction } from "../../core/work/types";
 import type { WorkCardModel } from "../../core/timeline/workCardModel";
@@ -260,10 +263,44 @@ function HomeHeader() {
   );
 }
 
+/**
+ * Brain's capsule header on a phone (SPEC §11): the cat (the computer page), "Brain" with the computer's name
+ * under it when there are two or more, the state control (the running things), and ⋯ (Brain's menu).
+ * Collapsed it keeps the cat and the state control, short ("● 3" while something needs you or runs, its words
+ * otherwise); both still act at once, so it has no tap that only expands, and ⋯ returns at the newest end.
+ */
+function BrainCapsule(props: { capsule: ReturnType<typeof createCapsule> }) {
+  const collapsed = props.capsule.collapsed;
+  const computerName = () => (servers().length > 1 ? current()?.name ?? "" : "");
+  return (
+    <Capsule testID="home-header" collapsed={collapsed} twoLines={() => Boolean(computerName())}>
+      <HomeCat size={CAPSULE.cat.size} box={CAPSULE.cat.box} onPress={() => openPage({ name: "computer" })} />
+      {collapsed() ? null : (
+        <>
+          <View testID="home-title" class="min-w-0 shrink justify-center" style={{ marginLeft: 2 }}>
+            <Text role="header" class="font-semibold text-foreground line-clamp-1" style={{ fontSize: CAPSULE.brain.size, lineHeight: CAPSULE.brain.line }}>Brain</Text>
+            {computerName() ? (
+              <Text testID="home-computer" class="text-muted-foreground line-clamp-1" style={{ fontSize: CAPSULE.computer.size, lineHeight: CAPSULE.computer.line }}>{computerName()}</Text>
+            ) : null}
+          </View>
+          <View class="flex-1" />
+        </>
+      )}
+      <StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} capsule={{ short: collapsed }} />
+      {collapsed() ? null : (
+        <Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
+          class="size-11 items-center justify-center rounded-full active:bg-accent">
+          <Icon name="more-horizontal" size={22} tone="ink" />
+        </Button>
+      )}
+    </Capsule>
+  );
+}
+
 /** Brain's Brain host sheet (the tray's Switch executor, the computer page's Switch). */
 const hostSheetOpen = signal(false);
 
-function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] }) {
+function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"]; capsule?: { top: () => number; reading: CapsuleReading } }) {
   const openTerminal = (id: string) => openBrainTerminal(id);
   // What the page shows, as one word: the branch below is made again only when the word changes. Read as
   // conditions in the JSX, every Brain snapshot (each Work and Worker change) and every chat state made the
@@ -277,13 +314,14 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
     return chatState() === "failed" ? "failed" : `chat:${routedBrainThread() ?? brain()?.chat_thread_id ?? ""}`;
   });
   return (
-    <View class="flex-1">
+    // Under a capsule the thread is padded itself; the other states start below it.
+    <View class="flex-1" style={{ paddingTop: props.capsule && !shows().startsWith("chat:") ? props.capsule.top() : 0 }}>
       {shows() === "unavailable" ? (
         <BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} />
       ) : shows() === "failed" ? (
         <BrainChatFailed onOpenTerminal={openTerminal} />
       ) : shows().startsWith("chat:") ? (
-        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown}
+        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} capsule={props.capsule}
           empty={() => (
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
             // 15 s; "What should Brain do?" only after a read that succeeded.
@@ -379,14 +417,37 @@ export function Home() {
       return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path) : Promise.resolve(null);
     },
   };
+  // The capsule header on a phone (SPEC §11); wide keeps its own header (crossing 1024 switches them).
+  const phone = mobile && platform.idiom === "phone";
+  const capsuled = () => phone && !wide();
+  const capsule = createCapsule();
+  const inset = () => capsuleInset(safeArea().top);
+  // One more thing that needs the person, or the computer going out of reach: it expands.
+  let lastState = untracked(() => tray().state);
+  effect(() => {
+    const now = tray().state;
+    const before = lastState;
+    lastState = now;
+    const more = now.kind === "needs" && (now.count ?? 0) > (before.kind === "needs" ? before.count ?? 0 : 0);
+    const trouble = ["connecting", "offline", "pair", "cant_start"].includes(now.kind) && now.kind !== before.kind;
+    if (more || trouble) untracked(capsule.expand);
+  });
+  // Coming back to Brain shows it expanded.
+  let wasShown = untracked(homeShown);
+  effect(() => {
+    const shown = homeShown();
+    if (shown && !wasShown) untracked(capsule.expand);
+    wasShown = shown;
+  });
   return (
     <NavPage title="Brain" column="reading" headerVisible={false} header={<View />}>
       <View class="flex-1 bg-background">
-        <HomeHeader />
-        {routedBrainThread() ? <PastThread /> : null}
-        <Body handlers={handlers} />
+        {capsuled() ? null : <HomeHeader />}
+        {routedBrainThread() ? <View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View> : null}
+        <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
         {routedBrainThread() ? null : <Composer text={text} editor={editor} />}
-        {wide() ? null : <Tray onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
+        {capsuled() ? <BrainCapsule capsule={capsule} /> : null}
+        {wide() ? null : <Tray top={capsuled() ? inset : undefined} onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
           onUseExecutor={(id) => {
             const executor = (brain()?.executors ?? []).find((ref) => ref.id === id);
             if (executor) void currentBrain.hostSwitch.switchTo(executor);

@@ -4,7 +4,7 @@ import type { BrainCurrentWork } from "../work/types";
 import { listTime } from "../sessions/listRow";
 import { catState } from "../pets/cat";
 import { workWorkerLines } from "../work/workers";
-import { backMark, requestsOf, trayModel, type TrayInput } from "./model";
+import { backMark, requestsOf, stateShortWords, trayModel, type TrayInput } from "./model";
 import { workDetailWorkerRow } from "../work/workers";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
@@ -73,6 +73,14 @@ describe("tray model", () => {
     const m = trayModel(input());
     expect(m.state).toMatchObject({ kind: "quiet", words: "All quiet", dot: null, ink: false, chevron: true });
     expect(m.title).toBe("All quiet");
+  });
+
+  test("a collapsed capsule says the count for running and need you, the words otherwise (SPEC §11)", () => {
+    expect(stateShortWords({ kind: "running", words: "3 running", dot: "ink", ink: true, chevron: true, count: 3 })).toBe("3");
+    expect(stateShortWords({ kind: "needs", words: "2 need you", dot: "seal", ink: true, chevron: true, count: 2 })).toBe("2");
+    expect(stateShortWords(trayModel(input()).state)).toBe("All quiet");
+    expect(stateShortWords({ kind: "offline", words: "Offline", dot: "ring", ink: false, chevron: true })).toBe("Offline");
+    expect(trayModel(input({ workers: [worker("a"), worker("b")] })).state.count).toBe(2);
   });
 
   test("the count counts rows: a Work and the Session it runs are one row", () => {

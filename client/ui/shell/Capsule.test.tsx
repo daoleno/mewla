@@ -91,3 +91,71 @@ describe("a Session's capsule header (SPEC §11)", () => {
     expect(app.shows("id:capsule")).toBe(true);
   }, 30_000);
 });
+
+describe("Brain's capsule header (SPEC §11)", () => {
+  const busy = { id: "w2", name: "api", status: "running", cwd: "/home/me/api", command: "claude", provider: "claude", started_at: 1, updated_at: Date.now() };
+  async function brainChat() {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [busy], conversations: { "brain-host": thread } }) });
+    await app.waitFor("id:brain-chat", { timeout: 10_000 });
+    await app.waitFor("text:1 running", { timeout: 10_000 });
+    await app.wait(300);
+    return app;
+  }
+
+  test("collapses to the cat and the short state while the person reads; both still act; ⋯ returns at the newest end", async () => {
+    const app = await brainChat();
+    expect(app.shows("id:capsule")).toBe(true);
+    expect(app.shows("id:home-title")).toBe(true);
+    expect(app.shows("id:brain-menu")).toBe(true);
+    await app.scroll("id:brain-chat", -300);
+    await app.waitFor("id:capsule-collapsed");
+    // The cat and the state control stay, the state short ("● 1"); "Brain" and ⋯ are gone.
+    expect(app.shows("id:home-cat")).toBe(true);
+    expect(app.texts()).toContain("1");
+    expect(app.shows("text:1 running")).toBe(false);
+    expect(app.shows("id:home-title")).toBe(false);
+    expect(app.shows("id:brain-menu")).toBe(false);
+    // The state control still opens the tray at once: no tap that only expands.
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-row");
+    await app.back();
+    await app.waitUntil(() => !app.shows("id:tray-row"));
+    // At the newest end it expands, ⋯ with it.
+    await app.scroll("id:brain-chat", 2000);
+    await app.waitFor("id:capsule");
+    expect(app.shows("id:brain-menu")).toBe(true);
+    expect(app.shows("text:1 running")).toBe(true);
+  }, 30_000);
+
+  test("one more thing that needs the person brings it back", async () => {
+    const app = await brainChat();
+    await app.scroll("id:brain-chat", -600);
+    await app.waitFor("id:capsule-collapsed");
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...busy, status: "blocked", process_id: 42, started_at: 1_700_000_000_000, prompt: { id: "p-1", kind: "permission", provider: "claude", title: "Run this command?", request: "rm -rf build", options: [{ number: 1, label: "Yes", selected: true }, { number: 2, label: "No" }] } } });
+    await app.waitFor("id:capsule");
+  }, 30_000);
+});
+
+describe("a pushed page's capsule (SPEC §11)", () => {
+  test("Back alone while the page's own title shows; past 50 of scroll the title joins it, and it never collapses", async () => {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain }) });
+    await app.waitFor("id:home-cat", { timeout: 10_000 });
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-settings");
+    await app.press("id:computer-settings");
+    await app.waitFor("id:settings");
+    await app.waitFor("id:capsule-collapsed");
+    expect(app.shows("id:page-back")).toBe(true);
+    expect(app.shows("id:page-title")).toBe(false);
+    await app.scroll("id:settings", 300);
+    await app.waitFor("id:page-title");
+    expect(app.shows("id:capsule")).toBe(true);
+    expect(app.texts()).toContain("Settings");
+    // Back to its top, the title is the page's own again.
+    await app.scroll("id:settings", -300);
+    await app.waitFor("id:capsule-collapsed");
+    // Back pops the page.
+    await app.press("id:page-back");
+    await app.waitFor("id:computer-page");
+  }, 30_000);
+});

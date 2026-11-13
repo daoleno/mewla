@@ -56,20 +56,26 @@ export function Capsule(props: {
   collapsed: () => boolean;
   /** Expanded with a two-line name: 56 high, not 48. */
   twoLines?: () => boolean;
+  /** Collapsed to one control (a pushed page's Back): a 44 circle, no inner padding. */
+  alone?: () => boolean;
   children: JSX.Element;
   /** A note under the capsule (a Session's durability warning). */
   below?: JSX.Element;
+  /** The whole header's (Brain's is home's header, `home-header`). */
+  testID?: string;
 }) {
   const top = () => safeArea().top;
   const height = () => (props.collapsed() ? CAPSULE.compactHeight : props.twoLines?.() ? CAPSULE.heightTwoLines : CAPSULE.height);
   return (
-    <View testID="capsule-layer" class="absolute left-0 right-0 top-0" style={{ pointerEvents: "box-none" }}>
+    <View testID={props.testID ?? "capsule-layer"} class="absolute left-0 right-0 top-0" style={{ pointerEvents: "box-none" }}>
       <StatusBarStrip top={top} />
       <View style={{ paddingTop: top() + CAPSULE.top, paddingLeft: CAPSULE.side + safeArea().left, paddingRight: CAPSULE.side + safeArea().right, gap: 4, pointerEvents: "box-none" }}>
         {/* Its testID says which layout shows (a test reads no sizes). */}
         <View testID={props.collapsed() ? "capsule-collapsed" : "capsule"} class="flex-row items-center rounded-full border border-border bg-sheet-surface"
           style={{
-            height: height(), alignSelf: props.collapsed() ? "flex-start" : "stretch", paddingHorizontal: CAPSULE.padding,
+            // Alone, it is the 44 circle itself (the hairline inside it, not 2 more around the control).
+            height: height(), alignSelf: props.collapsed() ? "flex-start" : "stretch", paddingHorizontal: props.collapsed() && props.alone?.() ? 0 : CAPSULE.padding,
+            width: props.collapsed() && props.alone?.() ? CAPSULE.compactHeight : undefined, justifyContent: props.collapsed() && props.alone?.() ? "center" : undefined,
             boxShadow: colorScheme() === "dark" ? undefined : CAPSULE.lightShadow,
           }}>
           {props.children}

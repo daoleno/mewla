@@ -32,6 +32,11 @@ export const CAPSULE = {
   compactNameShare: 0.52,
   /** A name longer than this many characters takes the two lines (the mock's rule). */
   longName: 16,
+  /** Brain's: the cat (a 44 target, the still 32), "Brain" 17/600, and with two or more computers the computer's name
+   * under it, 13 soft (the capsule is then 56 high). */
+  cat: { size: 32, box: 44 },
+  brain: { size: 17, line: 22 },
+  computer: { size: 13, line: 16 },
   /** In light, a 1 pt contact shadow where white meets white; in dark none. The edge is a 1 pt hairline. */
   lightShadow: "0px 1px 2px rgba(19, 20, 22, 0.06)",
   /** The status bar's strip: canvas down to `top` below the status bar, then a fade this long (in strips). */
@@ -39,6 +44,10 @@ export const CAPSULE = {
   fadeStrips: 6,
   /** The terminal is padded for the collapsed capsule, and this below it. */
   terminalGap: 4,
+  /** A pushed page (Settings, the computer page…): Back alone while the page's own title is on screen; the title
+   * (17/600) and the page's controls join Back once the content has scrolled past `titleAway`. Never collapses. */
+  pageTitle: { size: 17, line: 22 },
+  titleAway: 50,
   /** How far the person moves the content from where it last came to rest before it collapses. */
   collapseAfter: 24,
   /** A scroll that comes to rest this close to the newest end expands it; nearer than this it never collapses. */
@@ -51,6 +60,11 @@ export const CAPSULE = {
 /** Where the content starts below the screen's top: padded once, for the expanded capsule (6 + 56). */
 export function capsuleInset(safeTop: number): number {
   return safeTop + CAPSULE.top + CAPSULE.heightTwoLines;
+}
+
+/** Where a pushed page's content starts: below its capsule, which is never two lines and never collapses. */
+export function capsulePageInset(safeTop: number): number {
+  return safeTop + CAPSULE.top + CAPSULE.height;
 }
 
 /** Where a Session's terminal starts: below the collapsed capsule, which an expanded one floats over. */

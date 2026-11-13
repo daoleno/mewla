@@ -48,6 +48,8 @@ export type TrayProps = {
   onUseExecutor?: (executorId: string) => void;
   /** Brain can't start: the "Brain host" sheet. */
   onSwitchExecutor?: () => void;
+  /** Where its top hangs under a capsule header (SPEC §11); home's header's bottom otherwise. */
+  top?: () => number;
 };
 
 /** Home's header row (SPEC §11 Home header): 52 pt under the top safe area. */
@@ -334,7 +336,7 @@ export function Tray(props: TrayProps) {
 
 /** The panel: made each time the tray opens, so it rises once per opening and not when a pushed page pops back to it. */
 function TrayPanel(props: TrayProps & { onClose: () => void }) {
-  const top = () => homeHeaderInset() + HOME_HEADER_HEIGHT;
+  const top = () => props.top?.() ?? homeHeaderInset() + HOME_HEADER_HEIGHT;
   const rise = createMotion({ enter: { keyframes: { translateY: [untracked(() => windowSize().height - top()), 0] }, duration: 280, easing: Easing.out(Easing.cubic) } });
   return (
     <View testID="tray" class="absolute bottom-0 left-0 right-0 rounded-t-(--radius-sheet) bg-sheet" style={{ top: top(), transform: rise.transform }}>

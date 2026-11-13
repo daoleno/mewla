@@ -137,6 +137,19 @@ preference.
   on iOS and Android the page's own Back stands in for the system's while the
   mark shows). No page, chat or list carries a connection banner. A page that
   can't work at all says so in its empty state.
+- **The capsule header** (SPEC §11; `ui/shell/Capsule.tsx`, every value and the
+  collapse rule in `core/shell/capsule.ts`). On a phone no page has a bar: one
+  opaque shape floats 6 below the status bar and 8 from the sides, over a canvas
+  strip. Brain: the cat, "Brain" (the computer's name under it with two or more),
+  the state control without its pill, ⋯. A Session: Back, the agent's mark (a red
+  dot while it needs you), the name, the view button, ⋯. Both collapse while the
+  person reads (moved 24 from where the content last rested, away from the newest
+  end) and expand at the newest end, on a tap, or when something needs the person;
+  Brain's collapsed keeps the cat and a short state ("● 3"), a Session's Back, the
+  mark and the name. The terminal starts collapsed. Every other pushed page
+  (`NavPage`): Back alone while its own title shows, then the title and its
+  controls; it never collapses. Screen keeps its black system header, wide keeps
+  its own header.
 - **Home's tray** (SPEC §1.2, §3.2, §11; `ui/tray/Tray.tsx`, `core/tray/model.ts`)
   rises from the bottom, its top hanging just under home's header and filling
   to the screen's bottom whatever it lists; the header and the page dim under
