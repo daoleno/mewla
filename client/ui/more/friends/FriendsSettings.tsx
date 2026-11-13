@@ -1,5 +1,6 @@
 import { signal, Text, View } from "nsh";
 import { Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { tile } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
 import { Avatar } from "./parts";
 import {
@@ -111,7 +112,7 @@ export function FriendsSettings(props: { nav: PageNav }) {
         {friendsEnabled() && me()?.auto_post ? (
           <SwitchRow testID="friends-auto-media" title="Let it attach pictures and video" checked={me()!.auto_media === true} onChange={(on) => void autoMedia(on)} />
         ) : null}
-        {friendsEnabled() ? <Row testID="friends-open" icon="chat" title="Open Friends" chevron onPress={() => props.nav.push({ name: "friends" })} /> : null}
+        {friendsEnabled() ? <Row testID="friends-open" lead={tile("pink", "chat")} title="Open Friends" chevron onPress={() => props.nav.push({ name: "friends" })} /> : null}
       </Section>
 
       {phase() === "signing_in" && friends().signIn ? (

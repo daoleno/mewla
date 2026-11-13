@@ -14,6 +14,7 @@ import { computerProblems, computerProblemsMayChange, computerTmuxProblem, compu
 import { effectiveMinComputerVersion } from "../../../core/update/version";
 import manifest from "../../nsh.json";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { tile } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
 import { connection, current, resumeConnection, servers, switchTo, transportPath } from "../../session";
 import { linkPathText } from "../../../core/link/directAddresses";
@@ -298,7 +299,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
             <Section>
               <Row
                 testID="computer-use"
-                icon="swap-horizontal"
+                lead={tile("blue", "swap-horizontal")}
                 title="Use this computer"
                 disabled={Boolean(busy())}
                 onPress={() => {

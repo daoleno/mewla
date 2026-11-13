@@ -25,6 +25,7 @@ import { changeIPhone, getIPhoneStatus, type IPhoneChange, type IPhoneDaemonStat
 import { phoneAvailable, phoneStatus, readPhone } from "../../phone/state";
 import { daemon } from "../daemon";
 import { EmptyState, PillButton, Row, Section, Spinner } from "../../kit/kit";
+import { tile } from "../../kit/RowTile";
 import { Icon, type IconName } from "../../kit/Icon";
 import { inFront } from "../../kit/inFront";
 import type { PageNav } from "../routes";
@@ -773,10 +774,10 @@ function LocalCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.El
           {keyed(which, () =>
             props.agents.length ? (
               props.agents.map((agent) => (
-                <Row icon="desktop" title={agent.name || "An agent"} trailing={<SmallButton onCard title="Stop" label={`Stop ${agent.name || "An agent"}`} destructive disabled={props.busy} onPress={() => props.onStop(agent)} />} />
+                <Row lead={tile("blue", "desktop")} title={agent.name || "An agent"} trailing={<SmallButton onCard title="Stop" label={`Stop ${agent.name || "An agent"}`} destructive disabled={props.busy} onPress={() => props.onStop(agent)} />} />
               ))
             ) : (
-              <Row icon="desktop" title="No agent on this screen" />
+              <Row lead={tile("blue", "desktop")} title="No agent on this screen" />
             ),
           )}
         </Section>
