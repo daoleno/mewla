@@ -321,7 +321,13 @@ const focusOut = "\x1b[O"
 // Write types into the Session. A person typing here while another viewer
 // has the Session at its size takes the size back first, so what they type
 // into is drawn right.
-func (s *hostSession) Write(data string) error {
+func (s *hostSession) Write(data string) error { return s.write(data, data != focusOut) }
+
+// WriteScroll sends what a scroll drag made (wheel presses, cursor keys). Scrolling
+// is reading: the Session keeps the size another viewer gave it.
+func (s *hostSession) WriteScroll(data string) error { return s.write(data, false) }
+
+func (s *hostSession) write(data string, takeSize bool) error {
 	client, err := s.started()
 	if err != nil {
 		return err
@@ -329,7 +335,7 @@ func (s *hostSession) Write(data string) error {
 	s.mu.Lock()
 	owned, size := s.owned, s.size
 	s.mu.Unlock()
-	if !owned && data != focusOut {
+	if !owned && takeSize {
 		if err := s.Resize(size.Cols, size.Rows); err != nil {
 			return err
 		}

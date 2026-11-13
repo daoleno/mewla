@@ -446,6 +446,7 @@ type clientMessage struct {
 	Col                  int                                    `json:"col"`
 	Row                  int                                    `json:"row"`
 	Lines                int                                    `json:"lines"`
+	Scroll               bool                                   `json:"scroll,omitempty"`
 	Since                *terminal.HistoryCursor                `json:"since,omitempty"`
 	ProcessID            int                                    `json:"process_id"`
 	Path                 string                                 `json:"path"`
@@ -1749,7 +1750,13 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
 		}
 	case "terminal_input":
-		if err := s.terminal.Input(clientID(conn), raw.SessionID, raw.Data); err != nil {
+		// scroll: what a scroll drag made (wheel presses, cursor keys) is reading, not typing: it never takes
+		// the Session's size from another viewer.
+		input := s.terminal.Input
+		if raw.Scroll {
+			input = s.terminal.ScrollInput
+		}
+		if err := input(clientID(conn), raw.SessionID, raw.Data); err != nil {
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "session_id": raw.SessionID, "code": "input_failed", "message": err.Error()})
 		}
 	case "terminal_resize":

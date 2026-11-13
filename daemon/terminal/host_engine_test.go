@@ -310,6 +310,20 @@ printf '\033[H\033[2J'; for r in 1 2 3; do head -c "$c" /dev/zero | tr '\0' "$r"
 		t.Fatalf("info = %+v, %v; a focus-out took the size", info, err)
 	}
 
+	// A scroll drag on the App (wheel presses, cursor keys) is reading, not typing: the desk keeps its size.
+	for _, report := range []string{"\x1b[<64;80;23M\x1b[<64;80;23M", "\x1b[A\x1b[A"} {
+		if err := manager.ScrollInput("owner", view.ID(), report); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+	if info, err := client.Info(ctx, id); err != nil || info.Cols != 160 || info.Rows != 45 {
+		t.Fatalf("info = %+v, %v; a scroll report took the size", info, err)
+	}
+	if got := sizes.last(); got != "160x45" {
+		t.Fatalf("the App's view was last told the Session is %q after a scroll, want the desk's 160x45", got)
+	}
+
 	// The person types on the App: the Session is the App's size again, and its screen the host's.
 	if err := manager.Input("owner", view.ID(), "x\r"); err != nil {
 		t.Fatal(err)
