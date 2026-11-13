@@ -1,6 +1,6 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired, phoneHost } from "../testing/fixtures";
-import { IDS, storage } from "../fixture/scenario";
+import { phoneHost } from "../testing/fixtures";
+import { storage } from "../fixture/scenario";
 
 // Trial: three pages (SPEC 1, under trial since 11-13). Brain is the middle page; the computer page is to
 // its left, the running things to its right.
@@ -66,21 +66,4 @@ describe("Trial: three pages", () => {
     await app.drag("id:home-page-brain", { x: 260 });
     await app.waitFor("id:computer-settings");
   }, 30_000);
-
-  test("a code block in Brain's thread wraps its long lines, with Copy; one in a Session keeps its sideways scroll", async () => {
-    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
-    const code = "Run:\n\n```sh\n" + "mewla update --channel beta ".repeat(8) + "\n```\n";
-    const reply = { id: "a1", seq: 1, timestamp: "2026-11-12T07:00:01.000Z", kind: "assistant_message", role: "assistant", body: code };
-    const brain = await open("../FakeDaemonApp.tsx", { platform: "android", storage: paired, host: phoneHost({ brain: { chat_thread_id: "t-now", host_worker }, conversations: { "brain-host": [reply] } }) });
-    await brain.waitFor("id:code-block", { timeout: 10_000 });
-    expect(brain.count("id:code-wrapped")).toBe(1);
-    await brain.wait(300);
-    await brain.press("label:Copy");
-    await brain.waitUntil(() => (brain.clipboard() ?? "").includes("mewla update --channel beta"));
-
-    const app = await home();
-    await app.host.send("links.open", { url: `mewla://sessions/${IDS.ratelimit}` });
-    await app.waitFor("id:code-block", { timeout: 10_000 });
-    expect(app.count("id:code-wrapped")).toBe(0);
-  }, 40_000);
 });

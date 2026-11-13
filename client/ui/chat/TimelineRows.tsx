@@ -68,10 +68,7 @@ export const SELECTION = "selection:bg-foreground";
  */
 export const INLINE_CODE = "font-mono text-[15px] text-foreground bg-card rounded-[5px]";
 
-/** Trial: three pages. The face of a code block's code in Brain's thread, where it wraps: mono 13/20 (SPEC §11). */
-const PAGED_CODE_FACE = "font-mono text-[13px] leading-[20px] text-foreground";
-
-export function CodeBlock(props: { code: string; language?: string; paged?: boolean }) {
+export function CodeBlock(props: { code: string; language?: string }) {
   const copied = signal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const copy = () => {
@@ -89,26 +86,16 @@ export function CodeBlock(props: { code: string; language?: string; paged?: bool
           <Icon name={copied() ? "check" : "copy"} size={18} color="muted-foreground" />
         </Button>
       </View>
-      {props.paged ? (
-        // Trial: three pages. In Brain's pager a sideways scroll inside the thread loses every swipe to the page
-        // (NSH 0.5.0), so the code wraps its long lines instead: plain, selectable, the header's Copy as ever.
-        <View testID="code-wrapped" selectable class="px-4 pb-4">
-          <Text class={PAGED_CODE_FACE}>{props.code}</Text>
-        </View>
-      ) : (
-        <TextView document={{ blocks: [{ type: "codeBlock", code: props.code, language: props.language ?? "" }] }} selectable class={SELECTION}
-          classes={{ codeBlock: "m-0 rounded-none border-0 bg-transparent p-0", codeBlockScroll: "m-0 p-0", codeBlockCode: "m-0 px-4 pb-4 pt-0" }} />
-      )}
+      <TextView document={{ blocks: [{ type: "codeBlock", code: props.code, language: props.language ?? "" }] }} selectable class={SELECTION}
+        classes={{ codeBlock: "m-0 rounded-none border-0 bg-transparent p-0", codeBlockScroll: "m-0 p-0", codeBlockCode: "m-0 px-4 pb-4 pt-0" }} />
     </View>
   );
 }
 
 /** How a chat's Markdown draws its code blocks: as `CodeBlock`. */
 export const renderCode = (block: { code: string; language?: string }) => <CodeBlock code={block.code} language={block.language} />;
-/** Trial: three pages. Brain's thread, a page of the pager, draws its code blocks wrapped (`CodeBlock` `paged`). */
-export const renderPagedCode = (block: { code: string; language?: string }) => <CodeBlock code={block.code} language={block.language} paged />;
 
-const Mono = (props: { text: string; paged?: boolean }) => <CodeBlock code={props.text} paged={props.paged} />;
+const Mono = (props: { text: string }) => <CodeBlock code={props.text} />;
 
 /** A file as the row titles show it: from its project down (`daemon/watcher/watcher.go`), not the whole absolute path, whose end a line cuts off. */
 const shownPath = (path: string) => distinctivePath(path) ?? compactPathLabel(path);
@@ -145,7 +132,7 @@ function shownDetail(item: ActivityTimelineItem): string | undefined {
 }
 
 /** A tool call, a reasoning or update line, or a folded run of finished calls. */
-export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void; pictures?: { load?: PictureLoader; open: (src: string) => void }; paged?: boolean }) {
+export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void; pictures?: { load?: PictureLoader; open: (src: string) => void } }) {
   const item = props.item;
   const open = () => props.expansion.isOpen(item().id);
   const files = () => activityFileRows(item());
@@ -174,10 +161,10 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
               <ToolLine title={step.title} detail={shownDetail(step)} />
             </View>
           )) : null}
-          {item().commandText ? <Mono text={item().commandText ?? ""} paged={props.paged} /> : null}
+          {item().commandText ? <Mono text={item().commandText ?? ""} /> : null}
           {item().queryText ? <TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText ?? "" }] }] }} selectable class="text-sm" /> : null}
           {item().statusLine ? <Text class="text-xs text-muted-foreground">{item().statusLine}</Text> : null}
-          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body ?? ""} paged={props.paged} /> : <TextView markdown={item().body ?? ""} selectable renderCodeBlock={props.paged ? renderPagedCode : renderCode} class={`text-sm ${SELECTION}`} />) : null}
+          {item().body ? (item().bodyKind === "terminal" ? <Mono text={item().body ?? ""} /> : <TextView markdown={item().body ?? ""} selectable renderCodeBlock={renderCode} class={`text-sm ${SELECTION}`} />) : null}
           {files().map((file) => <FileRow file={file} onFile={props.onFile} />)}
         </View>
       ) : null}
