@@ -84,7 +84,7 @@ export type TerminalPathPosition = { line?: number; column?: number };
  * file path (or file: URL) goes to `onOpenPath`; text a program copies
  * (OSC 52) reaches the clipboard.
  */
-export function TerminalPane(props: { transport: Transport; targetId: string; active: () => boolean; onOpenPath?: (path: string, position: TerminalPathPosition) => void }) {
+export function TerminalPane(props: { transport: Transport; targetId: string; active: () => boolean; onOpenPath?: (path: string, position: TerminalPathPosition) => void; program?: () => string | undefined }) {
   let surface: NativeComponentRef | undefined;
   const ctrl = signal(false);
   const keyboard = signal(false);
@@ -125,7 +125,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     historyNotice: (text) => historyNotice.set(text),
     exit: (code) => exited.set(code),
     error: (message) => problem.set(message),
-  });
+  }, { program: () => props.program?.() });
   cleanup(() => session.close());
 
   const type = (data: string) => {
@@ -217,12 +217,15 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     return true;
   });
 
-  // A tap: a link opens; elsewhere on the live screen, the keyboard and the pane under the finger.
+  // A tap: a link opens; on the live screen of a program that takes mouse reports (Claude Code's
+  // fullscreen view, any mouse TUI), a click there, which raises no keyboard (the key bar has its key);
+  // elsewhere on the live screen, the keyboard and the pane under the finger. A long press selects (the view's).
   const tap = (col: number, row: number, text: string, index: number) => {
     const link = index >= 0 ? linkAction(text, index) : null;
     if (link?.kind === "url") return void openUrl(link.url).catch(() => {});
     if (link?.kind === "path") return props.onOpenPath?.(link.path, { ...(link.line !== undefined ? { line: link.line } : {}), ...(link.column !== undefined ? { column: link.column } : {}) });
     if (row < 0) return;
+    if (!scrolledBack() && !copyMode() && session.clickable && session.click(col, row)) return;
     if (scrolledBack() || copyMode()) toBottom();
     focusKeyboard();
     session.focusPane(col, row);

@@ -30,11 +30,45 @@ export function paneForDrag(panes: PaneScrollMode[]): PaneScrollMode | undefined
   return panes.find((p) => wheelKind(p) !== "none") ?? panes[0];
 }
 
+/** How the program asked for mouse reports to be encoded (DEC 1006, 1015, 1005, else X10); SGR when the host does not say. */
+export type MouseFormat = "sgr" | "urxvt" | "utf8" | "x10";
+
+export function mouseFormat(pane: Pick<PaneScrollMode, "mouse_format"> | undefined): MouseFormat {
+  const format = pane?.mouse_format;
+  return format === "urxvt" || format === "utf8" || format === "x10" ? format : "sgr";
+}
+
+/**
+ * One mouse report at 1-based cell (`col`, `row`): `button` 0 is the left button, 64 and 65 the wheel up
+ * and down; `release` ends a click. "" where the encoding cannot reach the cell: X10 carries a position in
+ * one byte, and this socket carries text, so only cells up to 95 fit (the phone's grid is narrower).
+ */
+export function mouseReport(format: MouseFormat, button: number, col: number, row: number, release = false): string {
+  if (format === "sgr") return `\u001b[<${button};${col};${row}${release ? "m" : "M"}`;
+  const code = release ? 3 : button;
+  if (format === "urxvt") return `\u001b[${code + 32};${col};${row}M`;
+  const limit = format === "utf8" ? 2015 : 95;
+  if (col > limit || row > limit || col < 1 || row < 1) return "";
+  return `\u001b[M${String.fromCharCode(code + 32)}${String.fromCharCode(col + 32)}${String.fromCharCode(row + 32)}`;
+}
+
 /** One wheel press at the pane's middle (1-based cells): 64 is up (back in time), 65 down. */
-export function wheelPress(pane: Pick<PaneScrollMode, "left" | "top" | "cols" | "rows">, up: boolean): string {
+export function wheelPress(pane: Pick<PaneScrollMode, "left" | "top" | "cols" | "rows" | "mouse_format">, up: boolean): string {
   const col = pane.left + Math.floor(pane.cols / 2) + 1;
   const row = pane.top + Math.floor(pane.rows / 2) + 1;
-  return `\u001b[<${up ? 64 : 65};${col};${row}M`;
+  return mouseReport(mouseFormat(pane), up ? 64 : 65, col, row);
+}
+
+/**
+ * A tap at the grid's cell (`col`, `row`, 0-based) as a click for a program that asked for mouse reports
+ * (Claude Code's "Jump to bottom", its new-message pill, any TUI's buttons): press and release of the left
+ * button, in the encoding the program asked for. "" when the program takes no clicks.
+ */
+export function clickBytes(pane: PaneScrollMode | undefined, col: number, row: number): string {
+  if (!pane?.mouse || !Number.isInteger(col) || !Number.isInteger(row) || col < 0 || row < 0) return "";
+  const format = mouseFormat(pane);
+  const press = mouseReport(format, 0, col + 1, row + 1);
+  return press ? press + mouseReport(format, 0, col + 1, row + 1, true) : "";
 }
 
 /** The cursor key a line of drag is: Up when back in time; application mode (DECCKM) uses SS3. */
