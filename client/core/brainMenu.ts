@@ -5,6 +5,7 @@
  */
 import type { BrainExecutorRef, BrainExecutorState, BrainSnapshot } from "./brain";
 import type { Transport } from "./transport";
+import { agentKindFromProvider } from "./sessions/workerPresentation";
 
 /** An agent provider's product name; an unknown provider keeps its own word. */
 export function brainProviderLabel(value?: string): string {
@@ -28,8 +29,6 @@ export function brainProviderLabel(value?: string): string {
   }
 }
 
-const KNOWN_PROVIDERS: ReadonlySet<string> = new Set(["codex", "cursor", "grok", "claude", "pi", "opencode", "dsh"]);
-
 /**
  * An executor's name: the product it runs (Codex, Claude Code, Cursor Agent…)
  * unless the computer gave it a name of its own; the raw id ("codex", "agent")
@@ -40,7 +39,7 @@ export function brainExecutorLabel(executor?: BrainExecutorRef | null): string {
   const provider = executor.provider?.trim().toLowerCase() ?? "";
   const name = executor.name?.trim() ?? "";
   const lower = name.toLowerCase();
-  if (KNOWN_PROVIDERS.has(provider) && (!name || lower === executor.id.trim().toLowerCase() || lower === provider)) {
+  if (agentKindFromProvider(provider) !== "terminal" && (!name || lower === executor.id.trim().toLowerCase() || lower === provider)) {
     return brainProviderLabel(provider);
   }
   if (name) return name;
