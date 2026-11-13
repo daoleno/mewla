@@ -15,8 +15,6 @@ import type { BrainWorkResultEvent } from "../../core/timeline/brainWorkEvent";
 import type { BrainCurrentWork } from "../../core/timeline/types";
 import { markWorkRead } from "../../core/work/brainWork";
 import { goHome, homeShown, openBrainTerminal, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
-import { ComputerPage } from "../computer/ComputerPage";
-import { besideBrainNav, HomePager, showHomePage } from "./Pager";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { workspaceRoute } from "../more/files/routes";
 import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, workers } from "../session";
@@ -32,8 +30,7 @@ import { clock } from "../calendar/clock";
 import { Icon } from "../kit/Icon";
 import { HomeCat } from "./Cat";
 import { StateControl } from "../tray/StateControl";
-import { HOME_HEADER_HEIGHT, homeHeaderInset, Tray, TrayPage } from "../tray/Tray";
-import { isAvailable as mobile } from "nsh/mobile";
+import { HOME_HEADER_HEIGHT, homeHeaderInset, Tray } from "../tray/Tray";
 import { BrainChatFailed, BrainChatUnavailable, BrainHostSheet, BrainMenu, brainChatState, brainChatUnavailable, brainComposerBlock, createBrainComposer, currentBrain, MentionPanel } from "../brain";
 import { newSessionOpen } from "../screens/NewSession";
 import { ComposerPlusButton, SlashMenu } from "../session/SlashMenu";
@@ -57,7 +54,6 @@ const revealRequests = signal(0);
 export function showRequestCard(key: string): void {
   pickedRequest.set(key);
   if (!homeShown()) goHome();
-  else showHomePage(1);
   revealRequests.set(revealRequests() + 1);
 }
 const activity = computed(() => brainThread().conversation?.activity);
@@ -239,7 +235,7 @@ function HomeHeader() {
           // Where I am: the cat, "Brain" and the computer's name are one target that opens the computer page,
           // and the name wears the state control's chevron, so the header reads as two controls of one kind.
           <Button testID="home-cat" accessibilityLabel={`Computer, ${current()?.name ?? ""}`}
-            onPress={() => (mobile ? showHomePage(0) : openPage({ name: "computer" }))} class="min-h-[48px] min-w-0 shrink flex-row items-center pr-2 active:opacity-70">
+            onPress={() => openPage({ name: "computer" })} class="min-h-[48px] min-w-0 shrink flex-row items-center pr-2 active:opacity-70">
             <HomeCat />
             <View class="min-w-0 shrink justify-center">
               <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
@@ -374,39 +370,19 @@ export function Home() {
       return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path) : Promise.resolve(null);
     },
   };
-  const trayProps = {
-    onPairAgain: () => openPage({ name: "computer" }, { name: "pair" }),
-    onNewSession: () => newSessionOpen.set(true),
-    onShowCard: showRequestCard,
-    onUseExecutor: (id: string) => {
-      const executor = (brain()?.executors ?? []).find((ref) => ref.id === id);
-      if (executor) void currentBrain.hostSwitch.switchTo(executor);
-    },
-    onSwitchExecutor: () => hostSheetOpen.set(true),
-  };
-  const brainPage = (
-    <View class="flex-1 bg-background">
-      <HomeHeader />
-      {routedBrainThread() ? <PastThread /> : null}
-      <Body handlers={handlers} />
-      {routedBrainThread() ? null : <Composer text={text} editor={editor} />}
-    </View>
-  );
   return (
     <NavPage title="Brain" column="reading" headerVisible={false} header={<View />}>
       <View class="flex-1 bg-background">
-        {wide() ? brainPage : mobile ? (
-          // Trial: three pages (home/Pager.tsx): the computer page, Brain, the running things. Phones and tablets only;
-          // in a browser home stays Brain with the tray over it, and the cat pushes the computer page (its URL).
-          <HomePager brain={brainPage}
-            computer={<View class="flex-1 bg-background" style={{ paddingTop: homeHeaderInset() }}><ComputerPage nav={besideBrainNav} onSwitchExecutor={() => hostSheetOpen.set(true)} bare /></View>}
-            running={<TrayPage {...trayProps} onLeave={() => showHomePage(1)} />} />
-        ) : (
-          <>
-            {brainPage}
-            <Tray {...trayProps} />
-          </>
-        )}
+        <HomeHeader />
+        {routedBrainThread() ? <PastThread /> : null}
+        <Body handlers={handlers} />
+        {routedBrainThread() ? null : <Composer text={text} editor={editor} />}
+        {wide() ? null : <Tray onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
+          onUseExecutor={(id) => {
+            const executor = (brain()?.executors ?? []).find((ref) => ref.id === id);
+            if (executor) void currentBrain.hostSwitch.switchTo(executor);
+          }}
+          onSwitchExecutor={() => hostSheetOpen.set(true)} />}
         <BrainMenu open={menuOpen} onClose={() => menuOpen.set(false)} anchor={menuAnchor.node}
           onOpenTerminal={(hostWorkerId: string) => openBrainTerminal(hostWorkerId)}
           onBrowseWorkspace={browseWorkspace}
