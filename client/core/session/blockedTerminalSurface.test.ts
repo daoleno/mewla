@@ -46,12 +46,8 @@ function input(overrides: Partial<BlockedTerminalInput> = {}): BlockedTerminalIn
 }
 
 describe("resolveBlockedTerminal", () => {
-  test("blocked with no prompt shows the live terminal", () => {
-    expect(resolveBlockedTerminal(input())).toEqual({
-      forceTerminal: true,
-      blockKey: "w1|10|20|",
-      dismissedKey: null,
-    });
+  test("blocked with no prompt keeps the chat: there is nothing on the terminal to answer (owner 11-13 19:4x)", () => {
+    expect(resolveBlockedTerminal(input())).toEqual({ forceTerminal: false, blockKey: null, dismissedKey: null });
   });
 
   test("blocked on a prompt the app cannot drive shows the live terminal", () => {
@@ -78,34 +74,35 @@ describe("resolveBlockedTerminal", () => {
   });
 
   test("does not force again once the person chose the chat, until the block changes or clears", () => {
-    const first = resolveBlockedTerminal(input());
+    const blocked = (overrides: Partial<BlockedTerminalInput> = {}) => input({ prompt: hollowChoice, ...overrides });
+    const first = resolveBlockedTerminal(blocked());
     const dismissedKey = first.blockKey;
     // The person went back to the chat: the same block stays in the chat.
-    expect(resolveBlockedTerminal(input({ dismissedKey }))).toEqual({
+    expect(resolveBlockedTerminal(blocked({ dismissedKey }))).toEqual({
       forceTerminal: false,
       blockKey: dismissedKey,
       dismissedKey,
     });
     // A different undrivable prompt is a new block.
-    expect(resolveBlockedTerminal(input({ prompt: emptyMenu, dismissedKey })).forceTerminal).toBe(true);
+    expect(resolveBlockedTerminal(blocked({ prompt: emptyMenu, dismissedKey })).forceTerminal).toBe(true);
     // Another run of the Session is a new block.
-    expect(resolveBlockedTerminal(input({ identity: "w1|11|21", dismissedKey })).forceTerminal).toBe(true);
+    expect(resolveBlockedTerminal(blocked({ identity: "w1|11|21", dismissedKey })).forceTerminal).toBe(true);
     // The block clears: the dismissal is forgotten, so the next block forces again.
-    const cleared = resolveBlockedTerminal(input({ status: "running", dismissedKey }));
+    const cleared = resolveBlockedTerminal(blocked({ status: "running", dismissedKey }));
     expect(cleared.dismissedKey).toBeNull();
-    expect(resolveBlockedTerminal(input({ dismissedKey: cleared.dismissedKey })).forceTerminal).toBe(true);
+    expect(resolveBlockedTerminal(blocked({ dismissedKey: cleared.dismissedKey })).forceTerminal).toBe(true);
     // A card appearing ends the block too.
-    expect(resolveBlockedTerminal(input({ prompt: permission, dismissedKey })).dismissedKey).toBeNull();
+    expect(resolveBlockedTerminal(blocked({ prompt: permission, dismissedKey })).dismissedKey).toBeNull();
   });
 
   test("a retained snapshot from before a reconnect does not move the view or forget a dismissal", () => {
-    const dismissedKey = "w1|10|20|";
+    const dismissedKey = "w1|10|20|choice-2";
     expect(resolveBlockedTerminal(input({ live: false }))).toEqual({
       forceTerminal: false,
       blockKey: null,
       dismissedKey: null,
     });
     expect(resolveBlockedTerminal(input({ live: false, dismissedKey })).dismissedKey).toBe(dismissedKey);
-    expect(resolveBlockedTerminal(input({ live: true, dismissedKey })).forceTerminal).toBe(false);
+    expect(resolveBlockedTerminal(input({ live: true, prompt: hollowChoice, dismissedKey })).forceTerminal).toBe(false);
   });
 });

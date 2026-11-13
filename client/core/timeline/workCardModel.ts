@@ -56,10 +56,17 @@ export function workCardModel(item: Pick<BrainWorkEventTimelineItem, "event" | "
   };
   // Only Brain's question asks you; a Worker's request without one is Brain's to resolve (owner 2026-11-13).
   if (work?.question && status !== "done" && status !== "cancelled") return { ...base, kind: "needs", summary: work.question, state: "Needs you", unread: false };
+  // A lost, stalled or uncertain turn, and a Worker's request, are Brain's to handle: never a result for the person,
+  // and never the daemon's words ("Delegated Session ended; outcome is unknown", owner 11-13 19:4x).
+  const brains = BRAINS_EVENTS.has(event.kind);
   if (status === "running" || status === "open" || status === "waiting" || status === "needs_input") {
     const state = status === "running" ? "Running" : status === "needs_input" ? "Reviewing" : "Waiting";
-    return { ...base, kind: "live", summary: work?.wait_for || work?.summary || event.summary, state, unread: false, mark: work ? workProgressMark(work) : undefined };
+    return { ...base, kind: "live", summary: (brains ? work?.summary : work?.wait_for || work?.summary || event.summary) || "", state, unread: false, mark: work ? workProgressMark(work) : undefined };
   }
+  if (brains) return { ...base, kind: "line", summary: work?.status === "done" ? work.summary ?? "" : "", state: work?.status === "done" ? "Done" : "Stopped", unread: false };
   const unread = work ? work.unread_result : event.unread;
   return { ...base, kind: unread ? "result" : "line", summary: work?.summary || event.summary, state: RESULT_STATE[event.kind] ?? "Done", unread };
 }
+
+/** The events Brain handles itself: the Work's next step is Brain's, so the thread shows the Work, not the event. */
+const BRAINS_EVENTS = new Set<BrainWorkEventKind>(["session.needs_input", "session.stale", "session.uncertain", "session.ownership_lost"]);

@@ -94,9 +94,9 @@ describe("nothing stays stuck", () => {
     expect(slip.summary).toContain("You answered a day ago");
   });
 
-  test("a Worker that vanished without a result is a decision, not a dead card", () => {
+  test("a Worker that vanished without a result is Brain's to check (owner 11-13 19:4x), with the person's moves on Work detail", () => {
     const slip = slipOf(work({ status: "needs_input", progress_mode: "ready", attention_reason: "turn_lost", attention_since: hoursAgo(3) }));
-    expect(slip).toMatchObject({ group: "needs", stuck: "outcome_unknown", status: "warning", statusLabel: "Outcome unknown" });
+    expect(slip).toMatchObject({ group: "running", stuck: "outcome_unknown", status: "running", statusLabel: "Reviewing" });
     expect(brainWorkActions(slip).map((action) => action.kind)).toEqual(["ask", "close", "dismiss"]);
   });
 

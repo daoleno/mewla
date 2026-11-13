@@ -298,7 +298,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
 }
 
 /** One open request: the card the person answers here. */
-function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; notice: RequestNotice; anchor?: (node: ViewRef) => void; onLater: () => void }) {
+function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; openLabel: string; notice: RequestNotice; anchor?: (node: ViewRef) => void; onLater: () => void }) {
   const card = props.card;
   const gone = () => {
     const command = card.body.kind === "action" ? promptParts(card.body.prompt.requestText ?? "", card.body.prompt.commandText).command : "";
@@ -315,11 +315,12 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
     <View testID="request-card" ref={props.anchor} class="gap-3 rounded-(--radius-group) bg-card p-4">
       <TopLine card={() => card} onSource={props.onSource} />
       <If when={card.body.kind === "choice" ? card.body : undefined} else={<If when={card.body.kind === "action"} else={<View class="gap-3">
-          {/* What it waits for, whole; the terminal is the last resort, so its button is the quiet one. */}
+          {/* What it waits for, whole, then one quiet button: in Brain's thread "Open", the Session (its chat when it
+              has one, owner 11-13 19:4x); in the Session's own chat, its terminal, the last resort. */}
           <View selectable><Text testID="request-detail" class="text-body font-semibold">{(card.body as { detail: string }).detail}</Text></View>
           <Button testID="request-open-terminal" onPress={() => props.onOpenTerminal((card.body as { workerId: string }).workerId)}
             class="h-[48px] items-center justify-center self-start rounded-(--radius-control) bg-muted px-4 active:opacity-70">
-            <Text class="text-body font-semibold">Open terminal</Text>
+            <Text class="text-body font-semibold">{props.openLabel}</Text>
           </Button>
         </View>}><ActionBody card={card} connected={props.connected} onGone={gone}
           onDone={(option) => {
@@ -399,6 +400,8 @@ export function RequestStack(props: {
   picked: Signal<string>;
   onSource?: (card: Card) => void;
   onOpenTerminal: (workerId: string) => void;
+  /** The blocked card's one button: "Open" where it opens the Session, "Open terminal" in the Session's own chat. */
+  openLabel?: string;
   notice: RequestNotice;
   /** Keys the thread holds as answered rows: their sealed lines are in the thread, not the foot. */
   durable?: () => ReadonlySet<string>;
@@ -427,7 +430,7 @@ export function RequestStack(props: {
       {/* Rows are kept by key while the list is made again (every update, each second): a row made anew flashed
           on the web and lost a tap under the finger (lead 11-13, RESULT-web-flicker; Tray a80b9b26). */}
       <Each of={sealed()} key={(s) => s.key}>{(s) => <SealedLine sealed={s} open={() => shown().has(s().key)} onToggle={() => toggle(untracked(s).key)} />}</Each>
-      <Each of={openKey() ? [openKey()!] : []} key={(key) => key}>{(key) => <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} notice={props.notice} anchor={props.anchor} onLater={() => later(untracked(key))} />}</Each>
+      <Each of={openKey() ? [openKey()!] : []} key={(key) => key}>{(key) => <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} openLabel={props.openLabel ?? "Open terminal"} notice={props.notice} anchor={props.anchor} onLater={() => later(untracked(key))} />}</Each>
       <Each of={cards().filter((card) => card.key !== openKey())} key={(card) => card.key}>{(card) => <StackedRow card={card} onPress={() => props.picked.set(untracked(card).key)} />}</Each>
     </View>
   );

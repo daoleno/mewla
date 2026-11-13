@@ -323,7 +323,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
             render: (anchor) => (
               <RequestStack anchor={anchor} durable={durableHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
                 onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
-                onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
+                openLabel="Open" onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
             ),
           }}
           requests={() => (routedBrainThread() ? 0 : requestsHere().length)} reveal={revealRequests} />

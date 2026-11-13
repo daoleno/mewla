@@ -253,10 +253,15 @@ export function brainWorkSurface(
       group = "needs";
       status = "needs";
       statusLabel = "Needs you";
+    } else if (stuck === "outcome_unknown") {
+      // A lost or unconfirmed turn is Brain's to handle (it is woken for it), not the person's (owner 11-13 19:4x).
+      group = "running";
+      status = "running";
+      statusLabel = "Reviewing";
     } else if (stuck) {
       group = "needs";
       status = "warning";
-      statusLabel = stuck === "outcome_unknown" ? "Outcome unknown" : "No decision";
+      statusLabel = "No decision";
     } else if (replied && !stuck) {
       group = "running";
       status = "running";

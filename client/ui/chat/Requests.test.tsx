@@ -337,6 +337,18 @@ describe("a real question, as the owner meets it (owner 2026-11-13, shot 11)", (
     expect(framesOf(app.host.posts(), "brain_work_action").at(-1)).toMatchObject({ id: "w4", action: "reply", text: "Wait for my review" });
   }, 20_000);
 
+  test("a card the computer cannot draw says Open, which opens the Session, never only its terminal (owner 11-13 19:4x)", async () => {
+    // A question whose options only the agent's transcript holds, read without it: the computer cannot draw it.
+    const odd = { id: "p-9", kind: "choice", provider: "claude", title: "Pick a region for the new bucket", call_id: "c-9", questions: [{ question: "Pick a region for the new bucket", options: [] }] };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session("infra", { delegated: true, prompt: odd })] }) });
+    await app.waitFor("id:request-open-terminal", { timeout: 10_000 });
+    expect(app.texts()).toContain("Open");
+    expect(app.texts()).not.toContain("Open terminal");
+    expect(app.texts()).toContain("Pick a region for the new bucket");
+    await app.press("id:request-open-terminal");
+    await app.waitFor("id:session-status");
+  }, 20_000);
+
   test("Later puts a card aside: it leaves the thread's foot, the tray keeps it, and its tray row brings it back", async () => {
     const app = await open(APP, {
       platform: "android", storage: paired,
