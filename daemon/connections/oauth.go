@@ -628,6 +628,15 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 		token, err = config.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, client), secret.Token).Token()
 	}
 	if err != nil {
+		// Only the service refusing the refresh means the sign-in is gone. A
+		// refresh that never got an answer (a dropped connection, a timeout, the
+		// service down) leaves the account as it was: marking it would show a
+		// working sign-in as expired until someone reconnects it.
+		if !refreshWasRefused(err) {
+			log.Printf("plugins: %s sign-in refresh did not get an answer: %s", r.Account.Integration, signInDetail(err))
+			return "", errNetwork
+		}
+		log.Printf("plugins: %s sign-in refresh refused: %s", r.Account.Integration, signInDetail(err))
 		r.Account.Status = "authorization_required"
 		_ = m.save()
 		return "", errAuth
