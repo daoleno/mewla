@@ -18,7 +18,8 @@ const notion = (n: number) => ({ id: `n${n}`, integration: "notion", name: `Noti
 const expires = () => new Date(Date.now() + 3_600_000).toISOString();
 const setup = { id: "gws-flow", integration: "gws", status: "waiting", authorization_url: "https://console.cloud.google.com/auth/overview", code_required: true, setup_required: true, message: "Set up the consent screen.", expires: expires() };
 
-function computer(page: unknown, answer: (request: Request, n: number) => Record<string, unknown>) {
+/** `answer` gives the connections, or `{ error }` for a refusal; `delay` is how long the computer takes to answer. */
+function computer(page: unknown, answer: (request: Request, n: number) => Record<string, unknown>, delay = 0) {
   const asked: Request[] = [];
   const secure = new Map<string, string>();
   return {
@@ -30,11 +31,13 @@ function computer(page: unknown, answer: (request: Request, n: number) => Record
           "secure.get": ({ key }: { key: string }) => secure.get(key) ?? null,
           "secure.set": ({ key, value }: { key: string; value: string }) => void secure.set(key, value),
           "secure.remove": ({ key }: { key: string }) => void secure.delete(key),
-          "app.daemon": ({ type, body }: { type: string; body: Record<string, unknown> }) => {
+          "app.daemon": async ({ type, body }: { type: string; body: Record<string, unknown> }) => {
             if (type !== "connections") return { error: "not in this test" };
             const request = body.connection_request as Request;
             asked.push(request);
-            return { reply: "connections_result", connections: answer(request, asked.filter((r) => r.action === request.action).length) };
+            const reply = answer(request, asked.filter((r) => r.action === request.action).length);
+            if (delay && request.action !== "list") await new Promise((done) => setTimeout(done, delay));
+            return typeof reply.error === "string" ? reply : { reply: "connections_result", connections: reply };
           },
         },
       },
@@ -142,3 +145,19 @@ describe("Extensions' buttons take a tap that spans the computer's news", () => 
   }, 20_000);
 });
 
+describe("a tapped button shows that it took", () => {
+  test("Connect: busy at once while the computer answers, then what it said in plain words", async () => {
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : { error: "The computer could not start this sign-in.", code: "plugin_request_failed" }), 1_500);
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:connect-notion");
+    await app.press("id:connect-notion");
+    // While the computer answers: the button is a spinner, and every other service waits.
+    await app.waitFor("label:Waiting");
+    expect(app.shows("id:connect-notion")).toBe(false);
+    expect(app.enabled("id:connect-gws")).toBe(false);
+    await app.waitFor("text:That didn't go through");
+    expect(app.texts()).toContain("The computer could not start this sign-in.");
+    // And the row can be tapped again.
+    await app.waitUntil(() => app.enabled("id:connect-notion"));
+  }, 20_000);
+});
