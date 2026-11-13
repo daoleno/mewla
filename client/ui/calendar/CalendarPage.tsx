@@ -142,11 +142,13 @@ function Empty(props: { day: () => string | null }) {
 
 /** One page's agenda: its rows under its header (the month, the day's heading). */
 function Agenda(props: { testID: string; day: () => string | null; header: () => JSX.Element; onOpen: (item: CalendarItem) => void }) {
+  const agenda = computed(() => rows(props.day()));
+  // The empty state is the footer while there are no rows, never the List's `empty` (core/listEmpty.test.ts).
   return (
-    <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows(props.day())}
+    <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={agenda()}
       keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
       header={props.header}
-      empty={() => <Empty day={props.day} />}>
+      footer={<If when={agenda().length === 0}><Empty day={props.day} /></If>}>
       {(row) => {
         // Cells are recycled: what a cell shows follows the row it holds now. The clock makes new rows every
         // 30 s, so the cell is rebuilt only when it turns from a heading into an item or back: a tap at the

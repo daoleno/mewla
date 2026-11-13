@@ -236,7 +236,7 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
         <List keyboardShouldPersistTaps="handled" testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-28" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() } : undefined}
           header={<View class="px-4"><DisplayTitle title="All Sessions" /></View>}
           onViewableItemsChange={({ viewableItems }) => titleAway.set(viewableItems.length > 0 && !viewableItems.some((t) => t.index === 0))}
-          empty={<Empty onPair={onPair} onNew={onNew} />}>
+          footer={<If when={rows().length === 0}><Empty onPair={onPair} onNew={onNew} /></If>}>
           {(row) => {
             // Cells are recycled: what a cell shows follows the row it holds now. A Session's update makes new
             // rows, so the cell is rebuilt only when it turns from a heading into a Session or back: a tap during
