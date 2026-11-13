@@ -17,6 +17,10 @@ val (major, minor, patch) = versionParts.groupValues.subList(1, 4).map { it.toIn
 val beta = versionParts.groupValues[4].takeIf { it.isNotEmpty() }?.toInt()
 if (minor > 99 || patch > 99 || (beta ?: 0) > 98) throw GradleException("$version has no version code (minor, patch ≤ 99, beta ≤ 98)")
 val mewlaVersionCode = major * 1_000_000 + minor * 10_000 + patch * 100 + (beta ?: 99)
+val devServer = providers.gradleProperty("mewla.devServer").orElse("").get().trim().also {
+  if (it.isNotEmpty() && !Regex("""^wss?://[A-Za-z0-9.\-]+:\d+(/[A-Za-z0-9._\-/]*)?$""").matches(it))
+    throw GradleException("mewla.devServer must be ws://<host>:<port>/ws, not $it")
+}
 val nshHome = providers.environmentVariable("NSH_HOME").orElse("${System.getProperty("user.home")}/.nsh").get()
 val nshCli = providers.environmentVariable("NSH").orElse("$nshHome/bin/nsh").get()
 // The release keystore is the one the Expo app is signed with (CI secrets only); without it, debug.
@@ -65,7 +69,13 @@ android {
   }
   buildTypes {
     // The dev build (hot reload) sits beside the Preview under its own name.
-    getByName("debug") { applicationIdSuffix = ".debug"; resValue("string", "app_name", "Mewla Dev") }
+    // -Pmewla.devServer=ws://<host>:<port>/ws: the `nsh dev` server the Dev app opens on (client/scripts/dev-android.sh
+    // passes the building host's), so no address is in the source; release builds have no such field.
+    getByName("debug") {
+      applicationIdSuffix = ".debug"
+      resValue("string", "app_name", "Mewla Dev")
+      buildConfigField("String", "DEV_SERVER", "\"$devServer\"")
+    }
     getByName("release") {
       signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
       isMinifyEnabled = true

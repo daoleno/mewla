@@ -23,9 +23,11 @@ cd client/ui && nsh check && nsh test
 
 ## Run it
 
-- **Android, hot reload:** `client/scripts/dev-android.sh` installs the preview debug build on the one device `adb`
-  sees and opens it on `nsh dev` through the start link (tap Load on the device): every save reloads it. The debug build
-  takes a dev server only through `mewla-dev://start?server=ws://…`, which it confirms first.
+- **Android, hot reload:** `client/scripts/dev-android.sh` builds the Dev app (preview debug) with this host's `nsh dev`
+  server (`-Pmewla.devServer=ws://<LAN address>:8790/ws`), installs it on the one device `adb` sees and serves client/.
+  Mewla Dev opens on that server from its icon, asking once (Load); every save reloads it. When the server does not
+  answer within two seconds, it starts on its built-in bundle and reopens on the server once it answers and the app
+  comes to the front. `mewla-dev://start?server=ws://…` points it at another server, confirmed first.
 - **Android, a build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`.
   The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app. A local
   build is signed with your debug key; the Preview `client.yml` keeps on dispatch carries the release key
