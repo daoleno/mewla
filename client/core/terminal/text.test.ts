@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { retainedOverlap, standAloneRows, TerminalHistoryModel, validateHistoryDelta, type HistoryDelta } from "./history";
-import { findTerminalLink, linkAction, promptRows, promptTarget, rowText, searchCount, searchHistory } from "./text";
+import { findTerminalLink, linkAction, promptRows, promptTarget, rowText, searchCount, searchHistory, tapAction } from "./text";
 
 const delta = (patch: Partial<HistoryDelta>): HistoryDelta => ({
   pane_id: "mh-1", cols: 80, rows: 24, alternate: false, mouse: false, epoch: 1, reset: false, first: 0, from: 0, next: 0, lines: [], ...patch,
@@ -126,5 +126,21 @@ describe("TerminalHistoryModel", () => {
     expect(() => validateHistoryDelta(delta({ cols: 0 }))).toThrow();
     expect(() => validateHistoryDelta(delta({ next: 1, lines: ["a"], flags: [99] }))).toThrow();
     expect(validateHistoryDelta(delta({ next: 1, lines: ["a"], flags: [4] })).lines).toEqual(["a"]);
+  });
+});
+
+describe("a tap on the terminal", () => {
+  const url = { kind: "url" as const, url: "https://example.com" };
+  test("a link opens before anything else, even on a program that reads the mouse", () => {
+    expect(tapAction({ link: url, row: 3, live: true, clickable: true })).toBe("link");
+    expect(tapAction({ link: url, row: -4, live: false, clickable: false })).toBe("link");
+  });
+  test("on the live screen of a program that reads the mouse it clicks; history and copy mode never click", () => {
+    expect(tapAction({ link: null, row: 3, live: true, clickable: true })).toBe("click");
+    expect(tapAction({ link: null, row: 3, live: false, clickable: true })).toBe("focus");
+    expect(tapAction({ link: null, row: 3, live: true, clickable: false })).toBe("focus");
+  });
+  test("a tap on history above the screen does nothing", () => {
+    expect(tapAction({ link: null, row: -1, live: false, clickable: true })).toBe("none");
   });
 });

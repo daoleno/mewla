@@ -45,7 +45,8 @@ export type TerminalProps = {
 
 export type TerminalEvents = {
   /** The grid fits cols × rows now (first layout, rotation, keyboard, font size). */
-  size: { cols: number; rows: number };
+  /** `keys`: the view takes `key` (Android: after what the keyboard is still composing). */
+  size: { cols: number; rows: number; keys?: boolean };
   /** The VT could not be made (the library did not load, or refused the grid); `retry` tries again. */
   failed: { message: string };
   /** Bytes for the program: typed text, keys (`\r`, `\x7f`, escape sequences), pasted text. */
