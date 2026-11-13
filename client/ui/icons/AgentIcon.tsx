@@ -25,12 +25,13 @@ import { Icon } from "./Icon";
  * glyph. Of the terminal flavors only the letter badges (bun, redis, nginx)
  * are drawn; the font-icon flavors fall back to the terminal glyph.
  */
-export function AgentIcon(props: { kind: AgentKind; flavor?: TerminalFlavor; size?: number; slot?: number; class?: string }) {
+/** `bare`: the mark alone, without the tile a terminal or Grok stands on (the capsule's mark has no base, SPEC §11). */
+export function AgentIcon(props: { kind: AgentKind; flavor?: TerminalFlavor; size?: number; slot?: number; bare?: boolean; class?: string }) {
   const size = props.size ?? 24;
   const slot = props.slot ?? size + 16;
   return (
     <View class={`items-center justify-center overflow-hidden ${props.class ?? ""}`} style={{ width: slot, height: slot }}>
-      {mark(props.kind, props.flavor ?? "shell", size)}
+      {mark(props.kind, props.flavor ?? "shell", size, props.bare ?? false)}
     </View>
   );
 }
@@ -43,10 +44,11 @@ const LETTER_FLAVORS: Partial<Record<TerminalFlavor, { letter: string; backgroun
   nginx: { letter: "N", background: "#009639", text: "#FFFFFF" },
 };
 
-function mark(kind: AgentKind, flavor: TerminalFlavor, size: number) {
+function mark(kind: AgentKind, flavor: TerminalFlavor, size: number, bare: boolean) {
   if (kind === "terminal") {
     const letter = LETTER_FLAVORS[flavor];
-    const frame = size + 10;
+    if (bare && !letter) return <Icon name="terminal" color="foreground" size={size} />;
+    const frame = bare ? size : size + 10;
     if (letter) {
       const fontSize = Math.round(frame * 0.42);
       return (
@@ -56,14 +58,14 @@ function mark(kind: AgentKind, flavor: TerminalFlavor, size: number) {
       );
     }
     return (
-      <View class="items-center justify-center rounded-xl border border-border bg-muted" style={{ width: frame, height: frame }}>
+      <View testID="agent-tile" class="items-center justify-center rounded-xl border border-border bg-muted" style={{ width: frame, height: frame }}>
         <Icon name="terminal" color="muted-foreground" size={size} />
       </View>
     );
   }
   const src = AGENT_ASSETS[kind];
   const image = <If when={TINTED.has(kind)} else={<Image src={src} style={{ width: size, height: size }} />}><Image src={src} style={{ width: size, height: size, tintColor: token("foreground") }} /></If>;
-  if (kind !== "grok") return image;
+  if (kind !== "grok" || bare) return image;
   return (
     <View class="items-center justify-center rounded-xl border border-border bg-muted" style={{ width: size + 8, height: size + 8 }}>
       {image}
