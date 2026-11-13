@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost } from "../testing/fixtures";
+import { framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const brain = { chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-11T07:00:00.000Z" } };
@@ -198,9 +198,10 @@ describe("the canvas under the capsule (owner 11-13 14:45: a dark band behind it
       await a.waitFor("id:computer-page");
       expect(a.shows("id:capsule-page")).toBe(true);
       await a.back();
+      // Back home first: the computer page goes with its own transition.
+      await a.waitUntil(() => !a.shows("id:computer-page"), { timeout: 10_000 });
       // A page on NavPage itself, with its own display title (All Sessions).
-      await a.press("id:state-control");
-      await a.waitFor("id:tray-all-sessions");
+      await pressUntil(a, "id:state-control", "id:tray-all-sessions");
       await a.press("id:tray-all-sessions");
       await a.waitFor("id:page-back");
       expect(a.shows("id:capsule-page")).toBe(true);

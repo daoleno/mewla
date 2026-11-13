@@ -1,5 +1,6 @@
 import { describe, expect, open, test } from "nsh/test";
 import { answering, expoTokenService, framesOf, paired, pairedTwo, phoneHost, pressUntil, pressWhenEnabled, typeUntil } from "../testing/fixtures";
+import { makeSessionKey } from "../../core/sessions/sessionKeys";
 
 const APP = "../FakeDaemonApp.tsx";
 const WEB = {
@@ -609,11 +610,14 @@ describe("a Session", () => {
   }, 35_000);
 
   test("the terminal sits in its surface group over a key bar of tiles in the mock's order, words in mono as the mock writes them", async () => {
-    // A phone (touch: every key shows), the Session last left in its terminal.
+    // A phone (touch: every key shows), the Session last left in its terminal (saved under the app's own Session key).
     const host = phoneHost({ brain: {}, worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
-    const app = await open(APP, { host, storage: { ...paired, "mewla:codex_render_modes": JSON.stringify({ w1: "terminal", "s1:w1": "terminal" }) }, platform: "android" });
+    const app = await open(APP, { host, storage: { ...paired, "mewla:codex_render_modes": JSON.stringify({ [makeSessionKey("s1", "w1")]: "terminal" }) }, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions/w1" });
+    // Its title comes from the computer's list: the Session is known (a chat agent), and its saved choice still holds.
+    await app.waitFor("text:notes", { timeout: 10_000 });
     await app.waitFor("id:terminal-group", { timeout: 10_000 });
+    expect(app.shows("id:session-chat")).toBe(false);
     const keys = ["terminal-attach", "terminal-keyboard", "key-esc", "key-tab", "key-ctrl", "key-ctrl-c", "key-ctrl-d", "key-ctrl-b", "key-up", "key-down", "key-left", "key-right", "key-enter", "key-paste"];
     for (const key of keys) expect(app.count(`id:${key}`)).toBe(1);
     for (const word of ["esc", "tab", "ctrl", "^C", "^D", "^B"]) expect(app.texts()).toContain(word);
