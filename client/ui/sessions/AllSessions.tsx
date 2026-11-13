@@ -2,6 +2,7 @@ import { cleanup, computed, createMotion, effect, List, platform, signal, Storag
 import { Button, type NavStackState } from "nsh/base";
 import { DisplayTitle, PillButton, SectionLabel } from "../kit/kit";
 import { BackHandler } from "nsh/mobile";
+import { BusyPlace } from "../kit/wait";
 import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
@@ -182,17 +183,20 @@ function SessionRow(props: { worker: () => Worker; first: () => boolean; last: (
 function Empty(props: { onPair: () => void; onNew: () => void }) {
   const state = () => sessionEmptyState(Boolean(current()), connection() === "waiting" ? "offline" : connection() === "idle" ? "connecting" : connection());
   const loading = () => connection() === "connected" && !workersHydrated();
-  const cat = () => sessionEmptyCat(state().action, loading() || Boolean(state().busy));
+  const cat = () => sessionEmptyCat(state().action, Boolean(state().busy));
+  // SPEC §16.4 All Sessions: the list's first read is placeholder rows (no pet, no words); the empty words after it.
   return (
+    <If when={!loading()} else={<View class="flex-1 px-4"><BusyPlace label="Reading sessions" testID="sessions-loading" rows={5} /></View>}>
     <View class="flex-1 items-center justify-center gap-3 p-8">
       {/* The chosen pet, in the state's clip (waking while it loads); a filter that matches nothing keeps its icon. */}
-      <If when={cat()} else={<Icon name={(loading() ? "server" : state().icon) as IconName} size={40} />}><PetSprite testID="sessions-empty-cat" state={() => cat()!} size={104} /></If>
-      <Text testID="sessions-empty" class="text-center text-title font-bold">{loading() ? "Loading sessions" : state().title}</Text>
-      <If when={!loading() && state().action}><Button testID="sessions-empty-action" onPress={() => (state().action === "pair" ? props.onPair() : state().action === "retry" ? resumeConnection() : props.onNew())}
+      <If when={cat()} else={<Icon name={state().icon as IconName} size={40} />}><PetSprite testID="sessions-empty-cat" state={() => cat()!} size={104} /></If>
+      <Text testID="sessions-empty" class="text-center text-title font-bold">{state().title}</Text>
+      <If when={state().action}><Button testID="sessions-empty-action" onPress={() => (state().action === "pair" ? props.onPair() : state().action === "retry" ? resumeConnection() : props.onNew())}
           class="h-[48px] items-center justify-center rounded-(--radius-control) bg-primary px-5 active:opacity-80">
           <Text class="text-body font-semibold text-primary-foreground">{state().label}</Text>
         </Button></If>
     </View>
+    </If>
   );
 }
 
