@@ -32,6 +32,8 @@ test -f "$APP/index.html"
 grep -q '^<base href="/">$' "$APP/index.html" || { echo "index.html has no <base href=\"/\"> (nsh.json web.base)" >&2; exit 1; }
 # Every pet image the app names is in the package, where index.html's asset map sends it.
 python3 "$ROOT/client/scripts/check-pet-assets.py" web "$APP"
+# While the runtime downloads (minutes through a slow tunnel), the page is Mewla's: the app's background and its pet.
+python3 -I "$ROOT/scripts/web-splash.py" "$APP" "$ROOT"
 # The web terminal's page (an NSH web view) loads these from <origin>/terminal/: its script, its VT
 # (libghostty-vt with the phones' packer and glyphs, WebAssembly; built once, then cached) and the
 # phones' face (client/native/terminal/fonts, SIL OFL 1.1).
