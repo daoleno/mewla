@@ -8,7 +8,7 @@ import { backMark } from "../../core/tray/model";
 import { nativeHeaderTitleWidth, pageColumnWidth, type PageColumn } from "../../core/web/places";
 import { tray } from "../tray/state";
 import { Icon } from "../kit/Icon";
-import { Capsule, CapsulePage, createCapsule } from "./Capsule";
+import { animateSwitch, Capsule, CapsulePage } from "./Capsule";
 import { stackWidth, wide } from "./layout";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
@@ -173,26 +173,29 @@ function PageHeader(props: {
 }
 
 /**
- * A pushed page's capsule (SPEC §11): Back alone, a 44 circle, while the page's own title is on screen (its
- * `title` is empty then); with the title, Back, the title 17/600 and the page's controls. A page with
- * controls of its own keeps them in reach: its capsule holds them with or without the title. It never
- * collapses while the person reads.
+ * A pushed page's capsule (SPEC §11, site/v/capsule): always the compact shape, as wide as what it holds, so it
+ * never shows a hollow middle. Back, then the title (17/600, at most 220) once the page's own title has scrolled
+ * under it (`title` is empty until then), then the page's actions right after. A page with no actions and its
+ * title on screen has Back alone, a 44 circle. It never collapses while the person reads.
  */
 function PageCapsule(props: { title: () => string; controls: boolean; right: () => JSX.Element | undefined }) {
-  const alone = () => !props.title() && !props.controls;
-  const capsule = createCapsule({ collapsed: untracked(alone) });
+  const titled = () => Boolean(props.title());
+  // The title coming or going is the capsule's one transition (width over `dur.move`).
+  let was = untracked(titled);
   effect(() => {
-    const backOnly = alone();
-    untracked(() => (backOnly ? capsule.collapse() : capsule.expand()));
+    const now = titled();
+    if (now === was) return;
+    was = now;
+    untracked(animateSwitch);
   });
   return (
-    <Capsule collapsed={capsule.collapsed} alone={() => true}>
+    <Capsule collapsed={() => !titled()} compact alone={() => !titled() && !props.controls}>
       <CapsuleBack />
-      <If when={!capsule.collapsed()}>
-        <Text testID="page-title" role="header" class="min-w-0 flex-1 font-semibold text-foreground line-clamp-1"
-          style={{ fontSize: CAPSULE.pageTitle.size, lineHeight: CAPSULE.pageTitle.line, marginLeft: 4 }}>{props.title()}</Text>
-        <If when={props.controls}><View class="flex-row items-center pr-1">{props.right() ?? null}</View></If>
+      <If when={titled()}>
+        <Text testID="page-title" role="header" class="min-w-0 shrink font-semibold text-foreground line-clamp-1"
+          style={{ fontSize: CAPSULE.pageTitle.size, lineHeight: CAPSULE.pageTitle.line, maxWidth: CAPSULE.pageTitleMax, marginLeft: 2, marginRight: props.controls ? 4 : 14 }}>{props.title()}</Text>
       </If>
+      <If when={props.controls}><View class="flex-row items-center">{props.right() ?? null}</View></If>
     </Capsule>
   );
 }
