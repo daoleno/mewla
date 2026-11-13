@@ -1,6 +1,6 @@
-import { cleanup, computed, effect, openUrl, platform, safeArea, signal, Storage, Text, untracked, View } from "nsh";
+import { cleanup, computed, effect, keyboardFrame, openUrl, platform, safeArea, signal, Storage, Text, untracked, View, windowSize } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
-import { CAPSULE, capsuleCompactNameWidth, capsuleInset, capsuleNameIsLong, capsuleTerminalInset } from "../../core/shell/capsule";
+import { CAPSULE, capsuleCompactNameWidth, capsuleInset, capsuleNameIsLong, capsuleTerminalInset, crampedOverKeyboard } from "../../core/shell/capsule";
 import { stackWidth } from "../shell/layout";
 import { Capsule, createCapsule } from "../shell/Capsule";
 import { CapsuleBack } from "../shell/NavPage";
@@ -514,6 +514,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const capsuled = mobile && platform.idiom === "phone";
   const capsule = createCapsule({ collapsed: untracked(mode) === "terminal" });
   const inset = () => capsuleInset(safeArea().top);
+  // The terminal over the keyboard of a phone held sideways: the capsule steps aside and the terminal takes its row.
+  const cramped = () => mode() === "terminal" && crampedOverKeyboard(windowSize().height, keyboardFrame().height);
   // Blocked, it waits on the person, unless Brain delegated it and it stopped on its own report: that is Brain's
   // to answer (a prompt or an approval on its terminal is a request above), owner 2026-11-13, shot 11.
   const blockedOnYou = () => worker()?.status === "blocked" && worker()?.delegated !== true;
@@ -580,7 +582,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     else if (untracked(mode) === "terminal") capsule.collapse();
   };
   const capsuleHeader = () => (
-    <Capsule collapsed={capsule.collapsed} twoLines={() => capsuleNameIsLong(title())} below={<If when={durability()}><DurabilityWarning /></If>}>
+    <Capsule collapsed={capsule.collapsed} hidden={cramped} twoLines={() => capsuleNameIsLong(title())} below={<If when={durability()}><DurabilityWarning /></If>}>
       <CapsuleBack />
       {/* The name gets the room; a long one takes two balanced lines ending in "…" before the controls. Collapsed,
           one line of 15, ending in "…" at min(200, 52 % of the width). */}
@@ -632,7 +634,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         <View class="flex-1">
           {/* Under a capsule the terminal starts below the collapsed one: an expanded capsule floats over its top
               rows and never resizes it, and the next touch in the terminal folds it again (seen, not taken). */}
-          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none", top: capsuled ? capsuleTerminalInset(safeArea().top) : 0 }}
+          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none", top: capsuled ? (cramped() ? safeArea().top : capsuleTerminalInset(safeArea().top)) : 0 }}
             onTouchStartCapture={capsuled ? () => capsule.collapse() : undefined}>
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)}
               program={() => (props.brain ? brain()?.host_worker?.provider || brain()?.host_executor?.provider : undefined) || (kind() === "terminal" ? undefined : kind())} />

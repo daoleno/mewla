@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   CAPSULE, CAPSULE_OPEN, capsuleCollapse, capsuleCompactNameWidth, capsuleDragStart, capsuleExpand, capsuleInset, capsuleNameIsLong,
-  capsuleRest, capsuleScroll, capsuleTerminalInset, type CapsuleState,
+  capsuleRest, capsuleScroll, capsuleTerminalInset, crampedOverKeyboard, type CapsuleState,
 } from "./capsule";
 
 const far = 2000;
@@ -55,5 +55,18 @@ describe("its room", () => {
     expect(capsuleNameIsLong("Daily Hacker News Briefing · Nov 13")).toBe(true);
     expect(capsuleCompactNameWidth(360)).toBe(187);
     expect(capsuleCompactNameWidth(412)).toBe(200);
+  });
+});
+
+describe("the terminal over the keyboard of a phone held sideways (11-14)", () => {
+  test("an SE (375 pt) and an iPhone 18 Pro (402 pt) sideways with the keyboard up are cramped", () => {
+    expect(crampedOverKeyboard(375, 194)).toBe(true);
+    expect(crampedOverKeyboard(402, 209)).toBe(true);
+  });
+
+  test("upright, or with the keyboard down, never", () => {
+    expect(crampedOverKeyboard(667, 260)).toBe(false);
+    expect(crampedOverKeyboard(874, 336)).toBe(false);
+    expect(crampedOverKeyboard(375, 0)).toBe(false);
   });
 });

@@ -76,12 +76,14 @@ export function Capsule(props: {
   below?: JSX.Element;
   /** The whole header's (Brain's is home's header, `home-header`). */
   testID?: string;
+  /** Stepped aside (a Session's terminal over the keyboard of a phone held sideways): not drawn, its state kept. */
+  hidden?: () => boolean;
 }) {
   const top = () => safeArea().top;
   const compact = () => props.compact || props.collapsed();
   const height = () => (compact() ? CAPSULE.compactHeight : props.twoLines?.() ? CAPSULE.heightTwoLines : CAPSULE.height);
   return (
-    <View testID={props.testID ?? "capsule-layer"} class="absolute left-0 right-0 top-0" style={{ pointerEvents: "box-none" }}>
+    <View testID={props.testID ?? "capsule-layer"} class="absolute left-0 right-0 top-0 flex-col" style={{ pointerEvents: "box-none", display: props.hidden?.() ? "none" : "flex" }}>
       <StatusBarStrip top={top} />
       <View style={{ paddingTop: top() + CAPSULE.top, paddingLeft: CAPSULE.side, paddingRight: CAPSULE.side, gap: 4, pointerEvents: "box-none" }}>
         {/* Its testID says which layout shows (a test reads no sizes). */}
