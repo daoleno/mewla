@@ -61,9 +61,11 @@ describe("a paired phone", () => {
 });
 
 describe("Brain", () => {
-  test("says the computer is offline instead of spinning, and the composer is there", async () => {
+  test("connecting is a wait (the placeholder thread, no words); Offline at 10 s; the composer is there", async () => {
     const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
-    await app.waitFor("id:brain-notice");
+    await app.waitFor("id:brain-offline");
+    await app.waitFor("id:placeholder-thread");
+    expect(app.shows("text:Desk is offline")).toBe(false);
     await app.waitFor("text:Desk is offline", { timeout: 15_000 });
     expect(app.shows("id:composer")).toBe(true);
   }, 20_000);
