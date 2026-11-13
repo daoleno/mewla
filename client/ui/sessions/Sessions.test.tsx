@@ -224,7 +224,8 @@ describe("a Session", () => {
     expect(app.texts()).toContain("Delete the build folder");
     await app.wait(500);
     await app.press("id:prompt-option-2");
-    await app.waitFor("text:mewla · Running");
+    await app.waitFor("id:session-project");
+    await app.waitFor("text: · Running");
     expect(framesOf(app.host.posts(), "answer_prompt").at(-1)).toMatchObject({ worker_id: "w9", prompt_answer: { prompt_id: "p-1", number: 2 } });
     await app.waitFor("id:request-sealed");
     expect(app.shows("id:request-card")).toBe(false);
