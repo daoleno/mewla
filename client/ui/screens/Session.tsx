@@ -37,6 +37,8 @@ import { compactPathLabel, pathBasename } from "../../core/timeline/pathDisplay"
 import { AgentIcon } from "../icons/AgentIcon";
 import { workLinkOf } from "../sessions/workLinks";
 import { goHome, openCalendarItem } from "../shell/nav";
+import { browseWorkspace, openBrainHost } from "../home/Home";
+import { canSwitchBrainExecutor } from "../../core/brainMenu";
 import { terminalShowing } from "../shell/desktop/keys";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { slashMenuState } from "../../core/session/composerSlash";
@@ -436,20 +438,30 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   };
 
   const menuAnchor = createMenuAnchor();
-  const menu = async () => {
-    const items: MenuItem[] = [
+  // Brain's Session takes what Brain's menu does there, on the same terms (only rows that can act now): it keeps
+  // its name, stopping it is Switch executor's, and its workspace is Browse workspace (not a repository to review).
+  const menuItems = (): MenuItem[] => props.brain
+    ? [
+      ...(switchable() ? [{ id: "model", label: "Model & Effort" }] : []),
+      ...(connected() ? [{ id: "workspace", label: "Browse workspace" }] : []),
+      ...(connected() && canSwitchBrainExecutor(brain()) ? [{ id: "executor", label: "Switch executor" }] : []),
+    ]
+    : [
       ...(worker()?.cwd ? [{ id: "changes", label: "Changes" }] : []),
       ...(switchable() ? [{ id: "model", label: "Model & Effort" }] : []),
       ...(dshWeb() ? [{ id: "web", label: "Open Web" }] : []),
       { id: "terminal", label: "New Terminal" },
-      // Brain's Session keeps its name, and stopping it is Brain's to do (Switch executor in Brain's menu).
-      ...(props.brain ? [] : [{ id: "rename", label: "Rename" }]),
+      { id: "rename", label: "Rename" },
       ...(link() ? [{ id: "work", label: "Open its Work" }] : []),
       ...(link()?.calendarItemId ? [{ id: "calendar", label: "Open in Calendar" }] : []),
-      ...(props.brain ? [] : [{ id: "terminate", label: "Terminate", destructive: true }]),
+      { id: "terminate", label: "Terminate", destructive: true },
     ];
-    const action = await showMenu({ title: untracked(title), items, anchor: menuAnchor.node(), testID: "session-menu-popover" });
-    if (action === "changes") openGit();
+  const hasMenu = computed(() => menuItems().length > 0);
+  const menu = async () => {
+    const action = await showMenu({ title: untracked(title), items: untracked(menuItems), anchor: menuAnchor.node(), testID: "session-menu-popover" });
+    if (action === "workspace") browseWorkspace();
+    else if (action === "executor") openBrainHost();
+    else if (action === "changes") openGit();
     else if (action === "calendar") openCalendarOrigin();
     else if (action === "model") modelOpen.set(true);
     else if (action === "work") {
@@ -502,7 +514,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
             </Button>
           ) : null}
-          <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button>
+          {hasMenu() ? <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button> : null}
         </View>
       }>
       <View class="flex-1 bg-background">
