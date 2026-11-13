@@ -89,8 +89,8 @@ export function SelectedWell() {
 }
 
 /** A tray row (SPEC §11 Tray row): 68 pt, a 28 pt tile, a title and a line, the end. */
-function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean; last?: boolean }) {
-  const row = () => props.row;
+function TrayRow(props: { row: () => Row; onPress: () => void; selected?: boolean; last?: boolean }) {
+  const row = props.row;
   return (
     <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
       class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
@@ -108,8 +108,8 @@ function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean; las
  * Work's name, as in every section, and its line the ask (SPEC §11 Tray row); a Calendar alert or a new device keeps
  * what it is over where it comes from.
  */
-function RequestRow(props: { request: TrayRequest; busy: boolean; last?: boolean; onApprove: () => void; onOpen: () => void }) {
-  const r = () => props.request;
+function RequestRow(props: { request: () => TrayRequest; busy: boolean; last?: boolean; onApprove: () => void; onOpen: () => void }) {
+  const r = props.request;
   const named = () => r().ask !== undefined;
   return (
     <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
@@ -239,9 +239,14 @@ export function TrayBody(props: TrayBodyProps) {
   const firstRead = delayed(() => !workersHydrated() && !m().notice && !listed());
   const selected = (key: string) => props.selected?.() === key;
   const running = () => (runningOpen() ? m().running : m().running.slice(0, RUNNING_SHOWN));
-  // The last row of its group has no hair under it ("N more" follows Running's fifth).
-  const row = (item: Row, index: number, list: readonly Row[], more = false) =>
-    <TrayRow row={item} selected={selected(rowKey(item))} last={!more && index === list.length - 1} onPress={() => openRow(item)} />;
+  // The last row of its group has no hair under it ("N more" follows Running's fifth). Rows are kept by their key:
+  // the model is made again every second (elapsed times tick), and a row made anew re-makes its glyphs and logo,
+  // which flashes on the web (a new canvas is blank until drawn).
+  const rows = (list: () => readonly Row[], more = () => false) => (
+    <Each of={list()} key={rowKey}>
+      {(item, index) => <TrayRow row={item} selected={selected(rowKey(item()))} last={!more() && index() === list().length - 1} onPress={() => openRow(item())} />}
+    </Each>
+  );
   return (
     <>
       <View class={`flex-row items-center px-4 ${props.pane ? "min-h-[52px] gap-0.5 pr-2" : "gap-2 pb-1 pt-4"}`}>
@@ -260,12 +265,14 @@ export function TrayBody(props: TrayBodyProps) {
         <View class={m().dimmed ? "opacity-45" : ""}>
           <If when={m().needs.length}><View testID="tray-needs">
               <Label title="Needs you" />
-              <Group>{m().needs.map((request, index, list) => <RequestRow request={request} last={index === list.length - 1} busy={busy() === request.key} onApprove={() => void approve(request)} onOpen={() => openRequest(request)} />)}</Group>
+              <Group><Each of={m().needs} key={(request) => request.key}>
+                {(request, index) => <RequestRow request={request} last={index() === m().needs.length - 1} busy={busy() === request().key} onApprove={() => void approve(request())} onOpen={() => openRequest(request())} />}
+              </Each></Group>
             </View></If>
           <If when={m().running.length}><View testID="tray-running">
               <Label title="Running" />
               <Group>
-                {running().map((item, index, list) => row(item, index, list, m().running.length > RUNNING_SHOWN && !runningOpen()))}
+                {rows(running, () => m().running.length > RUNNING_SHOWN && !runningOpen())}
                 <If when={m().running.length > RUNNING_SHOWN && !runningOpen()}><Button testID="tray-running-more" onPress={() => runningOpen.set(true)} class="min-h-[52px] justify-center px-4 hover:bg-accent active:bg-accent">
                     <Text class="text-sub text-muted-foreground">{`${m().running.length - RUNNING_SHOWN} more`}</Text>
                   </Button></If>
@@ -273,15 +280,15 @@ export function TrayBody(props: TrayBodyProps) {
             </View></If>
           <If when={m().today.length}><View testID="tray-today">
               <Label title="Today" link="Calendar" testID="tray-calendar" onLink={props.open.calendar} />
-              <Group>{m().today.slice(0, TODAY_SHOWN).map(row)}</Group>
+              <Group>{rows(() => m().today.slice(0, TODAY_SHOWN))}</Group>
             </View></If>
           <If when={m().idle.length}><View testID="tray-idle">
               <Label title="Idle" />
-              <Group>{m().idle.map(row)}</Group>
+              <Group>{rows(() => m().idle)}</Group>
             </View></If>
           <If when={m().done.length}><View testID="tray-done">
               <Label title="Done" link="All" testID="tray-all" onLink={props.open.allSessions} />
-              <Group>{m().done.slice(0, DONE_SHOWN).map(row)}</Group>
+              <Group>{rows(() => m().done.slice(0, DONE_SHOWN))}</Group>
             </View></If>
           <Button testID="tray-all-sessions" selected={selected("all")} onPress={props.open.allSessions}
             class="mt-6 min-h-[52px] flex-row items-center justify-between overflow-hidden rounded-(--radius-group) bg-sheet-surface px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
