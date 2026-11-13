@@ -74,8 +74,9 @@ command = "claude"
 config_dir = "/path/to/claude_work"
 ```
 
-`mewla doctor` and the Brain host picker in the app show which account each
-executor is signed in as, so two sign-ins of one agent can be told apart. The
+`mewla doctor` shows which account each executor is signed in as; the Brain
+host picker in the app shows it under a row only when two sign-ins of one
+agent are installed, so they can be told apart. The
 account is the email the CLI recorded at sign-in; it is blank for an API key.
 A separate sign-in keeps its own conversations and settings, so the Model
 Provider you picked and the Skills listed under **Extensions** apply to the
