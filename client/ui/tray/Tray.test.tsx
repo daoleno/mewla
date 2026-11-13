@@ -50,7 +50,7 @@ describe("the tray", () => {
   test("a running row ends in a live dot and how long it has run; its line is words, never the terminal's footer nor its section's word", async () => {
     const footer = "⏸ manual mode on · ? for shortcuts";
     const app = await open(HARNESS, { host: { params: { workers: [
-      worker("alpha", { started_at: NOW - 12 * 60_000, summary: footer, last_output_lines: [footer] }),
+      worker("alpha", { running_since: NOW - 12 * 60_000, summary: footer, last_output_lines: [footer] }),
       worker("beta", { status: "unknown", summary: footer, last_output_lines: [footer] }),
     ] } }, platform: "android" });
     await app.waitFor("text:1 running");
