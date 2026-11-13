@@ -424,9 +424,11 @@ export function RequestStack(props: {
   };
   return (
     <View testID="request-stack" class="gap-2 px-4 pb-2">
-      {sealed().map((s) => <SealedLine sealed={() => s} open={() => shown().has(s.key)} onToggle={() => toggle(s.key)} />)}
+      {/* Rows are kept by key while the list is made again (every update, each second): a row made anew flashed
+          on the web and lost a tap under the finger (lead 11-13, RESULT-web-flicker; Tray a80b9b26). */}
+      <Each of={sealed()} key={(s) => s.key}>{(s) => <SealedLine sealed={s} open={() => shown().has(s().key)} onToggle={() => toggle(untracked(s).key)} />}</Each>
       <Each of={openKey() ? [openKey()!] : []} key={(key) => key}>{(key) => <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} notice={props.notice} anchor={props.anchor} onLater={() => later(untracked(key))} />}</Each>
-      {cards().filter((card) => card.key !== openKey()).map((card) => <StackedRow card={() => card} onPress={() => props.picked.set(card.key)} />)}
+      <Each of={cards().filter((card) => card.key !== openKey())} key={(card) => card.key}>{(card) => <StackedRow card={card} onPress={() => props.picked.set(untracked(card).key)} />}</Each>
     </View>
   );
 }

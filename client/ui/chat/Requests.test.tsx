@@ -75,6 +75,21 @@ describe("requests in Brain's thread", () => {
     expect(app.count("id:request-stacked")).toBe(0);
   }, 20_000);
 
+  test("a stacked row is kept while the requests are made again (lead 11-13, RESULT-web-flicker): a tap spanning an update still opens it", async () => {
+    const docs = session("docs", { delegated: true, approvals: [approval("a1", "git push origin main")] });
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [docs, session("site", { delegated: true, approvals: [approval("a2", "npm publish")] })] }) });
+    await app.waitFor("id:request-stacked", { timeout: 10_000 });
+    await app.dragAndHold("id:request-stacked", { x: 0, y: 0 });
+    // A new list (a new object for the other Session, the same requests): the row under the finger stays.
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...docs, updated_at: Date.now() + 1000, summary: "still waiting" } });
+    await app.wait(400);
+    await app.drop();
+    await app.waitFor("text:npm publish");
+    expect(app.count("id:request-card")).toBe(1);
+    expect(app.shows("id:request-command")).toBe(true);
+    expect(app.texts().filter((t) => t === "npm publish")).toHaveLength(1);
+  }, 20_000);
+
   test("a cold start with requests open opens on the oldest, centred: the newest stacked rows wait below", async () => {
     const sessions = Array.from({ length: 20 }, (_, i) => session(`s${i}`, { delegated: true, approvals: [approval(`a${i}`, `step ${i} of the release`)] }));
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: sessions }) });
