@@ -86,6 +86,19 @@ export function pasteRefused(error: unknown): PairingProblem {
   };
 }
 
+/**
+ * What a read of the clipboard came to. iOS answers a paste the person denied with no text and no error (NSH 0.5.0
+ * reads `UIPasteboard.string`, nil when denied, and resolves ""), while `hasStrings`, which asks nothing, still says
+ * text is there: no text from a clipboard that holds some is a refusal (Mac re-run 11-14, 6c: PBErrorDomain 13 in the
+ * log, "Nothing to paste" on screen). An error from the read is one too.
+ */
+export function clipboardRead(read: { text: string; has: boolean } | { error: unknown }): { kind: "text"; text: string } | { kind: "empty" } | { kind: "refused"; error?: unknown } {
+  if ("error" in read) return { kind: "refused", error: read.error };
+  if (read.text === "" && read.has) return { kind: "refused" };
+  const text = read.text.trim();
+  return text ? { kind: "text", text } : { kind: "empty" };
+}
+
 export const LINK_REQUIRED: PairingProblem = {
   title: "Pairing link required",
   detail: "Paste the link mewla pair --details prints, or scan its QR code.",
