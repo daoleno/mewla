@@ -608,6 +608,7 @@ export function attachBrainWorkEventActions(
       ...item,
       currentWork: work,
       onPress,
+      canOpenSession,
     };
   });
 }

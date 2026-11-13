@@ -85,6 +85,8 @@ export type BrainWorkEventTimelineItem = {
   sourceCount?: number;
   currentWork?: BrainCurrentWork;
   onPress?: () => void;
+  /** What `onPress` opens: its Session (listed on the computer) rather than its Work. */
+  canOpenSession?: boolean;
   /** Brain only: the cat sits on this slip because its Work needs you. */
   catPerched?: boolean;
 };
