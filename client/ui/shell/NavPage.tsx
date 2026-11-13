@@ -17,6 +17,12 @@ export type AppNavPageProps = NavPageProps & {
   column?: PageColumn;
   /** The content is held in the column (default); false for a page that centers its own inside a full-width scroll. */
   frame?: boolean;
+  /**
+   * On a phone, the page's capsule header (`shell/Capsule.tsx`) instead of the system header: the system
+   * header is hidden, the content starts at the screen's top and the capsule floats over it. The desktops
+   * and the web keep the page's header from `headerTitle`.
+   */
+  capsule?: JSX.Element;
 };
 
 /**
@@ -56,6 +62,17 @@ export function NavPage(props: AppNavPageProps) {
   const stack = PageStack();
   /** Back's connection mark on a pushed page (SPEC §1.3); null when connected or on the stack's first page. */
   const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
+  if (mobile && platform.idiom === "phone" && "capsule" in props) {
+    const [own, rest] = split(props, ["capsule", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
+    return (
+      <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
+        <View class="flex-1">
+          {own.children}
+          {own.capsule}
+        </View>
+      </BaseNavPage>
+    );
+  }
   if (mobile) {
     // The system's Back can't carry a dot: while the mark shows, the page's own Back stands in for it.
     const [slots, page] = split(props, ["headerLeft", "headerTitle"]);
@@ -130,6 +147,18 @@ function PageHeader(props: {
         {props.right ? <View class="flex-row items-center gap-3">{props.right}</View> : null}
       </View>
     </View>
+  );
+}
+
+/** A capsule's Back (`shell/Capsule.tsx`), 44 pt, with the connection mark while it shows (SPEC §1.3). */
+export function CapsuleBack(props: { testID?: string }) {
+  const stack = PageStack();
+  const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
+  return (
+    <Button testID={props.testID ?? "page-back"} accessibilityLabel={mark()?.label ?? "Back"} onPress={stack.back} class="size-11 items-center justify-center rounded-full active:bg-accent">
+      {platform.os === "ios" ? <Icon name="chevron-left" size={22} tone="ink" /> : <View style={{ transform: [{ scaleX: -1 }] }}><Icon name="arrow-forward" size={22} tone="ink" /></View>}
+      {mark() ? <MarkDot tone={mark()!.tone} /> : null}
+    </Button>
   );
 }
 

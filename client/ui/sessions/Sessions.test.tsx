@@ -223,9 +223,10 @@ describe("a Session", () => {
     expect(app.texts()).toContain("rm -rf build");
     expect(app.texts()).toContain("Delete the build folder");
     await app.wait(500);
+    // Blocked, the capsule's mark says it needs you; answered, that it runs.
+    expect(app.shows("id:capsule-dot-needs-you")).toBe(true);
     await app.press("id:prompt-option-2");
-    await app.waitFor("id:session-project");
-    await app.waitFor("text: · Running");
+    await app.waitFor("id:capsule-dot-running");
     expect(framesOf(app.host.posts(), "answer_prompt").at(-1)).toMatchObject({ worker_id: "w9", prompt_answer: { prompt_id: "p-1", number: 2 } });
     await app.waitFor("id:request-sealed");
     expect(app.shows("id:request-card")).toBe(false);
@@ -342,7 +343,7 @@ describe("a Session", () => {
     expect(app.texts()).toContain("Read the three papers.");
   }, 20_000);
 
-  test("a Calendar run's header says the run once, then its project and state; one button shows the other view", async () => {
+  test("a Calendar run's capsule says the run once; one button shows the other view", async () => {
     const startedAt = Date.parse("2026-11-13T00:30:00Z");
     const work = {
       id: "wf-2", project: "calendar", path: "calendar/wf-2.md", title: "Daily Hacker News Briefing", mtime: "2026-11-13T00:31:00Z", body: "# Daily Hacker News Briefing\n",
@@ -353,10 +354,10 @@ describe("a Session", () => {
     await app.setViewport(363, 780);
     await app.waitFor("text:Daily Hacker News Briefing · Nov 13");
     await app.press("id:session-row");
-    await app.waitFor("id:session-state");
-    // The title says the run; the second line says where and what, never the title again.
+    await app.waitFor("id:session-status");
+    // On the phone the capsule says the run once (two lines, ending in "…" before the controls), nothing else.
     expect(app.count("text:Daily Hacker News Briefing · Nov 13")).toBe(1);
-    expect(app.texts()).toContain("briefings");
+    expect(app.shows("id:session-menu")).toBe(true);
     // In the chat the button shows the terminal; pressed, the chat.
     await app.waitFor("id:session-chat");
     await app.waitFor("label:Show terminal");

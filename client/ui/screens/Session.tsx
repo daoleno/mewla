@@ -1,4 +1,8 @@
-import { cleanup, computed, effect, openUrl, signal, Storage, Text, untracked, View } from "nsh";
+import { cleanup, computed, effect, openUrl, platform, safeArea, signal, Storage, Text, untracked, View } from "nsh";
+import { isAvailable as mobile } from "nsh/mobile";
+import { capsuleInset, capsuleTitleIsLong, CAPSULE } from "../../core/shell/capsule";
+import { Capsule, createCapsule } from "../shell/Capsule";
+import { CapsuleBack } from "../shell/NavPage";
 import { listSessionServices } from "../../core/sessions/services";
 import { dshWebServiceURL } from "../../core/sessions/servicesPresentation";
 import { Button, Input, type NavStackState } from "nsh/base";
@@ -486,8 +490,89 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     return folder && folder !== title() ? folder : "";
   };
 
+  // The capsule header on a phone (core/shell/capsule.ts): it collapses while the person reads the chat, and
+  // comes back when something needs them, when they go offline, and on the terminal (which never collapses it).
+  const capsuled = mobile && platform.idiom === "phone";
+  const capsule = createCapsule();
+  const inset = () => capsuleInset(safeArea().top);
+  const needsYou = computed(() => requests().length > 0 || worker()?.status === "blocked");
+  const offline = computed(() => connection() !== "connected");
+  // Each new thing that needs the person counts, a second request too, not only the first.
+  const asks = computed(() => requests().length + (worker()?.status === "blocked" ? 1 : 0));
+  let asked = untracked(asks);
+  effect(() => {
+    const now = asks();
+    const more = now > asked;
+    asked = now;
+    if (more || offline() || mode() === "terminal") untracked(capsule.expand);
+  });
+  const dot = (testID: string, label: string, tone: string) => (
+    <View testID={testID} accessibilityLabel={label} class={`absolute rounded-full border-card ${tone}`}
+      style={{ width: CAPSULE.dot.size, height: CAPSULE.dot.size, borderWidth: CAPSULE.dot.ring, right: CAPSULE.dot.right, bottom: CAPSULE.dot.bottom }} />
+  );
+  const mark = () => (
+    <View class="items-center justify-center" style={{ width: CAPSULE.control, height: CAPSULE.control }}>
+      <AgentIcon kind={kind()} size={CAPSULE.mark} />
+      {/* Whether it needs you, runs, or is out of reach; nothing when idle or done. */}
+      {offline() ? dot("capsule-dot-offline", "Offline", "bg-muted-foreground")
+        : needsYou() ? dot("capsule-dot-needs-you", "Needs you", "bg-seal")
+        : worker()?.status === "running" ? dot("capsule-dot-running", "Running", "bg-ok") : null}
+    </View>
+  );
+  const titleSize = () => (capsuleTitleIsLong(title()) ? CAPSULE.titleLong : CAPSULE.title);
+  const DurabilityWarning = () => (
+    <View testID="durability-warning" class="flex-row items-start gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+      <Icon name="alert-circle" size={18} color="muted-foreground" />
+      <View class="flex-1 gap-0.5">
+        <Text class="text-sm font-semibold">Not confirmed durable</Text>
+        <Text class="text-sm text-muted-foreground">{durability()}</Text>
+      </View>
+      <Button testID="durability-dismiss" accessibilityLabel="Dismiss durability warning" onPress={() => durability.set("")} class="active:opacity-60">
+        <Text class="text-sm font-semibold text-primary">Dismiss</Text>
+      </Button>
+    </View>
+  );
+  const viewButton = () =>
+    props.brain || canChat() ? (
+      <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
+        class="size-11 items-center justify-center rounded-full active:bg-accent">
+        <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
+      </Button>
+    ) : null;
+  const capsuleHeader = () => (
+    <Capsule collapsed={capsule.collapsed} onExpand={capsule.expand} compactLabel={() => `${title()}, show the header`}
+      full={
+        <>
+          <CapsuleBack />
+          {mark()}
+          {/* The title gets the room; a long one takes two smaller lines and ends in "…" before the controls.
+              Brain's terminal says what runs it, as its page did. */}
+          <View testID="session-status" class="ml-1 min-w-0 flex-1 justify-center">
+            <Text role="header" class={`font-semibold text-foreground ${capsuleTitleIsLong(title()) ? "line-clamp-2" : "line-clamp-1"}`}
+              style={{ fontSize: titleSize().size, lineHeight: titleSize().line }}>{title()}</Text>
+            {props.brain ? (
+              <Text class="text-muted-foreground line-clamp-1" style={{ fontSize: CAPSULE.subtitle.size, lineHeight: CAPSULE.subtitle.line }}>
+                {`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}
+              </Text>
+            ) : null}
+          </View>
+          {viewButton()}
+          {hasMenu() ? <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="more-horizontal" size={22} color="foreground" /></Button> : null}
+        </>
+      }
+      compact={
+        <>
+          <CapsuleBack testID="capsule-back" />
+          {mark()}
+        </>
+      }
+      below={durability() ? <DurabilityWarning /> : undefined} />
+  );
+  // Made once, here: a call in the page's props would be one of the getters NSH re-reads.
+  const header = capsuled ? capsuleHeader() : undefined;
+
   return (
-    <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"}
+    <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"} capsule={header}
       // One row holds the text and the controls (SPEC §11 Session header), as wide as the bar: the title gets
       // the room, the two lines end in "…" before the view button and ⋯; in the second the project
       // truncates and the state word never does. A Calendar run's title is already its run: the second line
@@ -518,20 +603,10 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         </View>
       }>
       <View class="flex-1 bg-background">
-        {durability() ? (
-          <View testID="durability-warning" class="mx-3 mt-2 flex-row items-start gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
-            <Icon name="alert-circle" size={18} color="muted-foreground" />
-            <View class="flex-1 gap-0.5">
-              <Text class="text-sm font-semibold">Not confirmed durable</Text>
-              <Text class="text-sm text-muted-foreground">{durability()}</Text>
-            </View>
-            <Button testID="durability-dismiss" accessibilityLabel="Dismiss durability warning" onPress={() => durability.set("")} class="active:opacity-60">
-              <Text class="text-sm font-semibold text-primary">Dismiss</Text>
-            </Button>
-          </View>
-        ) : null}
+        {!capsuled && durability() ? <View class="mx-3 mt-2"><DurabilityWarning /></View> : null}
         <View class="flex-1">
-          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
+          {/* Under a capsule the terminal starts below it: every row of it stays readable. */}
+          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none", top: capsuled ? inset() : 0 }}>
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)}
               program={() => (props.brain ? brain()?.host_worker?.provider || brain()?.host_executor?.provider : undefined) || (kind() === "terminal" ? undefined : kind())} />
             <View class="absolute left-3 right-3 top-3 gap-2" style={{ pointerEvents: "box-none" }}>
@@ -557,6 +632,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
               <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
+                capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
                 foot={{
                   shown: () => requests().length > 0 || sealedHere().length > 0,
                   render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,

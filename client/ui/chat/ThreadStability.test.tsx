@@ -183,6 +183,8 @@ describe("only the person's own acts move a chat read back up", () => {
     for (let i = 0; i < 3; i += 1) await app.scroll("id:session-chat", -1500);
     await app.wait(400);
     expect(app.shows("id:jump-latest")).toBe(true);
+    // Read back up, the capsule has collapsed: a tap on it brings its view switch back.
+    await app.press("id:capsule-compact");
     await app.press("id:session-mode");
     await app.waitUntil(() => !app.shows("id:session-chat"));
     await app.press("id:session-mode");

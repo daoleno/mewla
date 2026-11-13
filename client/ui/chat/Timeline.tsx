@@ -1,5 +1,6 @@
 import { cleanup, Clipboard, colorScheme, computed, effect, ErrorBoundary, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
 import { currentTransport } from "../session";
+import type { CapsuleReading } from "../shell/Capsule";
 import { noteScroll } from "../pets/hold";
 import { elapsedShort } from "../../core/sessions/activity";
 import { elapsedNow } from "../kit/elapsedClock";
@@ -322,6 +323,11 @@ export function ChatTimeline(props: {
   requests?: () => number;
   /** Bumped to bring the foot (the open request) into view: a tray row, the cold start with a request open. */
   reveal?: () => number;
+  /**
+   * Under a capsule header (`shell/Capsule.tsx`): the room above the first row, so nothing hides under the
+   * capsule at rest, and the person's scrolling reported to it. The capsule draws the fade then.
+   */
+  capsule?: { top: () => number; reading: CapsuleReading };
 }) {
   // A note at the foot of the chat for a moment (SPEC §11 Toast): why a link did not open.
   const notice = signal("");
@@ -394,7 +400,9 @@ export function ChatTimeline(props: {
     }
     const box = await list?.measure();
     if (!list || !card || !box) return void list?.scrollToEnd({ animated });
-    const top = Math.max(0, (box.bounds.size.height - card.bounds.size.height) / 2);
+    // In the band below a capsule header: the list runs under it.
+    const under = untracked(() => props.capsule?.top() ?? 0);
+    const top = under + Math.max(0, (box.bounds.size.height - under - card.bounds.size.height) / 2);
     list.scrollToIndex({ index, viewPosition: 0, viewOffset: top - card.bounds.origin.y, animated });
   };
   const openRequests = () => Boolean(props.foot?.shown()) && (props.requests?.() ?? 0) > 0;
@@ -425,7 +433,8 @@ export function ChatTimeline(props: {
       const all = rows();
       for (let index = all.length - 1; index >= 0; index -= 1) {
         const row = all[index] as TimelineItem;
-        if (row.type === "message" && (row as MessageTimelineItem).role === "user") return void list?.scrollToIndex({ index, viewPosition: 0, animated: true });
+        // At the top of what shows: below a capsule header, not under it.
+        if (row.type === "message" && (row as MessageTimelineItem).role === "user") return void list?.scrollToIndex({ index, viewPosition: 0, viewOffset: props.capsule?.top() ?? 0, animated: true });
       }
     });
   });
@@ -459,7 +468,11 @@ export function ChatTimeline(props: {
           list = node;
           mounted.set(true);
         }}
-        onScrollDragStart={() => (touched = true)}
+        onScrollDragStart={({ offset }) => {
+          touched = true;
+          props.capsule?.reading.dragStart(offset.y);
+        }}
+        onScrollEnd={() => props.capsule?.reading.rest(!untracked(away))}
         // Opens at its newest row (NSH 0.5.0, before the first frame), or at the row it was read back to.
         initialScrollAtEnd={opening.index === undefined}
         initialScrollIndex={opening.index}
@@ -467,10 +480,12 @@ export function ChatTimeline(props: {
           // A hidden list's rows (a browser resets its scroll) are not where the person was.
           if (untracked(shown)) shownFirst = readingPlace(viewableItems);
         }}
-        maintainVisibleContentPosition={{ autoscrollToBottomThreshold: AT_END }} keyboardDismissMode="interactive" contentClass="py-3"
+        maintainVisibleContentPosition={{ autoscrollToBottomThreshold: AT_END }} keyboardDismissMode="interactive"
+        contentStyle={{ paddingTop: (props.capsule?.top() ?? 0) + 12, paddingBottom: 12 }}
         onScroll={({ offset, contentSize, size }) => {
           // A hidden list's scroll (a browser resets it) is not where the person was.
           if (!untracked(shown)) return;
+          props.capsule?.reading.scroll(offset.y);
           // The person's own scrolling holds the header cat still.
           if (touched) noteScroll();
           const far = contentSize.height - (offset.y + size.height) > AT_END;
@@ -498,7 +513,7 @@ export function ChatTimeline(props: {
         }}
       </List>
       ) : <View testID={props.testID} class="flex-1">{props.empty() as never}</View>}
-      <HeaderFade />
+      {props.capsule ? null : <HeaderFade />}
       {away() ? (
         (props.requests?.() ?? 0) > 0 ? (
           <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}
