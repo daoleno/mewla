@@ -107,6 +107,22 @@ describe("the tray", () => {
     await app.waitFor("id:session-page");
   }, 20_000);
 
+  test("a failed Session in Needs you ends in Open, which opens it; a blocked one still ends in Answer (Brain 11-14)", async () => {
+    const app = await open(HARNESS, { host: { params: { workers: [
+      worker("alpha", { status: "failed", needs_attention: true, summary: "Tests fail" }),
+      worker("beta", { status: "blocked", needs_attention: true, summary: "Which port?" }),
+    ] } }, platform: "android" });
+    await app.waitFor("text:2 need you");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-needs");
+    expect(app.count("id:tray-needs >> id:tray-open")).toBe(1);
+    expect(app.count("id:tray-needs >> id:tray-answer")).toBe(1);
+    expect(app.count("id:tray-needs >> text:Open")).toBe(1);
+    expect(app.count("id:tray-needs >> text:Answer")).toBe(1);
+    await app.press("id:tray-open");
+    await app.waitFor("text:session alpha");
+  }, 20_000);
+
   test("Back closes the tray on home; on a page pushed from it, Back returns to the open tray", async () => {
     const app = await open(HARNESS, { host: { params: { workers: [worker("alpha")] } }, platform: "android" });
     await app.waitFor("text:1 running");

@@ -51,6 +51,8 @@ export interface TrayRequest {
   flavor?: TerminalFlavor;
   /** Approve on the row; absent sends the tap to the card ("Answer"). */
   oneTap?: OneTap;
+  /** A failed Session: nothing to answer, its tag is "Open" and opens it (Brain 11-14). */
+  opens?: true;
 }
 
 export type TrayTile =
@@ -256,7 +258,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
     } else if (worker.needs_attention) {
       // Blocked on something the computer could not read: its card says "Open terminal".
       const said = readableSummary(worker.summary) || "Waiting for you";
-      out.push({ ...base, key: `attention:${worker.id}`, kind: "attention", title: said, ask: said });
+      out.push({ ...base, key: `attention:${worker.id}`, kind: "attention", title: said, ask: said, ...(worker.status === "failed" ? { opens: true as const } : {}) });
     }
   }
   for (const slip of brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now).slips) {

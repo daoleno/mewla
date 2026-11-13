@@ -112,6 +112,8 @@ function TrayRow(props: { row: () => Row; onPress: () => void; selected?: boolea
 function RequestRow(props: { request: () => TrayRequest; busy: boolean; selected?: boolean; last?: boolean; onApprove: () => void; onOpen: () => void }) {
   const r = props.request;
   const named = () => r().ask !== undefined;
+  // A failed Session has nothing to answer: "Open" opens it.
+  const tag = () => (r().oneTap ? "Approve" : r().opens ? "Open" : "Answer");
   return (
     <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} selected={props.selected} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <If when={props.selected}><SelectedWell /></If>
@@ -120,11 +122,11 @@ function RequestRow(props: { request: () => TrayRequest; busy: boolean; selected
         <Text testID="tray-request-title" class="text-body font-semibold line-clamp-1">{named() ? r().source : r().title}</Text>
         <Text testID="tray-request-line" class="text-sub text-muted-foreground line-clamp-1">{named() ? r().ask : r().source}</Text>
       </View>
-      <Button testID={r().oneTap ? "tray-approve" : "tray-answer"} disabled={props.busy} onPress={() => (r().oneTap ? props.onApprove() : props.onOpen())}
+      <Button testID={r().oneTap ? "tray-approve" : r().opens ? "tray-open" : "tray-answer"} disabled={props.busy} onPress={() => (r().oneTap ? props.onApprove() : props.onOpen())}
         class={`h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"}`}>
         {/* SPEC §16.2 pattern 5, in a 30 pt pill: the 16 pt ring. */}
-        <BusyLabel busy={props.busy} small label={r().oneTap ? "Approve" : "Answer"} tone="onSeal" testID="tray-request-ring">
-          <Text class="text-caption font-semibold text-seal-foreground">{r().oneTap ? "Approve" : "Answer"}</Text>
+        <BusyLabel busy={props.busy} small label={tag()} tone="onSeal" testID="tray-request-ring">
+          <Text class="text-caption font-semibold text-seal-foreground">{tag()}</Text>
         </BusyLabel>
       </Button>
       <If when={!(props.selected || props.last)}><RowHair /></If>
