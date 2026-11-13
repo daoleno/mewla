@@ -160,9 +160,13 @@ const chatState = computed(() => brainChatState({
   conversation: brainThread().conversation as { available?: boolean; reason?: string } | null | undefined,
 }));
 
+/**
+ * Brain's word in its empty thread. On a phone it is centred; on wide the pane is tall and the words would float
+ * far above the composer they invite to (the owner's wide list, 11-13), so they sit on the bottom, just above it.
+ */
 function Notice(props: { title: string; detail?: string }) {
   return (
-    <View class="flex-1 items-center justify-center gap-2 p-8">
+    <View class={`flex-1 items-center gap-2 p-8 ${wide() ? "justify-end pb-6" : "justify-center"}`}>
       <Text testID="brain-notice" class="text-center text-title font-semibold tracking-title">{props.title}</Text>
       <If when={props.detail}>{(detail) => <Text class="text-center text-sub text-muted-foreground">{detail()}</Text>}</If>
     </View>
