@@ -35,7 +35,12 @@ func approvalWire(a agentevents.Approval) server.ApprovalWire {
 // Mewla: answered in the agent's own terminal UI, or timed out unanswered.
 // Answers through Mewla (By "mewla") are recorded by whoever gave them, with
 // who they were.
-func recordAgentResolution(ledger *answered.Ledger, workerID string, approval agentevents.Approval, e agentevents.Event) {
+//
+// settle, when given, says how a request answered in the terminal ended from
+// the provider's own record of the tool call (approved or denied): the record
+// is written at once as answered, and told better when the transcript has the
+// call's result.
+func recordAgentResolution(ledger *answered.Ledger, workerID string, approval agentevents.Approval, e agentevents.Event, settle func(answered.Request, string) answered.Request) {
 	var by answered.Answerer
 	switch e.By {
 	case "agent":
@@ -56,7 +61,31 @@ func recordAgentResolution(ledger *answered.Ledger, workerID string, approval ag
 		record.Answer, record.Outcome = "", answered.OutcomeAnswered
 	}
 	recordAnswered(ledger, record)
+	if settle == nil || record.Outcome != answered.OutcomeAnswered {
+		return
+	}
+	// The record stands at once, so the prompt that drew it is not sealed a
+	// second time. The agent moves on a moment before its transcript has the
+	// call's result: ask for a couple of seconds, then say how it ended.
+	go func() {
+		deadline := time.Now().Add(settleWithin)
+		for {
+			if settled := settle(record, ""); settled.Outcome != answered.OutcomeAnswered {
+				recordAnswered(ledger, settled)
+				return
+			}
+			if time.Now().After(deadline) {
+				return
+			}
+			time.Sleep(settleEvery)
+		}
+	}()
 }
+
+const (
+	settleWithin = 2 * time.Second
+	settleEvery  = 400 * time.Millisecond
+)
 
 // operatorAnswerer is who answers through `mewla worker answer`: Brain for
 // its delegated Workers (with the sentence of its brief it relied on), an

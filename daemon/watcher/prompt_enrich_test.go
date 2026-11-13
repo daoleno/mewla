@@ -29,19 +29,19 @@ func TestEnrichChoicePromptReadsTheTranscriptOncePerPrompt(t *testing.T) {
 		return prompt
 	})
 
-	first := w.enrichChoicePrompt("%1", choiceSignal("p1", false, false))
+	first := w.enrichPrompt("%1", choiceSignal("p1", false, false))
 	if first.Prompt.CallID != "toolu_1" || len(first.Prompt.Questions) != 2 || first.Prompt.Questions[0].Options[0].Description != "red" {
 		t.Fatalf("not enriched: %+v", first.Prompt)
 	}
-	second := w.enrichChoicePrompt("%1", choiceSignal("p1", true, false))
+	second := w.enrichPrompt("%1", choiceSignal("p1", true, false))
 	if reads != 1 || !second.Prompt.Questions[0].Answered || second.Prompt.Questions[1].Answered {
 		t.Fatalf("reads=%d answered flags not taken from the pane: %+v", reads, second.Prompt.Questions)
 	}
-	w.enrichChoicePrompt("%1", choiceSignal("p2", false, false))
+	w.enrichPrompt("%1", choiceSignal("p2", false, false))
 	if reads != 2 {
 		t.Fatalf("a different prompt must read the transcript again, reads=%d", reads)
 	}
-	w.enrichChoicePrompt("%2", choiceSignal("p2", false, false))
+	w.enrichPrompt("%2", choiceSignal("p2", false, false))
 	if reads != 3 {
 		t.Fatalf("another Session has its own entry, reads=%d", reads)
 	}
@@ -54,13 +54,13 @@ func TestEnrichChoicePromptLeavesOtherPromptsAndFailuresAlone(t *testing.T) {
 		reads++
 		return prompt // the transcript has nothing yet
 	})
-	menu := classifier.ActivitySignal{State: classifier.StateBlocked, Prompt: &classifier.Prompt{ID: "m", Kind: classifier.PromptPermission}}
-	if got := w.enrichChoicePrompt("%1", menu); got.Prompt != menu.Prompt || reads != 0 {
+	menu := classifier.ActivitySignal{State: classifier.StateBlocked, Prompt: &classifier.Prompt{ID: "m", Kind: classifier.PromptStartup}}
+	if got := w.enrichPrompt("%1", menu); got.Prompt != menu.Prompt || reads != 0 {
 		t.Fatalf("a menu prompt must not read the transcript: reads=%d", reads)
 	}
 	signal := choiceSignal("p1", false, false)
 	for range 3 {
-		got := w.enrichChoicePrompt("%1", signal)
+		got := w.enrichPrompt("%1", signal)
 		if got.Prompt != signal.Prompt {
 			t.Fatalf("an empty transcript must leave the pane prompt as is")
 		}
@@ -68,7 +68,46 @@ func TestEnrichChoicePromptLeavesOtherPromptsAndFailuresAlone(t *testing.T) {
 	if reads != 1 {
 		t.Fatalf("a failed read must not repeat every poll, reads=%d", reads)
 	}
-	if got := New(0).enrichChoicePrompt("%1", signal); got.Prompt != signal.Prompt {
+	if got := New(0).enrichPrompt("%1", signal); got.Prompt != signal.Prompt {
 		t.Fatalf("without an enricher the prompt is unchanged")
+	}
+}
+
+// A permission prompt is tied to the tool call it asks about once the
+// transcript has the call: the pane's identity stays, the transcript is read
+// again until it names the call, and then once per prompt.
+func TestEnrichPromptNamesThePermissionsToolCall(t *testing.T) {
+	w := New(0)
+	reads, ready := 0, false
+	w.SetPromptEnricher(func(sessionID string, prompt classifier.Prompt) classifier.Prompt {
+		reads++
+		if ready {
+			prompt.CallID, prompt.Tool, prompt.Summary = "toolu_1", "Bash", "curl -sI https://example.org"
+		}
+		return prompt
+	})
+	permission := func() classifier.ActivitySignal {
+		return classifier.ActivitySignal{State: classifier.StateBlocked, Prompt: &classifier.Prompt{ID: "perm", Kind: classifier.PromptPermission, Title: "Bash command", Request: "Tip: x\ncurl"}}
+	}
+	if got := w.enrichPrompt("%1", permission()); got.Prompt.Tool != "" || got.Prompt.ID != "perm" {
+		t.Fatalf("the transcript has no call yet: %+v", got.Prompt)
+	}
+	w.enrichPrompt("%1", permission())
+	if reads != 1 {
+		t.Fatalf("an empty read must not repeat every poll, reads=%d", reads)
+	}
+	ready = true
+	w.promptEnrich.mu.Lock()
+	entry := w.promptEnrich.entries["%1"]
+	entry.triedAt = entry.triedAt.Add(-promptEnrichRetry)
+	w.promptEnrich.entries["%1"] = entry
+	w.promptEnrich.mu.Unlock()
+	got := w.enrichPrompt("%1", permission())
+	if got.Prompt.ID != "perm" || got.Prompt.CallID != "toolu_1" || got.Prompt.Tool != "Bash" || got.Prompt.Summary != "curl -sI https://example.org" || got.Prompt.Request != "Tip: x\ncurl" {
+		t.Fatalf("not enriched: %+v", got.Prompt)
+	}
+	w.enrichPrompt("%1", permission())
+	if reads != 2 {
+		t.Fatalf("one read serves every poll of the prompt, reads=%d", reads)
 	}
 }

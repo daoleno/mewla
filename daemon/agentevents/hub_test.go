@@ -231,3 +231,25 @@ func TestHubKeepsASubAgentApprovalWhenTheWorkersOwnAgentMoves(t *testing.T) {
 		t.Fatalf("the sub-agent moved on but its request stayed: %+v", s.Approvals)
 	}
 }
+
+// What the agent says it started is the Worker's activity for as long as its
+// turn runs: a started tool call never settles a decision another call waits
+// on, and nothing stays over from the turn before.
+func TestHubKeepsTheActivityOfTheRunningTurnOnly(t *testing.T) {
+	h := NewHub()
+	h.Publish(Event{WorkerID: "w", Kind: KindActivity, Activity: "Bash ls", At: t0})
+	if s, _ := h.State("w"); s.Activity != "" {
+		t.Fatalf("activity outside a turn = %q", s.Activity)
+	}
+	h.Publish(Event{WorkerID: "w", Kind: KindTurnStarted, TurnID: "t1", At: t0})
+	h.Publish(Event{WorkerID: "w", Kind: KindApprovalRequest, Approval: &Approval{ID: "a1"}})
+	h.Publish(Event{WorkerID: "w", Kind: KindActivity, Activity: "Bash curl -sI https://example.org", ActivityTool: "Bash", ActivitySummary: "curl -sI https://example.org", At: t0.Add(time.Second)})
+	s, _ := h.State("w")
+	if s.Activity != "Bash curl -sI https://example.org" || s.ActivityTool != "Bash" || s.ActivitySummary != "curl -sI https://example.org" || len(s.Approvals) != 1 {
+		t.Fatalf("running turn: activity=%q approvals=%+v", s.Activity, s.Approvals)
+	}
+	h.Publish(Event{WorkerID: "w", Kind: KindTurnFinished, TurnID: "t1", Status: TurnCompleted, At: t0.Add(2 * time.Second)})
+	if s, _ = h.State("w"); s.Activity != "" || s.ActivityTool != "" || s.ActivitySummary != "" {
+		t.Fatalf("activity after the turn = %+v", s)
+	}
+}

@@ -157,11 +157,16 @@ type Work struct {
 	Question   string     `json:"question,omitempty"`
 	Choices    []string   `json:"choices,omitempty"`
 	QuestionAt *time.Time `json:"question_at,omitempty"`
+	// Recommended is the choice Brain recommends, one of Choices, or empty.
+	Recommended string `json:"recommended,omitempty"`
 	// SnoozedUntil hides the Work from Needs you until then. It is a user
 	// preference only: nothing is scheduled and elapsed time writes nothing.
 	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	// Progress is the judged progress (progress.go). It is presentation
+	// state: setting it never moves Revision.
+	Progress  *WorkProgress `json:"progress,omitempty"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
 }
 
 // WorkEvent is an append-only fact and at most a one-shot wake/delivery
@@ -221,6 +226,9 @@ type WorkUpdate struct {
 	// question clears both.
 	Question *string
 	Choices  *[]string
+	// Recommended names the choice Brain recommends; one that is not among
+	// the choices is dropped. A new question without one has none.
+	Recommended *string
 }
 
 // WorkCloseRequest is the explicit operator path for terminalizing queued or
@@ -281,6 +289,8 @@ type CurrentWork struct {
 	// What Brain asks the user, with the buttons to offer.
 	Question string   `json:"question,omitempty"`
 	Choices  []string `json:"choices,omitempty"`
+	// Recommended is the choice Brain recommends ("Brain's pick"), or empty.
+	Recommended string `json:"recommended,omitempty"`
 	// AttentionSince is when the Work started waiting on a decision (the
 	// question, the open review or the wait), immutable while it waits;
 	// UpdatedAt moves on every projection sync and cannot age a Work.
@@ -291,6 +301,8 @@ type CurrentWork struct {
 	// UserAction is the user's newest decision, while no newer result has
 	// come back since.
 	UserAction *WorkUserAction `json:"user_action,omitempty"`
+	// Progress is the judged progress while the Work is open (progress.go).
+	Progress *WorkProgress `json:"progress,omitempty"`
 	// Calendar names the schedule and run a Calendar occurrence's Work came
 	// from, so the app can say which schedule it belongs to.
 	Calendar *WorkCalendarRef `json:"calendar,omitempty"`
@@ -416,11 +428,14 @@ type workRecord struct {
 	Question   string     `json:"question,omitempty"`
 	Choices    []string   `json:"choices,omitempty"`
 	QuestionAt *time.Time `json:"question_at,omitempty"`
+	// Recommended is the choice Brain recommends, one of Choices, or empty.
+	Recommended string `json:"recommended,omitempty"`
 	// SnoozedUntil hides the Work from Needs you until then. It is a user
 	// preference only: nothing is scheduled and elapsed time writes nothing.
-	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	SnoozedUntil *time.Time    `json:"snoozed_until,omitempty"`
+	Progress     *WorkProgress `json:"progress,omitempty"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 type presentationDatabaseRecord struct {
@@ -457,7 +472,9 @@ func worksFromRecords(records []workRecord) []Work {
 			Question:         strings.TrimSpace(record.Question),
 			Choices:          append([]string(nil), record.Choices...),
 			QuestionAt:       cloneTimePointer(record.QuestionAt),
+			Recommended:      strings.TrimSpace(record.Recommended),
 			SnoozedUntil:     cloneTimePointer(record.SnoozedUntil),
+			Progress:         cloneWorkProgress(record.Progress),
 			CreatedAt:        record.CreatedAt,
 			UpdatedAt:        record.UpdatedAt,
 		})
@@ -1133,6 +1150,7 @@ func cloneWorks(items []Work) []Work {
 		out[index].Choices = append([]string(nil), items[index].Choices...)
 		out[index].QuestionAt = cloneTimePointer(items[index].QuestionAt)
 		out[index].SnoozedUntil = cloneTimePointer(items[index].SnoozedUntil)
+		out[index].Progress = cloneWorkProgress(items[index].Progress)
 	}
 	return out
 }
@@ -1503,13 +1521,16 @@ func (s *Store) applyWorkUpdateViaFSMLocked(database *presentationDatabase, inde
 		updated.ContextRef = *update.ContextRef
 		database.BrainWork[index] = updated
 	}
-	if update.Question != nil || update.Choices != nil {
-		choices := update.Choices
+	if update.Question != nil || update.Choices != nil || update.Recommended != nil {
+		choices, recommended := update.Choices, update.Recommended
 		if update.Question != nil && choices == nil {
 			// A new question never inherits the last one's answers.
 			choices = &[]string{}
 		}
-		updated = applyWorkQuestion(updated, update.Question, choices, now)
+		if (update.Question != nil || update.Choices != nil) && recommended == nil {
+			recommended = new(string)
+		}
+		updated = applyWorkQuestion(updated, update.Question, choices, recommended, now)
 		database.BrainWork[index] = updated
 	}
 	return updated, nil
@@ -3422,10 +3443,12 @@ func (s *Store) ProjectWorkInventory(workers []WorkerRef) (WorkInventory, error)
 			UpdatedAt:        item.UpdatedAt.UTC(),
 			Question:         item.Question,
 			Choices:          append([]string(nil), item.Choices...),
+			Recommended:      item.Recommended,
 			SnoozedUntil:     cloneTimePointer(item.SnoozedUntil),
 			UserAction:       userAction,
 			Calendar:         workCalendarRef(item),
 			WorkerSessions:   workerSessions(item.ID),
+			Progress:         item.Progress.view(),
 		})
 		s.projectWorkAttention(&current[len(current)-1], item)
 	}

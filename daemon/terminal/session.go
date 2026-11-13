@@ -60,6 +60,13 @@ type Session interface {
 	Size() Size
 }
 
+// ScrollWriter is optionally implemented by sessions that tell typing from
+// scrolling: the wheel presses or cursor keys a scroll drag made are reading,
+// and must not take the Session's size from another viewer the way typing does.
+type ScrollWriter interface {
+	WriteScroll(data string) error
+}
+
 // Scroller is optionally implemented by sessions that expose native tmux
 // copy-mode scrolling through the attached client's PTY redraw stream.
 type Scroller interface {

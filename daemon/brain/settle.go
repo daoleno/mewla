@@ -248,7 +248,7 @@ func (s *Service) settleBrief(item Work) string {
 		// history; it asserted nothing and only misleads a reader.
 		kept := events[:0:0]
 		for _, event := range events {
-			if event.Kind != "brain.reconcile_required" {
+			if event.Kind != "brain.reconcile_required" && !strings.HasPrefix(event.Kind, "progress.") {
 				kept = append(kept, event)
 			}
 		}

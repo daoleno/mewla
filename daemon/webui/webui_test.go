@@ -114,4 +114,59 @@ func TestCacheControlKeepsHashedNamesForever(t *testing.T) {
 			t.Errorf("%s: cache = %q, want %q", name, got, want)
 		}
 	}
+	// terminal/ keeps fixed names (scripts/build-web-ui.sh): revalidated, never kept.
+	if got := cacheControl("terminal/mewla-vt.wasm"); got != "no-cache" {
+		t.Errorf("terminal/mewla-vt.wasm: cache = %q", got)
+	}
+}
+
+func TestHandlerRevalidatesFixedNamesWithETag(t *testing.T) {
+	files := fstest.MapFS{
+		"index.html.gz":           {Data: gz(t, "<html>app</html>")},
+		"terminal/terminal.js.gz": {Data: gz(t, "terminal()")},
+		"app.353e9fdadf.js.gz":    {Data: gz(t, "app()")},
+	}
+	handler := Handler(files)
+	conditional := func(path, acceptEncoding, ifNoneMatch string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request.Header.Set("Accept-Encoding", acceptEncoding)
+		request.Header.Set("If-None-Match", ifNoneMatch)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	first := get(handler, "/terminal/terminal.js", "gzip")
+	tag := first.Header().Get("ETag")
+	if first.Code != http.StatusOK || tag == "" || first.Header().Get("Cache-Control") != "no-cache" {
+		t.Fatalf("first fetch: %d, ETag %q, Cache-Control %q", first.Code, tag, first.Header().Get("Cache-Control"))
+	}
+	// The same file asked again with its tag: 304 and no body.
+	again := conditional("/terminal/terminal.js", "gzip", tag)
+	if again.Code != http.StatusNotModified || again.Body.Len() != 0 || again.Header().Get("ETag") != tag {
+		t.Fatalf("revalidation: %d, %d bytes, ETag %q", again.Code, again.Body.Len(), again.Header().Get("ETag"))
+	}
+	if weak := conditional("/terminal/terminal.js", "gzip", `"other", W/`+tag); weak.Code != http.StatusNotModified {
+		t.Fatalf("a weak tag in a list: %d", weak.Code)
+	}
+	// The decompressed form is another representation, with its own tag.
+	plain := conditional("/terminal/terminal.js", "", tag)
+	if plain.Code != http.StatusOK || plain.Body.String() != "terminal()" || plain.Header().Get("ETag") == tag {
+		t.Fatalf("plain with the gzip tag: %d %q, ETag %q", plain.Code, plain.Body.String(), plain.Header().Get("ETag"))
+	}
+	// A changed file (a new build behind the same name) answers in full with a new tag.
+	files["terminal/terminal.js.gz"] = &fstest.MapFile{Data: gz(t, "terminal(2)")}
+	changed := conditional("/terminal/terminal.js", "gzip", tag)
+	if changed.Code != http.StatusOK || changed.Header().Get("ETag") == tag {
+		t.Fatalf("changed file: %d, ETag %q", changed.Code, changed.Header().Get("ETag"))
+	}
+	// index.html, and an app route that serves it, revalidate the same way.
+	index := get(handler, "/brain", "gzip")
+	if index.Header().Get("ETag") == "" || conditional("/", "gzip", index.Header().Get("ETag")).Code != http.StatusNotModified {
+		t.Fatal("index.html is not revalidated by its tag")
+	}
+	// Hashed names are cached for good and need no tag.
+	if hashed := get(handler, "/app.353e9fdadf.js", "gzip"); hashed.Header().Get("ETag") != "" || hashed.Header().Get("Cache-Control") != immutableAge {
+		t.Fatalf("hashed file: ETag %q, Cache-Control %q", hashed.Header().Get("ETag"), hashed.Header().Get("Cache-Control"))
+	}
 }

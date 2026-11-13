@@ -276,3 +276,72 @@ func TestRealClaudeCountdownNoticeDoesNotMoveTheID(t *testing.T) {
 		t.Fatal("a different command shares the id with a notice present")
 	}
 }
+
+// Claude draws a hint of its own modes ("Tip: auto mode handles these prompts
+// for you ...") inside the permission box, above what is asked. The request an
+// app shows starts at what is asked; the id still rests on the whole box.
+func TestRealClaudePermissionRequestDoesNotStartWithItsTip(t *testing.T) {
+	pane := realClaudeCapture(t, "bash-multiline-ssh.txt")
+	prompt := claudeOnRealCapture(pane).Prompt
+	if prompt == nil {
+		t.Fatal("no prompt")
+	}
+	if strings.Contains(prompt.Request, "Tip:") || !strings.HasPrefix(prompt.Request, "SSH to test host and run checks") {
+		t.Fatalf("request starts with the provider's tip: %q", prompt.Request)
+	}
+	if prompt.Title != "Bash command" {
+		t.Fatalf("title = %q", prompt.Title)
+	}
+	other := strings.Replace(pane, `Tip: auto mode handles these prompts for you`, `Tip: another hint`, 1)
+	if other == pane {
+		t.Fatal("fixture has no tip to change")
+	}
+	if realClaudeID(t, other) == prompt.ID {
+		t.Fatal("the id must keep resting on the whole box, tip included")
+	}
+	// A command's own line that starts with "Tip: " is the command, not chrome.
+	if got := withoutLeadingTips("Tip: x\nTip: y\necho hi\nTip: not chrome"); got != "echo hi\nTip: not chrome" {
+		t.Fatalf("withoutLeadingTips = %q", got)
+	}
+}
+
+func TestClaudeFooterSaysWorkingOnlyAtTheBottomOfASessionThatIsNotHidden(t *testing.T) {
+	adapter := NewClaudeActivityAdapter()
+	idle := "Claude Code v2.1.322\n● Done. Press esc to interrupt anything you start.\n────\n❯ \n────\n  ⏸ manual mode on · ? for shortcuts\n"
+	working := "Claude Code v2.1.322\n● Running curl\n────\n❯ \n────\n  ⏸ manual mode on · esc to interrupt\n"
+	for name, tc := range map[string]struct {
+		worker Worker
+		pane   string
+		want   WorkerState
+	}{
+		"working":                    {Worker{Command: "claude"}, working, StateRunning},
+		"idle":                       {Worker{Command: "claude"}, idle, StateUnknown},
+		"the hint in the scrollback": {Worker{Command: "claude"}, working + "● Finished.\n────\n❯ \n────\n  ⏸ manual mode on · ? for shortcuts\n", StateUnknown},
+		"hidden host":                {Worker{Command: "claude", Hidden: true}, working, StateUnknown},
+	} {
+		if got := adapter.Infer(ActivityInput{Worker: tc.worker, PaneContent: tc.pane}); got.State != tc.want {
+			t.Fatalf("%s: state = %q, want %q (%+v)", name, got.State, tc.want, got)
+		}
+	}
+}
+
+// An idle Claude Session whose last words quote an error ("Permission denied by
+// hook") is idle, not failed: the text sits above its composer. The same lines
+// above a shell's prompt still are a failure.
+func TestIdleClaudeQuotingAnErrorIsNotFailed(t *testing.T) {
+	claude := "Claude Code v2.1.322\n● The curl command didn't run. A hook denied the call with \"Permission denied by hook\".\n\n────────\n❯ \n────────\n  ⏸ manual mode on · ? for shortcuts\n"
+	if state, summary := Classify(true, strings.Split(claude, "\n"), "claude --session-id s1"); state != StateUnknown {
+		t.Fatalf("idle Claude = %q (%q)", state, summary)
+	}
+	if state, _ := Classify(true, strings.Split(claude, "\n"), "zsh"); state != StateUnknown {
+		t.Fatalf("a Claude screen is Claude's whatever the pane's command says, state = %q", state)
+	}
+	shell := "$ ./deploy.sh\nbash: ./deploy.sh: Permission denied\n❯ \n"
+	if state, _ := Classify(true, strings.Split(shell, "\n"), "zsh"); state != StateFailed {
+		t.Fatalf("a shell that printed an error = %q", state)
+	}
+	crash := "Claude Code v2.1.322\n❯ hi\nTraceback (most recent call last):\n  File \"x\", line 1\n"
+	if state, _ := Classify(true, strings.Split(crash, "\n"), "claude"); state != StateFailed {
+		t.Fatalf("an error printed after the composer = %q", state)
+	}
+}

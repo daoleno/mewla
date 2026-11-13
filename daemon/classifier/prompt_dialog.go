@@ -248,6 +248,9 @@ func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, optio
 	}
 	title, request, _, _ := readMenuRequest(dialog, len(dialog), false)
 	request = withoutSeparatorRows(request)
+	if provider == "claude" {
+		request = withoutLeadingTips(request)
+	}
 	return Prompt{
 		ID:       PromptIdentity(kind, strings.Join(rawRows, "\n"), menuIdentityRows(menu)),
 		Kind:     kind,
@@ -297,6 +300,76 @@ func withoutSeparatorRows(request string) string {
 		}
 	}
 	return strings.Join(kept, "\n")
+}
+
+// providerTipRe is a hint Claude draws inside its permission box ("Tip: auto
+// mode handles these prompts for you ..."): advice about the provider's own
+// modes, not part of what is asked.
+var providerTipRe = regexp.MustCompile(`^Tip: `)
+
+// claudeTips are the tips Claude draws in its permission box, each whole
+// (measured on 2.1.318 to 2.1.323). On a pane narrower than one, Claude wraps
+// it onto the rows below.
+var claudeTips = []string{
+	`Tip: auto mode handles these prompts for you — choose "switch to auto mode" below`,
+}
+
+// withoutLeadingTips drops the provider's tips that open the request, so the
+// request starts with what is asked. A line of the command that begins with
+// "Tip: " further down stays: only the lines before the first other line go.
+// A known tip goes with the rows it wrapped onto; of an unknown one, only its
+// own row goes, since nothing tells its tail from what is asked.
+func withoutLeadingTips(request string) string {
+	lines := strings.Split(request, "\n")
+	for len(lines) > 0 {
+		row := strings.TrimSpace(lines[0])
+		switch {
+		case isBlank(lines[0]):
+			lines = lines[1:]
+		case providerTipRe.MatchString(row):
+			lines = lines[1+wrappedTipRows(row, lines[1:]):]
+		default:
+			return strings.Join(lines, "\n")
+		}
+	}
+	return ""
+}
+
+// wrappedTipRows is how many of the rows after first carry the rest of a known
+// tip that first begins, matched word by word, so a wrap at any width is the
+// same tip and a row that is not its next words ends it.
+func wrappedTipRows(first string, rest []string) int {
+	for _, tip := range claudeTips {
+		want, got := strings.Fields(tip), strings.Fields(first)
+		if len(got) >= len(want) || !wordsBegin(want, got) {
+			continue
+		}
+		rows := 0
+		for rows < len(rest) && len(got) < len(want) {
+			next := strings.Fields(rest[rows])
+			if len(next) == 0 || !wordsBegin(want[len(got):], next) {
+				break
+			}
+			got, rows = append(got, next...), rows+1
+		}
+		if len(got) == len(want) {
+			return rows
+		}
+	}
+	return 0
+}
+
+// wordsBegin is whether words starts with prefix.
+func wordsBegin(words, prefix []string) bool {
+	if len(prefix) > len(words) {
+		return false
+	}
+	for i, word := range prefix {
+		if words[i] != word {
+			return false
+		}
+	}
+	return true
 }
 
 // ParseClaudePermissionPrompt reads the permission dialog open at the bottom of

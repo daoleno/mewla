@@ -519,6 +519,7 @@ func (term *Terminal) State() State {
 		BracketedPaste: bool(C.mewla_vt_mode(term.t, 2004)),
 		AppCursor:      bool(C.mewla_vt_mode(term.t, 1)),
 		AltScroll:      bool(C.mewla_vt_mode(term.t, 1007)),
+		MouseFormat:    mouseFormat(func(mode uint16) bool { return bool(C.mewla_vt_mode(term.t, C.uint16_t(mode))) }),
 		MouseTracking:  bool(mouse),
 		ScrollbackRows: int(scrollback),
 		TotalRows:      int(total),

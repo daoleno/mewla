@@ -47,9 +47,13 @@ type Worker struct {
 	// PromptUnidentified says why a blocked Worker's dialog has no Prompt (and
 	// so no id to answer): the dialog is open, but the screen cannot support an
 	// exact identity. It is empty whenever Prompt is set.
-	PromptUnidentified  string     `json:"prompt_unidentified,omitempty"`
-	NeedsAttention      bool       `json:"needs_attention,omitempty"`
-	LastProgressAt      *time.Time `json:"last_progress_at,omitempty"`
+	PromptUnidentified string     `json:"prompt_unidentified,omitempty"`
+	NeedsAttention     bool       `json:"needs_attention,omitempty"`
+	LastProgressAt     *time.Time `json:"last_progress_at,omitempty"`
+	// RunningSince is when a Session whose own terminal says it is working
+	// (not a delegated Worker's ledger turn) began this run, as the daemon
+	// first saw it; absent otherwise.
+	RunningSince        *time.Time `json:"running_since,omitempty"`
 	ExpectedNextCheckAt *time.Time `json:"expected_next_check_at,omitempty"`
 	LeaseSeconds        int        `json:"lease_seconds,omitempty"`
 	LastLines           []string   `json:"last_output_lines"`
@@ -194,8 +198,15 @@ func Classify(paneAlive bool, lines []string, command string) (WorkerState, stri
 		}
 	}
 
-	// Check for failed patterns in recent output.
-	if line := matchingFailedLine(tail); line != "" {
+	// Check for failed patterns in recent output. A Claude Session that shows
+	// its ready composer is waiting for the person: what it printed above the
+	// composer is the conversation (a command's error it reports, a "permission
+	// denied" it quotes), not the Session failing.
+	failedScan := tail
+	if isClaudePane(command, lines) {
+		failedScan = interactiveTail
+	}
+	if line := matchingFailedLine(failedScan); line != "" {
 		return StateFailed, truncate(line, 100)
 	}
 

@@ -77,3 +77,18 @@ func TestCurrentPromptRefusesADialogItCannotCaptureExactly(t *testing.T) {
 		t.Fatalf("an inexact capture was not refused with its reason: %v", err)
 	}
 }
+
+// The prompt an answer reads at answer time carries the tool call the poll
+// already named, so the record of the answer says what was approved.
+func TestCurrentPromptCarriesTheToolCallItAsksAbout(t *testing.T) {
+	whole, visible := claudeDialogFixture()
+	w, sessionID := watcherWithClaude(t)
+	w.SetPromptEnricher(func(_ string, prompt classifier.Prompt) classifier.Prompt {
+		prompt.CallID, prompt.Tool, prompt.Summary = "toolu_1", "Bash", "echo HEAD"
+		return prompt
+	})
+	got, err := w.currentPrompt(&dialogPane{visible: visible, dialog: whole, info: classifier.CaptureInfo{Exact: true}}, sessionID)
+	if err != nil || got == nil || got.Tool != "Bash" || got.Summary != "echo HEAD" || got.CallID != "toolu_1" {
+		t.Fatalf("prompt = %+v (err %v)", got, err)
+	}
+}

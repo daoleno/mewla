@@ -2,6 +2,7 @@ package brain
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +130,14 @@ func TestWorkListsEveryWorkerSessionInJoinOrder(t *testing.T) {
 	detail, err := store.WorkDetail(item.ID, live)
 	if err != nil || detail.ID != item.ID || len(detail.WorkerSessions) != 3 || detail.WorkerSessions[2].Name != "Fixer (renamed)" {
 		t.Fatalf("detail = %+v %v", detail, err)
+	}
+	// The brief, whole, is on the detail only: never on the lists every phone gets with each snapshot.
+	if brief, _ := store.Work(item.ID); brief.Objective == "" || detail.Objective != brief.Objective {
+		t.Fatalf("detail objective = %q, Work's = %q", detail.Objective, brief.Objective)
+	}
+	inventory, _ := store.ProjectWorkInventory(live)
+	if listed, _ := json.Marshal(inventory); strings.Contains(string(listed), `"objective"`) {
+		t.Fatalf("a list carries the brief: %s", listed)
 	}
 	if _, err := store.WorkDetail("work-missing", live); err != ErrWorkNotFound {
 		t.Fatalf("missing Work detail: %v", err)

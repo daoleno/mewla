@@ -12,6 +12,7 @@ flags for that command.
 mewla                         # start on 127.0.0.1:9876 (same as mewla serve)
 mewla --lan                   # also listen on Wi-Fi/LAN and Tailscale, for a trusted network
 mewla -addr "$(tailscale ip -4):9876"   # listen on host:port only, here your Tailscale IP
+mewla -loopback-only          # this computer only: no TLS listeners on Wi-Fi/LAN or Tailscale (test daemons)
 mewla doctor [--json]         # is this machine ready? platform, state, port, agents
 mewla deps                    # offer this system's official agent CLI install, then sign-in
 mewla setup                   # guided first run: pick Brain's agent
@@ -63,7 +64,8 @@ mewla memory search "<phrase>" [--from user|brain|context|all] [--since 30d] [--
 mewla memory show <id> [--around 3] [--json]   # a chat message with its neighbours
 mewla brain work update -id <work> -status done
 mewla brain work update -id <work> -status waiting \
-  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins"
+  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins" \
+  -recommend "Newest wins"   # the phone tags that button "Brain's pick"
 ```
 
 See [Brain and Work](brain-and-work.md).
@@ -98,7 +100,8 @@ the host's screen cut to its window (the bottom rows of a taller screen, the
 left columns of a wider one), and the Android app scales the screen down to a
 size you can still read and lets you drag sideways for the rest (the iOS app
 and the web still show that size on their own grid until you act there).
-Typing there, or resizing that window, makes its size the Session's again.
+Typing there, or resizing that window, makes its size the Session's again;
+scrolling there only reads and leaves the size as it is.
 
 With no argument it opens a picker of the live Sessions, newest first: name
 (the Worker's name, `Brain` or `Shell`), agent, state (working, idle, needs

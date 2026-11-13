@@ -305,6 +305,22 @@ func (m *Manager) withSession(ownerID, sessionID string) (*managedSession, error
 	return ms, nil
 }
 
+// ScrollInput forwards what a scroll drag made (wheel presses or cursor keys)
+// to a session. It is not typing: it does not end tmux's copy mode, and a
+// session that holds another viewer's size keeps it.
+func (m *Manager) ScrollInput(ownerID, sessionID, data string) error {
+	ms, err := m.withSession(ownerID, sessionID)
+	if err != nil {
+		return err
+	}
+	ms.interactionMu.Lock()
+	defer ms.interactionMu.Unlock()
+	if w, ok := ms.session.(ScrollWriter); ok {
+		return w.WriteScroll(data)
+	}
+	return ms.session.Write(data)
+}
+
 // Input forwards input bytes to a session.
 func (m *Manager) Input(ownerID, sessionID, data string) error {
 	ms, err := m.withSession(ownerID, sessionID)

@@ -490,6 +490,7 @@ func (s *session) capture(params CaptureParams) (Capture, error) {
 		Modes:          true,
 		AppCursor:      state.AppCursor,
 		AltScroll:      state.AltScroll,
+		MouseFormat:    state.MouseFormat,
 		RowFlags:       flags,
 		Text:           text,
 		Cols:           state.Cols,

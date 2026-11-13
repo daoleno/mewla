@@ -71,6 +71,9 @@ type daemonConfig struct {
 	stateDir       string
 	linkConfigPath string
 	lan            bool
+	// loopbackOnly keeps a loopback daemon off this computer's private
+	// addresses: no TLS listeners on Wi-Fi/LAN or Tailscale (a test daemon).
+	loopbackOnly bool
 }
 
 type pairConfig struct {
@@ -422,6 +425,17 @@ func runDaemon(args []string, stderr io.Writer) error {
 	installHostAuthProbe()
 	brainService := brain.NewService(brainStore, w, execs)
 	brainService.SetWorkJudge(brain.NewHeadlessJudge(brainService.HostExecutor, filepath.Join(brainRoot, "judge")))
+	// A Work's progress is judged by the model routing.md's "Work progress"
+	// row names, asked the way Watch asks its own.
+	progressAsker := watch.NewAsker(watch.AskerOptions{
+		Task: "Work progress", RoutingPath: brainStore.RoutingGuidePath(), Workdir: filepath.Join(brainRoot, "judge-progress"),
+		Preferred: func() string { return work.InferWorkerProvider(brainService.HostExecutor().Command) },
+		BudgetUSD: "0.5", Effort: "low",
+	})
+	brainService.SetProgressAsker(func(ctx context.Context, system, prompt, schema string) (json.RawMessage, float64, error) {
+		answer, usage, err := progressAsker.Ask(ctx, system, prompt, schema)
+		return answer, usage.CostUSD, err
+	})
 	w.SetTurnLedger(brainService)
 	// A Worker whose agent announces its conversation is re-proved when it
 	// announces another, not every 30 seconds; one the Hub has no binding for
@@ -457,7 +471,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err := platform.MkdirPrivate(codexControlDir); err != nil {
 		log.Printf("WARN agent events: cannot create %s, Codex Workers will be followed from their transcript: %v", codexControlDir, err)
 	} else {
-		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir})
+		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir, Inline: true, ConfigPath: modelprofiles.DefaultCodexConfigPath()})
 		codexFollow = newCodexEvents(ctx, eventHub)
 		w.ObserveSessions(codexFollow.Observe)
 	}
@@ -600,6 +614,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetExecutorResolver(execs.IDForCommand)
 	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
+	srv.SetAgentActivity(hubActivity(eventHub))
 	srv.SetAgentApprovals(appApprovals{service: agentEvents})
 	answeredRequests, err := answered.Open(stateDir)
 	if err != nil {
@@ -609,7 +624,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	agentEvents.answered = answeredRequests
 	agentEvents.askedAt = srv.PromptAskedAt
 	eventHub.OnApprovalResolved(func(workerID string, approval agentevents.Approval, e agentevents.Event) {
-		recordAgentResolution(answeredRequests, workerID, approval, e)
+		recordAgentResolution(answeredRequests, workerID, approval, e, srv.SettleTerminalAnswer)
 	})
 	if codexFollow != nil {
 		srv.SetCodexStatus(func(ctx context.Context, workerID string) (any, error) {
@@ -638,23 +653,22 @@ func runDaemon(args []string, stderr io.Writer) error {
 		}
 	}
 	srv.SetAddressBook(book)
+	srv.SetWebUIDir(filepath.Join(authManager.StorageDir(), "web-ui"))
 	srv.SetDirectEndpoints(func() []server.DirectEndpoint {
 		return directEndpoints(cfg.addr, detectPrivateNetworkAddresses())
 	})
-	if host, port, err := net.SplitHostPort(cfg.addr); err == nil && isLoopbackHost(host) {
+	if portNumber, ok := privateListenerPort(cfg); ok {
 		// A loopback daemon also listens, over TLS only, on this computer's
 		// private addresses, so a paired phone on the same network or tailnet
 		// can skip the relay without any flag.
-		if portNumber, err := strconv.Atoi(port); err == nil {
-			srv.EnablePrivateListeners(portNumber, func() []net.IP {
-				var ips []net.IP
-				for _, address := range detectPrivateNetworkAddresses() {
-					ips = append(ips, address.ip)
-				}
-				return ips
-			})
-			srv.SetDirectEndpoints(srv.PrivateEndpoints)
-		}
+		srv.EnablePrivateListeners(portNumber, func() []net.IP {
+			var ips []net.IP
+			for _, address := range detectPrivateNetworkAddresses() {
+				ips = append(ips, address.ip)
+			}
+			return ips
+		})
+		srv.SetDirectEndpoints(srv.PrivateEndpoints)
 	}
 	enrollmentManager, err := enrollment.New(authManager.StorageDir())
 	if err != nil {
@@ -962,6 +976,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 			name: "Brain transcript capture",
 			run: func(ctx context.Context) error {
 				brainService.RunHostTranscriptCapture(ctx)
+				return nil
+			},
+		},
+		{
+			name: "Work progress judge",
+			run: func(ctx context.Context) error {
+				brainService.RunProgressJudge(ctx)
 				return nil
 			},
 		},
@@ -2147,6 +2168,7 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 	fs.StringVar(&item.ContextRef, "context", "", "Brain Worklog/context reference (relative to the configured Brain workspace)")
 	fs.StringVar(&item.Question, "question", "", "what you ask the user about this Work; shown on its slip (empty clears it)")
 	fs.Var((*stringListFlag)(&item.Choices), "choice", "a one-tap answer to -question, repeatable (up to 4)")
+	fs.StringVar(&item.Recommended, "recommend", "", "the -choice you recommend, word for word; the phone tags it \"Brain's pick\"")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -2159,12 +2181,21 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 	if len(item.Choices) > 0 && strings.TrimSpace(item.Question) == "" {
 		return fmt.Errorf("-choice needs -question")
 	}
+	if pick := strings.Join(strings.Fields(item.Recommended), " "); pick != "" {
+		named := false
+		for _, choice := range item.Choices {
+			named = named || strings.Join(strings.Fields(choice), " ") == pick
+		}
+		if !named {
+			return fmt.Errorf("-recommend must be one of the -choice values")
+		}
+	}
 	fields := []string{}
 	fieldNames := map[string]string{
 		"title": "title", "objective": "objective", "status": "status", "attempt-session-id": "attempt_session_id",
 		"completion": "completion_policy", "done-criteria": "done_criteria_ref",
 		"next-action": "next_action", "wait-for": "wait_for", "context": "context_ref",
-		"question": "question", "choice": "choices",
+		"question": "question", "choice": "choices", "recommend": "recommended",
 	}
 	fs.Visit(func(value *flag.Flag) {
 		if field := fieldNames[value.Name]; field != "" {
@@ -2715,6 +2746,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	cfg := daemonConfig{}
 	fs.StringVar(&cfg.addr, "addr", "127.0.0.1:9876", "listen on host:port")
 	fs.BoolVar(&cfg.lan, "lan", false, "listen on all networks (plain HTTP; trusted networks only)")
+	fs.BoolVar(&cfg.loopbackOnly, "loopback-only", false, "reachable from this computer only: no TLS listeners on Wi-Fi/LAN or Tailscale addresses (test daemons)")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	bindRelayConfigFlags(fs, &cfg.linkConfigPath, "Mewla Relay config (default: <state-dir>/relay.json when present)")
 	fs.Usage = func() { printTopLevelUsage(stderr) }
@@ -2731,13 +2763,31 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	if cfg.lan && addrExplicit {
 		return cfg, fmt.Errorf("--lan and -addr cannot be used together")
 	}
+	if cfg.lan && cfg.loopbackOnly {
+		return cfg, fmt.Errorf("--lan and -loopback-only cannot be used together")
+	}
 	if cfg.lan {
 		cfg.addr = "0.0.0.0:9876"
+	}
+	if host, _, err := net.SplitHostPort(cfg.addr); cfg.loopbackOnly && (err != nil || !isLoopbackHost(host)) {
+		return cfg, fmt.Errorf("-loopback-only needs a loopback -addr, not %q", cfg.addr)
 	}
 	if fs.NArg() > 0 {
 		return cfg, fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 	return cfg, nil
+}
+
+// privateListenerPort is the port a daemon also listens on, over TLS, at this
+// computer's private addresses: a loopback daemon does, unless it is
+// -loopback-only.
+func privateListenerPort(cfg daemonConfig) (int, bool) {
+	host, port, err := net.SplitHostPort(cfg.addr)
+	if err != nil || !isLoopbackHost(host) || cfg.loopbackOnly {
+		return 0, false
+	}
+	number, err := strconv.Atoi(port)
+	return number, err == nil
 }
 
 func printTopLevelUsage(w io.Writer) {
@@ -2787,6 +2837,7 @@ Agents and tools
 Flags
   -lan                  listen on all networks (plain HTTP; trusted networks only)
   -addr host:port       listen on host:port instead of 127.0.0.1:9876
+  -loopback-only        reachable from this computer only: no TLS listeners on Wi-Fi/LAN or Tailscale (test daemons)
   -state-dir dir        state directory (default ~/.mewla)
   -relay-config path    Mewla Relay config, for a self-hosted relay (default <state-dir>/relay.json)
   -v, --version         print the Mewla version and exit

@@ -9,8 +9,9 @@ import (
 
 type fakeApprovals map[string][]ApprovalWire
 
-func (f fakeApprovals) Pending(workerID string) []ApprovalWire { return f[workerID] }
-func (f fakeApprovals) Decide(string, string, string) error    { return nil }
+func (f fakeApprovals) Pending(workerID string) []ApprovalWire    { return f[workerID] }
+func (f fakeApprovals) Decide(string, string, string) error       { return nil }
+func (f fakeApprovals) AnsweredInTerminal(string, string, string) {}
 
 func TestWorkerWireCarriesTheDecisionsItsAgentIsWaitingOn(t *testing.T) {
 	s := &Server{}

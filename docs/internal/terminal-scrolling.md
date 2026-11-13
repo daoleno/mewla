@@ -68,6 +68,26 @@ view: void the history, drop `removed` rows from its front, append `rows`
 (`client/core/terminal/history.ts`). While scrolled up, the rows on screen stay
 put.
 
+Several viewers can show one host Session (the App, `mewla attach` on a
+computer), and the program draws for one size: the viewer a person last acted
+on sets it (attaching, a resize, typing). The host ends every other viewer that
+asked to redraw (`AttachParams.Redraw`) with `AttachResized` when the size
+changes, and the viewer attaches again without a size for a full reset and a
+replay at the new size: output drawn for another width would otherwise write
+rows over rows on its grid, and stay so after the sizes match again. A viewer
+never takes the size back on its own (after `AttachBehind` or `AttachResized`),
+or two viewers of different sizes would take it from each other. Until its
+person acts (a focus-out report is not acting), a viewer that is not the one
+acted on is drawn at the other size: the daemon tells the App's view the
+Session's size (`terminal_size`) before each replay, so a view that can draw
+that grid fitted into its area does, and `mewla attach` mirrors the host's
+screen cut to its window (`mirrorFrame`) instead of writing output meant for
+another size. Viewers from before `Redraw` keep their stream. A host from before `Redraw` (every Session started before the
+upgrade runs on one until the host restarts) answers `Attached.Redraw` false
+and never ends a viewer for a resize: the daemon's view and `mewla attach` then
+ask the Session's size (`Info`) every half second and start over the same way
+when it is not the size their replay was drawn at.
+
 ## History and live output (tmux Sessions)
 
 The authenticated `terminal_history` request takes an open `session_id` and is

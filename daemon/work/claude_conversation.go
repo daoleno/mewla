@@ -554,6 +554,9 @@ type claudeConversationBuilder struct {
 	events            []CodexConversationEvent
 	eventByCall       map[string]int
 	activityLifecycle providerActivityLifecycle
+	// denialKind is the toolDenialKind of the record being read: its tool
+	// results are calls that were refused.
+	denialKind string
 	// pendingChoiceCalls are AskUserQuestion calls without a result yet.
 	pendingChoiceCalls []string
 	// pendingTaskTurn holds the activity a task notification would open. It
@@ -618,6 +621,10 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		} `json:"origin"`
 		Attachment    json.RawMessage `json:"attachment"`
 		ToolUseResult json.RawMessage `json:"toolUseResult"`
+		// ToolDenialKind is set on the result record of a tool call that was
+		// refused ("user-rejected", "permission-rule"): the structured fact
+		// that the call did not run because it was not allowed.
+		ToolDenialKind string `json:"toolDenialKind"`
 		// Claude Code writes a provider/transport failure as a synthetic
 		// assistant record: isApiErrorMessage, an error category and, when
 		// known, the upstream status.
@@ -688,7 +695,10 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		if envelope.IsCompactSummary {
 			origin = ConversationOriginProvider
 		}
-		if b.consumeUserContent(lineNumber, recordID, timestamp, origin, envelope.Message.Content, envelope.ToolUseResult) &&
+		b.denialKind = strings.TrimSpace(envelope.ToolDenialKind)
+		consumed := b.consumeUserContent(lineNumber, recordID, timestamp, origin, envelope.Message.Content, envelope.ToolUseResult)
+		b.denialKind = ""
+		if consumed &&
 			!b.activityLifecycle.running() {
 			b.pendingTaskTurn = claudePendingTaskTurn{}
 			b.activityLifecycle.start(activityID, timestamp)
@@ -1167,6 +1177,7 @@ func (b *claudeConversationBuilder) updateToolResult(lineNumber int, recordID st
 		if eventIndex, exists := b.eventByCall[callID]; exists && eventIndex >= 0 && eventIndex < len(b.events) {
 			b.events[eventIndex].Output = output
 			b.events[eventIndex].Status = status
+			b.events[eventIndex].Rejected = b.denialKind != ""
 			if isError {
 				code := 1
 				b.events[eventIndex].ExitCode = &code

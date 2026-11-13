@@ -252,6 +252,10 @@ type CodexConversationEvent struct {
 	CallID    string `json:"call_id,omitempty"`
 	ExitCode  *int   `json:"exit_code,omitempty"`
 	Status    string `json:"status,omitempty"`
+	// Rejected says a finished tool call did not run because the provider
+	// recorded it as refused (by the person at its prompt, or a permission
+	// rule). Daemon-internal; it is not on the wire.
+	Rejected bool `json:"-"`
 	// Partial means the provider may update this same logical event ID again.
 	// It does not imply or permit client-side splitting of completed text.
 	Partial bool `json:"partial,omitempty"`
