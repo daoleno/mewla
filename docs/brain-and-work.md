@@ -97,6 +97,15 @@ elsewhere, "Brain" gets a red dot (like "Sessions" does for a Session; on Brain
 itself the cat's line already says so), and the cat sits on that Work's slip in
 the conversation.
 
+**Who a request is for.** A Worker that Brain started reports to Brain, not to
+you: when it stops on a decision of its own (`--attention user_input`), Brain
+decides, and asks you only through its Work's question, which shows under
+Needs you with its choices. Until then the Work reads Reviewing, and nothing
+for that report reaches you: no card, no tray row, no count, no notification.
+A prompt or an approval on that Worker's terminal that Brain cannot answer (a
+sign-in, an approval outside the brief) still comes to you, and a Session you
+started yourself keeps asking you directly.
+
 **When the computer is unreachable** the cat's line says so, "Can't reach your
 computer", or "Reconnecting" after ten seconds of trying, at the same moment
 the menu's server line does. The message box keeps saying "Tell Brain…"; the
