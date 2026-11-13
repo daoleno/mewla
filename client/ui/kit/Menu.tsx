@@ -63,11 +63,11 @@ function MenuRow(props: { item: MenuItem; onPress: () => void }) {
   return (
     <Button testID={`menu-item-${item().id}`} accessibilityLabel={item().label} role="menuitem" disabled={item().disabled} onPress={props.onPress}
       class="mx-1.5 min-h-[48px] flex-row items-center gap-3 rounded-[12px] px-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-40">
-      {item().icon ? <Icon name={item().icon!} size={20} tone="ink" /> : null}
+      <If when={item().icon}><Icon name={item().icon!} size={20} tone="ink" /></If>
       <Text class="min-w-0 flex-1 text-body line-clamp-1">{item().label}</Text>
-      {item().value ? <Text class="text-sub text-muted-foreground line-clamp-1">{item().value}</Text> : null}
+      <If when={item().value}><Text class="text-sub text-muted-foreground line-clamp-1">{item().value}</Text></If>
       {item().trailing ?? null}
-      {item().checked ? <Icon name="check" size={18} tone="ink" /> : null}
+      <If when={item().checked}><Icon name="check" size={18} tone="ink" /></If>
     </Button>
   );
 }
@@ -86,15 +86,13 @@ export function MenuPopover(props: {
   testID?: string;
 }) {
   return (
-    <>{props.open() && props.anchor() ? (
-      <Overlay anchor={props.anchor()} placement="bottom" align="end" offset={6} margin={12} onPressOutside={props.onClose} onCancel={props.onClose}>
+    <><If when={props.open() && props.anchor()}><Overlay anchor={props.anchor()} placement="bottom" align="end" offset={6} margin={12} onPressOutside={props.onClose} onCancel={props.onClose}>
         <View testID={props.testID ?? "menu-popover"} role="menu" accessibilityLabel={props.title?.() ?? "Menu"}
           class="w-[288px] gap-0.5 overflow-hidden rounded-[18px] border border-border bg-popover py-1.5 shadow-float">
-          {props.title?.() ? <Text class="px-[18px] pb-1 pt-2 text-caption font-semibold text-muted-foreground line-clamp-1">{props.title!()!}</Text> : null}
+          <If when={props.title?.()}><Text class="px-[18px] pb-1 pt-2 text-caption font-semibold text-muted-foreground line-clamp-1">{props.title!()!}</Text></If>
           {props.items().map((item) => <MenuRow item={item} onPress={() => props.onSelect(item.id)} />)}
         </View>
-      </Overlay>
-    ) : null}</>
+      </Overlay></If></>
   );
 }
 

@@ -88,7 +88,7 @@ export function EditChip(props: { editor: MessageEditor }) {
           <Icon name="close" size={16} color="muted-foreground" />
         </Button>
       </View>
-      {e.error() ? <Text testID="edit-error" class="text-sub text-foreground">{e.error()}</Text> : null}
+      <If when={e.error()}><Text testID="edit-error" class="text-sub text-foreground">{e.error()}</Text></If>
     </View>
   );
 }

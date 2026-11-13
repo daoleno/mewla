@@ -63,12 +63,10 @@ export function EnrollmentApproval() {
             </Button>
           ))}
         </View>
-        {problem() ? (
-          <View testID="enrollment-problem" class="gap-1 rounded-xl border border-border bg-card px-3 py-2.5">
+        <If when={problem()}><View testID="enrollment-problem" class="gap-1 rounded-xl border border-border bg-card px-3 py-2.5">
             <Text class="text-sm font-semibold text-destructive">Decision not sent</Text>
             <Text class="text-sm text-muted-foreground">{problem()}</Text>
-          </View>
-        ) : null}
+          </View></If>
         <Button testID="enrollment-approve" disabled={!selected() || busy()} onPress={() => void decide(true)}
           class={!selected() || busy() ? "items-center rounded-full bg-primary py-3 opacity-50" : "items-center rounded-full bg-primary py-3 active:opacity-80"}>
           <Text class="text-base font-semibold text-primary-foreground">{busy() ? "Sending…" : "Approve device"}</Text>

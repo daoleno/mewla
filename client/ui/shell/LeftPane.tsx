@@ -35,17 +35,15 @@ function PaneHeader() {
   return (
     <View testID="pane-header" class="h-[68px] flex-row items-center gap-2 px-2">
       <View class="overflow-hidden rounded-full">
-        {selected() === "computer" ? <SelectedWell /> : null}
+        <If when={selected() === "computer"}><SelectedWell /></If>
         <HomeCat onPress={REPLACE.computer} />
       </View>
       <View class="min-w-0 flex-1">
         <Text testID="pane-computer" role="header" class="text-title font-bold tracking-title line-clamp-1">{current()?.name || "Mewla"}</Text>
-        {line().words ? (
-          <View class="flex-row items-center gap-1.5">
+        <If when={line().words}><View class="flex-row items-center gap-1.5">
             <StateDotMark dot={line().dot} />
             <Text testID="pane-state" class={`text-sub line-clamp-1 ${line().ink ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{line().words}</Text>
-          </View>
-        ) : null}
+          </View></If>
       </View>
     </View>
   );
@@ -72,13 +70,13 @@ function BrainRow() {
     <View class="mx-4 overflow-hidden rounded-(--radius-group) bg-sheet-surface">
       <Button testID="pane-brain" accessibilityLabel={line() ? `Brain, ${line()}` : "Brain"} selected={on()} onPress={() => goHome()}
         class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-        {on() ? <SelectedWell /> : null}
+        <If when={on()}><SelectedWell /></If>
         <View class="size-[28px] items-center justify-center rounded-lg bg-foreground"><Icon name="brain" size={18} tone="canvas" /></View>
         <View class="min-w-0 flex-1">
           <Text class="text-body font-semibold line-clamp-1">Brain</Text>
-          {line() ? <Text testID="pane-brain-line" class="text-sub text-muted-foreground line-clamp-1">{line()}</Text> : null}
+          <If when={line()}><Text testID="pane-brain-line" class="text-sub text-muted-foreground line-clamp-1">{line()}</Text></If>
         </View>
-        {running() ? <View testID="pane-brain-live" accessibilityLabel="Working" class="size-1.5 rounded-full bg-foreground" /> : null}
+        <If when={running()}><View testID="pane-brain-live" accessibilityLabel="Working" class="size-1.5 rounded-full bg-foreground" /></If>
       </Button>
     </View>
   );

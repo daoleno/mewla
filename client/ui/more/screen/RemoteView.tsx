@@ -354,8 +354,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
         onMessage={(e) => props.session.onViewer(e.data)}
       />
       {/* A browser's own keyboard types into the picture: no field, no key bar. */}
-      {soft ? (
-        <Input
+      <If when={soft}><Input
           ref={(node: InputRef) => {
             input = node;
           }}
@@ -371,12 +370,8 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
           onChange={({ value: next }) => typed(next)}
           onSubmit={() => press("Return")}
           onBlur={() => props.onTypingChange(false)}
-        />
-      ) : null}
-      {soft && props.typing ? (
-        // A narrow phone may not fit every key: the bar scrolls sideways.
-        // Translucent white keys on the black (SPEC §15 Full-screen remote).
-        <Scroll horizontal testID="remote-key-bar" class="grow-0 bg-black" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
+        /></If>
+      <If when={soft && props.typing}><Scroll horizontal testID="remote-key-bar" class="grow-0 bg-black" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
           {props.modifiers.map((modifier) => {
             const state = () => (mods().locked.includes(modifier.key) ? "locked" : mods().armed.includes(modifier.key) ? "armed" : "off");
             return (
@@ -397,8 +392,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
               <Text class="text-sub text-white">{key.label}</Text>
             </Button>
           ))}
-        </Scroll>
-      ) : null}
+        </Scroll></If>
       {(() => {
         // Bring the keyboard up or down when the page asks.
         if (!soft) return null;

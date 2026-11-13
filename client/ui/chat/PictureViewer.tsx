@@ -15,18 +15,12 @@ function Slide(props: { picture: ThreadPicture; near: () => boolean; load?: Pict
   const picture = createPicture(src, (path) => (path ? props.load?.(path) ?? Promise.resolve(null) : Promise.resolve(null)));
   return (
     <View testID="picture-viewer-slide" class="flex-1">
-      {picture.url() && !picture.failed() ? (
-        <ZoomImage testID="picture-viewer-image" src={picture.url()!} name={props.picture.alt || "Picture"} onFail={picture.fail} />
-      ) : (
-        <View class="flex-1 items-center justify-center">
-          {picture.failed() && src() ? (
-            <Button testID="picture-viewer-retry" accessibilityLabel={`Load ${props.picture.alt || "the picture"} again`} onPress={picture.retry}
+      <If when={picture.url() && !picture.failed()} else={<View class="flex-1 items-center justify-center">
+          <If when={picture.failed() && src()} else={<Spinner size={24} />}><Button testID="picture-viewer-retry" accessibilityLabel={`Load ${props.picture.alt || "the picture"} again`} onPress={picture.retry}
               class="size-14 items-center justify-center rounded-full bg-white/15 active:opacity-70">
               <Icon name="refresh" size={24} color="seal-foreground" />
-            </Button>
-          ) : <Spinner size={24} />}
-        </View>
-      )}
+            </Button></If>
+        </View>}><ZoomImage testID="picture-viewer-image" src={picture.url()!} name={props.picture.alt || "Picture"} onFail={picture.fail} /></If>
     </View>
   );
 }

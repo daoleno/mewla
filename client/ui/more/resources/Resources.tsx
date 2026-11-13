@@ -100,14 +100,14 @@ export function Resources(props: { nav: PageNav }) {
     <Page
       display
       title="Resources"
-      hero={telemetry() ? <Headline telemetry={telemetry()!} /> : undefined}
-      headerRight={telemetry() ? <HeaderActions onRefresh={refresh} /> : undefined}
+      hero={<If when={telemetry()} else={<DisplayTitle title="Resources" />}><Headline telemetry={telemetry()!} /></If>}
+      headerRight={<If when={telemetry()}><HeaderActions onRefresh={refresh} /></If>}
       testID="resources"
       maxWidth={CONTENT_MAX_WIDTH}
       refreshing={reading().reading && Boolean(telemetry())}
       onRefresh={refresh}
     >
-      {telemetry() ? <Ready telemetry={telemetry()!} onRefresh={refresh} /> : <NotReady onRetry={refresh} onOpenSettings={() => props.nav.push({ name: "settings" })} />}
+      <If when={telemetry()} else={<NotReady onRetry={refresh} onOpenSettings={() => props.nav.push({ name: "settings" })} />}><Ready telemetry={telemetry()!} onRefresh={refresh} /></If>
     </Page>
   );
 }
@@ -116,15 +116,7 @@ function NotReady(props: { onRetry: () => void; onOpenSettings: () => void }) {
   const busy = () => reading().reading || daemonState() === "connecting";
   return (
     <>
-      {!daemon() ? (
-        <EmptyState testID="resources-empty" icon="pulse" title="No current server" detail="Pair a computer in Settings to see its resources." action="Open Settings" onAction={props.onOpenSettings} />
-      ) : busy() ? (
-        <EmptyState testID="resources-loading" busy title={connected() ? "Reading the machine" : "Connecting to server"} />
-      ) : !connected() ? (
-        <EmptyState testID="resources-offline" icon="pulse" title="Server offline" detail="Resources appear once the server reconnects." />
-      ) : (
-        <EmptyState testID="resources-failed" icon="pulse" title="Resources unavailable" detail={reading().error || "This server did not report resources."} action="Try again" onAction={props.onRetry} />
-      )}
+      <If when={!daemon()} else={<If when={busy()} else={<If when={!connected()} else={<EmptyState testID="resources-failed" icon="pulse" title="Resources unavailable" detail={reading().error || "This server did not report resources."} action="Try again" onAction={props.onRetry} />}><EmptyState testID="resources-offline" icon="pulse" title="Server offline" detail="Resources appear once the server reconnects." /></If>}><EmptyState testID="resources-loading" busy title={connected() ? "Reading the machine" : "Connecting to server"} /></If>}><EmptyState testID="resources-empty" icon="pulse" title="No current server" detail="Pair a computer in Settings to see its resources." action="Open Settings" onAction={props.onOpenSettings} /></If>
     </>
   );
 }
@@ -146,14 +138,10 @@ function Headline(props: { telemetry: ResourceTelemetry }) {
       <DisplayTitle eyebrow={serverDisplayName(daemonName(), "This computer")} title={headline(t())} />
       {/* The daemon's pressure (SPEC §10.4): its dot and words in ok, warn or red; offline, a soft ring and soft words. */}
       <View class="flex-row items-center gap-1.5 px-1 pb-2">
-        {connected() ? (
-          <StateLine testID="resources-line" tone={pressureTone(t().state)} label={pressureWords(t())} detail={updated()} />
-        ) : (
-          <>
+        <If when={connected()} else={<>
             <View class="size-2 rounded-full" style={{ borderWidth: 1.5, borderColor: color("soft") }} />
             <Text testID="resources-line" class="shrink text-sub text-muted-foreground line-clamp-1">{`${pressureWords(t())} ${updated()}`}</Text>
-          </>
-        )}
+          </>}><StateLine testID="resources-line" tone={pressureTone(t().state)} label={pressureWords(t())} detail={updated()} /></If>
       </View>
     </View>
   );
@@ -187,8 +175,8 @@ function Ready(props: { telemetry: ResourceTelemetry; onRefresh: () => void }) {
   const basis = () => tileBasis(width(), wide());
   return (
     <View onLayout={({ bounds }) => width.set(bounds.size.width)}>
-      {connected() && reading().error ? <Notice testID="resources-refresh-failed" title="Refresh failed" detail={reading().error} action="Try again" onAction={props.onRefresh} /> : null}
-      {details() ? <MachineDetails t={t()} /> : null}
+      <If when={connected() && reading().error}><Notice testID="resources-refresh-failed" title="Refresh failed" detail={reading().error} action="Try again" onAction={props.onRefresh} /></If>
+      <If when={details()}><MachineDetails t={t()} /></If>
       {/* CPU, Memory, Disk, Swap: two across on a phone, four on a wide screen (SPEC §15 Metrics). */}
       <View testID="resource-tiles" class="mt-3 flex-row flex-wrap gap-3">
         <View style={{ flexGrow: 1, flexBasis: basis() }}><Cpu t={t()} /></View>
@@ -216,13 +204,7 @@ function MachineDetails(props: { t: ResourceTelemetry }) {
           <Text class="shrink font-mono text-code">{`${s.name} · ${trim2(s.value)} / threshold ${trim2(s.threshold)}`}</Text>
         </View>
       ))}
-      {usesMemoryPressure(props.t) ? (
-        <View class="gap-0.5">
-          <Fact label="Memory pressure" value={MEMORY_PRESSURE_LABEL[props.t.memoryPressure!.level]} />
-          <Text class="text-sub text-muted-foreground">{memoryPressureMicro(props.t)}</Text>
-        </View>
-      ) : (
-        <View class="gap-1">
+      <If when={usesMemoryPressure(props.t)} else={<View class="gap-1">
           <Text class="text-caption text-muted-foreground">PSI some / full · 10s / 1m / 5m</Text>
           {PSI_KEYS.map((key) => (
             <View class="gap-0.5">
@@ -231,8 +213,10 @@ function MachineDetails(props: { t: ResourceTelemetry }) {
               <Fact label="full" value={triple(props.t.psi[key]?.full)} />
             </View>
           ))}
-        </View>
-      )}
+        </View>}><View class="gap-0.5">
+          <Fact label="Memory pressure" value={MEMORY_PRESSURE_LABEL[props.t.memoryPressure!.level]} />
+          <Text class="text-sub text-muted-foreground">{memoryPressureMicro(props.t)}</Text>
+        </View></If>
     </View>
   );
 }
@@ -247,7 +231,7 @@ function Tile(props: { title: string; value: string; testID: string; t: Resource
   const word = () => (props.share === undefined && props.meter === null ? null : meterWord(tone()));
   return (
     <StatTile testID={props.testID} label={props.title} value={props.value} detail={props.line} status={word() ? { word: word()!, tone: tone() === "error" ? "error" : "warn" } : undefined}>
-      {props.share !== undefined ? <Meter share={props.share} tone={meterColor(tone())} height={4} /> : null}
+      <If when={props.share !== undefined}><Meter share={props.share!} tone={meterColor(tone())} height={4} /></If>
       {details() ? props.detail ?? null : null}
     </StatTile>
   );
@@ -278,7 +262,7 @@ function Cpu(props: { t: ResourceTelemetry }) {
       share={used() === undefined ? undefined : used()! / 100}
       detail={
         <View class="gap-2">
-          {cores().length ? <Fact label="Busiest core" value={formatPercent(Math.max(...cores()))} /> : null}
+          <If when={cores().length}><Fact label="Busiest core" value={formatPercent(Math.max(...cores()))} /></If>
           <View class="flex-row flex-wrap gap-1">
             {cores().map((c) => <View class="w-[22px]"><Meter share={c / 100} tone={meterColor(resourceMeterTone(props.t, null, c / 100))} height={18} /></View>)}
           </View>
@@ -411,21 +395,15 @@ function Consumers(props: { t: ResourceTelemetry }) {
           <View class="flex-1" />
           <Text class="w-[52px] text-right text-caption text-muted-foreground">CPU</Text>
           <Text class="w-[64px] text-right text-caption text-muted-foreground">Memory</Text>
-          {procs() ? <Text class="w-[44px] text-right text-caption text-muted-foreground">Procs</Text> : null}
-          {procs() ? <View class="w-[72px]" /> : null}
+          <If when={procs()}><Text class="w-[44px] text-right text-caption text-muted-foreground">Procs</Text></If>
+          <If when={procs()}><View class="w-[72px]" /></If>
           <View class="w-[14px]" />
         </View>
-        {filtered().length === 0 ? (
-          <View class="px-4 py-4"><Text class="text-sub text-muted-foreground">{owner() === "all" ? "No consumers reported." : "No consumers reported for this owner."}</Text></View>
-        ) : (
-          filtered().slice(0, shownCount()).map((c, index) => <ConsumerRow consumer={c} rowKey={keys()[index]} wide={procs()} share={consumerShare(c, filtered())} />)
-        )}
-        {filtered().length > shownCount() ? (
-          <Button testID="consumers-more" accessibilityLabel={`Show ${Math.min(PAGE_SIZE, filtered().length - shownCount())} more`} onPress={() => shownCount.set(shownCount() + PAGE_SIZE)} class="flex-row items-center gap-1.5 px-4 py-3 active:bg-accent">
+        <If when={filtered().length === 0} else={<>{filtered().slice(0, shownCount()).map((c, index) => <ConsumerRow consumer={c} rowKey={keys()[index]} wide={procs()} share={consumerShare(c, filtered())} />)}</>}><View class="px-4 py-4"><Text class="text-sub text-muted-foreground">{owner() === "all" ? "No consumers reported." : "No consumers reported for this owner."}</Text></View></If>
+        <If when={filtered().length > shownCount()}><Button testID="consumers-more" accessibilityLabel={`Show ${Math.min(PAGE_SIZE, filtered().length - shownCount())} more`} onPress={() => shownCount.set(shownCount() + PAGE_SIZE)} class="flex-row items-center gap-1.5 px-4 py-3 active:bg-accent">
             <Icon name="chevron-down" size={16} />
             <Text class="text-sub font-semibold text-muted-foreground">{`${filtered().length - shownCount()} more`}</Text>
-          </Button>
-        ) : null}
+          </Button></If>
       </Section>
       <View class="mt-1.5 px-4"><Text class="text-caption text-muted-foreground">CPU 100% is one core. Memory is resident size and may count shared pages twice.</Text></View>
     </View>
@@ -479,30 +457,28 @@ function ConsumerRow(props: { consumer: ResourceConsumer; rowKey: string; wide: 
           <RowTile lead={consumerRowLead(c())} testID="consumer-lead" />
           <View class="min-w-0 flex-1">
             <Text class="text-body line-clamp-1">{title()}</Text>
-            {consumerRowMeta(c()) ? <Text testID="consumer-meta" class="text-sub text-muted-foreground line-clamp-1" style={orphaned() ? { color: color("warning") } : undefined}>{consumerRowMeta(c())}</Text> : null}
+            <If when={consumerRowMeta(c())}><Text testID="consumer-meta" class="text-sub text-muted-foreground line-clamp-1" style={orphaned() ? { color: color("warning") } : undefined}>{consumerRowMeta(c())}</Text></If>
           </View>
           <Text class="w-[52px] text-right font-mono text-code" style={{ fontVariant: ["tabular-nums"] }}>{formatPercent(c().cpuPercent)}</Text>
           <Text class="w-[64px] text-right font-mono text-code" style={{ fontVariant: ["tabular-nums"] }}>{formatBytes(c().rssBytes)}</Text>
-          {props.wide ? <Text class="w-[44px] text-right font-mono text-code" style={{ fontVariant: ["tabular-nums"] }}>{String(c().processCount)}</Text> : null}
-          {props.wide ? <View class="w-[72px]"><Meter share={props.share} /></View> : null}
+          <If when={props.wide}><Text class="w-[44px] text-right font-mono text-code" style={{ fontVariant: ["tabular-nums"] }}>{String(c().processCount)}</Text></If>
+          <If when={props.wide}><View class="w-[72px]"><Meter share={props.share} /></View></If>
           <Icon name={expandedNow() ? "chevron-up" : "chevron-down"} size={14} tone="faint" />
         </View>
       </View>
-      {expandedNow() ? (
-        <View class="gap-1 bg-secondary px-4 py-3">
+      <If when={expandedNow()}><View class="gap-1 bg-secondary px-4 py-3">
           {/* A long press copies the title, the IDs or the commands, as selecting them did. */}
           <View testID="consumer-details" class="gap-1" onLongPress={() => void copyMenu(title(), consumerCopyChoices(c(), title()))}>
             <Text class="text-body font-semibold">{title()}</Text>
             <Text class="text-sub">{`${CONSUMER_OWNER_LABEL[c().owner]} · ${c().processCount} ${c().processCount === 1 ? "process" : "processes"}`}</Text>
-            {c().id ? <Fact label="ID" value={c().id!} /> : null}
-            {c().workerId ? <Fact label="Worker" value={c().workerId!} /> : null}
-            {c().workId ? <Fact label="Work" value={c().workId!} /> : null}
-            {consumerMeta(c()) ? <Text class="text-sub text-muted-foreground">{consumerMeta(c())}</Text> : null}
-            {consumerCommands(c()).length ? <Text class="text-sub text-muted-foreground">{`Commands · ${consumerCommands(c()).join(", ")}`}</Text> : null}
-            {kinds() ? <Text class="text-sub text-muted-foreground">{`Kinds · ${kinds()}`}</Text> : null}
+            <If when={c().id}><Fact label="ID" value={c().id!} /></If>
+            <If when={c().workerId}><Fact label="Worker" value={c().workerId!} /></If>
+            <If when={c().workId}><Fact label="Work" value={c().workId!} /></If>
+            <If when={consumerMeta(c())}><Text class="text-sub text-muted-foreground">{consumerMeta(c())}</Text></If>
+            <If when={consumerCommands(c()).length}><Text class="text-sub text-muted-foreground">{`Commands · ${consumerCommands(c()).join(", ")}`}</Text></If>
+            <If when={kinds()}><Text class="text-sub text-muted-foreground">{`Kinds · ${kinds()}`}</Text></If>
           </View>
-          {c().processes.length ? (
-            <View class="gap-0.5 pt-1">
+          <If when={c().processes.length} else={<Text class="text-sub text-muted-foreground">Process details unavailable in this sample.</Text>}><View class="gap-0.5 pt-1">
               <Text class="text-caption text-muted-foreground">{`${c().processes.length} / ${c().processCount} processes reported · largest memory`}</Text>
               <View class="flex-row gap-2 pt-1">
                 <Text class="w-[64px] text-caption text-muted-foreground">PID</Text>
@@ -514,17 +490,13 @@ function ConsumerRow(props: { consumer: ResourceConsumer; rowKey: string; wide: 
                   <Text class="w-[64px] font-mono text-code">{p.pid ? String(p.pid) : "—"}</Text>
                   <View class="min-w-0 flex-1 gap-0.5">
                     <Text class="font-mono text-code line-clamp-2">{p.command ?? "Unknown process"}</Text>
-                    {p.start ? <Text class="font-mono text-code text-muted-foreground">{`start ${p.start}`}</Text> : null}
+                    <If when={p.start}>{(startValue) => <Text class="font-mono text-code text-muted-foreground">{`start ${startValue()}`}</Text>}</If>
                   </View>
                   <Text class="font-mono text-code">{formatBytes(p.rssBytes)}</Text>
                 </View>
               ))}
-            </View>
-          ) : (
-            <Text class="text-sub text-muted-foreground">Process details unavailable in this sample.</Text>
-          )}
-        </View>
-      ) : null}
+            </View></If>
+        </View></If>
       <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 60 }} />
     </View>
   );

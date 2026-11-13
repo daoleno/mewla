@@ -13,15 +13,12 @@ import { ProgressBar } from "../kit/ProgressBar";
 export function RowTile(props: { tile: () => TrayTile }) {
   return (
     <View class="size-[28px] items-center justify-center">
-      {props.tile().kind === "agent" ? (() => {
+      <If when={props.tile().kind === "agent"} else={<If when={props.tile().kind === "brain"} else={<If when={props.tile().kind === "device"} else={<Icon name="calendar" size={24} tone="soft" />}><Icon name="shield-check" size={24} tone="soft" /></If>}><Icon name="brain" size={26} tone="ink" /></If>}>{(() => {
         const tile = props.tile() as Extract<TrayTile, { kind: "agent" }>;
         // Grok and a plain terminal draw their own frame around the mark (AgentIcon), so their mark is smaller.
         const framed = tile.agent === "terminal" || tile.agent === "grok";
         return <AgentIcon kind={tile.agent} flavor={tile.flavor} size={framed ? 18 : 26} slot={28} />;
-      })()
-        : props.tile().kind === "brain" ? <Icon name="brain" size={26} tone="ink" />
-        : props.tile().kind === "device" ? <Icon name="shield-check" size={24} tone="soft" />
-        : <Icon name="calendar" size={24} tone="soft" />}
+      })()}</If>
     </View>
   );
 }
@@ -32,8 +29,8 @@ export function RowText(props: { row: () => TrayRow }) {
   return (
     <View class="min-w-0 flex-1">
       <Text testID="row-title" class={`text-body line-clamp-1 ${row().done ? "" : "font-semibold"}`}>{row().title}</Text>
-      {row().line ? <Text testID="row-line" class="text-sub text-muted-foreground line-clamp-1">{row().line}</Text> : null}
-      {row().progress !== undefined ? <ProgressBar filled={row().progress!} testID="tray-progress" /> : null}
+      <If when={row().line}><Text testID="row-line" class="text-sub text-muted-foreground line-clamp-1">{row().line}</Text></If>
+      <If when={row().progress !== undefined}><ProgressBar filled={row().progress!} testID="tray-progress" /></If>
     </View>
   );
 }
@@ -50,12 +47,9 @@ export function RowEnd(props: { row: () => TrayRow }) {
   const row = props.row;
   return (
     <View testID="row-end" class="flex-row items-center gap-2">
-      {row().needs ? <Dot tone="seal" testID="row-needs" />
-        : row().live ? <Dot tone="ink" testID="row-live" />
-        : row().unread ? <Dot tone="ink" testID="tray-unread" />
-        : null}
-      {row().end ? <Text class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{row().end}</Text> : null}
-      {row().done ? <Icon name="check" size={18} tone="faint" /> : null}
+      <If when={row().needs} else={<If when={row().live} else={<If when={row().unread}><Dot tone="ink" testID="tray-unread" /></If>}><Dot tone="ink" testID="row-live" /></If>}><Dot tone="seal" testID="row-needs" /></If>
+      <If when={row().end}><Text class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{row().end}</Text></If>
+      <If when={row().done}><Icon name="check" size={18} tone="faint" /></If>
     </View>
   );
 }

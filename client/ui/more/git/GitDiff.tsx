@@ -123,7 +123,7 @@ function FindBar(props: { find: Find; onDone: () => void }) {
           onChange={({ value }) => f.set(value)}
           onSubmit={() => f.step("next")}
         />
-        {f.label() ? <Text testID="git-find-count" android={{ accessibilityLiveRegion: "polite" }} class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{f.label()}</Text> : null}
+        <If when={f.label()}><Text testID="git-find-count" android={{ accessibilityLiveRegion: "polite" }} class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{f.label()}</Text></If>
       </View>
       <IconButton testID="git-find-previous" icon="chevron-up" label="Previous matching line" disabled={!f.matches().length} onPress={() => f.step("previous")} />
       <IconButton testID="git-find-next" icon="chevron-down" label="Next matching line" disabled={!f.matches().length} onPress={() => f.step("next")} />
@@ -188,7 +188,7 @@ function PatchReader(props: {
       onAccessibilityAction={(event) => props.onStep(event.actionName === "increment" ? "next" : "previous")}
     >
       {/* Two whole texts (collapsed context expands) have no file of their own: the app draws its header. */}
-      {d.headers() && props.sides() ? <View class="h-8"><FileHeader path={props.path} additions={props.counts?.additions ?? 0} deletions={props.counts?.deletions ?? 0} binary={props.counts?.binary} /></View> : null}
+      <If when={d.headers() && props.sides()}><View class="h-8"><FileHeader path={props.path} additions={props.counts?.additions ?? 0} deletions={props.counts?.deletions ?? 0} binary={props.counts?.binary} /></View></If>
       <DiffView
         testID="git-diff-view"
         ref={(ref) => {
@@ -241,16 +241,14 @@ function ReaderHeader(props: {
       <View class="min-w-0 flex-1 px-2">
         <View class="flex-row items-center gap-2">
           <Text testID="git-diff-name" class="min-w-0 shrink font-mono text-body font-semibold line-clamp-1">{parts().name}</Text>
-          {props.counts ? <Counts additions={props.counts.additions} deletions={props.counts.deletions} binary={props.counts.binary} /> : null}
+          <If when={props.counts}>{(counts) => <Counts additions={counts().additions} deletions={counts().deletions} binary={counts().binary} />}</If>
         </View>
-        {parts().directory ? <Text class="font-mono text-caption text-muted-foreground line-clamp-1">{parts().directory}</Text> : null}
+        <If when={parts().directory}><Text class="font-mono text-caption text-muted-foreground line-clamp-1">{parts().directory}</Text></If>
       </View>
-      {props.position && props.onNavigate ? (
-        <>
-          <IconButton testID="git-diff-previous" icon="arrow-up" label="Previous file" disabled={props.position.index <= 0} onPress={() => props.onNavigate!("previous")} />
-          <IconButton testID="git-diff-next" icon="arrow-down" label="Next file" disabled={props.position.index >= props.position.total - 1} onPress={() => props.onNavigate!("next")} />
-        </>
-      ) : null}
+      <If when={props.position && props.onNavigate}><>
+          <IconButton testID="git-diff-previous" icon="arrow-up" label="Previous file" disabled={props.position!.index <= 0} onPress={() => props.onNavigate!("previous")} />
+          <IconButton testID="git-diff-next" icon="arrow-down" label="Next file" disabled={props.position!.index >= props.position!.total - 1} onPress={() => props.onNavigate!("next")} />
+        </></If>
       <IconButton testID="git-diff-more" icon="more-vertical" label="More actions" onPress={props.onMenu} />
     </View>
   );
@@ -506,25 +504,19 @@ export function DiffReader(props: { review: GitReview; entry: string; nav: PageN
   return (
     <View class="flex-1 bg-background">
       <ReaderHeader path={entry()?.file.path ?? last?.path ?? ""} counts={entry() ? { additions: entry()!.additions, deletions: entry()!.deletions, binary: entry()!.file.binary } : null} position={position()} onNavigate={navigate} onMenu={menu} />
-      {display.optionsOpen() ? <DisplayOptions display={display} /> : null}
-      {display.findOpen() ? <FindBar find={find} onDone={() => { display.findOpen.set(false); find.clear(); }} /> : null}
+      <If when={display.optionsOpen()}><DisplayOptions display={display} /></If>
+      <If when={display.findOpen()}><FindBar find={find} onDone={() => { display.findOpen.set(false); find.clear(); }} /></If>
       <View class="px-4"><FlashLine /></View>
       <View class="flex-1">
-        {kind() === "ready" ? (
-          <View class="flex-1">
+        <If when={kind() === "ready"} else={<View class="flex-1 px-4"><ReaderState reader={reader()} working onRetry={() => { const e = entry(); if (e) void load(e, false); }} /></View>}><View class="flex-1">
             {(() => {
               const r = untracked(reader);
-              return r.kind === "ready" && r.sections.length > 1 ? (
-                <View class="px-4 py-2">
-                  <Segmented testID="git-diff-section" value={String(sectionIndex())} onChange={(next) => { sectionIndex.set(Number(next)); clearHunk(); find.clear(); }} options={r.sections.map((s, i) => ({ key: String(i), label: s.label ?? `Part ${i + 1}` }))} />
-                </View>
-              ) : null;
+              return <If when={r.kind === "ready" && r.sections.length > 1 ? r.sections : undefined}>{(sections) => <View class="px-4 py-2">
+                  <Segmented testID="git-diff-section" value={String(sectionIndex())} onChange={(next) => { sectionIndex.set(Number(next)); clearHunk(); find.clear(); }} options={sections().map((s, i) => ({ key: String(i), label: s.label ?? `Part ${i + 1}` }))} />
+                </View>}</If>;
             })()}
             <PatchReader section={section} sides={sides} path={entry()?.file.path ?? ""} counts={entry() ? { additions: entry()!.additions, deletions: entry()!.deletions } : null} display={display} onSelect={select} onStep={step} onRef={(ref) => (view = ref)} />
-          </View>
-        ) : (
-          <View class="flex-1 px-4"><ReaderState reader={reader()} working onRetry={() => { const e = entry(); if (e) void load(e, false); }} /></View>
-        )}
+          </View></If>
       </View>
       <ActionBar
         group={entry()?.group ?? null}
@@ -571,11 +563,9 @@ function AskForm(props: { context: () => ReturnType<typeof gitAskContext> | null
   return (
     <View testID="ask-sheet" class="gap-2 px-4">
       <View class="px-1"><Text testID="ask-where" class="font-mono text-caption text-muted-foreground line-clamp-1">{context?.where ?? ""}</Text></View>
-      {context?.quote.length ? (
-        <View class="rounded-(--radius-control) bg-sheet-surface px-3 py-2">
-          {context.quote.map((line) => <Text class="font-mono text-code line-clamp-1">{line}</Text>)}
-        </View>
-      ) : null}
+      <If when={context?.quote.length}><View class="rounded-(--radius-control) bg-sheet-surface px-3 py-2">
+          {context!.quote.map((line) => <Text class="font-mono text-code line-clamp-1">{line}</Text>)}
+        </View></If>
       <View class="-mx-4">
         <Field testID="ask-comment" accessibilityLabel="Comment for the agent" placeholder="What should change?" multiline autoFocus value={comment()} onChange={(value) => comment.set(value)} />
       </View>
@@ -611,23 +601,17 @@ function ActionBar(props: {
         const label = hunkMode ? `${props.index! + 1}/${props.count}` : props.fileLabel ?? (props.count ? `${props.count} ${props.count === 1 ? "hunk" : "hunks"}` : "");
         return (
           <>
-            {hunkMode ? <IconButton testID="git-hunk-clear" icon="close" label="Select the whole file" onPress={props.onClearHunk} /> : null}
-            {props.count > 0 ? (
-              <>
+            <If when={hunkMode}><IconButton testID="git-hunk-clear" icon="close" label="Select the whole file" onPress={props.onClearHunk} /></If>
+            <If when={props.count > 0} else={<If when={label}>{(label) => <View class="px-2"><Text class="text-sub text-muted-foreground">{label()}</Text></View>}</If>}><>
                 <IconButton testID="git-hunk-previous" icon="chevron-up" label="Previous hunk" onPress={() => props.onStep("previous")} />
                 <Text testID="git-hunk-label" android={{ accessibilityLiveRegion: "polite" }} class="min-w-[34px] text-center text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{label}</Text>
                 <IconButton testID="git-hunk-next" icon="chevron-down" label="Next hunk" onPress={() => props.onStep("next")} />
-              </>
-            ) : label ? (
-              <View class="px-2"><Text class="text-sub text-muted-foreground">{label}</Text></View>
-            ) : null}
+              </></If>
             <View class="flex-1" />
             {/* Small ghost buttons (SPEC §15 Code review): Ask {agent}, Discard (it confirms), Stage or Unstage. */}
-            {props.canAsk && props.group ? <TextButton testID="git-ask" label={props.askLabel ?? "Ask"} accessibilityLabel={`${props.askLabel ?? "Ask the agent"} about this ${unit}`} onPress={() => props.onAsk?.()} /> : null}
-            {props.group === "changes" ? <TextButton testID="git-discard" label="Discard" accessibilityLabel={`Discard ${unit}`} disabled={props.busy} onPress={props.onDiscard} /> : null}
-            {props.group ? (
-              <TextButton testID="git-stage-toggle" busy={props.busy} label={`${props.group === "staged" ? "Unstage" : "Stage"} ${unit}`} onPress={props.onStageToggle} />
-            ) : null}
+            <If when={props.canAsk && props.group}><TextButton testID="git-ask" label={props.askLabel ?? "Ask"} accessibilityLabel={`${props.askLabel ?? "Ask the agent"} about this ${unit}`} onPress={() => props.onAsk?.()} /></If>
+            <If when={props.group === "changes"}><TextButton testID="git-discard" label="Discard" accessibilityLabel={`Discard ${unit}`} disabled={props.busy} onPress={props.onDiscard} /></If>
+            <If when={props.group}>{(group) => <TextButton testID="git-stage-toggle" busy={props.busy} label={`${group() === "staged" ? "Unstage" : "Stage"} ${unit}`} onPress={props.onStageToggle} />}</If>
           </>
         );
       })()}
@@ -704,12 +688,11 @@ export function CommitFilePage(props: { review: GitReview; sha: string; path: st
               }}
               onMenu={menu}
             />
-            {display.optionsOpen() ? <DisplayOptions display={display} /> : null}
-            {display.findOpen() ? <FindBar find={find} onDone={() => { display.findOpen.set(false); find.clear(); }} /> : null}
+            <If when={display.optionsOpen()}><DisplayOptions display={display} /></If>
+            <If when={display.findOpen()}><FindBar find={find} onDone={() => { display.findOpen.set(false); find.clear(); }} /></If>
             <View class="px-4"><FlashLine /></View>
             <View class="flex-1">
-              {kind() === "ready" ? (
-                <PatchReader
+              <If when={kind() === "ready"} else={<View class="flex-1 px-4"><ReaderState reader={state()} working={false} onRetry={() => void review.loadCommit(props.sha)} /></View>}><PatchReader
                   section={section}
                   sides={() => null}
                   path={path()}
@@ -720,10 +703,7 @@ export function CommitFilePage(props: { review: GitReview; sha: string; path: st
                   }}
                   onStep={step}
                   onRef={(ref) => (view = ref)}
-                />
-              ) : (
-                <View class="flex-1 px-4"><ReaderState reader={state()} working={false} onRetry={() => void review.loadCommit(props.sha)} /></View>
-              )}
+                /></If>
             </View>
             <ActionBar group={null} count={parsed()?.hunks.length ?? 0} index={cursor()} fileLabel={null} busy={false} onStep={step} onClearHunk={() => { cursor.set(null); view?.setSelectedLines(null); }} onStageToggle={() => {}} onDiscard={() => {}} />
           </View>

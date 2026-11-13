@@ -62,10 +62,10 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
         <Button testID="dir-up" accessibilityLabel="Up a folder" onPress={() => void load(parentDirectoryPath(path()))} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="arrow-up" size={20} tone="ink" /></Button>
         <Text class="min-w-0 flex-1 font-mono text-code line-clamp-1">{path() || "Home"}</Text>
       </View>
-      {problem() ? <Text class="text-sub text-muted-foreground">{problem()}</Text> : null}
+      <If when={problem()}><Text class="text-sub text-muted-foreground">{problem()}</Text></If>
       <View class="flex-1 overflow-hidden rounded-(--radius-group) bg-sheet-surface">
-        {loading() && entries().length === 0 ? <View class="px-4 py-4"><Text class="text-sub text-muted-foreground">Loading…</Text></View> : null}
-        {!loading() && entries().length === 0 && !problem() ? <View class="px-4 py-4"><Text class="text-sub text-muted-foreground">No folders here</Text></View> : null}
+        <If when={loading() && entries().length === 0}><View class="px-4 py-4"><Text class="text-sub text-muted-foreground">Loading…</Text></View></If>
+        <If when={!loading() && entries().length === 0 && !problem()}><View class="px-4 py-4"><Text class="text-sub text-muted-foreground">No folders here</Text></View></If>
         <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
           {entries().map((entry) => (
             <Button testID="dir-entry" onPress={() => void load(entry.path)} class="min-h-[52px] flex-row items-center gap-3 px-4 active:bg-accent">
@@ -198,18 +198,19 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   return (
     <Sheet testID="new-session-sheet" open={newSessionOpen} onClose={() => newSessionOpen.set(false)}
       title={() => (picking() ? "Choose a folder" : newSessionTarget() ? "New terminal" : "New session")}>
-      {picking() ? (
-        <DirectoryPicker start={cwd()} onCancel={() => picking.set(false)} onPick={(path) => {
-          cwd.set(path);
-          extra.set({ path, name: projectName(path) || path });
-          picking.set(false);
-        }} />
-      ) : (
-        <View class="px-4 pb-2">
+      <If when={picking()} else={<View class="px-4 pb-2">
           {/* Agent and Folder scroll; Start stays in view under them. */}
           <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
-            {!advanced() ? (
-              <Section sheet title="Agent">
+            <If when={!advanced()} else={<Section sheet title="Command">
+                <Field testID="new-command" accessibilityLabel="Command" mono value={command()} placeholder="Login shell" onChange={(value) => command.set(value)} />
+                <View class="flex-row flex-wrap gap-2 px-4 pb-3">
+                  {LAUNCH_PRESETS.filter((p) => p.command).map((item) => (
+                    <Button onPress={() => command.set(item.command)} class="h-9 justify-center rounded-full bg-background px-3 active:opacity-70"><Text class="text-sub">{item.label}</Text></Button>
+                  ))}
+                </View>
+                <Field testID="new-name" label="Window title" value={name()} placeholder="Optional" onChange={(value) => name.set(value)} />
+                <Row testID="new-advanced" icon="chevron-left" title="Back to agents" onPress={() => advanced.set(false)} />
+              </Section>}><Section sheet title="Agent">
                 {/* SPEC §15 Picker grid: three across, the art and a 15/600 name; a tap chooses, the ink ring marks it. */}
                 <View class="flex-row flex-wrap px-2 py-2">
                   {LAUNCH_PRESETS.map((item) => (
@@ -223,19 +224,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
                   ))}
                 </View>
                 <Row testID="new-advanced" icon="terminal" title="Custom command" chevron onPress={() => advanced.set(true)} />
-              </Section>
-            ) : (
-              <Section sheet title="Command">
-                <Field testID="new-command" accessibilityLabel="Command" mono value={command()} placeholder="Login shell" onChange={(value) => command.set(value)} />
-                <View class="flex-row flex-wrap gap-2 px-4 pb-3">
-                  {LAUNCH_PRESETS.filter((p) => p.command).map((item) => (
-                    <Button onPress={() => command.set(item.command)} class="h-9 justify-center rounded-full bg-background px-3 active:opacity-70"><Text class="text-sub">{item.label}</Text></Button>
-                  ))}
-                </View>
-                <Field testID="new-name" label="Window title" value={name()} placeholder="Optional" onChange={(value) => name.set(value)} />
-                <Row testID="new-advanced" icon="chevron-left" title="Back to agents" onPress={() => advanced.set(false)} />
-              </Section>
-            )}
+              </Section></If>
             <Section sheet title="Folder" testID="new-cwd">
               {folders().map((folder) => (
                 <Button testID="new-folder" accessibilityLabel={`${folder.path || folder.name}${cwd() === folder.path ? ", chosen" : ""}`} onPress={() => cwd.set(folder.path)}
@@ -243,26 +232,27 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
                   <Icon name="folder" size={24} tone="soft" />
                   <View class="min-w-0 flex-1">
                     <Text class="text-body line-clamp-1">{folder.name}</Text>
-                    {folder.path ? <Text testID="new-folder-path" class="text-caption text-muted-foreground line-clamp-1">{folder.path}</Text> : null}
+                    <If when={folder.path}>{(pathValue) => <Text testID="new-folder-path" class="text-caption text-muted-foreground line-clamp-1">{pathValue()}</Text>}</If>
                   </View>
-                  {cwd() === folder.path ? <Icon name="check" size={20} tone="ink" /> : null}
+                  <If when={cwd() === folder.path}><Icon name="check" size={20} tone="ink" /></If>
                   <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 52 }} />
                 </Button>
               ))}
               <Row testID="new-pick-dir" icon="folder-open" title="Other folder…" chevron disabled={offline()} onPress={() => picking.set(true)} />
             </Section>
-            {takesTask() ? (
-              <Section sheet title="Task">
+            <If when={takesTask()}><Section sheet title="Task">
                 <Field testID="new-task" accessibilityLabel="What should it do?" multiline value={task()} placeholder="What should it do?" onChange={(value) => task.set(value)} />
-              </Section>
-            ) : null}
-            {problem() ? <View class="mt-3 px-4"><Text testID="new-problem" class="text-sub text-muted-foreground">{problem()}</Text></View> : null}
+              </Section></If>
+            <If when={problem()}><View class="mt-3 px-4"><Text testID="new-problem" class="text-sub text-muted-foreground">{problem()}</Text></View></If>
           </Scroll>
           <View class="mt-2">
             <PillButton testID="new-launch" title="Start" filled busy={busy()} disabled={offline() || (advanced() ? false : !preset())} onPress={start} />
           </View>
-        </View>
-      )}
+        </View>}><DirectoryPicker start={cwd()} onCancel={() => picking.set(false)} onPick={(path) => {
+          cwd.set(path);
+          extra.set({ path, name: projectName(path) || path });
+          picking.set(false);
+        }} /></If>
     </Sheet>
   );
 }

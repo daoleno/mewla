@@ -315,36 +315,24 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
             <StateView {...states.away(current()?.name, undefined, wait.retry)} />
           </View>
         </If>
-        {wait.dim() ? (
-          <View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
-            <Text testID="terminal-reconnecting" class="text-sm text-muted-foreground">Reconnecting…</Text>
-          </View>
-        ) : problem() || exited() !== undefined ? (
-          <View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
-            <Text testID="terminal-notice" class="text-sm">{exited() !== undefined ? `The program ended${exited() === null ? "" : ` (exit ${exited()})`}.` : problem()}</Text>
-          </View>
-        ) : (scrolledBack() || copyMode()) && historyNotice() && !searching() ? (
-          <Button testID="terminal-history-notice" disabled={historyNotice() !== HISTORY_FAILED} onPress={() => session.retryHistory()}
+        <If when={wait.dim()} else={<If when={problem() || exited() !== undefined} else={<If when={(scrolledBack() || copyMode()) && historyNotice() && !searching()}><Button testID="terminal-history-notice" disabled={historyNotice() !== HISTORY_FAILED} onPress={() => session.retryHistory()}
             class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
             <Text class="text-sm text-muted-foreground">{historyNotice()}</Text>
-          </Button>
-        ) : null}
-        {(scrolledBack() || copyMode()) && rendererFailure() === null ? (
-          <TerminalJumpControls onSearch={() => searching.set(true)} onPrompt={(direction) => nav.jumpPrompt(direction)}
+          </Button></If>}><View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
+            <Text testID="terminal-notice" class="text-sm">{exited() !== undefined ? `The program ended${exited() === null ? "" : ` (exit ${exited()})`}.` : problem()}</Text>
+          </View></If>}><View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
+            <Text testID="terminal-reconnecting" class="text-sm text-muted-foreground">Reconnecting…</Text>
+          </View></If>
+        <If when={(scrolledBack() || copyMode()) && rendererFailure() === null}><TerminalJumpControls onSearch={() => searching.set(true)} onPrompt={(direction) => nav.jumpPrompt(direction)}
             onBottom={() => {
               closeSearch();
               toBottom();
-            }} />
-        ) : null}
-        {searching() && rendererFailure() === null ? (
-          <TerminalSearchBar state={search} onQuery={(query) => nav.runSearch(query, 0)} onStep={(step) => nav.step(step)} onClose={closeSearch} />
-        ) : null}
-        {rendererFailure() !== null ? (
-          <TerminalRendererFailure message={rendererFailure()!} onRetry={() => command("retry", {})} />
-        ) : null}
+            }} /></If>
+        <If when={searching() && rendererFailure() === null}><TerminalSearchBar state={search} onQuery={(query) => nav.runSearch(query, 0)} onStep={(step) => nav.step(step)} onClose={closeSearch} /></If>
+        <If when={rendererFailure() !== null}><TerminalRendererFailure message={rendererFailure()!} onRetry={() => command("retry", {})} /></If>
       </View>
-      {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
-      {attachProblem() ? <Text testID="terminal-attach-problem" class="px-3 py-1 text-xs text-destructive">{attachProblem()}</Text> : null}
+      <If when={uploads.items().length > 0}><AttachmentTray uploads={uploads} /></If>
+      <If when={attachProblem()}><Text testID="terminal-attach-problem" class="px-3 py-1 text-xs text-destructive">{attachProblem()}</Text></If>
       <View
         style={{
           marginBottom: props.active() ? Math.max(0, keyboardFrame().height - belowSections()) : 0,
@@ -361,7 +349,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
           }} scrollEventThrottle={64}>
           <KeyTile testID="terminal-attach" label="Attach" icon="attach" disabled={uploads.picking()} onPress={attach} />
           {/* A physical keyboard has every key here (keyboard-only web): only Attach stays. */}
-          {keyboardOnlyWeb() ? null : (<>
+          <If when={!keyboardOnlyWeb()}><>
           <KeyTile testID="terminal-keyboard" label="Keyboard" icon="keyboard" onPress={() => {
             const show = keyboardFrame().height === 0;
             if (show) focusKeyboard();
@@ -377,7 +365,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
               onPressDown={() => { down.set(key.id); hold(key); }}
               onPressUp={() => { down.set(null); release(); }} />
           ))}
-          </>)}
+          </></If>
         </Scroll>
       </View>
     </View>
@@ -393,9 +381,7 @@ function KeyTile(props: { testID: string; label: string; icon?: IconName; text?:
   return (
     <Button testID={props.testID} accessibilityLabel={props.label} disabled={props.disabled} onPress={props.onPress} onPressDown={props.onPressDown} onPressUp={props.onPressUp}
       class={`h-[44px] min-w-[46px] items-center justify-center rounded-[12px] px-3 ${on() ? "bg-primary" : "bg-card"}`}>
-      {props.text
-        ? <Text class={`font-mono text-[13px] font-semibold ${on() ? "text-card" : "text-foreground"}`}>{props.label}</Text>
-        : <Icon name={props.icon!} size={20} color={on() ? "card" : "foreground"} />}
+      <If when={props.text} else={<Icon name={props.icon!} size={20} color={on() ? "card" : "foreground"} />}><Text class={`font-mono text-[13px] font-semibold ${on() ? "text-card" : "text-foreground"}`}>{props.label}</Text></If>
     </Button>
   );
 }

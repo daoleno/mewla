@@ -57,13 +57,9 @@ export function OutsideAgents() {
 
   return (
     <Page display title="Outside agents" testID="outside-agents">
-      {!daemon() ? (
-        <EmptyState title="No current server" />
-      ) : (
-        <View>
-          {error() ? <View class="mt-4 px-1"><Text testID="agents-error" role="alert" android={{ accessibilityLiveRegion: "polite" }} class="text-sm text-destructive">{error()}</Text></View> : null}
-          {agents()?.pending.length ? (
-            <Section title="Waiting">
+      <If when={!daemon()} else={<View>
+          <If when={error()}><View class="mt-4 px-1"><Text testID="agents-error" role="alert" android={{ accessibilityLiveRegion: "polite" }} class="text-sm text-destructive">{error()}</Text></View></If>
+          <If when={agents()?.pending.length}><Section title="Waiting">
               {agents()!.pending.map((a) => (
                 <View class="gap-2 px-4 py-3">
                   <Text class="text-base">{a.name}</Text>
@@ -74,10 +70,8 @@ export function OutsideAgents() {
                   </View>
                 </View>
               ))}
-            </Section>
-          ) : null}
-          {agents()?.agents.length ? (
-            <Section title="Approved">
+            </Section></If>
+          <If when={agents()?.agents.length}><Section title="Approved">
               {agents()!.agents.map((a) => (
                 <Row
                   testID={`agent-${a.id}`}
@@ -95,14 +89,10 @@ export function OutsideAgents() {
                   }
                 />
               ))}
-            </Section>
-          ) : null}
-          {agents() && !agents()!.pending.length && !agents()!.agents.length ? (
-            <EmptyState testID="agents-empty" icon="brain" title="No outside agents" detail="On the computer where Claude Code or Codex runs: mewla agents mcp connect" />
-          ) : null}
-          {!agents() && !error() ? <EmptyState busy /> : null}
-        </View>
-      )}
+            </Section></If>
+          <If when={agents() && !agents()!.pending.length && !agents()!.agents.length}><EmptyState testID="agents-empty" icon="brain" title="No outside agents" detail="On the computer where Claude Code or Codex runs: mewla agents mcp connect" /></If>
+          <If when={!agents() && !error()}><EmptyState busy /></If>
+        </View>}><EmptyState title="No current server" /></If>
     </Page>
   );
 }

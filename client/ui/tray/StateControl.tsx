@@ -10,10 +10,7 @@ import { refreshOpened, tray } from "./state";
  * connecting, kept beside "1 running").
  */
 export function StateDotMark(props: { dot: StateDot }) {
-  return <>{props.dot === "seal" ? <View testID="state-dot-seal" class="size-2 rounded-full bg-seal" />
-    : props.dot === "ink" ? <View testID="state-dot-ink" class="size-2 rounded-full bg-foreground" />
-    : props.dot === "ring" ? <View testID="state-dot-ring" class="size-2 rounded-full border-[1.5px] border-muted-foreground" />
-    : null}</>;
+  return <><If when={props.dot === "seal"} else={<If when={props.dot === "ink"} else={<If when={props.dot === "ring"}><View testID="state-dot-ring" class="size-2 rounded-full border-[1.5px] border-muted-foreground" /></If>}><View testID="state-dot-ink" class="size-2 rounded-full bg-foreground" /></If>}><View testID="state-dot-seal" class="size-2 rounded-full bg-seal" /></If></>;
 }
 
 /**
@@ -37,25 +34,19 @@ export function StateControl(props: {
   };
   // No computer, no state control. Read in the JSX (a component runs once); a computed so the pill is made once.
   const hidden = computed(() => state().kind === "none");
-  return <>{hidden() ? null : (
-    <View testID="state-control" role="button" accessible onPress={press} accessibilityLabel={state().words}
+  return <><If when={!hidden()}><View testID="state-control" role="button" accessible onPress={press} accessibilityLabel={state().words}
       accessibilityHint={state().kind === "pair" ? "Pairs this phone again" : trayOpen() ? "Closes the tray" : "Opens the tray"}
       accessibilityState={{ expanded: state().kind === "pair" ? undefined : trayOpen() }}
       class={props.capsule ? "min-h-[44px] min-w-[44px] shrink-0 justify-center rounded-full active:bg-accent" : "min-h-[44px] shrink justify-center active:opacity-70"}>
-      {props.capsule ? (
-        <View class="h-[44px] flex-row items-center justify-center pl-2 pr-2.5" style={{ gap: 7 }}>
-          <StateDotMark dot={state().dot} />
-          <Text testID="state-words" class={`text-[15px] font-semibold ${state().ink ? "text-foreground" : "text-muted-foreground"}`}>
-            {props.capsule.short() ? stateShortWords(state()) : state().words}
-          </Text>
-        </View>
-      ) : (
-        <View class="h-[36px] flex-row items-center gap-1.5 rounded-full bg-card pl-[13px] pr-[9px]">
+      <If when={props.capsule} else={<View class="h-[36px] flex-row items-center gap-1.5 rounded-full bg-card pl-[13px] pr-[9px]">
           <StateDotMark dot={state().dot} />
           <Text testID="state-words" class={`text-sub font-semibold line-clamp-1 ${state().ink ? "text-foreground" : "text-muted-foreground"}`}>{state().words}</Text>
-          {state().chevron ? <Icon name={trayOpen() ? "chevron-up" : "chevron-down"} size={16} tone="faint" /> : <View class="w-1" />}
-        </View>
-      )}
-    </View>
-  )}</>;
+          <If when={state().chevron} else={<View class="w-1" />}><Icon name={trayOpen() ? "chevron-up" : "chevron-down"} size={16} tone="faint" /></If>
+        </View>}>{(capsule) => <View class="h-[44px] flex-row items-center justify-center pl-2 pr-2.5" style={{ gap: 7 }}>
+          <StateDotMark dot={state().dot} />
+          <Text testID="state-words" class={`text-[15px] font-semibold ${state().ink ? "text-foreground" : "text-muted-foreground"}`}>
+            {capsule().short() ? stateShortWords(state()) : state().words}
+          </Text>
+        </View>}</If>
+    </View></If></>;
 }

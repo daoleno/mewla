@@ -423,12 +423,12 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 <View class="items-center gap-1.5">
                   <Text class="text-lg font-semibold">Ready</Text>
                   <Text class="text-sm text-muted-foreground">Send a message to start.</Text>
-                  {worker()?.cwd ? (
+                  <If when={worker()?.cwd}>
                     <View class="mt-1 flex-row items-center gap-1.5 rounded-full bg-accent px-2.5 py-1">
                       <Icon name="folder" size={13} />
                       <Text class="text-xs text-muted-foreground line-clamp-1">{compactPathLabel(worker()!.cwd!, { tailSegments: 2, showFullUpTo: 2 })}</Text>
                     </View>
-                  ) : null}
+                  </If>
                 </View>
               </View>
             )} />
@@ -537,10 +537,10 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const mark = () => (
     <View style={{ width: CAPSULE.mark, height: CAPSULE.mark }}>
       <AgentIcon kind={kind()} size={CAPSULE.mark} />
-      {needsYou() ? (
+      <If when={needsYou()}>
         <View testID="capsule-needs-you" accessibilityLabel="Needs you" class="absolute rounded-full border-sheet-surface bg-seal"
           style={{ width: CAPSULE.dot.size, height: CAPSULE.dot.size, borderWidth: CAPSULE.dot.ring, right: CAPSULE.dot.right, bottom: CAPSULE.dot.bottom }} />
-      ) : null}
+      </If>
     </View>
   );
   const nameStyle = () => {
@@ -559,20 +559,21 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       </Button>
     </View>
   );
-  const viewButton = () =>
-    props.brain || canChat() ? (
+  const viewButton = () => (
+    <If when={props.brain || canChat()}>
       <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
         class="size-11 items-center justify-center rounded-full active:bg-accent">
         <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
       </Button>
-    ) : null;
+    </If>
+  );
   // Collapsed, the name is a tap that expands; on the terminal, expanded, it folds the capsule again.
   const pressName = () => {
     if (untracked(capsule.collapsed)) capsule.expand();
     else if (untracked(mode) === "terminal") capsule.collapse();
   };
   const capsuleHeader = () => (
-    <Capsule collapsed={capsule.collapsed} twoLines={() => capsuleNameIsLong(title())} below={durability() ? <DurabilityWarning /> : undefined}>
+    <Capsule collapsed={capsule.collapsed} twoLines={() => capsuleNameIsLong(title())} below={<If when={durability()}><DurabilityWarning /></If>}>
       <CapsuleBack />
       {/* The name gets the room; a long one takes two balanced lines ending in "…" before the controls. Collapsed,
           one line of 15, ending in "…" at min(200, 52 % of the width). */}
@@ -585,12 +586,10 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
             style={{ fontSize: nameStyle().size, lineHeight: nameStyle().line }}>{title()}</Text>
         </View>
       </Button>
-      {capsule.collapsed() ? null : (
-        <>
-          {viewButton()}
-          {hasMenu() ? <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="more-horizontal" size={22} color="foreground" /></Button> : null}
-        </>
-      )}
+      <If when={!capsule.collapsed()}>
+        {viewButton()}
+        <If when={hasMenu()}><Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="more-horizontal" size={22} color="foreground" /></Button></If>
+      </If>
     </Capsule>
   );
   // Made once, here: a call in the page's props would be one of the getters NSH re-reads.
@@ -607,28 +606,22 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
           <AgentIcon kind={kind()} size={28} />
           <View class="ml-2.5 min-w-0 flex-1">
             <Text role="header" class="text-body font-semibold text-foreground line-clamp-1">{title()}</Text>
-            {props.brain ? (
-              <Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text>
-            ) : worker() ? (
-              <View testID="session-status" class="min-w-0 flex-row">
-                {projectWord() ? <Text testID="session-project" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{projectWord()}</Text> : null}
+            <If when={props.brain} else={<If when={worker()}><View testID="session-status" class="min-w-0 flex-row">
+                <If when={projectWord()}><Text testID="session-project" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{projectWord()}</Text></If>
                 <Text testID="session-state" class="shrink-0 text-sub text-muted-foreground line-clamp-1">{`${projectWord() ? " · " : ""}${connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)}`}</Text>
-              </View>
-            ) : null}
+              </View></If>}><Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text></If>
           </View>
           {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a chat.
               Brain's chat is home's, so on Brain's terminal the button goes back there. */}
-          {props.brain || canChat() ? (
-            <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
+          <If when={props.brain || canChat()}><Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
               class="ml-1.5 size-10 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
               <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
-            </Button>
-          ) : null}
-          {hasMenu() ? <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button> : null}
+            </Button></If>
+          <If when={hasMenu()}><Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button></If>
         </View>
       }>
       <View class="flex-1 bg-background">
-        {!capsuled && durability() ? <View class="mx-3 mt-2"><DurabilityWarning /></View> : null}
+        <If when={!capsuled && durability()}><View class="mx-3 mt-2"><DurabilityWarning /></View></If>
         <View class="flex-1">
           {/* Under a capsule the terminal starts below the collapsed one: an expanded capsule floats over its top
               rows and never resizes it, and the next touch in the terminal folds it again (seen, not taken). */}
@@ -637,27 +630,20 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)}
               program={() => (props.brain ? brain()?.host_worker?.provider || brain()?.host_executor?.provider : undefined) || (kind() === "terminal" ? undefined : kind())} />
             <View class="absolute left-3 right-3 top-3 gap-2" style={{ pointerEvents: "box-none" }}>
-            {fallback() ? (
-              <View testID="terminal-offline" class="gap-1.5 rounded-xl border border-border bg-card px-3 py-3">
+            <If when={fallback()}><View testID="terminal-offline" class="gap-1.5 rounded-xl border border-border bg-card px-3 py-3">
                 <Text class="text-base font-semibold">{fallback()!.title}</Text>
                 <Text class="text-sm text-muted-foreground">{fallback()!.detail}</Text>
                 <Text class="text-xs text-muted-foreground">{fallback()!.hint}</Text>
-                {fallback()!.busy ? null : (
-                  <Button testID="terminal-offline-retry" onPress={() => resumeConnection()} class="mt-1 self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
+                <If when={!fallback()!.busy}><Button testID="terminal-offline-retry" onPress={() => resumeConnection()} class="mt-1 self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
                     <Text class="text-sm font-semibold">Retry</Text>
-                  </Button>
-                )}
-              </View>
-            ) : null}
+                  </Button></If>
+              </View></If>
             {/* The chat shows its notes above the composer; the terminal shows them here (parity #37). */}
-            {notice() && mode() === "terminal" ? (
-              <View testID="terminal-notice" onPress={() => notice.set("")}
-                class="rounded-xl border border-border bg-card px-3 py-2.5"><Text class="text-sm text-foreground">{notice()}</Text></View>
-            ) : null}
+            <If when={notice() && mode() === "terminal"}><View testID="terminal-notice" onPress={() => notice.set("")}
+                class="rounded-xl border border-border bg-card px-3 py-2.5"><Text class="text-sm text-foreground">{notice()}</Text></View></If>
             </View>
           </View>
-          {mode() === "chat" ? (
-            <View class="absolute inset-0 bg-background">
+          <If when={mode() === "chat"}><View class="absolute inset-0 bg-background">
               <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
                 capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
                 foot={{
@@ -678,20 +664,17 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
                 <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand}
                   onAttach={attach} uploading={uploading} />
-                {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
-                {modelChip() ? (
-                  <Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
+                <If when={uploads.items().length > 0}><AttachmentTray uploads={uploads} /></If>
+                <If when={modelChip()}><Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
                     class="mb-2 flex-row items-center gap-1 self-start rounded-full border border-border px-2.5 py-1 active:bg-accent">
                     <Text class="text-xs">{modelChip()!.label}</Text>
                     <Icon name="chevron-down" size={14} />
-                  </Button>
-                ) : null}
-                {editor.edit() ? <EditChip editor={editor} /> : null}
-                {dshRun() ? <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(dshRun().split("|")[0]), startedAt: Number(dshRun().split("|")[1]) }} /> : null}
-                {notice() ? <Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text> : null}
+                  </Button></If>
+                <If when={editor.edit()}><EditChip editor={editor} /></If>
+                <If when={dshRun()}><DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(dshRun().split("|")[0]), startedAt: Number(dshRun().split("|")[1]) }} /></If>
+                <If when={notice()}><Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text></If>
               </Composer>
-            </View>
-          ) : null}
+            </View></If>
         </View>
       </View>
       <ModelSheet open={modelOpen} onClose={() => modelOpen.set(false)} transport={transport} workerId={props.workerId} onRuntime={(selection) => runtime.set(selection)} />

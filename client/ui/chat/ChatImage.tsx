@@ -65,19 +65,13 @@ export function ChatImage(props: { src: string; alt?: string; load?: PictureLoad
     // A sent or tool picture is a radius-16 thumbnail on the canvas (FIDELITY-AUDIT item 18): no fill behind
     // it and no padding round it; only a picture still loading or failed shows a quiet tint in its frame.
     <View testID="chat-image" class={`overflow-hidden ${props.frame ? "rounded-[16px]" : "my-1 rounded-xl"}`} style={box()}>
-      {picture.failed() ? (
-        <Button testID="chat-image-retry" accessibilityLabel={`Load ${label()} again`} onPress={picture.retry} class="h-full w-full items-center justify-center bg-accent p-0 active:opacity-70">
-          <Icon name="refresh" size={22} />
-        </Button>
-      ) : picture.url() ? (
-        <Button testID="chat-image-open" accessibilityLabel={label()} disabled={!props.onOpen} onPress={() => props.onOpen?.()} class="h-full w-full p-0 active:opacity-80">
+      <If when={picture.failed()} else={<If when={picture.url()} else={<View testID="chat-image-loading" class="h-full w-full bg-accent" />}><Button testID="chat-image-open" accessibilityLabel={label()} disabled={!props.onOpen} onPress={() => props.onOpen?.()} class="h-full w-full p-0 active:opacity-80">
           <Image src={picture.url()!} accessibilityLabel={label()} onError={picture.fail}
             onLoad={({ size }) => tall.set(size.height > size.width)}
             style={{ width: "100%", height: "100%", objectFit: props.frame ? "cover" : "contain" }} />
-        </Button>
-      ) : (
-        <View testID="chat-image-loading" class="h-full w-full bg-accent" />
-      )}
+        </Button></If>}><Button testID="chat-image-retry" accessibilityLabel={`Load ${label()} again`} onPress={picture.retry} class="h-full w-full items-center justify-center bg-accent p-0 active:opacity-70">
+          <Icon name="refresh" size={22} />
+        </Button></If>
     </View>
   );
 }

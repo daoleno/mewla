@@ -216,12 +216,10 @@ export function ScreenFloat(props: ScreenFloatProps) {
         <Button testID="screen-float-title" accessibilityLabel={cycles() ? `${props.title()}, ${props.index() + 1} of ${props.count()}, show the next` : props.title()} onPress={tapTitle} class="h-full flex-1 justify-center">
           <Text class="text-xs line-clamp-1" style={{ color: "#fff" }}>{cycles() ? `${props.title()}  ${props.index() + 1}/${props.count()}` : props.title()}</Text>
         </Button>
-        {props.keyboard?.() ? (
-          <Button testID="screen-float-keyboard" accessibilityLabel={props.keyboard!()!.open ? "Hide keyboard" : "Show keyboard"} onPress={() => props.keyboard?.()?.toggle()}
+        <If when={props.keyboard?.()}><Button testID="screen-float-keyboard" accessibilityLabel={props.keyboard!()!.open ? "Hide keyboard" : "Show keyboard"} onPress={() => props.keyboard?.()?.toggle()}
             class="size-7 items-center justify-center rounded-md" style={{ backgroundColor: props.keyboard!()!.open ? "rgba(255,255,255,0.22)" : "transparent" }}>
             <Icon name="keyboard" size={15} tone="canvas" />
-          </Button>
-        ) : null}
+          </Button></If>
         <Button testID="screen-float-options" accessibilityLabel={`Options for ${props.title()}`} onPress={() => void openMenu()} class="size-7 items-center justify-center">
           <Icon name="more-horizontal" size={15} tone="canvas" />
         </Button>
@@ -231,7 +229,7 @@ export function ScreenFloat(props: ScreenFloatProps) {
       </View>
       <View class="bg-popover" style={{ width: picture().width, height: picture().height + extra() }}>{props.children(picture)}</View>
       <View class="absolute inset-0 rounded-[10px] border border-border" style={{ pointerEvents: "none" }} />
-      {props.attention?.() ? <AttentionRing /> : null}
+      <If when={props.attention?.()}><AttentionRing /></If>
       <View {...handle.panHandlers} testID="screen-float-resize" accessibilityLabel="Resize" class="absolute p-2"
         style={{ width: HANDLE, height: HANDLE, ...(handleLeft() ? { left: 0 } : { right: 0 }), ...(handleTop() ? { top: BAR } : { bottom: 0 }) }}>
         <View class={handleTop() ? "border-white/90" : "border-muted-foreground"} style={{

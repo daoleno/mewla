@@ -213,15 +213,11 @@ export function Composer(props: {
             typed = value;
             props.text.set(value);
           }} />
-        {stops() ? (
-          <SendButton testID="stop" label={props.stopping() ? "Stopping…" : "Stop"} onPress={props.onStop} disabled={props.stopping() || !props.canStop()} ready={false}>
-            <View class="size-3 rounded-[3.5px] bg-foreground" />
-          </SendButton>
-        ) : (
-          <SendButton testID="send" label="Send" onPress={send} disabled={disabled() || !props.canSend() || empty()} ready={!disabled() && props.canSend() && !empty()}>
+        <If when={stops()} else={<SendButton testID="send" label="Send" onPress={send} disabled={disabled() || !props.canSend() || empty()} ready={!disabled() && props.canSend() && !empty()}>
             <Icon name="arrow-up" size={20} color={!disabled() && props.canSend() && !empty() ? "card" : "faint"} />
-          </SendButton>
-        )}
+          </SendButton>}><SendButton testID="stop" label={props.stopping() ? "Stopping…" : "Stop"} onPress={props.onStop} disabled={props.stopping() || !props.canStop()} ready={false}>
+            <View class="size-3 rounded-[3.5px] bg-foreground" />
+          </SendButton></If>
       </View>
     </View>
   );

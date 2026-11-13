@@ -192,34 +192,28 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
                   <Segmented testID="git-tab" value={tab()} onChange={(next) => tab.set(next)} options={[{ key: "changes", label: "Changes" }, { key: "history", label: "History" }]} />
                 </View>
                 <Strip review={review} tab={tab()} onBranches={() => branchesOpen.set(true)} />
-                {review.searchOpen() && tab() === "changes" ? (
-                  <View class="mt-3">
+                <If when={review.searchOpen() && tab() === "changes"}><View class="mt-3">
                     <SearchField testID="git-query" accessibilityLabel="Filter files" placeholder="Filter files" autoFocus value={review.query()} onChange={(value) => review.query.set(value)} />
-                  </View>
-                ) : null}
-                <View>{tab() === "changes" ? <ChangesBody review={review} nav={props.nav} selected={wide() ? shown() : null} onOpen={open} /> : <HistoryBody review={review} nav={props.nav} />}</View>
+                  </View></If>
+                <View><If when={tab() === "changes"} else={<HistoryBody review={review} nav={props.nav} />}><ChangesBody review={review} nav={props.nav} selected={wide() ? shown() : null} onOpen={open} /></If></View>
               </View>
             </Scroll>
-            {tab() === "changes" ? <CommitBar review={review} onCommit={() => commitOpen.set(true)} /> : null}
+            <If when={tab() === "changes"}><CommitBar review={review} onCommit={() => commitOpen.set(true)} /></If>
           </View>
-          {wide() ? (
-            <View testID="git-reader" class="flex-1 bg-background">
-              {chosen() ? (
-                <DiffReader
+          <If when={wide()}><View testID="git-reader" class="flex-1 bg-background">
+              <If when={chosen()} else={<View class="flex-1 px-4"><EmptyState testID="git-no-file" icon="document" title="No file selected" /></View>}>
+                {/* Made again for each file opened from the list (a new choice); the reader's own steps keep it. */}
+                <Each of={[chosen()!]} key={(choice) => choice}>{(choice) => <DiffReader
                   review={review}
-                  entry={untracked(chosen)!.key}
+                  entry={untracked(choice).key}
                   nav={props.nav}
                   onShow={(key) => shown.set(key)}
                   onEmpty={() => {
                     chosen.set(null);
                     shown.set(null);
                   }}
-                />
-              ) : (
-                <View class="flex-1 px-4"><EmptyState testID="git-no-file" icon="document" title="No file selected" /></View>
-              )}
-            </View>
-          ) : null}
+                />}</Each></If>
+            </View></If>
           <CommitSheet review={review} open={commitOpen()} count={review.groups().staged.length} canPush={!!snapshot()?.available && !snapshot()?.detached} onClose={() => commitOpen.set(false)} />
           <BranchSheet review={review} open={branchesOpen()} onClose={() => branchesOpen.set(false)} />
         </View>
@@ -240,11 +234,7 @@ function CommitBar(props: { review: GitReview; onCommit: () => void }) {
         if (!groups.staged.length && !groups.changes.length) return null;
         return (
           <View testID="git-commit-bar" class="bg-background px-4 pb-4 pt-1">
-            {groups.staged.length ? (
-              <PillButton testID="git-commit-open" filled title={`Commit ${groups.staged.length} ${groups.staged.length === 1 ? "file" : "files"}`} onPress={props.onCommit} />
-            ) : (
-              <PillButton testID="git-stage-all" title={`Stage all ${groups.changes.length}`} busy={review.isBusy("bulk:changes")} onPress={() => void review.bulk("changes")} />
-            )}
+            <If when={groups.staged.length} else={<PillButton testID="git-stage-all" title={`Stage all ${groups.changes.length}`} busy={review.isBusy("bulk:changes")} onPress={() => void review.bulk("changes")} />}>{(length) => <PillButton testID="git-commit-open" filled title={`Commit ${length()} ${length() === 1 ? "file" : "files"}`} onPress={props.onCommit} />}</If>
           </View>
         );
       })()}
@@ -264,8 +254,7 @@ function Strip(props: { review: GitReview; tab: Tab; onBranches: () => void }) {
   const snapshot = () => props.review.status();
   return (
     <View>
-      {snapshot()?.available ? (
-        <View class="mt-3 flex-row flex-wrap items-center gap-2">
+      <If when={snapshot()?.available}><View class="mt-3 flex-row flex-wrap items-center gap-2">
           {(() => {
             const s = snapshot()!;
             const label = s.detached ? `Detached ${s.branch ?? ""}`.trim() : s.branch || "No branch";
@@ -278,14 +267,13 @@ function Strip(props: { review: GitReview; tab: Tab; onBranches: () => void }) {
           })()}
           {(() => {
             const sync = gitSyncAction(snapshot());
-            return sync ? <TextButton testID="git-sync" label={syncLabel(sync, snapshot())} busy={props.review.isBusy("sync")} onPress={() => void props.review.sync(sync.kind)} /> : null;
+            return <If when={sync}>{(sync) => <TextButton testID="git-sync" label={syncLabel(sync(), snapshot())} busy={props.review.isBusy("sync")} onPress={() => void props.review.sync(sync().kind)} />}</If>;
           })()}
           <Text testID="git-summary" android={{ accessibilityLiveRegion: "polite" }} class="ml-auto font-mono text-code text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>
             {props.tab === "changes" ? gitReviewSummary(snapshot()) : gitReviewSync(snapshot())}
           </Text>
-        </View>
-      ) : null}
-      {snapshot()?.operation ? <View class="mt-2 px-1"><Text class="text-sub">{`${snapshot()!.operation} in progress`}</Text></View> : null}
+        </View></If>
+      <If when={snapshot()?.operation}><View class="mt-2 px-1"><Text class="text-sub">{`${snapshot()!.operation} in progress`}</Text></View></If>
     </View>
   );
 }
@@ -322,8 +310,8 @@ function ChangesBody(props: { review: GitReview; nav: PageNav; selected: string 
         if (query.trim() && !visible("staged").length && !visible("changes").length) return <EmptyState title="No matching files" />;
         return (
           <View>
-            {review.error() ? <Notice tone="failed" title="Couldn't refresh Git status" detail={review.error()} action="Retry" onAction={() => void review.refresh()} /> : null}
-            {groups.staged.length ? <Group review={review} nav={props.nav} group="staged" rows={visible("staged")} entries={groups.staged} selected={props.selected} onOpen={props.onOpen} /> : null}
+            <If when={review.error()}><Notice tone="failed" title="Couldn't refresh Git status" detail={review.error()} action="Retry" onAction={() => void review.refresh()} /></If>
+            <If when={groups.staged.length}><Group review={review} nav={props.nav} group="staged" rows={visible("staged")} entries={groups.staged} selected={props.selected} onOpen={props.onOpen} /></If>
             <Group review={review} nav={props.nav} group="changes" rows={visible("changes")} entries={groups.changes} selected={props.selected} onOpen={props.onOpen} />
           </View>
         );
@@ -354,19 +342,15 @@ function Group(props: { review: GitReview; nav: PageNav; group: GitReviewGroup; 
         trailing={
           <View class="flex-row items-center gap-2">
             <Counts additions={totals.additions} deletions={totals.deletions} />
-            {count ? (
-              props.review.isBusy(`bulk:${props.group}`) ? <Spinner size={16} /> : <RowButton testID={`git-bulk-${props.group}`} label={staged ? "Unstage all" : "Stage all"} onPress={() => void props.review.bulk(props.group)} />
-            ) : null}
+            <If when={count}><If when={props.review.isBusy(`bulk:${props.group}`)} else={<RowButton testID={`git-bulk-${props.group}`} label={staged ? "Unstage all" : "Stage all"} onPress={() => void props.review.bulk(props.group)} />}><Spinner size={16} /></If></If>
           </View>
         }
       />
-      {collapsed() ? null : (
-        <View class="overflow-hidden rounded-(--radius-group) bg-card">
+      <If when={!collapsed()}><View class="overflow-hidden rounded-(--radius-group) bg-card">
           <View class="-mb-px">
-            {props.rows.length ? props.rows.map((row) => <ReviewRow review={props.review} nav={props.nav} row={row} selected={props.selected} onOpen={props.onOpen} />) : <Row title="No changes" />}
+            <If when={props.rows.length} else={<Row title="No changes" />}>{props.rows.map((row) => <ReviewRow review={props.review} nav={props.nav} row={row} selected={props.selected} onOpen={props.onOpen} />)}</If>
           </View>
-        </View>
-      )}
+        </View></If>
     </View>
   );
 }
@@ -412,10 +396,10 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
     >
       <StatusTile file={entry.file} />
       <View class="min-w-0 flex-1">
-        {props.review.tree() ? <Text class="font-mono text-code font-semibold line-clamp-1">{name}</Text> : <FileName path={entry.file.path} />}
-        {entry.file.old_path ? <Text class="font-mono text-caption text-muted-foreground line-clamp-1">{`from ${entry.file.old_path}`}</Text> : null}
+        <If when={props.review.tree()} else={<FileName path={entry.file.path} />}><Text class="font-mono text-code font-semibold line-clamp-1">{name}</Text></If>
+        <If when={entry.file.old_path}>{(old_path) => <Text class="font-mono text-caption text-muted-foreground line-clamp-1">{`from ${old_path()}`}</Text>}</If>
       </View>
-      {entry.file.binary ? <Text class="font-mono text-code text-muted-foreground">bin</Text> : <Counts additions={entry.additions} deletions={entry.deletions} />}
+      <If when={entry.file.binary} else={<Counts additions={entry.additions} deletions={entry.deletions} />}><Text class="font-mono text-code text-muted-foreground">bin</Text></If>
       <IconButton
         testID={`git-toggle-${entry.key}`}
         icon={staged ? "remove-circle" : "add-circle"}
@@ -435,7 +419,7 @@ function HistoryBody(props: { review: GitReview; nav: PageNav }) {
       {(() => {
         const history = review.history();
         if (!history.commits.length && history.error) return <EmptyState icon="alert" title="Couldn't load history" detail={history.error} action="Retry" onAction={() => void review.loadHistory(0)} />;
-        if (!history.commits.length) return history.loading || !history.loaded ? <EmptyState busy title="Loading history" /> : <EmptyState title="No commits yet" />;
+        if (!history.commits.length) return <If when={history.loading || !history.loaded} else={<EmptyState title="No commits yet" />}><EmptyState busy title="Loading history" /></If>;
         // A grouped list (SPEC §15): the commits by day, each day's label with its count.
         return (
           <View>
@@ -444,12 +428,10 @@ function HistoryBody(props: { review: GitReview; nav: PageNav }) {
                 {day.commits.map((commit) => <CommitRow review={review} nav={props.nav} commit={commit} />)}
               </Section>
             ))}
-            {history.moreError || history.hasMore ? (
-              <Section>
-                {history.moreError ? <Row title="Couldn't load more" subtitle={history.moreError} /> : null}
-                {history.hasMore ? <Row testID="git-history-more" title={history.loading ? "Loading history" : "Load more"} disabled={history.loading} onPress={() => void review.loadHistory(history.commits.length)} /> : null}
-              </Section>
-            ) : null}
+            <If when={history.moreError || history.hasMore}><Section>
+                <If when={history.moreError}>{(moreError) => <Row title="Couldn't load more" subtitle={moreError()} />}</If>
+                <If when={history.hasMore}><Row testID="git-history-more" title={history.loading ? "Loading history" : "Load more"} disabled={history.loading} onPress={() => void review.loadHistory(history.commits.length)} /></If>
+              </Section></If>
           </View>
         );
       })()}
@@ -466,7 +448,7 @@ function CommitRow(props: { review: GitReview; nav: PageNav; commit: GitCommitSu
       title={c.subject || "(no message)"}
       subtitle={[c.short, c.author, formatGitAge(c.date)].join(" · ")}
       accessibilityLabel={`${c.subject || "(no message)"}, ${c.author}, ${spokenGitAge(c.date)}`}
-      trailing={refs ? <Tag label={refs} /> : undefined}
+      trailing={<If when={refs}>{(refs) => <Tag label={refs()} />}</If>}
       chevron
       onPress={() => props.nav.push({ name: "git-commit", ...target(props.review), sha: c.sha })}
     />
@@ -491,8 +473,8 @@ function CommitPage(props: { review: GitReview; sha: string; nav: PageNav }) {
               <View>
                 <DisplayTitle eyebrow={[detail.short, detail.author, formatGitAge(detail.date)].join(" · ")} title={detail.subject || "(no message)"} />
                 <View class="gap-1 px-1">
-                  {detail.body.trim() ? <Text class="text-body text-muted-foreground line-clamp-6">{detail.body.trim()}</Text> : null}
-                  {detail.truncated ? <Text class="text-sub">Large commit: the last files are not shown.</Text> : null}
+                  <If when={detail.body.trim()}><Text class="text-body text-muted-foreground line-clamp-6">{detail.body.trim()}</Text></If>
+                  <If when={detail.truncated}><Text class="text-sub">Large commit: the last files are not shown.</Text></If>
                 </View>
                 <Section title={`${detail.files.length} ${detail.files.length === 1 ? "file" : "files"}`}>
                   {detail.files.map((file) => (
@@ -505,7 +487,7 @@ function CommitPage(props: { review: GitReview; sha: string; nav: PageNav }) {
                     >
                       <StatusTile file={file} />
                       <View class="min-w-0 flex-1"><FileName path={file.path} /></View>
-                      {file.binary ? <Text class="font-mono text-code text-muted-foreground">bin</Text> : <Counts additions={file.additions} deletions={file.deletions} />}
+                      <If when={file.binary} else={<Counts additions={file.additions} deletions={file.deletions} />}><Text class="font-mono text-code text-muted-foreground">bin</Text></If>
                       <Icon name="chevron-right" size={16} tone="faint" />
                       <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 56 }} />
                     </View>

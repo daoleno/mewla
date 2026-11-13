@@ -118,17 +118,13 @@ function Month() {
 function Heading() {
   return (
     <View class="px-4 pb-1 pt-4">
-      {pickedDay() ? (
-        <View class="flex-row items-center justify-between">
-          <Text class="text-lg font-semibold">{clock().format.longDay(Date.parse(`${pickedDay()}T12:00:00Z`), "UTC")}</Text>
-          <Button testID="back-to-today" accessibilityLabel="Return to today" onPress={() => pickedDay.set(null)} class="px-2 py-1"><Text class="text-base text-primary">Today</Text></Button>
-        </View>
-      ) : (
-        <View accessibilityLabel={`Today, ${clock().format.longDay(clock().now, clock().zones.device)}, ${clock().format.time(clock().now, clock().zones.device, true)}`} class="gap-1">
+      <If when={pickedDay()} else={<View accessibilityLabel={`Today, ${clock().format.longDay(clock().now, clock().zones.device)}, ${clock().format.time(clock().now, clock().zones.device, true)}`} class="gap-1">
           <Text class="text-2xl font-semibold">Today</Text>
           <Text class="text-sm text-muted-foreground">{`${clock().format.longDay(clock().now, clock().zones.device)} · ${clock().format.time(clock().now, clock().zones.device, true)}`}</Text>
-        </View>
-      )}
+        </View>}><View class="flex-row items-center justify-between">
+          <Text class="text-lg font-semibold">{clock().format.longDay(Date.parse(`${pickedDay()}T12:00:00Z`), "UTC")}</Text>
+          <Button testID="back-to-today" accessibilityLabel="Return to today" onPress={() => pickedDay.set(null)} class="px-2 py-1"><Text class="text-base text-primary">Today</Text></Button>
+        </View></If>
     </View>
   );
 }
@@ -137,7 +133,7 @@ function Empty() {
   return (
     <View testID="calendar-empty" class="items-center gap-2 px-6 py-16">
       <Text class="text-lg font-semibold">{!calendarLoaded() ? (connection() === "connected" ? "Loading calendar…" : "Calendar offline") : pickedDay() ? "Nothing planned for this date" : "Nothing planned"}</Text>
-      {!calendarLoaded() && connection() !== "connected" ? <Text class="text-center text-base text-muted-foreground">It shows when your computer is back.</Text> : null}
+      <If when={!calendarLoaded() && connection() !== "connected"}><Text class="text-center text-base text-muted-foreground">It shows when your computer is back.</Text></If>
     </View>
   );
 }
@@ -171,7 +167,7 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
       <View class="flex-1 bg-background">
         <List keyboardShouldPersistTaps="handled" testID="agenda" class="flex-1" each={rows()}
           keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
-          header={() => <View><ReminderBanner />{showMonth() ? <Month /> : null}<Heading /></View>}
+          header={() => <View><ReminderBanner /><If when={showMonth()}><Month /></If><Heading /></View>}
           empty={() => <Empty />}>
           {(row) => {
             // Cells are recycled: what a cell shows follows the row it holds now. The clock makes new rows every
@@ -183,9 +179,7 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
             const title = computed<string>((last) => (row().kind === "section" ? (row() as { title: string }).title : last ?? ""));
             return (
               <View>
-                {section()
-                  ? <View class="bg-background px-4 pb-1.5 pt-4"><Text class="text-sm font-semibold text-muted-foreground">{title()}</Text></View>
-                  : <ItemRow item={item} onPress={() => open(item())} />}
+                <If when={section()} else={<ItemRow item={item} onPress={() => open(item())} />}><View class="bg-background px-4 pb-1.5 pt-4"><Text class="text-sm font-semibold text-muted-foreground">{title()}</Text></View></If>
               </View>
             );
           }}

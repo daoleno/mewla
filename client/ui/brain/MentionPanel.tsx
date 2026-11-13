@@ -28,8 +28,7 @@ export function MentionPanel(props: {
   const choices = () => (mention() ? executorMentionChoices(props.executors(), mention()!.query) : []);
   return (
     <View>
-      {choices().length ? (
-        <View testID="brain-mention-panel" class="overflow-hidden rounded-(--radius-group) bg-sheet-surface shadow-lg">
+      <If when={choices().length}><View testID="brain-mention-panel" class="overflow-hidden rounded-(--radius-group) bg-sheet-surface shadow-lg">
           <Scroll keyboardShouldPersistTaps="always" style={{ maxHeight: 240 }}>
             {choices().map((executor, index) => (
               <Button testID={`brain-mention-${executor.id}`} accessibilityLabel={`Mention ${brainExecutorLabel(executor)}`}
@@ -44,8 +43,7 @@ export function MentionPanel(props: {
               </Button>
             ))}
           </Scroll>
-        </View>
-      ) : null}
+        </View></If>
     </View>
   );
 }

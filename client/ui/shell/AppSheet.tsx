@@ -79,14 +79,12 @@ export function AppSheet(props: SheetProps & { testID?: string }) {
   const popup = () => `${DIALOG} ${INK} ${(props.popupClass ?? "").replace(/\brounded-t-\S+|\bmax-h-\S+|\bbg-\S+/g, "")}`;
   return (
     <>
-      {wide() ? (
-        <Dialog testID={props.testID} open={open()} animation="fade" class={popup()} backdropClass={platform.os === "ios" ? undefined : "bg-scrim"}
+      <If when={wide()} else={<Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} popupStyle={aboveKeyboard(props)} open={open()} />}><Dialog testID={props.testID} open={open()} animation="fade" class={popup()} backdropClass={platform.os === "ios" ? undefined : "bg-scrim"}
           presentation={platform.os === "ios" ? "formSheet" : undefined}
           closeOnEscape={props.closeOnEscape ?? true} closeOnBackdropPress={props.closeOnBackdropPress ?? true}
           onOpenChange={({ open, reason }) => props.onOpenChange?.({ open, reason })} onCancel={props.onCancel} onClose={props.onClose}>
           {props.children}
-        </Dialog>
-      ) : <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} popupStyle={aboveKeyboard(props)} open={open()} />}
+        </Dialog></If>
     </>
   );
 }

@@ -12,8 +12,7 @@ type Scope = "all" | "following";
 /** The draft banner: what Brain wrote for you to check before it is posted. */
 function DraftBanner(props: { nav: PageNav }) {
   const one = () => draftCount() === 1;
-  return (<>{draftCount() > 0 ? (
-    <Button
+  return (<><If when={draftCount() > 0}><Button
       testID="friends-drafts-banner"
       accessibilityLabel={`${draftCount()} ${one() ? "draft" : "drafts"} waiting`}
       onPress={() => props.nav.push({ name: "friends-drafts" })}
@@ -25,8 +24,7 @@ function DraftBanner(props: { nav: PageNav }) {
       </View>
       <Text class="flex-1 text-body font-semibold">{one() ? "Draft waiting" : "Drafts waiting"}</Text>
       <Icon name="chevron-right" size={16} tone="faint" />
-    </Button>
-  ) : null}</>);
+    </Button></If></>);
 }
 
 /** Friends: everyone's posts or only the people you follow, newest first. */
@@ -47,22 +45,16 @@ export function Feed(props: { nav: PageNav; top: () => boolean }) {
         class="size-11 items-center justify-center rounded-full active:bg-accent"
       >
         <Icon name="bell" tone="ink" />
-        {unread() > 0 ? <View class="absolute right-2 top-2 size-2.5 rounded-full bg-seal" /> : null}
+        <If when={unread() > 0}><View class="absolute right-2 top-2 size-2.5 rounded-full bg-seal" /></If>
       </Button>
-      {me() ? (
-        <Button testID="friends-me" accessibilityLabel="Your profile" onPress={() => props.nav.push({ name: "friends-person", id: me()!.id })} class="active:opacity-70">
+      <If when={me()}><Button testID="friends-me" accessibilityLabel="Your profile" onPress={() => props.nav.push({ name: "friends-person", id: me()!.id })} class="active:opacity-70">
           <Avatar author={me()!} size={32} />
-        </Button>
-      ) : null}
+        </Button></If>
     </View>
   );
   return (
     <FriendsPageFrame title="Friends" testID="friends-feed" headerRight={friendsEnabled() ? header() : undefined}>
-      {off() ? (
-        // A browser offers no Friends switch (as v0.3.1): Open Labs opens Settings there.
-        <EmptyState testID="friends-off" icon="people" title="Friends is off" action="Open Labs" onAction={() => props.nav.push(platform.os === "web" ? { name: "settings" } : { name: "settings-friends" })} />
-      ) : (
-        <View class="flex-1">
+      <If when={off()} else={<View class="flex-1">
           <View class="px-4 pt-2">
             <Segmented
               testID="friends-scope"
@@ -73,13 +65,8 @@ export function Feed(props: { nav: PageNav; top: () => boolean }) {
             />
           </View>
           <DraftBanner nav={props.nav} />
-          {scope() === "all" ? (
-            <PostList testID="friends-list" path="/feed" nav={props.nav} top={props.top} emptyTitle="Nothing here yet" />
-          ) : (
-            <PostList testID="friends-list" path="/feed?scope=following" nav={props.nav} top={props.top} emptyTitle="No one followed yet" />
-          )}
-        </View>
-      )}
+          <If when={scope() === "all"} else={<PostList testID="friends-list" path="/feed?scope=following" nav={props.nav} top={props.top} emptyTitle="No one followed yet" />}><PostList testID="friends-list" path="/feed" nav={props.nav} top={props.top} emptyTitle="Nothing here yet" /></If>
+        </View>}><EmptyState testID="friends-off" icon="people" title="Friends is off" action="Open Labs" onAction={() => props.nav.push(platform.os === "web" ? { name: "settings" } : { name: "settings-friends" })} /></If>
     </FriendsPageFrame>
   );
 }

@@ -39,10 +39,10 @@ function CommitForm(props: { review: GitReview; count: number; canPush: boolean;
       <View class="-mx-4">
         <Field testID="commit-message" accessibilityLabel="Commit message" placeholder="Message" multiline autoFocus disabled={busy() !== ""} value={message()} onChange={(value) => { message.set(value); error.set(""); }} />
       </View>
-      {error() ? <Notice tone="failed" title="Couldn't commit" detail={error()} /> : null}
+      <If when={error()}><Notice tone="failed" title="Couldn't commit" detail={error()} /></If>
       {/* Full-width buttons, the ink one last (SPEC §11). */}
       <View>
-        {props.canPush ? <PillButton testID="commit-submit" title="Commit" busy={busy() === "commit"} disabled={!message().trim() || busy() !== ""} onPress={() => void submit(false)} /> : null}
+        <If when={props.canPush}><PillButton testID="commit-submit" title="Commit" busy={busy() === "commit"} disabled={!message().trim() || busy() !== ""} onPress={() => void submit(false)} /></If>
         <PillButton testID={props.canPush ? "commit-push" : "commit-submit"} title={props.canPush ? "Commit & push" : "Commit"} filled busy={busy() === (props.canPush ? "push" : "commit")} disabled={!message().trim() || busy() !== ""} onPress={() => void submit(props.canPush)} />
       </View>
     </View>
@@ -100,10 +100,10 @@ function BranchPicker(props: { review: GitReview; onDone: () => void }) {
       <View class="-mx-4">
         <Field testID="branch-query" accessibilityLabel="Find or create a branch" placeholder="Find or create a branch" value={query()} onChange={(value) => query.set(value)} />
       </View>
-      {error() ? <Notice tone="failed" title="Couldn't switch" detail={error()} /> : null}
-      {creatable() ? <TextButton testID="branch-create" label={`Create ${query().trim()}`} busy={busy() === query().trim()} onPress={() => void run(query().trim(), true)} /> : null}
-      {!payload() && !error() ? <EmptyState busy title="Loading branches" /> : null}
-      {payload() && !shown().length ? <EmptyState title="No matching branches" /> : null}
+      <If when={error()}><Notice tone="failed" title="Couldn't switch" detail={error()} /></If>
+      <If when={creatable()}><TextButton testID="branch-create" label={`Create ${query().trim()}`} busy={busy() === query().trim()} onPress={() => void run(query().trim(), true)} /></If>
+      <If when={!payload() && !error()}><EmptyState busy title="Loading branches" /></If>
+      <If when={payload() && !shown().length}><EmptyState title="No matching branches" /></If>
       <Scroll keyboardShouldPersistTaps="handled" class="max-h-[420px] overflow-hidden rounded-(--radius-group) bg-sheet-surface">
         {shown().map((branch) => (
           <Row

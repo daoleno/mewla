@@ -26,19 +26,11 @@ function updateRow(model: AppUpdateRowModel, press: () => void) {
       value={model.value}
       // The button is the action; without one, a tap checks again ("Up to date").
       onPress={model.actionable && !model.action ? press : undefined}
-      trailing={
-        model.action ? (
-          <Button testID="app-update-action" onPress={press} class="rounded-full bg-primary px-3.5 py-1.5 active:opacity-70">
-            <Text class="text-sm font-medium text-primary-foreground">{model.action}</Text>
-          </Button>
-        ) : model.progress !== undefined ? (
-          <View style={{ width: 64 }}>
-            <Meter share={model.progress} tone="meter" height={4} />
-          </View>
-        ) : model.busy ? (
-          <Spinner size={16} />
-        ) : undefined
-      }
+      trailing={<If when={model.action} else={<If when={model.progress !== undefined} else={<If when={model.busy}><Spinner size={16} /></If>}><View style={{ width: 64 }}>
+            <Meter share={model.progress!} tone="meter" height={4} />
+          </View></If>}>{(actionValue) => <Button testID="app-update-action" onPress={press} class="rounded-full bg-primary px-3.5 py-1.5 active:opacity-70">
+            <Text class="text-sm font-medium text-primary-foreground">{actionValue()}</Text>
+          </Button>}</If>}
     />
   );
 }

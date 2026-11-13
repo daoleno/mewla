@@ -109,7 +109,7 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
   const ids = computed(() => (displays() === null ? "loading" : `ids:${displays()!.map((d) => d.id).join(",")}:${displays()!.length ? "" : reason() ? "setup" : "empty"}`));
   const notice = () => {
     const current = issue();
-    return current ? <Notice testID="displays-issue" tone={current.tone === "danger" ? "failed" : "warning"} title={current.title} detail={current.detail} /> : null;
+    return <If when={current}>{(current) => <Notice testID="displays-issue" tone={current().tone === "danger" ? "failed" : "warning"} title={current().title} detail={current().detail} />}</If>;
   };
   return (
     <View class="flex-1">
@@ -130,19 +130,15 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
             return (
               <View class="flex-1 px-4">
                 {notice()}
-                {reason() ? (
-                  <View class="items-center gap-2 px-6 py-16">
+                <If when={reason()} else={<EmptyState onBlack icon="desktop" title="Nothing on screen" />}><View class="items-center gap-2 px-6 py-16">
                     <Icon name="construct" size={28} tone="onBlack" />
                     <Text class="mt-1 text-center text-title font-semibold text-white">Browser needs setup on this server</Text>
                     <Text class="text-center text-sub text-white/60">{reason()}</Text>
                     <Button testID="displays-check" disabled={checking()} onPress={() => void check()} class="mt-2 h-[52px] flex-row items-center gap-2 rounded-2xl bg-white px-5 active:opacity-70 disabled:opacity-40">
-                      {checking() ? <Spinner size={14} tone="onBlackSoft" /> : null}
+                      <If when={checking()}><Spinner size={14} tone="onBlackSoft" /></If>
                       <Text class="text-body font-semibold text-black">Check again</Text>
                     </Button>
-                  </View>
-                ) : (
-                  <EmptyState onBlack icon="desktop" title="Nothing on screen" />
-                )}
+                  </View></If>
               </View>
             );
           }
@@ -201,36 +197,24 @@ function DisplayCard(props: { display: () => AgentDisplay; name: () => string; s
         <View class={`size-2 rounded-full ${stopped() || elsewhere() ? "bg-white/30" : "bg-white"}`} />
         <View class="min-w-0 flex-1">
           <Text class="text-body font-semibold text-white line-clamp-1">{title()}</Text>
-          {holding() ? <Text class="text-caption text-white/60 line-clamp-1">You hold the agent</Text> : elsewhere() ? <Text class="text-caption text-white/60 line-clamp-1">Held on another device</Text> : stopped() ? <Text class="text-caption text-white/60 line-clamp-1">Stopped</Text> : null}
+          <If when={holding()} else={<If when={elsewhere()} else={<If when={stopped()}><Text class="text-caption text-white/60 line-clamp-1">Stopped</Text></If>}><Text class="text-caption text-white/60 line-clamp-1">Held on another device</Text></If>}><Text class="text-caption text-white/60 line-clamp-1">You hold the agent</Text></If>
         </View>
-        {live() && needsSoftKeyboard() ? (
-          <Button accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`size-11 items-center justify-center rounded-full ${typing() ? "bg-white/20" : ""}`}>
+        <If when={live() && needsSoftKeyboard()}><Button accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`size-11 items-center justify-center rounded-full ${typing() ? "bg-white/20" : ""}`}>
             <Icon name="keyboard" size={18} tone={typing() ? "onBlack" : "onBlackSoft"} />
-          </Button>
-        ) : null}
+          </Button></If>
         <Menu trigger={<View accessibilityLabel={`Options for ${title()}`} role="button" class="size-11 items-center justify-center"><Icon name="more-horizontal" size={18} tone="onBlack" /></View>} popupClass="rounded-[18px] bg-popover p-1.5 shadow-float" backdropClass="bg-scrim">
           <View class="px-4 pb-1 pt-2"><Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{title()}</Text></View>
-          {live() ? (
-            <MenuItem onSelect={() => props.session.hold(!holding())} class={ITEM}><Text class="text-body">{holding() ? "Let the agent go on" : "Hold the agent"}</Text></MenuItem>
-          ) : null}
-          {live() ? <MenuItem onSelect={() => props.session.fit()} class={ITEM}><Text class="text-body">Fit</Text></MenuItem> : null}
-          {live() && canShowFullSize() ? (
-            <MenuItem testID="display-full-size" onSelect={() => void props.session.fullSize(`Display of ${untracked(title)}`)} class={ITEM}><Text class="text-body">Full size</Text></MenuItem>
-          ) : null}
-          {stopped() ? (
-            <MenuItem disabled={busy()} onSelect={() => void run(props.onResume)} class={ITEM}><Text class="text-body">Resume</Text></MenuItem>
-          ) : (
-            <MenuItem disabled={busy() || elsewhere()} accessibilityLabel={`Stop ${title()}`} onSelect={() => void run(props.onStop)} class={ITEM}><Text class="text-body">Stop</Text></MenuItem>
-          )}
-          {props.session.phase() === "lost" ? <MenuItem onSelect={() => props.session.connect()} class={ITEM}><Text class="text-body">Reconnect</Text></MenuItem> : null}
+          <If when={live()}><MenuItem onSelect={() => props.session.hold(!holding())} class={ITEM}><Text class="text-body">{holding() ? "Let the agent go on" : "Hold the agent"}</Text></MenuItem></If>
+          <If when={live()}><MenuItem onSelect={() => props.session.fit()} class={ITEM}><Text class="text-body">Fit</Text></MenuItem></If>
+          <If when={live() && canShowFullSize()}><MenuItem testID="display-full-size" onSelect={() => void props.session.fullSize(`Display of ${untracked(title)}`)} class={ITEM}><Text class="text-body">Full size</Text></MenuItem></If>
+          <If when={stopped()} else={<MenuItem disabled={busy() || elsewhere()} accessibilityLabel={`Stop ${title()}`} onSelect={() => void run(props.onStop)} class={ITEM}><Text class="text-body">Stop</Text></MenuItem>}><MenuItem disabled={busy()} onSelect={() => void run(props.onResume)} class={ITEM}><Text class="text-body">Resume</Text></MenuItem></If>
+          <If when={props.session.phase() === "lost"}><MenuItem onSelect={() => props.session.connect()} class={ITEM}><Text class="text-body">Reconnect</Text></MenuItem></If>
         </Menu>
       </View>
-      {props.session.phase() === "lost" ? (
-        <View class="px-3 pb-2">
+      <If when={props.session.phase() === "lost"}><View class="px-3 pb-2">
           <Notice title="Lost connection to the display" detail={props.session.reason() || "It may have been closed."} action="Reconnect" onAction={() => props.session.connect()} />
-        </View>
-      ) : null}
-      {props.session.phase() === "connecting" ? <View class="flex-row items-center gap-2 px-4 pb-2"><Spinner size={14} tone="onBlackSoft" /><Text class="text-sub text-white/60">Connecting…</Text></View> : null}
+        </View></If>
+      <If when={props.session.phase() === "connecting"}><View class="flex-row items-center gap-2 px-4 pb-2"><Spinner size={14} tone="onBlackSoft" /><Text class="text-sub text-white/60">Connecting…</Text></View></If>
       <View style={{ aspectRatio: (props.display().width || 1280) / (props.display().height || 800) }}>
         <RemoteView session={props.session} label={`Display of ${title()}`} modifiers={modifiersFor("linux")} typing={typing()} onTypingChange={(on) => typing.set(on)} />
       </View>

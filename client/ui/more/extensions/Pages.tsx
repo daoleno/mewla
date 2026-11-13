@@ -61,36 +61,42 @@ export function PluginsFrame(props: { title: string; nav: PageNav; testID?: stri
   });
   return (
     <Page display hero={props.hero} title={props.title} testID={props.testID} scrollRef={(ref) => (scroll = ref)} refreshing={flowState().running === "list"} onRefresh={props.onRefresh ?? (() => void plugins()?.list())}>
-      {deferredFor() ? <Notice testID="authorization-saved" icon="swap-horizontal" title={`Authorization saved for ${deferredFor()}`} detail="Switch to that server in Settings to finish." action="Settings" onAction={() => props.nav.push({ name: "settings" })} /> : null}
-      {flowState().error && flowState().catalog.length ? <Notice tone="failed" testID="plugins-error" title="That didn't go through" detail={flowState().error} /> : null}
-      {daemon() ? <ConnectCard nav={props.nav} /> : null}
-      {!daemon() ? <EmptyState icon="server" title="No current server" detail="Choose one in Settings." action="Open Settings" onAction={() => props.nav.push({ name: "settings" })} /> : props.children}
+      <If when={deferredFor()}><Notice testID="authorization-saved" icon="swap-horizontal" title={`Authorization saved for ${deferredFor()}`} detail="Switch to that server in Settings to finish." action="Settings" onAction={() => props.nav.push({ name: "settings" })} /></If>
+      <If when={flowState().error && flowState().catalog.length}><Notice tone="failed" testID="plugins-error" title="That didn't go through" detail={flowState().error} /></If>
+      <If when={daemon()}><ConnectCard nav={props.nav} /></If>
+      <If when={!daemon()} else={<>{props.children}</>}><EmptyState icon="server" title="No current server" detail="Choose one in Settings." action="Open Settings" onAction={() => props.nav.push({ name: "settings" })} /></If>
     </Page>
   );
 }
 
 /** Notices for tools a service added or changed, which wait for a confirm. */
 export function ToolUpdateNotices(props: { service?: string }) {
+  // Kept by account: the computer's news updates a notice in place, so its Confirm keeps a tap under way.
+  const accounts = () => flowState().accounts.filter((account) => !props.service || account.integration === props.service);
   return (
     <View>
-      {flowState()
-        .accounts.filter((account) => !props.service || account.integration === props.service)
-        .map((account) => {
-          const updates = toolUpdates(account, plugins()?.serviceLabel(account) ?? account.name);
-          return updates ? (
-            <Notice
-              testID={`tool-updates-${account.id}`}
-              tone="info"
-              icon="sync"
-              title={updates.title}
-              detail={updates.detail}
-              busy={flowState().running === `updates:${account.id}`}
-              actionDisabled={flowState().running !== null}
-              action="Confirm"
-              onAction={() => flowState().running === null && plugins()?.confirmUpdates(account, updates.names)}
-            />
-          ) : null;
-        })}
+      <Each of={accounts()} key={(account) => account.id}>
+        {(account) => {
+          const updates = () => toolUpdates(account(), plugins()?.serviceLabel(account()) ?? account().name);
+          return (
+            <If when={updates()}>
+              {(updates) => (
+                <Notice
+                  testID={`tool-updates-${account().id}`}
+                  tone="info"
+                  icon="sync"
+                  title={updates().title}
+                  detail={updates().detail}
+                  busy={flowState().running === `updates:${account().id}`}
+                  actionDisabled={flowState().running !== null}
+                  action="Confirm"
+                  onAction={() => flowState().running === null && plugins()?.confirmUpdates(account(), updates().names)}
+                />
+              )}
+            </If>
+          );
+        }}
+      </Each>
     </View>
   );
 }
@@ -112,32 +118,28 @@ function Extensions(props: { nav: PageNav }) {
       available: all.filter(({ row }) => row.state.kind === "connect" || row.state.kind === "unavailable"),
     };
   };
-  const section = (title: string, items: { row: ServiceRow; custom: boolean }[]) =>
-    items.length ? <Section title={title}>{items.map(({ row, custom }) => <ServiceRowView row={row} nav={props.nav} custom={custom} />)}</Section> : null;
+  // Rows are kept by service: the computer's news updates a row in place, so its button keeps a tap under way.
+  const section = (title: string, items: () => { row: ServiceRow; custom: boolean }[]) => (
+    <If when={items().length > 0}>
+      <Section title={title}>
+        <Each of={items()} key={(item) => item.row.plugin.id}>{(item) => <ServiceRowView row={item().row} nav={props.nav} custom={item().custom} />}</Each>
+      </Section>
+    </If>
+  );
   return (
     <PluginsFrame title="Extensions" testID="extensions-page" nav={props.nav}>
       <ToolUpdateNotices />
-      {catalogLoading() ? (
-        <EmptyState busy title="Loading services" />
-      ) : !flowState().catalog.length ? (
-        catalogProblem() ? (
-          <EmptyState testID="services-unavailable" icon="cloud-offline" title="Services unavailable" detail={catalogProblem()} action="Try again" onAction={() => void plugins()?.list()} />
-        ) : (
-          <EmptyState icon="puzzle" title="No services" action="Try again" onAction={() => void plugins()?.list()} />
-        )
-      ) : (
-        <View>
+      <If when={catalogLoading()} else={<If when={!flowState().catalog.length} else={<View>
           <View class="mt-2">
             <SearchField testID="extensions-search" placeholder="Search services" value={query()} onChange={(value) => query.set(value)} />
           </View>
-          {section("Connected", groups().connected)}
-          {section("Needs fixing", groups().fixing)}
+          {section("Connected", () => groups().connected)}
+          {section("Needs fixing", () => groups().fixing)}
           <AgentToolsSection nav={props.nav} />
-          {section("Available", groups().available)}
-          {query().trim() && !groups().connected.length && !groups().fixing.length && !groups().available.length ? <EmptyState title="No matching services" /> : null}
-        </View>
-      )}
-      {catalogLoading() || !flowState().catalog.length ? <AgentToolsSection nav={props.nav} /> : null}
+          {section("Available", () => groups().available)}
+          <If when={query().trim() && !groups().connected.length && !groups().fixing.length && !groups().available.length}><EmptyState title="No matching services" /></If>
+        </View>}><If when={catalogProblem()} else={<EmptyState icon="puzzle" title="No services" action="Try again" onAction={() => void plugins()?.list()} />}><EmptyState testID="services-unavailable" icon="cloud-offline" title="Services unavailable" detail={catalogProblem()} action="Try again" onAction={() => void plugins()?.list()} /></If></If>}><EmptyState busy title="Loading services" /></If>
+      <If when={catalogLoading() || !flowState().catalog.length}><AgentToolsSection nav={props.nav} /></If>
     </PluginsFrame>
   );
 }
@@ -168,51 +170,72 @@ function rowLabel(row: ServiceRow): string {
 }
 
 function ServiceRowView(props: { row: ServiceRow; nav: PageNav; custom?: boolean }) {
-  const row = props.row;
-  const id = row.plugin.id;
+  // The row follows its service's news (`props.row` is new on every update); what it shows is made once.
+  const row = () => props.row;
+  const id = untracked(() => props.row.plugin.id);
+  const kind = computed(() => row().state.kind);
   const open = () => props.nav.push({ name: "extensions-service", id });
   const connect = () => {
     void plugins()
       ?.connect(id)
       .then((outcome) => outcome === "form" && open());
   };
+  const press = () => {
+    const state = row().state;
+    if (state.kind === "reconnect") void plugins()?.recover(state.account, "reconnect");
+    else connect();
+  };
   const connecting = () => connectingService() === id;
   // While one sign-in starts or waits, the other services wait for it.
   const blocked = () => flowState().running !== null || (connectingService() !== null && !connecting());
-  const trailing = (): JSX.Element => {
-    const state = row.state;
-    if (state.kind === "unavailable") return <Tag label={state.label} />;
-    if (state.kind === "connect" || state.kind === "reconnect") {
-      const label = state.kind === "reconnect" ? "Reconnect" : props.custom ? "Add" : "Connect";
-      return connecting() ? (
-        <Spinner size={16} />
-      ) : (
-        <RowButton
-          testID={`connect-${id}`}
-          label={label}
-          accessibilityLabel={state.kind === "reconnect" ? `Reconnect ${state.account.name}` : `${label} ${row.plugin.name}`}
-          disabled={blocked()}
-          onPress={() => (state.kind === "reconnect" ? plugins()?.recover(state.account, "reconnect") : connect())}
-        />
-      );
-    }
-    // Grouped by state, the section label says it: no dot, only a word that needs a look is coloured (SPEC §10.4).
-    return connecting() ? <Spinner size={16} /> : <Text testID={`service-${id}-state`} class="text-sub line-clamp-1" style={{ color: color(stateTextColor(connectionStateTone(state.tone) === "warn" ? "warn" : "off")) }}>{state.label}</Text>;
+  const label = () => (kind() === "reconnect" ? "Reconnect" : props.custom ? "Add" : "Connect");
+  const stateLabel = () => {
+    const state = row().state;
+    return state.kind === "status" || state.kind === "unavailable" ? state.label : "";
   };
-  const available = row.state.kind !== "unavailable";
+  const tone = () => {
+    const state = row().state;
+    return state.kind === "status" && connectionStateTone(state.tone) === "warn" ? "warn" : "off";
+  };
+  const trailing = (
+    <If when={kind() === "unavailable"} else={
+      <If when={connecting()} else={
+        <If when={kind() === "connect" || kind() === "reconnect"} else={
+          // Grouped by state, the section label says it: no dot, only a word that needs a look is coloured (SPEC §10.4).
+          <Text testID={`service-${id}-state`} class="text-sub line-clamp-1" style={{ color: color(stateTextColor(tone())) }}>{stateLabel()}</Text>
+        }>
+          <RowButton
+            testID={`connect-${id}`}
+            label={label()}
+            accessibilityLabel={(() => {
+              const state = row().state;
+              return state.kind === "reconnect" ? `Reconnect ${state.account.name}` : `${label()} ${row().plugin.name}`;
+            })()}
+            disabled={blocked()}
+            onPress={press}
+          />
+        </If>
+      }>
+        <Spinner size={16} />
+      </If>
+    }>
+      <Tag label={stateLabel()} />
+    </If>
+  );
+  const available = () => kind() !== "unavailable";
   return (
     <Row
       testID={`service-${id}`}
       lead={serviceRowLead(id)}
-      title={row.plugin.name}
-      subtitle={rowSubtitle(row) || undefined}
-      subtitleTone={row.state.kind === "reconnect" ? "warn" : undefined}
-      trailing={trailing()}
-      chevron={available}
-      disabled={!available}
-      accessibilityLabel={rowLabel(row)}
-      accessibilityHint={available ? "Opens the service" : undefined}
-      onPress={available ? open : undefined}
+      title={row().plugin.name}
+      subtitle={rowSubtitle(row()) || undefined}
+      subtitleTone={kind() === "reconnect" ? "warn" : undefined}
+      trailing={trailing}
+      chevron={available()}
+      disabled={!available()}
+      accessibilityLabel={rowLabel(row())}
+      accessibilityHint={available() ? "Opens the service" : undefined}
+      onPress={() => available() && open()}
     />
   );
 }

@@ -30,18 +30,14 @@ export function Sheet(props: {
       popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet shadow-float" backdropClass="bg-scrim">
       <View testID={props.testID} class={wide() ? "pb-6 pt-3" : "pb-8"}>
         {/* A dialog on wide has no grabber (SPEC §14.2). */}
-        {wide() ? null : (
-          <View class="items-center pt-2">
+        <If when={!wide()}><View class="items-center pt-2">
             <View class="h-[5px] w-[36px] rounded-full bg-track" />
-          </View>
-        )}
-        {title() || props.leading || props.trailing ? (
-          <View class="min-h-[44px] flex-row items-center gap-2 px-4 pb-[19px] pt-[11px]">
+          </View></If>
+        <If when={title() || props.leading || props.trailing} else={<View class="h-4" />}><View class="min-h-[44px] flex-row items-center gap-2 px-4 pb-[19px] pt-[11px]">
             {props.leading ?? null}
             <Text class="flex-1 text-[20px] font-bold text-foreground line-clamp-1">{title()}</Text>
             {props.trailing ?? null}
-          </View>
-        ) : <View class="h-4" />}
+          </View></If>
         {props.children ?? null}
       </View>
     </AppSheet>

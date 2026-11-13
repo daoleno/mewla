@@ -58,45 +58,28 @@ export function DSHPanel(props: { transport: Transport; run: DSHSessionRun }) {
 
   return (
     <View>
-      {first() ? (
-        <View testID="dsh-banner" class="mb-2 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+      <If when={first()}><View testID="dsh-banner" class="mb-2 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
           <Icon name="lock" size={16} color="seal" />
           <Text class="flex-1 text-sm font-semibold">{first()!.payload.type === "approval/requested" ? "Permission requested" : "Answer requested"}</Text>
           <Button testID="dsh-review" onPress={() => open.set(true)}><Text class="text-sm font-semibold text-primary">Review</Text></Button>
-        </View>
-      ) : null}
-      {error() ? <Text class="pb-1.5 text-sm text-destructive">{error()}</Text> : null}
+        </View></If>
+      <If when={error()}><Text class="pb-1.5 text-sm text-destructive">{error()}</Text></If>
       <Sheet open={open() && Boolean(first())} onOpenChange={({ open: next }) => open.set(next)} closeOnSwipe
         popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
         <View class="gap-3 pb-8">
-          {first()?.payload.type === "approval/requested" ? (
-            <View class="gap-2">
-              <Text class="text-lg font-semibold">{first()!.payload.toolName || "Permission requested"}</Text>
-              {first()!.payload.reason ? <TextView markdown={first()!.payload.reason!} selectable class="text-base" /> : null}
-              {first()!.payload.callId ? <Text class="text-xs text-muted-foreground">{first()!.payload.callId!}</Text> : null}
-              <View class="flex-row gap-3 pt-2">
-                <Button testID="dsh-reject" onPress={() => void respond({ outcome: "rejected" })} disabled={busy()} class="flex-1 items-center rounded-full border border-border py-2.5 active:bg-accent">
-                  <Text class="text-base font-semibold">Reject</Text>
-                </Button>
-                <Button testID="dsh-allow" onPress={() => void respond({ outcome: "allowed-once" })} disabled={busy()} class="flex-1 items-center rounded-full bg-primary py-2.5 active:opacity-80">
-                  <Text class="text-base font-semibold text-primary-foreground">Allow once</Text>
-                </Button>
-              </View>
-            </View>
-          ) : first() ? (
-            <View class="gap-3">
+          <If when={first()?.payload.type === "approval/requested"} else={<If when={first()}><View class="gap-3">
               {(first()!.payload.questions ?? []).map((question) => (
                 <View class="gap-2">
                   <Text class="text-lg font-semibold">{question.question}</Text>
-                  {question.detail ? <Text class="text-sm text-muted-foreground">{question.detail}</Text> : null}
+                  <If when={question.detail}>{(detail) => <Text class="text-sm text-muted-foreground">{detail()}</Text>}</If>
                   {(question.options ?? []).map((option) => (
                     <Button onPress={() => toggle(question.id, option.label, Boolean(question.multiSelect))} disabled={busy()}
                       class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2.5 active:bg-accent">
                       <View class="flex-1">
                         <Text class="text-base">{option.label}</Text>
-                        {option.description ? <Text class="text-xs text-muted-foreground">{option.description}</Text> : null}
+                        <If when={option.description}>{(description) => <Text class="text-xs text-muted-foreground">{description()}</Text>}</If>
                       </View>
-                      {values()[question.id]?.selected.includes(option.label) ? <Icon name="check" size={18} color="primary" /> : null}
+                      <If when={values()[question.id]?.selected.includes(option.label)}><Icon name="check" size={18} color="primary" /></If>
                     </Button>
                   ))}
                   <Input multiline value={values()[question.id]?.custom ?? ""} placeholder="Your answer"
@@ -120,8 +103,19 @@ export function DSHPanel(props: { transport: Transport; run: DSHSessionRun }) {
                   <Text class="text-base font-semibold text-primary-foreground">Send answer</Text>
                 </Button>
               </View>
-            </View>
-          ) : null}
+            </View></If>}><View class="gap-2">
+              <Text class="text-lg font-semibold">{first()!.payload.toolName || "Permission requested"}</Text>
+              <If when={first()!.payload.reason}><TextView markdown={first()!.payload.reason!} selectable class="text-base" /></If>
+              <If when={first()!.payload.callId}><Text class="text-xs text-muted-foreground">{first()!.payload.callId!}</Text></If>
+              <View class="flex-row gap-3 pt-2">
+                <Button testID="dsh-reject" onPress={() => void respond({ outcome: "rejected" })} disabled={busy()} class="flex-1 items-center rounded-full border border-border py-2.5 active:bg-accent">
+                  <Text class="text-base font-semibold">Reject</Text>
+                </Button>
+                <Button testID="dsh-allow" onPress={() => void respond({ outcome: "allowed-once" })} disabled={busy()} class="flex-1 items-center rounded-full bg-primary py-2.5 active:opacity-80">
+                  <Text class="text-base font-semibold text-primary-foreground">Allow once</Text>
+                </Button>
+              </View>
+            </View></If>
         </View>
       </Sheet>
     </View>

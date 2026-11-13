@@ -171,19 +171,17 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
               <AgentMarks agents={copy.agents as ManagedSkillAgent[]} size={16} />
               <Text class="text-sub line-clamp-2">{location.label}</Text>
               <View selectable><Text class="font-mono text-code text-muted-foreground line-clamp-1">{location.path}</Text></View>
-              {deletable() ? null : <Text class="text-caption text-muted-foreground">{copy.capability.reason || "This copy cannot be deleted from here."}</Text>}
+              <If when={!deletable()}><Text class="text-caption text-muted-foreground">{copy.capability.reason || "This copy cannot be deleted from here."}</Text></If>
             </View>
-            {deletable() ? (
-              <Button
+            <If when={deletable()}><Button
                 testID={`pick-delete-${copy.id}`}
                 accessibilityLabel={`Delete ${copy.name} from ${copy.location}`}
                 disabled={Boolean(preparing())}
                 onPress={() => { skillPicker.set(null); void deleteSkillCopy(copy); }}
                 class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
               >
-                {preparing() === `delete:${copy.id}` ? <Spinner size={16} /> : <Icon name="trash" size={20} tone="ink" />}
-              </Button>
-            ) : null}
+                <If when={preparing() === `delete:${copy.id}`} else={<Icon name="trash" size={20} tone="ink" />}><Spinner size={16} /></If>
+              </Button></If>
           </View>
         );
       })}
@@ -218,18 +216,15 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
       onRefresh={refresh}
       aside={
         <View testID="details-panel" class="w-[400px] flex-col border-l border-border bg-card" style={{ display: wide() && panel() ? "flex" : "none" }}>
-          {((key) => untracked(() => (!key ? null : <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll>)))(wide() ? panel() : "")}
+          {((key) => untracked(() => (<If when={key}><Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll></If>)))(wide() ? panel() : "")}
         </View>
       }
     >
-      {daemon() && projectCwd() ? (
-        <View testID="project-scope" class="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1" accessible accessibilityLabel={`Project ${projectName()}`}>
+      <If when={daemon() && projectCwd()}><View testID="project-scope" class="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1" accessible accessibilityLabel={`Project ${projectName()}`}>
           <Icon name="folder" size={14} />
           <Text class="text-caption line-clamp-1">{projectName()}</Text>
-        </View>
-      ) : null}
-      {hasPlugins ? (
-        <View class="mt-2">
+        </View></If>
+      <If when={hasPlugins}><View class="mt-2">
           <Segmented
             testID="agent-section"
             accessibilityLabel="Plugins and Skills"
@@ -237,16 +232,24 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
             value={section()}
             onChange={(key) => chosen.set(key)}
           />
-        </View>
-      ) : null}
-      {notice() ? (
-        <View testID="mutation-notice">
+        </View></If>
+      <If when={notice()}><View testID="mutation-notice">
           <Notice live tone={notice()!.kind === "error" ? "failed" : "success"} title={notice()!.message} action="Dismiss" onAction={() => notice.set(null)} />
-        </View>
-      ) : null}
+        </View></If>
       <View testID="agent-sections" panActivation={swipes ? { activeOffsetX: 24, failOffsetY: 14 } : undefined} onPanEnd={swipes ? (event) => !event.cancelled && swipe(event.translation.x) : undefined}>
-      {section() === "skills" ? (
-        <SkillsList
+      <If when={section() === "skills"} else={<PluginsList
+          rows={shownPlugins()}
+          total={plugins().length}
+          query={pluginQuery()}
+          filters={pluginFilters()}
+          onQuery={(value) => pluginQuery.set(value)}
+          onFilters={() => filtersOpen.set("plugins")}
+          onClearFilters={() => { pluginQuery.set(""); pluginFilters.set(NO_PLUGIN_FILTERS); }}
+          onRemoveFilter={(next) => pluginFilters.set(next)}
+          onOpen={(plugin) => openPluginKey.set(plugin.key)}
+          onUninstall={chooseUninstall}
+          nav={props.nav}
+        />}><SkillsList
           rows={shownSkills()}
           total={skills().length}
           pluginOwned={hasPlugins ? pluginOwned() : 0}
@@ -260,22 +263,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
           onOpen={(skill) => void inspectSkill(skill.primaryCopy)}
           onDelete={chooseDelete}
           nav={props.nav}
-        />
-      ) : (
-        <PluginsList
-          rows={shownPlugins()}
-          total={plugins().length}
-          query={pluginQuery()}
-          filters={pluginFilters()}
-          onQuery={(value) => pluginQuery.set(value)}
-          onFilters={() => filtersOpen.set("plugins")}
-          onClearFilters={() => { pluginQuery.set(""); pluginFilters.set(NO_PLUGIN_FILTERS); }}
-          onRemoveFilter={(next) => pluginFilters.set(next)}
-          onOpen={(plugin) => openPluginKey.set(plugin.key)}
-          onUninstall={chooseUninstall}
-          nav={props.nav}
-        />
-      )}
+        /></If>
       </View>
 
       <Sheet open={filtersOpen() === "skills"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
@@ -294,10 +282,10 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
 
       <Sheet open={!wide() && panel().startsWith("skill:")} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
         {/* The sheet takes its content once; the view inside follows the copy shown. */}
-        <View class="shrink">{((key) => untracked(() => (key.startsWith("skill:") ? <Scroll keyboardShouldPersistTaps="handled" class="shrink">{inspector()}</Scroll> : null)))(wide() ? "" : panel())}</View>
+        <View class="shrink">{((key) => untracked(() => (<If when={key.startsWith("skill:")}><Scroll keyboardShouldPersistTaps="handled" class="shrink">{inspector()}</Scroll></If>)))(wide() ? "" : panel())}</View>
       </Sheet>
       <Sheet open={!wide() && panel().startsWith("plugin:")} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
-        <View class="shrink">{((key) => untracked(() => (key.startsWith("plugin:") ? <Scroll keyboardShouldPersistTaps="handled" class="shrink">{pluginDetails()}</Scroll> : null)))(wide() ? "" : panel())}</View>
+        <View class="shrink">{((key) => untracked(() => (<If when={key.startsWith("plugin:")}><Scroll keyboardShouldPersistTaps="handled" class="shrink">{pluginDetails()}</Scroll></If>)))(wide() ? "" : panel())}</View>
       </Sheet>
     </Page>
   );
@@ -337,7 +325,7 @@ function ItemRow(props: { testID: string; name: string; summary: string; agents:
         <AgentMarks agents={props.agents} size={15} />
       </Button>
       <Button testID={`${props.testID}-action`} accessibilityLabel={props.action.label} disabled={props.action.disabled} onPress={props.action.onPress} class="mr-1 size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50">
-        {props.action.busy ? <Spinner size={16} /> : <Icon name={props.action.icon} size={20} tone={props.action.destructive ? "ink" : "faint"} />}
+        <If when={props.action.busy} else={<Icon name={props.action.icon} size={20} tone={props.action.destructive ? "ink" : "faint"} />}><Spinner size={16} /></If>
       </Button>
       <View class="absolute bottom-0 left-4 right-0 h-px bg-border" />
     </View>
@@ -378,7 +366,7 @@ function SkillsList(props: {
       return (
         <View>
           <EmptyState testID="skills-failed" icon={offline() ? "cloud-offline" : "warning"} title={offline() ? "Server disconnected" : "Skills unavailable"} detail={state().error} action="Try again" onAction={() => void refreshSkills()} />
-          {offline() ? <View class="items-center"><PillButton title="Open Settings" onPress={() => props.nav.push({ name: "settings" })} /></View> : null}
+          <If when={offline()}><View class="items-center"><PillButton title="Open Settings" onPress={() => props.nav.push({ name: "settings" })} /></View></If>
         </View>
       );
     }
@@ -417,22 +405,14 @@ function SkillsList(props: {
   };
   return (
     <View>
-      {inventory() ? (
-        <Toolbar testID="skills" placeholder="Search Skills" label="Search local Skills" query={props.query} onQuery={props.onQuery} filterLabel="Filter Skills" filtered={filtered()} onFilters={props.onFilters} />
-      ) : null}
-      {filtered() ? (
-        <View class="mt-2 flex-row flex-wrap gap-1.5">
+      <If when={inventory()}><Toolbar testID="skills" placeholder="Search Skills" label="Search local Skills" query={props.query} onQuery={props.onQuery} filterLabel="Filter Skills" filtered={filtered()} onFilters={props.onFilters} /></If>
+      <If when={filtered()}><View class="mt-2 flex-row flex-wrap gap-1.5">
           {props.filters.agents.map((agent) => (
             <Chip label={skillAgentLabel(agent)} removeLabel={`Remove ${skillAgentLabel(agent)} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, agents: props.filters.agents.filter((item) => item !== agent) })} />
           ))}
-          {props.filters.status !== "all" ? (
-            <Chip label={STATUS_LABEL[props.filters.status]} removeLabel={`Remove ${STATUS_LABEL[props.filters.status]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, status: "all" })} />
-          ) : null}
-          {props.filters.scope !== "all" ? (
-            <Chip label={SCOPE_LABEL[props.filters.scope]} removeLabel={`Remove ${SCOPE_LABEL[props.filters.scope]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, scope: "all" })} />
-          ) : null}
-        </View>
-      ) : null}
+          <If when={props.filters.status !== "all"}><Chip label={STATUS_LABEL[props.filters.status]} removeLabel={`Remove ${STATUS_LABEL[props.filters.status]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, status: "all" })} /></If>
+          <If when={props.filters.scope !== "all"}><Chip label={SCOPE_LABEL[props.filters.scope]} removeLabel={`Remove ${SCOPE_LABEL[props.filters.scope]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, scope: "all" })} /></If>
+        </View></If>
       <OwnershipNotice count={props.pluginOwned} onView={props.onShowPlugins} />
       {body()}
     </View>
@@ -444,11 +424,7 @@ function OwnershipNotice(props: { count: number; onView: () => void }) {
   const state = () => pluginsState();
   return (
     <View>
-      {state().status === "error" ? (
-        <Notice testID="ownership-failed" title="Plugin ownership unavailable" detail="Skills that come with plugins may appear here. They stay protected." action="Retry" onAction={() => void refreshPlugins()} />
-      ) : props.count > 0 ? (
-        <Notice testID="ownership-notice" tone="info" icon="puzzle" title={`${props.count} more ${props.count === 1 ? "Skill comes" : "Skills come"} with plugins`} action="View" onAction={props.onView} />
-      ) : null}
+      <If when={state().status === "error"} else={<If when={props.count > 0}><Notice testID="ownership-notice" tone="info" icon="puzzle" title={`${props.count} more ${props.count === 1 ? "Skill comes" : "Skills come"} with plugins`} action="View" onAction={props.onView} /></If>}><Notice testID="ownership-failed" title="Plugin ownership unavailable" detail="Skills that come with plugins may appear here. They stay protected." action="Retry" onAction={() => void refreshPlugins()} /></If>
     </View>
   );
 }
@@ -504,19 +480,13 @@ function PluginsList(props: {
   };
   return (
     <View>
-      {inventory() ? (
-        <Toolbar testID="plugins" placeholder="Search Plugins" label="Search installed Plugins" query={props.query} onQuery={props.onQuery} filterLabel="Filter Plugins" filtered={filtered()} onFilters={props.onFilters} />
-      ) : null}
-      {filtered() ? (
-        <View class="mt-2 flex-row flex-wrap gap-1.5">
+      <If when={inventory()}><Toolbar testID="plugins" placeholder="Search Plugins" label="Search installed Plugins" query={props.query} onQuery={props.onQuery} filterLabel="Filter Plugins" filtered={filtered()} onFilters={props.onFilters} /></If>
+      <If when={filtered()}><View class="mt-2 flex-row flex-wrap gap-1.5">
           {props.filters.agents.map((agent) => (
             <Chip label={skillAgentLabel(agent)} removeLabel={`Remove ${skillAgentLabel(agent)} Plugin filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, agents: props.filters.agents.filter((item) => item !== agent) })} />
           ))}
-          {props.filters.capability !== "all" ? (
-            <Chip label={CAPABILITY_LABEL[props.filters.capability]} removeLabel="Remove Plugin capability filter" onRemove={() => props.onRemoveFilter({ ...props.filters, capability: "all" })} />
-          ) : null}
-        </View>
-      ) : null}
+          <If when={props.filters.capability !== "all"}><Chip label={CAPABILITY_LABEL[props.filters.capability]} removeLabel="Remove Plugin capability filter" onRemove={() => props.onRemoveFilter({ ...props.filters, capability: "all" })} /></If>
+        </View></If>
       {body()}
     </View>
   );

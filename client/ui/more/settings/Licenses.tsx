@@ -29,19 +29,15 @@ export function License(props: { id: string; nav: PageNav }) {
     <Page display title={item.name} testID="license-page">
       <Section>
         <Row title={item.name} subtitle={licenseSummary(item)} />
-        {item.url ? <Row lead={tile("open-external")} title="Source" value={item.url.replace(/^https?:\/\//, "")} onPress={() => void openUrl(item.url!)} /> : null}
+        <If when={item.url}>{(url) => <Row lead={tile("open-external")} title="Source" value={url().replace(/^https?:\/\//, "")} onPress={() => void openUrl(url())} />}</If>
       </Section>
-      {item.note ? <View class="mt-3 px-4"><Text class="text-sm text-muted-foreground">{item.note}</Text></View> : null}
-      {text ? (
-        <View class="mt-4 rounded-2xl border border-border bg-card px-4 py-3" selectable>
-          <Text testID="license-text" class="font-mono text-xs leading-5 select-text">{text}</Text>
-        </View>
-      ) : null}
-      {item.includes?.length ? (
-        <Section title={`Includes ${item.includes.length} ${item.includes.length === 1 ? "package" : "packages"}`}>
-          {item.includes.map((included, n) => <Row title={included.name} subtitle={licenseSummary(included)} chevron onPress={() => props.nav.push({ name: "settings-license", id: `${props.id.split("/").slice(0, 2).join("/")}/${n}` })} />)}
-        </Section>
-      ) : null}
+      <If when={item.note}>{(note) => <View class="mt-3 px-4"><Text class="text-sm text-muted-foreground">{note()}</Text></View>}</If>
+      <If when={text}>{(text) => <View class="mt-4 rounded-2xl border border-border bg-card px-4 py-3" selectable>
+          <Text testID="license-text" class="font-mono text-xs leading-5 select-text">{text()}</Text>
+        </View>}</If>
+      <If when={item.includes?.length}><Section title={`Includes ${item.includes!.length} ${item.includes!.length === 1 ? "package" : "packages"}`}>
+          {item.includes!.map((included, n) => <Row title={included.name} subtitle={licenseSummary(included)} chevron onPress={() => props.nav.push({ name: "settings-license", id: `${props.id.split("/").slice(0, 2).join("/")}/${n}` })} />)}
+        </Section></If>
     </Page>
   );
 }

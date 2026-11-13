@@ -62,9 +62,7 @@ function mark(kind: AgentKind, flavor: TerminalFlavor, size: number) {
     );
   }
   const src = AGENT_ASSETS[kind];
-  const image = TINTED.has(kind)
-    ? <Image src={src} style={{ width: size, height: size, tintColor: token("foreground") }} />
-    : <Image src={src} style={{ width: size, height: size }} />;
+  const image = <If when={TINTED.has(kind)} else={<Image src={src} style={{ width: size, height: size }} />}><Image src={src} style={{ width: size, height: size, tintColor: token("foreground") }} /></If>;
   if (kind !== "grok") return image;
   return (
     <View class="items-center justify-center rounded-xl border border-border bg-muted" style={{ width: size + 8, height: size + 8 }}>

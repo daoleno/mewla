@@ -143,38 +143,16 @@ export function Providers(props: { nav: PageNav }) {
   return (
     <Page display title="Model Providers" testID="providers" refreshing={providers().loading && Boolean(snapshot())} onRefresh={refreshProviders}>
       <>
-        {!daemon() ? (
-          <EmptyState testID="providers-no-server" icon="key" title="No current server" detail="Providers are managed on the connected computer." action="Open Settings" onAction={() => props.nav.pop()} />
-        ) : !connected() && !snapshot() ? (
-          <EmptyState icon="key" title="Server offline" detail="Providers are managed on the connected computer." />
-        ) : !snapshot() && providers().error ? (
-          providers().error!.kind === "unavailable" ? (
-            <EmptyState icon="key" title="Unavailable" detail="Model connections are not available on this daemon." />
-          ) : (
-            <EmptyState
-              testID="providers-failed"
-              icon="alert"
-              title={providers().error!.refreshable ? "Refresh required" : "Could not load"}
-              detail={failureWords(providers().error)}
-              action="Refresh"
-              onAction={refreshProviders}
-            />
-          )
-        ) : !snapshot() ? (
-          <EmptyState busy title="Loading Providers" />
-        ) : (
-          <View>
-            {locked() ? <Notice testID="providers-locked" title="Refresh required" detail="Changes are paused until this list is refreshed." action="Refresh" onAction={refreshProviders} /> : null}
-            {warning() ? <Notice testID="providers-warning" title="Saved with a warning" detail={warning()} /> : null}
-            {providers().error ? <Notice tone="failed" title={presentProviderError(providers().error).title === "Providers" ? "Refresh required" : presentProviderError(providers().error).title} detail={failureWords(providers().error)} action="Refresh" onAction={refreshProviders} /> : null}
+        <If when={!daemon()} else={<If when={!connected() && !snapshot()} else={<If when={!snapshot() && providers().error} else={<If when={!snapshot()} else={<View>
+            <If when={locked()}><Notice testID="providers-locked" title="Refresh required" detail="Changes are paused until this list is refreshed." action="Refresh" onAction={refreshProviders} /></If>
+            <If when={warning()}><Notice testID="providers-warning" title="Saved with a warning" detail={warning()} /></If>
+            <If when={providers().error}><Notice tone="failed" title={presentProviderError(providers().error).title === "Providers" ? "Refresh required" : presentProviderError(providers().error).title} detail={failureWords(providers().error)} action="Refresh" onAction={refreshProviders} /></If>
             <View class="mt-3">
               <Segmented testID="provider-agent" accessibilityLabel="Agent" options={CLIENTS} value={client()} onChange={(key) => agent.set(key as ProviderClient)} />
             </View>
-            {showSearch() ? (
-              <Section>
+            <If when={showSearch()}><Section>
                 <Field testID="provider-search" accessibilityLabel="Search Providers" value={query()} placeholder={`Search ${label()} Providers`} onChange={(v) => query.set(v)} />
-              </Section>
-            ) : null}
+              </Section></If>
             <Section
               title={`${label()} uses`}
               footer={list().length === 0 && q() ? "No Providers match this search." : undefined}
@@ -188,11 +166,11 @@ export function Providers(props: { nav: PageNav }) {
                 role="radio"
                 selected={selectedId() === ""}
                 accessibilityLabel="Official login, Direct · uses the native account"
-                trailing={changing() === "select:" ? <Spinner size={16} /> : undefined}
+                trailing={<If when={changing() === "select:"}><Spinner size={16} /></If>}
                 disabled={Boolean(changing()) || selectedId() === ""}
                 onPress={() => void select(null)}
               />
-              {rowNote().official ? <View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{rowNote().official}</Text></View> : null}
+              <If when={rowNote().official}><View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{rowNote().official}</Text></View></If>
               {list().map((c) => (
                 <View>
                   <Row
@@ -208,8 +186,8 @@ export function Providers(props: { nav: PageNav }) {
                     onPress={() => void select(c)}
                     trailing={
                       <View class="flex-row items-center gap-2">
-                        {!c.credential_ready ? <StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /> : null}
-                        {changing() === `select:${c.id}` || changing() === `discover:${c.id}` ? <Spinner size={16} /> : null}
+                        <If when={!c.credential_ready}><StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /></If>
+                        <If when={changing() === `select:${c.id}` || changing() === `discover:${c.id}`}><Spinner size={16} /></If>
                         <Menu
                           trigger={<View testID={`provider-menu-${c.id}`} accessibilityLabel={`${c.name} actions`} class="p-1"><Icon name="more-horizontal" size={18} /></View>}
                           popupClass="rounded-2xl bg-popover p-2"
@@ -225,14 +203,20 @@ export function Providers(props: { nav: PageNav }) {
                       </View>
                     }
                   />
-                  {rowNote()[c.id] ? <View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View> : null}
+                  <If when={rowNote()[c.id]}><View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View></If>
                 </View>
               ))}
               <Row testID="provider-add" lead={tile("add")} title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
             </Section>
-            {snapshot()!.gateway ? <Gateway /> : null}
-          </View>
-        )}
+            <If when={snapshot()!.gateway}><Gateway /></If>
+          </View>}><EmptyState busy title="Loading Providers" /></If>}><If when={providers().error!.kind === "unavailable"} else={<EmptyState
+              testID="providers-failed"
+              icon="alert"
+              title={providers().error!.refreshable ? "Refresh required" : "Could not load"}
+              detail={failureWords(providers().error)}
+              action="Refresh"
+              onAction={refreshProviders}
+            />}><EmptyState icon="key" title="Unavailable" detail="Model connections are not available on this daemon." /></If></If>}><EmptyState icon="key" title="Server offline" detail="Providers are managed on the connected computer." /></If>}><EmptyState testID="providers-no-server" icon="key" title="No current server" detail="Providers are managed on the connected computer." action="Open Settings" onAction={() => props.nav.pop()} /></If>
       </>
     </Page>
   );
@@ -362,19 +346,15 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
 
   return (
     <Page display title={existing() ? "Edit Provider" : "Add Provider"} testID="provider-editor">
-      {props.retry ? <Notice testID="provider-retry" tone="failed" title="The API key was not saved. Check it and try again." /> : null}
+      <If when={props.retry}><Notice testID="provider-retry" tone="failed" title="The API key was not saved. Check it and try again." /></If>
       <Section footer={nameIssue() ?? undefined}>
         <Field testID="provider-name" label="Provider name" value={name()} placeholder="e.g. Work gateway" onChange={(v) => edit(name, v)} />
-        {requiresBaseUrl() ? <Field testID="provider-url" label="Base URL" mono keyboardType="url" value={baseUrl()} placeholder="https://api.example.com/v1" onChange={(v) => edit(baseUrl, v)} /> : null}
+        <If when={requiresBaseUrl()}><Field testID="provider-url" label="Base URL" mono keyboardType="url" value={baseUrl()} placeholder="https://api.example.com/v1" onChange={(v) => edit(baseUrl, v)} /></If>
         <Field testID="provider-key" label="API Key" masked value={apiKey()} placeholder="Paste API key" onChange={(v) => edit(apiKey, v)} />
       </Section>
-      {existing()?.credential_hint ? (
-        <View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground line-clamp-1">{`Stored key · ${existing()!.credential_hint} — leave empty to keep it`}</Text></View>
-      ) : existing()?.credential_ready ? (
-        <View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground">Leave empty to keep the current key.</Text></View>
-      ) : null}
-      {failure() ? <Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /> : null}
-      {testLine() ? <View class="mt-3 px-4"><Text testID="provider-test-line" class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{testLine()}</Text></View> : null}
+      <If when={existing()?.credential_hint} else={<If when={existing()?.credential_ready}><View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground">Leave empty to keep the current key.</Text></View></If>}><View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground line-clamp-1">{`Stored key · ${existing()!.credential_hint} — leave empty to keep it`}</Text></View></If>
+      <If when={failure()}><Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
+      <If when={testLine()}><View class="mt-3 px-4"><Text testID="provider-test-line" class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{testLine()}</Text></View></If>
       <View class="mt-4 flex-row gap-3">
         <PillButton testID="provider-save" filled title={changing() === "save" ? "Saving…" : existing() ? "Save changes" : "Add Provider"} busy={changing() === "save"} disabled={!canSave()} onPress={() => void save()} />
         <PillButton testID="provider-test" title="Test connection" disabled={!(baseUrl().trim() || existing()) || (!existing() && !apiKey().trim())} onPress={() => void test()} />
@@ -415,20 +395,15 @@ export function ProviderModels(props: { connectionId: string }) {
   return (
     <Page display title="Model access" testID="provider-models">
       <View class="mt-3 px-1"><Text class="text-sm text-muted-foreground">{`${connection()?.name ?? ""} · ${on().length} of ${(snapshot()?.models[props.connectionId] ?? []).length} on`}</Text></View>
-      {discovered()[props.connectionId] && discovered()[props.connectionId].models.length === 0 ? (
-        <Notice title="Upstream models are unavailable" detail="Showing the local model catalog; Sync can refresh it." />
-      ) : null}
-      {warning() ? <Notice title="Saved with a warning" detail={warning()} /> : null}
-      {failure() ? <Notice tone="failed" title={failure()!.title} detail={failure()!.detail} /> : null}
+      <If when={discovered()[props.connectionId] && discovered()[props.connectionId].models.length === 0}><Notice title="Upstream models are unavailable" detail="Showing the local model catalog; Sync can refresh it." /></If>
+      <If when={warning()}><Notice title="Saved with a warning" detail={warning()} /></If>
+      <If when={failure()}><Notice tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
       <Section>
         <Field testID="model-search" accessibilityLabel="Search model IDs or names" value={search()} placeholder="Search model IDs or names" onChange={(v) => search.set(v)} />
       </Section>
       <Section footer={changing().startsWith("model:") ? "Saving…" : undefined}>
         <>
-          {models().length === 0 ? (
-            <View class="px-4 py-4"><Text class="text-sm text-muted-foreground">{search() ? "No models match this search." : "No models were reported by this endpoint."}</Text></View>
-          ) : (
-            models().map((m) => (
+          <If when={models().length === 0} else={<>{models().map((m) => (
               <SwitchRow
                 testID={`model-${m.id}`}
                 title={m.display_name || m.id}
@@ -439,8 +414,7 @@ export function ProviderModels(props: { connectionId: string }) {
                 disabled={Boolean(changing()) && changing() !== `model:${m.id}`}
                 onChange={() => void flip(m)}
               />
-            ))
-          )}
+            ))}</>}><View class="px-4 py-4"><Text class="text-sm text-muted-foreground">{search() ? "No models match this search." : "No models were reported by this endpoint."}</Text></View></If>
         </>
       </Section>
     </Page>

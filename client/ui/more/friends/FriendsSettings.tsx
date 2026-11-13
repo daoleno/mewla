@@ -100,23 +100,18 @@ export function FriendsSettings(props: { nav: PageNav }) {
           disabled={deleting() || (!available() && !friendsEnabled())}
           onChange={toggle}
         />
-        {friendsEnabled() ? (
-          <SwitchRow
+        <If when={friendsEnabled()}><SwitchRow
             testID="friends-auto-post"
             title="Post without asking"
             subtitle={me()?.auto_post ? `Up to ${me()!.daily_cap} a day` : undefined}
             checked={me()?.auto_post === true}
             onChange={(on) => void autoPost(on)}
-          />
-        ) : null}
-        {friendsEnabled() && me()?.auto_post ? (
-          <SwitchRow testID="friends-auto-media" title="Let it attach pictures and video" checked={me()!.auto_media === true} onChange={(on) => void autoMedia(on)} />
-        ) : null}
-        {friendsEnabled() ? <Row testID="friends-open" lead={tile("chat")} title="Open Friends" chevron onPress={() => props.nav.push({ name: "friends" })} /> : null}
+          /></If>
+        <If when={friendsEnabled() && me()?.auto_post}><SwitchRow testID="friends-auto-media" title="Let it attach pictures and video" checked={me()!.auto_media === true} onChange={(on) => void autoMedia(on)} /></If>
+        <If when={friendsEnabled()}><Row testID="friends-open" lead={tile("chat")} title="Open Friends" chevron onPress={() => props.nav.push({ name: "friends" })} /></If>
       </Section>
 
-      {phase() === "signing_in" && friends().signIn ? (
-        <Section title="Sign in to Mewla">
+      <If when={phase() === "signing_in" && friends().signIn}><Section title="Sign in to Mewla">
           <View class="items-center gap-4 p-5">
             {/* The code can be selected and copied, to paste it on the sign-in page. */}
             <View selectable>
@@ -129,11 +124,9 @@ export function FriendsSettings(props: { nav: PageNav }) {
               <PillButton testID="friends-cancel-sign-in" title="Cancel" onPress={cancelSignIn} />
             </View>
           </View>
-        </Section>
-      ) : null}
+        </Section></If>
 
-      {friends().status?.handle ? (
-        <Section title="Friends account">
+      <If when={friends().status?.handle}><Section title="Friends account">
           <Row
             title={`@${friends().status!.handle}`}
             subtitle={friends().status!.signed_in ? (friends().status!.account ? `Signed in as ${friends().status!.account}` : "Signed in") : undefined}
@@ -144,11 +137,10 @@ export function FriendsSettings(props: { nav: PageNav }) {
             title="Delete Friends account"
             destructive
             disabled={phase() === "working" || deleting()}
-            trailing={deleting() ? <View testID="friends-deleting" accessibilityLabel="Deleting"><Spinner size={16} /></View> : undefined}
+            trailing={<If when={deleting()}><View testID="friends-deleting" accessibilityLabel="Deleting"><Spinner size={16} /></View></If>}
             onPress={() => void remove()}
           />
-        </Section>
-      ) : null}
+        </Section></If>
     </Page>
   );
 }
