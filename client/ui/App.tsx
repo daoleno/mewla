@@ -58,6 +58,10 @@ export function startApp(): void {
     if (platform.os === "android" && host.available()) void host.call("app.navigationBar", { dark }).catch(() => undefined);
   });
 
+  // The Android host reopens the app when these beats stop for 10 s while it is in front (JsWatchdog.kt): NSH's
+  // engine can spin forever (longbridge/nsh#1984), and a reopened app beats a frozen one. iOS has no watchdog yet.
+  if (platform.os === "android" && host.available()) setInterval(() => void host.call("app.alive").catch(() => undefined), 2_000);
+
   // Coming back to the app skips the reconnect backoff.
   // Leaving it keeps where chats were read to: the system may make the app anew before it comes back.
   effect(() => {
