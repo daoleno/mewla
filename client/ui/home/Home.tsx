@@ -400,7 +400,7 @@ export function Home() {
     // A reply's image (a Calendar run's result too) is a file on Brain's host.
     loadImage: (path: string) => {
       const server = untracked(current);
-      return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path) : Promise.resolve(null);
+      return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path) : Promise.reject(new Error("No computer yet."));
     },
   };
   // The capsule header on a phone (SPEC §11); wide keeps its own header (crossing 1024 switches them).

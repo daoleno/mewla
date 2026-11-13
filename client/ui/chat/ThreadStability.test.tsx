@@ -85,7 +85,8 @@ const short = [
   { id: "p1", seq: 2, kind: "user_message", timestamp: at(1), body: "Thanks. And the table?" },
   { id: "p2", seq: 3, kind: "assistant_message", timestamp: at(2), body: "Coming up." },
 ];
-const noPicture = { codex_asset: { type: "error", message: "not a picture" } };
+// The daemon's answer for a file it cannot show as a picture (a read that did not answer would be asked again).
+const noPicture = { codex_asset: { type: "error", code: "codex_asset_failed", message: "asset is not a supported image" } };
 const builds = (app: { host: { posts(): { name: string; data: unknown }[] } }) => framesOf(app.host.posts(), "codex_asset").length;
 
 async function everyKindOfNews(app: Awaited<ReturnType<typeof open>>, worker: string, expectBuilt: () => Promise<void>) {

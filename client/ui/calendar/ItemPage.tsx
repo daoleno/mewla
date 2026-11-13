@@ -33,7 +33,7 @@ const RUNS_SHOWN = 5;
  */
 function loadResultImage(path: string): Promise<string | null> {
   const transport = currentTransport();
-  if (!transport) return Promise.resolve(null);
+  if (!transport) return Promise.reject(new Error("No computer yet."));
   return codexAsset(transport, path, brain()?.host_worker?.cwd);
 }
 

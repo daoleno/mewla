@@ -289,8 +289,12 @@ in it). A picture a tool call produced, such as an agent's screenshot, is a
 thumbnail under its row. Tap any picture to open the viewer: black, with × and
 "2 of 3" on top. Previous and next sit at the sides, and the arrow keys and a
 swipe step through every picture of the chat in order; double-tap or pinch to
-zoom, and Back closes it. A picture that failed to load keeps its frame with a
-refresh mark; tap it to load it again.
+zoom, and Back closes it. While a picture loads, its frame is a plain block
+(a thin moving line along its top once it takes more than 3 seconds). A load the
+connection cut waits for the connection and loads by itself; with the
+connection up, an unanswered load tries again after 1, 2, 4 and 8 seconds. Only
+then, or when the computer says the file is no picture it can show, does the
+frame show a refresh mark; tap it to load it again.
 
 On the web, paste a screenshot or a copied picture into the composer and it
 becomes a chip above the field, the same as one you attached; pasted text goes

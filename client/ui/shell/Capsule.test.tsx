@@ -12,7 +12,8 @@ const thread = [
 const session = { id: "w1", name: "mewla", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() };
 // A picture that does not load is asked for again each time its row is made: the count of those asks is how
 // often the newest row was drawn.
-const noPicture = { codex_asset: { type: "error", message: "not a picture" } };
+// The daemon's answer for a file it cannot show as a picture (a read that did not answer would be asked again).
+const noPicture = { codex_asset: { type: "error", code: "codex_asset_failed", message: "asset is not a supported image" } };
 const builds = (app: { host: { posts(): { name: string; data: unknown }[] } }) => framesOf(app.host.posts(), "codex_asset").length;
 
 async function sessionChat() {

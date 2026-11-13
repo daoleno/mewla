@@ -26,6 +26,8 @@ export interface FakeDaemonState {
   firstMessages?: boolean;
   /** Pictures by path, as `codex_asset` answers them (`data_url`); a path not here falls to `replies`. */
   assets?: Record<string, string>;
+  /** The first this many `codex_asset` asks are lost with the link: it drops instead of answering (a relay that went away mid-picture). */
+  assetsLost?: number;
 }
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
@@ -155,6 +157,11 @@ export class FakeDaemon {
     host.post("app.testFrame", frame);
     const reply = (type: string, body: Record<string, unknown>) => this.to(socket, { type, request_id: frame.request_id, ...body });
     const fail = (message: string) => reply("error", { message });
+    if (frame.type === "codex_asset" && (this.state.assetsLost ?? 0) > 0) {
+      this.state.assetsLost = this.state.assetsLost! - 1;
+      setTimeout(() => this.drop(), 0);
+      return;
+    }
     const asset = frame.type === "codex_asset" ? this.state.assets?.[String(frame.path)] : undefined;
     if (asset) return reply("codex_asset", { data_url: asset });
     // A canned answer wins over the built-in one: a test makes any request fail this way.
