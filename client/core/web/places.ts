@@ -4,12 +4,25 @@
  * (client/DESIGN.md "The wide layout", soft-final SPEC §14).
  */
 
-/** From this window width (points) the app has two panes, on every device: a browser, a tablet, an open foldable. */
+/** From this usable width (points) the app has two panes, on every device: a browser, a tablet, an open foldable. */
 export const WIDE_MIN_WIDTH = 1024;
+/**
+ * A window on its side has two panes from this usable width already: an open foldable held like a book (the iPhone
+ * Duo's inner screen on its side, 867 pt beside its 84 pt side bar; a Galaxy Fold's, about 820 dp), so the tray
+ * stands beside a page at least 440 wide. Upright or short it stays one stack (Apple's split view tiles only
+ * landscape; a phone held sideways is under WIDE_MIN_HEIGHT).
+ */
+export const WIDE_LANDSCAPE_MIN_WIDTH = 760;
+/** Below this height a window on its side keeps one stack: two panes over a short phone screen read as neither. */
+export const WIDE_MIN_HEIGHT = 480;
 
-/** The one gate for the wide layout: the window is at least 1024 pt wide, whatever the device (SPEC §14.6). */
-export function isWide(width: number): boolean {
-  return width >= WIDE_MIN_WIDTH;
+/**
+ * The one gate for the wide layout (SPEC §14.6), whatever the device. `width` is the usable width: the window less
+ * what the system draws at its sides (the iPhone Duo's side bar, a phone's cutout), never counted as room.
+ */
+export function isWide(window: { width: number; height: number }): boolean {
+  if (window.width >= WIDE_MIN_WIDTH) return true;
+  return window.width >= WIDE_LANDSCAPE_MIN_WIDTH && window.width > window.height && window.height >= WIDE_MIN_HEIGHT;
 }
 
 /** A place you can go to by name: a `G` key, the palette's Go to, a URL. */

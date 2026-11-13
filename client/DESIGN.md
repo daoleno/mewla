@@ -112,11 +112,13 @@ preference.
   on Sessions when a Session needs you) and one ⋮ page action. The menu
   slides over the page. Nothing else is pinned under the app bar: no status
   strip, no goal line, no connection banner.
-- **Two panes from 1024 pt.** A window at least 1024 pt wide, on any device
-  (a browser, a tablet in landscape, an open foldable), gets the wide layout
-  (see The wide layout): the tray as a left pane beside the one stack. It
-  follows the window's width alone, never the device or its orientation, and
-  crossing 1024 only adds or removes the pane: the page keeps its state.
+- **Two panes from 1024 pt, or 760 on its side.** A window with at least 1024 pt
+  of usable width, or 760 when it is wider than tall and at least 480 high (an
+  open foldable held like a book: the iPhone Duo's inner screen on its side, a
+  Galaxy Fold's), on any device, gets the wide layout (see The wide layout): the
+  tray as a left pane beside the one stack. It follows the window's shape
+  alone, never the device, and crossing the gate only adds or removes the
+  pane: the page keeps its state.
 - **Side insets.** Every page sits inside the left and right safe areas (a
   foldable's rail, a landscape notch): one frame around each screen in the root
   Stack (`HorizontalSafeAreaFrame`), and floating layers (toasts, sheets, the
@@ -265,17 +267,30 @@ palette prop to a component.
 
 ## The wide layout
 
-From a 1024 pt window the app has two panes (soft-final SPEC §14). It is the
-same app, the same routes and the same stack as on the phone; only the frame
-changes. `wide` (`ui/shell/layout.ts`, from `isWide` in
-`core/web/places.ts`) is the one gate: the window's width, whatever the
-device. Touch (a tablet, an open foldable) and a pointer with a keyboard (a
-browser, a desktop) get the same frame.
+From 1024 pt of usable width, or 760 on its side, the app has two panes
+(soft-final SPEC §14). It is the same app, the same routes and the same stack
+as on the phone; only the frame changes. `wide` (`ui/shell/layout.ts`, from
+`isWide` in `core/web/places.ts`) is the one gate, whatever the device:
+- the usable width (the window less what the system draws at its sides: the
+  iPhone Duo's 84 pt side bar, a phone's cutout) is at least 1024, or
+- it is at least 760, wider than the window is tall, and the window at least
+  480 high.
+
+So an open iPhone Duo on its side (867 usable) and a Galaxy Fold's inner
+screen on its side (about 820 dp) have the pane. Upright, folded shut, or a
+phone held sideways (under 480 high), they keep the phone layout, as Apple's
+split view tiles only on its side. Touch (a tablet, an open foldable) and a
+pointer with a keyboard (a browser, a desktop) get the same frame.
+
+On an iPhone (the Duo opened) the right pane's pages keep their phone
+headers: Brain's header loses its cat and state control to the pane, and a
+pushed page keeps its capsule. A half-open fold is not yet followed: NSH 0.5.0
+reports no fold, so nothing snaps to it.
 
 1. **One tree.** `Shell` (`ui/shell/Shell.tsx`) is one row at every width: the
    left pane and its handle come and go beside the right pane, which holds the
-   one stack and is never made again. Crossing 1024 (a resized window, a
-   rotated tablet, a fold) keeps the stack, the pages, their scroll and what
+   one stack and is never made again. Crossing the gate (a resized window, a
+   rotated tablet, folding or unfolding) keeps the stack, the pages, their scroll and what
    is typed. Narrow to wide, an open tray becomes the left pane; wide to
    narrow, the pane goes and Brain's header gets back its cat and state
    control. Anything that differs by width changes a leaf or a style, never
@@ -304,13 +319,16 @@ browser, a desktop) get the same frame.
    (`NavPage` `column`, `PAGE_COLUMN_WIDTH`): list pages 680 (`page`), threads
    and their composer 760 (`reading`), and the whole pane (`full`) for the
    terminal, a diff and Screen. A Session switches between `reading` (chat)
-   and `full` (terminal) without making its content again. Below 1024 pages
+   and `full` (terminal) without making its content again. Off wide pages
    take the window, as on a phone.
 7. **Sheets become dialogs; menus become popovers.** Both in the
    primitives. `AppSheet` (and so `kit/Sheet`) is a 480 pt dialog on wide,
    centred, radius 28, over the scrim, without the grabber; Esc and the scrim
-   close it (iOS shows it as its own form sheet). An action menu is
-   `showMenu` (`ui/kit/Menu.tsx`): the platform's action sheet below 1024, a
+   close it (iOS shows it as its own form sheet). With the software keyboard
+   up (an open foldable, a tablet) the dialog sits in what the keyboard
+   leaves (`dialogFrame` in `core/shell/sheet.ts`), and its body's room
+   (`SheetRoom`) follows, so New session's Start stays reachable. An action menu is
+   `showMenu` (`ui/kit/Menu.tsx`): the platform's action sheet off wide, a
    288 pt popover with 48 pt rows and radius 18 at its button on wide (the
    button hands it `createMenuAnchor().node()`); Esc and a press outside
    close it, and a row that cannot run now stays in place at 40 %. Brain's

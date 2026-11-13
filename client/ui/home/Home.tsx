@@ -228,7 +228,7 @@ const menuAnchor = createMenuAnchor();
  * it when there are several, the state control (the tray), and ⋯ (Brain's menu). 52 pt, canvas,
  * no line; the tray dims it with the page. On wide (§14.1) only "Brain" and ⋯: the left pane holds
  * the cat, the computer's name and the tray. Each part comes and goes on its own, so crossing
- * 1024 makes nothing else again.
+ * the wide gate (a resize, a turn, a fold) makes nothing else again.
  */
 function HomeHeader() {
   return (
@@ -405,7 +405,7 @@ export function Home() {
       return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path) : Promise.reject(new Error("No computer yet."));
     },
   };
-  // The capsule header on a phone (SPEC §11); wide keeps its own header (crossing 1024 switches them).
+  // The capsule header on a phone (SPEC §11); wide (an open iPhone Duo too) keeps its own header (crossing the gate switches them).
   const phone = mobile && platform.idiom === "phone";
   const capsuled = () => phone && !wide();
   const capsule = createCapsule();

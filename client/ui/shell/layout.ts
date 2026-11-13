@@ -1,13 +1,20 @@
-import { computed, signal, Storage, windowSize } from "nsh";
+import { computed, safeArea, signal, Storage, windowSize } from "nsh";
 import { screenDockWidth } from "../../core/screen/float";
 import { clampPaneWidth, isWide, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
 
 /**
- * The wide layout (soft-final SPEC §14, client/DESIGN.md "The wide layout"): from a 1024 pt
- * window the tray is a left pane beside the one stack, on every device: a browser, a tablet in
- * landscape, an open foldable. One tree either way: crossing 1024 only adds or removes the pane.
+ * The window's width less what the system draws at its sides (the iPhone Duo's 84 pt side bar, a phone's cutout
+ * on its side): the room the panes share. The shell pads its row by the same insets.
  */
-export const wide = computed(() => isWide(windowSize().width));
+export const usableWidth = computed(() => windowSize().width - safeArea().left - safeArea().right);
+
+/**
+ * The wide layout (soft-final SPEC §14, client/DESIGN.md "The wide layout"): from 1024 pt of usable width, or 760
+ * on its side (an open foldable held like a book), the tray is a left pane beside the one stack, on every device:
+ * a browser, a tablet in landscape, an open iPhone Duo or Galaxy Fold. One tree either way: crossing the gate
+ * (a resize, a turn, a fold) only adds or removes the pane.
+ */
+export const wide = computed(() => isWide({ width: usableWidth(), height: windowSize().height }));
 
 /** The left pane's width: dragged, stepped or reset on its handle, kept on this device. */
 export const paneWidth = signal<number>(PANE_WIDTH.initial);
@@ -28,10 +35,10 @@ export function setPaneWidth(value: number): void {
 export const rightPaneWidth = signal(0);
 
 /** The one stack's width: the right pane as laid out, else the window less the tray's pane. */
-export const stackWidth = computed(() => rightPaneWidth() || windowSize().width - (wide() ? paneWidth() : 0));
+export const stackWidth = computed(() => rightPaneWidth() || usableWidth() - (wide() ? paneWidth() : 0));
 
 /** The floating screen's strip at the right of the right pane on wide (core/screen/float.ts screenDockWidth); 0 where it floats over the page. */
-export const screenDock = computed(() => (wide() ? screenDockWidth(windowSize().width - paneWidth()) : 0));
+export const screenDock = computed(() => (wide() ? screenDockWidth(usableWidth() - paneWidth()) : 0));
 
 /** How many floating screens are up (0 or 1): while one is, a docked strip is kept free of the page. */
 export const floatsShown = signal(0);

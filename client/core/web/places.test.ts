@@ -14,10 +14,37 @@ import {
 } from "./places";
 
 describe("the wide gate (SPEC §14.6)", () => {
-  test("two panes from a 1024 pt window, whatever the device", () => {
-    expect(isWide(1024)).toBe(true);
-    expect(isWide(1023)).toBe(false);
-    expect(isWide(1366)).toBe(true);
+  test("two panes from 1024 pt of usable width, whatever the device and its shape", () => {
+    expect(isWide({ width: 1024, height: 768 })).toBe(true);
+    expect(isWide({ width: 1366, height: 1024 })).toBe(true);
+    // A 13-inch tablet upright, and a short desktop window, as before.
+    expect(isWide({ width: 1032, height: 1376 })).toBe(true);
+    expect(isWide({ width: 1280, height: 400 })).toBe(true);
+    expect(isWide({ width: 1023, height: 1366 })).toBe(false);
+  });
+
+  test("a window on its side from 760 pt and at least 480 high: an open foldable held like a book", () => {
+    // iPhone Duo, inner screen on its side: 951 x 669 less the 84 pt side bar.
+    expect(isWide({ width: 951 - 84, height: 669 })).toBe(true);
+    // A Galaxy Fold's inner screen on its side (about 823 x 707 dp), a desktop window of 800 x 600.
+    expect(isWide({ width: 823, height: 707 })).toBe(true);
+    expect(isWide({ width: 800, height: 600 })).toBe(true);
+    expect(isWide({ width: 760, height: 480 })).toBe(true);
+    expect(isWide({ width: 759, height: 480 })).toBe(false);
+    expect(isWide({ width: 900, height: 479 })).toBe(false);
+  });
+
+  test("upright, folded or a phone held sideways: one stack", () => {
+    // iPhone Duo: inner upright, the cover screen upright and on its side (less the side bar).
+    expect(isWide({ width: 669, height: 951 })).toBe(false);
+    expect(isWide({ width: 466 - 84, height: 678 })).toBe(false);
+    expect(isWide({ width: 678 - 84, height: 466 })).toBe(false);
+    // An 11-inch tablet upright reads like a phone (SPEC §10.3); a square fold upright too.
+    expect(isWide({ width: 834, height: 1194 })).toBe(false);
+    expect(isWide({ width: 800, height: 800 })).toBe(false);
+    // A phone on its side: wide enough, too short.
+    expect(isWide({ width: 932 - 118, height: 430 })).toBe(false);
+    expect(isWide({ width: 915, height: 412 })).toBe(false);
   });
 
   test("list and detail side by side from an 880 pt right pane, on wide only", () => {

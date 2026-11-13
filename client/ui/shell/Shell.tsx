@@ -168,10 +168,10 @@ function Overlays(props: { bottomInset?: () => number }) {
 }
 
 /**
- * The app's frame (soft-final SPEC §14): one tree at every width. From a 1024 pt window, on any
- * device, the tray is the left pane beside the one stack; below it the stack alone, as on a phone.
- * Crossing 1024 only adds or removes the pane: the stack, its pages, their scroll and what is typed
- * stay as they were.
+ * The app's frame (soft-final SPEC §14): one tree at every width. On wide (ui/shell/layout.ts: 1024 pt of usable
+ * width, or 760 on its side, as an open foldable held like a book), on any device, the tray is the left pane beside
+ * the one stack; otherwise the stack alone, as on a phone. Crossing the gate (a resize, a turn, folding or unfolding)
+ * only adds or removes the pane: the stack, its pages, their scroll and what is typed stay as they were.
  */
 export function Shell() {
   loadPaneWidth();

@@ -40,7 +40,7 @@ export function Page(props: {
   headerRight?: JSX.Element;
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** The widest the content grows below 1024 pt, in points (720; a dashboard takes more). On wide every list page has the 680 column. */
+  /** The widest the content grows off wide, in points (720; a dashboard takes more). On wide every list page has the 680 column. */
   maxWidth?: number;
   /** The page's scroll view, for a page that brings something at its top into view. */
   scrollRef?: (ref: ScrollRef) => void;
