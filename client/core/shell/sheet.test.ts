@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentGridColumns, composing, dialogBodyRoom, dialogFrame, SHEET, scrollBesidePinned, sheetBodyRoom, sheetFoot, sheetTitleGivesWay } from "./sheet";
+import { agentGridColumns, composing, dialogBodyRoom, dialogFrame, SHEET, scrollBesidePinned, sheetBodyRoom, sheetFoot, sheetTitleGivesWay, taskCaptionShows } from "./sheet";
 
 // The grabber (8 + 5) and the title row (11 + 25 + 19), as laid out; the title's room alone is 16.
 const HEADER = 68;
@@ -46,6 +46,14 @@ describe("New session while a field has the keyboard", () => {
     expect(composing(260, "task")).toBe(true);
     expect(composing(0, "task")).toBe(false);
     expect(composing(260, null)).toBe(false);
+  });
+
+  test("the Task caption gives its room to the agents on a short window and while composing", () => {
+    expect(taskCaptionShows(874, false)).toBe(true);
+    expect(taskCaptionShows(669, false)).toBe(true);
+    expect(taskCaptionShows(466, false)).toBe(false);
+    expect(taskCaptionShows(411, false)).toBe(false);
+    expect(taskCaptionShows(874, true)).toBe(false);
   });
 
   test("its agents three across on a phone, more on a wide sheet so the folders show (1a)", () => {

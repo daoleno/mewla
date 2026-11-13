@@ -55,6 +55,15 @@ export function composing(keyboard: number, focused: string | null): boolean {
   return keyboard > 0 && focused !== null;
 }
 
+/**
+ * Whether New session's Task field shows its "Task" caption: not while it composes, nor on a short window (a phone
+ * held sideways, the Duo's cover screen on its side), where its 24 pt go to the agents' scroll and the placeholder
+ * ("What should it do?") says it already. By the window alone, so the scroll it frees never brings it back.
+ */
+export function taskCaptionShows(window: number, composing: boolean): boolean {
+  return !composing && window >= SHEET.shortWindow;
+}
+
 /** The agent grid's columns: three on a phone (SPEC §15), as many 88 pt tiles as fit on a wide sheet (fewer rows: the folders show). */
 export function agentGridColumns(width: number, count: number): number {
   if (width < 520) return 3;
