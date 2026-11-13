@@ -67,6 +67,14 @@ export interface Frame {
   height: number;
   top: number;
   bottom: number;
+  /** The side safe areas (an island on its side, the iPhone Duo's status rail); none when left out. */
+  left?: number;
+  right?: number;
+}
+
+/** The width between the side safe areas. */
+function innerWidth(frame: Frame): number {
+  return frame.width - (frame.left ?? 0) - (frame.right ?? 0);
 }
 
 export interface CatBox {
@@ -88,22 +96,23 @@ export function isCompactFrame({ height, top, bottom }: Frame): boolean {
 
 /** Width of the cat's column in a compact welcome or connected step; 0 otherwise. */
 export function heroZoneWidth(frame: Frame): number {
-  return isCompactFrame(frame) ? Math.round(Math.min(frame.width * 0.4, COMPACT_ZONE_MAX)) : 0;
+  return isCompactFrame(frame) ? Math.round(Math.min(innerWidth(frame) * 0.4, COMPACT_ZONE_MAX)) : 0;
 }
 
 /** Where the cat stands on the welcome and connected steps; short windows give it a column of its own. */
 export function heroCatBox(frame: Frame): CatBox {
-  const { width, height, top, bottom } = frame;
+  const { height, top, bottom } = frame;
+  const left = frame.left ?? 0;
   const usable = height - top - bottom;
   if (isCompactFrame(frame)) {
-    return { cx: heroZoneWidth(frame) / 2, cy: top + usable / 2, size: Math.min(HERO_SIZE, usable - 32) };
+    return { cx: left + heroZoneWidth(frame) / 2, cy: top + usable / 2, size: Math.min(HERO_SIZE, usable - 32) };
   }
-  return { cx: width / 2, cy: top + Math.max(132, Math.round(usable * 0.27)), size: HERO_SIZE };
+  return { cx: left + innerWidth(frame) / 2, cy: top + Math.max(132, Math.round(usable * 0.27)), size: HERO_SIZE };
 }
 
 /** The cat keeping watch beside the title on the install and scan steps. */
-export function cornerCatBox({ width, top }: Frame): CatBox {
-  return { cx: width - 20 - CORNER_SIZE / 2, cy: top + 14 + CORNER_SIZE / 2, size: CORNER_SIZE };
+export function cornerCatBox({ width, top, right }: Frame): CatBox {
+  return { cx: width - (right ?? 0) - 20 - CORNER_SIZE / 2, cy: top + 14 + CORNER_SIZE / 2, size: CORNER_SIZE };
 }
 
 export function catBoxForStep(step: OnboardingStep, frame: Frame): CatBox {

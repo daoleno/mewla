@@ -58,7 +58,8 @@ export function CapsulePage(props: { children: JSX.Element }) {
 
 /**
  * The capsule header (SPEC §11): one opaque shape on the sheet surface with a 1 pt hairline (and in light a
- * 1 pt contact shadow), 6 below the status bar and 8 from the sides, over the page's content. Expanded it is
+ * 1 pt contact shadow), 6 below the status bar and 8 from the sides (the page's: the shell keeps pages clear of
+ * the side safe areas), over the page's content. Expanded it is
  * the screen's width less the sides; collapsed it is as wide as what it keeps, at the same top-left. Its
  * radius is half its height in both. Touches outside it reach the content.
  */
@@ -82,7 +83,7 @@ export function Capsule(props: {
   return (
     <View testID={props.testID ?? "capsule-layer"} class="absolute left-0 right-0 top-0" style={{ pointerEvents: "box-none" }}>
       <StatusBarStrip top={top} />
-      <View style={{ paddingTop: top() + CAPSULE.top, paddingLeft: CAPSULE.side + safeArea().left, paddingRight: CAPSULE.side + safeArea().right, gap: 4, pointerEvents: "box-none" }}>
+      <View style={{ paddingTop: top() + CAPSULE.top, paddingLeft: CAPSULE.side, paddingRight: CAPSULE.side, gap: 4, pointerEvents: "box-none" }}>
         {/* Its testID says which layout shows (a test reads no sizes). */}
         <View testID={props.collapsed() ? "capsule-collapsed" : "capsule"} class="flex-row items-center rounded-full border border-border bg-sheet-surface"
           style={{

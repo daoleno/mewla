@@ -116,6 +116,17 @@ describe("onboarding layout", () => {
       expect(catBoxForStep("install", f)).toEqual(corner);
     }
   });
+  test("the cat stays clear of a side safe area (the iPhone Duo's 84 pt status rail, an island on its side)", () => {
+    // Cover screen upright: the rail is at the right. Inner screen on its side: at the right too. A phone on its side: both.
+    for (const f of [{ ...frame(466, 678, 0, 34), right: 84 }, { ...frame(951, 669, 0, 34), right: 84 }, { ...frame(874, 402, 0, 21), left: 62, right: 62 }]) {
+      const inner = { left: f.left ?? 0, right: f.width - (f.right ?? 0) };
+      const corner = cornerCatBox(f);
+      expect(corner.cx + corner.size / 2).toBeLessThanOrEqual(inner.right);
+      const hero = heroCatBox(f);
+      expect(hero.cx - hero.size / 2).toBeGreaterThanOrEqual(inner.left);
+      expect(hero.cx + hero.size / 2).toBeLessThanOrEqual(inner.right);
+    }
+  });
 });
 
 describe("the viewfinder", () => {

@@ -1,4 +1,4 @@
-import { Text, View } from "nsh";
+import { safeArea, Text, View } from "nsh";
 import type { JSX } from "nsh";
 import { AppSheet } from "../shell/AppSheet";
 import { wide } from "../shell/layout";
@@ -28,7 +28,8 @@ export function Sheet(props: {
   return (
     <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe
       popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet shadow-float" backdropClass="bg-scrim">
-      <View testID={props.testID} class={wide() ? "pb-6 pt-3" : "pb-8"}>
+      {/* The sheet spans the screen: its content keeps clear of the side safe areas (an island, a status rail). */}
+      <View testID={props.testID} class={wide() ? "pb-6 pt-3" : "pb-8"} style={wide() ? undefined : { paddingLeft: safeArea().left, paddingRight: safeArea().right }}>
         {/* A dialog on wide has no grabber (SPEC §14.2). */}
         <If when={!wide()}><View class="items-center pt-2">
             <View class="h-[5px] w-[36px] rounded-full bg-track" />
