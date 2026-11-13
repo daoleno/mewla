@@ -1,42 +1,33 @@
 import { describe, expect, test } from "bun:test";
-import { dialogBodyRoom, dialogFrame, SHEET, scrollAboveControl, sheetBodyRoom, sheetFoot, sheetTitleGivesWay } from "./sheet";
+import { agentGridColumns, composing, dialogBodyRoom, dialogFrame, SHEET, scrollBesidePinned, sheetBodyRoom, sheetFoot, sheetTitleGivesWay } from "./sheet";
 
 // The grabber (8 + 5) and the title row (11 + 25 + 19), as laid out; the title's room alone is 16.
 const HEADER = 68;
 const NO_TITLE = 29;
-// New session's Start: 8 above a 52 pill.
-const START = 60;
-const NEW_SESSION = { max: 520, minScroll: 120 };
+// New session under its scroll: the Task field with its caption (96), then Start (8 above a 52 pill).
+const PINNED = 96 + 60;
+// While composing: the focused field alone, Start in its row.
+const COMPOSE_FIELD = 72;
 
 describe("a sheet's body is held to what the window leaves (iPhone Duo, 11-14)", () => {
-  test("a tall phone keeps the 520 pt it always had", () => {
-    const room = sheetBodyRoom({ window: 874, keyboard: 0, header: HEADER });
-    expect(scrollAboveControl(room, START, NEW_SESSION)).toEqual({ scroll: 520, controlInside: false });
+  test("a tall phone keeps its scroll near the 520 pt it had, the field and Start under it", () => {
+    expect(scrollBesidePinned(sheetBodyRoom({ window: 874, keyboard: 0, header: HEADER }), PINNED)).toBe(513);
+    expect(scrollBesidePinned(sheetBodyRoom({ window: 956, keyboard: 0, header: HEADER }), PINNED)).toBe(520);
   });
 
-  test("the Duo's inner screen sideways (669 pt): Start stays inside the sheet", () => {
-    const room = sheetBodyRoom({ window: 669, keyboard: 0, header: HEADER });
-    const { scroll, controlInside } = scrollAboveControl(room, START, NEW_SESSION);
-    expect(controlInside).toBe(false);
-    // The whole sheet fits its 88 % cap.
-    expect(HEADER + scroll + START + SHEET.foot).toBeLessThanOrEqual(Math.floor(669 * SHEET.maxShare));
-  });
-
-  test("the outer screen sideways (466 pt)", () => {
+  test("the Duo's cover screen sideways (466 pt): the field and Start under a shorter scroll, all inside the sheet", () => {
     const room = sheetBodyRoom({ window: 466, keyboard: 0, header: HEADER });
-    const { scroll, controlInside } = scrollAboveControl(room, START, NEW_SESSION);
-    expect(controlInside).toBe(false);
-    expect(HEADER + scroll + START + SHEET.foot).toBeLessThanOrEqual(Math.floor(466 * SHEET.maxShare));
+    const scroll = scrollBesidePinned(room, PINNED);
+    expect(scroll).toBeGreaterThan(100);
+    expect(HEADER + scroll + PINNED + SHEET.foot).toBeLessThanOrEqual(Math.floor(466 * SHEET.maxShare));
   });
 
-  test("the outer screen sideways with the keyboard up: the title gives way and Start goes to the scroll's end", () => {
-    expect(sheetTitleGivesWay(466, 200)).toBe(true);
-    const room = sheetBodyRoom({ window: 466, keyboard: 200, header: NO_TITLE });
-    const { scroll, controlInside } = scrollAboveControl(room, START, NEW_SESSION);
-    expect(controlInside).toBe(true);
-    // The scroll still fits between the header and the keyboard, so scrolling reaches Start.
-    expect(NO_TITLE + scroll + sheetFoot(200) + 200 + SHEET.keyboardGap).toBeLessThanOrEqual(Math.floor(466 * SHEET.maxShare));
-    expect(scroll).toBeGreaterThan(START);
+  test("the cover screen sideways with the keyboard up (1c): the field and Start fit over the keyboard with no scroll", () => {
+    for (const keyboard of [200, 230, 260]) {
+      expect(sheetTitleGivesWay(466, keyboard)).toBe(true);
+      const room = sheetBodyRoom({ window: 466, keyboard, header: NO_TITLE });
+      expect(room).toBeGreaterThanOrEqual(COMPOSE_FIELD);
+    }
   });
 
   test("the keyboard up in a tall window keeps the title", () => {
@@ -46,7 +37,21 @@ describe("a sheet's body is held to what the window leaves (iPhone Duo, 11-14)",
 
   test("never negative", () => {
     expect(sheetBodyRoom({ window: 200, keyboard: 300, header: HEADER })).toBe(0);
-    expect(scrollAboveControl(0, START, NEW_SESSION)).toEqual({ scroll: 0, controlInside: true });
+    expect(scrollBesidePinned(0, PINNED)).toBe(0);
+  });
+});
+
+describe("New session while a field has the keyboard", () => {
+  test("composes only with the keyboard up for one of its fields", () => {
+    expect(composing(260, "task")).toBe(true);
+    expect(composing(0, "task")).toBe(false);
+    expect(composing(260, null)).toBe(false);
+  });
+
+  test("its agents three across on a phone, more on a wide sheet so the folders show (1a)", () => {
+    expect(agentGridColumns(358, 9)).toBe(3);
+    expect(agentGridColumns(560, 9)).toBe(6);
+    expect(agentGridColumns(835, 9)).toBe(9);
   });
 });
 
@@ -65,12 +70,11 @@ describe("on wide a sheet is a dialog the keyboard never covers (iPhone Duo open
     expect(dialogFrame(100, 264).max).toBe(0);
   });
 
-  test("New session in the dialog keeps Start beside its scroll on the open Duo, at its end once the keyboard is up", () => {
+  test("New session in the dialog on the open Duo: a scroll beside the pinned field and Start; typing, the field and Start fit", () => {
     const flat = dialogBodyRoom({ window: 669, keyboard: 0, header: DIALOG_HEADER });
     expect(flat).toBe(588 - 67 - 24);
-    expect(scrollAboveControl(flat, START, NEW_SESSION)).toEqual({ scroll: 437, controlInside: false });
+    expect(scrollBesidePinned(flat, PINNED)).toBe(497 - PINNED);
     const typing = dialogBodyRoom({ window: 669, keyboard: 264, header: DIALOG_HEADER });
-    expect(typing).toBe(373 - 67 - 24);
-    expect(scrollAboveControl(typing, START, NEW_SESSION)).toEqual({ scroll: 222, controlInside: false });
+    expect(typing).toBeGreaterThanOrEqual(COMPOSE_FIELD);
   });
 });

@@ -14,14 +14,27 @@ async function newSession(height: number) {
 }
 
 describe("New session fits the window (iPhone Duo, 11-14)", () => {
-  test("a tall phone keeps Start under the agents and folders", async () => {
-    const app = await newSession(844);
-    expect(app.count("id:new-scroll >> id:new-launch")).toBe(0);
-  }, 30_000);
+  for (const height of [844, 466, 300]) {
+    test(`on a window ${height} high the Task field and Start are under the scroll, never in it`, async () => {
+      // In no scroll, NSH keeps the focused field clear of the keyboard once the sheet rises; Start in the scroll sat
+      // behind the keyboard on the iPhone Duo's cover screen held sideways (Mac re-run 11-14, 1c).
+      const app = await newSession(height);
+      expect(app.count("id:new-pinned >> id:new-launch")).toBe(1);
+      expect(app.count("id:new-pinned >> id:new-task")).toBe(1);
+      expect(app.count("id:new-scroll >> id:new-launch")).toBe(0);
+      expect(app.count("id:new-scroll >> id:new-task")).toBe(0);
+      // 466 is the smallest real window (the Duo's cover screen held sideways): the agents still show there. Below it
+      // the scroll gives way first, never Task or Start.
+      expect(app.count("id:new-scroll >> id:preset-claude")).toBe(height >= 466 ? 1 : 0);
+    }, 30_000);
+  }
 
-  test("a short window (a phone held sideways) puts Start at the scroll's end, where scrolling reaches it", async () => {
-    // The sheet's room reaches its body: without it, the scroll kept its 520 pt and Start fell below the screen.
-    const app = await newSession(300);
-    expect(app.count("id:new-scroll >> id:new-launch")).toBe(1);
+  test("a custom command's two fields are under the scroll too, and Start starts it", async () => {
+    const app = await newSession(844);
+    await app.press("id:new-advanced");
+    await app.waitFor("id:new-command");
+    expect(app.count("id:new-pinned >> id:new-command")).toBe(1);
+    expect(app.count("id:new-pinned >> id:new-name")).toBe(1);
+    expect(app.count("id:new-scroll >> id:new-command")).toBe(0);
   }, 30_000);
 });
