@@ -98,16 +98,16 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
                 <Text class="text-sm text-muted-foreground">{`${statusLabel[item()!.status]} · ${kindLabel[item()!.kind]}`}</Text>
               </View>
             </View>
-            {itemSummary(item()!) ? <Text class="px-4 py-2 text-base">{itemSummary(item()!)}</Text> : null}
-            {item()!.kind === "event" && item()!.end_at ? <Text class="px-4 py-1 text-base text-muted-foreground">{`Ends ${clock().format.dateTime(Date.parse(item()!.end_at!), item()!.timezone, true)}`}</Text> : null}
-            {item()!.notes ? <Text class="px-4 py-2 text-base">{item()!.notes!}</Text> : null}
+            {itemSummary(item()!) ? <View class="px-4 py-2"><Text class="text-base">{itemSummary(item()!)}</Text></View> : null}
+            {item()!.kind === "event" && item()!.end_at ? <View class="px-4 py-1"><Text class="text-base text-muted-foreground">{`Ends ${clock().format.dateTime(Date.parse(item()!.end_at!), item()!.timezone, true)}`}</Text></View> : null}
+            {item()!.notes ? <View class="px-4 py-2"><Text class="text-base">{item()!.notes!}</Text></View> : null}
             {item()!.action_instruction ? (
               <View>
                 <SectionTitle title="Instructions" />
-                <View selectable><Text class="px-4 text-base text-muted-foreground">{item()!.action_instruction!}</Text></View>
+                <View selectable class="px-4"><Text class="text-base text-muted-foreground">{item()!.action_instruction!}</Text></View>
               </View>
             ) : null}
-            {itemFailure(item()!) ? <Text class="px-4 pt-3 text-base text-destructive">{itemFailure(item()!)}</Text> : null}
+            {itemFailure(item()!) ? <View class="px-4 pt-3"><Text class="text-base text-destructive">{itemFailure(item()!)}</Text></View> : null}
 
             {runs().length ? <SectionTitle title="Runs" /> : null}
             <View class="border-t border-border">
@@ -133,7 +133,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
               <Row testID="edit-item" title="Edit" disabled={busy() || item()!.status === "running"} onPress={() => openEditor(item())} />
               <Row testID="cancel-item" title="Cancel" tone="destructive" disabled={busy() || item()!.status === "running" || item()!.status === "cancelled"} onPress={() => void cancel(item()!)} />
             </View>
-            {failure() ? <Text testID="item-failure" class="px-4 pt-3 text-base text-destructive">{`That did not go through. ${failure()}`}</Text> : null}
+            {failure() ? <View class="px-4 pt-3"><Text testID="item-failure" class="text-base text-destructive">{`That did not go through. ${failure()}`}</Text></View> : null}
           </View>
         )}
       </Scroll>

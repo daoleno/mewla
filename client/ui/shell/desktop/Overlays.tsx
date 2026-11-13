@@ -89,7 +89,7 @@ const popupTop = () => ({ marginTop: Math.round(windowSize().height * 0.12) });
 const BACKDROP = "bg-scrim";
 
 function Key(props: { text: string }) {
-  return <Text class="rounded-md border border-border px-1.5 py-0.5 text-xs text-muted-foreground">{props.text}</Text>;
+  return <View class="rounded-md border border-border px-1.5 py-0.5"><Text class="text-xs text-muted-foreground">{props.text}</Text></View>;
 }
 
 /**
@@ -149,8 +149,8 @@ function Palette() {
             {byId().get(entry.id)?.shortcut ? <Key text={byId().get(entry.id)!.shortcut!} /> : null}
           </View>
         )}
-        empty={<Text testID="palette-empty" class="p-4 text-sm text-muted-foreground">{`Nothing matches “${query()}”.`}</Text>}
-        footer={<Text class="border-t border-border px-4 py-2 text-xs text-muted-foreground">{`↑↓ to move · Enter to open · Esc to close · ${mod()}+K anywhere`}</Text>} />
+        empty={<View class="p-4"><Text testID="palette-empty" class="text-sm text-muted-foreground">{`Nothing matches “${query()}”.`}</Text></View>}
+        footer={<View class="border-t border-border px-4 py-2"><Text class="text-xs text-muted-foreground">{`↑↓ to move · Enter to open · Esc to close · ${mod()}+K anywhere`}</Text></View>} />
     </Dialog>
   );
 }

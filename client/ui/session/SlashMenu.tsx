@@ -67,7 +67,7 @@ export function SlashMenu(props: {
                 state().visibleCommands.length > 0 ? (
                   groupSlashCommands(state().visibleCommands).map((group) => (
                     <View testID={`slash-group-${group.key}`} class="gap-0.5">
-                      <Text class="px-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">{group.label}</Text>
+                      <View class="px-2 pt-1"><Text class="text-xs font-semibold uppercase text-muted-foreground">{group.label}</Text></View>
                       {group.commands.map((command) => (
                         <Button testID={`slash-${command.name}`} accessibilityLabel={`${command.value} ${command.description}`} onPress={() => props.onPick(command)}
                           class="flex-row items-center gap-3 rounded-xl px-2 py-2 active:bg-accent">

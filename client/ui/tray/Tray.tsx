@@ -244,7 +244,7 @@ export function TrayBody(props: TrayBodyProps) {
       </View>
       <Scroll testID="tray-scroll" class="flex-1" contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
         {m().notice ? <Notice onAction={noticeAction} /> : null}
-        {said() ? <Text testID="tray-said" class="mt-2 px-4 text-sub text-muted-foreground" onPress={() => said.set("")}>{said()}</Text> : null}
+        {said() ? <View testID="tray-said" onPress={() => said.set("")} class="mt-2 px-4"><Text class="text-sub text-muted-foreground">{said()}</Text></View> : null}
         <View class={m().dimmed ? "opacity-45" : ""}>
           {m().needs.length ? (
             <View testID="tray-needs">

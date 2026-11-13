@@ -212,7 +212,7 @@ export function CalendarEditor() {
       </View>
       <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
         <View class="pb-10">
-          {failure() ? <Text testID="editor-failure" class="px-4 pt-3 text-base text-destructive">{failure()}</Text> : null}
+          {failure() ? <View class="px-4 pt-3"><Text testID="editor-failure" class="text-base text-destructive">{failure()}</Text></View> : null}
           <View class="mt-3 border-t border-border">
             <Field label="Title" id="editor-title" value={title} onChange={(v) => title.set(v)} placeholder="What is the commitment?" />
           </View>

@@ -398,7 +398,7 @@ function Consumers(props: { t: ResourceTelemetry }) {
           <View class="w-[14px]" />
         </View>
         {filtered().length === 0 ? (
-          <Text class="px-4 py-4 text-sub text-muted-foreground">{owner() === "all" ? "No consumers reported." : "No consumers reported for this owner."}</Text>
+          <View class="px-4 py-4"><Text class="text-sub text-muted-foreground">{owner() === "all" ? "No consumers reported." : "No consumers reported for this owner."}</Text></View>
         ) : (
           filtered().slice(0, shownCount()).map((c, index) => <ConsumerRow consumer={c} rowKey={keys()[index]} wide={procs()} share={consumerShare(c, filtered())} />)
         )}
@@ -409,7 +409,7 @@ function Consumers(props: { t: ResourceTelemetry }) {
           </Button>
         ) : null}
       </Section>
-      <Text class="mt-1.5 px-4 text-caption text-muted-foreground">CPU 100% is one core. Memory is resident size and may count shared pages twice.</Text>
+      <View class="mt-1.5 px-4"><Text class="text-caption text-muted-foreground">CPU 100% is one core. Memory is resident size and may count shared pages twice.</Text></View>
     </View>
   );
 }

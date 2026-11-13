@@ -208,7 +208,7 @@ export function ComputerPage(props: {
                     busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} />
                 ) : undefined}
               />
-              {notes()[row.key] ? <Text class="px-4 pb-3 text-sub text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[row.key]}</Text> : null}
+              {notes()[row.key] ? <View class="px-4 pb-3"><Text class="text-sub text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[row.key]}</Text></View> : null}
             </View>
           ))}
         </Section>

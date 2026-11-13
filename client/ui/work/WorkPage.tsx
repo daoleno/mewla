@@ -303,8 +303,8 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
           ) : (
             <View>
               <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />
-              {slip()!.summary && !slip()!.question ? <View selectable><Text testID="work-question" class="px-1 pt-3 text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View> : null}
-              {brainWorkWaitForLine(slip()!) ? <View selectable><Text testID="work-wait-for" class="px-1 pt-2 text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View> : null}
+              {slip()!.summary && !slip()!.question ? <View selectable class="px-1 pt-3"><Text testID="work-question" class="text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View> : null}
+              {brainWorkWaitForLine(slip()!) ? <View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View> : null}
               {slip()!.question ? (
                 <>
                   <Caption role="header" class="mb-2 mt-6 px-4" text="Waits on you" />
@@ -362,7 +362,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
               </Button>
             }>
             {files.items().length ? <AttachmentTray uploads={files} /> : null}
-            {attachFailure() ? <Text class="px-3 pb-1.5 text-sub text-muted-foreground">{attachFailure()}</Text> : null}
+            {attachFailure() ? <View class="px-3 pb-1.5"><Text class="text-sub text-muted-foreground">{attachFailure()}</Text></View> : null}
           </Composer>
         ) : null}
       </View>

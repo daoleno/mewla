@@ -188,7 +188,7 @@ export function Providers(props: { nav: PageNav }) {
                 disabled={Boolean(changing()) || selectedId() === ""}
                 onPress={() => void select(null)}
               />
-              {rowNote().official ? <Text class="px-4 pb-3 text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{rowNote().official}</Text> : null}
+              {rowNote().official ? <View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{rowNote().official}</Text></View> : null}
               {list().map((c) => (
                 <View>
                   <Row
@@ -220,7 +220,7 @@ export function Providers(props: { nav: PageNav }) {
                       </View>
                     }
                   />
-                  {rowNote()[c.id] ? <Text class="px-4 pb-3 text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text> : null}
+                  {rowNote()[c.id] ? <View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View> : null}
                 </View>
               ))}
               <Row testID="provider-add" icon="add" title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
@@ -357,12 +357,12 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
         <Field testID="provider-key" label="API Key" masked value={apiKey()} placeholder="Paste API key" onChange={(v) => edit(apiKey, v)} />
       </Section>
       {existing()?.credential_hint ? (
-        <Text testID="provider-key-hint" class="mt-1.5 px-4 text-xs text-muted-foreground line-clamp-1">{`Stored key · ${existing()!.credential_hint} — leave empty to keep it`}</Text>
+        <View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground line-clamp-1">{`Stored key · ${existing()!.credential_hint} — leave empty to keep it`}</Text></View>
       ) : existing()?.credential_ready ? (
-        <Text testID="provider-key-hint" class="mt-1.5 px-4 text-xs text-muted-foreground">Leave empty to keep the current key.</Text>
+        <View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground">Leave empty to keep the current key.</Text></View>
       ) : null}
       {failure() ? <Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /> : null}
-      {testLine() ? <Text testID="provider-test-line" class="mt-3 px-4 text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{testLine()}</Text> : null}
+      {testLine() ? <View class="mt-3 px-4"><Text testID="provider-test-line" class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{testLine()}</Text></View> : null}
       <View class="mt-4 flex-row gap-3">
         <PillButton testID="provider-save" filled title={changing() === "save" ? "Saving…" : existing() ? "Save changes" : "Add Provider"} busy={changing() === "save"} disabled={!canSave()} onPress={() => void save()} />
         <PillButton testID="provider-test" title="Test connection" disabled={!(baseUrl().trim() || existing()) || (!existing() && !apiKey().trim())} onPress={() => void test()} />
@@ -402,7 +402,7 @@ export function ProviderModels(props: { connectionId: string }) {
 
   return (
     <Page display title="Model access" testID="provider-models">
-      <Text class="mt-3 px-1 text-sm text-muted-foreground">{`${connection()?.name ?? ""} · ${on().length} of ${(snapshot()?.models[props.connectionId] ?? []).length} on`}</Text>
+      <View class="mt-3 px-1"><Text class="text-sm text-muted-foreground">{`${connection()?.name ?? ""} · ${on().length} of ${(snapshot()?.models[props.connectionId] ?? []).length} on`}</Text></View>
       {discovered()[props.connectionId] && discovered()[props.connectionId].models.length === 0 ? (
         <Notice title="Upstream models are unavailable" detail="Showing the local model catalog; Sync can refresh it." />
       ) : null}
@@ -414,7 +414,7 @@ export function ProviderModels(props: { connectionId: string }) {
       <Section footer={changing().startsWith("model:") ? "Saving…" : undefined}>
         <>
           {models().length === 0 ? (
-            <Text class="px-4 py-4 text-sm text-muted-foreground">{search() ? "No models match this search." : "No models were reported by this endpoint."}</Text>
+            <View class="px-4 py-4"><Text class="text-sm text-muted-foreground">{search() ? "No models match this search." : "No models were reported by this endpoint."}</Text></View>
           ) : (
             models().map((m) => (
               <SwitchRow

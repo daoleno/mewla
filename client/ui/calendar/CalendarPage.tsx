@@ -180,7 +180,7 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
             return (
               <View>
                 {section()
-                  ? <Text class="bg-background px-4 pb-1.5 pt-4 text-sm font-semibold text-muted-foreground">{title()}</Text>
+                  ? <View class="bg-background px-4 pb-1.5 pt-4"><Text class="text-sm font-semibold text-muted-foreground">{title()}</Text></View>
                   : <ItemRow item={item} onPress={() => open(item())} />}
               </View>
             );

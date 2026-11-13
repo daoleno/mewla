@@ -59,7 +59,7 @@ export function OutsideAgents() {
         <EmptyState title="No current server" />
       ) : (
         <View>
-          {error() ? <Text testID="agents-error" role="alert" android={{ accessibilityLiveRegion: "polite" }} class="mt-4 px-1 text-sm text-destructive">{error()}</Text> : null}
+          {error() ? <View class="mt-4 px-1"><Text testID="agents-error" role="alert" android={{ accessibilityLiveRegion: "polite" }} class="text-sm text-destructive">{error()}</Text></View> : null}
           {agents()?.pending.length ? (
             <Section title="Waiting">
               {agents()!.pending.map((a) => (

@@ -221,10 +221,10 @@ function CodexCard(props: { subscription: CodexSubscriptionUsage }) {
               </View>
             );
           })}
-          {s().stale ? <Text class="px-4 pb-3 text-sub text-muted-foreground">Live usage is temporarily unavailable. Showing the last successful update.</Text> : null}
+          {s().stale ? <View class="px-4 pb-3"><Text class="text-sub text-muted-foreground">Live usage is temporarily unavailable. Showing the last successful update.</Text></View> : null}
         </View>
       ) : (
-        <Text class="px-4 py-3 text-sub text-muted-foreground">{codexNotice(s())}</Text>
+        <View class="px-4 py-3"><Text class="text-sub text-muted-foreground">{codexNotice(s())}</Text></View>
       )}
     </Section>
   );
@@ -249,7 +249,7 @@ function Summary(props: { data: RangeData; pricing?: PricingStatus }) {
         <StatTile label="Tokens" valueTestID="stats-tokens" value={formatAvailableTokens(props.data.totalTokens, props.data.totalTokensKnown)} muted={unknownTokens()} />
         <StatTile label="Sessions" value={String(props.data.sessions)} />
       </StatGrid>
-      {props.pricing ? <Text class="mt-2 px-4 text-caption text-muted-foreground">{pricingLine(props.pricing, formatDate)}</Text> : null}
+      {props.pricing ? <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{pricingLine(props.pricing, formatDate)}</Text></View> : null}
     </View>
   );
 }
@@ -487,7 +487,7 @@ export function StatsModel(props: { model: ModelStat; pricing?: PricingStatus; n
       </Section>
       {modelNotes(props.model, props.pricing).map((note) => (
         <View role="text" accessibilityLabel={note} onLongPress={() => void copyMenu(note, [{ label: "Copy", value: note }])}>
-          <Text class="mt-3 px-4 text-sub text-muted-foreground">{note}</Text>
+          <View class="mt-3 px-4"><Text class="text-sub text-muted-foreground">{note}</Text></View>
         </View>
       ))}
     </Page>

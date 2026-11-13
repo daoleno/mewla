@@ -570,7 +570,7 @@ function AskForm(props: { context: () => ReturnType<typeof gitAskContext> | null
   const context = untracked(props.context);
   return (
     <View testID="ask-sheet" class="gap-2 px-4">
-      <Text testID="ask-where" class="px-1 font-mono text-caption text-muted-foreground line-clamp-1">{context?.where ?? ""}</Text>
+      <View class="px-1"><Text testID="ask-where" class="font-mono text-caption text-muted-foreground line-clamp-1">{context?.where ?? ""}</Text></View>
       {context?.quote.length ? (
         <View class="rounded-(--radius-control) bg-sheet-surface px-3 py-2">
           {context.quote.map((line) => <Text class="font-mono text-code line-clamp-1">{line}</Text>)}
@@ -619,7 +619,7 @@ function ActionBar(props: {
                 <IconButton testID="git-hunk-next" icon="chevron-down" label="Next hunk" onPress={() => props.onStep("next")} />
               </>
             ) : label ? (
-              <Text class="px-2 text-sub text-muted-foreground">{label}</Text>
+              <View class="px-2"><Text class="text-sub text-muted-foreground">{label}</Text></View>
             ) : null}
             <View class="flex-1" />
             {/* Small ghost buttons (SPEC §15 Code review): Ask {agent}, Discard (it confirms), Stage or Unstage. */}

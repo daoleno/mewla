@@ -63,8 +63,8 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
       </View>
       {problem() ? <Text class="text-sub text-muted-foreground">{problem()}</Text> : null}
       <View class="flex-1 overflow-hidden rounded-(--radius-group) bg-sheet-surface">
-        {loading() && entries().length === 0 ? <Text class="px-4 py-4 text-sub text-muted-foreground">Loading…</Text> : null}
-        {!loading() && entries().length === 0 && !problem() ? <Text class="px-4 py-4 text-sub text-muted-foreground">No folders here</Text> : null}
+        {loading() && entries().length === 0 ? <View class="px-4 py-4"><Text class="text-sub text-muted-foreground">Loading…</Text></View> : null}
+        {!loading() && entries().length === 0 && !problem() ? <View class="px-4 py-4"><Text class="text-sub text-muted-foreground">No folders here</Text></View> : null}
         <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
           {entries().map((entry) => (
             <Button testID="dir-entry" onPress={() => void load(entry.path)} class="min-h-[52px] flex-row items-center gap-3 px-4 active:bg-accent">
@@ -243,7 +243,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
               ))}
               <Row testID="new-pick-dir" icon="folder-open" title="Other folder…" chevron disabled={offline()} onPress={() => picking.set(true)} />
             </Section>
-            {problem() ? <Text testID="new-problem" class="mt-3 px-4 text-sub text-muted-foreground">{problem()}</Text> : null}
+            {problem() ? <View class="mt-3 px-4"><Text testID="new-problem" class="text-sub text-muted-foreground">{problem()}</Text></View> : null}
           </Scroll>
           <View class="mt-2">
             <PillButton testID="new-launch" title="Start" filled busy={busy()} disabled={offline() || (advanced() ? false : !preset())} onPress={start} />

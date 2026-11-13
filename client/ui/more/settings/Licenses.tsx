@@ -30,7 +30,7 @@ export function License(props: { id: string; nav: PageNav }) {
         <Row title={item.name} subtitle={licenseSummary(item)} />
         {item.url ? <Row icon="open-external" title="Source" value={item.url.replace(/^https?:\/\//, "")} onPress={() => void openUrl(item.url!)} /> : null}
       </Section>
-      {item.note ? <Text class="mt-3 px-4 text-sm text-muted-foreground">{item.note}</Text> : null}
+      {item.note ? <View class="mt-3 px-4"><Text class="text-sm text-muted-foreground">{item.note}</Text></View> : null}
       {text ? (
         <View class="mt-4 rounded-2xl border border-border bg-card px-4 py-3" selectable>
           <Text testID="license-text" class="font-mono text-xs leading-5 select-text">{text}</Text>

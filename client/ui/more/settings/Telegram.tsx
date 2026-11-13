@@ -153,7 +153,7 @@ export function Telegram() {
             ) : null}
 
             {!connected() ? (
-              <Text testID="telegram-offline" class="mt-3 px-4 text-sm text-muted-foreground">Reconnect the current server in Settings.</Text>
+              <View class="mt-3 px-4"><Text testID="telegram-offline" class="text-sm text-muted-foreground">Reconnect the current server in Settings.</Text></View>
             ) : null}
 
             {view() === "loading" ? null : view() === "retry" ? (
