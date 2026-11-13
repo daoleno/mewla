@@ -144,6 +144,8 @@ export function resolveTerminalRouteWorker({
       project: undefined,
       cwd: brainHostWorker.cwd || routeSessionHint.cwd,
       command: brainHostWorker.command || routeSessionHint.command,
+      // What the host runs (claude, codex, …): its mark and type label. Without it the host reads "Shell terminal".
+      provider: brainHostWorker.provider,
       summary: brainHostWorker.summary || "",
       last_output_lines: [],
       started_at: brainHostWorker.started_at ?? routeSessionHint.startedAt,
