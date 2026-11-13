@@ -573,6 +573,9 @@ export function Field(props: {
   onSubmit?: () => void;
   /** The field lost focus: commit what was typed. */
   onCommit?: () => void;
+  /** The field took the focus (and the keyboard), or let it go. */
+  onFocus?: () => void;
+  onBlur?: () => void;
   trailing?: JSX.Element;
   /** Takes the focus (and the keyboard) when it appears. */
   autoFocus?: boolean;
@@ -598,7 +601,11 @@ export function Field(props: {
           autoCorrect={false}
           onChange={({ value }) => props.onChange(value)}
           onSubmit={() => (props.onSubmit ?? props.onCommit)?.()}
-          onBlur={() => props.onCommit?.()}
+          onFocus={() => props.onFocus?.()}
+          onBlur={() => {
+            props.onBlur?.();
+            props.onCommit?.();
+          }}
         />
         {props.trailing ?? null}
       </View>

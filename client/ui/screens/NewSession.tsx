@@ -1,9 +1,9 @@
-import { computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { computed, effect, keyboardFrame, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
 import { Delayed, Rows } from "../kit/wait";
 import { Button } from "nsh/base";
 import { Sheet, SheetRoom } from "../kit/Sheet";
-import { scrollAboveControl } from "../../core/shell/sheet";
+import { agentGridColumns, composing, scrollBesidePinned } from "../../core/shell/sheet";
 import { Field, PillButton, Row, Section } from "../kit/kit";
 import { LAUNCH_PRESETS } from "../../core/sessions/agentCommands";
 import { createSession } from "../../core/sessions/create";
@@ -90,20 +90,24 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
   );
 }
 
-/** Start's block: 8 above a 52 pill. */
-const START_BLOCK = 60;
 /** The body's own foot (`pb-2`). */
 const BODY_FOOT = 8;
 
 /**
- * The scroll's height in the room the sheet leaves (core/shell/sheet.ts): 520 at most, Start under it, unless less
- * than 120 would be left beside Start, when Start goes to the scroll's end. Made under the sheet, so it reads its room.
+ * The scroll's height in the room the sheet leaves (core/shell/sheet.ts `scrollBesidePinned`): 520 at most, what is
+ * left beside the fields and Start pinned under it (`pinned`, as laid out). Made under the sheet, so it reads its room.
  */
-function Fitted(props: { children: (fit: () => { scroll: number; controlInside: boolean }) => JSX.Element }) {
+function Fitted(props: { pinned: () => number; children: (scroll: () => number) => JSX.Element }) {
   const room = SheetRoom();
-  const fit = computed(() => scrollAboveControl(room() - BODY_FOOT, START_BLOCK, { max: 520, minScroll: 120 }));
-  return <>{props.children(fit)}</>;
+  const scroll = computed(() => scrollBesidePinned(room() - BODY_FOOT, props.pinned()));
+  return <>{props.children(scroll)}</>;
 }
+
+/** How long a blurred field keeps composing, so a tap on the inline Start that blurs it first still lands. */
+const BLUR_SETTLE_MS = 300;
+
+/** The agent grid's columns, as wide as it is laid out (core/shell/sheet.ts `agentGridColumns`). */
+const gridWidth = signal(0);
 
 /** A folder the sheet offers: a recent project, or the one picked or inherited. */
 export type FolderChoice = { path: string; name: string };
@@ -216,63 +220,95 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   };
 
   const offline = () => connection() !== "connected";
-  const startButton = () => (
-    <View class="mt-2">
-      <PillButton testID="new-launch" title="Start" filled busy={busy()} disabled={offline() || (advanced() ? false : !preset())} onPress={start} />
-    </View>
+  const canStart = () => !offline() && (advanced() || Boolean(preset()));
+  // The field that has the keyboard: while it is up, the sheet is that field and Start (core/shell/sheet.ts `composing`).
+  const focused = signal<"task" | "command" | "name" | null>(null);
+  const compose = () => composing(keyboardFrame().height, focused());
+  const focus = (field: "task" | "command" | "name") => ({
+    onFocus: () => focused.set(field),
+    // A tap on the inline Start may blur the field first: clear a little later, so that tap still lands on Start.
+    onBlur: () => setTimeout(() => untracked(focused) === field && focused.set(null), BLUR_SETTLE_MS),
+  });
+  /** Start in the focused field's row while composing: the field and Start show together over the keyboard. */
+  const inlineStart = (field: "task" | "command" | "name") => (
+    <If when={compose() && focused() === field}>
+      <Button testID="new-launch-inline" accessibilityLabel="Start" disabled={!canStart() || busy()} onPress={start}
+        class="h-[36px] items-center justify-center rounded-full bg-primary px-4 active:opacity-70 disabled:opacity-40">
+        <Text class="text-sub font-semibold text-primary-foreground">Start</Text>
+      </Button>
+    </If>
   );
+  /** Hidden while another field composes; the node stays, so the focused one keeps its focus and its keyboard. */
+  const shownWhile = (field: "task" | "command" | "name") => ({ display: compose() && focused() !== field ? ("none" as const) : ("flex" as const) });
+  const pinnedHeight = signal(0);
   return (
     <Sheet testID="new-session-sheet" open={newSessionOpen} onClose={() => newSessionOpen.set(false)}
       title={() => (picking() ? "Choose a folder" : newSessionTarget() ? "New terminal" : "New session")}>
-      <If when={picking()} else={<Fitted>{(fit) => <View class="px-4 pb-2">
-          {/* Agent and Folder scroll; Start stays in view under them, or at their end when the window is too short for both. */}
-          <Scroll testID="new-scroll" keyboardShouldPersistTaps="handled" style={{ maxHeight: fit().scroll }}>
-            <If when={!advanced()} else={<Section sheet title="Command">
-                <Field testID="new-command" accessibilityLabel="Command" mono value={command()} placeholder="Login shell" onChange={(value) => command.set(value)} />
-                <View class="flex-row flex-wrap gap-2 px-4 pb-3">
-                  {LAUNCH_PRESETS.filter((p) => p.command).map((item) => (
-                    <Button onPress={() => command.set(item.command)} class="h-9 justify-center rounded-full bg-background px-3 active:opacity-70"><Text class="text-sub">{item.label}</Text></Button>
-                  ))}
-                </View>
-                <Field testID="new-name" label="Window title" value={name()} placeholder="Optional" onChange={(value) => name.set(value)} />
-                <Row testID="new-advanced" icon="chevron-left" title="Back to agents" onPress={() => advanced.set(false)} />
-              </Section>}><Section sheet title="Agent">
-                {/* SPEC §15 Picker grid: three across, the art and a 15/600 name; a tap chooses, the ink ring marks it. */}
-                <View class="flex-row flex-wrap px-2 py-2">
-                  {LAUNCH_PRESETS.map((item) => (
-                    <View class="w-1/3 p-1">
-                      <Button testID={`preset-${item.key}`} accessibilityLabel={preset() === item.key ? `${item.label}, chosen` : item.label} onPress={() => preset.set(item.key)} disabled={busy()}
-                        class={`min-h-[92px] items-center justify-center gap-2 rounded-(--radius-group) border-2 bg-background px-2 py-3 active:opacity-70 disabled:opacity-40 ${preset() === item.key ? "border-foreground" : "border-transparent"}`}>
-                        <AgentIcon kind={item.kind} size={32} />
-                        <Text class="text-sub font-semibold text-foreground line-clamp-1">{item.label}</Text>
-                      </Button>
-                    </View>
-                  ))}
-                </View>
-                <Row testID="new-advanced" icon="terminal" title="Custom command" chevron onPress={() => advanced.set(true)} />
-              </Section></If>
-            <Section sheet title="Folder" testID="new-cwd">
-              {folders().map((folder) => (
-                <Button testID="new-folder" accessibilityLabel={`${folder.path || folder.name}${cwd() === folder.path ? ", chosen" : ""}`} onPress={() => cwd.set(folder.path)}
-                  class="min-h-[56px] flex-row items-center gap-3 px-4 py-2 active:bg-accent">
-                  <Icon name="folder" size={24} tone="soft" />
-                  <View class="min-w-0 flex-1">
-                    <Text class="text-body line-clamp-1">{folder.name}</Text>
-                    <If when={folder.path}>{(pathValue) => <Text testID="new-folder-path" class="text-caption text-muted-foreground line-clamp-1">{pathValue()}</Text>}</If>
+      <If when={picking()} else={<Fitted pinned={pinnedHeight}>{(scroll) => <View class="px-4 pb-2">
+          {/* Agent and Folder scroll; the fields and Start stay in view under them. While a field has the keyboard
+              they step aside, and the sheet is that field with Start in its row. */}
+          <View class="flex-col" style={{ display: compose() ? "none" : "flex" }}>
+            <Scroll testID="new-scroll" keyboardShouldPersistTaps="handled" style={{ maxHeight: scroll() }}>
+              <If when={!advanced()} else={<Section sheet title="Command">
+                  <View class="flex-row flex-wrap gap-2 px-4 py-3">
+                    {LAUNCH_PRESETS.filter((p) => p.command).map((item) => (
+                      <Button onPress={() => command.set(item.command)} class="h-9 justify-center rounded-full bg-background px-3 active:opacity-70"><Text class="text-sub">{item.label}</Text></Button>
+                    ))}
                   </View>
-                  <If when={cwd() === folder.path}><Icon name="check" size={20} tone="ink" /></If>
-                  <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 52 }} />
-                </Button>
-              ))}
-              <Row testID="new-pick-dir" icon="folder-open" title="Other folder…" chevron disabled={offline()} onPress={() => picking.set(true)} />
-            </Section>
-            <If when={takesTask()}><Section sheet title="Task">
-                <Field testID="new-task" accessibilityLabel="What should it do?" multiline value={task()} placeholder="What should it do?" onChange={(value) => task.set(value)} />
-              </Section></If>
+                  <Row testID="new-advanced" icon="chevron-left" title="Back to agents" onPress={() => advanced.set(false)} />
+                </Section>}><Section sheet title="Agent">
+                  {/* SPEC §15 Picker grid: three across on a phone (more on a wide sheet), the art and a 15/600 name; a tap chooses, the ink ring marks it. */}
+                  <View class="flex-row flex-wrap px-2 py-2" onLayout={({ bounds }) => gridWidth.set(bounds.size.width - 16)}>
+                    {LAUNCH_PRESETS.map((item) => (
+                      <View class="p-1" style={{ width: `${100 / agentGridColumns(gridWidth(), LAUNCH_PRESETS.length)}%` }}>
+                        <Button testID={`preset-${item.key}`} accessibilityLabel={preset() === item.key ? `${item.label}, chosen` : item.label} onPress={() => preset.set(item.key)} disabled={busy()}
+                          class={`min-h-[92px] items-center justify-center gap-2 rounded-(--radius-group) border-2 bg-background px-2 py-3 active:opacity-70 disabled:opacity-40 ${preset() === item.key ? "border-foreground" : "border-transparent"}`}>
+                          <AgentIcon kind={item.kind} size={32} />
+                          <Text class="text-sub font-semibold text-foreground line-clamp-1">{item.label}</Text>
+                        </Button>
+                      </View>
+                    ))}
+                  </View>
+                  <Row testID="new-advanced" icon="terminal" title="Custom command" chevron onPress={() => advanced.set(true)} />
+                </Section></If>
+              <Section sheet title="Folder" testID="new-cwd">
+                {folders().map((folder) => (
+                  <Button testID="new-folder" accessibilityLabel={`${folder.path || folder.name}${cwd() === folder.path ? ", chosen" : ""}`} onPress={() => cwd.set(folder.path)}
+                    class="min-h-[56px] flex-row items-center gap-3 px-4 py-2 active:bg-accent">
+                    <Icon name="folder" size={24} tone="soft" />
+                    <View class="min-w-0 flex-1">
+                      <Text class="text-body line-clamp-1">{folder.name}</Text>
+                      <If when={folder.path}>{(pathValue) => <Text testID="new-folder-path" class="text-caption text-muted-foreground line-clamp-1">{pathValue()}</Text>}</If>
+                    </View>
+                    <If when={cwd() === folder.path}><Icon name="check" size={20} tone="ink" /></If>
+                    <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 52 }} />
+                  </Button>
+                ))}
+                <Row testID="new-pick-dir" icon="folder-open" title="Other folder…" chevron disabled={offline()} onPress={() => picking.set(true)} />
+              </Section>
+            </Scroll>
+          </View>
+          {/* The fields in no scroll: NSH keeps a focused field that is in none clear of the keyboard once the sheet
+              has risen (a scroll holding it took a keyboard inset before the sheet rose, and ended in blank, 1c). */}
+          <View testID="new-pinned" onLayout={({ bounds }) => pinnedHeight.set(bounds.size.height)}>
+            <If when={advanced()} else={<If when={takesTask()}><View testID="new-task-group" class="mt-2 rounded-(--radius-group) bg-sheet-surface">
+                  <Field testID="new-task" label={compose() ? undefined : "Task"} accessibilityLabel="What should it do?" multiline value={task()} placeholder="What should it do?" onChange={(value) => task.set(value)}
+                    {...focus("task")} trailing={inlineStart("task")} />
+                </View></If>}><View class="mt-2 rounded-(--radius-group) bg-sheet-surface">
+                <View class="flex-col" style={shownWhile("command")}>
+                  <Field testID="new-command" label="Command" mono value={command()} placeholder="Login shell" onChange={(value) => command.set(value)}
+                    {...focus("command")} trailing={inlineStart("command")} />
+                </View>
+                <View class="flex-col" style={shownWhile("name")}>
+                  <Field testID="new-name" label="Window title" value={name()} placeholder="Optional" onChange={(value) => name.set(value)}
+                    {...focus("name")} trailing={inlineStart("name")} />
+                </View>
+              </View></If>
             <If when={problem()}><View class="mt-3 px-4"><Text testID="new-problem" class="text-sub text-muted-foreground">{problem()}</Text></View></If>
-            <If when={fit().controlInside}>{startButton()}</If>
-          </Scroll>
-          <If when={!fit().controlInside}>{startButton()}</If>
+            <View class="mt-2 flex-col" style={{ display: compose() ? "none" : "flex" }}>
+              <PillButton testID="new-launch" title="Start" filled busy={busy()} disabled={!canStart()} onPress={start} />
+            </View>
+          </View>
         </View>}</Fitted>}><DirectoryPicker start={cwd()} onCancel={() => picking.set(false)} onPick={(path) => {
           cwd.set(path);
           extra.set({ path, name: projectName(path) || path });

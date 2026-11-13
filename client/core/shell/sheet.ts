@@ -37,14 +37,28 @@ export function sheetBodyRoom(input: { window: number; keyboard: number; header:
 }
 
 /**
- * A body that scrolls above a fixed control (New session's Start under its agents and folders): the scroll's
- * height, and whether the control has to go inside the scroll, at its end, because the room left beside it is
- * less than `minScroll` (a short window with the keyboard up). Inside, scrolling reaches it.
+ * New session's scroll (its agents and folders) in the room the sheet leaves: 520 at most, what is left beside the
+ * fields and Start pinned under it, never negative. Start never goes into the scroll: on the iPhone Duo's cover screen
+ * held sideways with the keyboard up, a Start at the scroll's end sat behind the keyboard and the scroll ended in
+ * blank (NSH insets a scroll holding the focused field for the keyboard before the sheet rises: Mac re-run 11-14, 1c).
  */
-export function scrollAboveControl(room: number, control: number, options: { max: number; minScroll: number }): { scroll: number; controlInside: boolean } {
-  const beside = Math.min(options.max, room - control);
-  if (beside >= options.minScroll) return { scroll: beside, controlInside: false };
-  return { scroll: Math.max(0, Math.min(options.max, room)), controlInside: true };
+export function scrollBesidePinned(room: number, pinned: number, max = 520): number {
+  return Math.max(0, Math.min(max, room - pinned));
+}
+
+/**
+ * While the keyboard is up for one of New session's fields, the sheet is that field and Start: its agents, folders
+ * and other fields step aside until the keyboard goes down, so the field and Start show together on any window
+ * (a phone held sideways, the Duo's cover screen) without scrolling.
+ */
+export function composing(keyboard: number, focused: string | null): boolean {
+  return keyboard > 0 && focused !== null;
+}
+
+/** The agent grid's columns: three on a phone (SPEC §15), as many 88 pt tiles as fit on a wide sheet (fewer rows: the folders show). */
+export function agentGridColumns(width: number, count: number): number {
+  if (width < 520) return 3;
+  return Math.max(3, Math.min(count, Math.floor(width / 88)));
 }
 
 /**
