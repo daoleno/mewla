@@ -71,20 +71,26 @@ export function agentGridColumns(width: number, count: number): number {
 }
 
 /**
- * On wide a sheet is a centred dialog (SPEC §14.2): at most 88 % of the window, and with the software keyboard up
- * (an open foldable or a tablet, touch) it sits in what the keyboard leaves, 16 pt clear of the keyboard and the top.
- * A dialog the keyboard covered hid its own field and New session's Start on an iPhone Duo held open (669 pt high,
- * a 264 pt keyboard). `lift` is the space the dialog keeps under it; `max` its height.
+ * On wide a sheet is a centred dialog (SPEC §14.2): at most 88 % of the window less its top and bottom safe areas
+ * (`insets`: a status bar, an unfolded foldable's taskbar), and with the software keyboard up (an open foldable or a
+ * tablet, touch) it sits in what the keyboard leaves, 16 pt clear of the keyboard and the top. A dialog the keyboard
+ * covered hid its own field and New session's Start on an iPhone Duo held open (669 pt high, a 264 pt keyboard).
+ * `lift` is the space the dialog keeps under it; `max` its height, which AppSheet sets on the dialog and the body's
+ * room is measured against: one number, so the content never runs past the dialog's rounded bottom (a 7.6" Android
+ * foldable unfolded, 11-14: the dialog's own 88 % box was shorter than the room, and its corner clipped Start).
  */
-export function dialogFrame(window: number, keyboard: number): { lift: number; max: number } {
-  if (keyboard <= 0) return { lift: 0, max: Math.floor(window * SHEET.maxShare) };
+export function dialogFrame(window: number, keyboard: number, insets = 0): { lift: number; max: number } {
+  if (keyboard <= 0) return { lift: 0, max: Math.floor(Math.max(0, window - insets) * SHEET.maxShare) };
   return { lift: keyboard + SHEET.keyboardGap, max: Math.max(0, window - keyboard - 2 * SHEET.keyboardGap) };
 }
 
-/** The dialog's foot under its content (kit/Sheet.tsx on wide). */
-export const DIALOG_FOOT = 24;
+/** The dialog's foot under its content (kit/Sheet.tsx on wide): the 16 its content keeps at the sides. */
+export const DIALOG_FOOT = 16;
 
-/** A dialog's body room: its height less its header (title, as laid out) and its foot. Never negative. */
-export function dialogBodyRoom(input: { window: number; keyboard: number; header: number }): number {
-  return Math.max(0, dialogFrame(input.window, input.keyboard).max - input.header - DIALOG_FOOT);
+/**
+ * A dialog's body room: its height less its header (its top padding and title, as laid out) and its foot. Never
+ * negative.
+ */
+export function dialogBodyRoom(input: { window: number; keyboard: number; header: number; insets?: number }): number {
+  return Math.max(0, dialogFrame(input.window, input.keyboard, input.insets).max - input.header - DIALOG_FOOT);
 }

@@ -16,6 +16,7 @@ import { startedWithFirstMessage } from "./firstMessage";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { projectName } from "../../core/work/surface";
 import type { Worker } from "../../core/sessions/workers";
+import { wide } from "../shell/layout";
 
 /** Open from the Sessions list (its + and its empty state). */
 export const newSessionOpen = signal(false);
@@ -90,8 +91,9 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
   );
 }
 
-/** The body's own foot (`pb-2`). */
+/** The body's own foot (`pb-2`) on a sheet; a dialog's own foot is Start's (the 16 at its sides). */
 const BODY_FOOT = 8;
+const bodyFoot = () => (wide() ? 0 : BODY_FOOT);
 
 /**
  * The scroll's height in the room the sheet leaves (core/shell/sheet.ts `scrollBesidePinned`): 520 at most, what is
@@ -99,7 +101,7 @@ const BODY_FOOT = 8;
  */
 function Fitted(props: { pinned: () => number; children: (scroll: () => number) => JSX.Element }) {
   const room = SheetRoom();
-  const scroll = computed(() => scrollBesidePinned(room() - BODY_FOOT, props.pinned()));
+  const scroll = computed(() => scrollBesidePinned(room() - bodyFoot(), props.pinned()));
   return <>{props.children(scroll)}</>;
 }
 
@@ -244,7 +246,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   return (
     <Sheet testID="new-session-sheet" open={newSessionOpen} onClose={() => newSessionOpen.set(false)}
       title={() => (picking() ? "Choose a folder" : newSessionTarget() ? "New terminal" : "New session")}>
-      <If when={picking()} else={<Fitted pinned={pinnedHeight}>{(scroll) => <View class="px-4 pb-2">
+      <If when={picking()} else={<Fitted pinned={pinnedHeight}>{(scroll) => <View class="px-4" style={{ paddingBottom: bodyFoot() }}>
           {/* Agent and Folder scroll; the fields and Start stay in view under them. While a field has the keyboard
               they step aside, and the sheet is that field with Start in its row. */}
           <View class="flex-col" style={{ display: compose() ? "none" : "flex" }}>

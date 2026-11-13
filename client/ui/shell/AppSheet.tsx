@@ -88,16 +88,26 @@ const DIALOG = platform.os === "ios"
   : "w-[480px] max-w-[92%] max-h-[88%] self-center my-auto overflow-hidden rounded-[28px] bg-sheet shadow-float";
 
 /**
- * The dialog's frame over the software keyboard (core/shell/sheet.ts `dialogFrame`): centred in what the keyboard
- * leaves, held to its height. iOS presents the dialog as its own form sheet and keeps it clear of the keyboard itself.
- * Read in the JSX, so it follows the keyboard.
+ * The window's top and bottom safe areas, which a dialog stays inside of (core/shell/sheet.ts `dialogFrame`). iOS
+ * presents it as its own form sheet, sized by the system: none there.
+ */
+export function dialogInsets(): number {
+  if (platform.os === "ios") return 0;
+  const area = safeArea();
+  return area.top + area.bottom;
+}
+
+/**
+ * The dialog's frame (core/shell/sheet.ts `dialogFrame`): held to the height its body's room is measured against
+ * (kit/Sheet.tsx), and over the software keyboard centred in what the keyboard leaves. iOS presents the dialog as its
+ * own form sheet and keeps it clear of the keyboard itself. Read in the JSX, so it follows the keyboard.
  */
 function dialogStyle(sidePadding = 0) {
   // The sheet's own side space; a dialog stands clear of the screen's sides already.
   const sides = sidePadding ? { paddingLeft: sidePadding, paddingRight: sidePadding } : undefined;
   if (platform.os === "ios") return sides;
-  const frame = dialogFrame(windowSize().height, keyboardFrame().height);
-  return frame.lift > 0 ? { ...sides, marginBottom: frame.lift, maxHeight: frame.max } : sides;
+  const frame = dialogFrame(windowSize().height, keyboardFrame().height, dialogInsets());
+  return frame.lift > 0 ? { ...sides, marginBottom: frame.lift, maxHeight: frame.max } : { ...sides, maxHeight: frame.max };
 }
 
 /**

@@ -1,7 +1,7 @@
 import { context, keyboardFrame, signal, Text, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { DIALOG_FOOT, dialogBodyRoom, sheetBodyRoom, sheetFoot, sheetTitleGivesWay } from "../../core/shell/sheet";
-import { AppSheet } from "../shell/AppSheet";
+import { AppSheet, dialogInsets } from "../shell/AppSheet";
 import { wide } from "../shell/layout";
 
 /**
@@ -35,15 +35,18 @@ export function Sheet(props: {
   const title = () => (typeof props.title === "function" ? props.title() : props.title ?? "");
   // A row holding a Back or a Close stays: only a bare title gives way.
   const titled = () => Boolean(props.leading || props.trailing) || (Boolean(title()) && !sheetTitleGivesWay(windowSize().height, keyboardFrame().height));
-  // The grabber and the title row as laid out.
+  // The grabber (the dialog's top padding on wide) and the title row as laid out.
   const header = signal(0);
   // On wide a centred dialog over the keyboard (shell/AppSheet.tsx), with its own cap and foot.
-  const room = () => (wide() ? dialogBodyRoom : sheetBodyRoom)({ window: windowSize().height, keyboard: keyboardFrame().height, header: header() });
+  const room = () => (wide()
+    ? dialogBodyRoom({ window: windowSize().height, keyboard: keyboardFrame().height, header: header(), insets: dialogInsets() })
+    : sheetBodyRoom({ window: windowSize().height, keyboard: keyboardFrame().height, header: header() }));
   return (
     <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe
       popupClass="max-h-[88%] rounded-t-(--radius-sheet) bg-sheet shadow-float" backdropClass="bg-scrim">
-      <View testID={props.testID} class={wide() ? "pt-3" : ""} style={{ paddingBottom: wide() ? DIALOG_FOOT : sheetFoot(keyboardFrame().height) }}>
-        <View onLayout={({ bounds }) => header.set(bounds.size.height)}>
+      <View testID={props.testID} style={{ paddingBottom: wide() ? DIALOG_FOOT : sheetFoot(keyboardFrame().height) }}>
+        {/* The header as laid out, the dialog's top padding with it: the room counts all of it. */}
+        <View class={wide() ? "pt-3" : ""} onLayout={({ bounds }) => header.set(bounds.size.height)}>
           {/* A dialog on wide has no grabber (SPEC §14.2). */}
           <If when={!wide()}><View class="items-center pt-2">
               <View class="h-[5px] w-[36px] rounded-full bg-track" />
