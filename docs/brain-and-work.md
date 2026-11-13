@@ -53,20 +53,22 @@ again, its slip moves down to that moment instead of piling up copies.
 
 Red always means "needs you", never "failed".
 
-**How far a running Work has come.** A running Work shows a percentage judged
-by a model, not reported by its Worker. When the Work starts, the judge turns
-the brief into a short weighted list of outcomes, things that will be true
-when it is done, such as "fix merged and released" or "review posted". It then
-marks each outcome from evidence: a commit, a passing run, a file written, a
-posted review. The percentage is computed from those marks.
+**How far a running Work has come.** A running Work has a ring round its
+Worker's logo, filled as far as a model judges the Work has come, not as its
+Worker reports. No number is written; a screen reader speaks it, rounded to 5.
+When the Work starts, the judge turns the brief into a short weighted list of
+outcomes, things that will be true when it is done, such as "fix merged and
+released" or "review posted". It then marks each outcome from evidence: a
+commit, a passing run, a file written, a posted review. How far the ring fills
+is computed from those marks.
 
 - **It only moves forward**, unless an outcome is reopened: Brain sent the Work
-  back, or a later check failed. Then it goes down once, in amber, and the
-  Work's line says why.
-- **It never shows 100 %.** When every outcome is done, the Work is in its last
-  stretch (the Worker reporting, Brain reading the result), shown as a closed
-  ring with a check.
-- **No number** while the Work waits on you, or for a Work with no finish line.
+  back, or a later check failed. Then the ring goes back once, in amber, and
+  the Work's page says why.
+- **It never fills to 100 %.** When every outcome is done, the Work is in its
+  last stretch (the Worker reporting, Brain reading the result), and the ring
+  closes in green.
+- **No ring** while the Work waits on you, or for a Work with no finish line.
 - **Tap the Work** to see its outcomes and which are done.
 
 The judge runs only when there is new evidence: a progress report, a turn
