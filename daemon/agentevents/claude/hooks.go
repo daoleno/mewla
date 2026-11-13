@@ -79,6 +79,18 @@ func Map(workerID string, p Payload, now time.Time) []agentevents.Event {
 		started := event(agentevents.KindTurnStarted)
 		started.Status = agentevents.TurnRunning
 		return []agentevents.Event{msg, started}
+	case "PreToolUse":
+		line := ToolActivity(p.ToolName, p.ToolInput)
+		if line == "" {
+			return nil
+		}
+		started := event(agentevents.KindActivity)
+		started.Activity = line
+		started.ActivityTool = strings.TrimSpace(p.ToolName)
+		if summary := strings.TrimSpace(summarizeToolInput(started.ActivityTool, p.ToolInput)); summary != started.ActivityTool {
+			started.ActivitySummary = summary
+		}
+		return []agentevents.Event{started}
 	case "PostToolUse":
 		return []agentevents.Event{event(agentevents.KindProgress)}
 	case "Stop":
@@ -166,20 +178,21 @@ func Decision(optionID string) (output string, ok bool) {
 	return string(raw), true
 }
 
-func summarizeToolInput(tool string, input json.RawMessage) string {
-	var fields struct {
-		Command     string `json:"command"`
-		Description string `json:"description"`
-		FilePath    string `json:"file_path"`
+// ToolActivity is the line a tool call is shown as while it runs: the tool's
+// name and, when the call has one, its command or file ("Bash curl -sI
+// https://example.org"). It is the approval's own wording, so a request and
+// the activity before it read alike.
+func ToolActivity(tool string, input json.RawMessage) string {
+	tool = strings.TrimSpace(tool)
+	if tool == "" {
+		return ""
 	}
-	_ = json.Unmarshal(input, &fields)
-	switch {
-	case fields.Command != "":
-		return fields.Command
-	case fields.FilePath != "":
-		return fields.FilePath
-	case fields.Description != "":
-		return fields.Description
+	if line := strings.TrimSpace(summarizeToolInput(tool, input)); line != "" && line != tool {
+		return tool + " " + line
 	}
 	return tool
+}
+
+func summarizeToolInput(tool string, input json.RawMessage) string {
+	return work.ClaudeToolSummary(tool, input)
 }

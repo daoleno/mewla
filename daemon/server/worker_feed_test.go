@@ -470,3 +470,30 @@ func TestWorkerFeedOutputBytesBeforeAndAfterPacing(t *testing.T) {
 		t.Fatalf("pacing saved too little: %d B before, %d B after", before, after)
 	}
 }
+
+// A running Session says what its agent is doing now, from the agent's own
+// report; a Session that is not running says nothing of the kind.
+func TestWorkerSessionWireCarriesTheActivityOfARunningSession(t *testing.T) {
+	srv := &Server{}
+	srv.SetAgentActivity(func(id string) AgentActivity {
+		return map[string]AgentActivity{
+			"%1": {Line: "Bash curl -sI https://example.org", Tool: "Bash", Summary: "curl -sI https://example.org"},
+			"%2": {Line: "Read a.go", Tool: "Read", Summary: "a.go"},
+		}[id]
+	})
+	since := time.Date(2026, 11, 13, 4, 0, 0, 0, time.UTC)
+	running := srv.workerSessionWire(&classifier.Worker{ID: "%1", State: classifier.StateRunning, RunningSince: &since})
+	encoded, _ := json.Marshal(running)
+	var wire map[string]any
+	_ = json.Unmarshal(encoded, &wire)
+	// The tool and what it works on, apart, so the app words it as its thread's tool row does ("Run curl …").
+	if wire["activity"] != "Bash curl -sI https://example.org" || wire["activity_tool"] != "Bash" || wire["activity_summary"] != "curl -sI https://example.org" ||
+		wire["running_since"] != "2026-11-13T04:00:00Z" || wire["status"] != "running" {
+		t.Fatalf("running wire = %s", encoded)
+	}
+	idle := srv.workerSessionWire(&classifier.Worker{ID: "%2", State: classifier.StateUnknown})
+	encoded, _ = json.Marshal(idle)
+	if strings.Contains(string(encoded), "activity") || strings.Contains(string(encoded), "running_since") {
+		t.Fatalf("an idle Session's line from its last turn is not news: %s", encoded)
+	}
+}

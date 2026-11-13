@@ -42,6 +42,13 @@ never sends it again by itself.
 The agent must already be installed and signed in on the computer; Mewla never
 signs in for you.
 
+Codex starts inline (`--no-alt-screen`): its transcript goes into the
+terminal's scrollback, so the phone's Terminal and a computer's own terminal
+scroll it on their own. If your Codex config names `[tui] alternate_screen`, or
+the command chooses the screen itself, Mewla leaves it as you set it. Claude
+Code keeps the renderer it picks for itself, or the `tui` your Claude settings
+name.
+
 ## The list
 
 Sessions are grouped by directory. Each row shows the agent, the Session's
@@ -145,6 +152,12 @@ this plan, trust this folder, a Codex approval) show a card with the prompt's
 own heading, what it asks about, and one button per numbered option, labelled as
 the agent labels it. Tapping a button answers that option.
 
+A Claude permission prompt also says what it asks about as data, not as screen
+text: `tool` (`Bash`) and `summary` (the command, or the file), taken from the
+tool call Claude wrote to its transcript before it asked. Claude's own hints in
+the box (such as "Tip: auto mode handles these prompts") are left out of
+`request`. They are absent when the transcript has no such call yet.
+
 If the prompt has already passed (answered in the Terminal, replaced by another,
 or timed out), Mewla says **This prompt has already passed** and the card goes
 away. If Mewla cannot send the answer, it says so on the card and the card
@@ -161,6 +174,11 @@ request that is answered: a screen prompt, an agent approval, an agent's
 question, or Brain's question on a Work. The record holds the short form of
 what was asked, the answer, the outcome (`answered`, `approved`, `denied`,
 `dismissed`, or `not_answered` when it timed out), who answered, and when.
+A permission or approval also carries `tool` and `summary`, the tool and the
+command or file it asked about, so the sealed line can say what was approved.
+One answered in the Session's own terminal gets its outcome (`approved` or
+`denied`) from the tool call Claude recorded; the option picked there is not
+recorded, so it has no `answer`.
 A request from a delegated Worker also names the Work it was working on
 (`work_id`). A Session that asks the same thing again gets a new record for
 each time it asks. Who answered is one of:
@@ -189,6 +207,19 @@ them in three places:
 
 The first explicit answer stands. A terminal answer, which is inferred, gives
 way to the app's or Brain's answer if that is recorded a moment later.
+
+**A Session that is working.** A Claude, Codex or Cursor Session you started
+reports `running` while its own terminal says it works (Claude's footer shows
+"esc to interrupt") and `unknown`, which apps list as idle, when it does not.
+`running_since` is the poll that first saw the run. A prompt ends the run and
+the answer starts a new one, so the time a Session waits on you is not counted.
+A Claude Session that Mewla's hooks follow also carries `activity`, the tool
+call it started last (`Bash curl -sI https://example.org`), with its parts in
+`activity_tool` (`Bash`) and `activity_summary` (`curl -sI https://example.org`),
+from the hook, not the screen. A Session whose agent is not followed by hooks
+(one launched with its own `--settings`, for example) has `running_since` and
+no `activity`. A Brain-delegated Worker keeps the status of its turn; its
+`running_since` is when its turn was accepted, and after a prompt, the answer.
 
 ### Copy and edit a message
 

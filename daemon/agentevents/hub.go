@@ -44,9 +44,16 @@ type State struct {
 	Terminals []Turn
 	Admission *Admission
 	Approvals []Approval
-	Exited    bool
-	ExitCode  *int
-	LastEvent time.Time
+	// Activity is what the agent said it started last, within the turn that
+	// is running; empty between turns.
+	Activity string
+	// ActivityTool and ActivitySummary are Activity's tool and what it works
+	// on (Event.ActivityTool, Event.ActivitySummary).
+	ActivityTool    string
+	ActivitySummary string
+	Exited          bool
+	ExitCode        *int
+	LastEvent       time.Time
 }
 
 // Hub holds each Worker's state and fans events out to subscribers. It is the
@@ -203,13 +210,19 @@ func (w *workerState) apply(e Event) {
 			}
 			w.Binding, w.Bound = *e.Binding, true
 		}
+	case KindActivity:
+		if w.Current != nil && !w.Current.Status.Terminal() {
+			w.Activity, w.ActivityTool, w.ActivitySummary = e.Activity, e.ActivityTool, e.ActivitySummary
+		}
 	case KindTurnStarted:
+		w.Activity, w.ActivityTool, w.ActivitySummary = "", "", ""
 		w.Current = &Turn{ID: e.TurnID, Status: TurnRunning, StartedAt: e.At, ProgressAt: e.At}
 	case KindProgress:
 		if w.Current != nil && !w.Current.Status.Terminal() && e.At.After(w.Current.ProgressAt) {
 			w.Current.ProgressAt = e.At
 		}
 	case KindTurnFinished:
+		w.Activity, w.ActivityTool, w.ActivitySummary = "", "", ""
 		turn := Turn{ID: e.TurnID, Status: e.Status, SettledAt: e.At, Error: e.Error, ProgressAt: e.At}
 		if w.Current != nil && (w.Current.ID == e.TurnID || e.TurnID == "") {
 			turn.ID, turn.StartedAt = w.Current.ID, w.Current.StartedAt

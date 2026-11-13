@@ -115,3 +115,37 @@ func TestLedgerRefusesIncompleteRecordsAndFoldsText(t *testing.T) {
 		t.Fatalf("folded = %q / %d runes, %v", got.Asked, len([]rune(got.Answer)), err)
 	}
 }
+
+// A terminal answer whose outcome was not known is told better once the
+// provider's record of the call says how it ended: the same answer, not a
+// second one. Nothing else replaces a terminal answer but an explicit one.
+func TestTerminalAnswerIsSettledOnceItsOutcomeIsKnown(t *testing.T) {
+	ledger, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 11, 13, 4, 0, 0, 0, time.UTC)
+	asked := at.Add(-time.Minute)
+	unknown := record("approval:%1:a", "%1", at, ByTerminal)
+	unknown.Answer, unknown.Outcome, unknown.AskedAt = "", OutcomeAnswered, &asked
+	if _, wrote, _ := ledger.Record(unknown); !wrote {
+		t.Fatal("not written")
+	}
+	again := unknown
+	if _, wrote, _ := ledger.Record(again); wrote {
+		t.Fatal("the same unknown outcome was written twice")
+	}
+	settled := unknown
+	settled.Outcome, settled.AskedAt = OutcomeApproved, nil
+	if got, wrote, _ := ledger.Record(settled); !wrote || got.Outcome != OutcomeApproved || got.AskedAt == nil || !got.AskedAt.Equal(asked) {
+		t.Fatalf("settled = %+v %v", got, wrote)
+	}
+	changed := unknown
+	changed.Outcome = OutcomeDenied
+	if got, wrote, _ := ledger.Record(changed); wrote || got.Outcome != OutcomeApproved {
+		t.Fatalf("a known outcome was rewritten: %+v %v", got, wrote)
+	}
+	if rows := ledger.List(Filter{SessionID: "%1"}); len(rows) != 1 {
+		t.Fatalf("rows = %+v", rows)
+	}
+}

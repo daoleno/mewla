@@ -356,9 +356,12 @@ func liveWorkWorkerState(status string) WorkWorkerState {
 // closed Work is in neither current_work nor open_work, but its page still
 // lists who worked on it.
 type WorkDetail struct {
-	ID             string              `json:"work_id"`
-	Revision       uint64              `json:"revision"`
-	Title          string              `json:"title"`
+	ID       string `json:"work_id"`
+	Revision uint64 `json:"revision"`
+	Title    string `json:"title"`
+	// Objective is the Work's brief, whole (Brain's -objective, or the task a
+	// Worker was spawned with). Only the detail carries it, never the lists.
+	Objective      string              `json:"objective,omitempty"`
 	Status         WorkStatus          `json:"status"`
 	CreatedAt      time.Time           `json:"created_at"`
 	UpdatedAt      time.Time           `json:"updated_at"`
@@ -366,6 +369,8 @@ type WorkDetail struct {
 	// ResultActions are the next steps of the Work's newest result, as its
 	// result row carries them (work_result_actions.go); [] when none.
 	ResultActions []work.ResultAction `json:"result_actions"`
+	// Progress is the judged progress and its outcomes, while it is open.
+	Progress *WorkProgress `json:"progress,omitempty"`
 }
 
 // WorkDetail projects one Work. workers is a fresh Session inventory, as for
@@ -400,8 +405,8 @@ func (s *Store) WorkDetail(workID string, workers []WorkerRef) (WorkDetail, erro
 		sessions = []WorkWorkerSession{}
 	}
 	return WorkDetail{
-		ID: item.ID, Revision: item.Revision, Title: item.Title, Status: item.Status,
+		ID: item.ID, Revision: item.Revision, Title: item.Title, Objective: item.Objective, Status: item.Status,
 		CreatedAt: item.CreatedAt.UTC(), UpdatedAt: item.UpdatedAt.UTC(), WorkerSessions: sessions,
-		ResultActions: []work.ResultAction{},
+		ResultActions: []work.ResultAction{}, Progress: item.Progress.view(),
 	}, nil
 }

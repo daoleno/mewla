@@ -178,6 +178,8 @@ type Server struct {
 	live                       liveHub // live state, see live_state.go
 	uploadDir                  string
 	uploadStore                *attachment.Store
+	// firstMessageSend submits a create_session's first message once the agent is ready (tests replace it).
+	firstMessageSend           func(workerID, command, text string) error
 	sessionFileWorkerLoader    func(workerID string) *classifier.Worker
 	sessionFileCapabilityClock func() time.Time
 	authRevocationUnsubscribe  func()
@@ -190,6 +192,8 @@ type Server struct {
 	enrollments                *enrollment.Manager
 	enrollmentObserver         func(enrollment.Request)
 	webUIFiles                 fs.FS
+	webUIDir                   string
+	webUIOverrideSeen          atomic.Bool
 
 	workSubID                   int
 	workSub                     <-chan work.Event
@@ -226,6 +230,7 @@ type Server struct {
 	refusals           refusalLog
 	enrollmentRates    map[string][]time.Time
 	agentLevelsFn      func(*classifier.Worker) map[string]string
+	agentActivityFn    func(workerID string) AgentActivity
 	agentApprovals     AgentApprovals
 	// answered is the answered-request ledger (answered_requests.go);
 	// prompts tracks open screen prompts for it.
@@ -445,6 +450,7 @@ type clientMessage struct {
 	Col                  int                                    `json:"col"`
 	Row                  int                                    `json:"row"`
 	Lines                int                                    `json:"lines"`
+	Scroll               bool                                   `json:"scroll,omitempty"`
 	Since                *terminal.HistoryCursor                `json:"since,omitempty"`
 	ProcessID            int                                    `json:"process_id"`
 	Path                 string                                 `json:"path"`
@@ -1254,6 +1260,16 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			}
 			command = ensured
 		}
+		firstMessage, firstErr := s.prepareFirstMessage(command, raw.Text, raw.Attachments)
+		if firstErr != nil {
+			code := "create_session_failed"
+			var refused *firstMessageError
+			if errors.As(firstErr, &refused) {
+				code = refused.code
+			}
+			s.sendErrorWithRequestID(conn, raw.RequestID, code, firstErr.Error())
+			return
+		}
 		connectionID := strings.TrimSpace(raw.ConnectionID)
 		if connectionID == "" {
 			connectionID = strings.TrimSpace(raw.ProfileID)
@@ -1281,8 +1297,15 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			"request_id": raw.RequestID,
 			"worker_id":  workerID,
 		}
+		launched := command
 		if worker := s.watcher.GetWorker(workerID); worker != nil {
 			response["worker_session"] = s.workerSessionWire(worker)
+			if strings.TrimSpace(worker.Command) != "" {
+				launched = worker.Command
+			}
+		}
+		if firstMessage != nil {
+			response["first_message"] = "pending"
 		}
 		if routeSnap != nil {
 			response["session_route"] = routeSnap
@@ -1295,6 +1318,9 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			}
 		}
 		s.sendJSON(conn, response)
+		if firstMessage != nil {
+			go s.deliverFirstMessage(workerID, launched, raw.RequestID, firstMessage)
+		}
 	case "kill_worker":
 		teardown := s.teardownWorkerSession(raw.WorkerID)
 		if teardown.Err != nil {
@@ -1748,7 +1774,13 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
 		}
 	case "terminal_input":
-		if err := s.terminal.Input(clientID(conn), raw.SessionID, raw.Data); err != nil {
+		// scroll: what a scroll drag made (wheel presses, cursor keys) is reading, not typing: it never takes
+		// the Session's size from another viewer.
+		input := s.terminal.Input
+		if raw.Scroll {
+			input = s.terminal.ScrollInput
+		}
+		if err := input(clientID(conn), raw.SessionID, raw.Data); err != nil {
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "session_id": raw.SessionID, "code": "input_failed", "message": err.Error()})
 		}
 	case "terminal_resize":

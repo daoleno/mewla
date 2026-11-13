@@ -169,10 +169,10 @@ func runClaude(ctx context.Context, j *judge, path string, route judgeRoute, sys
 		"--output-format", "json",
 		"--json-schema", schema,
 		"--system-prompt", system,
-		"--max-budget-usd", judgeBudgetUSD,
+		"--max-budget-usd", firstNonEmpty(j.budgetUSD, judgeBudgetUSD),
 	}
-	if route.Effort != "" {
-		args = append(args, "--effort", route.Effort)
+	if effort := firstNonEmpty(route.Effort, j.effort); effort != "" {
+		args = append(args, "--effort", effort)
 	}
 	stdout, stderr, runErr := j.command(ctx, path, prompt, args...)
 	var result claudeResult

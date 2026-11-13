@@ -15,6 +15,10 @@ import (
 type Adapter struct {
 	// ControlDir is where each launch's control socket, pid and log live.
 	ControlDir string
+	// Inline starts the TUI inline (InlineTUI) unless the person's Codex
+	// config at ConfigPath chose the screen.
+	Inline     bool
+	ConfigPath string
 }
 
 // Descriptor declares Codex's capabilities: the app-server is a typed
@@ -38,6 +42,9 @@ func (Adapter) Descriptor() agentevents.Descriptor {
 // is a subcommand, or has no control directory is left as it is and followed
 // by the fallback.
 func (a Adapter) PrepareLaunch(command string) (agentevents.Launch, error) {
+	if a.Inline {
+		command = InlineTUI(command, ReadConfig(a.ConfigPath))
+	}
 	rest, ok := plainInteractiveArgs(command)
 	if !ok || a.ControlDir == "" {
 		return agentevents.Launch{Command: command}, nil

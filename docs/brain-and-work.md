@@ -53,6 +53,29 @@ again, its slip moves down to that moment instead of piling up copies.
 
 Red always means "needs you", never "failed".
 
+**How far a running Work has come.** A running Work shows a percentage judged
+by a model, not reported by its Worker. When the Work starts, the judge turns
+the brief into a short weighted list of outcomes, things that will be true
+when it is done, such as "fix merged and released" or "review posted". It then
+marks each outcome from evidence: a commit, a passing run, a file written, a
+posted review. The percentage is computed from those marks.
+
+- **It only moves forward**, unless an outcome is reopened: Brain sent the Work
+  back, or a later check failed. Then it goes down once, in amber, and the
+  Work's line says why.
+- **It never shows 100 %.** When every outcome is done, the Work is in its last
+  stretch (the Worker reporting, Brain reading the result), shown as a closed
+  ring with a check.
+- **No number** while the Work waits on you, or for a Work with no finish line.
+- **Tap the Work** to see its outcomes and which are done.
+
+The judge runs only when there is new evidence: a progress report, a turn
+ending, or Brain's next message to the Worker. It runs at most once every two
+minutes per Work, sooner when a turn ends, and never on a timer alone. The
+`Work progress` row of `routing.md` picks its model (see
+[Worker routing](#worker-routing)). Each judgment is recorded on the Work as a
+`progress.judged` or `progress.back` event (`mewla brain work list -id`).
+
 **All open Work in one place.** The cat's line at the end of the
 conversation says what is out: "3 Workers running", "Brought something back".
 On a phone the chat gets the whole screen: tap that line, or ⋮ → Work, to open
@@ -143,8 +166,12 @@ Brain asks with buttons by setting a question on the Work:
 
 ```sh
 mewla brain work update -id <work-id> -status waiting \
-  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins"
+  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins" \
+  -recommend "Newest wins"
 ```
+
+`-recommend` names the choice Brain recommends, word for word; the phone tags that button
+"Brain's pick". It must be one of the choices, and a new question starts without one.
 
 ## Who decides that Work is done
 
@@ -226,8 +253,15 @@ Brain picks the agent, model and reasoning level for every Worker. Before each
 launch it reads `routing.md` in its workspace, a few lines of Markdown such as
 "use Codex with high reasoning for refactors". It rewrites a line when you
 state a preference, when a new model appears or when a choice went badly.
-Upgrades never overwrite it. Mewla reads one row only: the one starting
-`Watch judgment`, which picks the agent that reads [Watch](watch.md) signals.
+Upgrades never overwrite it. Mewla reads two rows itself: `Watch judgment`,
+which picks the agent that reads [Watch](watch.md) signals, and
+`Work progress`, which picks the agent that judges how far a running Work has
+come. Without a valid row, Mewla uses Brain's own agent (Claude Code: Sonnet at
+low reasoning).
+
+```markdown
+| Work progress | claude | sonnet | low |
+```
 
 A Worker launch looks like this:
 

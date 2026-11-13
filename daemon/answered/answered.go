@@ -84,7 +84,15 @@ type Request struct {
 	ThreadID string `json:"thread_id,omitempty"`
 	// Title is the card's kind line when the request names one (a tool, a
 	// question header); Asked is the short form of what was asked.
-	Title      string     `json:"title,omitempty"`
+	Title string `json:"title,omitempty"`
+	// Tool and Summary say what a permission or approval asked, as the
+	// agent's own tool call gives it: the tool's name ("Bash") and its one
+	// line (the command, the file). Asked carries the same line when it is
+	// known. They are absent on a request of another kind, on a record
+	// written before they existed, and when the provider could not name the
+	// call.
+	Tool       string     `json:"tool,omitempty"`
+	Summary    string     `json:"summary,omitempty"`
 	Asked      string     `json:"asked"`
 	Answer     string     `json:"answer,omitempty"`
 	Outcome    string     `json:"outcome"`
@@ -190,6 +198,14 @@ func strength(kind string) int {
 	return 0
 }
 
+// settlesTerminal is a terminal answer whose outcome was not known (answered)
+// finding out how it ended (approved, denied) from the provider's record of
+// the call. It is the same answer, told better, not a second one.
+func settlesTerminal(existing, r Request) bool {
+	return existing.By.Kind == ByTerminal && r.By.Kind == ByTerminal && existing.Outcome == OutcomeAnswered &&
+		(r.Outcome == OutcomeApproved || r.Outcome == OutcomeDenied)
+}
+
 // Record keeps r unless the request already has an answer at least as
 // explicit. It returns the record that stands and whether it was written.
 func (l *Ledger) Record(r Request) (Request, bool, error) {
@@ -207,7 +223,7 @@ func (l *Ledger) Record(r Request) (Request, bool, error) {
 		return Request{}, false, errors.New("answered: a record needs an id, a kind and an outcome")
 	}
 	l.mu.Lock()
-	if existing, ok := l.byID[r.ID]; ok && strength(existing.By.Kind) >= strength(r.By.Kind) {
+	if existing, ok := l.byID[r.ID]; ok && strength(existing.By.Kind) >= strength(r.By.Kind) && !settlesTerminal(existing, r) {
 		l.mu.Unlock()
 		return existing, false, nil
 	} else if ok && r.AskedAt == nil {
@@ -357,6 +373,8 @@ func normalize(r Request) Request {
 	r.WorkID = strings.TrimSpace(r.WorkID)
 	r.ThreadID = strings.TrimSpace(r.ThreadID)
 	r.Title = Short(r.Title)
+	r.Tool = Short(r.Tool)
+	r.Summary = Short(r.Summary)
 	r.Asked = Short(r.Asked)
 	r.Answer = Short(r.Answer)
 	r.By.Basis = Short(r.By.Basis)

@@ -187,11 +187,13 @@ func (s *Server) PromptAskedAt(sessionID, promptID string) *time.Time {
 func PromptAnswerRecord(sessionID string, prompt classifier.Prompt, answer PromptAnswer, recorded []string, by answered.Answerer, askedAt *time.Time, now time.Time) answered.Request {
 	record := answered.Request{
 		ID: promptRecordID(sessionID, prompt.ID, askedAt), Kind: string(prompt.Kind), SessionID: sessionID,
-		Title: prompt.Title, Asked: firstNonEmpty(prompt.Request, prompt.Title), Outcome: answered.OutcomeAnswered,
+		Title: prompt.Title, Tool: prompt.Tool, Summary: prompt.Summary,
+		Asked: firstNonEmpty(prompt.Summary, prompt.Request, prompt.Title), Outcome: answered.OutcomeAnswered,
 		By: by, AskedAt: askedAt, AnsweredAt: now,
-		Anchor: answered.Anchor{PromptID: prompt.ID, CallID: prompt.CallID},
+		Anchor: answered.Anchor{PromptID: prompt.ID},
 	}
 	if prompt.Kind == classifier.PromptChoice {
+		record.Anchor.CallID = prompt.CallID
 		record.Kind = answered.KindChoice
 		if len(prompt.Questions) > 0 {
 			record.Title = firstNonEmpty(prompt.Questions[0].Header, prompt.Title)
@@ -274,7 +276,8 @@ func ChoiceAnswerRecord(sessionID string, event work.CodexConversationEvent, ans
 func ApprovalAnswerRecord(sessionID string, approval ApprovalWire, optionID string, by answered.Answerer, now time.Time) answered.Request {
 	record := answered.Request{
 		ID: "approval:" + sessionID + ":" + approval.ID, Kind: answered.KindApproval, SessionID: sessionID,
-		Title: approval.Tool, Asked: firstNonEmpty(approval.Summary, approval.Tool, approval.Kind),
+		Title: approval.Tool, Tool: approval.Tool, Summary: approval.Summary,
+		Asked:   firstNonEmpty(approval.Summary, approval.Tool, approval.Kind),
 		Outcome: answered.OutcomeAnswered, By: by, AnsweredAt: now,
 		Anchor: answered.Anchor{ApprovalID: approval.ID},
 	}
@@ -456,6 +459,10 @@ func (w *promptWatch) observe(sessionID string, prompt *classifier.Prompt, now t
 	}
 	previous, had := w.open[sessionID]
 	if prompt != nil && had && previous.prompt.ID == prompt.ID {
+		// The same showing, read again: the transcript may have named its tool
+		// call since it was first seen, and the record of its answer says it.
+		previous.prompt = *prompt
+		w.open[sessionID] = previous
 		return watchedPrompt{}, false
 	}
 	if had {
@@ -537,6 +544,69 @@ func (s *Server) observePromptLifecycle(ev watcher.SessionEvent) {
 		record := PromptAnswerRecord(sessionID, left.prompt, PromptAnswer{}, nil, answered.Answerer{Kind: answered.ByTerminal}, &left.since, now)
 		record.Answer = ""
 		record.Outcome = answered.OutcomeAnswered
-		s.recordAnswered(record)
+		s.recordAnswered(s.SettleTerminalAnswer(record, left.prompt.CallID))
+		if left.prompt.Kind == classifier.PromptPermission {
+			// The agent's hook asked Mewla the same question and is never told
+			// it was answered here: without this, the phone keeps asking it
+			// until the agent moves (the call ends) or the hook times out.
+			s.mu.Lock()
+			approvals := s.agentApprovals
+			s.mu.Unlock()
+			if approvals != nil {
+				approvals.AnsweredInTerminal(sessionID, left.prompt.Tool, left.prompt.Summary)
+			}
+		}
 	})
+}
+
+// SettleTerminalAnswer says how a permission or approval answered in the
+// terminal ended, from what the provider recorded for its tool call: the call
+// ran (approved) or was refused (denied). The option the person picked is not
+// recorded anywhere, so Answer stays empty. A call with no result yet, a
+// request the transcript cannot name, or another provider leave the record as
+// it is: answered, not known how. callID names the call when the prompt knew
+// it; without it the newest call with the record's tool and line is taken.
+func (s *Server) SettleTerminalAnswer(record answered.Request, callID string) answered.Request {
+	if !awaitsOutcome(record) || s.watcher == nil {
+		return record
+	}
+	resolved := s.resolveCodexConversationWorker(clientMessage{WorkerID: record.SessionID})
+	if !resolved.ready || !resolved.fromWatcher || resolved.provider != work.WorkerProviderClaude {
+		return record
+	}
+	conversation, err := s.choiceConversationLoader(resolved)()
+	if err != nil {
+		return record
+	}
+	return settleFromConversation(record, callID, conversation)
+}
+
+// awaitsOutcome is a record of a permission or approval answered in the
+// terminal, whose outcome is not known yet.
+func awaitsOutcome(record answered.Request) bool {
+	return record.By.Kind == answered.ByTerminal && record.Outcome == answered.OutcomeAnswered && record.SessionID != "" &&
+		(record.Kind == string(classifier.PromptPermission) || record.Kind == answered.KindApproval)
+}
+
+// settleFromConversation is SettleTerminalAnswer over a loaded conversation.
+func settleFromConversation(record answered.Request, callID string, conversation work.CodexConversation) answered.Request {
+	if !awaitsOutcome(record) {
+		return record
+	}
+	var call work.ConversationToolCall
+	var found bool
+	if callID != "" {
+		call, found = work.ConversationToolCallByID(conversation, callID)
+	} else if record.Tool != "" && record.Summary != "" {
+		call, found = work.ConversationToolCallByLine(conversation, record.Tool, record.Summary)
+	}
+	if !found || !call.Done {
+		return record
+	}
+	if call.Rejected {
+		record.Outcome = answered.OutcomeDenied
+	} else {
+		record.Outcome = answered.OutcomeApproved
+	}
+	return record
 }

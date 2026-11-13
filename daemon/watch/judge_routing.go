@@ -18,7 +18,7 @@ import (
 // the status says why. The row picks only who judges: the no-tools, no-hooks,
 // no-session, redaction, batch, daily and cost limits hold whatever it says.
 
-const routingTask = "watch judgment"
+const routingTask = "Watch judgment"
 
 // judgeRoute is a validated routing row. Model and Effort are empty when the
 // row says "default": the executor's own choice.
@@ -43,9 +43,10 @@ func isDefaultCell(value string) bool {
 	return false
 }
 
-// parseRoutingRow finds the Watch judgment row. found is false when the file
-// has none; err explains a row that is there but cannot be used.
-func parseRoutingRow(text string, installed func(string) bool) (route judgeRoute, found bool, err error) {
+// parseRoutingRow finds the row whose Task cell starts with task ("Watch
+// judgment", "Work progress"). found is false when the file has none; err
+// explains a row that is there but cannot be used.
+func parseRoutingRow(text, task string, installed func(string) bool) (route judgeRoute, found bool, err error) {
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "|") {
@@ -55,11 +56,11 @@ func parseRoutingRow(text string, installed func(string) bool) (route judgeRoute
 		for index := range cells {
 			cells[index] = strings.TrimSpace(strings.Trim(strings.TrimSpace(cells[index]), "`"))
 		}
-		if !strings.HasPrefix(strings.ToLower(cells[0]), routingTask) {
+		if !strings.HasPrefix(strings.ToLower(cells[0]), strings.ToLower(task)) {
 			continue
 		}
 		if len(cells) != 4 {
-			return judgeRoute{}, true, fmt.Errorf("the Watch judgment row needs four cells (Task | Executor | Model | Reasoning), found %d", len(cells))
+			return judgeRoute{}, true, fmt.Errorf("the %s row needs four cells (Task | Executor | Model | Reasoning), found %d", task, len(cells))
 		}
 		executor := strings.ToLower(cells[1])
 		efforts, supported := judgeEfforts[executor]
@@ -127,13 +128,13 @@ func (j *judge) routed() (judgeRoute, Routing) {
 		cached = &routingCache{modified: info.ModTime(), size: info.Size()}
 		raw, readErr := os.ReadFile(j.routingPath)
 		installed := func(name string) bool { _, err := j.lookPath(name); return err == nil }
-		switch route, found, parseErr := parseRoutingRow(string(raw), installed); {
+		switch route, found, parseErr := parseRoutingRow(string(raw), j.task(), installed); {
 		case readErr != nil:
 			cached.reason = "routing.md is not readable: " + readErr.Error()
 		case parseErr != nil:
 			cached.reason = parseErr.Error()
 		case !found:
-			cached.reason = "routing.md has no Watch judgment row"
+			cached.reason = "routing.md has no " + j.task() + " row"
 		default:
 			cached.route, cached.valid = route, true
 		}
@@ -144,4 +145,13 @@ func (j *judge) routed() (judgeRoute, Routing) {
 	}
 	automatic.Reason = cached.reason
 	return judgeRoute{}, automatic
+}
+
+// task is the routing row this judge reads: Watch's own, or the one an Asker
+// was made for.
+func (j *judge) task() string {
+	if j.routingTask != "" {
+		return j.routingTask
+	}
+	return routingTask
 }

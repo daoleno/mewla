@@ -40,6 +40,9 @@ type HistoryDelta struct {
 	// them: unknown is not off.
 	AltScroll *bool `json:"alt_scroll,omitempty"`
 	AppCursor *bool `json:"app_cursor,omitempty"`
+	// MouseFormat is how a click or wheel press is encoded for the program
+	// ("sgr", "urxvt", "utf8", "x10"); left out when the host predates it.
+	MouseFormat string `json:"mouse_format,omitempty"`
 
 	Epoch uint64 `json:"epoch"`
 	// Reset says the viewer's rows are void: Lines replace them.
@@ -179,7 +182,7 @@ func (s *hostSession) HistoryFrom(cursor HistoryCursor) (HistoryDelta, error) {
 		return HistoryDelta{}, fmt.Errorf("capture Session history: %w", err)
 	}
 	delta := HistoryDelta{PaneID: s.targetID, Cols: capture.Cols, Rows: capture.Rows,
-		Alternate: capture.Alt, Mouse: capture.MouseTracking, Lines: []string{}}
+		Alternate: capture.Alt, Mouse: capture.MouseTracking, MouseFormat: capture.MouseFormat, Lines: []string{}}
 	if capture.Modes {
 		altScroll, appCursor := capture.AltScroll, capture.AppCursor
 		delta.AltScroll, delta.AppCursor = &altScroll, &appCursor

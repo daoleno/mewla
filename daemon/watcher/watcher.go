@@ -1732,8 +1732,33 @@ func (w *Watcher) projectPollResultsLocked(results []probedPollWorker) []Session
 			clearStaleAttemptMetadata(worker)
 			newState, summary = projectDelegatedActivity(worker, r.turn, activity)
 		}
+		wasBlocked := worker.State == classifier.StateBlocked
 		worker.State = newState
 		worker.Summary = summary
+		// A working Session carries when that run began: for one the person
+		// started, the poll that first saw its terminal say it works; for a
+		// delegated Worker, its turn's acceptance. A prompt ends the run, so the
+		// time it waits on the person is not the agent's: the answer starts a
+		// new one.
+		switch {
+		case newState == classifier.StateRunning && r.hasTurn && r.turnErr == nil:
+			if worker.RunningSince == nil {
+				since := r.now
+				if !wasBlocked && !r.turn.AcceptedAt.IsZero() {
+					since = r.turn.AcceptedAt
+				}
+				worker.RunningSince = &since
+			}
+		case newState == classifier.StateRunning && activity.State == classifier.StateRunning && !r.hasTurn:
+			if worker.RunningSince == nil {
+				since := r.now
+				worker.RunningSince = &since
+			}
+		case r.turnErr != nil:
+			// A failed ledger read keeps the last projection.
+		default:
+			worker.RunningSince = nil
+		}
 		worker.Prompt, worker.PromptUnidentified = nil, ""
 		if newState == classifier.StateBlocked && activity.State == classifier.StateBlocked {
 			worker.Prompt = activity.Prompt
@@ -1899,7 +1924,7 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 			toolChild := isCursorAgentCommand(item.workerSnap.Command) && cursorToolChildActive(item.panePID, processes)
 			activity = probe.Infer(classifier.ActivityInput{Worker: item.workerSnap, PaneContent: item.content, ToolChildActive: toolChild})
 			activity = w.withDialogCapture(item.id, item.workerSnap, activity)
-			activity = w.enrichChoicePrompt(item.id, withChoicePrompt(activity, item.content))
+			activity = w.enrichPrompt(item.id, withChoicePrompt(activity, item.content))
 		}
 		turn, hasTurn, turnErr := w.ledgerTurnFor(item.id, item.now)
 		pendingList, pendingErr := w.pendingInputAdmissions(item.id)
@@ -2644,6 +2669,10 @@ func cloneWorker(worker *classifier.Worker) *classifier.Worker {
 		at := *worker.ExpectedNextCheckAt
 		cp.ExpectedNextCheckAt = &at
 	}
+	if worker.RunningSince != nil {
+		at := *worker.RunningSince
+		cp.RunningSince = &at
+	}
 	return &cp
 }
 
@@ -2665,18 +2694,22 @@ type workerMetadataSnapshot struct {
 	leaseSeconds        int
 	delegated           bool
 	promptID            string
+	promptTool          string
+	promptSummary       string
 }
 
 func workerMetadataSnapshotFor(worker *classifier.Worker) workerMetadataSnapshot {
 	if worker == nil {
 		return workerMetadataSnapshot{}
 	}
-	promptID := ""
+	promptID, promptTool, promptSummary := "", "", ""
 	if worker.Prompt != nil {
-		promptID = worker.Prompt.ID
+		promptID, promptTool, promptSummary = worker.Prompt.ID, worker.Prompt.Tool, worker.Prompt.Summary
 	}
 	return workerMetadataSnapshot{
 		promptID:            promptID,
+		promptTool:          promptTool,
+		promptSummary:       promptSummary,
 		name:                worker.Name,
 		project:             worker.Project,
 		cwd:                 worker.Cwd,

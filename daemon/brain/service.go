@@ -106,8 +106,9 @@ type Service struct {
 	dispatchMu sync.Mutex
 
 	// judge decides undisposed Work (settle.go); nil leaves such Work as is.
-	judge  WorkJudge
-	settle settler
+	judge    WorkJudge
+	settle   settler
+	progress progressJudge
 	// inFlightHostInputs protects only the live Prepare -> provider mutation ->
 	// Admit/Abort critical section. It is deliberately process-local: durable
 	// BrainInputAdmission + watcher receipt state remain the restart authority.
@@ -632,6 +633,7 @@ func (s *Service) ApplyTurnFact(fact watcher.TurnFact) (watcher.TurnSnapshot, bo
 		return watcher.TurnSnapshot{}, false, fmt.Errorf("brain store is not configured")
 	}
 	s.recordTurnEndTranscript(fact)
+	s.noteProgressFact(fact, false)
 	return s.store.ApplyTurnFact(fact)
 }
 
@@ -640,6 +642,7 @@ func (s *Service) ApplyDelegatedTurnProgress(fact watcher.TurnFact) (watcher.Tur
 		return watcher.TurnProgressResult{}, fmt.Errorf("brain store is not configured")
 	}
 	s.recordTurnEndTranscript(fact)
+	s.noteProgressFact(fact, true)
 	return s.store.ApplyDelegatedTurnProgress(fact)
 }
 

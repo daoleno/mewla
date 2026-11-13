@@ -224,10 +224,13 @@ type Capture struct {
 	// wheel-sends-cursor-keys mode (1007). They are only ever sent when the
 	// host knows them: Modes says it does, so a host that predates them reads
 	// as unknown rather than as off.
-	Modes          bool `json:"modes,omitempty"`
-	AppCursor      bool `json:"app_cursor,omitempty"`
-	AltScroll      bool `json:"alt_scroll,omitempty"`
-	ScrollbackRows int  `json:"scrollback_rows"`
+	Modes     bool `json:"modes,omitempty"`
+	AppCursor bool `json:"app_cursor,omitempty"`
+	AltScroll bool `json:"alt_scroll,omitempty"`
+	// MouseFormat is how the program wants mouse reports encoded ("sgr",
+	// "urxvt", "utf8", "x10"); empty from a host that predates it.
+	MouseFormat    string `json:"mouse_format,omitempty"`
+	ScrollbackRows int    `json:"scrollback_rows"`
 	// RowFlags holds one ghosttyvt.Row* byte per captured history row when
 	// the capture asked for Marks and the host could read them.
 	RowFlags  []byte `json:"row_flags,omitempty"`
