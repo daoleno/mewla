@@ -505,7 +505,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       <View class="flex-1 bg-background">
         {durability() ? (
           <View testID="durability-warning" class="mx-3 mt-2 flex-row items-start gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
-            <Icon name="alert-circle" size={18} color="warning" />
+            <Icon name="alert-circle" size={18} color="muted-foreground" />
             <View class="flex-1 gap-0.5">
               <Text class="text-sm font-semibold">Not confirmed durable</Text>
               <Text class="text-sm text-muted-foreground">{durability()}</Text>

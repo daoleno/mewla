@@ -47,7 +47,7 @@ export function createExpansion() {
 export type Expansion = ReturnType<typeof createExpansion>;
 
 const iconOf = (name: string | undefined, fallback: IconName): IconName => (name && name in ICON_ASSETS ? (name as IconName) : fallback);
-const toneColor = (tone: string | undefined) => (tone === "failed" || tone === "danger" ? "destructive" : tone === "running" || tone === "accent" ? "foreground" : tone === "attention" ? "warning" : "muted-foreground");
+const toneColor = (tone: string | undefined) => (tone === "failed" || tone === "danger" ? "destructive" : tone === "running" || tone === "accent" ? "foreground" : "muted-foreground");
 
 /**
  * A chat's code block (soft-final SPEC §11 Message, the mock's `.codeblock`): a surface card, radius 20,
