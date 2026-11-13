@@ -1,4 +1,5 @@
 import { computed, effect, host, platform, signal, untracked, View, windowSize } from "nsh";
+import { DevWaitChip } from "./DevWait";
 import type { JSX } from "nsh";
 import { createNavStack, NavStack, type NavStackState } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
@@ -155,6 +156,7 @@ function Overlays(props: { bottomInset?: () => number }) {
       <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <EnrollmentApproval />
       <CalendarAlertCard />
+      <DevWaitChip />
     </>
   );
 }
