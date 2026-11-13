@@ -29,9 +29,15 @@ describe("Resources", () => {
     const texts = app.texts();
     expect(texts).toContain("Desk");
     expect(texts).toContain("Elevated pressure");
-    expect(texts.some((t) => t.startsWith("Memory under pressure · updated "))).toBe(true);
+    expect(texts).toContain("Memory under pressure");
+    expect(texts.some((t) => t.startsWith("· updated "))).toBe(true);
+    // The daemon's memory signal is over its threshold: its tile says High beside the number; the others say nothing.
+    expect(app.shows("id:resources-line-dot")).toBe(true);
+    expect(app.shows("id:tile-memory-status")).toBe(true);
+    expect(app.shows("id:tile-cpu-status")).toBe(false);
+    expect(app.shows("id:tile-disk-status")).toBe(false);
     // CPU 72% of 8 cores; 27 GB of 32 GB; the root disk 367 GB of 512 GB; swap 2 GB of 8 GB.
-    for (const text of ["72%", "8 cores", "27 GB", "of 32 GB", "367 GB", "of 512 GB", "2 GB", "of 8 GB"]) expect(texts).toContain(text);
+    for (const text of ["72%", "8 cores", "27 GB", "High", "· of 32 GB", "367 GB", "of 512 GB", "2 GB", "of 8 GB"]) expect(texts).toContain(text);
     expect(texts.join(" ")).toContain("Using this machine");
   });
 
@@ -108,7 +114,8 @@ describe("Resources", () => {
     const mac = () => ({ ...fresh(), signals: [], psi: {}, memory_pressure: { level: "warn", free_percent: 41.6 }, cpu: { load1: 2.14, per_core_percent: [10, 20, 30, 40], utilization_percent: 25 } });
     const app = await open(HARNESS, computer(mac).options);
     await app.waitFor("id:resources-headline");
-    expect(app.texts().some((t) => t.startsWith("Memory under pressure · updated "))).toBe(true);
+    expect(app.texts()).toContain("Memory under pressure");
+    expect(app.shows("id:tile-memory-status")).toBe(true);
     expect(app.texts()).toContain("4 cores");
     await app.press("id:resources-details");
     await app.waitFor("id:resources-machine-details");
@@ -122,7 +129,9 @@ describe("Resources", () => {
     const app = await open(HARNESS, computer(calm).options);
     await app.waitFor("id:resources-headline");
     expect(app.texts()).toContain("Comfortable");
-    expect(app.texts().some((t) => t.startsWith("Pressure low · updated "))).toBe(true);
+    expect(app.texts()).toContain("Pressure low");
+    expect(app.shows("id:resources-line-dot")).toBe(true);
+    expect(app.shows("id:tile-memory-status")).toBe(false);
   });
 
   test("Refresh reads at once, and is off while the computer is offline", async () => {

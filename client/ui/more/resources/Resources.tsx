@@ -43,10 +43,14 @@ import {
   type ResourceConsumerOwner,
   type ResourceTelemetry,
 } from "../../../core/resources/resourceTelemetry";
+import { consumerLead, meterWord, pressureTone, resourceMeterTone, type ResourceMeter } from "../../../core/resources/colour";
 import { DateStyle, formatDate } from "../../../core/timeline/dates";
-import { color, type ColorName } from "../../kit/colors";
-import { Icon, type IconName } from "../../kit/Icon";
-import { copyMenu, DisplayTitle, EmptyState, Meter, Notice, Page, Section, SectionLabel, StatTile, StatusMark } from "../../kit/kit";
+import { AgentIcon } from "../../icons/AgentIcon";
+import { pet } from "../../pets/pets";
+import { color } from "../../kit/colors";
+import { Icon } from "../../kit/Icon";
+import { copyMenu, DisplayTitle, EmptyState, Meter, Notice, Page, Section, SectionLabel, StatTile } from "../../kit/kit";
+import { LEAD_SLOT, meterColor, RowTile, StateLine, type Lead } from "../../kit/RowTile";
 import { Segmented } from "../../kit/Segmented";
 import { connected, daemon, daemonName, daemonState } from "../daemon";
 import type { PageNav } from "../routes";
@@ -133,22 +137,23 @@ function headline(t: ResourceTelemetry): string {
   return "Comfortable";
 }
 
-/** The live dot: green while comfortable, the warning or failed colour under pressure, a soft ring offline. */
-function dotTone(t: ResourceTelemetry): ColorName {
-  if (!connected()) return "soft";
-  return t.state === "critical" ? "failed" : t.state === "elevated" ? "warning" : "add";
-}
-
 /** The page's top block (SPEC §15 Metrics): the computer's name, the pressure in words, then what is under pressure and when it was read. */
 function Headline(props: { telemetry: ResourceTelemetry }) {
   const t = () => props.telemetry;
-  const line = () => `${pressureWords(t())} · updated ${formatDate(new Date(t().sampledAt), DateStyle.time)}`;
+  const updated = () => `· updated ${formatDate(new Date(t().sampledAt), DateStyle.time)}`;
   return (
     <View testID="resources-headline">
       <DisplayTitle eyebrow={serverDisplayName(daemonName(), "This computer")} title={headline(t())} />
-      <View class="flex-row items-center gap-2 px-1 pb-2">
-        <View class="size-2 rounded-full" style={connected() ? { backgroundColor: color(dotTone(t())) } : { borderWidth: 1.5, borderColor: color("soft") }} />
-        <Text testID="resources-line" class="shrink text-sub text-muted-foreground line-clamp-1">{line()}</Text>
+      {/* The daemon's pressure (SPEC §10.4): its dot and words in ok, warn or red; offline, a soft ring and soft words. */}
+      <View class="flex-row items-center gap-1.5 px-1 pb-2">
+        {connected() ? (
+          <StateLine testID="resources-line" tone={pressureTone(t().state)} label={pressureWords(t())} detail={updated()} />
+        ) : (
+          <>
+            <View class="size-2 rounded-full" style={{ borderWidth: 1.5, borderColor: color("soft") }} />
+            <Text testID="resources-line" class="shrink text-sub text-muted-foreground line-clamp-1">{`${pressureWords(t())} ${updated()}`}</Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -207,7 +212,7 @@ function MachineDetails(props: { t: ResourceTelemetry }) {
     <View testID="resources-machine-details" class="mt-2 gap-2 rounded-(--radius-group) bg-card p-4">
       {props.t.signals.map((s) => (
         <View class="flex-row items-center gap-2">
-          <StatusMark status={s.state === "critical" ? "failed" : "warning"} />
+          <View class="size-2 rounded-full" style={{ backgroundColor: color(s.state === "critical" ? "seal" : "warning") }} />
           <Text class="shrink font-mono text-code">{`${s.name} · ${trim2(s.value)} / threshold ${trim2(s.threshold)}`}</Text>
         </View>
       ))}
@@ -233,11 +238,16 @@ function MachineDetails(props: { t: ResourceTelemetry }) {
 }
 
 /** A stat tile (SPEC §15 Metrics): the label, the figure, a soft line, a 4 pt bar, and its facts while ⓘ is open. */
-function Tile(props: { title: string; value: string; testID: string; line?: string; share?: number; detail?: JSX.Element }) {
-  const tone = (): ColorName => ((props.share ?? 0) >= 0.9 ? "warning" : "ink");
+/**
+ * A tile's meter turns on the daemon's thresholds for what it judges (`meter`), on 80 % and 95 % for what it does
+ * not (swap); its status word ("High") carries the colour beside the number, never the number (SPEC §10.4).
+ */
+function Tile(props: { title: string; value: string; testID: string; t: ResourceTelemetry; meter: ResourceMeter | null; mount?: string; line?: string; share?: number; detail?: JSX.Element }) {
+  const tone = () => resourceMeterTone(props.t, props.meter, props.share ?? 0, props.mount);
+  const word = () => (props.share === undefined && props.meter === null ? null : meterWord(tone()));
   return (
-    <StatTile testID={props.testID} label={props.title} value={props.value} detail={props.line}>
-      {props.share !== undefined ? <Meter share={props.share} tone={tone()} height={4} /> : null}
+    <StatTile testID={props.testID} label={props.title} value={props.value} detail={props.line} status={word() ? { word: word()!, tone: tone() === "error" ? "error" : "warn" } : undefined}>
+      {props.share !== undefined ? <Meter share={props.share} tone={meterColor(tone())} height={4} /> : null}
       {details() ? props.detail ?? null : null}
     </StatTile>
   );
@@ -261,6 +271,8 @@ function Cpu(props: { t: ResourceTelemetry }) {
     <Tile
       testID="tile-cpu"
       title="CPU"
+      t={props.t}
+      meter="cpu"
       value={formatPercent(used())}
       line={cores().length ? `${cores().length} cores` : undefined}
       share={used() === undefined ? undefined : used()! / 100}
@@ -268,7 +280,7 @@ function Cpu(props: { t: ResourceTelemetry }) {
         <View class="gap-2">
           {cores().length ? <Fact label="Busiest core" value={formatPercent(Math.max(...cores()))} /> : null}
           <View class="flex-row flex-wrap gap-1">
-            {cores().map((c) => <View class="w-[22px]"><Meter share={c / 100} tone={c >= 90 ? "warning" : "ink"} height={18} /></View>)}
+            {cores().map((c) => <View class="w-[22px]"><Meter share={c / 100} tone={meterColor(resourceMeterTone(props.t, null, c / 100))} height={18} /></View>)}
           </View>
           <Fact label="Load · 1 / 5 / 15 min" value={`${load(props.t.cpu.load1)} / ${load(props.t.cpu.load5)} / ${load(props.t.cpu.load15)}`} />
         </View>
@@ -283,6 +295,8 @@ function Memory(props: { t: ResourceTelemetry }) {
     <Tile
       testID="tile-memory"
       title="Memory"
+      t={props.t}
+      meter="memory"
       value={formatBytes(memoryUsedBytes(props.t))}
       line={m().totalBytes !== undefined ? `of ${formatBytes(m().totalBytes)}` : undefined}
       share={memoryUsedRatio(props.t)}
@@ -304,6 +318,9 @@ function Disk(props: { t: ResourceTelemetry }) {
     <Tile
       testID="tile-disk"
       title="Disk"
+      t={props.t}
+      meter="disk"
+      mount={disk()?.mount}
       value={disk() ? formatBytes(disk()!.usedBytes) : "—"}
       line={disk() ? `of ${formatBytes(disk()!.totalBytes)}` : undefined}
       share={disk()?.totalBytes ? disk()!.usedBytes / disk()!.totalBytes : undefined}
@@ -313,7 +330,7 @@ function Disk(props: { t: ResourceTelemetry }) {
           {props.t.disks.map((d) => (
             <View class="gap-1">
               <Fact label={d.mount} value={`${formatBytes(d.freeBytes)} free / ${formatBytes(d.totalBytes)}`} />
-              <Meter share={d.totalBytes ? d.usedBytes / d.totalBytes : 0} tone={d.totalBytes && d.freeBytes / d.totalBytes < 0.1 ? "warning" : "ink"} height={4} />
+              <Meter share={d.totalBytes ? d.usedBytes / d.totalBytes : 0} tone={meterColor(resourceMeterTone(props.t, "disk", 0, d.mount))} height={4} />
             </View>
           ))}
         </View>
@@ -329,6 +346,8 @@ function Swap(props: { t: ResourceTelemetry }) {
     <Tile
       testID="tile-swap"
       title="Swap"
+      t={props.t}
+      meter={null}
       value={total() === undefined ? "—" : formatBytes(used())}
       line={total() === undefined ? undefined : `of ${formatBytes(total())}`}
       share={total() ? used() / total()! : undefined}
@@ -344,14 +363,13 @@ const OWNERS: ReadonlyArray<{ key: ResourceConsumerOwner; label: string }> = [
   { key: "user", label: "User processes" },
 ];
 
-/** One glyph names the owner, so rows don't repeat "User process" in words. */
-const OWNER_ICON: Record<ResourceConsumerOwner, IconName> = {
-  worker: "terminal",
-  orphaned_worker: "warning",
-  brain: "brain",
-  docker: "cube",
-  user: "person",
-};
+/** A row's mark (SPEC §10.4): an agent's logo, Mewla's own (the pet) for Brain and the daemon, a program's mark, or the teal cube. */
+function consumerRowLead(c: ResourceConsumer): Lead {
+  const lead = consumerLead(c);
+  if (lead.kind === "agent") return { kind: "logo", node: <AgentIcon kind={lead.agent} size={28} slot={LEAD_SLOT} /> };
+  if (lead.kind === "mewla") return { kind: "art", src: pet().art.portrait };
+  return lead;
+}
 
 function Consumers(props: { t: ResourceTelemetry }) {
   const all = () => sortConsumers(props.t.consumers, sort());
@@ -457,8 +475,8 @@ function ConsumerRow(props: { consumer: ResourceConsumer; rowKey: string; wide: 
         onPress={toggle}
         class="active:bg-accent"
       >
-        <View class="flex-row items-center gap-3 px-4 py-3">
-          <Icon name={OWNER_ICON[c().owner]} size={16} tone={orphaned() ? "warning" : "faint"} />
+        <View class="flex-row items-center gap-3.5 px-4 py-3">
+          <RowTile lead={consumerRowLead(c())} testID="consumer-lead" />
           <View class="min-w-0 flex-1">
             <Text class="text-body line-clamp-1">{title()}</Text>
             {consumerRowMeta(c()) ? <Text testID="consumer-meta" class="text-sub text-muted-foreground line-clamp-1" style={orphaned() ? { color: color("warning") } : undefined}>{consumerRowMeta(c())}</Text> : null}
@@ -507,7 +525,7 @@ function ConsumerRow(props: { consumer: ResourceConsumer; rowKey: string; wide: 
           )}
         </View>
       ) : null}
-      <View class="absolute bottom-0 left-4 right-0 h-px bg-border" />
+      <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 60 }} />
     </View>
   );
 }
