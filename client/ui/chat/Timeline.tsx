@@ -48,6 +48,20 @@ const jumpFloat = () => colorScheme() === "dark"
   ? "bg-sheet-surface shadow-[0_16px_48px_-12px_rgb(0_0_0_/_0.7)]"
   : "bg-sheet-surface shadow-[0_16px_48px_-12px_rgb(19_20_22_/_0.22)]";
 
+/**
+ * The 12 pt canvas fade under the page header (SPEC §11, the mock's `.nav::after`): the thread passes under
+ * the header cleanly instead of a half line cut hard against its second line. NSH draws no gradient, so
+ * six 2 pt strips of the page's paper step its opacity down. Taps go through it.
+ */
+const FADE = [0.94, 0.78, 0.6, 0.42, 0.24, 0.08];
+function HeaderFade() {
+  return (
+    <View testID="header-fade" class="absolute left-0 right-0 top-0" style={{ pointerEvents: "none" }}>
+      {FADE.map((opacity) => <View class="h-[2px] bg-background" style={{ opacity }} />)}
+    </View>
+  );
+}
+
 export type MessageHandlers = {
   /** A tap on one of the person's own messages: its menu (Copy, Edit). */
   onUserMessage?: (item: MessageTimelineItem) => void;
@@ -393,6 +407,7 @@ export function ChatTimeline(props: {
           );
         }}
       </List>
+      <HeaderFade />
       {away() ? (
         (props.requests?.() ?? 0) > 0 ? (
           <Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}

@@ -49,7 +49,6 @@ import { brain, connection, current, currentTransport, outbox, problem as connec
 import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
-import { Segmented } from "../kit/Segmented";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
 import { showAlert } from "../shell/alert";
@@ -444,10 +443,12 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       { id: "terminal", label: "New Terminal" },
       { id: "rename", label: "Rename" },
       ...(link() ? [{ id: "work", label: "Open its Work" }] : []),
+      ...(link()?.calendarItemId ? [{ id: "calendar", label: "Open in Calendar" }] : []),
       { id: "terminate", label: "Terminate", destructive: true },
     ];
     const action = await showMenu({ title: untracked(title), items, anchor: menuAnchor.node(), testID: "session-menu-popover" });
     if (action === "changes") openGit();
+    else if (action === "calendar") openCalendarOrigin();
     else if (action === "model") modelOpen.set(true);
     else if (action === "work") {
       const work = untracked(link)?.work;
@@ -473,17 +474,17 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
 
   return (
     <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"}
-      // One row holds the text and the controls (SPEC §11 Session header): the two lines stop before the switch with
-      // "…", never under it; in the second the project truncates and the state word never does.
+      // One row holds the text and the controls (SPEC §11 Session header), as wide as the bar: the title gets
+      // the room, the two lines end in "…" before the view button and ⋯; in the second the project
+      // truncates and the state word never does. A Calendar run's title is already its run: the second line
+      // is never the title again.
       headerTitle={
-        <View class="min-w-0 flex-1 flex-row items-center gap-2.5">
+        <View class="min-w-0 flex-1 flex-row items-center">
           <AgentIcon kind={kind()} size={28} />
-          <View class="min-w-0 flex-1">
+          <View class="ml-2.5 min-w-0 flex-1">
             <Text role="header" class="text-body font-semibold text-foreground line-clamp-1">{title()}</Text>
             {props.brain ? (
               <Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text>
-            ) : link()?.calendarLabel ? (
-              <Text testID="session-calendar" class="text-sub text-muted-foreground line-clamp-1" onPress={openCalendarOrigin}>{link()!.calendarLabel!}</Text>
             ) : worker() ? (
               <View testID="session-status" class="min-w-0 flex-row">
                 {projectWord() ? <Text testID="session-project" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{projectWord()}</Text> : null}
@@ -491,12 +492,14 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               </View>
             ) : null}
           </View>
-          {/* Chat or terminal, remembered per Session (SPEC §4): only where the Session has a chat. */}
+          {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a chat. */}
           {!props.brain && canChat() ? (
-            <Segmented testID="session-mode" accessibilityLabel="View" value={mode()} onChange={(key) => chooseMode(key)}
-              options={[{ key: "chat", label: "Chat", icon: "chat" }, { key: "terminal", label: "Terminal", icon: "terminal" }]} />
+            <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => chooseMode(untracked(mode) === "chat" ? "terminal" : "chat")}
+              class="ml-1.5 size-10 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+              <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
+            </Button>
           ) : null}
-          {props.brain ? null : <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button>}
+          {props.brain ? null : <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button>}
         </View>
       }>
       <View class="flex-1 bg-background">
