@@ -11,8 +11,8 @@ import UIKit
 /// The system keyboard types into it through UITextInput (composition drawn at the cursor, only
 /// committed text reported). Above the live screen it draws the history the page hands it
 /// (`applyHistory`, styled rows rendered by a second VT) and a drag scrolls through it point by
-/// point, with deceleration; with no history (or on the alternate screen) the drag is reported (the
-/// computer's tmux copy mode moves). A tap reports the cell and the text under it (the page opens
+/// point, with deceleration; with no history (or on the alternate screen) the drag is reported, with deceleration (the page makes it
+/// wheel presses or cursor keys for the program, or moves tmux's copy mode). A tap reports the cell and the text under it (the page opens
 /// links and raises the keyboard); a long press selects the word under the finger, with handles to
 /// stretch it over any rows, history included, and offers Copy, Paste and Select All. Text a program
 /// copies (OSC 52) is reported.
@@ -110,6 +110,8 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
   private var scrollY: CGFloat = 0
   private var velocity: CGFloat = 0
   private var decelerator: CADisplayLink?
+  /** The deceleration reports lines (the alternate screen, or no history) instead of scrolling. */
+  private var deceleratingReports = false
   private var dragRemainder: CGFloat = 0
   private var markRow = -1
   private var reportedTop = -1
@@ -1035,17 +1037,19 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
       if dragging != 0 {
         dragging = 0
         showMenu(at: point)
-      } else if scrolls, gesture.state == .ended {
-        startDecelerating(gesture.velocity(in: self).y)
+      } else if gesture.state == .ended {
+        // A drag that was reported goes on as reported lines, slowing down, as a scrolled one goes on as scrolling.
+        startDecelerating(gesture.velocity(in: self).y, reports: !scrolls)
       }
     default:
       break
     }
   }
 
-  private func startDecelerating(_ v: CGFloat) {
+  private func startDecelerating(_ v: CGFloat, reports: Bool) {
     guard abs(v) > 50 else { return }
     velocity = v
+    deceleratingReports = reports
     let link = CADisplayLink(target: self, selector: #selector(decelerate(_:)))
     link.add(to: .main, forMode: .common)
     decelerator = link
@@ -1055,11 +1059,23 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     decelerator?.invalidate()
     decelerator = nil
     velocity = 0
+    deceleratingReports = false
   }
 
   /// UIScrollView's normal deceleration (0.998 per millisecond).
   @objc private func decelerate(_ link: CADisplayLink) {
     let dt = max(link.targetTimestamp - link.timestamp, 1.0 / 120)
+    if deceleratingReports {
+      dragRemainder += velocity * CGFloat(dt) / max(cellH, 1)
+      let lines = Int(dragRemainder)
+      if lines != 0 {
+        dragRemainder -= CGFloat(lines)
+        onScroll(lines)
+      }
+      velocity *= CGFloat(pow(0.998, dt * 1000))
+      if abs(velocity) < 10 { stopDecelerating() }
+      return
+    }
     let before = scrollY
     setScroll(scrollY + velocity * CGFloat(dt))
     velocity *= CGFloat(pow(0.998, dt * 1000))

@@ -68,7 +68,12 @@ Open a Session to read it in one of three ways:
   including a Shell. A key row above the keyboard adds Ctrl, Esc, Tab and arrows.
   On Android, pinch to change the text size between 8 and 14 (10 by default).
   The phone remembers it, and the terminal takes the new size once you lift
-  your fingers.
+  your fingers. Drag one finger up or down to scroll back through what the
+  Session printed, and flick to keep going; it returns to the live screen at
+  the bottom. A program that fills the whole screen (Claude Code, Codex, `less`)
+  has no history to scroll, so the drag goes to it the way a mouse wheel does:
+  as wheel presses when it reads the mouse, or as Up and Down when it lets the
+  wheel send arrow keys; it scrolls its own text, one line per row you drag.
 - **Git**: read-only All, Working and Staged diffs for the Session's
   repository. Reading a diff never stages or discards anything.
 

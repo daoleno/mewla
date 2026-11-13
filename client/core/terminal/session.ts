@@ -1,5 +1,6 @@
 import type { Frame, Transport } from "../transport";
 import { TerminalHistoryFeed, type HistoryRender, type TerminalHistoryModel } from "./history";
+import { paneForDrag, wheelBytes } from "./wheel";
 
 export type TerminalScrollState = { atBottom: boolean; inCopyMode: boolean; position: number };
 
@@ -126,9 +127,19 @@ export class TerminalSession {
     if (this.sessionId && data) this.send({ type: "terminal_input", session_id: this.sessionId, data });
   }
 
-  /** History drag: `lines` > 0 is back in time (tmux copy mode). */
+  /**
+   * A drag the view did not take (it holds no history, or the program is on the alternate screen), `lines` > 0
+   * back in time: what the program scrolls with (core/terminal/wheel.ts), else tmux copy mode.
+   */
+  drag(lines: number): void {
+    const bytes = wheelBytes(paneForDrag(this.history.panes), lines);
+    if (bytes) this.input(bytes);
+    else this.scroll(lines);
+  }
+
+  /** History drag: `lines` > 0 is back in time. The computer's tmux copy mode counts the other way (negative is toward history). */
   scroll(lines: number): void {
-    if (this.sessionId && lines) this.send({ type: "terminal_scroll", session_id: this.sessionId, lines });
+    if (this.sessionId && lines) this.send({ type: "terminal_scroll", session_id: this.sessionId, lines: -lines });
   }
 
   scrollToBottom(): void {
