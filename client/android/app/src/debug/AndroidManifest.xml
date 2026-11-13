@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Debug builds only: the terminal render-corpus replay (TerminalReplayActivity) and the dev start link
+<!-- Debug builds only: the terminal render-corpus replay (TerminalReplayActivity), the live surfaces'
+     preview (LivePreviewActivity) and the dev start link
      (DevStartActivity, mewla-dev://start?server=…). scripts/tests/test_android_dev_start_link.py keeps the
      link out of every other manifest. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -8,6 +9,11 @@
       android:name="com.daoleno.mewla.terminal.TerminalReplayActivity"
       android:exported="true"
       android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+    <!-- The live surfaces from sample states (live/LivePreviewActivity.kt). -->
+    <activity
+      android:name="com.daoleno.mewla.live.LivePreviewActivity"
+      android:exported="true"
+      android:theme="@android:style/Theme.DeviceDefault.DayNight" />
     <activity
       android:name="com.daoleno.mewla.DevStartActivity"
       android:exported="true"

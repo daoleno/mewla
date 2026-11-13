@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from client/ui/icons/agents/opencode.svg (sources in client/ui/icons/AgentIcon.tsx). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+  <path android:pathData="M 16 6 H 8 v 12 h 8 V 6 z m 4 16 H 4 V 2 h 16 v 20 z" android:fillColor="@color/mewla_ink" android:fillType="evenOdd"/>
+</vector>

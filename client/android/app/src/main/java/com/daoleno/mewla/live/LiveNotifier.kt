@@ -14,9 +14,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 /**
- * The one live surface: an ongoing notification. On Android 16 QPR1+ it asks to be promoted
- * (status-bar chip, pinned card); everywhere else it is a plain ongoing notification with the
- * same content.
+ * The live update: an ongoing notification while something runs or needs you. On Android 16 QPR1+ it
+ * asks to be promoted (status-bar chip, ColorOS's 流体云 capsule, the pinned card); everywhere else it is
+ * a plain ongoing notification with the same content. Promotion allows no custom views and no colour of
+ * our own, so the logo and its ring are the large icon's bitmap.
  */
 internal object LiveNotifier {
   private const val TAG = "MewlaLive"
@@ -49,46 +50,48 @@ internal object LiveNotifier {
     }
   }
 
+  /**
+   * Option A: the one thing that matters now. What needs you (newest) else what started last: its title,
+   * what it does or asks, its agent's logo with its progress ring as the large icon, the header's words.
+   * The status-bar chip (流体云 on ColorOS) is the system's: our mask and either the running item's clock
+   * or the request's tag ("Answer", "Approve"). Choices answer only a Work's question; a tap opens the item.
+   */
   internal fun build(context: Context, state: LiveState): android.app.Notification {
-    val needs = state.needsYou
-    val title = if (needs) "Brain needs you" else state.title.ifBlank { "Mewla" }
-    val text = if (needs) state.question?.text.orEmpty() else state.phase
+    val focus = LiveView.focus(state)
+    val needs = focus?.asks == true
+    val title = focus?.title?.ifBlank { null } ?: "Mewla"
+    val text = focus?.line.orEmpty()
 
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(smallIcon(context))
       .setContentTitle(title)
       .setContentText(text.ifBlank { null })
+      .setSubText(LiveView.headerWords(state))
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setSilent(true)
       .setCategory(if (needs) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_PROGRESS)
       .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-      .setContentIntent(openIntent(context, state))
+      .setContentIntent(openIntent(context, focus))
       .setDeleteIntent(dismissIntent(context, state))
       .setRequestPromotedOngoing(true)
+    if (focus != null) builder.setLargeIcon(LiveArt.logo(context, focus, 48f))
 
-    if (needs) {
-      // The count is the chip text; chip colour belongs to the system.
-      builder.setShortCriticalText(state.needsCount.coerceAtLeast(1).toString())
+    if (needs && focus != null) {
+      builder.setShortCriticalText(LiveView.tag(focus))
+      builder.setShowWhen(false)
       if (text.isNotBlank()) builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
       val question = state.question
       if (question != null) {
-        LiveRules.actionChoices(state).forEachIndexed { index, choice ->
+        LiveView.choices(state, focus).forEachIndexed { index, choice ->
           builder.addAction(0, choice, answerIntent(context, question.id, index))
         }
       }
+    } else if (focus != null && focus.startedAt > 0) {
+      // The system ticks the clock: one post per change, never one per second.
+      builder.setShowWhen(true).setWhen(focus.startedAt).setUsesChronometer(true)
     } else {
-      // Elapsed time is the system's chronometer: no update per second, only per phase change.
-      if (state.startedAt > 0) {
-        builder.setShowWhen(true).setWhen(state.startedAt).setUsesChronometer(true)
-      }
-      if (state.total > 0) {
-        val style = NotificationCompat.ProgressStyle()
-        val segments = ArrayList<NotificationCompat.ProgressStyle.Segment>()
-        repeat(state.total.coerceAtMost(12)) { segments.add(NotificationCompat.ProgressStyle.Segment(1)) }
-        style.setProgressSegments(segments).setProgress(state.done.coerceIn(0, segments.size))
-        builder.setStyle(style)
-      }
+      builder.setShowWhen(false)
     }
     return builder.build()
   }
@@ -128,8 +131,15 @@ internal object LiveNotifier {
     )
   }
 
-  fun openIntent(context: Context, state: LiveState): PendingIntent =
-    deepLink(context, "open", mapOf("k" to state.kind), 1)
+  /** A tap opens the item: its Session or Work detail, Brain's thread for Brain's own question. */
+  fun openIntent(context: Context, item: LiveItem?): PendingIntent =
+    link(context, LiveView.link(item, LivePrefs(context).currentServerRef), 1)
+
+  fun link(context: Context, url: String, requestCode: Int): PendingIntent {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(context.packageName)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    return PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  }
 
   /** A tap opens the app on that question; the app then sends the answer once. */
   fun answerIntent(context: Context, questionId: String, choiceIndex: Int): PendingIntent =
