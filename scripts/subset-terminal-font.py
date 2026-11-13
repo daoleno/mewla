@@ -20,6 +20,12 @@ merge cells (`->`, `!=`) on any platform that applies them. Metrics, names and a
 Usage (fontTools installed; the zip is the upstream release, pinned by SHA-256 below):
 
   python3 scripts/subset-terminal-font.py MapleMono-NF.zip client/native/terminal/fonts
+
+The app's own monospaced text (inline code, code blocks, commands, diffs: the theme's `font-mono`)
+uses the same face, from the terminal's files: Regular without the icons (the app draws none in code)
+and SemiBold as is. Run after the terminal's, or alone on the committed files:
+
+  python3 scripts/subset-terminal-font.py --ui client/native/terminal/fonts client/ui/assets/fonts
 """
 
 import hashlib
@@ -92,7 +98,16 @@ def verify(before: TTFont, after: TTFont, output: Path, keep, icons: bool, itali
     print(f"{output.name}: {len(old)} -> {len(new)} code points, {output.stat().st_size} bytes")
 
 
+def ui_fonts(terminal: Path, out: Path) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    subset_font((terminal / "MapleMono-NF-Regular.ttf").read_bytes(), out / "MapleMono-NF-Regular.ttf", icons=False)
+    (out / "MapleMono-NF-SemiBold.ttf").write_bytes((terminal / "MapleMono-NF-SemiBold.ttf").read_bytes())
+    (out / "OFL.txt").write_bytes((terminal / "OFL.txt").read_bytes())
+
+
 def main() -> None:
+    if len(sys.argv) == 4 and sys.argv[1] == "--ui":
+        return ui_fonts(Path(sys.argv[2]), Path(sys.argv[3]))
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     archive, out = Path(sys.argv[1]), Path(sys.argv[2])

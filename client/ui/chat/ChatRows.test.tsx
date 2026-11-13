@@ -1,5 +1,7 @@
 import { describe, expect, open, test } from "nsh/test";
 import { paired, phoneHost } from "../testing/fixtures";
+import { MONO_FAMILY } from "../kit/monoFont";
+import theme from "../theme.json";
 
 const APP = "../FakeDaemonApp.tsx";
 const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
@@ -73,6 +75,12 @@ describe("inline code", () => {
     expect(app.spanStyle("text:bun test core")).toMatchObject({ fontSize: 15, backgroundColor: "#ffffffff", color: "#131416ff" });
     expect(app.spanStyle("text:zq-b")).toMatchObject({ fontSize: 15, backgroundColor: "#ffffffff" });
   }, 20_000);
+
+  test("is set in the face the app ships, not what a phone's vendor maps `monospace` to (a sans on the owner's OnePlus)", () => {
+    // The theme's font-mono names the bundled family first (the system's after it, for what the face lacks, such as CJK).
+    expect(MONO_FAMILY).toBe("Maple Mono NF");
+    expect(theme.cssVars.theme["font-mono"].split(",")[0].trim()).toBe(`'${MONO_FAMILY}'`);
+  });
 });
 
 describe("a long message the person sent folds", () => {

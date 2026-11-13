@@ -38,7 +38,7 @@ sections = [
         {"name": "translate-c", "version": "2.0.0", "license": "MIT", "url": "https://ziglang.org", "platforms": ["android", "ios", "web"],
          "text": text("libghostty-translate-c.txt"), "note": "Compiled into libghostty-vt, the terminal core of the app."},
         {"name": "Maple Mono NF", "version": "7.9", "license": "OFL-1.1", "url": "https://github.com/subframe7536/maple-font",
-         "text": text("MapleMono-OFL.txt"), "note": "The terminal's font, with the Nerd Fonts icons Maple patches in; subset by scripts/subset-terminal-font.py."},
+         "text": text("MapleMono-OFL.txt"), "note": "The terminal's font, with the Nerd Fonts icons Maple patches in, and the app's code, commands and diffs (without the icons); subset by scripts/subset-terminal-font.py."},
         {"name": "noVNC", "version": "1.7.0", "license": "MPL-2.0", "url": "https://github.com/novnc/noVNC", "text": text("noVNC-MPL-2.0.txt"),
          "note": "Draws a computer's screen in Screen. Its source is the published 1.7.0 release, unmodified apart from how it is bundled."},
         {"name": "TweetNaCl.js", "version": "1.0.3", "license": "Unlicense", "url": "https://github.com/dchest/tweetnacl-js", "text": text("Unlicense.txt")},
