@@ -39,7 +39,7 @@ export function PetPage() {
   const tile = () => `${100 / across()}%` as `${number}%`;
 
   return (
-    <Page title="Pet" testID="pet-page"
+    <Page display title="Pet" testID="pet-page"
       overlay={<If when={toast()}><View class="absolute left-0 right-0 items-center" style={{ bottom: 88, pointerEvents: "none" }}>
           <View testID="pet-toast" class="rounded-full bg-foreground px-4 py-2.5"><Text class="text-sub font-semibold text-background">{toast()}</Text></View>
         </View></If>}>
