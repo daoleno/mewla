@@ -274,7 +274,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
             if (scrolledBack()) command("scrollToBottom", {});
             type(data);
           }}
-          onScroll={({ lines }) => session.scroll(lines)}
+          onScroll={({ lines }) => session.drag(lines)}
           onViewport={({ top, atBottom }) => {
             nav.viewport(top, atBottom);
             scrolledBack.set(!atBottom);

@@ -41,7 +41,8 @@ import kotlin.math.roundToInt
  * The system keyboard types into it (composition drawn at the cursor, only committed text
  * reported). Above the live screen it draws the history the page hands it (`history`, styled rows
  * rendered by a second VT) and a drag scrolls through it pixel by pixel, with fling; with no history
- * (or on the alternate screen) the drag is reported (the computer's tmux copy mode moves). A tap
+ * (or on the alternate screen) the drag is reported, fling included (the page makes it wheel presses or
+ * cursor keys for the program, or moves tmux's copy mode). A tap
  * reports the cell and the text under it (the page opens links and raises the keyboard); a long press
  * selects the word under the finger, with handles to stretch it over any rows, history included,
  * and offers Copy, Paste and Select all. Text a program copies (OSC 52) is reported.
@@ -813,6 +814,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
 
   override fun onDetachedFromWindow() {
     removeCallbacks(blink)
+    stopReportedFling()
     super.onDetachedFromWindow()
   }
 
@@ -1094,15 +1096,16 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   // MARK: Touch
 
   // A tap names the cell and its text; a drag scrolls (fling included); a long press selects.
-  private var dragRemainder = 0f
+  private val reported = ReportedDrag()
   /** The axis a drag keeps once it starts: 0 not yet, 1 sideways (panning a wider Session grid), 2 up and down. */
   private var dragAxis = 0
 
   private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
     override fun onDown(e: MotionEvent): Boolean {
-      dragRemainder = 0f
+      reported.reset()
       dragAxis = 0
       scroller.forceFinished(true)
+      stopReportedFling()
       return true
     }
 
@@ -1128,18 +1131,21 @@ class TerminalView(context: Context, private val events: Events) : View(context)
         // A drag down (dy < 0) moves back in time.
         setScroll(scrollPx - dy / fit.scale)
       } else {
-        dragRemainder += -dy / (cellH * fit.scale)
-        val lines = dragRemainder.toInt()
-        if (lines != 0) {
-          dragRemainder -= lines
-          events.scroll(lines)
-        }
+        // A drag down (dy < 0) is back in time: lines > 0.
+        val lines = reported.add(-dy, cellH * fit.scale)
+        if (lines != 0) events.scroll(lines)
       }
       return true
     }
 
     override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-      if (dragAxis == 1 || alternate || maxScroll() <= 0f) return false
+      if (dragAxis == 1) return false
+      if (alternate || (history.isEmpty() && scrollPx <= 0f && fit.topCut <= 0f)) {
+        // A drag that was reported (the alternate screen, or nothing to scroll) goes on as reported lines, slowing down.
+        startReportedFling(vy)
+        return true
+      }
+      if (maxScroll() <= 0f) return false
       scroller.fling(0, scrollPx.roundToInt(), 0, (vy / fit.scale).roundToInt(), 0, 0, 0, maxScroll().roundToInt())
       postInvalidateOnAnimation()
       return true
@@ -1157,6 +1163,33 @@ class TerminalView(context: Context, private val events: Events) : View(context)
       showMenu()
     }
   })
+
+  // A fling of a reported drag: the page turns the lines into wheel presses or cursor keys for the program.
+  private val reportedFling = OverScroller(context)
+  private var reportedFlingY = 0
+  private val reportedFlingStep = object : Runnable {
+    override fun run() {
+      if (!reportedFling.computeScrollOffset()) return
+      val y = reportedFling.currY
+      val lines = reported.add((y - reportedFlingY).toFloat(), cellH * fit.scale)
+      reportedFlingY = y
+      if (lines != 0) events.scroll(lines)
+      postOnAnimation(this)
+    }
+  }
+
+  private fun startReportedFling(vy: Float) {
+    if (cellH <= 0) return
+    stopReportedFling()
+    reportedFlingY = 0
+    reportedFling.fling(0, 0, 0, vy.roundToInt(), 0, 0, -REPORTED_FLING_RANGE, REPORTED_FLING_RANGE)
+    postOnAnimation(reportedFlingStep)
+  }
+
+  private fun stopReportedFling() {
+    reportedFling.forceFinished(true)
+    removeCallbacks(reportedFlingStep)
+  }
 
   // MARK: Pinch
 
@@ -1210,6 +1243,7 @@ class TerminalView(context: Context, private val events: Events) : View(context)
       twoFingers = true
       parent?.requestDisallowInterceptTouchEvent(true)
       scroller.forceFinished(true)
+      stopReportedFling()
       // What the first finger started (a scroll, a pan, a long press waiting) ends here.
       val cancel = MotionEvent.obtain(e).apply { action = MotionEvent.ACTION_CANCEL }
       gestures.onTouchEvent(cancel)
@@ -1280,6 +1314,8 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     const val PAGE = 64
     const val BLINK_MS = 600L
     const val PINCH_SETTLE_MS = 600L
+    /** A reported fling's travel, in pixels, either way: far more than any fling goes. */
+    const val REPORTED_FLING_RANGE = 1_000_000
     const val COPY = 1
     const val PASTE = 2
     const val SELECT_ALL = 3

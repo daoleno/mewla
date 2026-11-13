@@ -203,6 +203,44 @@ describe("TerminalSession", () => {
     transport.close();
   });
 
+  test("a history drag reaches tmux copy mode the way the computer counts: negative is toward history", async () => {
+    const { transport, socket, term } = await attachedTerminal();
+    term.scroll(4);
+    term.scroll(-2);
+    term.scroll(0);
+    expect(frames(socket, "terminal_scroll")).toEqual([
+      { type: "terminal_scroll", session_id: "t1", lines: -4 },
+      { type: "terminal_scroll", session_id: "t1", lines: 2 },
+    ]);
+    term.close();
+    transport.close();
+  });
+
+  test("a drag on a host Session's alternate screen reaches the program as wheel presses or cursor keys, never as a no-op tmux scroll", async () => {
+    const { transport, socket, term } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    // Claude Code's fullscreen view: alternate screen with mouse reports.
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1",
+      history: delta({ reset: true, next: 0, alternate: true, mouse: true, cols: 54, rows: 40 }) });
+    await until(() => term.history.alternate);
+    // (The attachment's own focus report is input too.)
+    const sent = () => frames(socket, "terminal_input").map((f) => f.data).filter((data) => data !== "\u001b[I");
+    term.drag(2);
+    term.drag(-1);
+    expect(sent()).toEqual(["\u001b[<64;28;21M\u001b[<64;28;21M", "\u001b[<65;28;21M"]);
+    expect(frames(socket, "terminal_scroll")).toEqual([]);
+    // Codex's transcript: the wheel sends cursor keys.
+    term.history.panes = [{ ...term.history.panes[0], mouse: false, alt_scroll: true }];
+    term.drag(2);
+    expect(sent().pop()).toBe("\u001b[A\u001b[A");
+    // A pane with nothing to scroll with falls back to tmux's copy mode (a no-op on a host).
+    term.history.panes = [{ ...term.history.panes[0], alt_scroll: false }];
+    term.drag(2);
+    expect(frames(socket, "terminal_scroll")).toEqual([{ type: "terminal_scroll", session_id: "t1", lines: -2 }]);
+    term.close();
+    transport.close();
+  });
+
   test("tmux copy mode reports its scroll state for its own attachment only", async () => {
     const { transport, socket, term, log } = await attachedTerminal();
     socket.receive({ type: "terminal_scroll_state", session_id: "t1", at_bottom: false, in_copy_mode: true, scroll_position: 12 });
