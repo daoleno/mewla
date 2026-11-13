@@ -62,6 +62,16 @@ describe("a Session's capsule header (SPEC §11)", () => {
     await app.waitFor("id:capsule-needs-you");
   }, 30_000);
 
+  test("a delegated Worker stopped on its own report gets no dot: that is Brain's to answer (owner 2026-11-13, shot 11)", async () => {
+    const app = await sessionChat();
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...session, status: "blocked", delegated: true, needs_attention: true, attention: "user_input", summary: "Should I also purge the cache?" } });
+    await app.wait(500);
+    expect(app.shows("id:capsule-needs-you")).toBe(false);
+    // A prompt on its terminal Brain cannot answer is the person's.
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...session, status: "blocked", delegated: true, process_id: 42, started_at: 1_700_000_000_000, prompt: { id: "p-2", kind: "permission", provider: "claude", title: "Sign in?", request: "gh auth login", options: [{ number: 1, label: "Yes", selected: true }, { number: 2, label: "No" }] } } });
+    await app.waitFor("id:capsule-needs-you");
+  }, 30_000);
+
   test("a new request in the chat brings it back", async () => {
     const app = await sessionChat();
     await app.scroll("id:session-chat", -600);
