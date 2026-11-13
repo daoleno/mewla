@@ -205,11 +205,12 @@ export function StatGrid(props: { testID?: string; children?: JSX.Element }) {
 }
 
 /** A ranked row (SPEC §15 Metrics): a glyph, the name over its second line, a 72 pt bar of its share, the value. */
-export function RankedRow(props: { title: string; subtitle?: string; share: number; value: string; icon?: IconName; leading?: JSX.Element; testID?: string; accessibilityLabel?: string; accessibilityHint?: string; onPress?: () => void }) {
+export function RankedRow(props: { title: string; subtitle?: string; share: number; value: string; icon?: IconName; lead?: Lead; tone?: ColorName; leading?: JSX.Element; testID?: string; accessibilityLabel?: string; accessibilityHint?: string; onPress?: () => void }) {
   return (
     <Row
       testID={props.testID}
       icon={props.icon}
+      lead={props.lead}
       leading={props.leading}
       title={props.title}
       subtitle={props.subtitle}
@@ -219,7 +220,7 @@ export function RankedRow(props: { title: string; subtitle?: string; share: numb
       chevron={Boolean(props.onPress)}
       trailing={
         <View class="flex-row items-center gap-3">
-          <View class="w-[72px]"><Meter share={props.share} /></View>
+          <View class="w-[72px]"><Meter share={props.share} tone={props.tone} /></View>
           <Text class="min-w-[56px] text-right text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
         </View>
       }
