@@ -227,6 +227,12 @@ function SelectTextSheet() {
   );
 }
 
+/**
+ * Within this of its end the list is at its end: it follows new rows there, and further up the jump control
+ * shows. One distance for both: between two, the list did neither.
+ */
+const AT_END = 120;
+
 /** The thread's foot as a row of its list. */
 type FootRow = { type: "thread-foot"; id: string };
 const FOOT: FootRow = { type: "thread-foot", id: "thread-foot" };
@@ -291,26 +297,24 @@ export function ChatTimeline(props: {
     });
     return props.foot?.shown() ? [...all, FOOT] : all;
   });
-  // Back at the row the person left it at; at the newest row, nothing to restore. The list opens there
-  // itself when the row is already in (`initialScrollIndex`); rows that come later are scrolled to by index.
-  // Only the person's own scrolling moves the saved place, not the list settling as it mounts.
-  let restore = props.scope ? readingPositions.get(props.scope) : undefined;
-  const hadPlace = restore !== undefined;
-  const initialIndex = untracked(() => readingPlaceIndex(rows(), restore));
-  if (initialIndex !== undefined) restore = undefined;
+  /*
+   * The one rule (owner 11-13): the list follows its end while the person is at it (`AT_END`); otherwise
+   * only their own acts move it: sending, the jump control, a tray row or link to a request. Where it opens
+   * is decided once, when its first rows are in: the list is made then, at the row the person last read to
+   * or at its end, so nothing has to scroll it afterwards. (Before, five effects scrolled it as rows came
+   * and went, each kept in check by whether the person had touched it.)
+   */
+  const saved = props.scope ? readingPositions.get(props.scope) : undefined;
+  let opening: { index?: number; centre: boolean } = { centre: false };
+  const ready = signal(false);
+  const openOnce = () => {
+    if (untracked(ready) || untracked(rows).length === 0) return;
+    opening = { index: untracked(() => readingPlaceIndex(rows(), saved)), centre: untracked(openRequests) };
+    ready.set(true);
+  };
   let touched = false;
   let shownFirst: string | undefined;
   const mounted = signal(false);
-  effect(() => {
-    const index = readingPlaceIndex(rows(), restore);
-    if (index === undefined || !mounted()) return;
-    restore = undefined;
-    untracked(() => list?.scrollToIndex({ index, viewPosition: 0, animated: false }));
-  });
-  // A chat with no place to go back to opens at its newest row. The list does that itself when its rows
-  // are in as it mounts; rows that come after (a Session's transcript loads once the chat is open) are
-  // brought to the newest here, once, unless the person has already moved: on a slow phone the list
-  // stayed on the oldest rows it had laid out (the test for a long chat opened at "Message 0" under load).
   const anchor = signal<ViewRef | undefined>(undefined);
   /**
    * Brings the foot's open card to the middle of the list, as far as the content lets it (it is near the
@@ -332,29 +336,30 @@ export function ChatTimeline(props: {
     const top = Math.max(0, (box.bounds.size.height - card.bounds.size.height) / 2);
     list.scrollToIndex({ index, viewPosition: 0, viewOffset: top - card.bounds.origin.y, animated });
   };
-  let opened = false;
   const openRequests = () => Boolean(props.foot?.shown()) && (props.requests?.() ?? 0) > 0;
+  openOnce();
   effect(() => {
-    if (rows().length === 0 || !mounted() || opened) return;
-    opened = true;
-    if (hadPlace || touched || untracked(openRequests)) return;
-    untracked(() => list?.scrollToEnd({ animated: false }));
+    rows();
+    openOnce();
   });
-  // With a request open, the chat opens on the oldest one, centred (SPEC §3.1 cold start): once, when the
-  // first card is laid out (the requests can come after the rows), unless the person has a place or has moved.
+  // Opened with a request open and no place to go back to, the chat shows it centred (SPEC §3.1 cold
+  // start), when its card is first laid out. A request that comes later only shows in the jump control.
   let centred = false;
   effect(() => {
-    if (!openRequests() || !mounted() || !anchor() || centred) return;
+    if (!mounted() || !anchor() || centred) return;
     centred = true;
-    if (hadPlace || touched) return;
-    untracked(() => void centreRequest(false));
+    if (opening.centre && opening.index === undefined) untracked(() => void centreRequest(false));
   });
+  // The person's acts, counted by the page: each new one moves the list (a count already there when the
+  // list is made is not: back in the chat from the terminal, it does not jump to the last message sent).
+  const seenReveal = props.reveal ? untracked(props.reveal) : 0;
   effect(() => {
-    if (!props.reveal || props.reveal() === 0 || !mounted()) return;
+    if (!props.reveal || props.reveal() === seenReveal || !mounted()) return;
     untracked(() => void centreRequest(true));
   });
+  const seenSent = props.sent ? untracked(props.sent) : 0;
   effect(() => {
-    if (!props.sent || props.sent() === 0) return;
+    if (!props.sent || props.sent() === seenSent) return;
     untracked(() => {
       const all = rows();
       for (let index = all.length - 1; index >= 0; index -= 1) {
@@ -389,25 +394,26 @@ export function ChatTimeline(props: {
     <View class="flex-1">
       <SelectTextSheet />
       <PictureViewer pictures={pictures} open={viewing} load={handlers.loadImage} />
+      {ready() ? (
       <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
           list = node;
           mounted.set(true);
         }}
         onScrollDragStart={() => (touched = true)}
-        // A chat opens at its newest row (NSH 0.5.0, before the first frame), unless it is read back to a saved row.
-        initialScrollAtEnd={initialIndex === undefined && restore === undefined}
-        initialScrollIndex={initialIndex}
+        // Opens at its newest row (NSH 0.5.0, before the first frame), or at the row it was read back to.
+        initialScrollAtEnd={opening.index === undefined}
+        initialScrollIndex={opening.index}
         onViewableItemsChange={({ viewableItems }) => {
           // A hidden list's rows (a browser resets its scroll) are not where the person was.
           if (untracked(shown)) shownFirst = readingPlace(viewableItems);
         }}
-        maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
+        maintainVisibleContentPosition={{ autoscrollToBottomThreshold: AT_END }} keyboardDismissMode="interactive" contentClass="py-3"
         onScroll={({ offset, contentSize, size }) => {
           // A hidden list's scroll (a browser resets it) is not where the person was.
           if (!untracked(shown)) return;
           // The person's own scrolling holds the header cat still.
           if (touched) noteScroll();
-          const far = contentSize.height - (offset.y + size.height) > 240;
+          const far = contentSize.height - (offset.y + size.height) > AT_END;
           away.set(far);
           last = { offset: offset.y, atEnd: !far };
           if (!props.scope || !touched) return;
@@ -426,6 +432,7 @@ export function ChatTimeline(props: {
           );
         }}
       </List>
+      ) : <View testID={props.testID} class="flex-1">{props.empty() as never}</View>}
       <HeaderFade />
       {away() ? (
         (props.requests?.() ?? 0) > 0 ? (

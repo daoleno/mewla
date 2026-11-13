@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost } from "../testing/fixtures";
+import { framesOf, paired, phoneHost, pressWhenEnabled, typeUntil } from "../testing/fixtures";
 
 /**
  * Owner 11-13: Brain's whole thread flashed, sometimes several times, and a thread read back up jumped.
@@ -167,6 +167,30 @@ describe("a Session's chat read back up stays where it is (owner 11-13: history 
     await app.waitUntil(() => framesOf(app.host.posts(), "codex_conversation_subscribe").length > subscribed, { timeout: 10_000 });
     await still(app, before, "a reconnect");
   }, 60_000);
+});
+
+describe("only the person's own acts move a chat read back up", () => {
+  test("a message sent earlier does not scroll the chat again when it comes back from the terminal", async () => {
+    const session = { id: "w1", name: "longchat", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: long } }) });
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
+    await app.waitFor("id:session-chat", { timeout: 10_000 });
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
+    await typeUntil(app, "id:composer", "One more thing", "id:send");
+    await pressWhenEnabled(app, "id:send");
+    await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1);
+    await app.wait(500);
+    for (let i = 0; i < 3; i += 1) await app.scroll("id:session-chat", -1500);
+    await app.wait(400);
+    expect(app.shows("id:jump-latest")).toBe(true);
+    await app.press("id:session-mode");
+    await app.waitUntil(() => !app.shows("id:session-chat"));
+    await app.press("id:session-mode");
+    await app.waitFor("id:session-chat");
+    await app.wait(600);
+    // Back where it was read to (its saved row), not at the message sent before, near the end.
+    expect(app.shows("id:jump-latest")).toBe(true);
+  }, 40_000);
 });
 
 describe("a row whose content changes shows the change where it is", () => {
