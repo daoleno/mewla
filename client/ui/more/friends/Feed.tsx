@@ -3,6 +3,7 @@ import { Button } from "nsh/base";
 import { Icon } from "../../kit/Icon";
 import { EmptyState } from "../../kit/kit";
 import { Segmented } from "../../kit/Segmented";
+import { createTabPager, TabPages } from "../../kit/TabPager";
 import type { PageNav } from "../routes";
 import { Avatar, FriendsPageFrame, PostList } from "./parts";
 import { draftCount, followFriends, followPage, friends, friendsEnabled, refreshFriends, unread } from "./state";
@@ -33,6 +34,10 @@ export function Feed(props: { nav: PageNav; top: () => boolean }) {
   // Back on the feed (a post deleted, someone blocked, a draft posted): the drafts and the bell read again.
   followPage({ top: props.top, clear: () => {}, load: () => void refreshFriends() });
   const scope = signal<Scope>("all");
+  // All and Following are lists side by side that follow the finger (kit/TabPager.tsx); a list counts as shown
+  // (it reads again, its videos play) only while it is the one in view.
+  const pager = createTabPager({ keys: ["all", "following"] as const, value: scope, onChange: (next) => scope.set(next) });
+  const shown = (key: Scope) => () => props.top() && scope() === key;
   const me = () => friends().status?.me;
   // The list stays mounted while the status changes; only turning off replaces it.
   const off = computed(() => friends().status !== null && !friendsEnabled());
@@ -62,10 +67,14 @@ export function Feed(props: { nav: PageNav; top: () => boolean }) {
               options={[{ key: "all", label: "All" }, { key: "following", label: "Following" }]}
               value={scope()}
               onChange={(next) => scope.set(next)}
+              pager={pager}
             />
           </View>
           <DraftBanner nav={props.nav} />
-          <If when={scope() === "all"} else={<PostList testID="friends-list" path="/feed?scope=following" nav={props.nav} top={props.top} emptyTitle="No one followed yet" />}><PostList testID="friends-list" path="/feed" nav={props.nav} top={props.top} emptyTitle="Nothing here yet" /></If>
+          <TabPages fill testID="friends-pages" pager={pager} pages={{
+            all: () => <PostList testID="friends-list" path="/feed" nav={props.nav} top={shown("all")} emptyTitle="Nothing here yet" />,
+            following: () => <PostList testID="friends-list-following" path="/feed?scope=following" nav={props.nav} top={shown("following")} emptyTitle="No one followed yet" />,
+          }} />
         </View>}><EmptyState testID="friends-off" icon="people" title="Friends is off" action="Open Labs" onAction={() => props.nav.push(platform.os === "web" ? { name: "settings" } : { name: "settings-friends" })} /></If>
     </FriendsPageFrame>
   );
