@@ -225,8 +225,32 @@ func TestRoutingIsReadAgainWhenTheFileChanges(t *testing.T) {
 	}
 }
 
+func TestDefaultRoutingGuideCarriesAValidWorkProgressRow(t *testing.T) {
+	route, found, err := parseRoutingRow(brain.DefaultRoutingGuide(), "Work progress", func(string) bool { return true })
+	if err != nil || !found || route != (judgeRoute{Executor: "claude", Model: "sonnet", Effort: "low"}) {
+		t.Fatalf("default row = %#v found=%v err=%v", route, found, err)
+	}
+}
+
+func TestAnAskerReadsItsOwnRow(t *testing.T) {
+	installed := map[string]string{"claude": claudeOK, "pi": piOK}
+	j, path := routedFixture(t, installed, routingTable+"| Watch judgment | claude | sonnet | low |\n| Work progress | pi | m/x | off |\n")
+	asker := NewAsker(AskerOptions{Task: "Work progress", RoutingPath: path, Workdir: j.workdir})
+	asker.judge.lookPath = j.lookPath
+	if executor, model, routing := asker.Expected(); executor != "pi" || model != "m/x" || routing.Source != "routing.md" {
+		t.Fatalf("asker route = %s %s %#v", executor, model, routing)
+	}
+	if route, _ := j.routed(); route.Executor != "claude" {
+		t.Fatalf("Watch's own row changed: %#v", route)
+	}
+	missing := NewAsker(AskerOptions{Task: "Work progress", RoutingPath: path + ".none", Workdir: j.workdir})
+	if _, _, routing := missing.Expected(); routing.Source != "automatic" {
+		t.Fatalf("missing file = %#v", routing)
+	}
+}
+
 func TestDefaultRoutingGuideCarriesAValidWatchJudgmentRow(t *testing.T) {
-	route, found, err := parseRoutingRow(brain.DefaultRoutingGuide(), func(string) bool { return true })
+	route, found, err := parseRoutingRow(brain.DefaultRoutingGuide(), routingTask, func(string) bool { return true })
 	if err != nil || !found || route.Executor != "claude" || route.Model != "sonnet" {
 		t.Fatalf("default row = %#v found=%v err=%v", route, found, err)
 	}

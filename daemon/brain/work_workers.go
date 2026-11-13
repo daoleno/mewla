@@ -369,6 +369,8 @@ type WorkDetail struct {
 	// ResultActions are the next steps of the Work's newest result, as its
 	// result row carries them (work_result_actions.go); [] when none.
 	ResultActions []work.ResultAction `json:"result_actions"`
+	// Progress is the judged progress and its outcomes, while it is open.
+	Progress *WorkProgress `json:"progress,omitempty"`
 }
 
 // WorkDetail projects one Work. workers is a fresh Session inventory, as for
@@ -405,6 +407,6 @@ func (s *Store) WorkDetail(workID string, workers []WorkerRef) (WorkDetail, erro
 	return WorkDetail{
 		ID: item.ID, Revision: item.Revision, Title: item.Title, Objective: item.Objective, Status: item.Status,
 		CreatedAt: item.CreatedAt.UTC(), UpdatedAt: item.UpdatedAt.UTC(), WorkerSessions: sessions,
-		ResultActions: []work.ResultAction{},
+		ResultActions: []work.ResultAction{}, Progress: item.Progress.view(),
 	}, nil
 }

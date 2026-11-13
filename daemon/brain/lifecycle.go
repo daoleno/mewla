@@ -162,8 +162,11 @@ type Work struct {
 	// SnoozedUntil hides the Work from Needs you until then. It is a user
 	// preference only: nothing is scheduled and elapsed time writes nothing.
 	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	// Progress is the judged progress (progress.go). It is presentation
+	// state: setting it never moves Revision.
+	Progress  *WorkProgress `json:"progress,omitempty"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
 }
 
 // WorkEvent is an append-only fact and at most a one-shot wake/delivery
@@ -298,6 +301,8 @@ type CurrentWork struct {
 	// UserAction is the user's newest decision, while no newer result has
 	// come back since.
 	UserAction *WorkUserAction `json:"user_action,omitempty"`
+	// Progress is the judged progress while the Work is open (progress.go).
+	Progress *WorkProgress `json:"progress,omitempty"`
 	// Calendar names the schedule and run a Calendar occurrence's Work came
 	// from, so the app can say which schedule it belongs to.
 	Calendar *WorkCalendarRef `json:"calendar,omitempty"`
@@ -427,9 +432,10 @@ type workRecord struct {
 	Recommended string `json:"recommended,omitempty"`
 	// SnoozedUntil hides the Work from Needs you until then. It is a user
 	// preference only: nothing is scheduled and elapsed time writes nothing.
-	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	SnoozedUntil *time.Time    `json:"snoozed_until,omitempty"`
+	Progress     *WorkProgress `json:"progress,omitempty"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 type presentationDatabaseRecord struct {
@@ -468,6 +474,7 @@ func worksFromRecords(records []workRecord) []Work {
 			QuestionAt:       cloneTimePointer(record.QuestionAt),
 			Recommended:      strings.TrimSpace(record.Recommended),
 			SnoozedUntil:     cloneTimePointer(record.SnoozedUntil),
+			Progress:         cloneWorkProgress(record.Progress),
 			CreatedAt:        record.CreatedAt,
 			UpdatedAt:        record.UpdatedAt,
 		})
@@ -1143,6 +1150,7 @@ func cloneWorks(items []Work) []Work {
 		out[index].Choices = append([]string(nil), items[index].Choices...)
 		out[index].QuestionAt = cloneTimePointer(items[index].QuestionAt)
 		out[index].SnoozedUntil = cloneTimePointer(items[index].SnoozedUntil)
+		out[index].Progress = cloneWorkProgress(items[index].Progress)
 	}
 	return out
 }
@@ -3440,6 +3448,7 @@ func (s *Store) ProjectWorkInventory(workers []WorkerRef) (WorkInventory, error)
 			UserAction:       userAction,
 			Calendar:         workCalendarRef(item),
 			WorkerSessions:   workerSessions(item.ID),
+			Progress:         item.Progress.view(),
 		})
 		s.projectWorkAttention(&current[len(current)-1], item)
 	}

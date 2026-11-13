@@ -425,6 +425,17 @@ func runDaemon(args []string, stderr io.Writer) error {
 	installHostAuthProbe()
 	brainService := brain.NewService(brainStore, w, execs)
 	brainService.SetWorkJudge(brain.NewHeadlessJudge(brainService.HostExecutor, filepath.Join(brainRoot, "judge")))
+	// A Work's progress is judged by the model routing.md's "Work progress"
+	// row names, asked the way Watch asks its own.
+	progressAsker := watch.NewAsker(watch.AskerOptions{
+		Task: "Work progress", RoutingPath: brainStore.RoutingGuidePath(), Workdir: filepath.Join(brainRoot, "judge-progress"),
+		Preferred: func() string { return work.InferWorkerProvider(brainService.HostExecutor().Command) },
+		BudgetUSD: "0.5", Effort: "low",
+	})
+	brainService.SetProgressAsker(func(ctx context.Context, system, prompt, schema string) (json.RawMessage, float64, error) {
+		answer, usage, err := progressAsker.Ask(ctx, system, prompt, schema)
+		return answer, usage.CostUSD, err
+	})
 	w.SetTurnLedger(brainService)
 	// A Worker whose agent announces its conversation is re-proved when it
 	// announces another, not every 30 seconds; one the Hub has no binding for
@@ -965,6 +976,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 			name: "Brain transcript capture",
 			run: func(ctx context.Context) error {
 				brainService.RunHostTranscriptCapture(ctx)
+				return nil
+			},
+		},
+		{
+			name: "Work progress judge",
+			run: func(ctx context.Context) error {
+				brainService.RunProgressJudge(ctx)
 				return nil
 			},
 		},
