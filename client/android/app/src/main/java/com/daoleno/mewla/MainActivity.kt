@@ -52,9 +52,8 @@ class MainActivity : ComponentActivity() {
     channelHosts = ChannelHosts(this, nsh)
     nsh.setParams(mapOf("deviceName" to deviceName()))
     setContentView(nsh)
-    // A debug build started through the start link (DevLaunch) runs from `nsh dev`: every save reloads the app.
-    val dev = if (BuildConfig.DEBUG) DevLaunch.serverFor(intent.getStringExtra(DevLaunch.EXTRA)) else null
-    if (!(dev != null && nsh.connectDevServer(dev))) nsh.loadAssetBundle("nsh")
+    // The Dev app runs from its `nsh dev` server when it answers (src/debug/DevBoot.kt); a release build has none.
+    if (!DevBoot.start(this, nsh, intent)) nsh.loadAssetBundle("nsh")
     openLink(intent)
   }
 
@@ -68,6 +67,7 @@ class MainActivity : ComponentActivity() {
   override fun onResume() {
     super.onResume()
     channelHosts.onResume()
+    DevBoot.resumed(this)
   }
 
   override fun onUserLeaveHint() {
