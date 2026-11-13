@@ -2,12 +2,11 @@ import { effect, Scroll, signal, Text, untracked, View, type ViewRef } from "nsh
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../../shell/NavPage";
+import { CAPSULE } from "../../../core/shell/capsule";
 import type { GitCommitSummary } from "../../../core/git/gitDiff";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import {
   buildGitReviewRows,
-  gitReviewSummary,
-  gitReviewSync,
   gitSyncAction,
   splitGitReviewPath,
   sumGitReviewEntries,
@@ -16,15 +15,15 @@ import {
   type GitReviewRow,
 } from "../../../core/git/gitReviewModel";
 import { formatGitAge, gitCommitDays, spokenGitAge } from "../../../core/git/gitReviewTime";
-import { DisplayTitle, EmptyState, Notice, Page, PillButton, Row, RowButton, SearchField, Section, SectionLabel, Spinner, Tag } from "../../kit/kit";
-import { Icon } from "../../kit/Icon";
+import { DisplayTitle, EmptyState, Notice, Page, PillButton, Row, SearchField, Section, SectionLabel, Spinner, Tag } from "../../kit/kit";
+import { Icon, type IconName } from "../../kit/Icon";
 import { Segmented } from "../../kit/Segmented";
 import type { PageNav } from "../routes";
 import { CommitFilePage, DiffPage, DiffReader } from "./GitDiff";
 import { listDetail } from "../../shell/layout";
 import { createMenuAnchor, showMenu, type MenuItem } from "../../kit/Menu";
 import { FilePage, FilesPage } from "./GitFiles";
-import { Counts, Current, FileName, FlashLine, IconButton, StatusTile, TextButton } from "./parts";
+import { Counts, Current, FileName, FlashLine, IconButton, StatusTile } from "./parts";
 import type { GitPage } from "./routes";
 import { BranchSheet, CommitSheet } from "./sheets";
 import { copyText, gitReview, say, type GitReview } from "./state";
@@ -79,13 +78,22 @@ async function entryMenu(review: GitReview, nav: PageNav, entry: GitReviewEntry,
 }
 
 /** More actions on the whole repository. */
-async function overflowMenu(review: GitReview, nav: PageNav, anchor: ViewRef | null): Promise<void> {
+async function overflowMenu(review: GitReview, nav: PageNav, anchor: ViewRef | null, tab: Tab): Promise<void> {
   const snapshot = review.status();
   // SPEC §15 Code review's order: Refresh, Browse files, Fetch, Pull, Push, Copy path, Copy branch, Undo last
   // discard (disabled until there is one; a phone's action sheet leaves it out), then Discard all changes last, in ink.
+  // Changed after the owner's look (2026-11-13): the header is ⋯ alone, so filtering, the folder view and staging
+  // everything are here too, after Browse files.
   const actions: MenuItem[] = [{ id: "refresh", label: "Refresh" }];
   if (snapshot?.available) {
     actions.push({ id: "browse", label: "Browse files" });
+    const groups = review.groups();
+    if (tab === "changes" && !snapshot.clean) {
+      actions.push({ id: "filter", label: review.searchOpen() ? "Stop filtering" : "Filter files" });
+      actions.push({ id: "tree", label: review.tree() ? "Show as list" : "Show as folders" });
+      if (groups.changes.length) actions.push({ id: "stage-all", label: "Stage all" });
+      if (groups.staged.length) actions.push({ id: "unstage-all", label: "Unstage all" });
+    }
     if (snapshot.upstream) actions.push({ id: "fetch", label: "Fetch" }, { id: "pull", label: "Pull" }, { id: "push", label: "Push" });
     if (snapshot.repo_root) actions.push({ id: "copy-root", label: "Copy path" });
     if (snapshot.branch) actions.push({ id: "copy-branch", label: "Copy branch" });
@@ -103,6 +111,21 @@ async function overflowMenu(review: GitReview, nav: PageNav, anchor: ViewRef | n
       break;
     case "browse":
       nav.push({ name: "git-files", ...target(review) });
+      break;
+    case "filter":
+      if (review.searchOpen()) {
+        review.searchOpen.set(false);
+        review.query.set("");
+      } else review.searchOpen.set(true);
+      break;
+    case "tree":
+      review.setTree(!review.tree());
+      break;
+    case "stage-all":
+      void review.bulk("changes");
+      break;
+    case "unstage-all":
+      void review.bulk("staged");
       break;
     case "fetch":
     case "pull":
@@ -150,7 +173,8 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
   });
   const snapshot = () => review.status();
   const title = () => snapshot()?.repo_name || props.title || "Git";
-  // The project is the eyebrow over "Changes" or "History"; the nav bar names the project once that has scrolled away.
+  // The page's title is the repository (changed after the owner's look, 2026-11-13): the switch under it is the
+  // only place "Changes" and "History" are said. The capsule takes the name once it has scrolled under.
   const titleAway = signal(false);
   const closeSearch = () => {
     review.searchOpen.set(false);
@@ -162,12 +186,9 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
     }
     else props.nav.push({ name: "git-diff", ...target(review), entry: entry.key });
   };
+  // The header holds ⋯ alone (SPEC §15 Code review): every other page action is in it.
   const headerRight = (
-    <View class="flex-row items-center">
-      <IconButton testID="git-search" icon="search" label="Search changed files" selected={review.searchOpen()} onPress={() => (review.searchOpen() ? closeSearch() : review.searchOpen.set(true))} />
-      <IconButton testID="git-tree" icon={review.tree() ? "list" : "folder"} label={review.tree() ? "Show as list" : "Show as folders"} onPress={() => review.setTree(!review.tree())} />
-      <IconButton ref={moreAnchor.ref} testID="git-more" icon="more-vertical" label="More actions" onPress={() => void overflowMenu(review, props.nav, moreAnchor.node())} />
-    </View>
+    <IconButton ref={moreAnchor.ref} testID="git-more" icon="more-horizontal" label="Git options" onPress={() => void overflowMenu(review, props.nav, moreAnchor.node(), untracked(tab))} />
   );
   return (
     <NavPage
@@ -184,14 +205,14 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
         <View class="flex-1 flex-row bg-background">
           <View testID="git-list" class={wide() ? "w-[380px] border-r border-border" : "flex-1"}>
             <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6 pt-2" refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}
-              onScroll={(e) => titleAway.set(e.offset.y > 56)} scrollEventThrottle={64}>
+              onScroll={(e) => titleAway.set(e.offset.y > CAPSULE.titleAway)} scrollEventThrottle={64}>
               <View class="w-full max-w-[720px] self-center">
-                <DisplayTitle eyebrow={title()} title={tab() === "changes" ? "Changes" : "History"} />
+                <DisplayTitle title={title()} />
                 <FlashLine />
                 <View class="mt-3">
                   <Segmented testID="git-tab" value={tab()} onChange={(next) => tab.set(next)} options={[{ key: "changes", label: "Changes" }, { key: "history", label: "History" }]} />
                 </View>
-                <Strip review={review} tab={tab()} onBranches={() => branchesOpen.set(true)} />
+                <Strip review={review} onBranches={() => branchesOpen.set(true)} />
                 <If when={review.searchOpen() && tab() === "changes"}><View class="mt-3">
                     <SearchField testID="git-query" accessibilityLabel="Filter files" placeholder="Filter files" autoFocus value={review.query()} onChange={(value) => review.query.set(value)} />
                   </View></If>
@@ -242,36 +263,51 @@ function CommitBar(props: { review: GitReview; onCommit: () => void }) {
   );
 }
 
-/** What the sync button says: "↑ 2 to push", "↓ 1 to pull", or Publish for a branch with no upstream. */
-function syncLabel(sync: { kind: string; label: string }, snapshot: { ahead?: number; behind?: number } | null): string {
-  if (sync.kind === "pull" && snapshot?.behind) return `↓ ${snapshot.behind} to pull`;
-  if (sync.kind === "push" && snapshot?.ahead) return `↑ ${snapshot.ahead} to push`;
-  return sync.label;
+/**
+ * The branch and its sync as two pills of one shape (SPEC §15 Code review, changed after the owner's look,
+ * 2026-11-13): 36 high on the surface, an 18 pt soft glyph, 15/600. The branch opens Branches; pull or push is an
+ * action with its arrow and count ("↓ 1", "↑ 2", or Publish for a branch with no upstream), and shows only when
+ * there is something to pull or push.
+ */
+function StripPill(props: { testID: string; icon: IconName; label: string; accessibilityLabel: string; busy?: boolean; mono?: boolean; onPress: () => void; grow?: boolean }) {
+  return (
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel} disabled={props.busy} onPress={props.onPress} hitSlop={4}
+      class={`h-9 flex-row items-center gap-1.5 rounded-full bg-card px-3 active:opacity-70 ${props.grow ? "min-w-0 shrink" : "shrink-0"}`}>
+      <If when={props.busy} else={<Icon name={props.icon} size={18} tone="soft" />}><Spinner size={16} /></If>
+      <Text class="min-w-0 shrink text-sub font-semibold line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{props.label}</Text>
+    </Button>
+  );
 }
 
-/** The branch as a pill (it opens Branches), how it syncs beside it, what changed in all, and a merge or rebase in progress. */
-function Strip(props: { review: GitReview; tab: Tab; onBranches: () => void }) {
+function syncPill(sync: { kind: "pull" | "push" | string; label: string }, snapshot: { ahead?: number; behind?: number; upstream?: string | null } | null) {
+  if (!snapshot?.upstream) return { icon: "arrow-up" as IconName, label: "Publish", spoken: "Publish this branch" };
+  const n = sync.kind === "pull" ? snapshot.behind ?? 0 : snapshot.ahead ?? 0;
+  const commits = `${n} ${n === 1 ? "commit" : "commits"}`;
+  return sync.kind === "pull"
+    ? { icon: "arrow-down" as IconName, label: `${n}`, spoken: `Pull ${commits}` }
+    : { icon: "arrow-up" as IconName, label: `${n}`, spoken: `Push ${commits}` };
+}
+
+/** The branch pill and the sync pill beside it, and a merge or rebase in progress. */
+function Strip(props: { review: GitReview; onBranches: () => void }) {
   const snapshot = () => props.review.status();
   return (
     <View>
-      <If when={snapshot()?.available}><View class="mt-3 flex-row flex-wrap items-center gap-2">
+      <If when={snapshot()?.available}><View class="mt-3 flex-row items-center gap-2">
           {(() => {
             const s = snapshot()!;
             const label = s.detached ? `Detached ${s.branch ?? ""}`.trim() : s.branch || "No branch";
-            return (
-              <Button testID="git-branch" accessibilityLabel={`Branch ${label}. Switch branch`} onPress={props.onBranches} class="h-9 max-w-[60%] flex-row items-center gap-1.5 rounded-full bg-card px-3.5 active:opacity-70">
-                <Icon name="git-branch" size={16} tone="ink" />
-                <Text class="min-w-0 shrink font-mono text-code font-semibold line-clamp-1">{label}</Text>
-              </Button>
-            );
+            return <StripPill testID="git-branch" icon="git-branch" label={label} accessibilityLabel={`Branch ${label}. Switch branch`} onPress={props.onBranches} grow />;
           })()}
           {(() => {
             const sync = gitSyncAction(snapshot());
-            return <If when={sync}>{(sync) => <TextButton testID="git-sync" label={syncLabel(sync(), snapshot())} busy={props.review.isBusy("sync")} onPress={() => void props.review.sync(sync().kind)} />}</If>;
+            return (
+              <If when={sync}>{(sync) => {
+                const pill = syncPill(sync(), snapshot());
+                return <StripPill testID="git-sync" icon={pill.icon} label={pill.label} accessibilityLabel={pill.spoken} busy={props.review.isBusy("sync")} onPress={() => void props.review.sync(sync().kind)} />;
+              }}</If>
+            );
           })()}
-          <Text testID="git-summary" android={{ accessibilityLiveRegion: "polite" }} class="ml-auto font-mono text-code text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>
-            {props.tab === "changes" ? gitReviewSummary(snapshot()) : gitReviewSync(snapshot())}
-          </Text>
         </View></If>
       <If when={snapshot()?.operation}><View class="mt-2 px-1"><Text class="text-sub">{`${snapshot()!.operation} in progress`}</Text></View></If>
     </View>
@@ -302,7 +338,7 @@ function ChangesBody(props: { review: GitReview; nav: PageNav; selected: string 
           );
         }
         if (snapshot.clean) {
-          return <EmptyState testID="git-clean" icon="check-circle" title="Working tree clean" detail={snapshot.branch} action="Browse files" onAction={() => props.nav.push({ name: "git-files", ...target(review) })} />;
+          return <EmptyState testID="git-clean" icon="check-circle" title="Working tree clean" />;
         }
         const groups = review.groups();
         const query = review.query();
@@ -339,12 +375,7 @@ function Group(props: { review: GitReview; nav: PageNav; group: GitReviewGroup; 
         folded={collapsed()}
         accessibilityLabel={`${label}, ${count} ${count === 1 ? "file" : "files"}`}
         onPress={() => props.review.toggleCollapsed(key)}
-        trailing={
-          <View class="flex-row items-center gap-2">
-            <Counts additions={totals.additions} deletions={totals.deletions} />
-            <If when={count}><If when={props.review.isBusy(`bulk:${props.group}`)} else={<RowButton testID={`git-bulk-${props.group}`} label={staged ? "Unstage all" : "Stage all"} onPress={() => void props.review.bulk(props.group)} />}><Spinner size={16} /></If></If>
-          </View>
-        }
+        trailing={<If when={props.review.isBusy(`bulk:${props.group}`)} else={<Counts additions={totals.additions} deletions={totals.deletions} />}><Spinner size={16} /></If>}
       />
       <If when={!collapsed()}><View class="overflow-hidden rounded-(--radius-group) bg-card">
           <View class="-mb-px">
@@ -385,13 +416,13 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
       testID={`git-row-${entry.key}`}
       role="button"
       accessibilityLabel={`${name}, ${word}, ${entry.additions} added, ${entry.deletions} removed, ${staged ? "staged" : "not staged"}`}
-      accessibilityHint="Opens the diff"
+      accessibilityHint="Opens the diff. Press and hold to stage, discard or copy"
       accessibilityState={{ selected: props.selected === entry.key }}
       onPress={() => props.onOpen(entry)}
       onLongPress={() => void entryMenu(props.review, props.nav, entry, props.onOpen)}
       // A mouse's right click (the web, the desktops) opens the same menu.
       onContextMenu={() => void entryMenu(props.review, props.nav, entry, props.onOpen)}
-      class={`min-h-[56px] flex-row items-center gap-3 py-2.5 pr-1 active:bg-accent ${props.selected === entry.key ? "bg-accent" : ""}`}
+      class={`min-h-[56px] flex-row items-center gap-3 py-2.5 pr-4 active:bg-accent ${props.selected === entry.key ? "bg-accent" : ""}`}
       style={indent}
     >
       <StatusTile file={entry.file} />
@@ -399,14 +430,7 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
         <If when={props.review.tree()} else={<FileName path={entry.file.path} />}><Text class="font-mono text-code font-semibold line-clamp-1">{name}</Text></If>
         <If when={entry.file.old_path}>{(old_path) => <Text class="font-mono text-caption text-muted-foreground line-clamp-1">{`from ${old_path()}`}</Text>}</If>
       </View>
-      <If when={entry.file.binary} else={<Counts additions={entry.additions} deletions={entry.deletions} />}><Text class="font-mono text-code text-muted-foreground">bin</Text></If>
-      <IconButton
-        testID={`git-toggle-${entry.key}`}
-        icon={staged ? "remove-circle" : "add-circle"}
-        label={`${staged ? "Unstage" : "Stage"} ${name}`}
-        busy={props.review.isBusy(entry.key)}
-        onPress={() => void props.review.toggleStaged(entry)}
-      />
+      <If when={props.review.isBusy(entry.key)} else={<If when={entry.file.binary} else={<Counts additions={entry.additions} deletions={entry.deletions} />}><Text class="font-mono text-code text-muted-foreground">bin</Text></If>}><Spinner size={16} /></If>
       <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 16 + row.depth * 16 + 40 }} />
     </View>
   );
