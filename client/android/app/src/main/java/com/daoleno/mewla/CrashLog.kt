@@ -39,6 +39,11 @@ object CrashLog {
     runCatching { write(context.applicationContext, "js", message) }
   }
 
+  /** The JS stopped answering and [JsWatchdog] reopens the app: shown as "Stopped responding". */
+  fun stalled(context: Context, silentMs: Long) {
+    runCatching { write(context.applicationContext, "anr", "The app stopped answering for ${silentMs / 1000} s (its JS thread) and was reopened.\n") }
+  }
+
   /** The host calls the app reads them with. */
   fun register(context: Context, nsh: NshView) {
     nsh.handle("app.crashReports") { _, reply -> reply.resolve(list(context)) }

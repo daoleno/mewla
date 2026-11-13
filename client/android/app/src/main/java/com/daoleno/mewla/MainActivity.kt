@@ -23,12 +23,14 @@ class MainActivity : ComponentActivity() {
   private val legacy by lazy { LegacyStorage(this) }
   private lateinit var push: PushHost
   private lateinit var channelHosts: ChannelHosts
+  private lateinit var watchdog: JsWatchdog
 
   override fun onCreate(state: Bundle?) {
     super.onCreate(state)
     nsh = NshView(this)
     nsh.setErrorListener { Log.e(TAG, it); CrashLog.js(this, it) }
     CrashLog.register(this, nsh)
+    watchdog = JsWatchdog(this, nsh)
     ScanHost(this, nsh)
     com.daoleno.mewla.link.LinkTransportHost(nsh)
     nsh.registerComponent("mewla.qrScanner") { events -> QrScanner(this, events) }
@@ -68,6 +70,12 @@ class MainActivity : ComponentActivity() {
     super.onResume()
     channelHosts.onResume()
     DevBoot.resumed(this)
+    watchdog.resumed()
+  }
+
+  override fun onPause() {
+    watchdog.paused()
+    super.onPause()
   }
 
   override fun onUserLeaveHint() {
