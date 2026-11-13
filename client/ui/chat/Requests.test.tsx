@@ -38,8 +38,10 @@ describe("requests in Brain's thread", () => {
     expect(app.count("id:request-card")).toBe(1);
     expect(app.count("id:request-stacked")).toBe(1);
     expect(app.texts()).toContain("git push origin main");
-    await app.press("id:request-stacked");
-    await app.waitFor("text:npm publish");
+    // The stacked row reads the ask as its tool row does; opening it swaps it with the open card.
+    expect(app.texts()).toContain("Run npm publish");
+    await pressUntil(app, "id:request-stacked", "text:Run git push origin main");
+    expect(app.texts()).toContain("npm publish");
     expect(app.count("id:request-stacked")).toBe(1);
     // The tray's row of the other goes back to the thread, with that card open.
     await app.press("id:state-control");
@@ -118,7 +120,7 @@ describe("requests in Brain's thread", () => {
     });
     await app.waitFor("text:1 needs you", { timeout: 10_000 });
     await app.press("id:state-control");
-    await pressUntil(app, "text:touch /tmp/x", "id:request-card");
+    await pressUntil(app, "id:tray-request", "id:request-card");
     await app.wait(500);
     await app.press("id:prompt-option-allow");
     await app.waitFor("id:request-sealed");

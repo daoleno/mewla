@@ -101,15 +101,20 @@ function TrayRow(props: { row: Row; onPress: () => void; selected?: boolean; las
   );
 }
 
-/** A Needs you row: what is asked and who asks, ending in a red tag: Approve answers, Answer goes to the card. */
+/**
+ * A Needs you row, ending in a red tag (Approve answers, Answer goes to the card). Its title is the Session's or
+ * Work's name, as in every section, and its line the ask (SPEC §11 Tray row); a Calendar alert or a new device keeps
+ * what it is over where it comes from.
+ */
 function RequestRow(props: { request: TrayRequest; busy: boolean; last?: boolean; onApprove: () => void; onOpen: () => void }) {
   const r = () => props.request;
+  const named = () => r().ask !== undefined;
   return (
-    <Button testID="tray-request" accessibilityLabel={`${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+    <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <RowTile tile={(): TrayTile => (r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" })} />
       <View class="min-w-0 flex-1">
-        <Text class="text-body font-semibold line-clamp-1">{r().title}</Text>
-        <Text class="text-sub text-muted-foreground line-clamp-1">{r().source}</Text>
+        <Text testID="tray-request-title" class="text-body font-semibold line-clamp-1">{named() ? r().source : r().title}</Text>
+        <Text testID="tray-request-line" class="text-sub text-muted-foreground line-clamp-1">{named() ? r().ask : r().source}</Text>
       </View>
       <Button testID={r().oneTap ? "tray-approve" : "tray-answer"} disabled={props.busy} onPress={() => (r().oneTap ? props.onApprove() : props.onOpen())}
         class="h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 disabled:opacity-40">

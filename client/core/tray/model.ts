@@ -5,7 +5,7 @@
  */
 import { progressSteps } from "../sessions/progress";
 import type { BrainHostProblem, BrainSurface, BrainWorkerRef } from "../brain";
-import { approvalTitle, BARE_STATE_WORDS, elapsedShort, isQuestionApproval, promptTitle, readableSummary, sessionActivity } from "../sessions/activity";
+import { approvalAsk, approvalTitle, BARE_STATE_WORDS, promptAsk, elapsedShort, isQuestionApproval, promptTitle, readableSummary, sessionActivity } from "../sessions/activity";
 import { listTime, sessionRowModel, withoutSessionId } from "../sessions/listRow";
 import { agentKindFromProvider, typeLabel } from "../sessions/workerPresentation";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
@@ -36,6 +36,11 @@ export interface TrayRequest {
   title: string;
   /** Who asks: "Brain", a Session's title, a Work's title. */
   source: string;
+  /**
+   * What is asked, short (SPEC §11 Tray row, Needs you): the line under the source's name in the tray, the words of
+   * a stacked row. A call reads as its tool row ("Run git push origin…"); a folder trust as "Trust this folder?".
+   */
+  ask?: string;
   /** The Session that asks (the Brain host for Brain's own prompts). */
   workerId?: string;
   workId?: string;
@@ -224,11 +229,11 @@ function titleOf(worker: Worker): string {
 export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "devices" | "answered" | "now">): TrayRequest[] {
   const out: TrayRequest[] = [];
   if (input.brainChoice) {
-    out.push({ key: `brain-choice:${input.brainChoice.callId}`, kind: "choice", where: "brain", title: input.brainChoice.question || "Brain asks", source: "Brain", workerId: input.brainHost?.id });
+    out.push({ key: `brain-choice:${input.brainChoice.callId}`, kind: "choice", where: "brain", title: input.brainChoice.question || "Brain asks", ask: input.brainChoice.question || "Brain asks", source: "Brain", workerId: input.brainHost?.id });
   }
   const host = input.brainHost;
   if (host?.prompt && !(host.prompt.kind === "choice" && input.brainChoice && host.prompt.call_id === input.brainChoice.callId)) {
-    out.push({ key: `prompt:${host.id}:${host.prompt.id}`, kind: "prompt", where: "brain", title: promptTitle(host.prompt), source: "Brain", workerId: host.id, oneTap: promptOneTap(host.id, host.prompt) });
+    out.push({ key: `prompt:${host.id}:${host.prompt.id}`, kind: "prompt", where: "brain", title: promptTitle(host.prompt), ask: promptAsk(host.prompt), source: "Brain", workerId: host.id, oneTap: promptOneTap(host.id, host.prompt) });
   }
   for (const worker of input.workers) {
     const where: RequestWhere = worker.delegated ? "brain" : "session";
@@ -236,17 +241,18 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
     const base = { where, source: titleOf(worker), workerId: worker.id, agent: model.kind, flavor: model.flavor };
     const decisions = (worker.approvals ?? []).filter((approval) => !isQuestionApproval(approval));
     if (decisions.length > 0) {
-      for (const approval of decisions) out.push({ ...base, key: `approval:${worker.id}:${approval.id}`, kind: "approval", title: approvalTitle(approval), oneTap: approvalOneTap(worker.id, approval) });
+      for (const approval of decisions) out.push({ ...base, key: `approval:${worker.id}:${approval.id}`, kind: "approval", title: approvalTitle(approval), ask: approvalAsk(approval), oneTap: approvalOneTap(worker.id, approval) });
     } else if (worker.prompt) {
-      out.push({ ...base, key: `prompt:${worker.id}:${worker.prompt.id}`, kind: "prompt", title: promptTitle(worker.prompt), oneTap: promptOneTap(worker.id, worker.prompt) });
+      out.push({ ...base, key: `prompt:${worker.id}:${worker.prompt.id}`, kind: "prompt", title: promptTitle(worker.prompt), ask: promptAsk(worker.prompt), oneTap: promptOneTap(worker.id, worker.prompt) });
     } else if (worker.needs_attention) {
       // Blocked on something the computer could not read: its card says "Open terminal".
-      out.push({ ...base, key: `attention:${worker.id}`, kind: "attention", title: readableSummary(worker.summary) || "Waiting for you" });
+      const said = readableSummary(worker.summary) || "Waiting for you";
+      out.push({ ...base, key: `attention:${worker.id}`, kind: "attention", title: said, ask: said });
     }
   }
   for (const slip of brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now).slips) {
     if (slip.group !== "needs") continue;
-    out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question || slip.title, source: slip.title, workId: slip.workId });
+    out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question || slip.title, ask: slip.question || "Needs you", source: slip.title, workId: slip.workId });
   }
   for (const alert of input.alerts) out.push({ key: `alert:${alert.id}`, kind: "alert", where: "alert", title: alert.title, source: "Calendar", itemId: alert.id });
   for (const device of input.devices ?? []) out.push({ key: `device:${device.id}`, kind: "device", where: "device", title: "Approve new device", source: device.name, deviceId: device.id });

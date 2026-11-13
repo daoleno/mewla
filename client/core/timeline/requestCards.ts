@@ -32,6 +32,8 @@ export interface RequestCard {
   title: string;
   /** Who asks, at the top line's right. */
   source: string;
+  /** What is asked, short: a stacked row's words (the tray request's `ask`). */
+  ask?: string;
   /** Brain's thread shows it (Brain's own, or a Session working for Brain's Work); a Session's thread always does. */
   inBrain: boolean;
   /** The Session the source opens; Brain's own chat question has none (it is Brain's thread). */
@@ -83,7 +85,7 @@ function promptLabel(prompt: WorkerPrompt, brain: boolean): string {
 
 function cardOf(request: TrayRequest, input: RequestCardsInput): RequestCard | null {
   const hostId = input.brainHost?.id;
-  const base = { key: request.key, title: request.title, source: request.source, inBrain: request.where === "brain", agent: request.agent, flavor: request.flavor };
+  const base = { key: request.key, title: request.title, source: request.source, ask: request.ask, inBrain: request.where === "brain", agent: request.agent, flavor: request.flavor };
   if (request.kind === "choice" && request.key.startsWith("brain-choice:")) {
     const pending = input.brainChoice;
     if (!pending || !hostId || `brain-choice:${pending.callId}` !== request.key) return null;
