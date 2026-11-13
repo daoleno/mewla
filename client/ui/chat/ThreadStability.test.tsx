@@ -18,7 +18,8 @@ const long = Array.from({ length: 60 }, (_, i) => ({
 const firstDrawn = (app: { texts(): string[] }) => app.texts().find((t) => t.startsWith("Message "));
 
 async function readBackUp() {
-  const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
+  // The same thread under a restarted host's id too ("brain-host-2").
+  const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long, "brain-host-2": long } }) });
   await app.waitFor("id:brain-chat", { timeout: 10_000 });
   await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
   await app.wait(300);
@@ -186,5 +187,18 @@ describe("a row whose content changes shows the change where it is", () => {
       await app.host.send("app.conversation", { worker: "w1", upserts: [{ id: "a1", seq: 3, kind: "assistant_message", timestamp: t(2), body }] });
       await app.waitFor(`text:${body}`);
     }
+  }, 30_000);
+});
+
+describe("Brain's host restarts (the same thread under a new host id)", () => {
+  test("the thread read back up stays drawn and in its place while the new host's copy loads", async () => {
+    const app = await readBackUp();
+    const before = firstDrawn(app);
+    const builtBefore = framesOf(app.host.posts(), "codex_conversation_subscribe").length;
+    await app.host.send("app.daemonPush", { type: "brain_snapshot", brain: { ...brain, host_worker: { ...host, id: "brain-host-2" } } });
+    await app.waitUntil(() => framesOf(app.host.posts(), "codex_conversation_subscribe").length > builtBefore, { timeout: 5_000 });
+    await app.wait(500);
+    expect(app.shows("id:jump-latest")).toBe(true);
+    expect(firstDrawn(app)).toBe(before);
   }, 30_000);
 });

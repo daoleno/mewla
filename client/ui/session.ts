@@ -234,8 +234,11 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
   void Storage.setItem(LAST_BRAIN_CHAT + server.id, JSON.stringify({ host_worker: host, chat_thread_id: threadId })).catch(() => {});
   const scope = brainThreadScopeKey(routedBrainThread() ?? threadId);
   const open = brainChat();
-  if (open && open.cacheKey.endsWith(`:scope:${scope}`) && openHost === host.id) return;
-  closeBrainChat();
+  const sameThread = Boolean(open?.cacheKey.endsWith(`:scope:${scope}`));
+  if (open && sameThread && openHost === host.id) return;
+  // A restarted host answers the same thread: its rows stay on screen (where the person reads) until the
+  // new host's copy is in, which the list then takes row by row (owner 11-13: the thread emptied and refilled).
+  closeBrainChat({ keepThread: sameThread });
   // A restarted host answers the same thread under a new id: what waited for the old one goes to it.
   outbox.retarget(server.id, scope, host.id);
   const chat = new Chat({
@@ -254,8 +257,14 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
     },
   });
   openHost = host.id;
-  brainThread.set(chat.current);
-  stopChat = chat.onChange((state) => brainThread.set(state));
+  let waiting = sameThread;
+  const show = (state: InterfaceChatThreadState) => {
+    if (waiting && !state.conversation && !state.error) return;
+    waiting = false;
+    brainThread.set(state);
+  };
+  show(chat.current);
+  stopChat = chat.onChange(show);
   brainChat.set(chat);
 }
 
@@ -292,13 +301,13 @@ export function openBrainThread(threadId: string | null): void {
 let openHost = "";
 let stopChat: (() => void) | null = null;
 
-function closeBrainChat(): void {
+function closeBrainChat(options: { keepThread?: boolean } = {}): void {
   stopChat?.();
   stopChat = null;
   brainChat()?.close();
   brainChat.set(null);
   openHost = "";
-  brainThread.set(initialInterfaceChatThreadState(""));
+  if (!options.keepThread) brainThread.set(initialInterfaceChatThreadState(""));
 }
 
 function startWakePoll(owner: Transport): void {
