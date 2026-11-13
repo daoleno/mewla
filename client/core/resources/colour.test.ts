@@ -56,9 +56,9 @@ describe("Using this machine: each row's mark (SPEC §10.4)", () => {
     expect(consumerLead(consumer({ processes: [{ command: "python3 -m http.server" }] }))).toEqual({ kind: "mark", mark: "python" });
   });
 
-  test("an unknown program is the teal cube tile", () => {
-    expect(consumerLead(consumer({ commands: ["bun run dev"] }))).toEqual({ kind: "tile", hue: "teal", glyph: "cube" });
-    expect(consumerLead(consumer({}))).toEqual({ kind: "tile", hue: "teal", glyph: "cube" });
+  test("an unknown program is the cube on the neutral tile", () => {
+    expect(consumerLead(consumer({ commands: ["bun run dev"] }))).toEqual({ kind: "tile", glyph: "cube" });
+    expect(consumerLead(consumer({}))).toEqual({ kind: "tile", glyph: "cube" });
   });
 
   test("Workers and Brain show their agent, Docker its whale, the daemon Mewla's own", () => {

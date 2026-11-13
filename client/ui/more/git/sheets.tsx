@@ -108,7 +108,7 @@ function BranchPicker(props: { review: GitReview; onDone: () => void }) {
         {shown().map((branch) => (
           <Row
             testID={`branch-${branch.name}`}
-            lead={tile("teal", "git-branch")}
+            lead={tile("git-branch")}
             title={branch.name}
             subtitle={gitBranchDetail(branch) || undefined}
             accessibilityLabel={`${branch.name}${branch.current ? ", current" : ""}`}

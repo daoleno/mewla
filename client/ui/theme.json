@@ -54,16 +54,7 @@
       "chart-5": "#8A8D94",
       "ok": "#1B7F45",
       "meter": "#2A78D6",
-      "tile-blue": "#2A72D6",
-      "tile-blue-wash": "#E3EEFB",
-      "tile-violet": "#6250D6",
-      "tile-violet-wash": "#ECE9FB",
-      "tile-teal": "#0F8A80",
-      "tile-teal-wash": "#DDF2EF",
-      "tile-pink": "#C93F86",
-      "tile-pink-wash": "#FBE5EF",
-      "tile-graphite": "#5E6370",
-      "tile-graphite-wash": "#ECEDEF"
+      "tile": "#ECEDEF"
     },
     "dark": {
       "background": "#060708",
@@ -110,16 +101,7 @@
       "chart-5": "#6E7179",
       "ok": "#5FCB88",
       "meter": "#3987E5",
-      "tile-blue": "#6FA8F5",
-      "tile-blue-wash": "#1A2B42",
-      "tile-violet": "#A99EF5",
-      "tile-violet-wash": "#29254A",
-      "tile-teal": "#4CC9BB",
-      "tile-teal-wash": "#13332F",
-      "tile-pink": "#F58BBE",
-      "tile-pink-wash": "#3B1E2E",
-      "tile-graphite": "#B4B7BE",
-      "tile-graphite-wash": "#2C2D31"
+      "tile": "#2C2D31"
     }
   }
 }

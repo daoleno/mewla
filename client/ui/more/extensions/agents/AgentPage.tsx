@@ -209,7 +209,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
       title={agentExtensionsScopeLabel(props.scope)}
       hero={
         <View testID="agent-hero" class="gap-3 px-1 pb-2 pt-3">
-          <LeadHero lead={props.scope === "shared" ? tile("violet", "swap-horizontal") : { kind: "logo", node: <AgentIcon kind={props.scope === "claude-code" ? "claude" : props.scope} size={40} slot={40} /> }} />
+          <LeadHero lead={props.scope === "shared" ? tile("swap-horizontal") : { kind: "logo", node: <AgentIcon kind={props.scope === "claude-code" ? "claude" : props.scope} size={40} slot={40} /> }} />
           <Text class="text-display font-bold tracking-display" role="header" style={{ numberOfLines: 2 }}>{agentExtensionsScopeLabel(props.scope)}</Text>
         </View>
       }

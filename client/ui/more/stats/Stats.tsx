@@ -269,7 +269,7 @@ function Models(props: { data: RangeData; pricing?: PricingStatus; nav: PageNav 
           {shown("models", models()).map((m: ModelStat) => (
             <RankedRow
               testID={`model-${statsModelKey(m)}`}
-              lead={tile("violet", "chip")}
+              lead={tile("chip")}
               tone="meter"
               title={statsModelHeading(m, models())}
               subtitle={rowActivitySummary(m)}
@@ -296,7 +296,7 @@ function Projects(props: { data: RangeData }) {
       {projects().length === 0 ? null : (
         <Section title="Projects" testID="stats-projects">
           {shown("projects", projects()).map((p) => (
-            <RankedRow lead={tile("teal", "folder")} tone="meter" title={p.name} subtitle={`${rowActivitySummary(p)} · ${costSourceLabel(p.costProvenance)}`} share={activityValue(p, usesTokens()) / max()} value={formatAvailableCost(p.cost, p.costKnown)} />
+            <RankedRow lead={tile("folder")} tone="meter" title={p.name} subtitle={`${rowActivitySummary(p)} · ${costSourceLabel(p.costProvenance)}`} share={activityValue(p, usesTokens()) / max()} value={formatAvailableCost(p.cost, p.costKnown)} />
           ))}
           {projects().length > MAX_LIST_ITEMS ? <ShowMore hidden={projects().length - MAX_LIST_ITEMS} expanded={expanded().has("projects")} onToggle={() => toggle("projects")} /> : null}
         </Section>
@@ -313,7 +313,7 @@ function Counted(props: { section: string; title: string; items: Array<{ name: s
       {props.items.length === 0 || (props.section === "tools" && total() === 0) ? null : (
         <Section title={props.title} testID={`stats-${props.section}`} detail={<Text class="text-caption font-semibold text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{`${total()} calls`}</Text>}>
           {shown(props.section, props.items).map((item) => (
-            <RankedRow lead={tile("violet", props.section === "skills" ? "skills" : "construct")} tone="meter" title={item.name} subtitle={item.detail || undefined} share={item.calls / max()} value={String(item.calls)} />
+            <RankedRow lead={tile(props.section === "skills" ? "skills" : "construct")} tone="meter" title={item.name} subtitle={item.detail || undefined} share={item.calls / max()} value={String(item.calls)} />
           ))}
           {props.items.length > MAX_LIST_ITEMS ? <ShowMore hidden={props.items.length - MAX_LIST_ITEMS} expanded={expanded().has(props.section)} onToggle={() => toggle(props.section)} /> : null}
         </Section>

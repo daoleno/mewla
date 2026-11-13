@@ -179,7 +179,7 @@ export function Providers(props: { nav: PageNav }) {
             >
               <Row
                 testID="provider-official"
-                lead={tile("violet", "person-circle")}
+                lead={tile("person-circle")}
                 title="Official login"
                 subtitle="Direct · uses the native account"
                 check={selectedId() === ""}
@@ -195,7 +195,7 @@ export function Providers(props: { nav: PageNav }) {
                 <View>
                   <Row
                     testID={`provider-${c.id}`}
-                    lead={tile("violet", "key")}
+                    lead={tile("key")}
                     title={c.name}
                     subtitle={subtitle(c)}
                     check={selectedId() === c.id}
@@ -226,7 +226,7 @@ export function Providers(props: { nav: PageNav }) {
                   {rowNote()[c.id] ? <View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View> : null}
                 </View>
               ))}
-              <Row testID="provider-add" lead={tile("violet", "add")} title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
+              <Row testID="provider-add" lead={tile("add")} title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
             </Section>
             {snapshot()!.gateway ? <Gateway /> : null}
           </View>
@@ -242,7 +242,7 @@ function Gateway() {
   return (
     <Section title="Gateway" footer={`${g().protocols.length ? g().protocols.join(" / ") : "No protocols"} · ${g().model_count} exposed models`}>
       <Row
-        lead={tile("blue", "server")}
+        lead={tile("server")}
         title="Mewla Provider Gateway"
         subtitle={copied() ? "Endpoint copied" : g().endpoint || g().address}
         mono={false}

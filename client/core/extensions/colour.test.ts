@@ -17,15 +17,15 @@ describe("an extension's mark (SPEC §10.4)", () => {
   });
 
   test("a multicolour mark the client lacks is the generic tile, never a recoloured silhouette", () => {
-    expect(serviceLead("slack")).toEqual({ kind: "tile", hue: "violet", glyph: "chat" });
-    expect(serviceLead("gws")).toEqual({ kind: "tile", hue: "violet", glyph: "apps" });
-    expect(serviceLead("gcp")).toEqual({ kind: "tile", hue: "violet", glyph: "cloud" });
+    expect(serviceLead("slack")).toEqual({ kind: "tile", glyph: "chat" });
+    expect(serviceLead("gws")).toEqual({ kind: "tile", glyph: "apps" });
+    expect(serviceLead("gcp")).toEqual({ kind: "tile", glyph: "cloud" });
   });
 
-  test("a custom service is its kind's glyph, and an unknown one the puzzle, on the violet tile", () => {
-    expect(serviceLead("mcp")).toEqual({ kind: "tile", hue: "violet", glyph: "server" });
-    expect(serviceLead("openapi")).toEqual({ kind: "tile", hue: "violet", glyph: "code" });
-    expect(serviceLead("acme-internal")).toEqual({ kind: "tile", hue: "violet", glyph: "puzzle" });
+  test("a custom service is its kind's glyph, and an unknown one the puzzle, on the neutral tile", () => {
+    expect(serviceLead("mcp")).toEqual({ kind: "tile", glyph: "server" });
+    expect(serviceLead("openapi")).toEqual({ kind: "tile", glyph: "code" });
+    expect(serviceLead("acme-internal")).toEqual({ kind: "tile", glyph: "puzzle" });
   });
 });
 

@@ -355,7 +355,7 @@ export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead
             disabled={props.disabled || props.busy}
             onChange={({ checked }) => props.onChange(checked)}
             class="disabled:opacity-40"
-            trackClass="h-[30px] w-[50px] rounded-full bg-track checked:bg-ok"
+            trackClass="h-[30px] w-[50px] rounded-full bg-track checked:bg-primary"
             thumbClass="m-[2px] size-[26px] rounded-full bg-card checked:translate-x-[20px]"
           />
         </View>

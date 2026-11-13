@@ -299,7 +299,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
             <Section>
               <Row
                 testID="computer-use"
-                lead={tile("blue", "swap-horizontal")}
+                lead={tile("swap-horizontal")}
                 title="Use this computer"
                 disabled={Boolean(busy())}
                 onPress={() => {

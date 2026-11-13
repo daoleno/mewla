@@ -37,7 +37,7 @@ export function AgentToolsSection(props: { nav: PageNav }) {
         {rows.map((row) => (
           <Row
             testID={`agent-tool-${row.scope}`}
-            lead={row.scope === "shared" ? tile("violet", "swap-horizontal") : { kind: "logo", node: <AgentIcon kind={row.scope === "claude-code" ? "claude" : row.scope} size={28} slot={LEAD_SLOT} /> }}
+            lead={row.scope === "shared" ? tile("swap-horizontal") : { kind: "logo", node: <AgentIcon kind={row.scope === "claude-code" ? "claude" : row.scope} size={28} slot={LEAD_SLOT} /> }}
             title={row.label}
             subtitle={row.scope === "shared" ? `${agentExtensionsCountLabel(row)} · used by ${joinAgentLabels(row.agents)}` : agentExtensionsCountLabel(row)}
             chevron

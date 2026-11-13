@@ -43,7 +43,7 @@ function ItemRow(props: { item: () => CalendarItem; onPress: () => void }) {
   return (
     <Button testID={`calendar-item-${props.item().id}`} onPress={props.onPress} accessibilityLabel={`${props.item().title}, ${itemSummary(props.item()) || kindLabel[props.item().kind]}, ${statusLabel[props.item().status]}`}
       class="flex-row gap-3 border-b border-border bg-card px-4 py-3 active:bg-accent">
-      {/* Who acts (SPEC §10.4): pink for you, violet for a job Brain runs, teal for a recurring check. */}
+      {/* Who acts (SPEC §10.4), its glyph on the neutral tile: bell, calendar or flag for you, flash for a job Brain runs, sync for a recurring check. */}
       <RowTile testID="calendar-item-lead" lead={calendarLead(props.item())} />
       <Text class="w-20 pt-0.5 text-sm text-muted-foreground">{rowTime(props.item(), clock())}</Text>
       <View class="flex-1 gap-1">

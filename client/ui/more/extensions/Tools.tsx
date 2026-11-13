@@ -64,7 +64,7 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
         <SwitchRow testID="account-on" accessibilityLabel="Account on" title="On" checked={a.enabled} busy={running() === `enabled:${a.id}`} disabled={busy() && running() !== `enabled:${a.id}`} onChange={(on) => plugins()?.setEnabled(a, on)} />
         <Row
           testID="check-tools"
-          lead={tile("violet", "pulse")}
+          lead={tile("pulse")}
           title="Check service and tools"
           subtitle={a.verified_at ? `Last checked ${formatDateTime(a.verified_at)}` : undefined}
           trailing={running() === `refresh:${a.id}` ? <Spinner size={16} /> : undefined}

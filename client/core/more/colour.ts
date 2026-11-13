@@ -4,8 +4,6 @@
  * ui/theme.json; this file only names them.
  */
 
-/** A row tile's hue: the hue of the row's group (§10.4 "Tokens"). */
-export type TileHue = "blue" | "violet" | "teal" | "pink" | "graphite";
 
 /**
  * A state as colour shows it (§10.4 "State"): `ok` healthy, on, connected; `warn` degraded or needs setting up,
@@ -55,15 +53,15 @@ export function brandMark(name: string | undefined | null): BrandMark | null {
   return ALIASES[key] ?? null;
 }
 
-/** A row's leading icon: a named product's mark, or the generic glyph on its group's tile. Never a bare grey outline. */
+/** A row's leading icon: a named product's mark, or the generic glyph in ink on the one neutral tile. Never a bare grey outline. */
 export type RowLeading<Glyph extends string = string> =
   | { kind: "mark"; mark: BrandMark }
-  | { kind: "tile"; hue: TileHue; glyph: Glyph };
+  | { kind: "tile"; glyph: Glyph };
 
-/** The leading icon of a row for `name`: its mark when the client has one, else `fallback` (the group's tile). */
-export function rowLeading<Glyph extends string>(name: string | undefined | null, fallback: { hue: TileHue; glyph: Glyph }): RowLeading<Glyph> {
+/** The leading icon of a row for `name`: its mark when the client has one, else `fallback` on the neutral tile. */
+export function rowLeading<Glyph extends string>(name: string | undefined | null, fallback: { glyph: Glyph }): RowLeading<Glyph> {
   const mark = brandMark(name);
-  return mark ? { kind: "mark", mark } : { kind: "tile", hue: fallback.hue, glyph: fallback.glyph };
+  return mark ? { kind: "mark", mark } : { kind: "tile", glyph: fallback.glyph };
 }
 
 /** Where a meter's fill turns (shares, 0..1). Where a metric has no threshold of the daemon's: 80 % and 95 % (§10.4 "Data"). */

@@ -15,16 +15,16 @@ describe("a row's leading icon (SPEC §10.4 row tiles)", () => {
     expect(brandMark(" Docker ")).toBe("docker");
   });
 
-  test("a generic row keeps its group's tile, never a guessed mark", () => {
+  test("a generic row keeps the neutral tile, never a guessed mark", () => {
     expect(brandMark("bash")).toBeNull();
     expect(brandMark("")).toBeNull();
     expect(brandMark(undefined)).toBeNull();
-    expect(rowLeading("bash", { hue: "teal", glyph: "cube" })).toEqual({ kind: "tile", hue: "teal", glyph: "cube" });
-    expect(rowLeading(null, { hue: "violet", glyph: "puzzle" })).toEqual({ kind: "tile", hue: "violet", glyph: "puzzle" });
+    expect(rowLeading("bash", { glyph: "cube" })).toEqual({ kind: "tile", glyph: "cube" });
+    expect(rowLeading(null, { glyph: "puzzle" })).toEqual({ kind: "tile", glyph: "puzzle" });
   });
 
   test("a named product's row is its mark, not the tile", () => {
-    expect(rowLeading("Linear", { hue: "violet", glyph: "puzzle" })).toEqual({ kind: "mark", mark: "linear" });
+    expect(rowLeading("Linear", { glyph: "puzzle" })).toEqual({ kind: "mark", mark: "linear" });
   });
 
   test("every mark has a name that leads to it", () => {
