@@ -174,3 +174,27 @@ func TestItemClockIsNotANewState(t *testing.T) {
 		t.Fatalf("but the current state keeps the newest anchor")
 	}
 }
+
+func TestItemRunningLineIsNotANewStateButAnAskIs(t *testing.T) {
+	var got []State
+	p := NewProjector(1, 0, func(state State) { got = append(got, state) })
+	running := func(line string) Input {
+		return Input{Sessions: []Session{{ID: "s", Title: "x", Line: line, Running: true, StartedAt: t0}}}
+	}
+	p.Observe(running("Reading the brief"))
+	p.Observe(running("Editing main.go"))
+	if len(got) != 1 {
+		t.Fatalf("a running row's new line must not push again, got %d states", len(got))
+	}
+	if p.Current().Items[0].Line != "Editing main.go" {
+		t.Fatalf("but the current state (fetches, live_state_get) carries the newest line")
+	}
+	asking := func(ask string) Input {
+		return Input{Sessions: []Session{{ID: "s", Title: "x", Asks: NeedsAnswer, Ask: ask, AskSince: t0}}}
+	}
+	p.Observe(asking("Allow npm publish?"))
+	p.Observe(asking("Allow git push?"))
+	if len(got) != 3 {
+		t.Fatalf("what a request asks is news, got %d states", len(got))
+	}
+}

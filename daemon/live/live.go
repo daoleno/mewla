@@ -305,9 +305,14 @@ func itoa(value int64) string { return strconv.FormatInt(value, 10) }
 // see change. The elapsed clock (started_at) and the numbering are excluded.
 func materialKey(state State) string {
 	state.Epoch, state.Seq, state.StartedAt = 0, 0, 0
+	// A running row's line moves with each report; it shows on the next new
+	// state and in every fetch, but never makes one. What a request asks does.
 	items := make([]Item, len(state.Items))
 	for index, item := range state.Items {
 		item.StartedAt = 0
+		if item.Needs == "" {
+			item.Line = ""
+		}
 		items[index] = item
 	}
 	state.Items = items

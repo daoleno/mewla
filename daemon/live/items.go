@@ -307,7 +307,10 @@ func workItem(work brain.CurrentWork, live []string, workers map[string]brain.Wo
 			item.StartedAt = millis(session.StartedAt)
 		} else if ref, ok := workers[sessionID]; ok {
 			item.Agent = ref.Provider
-			item.Line = firstNonEmpty(ref.Summary, ref.Phase)
+			if strings.TrimSpace(ref.Phase) != "" {
+				// Only a reported line: without a phase the summary is the terminal's text.
+				item.Line = firstNonEmpty(ref.Summary, ref.Phase)
+			}
 			if ref.StartedAt != nil {
 				item.StartedAt = millis(*ref.StartedAt)
 			}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -167,8 +169,8 @@ func (s *Server) liveInput(snapshot brain.Snapshot) live.Input {
 			continue
 		}
 		session := live.Session{
-			ID: worker.ID, Title: strings.TrimSpace(worker.Name), Provider: providers[worker.ID],
-			Line: firstLiveText(worker.Summary, worker.Phase), Delegated: worker.Delegated,
+			ID: worker.ID, Title: liveSessionTitle(worker), Provider: providers[worker.ID],
+			Line: liveReportedLine(worker), Delegated: worker.Delegated,
 			Running: worker.State == classifier.StateRunning, StartedAt: worker.StartedAt,
 		}
 		if worker.RunningSince != nil {
@@ -196,6 +198,42 @@ func (s *Server) liveInput(snapshot brain.Snapshot) live.Input {
 		in.Sessions = append(in.Sessions, session)
 	}
 	return in
+}
+
+// liveSessionTitle names a Session as the app's rows do (client core/sessions/listRow.ts): its own name
+// without a trailing "(…)", or, when that name is generated (empty, its id, an mh- id) or only the
+// agent's or shell's name, the folder it works in.
+func liveSessionTitle(worker *classifier.Worker) string {
+	name := strings.TrimSpace(liveTrailingParen.ReplaceAllString(strings.TrimSpace(worker.Name), ""))
+	lower := strings.ToLower(name)
+	generated := name == "" || name == worker.ID || liveGeneratedName.MatchString(name) || liveGenericNames[lower]
+	if !generated {
+		return name
+	}
+	if folder := filepath.Base(strings.TrimSpace(worker.Cwd)); folder != "" && folder != "." && folder != "/" {
+		return folder
+	}
+	return firstLiveText(name, "Session")
+}
+
+var (
+	liveTrailingParen = regexp.MustCompile(`\s+\([^)]+\)\s*$`)
+	liveGeneratedName = regexp.MustCompile(`^mh-[0-9a-f]{24}$`)
+	liveGenericNames  = map[string]bool{
+		"claude": true, "claude code": true, "claude-code": true, "codex": true, "openai codex": true,
+		"cursor": true, "cursor agent": true, "agent": true, "grok": true, "grok cli": true, "pi": true,
+		"opencode": true, "open code": true, "zsh": true, "bash": true, "sh": true, "fish": true,
+		"shell": true, "terminal": true,
+	}
+)
+
+// liveReportedLine is what a Session said it does, only when it reported it (a phase or an event):
+// the terminal's own text is never shown (client core/sessions/activity.ts).
+func liveReportedLine(worker *classifier.Worker) string {
+	if strings.TrimSpace(worker.Phase) == "" && strings.TrimSpace(worker.EventKind) == "" {
+		return ""
+	}
+	return strings.TrimSpace(worker.Summary)
 }
 
 func firstLiveText(values ...string) string {
