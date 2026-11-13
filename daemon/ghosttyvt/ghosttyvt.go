@@ -144,11 +144,14 @@ type State struct {
 	MouseTracking    bool // the program asked for mouse reports
 	AppCursor        bool // application cursor keys (DECCKM, mode 1)
 	AltScroll        bool // the wheel sends cursor keys on the alternate screen (mode 1007)
-	ScrollbackRows   int
-	TotalRows        int
-	Title            string
-	Pwd              string // the working directory the program reported (OSC 7)
-	Ground           bool   // the parser is between sequences
+	// MouseFormat is how mouse reports are encoded: "sgr" (mode 1006),
+	// "urxvt" (1015), "utf8" (1005) or "x10", the default.
+	MouseFormat    string
+	ScrollbackRows int
+	TotalRows      int
+	Title          string
+	Pwd            string // the working directory the program reported (OSC 7)
+	Ground         bool   // the parser is between sequences
 }
 
 // Row flags, as RowFlags reports them.
@@ -158,3 +161,19 @@ const (
 	RowPrompt                   // starts a shell prompt (OSC 133)
 	RowPromptMore               // continues a shell prompt
 )
+
+// mouseFormat names the mouse report encoding the modes set: the last of
+// them a program sets wins in xterm, but programs set one, and SGR is checked
+// first as the one they all prefer.
+func mouseFormat(on func(mode uint16) bool) string {
+	switch {
+	case on(1006):
+		return "sgr"
+	case on(1015):
+		return "urxvt"
+	case on(1005):
+		return "utf8"
+	default:
+		return "x10"
+	}
+}

@@ -462,6 +462,23 @@ func TestStateReportsKeyModes(t *testing.T) {
 	}
 }
 
+func TestStateReportsTheMouseEncoding(t *testing.T) {
+	term := newTerminal(t, 10, 3)
+	for _, step := range []struct{ write, want string }{
+		{"", "x10"},
+		{"\x1b[?1000h", "x10"},
+		{"\x1b[?1006h", "sgr"},
+		{"\x1b[?1006l\x1b[?1015h", "urxvt"},
+		{"\x1b[?1015l\x1b[?1005h", "utf8"},
+		{"\x1b[?1005l", "x10"},
+	} {
+		term.Write([]byte(step.write))
+		if got := term.State().MouseFormat; got != step.want {
+			t.Fatalf("after %q: mouse format %q, want %q", step.write, got, step.want)
+		}
+	}
+}
+
 // libghostty-vt decodes UTF-8 in bulk with simdutf, whose AVX-512 kernels
 // (built since 1.0.1, chosen at run time on CPUs that have them) leave the
 // output undefined when the input has an error. An invalid sequence inside a
