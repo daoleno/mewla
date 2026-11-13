@@ -27,6 +27,9 @@ describe("a draft survives a page pushed over its chat (SPEC §3.8)", () => {
     await a.waitFor("id:tray-row");
     await a.press("id:tray-row");
     await a.waitFor("text:Write the plan", { timeout: 10_000 });
+    // Trial: three pages: Back returns to the running page the Session was opened from, and Back again to Brain.
+    await a.back();
+    await a.waitFor("id:home-page-running");
     await a.back();
     await a.waitFor("id:home-header");
     await a.waitUntil(() => a.value("id:composer") === "half a thought", { timeout: 3_000 });

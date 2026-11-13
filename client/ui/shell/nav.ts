@@ -30,9 +30,13 @@ export function openPage(...routes: Route[]): void {
   nav.setRoutes([untracked(nav.routes)[0] ?? { name: "home" }, ...routes.filter((route) => route.name !== "home")]);
 }
 
+/** Trial: three pages. Each `goHome`, so the home pager shows Brain (or the running things) even when home already shows. */
+export const homeCalls = signal(0);
+
 /** Back to home, the tray closed (a computer switch, "Ask Brain about this", a link to Brain). */
 export function goHome(options: { tray?: boolean } = {}): void {
   trayOpen.set(Boolean(options.tray));
+  homeCalls.set(untracked(homeCalls) + 1);
   nav.popToRoot();
 }
 
