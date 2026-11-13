@@ -10,7 +10,7 @@ import { chatCacheKey, Draft } from "../../core/conversation/draft";
 import { createChatTimeline, isWorkingRow } from "../../core/conversation/timeline";
 import { workingLineShown, workingSince } from "../../core/sessions/activity";
 import { rewindMessage, stopTurn } from "../../core/conversation/turn";
-import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
+import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
 import { resolveBlockedTerminal } from "../../core/session/blockedTerminalSurface";
 import { shouldLeaveMissingSession } from "../../core/session/missingSession";
 import { resolveInterfaceRenderMode, resolveTerminalRouteWorker, supportsChatInterface, type TerminalRouteSessionHint } from "../../core/session/sessionRoute";
@@ -136,8 +136,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     send: (value) => chat.send(value),
   });
   const handlers = {
-    onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
-      void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
+    onUserMessage: (item: Parameters<typeof editOnTap>[0]) =>
+      editOnTap(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
     workingSince: () => workingSince(worker(), activity()?.started_at),
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),

@@ -16,15 +16,8 @@ export function lastEditablePrompt(
     if (item.type !== "message") continue;
     const message = item as MessageTimelineItem;
     if (message.role !== "user") continue;
-    const subject = {
-      id: message.id,
-      role: message.role,
-      body: message.body,
-      hasAttachments: message.attachments.length > 0,
-      pending: Boolean(message.pending),
-      streaming: Boolean(message.streaming),
-    };
-    const editable = isEditablePrompt(subject, { messageRewind: false, brain: false, running: env.running, connected: env.connected, canSelectText: false });
+    const subject = { role: message.role, body: message.body, hasAttachments: message.attachments.length > 0, pending: Boolean(message.pending) };
+    const editable = isEditablePrompt(subject, { running: env.running, connected: env.connected });
     return editable ? message : null;
   }
   return null;
