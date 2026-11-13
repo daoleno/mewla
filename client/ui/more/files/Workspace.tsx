@@ -80,7 +80,7 @@ export function WorkspacePage(props: { trail?: string[]; file?: string; hostSess
           <WorkspaceFolder trail={props.trail ?? []} name={name} hostSession={props.hostSession} nav={props.nav} onOpenFile={openFile} selected={() => (listDetail() ? chosen() : null)} onTitleAway={(away) => titleAway.set(away)} />
         </View>
         <If when={listDetail()}><View testID="workspace-reader" class="flex-1 bg-background pt-2">
-            <If when={chosen()} else={<View class="flex-1 px-4"><EmptyState testID="workspace-no-file" icon="document" title="No file selected" /></View>}><Each of={[chosen()!]} key={(path) => path}>{(path) => <WorkspaceFile path={path()} hostSession={props.hostSession} nav={props.nav} />}</Each></If>
+            <If when={chosen()} else={<View class="flex-1 px-4"><EmptyState testID="workspace-no-file" icon="document" title="No file selected" /></View>}><Each of={chosen() ? [chosen()!] : []} key={(path) => path}>{(path) => <WorkspaceFile path={path()} hostSession={props.hostSession} nav={props.nav} />}</Each></If>
           </View></If>
       </View>
     </NavPage>

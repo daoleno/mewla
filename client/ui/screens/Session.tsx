@@ -671,7 +671,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                     <Icon name="chevron-down" size={14} />
                   </Button></If>
                 <If when={editor.edit()}><EditChip editor={editor} /></If>
-                <If when={dshRun()}><DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(dshRun().split("|")[0]), startedAt: Number(dshRun().split("|")[1]) }} /></If>
+                <Each of={dshRun() ? [dshRun()] : []} key={(run) => run}>{(run) => <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(run().split("|")[0]), startedAt: Number(run().split("|")[1]) }} />}</Each>
                 <If when={notice()}><Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text></If>
               </Composer>
             </View></If>
