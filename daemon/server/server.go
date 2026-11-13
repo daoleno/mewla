@@ -194,6 +194,9 @@ type Server struct {
 	webUIFiles                 fs.FS
 	webUIDir                   string
 	webUIOverrideSeen          atomic.Bool
+	// webPort is the port this daemon listens on (0 until it binds): a
+	// loopback web UI is this daemon's only on it.
+	webPort atomic.Int32
 
 	workSubID                   int
 	workSub                     <-chan work.Event
@@ -234,9 +237,11 @@ type Server struct {
 	agentApprovals     AgentApprovals
 	// answered is the answered-request ledger (answered_requests.go);
 	// prompts tracks open screen prompts for it.
-	answered        *answered.Ledger
-	prompts         promptWatch
-	promptLeftGrace time.Duration
+	answered *answered.Ledger
+	prompts  promptWatch
+	// afterPromptLeft runs a prompt's check once it has stayed off the
+	// screen for the grace; nil is time.AfterFunc. Tests run it themselves.
+	afterPromptLeft func(grace time.Duration, check func())
 	codexStatus     func(ctx context.Context, workerID string) (any, error)
 }
 
@@ -570,6 +575,9 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 		if bound, ok := tcp.Addr().(*net.TCPAddr); ok {
 			s.connections.SetLoopbackPort(bound.Port)
 		}
+	}
+	if bound, ok := tcp.Addr().(*net.TCPAddr); ok {
+		s.webPort.Store(int32(bound.Port))
 	}
 	var listener net.Listener = tcp
 	if s.tlsConfig != nil {
@@ -3841,6 +3849,11 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 	}
 
 	switch ev.Type {
+	case "worker_discovered", "worker_state_change", "worker_metadata_change", "worker_removed":
+		// A Session that starts or stops running or asking changes the live state.
+		defer s.observeLiveSessions()
+	}
+	switch ev.Type {
 	case "worker_discovered":
 		if ev.Worker != nil {
 			s.publishWorkerSession("worker_session_created", ev.Worker)
@@ -3989,6 +4002,12 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 	kind, ok := workerNotificationKind(ev.NewState)
 	if !ok {
 		s.noteWorkerMoved(ev)
+		return
+	}
+	// Blocked on its own report, the Worker asks Brain, not the owner: Brain
+	// decides, and reaches the owner only with its Work's question.
+	if kind == push.KindWorkerBlocked && !asksOwner(ev.Worker, len(s.pendingApprovals(ev.WorkerID))) {
+		s.noteSuppressedNotification(ev, "brain_decides")
 		return
 	}
 	if s.hasActiveViewer(ev.WorkerID) {

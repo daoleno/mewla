@@ -119,13 +119,17 @@ func ProgressState(progress WorkerProgress) WorkerState {
 	}
 }
 
+// ProgressNeedsAttention reports whether a progress report waits on the person.
+// Done is a result, not a request: it shows as finished like any ended Session
+// (no Needs you row, no open-request count). Failed and blocked keep asking:
+// the person likely has to act (Brain 2026-11-14).
 func ProgressNeedsAttention(progress WorkerProgress) bool {
 	switch progress.Status {
-	case "done", "blocked", "failed":
+	case "blocked", "failed":
 		return true
 	}
 	switch progress.Attention {
-	case "done", "blocked", "failed", "user_input", "stale":
+	case "blocked", "failed", "user_input", "stale":
 		return true
 	default:
 		return false

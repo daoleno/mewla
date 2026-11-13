@@ -108,7 +108,7 @@ Cursor and Grok record no turn error, so they have nothing to classify.
 | Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
 | Persistent error by code or status: login, billing, unknown model, invalid or oversized request, 4xx |
 | An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) | One stall escalation after 30 s (`provider_error`); never resumed |
-| Stopped with no error and no terminal report, the pane idle at its prompt | One stall escalation after 90 s (`stopped`, "Worker stopped; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents |
+| Stopped with no error and no terminal report, the pane idle at its prompt or the agent's own hook saying its turn ended | One stall escalation after 90 s (`stopped`, "Worker's turn ended without a progress report; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents |
 | Stopped with no error and no terminal report, the pane not recognized as idle | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease |
 
 A Turn that carries its identity in the prompt (a signal Turn) is settled only by
@@ -119,7 +119,21 @@ Turn still binds to the provider Activity that carried its exact input (matched
 by the input's digest) even when the Worker's first check-in arrived before the
 transcript was read; without that, every later provider fact stayed unbound. The
 `stopped` row above is how Brain hears about a Worker that ended without
-reporting.
+reporting. Until then the Turn reads "Turn ended without a progress report;
+waiting for the Worker's report" and its Work is `waiting` ("The Worker's turn
+ended without a progress report; Brain is told if none follows."), not
+`running`; a new provider Activity (a background wake) or the Worker's late
+report sets it running or settles it. A Claude Worker's composer may hold a dim
+prompt suggestion after its turn, which a screen capture cannot tell from typed
+text, so a turn end that Claude's `Stop` hook reported counts as stopped
+whatever the composer shows.
+
+A delegated prompt is admitted either by the Worker's own first report or by
+the provider admission that carried its exact bytes. Claude receives Mewla's
+typed prefix plus one paste envelope, so its `UserPromptSubmit` hook and its
+transcript carry the wrapped bytes; the admission is matched by the unwrapped
+digest too, so a Claude Worker that never reports, fresh or resumed (`-command
+"claude --resume <id>"`), is still admitted and its turn followed.
 
 The wait is counted from the first poll that saw the Session idle, not from when
 the provider settled. A Worker idle at its prompt while a background Monitor,

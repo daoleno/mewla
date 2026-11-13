@@ -75,7 +75,7 @@ func ResolveLiveHostTranscriptIdentity(worker classifier.Worker, provider string
 	if !pathsEquivalent(record.Cwd, worker.Cwd) {
 		return HostTranscriptIdentity{}, false, fmt.Errorf("Claude process session cwd does not match host %q", worker.ID)
 	}
-	path := filepath.Join(claudeProjectDir(root, record.Cwd), record.SessionID+".jsonl")
+	path, _ := claudeConversationTranscript(root, record.Cwd, record.SessionID)
 	return HostTranscriptIdentity{Provider: provider, SessionID: record.SessionID, Path: path, DataRoot: root}, true, nil
 }
 
@@ -125,15 +125,13 @@ func LiveClaudeSessionOwner(sessionID, root string) (int, error) {
 }
 
 // ClaudeTranscriptPath is where the Claude process pid keeps conversation
-// sessionID that runs in cwd, or "" when its config directory is unknown.
+// sessionID that runs in cwd (where it was born when it was resumed from
+// another folder), or "" when its config directory is unknown.
 func ClaudeTranscriptPath(pid int, cwd, sessionID string) string {
 	root := claudeIdentityRoot(pid)
 	if !filepath.IsAbs(root) || strings.TrimSpace(sessionID) == "" {
 		return ""
 	}
-	dir := claudeProjectDir(root, cwd)
-	if dir == "" {
-		return ""
-	}
-	return filepath.Join(dir, sessionID+".jsonl")
+	path, _ := claudeConversationTranscript(root, cwd, sessionID)
+	return path
 }

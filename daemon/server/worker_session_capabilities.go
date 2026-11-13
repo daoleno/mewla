@@ -60,6 +60,15 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 		worker = &named
 	}
 	activity := s.agentActivityOf(worker)
+	levels := s.agentLevels(worker)
+	structured := s.workerSupportsStructuredEvents(worker)
+	rewind := s.workerSupportsMessageRewind(worker)
+	if shown := work.ShownCommand(worker.Command); shown != worker.Command {
+		// The person sees the launch without Mewla's hooks; the Worker keeps it.
+		copied := *worker
+		copied.Command = shown
+		worker = &copied
+	}
 	return &workerSessionWire{
 		Worker:          worker,
 		Provider:        provider,
@@ -68,11 +77,11 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 		ActivityTool:    activity.Tool,
 		ActivitySummary: activity.Summary,
 		Capabilities: workerSessionWireCapabilities{
-			StructuredEvents:         s.workerSupportsStructuredEvents(worker),
+			StructuredEvents:         structured,
 			ModelProfileManaged:      managed,
 			ModelProfileActiveSwitch: activeSwitch,
-			MessageRewind:            s.workerSupportsMessageRewind(worker),
-			Levels:                   s.agentLevels(worker),
+			MessageRewind:            rewind,
+			Levels:                   levels,
 		},
 	}
 }

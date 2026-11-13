@@ -468,10 +468,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.validate.outputs.tag }}
           VERSION: ${{ needs.validate.outputs.version }}
+          # A held stable release is published as a prerelease, which releases/latest (every updater,
+          # both installers, the site) skips, until it is promoted by hand; see docs/ci-release.md.
+          RELEASE_HOLD: ${{ vars.MEWLA_RELEASE_HOLD }}
         run: |
           set -euo pipefail
           test -n "${GH_REPO:-}"
-          if [[ "$TAG" == *-beta.* ]]; then
+          if [[ "$TAG" == *-beta.* || "${RELEASE_HOLD:-}" == "true" ]]; then
             RELEASE_IS_PRERELEASE=true
             RELEASE_IS_STABLE=false
           else
