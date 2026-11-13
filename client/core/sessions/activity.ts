@@ -3,6 +3,7 @@
  * Never the terminal's own text: `last_output_lines` is the provider's screen (its status footer, the
  * prompt Brain pasted in), so it is never read here.
  */
+import { collapsedToolLabel } from "../timeline/toolCallSemantics";
 import type { Worker, WorkerApproval, WorkerPrompt } from "./workers";
 
 /**
@@ -70,6 +71,39 @@ export function promptTitle(prompt: WorkerPrompt): string {
   if (prompt.summary) return prompt.summary;
   const request = prompt.request ? promptLines(prompt.request)[0] : undefined;
   return request || prompt.title || "Waiting for confirmation";
+}
+
+/** The input field a call's one-line summary (the daemon's `summary`: the command, the file, the URL) stands for. */
+const SUMMARY_FIELD: Record<string, string> = {
+  Bash: "command", Read: "file_path", Edit: "file_path", MultiEdit: "file_path", Write: "file_path", NotebookEdit: "notebook_path",
+  Grep: "pattern", Glob: "pattern", WebFetch: "url", WebSearch: "query", Task: "description",
+};
+
+/**
+ * A tool call in the thread's tool-row words ("Run ping -c 50 127.0.0.1", "Edit src/pricing.tsx"), from its tool and the
+ * one line the daemon gives for it: the tray, the stacked rows and the card say a call the way its row says it.
+ */
+export function toolWords(tool: string | undefined, summary: string | undefined): string {
+  const line = summary?.split(/\r?\n/)[0]?.trim() ?? "";
+  if (!tool?.trim()) return line;
+  const field = SUMMARY_FIELD[tool.trim()] ?? "command";
+  const input = line ? JSON.stringify({ [field]: line }) : undefined;
+  return collapsedToolLabel({ toolName: tool.trim(), input, command: field === "command" && line ? line : undefined }).title || line;
+}
+
+/**
+ * What a request asks, short, for the line under its source (SPEC §11 Tray row, Needs you): the request's summary,
+ * a call in its tool row's words, a folder trust as "Trust this folder?", else the question or its first line.
+ */
+export function promptAsk(prompt: WorkerPrompt): string {
+  if (prompt.kind === "startup" && /\btrust\b/i.test(`${prompt.title} ${prompt.request ?? ""}`)) return "Trust this folder?";
+  if ((prompt.kind === "permission" || prompt.kind === "approval") && prompt.tool) return toolWords(prompt.tool, prompt.summary);
+  return promptTitle(prompt);
+}
+
+/** A reported decision, short: its call in the tool row's words, else its summary's first line. */
+export function approvalAsk(approval: WorkerApproval): string {
+  return approval.tool ? toolWords(approval.tool, approval.summary) : approvalTitle(approval);
 }
 
 /** What a reported decision asks: its summary's first line, else its tool. */

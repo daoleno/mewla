@@ -307,14 +307,18 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
   );
 }
 
-/** A stacked request under the open one: 52 pt, the dot, the question, the source. Tap opens it instead. */
+/** A stacked request under the open one: 52 pt, the dot, the ask, then the source with its 16 pt logo. Tap opens it. */
 function StackedRow(props: { card: () => Card; onPress: () => void }) {
+  const c = props.card;
   return (
-    <Button testID="request-stacked" accessibilityLabel={`${props.card().title}, ${props.card().source}`} onPress={props.onPress}
+    <Button testID="request-stacked" accessibilityLabel={`${c().ask ?? c().title}, ${c().source}`} onPress={props.onPress}
       class="min-h-[52px] flex-row items-center gap-2.5 rounded-2xl bg-card px-4 active:opacity-70">
       <View class="size-2 rounded-full bg-seal" />
-      <Text class="min-w-0 flex-1 text-sub font-semibold line-clamp-1">{props.card().title}</Text>
-      <Text class="max-w-[42%] text-sub text-muted-foreground line-clamp-1">{props.card().source}</Text>
+      <Text testID="request-stacked-ask" class="min-w-0 flex-1 text-sub font-semibold line-clamp-1">{c().ask ?? c().title}</Text>
+      <View class="max-w-[42%] flex-row items-center gap-1.5">
+        {c().agent ? <AgentIcon kind={c().agent!} flavor={c().flavor} size={16} /> : c().source === "Brain" ? <Icon name="brain" size={16} tone="soft" /> : null}
+        <Text class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{c().source}</Text>
+      </View>
     </Button>
   );
 }
