@@ -17,6 +17,7 @@ import {
   connectedCopy,
   cornerCatBox,
   finderState,
+  cameraFailure,
   heroCatBox,
   heroZoneWidth,
   isCompactFrame,
@@ -116,6 +117,7 @@ describe("onboarding layout", () => {
       expect(catBoxForStep("install", f)).toEqual(corner);
     }
   });
+
   test("the cat stays clear of a side safe area (the iPhone Duo's 84 pt status rail, an island on its side)", () => {
     // Cover screen upright: the rail is at the right. Inner screen on its side: at the right too. A phone on its side: both.
     for (const f of [{ ...frame(466, 678, 0, 34), right: 84 }, { ...frame(951, 669, 0, 34), right: 84 }, { ...frame(874, 402, 0, 21), left: 62, right: 62 }]) {
@@ -131,12 +133,15 @@ describe("onboarding layout", () => {
 
 describe("the viewfinder", () => {
   test("never a dark window that promises a camera", () => {
-    expect(finderState(null, false, false)).toBe("loading");
-    expect(finderState("undetermined", false, true)).toBe("loading");
-    expect(finderState("undetermined", false, false)).toBe("request");
-    expect(finderState("denied", false, false)).toBe("denied");
-    expect(finderState("granted", true, false)).toBe("failed");
-    expect(finderState("granted", false, false)).toBe("camera");
+    expect(finderState(null, null, false)).toBe("loading");
+    expect(finderState("undetermined", null, true)).toBe("loading");
+    expect(finderState("undetermined", null, false)).toBe("request");
+    expect(finderState("denied", null, false)).toBe("denied");
+    expect(finderState("granted", "failed", false)).toBe("failed");
+    expect(finderState("granted", null, false)).toBe("camera");
+    // A device with no camera (the Simulator) is not a Settings problem: it says so (audit 11-13 r18-04, duo-06).
+    expect(finderState("granted", cameraFailure("missing"), false)).toBe("missing");
+    expect(finderState("granted", cameraFailure("camera"), false)).toBe("failed");
   });
 
   test("runs the camera only in front and on screen: a page under another tab keeps it off", () => {
