@@ -251,11 +251,13 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
   // What the page shows, as one word: the branch below is made again only when the word changes. Read as
   // conditions in the JSX, every Brain snapshot (each Work and Worker change) and every chat state made the
   // thread again: its rows all drawn anew (the whole page flashed) and the list back at its end (owner 11-13).
+  // A thread is its own list: another thread (a past one, Current chat, New chat) is made anew and opens at
+  // its end; the same thread under a restarted host is not.
   const shows = computed(() => {
     const on = surface();
     if (on !== "chat") return on;
     if (brainChatUnavailable(brain())) return "unavailable";
-    return chatState() === "failed" ? "failed" : "chat";
+    return chatState() === "failed" ? "failed" : `chat:${routedBrainThread() ?? brain()?.chat_thread_id ?? ""}`;
   });
   return (
     <View class="flex-1">
@@ -263,7 +265,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] 
         <BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} />
       ) : shows() === "failed" ? (
         <BrainChatFailed onOpenTerminal={openTerminal} />
-      ) : shows() === "chat" ? (
+      ) : shows().startsWith("chat:") ? (
         <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown}
           empty={() => (chatState() === "loading" ? <Notice title="Loading…" /> : <Notice title="What should Brain do?" />)}
           foot={{

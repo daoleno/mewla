@@ -69,7 +69,8 @@ describe("the person's own message", () => {
     const app = await brainWith([{ id: "u1", seq: 1, timestamp: at(1), kind: "user_message", role: "user", body: "Book the 23:30 train" }, reply("a1", 2, "Booked.")]);
     await app.waitFor("text:Book the 23:30 train", { timeout: 10_000 });
     await app.wait(300);
-    await app.press("id:user-message");
+    // A tap on its words (on the phone the text takes every touch on it).
+    await app.press("id:user-message-text");
     await app.waitFor("id:edit-chip");
     expect(app.value("id:composer")).toBe("Book the 23:30 train");
     expect(app.dialogs()).toEqual([]);

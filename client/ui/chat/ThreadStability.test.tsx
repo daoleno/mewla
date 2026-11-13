@@ -226,3 +226,24 @@ describe("Brain's host restarts (the same thread under a new host id)", () => {
     expect(firstDrawn(app)).toBe(before);
   }, 30_000);
 });
+
+describe("Brain's other threads", () => {
+  test("a past thread opens at its own end, and Current chat comes back to the current one", async () => {
+    const past = Array.from({ length: 30 }, (_, i) => ({
+      id: `old${i}`, seq: i + 1, kind: i % 2 ? "assistant_message" : "user_message",
+      timestamp: new Date(Date.UTC(2026, 10, 1, 7, 0, i)).toISOString(), body: `Old ${i}. ${"Words of an older thread that wrap in a phone-sized chat. ".repeat(4)}`,
+    }));
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long, "brain-host#brain-thread:t-old": past } }) });
+    await app.waitFor("id:brain-chat", { timeout: 10_000 });
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
+    await app.host.send("links.open", { url: "mewla://brain?thread=t-old" });
+    await app.waitFor("id:brain-past-thread");
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Old 29.")), { timeout: 10_000 });
+    await app.wait(400);
+    expect(app.shows("id:jump-latest")).toBe(false);
+    await app.press("id:brain-current-thread");
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
+    await app.wait(400);
+    expect(app.shows("id:jump-latest")).toBe(false);
+  }, 30_000);
+});
