@@ -13,8 +13,6 @@ import { startAppUpdate } from "./update/update";
 // Registers the monospaced face theme.json's `font-mono` names, before the first frame.
 import "./kit/monoFont";
 
-installPlatform(nshPlatform());
-
 // The first start after the in-place upgrade takes over what the Expo app kept (computers,
 // drafts, preferences); the device key stays where it was, in the host's secure store.
 async function start(): Promise<void> {
@@ -35,32 +33,45 @@ async function start(): Promise<void> {
     if (link) void pairFromText(link);
   }
 }
-void start();
-startNotifications();
-startAppUpdate();
 
-// Android's navigation bar draws its buttons for the app's appearance, also when it changes while the app runs
-// (Settings › Appearance, or the system's when it follows it); NSH sets only the status bar. iOS has no such bar.
-effect(() => {
-  const dark = colorScheme() === "dark";
-  if (platform.os === "android" && host.available()) void host.call("app.navigationBar", { dark }).catch(() => undefined);
-});
+// A hot patch (the dev channel) runs this module again. Starting again closed the live connection and Brain's chat
+// (its draft; the thread came back at its newest row) to open them anew, and registered notifications, app update
+// and the listeners below once more. The flag is on globalThis, which a re-run keeps.
+const processState = globalThis as { __mewlaStarted?: boolean };
 
-// Coming back to the app skips the reconnect backoff.
-effect(() => {
-  if (lifecycle() === "active") resumeConnection();
-});
+/** The app's start: its platform, its computer and connection, notifications, app update, links. Runs once per process. */
+export function startApp(): void {
+  if (processState.__mewlaStarted) return;
+  processState.__mewlaStarted = true;
+  installPlatform(nshPlatform());
+  void start();
+  startNotifications();
+  startAppUpdate();
 
-// Links the system opens in the app: a pairing link pairs, like a scan; the others open their page.
-host.on("links.open", (payload) => {
-  const url = (payload as { url?: string } | null)?.url;
-  if (!url) return;
-  if (readPairingLink(url)) return void pairFromText(url);
-  if (isPhoneLink(url)) return void openPhonePage();
-  if (openSettingsLink(url)) return;
-  // Brain, a Session, the Calendar, a live answer, Friends: what a notification, an alert or a widget sends.
-  openNotificationLink(url);
-});
+  // Android's navigation bar draws its buttons for the app's appearance, also when it changes while the app runs
+  // (Settings › Appearance, or the system's when it follows it); NSH sets only the status bar. iOS has no such bar.
+  effect(() => {
+    const dark = colorScheme() === "dark";
+    if (platform.os === "android" && host.available()) void host.call("app.navigationBar", { dark }).catch(() => undefined);
+  });
+
+  // Coming back to the app skips the reconnect backoff.
+  effect(() => {
+    if (lifecycle() === "active") resumeConnection();
+  });
+
+  // Links the system opens in the app: a pairing link pairs, like a scan; the others open their page.
+  host.on("links.open", (payload) => {
+    const url = (payload as { url?: string } | null)?.url;
+    if (!url) return;
+    if (readPairingLink(url)) return void pairFromText(url);
+    if (isPhoneLink(url)) return void openPhonePage();
+    if (openSettingsLink(url)) return;
+    // Brain, a Session, the Calendar, a live answer, Friends: what a notification, an alert or a widget sends.
+    openNotificationLink(url);
+  });
+}
+startApp();
 
 /** A pairing link opened while the app runs: what it is doing, then why it failed (tap or 8 s to dismiss). */
 function LinkPairingNote() {
