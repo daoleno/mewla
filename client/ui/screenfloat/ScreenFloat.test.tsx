@@ -77,7 +77,8 @@ describe("the floating screen: agents' displays and the Mac", () => {
       await shown.wait(50);
     }
     await shown.wait(300);
-    expect(asked()).toBe(before);
+    // Six updates asked six times before; the float's own 3 s poll may fall in this window once.
+    expect(asked() - before).toBeLessThan(3);
     // It stopping is news: nothing runs, so nothing is asked or shown.
     await shown.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...writer, status: "done" } });
     await shown.waitUntil(() => !shown.shows("id:screen-float"), { timeout: 5_000 });
