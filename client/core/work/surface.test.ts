@@ -115,6 +115,8 @@ describe("brainWorkSurface", () => {
   test("Brain's question and a user_input wake need you; a Worker's request is Brain's (owner 2026-11-13)", () => {
     expect(brainWorkGroup(work({ status: "needs_input", progress_mode: "waiting" }))).toBe("running");
     expect(brainCurrentWorkLifecycle(work({ status: "needs_input", progress_mode: "waiting" })).label).toBe("Reviewing");
+    // Brain's review queued (Brain not on it yet) is still Brain's, never a result under Done (shot 11, isolated run).
+    expect(brainWorkGroup(work({ status: "needs_input", attention_state: "queued" }))).toBe("running");
     expect(brainWorkSurface([work({ status: "needs_input", progress_mode: "waiting", question: "Which name?" })], []).slips[0]).toMatchObject({ group: "needs", statusLabel: "Needs you" });
     expect(brainWorkGroup(work({ status: "needs_input", attention_state: "reviewing" }))).toBe("running");
     expect(brainWorkGroup(work({ status: "waiting", wake: { kind: "user_input", ref: "x" } }))).toBe("needs");

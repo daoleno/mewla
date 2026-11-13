@@ -65,10 +65,11 @@ export function brainCurrentWorkLifecycle(work: BrainCurrentWork): BrainWorkLife
   // Brain parked the Work on you (a user_input wake).
   if (work.wake?.kind === "user_input") return lifecyclePresentation("needs_you");
   if (work.attention_state === "reviewing") return lifecyclePresentation("reviewing");
-  if (work.attention_state === "queued" || work.attention_state === "reserved" || work.progress_mode === "ready") return lifecyclePresentation("ready");
-  // A Worker's request (the daemon's needs_input) is Brain's to resolve: it reaches you only as Brain's
-  // question (`work.question`, below), never by itself (owner 2026-11-13, shot 11).
+  // A Worker's request (the daemon's needs_input) is Brain's to resolve, whether Brain's review is queued or
+  // under way: it reaches you only as Brain's question (`work.question`), never by itself, and it is not a
+  // result that came back (owner 2026-11-13, shot 11).
   if (work.status === "needs_input") return lifecyclePresentation("reviewing");
+  if (work.attention_state === "queued" || work.attention_state === "reserved" || work.progress_mode === "ready") return lifecyclePresentation("ready");
   if (work.status === "waiting" || work.progress_mode === "waiting") return lifecyclePresentation("waiting");
   return lifecyclePresentation("working");
 }
