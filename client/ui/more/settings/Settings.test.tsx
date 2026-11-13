@@ -54,6 +54,30 @@ describe("Settings", () => {
     await app.waitFor("text:@mewla_bot");
     const texts = app.texts();
     for (const word of ["Telegram", "Model Providers", "Outside agents", "Friends", "Auto", "Light", "Dark", "Open-source Licenses"]) expect(texts).toContain(word);
+    // A connected bot shows its state with a dot (SPEC §10.4), not a Connect button.
+    expect(app.shows("id:settings-telegram-state")).toBe(true);
+    expect(app.shows("id:settings-telegram-state-dot")).toBe(true);
+    expect(app.shows("id:settings-telegram-connect")).toBe(false);
+  });
+
+  test("Telegram with no bot set up offers Connect, which opens its page", async () => {
+    const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "disabled", enabled: false, binding_pending: false } } : null), {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:settings-telegram-connect");
+    expect(app.shows("id:settings-telegram-state")).toBe(false);
+    await app.press("id:settings-telegram-connect");
+    await app.waitFor("id:telegram");
+  });
+
+  test("a disconnected bot reads as off: its word, no dot", async () => {
+    const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "disabled", enabled: false, bot_username: "mewla_bot", owner_hint: "@me", binding_pending: false } } : null), {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Disconnected");
+    expect(app.shows("id:settings-telegram-state-dot")).toBe(false);
   });
 
   test("the appearance chosen is kept in the Expo app's key", async () => {

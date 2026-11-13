@@ -1,0 +1,110 @@
+import type { ImageAsset, JSX } from "nsh";
+import { Canvas, Image, Path2D, Text, View, colorScheme } from "nsh";
+import type { BrandMark, RowLeading, StateTone, TileHue } from "../../core/more/colour";
+import { color, type ColorName } from "./colors";
+import { Icon, type IconName } from "./Icon";
+import { MARK_PATHS } from "./marks";
+
+/**
+ * A row's leading icon behind the first level (soft-final SPEC §10.4 "Row tiles"), one of three things and never
+ * a bare grey outline: a named product's real mark or an agent's logo (28 in a 30 slot, no tile), a thing's own
+ * art, or a generic setting's glyph on its group's tile (30 × 30, radius 9, the glyph 18 in the hue on its wash).
+ * The first level and its family (Home, the tray, a Session, Work detail, All Sessions, their sheets and menus)
+ * never use it. The kit imports no pictures (a test harness with its own nsh.json could not bundle them), so a
+ * thing's art comes in as its asset, and an agent's logo as the page's `AgentIcon` (`logo`), sized here.
+ */
+export type Lead = RowLeading<IconName> | { kind: "art"; src: ImageAsset } | { kind: "logo"; node: JSX.Element };
+
+/** The slot a lead takes in a row; the row's divider starts after it (§10.4: inset 60). */
+export const LEAD_SLOT = 30;
+
+const HUES: Record<TileHue, { glyph: ColorName; wash: ColorName }> = {
+  blue: { glyph: "tileBlue", wash: "tileBlueWash" },
+  violet: { glyph: "tileViolet", wash: "tileVioletWash" },
+  teal: { glyph: "tileTeal", wash: "tileTealWash" },
+  pink: { glyph: "tilePink", wash: "tilePinkWash" },
+  graphite: { glyph: "tileGraphite", wash: "tileGraphiteWash" },
+};
+
+/** A generic glyph on a tile of `hue`. */
+export function tile(hue: TileHue, glyph: IconName): Lead {
+  return { kind: "tile", hue, glyph };
+}
+
+export function RowTile(props: { lead: Lead; testID?: string }) {
+  const lead = () => props.lead;
+  return (
+    <View testID={props.testID} class="items-center justify-center" style={{ width: LEAD_SLOT, height: LEAD_SLOT }}>
+      {(() => {
+        const l = lead();
+        if (l.kind === "tile") {
+          return (
+            <View class="items-center justify-center" style={{ width: LEAD_SLOT, height: LEAD_SLOT, borderRadius: 9, backgroundColor: color(HUES[l.hue].wash) }}>
+              <Icon name={l.glyph} size={18} tone={HUES[l.hue].glyph} />
+            </View>
+          );
+        }
+        if (l.kind === "mark") return <MarkView mark={l.mark} size={28} />;
+        if (l.kind === "logo") return l.node;
+        return <Image src={l.src} style={{ width: 28, height: 28 }} />;
+      })()}
+    </View>
+  );
+}
+
+const compiled = new Map<string, Path2D>();
+function path(mark: BrandMark): Path2D {
+  let p = compiled.get(mark);
+  if (!p) {
+    p = new Path2D(MARK_PATHS[mark].d);
+    compiled.set(mark, p);
+  }
+  return p;
+}
+
+/** A named product's mark at `size`, in its real colours (ink for black marks). */
+export function MarkView(props: { mark: BrandMark; size?: number }) {
+  const size = () => props.size ?? 28;
+  const mark = props.mark;
+  return (
+    <Canvas
+      style={{ width: size(), height: size() }}
+      accessibilityElementsHidden
+      draw={(cx) => {
+        const fill = MARK_PATHS[mark].fill;
+        cx.save();
+        cx.scale(size() / 24, size() / 24);
+        // A knockout mark keeps its cut-out white in dark: a white plate under the plane (§10.4).
+        if (mark === "telegram") {
+          cx.fillStyle = color("onBlack");
+          cx.beginPath();
+          cx.arc(12, 12, 9.6, 0, Math.PI * 2);
+          cx.fill();
+        }
+        cx.fillStyle = fill === "ink" ? color("ink") : typeof fill === "string" ? fill : colorScheme() === "dark" ? color("ink") : fill.brand;
+        cx.fill(path(mark), "evenodd");
+        cx.restore();
+      }}
+    />
+  );
+}
+
+const STATE_COLOR: Record<Exclude<StateTone, "off">, { dot: ColorName; text: ColorName }> = {
+  ok: { dot: "ok", text: "soft" },
+  warn: { dot: "warning", text: "warning" },
+  error: { dot: "seal", text: "sealInk" },
+};
+
+/**
+ * A state in its fixed place (§10.4 "State"): an 8 pt dot and the words. `ok` keeps the words soft, `warn` and
+ * `error` colour them, `off` is soft words and no dot. The colour is never the only sign: the words say it.
+ */
+export function StateLine(props: { tone: StateTone; label: string; testID?: string; strong?: boolean }) {
+  const look = () => (props.tone === "off" ? null : STATE_COLOR[props.tone]);
+  return (
+    <View testID={props.testID} class="shrink flex-row items-center gap-1.5" accessible accessibilityLabel={props.label}>
+      {look() ? <View testID={props.testID ? `${props.testID}-dot` : undefined} class="size-2 rounded-full" style={{ backgroundColor: color(look()!.dot) }} /> : null}
+      <Text class={`shrink text-sub line-clamp-1 ${props.strong ? "font-semibold" : ""}`} style={{ color: color(look()?.text ?? "soft") }}>{props.label}</Text>
+    </View>
+  );
+}

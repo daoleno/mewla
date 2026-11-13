@@ -13,8 +13,8 @@ import {
   type TelegramAction,
 } from "../../../core/settings/telegram";
 import { connected, daemon } from "../daemon";
-import { color } from "../../kit/colors";
 import { Icon } from "../../kit/Icon";
+import { MarkView, StateLine } from "../../kit/RowTile";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner } from "../../kit/kit";
 import { loadTelegram, setTelegram, telegram } from "./telegramState";
 
@@ -136,12 +136,12 @@ export function Telegram() {
         ) : (
           <View>
             <View class="mt-4 flex-row items-center gap-3 px-1">
-              <Icon name="paper-plane" size={28} tone="ink" />
+              <MarkView mark="telegram" size={40} />
               <View class="flex-1">
                 <Text class="text-xl font-semibold" role="header">{status()?.bot_username ? `@${status()!.bot_username}` : "Telegram"}</Text>
                 <View class="flex-row items-center gap-1.5">
                   {telegram().loading || busy() ? <Spinner size={12} /> : null}
-                  <Text testID="telegram-state" class="text-sm" style={{ color: color(telegramLabelTone(label())) }}>{label()}</Text>
+                  <StateLine testID="telegram-state" tone={telegramLabelTone(label())} label={label()} />
                 </View>
                 {status()?.owner_hint ? <Text class="text-xs text-muted-foreground">{status()!.owner_hint}</Text> : null}
               </View>
