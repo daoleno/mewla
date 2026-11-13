@@ -65,6 +65,8 @@ export type BrainWorkDetail = {
   work_id: string;
   revision: number;
   title: string;
+  /** The Work's brief, whole (only the detail carries it); daemons before it omit it. */
+  objective?: string;
   status: BrainWorkStatus;
   created_at: string;
   updated_at: string;

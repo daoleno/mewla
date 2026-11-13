@@ -158,6 +158,31 @@ describe("Brain's Work", () => {
     expect(app.texts()).not.toContain("This Work is no longer open");
   }, 20_000);
 
+  test("Work detail shows the Work's brief whole under the top block: an open Work asks the computer for it once", async () => {
+    const at = now();
+    const objective = "Ship the beta: fix the checkout flake, refresh the docs screenshots, and tag 0.4.0 once CI is green.";
+    const app = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work: {
+      work_id: "w-run", revision: 3, title: "ship the beta", objective, status: "running", created_at: at, updated_at: at, worker_sessions: [],
+    } } } });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-brief");
+    expect(app.texts()).toContain(objective);
+    expect(framesOf(app.host.posts(), "brain_work_detail")).toHaveLength(1);
+  }, 20_000);
+
+  test("a closed Work's page shows its brief too; a computer that sends none shows no brief", async () => {
+    const at = now();
+    const work = { work_id: "w-old", revision: 9, title: "rename-the-app", status: "done", created_at: at, updated_at: at, worker_sessions: [] };
+    const app = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work: { ...work, objective: "Rename the app to Mewla everywhere." } } } });
+    await openWork(app, "w-old");
+    await app.waitFor("id:work-brief");
+    expect(app.texts()).toContain("Rename the app to Mewla everywhere.");
+    const older = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work } } });
+    await openWork(older, "w-old");
+    await older.waitFor("text:rename-the-app");
+    expect(older.shows("id:work-brief")).toBe(false);
+  }, 30_000);
+
   test("Work detail's top block: the eyebrow names the project on one line, then the title and the state line", async () => {
     const app = await workApp();
     await openWork(app, "w-run");
