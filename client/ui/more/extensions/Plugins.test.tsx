@@ -101,7 +101,8 @@ describe("Extensions", () => {
     expect(app.shows("id:service-notion-state")).toBe(false);
     expect(app.shows("id:connect-github")).toBe(true);
     expect(app.texts()).toContain("Reconnect");
-    expect(app.texts()).toContain("Sign-in expired · octocat");
+    // The section says what is wrong: its one account isn't named again, nor "Sign-in expired".
+    expect(app.texts().some((text) => text.includes("Sign-in expired"))).toBe(false);
     // Its page: the mark on the hero and the state with its dot.
     await app.press("id:service-notion");
     await app.waitFor("id:service-hero-lead");
@@ -441,5 +442,60 @@ describe("a sign-in card says what to do in one line", () => {
     // × stops the sign-in.
     await app.press("id:close-sign-in");
     await app.waitUntil(() => c.asked.some((r) => r.action === "connect_cancel"));
+  });
+});
+
+describe("Needs fixing reads at a glance (owner 11-14)", () => {
+  const services = [
+    { id: "github", name: "GitHub", available: true, setup_url: "", description: "Repositories" },
+    { id: "aws", name: "AWS", available: true, setup_url: "", description: "Cloud" },
+    { id: "notion", name: "Notion", available: true, setup_url: "", description: "Pages" },
+  ];
+  const account = (id: string, integration: string, name: string, status: string, extra: Record<string, unknown> = {}) =>
+    ({ id, integration, name, identity: name, enabled: true, status, history: [], access: { read: "allowed", write: "off" }, ...extra });
+  const accounts = [
+    account("g1", "github", "daoleno", "authorization_required"),
+    account("g2", "github", "paul-freeride", "connected"),
+    ...["ace-mgmt", "old-1", "old-2"].map((name) => account(`a-${name}`, "aws", name, "authorization_required", { profile: name, profile_status: "expired", auth_method: "cli" })),
+    account("a-prod", "aws", "freeride-prod", "connected", { profile: "freeride-prod", profile_status: "valid", auth_method: "cli" }),
+  ];
+
+  test("each row: the name, which account only when it tells it apart, one enabled button and no chevron", async () => {
+    const waiting = { id: "n1", integration: "notion", status: "waiting", authorization_url: "https://notion.example/authorize?state=s", expires: expires() };
+    const c = computer({ name: "extensions" }, (request) => {
+      if (request.action === "list") return { catalog: services, accounts };
+      if (request.action === "connect_status") return { flow: waiting };
+      if (request.action === "connect_cancel") return { flow: { ...waiting, status: "cancelled" } };
+      return { flow: { id: "g-flow", integration: "github", status: "waiting", user_code: "ABCD-1234", authorization_url: "https://github.com/login/device", expires: expires() } };
+    });
+    // A Notion sign-in left waiting: it used to grey out every Reconnect.
+    c.secure.set("mewla.plugin.authorization.s1", JSON.stringify({ serverId: "s1", flow: waiting }));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Needs fixing");
+    const texts = app.texts();
+    expect(texts.some((text) => text.includes("Sign-in expired"))).toBe(false);
+    // GitHub: one of two needs it, so it is named; the working one is not.
+    expect(texts).toContain("daoleno");
+    expect(texts).not.toContain("paul-freeride");
+    expect(texts).not.toContain("daoleno · paul-freeride");
+    // AWS: three of four.
+    expect(texts).toContain("3 of 4");
+    expect(app.enabled("id:connect-github")).toBe(true);
+    expect(app.enabled("id:connect-aws")).toBe(true);
+    expect(texts).toContain("Reconnect");
+    expect(texts).toContain("Fix");
+    // GitHub's Reconnect starts its sign-in (ending the waiting one); AWS's Fix opens its page, each account there.
+    await app.press("id:connect-github");
+    await app.waitUntil(() => c.asked.some((r) => r.action === "connect_start"));
+    expect((c.asked.find((r) => r.action === "connect_start")!.input as { integration: string }).integration).toBe("github");
+  });
+
+  test("Fix on a service with several accounts to sign in again opens its page", async () => {
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog: services, accounts } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:connect-aws");
+    await app.press("id:connect-aws");
+    await app.waitFor("id:service-page");
+    expect(c.asked.some((r) => r.action === "connect_start")).toBe(false);
   });
 });

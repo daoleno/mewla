@@ -1,5 +1,6 @@
 import { computed, effect, signal, Text, untracked, View } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
+import { accountRow } from "../../../core/extensions/accountListModel";
 import { cloudProfilesSummary } from "../../../core/extensions/cloudProfilesModel";
 import { isConnecting, pluginCatalogRows, toolUpdates, type ConnectionTone, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
 import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
@@ -11,6 +12,7 @@ import { stateTextColor } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
 import { AgentPage } from "./agents/AgentPage";
 import { AgentToolsSection } from "./agents/AgentToolsSection";
+import { FixButton } from "./Action";
 import { ConnectCard } from "./ConnectCard";
 import { catalogLoading, catalogProblem, deferredFor, flowState, plugins } from "./plugins";
 import type { ExtensionsPage } from "./routes";
@@ -166,17 +168,35 @@ function accountNames(row: ServiceRow): string {
 /** The row's second line: whose accounts are connected (never the service's own name again), or what needs fixing. */
 function rowSubtitle(row: ServiceRow): string {
   if (row.state.kind === "unavailable" || row.state.kind === "connect") return "";
+  if (row.state.kind === "reconnect") return needsFixingWho(row);
   const names = accountNames(row);
-  const who = names === row.plugin.name ? "" : names;
-  // What needs fixing says so, in the warn colour (SPEC §10.4), with whose sign-in it is.
-  if (row.state.kind === "reconnect") return ["Sign-in expired", who].filter(Boolean).join(" · ");
-  return who;
+  return names === row.plugin.name ? "" : names;
+}
+
+/** The accounts of a row under Needs fixing that need signing in again. */
+function expiredAccounts(row: ServiceRow) {
+  return row.accounts.filter((account) => account.enabled && account.status === "authorization_required");
+}
+
+/**
+ * Under Needs fixing the section says what is wrong (owner 11-14: "Sign-in expired" on every row under it, and
+ * every account named, the working ones too). A row names only which account, when that tells it apart: the one
+ * of several, or how many of them. One account, or all of them: nothing.
+ */
+function needsFixingWho(row: ServiceRow): string {
+  const expired = expiredAccounts(row);
+  if (row.accounts.length <= 1 || expired.length === row.accounts.length) return "";
+  if (expired.length === 1) return accountRow(expired[0]!).name;
+  return `${expired.length} of ${row.accounts.length}`;
 }
 
 /** What a screen reader says for the row: the service and its state, which the row's parts say apart. */
 function rowLabel(row: ServiceRow): string {
   const state = row.state;
-  if (state.kind === "reconnect") return `${row.plugin.name}, ${state.account.name} needs sign-in again`;
+  if (state.kind === "reconnect") {
+    const expired = expiredAccounts(row);
+    return expired.length > 1 ? `${row.plugin.name}, ${expired.length} accounts need sign-in again` : `${row.plugin.name}, ${state.account.name} needs sign-in again`;
+  }
   if (state.kind === "status") return `${row.plugin.name}, ${accountNames(row)}, ${state.label}`;
   if (state.kind === "unavailable") return `${row.plugin.name}, ${state.label}. ${row.plugin.unavailable_reason ?? ""}`.trim();
   return row.plugin.name;
@@ -193,15 +213,19 @@ function ServiceRowView(props: { row: ServiceRow; nav: PageNav; custom?: boolean
       ?.connect(id)
       .then((outcome) => outcome === "form" && open());
   };
+  // Several accounts to sign in again: their page, where each has its own Sign in.
+  const several = () => kind() === "reconnect" && expiredAccounts(row()).length > 1;
   const press = () => {
     const state = row().state;
-    if (state.kind === "reconnect") void plugins()?.recover(state.account, "reconnect");
+    if (state.kind === "reconnect" && several()) open();
+    else if (state.kind === "reconnect") void plugins()?.recover(state.account, "reconnect");
     else connect();
   };
   const connecting = () => connectingService() === id;
-  // While one sign-in starts or waits, the other services wait for it.
-  const blocked = () => flowState().running !== null || (connectingService() !== null && !connecting());
-  const label = () => (kind() === "reconnect" ? "Reconnect" : props.custom ? "Add" : "Connect");
+  // A button waits only while the computer answers a request. A sign-in left waiting for another service doesn't
+  // hold it (owner 11-14: every Reconnect read as disabled): starting this one ends that one.
+  const blocked = () => flowState().running !== null;
+  const label = () => (kind() === "reconnect" ? (several() ? "Fix" : "Reconnect") : props.custom ? "Add" : "Connect");
   // Under Connected the section says it: a row adds a word only when it is something else (Off, Read only, a warning).
   const stateLabel = () => {
     const state = row().state;
@@ -219,16 +243,20 @@ function ServiceRowView(props: { row: ServiceRow; nav: PageNav; custom?: boolean
           // Grouped by state, the section label says it: no dot, only a word that needs a look is coloured (SPEC §10.4).
           <If when={stateLabel()}><Text testID={`service-${id}-state`} class="text-sub line-clamp-1" style={{ color: color(stateTextColor(tone())) }}>{stateLabel()}</Text></If>
         }>
-          <RowButton
-            testID={`connect-${id}`}
-            label={label()}
-            accessibilityLabel={(() => {
-              const state = row().state;
-              return state.kind === "reconnect" ? `Reconnect ${state.account.name}` : `${label()} ${row().plugin.name}`;
-            })()}
-            disabled={blocked()}
-            onPress={press}
-          />
+          <If when={kind() === "reconnect"} else={
+            <RowButton testID={`connect-${id}`} label={label()} accessibilityLabel={`${label()} ${row().plugin.name}`} disabled={blocked()} onPress={press} />
+          }>
+            <FixButton
+              testID={`connect-${id}`}
+              label={label()}
+              accessibilityLabel={(() => {
+                const state = row().state;
+                return several() ? `Fix ${row().plugin.name}: ${expiredAccounts(row()).length} accounts to sign in again` : state.kind === "reconnect" ? `Reconnect ${state.account.name}` : label();
+              })()}
+              disabled={blocked()}
+              onPress={press}
+            />
+          </If>
         </If>
       }>
         <Spinner size={16} />
@@ -244,9 +272,9 @@ function ServiceRowView(props: { row: ServiceRow; nav: PageNav; custom?: boolean
       lead={serviceRowLead(id)}
       title={row().plugin.name}
       subtitle={rowSubtitle(row()) || undefined}
-      subtitleTone={kind() === "reconnect" ? "warn" : undefined}
       trailing={trailing}
-      chevron={available()}
+      // A row under Needs fixing has its button; one control, no chevron beside it.
+      chevron={available() && kind() !== "reconnect"}
       disabled={!available()}
       accessibilityLabel={rowLabel(row())}
       accessibilityHint={available() ? "Opens the service" : undefined}
