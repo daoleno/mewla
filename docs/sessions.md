@@ -32,6 +32,13 @@ what to run:
 **Advanced** lets you set the working directory, any command (for example
 `claude --model opus`) and a window title.
 
+For an agent, **Task** ("What should it do?") is the Session's first message.
+The computer holds it until the agent is ready; meanwhile it shows in the
+Session as sending, and anything else you send waits behind it and goes after
+it, in order. If it could not be delivered (or the connection dropped while it
+was held), it leaves the chat and comes back as the Session's draft. Mewla
+never sends it again by itself.
+
 The agent must already be installed and signed in on the computer; Mewla never
 signs in for you.
 

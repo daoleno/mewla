@@ -194,6 +194,11 @@ export class Chat {
     }
     const rowId = this.rowFor(entry.id);
     if (!rowId) return;
+    if (event.kind === "withdrawn") {
+      this.rowByRequest.delete(entry.id);
+      this.dispatch({ type: "withdraw_pending_user_message", id: rowId });
+      return;
+    }
     if (event.kind === "accepted") {
       this.dispatch({ type: "settle_pending_user_message", id: rowId, settlement: { kind: "acknowledge", requestId: entry.id } });
     } else if (event.kind === "uncertain") {
