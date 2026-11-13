@@ -1,4 +1,6 @@
 import { cleanup, Clipboard, colorScheme, computed, effect, ErrorBoundary, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
+import { delayed } from "../kit/wait";
+import { motion } from "../../core/motion/tokens";
 import { currentTransport } from "../session";
 import type { CapsuleReading } from "../shell/Capsule";
 import { noteScroll } from "../pets/hold";
@@ -108,19 +110,22 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
   const folded = () => folds() && !open();
   const failed = () => it().pending && it().pendingLifecycle === "failed";
   const waiting = () => it().pending && !failed();
+  // SPEC §16.4 Sending: the bubble at full strength at once; a clock beside it only once it is slow (3 s);
+  // at the outbox's limit it dims and says "Not sent" with Try again.
+  const slow = delayed(() => Boolean(waiting()), motion.wait.slow);
   // Sent pictures show as pictures above the bubble (SPEC §1.7); other files stay rows in it.
   const pictures = () => sentPictures(it().attachments);
   const files = () => it().attachments.filter((file) => !pictures().includes(file));
   const tap = () => !it().pending && props.handlers.onUserMessage?.(it());
   return (
     <View class="max-w-[84%] items-end gap-1 self-end">
-      <If when={pictures().length}><View testID="sent-pictures" class={`flex-row flex-wrap justify-end gap-2 ${waiting() ? "opacity-55" : ""}`}>
+      <If when={pictures().length}><View testID="sent-pictures" class={`flex-row flex-wrap justify-end gap-2 ${failed() ? "opacity-55" : ""}`}>
           {pictures().map((file) => (
             <ChatImage frame="sent" src={file.path} alt={file.name} load={props.handlers.loadImage} onOpen={() => props.handlers.openPicture?.(pictureKey(it().id, file.path))} />
           ))}
         </View></If>
       <If when={it().body || files().length}><View testID="user-message" selectable onPress={tap}
-          class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "border border-foreground" : ""} ${waiting() ? "opacity-55" : ""}`}>
+          class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "opacity-55" : ""}`}>
           <If when={it().body}><View testID={folded() ? "user-message-folded" : "user-message-body"} class="overflow-hidden" style={{ maxHeight: folded() ? FOLDED_TEXT_HEIGHT : undefined }}>
               <Text testID="user-message-text" onPress={tap} onLayout={({ bounds }) => textHeight.set(bounds.size.height)}
                 class={`shrink-0 text-message ${SELECTION}`}>{it().body}</Text>
@@ -137,10 +142,11 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
             </View>
           ))}
         </View></If>
-      <If when={waiting()}><Icon name="time" size={12} /></If>
+      {/* Beside the bubble, so it takes no room in the thread when it comes. */}
+      <If when={slow()}><View testID="message-slow" class="absolute -left-5 bottom-1"><Icon name="time" size={12} /></View></If>
       <If when={failed()}><View class="flex-row items-center gap-3">
-          <Text class="text-sub font-semibold">Not sent</Text>
-          <Button testID="retry" onPress={() => it().onRetryPending?.()} class="min-h-[44px] justify-center"><Text class="text-sub font-semibold">Send again</Text></Button>
+          <Text class="text-sub font-semibold">Not sent ·</Text>
+          <Button testID="retry" onPress={() => it().onRetryPending?.()} class="min-h-[44px] justify-center"><Text class="text-sub font-semibold">Try again</Text></Button>
           <Button testID="discard" onPress={() => it().onDiscardPending?.()} class="min-h-[44px] justify-center"><Text class="text-sub text-muted-foreground">Delete</Text></Button>
         </View></If>
     </View>
