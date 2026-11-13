@@ -8,7 +8,8 @@
 export const WIDE_MIN_WIDTH = 1024;
 /**
  * A window on its side has two panes from this usable width already: an open foldable held like a book (the iPhone
- * Duo's inner screen on its side, 867 pt beside its 84 pt side bar; a Galaxy Fold's, about 820 dp), so the tray
+ * Duo's inner screen on its side, 867 pt beside its 84 pt side bar; the Android SDK's 7.6" Fold-in, 841 x 674 dp,
+ * less a side cutout: 840, Material's "expanded", would miss it), so the tray
  * stands beside a page at least 440 wide. Upright or short it stays one stack (Apple's split view tiles only
  * landscape; a phone held sideways is under WIDE_MIN_HEIGHT).
  */
@@ -23,6 +24,19 @@ export const WIDE_MIN_HEIGHT = 480;
 export function isWide(window: { width: number; height: number }): boolean {
   if (window.width >= WIDE_MIN_WIDTH) return true;
   return window.width >= WIDE_LANDSCAPE_MIN_WIDTH && window.width > window.height && window.height >= WIDE_MIN_HEIGHT;
+}
+
+/**
+ * The gate as the window changes: a window that was wide stays wide while only its height shrinks at the same width
+ * and it stays wider than tall. Android 14 and older resize the app's window over the software keyboard (Mewla's
+ * `adjustResize`; 15 and later draw edge to edge and report the keyboard apart), so a Fold on its side, 674 high,
+ * would fall under WIDE_MIN_HEIGHT on each tap into a field and lose its pane until the keyboard went. A phone turned
+ * on its side starts short, so it never becomes wide this way; a turn, a fold or a resize changes the width and
+ * decides afresh.
+ */
+export function nextWide(previous: { wide: boolean; width: number } | null, window: { width: number; height: number }): boolean {
+  if (isWide(window)) return true;
+  return Boolean(previous?.wide) && previous!.width === window.width && window.width > window.height;
 }
 
 /** A place you can go to by name: a `G` key, the palette's Go to, a URL. */

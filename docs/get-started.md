@@ -94,7 +94,7 @@ machine with secrets, read [Permission bypass risks](executors.md#permission-byp
 
 ## Find your way
 
-| On a phone | From 1024 pt wide, or an open foldable on its side (a browser, a tablet in landscape, an iPhone Duo or Galaxy Fold held open) |
+| On a phone | From 1024 pt wide, or an open foldable on its side (a browser, a tablet in landscape, an iPhone Duo or an Android foldable held open) |
 | --- | --- |
 | ☰ opens the menu, or swipe right anywhere on Brain; swipe or tap **Brain · Sessions** in the top bar; ⋮ holds the current page's actions | The tray stays open as a left pane beside Brain: what needs you, what runs, today and every Session. **Search or run** (Ctrl K, ⌘ K on a Mac) opens any place, Session or Work |
 
