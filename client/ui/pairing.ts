@@ -1,6 +1,6 @@
 import { Clipboard, host, platform, signal } from "nsh";
 import { PairLatch } from "../core/onboarding";
-import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
+import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, clipboardRead, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
 import { haptic } from "./shell/haptics";
@@ -87,17 +87,20 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
 /** "Paste a pairing link": the clipboard's text, or a word about what to copy. */
 export async function pasteFromClipboard(): Promise<void> {
   const read = await readClipboard();
-  if ("refused" in read) return pairingIssue.set(pasteRefused(read.refused));
-  if (!read.text) return pairingIssue.set(NOTHING_TO_PASTE);
+  if (read.kind === "refused") return pairingIssue.set(pasteRefused(read.error));
+  if (read.kind === "empty") return pairingIssue.set(NOTHING_TO_PASTE);
   await pairFromText(read.text, "paste");
 }
 
-/** The clipboard's text, or why the system would not give it (a refusal is not an empty clipboard). */
-async function readClipboard(): Promise<{ text: string } | { refused: unknown }> {
+/** The clipboard's text, or that the system refused it, or that it is empty (core/pairFlow.ts `clipboardRead`). */
+async function readClipboard(): Promise<ReturnType<typeof clipboardRead>> {
   try {
-    return { text: (await Clipboard.readText()).trim() };
+    const text = await Clipboard.readText();
+    // Asked only when no text came: `hasText` shows no paste prompt.
+    const has = text === "" ? await Clipboard.hasText().catch(() => false) : true;
+    return clipboardRead({ text, has });
   } catch (error) {
-    return { refused: error };
+    return clipboardRead({ error });
   }
 }
 
@@ -105,8 +108,8 @@ async function readClipboard(): Promise<{ text: string } | { refused: unknown }>
 export async function pairFromField(text: string): Promise<void> {
   if (text.trim()) return pairFromText(text, "paste");
   const read = await readClipboard();
-  if ("refused" in read) return pairingIssue.set(pasteRefused(read.refused));
-  if (!read.text) return pairingIssue.set(LINK_REQUIRED);
+  if (read.kind === "refused") return pairingIssue.set(pasteRefused(read.error));
+  if (read.kind === "empty") return pairingIssue.set(LINK_REQUIRED);
   await pairFromText(read.text, "paste");
 }
 
