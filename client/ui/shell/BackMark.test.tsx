@@ -40,7 +40,8 @@ describe("a Session's capsule on Android", () => {
     await app.waitFor("id:composer");
     await app.host.send("links.open", { url: "mewla://sessions/s-proj" });
     await app.waitFor("id:session-status", { timeout: 10_000 });
-    expect(app.shows("id:capsule")).toBe(true);
+    // Its terminal (no chat yet) has the capsule collapsed: Back, the mark and the name.
+    expect(app.shows("id:capsule-name")).toBe(true);
     expect(app.shows("id:page-back")).toBe(true);
     await app.wait(500);
     await app.press("id:page-back");

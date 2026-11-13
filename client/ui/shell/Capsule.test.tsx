@@ -24,24 +24,25 @@ async function sessionChat() {
   return app;
 }
 
-describe("a Session's capsule header (owner 11-13)", () => {
-  test("collapses while the person reads, without drawing a row again; a tap or the newest end brings it back", async () => {
+describe("a Session's capsule header (SPEC §11)", () => {
+  test("collapses while the person reads, without drawing a row again; a tap on its name or the newest end brings it back", async () => {
     const app = await sessionChat();
     expect(app.shows("id:capsule")).toBe(true);
-    expect(app.shows("id:session-status")).toBe(true);
+    expect(app.shows("id:session-menu")).toBe(true);
     const once = builds(app);
     await app.scroll("id:session-chat", -300);
-    await app.waitFor("id:capsule-compact");
-    expect(app.shows("id:capsule")).toBe(false);
-    // Collapsed, its controls take no presses: the view stays the chat.
-    await app.press("id:session-mode");
-    expect(app.shows("id:session-chat")).toBe(true);
-    // A tap on the collapsed capsule brings it back.
-    await app.press("id:capsule-compact");
+    await app.waitFor("id:capsule-collapsed");
+    // Collapsed, it keeps Back, the mark and the name: the view button and ⋯ are gone.
+    expect(app.shows("id:page-back")).toBe(true);
+    expect(app.shows("id:session-status")).toBe(true);
+    expect(app.shows("id:session-mode")).toBe(false);
+    expect(app.shows("id:session-menu")).toBe(false);
+    // A tap on the name brings it back.
+    await app.press("id:capsule-name");
     await app.waitFor("id:capsule");
     // Collapsed again, then back at the newest end: it expands.
     await app.scroll("id:session-chat", -300);
-    await app.waitFor("id:capsule-compact");
+    await app.waitFor("id:capsule-collapsed");
     await app.scroll("id:session-chat", 800);
     await app.waitFor("id:capsule");
     // The thread was never drawn again for any of it.
@@ -51,23 +52,42 @@ describe("a Session's capsule header (owner 11-13)", () => {
   test("a message arriving while the person reads does not bring it back; something that needs them does", async () => {
     const app = await sessionChat();
     await app.scroll("id:session-chat", -600);
-    await app.waitFor("id:capsule-compact");
+    await app.waitFor("id:capsule-collapsed");
     await app.host.send("app.conversation", { worker: "w1", upserts: [{ id: "n1", seq: 20, kind: "assistant_message", timestamp: at(20), body: "One more thing." }] });
     await app.wait(400);
-    expect(app.shows("id:capsule-compact")).toBe(true);
-    // The Session stops on a prompt: it needs the person.
+    expect(app.shows("id:capsule-collapsed")).toBe(true);
+    // The Session stops on a prompt only its terminal can answer: it goes there, where the capsule is collapsed,
+    // and its mark has the red dot.
     await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...session, status: "blocked" } });
-    await app.waitFor("id:capsule");
+    await app.waitFor("id:capsule-needs-you");
   }, 30_000);
 
-  test("its terminal starts below it, and the capsule there never collapses", async () => {
+  test("a new request in the chat brings it back", async () => {
     const app = await sessionChat();
-    await app.scroll("id:session-chat", -300);
-    await app.waitFor("id:capsule-compact");
-    await app.press("id:capsule-compact");
+    await app.scroll("id:session-chat", -600);
+    await app.waitFor("id:capsule-collapsed");
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...session, status: "blocked", process_id: 42, started_at: 1_700_000_000_000, prompt: { id: "p-1", kind: "permission", provider: "claude", title: "Run this command?", request: "rm -rf build", options: [{ number: 1, label: "Yes", selected: true }, { number: 2, label: "No" }] } } });
+    await app.waitFor("id:capsule");
+    expect(app.shows("id:capsule-needs-you")).toBe(true);
+  }, 30_000);
+
+  test("its terminal has it collapsed: a tap on the name brings it over the top rows, a touch in the terminal folds it", async () => {
+    const app = await sessionChat();
     await app.press("id:session-mode");
     await app.waitUntil(() => !app.shows("id:session-chat"));
-    expect(app.shows("id:capsule")).toBe(true);
+    await app.waitFor("id:capsule-collapsed");
+    await app.press("id:capsule-name");
+    await app.waitFor("id:capsule");
+    // A touch in the terminal (its key bar here) folds it again. (It is seen on the way in, not taken; the fake
+    // computer attaches no terminal, so the key's own frame is not checked here.)
+    await app.press("text:esc");
+    await app.waitFor("id:capsule-collapsed");
+    await app.press("id:capsule-name");
+    await app.waitFor("id:capsule");
     expect(app.shows("label:Show chat")).toBe(true);
+    // Back to the chat: it opens expanded.
+    await app.press("id:session-mode");
+    await app.waitFor("id:session-chat");
+    expect(app.shows("id:capsule")).toBe(true);
   }, 30_000);
 });
