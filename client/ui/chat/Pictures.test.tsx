@@ -95,6 +95,43 @@ describe("the viewer while the thread moves", () => {
   }, 20_000);
 });
 
+describe("a picture whose read the link interrupted", () => {
+  test("waits for the link and shows by itself: no refresh glyph, no tap", async () => {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": thread }, replies: { codex_asset: { type: "codex_asset", data_url: PIXEL } }, assetsLost: 1 }) });
+    await app.waitFor("id:sent-pictures", { timeout: 10_000 });
+    await app.waitFor("id:sent-pictures >> id:chat-image-open", { timeout: 10_000 });
+    expect(app.count("id:chat-image-retry")).toBe(0);
+  }, 20_000);
+});
+
+describe("a picture whose read did not answer", () => {
+  test("shows a placeholder, not the refresh glyph, and reads again by itself", async () => {
+    let asked = 0;
+    const app = await open("./testing/Picture.tsx", { platform: "android", host: { handlers: { "app.picture": () => {
+      if (++asked === 1) throw new Error("codex_asset timed out");
+      return PIXEL;
+    } } } });
+    await app.waitFor("id:chat-image-loading");
+    expect(app.count("id:chat-image-retry")).toBe(0);
+    await app.waitFor("id:chat-image-open", { timeout: 5_000 });
+    expect(asked).toBe(2);
+    expect(app.count("id:chat-image-retry")).toBe(0);
+  });
+
+  test("shows the refresh glyph only after its reads again went unanswered (1, 2, 4, 8 s)", async () => {
+    let asked = 0;
+    const app = await open("./testing/Picture.tsx", { platform: "android", host: { handlers: { "app.picture": () => {
+      asked++;
+      throw new Error("codex_asset timed out");
+    } } } });
+    await app.wait(13_000);
+    expect(app.count("id:chat-image-retry")).toBe(0);
+    expect(app.shows("id:chat-image-slow-on")).toBe(true);
+    await app.waitFor("id:chat-image-retry", { timeout: 5_000 });
+    expect(asked).toBe(5);
+  }, 25_000);
+});
+
 describe("a picture that failed to load", () => {
   test("keeps its frame with a refresh glyph, and a tap loads it again", async () => {
     let asked = 0;
