@@ -151,7 +151,7 @@ func daemonAgentUse(stateDir string, local agentuse.Status) agentuse.Status {
 	return local
 }
 
-// printPhone says whether Phone use is on, which only the person turns on (Settings → Labs).
+// printPhone says whether Phone use is on, which only the person turns on (Settings → Agents → Phone use).
 func printPhone(w io.Writer, status agentuse.Status) {
 	phone := status.Phone
 	if phone == nil || !phone.Enabled {

@@ -3,7 +3,7 @@ import {
   floatPlaceholder,
   nextPhoneStep,
   phoneAgentWorking,
-  phoneLabsValue,
+  phoneRowValue,
   phoneMode,
   phoneOwner,
   phoneReady,
@@ -163,13 +163,13 @@ describe("phone setup plan", () => {
   });
 });
 
-describe("Settings → Labs → Phone use", () => {
+describe("Settings → Agents → Phone use", () => {
   test("Off, Set up, Ready or You are in control", () => {
-    expect(phoneLabsValue(null)).toBe("Off");
-    expect(phoneLabsValue({ ...ready, enabled: false })).toBe("Off");
-    expect(phoneLabsValue(ready)).toBe("Ready");
-    expect(phoneLabsValue({ ...ready, state: "person_in_control" })).toBe("You are in control");
-    expect(phoneLabsValue({ ...ready, helper: false })).toBe("Set up");
+    expect(phoneRowValue(null)).toBe("Off");
+    expect(phoneRowValue({ ...ready, enabled: false })).toBe("Off");
+    expect(phoneRowValue(ready)).toBe("Ready");
+    expect(phoneRowValue({ ...ready, state: "person_in_control" })).toBe("You are in control");
+    expect(phoneRowValue({ ...ready, helper: false })).toBe("Set up");
   });
 
   test("ready needs the pairing, the helper and the link to the computer", () => {

@@ -6,12 +6,12 @@ screen of their own, so you keep using the phone. The picture and every action
 travel over the same signed connection as everything else; nothing is opened on
 the phone's network and no account is needed.
 
-Phone use is in **Labs**: off until you turn it on. It is for Android 11 or
+Phone use is off until you turn it on. It is for Android 11 or
 later, in the APK from GitHub (the Play Store build leaves it out).
 
 ## Turn it on
 
-1. **Settings → Labs → Phone use**, switch on. The Phone page opens, and Phone is added to the menu of **Screen**.
+1. **Settings → Agents → Phone use**, switch on. The Phone page opens, and Phone is added to the menu of **Screen**.
 2. The page lists what the phone needs and checks it live: **Developer
    options**, **Wi‑Fi**, **Wireless debugging**, **Pairing** and **Helper**.
 3. Tap **Allow**. Android has you switch on Mewla's Accessibility service, once
@@ -166,7 +166,7 @@ back on when it can.
 
 ## Turn it off
 
-Switch **Phone use** off in **Settings → Labs → Phone use**. The helper stops, the notification goes,
+Switch **Phone use** off in **Settings → Agents → Phone use**. The helper stops, the notification goes,
 the Accessibility service is disabled, and agents lose the phone tools for new
 Workers. To forget the pairing, remove Mewla under **Wireless debugging → Paired
 devices** in Settings.

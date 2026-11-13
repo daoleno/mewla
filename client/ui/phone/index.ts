@@ -1,5 +1,5 @@
-// Phone use, for the pages that show it: the Phone page (Settings → Labs → Phone use, mewla://phone),
-// the floating control over every page, and what the Labs row says.
+// Phone use, for the pages that show it: the Phone page (Settings → Agents → Phone use, mewla://phone),
+// the floating control over every page, and what its Settings row says.
 export { isPhoneLink } from "../../core/phone/link";
 export { PhonePage } from "./PhonePage";
-export { phoneAvailable, phoneLabsWord, phoneStatus, startPhoneUse } from "./state";
+export { phoneAvailable, phoneStateWord, phoneStatus, startPhoneUse } from "./state";

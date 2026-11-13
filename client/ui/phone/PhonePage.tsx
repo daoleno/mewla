@@ -23,7 +23,7 @@ import {
 } from "./state";
 
 /**
- * Phone use (Settings → Labs → Phone use, mewla://phone): the switch, then the setup until it works,
+ * Phone use (Settings → Agents → Phone use, mewla://phone): the switch, then the setup until it works,
  * then the agent's own screen with Take over and Stop one tap away.
  */
 export function PhonePage() {
