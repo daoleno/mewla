@@ -14,7 +14,6 @@ import {
 import { sessionFileMediaKindForPath } from "../../../core/files/sessionFileMedia";
 import {
   brainWorkspaceEntryAccessibilityLabel,
-  brainWorkspaceEntryIconName,
   brainWorkspaceMarkdownPath,
   workspaceFolderEntries,
   workspaceFolderKey,
@@ -26,6 +25,7 @@ import { failureText } from "../../../core/more/daemon";
 import { daemon } from "../daemon";
 import { Icon } from "../../kit/Icon";
 import { DisplayTitle, EmptyState, Row, Section } from "../../kit/kit";
+import { fileLead } from "../../../core/files/fileLead";
 import { formatBytes } from "../../../core/resources/resourceTelemetry";
 import type { PageNav } from "../routes";
 import { ZoomImage } from "./FilePreview";
@@ -145,7 +145,7 @@ function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: S
       <Row
         testID={`workspace-${entry.path}`}
         title={entry.name}
-        icon={brainWorkspaceEntryIconName(entry.kind, entry.path)}
+        lead={fileLead(entry.kind, entry.path)}
         value={entry.kind === "directory" || entry.size === undefined ? undefined : formatBytes(entry.size)}
         chevron={entry.kind === "directory"}
         accessibilityLabel={brainWorkspaceEntryAccessibilityLabel(entry.kind, entry.name)}

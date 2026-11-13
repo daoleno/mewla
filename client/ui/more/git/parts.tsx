@@ -1,39 +1,31 @@
 import { Text, untracked, View, type ViewRef } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
-import { gitDiffStatusMark, gitDiffStatusWord, gitDiffTone, type GitDiffStatusTone } from "../../../core/git/gitDiffPresentation";
+import { gitDiffStatusMark, gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
-import { color, type ColorName } from "../../kit/colors";
+import { statusTileLook } from "../../../core/git/colour";
+import { color, withAlpha } from "../../kit/colors";
 import { Icon, type IconName } from "../../kit/Icon";
-import { EmptyState, Spinner, Tile } from "../../kit/kit";
+import { EmptyState, Spinner } from "../../kit/kit";
 import { gitFlash, type GitReview } from "./state";
 import { haptic } from "../../shell/haptics";
 
-/** Added and deleted keep the change colours (`add`, `del`); modified and renamed are ink. */
-export function toneColor(tone: GitDiffStatusTone): ColorName {
-  switch (tone) {
-    case "added":
-      return "add";
-    case "deleted":
-    case "conflict":
-      return "del";
-    case "renamed":
-    case "modified":
-      return "ink";
-    default:
-      return "faint";
-  }
-}
-
-/** A file's status as a 28 pt tile (SPEC §15 Code review): M, A, D or R in mono, coloured by what happened to it. */
+/**
+ * A file's status as a 28 pt tile (SPEC §15 Code review, §10.4): its mark in mono, in its colour on its wash —
+ * added on `add` at 13 %, deleted on `del` at 11 %, modified on the blue tile, renamed on the violet.
+ */
 export function StatusTile(props: { file: Pick<GitDiffFileInfo, "status" | "binary"> }) {
-  const tone = gitDiffTone(props.file);
+  const tone = () => gitDiffTone(props.file);
+  const wash = () => {
+    const w = statusTileLook(tone()).wash;
+    return typeof w === "string" ? color(w) : withAlpha(color(w.of), w.alpha);
+  };
   return (
-    <Tile size={28}>
-      <Text class="font-mono text-caption font-semibold" style={{ color: color(toneColor(tone)) }} accessibilityLabel={gitDiffStatusWord(tone)}>
-        {gitDiffStatusMark(tone)}
+    <View testID="git-status-tile" class="items-center justify-center" style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: wash() }}>
+      <Text class="font-mono text-caption font-semibold" style={{ color: color(statusTileLook(tone()).glyph) }} accessibilityLabel={gitDiffStatusWord(tone())}>
+        {gitDiffStatusMark(tone())}
       </Text>
-    </Tile>
+    </View>
   );
 }
 
@@ -102,7 +94,7 @@ export function FlashLine() {
     <View>
       {gitFlash() ? (
         <View testID="git-flash" class="mt-3 min-h-[52px] flex-row items-center gap-3 rounded-(--radius-group) bg-card px-4 py-3">
-          <Icon name={gitFlash()!.tone === "error" ? "alert-circle" : gitFlash()!.tone === "success" ? "check-circle" : "info"} size={18} tone={gitFlash()!.tone === "error" ? "failed" : gitFlash()!.tone === "success" ? "ready" : "soft"} />
+          <Icon name={gitFlash()!.tone === "error" ? "alert-circle" : gitFlash()!.tone === "success" ? "check-circle" : "info"} size={18} tone={gitFlash()!.tone === "error" ? "warning" : gitFlash()!.tone === "success" ? "ok" : "soft"} />
           <View class="min-w-0 flex-1">
             <Text class="text-body font-semibold">{gitFlash()!.title}</Text>
             {gitFlash()!.detail ? <Text class="text-sub text-muted-foreground line-clamp-3">{gitFlash()!.detail!}</Text> : null}

@@ -20,8 +20,11 @@ describe("the Calendar tab", () => {
     await app.waitFor("text:Dentist", SLOW);
     expect(app.texts()).not.toContain("Old plan");
     expect(app.texts().join(" ")).toMatch(/Scheduled · Reminder/);
+    // Each row leads with who acts (SPEC §10.4).
+    expect(app.count("id:calendar-item-lead")).toBe(2);
     await app.press("id:calendar-item-Call the bank");
     await app.waitFor("id:calendar-item-page", SLOW);
+    expect(app.shows("id:item-lead")).toBe(true);
     expect(app.texts().join(" ")).toMatch(/at \d+:\d\d (AM|PM)/);
   }, 20_000);
 

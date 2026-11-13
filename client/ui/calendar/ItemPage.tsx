@@ -12,6 +12,17 @@ import { brain, currentTransport, workers } from "../session";
 import { clock } from "./clock";
 import { openEditor } from "./Editor";
 import { Row, SectionTitle, StatusDot } from "./parts";
+import { Icon } from "../kit/Icon";
+import { LeadHero } from "../kit/RowTile";
+import { calendarLead } from "../../core/calendar/colour";
+import type { CalendarStatus } from "../../core/calendar/model";
+
+/** A run's mark (SPEC §10.4): done is `check-circle` in ok, failed `alert-circle` in warning; the rest keep the dot. */
+function RunMark(props: { status: CalendarStatus }) {
+  return props.status === "completed" ? <Icon name="check-circle" size={16} tone="ok" />
+    : props.status === "failed" ? <Icon name="alert-circle" size={16} tone="warning" />
+    : <StatusDot status={props.status} />;
+}
 import type { Route } from "../shell/routes";
 import { calendar, calendarItems } from "./state";
 import { showAlert } from "../shell/alert";
@@ -91,6 +102,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
         ) : (
           <View class="pb-10">
             <View class="gap-1.5 px-4 pb-2 pt-4">
+              <LeadHero testID="item-lead" lead={calendarLead(item()!)} />
               <Text testID="item-title" class="text-xl font-semibold">{item()!.title}</Text>
               <Text testID="item-schedule" class="text-base text-muted-foreground">{header(item()!)}</Text>
               <View class="flex-row items-center gap-1.5">
@@ -107,7 +119,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
                 <View selectable class="px-4"><Text class="text-base text-muted-foreground">{item()!.action_instruction!}</Text></View>
               </View>
             ) : null}
-            {itemFailure(item()!) ? <View class="px-4 pt-3"><Text class="text-base text-destructive">{itemFailure(item()!)}</Text></View> : null}
+            {itemFailure(item()!) ? <View class="px-4 pt-3"><Text class="text-base text-warning">{itemFailure(item()!)}</Text></View> : null}
 
             {runs().length ? <SectionTitle title="Runs" /> : null}
             <View class="border-t border-border">
@@ -117,7 +129,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
                   onPress={() => (run.status === "running" && run.worker_session && workers().some((worker) => worker.id === run.worker_session)
                     ? props.openSession(run.worker_session) : props.nav.push({ name: "run", itemId: props.id, runId: run.id }))} class="gap-1 border-b border-border bg-card px-4 py-3 active:bg-accent">
                   <View class="flex-row items-center gap-1.5">
-                    <StatusDot status={run.status} />
+                    <RunMark status={run.status} />
                     <Text class="text-sm text-muted-foreground">{`${runWhen(run, item()!, clock())} · ${statusLabel[run.status]}`}</Text>
                   </View>
                   {runPreview(run) ? <Text class="text-base line-clamp-2">{runPreview(run)}</Text> : null}
@@ -154,11 +166,11 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
         ) : (
           <View class="gap-3 px-4 pb-10 pt-4">
             <View class="flex-row items-center gap-1.5">
-              <StatusDot status={run()!.status} />
+              <RunMark status={run()!.status} />
               <Text class="text-sm text-muted-foreground">{`${runWhen(run()!, item()!, clock())} · ${statusLabel[run()!.status]}${run()!.manual ? " · Run by you" : ""}`}</Text>
             </View>
             {run()!.status === "failed"
-              ? <View selectable><Text class="text-base text-destructive">{run()!.failure_reason || "It failed without saying why."}</Text></View>
+              ? <View selectable><Text class="text-base text-warning">{run()!.failure_reason || "It failed without saying why."}</Text></View>
               : run()!.result
                 ? (
                   <View onLayout={({ bounds }) => resultWidth.set(bounds.size.width)}>

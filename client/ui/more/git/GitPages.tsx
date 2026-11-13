@@ -389,7 +389,7 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
         style={indent}
       >
         <Icon name={row.collapsed ? "chevron-right" : "chevron-down"} size={14} tone="faint" />
-        <Icon name="folder" size={16} tone="soft" />
+        <Icon name="folder" size={16} tone="tileTeal" />
         <Text class="flex-1 font-mono text-code text-muted-foreground line-clamp-1">{row.label}</Text>
         <Text class="text-caption text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(row.count)}</Text>
         <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 16 }} />
