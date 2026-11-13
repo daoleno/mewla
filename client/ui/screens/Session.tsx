@@ -1,6 +1,7 @@
 import { cleanup, computed, effect, openUrl, platform, safeArea, signal, Storage, Text, untracked, View } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
-import { capsuleInset, capsuleTitleIsLong, CAPSULE } from "../../core/shell/capsule";
+import { CAPSULE, capsuleCompactNameWidth, capsuleInset, capsuleNameIsLong, capsuleTerminalInset } from "../../core/shell/capsule";
+import { stackWidth } from "../shell/layout";
 import { Capsule, createCapsule } from "../shell/Capsule";
 import { CapsuleBack } from "../shell/NavPage";
 import { listSessionServices } from "../../core/sessions/services";
@@ -490,36 +491,48 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     return folder && folder !== title() ? folder : "";
   };
 
-  // The capsule header on a phone (core/shell/capsule.ts): it collapses while the person reads the chat, and
-  // comes back when something needs them, when they go offline, and on the terminal (which never collapses it).
+  // The capsule header on a phone (SPEC §11, core/shell/capsule.ts): it collapses while the person reads the
+  // chat, and comes back at the newest end, on a tap of its name, and when something needs them. The terminal
+  // has it collapsed: a tap on the name brings it over the top rows, the next touch in the terminal folds it.
   const capsuled = mobile && platform.idiom === "phone";
-  const capsule = createCapsule();
+  const capsule = createCapsule({ collapsed: untracked(mode) === "terminal" });
   const inset = () => capsuleInset(safeArea().top);
   const needsYou = computed(() => requests().length > 0 || worker()?.status === "blocked");
   const offline = computed(() => connection() !== "connected");
-  // Each new thing that needs the person counts, a second request too, not only the first.
+  // One more thing that needs the person (a second request too), or the connection going: it expands.
   const asks = computed(() => requests().length + (worker()?.status === "blocked" ? 1 : 0));
   let asked = untracked(asks);
+  let wasOffline = untracked(offline);
   effect(() => {
     const now = asks();
-    const more = now > asked;
+    const away = offline();
+    const more = now > asked || (away && !wasOffline);
     asked = now;
-    if (more || offline() || mode() === "terminal") untracked(capsule.expand);
+    wasOffline = away;
+    if (more) untracked(capsule.expand);
   });
-  const dot = (testID: string, label: string, tone: string) => (
-    <View testID={testID} accessibilityLabel={label} class={`absolute rounded-full border-card ${tone}`}
-      style={{ width: CAPSULE.dot.size, height: CAPSULE.dot.size, borderWidth: CAPSULE.dot.ring, right: CAPSULE.dot.right, bottom: CAPSULE.dot.bottom }} />
-  );
+  // A Session opens expanded on its chat and collapsed on its terminal; changing view does the same.
+  let shownMode = untracked(mode);
+  effect(() => {
+    const now = mode();
+    if (now === shownMode) return;
+    shownMode = now;
+    untracked(now === "terminal" ? capsule.collapse : capsule.expand);
+  });
+  // The agent's mark, with a red dot at its corner while it needs you (present or absent: a shape, not a colour pair).
   const mark = () => (
-    <View class="items-center justify-center" style={{ width: CAPSULE.control, height: CAPSULE.control }}>
+    <View style={{ width: CAPSULE.mark, height: CAPSULE.mark }}>
       <AgentIcon kind={kind()} size={CAPSULE.mark} />
-      {/* Whether it needs you, runs, or is out of reach; nothing when idle or done. */}
-      {offline() ? dot("capsule-dot-offline", "Offline", "bg-muted-foreground")
-        : needsYou() ? dot("capsule-dot-needs-you", "Needs you", "bg-seal")
-        : worker()?.status === "running" ? dot("capsule-dot-running", "Running", "bg-ok") : null}
+      {needsYou() ? (
+        <View testID="capsule-needs-you" accessibilityLabel="Needs you" class="absolute rounded-full border-sheet-surface bg-seal"
+          style={{ width: CAPSULE.dot.size, height: CAPSULE.dot.size, borderWidth: CAPSULE.dot.ring, right: CAPSULE.dot.right, bottom: CAPSULE.dot.bottom }} />
+      ) : null}
     </View>
   );
-  const titleSize = () => (capsuleTitleIsLong(title()) ? CAPSULE.titleLong : CAPSULE.title);
+  const nameStyle = () => {
+    if (capsule.collapsed()) return { ...CAPSULE.nameCompact, lines: 1 };
+    return capsuleNameIsLong(title()) ? { ...CAPSULE.nameLong, lines: 2 } : { ...CAPSULE.name, lines: 1 };
+  };
   const DurabilityWarning = () => (
     <View testID="durability-warning" class="flex-row items-start gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
       <Icon name="alert-circle" size={18} color="muted-foreground" />
@@ -539,34 +552,32 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
       </Button>
     ) : null;
+  // Collapsed, the name is a tap that expands; on the terminal, expanded, it folds the capsule again.
+  const pressName = () => {
+    if (untracked(capsule.collapsed)) capsule.expand();
+    else if (untracked(mode) === "terminal") capsule.collapse();
+  };
   const capsuleHeader = () => (
-    <Capsule collapsed={capsule.collapsed} onExpand={capsule.expand} compactLabel={() => `${title()}, show the header`}
-      full={
+    <Capsule collapsed={capsule.collapsed} twoLines={() => capsuleNameIsLong(title())} below={durability() ? <DurabilityWarning /> : undefined}>
+      <CapsuleBack />
+      {/* The name gets the room; a long one takes two balanced lines ending in "…" before the controls. Collapsed,
+          one line of 15, ending in "…" at min(200, 52 % of the width). */}
+      <Button testID="capsule-name" accessibilityLabel={capsule.collapsed() ? `${title()}, show the header` : title()} onPress={pressName}
+        class="min-w-0 flex-row items-center rounded-full active:bg-accent"
+        style={{ height: CAPSULE.control, gap: CAPSULE.markGap, paddingLeft: CAPSULE.padding, paddingRight: 6, flexGrow: capsule.collapsed() ? 0 : 1, flexShrink: 1 }}>
+        {mark()}
+        <View testID="session-status" class="min-w-0 shrink" style={{ maxWidth: capsule.collapsed() ? capsuleCompactNameWidth(stackWidth()) : undefined }}>
+          <Text role="header" class={`font-semibold text-foreground ${nameStyle().lines === 2 ? "line-clamp-2" : "line-clamp-1"}`}
+            style={{ fontSize: nameStyle().size, lineHeight: nameStyle().line }}>{title()}</Text>
+        </View>
+      </Button>
+      {capsule.collapsed() ? null : (
         <>
-          <CapsuleBack />
-          {mark()}
-          {/* The title gets the room; a long one takes two smaller lines and ends in "…" before the controls.
-              Brain's terminal says what runs it, as its page did. */}
-          <View testID="session-status" class="ml-1 min-w-0 flex-1 justify-center">
-            <Text role="header" class={`font-semibold text-foreground ${capsuleTitleIsLong(title()) ? "line-clamp-2" : "line-clamp-1"}`}
-              style={{ fontSize: titleSize().size, lineHeight: titleSize().line }}>{title()}</Text>
-            {props.brain ? (
-              <Text class="text-muted-foreground line-clamp-1" style={{ fontSize: CAPSULE.subtitle.size, lineHeight: CAPSULE.subtitle.line }}>
-                {`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}
-              </Text>
-            ) : null}
-          </View>
           {viewButton()}
           {hasMenu() ? <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="more-horizontal" size={22} color="foreground" /></Button> : null}
         </>
-      }
-      compact={
-        <>
-          <CapsuleBack testID="capsule-back" />
-          {mark()}
-        </>
-      }
-      below={durability() ? <DurabilityWarning /> : undefined} />
+      )}
+    </Capsule>
   );
   // Made once, here: a call in the page's props would be one of the getters NSH re-reads.
   const header = capsuled ? capsuleHeader() : undefined;
@@ -605,8 +616,10 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       <View class="flex-1 bg-background">
         {!capsuled && durability() ? <View class="mx-3 mt-2"><DurabilityWarning /></View> : null}
         <View class="flex-1">
-          {/* Under a capsule the terminal starts below it: every row of it stays readable. */}
-          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none", top: capsuled ? inset() : 0 }}>
+          {/* Under a capsule the terminal starts below the collapsed one: an expanded capsule floats over its top
+              rows and never resizes it, and the next touch in the terminal folds it again (seen, not taken). */}
+          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none", top: capsuled ? capsuleTerminalInset(safeArea().top) : 0 }}
+            onTouchStartCapture={capsuled ? () => capsule.collapse() : undefined}>
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)}
               program={() => (props.brain ? brain()?.host_worker?.provider || brain()?.host_executor?.provider : undefined) || (kind() === "terminal" ? undefined : kind())} />
             <View class="absolute left-3 right-3 top-3 gap-2" style={{ pointerEvents: "box-none" }}>

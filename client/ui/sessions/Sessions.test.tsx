@@ -78,7 +78,8 @@ describe("Sessions", () => {
     await app.wait(100);
     expect(framesOf(app.host.posts(), "create_session")).toHaveLength(0);
     await app.press("id:new-launch");
-    await app.waitFor("id:session-menu");
+    // Its page: a new Session opens on its terminal, under the collapsed capsule.
+    await app.waitFor("id:capsule-name");
     const create = framesOf(app.host.posts(), "create_session").at(-1)!;
     expect(create).toMatchObject({ cwd: "/home/me/mewla", command: "codex --dangerously-bypass-approvals-and-sandbox", name: "" });
     const active = framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id);
@@ -97,7 +98,7 @@ describe("Sessions", () => {
     await app.waitFor("id:new-command");
     await app.type("id:new-command", "htop");
     await app.press("id:new-launch");
-    await app.waitFor("id:session-menu");
+    await app.waitFor("id:capsule-name");
     expect(framesOf(app.host.posts(), "create_session").at(-1)).toMatchObject({ command: "htop" });
   }, 20_000);
 
@@ -223,10 +224,10 @@ describe("a Session", () => {
     expect(app.texts()).toContain("rm -rf build");
     expect(app.texts()).toContain("Delete the build folder");
     await app.wait(500);
-    // Blocked, the capsule's mark says it needs you; answered, that it runs.
-    expect(app.shows("id:capsule-dot-needs-you")).toBe(true);
+    // Blocked, the capsule's mark has the red dot; answered, it goes.
+    expect(app.shows("id:capsule-needs-you")).toBe(true);
     await app.press("id:prompt-option-2");
-    await app.waitFor("id:capsule-dot-running");
+    await app.waitUntil(() => !app.shows("id:capsule-needs-you"));
     expect(framesOf(app.host.posts(), "answer_prompt").at(-1)).toMatchObject({ worker_id: "w9", prompt_answer: { prompt_id: "p-1", number: 2 } });
     await app.waitFor("id:request-sealed");
     expect(app.shows("id:request-card")).toBe(false);
@@ -362,8 +363,11 @@ describe("a Session", () => {
     await app.waitFor("id:session-chat");
     await app.waitFor("label:Show terminal");
     await app.press("id:session-mode");
-    await app.waitFor("label:Show chat");
     await app.waitUntil(() => !app.shows("id:session-chat"));
+    // On the terminal the capsule is collapsed: a tap on the name brings the button back, showing the chat.
+    await app.waitFor("id:capsule-collapsed");
+    await app.press("id:capsule-name");
+    await app.waitFor("label:Show chat");
     await app.press("id:session-mode");
     await app.waitFor("id:session-chat");
   }, 20_000);

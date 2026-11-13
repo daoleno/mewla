@@ -380,6 +380,8 @@ export function ChatTimeline(props: {
     ready.set(true);
   };
   let touched = false;
+  // How far the list is from its newest end, as it last scrolled (for the capsule's rest).
+  let fromEnd = 0;
   let shownFirst: string | undefined;
   const mounted = signal(false);
   const anchor = signal<ViewRef | undefined>(undefined);
@@ -468,11 +470,11 @@ export function ChatTimeline(props: {
           list = node;
           mounted.set(true);
         }}
-        onScrollDragStart={({ offset }) => {
+        onScrollDragStart={() => {
           touched = true;
-          props.capsule?.reading.dragStart(offset.y);
+          props.capsule?.reading.dragStart();
         }}
-        onScrollEnd={() => props.capsule?.reading.rest(!untracked(away))}
+        onScrollEnd={({ offset }) => props.capsule?.reading.rest(offset.y, fromEnd)}
         // Opens at its newest row (NSH 0.5.0, before the first frame), or at the row it was read back to.
         initialScrollAtEnd={opening.index === undefined}
         initialScrollIndex={opening.index}
@@ -485,7 +487,8 @@ export function ChatTimeline(props: {
         onScroll={({ offset, contentSize, size }) => {
           // A hidden list's scroll (a browser resets it) is not where the person was.
           if (!untracked(shown)) return;
-          props.capsule?.reading.scroll(offset.y);
+          fromEnd = contentSize.height - (offset.y + size.height);
+          props.capsule?.reading.scroll(offset.y, fromEnd);
           // The person's own scrolling holds the header cat still.
           if (touched) noteScroll();
           const far = contentSize.height - (offset.y + size.height) > AT_END;
