@@ -43,8 +43,6 @@ export function Page(props: {
   aside?: JSX.Element;
   /** Laid over the page, not scrolling with it (a toast). */
   overlay?: JSX.Element;
-  /** The page without its nav bar, inside another page (Trial: three pages: the computer page beside Brain). */
-  bare?: boolean;
   children?: JSX.Element;
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
@@ -63,14 +61,6 @@ export function Page(props: {
   );
   // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
   const withAside = untracked(() => props.aside !== undefined);
-  if (untracked(() => props.bare)) {
-    return (
-      <View testID={props.testID} class="flex-1 bg-background">
-        {withAside ? <View class="flex-1 flex-row">{scroll}{props.aside}</View> : scroll}
-        {props.overlay ?? null}
-      </View>
-    );
-  }
   return (
     <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column="page" frame={false}>
       <View class="flex-1 bg-background">

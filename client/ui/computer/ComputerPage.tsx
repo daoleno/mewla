@@ -109,8 +109,6 @@ export function ComputerPage(props: {
   nav: PageNav;
   /** "Claude is not signed in" › Switch: the Brain host sheet, which belongs to Brain's menu. */
   onSwitchExecutor: () => void;
-  /** Trial: three pages. The same page without its nav bar, as the page left of Brain. */
-  bare?: boolean;
 }) {
   const busy = signal("");
   const notes = signal<Record<string, string>>({});
@@ -197,7 +195,7 @@ export function ComputerPage(props: {
   const updateRow = (): FixRow | null => (optional() ? { key: "update-optional", title: `Update available · ${optional()}`, button: "Update", action: { kind: "update" }, blocking: false } : null);
 
   return (
-    <Page title="" testID="computer-page" bare={props.bare}>
+    <Page title="" testID="computer-page">
       <CatHeader nav={props.nav} />
       {removedNotice() ? (
         <Notice testID="removed-notice" tone="failed" title={removedNotice()!.title} detail={removedNotice()!.detail} action="OK" onAction={() => removedNotice.set(null)} />
