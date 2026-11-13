@@ -1,4 +1,4 @@
-import { signal, Storage } from "nsh";
+import { computed, signal, Storage } from "nsh";
 import { brainThreadScopeKey, requestBrainSnapshot, type BrainSnapshot } from "../core/brain";
 import { Chat } from "../core/conversation/chat";
 import { chatCacheKey, Draft } from "../core/conversation/draft";
@@ -24,6 +24,15 @@ export const connection = signal<ConnectionState>("idle");
 export const problem = signal("");
 /** The connection as the person is told it (SPEC §16.1 `link.away`): Offline after 10 s, kept between retries. */
 const linkWatch = new LinkWatch((link) => linkState.set(link));
+/**
+ * The connection as the person is told it: Connecting… through the first 10 s of any drop or start, then
+ * Offline, kept between retries until a socket is up (SPEC §16.1 `link.away`; no flicker back to Connecting).
+ */
+export const shownConnection = computed<ConnectionState>(() => {
+  const real = connection();
+  if (real === "connected" || !current()) return real;
+  return linkState() === "away" ? "waiting" : "connecting";
+});
 linkHooks.computer = () => current()?.name ?? "";
 linkHooks.reconnect = () => resumeConnection();
 export const ready = signal(false);

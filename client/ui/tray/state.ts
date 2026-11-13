@@ -15,7 +15,7 @@ import { calendarItems } from "../calendar/state";
 import { deviceRequests } from "../enrollment/state";
 import { currentIssue } from "../more/settings/computers";
 import { currentDiagnosis } from "../computer/computers";
-import { brain, brainThread, connection, current, onTransport, workers } from "../session";
+import { brain, brainThread, connection, current, onTransport, shownConnection, workers } from "../session";
 
 const SORT_KEY = "mewla:tray:sort";
 
@@ -99,7 +99,7 @@ export const tray = computed(() => {
   return trayModel({
     hasServer: Boolean(server),
     computerName: server?.name ?? "",
-    connection: connection(),
+    connection: shownConnection(),
     pairAgain: issue === "device_not_paired",
     diagnosis: currentDiagnosis(),
     surface: brainSurface({ hasServer: Boolean(server), connected: connection() === "connected", snapshot }),

@@ -16,7 +16,7 @@ import type { MorePage, PageNav } from "../more/routes";
 import { currentPathMark, forgetConnectionIssue, probeComputers, removedNotice, statusWord } from "../more/settings/computers";
 import { otherState } from "./computers";
 import { pet } from "../pets/pets";
-import { connection, current, resumeConnection, servers, switchTo, transportPath } from "../session";
+import { connection, current, resumeConnection, servers, shownConnection, switchTo, transportPath } from "../session";
 import { goHome, nav } from "../shell/nav";
 import { updatePending } from "../update/update";
 import { computerAgentUse, computerUpdate, fixRows, minComputerVersion, readComputer } from "./state";
@@ -80,12 +80,12 @@ function CatHeader(props: { nav: PageNav }) {
             <Text role="header" class="text-display font-bold tracking-display line-clamp-1">{current()?.name || current()?.url || "Computer"}</Text>
           </Button>
           <View testID="computer-connection" class="flex-row items-center gap-2" onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
-            accessible accessibilityLabel={[WORDS[connection()], connectionTail()].filter(Boolean).join(", ")}>
+            accessible accessibilityLabel={[WORDS[shownConnection()], connectionTail()].filter(Boolean).join(", ")}>
             {/* Connected is green; this computer offline is red with its word, since work stops (SPEC §10.4); else a soft ring. */}
-            <If when={connectionTone(connection()) === "off"} else={<View testID="computer-connection-dot" class="size-2 rounded-full" style={{ backgroundColor: color(connectionTone(connection()) === "ok" ? "ok" : "seal") }} />}><View testID="computer-connection-dot" class="size-2 rounded-full border-2 border-muted-foreground" /></If>
+            <If when={connectionTone(shownConnection()) === "off"} else={<View testID="computer-connection-dot" class="size-2 rounded-full" style={{ backgroundColor: color(connectionTone(shownConnection()) === "ok" ? "ok" : "seal") }} />}><View testID="computer-connection-dot" class="size-2 rounded-full border-2 border-muted-foreground" /></If>
             {/* One space each side of the dot: "Connected · LAN", the row's gap is only the status dot's. */}
             <View class="min-w-0 shrink flex-row">
-              <Text class="text-sub" style={{ color: color(stateTextColor(connectionTone(connection()))) }}>{WORDS[connection()]}</Text>
+              <Text class="text-sub" style={{ color: color(stateTextColor(connectionTone(shownConnection()))) }}>{WORDS[shownConnection()]}</Text>
               <If when={connectionTail()}><Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{` · ${connectionTail()}`}</Text></If>
             </View>
           </View>
