@@ -137,6 +137,8 @@ export type BrainWorkSlip = {
   /** What Brain asks, with one-tap answers. */
   question?: string;
   choices?: readonly string[];
+  /** The choice Brain recommends, when it is one of `choices`. */
+  recommended?: string;
   /** What the Work waits on, as Brain wrote it. */
   waitFor?: string;
   /** A running Worker's reported phase ("verifying"). */
@@ -281,6 +283,7 @@ export function brainWorkSurface(
       unread: work.unread_result,
       question: work.question,
       choices: work.choices,
+      recommended: work.recommended && work.choices?.includes(work.recommended) ? work.recommended : undefined,
       waitFor: work.wait_for,
       phase: group === "running" && worker?.phase && worker.phase !== "working" ? worker.phase : undefined,
       attentionSince: work.attention_since,

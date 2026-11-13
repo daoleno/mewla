@@ -105,12 +105,13 @@ function actionOff(action: BrainWorkAction, slip: BrainWorkSlip): boolean {
 const actionTestID = (action: BrainWorkAction) => `work-action-${action.kind}${action.text ? `-${action.text}` : ""}`;
 const actionBusy = (action: BrainWorkAction, slip: BrainWorkSlip) => busy() === `${slip.workId}:${action.kind}:${action.text ?? ""}`;
 
-/** An answer to what the Work asks: a 54 pt row of its request card, with a ring. */
+/** An answer to what the Work asks: a 54 pt row of its request card, with a ring; Brain's pick wears the request card's tag. */
 function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; onPress: () => void }) {
   return (
     <Button testID={actionTestID(props.action)} disabled={actionOff(props.action, props.slip())} onPress={props.onPress}
       class="min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 active:bg-accent disabled:opacity-40">
       <Text class="min-w-0 flex-1 text-body">{actionBusy(props.action, props.slip()) ? "Sending…" : props.action.label}</Text>
+      {props.action.pick ? <Text testID="work-pick" class="text-caption text-muted-foreground">Brain's pick</Text> : null}
       <View class="size-[22px] rounded-full border-2 border-faint" />
     </Button>
   );

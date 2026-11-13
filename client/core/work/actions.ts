@@ -31,6 +31,8 @@ export type BrainWorkAction = {
   /** For answer: the choice sent as the reply. */
   text?: string;
   primary?: boolean;
+  /** For answer: the choice Brain recommends ("Brain's pick"). */
+  pick?: boolean;
   /** Ask before doing it; the confirm says what will happen. */
   confirm?: string;
 };
@@ -43,11 +45,13 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
     ];
   }
   if (slip.question) {
+    // Brain's pick leads when there is one, else the first choice, as before.
     const choices = (slip.choices ?? []).map<BrainWorkAction>((choice, index) => ({
       kind: "answer",
       label: choice,
       text: choice,
-      primary: index === 0,
+      primary: slip.recommended ? choice === slip.recommended : index === 0,
+      pick: choice === slip.recommended || undefined,
     }));
     return [
       ...choices,

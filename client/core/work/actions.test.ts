@@ -28,6 +28,15 @@ describe("every Work state has a way forward", () => {
     expect(brainWorkActions(slip).find((action) => action.kind === "dismiss")?.confirm).toBeTruthy();
   });
 
+  test("Brain's pick: the choice Brain recommends is tagged and is the primary one; the reply is still its text", () => {
+    const slip = slipOf(work({ question: "How long a trial?", choices: ["7 days", "14 days"], recommended: "14 days", wake: { kind: "user_input", ref: "x" } }));
+    const answers = brainWorkActions(slip).filter((action) => action.kind === "answer");
+    expect(answers.map((a) => [a.text, a.pick ?? false, a.primary ?? false])).toEqual([["7 days", false, false], ["14 days", true, true]]);
+    // A pick that names no choice (an older daemon would not send one) tags nothing.
+    const stray = slipOf(work({ question: "How long?", choices: ["7 days"], recommended: "30 days", wake: { kind: "user_input", ref: "x" } }));
+    expect(brainWorkActions(stray).filter((a) => a.pick)).toEqual([]);
+  });
+
   test("a question with no choices is answered in words", () => {
     expect(kinds(work({ question: "Which account?" }))).toEqual(["reply", "snooze", "dismiss"]);
   });
