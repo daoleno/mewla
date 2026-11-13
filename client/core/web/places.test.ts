@@ -75,6 +75,7 @@ describe("sub-pages have URLs of their own (parity #47)", () => {
     { key: "extensions", page: { name: "extensions-tools", service: "notion", account: "a1" } },
     { key: "extensions", page: { name: "extensions-agent", scope: "codex" } },
     { key: "work", page: { name: "workFile", id: "release.md" } },
+    { key: "work", page: { name: "workDetail", id: "docsref" } },
   ];
 
   test("each round-trips through its path", () => {
@@ -88,6 +89,10 @@ describe("sub-pages have URLs of their own (parity #47)", () => {
     expect(placeOfPath("/plugins/notion/tools?account=a1")).toEqual({ key: "extensions", page: { name: "extensions-tools", service: "notion", account: "a1" } });
     expect(placeOfPath("/plugins/agents/claude-code")).toEqual({ key: "extensions", page: { name: "extensions-agent", scope: "claude-code" } });
     expect(placeOfPath("/work/w1")).toEqual({ key: "work", page: { name: "workFile", id: "w1" } });
+    // A Work's detail (SPEC §14.5 #work-detail/docsref); the bare path is no place.
+    expect(placePath({ key: "work", page: { name: "workDetail", id: "docsref" } })).toBe("/work-detail/docsref");
+    expect(placeOfPath("/work-detail")).toBeNull();
+    expect(placeOfPath("/brain/work/docsref")).toEqual({ key: "work", page: { name: "workDetail", id: "docsref" } });
     expect(placeOfPath("/friends/nowhere")).toEqual({ key: "friends" });
   });
 });

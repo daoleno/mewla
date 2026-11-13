@@ -52,6 +52,7 @@ export function placeOfRoutes(routes: readonly Route[]): WebPlace {
     const route = routes[i]!;
     if (route.name === "session") return { key: "session", workerId: route.workerId };
     if (route.name === "workFile") return { key: "work", page: { name: "workFile", id: route.id } };
+    if (route.name === "workDetail") return { key: "work", page: { name: "workDetail", id: route.workId } };
     const key = placeKeyOf(route.name);
     if (!key) continue;
     const page = placePageOf(route);
@@ -65,7 +66,9 @@ export function routesOfPlace(place: WebPlace): Route[] {
   const page = "page" in place ? place.page : undefined;
   switch (place.key) {
     case "brain": return [];
-    case "work": return page?.name === "workFile" ? [{ name: "workFile", id: page.id }] : [];
+    case "work":
+      if (page?.name === "workFile") return [{ name: "workFile", id: page.id }];
+      return page?.name === "workDetail" ? [{ name: "workDetail", workId: page.id }] : [];
     case "sessions": return [{ name: "allSessions" }];
     case "session": return [{ name: "session", workerId: place.workerId }];
     case "calendar": return [{ name: "calendar" }];
@@ -76,7 +79,7 @@ export function routesOfPlace(place: WebPlace): Route[] {
 
 function pagesUnder(page: PlacePage): Route[] {
   switch (page.name) {
-    case "workFile": return [];
+    case "workFile": case "workDetail": return [];
     case "settings-license": return [{ name: "settings-licenses" }, page];
     case "extensions-agent": return [{ name: "extensions-agent", scope: isAgentExtensionsScope(page.scope) ? page.scope : "shared" }];
     default: return [page as Route];

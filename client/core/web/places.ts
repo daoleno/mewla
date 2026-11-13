@@ -45,7 +45,8 @@ export function placeLabel(key: PlaceKey): string {
 /**
  * A page under a place that has a URL of its own, as the Expo app's routes did: a Settings page
  * (`/settings/computer?id=…`), a Friends post or person, a Plugins service, its tools or a tool's
- * extensions, a Work file (`/work/<id>`). The values are the shell's own routes.
+ * extensions, a Work file (`/work/<id>`), a Work's detail (`/work-detail/<id>`, SPEC §14.5). The values are the shell's
+ * own routes, but for the Work detail, which carries `workId` there.
  */
 export type PlacePage =
   | { name: "settings-computer"; id: string }
@@ -68,7 +69,8 @@ export type PlacePage =
   | { name: "extensions-service"; id: string }
   | { name: "extensions-tools"; service: string; account?: string }
   | { name: "extensions-agent"; scope: string }
-  | { name: "workFile"; id: string };
+  | { name: "workFile"; id: string }
+  | { name: "workDetail"; id: string };
 
 /** A place with a URL: a named place, a Work file, or one Session of the current computer; `page`, a page under it. */
 export type WebPlace =
@@ -94,7 +96,7 @@ const FRIENDS_LISTS = ["drafts", "notifications", "bookmarks", "blocked"] as con
 
 /** The place a page belongs to. */
 function placeKeyOfPage(page: PlacePage): "settings" | "friends" | "extensions" | "work" {
-  if (page.name === "workFile") return "work";
+  if (page.name === "workFile" || page.name === "workDetail") return "work";
   return page.name.split("-")[0] as "settings" | "friends" | "extensions";
 }
 
@@ -110,6 +112,7 @@ function pagePath(page: PlacePage): string {
     case "extensions-tools": return `/extensions/${e(page.service)}/tools${page.account ? `?account=${e(page.account)}` : ""}`;
     case "extensions-agent": return `/extensions/agents/${e(page.scope)}`;
     case "workFile": return `/work/${e(page.id)}`;
+    case "workDetail": return `/work-detail/${e(page.id)}`;
     default: {
       if (page.name.startsWith("friends-")) return `/friends/${page.name.slice("friends-".length)}`;
       const segment = Object.keys(SETTINGS_PAGES).find((key) => SETTINGS_PAGES[key].name === page.name);
@@ -140,6 +143,11 @@ function pageOfSegments(first: string, rest: string[], params: URLSearchParams):
       return { name: "extensions-service", id: second };
     case "work":
       return second ? { name: "workFile", id: second } : null;
+    case "work-detail":
+      return second ? { name: "workDetail", id: second } : null;
+    case "brain":
+      // The app's own link for a Work (mewla://brain/work/<id>), read as a path.
+      return second === "work" && third ? { name: "workDetail", id: third } : null;
     default:
       return null;
   }
