@@ -95,6 +95,15 @@ export function Resources(props: { nav: PageNav }) {
   });
   cleanup(() => poller?.stop());
   const refresh = () => poller?.refresh();
+  // SPEC §16.2: background polls (every 5 s) draw nothing; the pull's spinner shows only for a person's pull.
+  const pulled = signal(false);
+  effect(() => {
+    if (!reading().reading) untracked(() => pulled() && pulled.set(false));
+  });
+  const pull = () => {
+    pulled.set(true);
+    refresh();
+  };
   const telemetry = () => reading().telemetry;
   return (
     <Page
@@ -104,8 +113,8 @@ export function Resources(props: { nav: PageNav }) {
       headerRight={<If when={telemetry()}><HeaderActions onRefresh={refresh} /></If>}
       testID="resources"
       maxWidth={CONTENT_MAX_WIDTH}
-      refreshing={reading().reading && Boolean(telemetry())}
-      onRefresh={refresh}
+      refreshing={pulled() && reading().reading && Boolean(telemetry())}
+      onRefresh={pull}
     >
       <If when={telemetry()} else={<NotReady onRetry={refresh} onOpenSettings={() => props.nav.push({ name: "settings" })} />}><Ready telemetry={telemetry()!} onRefresh={refresh} /></If>
     </Page>
