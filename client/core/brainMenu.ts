@@ -82,9 +82,9 @@ export function brainRunning(input: { connected: boolean; snapshot: BrainSnapsho
 }
 
 /**
- * Brain's menu (soft-final/SPEC.md §1.6), always all five rows in their order; a
- * row the computer cannot do now is not enabled (drawn at 40 %, so the menu never
- * changes shape):
+ * Brain's menu (soft-final/SPEC.md §1.6): the rows the computer can do now, in their
+ * order. A row that cannot act is not drawn (the owner, 11-13: a grey Model row
+ * "seems useless"), the same rule as the Session's "Model & Effort". Each row shows when:
  * - Open terminal: Brain's host Session is known (also offline or connecting);
  * - Browse workspace: connected (Starting and Can't start too);
  * - Switch executor: connected, and another agent is installed;
@@ -106,7 +106,7 @@ export function brainMenuRows(input: {
     model: running && input.modelSwitchable,
     "new-chat": running && input.threadLoaded,
   };
-  return (Object.keys(BRAIN_MENU_LABELS) as BrainMenuRowId[]).map((id) => ({ id, label: BRAIN_MENU_LABELS[id], enabled: enabled[id] }));
+  return (Object.keys(BRAIN_MENU_LABELS) as BrainMenuRowId[]).filter((id) => enabled[id]).map((id) => ({ id, label: BRAIN_MENU_LABELS[id], enabled: true }));
 }
 
 /**
