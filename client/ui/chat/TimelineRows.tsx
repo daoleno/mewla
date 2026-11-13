@@ -60,6 +60,14 @@ const toneColor = (tone: string | undefined) => (tone === "failed" || tone === "
  */
 export const SELECTION = "selection:bg-foreground";
 
+/**
+ * Code in a reply's text (SPEC §11 Inline code): the mono face a step under the 17 pt body (15), so the
+ * x-heights meet, on the surface chip (radius 5) that shows on the canvas in both appearances. NSH 0.5.0
+ * sizes it in points for the whole reply (no `em`: a heading's or a table cell's code is 15 too) and gives
+ * spans no padding.
+ */
+export const INLINE_CODE = "font-mono text-[15px] text-foreground bg-card rounded-[5px]";
+
 export function CodeBlock(props: { code: string; language?: string }) {
   const copied = signal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;

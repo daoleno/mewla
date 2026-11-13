@@ -15,7 +15,7 @@ import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
 import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
-import { SELECTION } from "./TimelineRows";
+import { INLINE_CODE, SELECTION } from "./TimelineRows";
 import { Caption } from "../kit/kit";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
@@ -36,6 +36,7 @@ const TABLE = {
   tableHead: "bg-transparent",
   tableCell: "min-w-[132px] border-0 border-t border-border px-4 py-3 text-[15px] leading-[22px]",
   tableHeaderCell: "border-t-0 text-[13px] font-semibold leading-4 text-muted-foreground",
+  code: INLINE_CODE,
 };
 
 
