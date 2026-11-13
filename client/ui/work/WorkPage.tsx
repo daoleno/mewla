@@ -200,6 +200,12 @@ function TopBlock(props: { project: () => string | undefined; title: () => strin
   );
 }
 
+/** The brief (SPEC §11 Work detail): a paragraph at 15/22, soft, shown whole; the page scrolls instead. */
+function Brief(props: { text: () => string }) {
+  // Read in the JSX: a component runs once, and the brief arrives after the page opens.
+  return <>{props.text() ? <View selectable class="px-1 pt-3"><Text testID="work-brief" class="text-sub leading-[22px] text-muted-foreground">{props.text()}</Text></View> : null}</>;
+}
+
 /** A row of Work detail's own groups: an icon, the label, a value, a chevron when it opens something. */
 function GroupRow(props: { testID: string; icon: IconName; label: string; value?: string; chevron?: boolean; strong?: boolean; disabled?: boolean; first: boolean; onPress: () => void; accessibilityLabel?: string }) {
   return (
@@ -229,6 +235,16 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
     asked = true;
     workDetail(transport, props.workId).then((work) => closed.set(work), (error) => closedFailure.set(error instanceof Error ? error.message : ""));
   });
+  // The brief (SPEC §11 Work detail): only the Work's own page carries it, so an open Work asks for it once.
+  const openBrief = signal("");
+  let briefAsked = false;
+  effect(() => {
+    const transport = connection() === "connected" ? currentTransport() : null;
+    if (!slip() || briefAsked || !transport) return;
+    briefAsked = true;
+    workDetail(transport, props.workId).then((work) => openBrief.set(work.objective?.trim() ?? ""), () => {});
+  });
+  const brief = () => (slip() ? openBrief() : closed()?.objective?.trim() ?? "");
   const sessions = computed(() => new Map(workers().map((w) => [w.id, w] as const)));
   const workerLines = () => workWorkerLines(slip() ? slip()!.workerSessions : closed()?.worker_sessions, sessions());
   const project = () => workProject(slip()?.project, workerLines());
@@ -302,6 +318,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
           {!slip() && closed() ? (
             <View>
               <TopBlock project={project} title={title} dot={() => null} done={() => closed()!.status === "done"} state={() => CLOSED_STATUS[closed()!.status] ?? "Closed"} since={() => since(closed()!.updated_at)} />
+              <Brief text={brief} />
               <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
             </View>
           ) : !slip() ? (
@@ -314,6 +331,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
           ) : (
             <View>
               <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />
+              <Brief text={brief} />
               {slip()!.summary && !slip()!.question ? <View selectable class="px-1 pt-3"><Text testID="work-question" class="text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View> : null}
               {brainWorkWaitForLine(slip()!) ? <View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View> : null}
               {slip()!.question ? (
