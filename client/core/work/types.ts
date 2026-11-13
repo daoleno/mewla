@@ -92,6 +92,8 @@ export type BrainCurrentWork = {
   /** What Brain asks you about this Work, with one-tap answers. */
   question?: string;
   choices?: string[];
+  /** The choice Brain recommends, one of `choices` (WIRE §10): its button is tagged "Brain's pick". */
+  recommended?: string;
   /** When the Work started waiting on a decision; never moves while it waits. */
   attention_since?: string;
   /** The open review's reason, e.g. "turn_lost" for an unknown outcome. */

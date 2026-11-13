@@ -8,7 +8,7 @@ function brain() {
   return {
     workers: [{ id: "%7", name: "release", status: "running", phase: "verifying", summary: "Running the release checks", command: "claude", cwd: "/home/me/perpetuo" }],
     current_work: [
-      { work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name do we ship?", choices: ["Mewla", "Zen"], attention_since: now(), updated_at: now() },
+      { work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name do we ship?", choices: ["Mewla", "Zen"], recommended: "Zen", attention_since: now(), updated_at: now() },
       { work_id: "w-run", revision: 1, title: "ship-the-beta", status: "running", progress_mode: "owned", attempt_session_id: "%7", attempt_delegated: true, unread_result: false, updated_at: now() },
       { work_id: "w-back", revision: 1, title: "fix-sync", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: true, summary: "Fixed the sync race and added a test.", attention_since: now(), updated_at: now() },
     ],
@@ -44,6 +44,9 @@ describe("Brain's Work", () => {
     const app = await workApp();
     await openWork(app, "w-q");
     expect(app.texts()).toContain("Which name do we ship?");
+    // Brain's pick is tagged once, on its own choice (WIRE §10).
+    expect(app.texts().filter((t) => t === "Brain's pick")).toHaveLength(1);
+    expect(app.shows("id:work-pick")).toBe(true);
     await app.press("id:work-action-answer-Mewla");
     await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "reply", text: "Mewla" });
