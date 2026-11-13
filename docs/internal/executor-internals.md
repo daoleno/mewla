@@ -61,7 +61,23 @@ reviews an individual action.
   every visible Claude (`agentevents/claude`: Workers, scheduled actions); an
   inline `--settings` on the Brain host command (`HardenClaudeCommand`: the host
   is a hidden Session, which gets no hook file); and the routed payload above.
-  A command with its own `--settings` is left alone, as it is for the hook file.
+  A command with its own `--settings` file is left alone, as it is for the hook file.
+- **Hooks on a routed launch.** Because Claude keeps only one `--settings`, a
+  launch whose `--settings` is inline JSON (every routed launch: Brain's
+  Workers, app Sessions, scheduled actions) gets the hook file's `hooks` merged
+  into that JSON by `agentevents/claude.Adapter.PrepareLaunch`, next to the route
+  env; every other byte of the command is kept. Inline JSON that brings its own
+  `hooks` or `disableAllHooks`, a `--settings` naming a file, or a command with
+  two `--settings` is left as written and followed from its transcript. Until
+  2026-11-13 the route payload made the adapter leave the hook file off, so no
+  routed Claude had hooks: no SessionStart binding, hook events or hook-answered
+  permissions; their prompts reached Brain only as screen dialogs.
+- **Reported transcript path of a resumed conversation.** Resumed from another
+  folder, Claude 2.1.323 reports on `SessionStart` (source `resume`) the
+  transcript path for the new cwd, which does not exist, and the born-in file on
+  the later hooks (`UserPromptSubmit`, `Stop`); the daemon rebinds to the latter
+  on the next hook, and until then a reported file that is not there is looked
+  for by its conversation id.
 - **Root.** Claude refuses bypass mode for uid 0 unless it runs in a container
   or sandbox (`IS_SANDBOX=1`, Docker, bubblewrap). The daemon is documented as
   not supported as root, and Mewla does not set `IS_SANDBOX`.
