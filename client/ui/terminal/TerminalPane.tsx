@@ -4,7 +4,7 @@ import { BackHandler } from "nsh/mobile";
 import { TerminalNavigator } from "../../core/terminal/navigation";
 import { TerminalSession } from "../../core/terminal/session";
 import { HISTORY_FAILED } from "../../core/terminal/history";
-import { linkAction, NO_SEARCH } from "../../core/terminal/text";
+import { linkAction, NO_SEARCH, tapAction } from "../../core/terminal/text";
 import type { Transport } from "../../core/transport";
 import { Icon, type IconName } from "../icons/Icon";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
@@ -133,6 +133,14 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     ctrl.set(false);
     session.input(out);
   };
+  /** The view sends a key after the word the keyboard is composing (it comes back as input), if it can. */
+  let viewKeys = false;
+  const keyBar = (data: string) => {
+    if (!viewKeys) return type(data);
+    const out = ctrl() ? withControl(data) : data;
+    ctrl.set(false);
+    command("key", { data: out });
+  };
   // Attach: a picked file goes to the computer, then its path is typed at the prompt, quoted for the shell.
   const uploads = createAttachmentUploads();
   cleanup(() => uploads.dispose());
@@ -161,7 +169,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       if (scrolledBack()) command("scrollToBottom", {});
       command("paste", { text });
     }).catch(() => {});
-    if (key.data) type(key.data);
+    if (key.data) keyBar(key.data);
   };
   /** The key under the finger: drawn inverted, as the mock's pressed key. */
   const down = signal<string | null>(null);
@@ -169,8 +177,8 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   const hold = (key: Key) => {
     if (!key.repeat || !key.data) return;
     release();
-    type(key.data);
-    holdTimer = setTimeout(() => (repeatTimer = setInterval(() => session.input(key.data!), 70)), 350);
+    keyBar(key.data);
+    holdTimer = setTimeout(() => (repeatTimer = setInterval(() => keyBar(key.data!), 70)), 350);
   };
   const release = () => {
     clearTimeout(holdTimer);
@@ -222,10 +230,11 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   // elsewhere on the live screen, the keyboard and the pane under the finger. A long press selects (the view's).
   const tap = (col: number, row: number, text: string, index: number) => {
     const link = index >= 0 ? linkAction(text, index) : null;
+    const action = tapAction({ link, row, live: !scrolledBack() && !copyMode(), clickable: session.clickable });
     if (link?.kind === "url") return void openUrl(link.url).catch(() => {});
     if (link?.kind === "path") return props.onOpenPath?.(link.path, { ...(link.line !== undefined ? { line: link.line } : {}), ...(link.column !== undefined ? { column: link.column } : {}) });
-    if (row < 0) return;
-    if (!scrolledBack() && !copyMode() && session.clickable && session.click(col, row)) return;
+    if (action === "none") return;
+    if (action === "click" && session.click(col, row)) return;
     if (scrolledBack() || copyMode()) toBottom();
     focusKeyboard();
     session.focusPane(col, row);
@@ -266,7 +275,8 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
             surface = node;
             for (const [name, args] of pending.splice(0)) node.command(name, args);
           }}
-          onSize={({ cols, rows }) => {
+          onSize={({ cols, rows, keys }) => {
+            viewKeys = keys === true;
             rendererFailure.set(null);
             if (terminalTextSize() === undefined) heldGrid = { cols, rows };
             else takeGrid(cols, rows);

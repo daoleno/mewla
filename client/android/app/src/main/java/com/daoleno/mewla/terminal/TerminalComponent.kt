@@ -9,7 +9,8 @@ import com.longbridge.nsh.NshComponentContext
 /** `mewla.terminal` (client/ui/terminal/contract.ts): the native terminal view as an NSH component. */
 class TerminalComponent(context: Context, private val ctx: NshComponentContext) : NshComponent {
   private val view = TerminalView(context, object : TerminalView.Events {
-    override fun size(cols: Int, rows: Int) = ctx.emit("size", mapOf("cols" to cols, "rows" to rows))
+    // `keys`: this view takes the page's keys (`key`), after what the keyboard is composing.
+    override fun size(cols: Int, rows: Int) = ctx.emit("size", mapOf("cols" to cols, "rows" to rows, "keys" to true))
     override fun failed(message: String) = ctx.emit("failed", mapOf("message" to message))
     override fun input(data: String) = ctx.emit("input", mapOf("data" to data))
     override fun scroll(lines: Int) {
@@ -74,6 +75,7 @@ class TerminalComponent(context: Context, private val ctx: NshComponentContext) 
       "blur" -> view.hideKeyboard()
       "retry" -> view.retry()
       "paste" -> (m?.get("text") as? String)?.let(view::pasteText)
+      "key" -> (m?.get("data") as? String)?.let(view::key)
     }
   }
 

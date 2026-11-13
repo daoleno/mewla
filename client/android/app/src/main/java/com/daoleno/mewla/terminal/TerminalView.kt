@@ -1043,9 +1043,29 @@ class TerminalView(context: Context, private val events: Events) : View(context)
   /** The `paste` command (the key bar's Paste): as the selection menu's Paste. */
   fun pasteText(text: String) = paste(text)
 
+  /**
+   * A key from the page (the key bar's Enter, Tab, ^C, arrows): what the keyboard is composing goes to the
+   * program first, so the key never overtakes the word typed before it, then the key.
+   */
+  fun key(data: String) {
+    commitComposing()
+    if (data.isNotEmpty()) send(data)
+  }
+
+  /** Text the keyboard is still composing goes out now, and the keyboard is told to start afresh. */
+  private fun commitComposing() {
+    if (composing.isEmpty()) return
+    val text = composing
+    composing = ""
+    send(text)
+    context.getSystemService(InputMethodManager::class.java).restartInput(this)
+    invalidate()
+  }
+
   /** Pasted text to the program, framed for bracketed paste when it asked for it. */
   private fun paste(text: String) {
     if (handle == 0L) return
+    commitComposing()
     val bytes = Vt.nativePaste(handle, text.toByteArray(Charsets.UTF_8)) ?: return
     send(String(bytes, Charsets.UTF_8))
     scrollToBottom()
