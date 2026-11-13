@@ -134,7 +134,7 @@ export function FilesPage(props: { review: GitReview; nav: PageNav }) {
         class="min-h-[44px] flex-row items-center gap-2 py-2 pr-4"
         style={{ paddingLeft: 16 + entry.depth * 16 }}
       >
-        <Icon name={entry.folder ? (shownExpanded().includes(entry.id) ? "folder-open" : "folder") : "document-text"} size={16} tone={entry.folder ? "soft" : "faint"} />
+        <Icon name={entry.folder ? (shownExpanded().includes(entry.id) ? "folder-open" : "folder") : "document-text"} size={16} tone={entry.folder ? "tileTeal" : "tileGraphite"} />
         <Text class={`flex-1 font-mono text-code line-clamp-1 ${changed || holds ? "font-semibold" : ""}`}>{entry.label}</Text>
         {changed ? <StatusTile file={changed} /> : holds ? <View testID={`git-file-dot-${entry.id}`} class="size-1.5 rounded-full bg-foreground" /> : null}
       </View>

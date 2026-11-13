@@ -19,14 +19,17 @@ export function Row(props: { title: string; detail?: string; onPress?: () => voi
   );
 }
 
-/** The status dot: the seal for what waits on you, quiet for the rest (DESIGN.md's Work states). */
+/**
+ * The status dot (SPEC §10.4): the seal for what waits on you, `ok` for done, `warning` for a failure, ink while
+ * it runs, a ring for the rest.
+ */
 export function StatusDot(props: { status: CalendarStatus }) {
   const color = () => {
     switch (props.status) {
       case "waiting": return "bg-seal";
       case "running": return "bg-ring";
-      case "failed": return "bg-destructive";
-      case "completed": return "bg-muted-foreground";
+      case "failed": return "bg-warning";
+      case "completed": return "bg-ok";
       default: return "border border-muted-foreground";
     }
   };

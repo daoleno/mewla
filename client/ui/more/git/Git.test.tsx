@@ -139,6 +139,8 @@ describe("Git review", () => {
     expect(app.shows("id:git-row-staged:done.ts")).toBe(true);
     expect(app.shows("id:git-row-changes:app.ts")).toBe(true);
     expect(app.shows("id:git-row-changes:notes.md")).toBe(true);
+    // Each file leads with its status tile (SPEC §10.4: its mark in its colour on its wash).
+    expect(app.count("id:git-status-tile")).toBe(3);
     expect(app.texts()).toContain("Commit 1 file");
     await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_diff_status").length === 2);
     expect(repo.asked.find((r) => r.type === "git_diff_status")?.body).toEqual({ target_id: "w1", cwd: "/repo" });

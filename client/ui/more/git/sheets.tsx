@@ -2,7 +2,7 @@ import { Scroll, signal, View } from "nsh";
 import type { GitBranchesPayload, GitBranchInfo } from "../../../core/git/gitDiff";
 import { formatGitAge } from "../../../core/git/gitReviewTime";
 import { EmptyState, Field, Notice, Row } from "../../kit/kit";
-import { Icon } from "../../kit/Icon";
+import { tile } from "../../kit/RowTile";
 import { Sheet } from "../../kit/Sheet";
 import { PillButton } from "../../kit/kit";
 import { TextButton } from "./parts";
@@ -108,7 +108,7 @@ function BranchPicker(props: { review: GitReview; onDone: () => void }) {
         {shown().map((branch) => (
           <Row
             testID={`branch-${branch.name}`}
-            leading={<Icon name="git-branch" size={18} tone={branch.current ? "ink" : "soft"} />}
+            lead={tile("teal", "git-branch")}
             title={branch.name}
             subtitle={gitBranchDetail(branch) || undefined}
             accessibilityLabel={`${branch.name}${branch.current ? ", current" : ""}`}
