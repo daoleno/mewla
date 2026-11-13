@@ -185,9 +185,9 @@ describe("Sessions", () => {
     const pasted = '"$MEWLA_WORKER_PROGRESS_CMD" worker progress --turn-id t1 --status running';
     const footer = "⏸ manual mode on · ? for shortcuts";
     const app = await sessionsApp({ worker_sessions: [
-      session("a", { name: "pasted", status: "running", delegated: true, started_at: Date.now() - 12 * 60_000, summary: pasted, last_output_lines: [pasted] }),
+      session("a", { name: "pasted", status: "running", delegated: true, running_since: Date.now() - 12 * 60_000, summary: pasted, last_output_lines: [pasted] }),
       session("b", { name: "quiet one", status: "unknown", summary: footer, last_output_lines: [footer] }),
-      session("c", { name: "reporter", status: "running", phase: "working", summary: "Rerunning the suite", started_at: Date.now() - 4 * 60_000 }),
+      session("c", { name: "reporter", status: "running", phase: "working", summary: "Rerunning the suite", running_since: Date.now() - 4 * 60_000 }),
     ] });
     await app.waitFor("text:reporter");
     // Nothing reported: the agent and project, never the bare "Working" or "Idle".
