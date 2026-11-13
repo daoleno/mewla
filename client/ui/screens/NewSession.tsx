@@ -1,7 +1,9 @@
-import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
+import type { JSX } from "nsh";
 import { Delayed, Rows } from "../kit/wait";
 import { Button } from "nsh/base";
-import { Sheet } from "../kit/Sheet";
+import { Sheet, SheetRoom } from "../kit/Sheet";
+import { scrollAboveControl } from "../../core/shell/sheet";
 import { Field, PillButton, Row, Section } from "../kit/kit";
 import { LAUNCH_PRESETS } from "../../core/sessions/agentCommands";
 import { createSession } from "../../core/sessions/create";
@@ -57,8 +59,10 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
     }
   };
   void load(props.start);
+  // 440, or what the sheet leaves on a short window (a phone held sideways).
+  const room = SheetRoom();
   return (
-    <View class="gap-3 px-4" style={{ height: 440 }}>
+    <View class="gap-3 px-4" style={{ height: Math.min(440, room()) }}>
       <View class="min-h-[44px] flex-row items-center gap-2">
         <Button testID="dir-up" accessibilityLabel="Up a folder" onPress={() => void load(parentDirectoryPath(path()))} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="arrow-up" size={20} tone="ink" /></Button>
         <Text class="min-w-0 flex-1 font-mono text-code line-clamp-1">{path() || "Home"}</Text>
@@ -84,6 +88,21 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
       </View>
     </View>
   );
+}
+
+/** Start's block: 8 above a 52 pill. */
+const START_BLOCK = 60;
+/** The body's own foot (`pb-2`). */
+const BODY_FOOT = 8;
+
+/**
+ * The scroll's height in the room the sheet leaves (core/shell/sheet.ts): 520 at most, Start under it, unless less
+ * than 120 would be left beside Start, when Start goes to the scroll's end. Made under the sheet, so it reads its room.
+ */
+function Fitted(props: { children: (fit: () => { scroll: number; controlInside: boolean }) => JSX.Element }) {
+  const room = SheetRoom();
+  const fit = computed(() => scrollAboveControl(room() - BODY_FOOT, START_BLOCK, { max: 520, minScroll: 120 }));
+  return <>{props.children(fit)}</>;
 }
 
 /** A folder the sheet offers: a recent project, or the one picked or inherited. */
@@ -197,12 +216,17 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   };
 
   const offline = () => connection() !== "connected";
+  const startButton = () => (
+    <View class="mt-2">
+      <PillButton testID="new-launch" title="Start" filled busy={busy()} disabled={offline() || (advanced() ? false : !preset())} onPress={start} />
+    </View>
+  );
   return (
     <Sheet testID="new-session-sheet" open={newSessionOpen} onClose={() => newSessionOpen.set(false)}
       title={() => (picking() ? "Choose a folder" : newSessionTarget() ? "New terminal" : "New session")}>
-      <If when={picking()} else={<View class="px-4 pb-2">
-          {/* Agent and Folder scroll; Start stays in view under them. */}
-          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 520 }}>
+      <If when={picking()} else={<Fitted>{(fit) => <View class="px-4 pb-2">
+          {/* Agent and Folder scroll; Start stays in view under them, or at their end when the window is too short for both. */}
+          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: fit().scroll }}>
             <If when={!advanced()} else={<Section sheet title="Command">
                 <Field testID="new-command" accessibilityLabel="Command" mono value={command()} placeholder="Login shell" onChange={(value) => command.set(value)} />
                 <View class="flex-row flex-wrap gap-2 px-4 pb-3">
@@ -246,11 +270,10 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
                 <Field testID="new-task" accessibilityLabel="What should it do?" multiline value={task()} placeholder="What should it do?" onChange={(value) => task.set(value)} />
               </Section></If>
             <If when={problem()}><View class="mt-3 px-4"><Text testID="new-problem" class="text-sub text-muted-foreground">{problem()}</Text></View></If>
+            <If when={fit().controlInside}>{startButton()}</If>
           </Scroll>
-          <View class="mt-2">
-            <PillButton testID="new-launch" title="Start" filled busy={busy()} disabled={offline() || (advanced() ? false : !preset())} onPress={start} />
-          </View>
-        </View>}><DirectoryPicker start={cwd()} onCancel={() => picking.set(false)} onPick={(path) => {
+          <If when={!fit().controlInside}>{startButton()}</If>
+        </View>}</Fitted>}><DirectoryPicker start={cwd()} onCancel={() => picking.set(false)} onPick={(path) => {
           cwd.set(path);
           extra.set({ path, name: projectName(path) || path });
           picking.set(false);
