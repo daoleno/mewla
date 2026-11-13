@@ -59,7 +59,7 @@ export function pageStatusBar(own?: StatusBar): StatusBar {
 
 /**
  * The page's content in its column (client/DESIGN.md): always the same view, so a page that changes
- * column (a Session between chat and terminal) or a window crossing 1024 never makes its content
+ * column (a Session between chat and terminal) or a window crossing the wide gate never makes its content
  * again; only the width changes. On a phone and a narrow window the whole width.
  */
 function Column(props: { width: () => number | null; children: JSX.Element }) {
@@ -131,7 +131,8 @@ export function NavPage(props: AppNavPageProps) {
           {slots.headerLeft ?? null}
           {slots.headerTitle ?? <Text role="header" class="shrink text-[22px] font-medium text-foreground line-clamp-1">{page.title ?? ""}</Text>}
         </View></If>;
-    // A phone never reaches 1024 pt: its pages stay the system's own, with nothing around their content.
+    // A phone's page that keeps the system header stays the system's own, with nothing around its content, also in the
+    // right pane of an open iPhone Duo (its pushed pages wear the capsule above).
     if (platform.idiom === "phone") {
       const [own, rest] = split(page, ["capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar"]);
       return <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;

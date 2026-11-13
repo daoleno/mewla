@@ -10,7 +10,7 @@ import { newSessionOpen } from "../screens/NewSession";
 import { brain, brainThread, current } from "../session";
 import { StateDotMark } from "../tray/StateControl";
 import { refreshOpened, tray } from "../tray/state";
-import { SelectedWell, TrayBody, type TrayOpeners } from "../tray/Tray";
+import { homeHeaderInset, SelectedWell, TrayBody, type TrayOpeners } from "../tray/Tray";
 import { currentBrain } from "../brain";
 import { paletteOpen } from "./desktop/Overlays";
 import { paneWidth, setPaneWidth } from "./layout";
@@ -148,7 +148,8 @@ export function LeftPane() {
     untracked(refreshOpened);
   });
   return (
-    <View testID="left-pane" accessibilityLabel="Tray" role="navigation" class="bg-background" style={{ width: paneWidth() }}>
+    // Below the status bar on a touch screen (an Android foldable, a tablet), as Brain's header beside it is.
+    <View testID="left-pane" accessibilityLabel="Tray" role="navigation" class="bg-background" style={{ width: paneWidth(), paddingTop: homeHeaderInset() }}>
       <PaneHeader />
       <SearchOrRun />
       <BrainRow />
