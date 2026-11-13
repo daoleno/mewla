@@ -6,7 +6,9 @@ package webui
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"io"
 	"io/fs"
 	"mime"
@@ -93,12 +95,24 @@ func handler(files fs.FS, cacheControl func(string) string) http.Handler {
 
 		header := w.Header()
 		header.Set("Content-Type", contentType(name))
-		header.Set("Cache-Control", cacheControl(name))
+		policy := cacheControl(name)
+		header.Set("Cache-Control", policy)
 		header.Add("Vary", "Accept-Encoding")
+		gzipped := acceptsGzip(r)
+		// A name that can change (index.html, a package's fixed names such as terminal/) is revalidated on every
+		// use: its ETag lets the browser and a cache in front keep it and get 304 Not Modified while it is the same.
+		if policy != immutableAge {
+			tag := entityTag(body, gzipped)
+			header.Set("ETag", tag)
+			if matchesNoneOf(r.Header.Get("If-None-Match"), tag) {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
 		if r.Method == http.MethodHead {
 			return
 		}
-		if acceptsGzip(r) {
+		if gzipped {
 			header.Set("Content-Encoding", "gzip")
 			_, _ = w.Write(body)
 			return
@@ -139,6 +153,27 @@ func packageCacheControl(name string) string {
 		}
 	}
 	return "no-cache"
+}
+
+// entityTag names a file's content as served: the gzip bytes and their decompressed form are two representations.
+func entityTag(body []byte, gzipped bool) string {
+	sum := sha256.Sum256(body)
+	tag := hex.EncodeToString(sum[:12])
+	if gzipped {
+		tag += "-gzip"
+	}
+	return `"` + tag + `"`
+}
+
+// matchesNoneOf reports whether If-None-Match names tag (weak comparison, as RFC 9110 asks for it), or is "*".
+func matchesNoneOf(ifNoneMatch, tag string) bool {
+	for _, candidate := range strings.Split(ifNoneMatch, ",") {
+		candidate = strings.TrimPrefix(strings.TrimSpace(candidate), "W/")
+		if candidate == "*" || candidate == tag {
+			return true
+		}
+	}
+	return false
 }
 
 func acceptsGzip(r *http.Request) bool {
