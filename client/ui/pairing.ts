@@ -1,6 +1,6 @@
 import { Clipboard, host, platform, signal } from "nsh";
 import { PairLatch } from "../core/onboarding";
-import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
+import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
 import { haptic } from "./shell/haptics";
@@ -86,17 +86,28 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
 
 /** "Paste a pairing link": the clipboard's text, or a word about what to copy. */
 export async function pasteFromClipboard(): Promise<void> {
-  const text = (await Clipboard.readText().catch(() => null))?.trim() ?? "";
-  if (!text) return pairingIssue.set(NOTHING_TO_PASTE);
-  await pairFromText(text, "paste");
+  const read = await readClipboard();
+  if ("refused" in read) return pairingIssue.set(pasteRefused(read.refused));
+  if (!read.text) return pairingIssue.set(NOTHING_TO_PASTE);
+  await pairFromText(read.text, "paste");
+}
+
+/** The clipboard's text, or why the system would not give it (a refusal is not an empty clipboard). */
+async function readClipboard(): Promise<{ text: string } | { refused: unknown }> {
+  try {
+    return { text: (await Clipboard.readText()).trim() };
+  } catch (error) {
+    return { refused: error };
+  }
 }
 
 /** Settings' "Pair": the link typed or pasted into the field, else the clipboard's. */
 export async function pairFromField(text: string): Promise<void> {
   if (text.trim()) return pairFromText(text, "paste");
-  const clipboard = (await Clipboard.readText().catch(() => null))?.trim() ?? "";
-  if (!clipboard) return pairingIssue.set(LINK_REQUIRED);
-  await pairFromText(clipboard, "paste");
+  const read = await readClipboard();
+  if ("refused" in read) return pairingIssue.set(pasteRefused(read.refused));
+  if (!read.text) return pairingIssue.set(LINK_REQUIRED);
+  await pairFromText(read.text, "paste");
 }
 
 /** "Pick QR image": the code in a screenshot or photo the person picks (the host reads it). */
