@@ -198,6 +198,18 @@ describe("About update row states", () => {
     expect(downloading.host.posts()).toHaveLength(0);
   });
 
+  test("a download's ticks move its percentage and meter in the same row", async () => {
+    const downloading = (progress: number) => ({ kind: "downloading", update: artifact, progress });
+    const app = await shows(downloading(0.1));
+    expect(app.texts()).toContain("10%");
+    await app.host.send("test.state", downloading(0.5));
+    expect(app.texts()).toContain("50%");
+    expect(app.texts()).not.toContain("10%");
+    await app.host.send("test.state", { kind: "ready", update: artifact, fileName: APK });
+    expect(app.texts()).toContain("Ready to install");
+    expect(app.count(ACTION)).toBe(1);
+  });
+
   test("hidden is no row", async () => {
     const app = await shows({ kind: "hidden" });
     expect(app.count("id:app-update")).toBe(0);
