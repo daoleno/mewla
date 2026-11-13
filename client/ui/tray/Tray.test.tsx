@@ -84,6 +84,19 @@ describe("the tray", () => {
     expect(app.count("id:tray-running >> id:tray-row")).toBe(1);
   }, 20_000);
 
+  test("a row is kept while the tray is made again (each second, each update): a tap spanning one still opens the Session", async () => {
+    const app = await open(HARNESS, { host: { params: { workers: [worker("alpha")] } }, platform: "android" });
+    await app.waitFor("text:1 running");
+    await app.press("id:state-control");
+    await app.waitFor("text:Claude Code · mewla");
+    await app.dragAndHold("id:tray-running >> id:tray-row", { x: 0, y: 0 });
+    // A new list (new objects, the same Session): the row under the finger takes the new line and stays.
+    await app.host.send("app.workers", [worker("alpha", { cwd: "/home/me/site" })]);
+    await app.waitFor("text:Claude Code · site");
+    await app.drop();
+    await app.waitFor("id:session-page");
+  }, 20_000);
+
   test("Back closes the tray on home; on a page pushed from it, Back returns to the open tray", async () => {
     const app = await open(HARNESS, { host: { params: { workers: [worker("alpha")] } }, platform: "android" });
     await app.waitFor("text:1 running");
