@@ -40,6 +40,8 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     pairingIssue.set(NOT_A_CODE);
     return latch.release(value);
   }
+  // A pairing code found in the finder: one of the app's two light ticks (SPEC §16.3 Haptics).
+  if (source === "camera") haptic.impact("light");
   if (!alreadyPairedWith(servers(), payload)) {
     const copy = pairingScopeCopy(device());
     const { action } = await showAlert({
@@ -68,14 +70,12 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     }
     // Settings' Pair page closes on this, while the app is still there under it.
     pairings.set(pairings() + 1);
-    haptic.notification("success");
     // A browser goes straight to the app; a phone sees Brain come home first (the app goes until then).
     if (paired && device() === "phone") justPaired.set(paired);
     if (source === "link") linkPairing.set(null);
     latch.release();
   } catch (error) {
     pairingIssue.set(pairingProblem(error));
-    haptic.notification("error");
     if (source === "link") linkPairing.set({ problem: pairingProblem(error) });
     latch.release(value);
   } finally {

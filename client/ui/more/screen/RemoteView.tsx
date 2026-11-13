@@ -10,7 +10,6 @@ import type { ScreenStreamStats } from "../../../core/screen/screenStream";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { SCREEN_VIEWER_SOURCE } from "./viewerSource";
 import { viewerBaseUrl } from "../../viewerBase";
-import { haptic } from "../../shell/haptics";
 
 export interface RemoteModifier {
   key: ScreenModifier;
@@ -98,8 +97,8 @@ export class RemoteSession {
   readonly stats = signal<ScreenStreamStats | null>(null);
   readonly viewerStats = signal<ViewerStats | null>(null);
   readonly holding = signal(false);
-  /** The viewer felt a long press (a right-click) or the remote bell rang: a medium impact on a phone, as the Expo app played. */
-  onHaptic: (() => void) | null = () => haptic.impact("medium");
+  /** The viewer felt a long press (a right-click) or the remote bell rang. No haptic: the app has two (SPEC §16.3). */
+  onHaptic: (() => void) | null = null;
   private connection: ScreenConnection | null = null;
   private web: WebViewRef | null = null;
   private viewerReady = false;

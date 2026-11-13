@@ -11,7 +11,6 @@ import { RowEnd, RowHair, RowText, RowTile } from "../tray/rowParts";
 import { workLinkOf } from "./workLinks";
 import { openPage } from "../shell/nav";
 import { newSessionOpen } from "../screens/NewSession";
-import { haptic } from "../shell/haptics";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
 import { sessionEmptyCat, sessionEmptyState } from "../../core/sessions/sessionEmptyState";
 import { PetSprite } from "../pets/PetSprite";
@@ -86,7 +85,6 @@ async function terminateSelected(): Promise<void> {
   const server = current();
   const keys = [...selection()];
   if (!transport || !server || keys.length === 0 || terminating()) return;
-  haptic.notification("warning");
   // Named by what it ends; the action keeps the normal role (red is for what waits for you).
   const only = keys.length === 1 ? workers().find((w) => w.key === keys[0]) : undefined;
   const { action } = await showAlert({
@@ -111,7 +109,6 @@ async function terminateSelected(): Promise<void> {
       selection.set(failed.size ? new Set([...failed]) : EMPTY_SESSION_SELECTION);
       const titles = summary.failedEntries.map((e) => (byKey.get(e.sessionKey) ? sessionRowModel(byKey.get(e.sessionKey)!, { alias: untracked(aliases)[e.workerId] }).title : ""));
       notice.set(sessionTerminationSummaryMessage(summary, titles));
-      if (!failed.size) haptic.notification("success");
     },
   });
   batch.start();
@@ -167,7 +164,6 @@ function SessionRow(props: { worker: () => Worker; first: () => boolean; last: (
       onPress={() => (selecting() ? online() && toggleSelected(props.worker()) : props.open(props.worker()))}
       onLongPress={() => {
         if (selecting() || !online()) return;
-        haptic.impact("medium");
         toggleSelected(props.worker());
       }}
       onContextMenu={() => {
