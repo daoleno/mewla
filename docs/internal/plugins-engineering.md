@@ -57,7 +57,7 @@ Disconnect commits the disabled state before provider revocation and credential 
 
 Credentials live in the daemon's private 0600 vault. Account metadata/history contain no token, arguments or result bodies. Existing linked accounts remain usable. A verified reconnect can retain the stable known identity's account ID. Where the vendor does not expose a supported identity, Mewla says so instead of requiring a nickname or inventing an identity.
 
-The existing private control CLI retains operator-owned OAuth configuration and token/custom-service functionality for advanced use. Those commands are not the end-user built-in installation journey and must never distribute Mewla's shared publisher secret.
+The existing private control CLI retains operator-owned OAuth configuration and token/custom-service functionality for advanced use. An operator client whose fixed https callback is not the web origin's own finishes by polling (no `web_return`); its callback tab is sent to that origin's `/plugins` with the outcome (`oauthFlow.ReturnTo`, an origin `servesWebOrigin` admitted at start), never left on the `mewla://plugins` page. Those commands are not the end-user built-in installation journey and must never distribute Mewla's shared publisher secret.
 
 ## Custom service boundaries
 
@@ -152,8 +152,12 @@ background refresh, never from a synchronous list-time process. `--version` is
 the only account-free `cloud_run` probe; cloud command authorization is unchanged.
 
 An OAuth callback can land on a different Mewla computer using the same loopback
-port. Unknown state must never redirect away or exchange the code: the callback
-page retains its original URL and provides a full-address Copy action. The page
+port. Unknown state must never exchange the code. Each state the daemon issues
+ends in a 32-hex HMAC under a key kept in its vault (`oauth-state-key`,
+`connections/oauth_state.go`), so a state it issued but no longer holds (a
+restart forgets pending flows, or a replay) is told apart: on a web UI host it
+redirects to `/plugins?plugin_error=expired`. Any other unknown state (another
+computer's) keeps the copy page: it retains its original URL and provides a full-address Copy action. The page
 uses no-store, no-referrer and a nonce-bound script; callback values are not
 rendered into HTML or logged. Known states retain their single-use behavior.
 The computers channel currently transports durable Brain messages, not an OAuth

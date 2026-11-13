@@ -51,7 +51,13 @@ type oauthFlow struct {
 	Expires      time.Time
 	Mobile       bool
 	Web          bool // returns to the web UI's Plugins page
-	AllowWrites  bool
+	// ReturnTo: a web UI sign-in whose provider returns to another fixed https
+	// callback of this daemon (an operator's client) instead of the web
+	// origin's own. That tab is not the web UI, so its outcome takes it to the
+	// origin's Plugins (an origin servesWebOrigin admitted when it started),
+	// never to a page whose only way on is mewla://plugins.
+	ReturnTo    string
+	AllowWrites bool
 	// Loopback: the provider returns to this daemon's own port; the person may
 	// also paste the address the browser ended on. One state finishes once,
 	// from either.
@@ -105,7 +111,7 @@ const webCallbackPath = pluginreturn.WebCallbackPath
 
 func validCallback(raw string) bool {
 	u, err := url.Parse(raw)
-	return len(raw) <= 4096 && err == nil && u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Path == "/plugins/oauth/callback" && (u.Scheme == "https" && u.Hostname() != "" || u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"))
+	return len(raw) <= 4096 && err == nil && u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Path == "/plugins/oauth/callback" && (u.Scheme == "https" && u.Hostname() != "" || u.Scheme == "http" && (u.Hostname() == "localhost" || net.ParseIP(u.Hostname()).IsLoopback()))
 }
 
 // appReturn reports a redirect that ends in the Mewla app, directly or
@@ -337,7 +343,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	} else if oauth.Static != nil {
 		r.OAuth.Resource = oauth.Static.Resource
 	}
-	state, verifier := oauth2.GenerateVerifier(), oauth2.GenerateVerifier()
+	state, verifier := m.newOAuthState(), oauth2.GenerateVerifier()
 	paste := false
 	if webApp {
 		origin := strings.TrimSuffix(callback, webCallbackPath)
@@ -360,7 +366,12 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		// The person may be away from the screen the sign-in started on.
 		lifetime = oauthLoopbackLifetime
 	}
-	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Loopback: loopback, Paste: paste, Expires: time.Now().Add(lifetime), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: callback != "" && callback != NativeCallback && (client.RedirectURL == callback || webApp && !paste), AllowWrites: callback != "" && in.AllowWrites}
+	web := callback != "" && callback != NativeCallback && (client.RedirectURL == callback || webApp && !paste)
+	returnTo := ""
+	if callback != "" && callback != NativeCallback && !web && !paste && !loopback {
+		returnTo = strings.TrimSuffix(callback, webCallbackPath)
+	}
+	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Loopback: loopback, Paste: paste, Expires: time.Now().Add(lifetime), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: web, ReturnTo: returnTo, AllowWrites: callback != "" && in.AllowWrites}
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }
@@ -403,6 +414,14 @@ func (m *Manager) BrowserOAuthCallback(w http.ResponseWriter, req *http.Request,
 		return
 	}
 	if _, owns := m.pending[values.Get("state")]; !owns {
+		// A state this daemon issued and no longer holds went stale (a restart
+		// forgets pending sign-ins) or was replayed: on a web UI host, Plugins
+		// says it expired and offers Connect again; nothing is exchanged. Any
+		// other may be another computer's on the same loopback port.
+		if webUI && m.issuedOAuthState(values.Get("state")) {
+			pluginsReturn(w, req, "", url.Values{"plugin_error": {"expired"}})
+			return
+		}
 		foreignOAuthReturn(w)
 		return
 	}
@@ -413,10 +432,29 @@ func (m *Manager) BrowserOAuthCallback(w http.ResponseWriter, req *http.Request,
 // started, naming the service it was for. The target is a path, so the
 // browser stays on the origin the provider returned it to.
 func pluginsReturn(w http.ResponseWriter, req *http.Request, integration string, query url.Values) {
+	pluginsReturnTo(w, req, "", integration, query)
+}
+
+// pluginsReturnTo is pluginsReturn on origin ("" for the request's own).
+func pluginsReturnTo(w http.ResponseWriter, req *http.Request, origin, integration string, query url.Values) {
 	if integration != "" {
 		query.Set("service", integration)
 	}
-	http.Redirect(w, req, "/plugins?"+query.Encode(), http.StatusSeeOther)
+	http.Redirect(w, req, origin+"/plugins?"+query.Encode(), http.StatusSeeOther)
+}
+
+// webOutcome sends a web UI sign-in's tab back to its Plugins with the
+// outcome, and reports whether the flow was one.
+func webOutcome(w http.ResponseWriter, req *http.Request, flow *oauthFlow, integration string, query url.Values) bool {
+	switch {
+	case flow.Web:
+		pluginsReturn(w, req, integration, query)
+	case flow.ReturnTo != "":
+		pluginsReturnTo(w, req, flow.ReturnTo, integration, query)
+	default:
+		return false
+	}
+	return true
 }
 
 // signInFailures name the step a sign-in return failed at. Web returns carry
@@ -464,6 +502,10 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	state := req.URL.Query().Get("state")
 	flow, ok := m.pending[state]
 	if !ok || flow.Mobile != mobile && !flow.Loopback && !flow.Paste || time.Now().After(flow.Expires) {
+		if ok && !mobile && flow.ReturnTo != "" {
+			pluginsReturnTo(w, req, flow.ReturnTo, "", url.Values{"plugin_error": {"expired"}})
+			return "expired"
+		}
 		if webUI && !mobile {
 			pluginsReturn(w, req, "", url.Values{"plugin_error": {"expired"}})
 			return "expired"
@@ -474,8 +516,7 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	delete(m.pending, state)
 	r, ok := m.records[flow.ID]
 	if !ok || !r.Account.Enabled || r.Account.Status == "disconnected" {
-		if flow.Web {
-			pluginsReturn(w, req, "", url.Values{"plugin_error": {"cancelled"}})
+		if webOutcome(w, req, flow, "", url.Values{"plugin_error": {"cancelled"}}) {
 			return "cancelled"
 		}
 		http.Error(w, "Account authorization cancelled", 400)
@@ -490,8 +531,7 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 		}
 		_ = m.save()
 		log.Printf("plugins: %s sign-in failed at %s: %s", r.Account.Integration, cause, detail)
-		if flow.Web {
-			pluginsReturn(w, req, r.Account.Integration, url.Values{"plugin_error": {cause}})
+		if webOutcome(w, req, flow, r.Account.Integration, url.Values{"plugin_error": {cause}}) {
 			return cause
 		}
 		http.Error(w, signInFailures[cause], 400)
@@ -545,8 +585,7 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	if err = m.save(); err != nil {
 		return fail("storage", err.Error())
 	}
-	if flow.Web {
-		pluginsReturn(w, req, r.Account.Integration, url.Values{"connected": {r.Account.ID}})
+	if webOutcome(w, req, flow, r.Account.Integration, url.Values{"connected": {r.Account.ID}}) {
 		return ""
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -194,6 +194,9 @@ type Server struct {
 	webUIFiles                 fs.FS
 	webUIDir                   string
 	webUIOverrideSeen          atomic.Bool
+	// webPort is the port this daemon listens on (0 until it binds): a
+	// loopback web UI is this daemon's only on it.
+	webPort atomic.Int32
 
 	workSubID                   int
 	workSub                     <-chan work.Event
@@ -570,6 +573,9 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 		if bound, ok := tcp.Addr().(*net.TCPAddr); ok {
 			s.connections.SetLoopbackPort(bound.Port)
 		}
+	}
+	if bound, ok := tcp.Addr().(*net.TCPAddr); ok {
+		s.webPort.Store(int32(bound.Port))
 	}
 	var listener net.Listener = tcp
 	if s.tlsConfig != nil {
