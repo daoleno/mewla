@@ -14,6 +14,9 @@ import { TerminalJumpControls, TerminalRendererFailure, TerminalSearchBar } from
 import { keyboardOnlyWeb, WebTerminalSurface } from "./web/WebTerminalSurface";
 import { loadTerminalTextSize, setTerminalTextSize, terminalTextSize } from "./fontSize";
 import { TERMINAL_FONT } from "../../core/sessions/deviceState";
+import { motion } from "../../core/motion/tokens";
+import { SlowLine, StateView, states, useWait } from "../kit/wait";
+import { current, resumeConnection } from "../session";
 
 /** The phones' native view; the web's is libghostty-vt (WebAssembly) on a canvas in a web view, with the same contract. */
 const Surface: typeof TerminalSurface = platform.os === "web" ? WebTerminalSurface : TerminalSurface;
@@ -108,8 +111,13 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     mark: (row) => command("mark", { row }),
   }, (state) => search.set(state));
 
+  // SPEC §16.4 Terminal attach: the well at once, the slow line from 3 s, "Couldn't attach" with Try again at the
+  // attachment's own 15 s bound, the last screen dimmed with "Reconnecting…" while the computer is away.
+  const wait = useWait({ read: () => session.retry(), reconnect: resumeConnection, failMs: 16_000 });
+  wait.start();
   const session: TerminalSession = new TerminalSession(props.transport, props.targetId, {
     reset: () => {
+      wait.resolve();
       for (let i = pending.length - 1; i >= 0; i--) if (pending[i][0] === "write") pending.splice(i, 1);
       problem.set("");
       copyMode.set(false);
@@ -124,7 +132,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     },
     historyNotice: (text) => historyNotice.set(text),
     exit: (code) => exited.set(code),
-    error: (message) => problem.set(message),
+    error: (message) => (session.attached ? problem.set(message) : wait.fail()),
   }, { program: () => props.program?.() });
   cleanup(() => session.close());
 
@@ -294,7 +302,24 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
           }}
           onTapCell={({ col, row, text, index }) => tap(col, row, text, index)}
           onCopy={({ text }) => void Clipboard.writeText(text).catch(() => {})} />
-        {problem() || exited() !== undefined ? (
+        <View class="absolute inset-0 bg-card" style={{ pointerEvents: "none", opacity: wait.dim() ? 0.5 : 0, transitionProperty: "opacity", transitionDuration: motion.dur.base }} />
+        <SlowLine on={wait.slow()} testID="terminal-slow-line" />
+        <If when={wait.view() === "failed"}>
+          <View testID="terminal-attach-failed" class="absolute inset-0 justify-center bg-card">
+            <StateView icon="terminal" title="Couldn't attach" detail={`${current()?.name || "Your computer"} didn't answer`}
+              actions={[{ title: "Try again", onPress: wait.retry, testID: "terminal-try-again" }]} />
+          </View>
+        </If>
+        <If when={wait.view() === "away"}>
+          <View class="absolute inset-0 justify-center bg-card">
+            <StateView {...states.away(current()?.name, undefined, wait.retry)} />
+          </View>
+        </If>
+        {wait.dim() ? (
+          <View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
+            <Text testID="terminal-reconnecting" class="text-sm text-muted-foreground">Reconnecting…</Text>
+          </View>
+        ) : problem() || exited() !== undefined ? (
           <View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
             <Text testID="terminal-notice" class="text-sm">{exited() !== undefined ? `The program ended${exited() === null ? "" : ` (exit ${exited()})`}.` : problem()}</Text>
           </View>

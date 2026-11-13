@@ -489,6 +489,20 @@ describe("a Session", () => {
     expect(framesOf(app.host.posts(), "kill_worker")).toEqual([]);
   }, 20_000);
 
+  test("a terminal that cannot attach says \"Couldn't attach\" with Try again over its well, never a blank screen (SPEC §16.4)", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript }, replies: { terminal_open: { type: "terminal_error", message: "pane gone" } } });
+    await app.waitFor("text:notes", { timeout: 10_000 });
+    await app.press("text:notes");
+    await app.waitFor("id:session-chat");
+    await app.press("id:session-mode");
+    await app.waitFor("id:terminal-group", { timeout: 10_000 });
+    // The computer refuses the attachment (or never answers, by the 16 s bound): the named state over the well.
+    await app.waitFor("id:terminal-attach-failed", { timeout: 20_000 });
+    expect(app.texts()).toContain("Couldn't attach");
+    await app.press("id:terminal-try-again");
+    await app.waitUntil(() => !app.shows("id:terminal-attach-failed"));
+  }, 35_000);
+
   test("the terminal sits in its surface group over a key bar of tiles in the mock's order, words in mono as the mock writes them", async () => {
     // A phone (touch: every key shows), the Session last left in its terminal.
     const host = phoneHost({ brain: {}, worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } });
