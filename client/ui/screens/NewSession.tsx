@@ -226,7 +226,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
       title={() => (picking() ? "Choose a folder" : newSessionTarget() ? "New terminal" : "New session")}>
       <If when={picking()} else={<Fitted>{(fit) => <View class="px-4 pb-2">
           {/* Agent and Folder scroll; Start stays in view under them, or at their end when the window is too short for both. */}
-          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: fit().scroll }}>
+          <Scroll testID="new-scroll" keyboardShouldPersistTaps="handled" style={{ maxHeight: fit().scroll }}>
             <If when={!advanced()} else={<Section sheet title="Command">
                 <Field testID="new-command" accessibilityLabel="Command" mono value={command()} placeholder="Login shell" onChange={(value) => command.set(value)} />
                 <View class="flex-row flex-wrap gap-2 px-4 pb-3">
