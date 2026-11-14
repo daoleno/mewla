@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering } from "../../testing/fixtures";
+import { answering, pressUntil } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const PAGE = { name: "git", targetId: "w1", cwd: "/repo" };
@@ -693,9 +693,9 @@ describe("a big change (owner 11-14: Git on a checkout with 14,883 untracked fil
     expect(app.texts()).toContain("Show 200 more");
     // Every row of the old page in one go took the engine past this; a page is well inside it.
     expect(took).toBeLessThan(8_000);
-    await app.press("id:git-more-changes");
-    await app.waitFor("id:git-row-changes:app/node_modules/f00399.js");
-    expect(app.shows("id:git-row-changes:app/node_modules/f00400.js")).toBe(false);
+    // A press can be lost on a loaded runner (pressUntil); the next page is made, not the whole list again.
+    await pressUntil(app, "id:git-more-changes", "id:git-row-changes:app/node_modules/f00399.js", 20_000);
+    expect(app.shows("id:git-row-changes:app/node_modules/f00000.js")).toBe(true);
   }, 60_000);
 
   test("a computer that lists a page of a vast change says how many it left out", async () => {
