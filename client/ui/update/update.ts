@@ -93,8 +93,16 @@ export function createAppUpdate(overrides: Partial<AppUpdateDeps> = {}): AppUpda
 }
 
 export const appUpdate = createAppUpdate();
-export const updateState = appUpdate.state;
-export const updatePending = appUpdate.pending;
+
+/** This app's update owner for what shows it (Settings, the update hint): the app's own; a test binds one of its own. */
+export const appUpdateOwner = signal<AppUpdate>(appUpdate);
+
+export function bindAppUpdate(update: AppUpdate): void {
+  appUpdateOwner.set(update);
+}
+
+/** A newer release of this app waits, until it is installed: Settings' row carries the dot and the update row sits first. */
+export const appUpdateWaiting = computed(() => appUpdateOwner().pending());
 
 /** Once, at start (App.tsx): checks at launch and when the app comes back, at most every six hours. */
 export function startAppUpdate(): void {

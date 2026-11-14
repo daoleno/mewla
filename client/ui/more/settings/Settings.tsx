@@ -12,6 +12,8 @@ import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen
 import type { PageNav } from "../routes";
 import { current } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
+import { markAppUpdateSeen } from "../../update/hint";
+import { appUpdateWaiting } from "../../update/update";
 import { loadTelegram, telegramRow, telegramRowLabel } from "./telegramState";
 
 /** The appearance this phone chose: the system's, or always light or dark. */
@@ -91,6 +93,11 @@ export function Settings(props: { nav: PageNav }) {
       loadTelegram();
     });
   });
+  // Shown with this app's update row on top: the cat's dot for that version goes.
+  effect(() => {
+    const top = (props.nav.routes?.().length ?? depth) === depth;
+    if (top && lifecycle() === "active" && appUpdateWaiting()) untracked(markAppUpdateSeen);
+  });
   followFriends();
   if (!onWeb()) void loadStrongAlerts();
   followVirtualScreen();
@@ -121,6 +128,8 @@ export function Settings(props: { nav: PageNav }) {
   });
   return (
     <Page display title="Settings" testID="settings">
+      {/* While this app's update waits, its row comes first (About is at the page's end); then it is About's again. */}
+      <If when={appUpdateWaiting()}><Section testID="settings-update"><AboutUpdateRow /></Section></If>
       <Section title="Channels">
         <Row
           testID="settings-telegram"
@@ -198,7 +207,7 @@ export function Settings(props: { nav: PageNav }) {
 
       <Section title="About">
         <Row lead={tile("info")} title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
-        <AboutUpdateRow />
+        <If when={!appUpdateWaiting()}><AboutUpdateRow /></If>
         <Row lead={tile("shield-check")} title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
         <Row lead={tile("help")} title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
         <Row testID="settings-licenses" lead={tile("book")} title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />

@@ -3,7 +3,7 @@ import { Button } from "nsh/base";
 import { appUpdateRow, type AppUpdateRowModel } from "../../core/update/appUpdate";
 import { Meter, Row, Spinner } from "../kit/kit";
 import { tile } from "../kit/RowTile";
-import { appUpdate, type AppUpdate } from "./update";
+import { appUpdateOwner, type AppUpdate } from "./update";
 
 /**
  * Settings → About, under the version: where this build's update stands in a few
@@ -12,7 +12,7 @@ import { appUpdate, type AppUpdate } from "./update";
  * [Install], Update failed [Retry]). Nothing where the build cannot update itself.
  */
 export function AboutUpdateRow(props: { update?: AppUpdate }) {
-  const update = () => props.update ?? appUpdate;
+  const update = () => props.update ?? appUpdateOwner();
   const model = () => appUpdateRow(update().state());
   // Made again when what it says or does changes (a Row takes its tap once); a download's ticks only move its meter.
   return (

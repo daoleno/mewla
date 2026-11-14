@@ -139,6 +139,16 @@ preference.
   on iOS and Android the page's own Back stands in for the system's while the
   mark shows). No page, chat or list carries a connection banner. A page that
   can't work at all says so in its empty state.
+- **An update waits** (owner, 2026-11-14; `core/update/hint.ts`). A light hint,
+  never a banner: a 12 pt ink dot (`primary`) on the cat's top-right while an
+  update of this app or of the current computer's Mewla has not been looked at,
+  and the same ink dot (10 pt) on the computer page's Settings row while this
+  app's update waits. Red stays "your move": a required update is the red dot,
+  and it wins over the ink one. The cat's dot goes once that update's row has
+  been shown (Settings for the app, the computer page for the computer) and
+  comes back with the next version; the Settings row keeps its dot until the
+  update is installed. While this app's update waits, its row sits first in
+  Settings instead of in About.
 - **The capsule header** (SPEC §11; `ui/shell/Capsule.tsx`, every value and the
   collapse rule in `core/shell/capsule.ts`). On a phone no page has a bar: one
   opaque shape floats 6 below the status bar and 8 from the sides, over a canvas
