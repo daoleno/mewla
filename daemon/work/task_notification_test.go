@@ -413,6 +413,58 @@ func TestClaudeMidTurnHumanPromptAttachmentProjectsUserMessage(t *testing.T) {
 	}
 }
 
+// A paste Claude absorbs mid-turn arrives as a queued_command whose prompt is
+// the bare envelope (Claude Code 2.1.323: no "\n\n" before, no "\n" after). Its
+// unwrapped digest must be the submitted text's own, or the Brain admission
+// never claims the echo when display cleaning changes the body (blank-line runs).
+func TestClaudeMidTurnPastedPromptKeepsTheSubmittedDigest(t *testing.T) {
+	session := "5ecced80-be50-44b3-aa3e-7dfa7243c74e"
+	submitted := "为啥呢\n\nError: interrupted\n    at filter (native)\n\n\n----\n\nError: interrupted\n\n" +
+		`<mewla_attachments>{"files":[{"name":"s.jpg","path":"/u/a.jpg","content_type":"image/jpeg","size":1}]}</mewla_attachments>`
+	queued := func(uuid, prompt string) map[string]any {
+		return map[string]any{
+			"type": "attachment", "uuid": uuid, "timestamp": "2026-11-14T15:58:59.152Z", "sessionId": session,
+			"attachment": map[string]any{
+				"type": "queued_command", "prompt": prompt, "commandMode": "prompt",
+				"origin": map[string]any{"kind": "human"}, "humanTurn": true,
+			},
+		}
+	}
+	bare := "<pasted_content id=\"64a6\">\n" + submitted + "\n</pasted_content id=\"64a6\">"
+	conversation := parseClaudeFixture(t, queued("q1", bare))
+	if len(conversation.Events) != 1 {
+		t.Fatalf("events = %#v", conversation.Events)
+	}
+	event := conversation.Events[0]
+	if event.AdmissionSHA256 != fmt.Sprintf("%x", sha256.Sum256([]byte(bare))) {
+		t.Fatal("native digest changed")
+	}
+	if want := fmt.Sprintf("%x", sha256.Sum256([]byte(submitted))); event.AdmissionUnwrappedSHA256 != want {
+		t.Fatalf("unwrapped digest = %q, want the submitted text's %q", event.AdmissionUnwrappedSHA256, want)
+	}
+	if strings.Contains(event.Body, "pasted_content") {
+		t.Fatalf("envelope leaked into the body: %q", event.Body)
+	}
+	for _, prompt := range []string{
+		"<pasted_content id=\"64a6\">\nbody\n</pasted_content id=\"aaaa\">",
+		"<pasted_content id=\"64a6\">\n<pasted_content id=\"64a6\">\nbody\n</pasted_content id=\"64a6\">\n</pasted_content id=\"64a6\">",
+		"hi <pasted_content id=\"64a6\">\nbody\n</pasted_content id=\"64a6\">",
+	} {
+		conversation := parseClaudeFixture(t, queued("q2", prompt))
+		if got := conversation.Events[0].AdmissionUnwrappedSHA256; got != "" {
+			t.Fatalf("%q must stay raw, got unwrapped digest %q", prompt, got)
+		}
+	}
+	// A typed user record keeps the strict typed-submit form only.
+	typed := map[string]any{
+		"type": "user", "uuid": "u1", "timestamp": "2026-11-14T15:58:59Z", "sessionId": session,
+		"origin": map[string]any{"kind": "human"}, "message": map[string]any{"role": "user", "content": bare},
+	}
+	if got := parseClaudeFixture(t, typed).Events[0].AdmissionUnwrappedSHA256; got != "" {
+		t.Fatalf("a typed record with a bare envelope must stay raw, got %q", got)
+	}
+}
+
 // The brief Mewla submits is the pasted part only, so a delegated message's
 // unwrapped admission digest is the brief's own; that is what the submitted
 // payload digest is compared with. A person's own text stays raw.

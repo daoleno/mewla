@@ -902,7 +902,7 @@ func (b *claudeConversationBuilder) consumeTaskNotificationAttachment(lineNumber
 		return
 	}
 	if text, ok := claudeUserPlainText(attachment.Prompt); ok {
-		b.addMessage(lineNumber, recordID, 0, timestamp, "user", "", text)
+		b.addUserMessage(lineNumber, recordID, 0, timestamp, "", text, claudeQueuedPastedInput)
 	}
 }
 
@@ -982,6 +982,16 @@ type claudeContentBlock struct {
 }
 
 func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, index int, timestamp, role, origin, text string) {
+	b.addNativeMessage(lineNumber, recordID, index, timestamp, role, origin, text, claudePastedInput)
+}
+
+// addUserMessage records a user input whose paste envelope has the form
+// pastedInput decodes; each Claude record kind has its own exact form.
+func (b *claudeConversationBuilder) addUserMessage(lineNumber int, recordID string, index int, timestamp, origin, text string, pastedInput func(string) (string, bool)) {
+	b.addNativeMessage(lineNumber, recordID, index, timestamp, "user", origin, text, pastedInput)
+}
+
+func (b *claudeConversationBuilder) addNativeMessage(lineNumber int, recordID string, index int, timestamp, role, origin, text string, pastedInput func(string) (string, bool)) {
 	exact := text
 	text = CleanCodexDisplayText(text)
 	if text == "" || isTranscriptBoilerplate(text) {
@@ -989,7 +999,7 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 	}
 	inner, pasted := "", false
 	if role == "user" {
-		inner, pasted = claudePastedInput(exact)
+		inner, pasted = pastedInput(exact)
 		// Visibility is decided on the native wrapped bytes above; the paste
 		// envelope itself is transport, so show only what the user submitted.
 		if display := cleanConversationText(inner); pasted && display != "" {
@@ -1343,7 +1353,24 @@ func UnwrapClaudeDelegatedInput(raw string) (string, bool) {
 }
 
 func claudePastedInput(raw string) (string, bool) {
-	parts := claudePasteEnvelope.FindStringSubmatch(raw)
+	return claudeWholePasteEnvelope(claudePasteEnvelope, raw)
+}
+
+// claudeQueuedPasteEnvelope is how Claude Code (2.1.323) records a paste it
+// absorbed mid-turn: the queued_command prompt is the bare envelope, with no
+// "\n\n" before it and no "\n" after. Only queued prompts are read this way;
+// a typed user record keeps the strict typed-submit form above.
+var claudeQueuedPasteEnvelope = regexp.MustCompile(`(?s)\A<pasted_content id="([0-9a-f]{4})">\n(.*)\n</pasted_content id="([0-9a-f]{4})">\z`)
+
+// claudeQueuedPastedInput decodes a queued_command prompt's paste envelope, so
+// a message sent while Claude was busy keeps the submitted text's digest and
+// its Brain admission claims the echo even when display cleaning changes it.
+func claudeQueuedPastedInput(raw string) (string, bool) {
+	return claudeWholePasteEnvelope(claudeQueuedPasteEnvelope, raw)
+}
+
+func claudeWholePasteEnvelope(envelope *regexp.Regexp, raw string) (string, bool) {
+	parts := envelope.FindStringSubmatch(raw)
 	if parts == nil || parts[1] != parts[3] || strings.Contains(parts[2], "<pasted_content") || strings.Contains(parts[2], "</pasted_content") {
 		return "", false
 	}
@@ -1358,11 +1385,7 @@ var claudePasteDisplayEnvelope = regexp.MustCompile(`(?s)\A<pasted_content id="(
 // Claude paste envelope. It is a presentation repair for legacy rows only;
 // admission evidence uses the exact native bytes (claudePastedInput).
 func UnwrapClaudePasteDisplay(body string) (string, bool) {
-	parts := claudePasteDisplayEnvelope.FindStringSubmatch(body)
-	if parts == nil || parts[1] != parts[3] || strings.Contains(parts[2], "<pasted_content") || strings.Contains(parts[2], "</pasted_content") {
-		return "", false
-	}
-	return parts[2], true
+	return claudeWholePasteEnvelope(claudePasteDisplayEnvelope, body)
 }
 
 var claudeEmbeddedPasteOpen = regexp.MustCompile(`<pasted_content id="([0-9a-f]{4})">\n`)
