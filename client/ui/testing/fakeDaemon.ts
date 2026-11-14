@@ -28,6 +28,12 @@ export interface FakeDaemonState {
   assets?: Record<string, string>;
   /** The first this many `codex_asset` asks are lost with the link: it drops instead of answering (a relay that went away mid-picture). */
   assetsLost?: number;
+  /**
+   * `send_input` is admitted as the daemon admits it: once per request id, echoed to the conversation as a
+   * user message whose id is that request id, then `input_sent`. loseFirstAck: the first one is admitted and
+   * echoed, but the link drops before its answer (a slow phone), so the app sends it again under the same id.
+   */
+  admitsInput?: { loseFirstAck?: boolean };
 }
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
@@ -39,6 +45,9 @@ export class FakeDaemon {
   private dshRev = 1;
   /** `dsh_interaction` calls held until the requests change, as the daemon holds them. */
   private dshWaiting: Array<() => void> = [];
+  /** Request ids of the `send_input`s admitted so far: a resend under one is answered, never stored again. */
+  private admitted = new Set<string>();
+  private ackLost = false;
 
   constructor(private state: FakeDaemonState) {}
 
@@ -298,6 +307,21 @@ export class FakeDaemon {
       }
       case "live_answer":
         return reply("live_answer", { kind: "brain", text: "ok", duplicate: false });
+      case "send_input": {
+        const admits = this.state.admitsInput;
+        if (!admits) return;
+        const id = String(frame.request_id);
+        if (!this.admitted.has(id)) {
+          this.admitted.add(id);
+          const echo = { id, seq: ++this.revision, timestamp: new Date().toISOString(), kind: "user_message", role: "user", body: String(frame.text ?? ""), ...(frame.attachments ? { attachments: frame.attachments } : {}) };
+          this.conversation({ worker: String(frame.worker_id), upserts: [echo] });
+          if (admits.loseFirstAck && !this.ackLost) {
+            this.ackLost = true;
+            return void setTimeout(() => this.drop(), 0);
+          }
+        }
+        return reply("input_sent", {});
+      }
       default:
         return;
     }
