@@ -87,7 +87,8 @@ jobs:
   client:
     name: Client (NSH core and UI)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The UI suite alone took 12 min on 11-14 and grows with every screen (the 15-min limit cut it off at 14:44).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
