@@ -24,6 +24,7 @@ NATIVE_CACHE = read(".github/workflows/native-cache.yml")
 NATIVE_LIBS = read(".github/workflows/native-libs.yml")
 POSTPROCESS = read(".github/workflows/ios-testflight-postprocess.yml")
 AVAILABILITY = read(".github/workflows/ios-testflight-available.yml")
+REVIEW = read(".github/workflows/ios-testflight-review.yml")
 PREPARATION = read(".github/workflows/release-next-beta.yml")
 ANDROID_NATIVE = read(".github/actions/android-native/action.yml")
 IOS_NATIVE = read(".github/actions/ios-native/action.yml")
@@ -211,6 +212,24 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
         ):
             self.assertIn(needle, AVAILABILITY)
         self.assertNotRegex(AVAILABILITY, r"\b67\d{8}\b")
+
+    def test_testflight_review_reads_with_the_preview_key_and_writes_nothing_to_the_repo(self):
+        for needle in (
+            "workflow_dispatch:",
+            "cron:",
+            "environment: app-store-connect-preview",
+            "vars.MEWLA_ASC_PREVIEW_APP_ID",
+            "secrets.ZEN_ASC_API_KEY_BASE64",
+            '--beta-group-name "Mewla Preview"',
+            "--enable-public-link",
+            '--summary "$GITHUB_STEP_SUMMARY"',
+            'rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"',
+        ):
+            self.assertIn(needle, REVIEW)
+        self.assertIn("permissions:\n  contents: read", REVIEW)
+        self.assertNotIn("contents: write", REVIEW)
+        self.assertNotIn("ZEN_UPDATE_SIGNING_KEY_BASE64", REVIEW)
+        self.assertNotRegex(REVIEW, r"\b67\d{8}\b")
 
     def test_postprocess_resumes_against_the_configured_preview_app(self):
         self.assertIn("MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}", POSTPROCESS)
