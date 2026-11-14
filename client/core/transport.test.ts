@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { getOrCreateLocalDeviceIdentity } from "./auth";
 import type { StoredServer } from "./storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "./testing/memoryPlatform";
-import { setFrameBatcher, Transport, transportTiming } from "./transport";
+import { BIG_FRAME_BYTES, setFrameBatcher, Transport, transportTiming } from "./transport";
 import { AUTH_SUBPROTOCOL_PREFIX } from "./webSocketAuth";
 
 const server = {
@@ -174,6 +174,29 @@ describe("Transport", () => {
     await wait();
     expect(seen).toEqual([1, 2, 3, 4, 5]);
     expect(batches).toEqual([5]);
+    transport.close();
+  });
+
+  test("with a batcher, a big frame is a call of its own: small frames go together up to it, and those after it after", async () => {
+    const batches: string[][] = [];
+    let current: string[] = [];
+    setFrameBatcher((deliver) => {
+      current = [];
+      deliver();
+      batches.push(current);
+    });
+    const { transport, socket } = await connected();
+    const note = (frame: Record<string, unknown>) => current.push(String(frame.seq));
+    transport.on("worker_session_updated", note);
+    transport.on("codex_conversation_delta", note);
+    const page = "x".repeat(BIG_FRAME_BYTES);
+    socket.receive({ type: "worker_session_updated", seq: 1 });
+    socket.receive({ type: "worker_session_updated", seq: 2 });
+    socket.receive({ type: "codex_conversation_delta", seq: 3, page });
+    socket.receive({ type: "codex_conversation_delta", seq: 4, page });
+    socket.receive({ type: "worker_session_updated", seq: 5 });
+    await wait(20);
+    expect(batches).toEqual([["1", "2"], ["3"], ["4"], ["5"]]);
     transport.close();
   });
 
