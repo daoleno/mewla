@@ -328,16 +328,17 @@ it (at most every six hours). **Settings › About** shows the version and an
 update row under it: **Check for updates** says **Up to date** and checks again
 when you tap it, and offers **Retry** if it can't reach GitHub. When a newer
 release exists, the row reads **Update available** with an **Update** button,
-and the computer page shows **Update available** too. Tap it to download the
-APK, with progress in the row. Mewla checks the release's signed manifest and the APK's SHA-256
-before it opens the Android installer. The first time, Android asks you to let
-Mewla install apps. Allow it, come back, and the installer opens. If a download
-fails, tap **Retry**. Versions before 0.2.9 need one manual install as
-above; 0.2.9 and 0.2.10 show the update in **Settings › About** only.
+and the computer page shows **Update available** too.
 
-Builds take their update channel from `MEWLA_ANDROID_DISTRIBUTION` at build
-time: `github-apk` (default), `play-store` or `none`. Store and `none` builds,
-and iOS, leave updates to the store and show the version only.
+Tap **Update** to download the APK, with progress in the row. Mewla checks the
+release's signed manifest and the APK's SHA-256, then opens the Android
+installer. The first time, Android asks you to let Mewla install apps: the row
+reads **Allow app installs** with **Continue**. Allow it, come back, and the
+installer opens. If you close the installer, the row offers **Install** again;
+if a download fails, it offers **Retry**.
+
+Only the GitHub APK updates itself. A Play Store build (`-Pmewla.channel=play`)
+leaves updates to the store and shows the version only.
 
 ### iOS
 
@@ -345,6 +346,8 @@ Install **Mewla Preview** from
 [TestFlight](https://testflight.apple.com/join/nMQheDCE): open the link on your
 iPhone, install Apple's TestFlight app if asked, then tap **Accept** and
 **Install**. TestFlight delivers new builds as they're released.
+When a newer build is in TestFlight, **Settings › About** reads **Update
+available**, and **Update** opens it in TestFlight.
 
 You can also build the app from source on an Apple Silicon Mac.
 
