@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -265,13 +266,20 @@ func (o *clientOutbox) run() {
 
 		started := time.Now()
 		out := o.wireMessage(msg, deflate)
-		err := writeWithProgressDeadline(o.conn, out)
+		notice := frameComingNotice(len(out.data))
+		var err error
+		if notice != nil {
+			err = writeWithProgressDeadline(o.conn, outboundMessage{messageType: websocket.TextMessage, data: notice, kind: "frame_coming"})
+		}
+		if err == nil {
+			err = writeWithProgressDeadline(o.conn, out)
+		}
 		o.mu.Lock()
 		if err != nil {
 			o.failLocked(err)
 		} else {
 			o.sent += int64(len(msg.data))
-			o.wire += int64(len(out.data))
+			o.wire += int64(len(out.data) + len(notice))
 			if o.byType == nil {
 				o.byType = make(map[string]typeTally)
 			}
@@ -292,6 +300,24 @@ func (o *clientOutbox) run() {
 			return
 		}
 	}
+}
+
+// frameComingMin is the smallest message, as it goes on the wire, that the
+// writer announces first. A client counts a socket that carried no message for
+// 25 s as dead, and it sees nothing of a message until all of it is in: on a
+// slow link (60 KB/s, the owner's tunnel at its worst) a 1.5 MB message is that
+// long in transit, and the client dropped the connection under it and asked
+// again from the start. Told the size, the client allows for it.
+const frameComingMin = 64 << 10
+
+// frameComingNotice is `{"type":"frame_coming","bytes":N}` for a message of n
+// wire bytes when it is big enough to announce, else nil. A client that does
+// not know the type ignores it.
+func frameComingNotice(n int) []byte {
+	if n < frameComingMin {
+		return nil
+	}
+	return []byte(`{"type":"frame_coming","bytes":` + strconv.Itoa(n) + `}`)
 }
 
 // bulkReadyLocked reports whether the bulk lane's next message may go: it has
