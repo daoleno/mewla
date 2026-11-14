@@ -180,6 +180,18 @@ describe("semantic action model", () => {
     expect(isExecWrapperToolName("exec_command")).toBe(false);
   });
 
+  test("a command is what it runs: not its quoted arguments, not a filter after a pipe, not a variable it sets", () => {
+    const action = (command) => primarySemanticAction({ kind: "command", command, toolName: "exec_command", status: "done" });
+    // Brain's Worker spawn on 11-12 read as a bare "Read" (BRAIN-LOOK item 5).
+    const spawn = action(`M=/home/me/bin/mewla; $M worker spawn -name "Hello writer" -prompt "Report the output of: cat -A hello.txt" | head -c 800`);
+    expect(spawn.kind).toBe("run_command");
+    expect(spawn.target).toMatch(/^\$M worker spawn/);
+    expect(action("mewla brain work get -id f97 | tail -5").kind).toBe("run_command");
+    expect(action("cat routing.md | head -60")).toMatchObject({ kind: "read_files", target: "routing.md" });
+    expect(action("sed -n 1,40p app/foo.ts").kind).toBe("read_files");
+    expect(action("ps aux | grep qemu").kind).toBe("search_code");
+  });
+
   test("collapsed labels never expose secrets or raw args", () => {
     const label = collapsedToolLabel({
       toolName: "exec",

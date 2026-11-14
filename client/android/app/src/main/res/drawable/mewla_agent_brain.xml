@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from client/ui/icons/glyphs.ts 'brain'. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+  <path android:pathData="M9.18,5A8.25,8.25 0 0 1 14.82,5L16.86,3.54Q17.75,2.9 18.01,3.97L19.14,8.63A8.25,8.25 0 0 1 6.17,18.58L4.21,20.54Q3.5,21.25 3.61,20.26L4.15,15.3A8.25,8.25 0 0 1 4.86,8.63L5.99,3.97Q6.25,2.9 7.14,3.54Z" android:strokeColor="@color/mewla_ink" android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+  <path android:pathData="M7.5,13a1,1 0 1 0 2,0a1,1 0 1 0 -2,0Z" android:fillColor="@color/mewla_ink"/>
+  <path android:pathData="M11,13a1,1 0 1 0 2,0a1,1 0 1 0 -2,0Z" android:fillColor="@color/mewla_ink"/>
+  <path android:pathData="M14.5,13a1,1 0 1 0 2,0a1,1 0 1 0 -2,0Z" android:fillColor="@color/mewla_ink"/>
+</vector>

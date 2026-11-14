@@ -1,7 +1,7 @@
 import { signal, untracked, View } from "nsh";
 import { suggestedAWSProfile, validAWSProfileName } from "../../../core/extensions/cloudProfilesModel";
 import type { PluginAccount } from "../../../core/extensions/connections";
-import { Field, Notice } from "../kit/kit";
+import { Field, Notice } from "../../kit/kit";
 import { Action } from "./Action";
 import { flowState, plugins } from "./plugins";
 
@@ -34,7 +34,7 @@ export function ProfileName(props: { account: PluginAccount; suggest?: boolean; 
     <View testID="profile-name" class="pb-3">
       <Field label="Profile name" testID="profile-name-field" value={name()} onChange={(value) => { name.set(value.slice(0, 128)); error.set(""); }} onSubmit={() => void save()} />
       <View class="gap-2 px-4">
-        {error() ? <Notice live tone="failed" title="Check the name" detail={error()} /> : null}
+        <If when={error()}><Notice live tone="failed" title="Check the name" detail={error()} /></If>
         <Action testID="profile-name-save" filled={!props.suggest} label="Save name" busy={saving()} onPress={() => void save()} />
       </View>
     </View>

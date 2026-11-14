@@ -23,7 +23,7 @@ var displayUpgrader = websocket.Upgrader{
 // SetDisplays installs the private displays agents open apps on.
 func (s *Server) SetDisplays(service *vdisplay.Service) { s.displays = service }
 
-// displayOn is whether agents have displays: the Labs switch is on and Xvnc is installed.
+// displayOn is whether agents have displays: the Virtual screen switch is on and Xvnc is installed.
 func (s *Server) displayOn() bool {
 	return s.displays != nil && s.browsers != nil && s.browsers.VirtualScreen() && vdisplay.Capability() == nil
 }

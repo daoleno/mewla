@@ -112,8 +112,8 @@ export function phoneStateWord(ready: boolean, state: string | undefined): strin
   return "Ready";
 }
 
-/** Settings → Labs → Phone use: Off, Set up, Ready or You are in control. */
-export function phoneLabsValue(status: PhoneStatus | null): string {
+/** Settings → Agents → Phone use: Off, Set up, Ready or You are in control. */
+export function phoneRowValue(status: PhoneStatus | null): string {
   if (!status?.enabled) return "Off";
   return phoneStateWord(phoneReady(status), status.state);
 }

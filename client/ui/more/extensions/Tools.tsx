@@ -4,8 +4,10 @@ import type { ConnectionTool, PluginAccount } from "../../../core/extensions/con
 import { toolSections, toolsSwitch, type ToolsSwitch } from "../../../core/extensions/pluginConnectionsModel";
 import { formatDateTime } from "../../../core/more/dates";
 import { daemonState } from "../daemon";
-import { EmptyState, Row, Section, Spinner, StatusMark, SwitchRow, type Status } from "../kit/kit";
-import { Icon } from "../kit/Icon";
+import { EmptyState, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { StateLine, tile } from "../../kit/RowTile";
+import { callStateTone } from "../../../core/extensions/colour";
+import { Icon } from "../../kit/Icon";
 import type { PageNav } from "../routes";
 import { PluginsFrame } from "./Pages";
 import { flowState, plugins } from "./plugins";
@@ -35,18 +37,13 @@ export function ToolsPage(props: { service: string; account?: string; nav: PageN
     }
   });
   return (
-    <PluginsFrame title="Tools & activity" testID="tools-page" nav={props.nav} onRefresh={() => accountId() && void plugins()?.load(accountId()!)}>
+    <PluginsFrame title="Tools & activity" testID="tools-page" service={props.service} nav={props.nav} onRefresh={() => accountId() && void plugins()?.load(accountId()!)}>
       {/* Loading only while the account's answer is on its way; a failed one says so above. */}
-      {target() ? <ToolsView account={target()!} nav={props.nav} /> : flowState().running === `load:${accountId()}` || !flowState().loaded || (accountId() && !asked.has(accountId()!)) ? <EmptyState busy title="Loading tools" /> : null}
+      {/* The account's answer is drawn once per answer: a new one (a tool switched, a check) draws it again, other news does not. */}
+      <Each of={target() ? [target()!] : []} key={(account) => account}>{(account) => <ToolsView account={account()} nav={props.nav} />}</Each>
+      <If when={!target() && (flowState().running === `load:${accountId()}` || !flowState().loaded || (accountId() && !asked.has(accountId()!)))}><EmptyState busy title="Loading tools" /></If>
     </PluginsFrame>
   );
-}
-
-function callStatus(status: string): Status {
-  const value = status.toLowerCase();
-  if (value === "ok" || value === "success" || value === "succeeded") return "ready";
-  if (value.includes("fail") || value.includes("error") || value.includes("denied")) return "failed";
-  return "neutral";
 }
 
 function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
@@ -65,22 +62,22 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
   };
   return (
     <View>
+      {/* The account's own switch is on its service's page, once (one toggle per feature). */}
       <Section title={a.name}>
-        <SwitchRow testID="account-on" accessibilityLabel="Account on" title="On" subtitle="Brain and Workers can use this account." checked={a.enabled} busy={running() === `enabled:${a.id}`} disabled={busy() && running() !== `enabled:${a.id}`} onChange={(on) => plugins()?.setEnabled(a, on)} />
         <Row
           testID="check-tools"
-          icon="pulse"
-          title="Check service and tools"
-          subtitle={a.verified_at ? `Last checked ${formatDateTime(a.verified_at)}` : undefined}
-          trailing={running() === `refresh:${a.id}` ? <Spinner size={16} /> : undefined}
+          lead={tile("pulse")}
+          title="Check now"
+          accessibilityLabel={a.verified_at ? `Check service and tools. Last checked ${formatDateTime(a.verified_at)}` : "Check service and tools"}
+          value={running() === `refresh:${a.id}` || !a.verified_at ? undefined : formatDateTime(a.verified_at)}
+          trailing={<If when={running() === `refresh:${a.id}`}><Spinner size={16} /></If>}
           disabled={busy()}
           onPress={() => plugins()?.refresh(a)}
         />
       </Section>
       <Section title="Tools">
-        {tools.length ? (
-          <View>
-            <SwitchRow testID="all-tools" title="All tools" subtitle={`${allowed} of ${tools.length} allowed`} checked={all.on} disabled={locked() || all.tap === "none"} onChange={() => flip(all)} />
+        <If when={tools.length} else={<Row title="No tools reported" />}>{(length) => <View>
+            <SwitchRow testID="all-tools" title="All tools" subtitle={`${allowed} of ${length()} allowed`} checked={all.on} disabled={locked() || all.tap === "none"} onChange={() => flip(all)} />
             {sections.flatMap((section) => {
               const state = toolsSwitch(a, section.tools, section.consent);
               const rows = section.tools.map((tool) => <ToolRow tool={tool} locked={locked()} onToggle={(on) => plugins()?.setTools(a, [tool.name], on)} />);
@@ -89,13 +86,10 @@ function ToolsView(props: { account: PluginAccount; nav: PageNav }) {
                 ? [<SwitchRow title={`${section.title} · ${section.allowed}/${section.tools.length}`} accessibilityLabel={`All of ${section.title}`} checked={state.on} disabled={locked() || state.tap === "none"} onChange={() => flip(state)} />, ...rows]
                 : rows;
             })}
-          </View>
-        ) : (
-          <Row title="No tools reported" />
-        )}
+          </View>}</If>
       </Section>
       <Section title="Recent calls">
-        {a.history.length ? a.history.map((event) => <Row title={event.tool} subtitle={event.message || formatDateTime(event.at)} trailing={<StatusMark status={callStatus(event.status)} label={event.status} />} />) : <Row title="No calls yet" />}
+        <If when={a.history.length} else={<Row title="No calls yet" />}>{a.history.map((event) => <Row title={event.tool} subtitle={event.message || formatDateTime(event.at)} trailing={<StateLine tone={callStateTone(event.status)} label={event.status} />} />)}</If>
       </Section>
     </View>
   );
@@ -130,25 +124,23 @@ function ToolRow(props: { tool: ConnectionTool; locked: boolean; onToggle: (allo
         onPress={expandable ? () => expanded.set(!expanded()) : undefined}
         class="flex-row items-center gap-2 px-4 py-3 active:bg-accent"
       >
-        <View class="w-4">{expandable ? <Icon name={expanded() ? "chevron-down" : "chevron-right"} size={14} tone="faint" /> : null}</View>
+        <View class="w-4"><If when={expandable}><Icon name={expanded() ? "chevron-down" : "chevron-right"} size={14} tone="faint" /></If></View>
         <View class="min-w-0 flex-1">
-          <Text class="font-mono text-sm">{props.tool.name}</Text>
-          <Text class={`mt-0.5 text-sm text-muted-foreground ${expanded() ? "" : "line-clamp-2"}`}>{`${props.tool.updated ? "Updated, waits for your confirmation · " : ""}${description}`}</Text>
+          <Text class="font-mono text-code">{props.tool.name}</Text>
+          <Text class={`mt-0.5 text-sub text-muted-foreground ${expanded() ? "" : "line-clamp-2"}`}>{`${props.tool.updated ? "Updated, waits for your confirmation · " : ""}${description}`}</Text>
         </View>
         <View class="-mr-4">
           <SwitchRowInline testID={`tool-${props.tool.name}`} label={`Allow ${props.tool.name}`} checked={props.tool.allowed} disabled={props.locked} onChange={props.onToggle} />
         </View>
       </View>
-      {expanded() && inputs.length ? (
-        <View class="mb-2 ml-10 mr-4 gap-1 rounded-xl border border-border px-3 py-2">
+      <If when={expanded() && inputs.length}><View class="mb-2 ml-10 mr-4 gap-1 rounded-(--radius-control) bg-background px-3 py-2">
           {inputs.map((input) => (
             <View>
-              <Text class="font-mono text-xs">{`${input.name}: ${input.type}${input.required ? " (required)" : ""}`}</Text>
-              {input.description ? <Text class="text-xs text-muted-foreground">{input.description}</Text> : null}
+              <Text class="font-mono text-code">{`${input.name}: ${input.type}${input.required ? " (required)" : ""}`}</Text>
+              <If when={input.description}>{(description) => <Text class="text-caption text-muted-foreground">{description()}</Text>}</If>
             </View>
           ))}
-        </View>
-      ) : null}
+        </View></If>
     </View>
   );
 }

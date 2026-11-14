@@ -15,4 +15,4 @@ runs:
           ~/.cache/mewla/ghostty-desktop
           ~/.cache/mewla/ghostty
           .cache/mewla-tools
-        key: ghostty-desktop-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-desktop.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig.sh') }}
+        key: ghostty-desktop-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-desktop.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig.sh') }}

@@ -732,7 +732,7 @@ func TestWorkspaceImageUsesExistingPathBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile("../../app/assets/reading-fixture/normal.png")
+	data, err := os.ReadFile("../testdata/reading-normal.png")
 	if err != nil {
 		t.Fatal(err)
 	}

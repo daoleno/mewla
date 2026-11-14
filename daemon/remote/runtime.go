@@ -36,7 +36,54 @@ type Status struct {
 	LastError    string    `json:"last_error,omitempty"`
 	CertError    string    `json:"cert_error,omitempty"`
 	CertNotAfter time.Time `json:"cert_not_after,omitempty"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	// UpdatedAt is when the file was last written (any field).
+	UpdatedAt time.Time `json:"updated_at"`
+	// ConnectedAt is when the relay connection last came up.
+	ConnectedAt *time.Time `json:"connected_at,omitempty"`
+	// LastFailure is the cause of the newest failed stretch, in remote access
+	// terms, and LastFailureAt when that stretch began: the first failure
+	// after the connection was last up. Both stay after it recovers, and
+	// across restarts, so "Relay unreachable · 13:40" can still be told.
+	LastFailure   string     `json:"last_failure,omitempty"`
+	LastFailureAt *time.Time `json:"last_failure_at,omitempty"`
+}
+
+// noteFailure records a failure seen at at. A failure while the newest
+// stretch is still failing keeps that stretch's start and takes the newer
+// cause.
+func (s *Status) noteFailure(cause string, at time.Time) {
+	cause = strings.TrimSpace(cause)
+	if cause == "" {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+	at = at.UTC()
+	if s.LastFailureAt == nil || (s.ConnectedAt != nil && s.ConnectedAt.After(*s.LastFailureAt)) {
+		s.LastFailureAt = &at
+	}
+	s.LastFailure = cause
+}
+
+// noteConnected records the connection coming up at at.
+func (s *Status) noteConnected(at time.Time) {
+	if at.IsZero() {
+		at = time.Now()
+	}
+	at = at.UTC()
+	s.ConnectedAt = &at
+}
+
+// applyConnectorState folds one connector state change into the status.
+func (s *Status) applyConnectorState(state link.ConnectorState) {
+	s.Phase, s.Relay, s.LastError = state.Phase, state.Relay, state.LastError
+	switch {
+	case state.Phase == "connected":
+		s.noteConnected(state.ChangedAt)
+	case state.Phase == "offline" && state.LastError != "":
+		s.noteFailure(state.LastError, state.ChangedAt)
+	}
 }
 
 func LoadStatus(stateDir string) (Status, bool) {
@@ -62,6 +109,8 @@ type Runtime struct {
 	Handler     http.Handler
 	AddressBook *addressbook.Store
 	Logf        func(format string, args ...any)
+	// OnStatus hears remote-status.json change phase or failure.
+	OnStatus func(Status)
 }
 
 func (runtime *Runtime) Run(ctx context.Context) error {
@@ -122,11 +171,22 @@ func sessionKey(config Config) string {
 }
 
 func (runtime *Runtime) runSession(ctx context.Context, config Config) {
-	status := &statusWriter{stateDir: runtime.StateDir, status: Status{Phase: "connecting", URL: config.URL()}}
+	initial := Status{Phase: "connecting", URL: config.URL()}
+	if previous, ok := LoadStatus(runtime.StateDir); ok {
+		// The newest failure and connection outlive a restart.
+		initial.ConnectedAt, initial.LastFailure, initial.LastFailureAt = previous.ConnectedAt, previous.LastFailure, previous.LastFailureAt
+	}
+	status := &statusWriter{stateDir: runtime.StateDir, status: initial, onChange: runtime.OnStatus}
 	status.write()
+	offline := func(cause string) {
+		status.update(func(s *Status) {
+			s.Phase, s.LastError = "offline", cause
+			s.noteFailure(cause, time.Now())
+		})
+	}
 	client, err := NewClient(config.ServiceURL, config.ServiceCAPEM, runtime.Auth)
 	if err != nil {
-		status.update(func(s *Status) { s.Phase, s.LastError = "offline", err.Error() })
+		offline(UserText(err.Error()))
 		return
 	}
 	if runtime.AddressBook != nil {
@@ -137,7 +197,7 @@ func (runtime *Runtime) runSession(ctx context.Context, config Config) {
 	grants := &grantSource{stateDir: runtime.StateDir, client: client, config: config}
 	key, ok := runtime.Identity.Certificate.PrivateKey.(crypto.Signer)
 	if !ok {
-		status.update(func(s *Status) { s.Phase, s.LastError = "offline", "transport key cannot sign certificates" })
+		offline("transport key cannot sign certificates")
 		return
 	}
 	certs := NewCertManager(runtime.StateDir, key, client, config)
@@ -183,9 +243,7 @@ func (runtime *Runtime) runSession(ctx context.Context, config Config) {
 		connectorConfig.TLSConfig = ServerTLSConfig(runtime.Identity.Certificate, config.Machine.Hostname, certs)
 		connectorConfig.StateObserver = func(state link.ConnectorState) {
 			state.LastError = UserText(state.LastError)
-			status.update(func(s *Status) {
-				s.Phase, s.Relay, s.LastError = state.Phase, state.Relay, state.LastError
-			})
+			status.update(func(s *Status) { s.applyConnectorState(state) })
 			switch {
 			case state.Phase == "connected":
 				runtime.logf("Remote access connected: %s", config.URL())
@@ -201,7 +259,7 @@ func (runtime *Runtime) runSession(ctx context.Context, config Config) {
 		}
 	}
 	if err != nil && ctx.Err() == nil {
-		status.update(func(s *Status) { s.Phase, s.LastError = "offline", UserText(err.Error()) })
+		offline(UserText(err.Error()))
 		runtime.logf("Remote access stopped: %v", err)
 		<-ctx.Done()
 	}
@@ -289,13 +347,28 @@ type statusWriter struct {
 	stateDir string
 	mu       sync.Mutex
 	status   Status
+	// onChange hears every phase or failure change, after it is written.
+	onChange func(Status)
 }
 
 func (writer *statusWriter) update(change func(*Status)) {
 	writer.mu.Lock()
+	before := writer.status
 	change(&writer.status)
+	after := writer.status
 	writer.mu.Unlock()
 	writer.write()
+	if writer.onChange != nil && (before.Phase != after.Phase || before.LastFailure != after.LastFailure ||
+		!sameTime(before.LastFailureAt, after.LastFailureAt) || !sameTime(before.ConnectedAt, after.ConnectedAt)) {
+		writer.onChange(after)
+	}
+}
+
+func sameTime(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Equal(*b)
 }
 
 func (writer *statusWriter) write() {

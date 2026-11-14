@@ -34,3 +34,13 @@ export async function listOutsideAgents(server: StoredServer): Promise<OutsideAg
 export async function decideOutsideAgent(server: StoredServer, action: "approve" | "deny" | "revoke", id: string): Promise<OutsideAgents> {
   return parse(await signedJSON<Partial<OutsideAgents>>(server, "POST", "/agents", bodyPurpose("mewla-agents-admin:decide:POST:/agents"), { body: { action, id } }));
 }
+
+/**
+ * The agent an outside client is, for its logo (SPEC §10.4). The daemon reports only the name the client gave when
+ * it connected ("claude-code", "codex-mcp-client"), no kind, so the logo follows that name; an unknown one has none.
+ */
+export function outsideAgentKind(name: string): "claude" | "codex" | "cursor" | "opencode" | "grok" | null {
+  const lower = name.toLowerCase();
+  for (const kind of ["claude", "codex", "cursor", "opencode", "grok"] as const) if (lower.includes(kind)) return kind;
+  return null;
+}

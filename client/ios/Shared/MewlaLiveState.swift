@@ -14,16 +14,92 @@ struct MewlaLiveQuestion: Codable, Hashable {
   var kind: String
   var text: String
   var choices: [String]
+  /// The Work it is that Work's question for.
+  var workId: String
 
-  enum CodingKeys: String, CodingKey { case id, kind, text, choices }
+  enum CodingKeys: String, CodingKey {
+    case id, kind, text, choices
+    case workId = "work_id"
+  }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
     kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? ""
+    workId = try c.decodeIfPresent(String.self, forKey: .workId) ?? ""
     text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
     choices = try c.decodeIfPresent([String].self, forKey: .choices) ?? []
   }
+}
+
+/// A Work's progress ring as the app draws it: moving or back as far as `percent` (rounded to 5, at most
+/// 95), or the last stretch. Never a number for the person to read.
+struct MewlaLiveRing: Codable, Hashable {
+  var stage: String
+  var percent: Int
+
+  enum CodingKeys: String, CodingKey { case stage, percent }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    stage = try c.decodeIfPresent(String.self, forKey: .stage) ?? ""
+    percent = try c.decodeIfPresent(Int.self, forKey: .percent) ?? 0
+  }
+
+  var isLast: Bool { stage == "last" }
+  var isDrawn: Bool { stage == "moving" || stage == "back" || stage == "last" }
+  /// How much of the circle the arc covers; the last stretch closes it but for a small gap.
+  var fraction: Double { isLast ? 1 : Double(min(max(percent, 0), 95)) / 100 }
+}
+
+/// One row of a live surface (daemon/live/items.go).
+struct MewlaLiveItem: Codable, Hashable {
+  var key: String
+  /// "work", "session" or "brain": what a tap opens.
+  var open: String
+  var id: String
+  var title: String
+  var line: String
+  /// The Session's provider (claude, codex, …), "brain", or "" for a plain terminal.
+  var agent: String
+  /// "answer" or "approve" while it waits for the person.
+  var needs: String
+  var ring: MewlaLiveRing?
+  /// Unix milliseconds: its clock.
+  var startedAt: Int64
+
+  enum CodingKeys: String, CodingKey {
+    case key, open, id, title, line, agent, needs, ring
+    case startedAt = "started_at"
+  }
+
+  init(key: String, open: String, id: String, title: String, line: String, agent: String, needs: String, ring: MewlaLiveRing?, startedAt: Int64) {
+    self.key = key
+    self.open = open
+    self.id = id
+    self.title = title
+    self.line = line
+    self.agent = agent
+    self.needs = needs
+    self.ring = ring
+    self.startedAt = startedAt
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    key = try c.decodeIfPresent(String.self, forKey: .key) ?? ""
+    open = try c.decodeIfPresent(String.self, forKey: .open) ?? ""
+    id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+    title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+    line = try c.decodeIfPresent(String.self, forKey: .line) ?? ""
+    agent = try c.decodeIfPresent(String.self, forKey: .agent) ?? ""
+    needs = try c.decodeIfPresent(String.self, forKey: .needs) ?? ""
+    ring = (try? c.decodeIfPresent(MewlaLiveRing.self, forKey: .ring)).flatMap { $0 }.flatMap { $0.isDrawn ? $0 : nil }
+    startedAt = try c.decodeIfPresent(Int64.self, forKey: .startedAt) ?? 0
+  }
+
+  var asks: Bool { !needs.isEmpty }
+  var startedDate: Date? { startedAt > 0 ? Date(timeIntervalSince1970: Double(startedAt) / 1000) : nil }
 }
 
 /// The daemon's live_state projection (daemon/live), field for field. An ActivityKit push carries
@@ -47,9 +123,15 @@ struct MewlaLiveState: Codable, Hashable {
   var workerCount: Int
   var needsCount: Int
   var question: MewlaLiveQuestion?
+  /// What the surfaces draw: needs first, then running; at most three. Empty from a daemon that predates them.
+  var items: [MewlaLiveItem]
+  /// The app header's counts (a Work with several Workers is one row).
+  var running: Int
+  var queued: Int
+  var waiting: Int
 
   enum CodingKeys: String, CodingKey {
-    case kind, epoch, seq, title, phase, done, total, workers, question
+    case kind, epoch, seq, title, phase, done, total, workers, question, items, running, queued, waiting
     case runKey = "run_key"
     case startedAt = "started_at"
     case workerCount = "worker_count"
@@ -71,6 +153,10 @@ struct MewlaLiveState: Codable, Hashable {
     workerCount = try c.decodeIfPresent(Int.self, forKey: .workerCount) ?? 0
     needsCount = try c.decodeIfPresent(Int.self, forKey: .needsCount) ?? 0
     question = try c.decodeIfPresent(MewlaLiveQuestion.self, forKey: .question)
+    items = (try? c.decodeIfPresent([MewlaLiveItem].self, forKey: .items)).flatMap { $0 } ?? []
+    running = try c.decodeIfPresent(Int.self, forKey: .running) ?? 0
+    queued = try c.decodeIfPresent(Int.self, forKey: .queued) ?? 0
+    waiting = try c.decodeIfPresent(Int.self, forKey: .waiting) ?? 0
   }
 
   var isIdle: Bool { kind == Self.idle }

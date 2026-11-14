@@ -1,19 +1,30 @@
-import { cleanup, computed, List, Scroll, signal, Text, View } from "nsh";
-import { AlertDialog, Button, Input } from "nsh/base";
-import { NavPage } from "../shell/NavPage";
+import { elapsedNow } from "../kit/elapsedClock";
+import { cleanup, computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { Button } from "nsh/base";
+import { capsuleScrollTop, NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
-import { markWorkRead, objectiveLine, workAction } from "../../core/work/brainWork";
+import { markWorkRead, workAction, workDetail } from "../../core/work/brainWork";
+import type { BrainWorkDetail, BrainWorkStatus } from "../../core/work/types";
+import { workDetailWorkerRow, workProject, workWorkerLines, type WorkWorkerLine } from "../../core/work/workers";
+import { RowEnd, RowHair, RowText, RowTile } from "../tray/rowParts";
 import {
-  brainWorkActions, brainWorkAskDraft, brainWorkSlipActions, brainWorkSnoozeUntil, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
+  BRAIN_WORK_SNOOZE_SECONDS, brainWorkActions, brainWorkAskDraft, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
 } from "../../core/work/actions";
-import { BRAIN_WORK_GROUP_LABELS, BRAIN_WORK_GROUP_ORDER, brainWorkAge, brainWorkSummaryLine, type BrainWorkSlip, type WorkStatus } from "../../core/work/surface";
+import type { BrainWorkSlip } from "../../core/work/surface";
+import { progressBackLine, progressOutcomes, type BrainWorkProgress, type JudgedOutcomeState } from "../../core/work/judgedProgress";
+import { OutcomeMark, ProgressHalo } from "../kit/ProgressHalo";
+import { AgentIcon } from "../icons/AgentIcon";
 import { clock } from "../calendar/clock";
 import { createAttachmentUploads } from "../more/files/upload";
-import { brainDraft, connection, currentTransport } from "../session";
-import { workSurface } from "./state";
-
-/** Brain's Work: what Brain is doing for you, grouped by what it asks of you. Not the Calendar's items. */
-export type WorkRoute = { name: "work" } | { name: "workDetail"; workId: string };
+import { brainDraft, connection, currentTransport, workers } from "../session";
+import { Composer, createComposerText, writeIntoDraft } from "../chat/Composer";
+import { workFileOfWork, workSurface } from "./state";
+import { Icon, type IconName } from "../kit/Icon";
+import { delayed, RING, Spinner } from "../kit/wait";
+import { haptic } from "../shell/haptics";
+import { Caption, DISPLAY_TITLE_AWAY } from "../kit/kit";
+import { AttachmentTray } from "../more/files/Attachments";
+import { showAlert } from "../shell/alert";
 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
 export interface WorkLinks {
@@ -24,29 +35,9 @@ export interface WorkLinks {
   askBrain(text: string): void;
 }
 
-type Row = { kind: "group"; title: string } | { kind: "slip"; slip: BrainWorkSlip };
-
-function rows(): Row[] {
-  const slips = workSurface().slips;
-  return BRAIN_WORK_GROUP_ORDER.flatMap((group): Row[] => {
-    const inGroup = slips.filter((s) => s.group === group);
-    return inGroup.length ? [{ kind: "group", title: BRAIN_WORK_GROUP_LABELS[group] }, ...inGroup.map((slip) => ({ kind: "slip" as const, slip }))] : [];
-  });
-}
-
-const DOT: Record<WorkStatus, string> = {
-  needs: "bg-seal", running: "bg-ring", ready: "bg-muted-foreground", warning: "bg-warning", failed: "bg-destructive", blocked: "border border-muted-foreground",
-};
-
-function meta(slip: BrainWorkSlip): string {
-  const at = slip.updatedAt ? Date.parse(slip.updatedAt) : NaN;
-  const when = Number.isFinite(at) ? clock().format.shortDate(at, clock().zones.device) : "";
-  return [slip.calendarLabel ?? slip.who, when].filter(Boolean).join(" · ");
-}
-
 /** The action in flight ("<workId>:<kind>:<text>"): its button waits, the Work's others are off. */
 const busy = signal("");
-/** What the last action did, under the list's heading: "Brain has your answer", or why it failed. */
+/** What the last action did, under the list's heading: "Sent to Brain", or why it failed. */
 const notice = signal<{ text: string; detail?: string; failed?: boolean } | null>(null);
 let noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -56,7 +47,7 @@ function say(text: string, options: { detail?: string; failed?: boolean } = {}):
   noticeTimer = setTimeout(() => notice.set(null), 5_000);
 }
 
-const SAID: Partial<Record<BrainWorkAction["kind"], string>> = { close: "Closed", stop: "Stopped", dismiss: "Dismissed", snooze: "Snoozed until tomorrow morning" };
+const SAID: Partial<Record<BrainWorkAction["kind"], string>> = { close: "Closed", dismiss: "Dismissed", snooze: "Snoozed for 1 hour" };
 
 interface ActionContext {
   links: WorkLinks;
@@ -81,10 +72,10 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
   const words = context.reply?.text.trim() ?? "";
   if (action.kind === "reply" && !words && !context.reply?.attachments.length) return context.openDetail(slip.workId, true), false;
   if (action.confirm) {
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       title: action.kind === "stop" ? `Stop “${slip.title}”?` : `${action.label}?`,
       description: action.confirm,
-      actions: [{ id: "keep", label: "Cancel", role: "cancel" }, { id: "go", label: action.label, role: "destructive" }],
+      actions: [{ id: "keep", label: "Cancel", role: "cancel" }, { id: "go", label: action.label }],
     });
     if (answer.action !== "go") return false;
   }
@@ -97,12 +88,14 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
     const result = await workAction(transport, slip.workId, kind, {
       text,
       attachments: action.kind === "reply" ? context.reply?.attachments : undefined,
-      snoozeUntil: kind === "snooze" ? brainWorkSnoozeUntil(clock().zones) : undefined,
+      snoozeSeconds: kind === "snooze" ? BRAIN_WORK_SNOOZE_SECONDS : undefined,
     });
     if (kind === "reply") {
       if (result.admission === "uncertain") say("Sent, but Brain may not have it", { detail: "Check Brain's chat before sending again." });
-      else say("Brain has your answer");
-    } else say(SAID[action.kind] ?? "Done");
+      else say("Sent to Brain");
+    } else say(action.kind === "stop" ? `Stopped “${slip.title}”` : SAID[action.kind] ?? "Done");
+    // A request answered and acknowledged: the one light tick (SPEC §16.3 Haptics).
+    if (action.kind === "answer") haptic.impact("light");
     context.done();
     return true;
   } catch (error) {
@@ -113,113 +106,196 @@ async function runWorkAction(action: BrainWorkAction, slip: BrainWorkSlip, conte
   }
 }
 
-function ActionButton(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; onPress: () => void; compact?: boolean }) {
-  const key = () => `${props.slip().workId}:${props.action.kind}:${props.action.text ?? ""}`;
-  const off = () => Boolean(busy() && busy().startsWith(`${props.slip().workId}:`)) || (connection() !== "connected" && props.action.kind !== "ask" && props.action.kind !== "open");
-  const pad = props.compact ? "px-3 py-1.5" : "px-4 py-3";
+function actionOff(action: BrainWorkAction, slip: BrainWorkSlip): boolean {
+  return Boolean(busy() && busy().startsWith(`${slip.workId}:`)) || (connection() !== "connected" && action.kind !== "ask" && action.kind !== "open");
+}
+const actionTestID = (action: BrainWorkAction) => `work-action-${action.kind}${action.text ? `-${action.text}` : ""}`;
+const actionBusy = (action: BrainWorkAction, slip: BrainWorkSlip) => busy() === `${slip.workId}:${action.kind}:${action.text ?? ""}`;
+
+/** An answer to what the Work asks: a 54 pt row of its request card, with a ring; Brain's pick wears the request card's tag. */
+function AnswerRow(props: { action: BrainWorkAction; slip: () => BrainWorkSlip; onPress: () => void }) {
+  // Not optimistic (SPEC §16.2 pattern 8): the press, then the ring in the row's circle after `wait.quiet`.
+  const ring = delayed(() => actionBusy(props.action, props.slip()));
   return (
-    <Button testID={`work-action-${props.action.kind}${props.action.text ? `-${props.action.text}` : ""}`} disabled={off()} onPress={props.onPress}
-      class={props.action.primary ? `rounded-xl bg-primary ${pad}` : `rounded-xl border border-border ${pad} active:bg-accent`}>
-      <Text class={props.action.primary ? "text-center text-base font-semibold text-primary-foreground" : props.action.confirm ? "text-center text-base text-destructive" : "text-center text-base"}>
-        {busy() === key() ? "…" : props.action.label}
-      </Text>
+    <Button testID={actionTestID(props.action)} disabled={actionOff(props.action, props.slip())} onPress={props.onPress}
+      class={`min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 active:bg-accent ${actionBusy(props.action, props.slip()) ? "" : "disabled:opacity-40"}`}>
+      <Text class="min-w-0 flex-1 text-body">{props.action.label}</Text>
+      <If when={props.action.pick}><Text testID="work-pick" class="text-caption text-muted-foreground">Brain's pick</Text></If>
+      <View class="size-[22px] items-center justify-center">
+        <If when={ring()} else={<View class="size-[22px] rounded-full border-2 border-faint" />}>
+          <Spinner size={RING.button} label={props.action.label} />
+        </If>
+      </View>
     </Button>
   );
 }
 
-function SlipRow(props: { slip: () => BrainWorkSlip; onPress: () => void; context: ActionContext }) {
-  const s = () => props.slip();
-  const summary = () => (s().group === "running" && s().phase ? `${s().phase![0].toUpperCase()}${s().phase!.slice(1)} · ${s().summary ?? ""}` : s().summary ?? "");
+/**
+ * The Workers (SPEC §11 Work detail): a group of tray rows, the tray's own parts (`workDetailWorkerRow`): the
+ * agent's logo, the task name, what it does, its progress, its state at the end. Each pushes its Session; one
+ * the list no longer has is shown but does not open.
+ */
+function Workers(props: { lines: () => WorkWorkerLine[]; project: () => string | undefined; onOpen: (sessionId: string) => void }) {
+  const rows = () => props.lines().map((line) => ({ line, row: workDetailWorkerRow(line, elapsedNow(), props.project()) }));
   return (
-    <View class="border-b border-border bg-card">
-      <Button testID={`work-${s().workId}`} onPress={props.onPress} class="gap-1 px-4 pb-2 pt-3 active:bg-accent">
-        <View class="flex-row items-center gap-2">
-          <View class={`size-2 rounded-full ${DOT[s().status]}`} />
-          <Text class="flex-1 text-sm text-muted-foreground line-clamp-1">{meta(s())}</Text>
-          {s().statusLabel !== BRAIN_WORK_GROUP_LABELS[s().group] ? <Text class="text-sm text-muted-foreground">{s().statusLabel}</Text> : null}
-          {s().unread && s().group !== "needs" ? <View accessibilityLabel="Unread" class="size-2 rounded-full bg-seal" /> : null}
-        </View>
-        <Text class="text-base font-semibold line-clamp-2">{s().title}</Text>
-        {summary() ? <Text class="text-base text-muted-foreground line-clamp-2">{summary()}</Text> : null}
-      </Button>
-      {/* The answers or the one next step, right on the slip; the rest on its page. */}
-      <View class="flex-row flex-wrap gap-2 px-4 pb-3">
-        {brainWorkSlipActions(s()).map((action) => (
-          <ActionButton compact action={action} slip={s} onPress={() => void runWorkAction(action, s(), props.context)} />
-        ))}
-      </View>
+    <View>
+      <If when={props.lines().length}><>
+          <Caption role="header" class="mb-2 mt-6 px-4" text="Workers" />
+          <View testID="work-workers" class="overflow-hidden rounded-(--radius-group) bg-card">
+            {rows().map(({ line, row }, index, list) => (
+              <Button testID="work-worker" accessibilityLabel={[row.title, row.line, row.end].filter(Boolean).join(", ")} disabled={!line.openable} onPress={() => props.onOpen(line.sessionId)}
+                class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 active:bg-accent">
+                <RowTile tile={() => row.tile} />
+                <RowText row={() => row} />
+                <RowEnd row={() => row} />
+                <If when={!(index === list.length - 1)}><RowHair /></If>
+              </Button>
+            ))}
+          </View>
+        </></If>
     </View>
   );
 }
+
+const OUTCOME_WORDS: Record<JudgedOutcomeState, string> = { done: "done", doing: "under way", todo: "to do" };
+
+/**
+ * Its outcomes (SPEC §11 Progress, Work detail): why it went back when it did, in amber; then the outcomes the
+ * judge keeps, in its order, each marked done, under way or to do. None before a judgment.
+ */
+function Progress(props: { progress: () => BrainWorkProgress | undefined }) {
+  const outcomes = () => progressOutcomes(props.progress());
+  const back = () => progressBackLine(props.progress());
+  return (
+    <View>
+      <If when={outcomes().length}><>
+          <Caption role="header" class="mb-2 mt-6 px-4" text="Outcomes" />
+          <View testID="work-progress" class="overflow-hidden rounded-(--radius-group) bg-card">
+            <If when={back()}><View testID="work-progress-back" class="min-h-[44px] flex-row items-center gap-3 px-4 py-2.5">
+                <View class="size-[20px] items-center justify-center"><View class="size-2 rounded-full bg-warning" /></View>
+                <Text class="min-w-0 flex-1 text-sub font-semibold">{back()}</Text>
+              </View></If>
+            {outcomes().map((outcome, index) => (
+              <View testID={`work-outcome-${outcome.state}`} accessibilityLabel={`${outcome.text}, ${OUTCOME_WORDS[outcome.state]}`}
+                class={`min-h-[44px] flex-row items-center gap-3 px-4 py-2.5 ${index === 0 && !back() ? "" : "border-t border-border"}`}>
+                <OutcomeMark state={() => outcome.state} />
+                <Text class={`min-w-0 flex-1 text-sub ${outcome.state === "done" ? "text-muted-foreground" : ""}`}>{outcome.text}</Text>
+              </View>
+            ))}
+          </View>
+        </></If>
+    </View>
+  );
+}
+
+const CLOSED_STATUS: Partial<Record<BrainWorkStatus, string>> = { done: "Done", cancelled: "Cancelled" };
 
 function Notice() {
   return (
     <View>
-      {notice() ? (
-        <View testID="work-notice" class="gap-0.5 px-4 pt-3">
-          <Text class={notice()!.failed ? "text-base font-semibold text-destructive" : "text-base font-semibold"}>{notice()!.text}</Text>
-          {notice()!.detail ? <Text class="text-sm text-muted-foreground">{notice()!.detail!}</Text> : null}
-        </View>
-      ) : null}
+      <If when={notice()}><View testID="work-notice" class="gap-0.5 pt-3">
+          <Text class="text-body font-semibold">{notice()!.text}</Text>
+          <If when={notice()!.detail}><Text class="text-sub text-muted-foreground">{notice()!.detail!}</Text></If>
+        </View></If>
     </View>
   );
 }
 
-export function WorkPage(props: { nav: NavStackState<any>; links: WorkLinks }) {
-  const context: ActionContext = {
-    links: props.links,
-    openDetail: (workId) => props.nav.push({ name: "workDetail", workId }),
-    done: () => {},
-  };
-  const open = (slip: BrainWorkSlip) => {
-    const transport = currentTransport();
-    if (slip.unread && transport) markWorkRead(transport, slip.workId);
-    if (slip.group === "running" && slip.sessionId && !slip.replied) return props.links.openSession(slip.sessionId);
-    props.nav.push({ name: "workDetail", workId: slip.workId });
-  };
+/** "since 13:20" today, "since Nov 10" before. */
+function since(at: string | undefined): string {
+  const ms = at ? Date.parse(at) : NaN;
+  if (!Number.isFinite(ms)) return "";
+  const c = clock();
+  const zone = c.zones.device;
+  return `since ${c.zones.dateKey(ms, zone) === c.zones.dateKey(c.now, zone) ? c.format.time(ms, zone) : c.format.shortDate(ms, zone)}`;
+}
+
+/**
+ * The top block (SPEC §11 Work detail): the eyebrow "Work · {project}", the title at display size, the state line
+ * (a red dot and Needs you, a live dot and the running word, or a check and Done; then "· since 13:20").
+ */
+function TopBlock(props: { project: () => string | undefined; title: () => string; dot: () => "seal" | "live" | null; done: () => boolean; state: () => string; since: () => string }) {
   return (
-    <NavPage title="Work" testID="work-page">
-      <View class="flex-1 bg-background">
-        <List keyboardShouldPersistTaps="handled" testID="work-list" class="flex-1" each={rows()} keyExtractor={(row) => (row.kind === "group" ? `g:${row.title}` : `w:${row.slip.workId}`)}
-          header={() => (
-            <View>
-              <Notice />
-              <View class="gap-1 px-4 pb-1 pt-4">
-                {objectiveLine(workSurface().objective) ? <Text class="text-base font-semibold">{objectiveLine(workSurface().objective)!}</Text> : null}
-                {brainWorkSummaryLine(workSurface().counts) ? <Text testID="work-summary" class="text-sm text-muted-foreground">{brainWorkSummaryLine(workSurface().counts)!}</Text> : null}
-              </View>
-            </View>
-          )}
-          empty={() => (
-            <View testID="work-empty" class="items-center gap-2 px-6 py-16">
-              <Text class="text-lg font-semibold">No open Work</Text>
-              {connection() !== "connected" ? <Text class="text-center text-base text-muted-foreground">It shows when your computer is back.</Text> : null}
-            </View>
-          )}>
-          {(row) => {
-            // Every Brain update makes new rows: the cell is rebuilt only when it turns from a heading into a slip or
-            // back, so a tap is never lost to an update (as the Calendar agenda).
-            const group = computed(() => row().kind === "group");
-            // The slip row may read once more after the cell took a heading, before it goes: it keeps its last slip.
-            const slip = computed<BrainWorkSlip>((last) => (row().kind === "group" ? last! : (row() as { slip: BrainWorkSlip }).slip));
-            const title = computed<string>((last) => (row().kind === "group" ? (row() as { title: string }).title : last ?? ""));
-            return (
-              <View>
-                {group()
-                  ? <Text class="bg-background px-4 pb-1.5 pt-4 text-sm font-semibold text-muted-foreground">{title()}</Text>
-                  : <SlipRow slip={slip} onPress={() => open(slip())} context={context} />}
-              </View>
-            );
-          }}
-        </List>
+    <View class="gap-1 px-1 pb-1 pt-3">
+      <Caption testID="work-eyebrow" text={["Work", props.project()].filter(Boolean).join(" · ")} />
+      <View selectable><Text testID="work-title" role="header" class="text-display font-bold tracking-display">{props.title()}</Text></View>
+      <View testID="work-state" class="mt-1 flex-row items-center gap-2">
+        <If when={props.dot()} else={<If when={props.done()}><Icon name="check" size={16} tone="soft" /></If>}><View class={`size-2 rounded-full ${props.dot() === "seal" ? "bg-seal" : "bg-foreground"}`} /></If>
+        <Text class="min-w-0 flex-1 text-sub text-muted-foreground line-clamp-1">
+          <Text class="font-semibold text-foreground">{props.state()}</Text>
+          {props.since() ? ` · ${props.since()}` : ""}
+        </Text>
       </View>
-    </NavPage>
+    </View>
   );
 }
 
+/** The brief (SPEC §11 Work detail): a paragraph at 15/22, soft, shown whole; the page scrolls instead. */
+function Brief(props: { text: () => string }) {
+  // Read in the JSX: a component runs once, and the brief arrives after the page opens.
+  return <><If when={props.text()}><View selectable class="px-1 pt-3"><Text testID="work-brief" class="text-sub leading-[22px] text-muted-foreground">{props.text()}</Text></View></If></>;
+}
+
+/** A row of Work detail's own groups: an icon, the label, a value, a chevron when it opens something. */
+function GroupRow(props: { testID: string; icon: IconName; label: string; value?: string; chevron?: boolean; strong?: boolean; disabled?: boolean; first: boolean; onPress: () => void; accessibilityLabel?: string }) {
+  return (
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel} disabled={props.disabled} onPress={props.onPress}
+      class={`min-h-[56px] flex-row items-center gap-3 px-4 active:bg-accent disabled:opacity-40 ${props.first ? "" : "border-t border-border"}`}>
+      <Icon name={props.icon} size={24} tone={props.strong ? "ink" : "soft"} />
+      <Text class={`min-w-0 flex-1 text-body line-clamp-1 ${props.strong ? "font-semibold" : ""}`}>{props.label}</Text>
+      <If when={props.value}>{(value) => <Text class="max-w-[50%] text-body text-muted-foreground line-clamp-1">{value()}</Text>}</If>
+      <If when={props.chevron}><Icon name="chevron-right" size={18} tone="faint" /></If>
+    </Button>
+  );
+}
+
+const ACTION_ICON: Partial<Record<BrainWorkAction["kind"], IconName>> = {
+  snooze: "time", stop: "stop", dismiss: "close", close: "check", read: "check", open: "terminal",
+};
+
 export function WorkDetail(props: { workId: string; nav: NavStackState<any>; links: WorkLinks }) {
   const slip = () => workSurface().slips.find((s) => s.workId === props.workId);
-  const reply = signal("");
+  // A Work no longer open: its page from the computer, with who worked on it.
+  const closed = signal<BrainWorkDetail | null>(null);
+  const closedFailure = signal("");
+  let asked = false;
+  effect(() => {
+    const transport = connection() === "connected" ? currentTransport() : null;
+    if (slip() || asked || !transport) return;
+    asked = true;
+    workDetail(transport, props.workId).then((work) => closed.set(work), (error) => closedFailure.set(error instanceof Error ? error.message : ""));
+  });
+  // The brief (SPEC §11 Work detail): only the Work's own page carries it, so an open Work asks for it once.
+  const openBrief = signal("");
+  let briefAsked = false;
+  effect(() => {
+    const transport = connection() === "connected" ? currentTransport() : null;
+    if (!slip() || briefAsked || !transport) return;
+    briefAsked = true;
+    workDetail(transport, props.workId).then((work) => openBrief.set(work.objective?.trim() ?? ""), () => {});
+  });
+  const brief = () => (slip() ? openBrief() : closed()?.objective?.trim() ?? "");
+  const sessions = computed(() => new Map(workers().map((w) => [w.id, w] as const)));
+  const workerLines = () => workWorkerLines(slip() ? slip()!.workerSessions : closed()?.worker_sessions, sessions());
+  const project = () => workProject(slip()?.project, workerLines());
+  // Opening a result that came back reads it, from whichever way it was opened (the tray, a card, a notification).
+  let read = false;
+  effect(() => {
+    const shown = slip();
+    const transport = connection() === "connected" ? currentTransport() : null;
+    if (read || !shown?.unread || !transport) return;
+    read = true;
+    markWorkRead(transport, shown.workId);
+  });
+  // The nav bar names the Work once its display title has scrolled away (SPEC §11).
+  const titleAway = signal(false);
+  const title = () => slip()?.title ?? closed()?.title ?? "";
+  // On screen while nothing is pushed over it: only then does the dock lift for the keyboard.
+  const depth = untracked(() => props.nav.routes?.().length ?? 0);
+  const shown = () => (props.nav.routes?.().length ?? depth) === depth;
+
+  // The dock (SPEC §11): the shared composer, its words and files kept on this page only.
+  const text = createComposerText(() => null);
   const files = createAttachmentUploads();
   // Leaving the page drops what was picked and stops an upload still going.
   cleanup(() => files.dispose());
@@ -228,9 +304,9 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   const context = (): ActionContext => ({
     links: props.links,
     openDetail: () => {},
-    reply: { text: reply(), attachments: files.ready() },
+    reply: { text: text.text(), attachments: files.ready() },
     done: () => {
-      reply.set("");
+      text.clear();
       files.clear();
       props.nav.pop();
     },
@@ -244,76 +320,103 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
     }
   };
   const uploading = () => files.items().some((item) => item.status !== "ready");
-  const canSend = () => !busy() && !uploading() && Boolean(reply().trim() || files.ready().length);
+
+  const actions = () => brainWorkActions(slip()!);
+  const answers = () => actions().filter((action) => action.kind === "answer");
+  // Ask Brain about this is always there (it only fills Brain's composer); the table's own wording when it has one.
+  const ask = (): BrainWorkAction => actions().find((action) => action.kind === "ask") ?? { kind: "ask", label: "Ask Brain about this" };
+  // Snooze, Stop and the other ways to move the Work on. The dock replies; the Workers' rows open their Sessions.
+  const moves = () => actions().filter((action) => action.kind !== "answer" && action.kind !== "reply" && action.kind !== "ask" && !(action.kind === "open" && workerLines().length));
+  const file = () => (slip() ? workFileOfWork({ workId: slip()!.workId, runId: slip()!.calendar?.runId, sessionIds: [slip()!.sessionId, ...(slip()!.workerSessions ?? []).map((w) => w.session_id)].filter((id): id is string => Boolean(id)) }) : undefined);
+  // The ink dot is for running Work only; Queued, Waiting, Back and the like say their word with no dot.
+  const dot = (): "seal" | "live" | null => (slip()!.group === "needs" ? "seal" : slip()!.group === "running" ? "live" : null);
+  // "N running" while Workers run (SPEC §11), else the Work's own word.
+  const stateWord = () => {
+    const running = workerLines().filter((line) => line.state === "running").length;
+    return slip()!.group === "running" && running ? `${running} running` : slip()!.statusLabel;
+  };
+  // Since it began waiting, else since its first Worker joined; never updated_at, which moves on every sync.
+  const startedAt = () => slip()!.attentionSince ?? (slip()!.workerSessions ?? []).map((w) => w.joined_at).filter(Boolean).sort()[0];
+  // The dock is made once while the Work is open: snapshots and the clock rebuild the slip, never the field under a reply.
+  const docked = computed(() => Boolean(slip() && !slip()!.closed));
 
   return (
-    <NavPage title="Work" testID="work-detail">
-      <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
-        {!slip() ? (
-          <View class="items-center gap-2 px-6 py-16">
-            <Text class="text-lg font-semibold">This Work is no longer open</Text>
-          </View>
-        ) : (
-          <View class="gap-3 px-4 pb-10 pt-4">
-            <View class="flex-row items-center gap-2">
-              <View class={`size-2 rounded-full ${DOT[slip()!.status]}`} />
-              <Text class="text-sm text-muted-foreground">{[slip()!.statusLabel, meta(slip()!), slip()!.waitedMs && slip()!.group === "needs" ? `Waiting ${brainWorkAge(slip()!.waitedMs!)}` : ""].filter(Boolean).join(" · ")}</Text>
-            </View>
-            <View selectable><Text testID="work-title" class="text-xl font-semibold">{slip()!.title}</Text></View>
-            {slip()!.calendar && slip()!.calendarLink ? (
-              <Button testID="work-calendar-link" accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)} class="self-start">
-                <Text class="text-base text-primary">{slip()!.calendarLink!}</Text>
-              </Button>
-            ) : null}
-            {slip()!.question || slip()!.summary ? <View selectable><Text testID="work-question" class="text-base">{slip()!.question ?? slip()!.summary!}</Text></View> : null}
-            {brainWorkWaitForLine(slip()!) ? <View selectable><Text testID="work-wait-for" class="text-sm text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View> : null}
-            <View class="gap-2 pt-2">
-              {brainWorkActions(slip()!).filter((action) => !(action.kind === "reply" && slip()!.closed)).map((action) => (
-                <ActionButton action={action} slip={() => slip()!} onPress={() => void runWorkAction(action, slip()!, context())} />
-              ))}
-            </View>
-            {!slip()!.closed ? (
-              <View class="gap-2 pt-2">
-                {files.items().length ? (
-                  <View class="flex-row flex-wrap gap-2">
-                    {files.items().map((item) => (
-                      <Button accessibilityLabel={`Remove ${item.asset.name}`} onPress={() => files.remove(item.id)} class="rounded-full border border-border px-3 py-1">
-                        <Text class={item.status === "failed" ? "text-sm text-destructive" : "text-sm"}>{item.status === "ready" ? `${item.asset.name} ×` : item.status === "failed" ? `${item.asset.name}: ${item.error ?? "failed"} ×` : `${item.asset.name} …`}</Text>
-                      </Button>
-                    ))}
+    <NavPage title={titleAway() ? title() : ""} testID="work-detail" capsuleUnder>
+      <View class="flex-1 bg-background">
+        <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-2" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() + 8 } : undefined}
+          onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
+          <If when={!slip() && closed()} else={<If when={!slip()} else={<View>
+              <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />
+              {/* Its progress (§11 Progress): the ring around its Worker's logo (Brain's mark with several or none), no number. */}
+              <If when={slip()!.mark}>{(mark) => <View class="px-1 pt-3"><View class="size-[56px] items-center justify-center">
+                  <View class="absolute" style={{ left: 0, top: 0 }}><ProgressHalo mark={() => mark()!} size={56} testID="work-progress-ring" /></View>
+                  <If when={workerLines().length === 1} else={<Icon name="brain" size={26} tone="ink" />}><AgentIcon kind={workerLines()[0]?.agent ?? "terminal"} flavor={workerLines()[0]?.flavor} size={28} /></If>
+                </View></View>}</If>
+              <Brief text={brief} />
+              <If when={slip()!.summary && !slip()!.question}><View selectable class="px-1 pt-3"><Text testID="work-question" class="text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View></If>
+              <If when={brainWorkWaitForLine(slip()!)}><View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View></If>
+              <If when={slip()!.question}><>
+                  <Caption role="header" class="mb-2 mt-6 px-4" text="Waits on you" />
+                  <View class="overflow-hidden rounded-(--radius-group) bg-card">
+                    <View class="gap-2 p-4">
+                      <View class="flex-row items-center gap-2">
+                        <View class="size-2 rounded-full bg-seal" />
+                        <Text class="text-caption font-semibold">Brain asks</Text>
+                      </View>
+                      <View selectable><Text testID="work-question" class="text-body font-semibold">{slip()!.question!}</Text></View>
+                    </View>
+                    {answers().map((action) => <AnswerRow action={action} slip={() => slip()!} onPress={() => void runWorkAction(action, slip()!, context())} />)}
                   </View>
-                ) : null}
-                <View class="flex-row items-end gap-2">
-                  <Button testID="work-attach" accessibilityLabel="Attach file" disabled={busy() !== "" || files.picking()} onPress={() => void attach()} class="rounded-full border border-border px-3 py-2.5 active:bg-accent">
-                    <Text class="text-base">+</Text>
-                  </Button>
-                  <Input testID="work-reply" multiline value={reply()} onChange={({ value }) => reply.set(value)} placeholder={slip()!.question ? "Answer Brain…" : "Tell Brain about this…"}
-                    accessibilityLabel={`Reply to Brain about ${slip()!.title}`} class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base" />
-                  <Button testID="work-send-reply" accessibilityLabel="Send reply" disabled={!canSend()} onPress={() => void runWorkAction({ kind: "reply", label: "Reply" }, slip()!, context())} class="rounded-full bg-primary px-4 py-2.5">
-                    <Text class="text-base font-semibold text-primary-foreground">Send</Text>
-                  </Button>
-                </View>
-                {attachFailure() ? <Text class="text-sm text-destructive">{attachFailure()}</Text> : null}
+                </></If>
+              <Progress progress={() => slip()!.progress} />
+              <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
+              <View testID="work-links" class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
+                <If when={file()}><GroupRow testID="work-file" icon="document-text" label="Work file" value={file()!.path.split("/").pop()} chevron first
+                    onPress={() => props.nav.push({ name: "workFile", id: file()!.id })} /></If>
+                <If when={slip()!.calendar && slip()!.calendarLink}><GroupRow testID="work-calendar-link" icon="calendar" label={slip()!.calendarLink!} accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} chevron first={!file()}
+                    onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)} /></If>
+                <GroupRow testID={actionTestID(ask())} icon="chat" label={ask().label} chevron first={!file() && !(slip()!.calendar && slip()!.calendarLink)}
+                  onPress={() => void runWorkAction(ask(), slip()!, context())} />
               </View>
-            ) : null}
-            <Notice />
-          </View>
-        )}
-      </Scroll>
+              <If when={moves().length}><View testID="work-moves" class="mt-3 overflow-hidden rounded-(--radius-group) bg-card">
+                  {moves().map((action, index) => (
+                    <GroupRow testID={actionTestID(action)} icon={ACTION_ICON[action.kind] ?? "chevron-right"} label={actionBusy(action, slip()!) ? "…" : action.label}
+                      strong={Boolean(action.primary || action.confirm)} disabled={actionOff(action, slip()!)} first={index === 0}
+                      onPress={() => void runWorkAction(action, slip()!, context())} />
+                  ))}
+                </View></If>
+              <Notice />
+            </View>}><If when={closedFailure() || connection() !== "connected"}><View class="items-center gap-2 px-6 py-16">
+                <Text class="text-title font-semibold tracking-title">{closedFailure() || "This Work is no longer open"}</Text>
+              </View></If></If>}><View>
+              <TopBlock project={project} title={title} dot={() => null} done={() => closed()!.status === "done"} state={() => CLOSED_STATUS[closed()!.status] ?? "Closed"} since={() => since(closed()!.updated_at)} />
+              <Brief text={brief} />
+              <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
+            </View></If>
+        </Scroll>
+        <If when={docked()}><Composer text={text} placeholder="Reply about this Work" active={shown}
+            canSend={() => !busy() && !uploading()} attached={() => files.ready().length > 0}
+            disabled={() => connection() !== "connected"} disabledReason={() => "Offline"}
+            running={() => false} stopping={() => false} canStop={() => false} onStop={() => {}}
+            onSend={() => {
+              void runWorkAction({ kind: "reply", label: "Reply" }, slip()!, context());
+              // Kept until Brain has it: the page closes then, and a failure leaves the words to send again.
+              return false;
+            }}
+            leading={
+              <Button testID="work-attach" accessibilityLabel="Attach file" disabled={busy() !== "" || files.picking()} onPress={() => void attach()} class="h-[52px] w-[44px] items-center justify-center disabled:opacity-40">
+                <Icon name="add" size={22} tone="soft" />
+              </Button>
+            }>
+            <If when={files.items().length}><AttachmentTray uploads={files} /></If>
+            <If when={attachFailure()}><View class="px-3 pb-1.5"><Text class="text-sub text-muted-foreground">{attachFailure()}</Text></View></If>
+          </Composer></If>
+      </View>
     </NavPage>
   );
 }
 
-/** The Brain header's way into Work: "Work", with how many need you. */
-export function WorkHeaderButton(props: { onPress: () => void }) {
-  return (
-    <Button testID="open-work" onPress={props.onPress} accessibilityLabel="Work">
-      <Text class="text-base text-primary">{workSurface().counts.needs ? `Work · ${workSurface().counts.needs}` : "Work"}</Text>
-    </Button>
-  );
-}
-
-/** "Ask Brain about this" until Brain's composer takes text from outside: the thread's draft holds it. */
+/** "Ask Brain about this": the quote joins Brain's composer, below anything typed there (SPEC §3.4). */
 export function draftForBrain(text: string): void {
-  brainDraft()?.save(text);
+  writeIntoDraft(brainDraft(), text);
 }

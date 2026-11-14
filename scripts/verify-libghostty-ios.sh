@@ -5,8 +5,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
-OUT_DIR="$ROOT/app/modules/terminal-vt/libs/ios"
+LOCK="$ROOT/native/terminal-vt/native.lock.json"
+OUT_DIR="$ROOT/native/terminal-vt/libs/ios"
 
 eval "$(python3 - "$LOCK" <<'PY'
 import json, shlex, sys

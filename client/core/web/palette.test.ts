@@ -9,11 +9,14 @@ const items = buildPaletteItems({
 describe("command palette", () => {
   test("actions, then places, Work and Sessions", () => {
     expect(items.map((item) => item.section)).toEqual([
-      "Actions", "Actions", "Actions",
-      "Go to", "Go to", "Go to", "Go to", "Go to", "Go to", "Go to", "Go to",
+      "Actions", "Actions", "Actions", "Actions", "Actions", "Actions",
+      "Go to", "Go to", "Go to", "Go to", "Go to", "Go to", "Go to", "Go to", "Go to",
       "Work", "Sessions", "Sessions",
     ]);
-    expect(items.slice(0, 3).map((item) => item.label)).toEqual(["New session", "New Brain chat", "Keyboard shortcuts"]);
+    expect(items.slice(0, 6).map((item) => item.label)).toEqual(["New session", "New chat", "Open Brain's terminal", "Browse workspace", "Switch executor", "Keyboard shortcuts"]);
+    expect(items.filter((item) => item.section === "Go to").map((item) => item.label)).toEqual(
+      ["Brain", "All Sessions", "Calendar", "Computer", "Screen", "Extensions", "Stats", "Resources", "Settings"],
+    );
     expect(items.find((item) => item.id === "go:calendar")?.shortcut).toBe("G then C");
     expect(items.find((item) => item.id === "work:k1")?.action).toEqual({ kind: "work", workId: "k1", sessionId: "w1" });
     expect(items.find((item) => item.id === "session:w2")?.action).toEqual({ kind: "session", workerId: "w2" });

@@ -2,7 +2,7 @@
 // Builds the offline Screen viewer (this folder plus noVNC) into
 // ../viewerSource.ts, the WebView document's script as a string constant: the
 // WebView loads no remote scripts. noVNC comes from the repository's installed
-// `@novnc/novnc` (pinned in app/package.json while the Expo app is kept).
+// `@novnc/novnc` (pinned in the root package.json).
 //
 // noVNC 1.7 probes H.264 support with a top-level await; the probe is rewritten
 // to settle in the background as globalThis.__mewlaH264Ready, which the viewer
@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "../../../../..");
-const anchor = [join(repo, "app", "package.json"), join(repo, "package.json")].find(existsSync);
+const anchor = join(repo, "package.json");
 // A worktree without node_modules can name a checkout's copy: MEWLA_NOVNC_DIR=<…/node_modules/@novnc/novnc>.
 const packageDir = process.env.MEWLA_NOVNC_DIR || dirname(createRequire(anchor).resolve("@novnc/novnc/package.json"));
 const { main = "core/rfb.js" } = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));

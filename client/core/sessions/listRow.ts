@@ -1,6 +1,6 @@
 import { DateStyle, formatDate } from "../timeline/dates";
-import { formatWorkerSessionPreview, type SessionPreviewTone } from "./sessionPreview";
-import { isWorkerActivelyRunning } from "./workerStatusPresentation";
+import { BARE_STATE_WORDS, sessionActivity } from "./activity";
+import { buildWorkerSessionAccessibilityLabel, workerStatusLabel } from "./workerStatusPresentation";
 import { presentWorker, type AgentKind, type TerminalFlavor } from "./workerPresentation";
 import type { Worker, WorkerStatus } from "./workers";
 
@@ -23,19 +23,26 @@ export function shortWorkerLabel(value?: string): string {
   return trimmed.replace(/\s+\([^)]+\)\s*$/, "") || trimmed;
 }
 
+/** "Hello writer (mh-17b3337d43f38037916f0e5b)" → "Hello writer": the daemon's Session id is no part of a name. */
+export function withoutSessionId(name: string | undefined): string {
+  return name?.replace(/\s*\(mh-[0-9a-f]+\)\s*$/i, "").trim() ?? "";
+}
+
 export type SessionRowModel = {
   title: string;
   kind: AgentKind;
   flavor: TerminalFlavor;
-  preview: string;
-  previewPrefix?: string;
-  tone: SessionPreviewTone;
-  /** "live" while a turn runs, else when it last changed. */
-  time: string;
+  /**
+   * What it is doing, in words (core/sessions/activity `sessionActivity`); when that is only its state's
+   * word ("Idle", "Working"), the agent and where it works ("Claude Code · mewla") instead.
+   */
+  line: string;
   status: WorkerStatus;
   needsYou: boolean;
   delegated: boolean;
   fromCalendar: boolean;
+  /** What a screen reader says for the row (the Expo app's WorkerSessionRow label): title, origin, status, line, time. */
+  accessibilityLabel: string;
 };
 
 /**
@@ -59,18 +66,28 @@ export function sessionRowModel(worker: Worker, options: { alias?: string; calen
   const title = presented.titleSource !== "default"
     ? presented.title
     : workTitle || presented.shortTitle || (generated ? "" : shortWorkerLabel(worker.name)) || presented.title;
-  const preview = formatWorkerSessionPreview(worker);
+  const activity = sessionActivity(worker);
+  // A bare state word repeats the row's section and dot ("Idle" under Idle) and says nothing. What is always
+  // known and still tells two rows apart is which agent works where, the subtitle "Claude Code · mewla";
+  // the terminal's own text is never read, so this is the honest fallback.
+  const line = BARE_STATE_WORDS.has(activity) ? presented.subtitle || activity : activity;
   return {
     title,
     kind: presented.kind,
     flavor: presented.terminalFlavor,
-    preview: preview.text,
-    previewPrefix: preview.prefix,
-    tone: preview.tone,
-    time: isWorkerActivelyRunning(worker.status) ? "live" : listTime(worker.updated_at),
+    line,
     status: worker.status,
     needsYou: worker.needs_attention === true,
     delegated: Boolean(worker.delegated),
     fromCalendar: Boolean(options.calendarLabel),
+    accessibilityLabel: buildWorkerSessionAccessibilityLabel({
+      title,
+      status: worker.status,
+      // A line that is only the state's word ("Done", "Idle") is said once.
+      preview: line === workerStatusLabel(worker.status) ? "" : line,
+      timeLabel: worker.status === "running" ? "" : listTime(worker.updated_at),
+      brainDelegated: Boolean(worker.delegated),
+      fromCalendar: Boolean(options.calendarLabel),
+    }),
   };
 }

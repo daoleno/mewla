@@ -29,7 +29,7 @@ Linear/Notion/Slack use a fixed native return. The daemon retains the verifier a
 
 Native authorization-session close and provider denial have explicit retry states. When the app uses an external browser, closing that browser cannot report a cancellation to Mewla; the waiting screen keeps Open authorization and Cancel connection available until completion or expiry. App resume and connection recovery recheck automatically; no Refresh is needed to finish consent. Expired and cancelled flows cannot execute. A network failure after a native return can retry verification with the same bound return. GitHub device consent may complete after the browser closes; the waiting screen offers a clear cancel action.
 
-Slack public clients request only user scopes on the relay redirect and send S256/verifier without `client_secret`. The official token response has a nested `authed_user` on initial consent and top-level rotating token on refresh; both are handled. The refreshed token pair is saved before subsequent use. Slack's public-client refresh tokens expire after 30 days; expired authorization requires reconnect.
+Slack public clients request only user scopes on the relay redirect and send S256/verifier without `client_secret`. The official token response has a nested `authed_user` on initial consent and top-level rotating token on refresh; both are handled. The refreshed token pair is saved before subsequent use. Slack's public-client refresh tokens expire after 30 days; expired authorization requires reconnect. A refresh marks the account Sign-in expired only when the provider answers with a refusal (an OAuth error such as `invalid_grant`, a Slack `ok:false`, or any status below 500); a dropped connection or a 5xx keeps the sign-in and the call fails as a network error. A later call that succeeds with the stored sign-in clears an expired or failed status.
 
 ## The integration catalog
 
@@ -57,7 +57,7 @@ Disconnect commits the disabled state before provider revocation and credential 
 
 Credentials live in the daemon's private 0600 vault. Account metadata/history contain no token, arguments or result bodies. Existing linked accounts remain usable. A verified reconnect can retain the stable known identity's account ID. Where the vendor does not expose a supported identity, Mewla says so instead of requiring a nickname or inventing an identity.
 
-The existing private control CLI retains operator-owned OAuth configuration and token/custom-service functionality for advanced use. Those commands are not the end-user built-in installation journey and must never distribute Mewla's shared publisher secret.
+The existing private control CLI retains operator-owned OAuth configuration and token/custom-service functionality for advanced use. An operator client whose fixed https callback is not the web origin's own finishes by polling (no `web_return`); its callback tab is sent to that origin's `/plugins` with the outcome (`oauthFlow.ReturnTo`, an origin `servesWebOrigin` admitted at start), never left on the `mewla://plugins` page. Those commands are not the end-user built-in installation journey and must never distribute Mewla's shared publisher secret.
 
 ## Custom service boundaries
 
@@ -67,11 +67,11 @@ Custom forms use the shared `react-native-keyboard-controller` keyboard-aware sc
 
 Custom endpoints use HTTPS/public addresses by default. A per-account grant permits explicitly selected internal CIDRs; cloud metadata/link-local addresses and overbroad ranges remain rejected. DNS validation is bound to dialing. Credentials never follow redirects. OAuth resource/client identity remains bound to the exact endpoint, including refresh. OpenAPI references stay local to the submitted document; file/remote references, recursive schemas and unsupported body encodings are rejected. Calls cannot override endpoint, credential, policy or schema.
 
-The daemon uses maintained Go MCP, OAuth2, OpenAPI and JSON-schema packages. The app uses Expo WebBrowser's native authorization sessions on Android/iOS when that module is present. Older native clients open the same official authorization URL through React Native Linking instead, with the existing state/PKCE, original-server binding, deep-link handling and app-resume checks. The optional native package is loaded only after checking availability, so a JavaScript update cannot crash route discovery on an older client. A matching native build enables the integrated auth-session UI; a JavaScript update cannot add that native module. Android and iOS bundle checks are required; device evidence must identify its actual platform.
+The daemon uses maintained Go MCP, OAuth2, OpenAPI and JSON-schema packages. The app opens the official authorization URL in the system browser (`openUrl`), and the browser returns to the app through the `mewla://plugins` link (`client/core/extensions/pluginOnboarding.ts`). The pending flow is stored per paired server and a return is accepted only when its state matches that flow and the server is the one that started it; a bare callback without state is treated as a closed browser. Device evidence must identify its actual platform.
 
 ## Verification and loading
 
-Run meaningful connection regressions, `GOMAXPROCS=2 go test -p 1 ./...`, daemon build and app TypeScript. Export Android and iOS serially with `NODE_OPTIONS=--max-old-space-size=2048`, Metro `--max-workers 1`. Build the normal matching native package; start only one small emulator after bundling exits. Protocol fixtures prove protocol behavior, not real vendor consent.
+Run meaningful connection regressions, `GOMAXPROCS=2 go test -p 1 ./...`, daemon build, `cd client && bun test core` and `cd client/ui && nsh check && nsh test`. Build the normal Android and iOS hosts serially; start only one small emulator after the build exits. Protocol fixtures prove protocol behavior, not real vendor consent.
 
 `TestPluginsOwnedRuntime` provides disposable production pairing/WebSocket/control dispatch without starting Brain or schedulers. Keep its state private and remove it after verification. A live `mewla-dev` watcher can restart the Brain host when original Go source changes; build in isolation, then use the current private checkpoint/recovery loading procedure to integrate and load safely. Never reset the original provider, tmux or state.
 
@@ -152,8 +152,12 @@ background refresh, never from a synchronous list-time process. `--version` is
 the only account-free `cloud_run` probe; cloud command authorization is unchanged.
 
 An OAuth callback can land on a different Mewla computer using the same loopback
-port. Unknown state must never redirect away or exchange the code: the callback
-page retains its original URL and provides a full-address Copy action. The page
+port. Unknown state must never exchange the code. Each state the daemon issues
+ends in a 32-hex HMAC under a key kept in its vault (`oauth-state-key`,
+`connections/oauth_state.go`), so a state it issued but no longer holds (a
+restart forgets pending flows, or a replay) is told apart: on a web UI host it
+redirects to `/plugins?plugin_error=expired`. Any other unknown state (another
+computer's) keeps the copy page: it retains its original URL and provides a full-address Copy action. The page
 uses no-store, no-referrer and a nonce-bound script; callback values are not
 rendered into HTML or logged. Known states retain their single-use behavior.
 The computers channel currently transports durable Brain messages, not an OAuth

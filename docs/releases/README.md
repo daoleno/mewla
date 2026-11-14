@@ -16,7 +16,7 @@ installer and `mewla update` pick the highest version.
   [Install](../install-daemon.md#ios).
 - **Android**: distributed as an APK outside the Play Store. Android asks to
   allow installs from your browser or file manager, and Play Protect may warn.
-- **Plugins**: first-time sign-in is not yet available for Slack, and for
+- **Extensions**: first-time sign-in is not yet available for Slack, and for
   Google Workspace unless your daemon already has Google sign-in configured.
   See [Extensions](../extensions.md#sign-in-availability).
 - **macOS daemon**: the Apple Silicon binary is cross-built; report problems you

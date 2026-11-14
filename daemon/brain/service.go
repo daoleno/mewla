@@ -69,6 +69,8 @@ type Service struct {
 	watcher Watcher
 	execs   *work.ExecutorConfig
 	now     func() time.Time
+	// resultGit probes Worker projects for a result's git_review action.
+	resultGit resultGitProbes
 	// defaultHostLogged logs once which agent Brain picked by default when
 	// more than one is installed and none was chosen.
 	defaultHostLogged sync.Once
@@ -104,8 +106,9 @@ type Service struct {
 	dispatchMu sync.Mutex
 
 	// judge decides undisposed Work (settle.go); nil leaves such Work as is.
-	judge  WorkJudge
-	settle settler
+	judge    WorkJudge
+	settle   settler
+	progress progressJudge
 	// inFlightHostInputs protects only the live Prepare -> provider mutation ->
 	// Admit/Abort critical section. It is deliberately process-local: durable
 	// BrainInputAdmission + watcher receipt state remain the restart authority.
@@ -630,6 +633,7 @@ func (s *Service) ApplyTurnFact(fact watcher.TurnFact) (watcher.TurnSnapshot, bo
 		return watcher.TurnSnapshot{}, false, fmt.Errorf("brain store is not configured")
 	}
 	s.recordTurnEndTranscript(fact)
+	s.noteProgressFact(fact, false)
 	return s.store.ApplyTurnFact(fact)
 }
 
@@ -638,6 +642,7 @@ func (s *Service) ApplyDelegatedTurnProgress(fact watcher.TurnFact) (watcher.Tur
 		return watcher.TurnProgressResult{}, fmt.Errorf("brain store is not configured")
 	}
 	s.recordTurnEndTranscript(fact)
+	s.noteProgressFact(fact, true)
 	return s.store.ApplyDelegatedTurnProgress(fact)
 }
 
@@ -737,7 +742,7 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	snapshot.ExecutorStates = s.executorStates(snapshot.Executors)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
-	inventory, err := s.store.ProjectWorkInventory(presentDelegatedSessions(snapshot.Workers))
+	inventory, err := s.store.ProjectWorkInventory(snapshot.Workers)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -786,7 +791,7 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	snapshot.ExecutorStates = s.executorStates(snapshot.Executors)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
-	inventory, err := s.store.ProjectWorkInventory(presentDelegatedSessions(snapshot.Workers))
+	inventory, err := s.store.ProjectWorkInventory(snapshot.Workers)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -2080,6 +2085,7 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 			continue
 		}
 		if worker != nil && item.AttemptDelegated {
+			s.recordWorkWorker(item.ID, worker)
 			s.recordWorkTranscript(item, worker, turn.TurnID, false)
 		}
 		if worker == nil {
@@ -2252,6 +2258,56 @@ func (s *Service) UnsubscribeWork(id int) {
 	}
 }
 
+// Work reads one Work.
+func (s *Service) Work(workID string) (Work, error) {
+	if s == nil || s.store == nil {
+		return Work{}, fmt.Errorf("brain service is not configured")
+	}
+	return s.store.Work(workID)
+}
+
+// WorkDetail is one Work's detail, current or closed, with its Workers'
+// live state from the current Session inventory.
+func (s *Service) WorkDetail(workID string) (WorkDetail, error) {
+	if s == nil || s.store == nil {
+		return WorkDetail{}, fmt.Errorf("brain service is not configured")
+	}
+	hostID, err := s.store.HostSessionID()
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	detail, err := s.store.WorkDetail(workID, s.workerRefs(hostID))
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	item, err := s.store.Work(detail.ID)
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	events, err := s.store.ListWorkEvents(detail.ID)
+	if err != nil {
+		return WorkDetail{}, err
+	}
+	for index := len(events) - 1; index >= 0; index-- {
+		event := events[index]
+		if !isProjectedWorkResultEvent(event.Kind) {
+			continue
+		}
+		sessionID := strings.TrimSpace(strings.TrimPrefix(event.PayloadRef, "session:"))
+		if sessionID == strings.TrimSpace(event.PayloadRef) {
+			sessionID = ""
+		}
+		if actions := s.workResultActions(workResultSource{
+			sessionID: sessionID, summary: event.Summary, details: event.DetailsJSON,
+			contextRef: item.ContextRef, current: true, cwd: s.workWorkerCwd(item.ID, sessionID),
+		}); len(actions) > 0 {
+			detail.ResultActions = actions
+		}
+		break
+	}
+	return detail, nil
+}
+
 func (s *Service) MarkWorkRead(workID string) error {
 	if s == nil || s.store == nil {
 		return fmt.Errorf("brain service is not configured")
@@ -2314,6 +2370,11 @@ func (s *Service) AnnotateWorkResultEvents(events []work.CodexConversationEvent)
 	if err != nil {
 		return err
 	}
+	currentByWork := make(map[string]string, len(lifecycles))
+	for workID, lifecycle := range lifecycles {
+		currentByWork[workID] = lifecycle.CurrentEventID
+	}
+	s.annotateWorkResultActions(events, currentByWork)
 	for index := range events {
 		lifecycle, found := lifecycles[events[index].WorkID]
 		if !found || events[index].Source != workResultConversationSource {
@@ -4415,12 +4476,47 @@ func (s *Service) workerRefs(hostID string) []WorkerRef {
 		if worker.Hidden || (hostID != "" && worker.ID == hostID) {
 			continue
 		}
-		out = append(out, workerRefFromClassifier(worker))
+		ref := workerRefFromClassifier(worker)
+		ref.ExecutorID, ref.Provider = s.workerExecutorOf(worker)
+		out = append(out, ref)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Updated.After(out[j].Updated)
 	})
 	return out
+}
+
+// workerExecutorOf names the executor a Session runs and its provider, the
+// way worker_session does: the executor it was launched from, else the one
+// whose command it runs.
+func (s *Service) workerExecutorOf(worker *classifier.Worker) (executorID, provider string) {
+	if s == nil || s.execs == nil || worker == nil {
+		return "", ""
+	}
+	executorID = worker.ExecutorID
+	if executorID == "" {
+		executorID = s.execs.IDForCommand(worker.Command)
+	}
+	if executor, ok := s.execs.WorkerExecutor(executorID); ok {
+		return executorID, executor.Provider
+	}
+	return executorID, ""
+}
+
+// recordWorkWorker keeps the name and executor of a Session working on a
+// Work, so the Work still names it after the pane is gone. Failures are
+// logged and never block reconciliation.
+func (s *Service) recordWorkWorker(workID string, worker *classifier.Worker) {
+	if s == nil || s.store == nil || worker == nil {
+		return
+	}
+	executorID, provider := s.workerExecutorOf(worker)
+	if _, err := s.store.RecordWorkWorker(WorkWorkerRecord{
+		WorkID: workID, SessionID: worker.ID, Name: worker.Name,
+		ExecutorID: executorID, Provider: provider, Cwd: worker.Cwd,
+	}); err != nil {
+		log.Printf("brain Work %s Worker %s record failed: %v", workID, worker.ID, err)
+	}
 }
 
 func presentDelegatedSessions(workers []WorkerRef) map[string]bool {

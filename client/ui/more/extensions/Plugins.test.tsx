@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering } from "../../testing/fixtures";
+import { answering, pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 
@@ -70,8 +70,8 @@ describe("Extensions", () => {
       return {};
     });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("text:Mewla plugins");
-    for (const word of ["Notion", "GitHub", "Not yet available", "Your own services"]) expect(app.texts()).toContain(word);
+    await app.waitFor("text:Available");
+    for (const word of ["Notion", "GitHub", "Unavailable", "MCP server"]) expect(app.texts()).toContain(word);
 
     await app.press("id:connect-notion");
     await app.waitFor("text:Waiting for Notion");
@@ -87,8 +87,26 @@ describe("Extensions", () => {
     await app.host.send("links.open", { url: "mewla://plugins?state=s123&code=good" });
     await app.waitFor("text:Notion connected");
     expect(c.asked.find((r) => r.action === "connect_finish")).toEqual({ action: "connect_finish", flow_id: "f1", callback: "mewla://plugins?state=s123&code=good" });
-    expect(app.texts()).toContain("Brain can now find and read workspace pages.");
+    // Connected says so, and offers the one next step: changes are off until allowed.
+    expect(app.texts()).toContain("Allow changes");
     expect(c.secure.has("mewla.plugin.authorization.s1")).toBe(false);
+  });
+
+  test("grouped by state (SPEC §10.4): Connected rows say their state plainly, a sign-in to redo sits under Needs fixing with Reconnect", async () => {
+    const github = { ...notionAccount, id: "g1", integration: "github", name: "octocat", status: "authorization_required" };
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [notionAccount, github] } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Needs fixing");
+    // Under Connected the section says it: the row repeats neither its state nor the service's name.
+    expect(app.shows("id:service-notion-state")).toBe(false);
+    expect(app.shows("id:connect-github")).toBe(true);
+    expect(app.texts()).toContain("Reconnect");
+    // The section says what is wrong: its one account isn't named again, nor "Sign-in expired".
+    expect(app.texts().some((text) => text.includes("Sign-in expired"))).toBe(false);
+    // Its page: the mark on the hero and the state with its dot.
+    await app.press("id:service-notion");
+    await app.waitFor("id:service-hero-lead");
+    expect(app.shows("id:service-state-dot")).toBe(true);
   });
 
   test("a GitHub code is shown first, then copied as the page opens", async () => {
@@ -181,7 +199,7 @@ describe("Extensions in a browser", () => {
     const b = browser(c, { connected: "n1", service: "notion" });
     const app = await open(HARNESS, b.options);
     await app.waitFor("text:Notion connected");
-    expect(app.texts()).toContain("Brain can now find and read workspace pages.");
+    expect(app.texts()).toContain("Allow changes");
     expect(c.secure.has("mewla.plugin.authorization.s1")).toBe(false);
     expect(c.asked.some((r) => r.action === "connect_status")).toBe(false);
   });
@@ -198,7 +216,7 @@ describe("Extensions in a browser", () => {
 });
 
 describe("A service", () => {
-  test("its account's switches tell the computer, and Disconnect asks once with Keep", async () => {
+  test("its account's switches tell the computer, and Disconnect asks once, by name", async () => {
     let accounts = [notionAccount];
     const c = computer({ name: "extensions-service", id: "notion" }, (request) => {
       if (request.action === "list") return { catalog, accounts };
@@ -217,13 +235,13 @@ describe("A service", () => {
 
     app.onDialog((dialog) => {
       expect(dialog.title).toBe("Disconnect Notion?");
-      expect(dialog.buttons).toEqual(["Keep", "Disconnect"]);
+      expect(dialog.buttons).toEqual(["Cancel", "Disconnect"]);
       return "Disconnect";
     });
-    await answering(app, () => app.press("id:disconnect-n1"));
+    // The switch's change is still being saved: Disconnect waits for it.
+    await answering(app, () => pressWhenEnabled(app, "id:disconnect-n1"));
     await app.waitUntil(() => c.asked.some((r) => r.action === "disconnect"));
     await app.waitFor("id:service-connect");
-    expect(app.texts()).toContain("What Brain can do");
   });
 
   test("a custom service with a token connects without a sign-in, sending its address and token once", async () => {
@@ -241,7 +259,7 @@ describe("A service", () => {
     await app.press("id:custom-connect");
     await app.waitFor("text:Docs connected");
     expect(c.asked.find((r) => r.action === "add")).toEqual({ action: "add", input: { integration: "mcp", name: "Docs", endpoint: "https://docs.example.com/mcp", credential: "tok_123" } });
-    expect(app.texts()).toContain("Choose which of its tools Brain may use. None are allowed yet.");
+    expect(app.texts()).toContain("Choose tools");
   });
 });
 
@@ -271,7 +289,7 @@ describe("Tools & activity", () => {
     const c = computer({ name: "extensions-tools", service: "notion" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
     const app = await open(HARNESS, c.options);
     await app.waitUntil(() => c.asked.some((r) => r.action === "list"));
-    await app.waitUntil(() => !app.shows("text:Loading tools"));
+    await app.waitUntil(() => !app.shows("label:Loading tools"));
   });
 });
 
@@ -311,11 +329,11 @@ describe("As before the rewrite", () => {
   // FINAL-VERIFY 6387f88f extensions D4: a computer paired by its address took its reported name in
   // Settings, but the pages kept saying "this computer" until the app started again.
   test("a computer that takes its reported name is named by it at once", async () => {
-    const c = computer({ name: "extensions-service", id: "github" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
+    const c = computer({ name: "extensions-service", id: "mcp" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
     const app = await open(HARNESS, { host: { ...c.options.host, params: { ...c.options.host.params, server: { name: "192.168.1.5" } } } });
-    await app.waitFor("text:Your sign-in stays on this computer. Brain only acts on tasks you give it.");
+    await app.waitFor("text:Credentials stay on this computer. Each tool needs your permission.");
     await app.host.send("app.serverRenamed", "claude9983");
-    await app.waitFor("text:Your sign-in stays on claude9983. Brain only acts on tasks you give it.");
+    await app.waitFor("text:Credentials stay on claude9983. Each tool needs your permission.");
   });
 
   test("Hyperliquid offers another key only once an account holds one", async () => {
@@ -355,8 +373,129 @@ describe("As before the rewrite", () => {
     const c = computer({ name: "extensions" }, () => ({}));
     const options = { host: { ...c.options.host, params: { page: { name: "extensions" }, state: "waiting" } } };
     const app = await open(HARNESS, options);
-    await app.waitFor("text:Loading services");
+    await app.waitFor("label:Loading services");
     await app.waitFor("id:services-unavailable", { timeout: 4_000 });
     expect(app.texts()).toContain("Can't reach your computer.");
+  });
+});
+
+describe("Extensions on the web, as on the phone (owner 11-13)", () => {
+  /** A computer whose list comes late: a reloaded or shared /extensions/<id> opens the page before it. */
+  function slowList(page: unknown, accounts: unknown[] = []) {
+    const secure = new Map<string, string>();
+    return {
+      secure,
+      options: {
+        host: {
+          params: { page },
+          handlers: {
+            ...secureStore(secure),
+            "app.daemon": async ({ type, body }: { type: string; body: Record<string, unknown> }) => {
+              if (type !== "connections") return { error: "not in this test" };
+              const request = body.connection_request as Request;
+              if (request.action === "list") await new Promise((done) => setTimeout(done, 400));
+              return { reply: "connections_result", connections: request.action === "list" ? { catalog, accounts } : {} };
+            },
+          },
+        },
+      },
+    };
+  }
+
+  test("a service page opened before the list names its service and shows its mark once the list comes", async () => {
+    const c = slowList({ name: "extensions-service", id: "notion" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:service-connect");
+    await app.waitFor("id:service-hero-lead");
+    expect(app.texts()).toContain("Notion");
+    expect(app.texts()).not.toContain("Service");
+  });
+
+  test("a sign-in under way shows its card on Extensions and on its own service's page, not over another service's", async () => {
+    const flow = { id: "g1", integration: "github", status: "waiting", user_code: "WDJB-MJHT", authorization_url: "https://github.com/login/device", expires: expires() };
+    for (const [page, card] of [[{ name: "extensions" }, true], [{ name: "extensions-service", id: "github" }, true], [{ name: "extensions-service", id: "notion" }, false]] as const) {
+      const c = computer(page, (request) => (request.action === "list" ? { catalog, accounts: [] } : { flow }));
+      c.secure.set("mewla.plugin.authorization.s1", JSON.stringify({ serverId: "s1", flow }));
+      const app = await open(HARNESS, c.options);
+      await app.waitUntil(() => c.asked.some((r) => r.action === "connect_status"));
+      await app.wait(200);
+      expect(app.shows("id:device-code")).toBe(card);
+      // While it is under way, its own page doesn't offer a second Connect beside the card.
+      if (page.name === "extensions-service" && page.id === "github") expect(app.shows("id:service-connect")).toBe(false);
+    }
+  });
+});
+
+describe("a sign-in card says what to do in one line", () => {
+  test("a Google client to paste: the console's steps wait behind Steps, the field and Continue are there", async () => {
+    const setup = { id: "w1", integration: "gws", status: "waiting", authorization_url: "https://console.cloud.google.com/auth/overview", code_required: true, setup_required: true, message: "Create a Google Cloud project, then paste its client ID and secret.", expires: expires() };
+    const gwsCatalog = [...catalog, { id: "gws", name: "Google Workspace", available: true, setup_url: "", description: "Mail" }];
+    const c = computer({ name: "extensions-service", id: "gws" }, (request) => (request.action === "list" ? { catalog: gwsCatalog, accounts: [] } : { flow: setup }));
+    const app = await open(HARNESS, c.options);
+    await app.press("id:service-connect");
+    await app.waitFor("text:Paste the client ID and secret");
+    expect(app.texts()).not.toContain(setup.message);
+    expect(app.shows("id:sign-in-code")).toBe(true);
+    expect(app.texts()).toContain("Open console");
+    await app.press("id:sign-in-steps");
+    await app.waitFor(`text:${setup.message}`);
+    // × stops the sign-in.
+    await app.press("id:close-sign-in");
+    await app.waitUntil(() => c.asked.some((r) => r.action === "connect_cancel"));
+  });
+});
+
+describe("Needs fixing reads at a glance (owner 11-14)", () => {
+  const services = [
+    { id: "github", name: "GitHub", available: true, setup_url: "", description: "Repositories" },
+    { id: "aws", name: "AWS", available: true, setup_url: "", description: "Cloud" },
+    { id: "notion", name: "Notion", available: true, setup_url: "", description: "Pages" },
+  ];
+  const account = (id: string, integration: string, name: string, status: string, extra: Record<string, unknown> = {}) =>
+    ({ id, integration, name, identity: name, enabled: true, status, history: [], access: { read: "allowed", write: "off" }, ...extra });
+  const accounts = [
+    account("g1", "github", "daoleno", "authorization_required"),
+    account("g2", "github", "paul-freeride", "connected"),
+    ...["ace-mgmt", "old-1", "old-2"].map((name) => account(`a-${name}`, "aws", name, "authorization_required", { profile: name, profile_status: "expired", auth_method: "cli" })),
+    account("a-prod", "aws", "freeride-prod", "connected", { profile: "freeride-prod", profile_status: "valid", auth_method: "cli" }),
+  ];
+
+  test("each row: the name, which account only when it tells it apart, one enabled button and no chevron", async () => {
+    const waiting = { id: "n1", integration: "notion", status: "waiting", authorization_url: "https://notion.example/authorize?state=s", expires: expires() };
+    const c = computer({ name: "extensions" }, (request) => {
+      if (request.action === "list") return { catalog: services, accounts };
+      if (request.action === "connect_status") return { flow: waiting };
+      if (request.action === "connect_cancel") return { flow: { ...waiting, status: "cancelled" } };
+      return { flow: { id: "g-flow", integration: "github", status: "waiting", user_code: "ABCD-1234", authorization_url: "https://github.com/login/device", expires: expires() } };
+    });
+    // A Notion sign-in left waiting: it used to grey out every Reconnect.
+    c.secure.set("mewla.plugin.authorization.s1", JSON.stringify({ serverId: "s1", flow: waiting }));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Needs fixing");
+    const texts = app.texts();
+    expect(texts.some((text) => text.includes("Sign-in expired"))).toBe(false);
+    // GitHub: one of two needs it, so it is named; the working one is not.
+    expect(texts).toContain("daoleno");
+    expect(texts).not.toContain("paul-freeride");
+    expect(texts).not.toContain("daoleno · paul-freeride");
+    // AWS: three of four.
+    expect(texts).toContain("3 of 4");
+    expect(app.enabled("id:connect-github")).toBe(true);
+    expect(app.enabled("id:connect-aws")).toBe(true);
+    expect(texts).toContain("Reconnect");
+    expect(texts).toContain("Fix");
+    // GitHub's Reconnect starts its sign-in (ending the waiting one); AWS's Fix opens its page, each account there.
+    await app.press("id:connect-github");
+    await app.waitUntil(() => c.asked.some((r) => r.action === "connect_start"));
+    expect((c.asked.find((r) => r.action === "connect_start")!.input as { integration: string }).integration).toBe("github");
+  });
+
+  test("Fix on a service with several accounts to sign in again opens its page", async () => {
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog: services, accounts } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:connect-aws");
+    await app.press("id:connect-aws");
+    await app.waitFor("id:service-page");
+    expect(c.asked.some((r) => r.action === "connect_start")).toBe(false);
   });
 });

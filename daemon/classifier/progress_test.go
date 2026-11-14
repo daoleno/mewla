@@ -130,12 +130,13 @@ func TestApplyProgressDoesNotShortenActiveLeaseWithinRunningPhase(t *testing.T) 
 	}
 }
 
-func TestProgressNeedsAttentionIncludesTerminalStatuses(t *testing.T) {
+func TestProgressNeedsAttentionIncludesFailedBlockedAndAsks(t *testing.T) {
 	for _, progress := range []WorkerProgress{
-		{Status: "done", Attention: "none"},
 		{Status: "failed", Attention: "none"},
+		{Status: "failed", Attention: "failed"},
 		{Status: "blocked", Attention: "none"},
 		{Status: "running", Attention: "user_input"},
+		{Status: "running", Attention: "blocked"},
 		{Status: "running", Attention: "stale"},
 	} {
 		if !ProgressNeedsAttention(progress) {
@@ -144,6 +145,26 @@ func TestProgressNeedsAttentionIncludesTerminalStatuses(t *testing.T) {
 	}
 	if ProgressNeedsAttention(WorkerProgress{Status: "running", Attention: "none"}) {
 		t.Fatal("normal running progress should not need attention")
+	}
+}
+
+// A Session that reports done has a result, not a request: no Needs you row, no Answer, no open-request count. It
+// reads as finished like any ended Session (Brain 2026-11-14).
+func TestProgressDoneIsAResultNotARequest(t *testing.T) {
+	for _, progress := range []WorkerProgress{
+		{Status: "done", Attention: "done"},
+		{Status: "done", Attention: "none"},
+		{Status: "done"},
+		{Status: "running", Attention: "done"},
+	} {
+		if ProgressNeedsAttention(progress) {
+			t.Fatalf("ProgressNeedsAttention(%#v) = true, want false", progress)
+		}
+	}
+	worker := &Worker{ID: "w", State: StateRunning}
+	ApplyProgress(worker, WorkerProgress{Status: "done", Phase: "reporting", Attention: "done", Summary: "Shipped"}, time.Time{})
+	if worker.State != StateDone || worker.NeedsAttention {
+		t.Fatalf("done progress = state %s needs_attention %v, want done without needs_attention", worker.State, worker.NeedsAttention)
 	}
 }
 

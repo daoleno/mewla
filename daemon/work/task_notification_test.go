@@ -439,3 +439,25 @@ func TestClaudeDelegatedInputUnwrapsToTheSubmittedBrief(t *testing.T) {
 		}
 	}
 }
+
+// A delegated Worker's brief is Mewla's, not the person's: its user_message
+// says so in Origin, and a person's own message (even one that starts with
+// "Execute: ") keeps the empty origin.
+func TestClaudeDelegatedBriefIsMarkedDelegated(t *testing.T) {
+	brief := "Create hello.txt with one line: hello\n\nMewla lifecycle protocol:\nProfile: quick.\nYou are the delegated Worker."
+	raw := "Execute: \n\n<pasted_content id=\"11c9\">\n" + brief + "\n</pasted_content id=\"11c9\">\n"
+	conversation := parseClaudeFixture(t, claudeTaskNotificationRecord("u8", "2026-10-07T01:42:00Z", "human", raw))
+	event := conversation.Events[0]
+	if event.Kind != "user_message" || event.Origin != ConversationOriginDelegated {
+		t.Fatalf("delegated brief = kind %q origin %q, want user_message %q", event.Kind, event.Origin, ConversationOriginDelegated)
+	}
+	if want := "Execute:\n\n" + brief; event.Body != want {
+		t.Fatalf("delegated body = %q, want %q", event.Body, want)
+	}
+	for _, text := range []string{"Execute: do it", "Make hello.txt\n\nMewla lifecycle protocol:\nProfile: quick."} {
+		own := parseClaudeFixture(t, claudeTaskNotificationRecord("u9", "2026-10-07T01:43:00Z", "human", text))
+		if got := own.Events[0].Origin; got != "" {
+			t.Fatalf("%q origin = %q, want the person's (empty)", text, got)
+		}
+	}
+}

@@ -1,10 +1,11 @@
-import { cleanup, effect, signal, Text, untracked, View } from "nsh";
-import { lifecycle } from "../../lifecycle";
+import { cleanup, effect, signal, Text, untracked, View, lifecycle } from "nsh";
 import { formatFullDateTime } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";
-import { decideOutsideAgent, listOutsideAgents, type OutsideAgents as Agents } from "../../../core/settings/outsideAgents";
+import { decideOutsideAgent, listOutsideAgents, outsideAgentKind, type OutsideAgents as Agents } from "../../../core/settings/outsideAgents";
 import { daemon } from "../daemon";
-import { confirmDestructive, EmptyState, Page, PillButton, Row, Section } from "../kit/kit";
+import { confirmDestructive, EmptyState, Page, PillButton, Row, Section } from "../../kit/kit";
+import { LEAD_SLOT, tile } from "../../kit/RowTile";
+import { AgentIcon } from "../../icons/AgentIcon";
 
 /** Outside agents: approve the ones that ask to hand work to Brain, revoke the ones you no longer trust. */
 export function OutsideAgents() {
@@ -55,14 +56,10 @@ export function OutsideAgents() {
   }
 
   return (
-    <Page title="Outside agents" testID="outside-agents">
-      {!daemon() ? (
-        <EmptyState title="No current server" />
-      ) : (
-        <View>
-          {error() ? <Text testID="agents-error" role="alert" android={{ accessibilityLiveRegion: "polite" }} class="mt-4 px-1 text-sm text-destructive">{error()}</Text> : null}
-          {agents()?.pending.length ? (
-            <Section title="Waiting">
+    <Page display title="Outside agents" testID="outside-agents">
+      <If when={!daemon()} else={<View>
+          <If when={error()}><View class="mt-4 px-1"><Text testID="agents-error" role="alert" android={{ accessibilityLiveRegion: "polite" }} class="text-sm text-destructive">{error()}</Text></View></If>
+          <If when={agents()?.pending.length}><Section title="Waiting">
               {agents()!.pending.map((a) => (
                 <View class="gap-2 px-4 py-3">
                   <Text class="text-base">{a.name}</Text>
@@ -73,13 +70,12 @@ export function OutsideAgents() {
                   </View>
                 </View>
               ))}
-            </Section>
-          ) : null}
-          {agents()?.agents.length ? (
-            <Section title="Approved">
+            </Section></If>
+          <If when={agents()?.agents.length}><Section title="Approved">
               {agents()!.agents.map((a) => (
                 <Row
                   testID={`agent-${a.id}`}
+                  lead={outsideAgentKind(a.name) ? { kind: "logo", node: <AgentIcon kind={outsideAgentKind(a.name)!} size={28} slot={LEAD_SLOT} /> } : tile("brain")}
                   title={a.name}
                   subtitle={a.last_used_at ? `Used ${formatFullDateTime(a.last_used_at)}` : "Not used yet"}
                   trailing={
@@ -93,14 +89,10 @@ export function OutsideAgents() {
                   }
                 />
               ))}
-            </Section>
-          ) : null}
-          {agents() && !agents()!.pending.length && !agents()!.agents.length ? (
-            <EmptyState testID="agents-empty" icon="brain" title="No outside agents" detail="On the computer where Claude Code or Codex runs: mewla agents mcp connect" />
-          ) : null}
-          {!agents() && !error() ? <EmptyState busy /> : null}
-        </View>
-      )}
+            </Section></If>
+          <If when={agents() && !agents()!.pending.length && !agents()!.agents.length}><EmptyState testID="agents-empty" icon="brain" title="No outside agents" detail="On the computer where Claude Code or Codex runs: mewla agents mcp connect" /></If>
+          <If when={!agents() && !error()}><EmptyState busy /></If>
+        </View>}><EmptyState title="No current server" /></If>
     </Page>
   );
 }

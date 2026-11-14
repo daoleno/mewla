@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.core.view.WindowCompat
 import com.daoleno.mewla.live.LiveHost
 import com.daoleno.mewla.push.PushHost
 import com.daoleno.mewla.terminal.TerminalComponent
@@ -22,12 +23,14 @@ class MainActivity : ComponentActivity() {
   private val legacy by lazy { LegacyStorage(this) }
   private lateinit var push: PushHost
   private lateinit var channelHosts: ChannelHosts
+  private lateinit var watchdog: JsWatchdog
 
   override fun onCreate(state: Bundle?) {
     super.onCreate(state)
     nsh = NshView(this)
     nsh.setErrorListener { Log.e(TAG, it); CrashLog.js(this, it) }
     CrashLog.register(this, nsh)
+    watchdog = JsWatchdog(this, nsh)
     ScanHost(this, nsh)
     com.daoleno.mewla.link.LinkTransportHost(nsh)
     nsh.registerComponent("mewla.qrScanner") { events -> QrScanner(this, events) }
@@ -36,6 +39,14 @@ class MainActivity : ComponentActivity() {
     nsh.handle("secure.set") { data, reply -> answer(reply) { secure.set(key(data), field(data, "value")); null } }
     nsh.handle("secure.remove") { data, reply -> answer(reply) { secure.remove(key(data)); null } }
     nsh.handle("app.legacyStorage") { _, reply -> answer(reply) { legacy.entries() } }
+    // The navigation bar's buttons for the app's appearance (App.tsx); the theme sets them only at start.
+    nsh.handle("app.navigationBar") { data, reply ->
+      answer(reply) {
+        val dark = (data as? Map<*, *>)?.get("dark") == true
+        runOnUiThread { WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = !dark }
+        null
+      }
+    }
     nsh.handle("app.legacyStorageCopied") { _, reply -> answer(reply) { legacy.copied(); null } }
     push = PushHost(this, nsh)
     LiveHost(this, nsh)
@@ -43,9 +54,8 @@ class MainActivity : ComponentActivity() {
     channelHosts = ChannelHosts(this, nsh)
     nsh.setParams(mapOf("deviceName" to deviceName()))
     setContentView(nsh)
-    // scripts/dev-android.sh starts a debug build on `nsh dev`: every save reloads the app.
-    val dev = intent.getStringExtra("devServer")
-    if (!(BuildConfig.DEBUG && dev != null && nsh.connectDevServer(dev))) nsh.loadAssetBundle("nsh")
+    // The Dev app runs from its `nsh dev` server when it answers (src/debug/DevBoot.kt); a release build has none.
+    if (!DevBoot.start(this, nsh, intent)) nsh.loadAssetBundle("nsh")
     openLink(intent)
   }
 
@@ -59,6 +69,13 @@ class MainActivity : ComponentActivity() {
   override fun onResume() {
     super.onResume()
     channelHosts.onResume()
+    DevBoot.resumed(this)
+    watchdog.resumed()
+  }
+
+  override fun onPause() {
+    watchdog.paused()
+    super.onPause()
   }
 
   override fun onUserLeaveHint() {

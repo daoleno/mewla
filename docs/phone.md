@@ -6,14 +6,14 @@ screen of their own, so you keep using the phone. The picture and every action
 travel over the same signed connection as everything else; nothing is opened on
 the phone's network and no account is needed.
 
-Phone use is in **Labs**: off until you turn it on. It is for Android 11 or
+Phone use is off until you turn it on. It is for Android 11 or
 later, in the APK from GitHub (the Play Store build leaves it out). On an
 iPhone, agents on a Mac use it through iPhone Mirroring instead: see
 [iPhone use](#iphone-use).
 
 ## Turn it on
 
-1. Tap the cat, then **Settings › Labs › Phone use**, and switch it on. The
+1. Tap the cat, then **Settings › Agents › Phone use**, and switch it on. The
    Phone use page opens, and **Phone** appears in Screen's **⋯**.
 2. The page lists what the phone needs and checks it live: **Developer
    options**, **Wi‑Fi**, **Wireless debugging**, **Pairing** and **Helper**.
@@ -48,7 +48,7 @@ with another computer and switch to it, and Phone use follows. Agents on
 
 While an agent works, the Phone use page shows its screen live, and a
 notification says who is using your phone. Open the page from **Settings ›
-Labs › Phone use**, from Screen's **⋯ › Phone**, or from the notification.
+Agents › Phone use**, from Screen's **⋯ › Phone**, or from the notification.
 
 The ongoing notification only says **Phone use is on** while the helper is really
 running. Until then it says **Finish setting up Phone use** (not paired yet) or
@@ -175,7 +175,7 @@ back on when it can.
 
 ## Turn it off
 
-Switch **Phone use** off in **Settings › Labs › Phone use**. The helper stops, the notification goes,
+Switch **Phone use** off in **Settings › Agents › Phone use**. The helper stops, the notification goes,
 the Accessibility service is disabled, and agents lose the phone tools for new
 Workers. To forget the pairing, remove Mewla under **Wireless debugging → Paired
 devices** in Settings.
@@ -188,7 +188,7 @@ iPhone nearby in a window. Mewla moves that window off your screen, onto a
 display of its own, and reads and taps it from there. Your iPhone stays locked
 in your hand or on the desk, and you keep using your Mac.
 
-iPhone use is in **Labs**: off until you turn it on.
+iPhone use is off until you turn it on.
 
 ### What you need
 

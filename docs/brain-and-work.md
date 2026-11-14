@@ -52,16 +52,45 @@ moved for 12 hours.
 to three Workers (logo, name, what it does, time) and "N more". When the Work
 reports again, earlier cards of it shrink to one line, so the thread never
 fills with copies. Tap the title for Work detail, or a Worker for its Session.
+Work detail lists every Worker that joined the Work, finished ones too; in the
+tray a Work with several Workers is one row reading "N Workers".
+
+**How far a running Work has come.** A running Work has a ring round its
+Worker's logo, filled as far as a model judges the Work has come, not as its
+Worker reports. No number is written; a screen reader speaks it, rounded to 5.
+When the Work starts, the judge turns the brief into a short weighted list of
+outcomes, things that will be true when it is done, such as "fix merged and
+released" or "review posted", and marks each from evidence: a commit, a
+passing run, a file written, a posted review.
+
+- **It only moves forward**, unless an outcome is reopened (Brain sent the Work
+  back, or a later check failed). Then the ring goes back once, in amber, and
+  Work detail says why.
+- **It never fills to 100 %.** When every outcome is done, the Work is in its
+  last stretch (the Worker reporting, Brain reading the result), and the ring
+  closes in green.
+- **No ring** while the Work waits on you, or for a Work with no finish line.
+- **Tap the Work** to see its outcomes and which are done.
+
+The judge runs only on new evidence (a progress report, a turn ending, Brain's
+next message to the Worker), at most once every two minutes per Work and never
+on a timer alone; after a turn ends or a send-back, within seconds. The
+`Work progress` row of `routing.md` picks its model (see
+[Worker routing](#worker-routing)). Each judgment is recorded on the Work as a
+`progress.judged` or `progress.back` event (`mewla brain work list -id`).
 
 **Results.** When a Work comes back, a result card arrives: the agent, the
-title, when it finished, the summary and its next steps as buttons. Tapping a
-next step sends it to Brain as your message. Once you open it or act on it, the
+title, when it finished, the summary and the next steps it truthfully offers,
+as buttons: the pull request it opened, **Review changes** when its project
+has uncommitted changes, the files it names, and the Work's worklog. A result
+that names none has none. Once you open it or act on it, the
 card becomes one line; tap the line to see the result again, with **Open
 session**. A result that needs a decision is a request instead (below).
 
 **Folded steps.** The searches, reads and commands Brain runs in a turn fold
-into one "Worked · N steps" row. Tap it to see them. Session chats fold the
-same way, but the row says what happened ("Read 3 files").
+into one row that says what happened ("Ran 3 commands, read 2 files"), with
+the files it touched beside it. Tap it to see the real rows. Session chats
+fold the same way.
 
 **Background tasks.** When a Claude Code subagent, background command or
 monitor reports back, the chat shows a task card with its status, duration,
@@ -107,12 +136,25 @@ A Work that came back failed, with no result, or needing a decision is a
 request too. Its tray row opens Work detail, where the card sits under
 **Waits on you**.
 
+**Who a request is for.** A Worker that Brain started reports to Brain, not to
+you: when it stops on a decision of its own, Brain decides, and asks you only
+through its Work's question, which shows under Needs you with its choices.
+Until then the Work reads Reviewing, and nothing for that report reaches you:
+no card, no tray row, no count, no notification. A prompt on that Worker's
+terminal that Brain cannot answer (a sign-in, an approval outside the brief)
+still comes to you, and a Session you started yourself asks you directly.
+
 Brain asks with buttons by setting a question on the Work:
 
 ```sh
 mewla brain work update -id <work-id> -status waiting \
-  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins"
+  -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins" \
+  -recommend "Newest wins"
 ```
+
+`-recommend` names the choice Brain recommends, word for word; the app tags
+that answer "Brain's pick". It must be one of the choices, and a new question
+starts without one.
 
 ## Work detail
 
@@ -125,7 +167,7 @@ Open its Work**. Work detail shows the state ("Needs you", "N running" or
 | **Waits on you** | The open request itself; answering here answers it everywhere |
 | **Workers** | Each Worker; tap one for its Session |
 | **Work file** | The Work's notes, to read or edit |
-| **Ask Brain about this** | Back to Brain with the Work quoted in the composer |
+| **Ask Brain about this** | Back to Brain with the Work quoted in the composer, below anything you had typed there |
 | **Snooze 1 hour** | Takes it out of Needs you for an hour |
 | **Stop** | After you confirm, closes its Workers and cancels the Work |
 | **Reply about this Work** | Sends your message to Brain about this Work |
@@ -232,8 +274,15 @@ Brain picks the agent, model and reasoning level for every Worker. Before each
 launch it reads `routing.md` in its workspace, a few lines of Markdown such as
 "use Codex with high reasoning for refactors". It rewrites a line when you
 state a preference, when a new model appears or when a choice went badly.
-Upgrades never overwrite it. Mewla reads one row only: the one starting
-`Watch judgment`, which picks the agent that reads [Watch](watch.md) signals.
+Upgrades never overwrite it. Mewla reads two rows itself: `Watch judgment`,
+which picks the agent that reads [Watch](watch.md) signals, and
+`Work progress`, which picks the agent that judges how far a running Work has
+come. Without a valid row, Mewla uses Brain's own agent (Claude Code: Sonnet at
+low reasoning).
+
+```markdown
+| Work progress | claude | sonnet | low |
+```
 
 A Worker launch looks like this:
 

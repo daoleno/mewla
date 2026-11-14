@@ -23,52 +23,24 @@ destination or rename source. No arbitrary commit/branch comparison is implied.
 
 ## Reader
 
-The reader is [@pierre/diffs](https://diffs.com) (the file view too) and the
-Files browser is [@pierre/trees](https://trees.software),
-both running from bundled offline copies (see
-`docs/third-party-assets.md`). On Android and iOS each is a WebView document that
-cannot navigate or fetch; on web the same code mounts straight into the page,
-because the web UI's CSP allows only same-origin scripts. The sheet keeps all
-chrome in React Native (header, list, find bar, display options, action bar,
-menus); the WebViews draw content only. Messages between them are typed in
-`app/components/terminal/pierre/diffViewerProtocol.ts` and
-`treeViewerProtocol.ts`, and every message from a WebView is parsed and dropped
-if unexpected.
+The client draws the review natively (`client/ui/more/git`: `GitDiff.tsx`,
+`GitFiles.tsx`) from the models in `client/core/git`, using NSH's `DiffView` and
+`Tree` components (`nsh/base`). The changed-file list has two groups, and each
+row carries a stage toggle.
 
-The WebViews run on iOS 17.5 or newer (the app's deployment target, set in
-`app/plugins/withIOSBuild.js`) and Android WebView 123 or newer. That is the
-oldest engine with `light-dark()`, which Pierre's stylesheets use, so they ship
-exactly as the libraries write them: no lowering step. Android System WebView
-updates through Google Play. A WebView without `light-dark()` shows "This WebView
-is too old to show diffs." instead of unthemed colors. `pierrePlatformFloor.test.ts`
-fails when a library bump needs CSS, an API or syntax newer than that line.
+One file is open at a time. A layout 720 pt wide or more (`SPLIT_WIDTH`) reads in
+split view, narrower in unified view. Display options toggle line wrap (on by
+default), the code text size and file headers. Unchanged context expands in
+place when the file has staged or unstaged edits but not both and neither side
+is binary or truncated (see Data And Freshness).
 
-One file is open at a time. A wide layout (720 dp and up) reads in split view and
-a phone in unified view. The reader shows old and new line numbers, change
-colors, word-level changes inside a line, syntax highlighting, and collapsed
-unchanged context that expands in place. Syntax comes from a fixed set of Shiki
-grammars; any other extension reads as plain text. Colors come from the terminal
-palette and the font is the terminal's, so a diff matches the terminal beside it.
+Find is over the whole open diff (`findGitPatchMatches`); its arrows step
+through the matching lines and the count is announced. The hunk actions select a
+hunk by line (`gitHunkAtLine`, `gitHunkSelection`).
 
-Files keeps one file viewer mounted after the first file opens, parked under the tree, so later files reuse its WebView and Back finds the tree as it was left.
-
-Back unwinds one level at a time (`diff -> list -> close`, `commit file -> commit
--> history`, `file browser -> list`); Android hardware back follows the same
-stack. The reader WebView is one long-lived document per sheet: it stays mounted and empty while the list shows, so opening a
-file never pays the runtime's start-up, and it restores each diff's scroll
-position, also across the reload a stage or discard causes. Wrap, text size and file
-headers re-render the open diff in place.
-
-Find is case-insensitive over the whole open diff, runs inside the
-reader, wraps around at either end and highlights the current line. Its arrows
-step through matching lines; the hunk arrows (and screen-reader actions) step through hunks, select them and
-stop at the first and last.
-
-The changed-file list is native (React Native rows, not Trees): each row carries a
-stage toggle and the list has two groups, which a WebView tree cannot host. The
-Files browser is Trees over every tracked and untracked-but-not-ignored path of
-the working tree, with a file opening into the reader's file view (its byte limit
-is separate: a truncated file says so).
+The Files browser is a `Tree` over every tracked and untracked-but-not-ignored
+path of the working tree, with a file opening into the reader's file view (its
+byte limit is separate: a truncated file says so).
 
 ## Actions
 
@@ -120,9 +92,9 @@ but not both, and neither side is binary or truncated; otherwise the hunks stay
 as git printed them. `git_repo_paths` returns up to 100000 repo-relative paths
 (`truncated` says when it was capped).
 
-A comparison larger than 5 MB is not sent to the reader; the sheet says it is too
-large, and Copy diff still copies it. There is no daemon-side paging: the patch
-crosses the WebView bridge once and is parsed in one pass.
+A comparison larger than 5 MB (`GIT_DIFF_PATCH_LIMIT_BYTES`) is not shown; the sheet
+says it is too large, and Copy diff still copies it. There is no daemon-side
+paging: the patch is parsed in one pass.
 
 A reader is a snapshot. Refresh reloads the overview and selected diff, and every
 change the sheet makes reloads them itself. Expansion
@@ -151,13 +123,11 @@ repositories. `TestGitDiffNativeFixtureServer` is opt-in with
 authenticated WebSocket handler against temporary repositories. `/stop` shuts
 down this test resource. It is not a daemon entry point or a product route.
 
-The app side is `bun test components/terminal services`. The review's pure
-models (groups, rows, hunks, the agent message) are in `gitReview.test.ts`. The
-route `/screenshot-demo?demo=1&state=chat&fixture=git` (development builds with
-`EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1`) shows the whole sheet on a fake repository. The generated viewers are
-rebuilt with `bun run pierre:generate` (`--check` reports stale output).
+The app side is `cd client && bun test core/git` and `cd client/ui && nsh test more/git`.
+The review's pure models (groups, rows, hunks, the agent message) are in
+`client/core/git/gitReview.test.ts`.
 
 Native performance evidence must come from Android/iOS execution, not these Go
 or Bun tests. Android emulator data, debug-build overhead, and software-rendered
-frame timings must be distinguished from release-device performance. iOS bundles
-can be exported on Linux, but iOS Simulator verification requires macOS.
+frame timings must be distinguished from release-device performance. iOS
+Simulator verification requires macOS.

@@ -129,9 +129,11 @@ Home is Brain's conversation. The header holds three things:
 - **⋯**, at the right: Brain's menu, with **Open terminal**, **Browse
   workspace**, **Switch executor**, **Model** and **New chat**.
 
-On a window 1024 points wide or more (a tablet in landscape, an unfolded
-foldable, a desktop browser), the tray stays open as a left pane, with the cat
-on top, and the page you open sits on the right.
+From 1024 points of usable width, or 760 on its side (a desktop browser, a
+tablet in landscape, an iPhone Duo or an Android foldable held open), the tray
+stays open as a left pane, with the cat on top, and the page you open sits on
+the right. There, **Search or run** (Ctrl K, ⌘ K on a Mac) opens any place,
+Session or Work.
 
 ## Next
 

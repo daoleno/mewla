@@ -10,13 +10,13 @@ import (
 )
 
 // virtualScreenSystem: the virtual screen (Xvnc) exists only on Linux.
-// Elsewhere the app hides the Labs switch.
+// Elsewhere the app hides the Virtual screen row.
 var virtualScreenSystem = runtime.GOOS == "linux"
 
 // Settings are the computer-wide Browser choices, kept beside the profile.
 type Settings struct {
 	// VirtualScreen: new agent Workers get a browser on the virtual screen
-	// without being told which one (Settings → Labs → Virtual screen).
+	// without being told which one (Settings → Agents → Virtual screen).
 	VirtualScreen bool `json:"virtual_screen,omitempty"`
 }
 

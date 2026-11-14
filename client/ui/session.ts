@@ -1,4 +1,4 @@
-import { signal, Storage } from "nsh";
+import { computed, signal, Storage } from "nsh";
 import { brainThreadScopeKey, requestBrainSnapshot, type BrainSnapshot } from "../core/brain";
 import { Chat } from "../core/conversation/chat";
 import { chatCacheKey, Draft } from "../core/conversation/draft";
@@ -10,6 +10,8 @@ import { WorkerSessions } from "../core/sessions/store";
 import type { Worker } from "../core/sessions/workers";
 import { Transport, type ConnectionState } from "../core/transport";
 import { subscribeTransportPath, transportPathInfo, type TransportPathInfo } from "../core/link/pinnedTransport";
+import { LinkWatch } from "../core/motion/wait";
+import { forcedLink, linkHooks, linkState } from "./kit/wait";
 
 /**
  * Everything that belongs to the current computer. There is exactly one; switching
@@ -20,6 +22,22 @@ export const servers = signal<StoredServer[]>([]);
 export const current = signal<StoredServer | null>(null);
 export const connection = signal<ConnectionState>("idle");
 export const problem = signal("");
+/** The connection as the person is told it (SPEC §16.1 `link.away`): Offline after 10 s, kept between retries. */
+const linkWatch = new LinkWatch((link) => linkState.set(link));
+/**
+ * The connection as the person is told it: Connecting… through the first 10 s of any drop or start, then
+ * Offline, kept between retries until a socket is up (SPEC §16.1 `link.away`; no flicker back to Connecting).
+ */
+export const shownConnection = computed<ConnectionState>(() => {
+  // Dev builds: a forced "offline" (Brain's ⋯ → Wait states) plays here too, so the header and the cat show it.
+  const forced = forcedLink();
+  if (forced && current()) return forced === "away" ? "waiting" : "connecting";
+  const real = connection();
+  if (real === "connected" || !current()) return real;
+  return linkState() === "away" ? "waiting" : "connecting";
+});
+linkHooks.computer = () => current()?.name ?? "";
+linkHooks.reconnect = () => resumeConnection();
 export const ready = signal(false);
 /** `brain_snapshot.brain` of the current computer; null until the first one. */
 export const brain = signal<BrainSnapshot | null>(null);
@@ -173,6 +191,7 @@ function applySwitch(server: StoredServer | null): void {
   current.set(server);
   transportPath.set(server ? transportPathInfo(server.id) : null);
   connection.set("idle");
+  linkWatch.reset();
   problem.set("");
   forgetInterfaceConversationsOutsideServer(server?.id ?? "");
   if (!server) return;
@@ -187,6 +206,7 @@ function applySwitch(server: StoredServer | null): void {
   stops = [
     next.onState((state) => {
       connection.set(state);
+      linkWatch.update(state);
       problem.set(next.problem);
     }),
     next.on("connected", () => {
@@ -234,8 +254,11 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
   void Storage.setItem(LAST_BRAIN_CHAT + server.id, JSON.stringify({ host_worker: host, chat_thread_id: threadId })).catch(() => {});
   const scope = brainThreadScopeKey(routedBrainThread() ?? threadId);
   const open = brainChat();
-  if (open && open.cacheKey.endsWith(`:scope:${scope}`) && openHost === host.id) return;
-  closeBrainChat();
+  const sameThread = Boolean(open?.cacheKey.endsWith(`:scope:${scope}`));
+  if (open && sameThread && openHost === host.id) return;
+  // A restarted host answers the same thread: its rows stay on screen (where the person reads) until the
+  // new host's copy is in, which the list then takes row by row (owner 11-13: the thread emptied and refilled).
+  closeBrainChat({ keepThread: sameThread });
   // A restarted host answers the same thread under a new id: what waited for the old one goes to it.
   outbox.retarget(server.id, scope, host.id);
   const chat = new Chat({
@@ -254,8 +277,14 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
     },
   });
   openHost = host.id;
-  brainThread.set(chat.current);
-  stopChat = chat.onChange((state) => brainThread.set(state));
+  let waiting = sameThread;
+  const show = (state: InterfaceChatThreadState) => {
+    if (waiting && !state.conversation && !state.error) return;
+    waiting = false;
+    brainThread.set(state);
+  };
+  show(chat.current);
+  stopChat = chat.onChange(show);
   brainChat.set(chat);
 }
 
@@ -292,13 +321,13 @@ export function openBrainThread(threadId: string | null): void {
 let openHost = "";
 let stopChat: (() => void) | null = null;
 
-function closeBrainChat(): void {
+function closeBrainChat(options: { keepThread?: boolean } = {}): void {
   stopChat?.();
   stopChat = null;
   brainChat()?.close();
   brainChat.set(null);
   openHost = "";
-  brainThread.set(initialInterfaceChatThreadState(""));
+  if (!options.keepThread) brainThread.set(initialInterfaceChatThreadState(""));
 }
 
 function startWakePoll(owner: Transport): void {

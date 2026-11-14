@@ -1,9 +1,8 @@
-import { effect, host, platform, signal, untracked } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { effect, host, platform, signal, untracked, lifecycle } from "nsh";
 import { failureText } from "../../core/more/daemon";
 import { changePhone } from "../../core/phone/api";
 import { phoneLinkTarget, sameTarget, type PhoneLinkTarget } from "../../core/phone/link";
-import { phoneAgentWorking, phoneLabsValue } from "../../core/phone/setup";
+import { phoneAgentWorking, phoneRowValue } from "../../core/phone/setup";
 import { parsePhoneStatus, type PhoneStatus } from "../../core/phone/status";
 import { serverURLNow } from "../../core/link/pinnedTransport";
 import { current, ready, transportPath } from "../session";
@@ -27,9 +26,9 @@ export const phonePairing = signal(false);
 /** The helper is being started because the person asked. */
 export const phoneStarting = signal(false);
 
-/** Settings → Labs → Phone use: Off, Set up, Ready or You are in control. */
-export function phoneLabsWord(): string {
-  return phoneLabsValue(phoneStatus());
+/** Settings → Agents → Phone use: Off, Set up, Ready or You are in control. */
+export function phoneStateWord(): string {
+  return phoneRowValue(phoneStatus());
 }
 
 let shown = "";

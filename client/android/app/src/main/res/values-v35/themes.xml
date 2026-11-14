@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <style name="Theme.Mewla" parent="android:Theme.Material.Light.NoActionBar">
+    <item name="android:windowBackground">@color/background</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@android:color/transparent</item>
+    <item name="android:windowLightStatusBar">true</item>
+    <item name="android:windowLightNavigationBar">true</item>
+    <item name="android:textViewStyle">@style/Widget.Mewla.TextView</item>
+    <item name="android:editTextStyle">@style/Widget.Mewla.EditText</item>
+  </style>
+  <!-- NSH 0.5.0 leaves useBoundsForWidth on in its layout pool after a multiline input whose placeholder is wider
+       than the field (longbridge/nsh#1870), and later labels measured by advance then wrap their last letter
+       ("Wor / k"). Text views here measure by advance, as before API 35. Drop this when the app takes the NSH
+       release with #1871. -->
+  <style name="Widget.Mewla.TextView" parent="android:Widget.Material.TextView">
+    <item name="android:useBoundsForWidth">false</item>
+  </style>
+  <style name="Widget.Mewla.EditText" parent="android:Widget.Material.EditText">
+    <item name="android:useBoundsForWidth">false</item>
+  </style>
+</resources>

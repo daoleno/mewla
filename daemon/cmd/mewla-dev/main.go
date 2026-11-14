@@ -54,6 +54,10 @@ type devRunner struct {
 // with them (-tags ghosttyvt), so Settings → Labs → Session host can work.
 const engineLibDir = "ghostty-libs"
 
+// devBuiltPrefix starts the line mewla-dev prints once its first build is done
+// and it starts the daemon.
+const devBuiltPrefix = "  Dev     Built in "
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "mewla-dev: %v\n", err)
@@ -83,9 +87,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 		pprofAddr:  devPprofAddr(),
 	}
 
+	buildStarted := time.Now()
 	if err := runner.rebuild(); err != nil {
 		return err
 	}
+	// Supervisors and tests time the daemon's own start from this line, not
+	// from the build before it.
+	fmt.Fprintf(stderr, "%s%s\n", devBuiltPrefix, time.Since(buildStarted).Round(time.Millisecond))
 	if err := runner.start(); err != nil {
 		return err
 	}
@@ -226,7 +234,11 @@ func (t *watchTree) addTree(root string) error {
 			return nil
 		}
 		// Only source trees that contribute to the daemon or embedded app.
-		if filepath.Dir(path) == t.root && d.Name() != "daemon" && d.Name() != "app" && d.Name() != "scripts" && d.Name() != "patches" {
+		if filepath.Dir(path) == t.root && d.Name() != "daemon" && d.Name() != "client" && d.Name() != "scripts" {
+			return filepath.SkipDir
+		}
+		// The web UI is client/ui and client/core; the native hosts never reach it.
+		if filepath.Dir(path) == filepath.Join(t.root, "client") && d.Name() != "ui" && d.Name() != "core" {
 			return filepath.SkipDir
 		}
 		if ignoredDirName(d.Name()) {
@@ -322,13 +334,13 @@ func (t *watchTree) relevantPath(path string) (string, bool) {
 	}
 }
 
-// Web source and daemon code must be exported together; an old export can
+// Web source and daemon code must be packaged together; an old package can
 // otherwise keep calling operations the current daemon has removed.
 func webSourcePath(rel string) bool {
-	if strings.HasPrefix(rel, "app/") {
-		return !strings.Contains(rel, ".test.") && !strings.Contains(rel, ".spec.")
+	if strings.HasPrefix(rel, "client/ui/") || strings.HasPrefix(rel, "client/core/") {
+		return !strings.Contains(rel, ".test.") && !strings.Contains(rel, ".spec.") && !strings.Contains(rel, "/testing/")
 	}
-	return rel == "package.json" || rel == "bun.lock" || rel == "scripts/build-web-ui.sh" || strings.HasPrefix(rel, "patches/")
+	return rel == "scripts/build-web-ui.sh"
 }
 
 func (r *devRunner) rebuild() error {

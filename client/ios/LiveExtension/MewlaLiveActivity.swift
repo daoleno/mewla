@@ -2,62 +2,61 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
+/// The Live Activity (option A): the one thing that matters now (what needs you, else what started last)
+/// with its agent's logo and progress ring, its clock or its tag, and one tap into it.
 struct MewlaLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: MewlaLiveAttributes.self) { context in
-      RunningCard(state: context.state)
-        .widgetURL(MewlaStyle.openURL)
+      FocusCard(state: context.state)
+        .padding(16)
+        .activityBackgroundTint(MewlaStyle.surface)
+        .widgetURL(MewlaLiveView.link(MewlaLiveView.focus(context.state)))
     } dynamicIsland: { context in
       let state = context.state
+      let focus = MewlaLiveView.focus(state)
       return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
-          SealView(size: 32)
+          if let focus { RingLogo(item: focus, size: 44, behind: .black).padding(.leading, 4) }
         }
         DynamicIslandExpandedRegion(.center) {
-          VStack(spacing: 1) {
-            Text(MewlaStyle.headline(state)).font(.subheadline.weight(.semibold)).lineLimit(1)
-            if !state.needsYou, !state.phase.isEmpty {
-              Text(state.phase).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+          if let focus {
+            VStack(alignment: .leading, spacing: 1) {
+              Text(focus.title).font(.headline).lineLimit(1)
+              if !focus.line.isEmpty {
+                Text(focus.line).font(.subheadline).foregroundStyle(focus.asks ? .primary : .secondary).lineLimit(focus.asks ? 2 : 1)
+              }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
           }
         }
         DynamicIslandExpandedRegion(.trailing) {
-          if state.needsYou {
-            Circle().fill(MewlaStyle.seal).frame(width: 8, height: 8)
-          } else if let since = state.startedDate {
-            ElapsedView(since: since).font(.title3.weight(.semibold))
+          if let focus, !focus.asks, let since = focus.startedDate {
+            ElapsedView(since: since).font(.headline).frame(width: 64, alignment: .trailing)
           }
         }
         DynamicIslandExpandedRegion(.bottom) {
-          VStack(alignment: .leading, spacing: 10) {
-            if state.needsYou, let question = state.question {
-              if !question.text.isEmpty { Text(question.text).font(.body).lineLimit(2) }
-              ChoiceChips(question: question)
+          if let focus {
+            let choices = MewlaLiveView.choices(state, focus)
+            if let question = state.question, !choices.isEmpty {
+              ChoiceButtons(question: question, choices: choices, fill: Color.white.opacity(0.16))
             } else {
-              SegmentsView(done: state.done, total: state.total)
-              if state.workerCount > 1 { WorkerNamesView(workers: state.workers) }
+              let others = Array(MewlaLiveView.items(state).dropFirst().prefix(2))
+              if !others.isEmpty { OthersLine(items: others, behind: .black).frame(maxWidth: .infinity, alignment: .leading) }
             }
           }
         }
       } compactLeading: {
-        SealView(size: 22)
+        if let focus { RingLogo(item: focus, size: 24, behind: .black) }
       } compactTrailing: {
-        if state.needsYou {
-          Text("\(max(state.needsCount, 1))")
-            .font(.caption.weight(.bold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .background(Capsule().fill(MewlaStyle.seal))
-        } else if let since = state.startedDate {
-          Text(timerInterval: since...since.addingTimeInterval(12 * 3600), countsDown: false)
-            .monospacedDigit()
-            .font(.caption)
-            .frame(width: 44)
+        if let focus, focus.asks {
+          NeedsTag(item: focus, compact: true)
+        } else if let since = focus?.startedDate {
+          ElapsedView(since: since).font(.caption.weight(.semibold)).frame(width: 44)
         }
       } minimal: {
-        SealView(size: 22)
+        if let focus { RingLogo(item: focus, size: 24, behind: .black) }
       }
-      .widgetURL(MewlaStyle.openURL)
+      .widgetURL(MewlaLiveView.link(focus))
     }
   }
 }

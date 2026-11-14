@@ -1,7 +1,7 @@
 # Web UI
 
-The daemon serves the Mewla app as a web page. It is the same app as Android and
-iOS, with the same Brain, Sessions, Terminal, Work, and Settings screens. A
+The daemon serves the Mewla client as a web page. It is the same TSX app as Android and
+iOS (`client/ui`, built with `nsh package --target web`), with the same Brain, Sessions, Terminal, Work, and Settings screens. A
 browser pairs as its own trusted device, so it has the same authority as a
 paired phone and you can revoke it the same way.
 
@@ -72,20 +72,18 @@ mewla devices revoke -id <device-id>
 
 ## Differences from the mobile apps
 
-Brain and Sessions keep their mounted state when switching tabs. On desktop,
-the inactive page is hidden from keyboard navigation and screen readers by a
-screen wrapper subscribed to `useIsFocused()`. Do not read
-`navigation.isFocused()` in `screenOptions` to control visibility: it can still
-refer to the previous tab during render and leave the selected page hidden.
+Brain and Sessions keep their mounted state when switching tabs. A browser
+resets a hidden list's scroll, so a chat given `shown` (`client/ui/chat/Timeline.tsx`)
+records its offset while visible and restores it, or the newest row, when its tab
+comes back.
 
 | Feature                          | Web                                                     |
 | -------------------------------- | ------------------------------------------------------- |
 | Brain, Sessions, Work, Settings  | Same as mobile                                          |
-| Terminal                         | xterm.js renderer with the same terminal protocol       |
+| Terminal                         | libghostty-vt (WebAssembly) on a canvas, same protocol  |
 | Pairing                          | `mewla pair` browser link or paste a `mewla://` link; no QR camera scan |
 | Mewla Relay (pinned TLS) | Unsupported; browsers cannot pin the daemon certificate |
 | Push notifications               | Unsupported                                             |
-| Mermaid diagrams                 | Shown as source                                         |
 | File upload from the device      | Unsupported                                             |
 | In-app Browser and PDF preview   | Unsupported                                             |
 
@@ -95,29 +93,13 @@ profiles you control.
 
 ## Building
 
-Web routes load with the initial app bundle (`expo-router.asyncRoutes.web` is
-`false`). Switching pages must not fetch route code: a slow tunnel otherwise
-leaves Expo's production Suspense fallback empty, and a failed or obsolete
-chunk can unmount the whole app. Once the app opens, every main page remains
-available while its server connection reconnects. Keep this setting explicit
-when upgrading Expo, whose web default is asynchronous routes.
+Check the TSX with `cd client/ui && nsh check`, run the screens with
+`nsh test`, and the shared logic with `cd client && bun test core`. A page is
+reachable by its address: a Session at `/terminal/<id>`, and the app restores
+the place and the current server from the browser history entry
+(`client/ui/shell/webLocation.ts`).
 
-To exercise cold and repeated tab/page switches against a built export, pair
-an owned, paired `mewla_chrome` browser (or a throwaway Chrome with
-`--remote-debugging-port`) that is open on the export, then run it against that
-browser's CDP host and port:
-
-```bash
-bun scripts/tests/web-navigation.mjs 127.0.0.1:CDP_PORT http://127.0.0.1:PORT /tmp/web-evidence
-```
-
-The browser regression rejects subsequent JavaScript requests, checks visible
-page content, disconnects only that browser, repeats navigation offline, and
-checks its automatic reconnect. Run it on an isolated Linux daemon; it expects
-Screen's Mac requirement message. Screenshots and results belong outside the
-repository.
-
-Release and CI daemon builds embed the web export. A source build without it
+Release and CI daemon builds embed the web build. A source build without it
 serves a short message instead of the app. To embed it locally:
 
 ```bash
@@ -126,11 +108,11 @@ bun install
 cd daemon && go build ./cmd/mewla
 ```
 
-For development, `cd daemon && go run ./cmd/mewla-dev` exports the current web
-sources before its first daemon build. It watches the app, web build script,
-workspace dependencies and daemon sources. App changes re-export the web UI
+For development, `cd daemon && go run ./cmd/mewla-dev` builds the current web
+sources before its first daemon build. It watches `client/ui`, `client/core`,
+`scripts/build-web-ui.sh` and daemon sources. Client changes rebuild the web UI
 before rebuilding the daemon; generated bundles and dependencies do not trigger
-another rebuild. A failed export keeps the previous daemon running.
+another rebuild. A failed web build keeps the previous daemon running.
 
 An already running dev watcher keeps its own compiled code until its next launch.
 When changing the watcher itself, stage the web bundle with `bun run web:build`

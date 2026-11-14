@@ -89,8 +89,9 @@ command = "claude"
 config_dir = "/path/to/claude_work"
 ```
 
-`mewla doctor` and Brain's menu › **Switch executor** show which account each
-executor is signed in as, so two sign-ins of one agent can be told apart. The
+`mewla doctor` shows which account each executor is signed in as; Brain's
+menu › **Switch executor** shows it under a row only when two sign-ins of one
+agent are installed, so they can be told apart. The
 account is the email the CLI recorded at sign-in; it is blank for an API key.
 A separate sign-in keeps its own conversations and settings, so the Model
 Provider you picked and the Skills listed under **Extensions** apply to the
@@ -124,8 +125,10 @@ changes the command as it loads and launches it.
 
 Claude Code asks you to accept a one-time warning the first time it runs in
 bypass mode. Mewla answers it for the Claude it launches, through a settings
-file it passes with `--settings`; it does not edit your `~/.claude` files. A
-Claude command that carries its own `--settings` is left alone, so put
+file it passes with `--settings` (or, for a Claude that already gets Mewla's
+inline `--settings` for its Provider route, in that same JSON, together with
+the hooks Mewla follows it by); it does not edit your `~/.claude` files. A
+Claude command that names its own `--settings` file is left alone, so put
 `"skipDangerousModePermissionPrompt": true` in that settings yourself. Claude
 refuses bypass mode for root outside a container, one more reason not to run
 the daemon as root.

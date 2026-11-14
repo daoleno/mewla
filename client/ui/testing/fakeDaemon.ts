@@ -18,8 +18,16 @@ export interface FakeDaemonState {
   conversations?: Record<string, Record<string, unknown>[] | { source?: string; available?: boolean; reason?: string; events: Record<string, unknown>[] }>;
   /** A DSH Session's pending requests (`dsh_interaction`). */
   dsh?: { epoch: string; items: Record<string, unknown>[] };
+  /** The `computers` message (WIRE §5) without its type: the other computers as this one sees them. */
+  computers?: Record<string, unknown>;
   /** Canned answers by request type (before any built-in one): the reply's `type` and fields, e.g. `{ type: "error", message }`. */
   replies?: Record<string, { type: string } & Record<string, unknown>>;
+  /** false: a computer from before create_session's first message (WIRE §11), which ignores `text` and echoes nothing. */
+  firstMessages?: boolean;
+  /** Pictures by path, as `codex_asset` answers them (`data_url`); a path not here falls to `replies`. */
+  assets?: Record<string, string>;
+  /** The first this many `codex_asset` asks are lost with the link: it drops instead of answering (a relay that went away mid-picture). */
+  assetsLost?: number;
 }
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
@@ -34,8 +42,20 @@ export class FakeDaemon {
 
   constructor(private state: FakeDaemonState) {}
 
+  /** The computer went away (`goDown`): every connection closes and new ones fail. */
+  private down = false;
+
+  goDown(): void {
+    this.down = true;
+    for (const socket of [...this.sockets]) socket.close(1006, "gone");
+  }
+
   open(): SocketLike {
     const socket = new FakeSocket(this);
+    if (this.down) {
+      setTimeout(() => socket.close(1006, "gone"), 5);
+      return socket;
+    }
     this.sockets.add(socket);
     setTimeout(() => {
       socket.readyState = 1;
@@ -51,6 +71,7 @@ export class FakeDaemon {
 
   closed(socket: FakeSocket): void {
     this.sockets.delete(socket);
+    this.subscriptions = this.subscriptions.filter((s) => s.socket !== socket);
   }
 
   private to(socket: FakeSocket, frame: Frame): void {
@@ -65,6 +86,55 @@ export class FakeDaemon {
     if (frame.type === "work_item_deleted") this.state.work_items = (this.state.work_items ?? []).filter((w) => w.id !== frame.id);
     if (frame.type === "work_item_changed") this.state.work_items = [...(this.state.work_items ?? []).filter((w) => w.id !== frame.id), frame.work_item as never];
     this.broadcast(frame.type.startsWith("worker_session_") && frame.seq === undefined ? { ...frame, seq: ++this.seq } : frame);
+  }
+
+  /** Who follows which conversation: deltas and re-sent snapshots go to them under their subscription's id. */
+  private subscriptions: { socket: FakeSocket; worker: string; requestId: string }[] = [];
+  private revisions = new Map<string, number>();
+
+  private revisionOf(worker: string): number {
+    return this.revisions.get(worker) ?? 1;
+  }
+
+  private conversationOf(worker: string): Record<string, unknown> {
+    const entry = this.state.conversations?.[worker] ?? [];
+    return Array.isArray(entry) ? { available: true, events: entry } : { available: true, ...entry };
+  }
+
+  private events(worker: string): Record<string, unknown>[] {
+    return (this.conversationOf(worker).events as Record<string, unknown>[]) ?? [];
+  }
+
+  /**
+   * A conversation's news, as the daemon sends it to its followers: `upserts` (new or changed events, by id),
+   * `activity` (the running turn, null when it ended), or `snapshot: true` to send the whole conversation again.
+   */
+  conversation(update: { worker: string; upserts?: Record<string, unknown>[]; deletes?: string[]; activity?: Record<string, unknown> | null; snapshot?: boolean }): void {
+    const { worker } = update;
+    const base = this.revisionOf(worker);
+    if (update.upserts?.length || update.deletes?.length) {
+      const byId = new Map(this.events(worker).map((e) => [e.id, e] as const));
+      for (const event of update.upserts ?? []) byId.set(event.id, event);
+      for (const id of update.deletes ?? []) byId.delete(id);
+      const entry = this.state.conversations?.[worker];
+      const events = [...byId.values()];
+      this.state.conversations = { ...this.state.conversations, [worker]: Array.isArray(entry) || !entry ? events : { ...entry, events } };
+    }
+    const revision = update.snapshot ? base : base + 1;
+    this.revisions.set(worker, revision);
+    for (const s of this.subscriptions.filter((s) => s.worker === worker)) {
+      if (update.snapshot) this.to(s.socket, { type: "codex_conversation_snapshot", request_id: s.requestId, worker_id: worker, revision, conversation: this.conversationOf(worker) });
+      else this.to(s.socket, {
+        type: "codex_conversation_delta", request_id: s.requestId, worker_id: worker, revision, base_revision: base,
+        upserts: update.upserts ?? [], deletes: update.deletes ?? [], ...(update.activity !== undefined ? { activity: update.activity } : {}),
+      });
+    }
+  }
+
+  /** Every connection drops and the app connects again (a network change): the daemon forgets the subscriptions. */
+  drop(): void {
+    for (const socket of [...this.sockets]) socket.close(1006, "network changed");
+    this.subscriptions = [];
   }
 
   private broadcast(frame: Frame): void {
@@ -87,12 +157,21 @@ export class FakeDaemon {
     host.post("app.testFrame", frame);
     const reply = (type: string, body: Record<string, unknown>) => this.to(socket, { type, request_id: frame.request_id, ...body });
     const fail = (message: string) => reply("error", { message });
+    if (frame.type === "codex_asset" && (this.state.assetsLost ?? 0) > 0) {
+      this.state.assetsLost = this.state.assetsLost! - 1;
+      setTimeout(() => this.drop(), 0);
+      return;
+    }
+    const asset = frame.type === "codex_asset" ? this.state.assets?.[String(frame.path)] : undefined;
+    if (asset) return reply("codex_asset", { data_url: asset });
     // A canned answer wins over the built-in one: a test makes any request fail this way.
     const canned = this.state.replies?.[frame.type];
     if (canned) return reply(canned.type, canned);
     switch (frame.type) {
       case "brain_snapshot":
         return reply("brain_snapshot", { brain: this.state.brain ?? {} });
+      case "computers":
+        return reply("computers", this.state.computers ?? { computers: [], open_requests: 0 });
       case "list_calendar_items":
         return reply("calendar_items_snapshot", { calendar_items: this.state.calendar_items ?? [] });
       case "get_calendar_item": {
@@ -138,7 +217,7 @@ export class FakeDaemon {
         const action = frame.action as string;
         if (action === "close" || action === "dismiss" || action === "stop") work.status = action === "close" ? "done" : "cancelled";
         if (action === "reply") Object.assign(work, { question: undefined, choices: undefined, user_action: { kind: "reply", text: frame.text, at: new Date().toISOString(), admission: "accepted" } });
-        if (action === "snooze") work.snoozed_until = frame.snooze_until;
+        if (action === "snooze") work.snoozed_until = new Date(Date.now() + Number(frame.snooze_seconds) * 1000).toISOString();
         work.unread_result = false;
         reply("brain_work_action", { work_id: frame.id, status: work.status, admission: "accepted" });
         return this.broadcast({ type: "brain_snapshot", brain: this.state.brain ?? {} });
@@ -165,9 +244,11 @@ export class FakeDaemon {
         return reply("widget_token", { token: "widget-token", id: "w1" });
       case "codex_conversation_subscribe":
       {
-        const entry = this.state.conversations?.[String(frame.worker_id)] ?? [];
-        const conversation = Array.isArray(entry) ? { available: true, events: entry } : { available: true, ...entry };
-        return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: 1, conversation });
+        // A Brain thread of its own is `<worker>#<scope>` (`brain-host#brain-thread:t-old`); else the worker's.
+        const scoped = `${String(frame.worker_id)}#${String(frame.conversation_scope_key ?? "")}`;
+        const worker = this.state.conversations?.[scoped] ? scoped : String(frame.worker_id);
+        this.subscriptions = [...this.subscriptions.filter((s) => s.socket !== socket || s.worker !== worker), { socket, worker, requestId: String(frame.request_id) }];
+        return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: this.revisionOf(worker), conversation: this.conversationOf(worker) });
       }
       case "answer_prompt": {
         const answer = frame.prompt_answer as { prompt_id?: string } | undefined;
@@ -198,7 +279,8 @@ export class FakeDaemon {
         const id = `w${++this.revision}`;
         const session = { id, name: String(frame.name || ""), status: "running", cwd: String(frame.cwd || "/home/me"), command: String(frame.command || ""), started_at: Date.now(), updated_at: Date.now() };
         this.state.worker_sessions = [...(this.state.worker_sessions ?? []), session];
-        reply("session_created", { worker_id: id, worker_session: session });
+        const holds = typeof frame.text === "string" && frame.text.trim() !== "" && this.state.firstMessages !== false;
+        reply("session_created", { worker_id: id, worker_session: session, ...(holds ? { first_message: "pending" } : {}) });
         return this.broadcast({ type: "worker_session_created", seq: ++this.seq, worker_session: session });
       }
       case "kill_worker": {

@@ -1,7 +1,7 @@
 // Package phone is how Mewla's agents use the person's Android phone. The phone's App holds one
 // signed WebSocket to the current computer (/phone/device); the daemon sends it one request at a
 // time for each agent action and gets the resulting screen back. Everything below is that wire
-// contract; the App mirrors it in app/services/phoneProtocol.ts.
+// contract; the App mirrors it in client/android/phone (link/PhoneFrames.kt, link/PhoneLink.kt).
 package phone
 
 import (

@@ -5,7 +5,7 @@ trust boundary and `mewla boot`. The user guide is [Install](../install-daemon.m
 
 ## Installer selection and trust boundary
 
-On every fresh bootstrap run without `MEWLA_VERSION`, the installer queries GitHub at run time and selects the SemVer-highest public nondraft Release whose tag matches supported `vX.Y.Z` or `vX.Y.Z-beta.N` syntax. GitHub's `prerelease` flag does not affect eligibility: strict SemVer ordering makes a stable tag outrank a beta at the same core version, while a beta with a higher core version outranks a stable release with a lower core. The default follows the highest published version without an embedded version that needs routine README or script updates. `MEWLA_VERSION` is optional pinning only.
+On every fresh bootstrap run without `MEWLA_VERSION`, the installer follows GitHub's `releases/latest` redirect: the newest published release that is not a prerelease (betas and a held stable release are skipped). The default follows that without an embedded version that needs routine README or script updates. `MEWLA_VERSION` is optional pinning only.
 
 ### Install location and PATH
 
@@ -51,7 +51,7 @@ running without the engine; it prints one line, and the full output goes to
 `<binary>-tagged-build.log`. The runner rebuilds only `cmd/mewla`: after its
 own source changes, restart `go run ./cmd/mewla-dev`.
 
-Product version for banners and release staging comes from `app/app.base.json` (`expo.version`). The daemon default is `daemon/cmd/mewla/version.go` and can be overridden at link time (`-X main.Version=…`).
+Product version for banners and release staging comes from `client/ui/nsh.json` (`version`, read by `scripts/lib/release_identity.py`). The daemon default is `daemon/cmd/mewla/version.go` and can be overridden at link time (`-X main.Version=…`).
 
 ## Release binaries (Linux and Apple Silicon macOS)
 
@@ -110,7 +110,7 @@ Verify identity sources and stage checksums:
 
 ```bash
 ./scripts/verify-release-identity.sh
-VERSION="$(python3 -c "import json; print(json.load(open('app/app.base.json'))['expo']['version'])")"
+VERSION="$(python3 scripts/lib/release_identity.py version)"
 ./scripts/verify-release-identity.sh --stage "dist-download/v$VERSION"
 (cd "dist-download/v$VERSION" && sha256sum -c SHA256SUMS)
 
@@ -187,4 +187,4 @@ See `daemon/Dockerfile`. Prefer the host binary so agents and their CLIs share y
 docker build -f daemon/Dockerfile -t mewla .
 ```
 
-The image's daemon carries the session host's terminal engine, built and linked statically the same way as the Linux release binaries (`zig cc`, musl, `ghosttyvt`), so Sessions run in the container without tmux. `daemon/Dockerfile.dockerignore` keeps the build context to `daemon/`, `scripts/` and the few `app/` files the engine's library build reads. The image never updates itself; rebuild it. Container use requires mounting state, publishing or proxying port 9876, and installing or mounting the agent CLIs yourself.
+The image's daemon carries the session host's terminal engine, built and linked statically the same way as the Linux release binaries (`zig cc`, musl, `ghosttyvt`), so Sessions run in the container without tmux. `daemon/Dockerfile.dockerignore` keeps the build context to `daemon/`, `scripts/`, `native/terminal-vt/` and the few client files the engine's library build checks (`verify-libghostty.sh --contract`). The image never updates itself; rebuild it. Container use requires mounting state, publishing or proxying port 9876, and installing or mounting the agent CLIs yourself.

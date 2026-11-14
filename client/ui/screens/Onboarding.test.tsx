@@ -57,6 +57,17 @@ describe("first run", () => {
     expect(app.shows("id:paste")).toBe(true);
   });
 
+  test("a camera turned on from outside the app clears the off text by itself, with no return from Settings (11-14)", async () => {
+    // The Mac's re-run: after Allow the finder kept "The camera is off" until the page was entered again.
+    const camera = { permission: "denied" };
+    const app = await open("../App.tsx", { host: phone(camera), platform: "android" });
+    await app.press("id:scan-now");
+    await app.waitFor("id:open-settings");
+    camera.permission = "granted";
+    await app.waitFor("id:qr-camera", { timeout: 5_000 });
+    expect(app.shows("id:open-settings")).toBe(false);
+  });
+
   test("a rotation lays the step out again: beside the cat on its side, above it upright", async () => {
     const app = await open("../App.tsx", { host: phone(), platform: "android" });
     await app.waitFor("id:set-up");
@@ -140,6 +151,8 @@ describe("after pairing", () => {
     await answering(app, () => app.press("id:paste"));
     await app.waitFor("text:Brain is home.", { timeout: 10_000 });
     expect(app.texts()).toContain("Connected to Desk.");
+    // The pairing's success shows as the ok dot (SPEC §10.4).
+    expect(app.shows("id:connected-ok-dot")).toBe(true);
     expect(app.storage()["mewla:onboarded"]).toBe("true");
     // Nothing of the app is under the step (settings.md [20]: Android drew its native views over it).
     expect(app.count("id:composer")).toBe(0);
@@ -159,6 +172,7 @@ describe("after pairing", () => {
     await app.waitFor("id:connected-title");
     await app.waitFor("text:Can't reach your computer", { timeout: 15_000 });
     expect(app.shows("id:retry")).toBe(true);
+    expect(app.count("id:connected-ok-dot")).toBe(0);
     await app.press("id:server-settings");
     await app.waitFor("id:pair-another");
   }, 20_000);
@@ -229,9 +243,9 @@ describe("Settings' Pair a computer", () => {
     expect(JSON.parse(app.storage()["mewla:v3:servers"]!).map((s: { url: string }) => s.url).sort()).toEqual(["ws://10.0.0.5:9876/ws", desk.url]);
   }, 15_000);
 
-  test("the camera runs only while the Pair page is on screen: another tab stops it, coming back starts it", async () => {
-    // Every tab's stack stays mounted, so a Pair page left for another tab kept its camera open
-    // (FAILURES Round 3: a black band over the other tabs; the camera reopened at every resume).
+  test("the camera runs only while the Pair page is on screen: a page over it stops it, coming back starts it", async () => {
+    // A Pair page under another page kept its camera open (FAILURES Round 3: a black band over the
+    // other pages; the camera reopened at every resume).
     const app = await open("../App.tsx", { host: phone({ permission: "granted" }), platform: "android", storage: paired });
     await app.host.send("links.open", { url: "mewla://settings?addServer=1" });
     await app.waitFor("id:qr-camera");
@@ -267,7 +281,7 @@ describe("Settings' Pair a computer", () => {
     await app.waitFor("id:connected-title", { timeout: 10_000 });
   }, 15_000);
 
-  test("after a pairing from Settings, Open Brain and then More shows More, not the Pair page", async () => {
+  test("after a pairing from the computer page, Open Brain and then the cat shows the computer page, not the Pair page", async () => {
     const same = { id: "s2", name: "Desk", url: "ws://10.0.0.5:9876/ws", daemonId: "a1".repeat(32), daemonPublicKey: computer.publicKey };
     const app = await open("../FakeDaemonApp.tsx", {
       host: phone(), platform: "android",
@@ -282,7 +296,7 @@ describe("Settings' Pair a computer", () => {
     await app.waitFor("id:open-brain", { timeout: 10_000 });
     await app.press("id:open-brain");
     await app.waitFor("id:composer");
-    await app.host.send("links.open", { url: "mewla://more" });
+    await app.press("id:home-cat");
     await app.waitFor("text:Computers");
     expect(app.shows("id:pair-link")).toBe(false);
   }, 20_000);

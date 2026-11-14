@@ -1,0 +1,5 @@
+<!-- The tray's red tag (Answer, Approve): red is only "your move". -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+  <solid android:color="@color/mewla_seal" />
+  <corners android:radius="13dp" />
+</shape>

@@ -21,6 +21,7 @@ import (
 	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/server"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/gorilla/websocket"
 )
 
 // computer is one Mewla daemon: its identity, its Brain inbox, the real
@@ -39,6 +40,12 @@ type computer struct {
 
 	// browser is what this computer says about its Chrome.
 	browser atomic.Bool
+	// open is how many requests on this computer wait for the person.
+	open atomic.Int64
+	// changes counts the Manager's OnChange calls.
+	changes atomic.Int64
+	// notify is the server's NotifyComputers, as the daemon wires it.
+	notify func()
 
 	mu          sync.Mutex
 	received    []string
@@ -58,12 +65,20 @@ func newComputer(t *testing.T, ctx context.Context, name string) *computer {
 		Caps: func() computers.Caps {
 			return computers.Caps{OS: "test", Apps: []string{name + "-app"}, BrowserUse: c.browser.Load()}
 		},
+		OpenRequests: func() int { return int(c.open.Load()) },
+		OnChange: func() {
+			c.changes.Add(1)
+			if notify := c.notify; notify != nil {
+				notify()
+			}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv := server.New(manager, watcher.New(time.Second), nil, nil, nil, nil, nil)
 	srv.SetComputers(c.manager)
+	c.notify = srv.NotifyComputers
 	c.handler = srv.Handler()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -535,4 +550,127 @@ func TestNewCapsReachTheOtherComputer(t *testing.T) {
 	eventually(t, "browser use on the open channel", func() bool { return linux.peer("mac").Caps.BrowserUse })
 	mac.browser.Store(false)
 	eventually(t, "browser use gone again", func() bool { return !linux.peer("mac").Caps.BrowserUse })
+}
+
+// The other computer's count of requests waiting for the person reaches this
+// one over the open channel as it moves ("Online · 1 needs you"); it is shown
+// only while the channel is up, and its last-seen time outlives a restart.
+func TestOpenRequestsAndLastSeenOfTheOtherComputer(t *testing.T) {
+	t.Cleanup(computers.FastTimings())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	linux := newComputer(t, ctx, "manjaro")
+	mac := newComputer(t, ctx, "studio")
+	p := pairPhone(t, linux, mac)
+	connectWithPhone(t, p, linux, mac)
+	eventually(t, "online", func() bool { return linux.peer("mac").Online })
+	count := func(c *computer, name string) int {
+		if view := c.peer(name); view.OpenRequests != nil {
+			return *view.OpenRequests
+		}
+		return -1
+	}
+	if got := count(linux, "mac"); got != 0 {
+		t.Fatalf("open requests at start = %d", got)
+	}
+	changesBefore := linux.changes.Load()
+	mac.open.Store(1)
+	eventually(t, "one request on the Mac", func() bool { return count(linux, "mac") == 1 })
+	if linux.changes.Load() == changesBefore {
+		t.Fatal("a new count did not call OnChange")
+	}
+	linux.open.Store(2)
+	eventually(t, "two requests on Linux, seen by the Mac", func() bool { return count(mac, "manjaro") == 2 })
+
+	// The Mac goes away: no count (it is unknown, not zero), but a last seen.
+	mac.stopRun()
+	mac.stop()
+	<-mac.stopped
+	eventually(t, "offline", func() bool { return !linux.peer("mac").Online })
+	offline := linux.peer("mac")
+	if offline.OpenRequests != nil || offline.LastSeen == nil {
+		t.Fatalf("offline view = %+v", offline)
+	}
+
+	// Linux restarts: the Mac's last seen is still known.
+	linux.stopRun()
+	<-linux.stopped
+	restarted, err := computers.NewManager(computers.Options{Auth: linux.auth, Version: "test", Name: "manjaro"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := restarted.Handle(context.Background(), computers.Request{Action: "list"})
+	if err != nil || len(result.Computers) != 1 || result.Computers[0].LastSeen == nil ||
+		result.Computers[0].Online || result.Computers[0].OpenRequests != nil {
+		t.Fatalf("after restart: %+v %v", result.Computers, err)
+	}
+	if !result.Computers[0].LastSeen.Equal(*offline.LastSeen) {
+		t.Fatalf("last seen %v after restart, %v before", result.Computers[0].LastSeen, offline.LastSeen)
+	}
+}
+
+// The app reads every paired computer from the one it is connected to, in a
+// `computers` message over its WebSocket, and hears it again when a paired
+// computer comes, goes or reports a new count.
+func TestAppReadsTheOtherComputersOverItsWebSocket(t *testing.T) {
+	t.Cleanup(computers.FastTimings())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	linux := newComputer(t, ctx, "manjaro")
+	mac := newComputer(t, ctx, "studio")
+	p := pairPhone(t, linux, mac)
+	connectWithPhone(t, p, linux, mac)
+	eventually(t, "online", func() bool { return linux.peer("mac").Online })
+	mac.open.Store(1)
+	eventually(t, "count", func() bool { v := linux.peer("mac"); return v.OpenRequests != nil && *v.OpenRequests == 1 })
+
+	nonce := make([]byte, 16)
+	_, _ = rand.Read(nonce)
+	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	signature := ed25519.Sign(p.key, auth.BuildSignaturePayload("mewla-connect", linux.auth.DaemonID(), p.id, timestamp, hex.EncodeToString(nonce)))
+	header := http.Header{}
+	header.Set("Authorization", auth.AuthorizationHeaderPrefix+"v1:"+p.id+":"+linux.auth.DaemonID()+":"+timestamp+":"+hex.EncodeToString(nonce)+":"+hex.EncodeToString(signature))
+	ws, _, err := websocket.DefaultDialer.Dial("ws://"+linux.addr+"/ws", header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	read := func(match func(map[string]any) bool) map[string]any {
+		t.Helper()
+		_ = ws.SetReadDeadline(time.Now().Add(10 * time.Second))
+		for {
+			var message map[string]any
+			if err := ws.ReadJSON(&message); err != nil {
+				t.Fatalf("no computers message: %v", err)
+			}
+			if message["type"] == "computers" && match(message) {
+				return message
+			}
+		}
+	}
+	if err := ws.WriteJSON(map[string]any{"type": "computers", "request_id": "c1"}); err != nil {
+		t.Fatal(err)
+	}
+	reply := read(func(m map[string]any) bool { return m["request_id"] == "c1" })
+	raw, _ := json.MarshalIndent(reply, "", "  ")
+	t.Logf("computers = %s", raw)
+	list, _ := reply["computers"].([]any)
+	if len(list) != 1 {
+		t.Fatalf("computers = %s", raw)
+	}
+	peer := list[0].(map[string]any)
+	if peer["name"] != "mac" || peer["online"] != true || peer["daemon_id"] != mac.auth.DaemonID() ||
+		peer["open_requests"] != float64(1) || peer["last_seen"] == nil {
+		t.Fatalf("peer = %s", raw)
+	}
+	if _, ok := reply["open_requests"].(float64); !ok {
+		t.Fatalf("this computer's own count missing: %s", raw)
+	}
+
+	// The Mac answers its request: the app hears the new count unasked.
+	mac.open.Store(0)
+	read(func(m map[string]any) bool {
+		list, _ := m["computers"].([]any)
+		return m["request_id"] == nil && len(list) == 1 && list[0].(map[string]any)["open_requests"] == float64(0)
+	})
 }

@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired } from "../testing/fixtures";
+import { paired, settle, typeUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -34,10 +34,11 @@ const path = (app: { host: { calls(): { name: string; data: unknown }[] } }) =>
 describe("the command palette", () => {
   test("⌘K / Ctrl+K opens it on actions and places; a query finds Sessions and ranks; Return runs and closes it", async () => {
     const app = await open(APP, desk({ brain: {}, worker_sessions: sessions }));
-    await app.waitFor("id:sidebar");
+    await app.waitFor("id:left-pane");
+    await settle(app);
     await app.keyboard.press("mod+k");
     await app.waitFor("id:palette");
-    for (const label of ["Actions", "New session", "New Brain chat", "Keyboard shortcuts", "Go to", "Calendar"]) expect(app.texts()).toContain(label);
+    for (const label of ["Actions", "New session", "New chat", "Open Brain's terminal", "Browse workspace", "Switch executor", "Keyboard shortcuts", "Go to", "Calendar"]) expect(app.texts()).toContain(label);
     expect(app.texts()).toContain("G then C");
     await app.type("label:Search commands", "api");
     await app.waitFor("text:api server");
@@ -46,7 +47,7 @@ describe("the command palette", () => {
     await app.type("label:Search commands", "cal");
     // A query drops the headings and names each row's section instead. Wait for this query's rows: the last one's
     // (no headings either) can still be on screen.
-    await app.waitFor("text:api server", { state: "gone" });
+    await app.waitFor("id:palette >> text:api server", { state: "gone" });
     await app.waitFor("text:Go to");
     expect(app.texts()).not.toContain("Actions");
     await app.keyboard.press("enter");
@@ -56,8 +57,8 @@ describe("the command palette", () => {
 
   test("a Session row opens that Session; nothing matching says so", async () => {
     const app = await open(APP, desk({ brain: {}, worker_sessions: sessions }));
-    await app.waitFor("id:sidebar");
-    await app.press("id:sidebar-search");
+    await app.waitFor("id:left-pane");
+    await app.press("id:pane-search");
     await app.waitFor("id:palette");
     await app.type("label:Search commands", "zzz");
     await app.waitFor("id:palette-empty");
@@ -65,16 +66,18 @@ describe("the command palette", () => {
     await app.type("label:Search commands", "docs");
     // Return runs the row the palette shows for this query: wait until it shows it alone.
     await app.waitFor("text:Sessions · /home/me/docs");
-    await app.waitFor("text:api server", { state: "gone" });
+    await app.waitFor("id:palette >> text:api server", { state: "gone" });
     await app.keyboard.press("enter");
     await app.waitUntil(() => path(app) === "/sessions/w2");
   }, 20_000);
 
   test("the arrows wrap: ↑ from the first row is the last one", async () => {
     const app = await open(APP, desk());
-    await app.waitFor("id:sidebar");
+    await app.waitFor("id:left-pane");
+    await settle(app);
     await app.keyboard.press("mod+k");
     await app.waitFor("id:palette");
+    // It opens with the focus in its field (SPEC §14.3): the arrows are the palette's at once.
     await app.keyboard.press("up");
     await app.keyboard.press("enter");
     await app.waitFor("id:settings");
@@ -82,7 +85,8 @@ describe("the command palette", () => {
 
   test("Escape closes it", async () => {
     const app = await open(APP, desk());
-    await app.waitFor("id:sidebar");
+    await app.waitFor("id:left-pane");
+    await settle(app);
     await app.keyboard.press("mod+k");
     await app.waitFor("id:palette");
     await app.keyboard.press("escape");
@@ -93,12 +97,14 @@ describe("the command palette", () => {
 describe("the desktop's keys", () => {
   test("? lists every shortcut; Escape closes it", async () => {
     const app = await open(APP, desk());
-    await app.waitFor("id:sidebar");
+    await app.waitFor("id:left-pane");
     await app.keyboard.press("shift+/");
     await app.waitFor("id:shortcuts");
     expect(app.texts()).toContain("Command palette");
     expect(app.texts()).toContain("Ctrl+K");
-    expect(app.texts()).toContain("Edit your last message (empty box)");
+    expect(app.texts()).toContain("Edit your last message");
+    expect(app.texts()).toContain("G then M");
+    expect(app.texts()).toContain("G then X");
     await app.keyboard.press("escape");
     await app.waitFor("id:shortcuts", { state: "gone" });
   }, 20_000);
@@ -106,7 +112,7 @@ describe("the desktop's keys", () => {
   // A manual clock: a step waits for the app to be quiet, which would otherwise run out G's 1.5 s.
   test("G then a letter goes to a place; N starts a new Session", async () => {
     const app = await open(APP, { ...desk(), clock: {} });
-    await app.waitFor("id:sidebar");
+    await app.waitFor("id:left-pane");
     await app.keyboard.press("g");
     await app.keyboard.press("t");
     await app.waitFor("id:stats");
@@ -119,7 +125,7 @@ describe("the desktop's keys", () => {
 
   test("G waits 1.5 s for its letter, then the letter is only a letter", async () => {
     const app = await open(APP, { ...desk(), clock: {} });
-    await app.waitFor("id:sidebar");
+    await app.waitFor("id:left-pane");
     await app.waitUntil(() => path(app) === "/");
     await app.keyboard.press("g");
     await app.clock!.runFor(1600);
@@ -130,7 +136,7 @@ describe("the desktop's keys", () => {
 
   test("a sheet is a dialog on the desktop, and Escape closes it", async () => {
     const app = await open(APP, desk());
-    await app.waitFor("id:sidebar");
+    await app.waitFor("id:left-pane");
     await app.keyboard.press("n");
     await app.waitFor("id:new-session-sheet");
     await app.keyboard.press("escape");
@@ -139,18 +145,60 @@ describe("the desktop's keys", () => {
 
   test("the bare keys never fire while typing in a field", async () => {
     const app = await open(APP, desk());
-    await app.waitFor("id:sidebar");
-    await app.type("id:composer", "gn");
+    await app.waitFor("id:left-pane");
+    // Typed until the field holds it: the harness can drop the first keys of a fresh page.
+    await typeUntil(app, "id:composer", "gn", "id:composer");
     await app.wait(100);
     expect(app.shows("id:new-cwd")).toBe(false);
     expect(app.value("id:composer")).toBe("gn");
   }, 20_000);
 
-  test("below 1024 pt there are no desktop shortcuts", async () => {
+  test("keys work at any width with a hardware keyboard: below 1024 ⌘K opens the palette too", async () => {
     const app = await open(APP, { ...desk(), width: 800 });
-    await app.waitFor("id:tab-row");
+    await app.waitFor("id:home-header");
+    await settle(app);
     await app.keyboard.press("mod+k");
-    await app.wait(100);
-    expect(app.shows("id:palette")).toBe(false);
+    await app.waitFor("id:palette");
+  }, 20_000);
+
+  test("G then M opens the computer page and G then X Screen; a palette pick replaces the page above Brain", async () => {
+    const app = await open(APP, { ...desk({ brain: {}, worker_sessions: sessions }), clock: {} });
+    await app.waitFor("id:left-pane");
+    await app.keyboard.press("g");
+    await app.keyboard.press("m");
+    await app.waitUntil(() => path(app) === "/computer");
+    await app.keyboard.press("g");
+    await app.keyboard.press("x");
+    await app.waitUntil(() => path(app) === "/screen");
+    await app.keyboard.press("mod+k");
+    await app.waitFor("id:palette");
+    await app.type("label:Search commands", "docs");
+    await app.waitFor("text:Sessions · /home/me/docs");
+    await app.waitFor("id:palette >> text:api server", { state: "gone" });
+    await app.keyboard.press("enter");
+    await app.waitUntil(() => path(app) === "/sessions/w2");
+    // Brain › that Session: one Back to Brain.
+    await app.press("id:page-back");
+    await app.waitUntil(() => path(app) === "/");
   }, 20_000);
 });
+
+describe("a terminal on screen (parity #27)", () => {
+  test("with the focus outside the terminal, ⌘K and G then a letter still work", async () => {
+    const app = await open(APP, desk({ brain: {}, worker_sessions: [{ ...sessions[0], command: "bash", provider: "" }] }));
+    await app.waitFor("id:left-pane");
+    await app.press("id:tray-all-sessions");
+    await app.waitFor("id:session-row");
+    await app.press("id:session-row");
+    await app.waitFor("id:terminal-web", { timeout: 10_000 });
+    await settle(app);
+    await app.keyboard.press("mod+k");
+    await app.waitFor("id:palette");
+    await app.keyboard.press("escape");
+    await app.waitFor("id:palette", { state: "gone" });
+    await app.keyboard.press("g");
+    await app.keyboard.press("c");
+    await app.waitUntil(() => path(app) === "/calendar");
+  }, 20_000);
+});
+

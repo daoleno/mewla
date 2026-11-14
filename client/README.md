@@ -1,8 +1,9 @@
 # Mewla client (NSH)
 
 The app on [NSH](https://nsh.dev): one TSX app with native views on iOS and Android, and the same TSX on the web.
-It is built complete beside `app/` (Expo) and replaces it in one release, in place: same package and signing key on
-Android, same bundle id on iOS, so a phone keeps its pairing and its drafts. Until then `app/` is what ships.
+It replaces the Expo app in one release, in place: same package and signing key on Android, same bundle id on iOS,
+so a phone keeps its pairing and its drafts. The terminal links libghostty-vt from `native/terminal-vt/` (built by
+`scripts/build-libghostty.sh` and `scripts/build-libghostty-ios.sh`, pinned by its `native.lock.json`).
 
 | Directory | What it is | Owns |
 |---|---|---|
@@ -15,15 +16,19 @@ Android, same bundle id on iOS, so a phone keeps its pairing and its drafts. Unt
 ## Set up
 
 ```sh
-client/scripts/fetch-nsh.sh          # NSH 0.4.0 into ~/.nsh (checksums pinned); --ios also fetches the framework
+client/scripts/fetch-nsh.sh          # NSH 0.5.0 and its Android AARs into $NSH_HOME (default ~/.nsh, checksums pinned); --ios also fetches the framework
 cd client && bun test core           # core
 cd client/ui && nsh check && nsh test
 ```
 
 ## Run it
 
-- **Android, hot reload:** `client/scripts/dev-android.sh` installs the preview debug build on the one device `adb`
-  sees and runs it from `nsh dev`: every save reloads it.
+- **Android, hot reload:** `client/scripts/dev-android.sh` builds the Dev app (preview debug) with this host's `nsh dev`
+  server (`-Pmewla.devServer=ws://<LAN address>:8790/ws`: `DEV_HOST`, or the private LAN address `lan-address.sh` picks and prints,
+  never a proxy's or VPN's tunnel; with none it stops before building), installs it on the one device `adb` sees and serves client/.
+  Mewla Dev opens on that server from its icon, asking once (Load); every save reloads it. When the server does not
+  answer within two seconds, it starts on its built-in bundle and reopens on the server once it answers and the app
+  comes to the front. `mewla-dev://start?server=ws://…` points it at another server, confirmed first.
 - **Android, a build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`.
   The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app. A local
   build is signed with your debug key; the Preview `client.yml` keeps on dispatch carries the release key
@@ -49,7 +54,9 @@ cd client/ui && nsh check && nsh test
 
 ## Upgrade
 
-Version code = `major·1 000 000 + minor·10 000 + patch·100` from `ui/nsh.json`, above every Expo build. The
+The version is `ui/nsh.json` `version` (also the daemon's; `scripts/prepare-release.py` moves it). The Android
+version code and iOS build number are `major·1 000 000 + minor·10 000 + patch·100 + 99`, or `+ N` for `-beta.N`
+(`scripts/lib/release_identity.py`; 0.3.2 is 30299), above every Expo build (142 / 140). The
 upgrade gate (`client.yml`, manual dispatch) installs the released Expo APK on an emulator, pairs it with a fresh
 daemon and types a draft, installs the release-signed NSH app over it, and passes only if the daemon still lists
 that one device and sees it sign in again and the draft is in the new storage

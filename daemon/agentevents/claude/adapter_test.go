@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 func TestAdapterDeclaresWhatHooksCanAndCannotDo(t *testing.T) {
@@ -147,5 +148,84 @@ func TestExecFormHookFile(t *testing.T) {
 	plain, _ := SettingsJSON("mewla agent-event claude")
 	if strings.Contains(string(plain), `"args"`) {
 		t.Fatalf("a command line hook carries args: %s", plain)
+	}
+}
+
+// routedClaudeCommand is the shape every routed Claude launch has (Brain's
+// Workers and app Sessions alike): the route env, permission mode and bypass
+// acknowledgement as one inline --settings JSON, then the agent tools.
+const routedClaudeCommand = `claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --resume 68197d1b-d079-4cd2-9c44-c93a18189b6e --settings '{"env":{"ANTHROPIC_API_KEY":"sk-ant-mewla-loopback-placeholder-not-a-secret","ANTHROPIC_AUTH_TOKEN":"mewla-loopback-placeholder-not-a-secret","ANTHROPIC_BASE_URL":"http://127.0.0.1:42403/r/rt_61e64bed36c8d219a55593755f497abb"},"permissions":{"defaultMode":"bypassPermissions"},"skipDangerousModePermissionPrompt":true}' --mcp-config '{"mcpServers":{}}'`
+
+// A routed launch got no hooks: its inline --settings made PrepareLaunch leave
+// the hook file off, and Claude reads only one --settings anyway. Every Brain
+// Worker ran without SessionStart binding, hook events or hook approvals
+// (2026-11-13). The hooks now go into that one JSON.
+func TestPrepareLaunchMergesTheHooksIntoARoutedLaunchSettings(t *testing.T) {
+	a := Adapter{SettingsPath: "/state/agent-events/claude-settings.json", Hook: Hook{Command: `'/bin/mewla' agent-event -state-dir /state claude`}}
+	launched, err := a.PrepareLaunch(routedClaudeCommand)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields, ok := shellquote.Fields(launched.Command)
+	if !ok {
+		t.Fatalf("unparseable launch: %q", launched.Command)
+	}
+	var settings []string
+	for i, field := range fields {
+		if field == "--settings" && i+1 < len(fields) {
+			settings = append(settings, fields[i+1])
+		}
+	}
+	if len(settings) != 1 {
+		t.Fatalf("want exactly one --settings, got %d in %q", len(settings), launched.Command)
+	}
+	var parsed struct {
+		Env         map[string]string          `json:"env"`
+		Permissions map[string]string          `json:"permissions"`
+		Skip        bool                       `json:"skipDangerousModePermissionPrompt"`
+		Hooks       map[string]json.RawMessage `json:"hooks"`
+	}
+	if err := json.Unmarshal([]byte(settings[0]), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Env["ANTHROPIC_BASE_URL"] != "http://127.0.0.1:42403/r/rt_61e64bed36c8d219a55593755f497abb" ||
+		parsed.Env["ANTHROPIC_AUTH_TOKEN"] != "mewla-loopback-placeholder-not-a-secret" ||
+		parsed.Permissions["defaultMode"] != "bypassPermissions" || !parsed.Skip {
+		t.Fatalf("route settings changed: %+v", parsed)
+	}
+	for _, name := range HookEvents {
+		if !strings.Contains(string(parsed.Hooks[name]), "agent-event -state-dir /state claude") {
+			t.Fatalf("hook %s missing from %s", name, settings[0])
+		}
+	}
+	// Every other argument is kept as written.
+	if !strings.HasPrefix(launched.Command, "claude --model claude-opus-5-5 --effort high --permission-mode bypassPermissions --resume 68197d1b-d079-4cd2-9c44-c93a18189b6e --settings ") ||
+		!strings.HasSuffix(launched.Command, ` --mcp-config '{"mcpServers":{}}'`) {
+		t.Fatalf("other arguments changed: %q", launched.Command)
+	}
+	// Preparing it again changes nothing (a relaunch of a saved command).
+	again, err := a.PrepareLaunch(launched.Command)
+	if err != nil || again.Command != launched.Command {
+		t.Fatalf("second prepare changed the launch:\n%q\n%q", launched.Command, again.Command)
+	}
+}
+
+func TestPrepareLaunchLeavesSettingsThatChoseTheirOwnHooksAlone(t *testing.T) {
+	a := Adapter{SettingsPath: "/s.json", Hook: Hook{Command: "/bin/mewla agent-event claude"}}
+	for _, command := range []string{
+		`claude --resume x --settings /mine.json`,
+		`claude --resume x --settings '{"hooks":{}}'`,
+		`claude --resume x --settings '{"disableAllHooks":true}'`,
+		`claude --resume x --settings '{"env":{}}' --settings '{"env":{}}'`,
+	} {
+		launched, err := a.PrepareLaunch(command)
+		if err != nil || launched.Command != command {
+			t.Fatalf("%q became %q (%v)", command, launched.Command, err)
+		}
+	}
+	// --settings=<json> is merged like the spaced form.
+	launched, _ := a.PrepareLaunch(`claude --resume x '--settings={"env":{"A":"b"}}'`)
+	if !strings.Contains(launched.Command, `--settings={"env":{"A":"b"},"hooks":`) {
+		t.Fatalf("--settings= form not merged: %q", launched.Command)
 	}
 }

@@ -1,8 +1,7 @@
-import { cleanup, effect, host, nativeComponent, signal, Text, untracked, View } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { cleanup, effect, host, nativeComponent, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
-import { cameraRuns, cameraSearching, finderState, readCameraPermission, type CameraPermission } from "../../core/onboarding";
-import { Spinner } from "../more/kit/kit";
+import { cameraFailure, cameraRuns, cameraSearching, finderState, readCameraPermission, type CameraFailure, type CameraPermission } from "../../core/onboarding";
+import { Spinner } from "../kit/kit";
 import { pairFromText, pairingBusy } from "../pairing";
 
 /** The host's camera reader (CameraX + ML Kit on Android, AVFoundation on iOS). */
@@ -12,6 +11,8 @@ const CodeScanner = nativeComponent<{ active: boolean }, { scan: { value: string
 });
 
 const LIGHT = "#F4F0EA";
+/** How often a finder that says the camera is off asks the system again. */
+const DENIED_RECHECK_MS = 2000;
 const DARK = "#0A0908";
 
 /** Whether the camera is really looking for a code, for the line under the finder. */
@@ -20,65 +21,76 @@ export const scannerSearching = signal(false);
 /**
  * The viewfinder. The first time it shows, the system asks for the camera by itself (a finder
  * that waits for a tap reads as a black screen); the camera runs only while its page is on screen
- * (`onScreen`: a tab's page stays mounted under another tab), the app in front and nothing pairing. Refused, failed or missing, it says so and points to Settings;
+ * (`onScreen`: a tab's page stays mounted under another tab), the app in front and nothing pairing. Refused, it points to Settings;
+ * on a device with no camera it says so; one that would not start offers to try again;
  * the link can always be pasted instead.
  */
 export function OnboardingScanner(props: { compact?: boolean; onScreen?: () => boolean }) {
   const permission = signal<CameraPermission | null>(null);
   const asking = signal(false);
-  const failed = signal(false);
+  const failed = signal<CameraFailure>(null);
   const state = () => finderState(permission(), failed(), asking());
   const onScreen = () => props.onScreen?.() ?? true;
   const running = () => cameraRuns(state(), lifecycle() === "active", onScreen());
 
+  // Only the newest question's answer counts: an older one that comes back late never undoes it.
+  let asked = 0;
   const ask = async () => {
     if (!host.available()) return permission.set("denied");
+    const mine = ++asked;
     asking.set(true);
     const answer = readCameraPermission(await host.call("scan.request").catch(() => null));
     asking.set(false);
+    if (mine !== asked) return;
     permission.set(answer ?? "denied");
   };
   const check = async (askIfNew: boolean) => {
     if (!host.available()) return permission.set("denied");
+    const mine = ++asked;
     const answer = readCameraPermission(await host.call("scan.permission").catch(() => null)) ?? "denied";
+    if (mine !== asked) return;
     permission.set(answer);
     if (answer === "undetermined" && askIfNew) await ask();
   };
   void check(true);
-  // Back from Settings (or the system prompt): ask the system again what it says now.
+  // Back from Settings (or the system prompt), or the finder on screen again: ask the system what it says now.
   effect(() => {
-    if (lifecycle() !== "active") return;
+    if (lifecycle() !== "active" || !onScreen()) return;
     untracked(() => {
       if (permission() !== null && !asking()) void check(false);
     });
+  });
+  // Off, the camera can come back on with no sign to the app (a grant from outside it, the Simulator's included):
+  // while the finder says so, it asks again now and then.
+  effect(() => {
+    if (state() !== "denied" || lifecycle() !== "active" || !onScreen()) return;
+    const timer = setInterval(() => void check(false), DENIED_RECHECK_MS);
+    cleanup(() => clearInterval(timer));
   });
   effect(() => scannerSearching.set(cameraSearching(state(), lifecycle() === "active" && onScreen(), pairingBusy())));
   cleanup(() => scannerSearching.set(false));
 
   const openSettings = () => void host.call("app.openSettings").catch(() => {});
   return (
-    <View testID="finder" class="w-full items-center justify-center self-center overflow-hidden rounded-3xl border border-border"
+    <View testID="finder" class="w-full items-center justify-center self-center overflow-hidden rounded-(--radius-sheet)"
       style={{ backgroundColor: DARK, aspectRatio: 1, maxHeight: 320, maxWidth: props.compact ? 200 : 320 }}>
-      {state() === "camera" ? (running() ? (
-        <CodeScanner testID="qr-camera" active={!pairingBusy()} class="absolute inset-0"
+      <If when={state() === "camera"} else={<If when={state() === "loading"} else={<View class="items-center gap-3.5 px-7">
+          <Text testID="finder-words" class="text-center text-sub" style={{ color: LIGHT }}>
+            {state() === "request" ? "Mewla reads the code with the camera."
+              : state() === "denied" ? "The camera is off for Mewla. Turn it on in Settings, or paste the link instead."
+              : state() === "missing" ? "This device has no camera. Paste the link instead."
+              : "The camera didn't start. Try again, or paste the link instead."}
+          </Text>
+          {/* No camera: nothing to allow, open or retry. */}
+          <If when={state() !== "missing"}><FinderButton testID={state() === "request" ? "allow-camera" : state() === "denied" ? "open-settings" : "camera-retry"}
+            label={state() === "request" ? "Allow camera" : state() === "denied" ? "Open Settings" : "Try again"}
+            onPress={() => (state() === "request" ? void ask() : state() === "denied" ? openSettings() : failed.set(null))} /></If>
+        </View>}><Spinner /></If>}><If when={running()}><CodeScanner testID="qr-camera" active={!pairingBusy()} class="absolute inset-0"
           onScan={({ value }) => void pairFromText(value, "camera")}
           onUnavailable={({ reason }) => {
             if (reason === "permission") void check(false);
-            else failed.set(true);
-          }} />
-      ) : null) : state() === "loading" ? (
-        <Spinner />
-      ) : (
-        <View class="items-center gap-3.5 px-7">
-          <Text class="text-center text-sm" style={{ color: LIGHT }}>
-            {state() === "request" ? "Mewla reads the code with the camera."
-              : state() === "denied" ? "The camera is off for Mewla. Turn it on in Settings, or paste the link instead."
-              : "The camera could not start. Check that Mewla may use it in Settings, or paste the link instead."}
-          </Text>
-          <FinderButton testID={state() === "request" ? "allow-camera" : "open-settings"} label={state() === "request" ? "Allow camera" : "Open Settings"}
-            onPress={() => (state() === "request" ? void ask() : openSettings())} />
-        </View>
-      )}
+            else failed.set(cameraFailure(reason));
+          }} /></If></If>
       <Corner style={{ top: 18, left: 18, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 10 }} />
       <Corner style={{ top: 18, right: 18, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 10 }} />
       <Corner style={{ bottom: 18, left: 18, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 10 }} />
@@ -96,7 +108,7 @@ function FinderButton(props: { testID: string; label: string; onPress(): void })
   return (
     <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
       class="min-h-11 justify-center rounded-full px-[18px] py-2.5 active:opacity-80" style={{ backgroundColor: LIGHT }}>
-      <Text class="text-sm font-semibold" style={{ color: DARK }}>{props.label}</Text>
+      <Text class="text-sub font-semibold" style={{ color: DARK }}>{props.label}</Text>
     </Button>
   );
 }

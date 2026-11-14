@@ -14,7 +14,7 @@ describe("the status bar follows the app's appearance on every page", () => {
   test("the app's NavPage and the pages that use NSH's NavPage directly state it", () => {
     const appPage = readFileSync(join(UI, "shell", "NavPage.tsx"), "utf8");
     expect(appPage).toContain("statusBar={pageStatusBar(own.statusBar)}");
-    for (const file of [join("screens", "More.tsx"), join("phone", "PhonePage.tsx")]) {
+    for (const file of [join("phone", "PhonePage.tsx")]) {
       expect(readFileSync(join(UI, file), "utf8")).toContain("statusBar={pageStatusBar()}");
     }
   });

@@ -20,8 +20,8 @@ set -euo pipefail
 umask 077
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
-NOTICE_SRC="$ROOT/app/assets/notices/GHOSTTY-MIT.txt"
+LOCK="$ROOT/native/terminal-vt/native.lock.json"
+NOTICE_SRC="$ROOT/client/ui/more/settings/licenses/texts/Ghostty-MIT.txt"
 
 if [[ ! -f "$LOCK" ]]; then
   echo "error: missing lockfile $LOCK" >&2

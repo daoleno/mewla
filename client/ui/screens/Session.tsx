@@ -1,15 +1,21 @@
-import { cleanup, computed, effect, openUrl, signal, Storage, Text, untracked, View } from "nsh";
+import { cleanup, computed, effect, keyboardFrame, openUrl, platform, safeArea, signal, Storage, Text, untracked, View, windowSize } from "nsh";
+import { isAvailable as mobile } from "nsh/mobile";
+import { CAPSULE, capsuleCompactNameWidth, capsuleInset, capsuleNameIsLong, capsuleTerminalInset, crampedOverKeyboard } from "../../core/shell/capsule";
+import { stackWidth } from "../shell/layout";
+import { Capsule, createCapsule } from "../shell/Capsule";
+import { CapsuleBack } from "../shell/NavPage";
 import { listSessionServices } from "../../core/sessions/services";
 import { dshWebServiceURL } from "../../core/sessions/servicesPresentation";
-import { AlertDialog, Button, Input, type NavStackState } from "nsh/base";
+import { Button, Input, type NavStackState } from "nsh/base";
+import { createMenuAnchor, showMenu, type MenuItem } from "../kit/Menu";
 import { AppSheet } from "../shell/AppSheet";
 import { NavPage } from "../shell/NavPage";
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
-import { createChatTimeline } from "../../core/conversation/timeline";
-import { answerChoice, answerPrompt, decideApproval, rewindMessage, stopTurn } from "../../core/conversation/turn";
-import { finalReplyIdsOf } from "../../core/timeline/model";
-import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
+import { createChatTimeline, isWorkingRow } from "../../core/conversation/timeline";
+import { workingLineShown, workingSince } from "../../core/sessions/activity";
+import { rewindMessage, stopTurn } from "../../core/conversation/turn";
+import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
 import { resolveBlockedTerminal } from "../../core/session/blockedTerminalSurface";
 import { shouldLeaveMissingSession } from "../../core/session/missingSession";
 import { resolveInterfaceRenderMode, resolveTerminalRouteWorker, supportsChatInterface, type TerminalRouteSessionHint } from "../../core/session/sessionRoute";
@@ -18,8 +24,6 @@ import { sessionRowModel } from "../../core/sessions/listRow";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { presentWorker } from "../../core/sessions/workerPresentation";
 import { workerStatusLabel } from "../../core/sessions/workerStatusPresentation";
-import { buildTerminalActionPrompt, type TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
-import { CHOICE_GONE_NOTICE, choiceFromPrompt, isPromptGoneError, latestPendingChoice, PROMPT_GONE_NOTICE, visiblePendingChoice, type ChoiceAnswer } from "../../core/timeline/claudeChoiceModel";
 import type { CodexSlashCommand } from "../../core/session/codexSlashCommands";
 import type { ComposerAlert, ComposerSendRoute } from "../../core/session/composerSlash";
 import { resolveComposerModelControl } from "../../core/session/sessionModelHelpers";
@@ -30,33 +34,33 @@ import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { ModelSheet } from "../session/ModelSheet";
 import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
-import { ActionPromptCard } from "../chat/ActionPromptCard";
+import { bringSessionRequestsBack, durableAnswered, RequestStack, requestsInView, threadRequests, threadSealed } from "../chat/RequestCard";
 import { buildChatComposerPlaceholder } from "../../core/session/chatComposerPresentation";
 import { terminalFallback } from "../../core/session/terminalFallback";
 import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
-import { compactPathLabel } from "../../core/timeline/pathDisplay";
+import { compactPathLabel, pathBasename } from "../../core/timeline/pathDisplay";
 import { AgentIcon } from "../icons/AgentIcon";
-import { showCalendarItem } from "../calendar/routes";
 import { workLinkOf } from "../sessions/workLinks";
-import { selectedTab } from "../shell/Shell";
+import { goHome, openCalendarItem } from "../shell/nav";
+import { browseWorkspace, openBrainHost } from "../home/Home";
+import { canSwitchBrainExecutor } from "../../core/brainMenu";
 import { terminalShowing } from "../shell/desktop/keys";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { slashMenuState } from "../../core/session/composerSlash";
 import { DSHPanel } from "../chat/DSHPanel";
-import { ChoiceCard } from "../chat/ChoiceCard";
 import { Composer, createComposerText } from "../chat/Composer";
 import { ChatTimeline } from "../chat/Timeline";
+import { openChatLink, openChatPath, type ChatFiles } from "../chat/links";
 import { Icon } from "../icons/Icon";
+import { ThreadWait } from "../chat/ThreadWait";
+import { StateView } from "../kit/wait";
 import { brain, connection, current, currentTransport, outbox, problem as connectionProblem, resumeConnection, workers, workersHydrated } from "../session";
-import type { SessionsRoute } from "../shell/routes";
+import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
-import { filePreviewRoute } from "../more/files/routes";
-import { recognizeSessionFileReference } from "../../core/files/sessionFilePreview";
-import { buildGitDiffChipLabel, type GitDiffStatusSnapshot } from "../../core/git/gitDiff";
-import { getGitStatus } from "../../core/git/requests";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
-import { reloadAliases } from "./Sessions";
+import { reloadAliases } from "../sessions/AllSessions";
+import { showAlert } from "../shell/alert";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 
@@ -68,9 +72,11 @@ void getInterfaceRenderModes(Storage).then((modes) => storedModes.set(modes)).ca
 /**
  * One Session of the current computer: its chat (structured agents) or its
  * terminal, with the terminal kept attached under the chat so switching is
- * instant. The computer is told which Session is on screen.
+ * instant. The computer is told which Session is on screen. `brain`: Brain's
+ * own Session (Brain's menu › Open terminal), its terminal only, titled
+ * "Brain", "{agent} · workspace" (SPEC §1.6, §4).
  */
-export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: string; hint?: TerminalRouteSessionHint; active: () => boolean }) {
+export function Session(props: { nav: NavStackState<Route>; workerId: string; hint?: TerminalRouteSessionHint; brain?: boolean; active: () => boolean }) {
   const server = untracked(current);
   const transport = untracked(currentTransport);
   if (!server || !transport) return <NavPage title="Session"><View class="flex-1 bg-background" /></NavPage>;
@@ -83,7 +89,8 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     sessionKey,
     serverId: server.id,
     workerId: props.workerId,
-    brainHostWorker: brain()?.host_worker ?? null,
+    // The computer names the host's provider once it sees the host's pane; until then, the executor Brain hosts on.
+    brainHostWorker: brain()?.host_worker ? { ...brain()!.host_worker!, provider: brain()!.host_worker!.provider || brain()!.host_executor?.provider } : null,
     brainHostServerId: brain() ? server.id : null,
   }));
   const kind = computed(() => (worker() ? presentWorker(worker()!).kind : "terminal"));
@@ -100,7 +107,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     identity: `${props.workerId}|${worker()?.process_id ?? ""}|${worker()?.started_at ?? ""}`,
     dismissedKey: dismissedBlock(),
   }));
-  const mode = computed(() => (!canChat() ? "terminal" : blocked().forceTerminal ? "terminal" : chosenMode()));
+  const mode = computed(() => (props.brain || !canChat() ? "terminal" : blocked().forceTerminal ? "terminal" : chosenMode()));
   const chooseMode = (next: "chat" | "terminal") => {
     if (next === "chat" && untracked(blocked).blockKey) dismissedBlock.set(untracked(blocked).blockKey);
     storedModes.set({ ...untracked(storedModes), [sessionKey]: next });
@@ -127,7 +134,10 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
 
   const timeline = createChatTimeline("session");
   const items = computed(() => timeline(thread(), { onPendingAction: (id, action) => chat.actOnFailed(id, action) }));
+  const durableHere = durableAnswered(items);
   const activity = computed(() => thread().conversation?.activity);
+  // The "Working" line only while the agent works on a turn: not over an open request, not once it ended (§11).
+  const shownItems = computed(() => workingLineShown(worker(), activity()?.status === "running") ? items() : items().filter((item) => !isWorkingRow(item)));
   const editor = createMessageEdit({
     text,
     brain: false,
@@ -135,12 +145,10 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     rewind: (eventId) => rewindMessage(transport, props.workerId, eventId),
     send: (value) => chat.send(value),
   });
-  const finalReplies = computed(() => finalReplyIdsOf(thread().conversation?.events ?? []));
   const handlers = {
-    onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
-      void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
-    isFinalReply: (id: string) => finalReplies().has(id),
-    workingSince: () => activity()?.started_at,
+    onUserMessage: (item: Parameters<typeof editOnTap>[0]) =>
+      editOnTap(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
+    workingSince: () => workingSince(worker(), activity()?.started_at),
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),
     loadImage: (path: string) => chatImage(transport, server.id, untracked(worker)?.cwd, path),
@@ -151,59 +159,19 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const durability = signal(hint.durabilityWarning ?? "");
   const fallback = computed(() => terminalFallback(connection(), connectionProblem()));
   const notice = signal("");
-  // What the Session waits on. Brain's hidden host has no terminal prompt: its question is read from the
-  // transcript and answered with answer_choice. A listed Session's prompt is the one the daemon read off its
-  // terminal (only from a list received on this connection): a question card, or the menu/approval card.
-  const gone = signal<ReadonlySet<string>>(new Set());
-  const isHost = computed(() => !workers().some((w) => w.id === props.workerId) && brain()?.host_worker?.id === props.workerId);
-  const livePrompt = computed(() => {
-    const prompt = worker()?.prompt;
-    return connection() === "connected" && workersHydrated() && prompt && !gone().has(prompt.id) ? prompt : undefined;
-  });
-  const question = computed(() => {
-    const events = thread().conversation?.events;
-    if (isHost()) {
-      const pending = visiblePendingChoice(events, gone());
-      const callId = pending?.call_id;
-      return pending && callId
-        ? { key: callId, choice: pending.choice, goneKey: callId, goneNotice: CHOICE_GONE_NOTICE, submit: (answers: ChoiceAnswer[]) => answerChoice(transport, props.workerId, callId, answers) }
-        : null;
-    }
-    const prompt = livePrompt();
-    if (!prompt) return null;
-    const transcript = latestPendingChoice(events);
-    const choice = choiceFromPrompt(prompt, transcript?.call_id ? { callId: transcript.call_id, choice: transcript.choice } : null);
-    return choice
-      ? { key: prompt.call_id ?? prompt.id, choice, goneKey: prompt.id, goneNotice: PROMPT_GONE_NOTICE, submit: (answers: ChoiceAnswer[]) => answerPrompt(transport, props.workerId, prompt.id, { answers }) }
-      : null;
-  });
-  const questionKey = computed(() => question()?.key ?? "");
+  // What the Session waits on: its requests, from the same model as the tray (an agent's reported
+  // decisions, the prompt the daemon read off its terminal, a question its transcript fills in).
+  const requests = threadRequests({ workerId: props.workerId }, () => thread().conversation?.events);
+  // Opened, the Session shows again what it asks that was put aside; the foot leaves out what is put aside here.
+  bringSessionRequestsBack(props.workerId);
+  const requestsHere = requestsInView(requests);
+  const sealedHere = threadSealed({ workerId: props.workerId }, () => durableHere());
+  const pickedRequest = signal("");
   // A DSH Session asks through its own channel; one panel per run of it.
   const dshRun = computed(() => {
     const w = worker();
     return thread().conversation?.source === "dsh_session_jsonl" && w?.process_id && w.started_at ? `${w.process_id}|${w.started_at}` : "";
   });
-  const actionPrompt = computed(() => (question() || !workersHydrated() || connection() !== "connected" ? null : buildTerminalActionPrompt({
-    prompt: livePrompt(),
-    approvals: worker()?.approvals,
-    scopeKey: `${props.workerId}|${worker()?.process_id ?? ""}|${worker()?.started_at ?? ""}`,
-  })));
-  const actionKey = computed(() => actionPrompt()?.id ?? "");
-  const answerAction = async (option: TerminalActionPromptOption) => {
-    const prompt = untracked(actionPrompt);
-    if (!prompt) return;
-    try {
-      if (option.approvalOptionId && prompt.approvalId) await decideApproval(transport, props.workerId, prompt.approvalId, option.approvalOptionId);
-      else if (option.number !== undefined && prompt.promptId) await answerPrompt(transport, props.workerId, prompt.promptId, { number: option.number });
-    } catch (error) {
-      if (isPromptGoneError(error) && prompt.promptId) {
-        gone.set(new Set([...untracked(gone), prompt.promptId]));
-        notice.set(PROMPT_GONE_NOTICE);
-        return;
-      }
-      throw error;
-    }
-  };
 
   const stop = async () => {
     const running = activity();
@@ -248,14 +216,14 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   // The Work this Session runs, and the Calendar run that started it.
   const link = computed(() => (worker() ? workLinkOf(worker()!) : null));
   const title = computed(() => {
+    if (props.brain) return "Brain";
     const w = worker();
     return w ? sessionRowModel(w, { alias: aliasOf(props.workerId), workTitle: link()?.workTitle, calendarLabel: link()?.calendarLabel }).title : hint.name || "Session";
   });
   const openCalendarOrigin = () => {
     const id = untracked(link)?.calendarItemId;
     if (!id) return;
-    showCalendarItem(id);
-    selectedTab.set(2);
+    openCalendarItem(id);
   };
 
   const saveRename = async () => {
@@ -267,7 +235,12 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   };
 
   const terminate = async () => {
-    const { action } = await AlertDialog.show({
+    // As the Expo app did: offline, nothing is asked; the note says why (parity #37).
+    if (untracked(connection) !== "connected") {
+      notice.set("Your computer is offline.");
+      return;
+    }
+    const { action } = await showAlert({
       title: "Terminate this session?",
       description: "Its terminal and agent stop on your computer.",
       actions: [{ id: "cancel", label: "Cancel", role: "cancel" }, { id: "terminate", label: "Terminate", role: "destructive" }],
@@ -326,44 +299,40 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     if (!dshLive()) return dshWeb.set(null);
     untracked(() => void listSessionServices(transport).then((snapshot) => dshWeb.set(dshWebServiceURL(snapshot.services))).catch(() => dshWeb.set(null)));
   });
-  // Git: the folder's changes on a chip in the header, read every 15 s while the Session is on screen.
-  const git = signal<{ status: GitDiffStatusSnapshot | null; error: boolean } | null>(null);
-  const gitTarget = computed(() => (props.active() && connected() && worker()?.cwd ? worker()!.cwd! : ""));
-  effect(() => {
-    const cwd = gitTarget();
-    if (!cwd) return;
-    let live = true;
-    const read = () => void getGitStatus(transport, { targetId: props.workerId, cwd })
-      .then((status) => live && git.set({ status, error: false }))
-      .catch(() => live && git.set({ status: untracked(git)?.status ?? null, error: true }));
-    read();
-    const timer = setInterval(read, 15_000);
-    cleanup(() => {
-      live = false;
-      clearInterval(timer);
-    });
-  });
-  const gitChip = computed(() => {
-    const state = git();
-    if (!state || state.status?.reason === "not_git_repo" || (!state.status?.available && !state.error)) return null;
-    return { label: buildGitDiffChipLabel(state.status, false), dirty: Boolean(state.status?.available && !state.status.clean), error: state.error };
-  });
   const openGit = () => {
     const cwd = untracked(worker)?.cwd;
     if (cwd) props.nav.push({ name: "git", targetId: props.workerId, cwd, title: untracked(title) });
   };
-  // A reply's link: a file the Session wrote opens in the preview; a page opens in the browser.
-  const openLink = (url: string) => {
-    if (recognizeSessionFileReference(url)) return openPath(url);
-    if (/^https?:\/\//i.test(url)) void openUrl(url).catch(() => notice.set("Could not open the link."));
+  // A Git review of this Session closes when the Session changes folder, as the Expo app's sheet did;
+  // the chip then reads the new folder (parity #43).
+  effect(() => {
+    const cwd = worker()?.cwd;
+    if (!cwd) return;
+    const routes = untracked(props.nav.routes);
+    const kept = routes.filter((route) => !(route.name.startsWith("git") && "targetId" in route && "cwd" in route && route.targetId === props.workerId && route.cwd !== cwd));
+    if (kept.length !== routes.length) props.nav.setRoutes(kept);
+  });
+  // A reply's link and a path the terminal showed (ui/chat/links.ts): a file opens in the preview against
+  // this run of the Session (without one it says why, parity #38); a page opens in the browser.
+  const sessionFiles: ChatFiles = {
+    identity: () => {
+      const w = untracked(worker);
+      return w?.process_id && w.started_at ? { workerId: props.workerId, processId: w.process_id, startedAt: w.started_at } : null;
+    },
+    notice: (text) => notice.set(text),
   };
-  // A path the terminal showed, previewed against this run of the Session.
-  const openPath = (path: string) => {
-    const reference = recognizeSessionFileReference(path);
-    const w = untracked(worker);
-    if (!reference || !w?.process_id || !w.started_at) return;
-    props.nav.push(filePreviewRoute(reference, { workerId: props.workerId, processId: w.process_id, startedAt: w.started_at }));
-  };
+  const openLink = (url: string) => openChatLink(url, sessionFiles);
+  const openPath = (path: string) => openChatPath(path, sessionFiles);
+  // A preview opened for this Session closes when the Session restarts (another process or start time),
+  // as the Expo app's sheet did: it was read with the old generation (parity #44). A generation that is
+  // only missing for a moment keeps it.
+  effect(() => {
+    const w = worker();
+    if (!w?.process_id || !w.started_at) return;
+    const stale = untracked(props.nav.routes).filter((route) => route.name === "files-preview" && route.identity?.workerId === props.workerId
+      && (route.identity.processId !== w.process_id || route.identity.startedAt !== w.started_at));
+    for (const route of stale) props.nav.remove(route);
+  });
 
   // Files picked for the next message, uploaded to this computer as they are picked.
   const uploads = createAttachmentUploads();
@@ -443,16 +412,38 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
       unavailable: Boolean(conversation() && !conversation()!.available && !syncing()),
       syncing: syncing() && conversation()?.reason !== "transcript_not_found",
     });
+    // One word per branch, so a branch is made again only when the word changes (loading → empty keeps the wait).
+    const kind = computed(() => (phase() === "error" ? "error" : phase() === "unavailable" ? "unavailable" : "wait"));
     return (
-      <View testID="chat-empty" class="flex-1 items-center justify-center gap-2 p-8">
-        {phase() === "loading" ? <Text class="text-sm text-muted-foreground">Loading conversation…</Text>
-          : phase() === "error" ? (
-            <View class="items-center gap-2">
-              <Icon name="alert-circle" size={28} color="destructive" />
-              <Text class="text-base font-semibold">Could not load this chat</Text>
-              <Text class="text-center text-sm text-muted-foreground">{thread().error ?? ""}</Text>
-            </View>
-          ) : phase() === "unavailable" ? (
+      <View testID="chat-empty" class="flex-1">
+        <If when={kind() === "wait"}>
+          {/* SPEC §16.4: the wait of Brain's thread; the agent's own empty prompt only after a read. */}
+          <ThreadWait waiting={() => phase() === "loading"} hasRows={() => items().length > 0} reload={() => chat.reload()}
+            reconnect={resumeConnection} computer={() => current()?.name}
+            failedAction={{ title: "Open terminal", onPress: () => chooseMode("terminal"), testID: "chat-open-terminal" }}
+            empty={() => (
+              <View class="flex-1 items-center justify-center gap-2 p-8">
+                <View class="items-center gap-1.5">
+                  <Text class="text-lg font-semibold">Ready</Text>
+                  <Text class="text-sm text-muted-foreground">Send a message to start.</Text>
+                  <If when={worker()?.cwd}>
+                    <View class="mt-1 flex-row items-center gap-1.5 rounded-full bg-accent px-2.5 py-1">
+                      <Icon name="folder" size={13} />
+                      <Text class="text-xs text-muted-foreground line-clamp-1">{compactPathLabel(worker()!.cwd!, { tailSegments: 2, showFullUpTo: 2 })}</Text>
+                    </View>
+                  </If>
+                </View>
+              </View>
+            )} />
+        </If>
+        <If when={kind() === "error"}>
+          <View class="flex-1 justify-center">
+            <StateView icon="alert-circle" title="Couldn't load the chat" detail={thread().error ?? undefined} testID="chat-failed"
+              actions={[{ title: "Try again", onPress: () => chat.reload(), testID: "chat-try-again" }, { title: "Open terminal", onPress: () => chooseMode("terminal"), testID: "chat-open-terminal" }]} />
+          </View>
+        </If>
+        <If when={kind() === "unavailable"}>
+          <View class="flex-1 items-center justify-center gap-2 p-8">
             <View class="items-center gap-2">
               <Icon name="layers" size={28} />
               <Text class="text-base font-semibold">Chat view is not available here</Text>
@@ -462,35 +453,38 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
                 <Text class="text-sm font-semibold">Open Terminal</Text>
               </Button>
             </View>
-          ) : (
-            <View class="items-center gap-1.5">
-              <Text class="text-lg font-semibold">Ready</Text>
-              <Text class="text-sm text-muted-foreground">Send a message to start.</Text>
-              {worker()?.cwd ? (
-                <View class="mt-1 flex-row items-center gap-1.5 rounded-full bg-accent px-2.5 py-1">
-                  <Icon name="folder" size={13} />
-                  <Text class="text-xs text-muted-foreground line-clamp-1">{compactPathLabel(worker()!.cwd!, { tailSegments: 2, showFullUpTo: 2 })}</Text>
-                </View>
-              ) : null}
-            </View>
-          )}
+          </View>
+        </If>
       </View>
     );
   };
 
-  const menu = async () => {
-    const actions = [
-      ...(canChat() ? [{ id: "mode", label: mode() === "chat" ? "Open terminal" : "Open chat" }] : []),
-      ...(switchable() ? [{ id: "model", label: "Model & Effect" }] : []),
+  const menuAnchor = createMenuAnchor();
+  // Brain's Session takes what Brain's menu does there, on the same terms (only rows that can act now): it keeps
+  // its name, stopping it is Switch executor's, and its workspace is Browse workspace (not a repository to review).
+  const menuItems = (): MenuItem[] => props.brain
+    ? [
+      ...(switchable() ? [{ id: "model", label: "Model & Effort" }] : []),
+      ...(connected() ? [{ id: "workspace", label: "Browse workspace" }] : []),
+      ...(connected() && canSwitchBrainExecutor(brain()) ? [{ id: "executor", label: "Switch executor" }] : []),
+    ]
+    : [
+      ...(worker()?.cwd ? [{ id: "changes", label: "Changes" }] : []),
+      ...(switchable() ? [{ id: "model", label: "Model & Effort" }] : []),
       ...(dshWeb() ? [{ id: "web", label: "Open Web" }] : []),
       { id: "terminal", label: "New Terminal" },
       { id: "rename", label: "Rename" },
-      ...(link() ? [{ id: "work", label: "Open Brain" }] : []),
-      { id: "terminate", label: "Terminate", role: "destructive" as const },
-      { id: "cancel", label: "Cancel", role: "cancel" as const },
+      ...(link() ? [{ id: "work", label: "Open its Work" }] : []),
+      ...(link()?.calendarItemId ? [{ id: "calendar", label: "Open in Calendar" }] : []),
+      { id: "terminate", label: "Terminate", destructive: true },
     ];
-    const { action } = await AlertDialog.show({ title: untracked(title), presentation: "actionSheet", actions });
-    if (action === "mode") chooseMode(untracked(mode) === "chat" ? "terminal" : "chat");
+  const hasMenu = computed(() => menuItems().length > 0);
+  const menu = async () => {
+    const action = await showMenu({ title: untracked(title), items: untracked(menuItems), anchor: menuAnchor.node(), testID: "session-menu-popover" });
+    if (action === "workspace") browseWorkspace();
+    else if (action === "executor") openBrainHost();
+    else if (action === "changes") openGit();
+    else if (action === "calendar") openCalendarOrigin();
     else if (action === "model") modelOpen.set(true);
     else if (action === "work") {
       const work = untracked(link)?.work;
@@ -508,97 +502,188 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     } else if (action === "terminate") void terminate();
   };
 
-  return (
-    <NavPage title={title()} column="wide"
-      headerTitle={
-        <View class="max-w-[260px] flex-row items-center gap-2">
-          <AgentIcon kind={kind()} size={22} />
-          <View class="flex-1">
-            <Text class="text-base font-semibold line-clamp-1">{title()}</Text>
-            {link()?.calendarLabel ? (
-              <Text testID="session-calendar" class="text-xs text-primary line-clamp-1" onPress={openCalendarOrigin}>{link()!.calendarLabel!}</Text>
-            ) : worker() ? (
-              <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">
-                {[workerStatusLabel(worker()!.status), worker()!.delegated ? "Delegated" : "", connection() !== "connected" ? "Offline" : ""].filter(Boolean).join(" · ")}
-              </Text>
-            ) : null}
-          </View>
+  // The folder, unless the title already is it (a Session without a name of its own): "proj", not "proj / proj · Idle".
+  const projectWord = () => {
+    const folder = worker()?.cwd ? pathBasename(worker()!.cwd!) : "";
+    return folder && folder !== title() ? folder : "";
+  };
+
+  // The capsule header on a phone (SPEC §11, core/shell/capsule.ts): it collapses while the person reads the
+  // chat, and comes back at the newest end, on a tap of its name, and when something needs them. The terminal
+  // has it collapsed: a tap on the name brings it over the top rows, the next touch in the terminal folds it.
+  const capsuled = mobile && platform.idiom === "phone";
+  const capsule = createCapsule({ collapsed: untracked(mode) === "terminal" });
+  const inset = () => capsuleInset(safeArea().top);
+  // The terminal over the keyboard of a phone held sideways: the capsule steps aside and the terminal takes its row.
+  const cramped = () => mode() === "terminal" && crampedOverKeyboard(windowSize().height, keyboardFrame().height);
+  // Blocked, it waits on the person, unless Brain delegated it and it stopped on its own report: that is Brain's
+  // to answer (a prompt or an approval on its terminal is a request above), owner 2026-11-13, shot 11.
+  const blockedOnYou = () => worker()?.status === "blocked" && worker()?.delegated !== true;
+  const needsYou = computed(() => requests().length > 0 || blockedOnYou());
+  const offline = computed(() => connection() !== "connected");
+  // One more thing that needs the person (a second request too), or the connection going: it expands.
+  const asks = computed(() => requests().length + (blockedOnYou() ? 1 : 0));
+  let asked = untracked(asks);
+  let wasOffline = untracked(offline);
+  effect(() => {
+    const now = asks();
+    const away = offline();
+    const more = now > asked || (away && !wasOffline);
+    asked = now;
+    wasOffline = away;
+    if (more) untracked(capsule.expand);
+  });
+  // A Session opens expanded on its chat and collapsed on its terminal; changing view does the same.
+  let shownMode = untracked(mode);
+  effect(() => {
+    const now = mode();
+    if (now === shownMode) return;
+    shownMode = now;
+    untracked(now === "terminal" ? capsule.collapse : capsule.expand);
+  });
+  // The agent's mark, with a red dot at its corner while it needs you (present or absent: a shape, not a colour pair).
+  const mark = () => (
+    <View style={{ width: CAPSULE.mark, height: CAPSULE.mark }}>
+      {/* Its slot is the mark's own box: the default slot (16 larger) spilled out of it, low and over the name. */}
+      <AgentIcon kind={kind()} size={CAPSULE.mark} slot={CAPSULE.mark} bare />
+      <If when={needsYou()}>
+        <View testID="capsule-needs-you" accessibilityLabel="Needs you" class="absolute rounded-full border-sheet-surface bg-seal"
+          style={{ width: CAPSULE.dot.size, height: CAPSULE.dot.size, borderWidth: CAPSULE.dot.ring, right: CAPSULE.dot.right, bottom: CAPSULE.dot.bottom }} />
+      </If>
+    </View>
+  );
+  const nameStyle = () => {
+    if (capsule.collapsed()) return { ...CAPSULE.nameCompact, lines: 1 };
+    return capsuleNameIsLong(title()) ? { ...CAPSULE.nameLong, lines: 2 } : { ...CAPSULE.name, lines: 1 };
+  };
+  const DurabilityWarning = () => (
+    <View testID="durability-warning" class="flex-row items-start gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
+      <Icon name="alert-circle" size={18} color="muted-foreground" />
+      <View class="flex-1 gap-0.5">
+        <Text class="text-sm font-semibold">Not confirmed durable</Text>
+        <Text class="text-sm text-muted-foreground">{durability()}</Text>
+      </View>
+      <Button testID="durability-dismiss" accessibilityLabel="Dismiss durability warning" onPress={() => durability.set("")} class="active:opacity-60">
+        <Text class="text-sm font-semibold text-primary">Dismiss</Text>
+      </Button>
+    </View>
+  );
+  const viewButton = () => (
+    <If when={props.brain || canChat()}>
+      <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
+        class="size-11 items-center justify-center rounded-full active:bg-accent">
+        <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
+      </Button>
+    </If>
+  );
+  // Collapsed, the name is a tap that expands; on the terminal, expanded, it folds the capsule again.
+  const pressName = () => {
+    if (untracked(capsule.collapsed)) capsule.expand();
+    else if (untracked(mode) === "terminal") capsule.collapse();
+  };
+  const capsuleHeader = () => (
+    <Capsule collapsed={capsule.collapsed} hidden={cramped} twoLines={() => capsuleNameIsLong(title())} below={<If when={durability()}><DurabilityWarning /></If>}>
+      <CapsuleBack />
+      {/* The name gets the room; a long one takes two balanced lines ending in "…" before the controls. Collapsed,
+          one line of 15, ending in "…" at min(200, 52 % of the width). */}
+      <Button testID="capsule-name" accessibilityLabel={capsule.collapsed() ? `${title()}, show the header` : title()} onPress={pressName}
+        class="min-w-0 flex-row items-center rounded-full active:bg-accent"
+        style={{ height: CAPSULE.control, gap: CAPSULE.markGap, paddingLeft: CAPSULE.padding, paddingRight: 6, flexGrow: capsule.collapsed() ? 0 : 1, flexShrink: 1 }}>
+        {mark()}
+        <View testID="session-status" class="min-w-0 shrink" style={{ maxWidth: capsule.collapsed() ? capsuleCompactNameWidth(stackWidth()) : undefined }}>
+          <Text role="header" class={`font-semibold text-foreground ${nameStyle().lines === 2 ? "line-clamp-2" : "line-clamp-1"}`}
+            style={{ fontSize: nameStyle().size, lineHeight: nameStyle().line }}>{title()}</Text>
         </View>
-      }
-      headerRight={
-        <View class="flex-row items-center gap-3">
-          {gitChip() ? (
-            <Button testID="session-git" accessibilityLabel={`Git: ${gitChip()!.label}`} onPress={openGit} class="flex-row items-center gap-1 rounded-full border border-border px-2 py-1 active:bg-accent">
-              <Icon name={gitChip()!.error ? "alert-circle" : "git-branch"} size={14} color={gitChip()!.dirty ? "primary" : undefined} />
-              <Text class="max-w-[120px] text-xs line-clamp-1">{gitChip()!.label}</Text>
-            </Button>
-          ) : null}
-          <Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>
+      </Button>
+      <If when={!capsule.collapsed()}>
+        {viewButton()}
+        <If when={hasMenu()}><Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="more-horizontal" size={22} color="foreground" /></Button></If>
+      </If>
+    </Capsule>
+  );
+  // Made once, here: a call in the page's props would be one of the getters NSH re-reads.
+  const header = capsuled ? capsuleHeader() : undefined;
+
+  return (
+    <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"} capsule={header}
+      // One row holds the text and the controls (SPEC §11 Session header), as wide as the bar: the title gets
+      // the room, the two lines end in "…" before the view button and ⋯; in the second the project
+      // truncates and the state word never does. A Calendar run's title is already its run: the second line
+      // is never the title again.
+      headerTitle={
+        <View class="min-w-0 flex-1 flex-row items-center">
+          <AgentIcon kind={kind()} size={28} />
+          <View class="ml-2.5 min-w-0 flex-1">
+            <Text role="header" class="text-body font-semibold text-foreground line-clamp-1">{title()}</Text>
+            <If when={props.brain} else={<If when={worker()}><View testID="session-status" class="min-w-0 flex-row">
+                <If when={projectWord()}><Text testID="session-project" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{projectWord()}</Text></If>
+                <Text testID="session-state" class="shrink-0 text-sub text-muted-foreground line-clamp-1">{`${projectWord() ? " · " : ""}${connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)}`}</Text>
+              </View></If>}><Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text></If>
+          </View>
+          {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a chat.
+              Brain's chat is home's, so on Brain's terminal the button goes back there. */}
+          <If when={props.brain || canChat()}><Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
+              class="ml-1.5 size-10 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+              <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
+            </Button></If>
+          <If when={hasMenu()}><Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button></If>
         </View>
       }>
       <View class="flex-1 bg-background">
-        {durability() ? (
-          <View testID="durability-warning" class="mx-3 mt-2 flex-row items-start gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
-            <Icon name="alert-circle" size={18} color="warning" />
-            <View class="flex-1 gap-0.5">
-              <Text class="text-sm font-semibold">Not confirmed durable</Text>
-              <Text class="text-sm text-muted-foreground">{durability()}</Text>
-            </View>
-            <Button testID="durability-dismiss" accessibilityLabel="Dismiss durability warning" onPress={() => durability.set("")} class="active:opacity-60">
-              <Text class="text-sm font-semibold text-primary">Dismiss</Text>
-            </Button>
-          </View>
-        ) : null}
+        <If when={!capsuled && durability()}><View class="mx-3 mt-2"><DurabilityWarning /></View></If>
         <View class="flex-1">
-          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
-            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)} />
-            {fallback() ? (
-              <View testID="terminal-offline" class="absolute left-3 right-3 top-3 gap-1.5 rounded-xl border border-border bg-card px-3 py-3">
+          {/* Under a capsule the terminal starts below the collapsed one: an expanded capsule floats over its top
+              rows and never resizes it, and the next touch in the terminal folds it again (seen, not taken). */}
+          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none", top: capsuled ? (cramped() ? safeArea().top : capsuleTerminalInset(safeArea().top)) : 0 }}
+            onTouchStartCapture={capsuled ? () => capsule.collapse() : undefined}>
+            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)}
+              program={() => (props.brain ? brain()?.host_worker?.provider || brain()?.host_executor?.provider : undefined) || (kind() === "terminal" ? undefined : kind())} />
+            <View class="absolute left-3 right-3 top-3 gap-2" style={{ pointerEvents: "box-none" }}>
+            <If when={fallback()}><View testID="terminal-offline" class="gap-1.5 rounded-xl border border-border bg-card px-3 py-3">
                 <Text class="text-base font-semibold">{fallback()!.title}</Text>
                 <Text class="text-sm text-muted-foreground">{fallback()!.detail}</Text>
                 <Text class="text-xs text-muted-foreground">{fallback()!.hint}</Text>
-                {fallback()!.busy ? null : (
-                  <Button testID="terminal-offline-retry" onPress={() => resumeConnection()} class="mt-1 self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
+                <If when={!fallback()!.busy}><Button testID="terminal-offline-retry" onPress={() => resumeConnection()} class="mt-1 self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
                     <Text class="text-sm font-semibold">Retry</Text>
-                  </Button>
-                )}
-              </View>
-            ) : null}
+                  </Button></If>
+              </View></If>
+            {/* The chat shows its notes above the composer; the terminal shows them here (parity #37). */}
+            <If when={notice() && mode() === "terminal"}><View testID="terminal-notice" onPress={() => notice.set("")}
+                class="rounded-xl border border-border bg-card px-3 py-2.5"><Text class="text-sm text-foreground">{notice()}</Text></View></If>
+            </View>
           </View>
-          {mode() === "chat" ? (
-            <View class="absolute inset-0 bg-background">
-              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"} />
-              <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}
+          <If when={mode() === "chat"}><View class="absolute inset-0 bg-background">
+              <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
+                capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
+                foot={{
+                  shown: () => requestsHere().length > 0 || sealedHere().length > 0,
+                  render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
+                }}
+                requests={() => requestsHere().length} />
+              <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} attached={() => uploads.ready().length > 0} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}
+                onFiles={(files) => {
+                  try {
+                    uploads.add(files);
+                  } catch (error) {
+                    notice.set(error instanceof Error ? error.message : "Could not attach the file.");
+                  }
+                }}
                 leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
                 <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand}
                   onAttach={attach} uploading={uploading} />
-                {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
-                {modelChip() ? (
-                  <Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
+                <If when={uploads.items().length > 0}><AttachmentTray uploads={uploads} /></If>
+                <If when={modelChip()}><Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
                     class="mb-2 flex-row items-center gap-1 self-start rounded-full border border-border px-2.5 py-1 active:bg-accent">
                     <Text class="text-xs">{modelChip()!.label}</Text>
                     <Icon name="chevron-down" size={14} />
-                  </Button>
-                ) : null}
-                {editor.edit() ? <EditChip editor={editor} /> : null}
-                {dshRun() ? <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(dshRun().split("|")[0]), startedAt: Number(dshRun().split("|")[1]) }} /> : null}
-                {questionKey() ? (
-                  <ChoiceCard choice={untracked(question)!.choice} connected={() => connection() === "connected"}
-                    submit={(answers) => untracked(question)!.submit(answers)}
-                    onGone={() => {
-                      const passed = untracked(question);
-                      if (!passed) return;
-                      gone.set(new Set([...untracked(gone), passed.goneKey]));
-                      notice.set(passed.goneNotice);
-                    }} />
-                ) : null}
-                {actionKey() ? <ActionPromptCard prompt={untracked(actionPrompt)!} connected={() => connection() === "connected"} answer={answerAction} /> : null}
-                {notice() ? <Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text> : null}
+                  </Button></If>
+                <If when={editor.edit()}><EditChip editor={editor} /></If>
+                <Each of={dshRun() ? [dshRun()] : []} key={(run) => run}>{(run) => <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(run().split("|")[0]), startedAt: Number(run().split("|")[1]) }} />}</Each>
+                <If when={notice()}><Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text></If>
               </Composer>
-            </View>
-          ) : null}
+            </View></If>
         </View>
       </View>
       <ModelSheet open={modelOpen} onClose={() => modelOpen.set(false)} transport={transport} workerId={props.workerId} onRuntime={(selection) => runtime.set(selection)} />
@@ -609,7 +694,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
         }} />
       <CodexSkillsSheet open={skillsOpen} onClose={() => skillsOpen.set(false)} transport={transport} cwd={worker()?.cwd}
         onPick={(name) => text.set(insertSkillMention(untracked(text.text), name))} />
-      <AppSheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3" backdropClass="bg-black/40">
+      <AppSheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background py-4 gap-3" sidePadding={16} backdropClass="bg-black/40">
         <View class="gap-3 pb-6">
           <Text class="text-lg font-semibold">Rename</Text>
           <Text class="text-sm text-muted-foreground">A name for this Session on this phone. Empty uses its own name.</Text>

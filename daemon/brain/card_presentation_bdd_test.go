@@ -160,7 +160,7 @@ func TestBDD_BrainCardUnicodeDeliveryHistoryAndAcceptance(t *testing.T) {
 			t.Skip("Bun required for native projection contract")
 		}
 		payload, _ := json.Marshal(map[string]any{"live": live, "accepted": accepted, "reconnect": reconnect, "work_id": item.ID, "quoted": quoted})
-		cmd := exec.Command(bun, "run", filepath.Join("..", "..", "app", "components", "brain", "brainCardApiContract.ts"))
+		cmd := exec.Command(bun, "run", filepath.Join("..", "..", "client", "core", "work", "brainCardApiContract.ts"))
 		cmd.Stdin = bytes.NewReader(payload)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("mobile contract: %v\n%s", err, output)

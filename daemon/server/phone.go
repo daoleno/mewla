@@ -41,7 +41,7 @@ const phonePingEvery = 20 * time.Second
 
 // phoneAction is one change from the app. Exactly one field is set.
 type phoneAction struct {
-	// Enabled is the Phone use switch (Settings → Labs).
+	// Enabled is the Phone use switch (Settings → Agents → Phone use).
 	Enabled *bool `json:"enabled,omitempty"`
 	// StopAgent ends what the agent is doing on the phone, as the Stop button does.
 	StopAgent bool `json:"stop_agent,omitempty"`

@@ -25,6 +25,33 @@ describe("a new device asks to be let in", () => {
     await app.waitFor("id:enrollment-approval", { state: "gone" });
   }, 20_000);
 
+  test("closed undecided, the request waits in the tray: one more needs you, and its row opens the sheet again", async () => {
+    const app = await open(APP, {
+      host: phoneHost({ brain: {} }),
+      storage: paired,
+      platform: "android",
+      network: {
+        ...expoTokenService,
+        "GET http://127.0.0.1:1/enrollment/pending": { status: 200, body: { requests: [request] } },
+        "POST http://127.0.0.1:1/enrollment/decision": { status: 200, body: {} },
+      },
+    });
+    await app.waitFor("id:enrollment-approval");
+    await app.back();
+    await app.waitFor("id:enrollment-approval", { state: "gone" });
+    await app.waitFor("text:1 needs you");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-needs");
+    expect(app.texts()).toContain("Approve new device");
+    expect(app.texts()).toContain("Firefox on Linux");
+    await app.press("id:tray-needs >> id:tray-request");
+    await app.waitFor("id:enrollment-approval");
+    await app.press("id:enrollment-choice-042");
+    await app.press("id:enrollment-approve");
+    await app.waitFor("id:enrollment-approval", { state: "gone" });
+    await app.waitUntil(() => !app.texts().includes("1 needs you"));
+  }, 20_000);
+
   test("a browser a pairing link paired withdraws its own request instead of asking to approve it", async () => {
     const own = { requestId: "r1", secret: "s", verificationNumber: "042", expiresAt: "2099-01-01T00:00:00Z" };
     const app = await open(APP, {

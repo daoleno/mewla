@@ -159,7 +159,8 @@ function shortDefaultTitle(kind: AgentKind): string {
   }
 }
 
-function typeLabel(kind: AgentKind, terminalFlavor: TerminalFlavor): string {
+/** "Claude Code", "OpenAI Codex", a terminal's flavor: the agent a Session runs, by name. */
+export function typeLabel(kind: AgentKind, terminalFlavor: TerminalFlavor): string {
   switch (kind) {
     case 'claude':
       return 'Claude Code';

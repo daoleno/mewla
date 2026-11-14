@@ -15,6 +15,8 @@ export type PaneScrollMode = {
   mouse: boolean;
   alt_scroll?: boolean;
   app_cursor?: boolean;
+  /** How the program wants mouse reports encoded ("sgr", "urxvt", "utf8", "x10"); absent from older computers. */
+  mouse_format?: string;
 };
 
 /** A tmux Session's answer: one bounded snapshot of the active pane's history, newest last. */
@@ -41,6 +43,7 @@ export type HistoryDelta = {
   mouse: boolean;
   alt_scroll?: boolean;
   app_cursor?: boolean;
+  mouse_format?: string;
   epoch: number;
   reset: boolean;
   first: number;
@@ -91,7 +94,49 @@ export function snapshotRows(snapshot: HistorySnapshot): string[] {
   if (snapshot.alternate || !snapshot.ansi) return [];
   const rows = snapshot.ansi.replace(/\n$/, "").split("\n");
   if (rows.length > HISTORY_MAX_ROWS) throw new Error("Terminal history is too large.");
-  return rows;
+  return standAloneRows(rows);
+}
+
+const SGR = /\x1b\[([0-9;:]*)m/g;
+
+/** The SGR sequences in force after `row`, given those in force before it (`pen`, "" for none). */
+function penAfter(pen: string, row: string): string {
+  for (const match of row.matchAll(SGR)) {
+    const tokens = match[1] === "" ? ["0"] : match[1].split(";");
+    const kept: string[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const main = tokens[i].split(":")[0];
+      if (main === "" || main === "0") {
+        // A reset: what came before it, in this sequence or the rows above, is gone.
+        pen = "";
+        kept.length = 0;
+      } else if ((main === "38" || main === "48" || main === "58") && !tokens[i].includes(":")) {
+        // An extended color with ;-separated parts: its parts (the 0 in 38;5;0 is a color, not a reset).
+        const parts = tokens[i + 1] === "5" ? 3 : tokens[i + 1] === "2" ? 5 : 1;
+        kept.push(tokens.slice(i, i + parts).join(";"));
+        i += parts - 1;
+      } else {
+        kept.push(tokens[i]);
+      }
+    }
+    if (kept.length) pen += "\x1b[" + kept.join(";") + "m";
+  }
+  return pen;
+}
+
+/**
+ * Rows that each start from what is in force where they begin. tmux captures a style once and the
+ * rows after it lean on it; a view draws any page of history rows on its own (lazily, as they come
+ * into sight), so a row that leans on the rows above it starts with a reset and that style. A
+ * session host's rows stand alone already (daemon/ghosttyvt, Styled).
+ */
+export function standAloneRows(rows: readonly string[]): string[] {
+  let pen = "";
+  return rows.map((row) => {
+    const out = pen ? "\x1b[0m" + pen + row : row;
+    pen = penAfter(pen, row);
+    return out;
+  });
 }
 
 /** Checks a delta's shape and bounds before the view allocates for it. */
@@ -189,9 +234,20 @@ export class TerminalHistoryModel {
       this.first + this.lines.length === this.next;
   }
 
+  /**
+   * Whether the delta is a host's answer while it has numbered no rows yet: a program that started on
+   * the alternate screen (Claude Code) leaves nothing to number, and the host answers a view
+   * that holds nothing with nothing at epoch 0. That is in step. Asking again would void the view
+   * every few hundred milliseconds, and its selection with it.
+   */
+  private startsEmpty(delta: HistoryDelta): boolean {
+    return !this.numbered && !this.lines.length && delta.epoch === 0 && delta.first === 0 && delta.from === 0 &&
+      delta.next === 0 && !delta.lines.length;
+  }
+
   /** The view's instruction for a delta, null when nothing it shows changed, or "resync" when the delta does not follow what is held. */
   applyDelta(delta: HistoryDelta): HistoryRender | null | "resync" {
-    if (!delta.reset && !this.continues(delta)) return "resync";
+    if (!delta.reset && !this.continues(delta) && !this.startsEmpty(delta)) return "resync";
     const flags = delta.flags && delta.flags.length === delta.lines.length ? delta.flags : delta.lines.map(() => 0);
     const modesChanged = delta.alternate !== this.alternate || delta.cols !== this.cols || delta.pane_id !== this.paneId;
     let render: HistoryRender;
@@ -217,7 +273,8 @@ export class TerminalHistoryModel {
     this.alternate = delta.alternate;
     this.panes = [{ id: delta.pane_id, left: 0, top: 0, cols: delta.cols, rows: delta.rows, alternate: delta.alternate, mouse: delta.mouse,
       ...(typeof delta.alt_scroll === "boolean" ? { alt_scroll: delta.alt_scroll } : {}),
-      ...(typeof delta.app_cursor === "boolean" ? { app_cursor: delta.app_cursor } : {}) }];
+      ...(typeof delta.app_cursor === "boolean" ? { app_cursor: delta.app_cursor } : {}),
+      ...(typeof delta.mouse_format === "string" && delta.mouse_format.length <= 16 ? { mouse_format: delta.mouse_format } : {}) }];
     // A reset with what was held changes nothing the view shows only if both are empty.
     return unchanged ? null : render;
   }

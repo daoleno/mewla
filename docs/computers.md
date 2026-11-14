@@ -115,6 +115,62 @@ replayed. Check the recipient before choosing to send a new message.
 Routing and delivery identities remain after the bounded card/outbox history
 is pruned, so a long job can still reply to its original asker.
 
+## What the app sees of the other computers
+
+The app reads every paired computer from the one it is connected to. It does
+not connect to each of them. It sends `{"type":"computers"}` over its
+WebSocket, and gets the same `computers` message again, unasked, when a paired
+computer comes or goes or reports a new count, or when this computer's remote
+access connection changes. Each entry has `daemon_id`, `name`, `online`,
+`last_seen` and `version`. It also has `open_requests`: how many requests wait
+for the person on that computer. Fields:
+
+- **`online` and `last_seen`.** These say whether this computer's channel to
+  the other one is up, and when it last opened, closed or carried a frame.
+  The time when a channel opens or closes is kept in `computers.json`, so
+  `last_seen` survives a restart.
+- **`open_requests` on an entry.** The other computer reports it over the
+  channel and re-sends it when it changes. The entry carries it only while
+  the channel is up. An offline computer, or one older than this field, has
+  none, which means unknown, not zero.
+- **The count rule.**
+  - Each Brain Work that asks a question and is not closed or snoozed counts
+    one.
+  - Each visible Session counts its pending approvals. A Session with none
+    counts one if it needs you or is blocked on a prompt.
+  - Brain's own Session counts one while it is blocked on a prompt.
+  - A blocked action Brain still holds is not counted. Neither are DSH
+    interactions.
+- **`open_requests` at the top level.** This is the same count for this
+  computer.
+- **`connection`** is present only while remote access is on. It comes from
+  `remote-status.json`:
+  - `phase` is `connecting`, `connected` or `offline`.
+  - `cause` is the current error.
+  - `connected_at` is when the relay connection last came up.
+  - `last_failure` and `last_failure_at` are the newest failed stretch: its
+    newest cause, and when it began. That is the first failure after the
+    connection was last up, so "Relay unreachable · 13:40" survives retries,
+    the recovery and a restart.
+  - A phone that reaches this computer only through the relay cannot hear
+    this while the relay is down. It shows the last one it received.
+  - A self-hosted relay (`relay.json`) records no status.
+
+### In the app
+
+Tap the cat on home for the computer page. Its **Computers** section lists every
+other computer with what the connected one reports:
+- "Online";
+- "Online · 1 needs you", which also puts a red dot on that row and on the cat;
+- "Offline · last seen 13:40";
+- "Pair again" when that computer no longer knows the phone, which only the
+  phone can find out.
+
+One tap switches to a computer. While the phone cannot reach the connected
+computer through Mewla's relay, the tray and the page's **Needs fixing** give
+that computer's own last word on its relay, with when it began ("Relay
+unreachable · 13:40"). The page keeps it across a restart of the app.
+
 ## Commands
 
 ```sh

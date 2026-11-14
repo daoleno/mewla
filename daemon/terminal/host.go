@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/daoleno/mewla/daemon/sessionhost"
 )
@@ -52,14 +53,21 @@ const hostCallTimeout = 5 * time.Second
 const fullReset = "\x1bc"
 
 // hostSession is one Terminal view of a host Session. The host replays the
-// screen and then streams the program's output; this view is an active one,
-// so its size becomes the Session's. The host keeps the history, so there is
-// no copy-mode to scroll: the App reads History instead.
+// screen and then streams the program's output. The host keeps the history,
+// so there is no copy-mode to scroll: the App reads History instead.
 //
-// A resize draws the view again at its new size, as tmux redraws a client: a
-// viewer's terminal and the host's reflow on their own, and a replay that
-// reached the viewer while its grid was another size (the App's grid settles
-// while the view opens) would otherwise stay misdrawn until it reopens.
+// The Session has one size, the one its program writes for, and the last
+// viewer a person acted on sets it: this view sets it when it opens, when the
+// App's grid changes or is shown again (Resize), and when the person types
+// while another viewer has it. Any resize draws the view again, as tmux
+// redraws a client: output written for another size, drawn on this view's
+// grid, writes rows over rows (the host ends the view with AttachResized),
+// and a replay that reached the view while its grid was another size (the
+// App's grid settles while the view opens) would stay misdrawn. Attaching
+// again on its own (behind, resized) never takes the size: two viewers of
+// different sizes would take it from each other forever. A host from before
+// AttachResized never ends the view for a resize: the view asks it the
+// Session's size every sizePoll instead, and redraws when it changed.
 type hostSession struct {
 	id       string
 	targetID string
@@ -74,6 +82,10 @@ type hostSession struct {
 	closed bool
 	// redraw asks the pump for a fresh replay at size once the view ends.
 	redraw bool
+	// owned: the Session is this view's size (no other viewer resized it).
+	owned bool
+	// shown: the size the attached view's replay was drawn at.
+	shown Size
 
 	events    chan Event
 	closeOnce sync.Once
@@ -106,7 +118,7 @@ func (s *hostSession) Start(ctx context.Context) error {
 		cancel()
 		return fmt.Errorf("open Session %s: %w", s.targetID, err)
 	}
-	view, err := client.Attach(callCtx, sessionhost.AttachParams{ID: s.targetID, Cols: s.size.Cols, Rows: s.size.Rows})
+	view, err := client.Attach(callCtx, sessionhost.AttachParams{ID: s.targetID, Cols: s.size.Cols, Rows: s.size.Rows, Redraw: true})
 	if err != nil {
 		client.Close()
 		cancel()
@@ -114,22 +126,77 @@ func (s *hostSession) Start(ctx context.Context) error {
 	}
 	s.client, s.view, s.cancel = client, view, cancel
 	s.size = Size{Cols: view.Cols, Rows: view.Rows}
-	go s.pump(runCtx, view)
+	s.shown, s.owned = s.size, true
+	if view.Redraw {
+		go s.pump(runCtx, view, func() {})
+	} else {
+		watchCtx, stopWatch := context.WithCancel(runCtx)
+		go s.watchSize(watchCtx, client)
+		go s.pump(runCtx, view, stopWatch)
+	}
 	return nil
 }
 
+// sizePoll is how often a view on a host from before AttachResized asks the
+// Session's size.
+var sizePoll = 500 * time.Millisecond
+
+// watchSize redraws the view when the Session's size is no longer the one
+// its replay was drawn at, for a host that does not end the view itself.
+func (s *hostSession) watchSize(ctx context.Context, client *sessionhost.Client) {
+	tick := time.NewTicker(sizePoll)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		callCtx, cancel := context.WithTimeout(ctx, hostCallTimeout)
+		info, err := client.Info(callCtx, s.targetID)
+		cancel()
+		if err != nil {
+			continue
+		}
+		s.mu.Lock()
+		view := s.view
+		stale := view != nil && !s.redraw && (info.Cols != s.shown.Cols || info.Rows != s.shown.Rows)
+		if stale {
+			s.redraw = true
+		}
+		s.mu.Unlock()
+		if stale {
+			view.Close() // the pump attaches again at the Session's size
+		}
+	}
+}
+
 // pump forwards the replay and then the output. A view that fell behind or
-// was resized starts over: a full reset and a fresh replay leave nothing
-// stale on the viewer's terminal.
-func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment) {
+// was resized (by the App or by another viewer) starts over: a full reset
+// and a fresh replay leave nothing stale on the viewer's terminal.
+func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment, done func()) {
+	defer done()
 	defer s.closeEvents()
 	prefix := ""
 	for {
-		if !s.send(ctx, Event{Type: EventOutput, Data: prefix + string(view.Replay)}) {
+		// The size first: the replay and the output after it are drawn for it.
+		if !s.send(ctx, Event{Type: EventSize, Size: Size{Cols: view.Cols, Rows: view.Rows}}) ||
+			!s.send(ctx, Event{Type: EventOutput, Data: prefix + string(view.Replay)}) {
 			return
 		}
+		// The host cuts its output anywhere, a character's bytes included: a
+		// character cut in two waits for its other part, since the App gets
+		// the output as JSON text and each lone byte would arrive as U+FFFD
+		// (three cells for one, the rest of the row pushed over).
+		var tail []byte
 		for chunk := range view.Output() {
-			if !s.send(ctx, Event{Type: EventOutput, Data: string(chunk)}) {
+			data := append(tail, chunk...)
+			cut := completeUTF8(data)
+			tail = append([]byte(nil), data[cut:]...)
+			if cut == 0 {
+				continue
+			}
+			if !s.send(ctx, Event{Type: EventOutput, Data: string(data[:cut])}) {
 				return
 			}
 		}
@@ -150,7 +217,7 @@ func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment) {
 			s.send(ctx, Event{Type: EventError, Err: fmt.Errorf("the session host stopped streaming Session %s: %w", s.targetID, err)})
 			s.send(ctx, Event{Type: EventExit, ExitCode: 1})
 			return
-		case end.Reason == sessionhost.AttachBehind:
+		case end.Reason == sessionhost.AttachBehind || end.Reason == sessionhost.AttachResized:
 			next, err := s.reattach(ctx)
 			if err != nil {
 				s.send(ctx, Event{Type: EventError, Err: err})
@@ -169,13 +236,30 @@ func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment) {
 	}
 }
 
+// completeUTF8 is the length of data without a character cut off at its
+// end (all of it when it ends whole, or with bytes that are not UTF-8).
+func completeUTF8(data []byte) int {
+	for i := len(data) - 1; i >= 0 && i >= len(data)-utf8.UTFMax; i-- {
+		if utf8.RuneStart(data[i]) {
+			if !utf8.FullRune(data[i:]) {
+				return i
+			}
+			break
+		}
+	}
+	return len(data)
+}
+
+// reattach opens the view again at the Session's size, whatever it is now:
+// a size this view wants was set before (Resize), and one another viewer set
+// stays until this view's person acts.
 func (s *hostSession) reattach(ctx context.Context) (*sessionhost.Attachment, error) {
 	s.mu.Lock()
-	client, size := s.client, s.size
+	client := s.client
 	s.mu.Unlock()
 	callCtx, cancel := context.WithTimeout(ctx, hostCallTimeout)
 	defer cancel()
-	view, err := client.Attach(callCtx, sessionhost.AttachParams{ID: s.targetID, Cols: size.Cols, Rows: size.Rows})
+	view, err := client.Attach(callCtx, sessionhost.AttachParams{ID: s.targetID, Redraw: true})
 	if err != nil {
 		return nil, fmt.Errorf("reopen Session %s: %w", s.targetID, err)
 	}
@@ -186,6 +270,8 @@ func (s *hostSession) reattach(ctx context.Context) (*sessionhost.Attachment, er
 		return nil, fmt.Errorf("terminal view of Session %s is closed", s.targetID)
 	}
 	s.view = view
+	s.shown = Size{Cols: view.Cols, Rows: view.Rows}
+	s.owned = s.shown == s.size
 	again := s.redraw // resized while this view was attaching
 	s.mu.Unlock()
 	if again {
@@ -228,10 +314,31 @@ func (s *hostSession) started() (*sessionhost.Client, error) {
 	return s.client, nil
 }
 
-func (s *hostSession) Write(data string) error {
+// focusOut is the report a view sends when it loses the keyboard (DEC 1004):
+// the person went elsewhere, so it is no reason to take the size.
+const focusOut = "\x1b[O"
+
+// Write types into the Session. A person typing here while another viewer
+// has the Session at its size takes the size back first, so what they type
+// into is drawn right.
+func (s *hostSession) Write(data string) error { return s.write(data, data != focusOut) }
+
+// WriteScroll sends what a scroll drag made (wheel presses, cursor keys). Scrolling
+// is reading: the Session keeps the size another viewer gave it.
+func (s *hostSession) WriteScroll(data string) error { return s.write(data, false) }
+
+func (s *hostSession) write(data string, takeSize bool) error {
 	client, err := s.started()
 	if err != nil {
 		return err
+	}
+	s.mu.Lock()
+	owned, size := s.owned, s.size
+	s.mu.Unlock()
+	if !owned && takeSize {
+		if err := s.Resize(size.Cols, size.Rows); err != nil {
+			return err
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), hostCallTimeout)
 	defer cancel()
@@ -239,23 +346,36 @@ func (s *hostSession) Write(data string) error {
 	return err
 }
 
+// Resize makes cols x rows the Session's size and draws the view again. The
+// App sends its grid again when the terminal is shown: at the size this view
+// already has, nothing happens.
 func (s *hostSession) Resize(cols, rows int) error {
 	client, err := s.started()
 	if err != nil {
 		return err
 	}
+	s.mu.Lock()
+	if s.owned && s.size == (Size{Cols: cols, Rows: rows}) {
+		s.mu.Unlock()
+		return nil
+	}
+	// Set before the host resizes: it ends the view, and the pump must read
+	// that end as this redraw, not as the host going away.
+	s.size = Size{Cols: cols, Rows: rows}
+	s.redraw = true
+	s.owned = true
+	view := s.view
+	s.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), hostCallTimeout)
 	defer cancel()
 	if err := client.Resize(ctx, s.targetID, cols, rows); err != nil {
+		s.mu.Lock()
+		s.owned = false
+		s.mu.Unlock()
 		return err
 	}
-	s.mu.Lock()
-	s.size = Size{Cols: cols, Rows: rows}
-	s.redraw = true
-	view := s.view
-	s.mu.Unlock()
 	if view != nil {
-		view.Close() // the pump attaches again at the new size
+		view.Close() // the pump attaches again at the new size (a host before AttachResized does not end it)
 	}
 	return nil
 }

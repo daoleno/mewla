@@ -354,3 +354,47 @@ describe("feed frames as store actions", () => {
     expect(isWorkerSessionListFreshForConnection(state, "server")).toBe(false);
   });
 });
+
+describe("the daemon's run and prompt fields (WIRE §7, §9)", () => {
+  const server = { serverId: "server", serverName: "Server", serverUrl: "https://server.test" };
+  const one = (raw: object) => {
+    const state = workerReducer(initialWorkerState, workerSessionFeedAction({ type: "worker_session_list", seq: 1, worker_sessions: [raw] }, server)!);
+    return serverWorkers(state, "server")[0]!;
+  };
+
+  test("a running Session keeps when its run began and the call it started last; an idle one keeps neither", () => {
+    const running = one({ id: "%1", name: "a", status: "running", activity: "Read /etc/hostname", activity_tool: "Read", activity_summary: "/etc/hostname", running_since: "2026-11-12T20:47:07.139Z" });
+    expect(running).toMatchObject({ activity: "Read /etc/hostname", activity_tool: "Read", activity_summary: "/etc/hostname", running_since: Date.parse("2026-11-12T20:47:07.139Z") });
+    const idle = one({ id: "%1", name: "a", status: "unknown", activity: "Read /etc/hostname", activity_tool: "Read", activity_summary: "/etc/hostname", running_since: "2026-11-12T20:47:07.139Z" });
+    expect(idle.activity).toBeUndefined();
+    expect(idle.activity_tool).toBeUndefined();
+    expect(idle.running_since).toBeUndefined();
+  });
+
+  test("a permission prompt keeps its tool and the call's line", () => {
+    const prompt = normalizePrompt({ id: "p", kind: "permission", provider: "claude", title: "Bash command", tool: "Bash", summary: "curl -sI https://example.org", options: [{ number: 1, label: "Yes" }] });
+    expect(prompt).toMatchObject({ tool: "Bash", summary: "curl -sI https://example.org" });
+  });
+});
+
+describe("who a Session's attention is for (owner 2026-11-13, shot 11)", () => {
+  const upsert = (workers: Record<string, unknown>[]) =>
+    serverWorkers(workerReducer(initialWorkerState, { type: "UPSERT_SERVER_WORKERS", serverId: "server", serverName: "Server", serverUrl: "https://server.test", workers: workers as never }), "server");
+
+  test("a delegated Worker's own report (user_input, done, blocked) is Brain's to decide: it does not need the person", () => {
+    const [worker] = upsert([{ id: "w1", name: "w1", status: "blocked", summary: "Plaza fix done, no rollback needed.", delegated: true, needs_attention: true, attention: "user_input" }]);
+    expect(worker.needs_attention).toBe(false);
+    // What Brain reads is still there.
+    expect(worker.attention).toBe("user_input");
+  });
+
+  test("a Session the person started keeps asking the person", () => {
+    const [worker] = upsert([{ id: "w2", name: "w2", status: "blocked", summary: "", needs_attention: true }]);
+    expect(worker.needs_attention).toBe(true);
+  });
+
+  test("a delegated Worker's terminal prompt still reaches the person (a sign-in, an approval Brain cannot give)", () => {
+    const [worker] = upsert([{ id: "w3", name: "w3", status: "blocked", summary: "", delegated: true, needs_attention: true, prompt: { id: "p1", kind: "permission", title: "Run this command?", options: [{ number: 1, label: "Yes" }, { number: 2, label: "No" }] } }]);
+    expect(worker.prompt?.id).toBe("p1");
+  });
+});

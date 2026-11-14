@@ -1,0 +1,978 @@
+{
+ "version": 1,
+ "default": "p05",
+ "remove": [
+  "p01",
+  "p02",
+  "p03",
+  "p04",
+  "p06",
+  "p07",
+  "p08",
+  "p09",
+  "p10"
+ ],
+ "removed_ids_fall_back_to": "p05",
+ "pets": {
+  "p05": {
+   "name": "Dango",
+   "frame": 256,
+   "hopBleed": 0.2812,
+   "clips": {
+    "idle": {
+     "size": 256,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "waking": {
+     "size": 400,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      160,
+      140,
+      140,
+      160,
+      420
+     ],
+     "total_ms": 1440,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "going_back": {
+     "size": 400,
+     "frames": 6,
+     "delays_ms": [
+      200,
+      150,
+      140,
+      160,
+      200,
+      520
+     ],
+     "total_ms": 1370,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "working": {
+     "size": 256,
+     "frames": 6,
+     "delays_ms": [
+      120,
+      120,
+      120,
+      120,
+      120,
+      220
+     ],
+     "total_ms": 820,
+     "loop": true,
+     "bleed": 0
+    },
+    "delegating": {
+     "size": 256,
+     "frames": 6,
+     "delays_ms": [
+      280,
+      110,
+      110,
+      140,
+      140,
+      320
+     ],
+     "total_ms": 1100,
+     "loop": true,
+     "bleed": 0
+    },
+    "attention": {
+     "size": 400,
+     "frames": 6,
+     "delays_ms": [
+      150,
+      150,
+      150,
+      150,
+      150,
+      260
+     ],
+     "total_ms": 1010,
+     "loop": true,
+     "bleed": 0.2812
+    },
+    "delivered": {
+     "size": 400,
+     "frames": 5,
+     "delays_ms": [
+      140,
+      140,
+      140,
+      140,
+      280
+     ],
+     "total_ms": 840,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "offline": {
+     "size": 256,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "homeless": {
+     "size": 256,
+     "frames": 1
+    },
+    "portrait": {
+     "size": 256,
+     "frames": 1
+    }
+   },
+   "stills": {
+    "idle": {
+     "size": 256,
+     "from_frame": 0
+    },
+    "working": {
+     "size": 256,
+     "from_frame": 1
+    },
+    "delegating": {
+     "size": 256,
+     "from_frame": 0
+    },
+    "attention": {
+     "size": 256,
+     "from_frame": 2
+    },
+    "waking": {
+     "size": 256,
+     "from_frame": 5
+    },
+    "offline": {
+     "size": 256,
+     "from_frame": 0
+    }
+   }
+  },
+  "p11": {
+   "name": "Ash",
+   "frame": 192,
+   "hopBleed": 0.2812,
+   "clips": {
+    "idle": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "waking": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      160,
+      140,
+      140,
+      160,
+      420
+     ],
+     "total_ms": 1440,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "going_back": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      200,
+      150,
+      140,
+      160,
+      200,
+      520
+     ],
+     "total_ms": 1370,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "working": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      120,
+      120,
+      120,
+      120,
+      120,
+      220
+     ],
+     "total_ms": 820,
+     "loop": true,
+     "bleed": 0
+    },
+    "delegating": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      280,
+      110,
+      110,
+      140,
+      140,
+      320
+     ],
+     "total_ms": 1100,
+     "loop": true,
+     "bleed": 0
+    },
+    "attention": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      150,
+      150,
+      150,
+      150,
+      150,
+      260
+     ],
+     "total_ms": 1010,
+     "loop": true,
+     "bleed": 0.2812
+    },
+    "delivered": {
+     "size": 300,
+     "frames": 5,
+     "delays_ms": [
+      140,
+      140,
+      140,
+      140,
+      280
+     ],
+     "total_ms": 840,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "offline": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "homeless": {
+     "size": 192,
+     "frames": 1
+    },
+    "portrait": {
+     "size": 256,
+     "frames": 1
+    }
+   },
+   "stills": {
+    "idle": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "working": {
+     "size": 192,
+     "from_frame": 1
+    },
+    "delegating": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "attention": {
+     "size": 192,
+     "from_frame": 2
+    },
+    "waking": {
+     "size": 192,
+     "from_frame": 5
+    },
+    "offline": {
+     "size": 192,
+     "from_frame": 0
+    }
+   }
+  },
+  "p12": {
+   "name": "Kami",
+   "frame": 192,
+   "hopBleed": 0.2812,
+   "clips": {
+    "idle": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "waking": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      160,
+      140,
+      140,
+      160,
+      420
+     ],
+     "total_ms": 1440,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "going_back": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      200,
+      150,
+      140,
+      160,
+      200,
+      520
+     ],
+     "total_ms": 1370,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "working": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      120,
+      120,
+      120,
+      120,
+      120,
+      220
+     ],
+     "total_ms": 820,
+     "loop": true,
+     "bleed": 0
+    },
+    "delegating": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      280,
+      110,
+      110,
+      140,
+      140,
+      320
+     ],
+     "total_ms": 1100,
+     "loop": true,
+     "bleed": 0
+    },
+    "attention": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      150,
+      150,
+      150,
+      150,
+      150,
+      260
+     ],
+     "total_ms": 1010,
+     "loop": true,
+     "bleed": 0.2812
+    },
+    "delivered": {
+     "size": 300,
+     "frames": 5,
+     "delays_ms": [
+      140,
+      140,
+      140,
+      140,
+      280
+     ],
+     "total_ms": 840,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "offline": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "homeless": {
+     "size": 192,
+     "frames": 1
+    },
+    "portrait": {
+     "size": 256,
+     "frames": 1
+    }
+   },
+   "stills": {
+    "idle": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "working": {
+     "size": 192,
+     "from_frame": 1
+    },
+    "delegating": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "attention": {
+     "size": 192,
+     "from_frame": 2
+    },
+    "waking": {
+     "size": 192,
+     "from_frame": 5
+    },
+    "offline": {
+     "size": 192,
+     "from_frame": 0
+    }
+   }
+  },
+  "p13": {
+   "name": "Bit",
+   "frame": 192,
+   "hopBleed": 0.2812,
+   "clips": {
+    "idle": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "waking": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      160,
+      140,
+      140,
+      160,
+      420
+     ],
+     "total_ms": 1440,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "going_back": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      200,
+      150,
+      140,
+      160,
+      200,
+      520
+     ],
+     "total_ms": 1370,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "working": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      120,
+      120,
+      120,
+      120,
+      120,
+      220
+     ],
+     "total_ms": 820,
+     "loop": true,
+     "bleed": 0
+    },
+    "delegating": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      280,
+      110,
+      110,
+      140,
+      140,
+      320
+     ],
+     "total_ms": 1100,
+     "loop": true,
+     "bleed": 0
+    },
+    "attention": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      150,
+      150,
+      150,
+      150,
+      150,
+      260
+     ],
+     "total_ms": 1010,
+     "loop": true,
+     "bleed": 0.2812
+    },
+    "delivered": {
+     "size": 300,
+     "frames": 5,
+     "delays_ms": [
+      140,
+      140,
+      140,
+      140,
+      280
+     ],
+     "total_ms": 840,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "offline": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "homeless": {
+     "size": 192,
+     "frames": 1
+    },
+    "portrait": {
+     "size": 256,
+     "frames": 1
+    }
+   },
+   "stills": {
+    "idle": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "working": {
+     "size": 192,
+     "from_frame": 1
+    },
+    "delegating": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "attention": {
+     "size": 192,
+     "from_frame": 2
+    },
+    "waking": {
+     "size": 192,
+     "from_frame": 5
+    },
+    "offline": {
+     "size": 192,
+     "from_frame": 0
+    }
+   }
+  },
+  "p14": {
+   "name": "Doodle",
+   "frame": 192,
+   "hopBleed": 0.2812,
+   "clips": {
+    "idle": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "waking": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      160,
+      140,
+      140,
+      160,
+      420
+     ],
+     "total_ms": 1440,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "going_back": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      200,
+      150,
+      140,
+      160,
+      200,
+      520
+     ],
+     "total_ms": 1370,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "working": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      120,
+      120,
+      120,
+      120,
+      120,
+      220
+     ],
+     "total_ms": 820,
+     "loop": true,
+     "bleed": 0
+    },
+    "delegating": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      280,
+      110,
+      110,
+      140,
+      140,
+      320
+     ],
+     "total_ms": 1100,
+     "loop": true,
+     "bleed": 0
+    },
+    "attention": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      150,
+      150,
+      150,
+      150,
+      150,
+      260
+     ],
+     "total_ms": 1010,
+     "loop": true,
+     "bleed": 0.2812
+    },
+    "delivered": {
+     "size": 300,
+     "frames": 5,
+     "delays_ms": [
+      140,
+      140,
+      140,
+      140,
+      280
+     ],
+     "total_ms": 840,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "offline": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "homeless": {
+     "size": 192,
+     "frames": 1
+    },
+    "portrait": {
+     "size": 256,
+     "frames": 1
+    }
+   },
+   "stills": {
+    "idle": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "working": {
+     "size": 192,
+     "from_frame": 1
+    },
+    "delegating": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "attention": {
+     "size": 192,
+     "from_frame": 2
+    },
+    "waking": {
+     "size": 192,
+     "from_frame": 5
+    },
+    "offline": {
+     "size": 192,
+     "from_frame": 0
+    }
+   }
+  },
+  "p15": {
+   "name": "Riso",
+   "frame": 192,
+   "hopBleed": 0.2812,
+   "clips": {
+    "idle": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "waking": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      160,
+      140,
+      140,
+      160,
+      420
+     ],
+     "total_ms": 1440,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "going_back": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      200,
+      150,
+      140,
+      160,
+      200,
+      520
+     ],
+     "total_ms": 1370,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "working": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      120,
+      120,
+      120,
+      120,
+      120,
+      220
+     ],
+     "total_ms": 820,
+     "loop": true,
+     "bleed": 0
+    },
+    "delegating": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      280,
+      110,
+      110,
+      140,
+      140,
+      320
+     ],
+     "total_ms": 1100,
+     "loop": true,
+     "bleed": 0
+    },
+    "attention": {
+     "size": 300,
+     "frames": 6,
+     "delays_ms": [
+      150,
+      150,
+      150,
+      150,
+      150,
+      260
+     ],
+     "total_ms": 1010,
+     "loop": true,
+     "bleed": 0.2812
+    },
+    "delivered": {
+     "size": 300,
+     "frames": 5,
+     "delays_ms": [
+      140,
+      140,
+      140,
+      140,
+      280
+     ],
+     "total_ms": 840,
+     "loop": false,
+     "bleed": 0.2812
+    },
+    "offline": {
+     "size": 192,
+     "frames": 6,
+     "delays_ms": [
+      420,
+      300,
+      380,
+      320,
+      300,
+      400
+     ],
+     "total_ms": 2120,
+     "loop": true,
+     "bleed": 0
+    },
+    "homeless": {
+     "size": 192,
+     "frames": 1
+    },
+    "portrait": {
+     "size": 256,
+     "frames": 1
+    }
+   },
+   "stills": {
+    "idle": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "working": {
+     "size": 192,
+     "from_frame": 1
+    },
+    "delegating": {
+     "size": 192,
+     "from_frame": 0
+    },
+    "attention": {
+     "size": 192,
+     "from_frame": 2
+    },
+    "waking": {
+     "size": 192,
+     "from_frame": 5
+    },
+    "offline": {
+     "size": 192,
+     "from_frame": 0
+    }
+   }
+  }
+ }
+}

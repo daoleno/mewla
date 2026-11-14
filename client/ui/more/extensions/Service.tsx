@@ -1,9 +1,8 @@
 import { cleanup, Clipboard, computed, openUrl, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
-import { AlertDialog } from "nsh/base";
-import { accountRow, endpointHost, openAccountId } from "../../../core/extensions/accountListModel";
+import { accountRow, openAccountId } from "../../../core/extensions/accountListModel";
 import { cloudProfileGroups } from "../../../core/extensions/cloudProfilesModel";
-import { accountStatus, type ConnectionRequest, type PluginAccount, type PluginIntegration } from "../../../core/extensions/connections";
+import { type ConnectionRequest, type PluginAccount, type PluginIntegration } from "../../../core/extensions/connections";
 import {
   accessControl,
   accountRecovery,
@@ -12,27 +11,30 @@ import {
   awsAccountSummary,
   canDisconnect,
   connectLabel,
+  isConnecting,
   networkLabel,
   serviceState,
 } from "../../../core/extensions/pluginConnectionsModel";
-import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { serverDisplayName } from "../../../core/extensions/serverDisplayName";
-import { formatDateTime, formatFullDateTime } from "../../../core/more/dates";
 import { daemonName } from "../daemon";
-import { EmptyState, Field, Notice, Row, Section, Spinner, StatusMark, SwitchRow } from "../kit/kit";
+import { confirmDestructive, DisplayTitle, EmptyState, Field, Notice, Row, RowButton, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { LeadHero, StateLine, tile } from "../../kit/RowTile";
+import { Icon } from "../../kit/Icon";
+import { connectionStateTone } from "../../../core/extensions/colour";
 import type { PageNav } from "../routes";
-import { Action } from "./Action";
-import { connectingService, PluginsFrame, ToolUpdateNotices, toneStatus } from "./Pages";
+import { Action, GhostAction } from "./Action";
+import { connectingService, PluginsFrame, ToolUpdateNotices } from "./Pages";
 import { ProfileName } from "./ProfileName";
 import { flowState, plugins } from "./plugins";
-import { ServiceMark } from "./ServiceMark";
+import { serviceRowLead } from "./ServiceMark";
 
 const API_WALLETS = "https://app.hyperliquid.xyz/API";
 const CLI_NAMES: Record<string, string> = { aws: "AWS CLI", gws: "Google Workspace CLI", gcp: "Google Cloud CLI" };
 
 /** One service: what Brain may do with it, its accounts, and how to connect another. */
 export function ServicePage(props: { id: string; nav: PageNav }) {
-  const plugin = () => plugins()?.plugin(props.id) ?? null;
+  // Read from the state, so a page opened before the list came (a reloaded or shared /extensions/<id> on the web) names its service when it comes.
+  const plugin = () => flowState().catalog.find((item) => item.id === props.id) ?? null;
   const accounts = () => flowState().accounts.filter((account) => account.integration === props.id && account.status !== "disconnected").sort((a, b) => a.name.localeCompare(b.name));
   const custom = props.id === "mcp" || props.id === "openapi";
   const hasAccounts = computed(() => accounts().length > 0);
@@ -47,69 +49,91 @@ export function ServicePage(props: { id: string; nav: PageNav }) {
   // The trading form is offered as "Add another key" once an account holds a key.
   const keyed = computed(() => accounts().some((account) => !!account.signer));
   const body = (p: PluginIntegration | null): JSX.Element => {
-    if (!p) return flowState().loaded ? <Notice tone="failed" title="Service unavailable" detail={`${serverDisplayName(daemonName(), "This server")} does not offer this service.`} /> : <EmptyState busy title="Loading services" />;
+    if (!p) return <If when={flowState().loaded} else={<EmptyState busy title="Loading services" />}><Notice tone="failed" title="Service unavailable" detail={`${serverDisplayName(daemonName(), "This server")} does not offer this service.`} /></If>;
     return (
       <View>
-        <Header plugin={p} accounts={accounts()} />
         <ToolUpdateNotices service={p.id} />
-        {hasAccounts() ? <AccountList plugin={p} accounts={accounts()} nav={props.nav} /> : !custom && p.id !== "hyperliquid" ? <ConnectOffer plugin={p} /> : null}
-        {custom ? <CustomServiceForm plugin={p} again={untracked(hasAccounts)} /> : null}
-        {p.id === "hyperliquid" ? <HyperliquidForm plugin={p} keyed={keyed()} /> : null}
-        {hasAccounts() && !custom && p.id !== "hyperliquid" && p.available ? (
-          <View class="mt-4">
-            <Action testID="add-another" label={`Add another ${p.name} account`} busy={connectingService() === p.id} disabled={flowState().running !== null || (connectingService() !== null && connectingService() !== p.id)} onPress={() => void plugins()?.connect(p.id)} />
-          </View>
-        ) : null}
+        <If when={hasAccounts()} else={<If when={!custom && p.id !== "hyperliquid"}><ConnectOffer plugin={p} /></If>}><AccountList plugin={p} accounts={accounts()} nav={props.nav} /></If>
+        <If when={custom}><CustomServiceForm plugin={p} again={untracked(hasAccounts)} /></If>
+        <If when={p.id === "hyperliquid"}><HyperliquidForm plugin={p} keyed={keyed()} /></If>
+        <If when={hasAccounts() && !custom && p.id !== "hyperliquid" && p.available}><Section>
+            <Row
+              testID="add-another"
+              lead={tile("add")}
+              title="Add account"
+              accessibilityLabel={`Add another ${p.name} account`}
+              trailing={<If when={connectingService() === p.id}><Spinner size={16} /></If>}
+              disabled={flowState().running !== null || connectingService() !== null}
+              onPress={() => void plugins()?.connect(p.id)}
+            />
+          </Section></If>
+        <CliVersion plugin={p} />
       </View>
     );
   };
   return (
-    <PluginsFrame title={plugin()?.name ?? "Service"} testID="service-page" nav={props.nav}>
+    <PluginsFrame title={plugin()?.name ?? "Service"} testID="service-page" service={props.id} nav={props.nav} hero={<If when={plugin()} else={<DisplayTitle title="Service" />}><Header plugin={plugin()!} accounts={accounts()} /></If>}>
       {((current) => untracked(() => body(current.plugin)))(view())}
     </PluginsFrame>
   );
 }
 
+/** The detail's top block (SPEC §15 Collection): a 64 pt tile, the name in display type, the state line. */
 function Header(props: { plugin: PluginIntegration; accounts: PluginAccount[] }) {
   const state = () => serviceState(props.plugin, props.accounts);
-  const cli = props.plugin.cli && CLI_NAMES[props.plugin.id] ? `${CLI_NAMES[props.plugin.id]} ${props.plugin.cli.version} · ${props.plugin.cli.managed ? "managed by Mewla" : "local installation"}` : "";
   return (
-    <View class="mt-4 flex-row items-start gap-3 px-1">
-      <ServiceMark id={props.plugin.id} size={32} />
-      <View class="min-w-0 flex-1 gap-1">
-        <Text class="text-xl font-semibold" role="header">{props.plugin.name}</Text>
-        {props.plugin.description ? <Text class="text-sm text-muted-foreground">{props.plugin.description}</Text> : null}
-        {cli ? <Text class="text-xs text-muted-foreground">{cli}</Text> : null}
+    <View testID="service-header" class="gap-3 px-1 pb-2 pt-3">
+      <LeadHero testID="service-hero-lead" lead={serviceRowLead(props.plugin.id, 40)} />
+      <View class="gap-1">
+        <Text class="text-display font-bold tracking-display" role="header" style={{ numberOfLines: 2 }}>{props.plugin.name}</Text>
+        <If when={(() => {
+          const s = state();
+          return s.kind === "status" ? s : undefined;
+        })()}>{(s) => <StateLine testID="service-state" tone={connectionStateTone(s().tone)} label={s().label} />}</If>
       </View>
-      {(() => {
-        const s = state();
-        return s.kind === "status" ? <StatusMark status={toneStatus(s.tone)} label={s.label} /> : null;
-      })()}
     </View>
   );
 }
 
-/** A service with nothing connected: what Brain gets, and the one way to connect. */
+/**
+ * Which CLI the service runs through, and whose it is: a fact looked up rarely, so the page's last row.
+ */
+function CliVersion(props: { plugin: PluginIntegration }) {
+  const name = CLI_NAMES[props.plugin.id];
+  const cli = props.plugin.cli;
+  if (!name || !cli) return null;
+  return (
+    <Section>
+      <Row testID="service-cli" lead={tile("terminal")} title={name} value={cli.managed ? cli.version : `${cli.version} · yours`} accessibilityLabel={`${name} ${cli.version}, ${cli.managed ? "managed by Mewla" : "your own installation"}`} />
+    </Section>
+  );
+}
+
+/** A service with nothing connected: the one way to connect, first. While its sign-in runs, the card above is that way. */
 function ConnectOffer(props: { plugin: PluginIntegration }) {
-  const job = pluginJobs[props.plugin.id];
   if (!props.plugin.available) {
-    return <Section><Row icon="info" title="Not yet available" subtitle={props.plugin.unavailable_reason || "Sign-in is not set up yet."} /></Section>;
+    return <Section><Row testID="service-unavailable" lead={tile("info")} title={props.plugin.unavailable_reason || "Not available yet"} /></Section>;
   }
   const connecting = () => connectingService() === props.plugin.id;
   const busy = () => flowState().running !== null || (connectingService() !== null && !connecting());
+  // The card shows the sign-in under way, or how it failed, with its own buttons: the offer steps aside for it.
+  const signingIn = () => flowState().service === props.plugin.id && (isConnecting(flowState().phase) || flowState().phase === "failed");
   return (
-    <View>
-      <Section title="What Brain can do" footer={`Your sign-in stays on ${serverDisplayName(daemonName())}. Brain only acts on tasks you give it.`}>
-        <Row icon="eye" title="Read and search" subtitle={job?.read} value="On" />
-        <Row icon="edit" title="Make changes when asked" subtitle={job ? `${job.write}. Off until you allow it.` : "Off until you allow it."} value="Off" />
-      </Section>
-      <View class="mt-4 gap-2">
+    <If when={!signingIn()}>
+      <View class="mt-2 gap-2">
         <Action filled testID="service-connect" label={connectLabel(props.plugin)} busy={connecting()} disabled={busy()} onPress={() => void plugins()?.connect(props.plugin.id)} />
-        {props.plugin.id === "github" ? <Action label="Use the GitHub login on this server" disabled={busy() || connecting()} onPress={() => void plugins()?.useServerGitHub()} /> : null}
+        <If when={props.plugin.id === "github"}><View class="items-center"><GhostAction icon="desktop" label="Use this computer's login" accessibilityLabel="Use the GitHub login on this server" disabled={busy() || connecting()} onPress={() => void plugins()?.useServerGitHub()} /></View></If>
       </View>
-    </View>
+    </If>
   );
 }
+
+/**
+ * A row is kept while its account is the same: the computer's news about other accounts (each list, each
+ * `connections_changed`) leaves it, and the buttons on its card keep a tap under way. An account that changed is
+ * drawn again.
+ */
+const accountKey = (account: PluginAccount) => JSON.stringify(account);
 
 /**
  * The accounts of one service: one collapsed row each, a lone account open. Cloud
@@ -127,6 +151,8 @@ function AccountList(props: { plugin: PluginIntegration; accounts: PluginAccount
   const filterVisible = computed(() => props.accounts.length > 8);
   const groups = () => cloudProfileGroups(props.accounts, filterVisible() ? query() : "");
   const filtering = () => filterVisible() && !!query().trim();
+  const shown = () => { const g = groups(); return [...g.signedIn, ...g.unchecked]; };
+  const expired = () => groups().expired;
   const row = (account: PluginAccount) => {
     const open = () => openAccountId(props.accounts, chosen()) === account.id;
     const info = () => accountRow(account, now());
@@ -135,46 +161,39 @@ function AccountList(props: { plugin: PluginIntegration; accounts: PluginAccount
         <Section>
           <Row
             testID={`account-${account.id}`}
-            icon="person-circle"
+            lead={tile("person-circle")}
             title={info().name}
             subtitle={[info().identity, info().expiry?.label].filter(Boolean).join(" · ") || undefined}
-            trailing={<StatusMark status={toneStatus(info().status.tone)} label={info().status.label} />}
+            // Connected is the page's own state line: an account adds a word only when it is something else.
+            trailing={<If when={info().status.tone !== "success"}><StateLine tone={connectionStateTone(info().status.tone)} label={info().status.label} /></If>}
             chevron={!open()}
             accessibilityLabel={[info().name, info().identity, info().status.label].filter(Boolean).join(", ")}
             accessibilityHint="Show account actions"
             expanded={open()}
             onPress={() => chosen.set(open() ? null : account.id)}
           />
-          {open() ? <AccountCard plugin={props.plugin} account={account} nav={props.nav} /> : null}
+          <If when={open()}><AccountCard plugin={props.plugin} account={account} nav={props.nav} /></If>
         </Section>
+        <If when={open()}><AccountEnd account={account} /></If>
       </View>
     );
   };
   return (
     <View>
-      {filterVisible() ? (
-        <View class="-mx-4 mt-2">
+      <If when={filterVisible()}><View class="-mx-4 mt-2">
           <Field testID="filter-accounts" accessibilityLabel="Filter accounts" placeholder="Filter accounts" value={query()} onChange={(value) => query.set(value)} />
+        </View></If>
+      <If when={shown().length || expired().length} else={<If when={query()}><EmptyState title="No matching accounts" /></If>}>
+        <View>
+          <Each of={shown()} key={accountKey}>{(account) => row(account())}</Each>
+          <If when={expired().length}>{(length) => <View>
+              <Section>
+                <Row title={`Expired (${length()})`} chevron={!(showExpired() || filtering())} expanded={showExpired() || filtering()} onPress={() => showExpired.set(!showExpired())} />
+              </Section>
+              <If when={showExpired() || filtering()}><Each of={expired()} key={accountKey}>{(account) => row(account())}</Each></If>
+            </View>}</If>
         </View>
-      ) : null}
-      {(() => {
-        const g = groups();
-        const shown = [...g.signedIn, ...g.unchecked];
-        if (!shown.length && !g.expired.length) return query() ? <EmptyState title="No matching accounts" /> : null;
-        return (
-          <View>
-            {shown.map(row)}
-            {g.expired.length ? (
-              <View>
-                <Section>
-                  <Row title={`Expired (${g.expired.length})`} chevron={!(showExpired() || filtering())} expanded={showExpired() || filtering()} onPress={() => showExpired.set(!showExpired())} />
-                </Section>
-                {showExpired() || filtering() ? g.expired.map(row) : null}
-              </View>
-            ) : null}
-          </View>
-        );
-      })()}
+      </If>
     </View>
   );
 }
@@ -186,20 +205,28 @@ function disconnectCopy(account: PluginAccount): { title: string; detail: string
   return { title: `Disconnect ${account.name}?`, detail: "Brain loses access right away, and Mewla removes its saved sign-in.", action: "Disconnect" };
 }
 
-async function confirm(title: string, detail: string, action: string): Promise<boolean> {
-  const answer = await AlertDialog.show({ title, description: detail, actions: [{ id: "keep", label: "Keep", role: "cancel" }, { id: "go", label: action, role: "destructive" }] });
-  return answer.action === "go";
+/** What tells one account apart, for its Details: looked up rarely, so behind a tap. */
+function accountFacts(account: PluginAccount, custom: boolean): { label: string; value: string; copy?: boolean }[] {
+  const aws = awsAccountSummary(account);
+  const facts: { label: string; value: string; copy?: boolean }[] = [];
+  if (account.profile) facts.push({ label: "Profile", value: account.profile, copy: true });
+  if (account.profile_kind) facts.push({ label: "Kind", value: account.profile_kind });
+  if (account.project) facts.push({ label: "Project", value: account.project, copy: true });
+  if (account.region) facts.push({ label: "Region", value: account.region });
+  if (aws) facts.push(...aws.details);
+  else if (account.integration === "gcp" && account.identity) facts.push({ label: "Identity", value: account.identity, copy: true });
+  if (custom && account.endpoint) facts.push({ label: "Endpoint", value: account.endpoint, copy: true });
+  return facts;
 }
 
 /**
  * One account: its switch, the one fix it needs if any, what Brain may do, its
- * tools, and Disconnect after one confirm.
+ * tools, then its details behind a tap, and Disconnect after one confirm.
  */
 function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount; nav: PageNav }) {
   const account = () => flowState().accounts.find((item) => item.id === props.account.id) ?? props.account;
   const running = () => flowState().running;
   const busy = () => running() !== null;
-  const job = pluginJobs[props.plugin.id];
   const custom = props.plugin.id === "mcp" || props.plugin.id === "openapi";
   const showDetails = signal(false);
   const copied = signal<string | null>(null);
@@ -210,30 +237,23 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
     const a = account();
     const control = accessControl(a, name);
     if (control.kind === "none") return null;
-    const title = name === "read" ? "Read and search" : "Make changes when asked";
-    const note = control.kind === "consent" ? `${props.plugin.name} asks you to approve this once.` : control.note;
-    const subtitle = [name === "read" ? job?.read : job?.write, note].filter(Boolean).join(". ");
+    const title = name === "read" ? "Read and search" : "Make changes";
     const pending = running() === `${name}:${a.id}` || (name === "write" && control.kind === "consent" && running() === `connect:${props.plugin.id}`);
     if (control.kind === "consent") {
-      return <Row icon="edit" title={title} subtitle={subtitle} trailing={pending ? <Spinner size={16} /> : <SmallButton label="Allow" accessibilityLabel={`Allow changes in ${props.plugin.name}`} disabled={busy()} onPress={() => flow().setAccess(a, name, true)} />} />;
+      return <Row lead={tile("edit")} title={title} trailing={<If when={pending} else={<RowButton label="Allow" accessibilityLabel={`Allow changes in ${props.plugin.name}. ${props.plugin.name} asks you to approve this once.`} disabled={busy()} onPress={() => flow().setAccess(a, name, true)} />}><Spinner size={16} /></If>} />;
     }
-    return <SwitchRow testID={`${name}-${a.id}`} title={title} subtitle={subtitle} checked={control.on} busy={pending} disabled={busy() && !pending} onChange={(on) => flow().setAccess(a, name, on)} />;
+    return <SwitchRow testID={`${name}-${a.id}`} lead={tile(name === "read" ? "eye" : "edit")} title={title} subtitle={control.note || undefined} checked={control.on} busy={pending} disabled={busy() && !pending} onChange={(on) => flow().setAccess(a, name, on)} />;
   };
 
   return (
     <View>
       {(() => {
         const a = account();
-        const aws = awsAccountSummary(a);
         const recovery = accountRecovery(a, props.plugin.name);
         const network = a.network === "testnet" ? networkLabel(a.network) : null;
-        const subtitle = a.profile
-          ? [a.profile_kind, a.profile_status, a.active ? "Active" : "", a.project, a.integration === "gcp" ? a.identity : "", a.aws?.account_id, a.aws?.account_name].filter(Boolean).join(" · ")
-          : aws
-            ? aws.subtitle
-            : [custom ? endpointHost(a.endpoint) : a.identity !== a.name ? a.identity : "", a.verified_at ? `Checked ${formatDateTime(a.verified_at)}` : ""].filter(Boolean).join(" · ");
         const tools = allowedToolCount(a);
-        const copy = disconnectCopy(a);
+        const facts = accountFacts(a, custom);
+        const renamable = a.integration === "aws" && !!a.profile;
         return (
           <View>
             {/* An account that is off reads quieter; its switch still turns it on. */}
@@ -241,82 +261,57 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
             <SwitchRow
               testID={`enabled-${a.id}`}
               accessibilityLabel={`${props.plugin.name} ${a.name} on`}
-              title={[network, recovery ? null : accountStatus(a)].filter(Boolean).join(" · ") || "On"}
-              subtitle={subtitle || undefined}
+              lead={tile("power")}
+              title={network ? `On · ${network}` : "On"}
               checked={a.enabled}
               busy={running() === `enabled:${a.id}`}
               disabled={busy() && running() !== `enabled:${a.id}`}
               onChange={(on) => flow().setEnabled(a, on)}
             />
             </View>
-            {a.integration === "aws" && a.profile ? (renaming() ? <ProfileName account={a} onDone={() => renaming.set(false)} /> : <Row icon="edit" title="Rename profile" onPress={() => renaming.set(true)} />) : null}
-            {a.profile_sign_in_by ? <Row icon="time" title="Sign in again by" subtitle={`${formatFullDateTime(a.profile_sign_in_by)} · ${a.profile_sign_in_limit === "maximum" ? "At latest · AWS allows up to 12h; your session may end sooner." : "SSO session"}`} /> : null}
-            {a.profile ? <Row icon="person-circle" title="Sign in again" subtitle={`Use ${props.plugin.name} remote sign-in for this ${a.integration === "aws" ? "profile" : "account"}.`} trailing={connectingService() === props.plugin.id ? <Spinner size={16} /> : <SmallButton label="Sign in again" disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />} /> : null}
-            {!a.profile && recovery ? (
-              <Row
+            {/* A cloud profile signs in again often (AWS ends a session within 12 h): its own row, right under the switch. */}
+            <If when={a.profile}><Row
+                testID={`sign-in-again-${a.id}`}
+                lead={tile("refresh")}
+                title="Sign in again"
+                trailing={<If when={connectingService() === props.plugin.id} else={<RowButton label="Sign in" accessibilityLabel={`Sign in to ${props.plugin.name} again`} disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />}><Spinner size={16} /></If>}
+              /></If>
+            <If when={!a.profile ? recovery : null}>{(recovery) => <Row
                 testID={`recover-${a.id}`}
-                icon={recovery.tone === "neutral" ? "pause-circle" : "alert-circle"}
-                title={recovery.title}
-                subtitle={recovery.detail}
+                lead={tile(recovery().tone === "neutral" ? "pause-circle" : "alert-circle")}
+                title={recovery().title}
+                // Only the cause the computer gave (a service out of reach) is worth a line.
+                subtitle={recovery().action === "refresh" && a.unavailable ? a.unavailable : undefined}
+                subtitleTone="warn"
                 // Whichever fix it is (check, sign in again, finish the removal), its button turns while it runs.
-                trailing={
-                  running() === `recover:${a.id}` || (recovery.action === "reconnect" && connectingService() === props.plugin.id) || (recovery.action === "disconnect" && running() === `disconnect:${a.id}`)
-                    ? <Spinner size={16} />
-                    : <SmallButton label={recovery.actionLabel} disabled={busy()} onPress={() => flow().recover(a, recovery.action)} />
-                }
-              />
-            ) : null}
-            {aws ? (
-              <View>
-                <Row icon="info" title="Details" chevron={!showDetails()} onPress={() => showDetails.set(!showDetails())} />
-                {showDetails()
-                  ? aws.details.map((detail) => (
+                trailing={<If when={running() === `recover:${a.id}` || (recovery().action === "reconnect" && connectingService() === props.plugin.id) || (recovery().action === "disconnect" && running() === `disconnect:${a.id}`)} else={<RowButton label={recovery().actionLabel} disabled={busy()} onPress={() => flow().recover(a, recovery().action)} />}><Spinner size={16} /></If>}
+              />}</If>
+            {custom ? null : group("read")}
+            {custom ? null : group("write")}
+            <Row
+              testID={`tools-${a.id}`}
+              lead={tile("list")}
+              title="Tools & activity"
+              value={!tools.total ? undefined : `${tools.allowed}/${tools.total}`}
+              chevron
+              onPress={() => props.nav.push({ name: "extensions-tools", service: props.plugin.id, account: a.id })}
+            />
+            <If when={facts.length || renamable}><View>
+                <Row testID={`details-${a.id}`} lead={tile("info")} title="Details" chevron={!showDetails()} expanded={showDetails()} onPress={() => showDetails.set(!showDetails())} />
+                <If when={showDetails()}><View>
+                    {facts.map((detail) => (
                       <Row
                         title={detail.label}
                         accessibilityLabel={detail.copy ? `Copy ${detail.label}` : undefined}
                         subtitle={detail.value}
                         value={copied() === detail.label ? "Copied" : undefined}
+                        trailing={<If when={detail.copy && copied() !== detail.label}><Icon name="copy" size={16} tone="faint" /></If>}
                         onPress={detail.copy ? () => void Clipboard.writeText(detail.value).then(() => copied.set(detail.label)) : undefined}
                       />
-                    ))
-                  : null}
-              </View>
-            ) : null}
-            {custom ? null : group("read")}
-            {custom ? null : group("write")}
-            <Row
-              testID={`tools-${a.id}`}
-              icon="list"
-              title={custom ? `${tools.allowed} of ${tools.total} tools allowed` : "Tools & activity"}
-              subtitle={custom && tools.allowed === 0 ? "Choose which tools Brain may use." : undefined}
-              value={custom || !tools.total ? undefined : `${tools.allowed}/${tools.total}`}
-              chevron
-              onPress={() => props.nav.push({ name: "extensions-tools", service: props.plugin.id, account: a.id })}
-            />
-            {a.signer ? (
-              <Row
-                icon="key"
-                title="Remove trading key"
-                subtitle={`API wallet ${a.signer.slice(0, 6)}…${a.signer.slice(-4)}`}
-                trailing={running() === `key:${a.id}` ? <Spinner size={16} /> : undefined}
-                destructive
-                disabled={busy()}
-                onPress={() =>
-                  void confirm(`Remove the trading key from ${a.name}?`, "Brain can still read it, and can no longer place or cancel orders. Mewla deletes the saved key.", "Remove key").then((yes) => yes && flow().removeKey(a))
-                }
-              />
-            ) : null}
-            {!a.profile && !canDisconnect(a) ? null : (
-              <Row
-                testID={`disconnect-${a.id}`}
-                icon="remove-circle"
-                title={copy.action}
-                trailing={running() === `disconnect:${a.id}` ? <Spinner size={16} /> : undefined}
-                destructive
-                disabled={busy()}
-                onPress={() => void confirm(copy.title, copy.detail, copy.action).then((yes) => yes && flow().disconnect(a))}
-              />
-            )}
+                    ))}
+                    <If when={renamable}><If when={renaming()} else={<Row testID={`rename-${a.id}`} lead={tile("edit")} title="Rename profile" onPress={() => renaming.set(true)} />}><ProfileName account={a} onDone={() => renaming.set(false)} /></If></If>
+                  </View></If>
+              </View></If>
           </View>
         );
       })()}
@@ -324,10 +319,43 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
   );
 }
 
-function SmallButton(props: { label: string; onPress: () => void; disabled?: boolean; accessibilityLabel?: string }) {
+/** An open account's irreversible steps, alone in the last group (SPEC §15): removing its trading key, Disconnect. */
+function AccountEnd(props: { account: PluginAccount }) {
+  const account = () => flowState().accounts.find((item) => item.id === props.account.id) ?? props.account;
+  const running = () => flowState().running;
+  const busy = () => running() !== null;
+  const flow = () => plugins()!;
   return (
-    <View role="button" accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} class="rounded-full bg-secondary px-3 py-1.5 active:opacity-70 disabled:opacity-50">
-      <Text class="text-sm font-medium">{props.label}</Text>
+    <View>
+      {(() => {
+        const a = account();
+        const copy = disconnectCopy(a);
+        if (!a.signer && !a.profile && !canDisconnect(a)) return null;
+        return (
+          <Section>
+            <If when={a.signer}>{(signer) => <Row
+                icon="key"
+                title="Remove trading key"
+                subtitle={`API wallet ${signer().slice(0, 6)}…${signer().slice(-4)}`}
+                trailing={<If when={running() === `key:${a.id}`}><Spinner size={16} /></If>}
+                destructive
+                disabled={busy()}
+                onPress={() =>
+                  void confirmDestructive(`Remove the trading key from ${a.name}?`, "Brain can still read it, and can no longer place or cancel orders. Mewla deletes the saved key.", "Remove key").then((yes) => yes && flow().removeKey(a))
+                }
+              />}</If>
+            <If when={!(!a.profile && !canDisconnect(a))}><Row
+                testID={`disconnect-${a.id}`}
+                icon="remove-circle"
+                title={copy.action}
+                trailing={<If when={running() === `disconnect:${a.id}`}><Spinner size={16} /></If>}
+                destructive
+                disabled={busy()}
+                onPress={() => void confirmDestructive(copy.title, copy.detail, copy.action).then((yes) => yes && flow().disconnect(a))}
+              /></If>
+          </Section>
+        );
+      })()}
     </View>
   );
 }
@@ -366,36 +394,30 @@ function CustomServiceForm(props: { plugin: PluginIntegration; again: boolean })
   };
   return (
     <View>
-      {open() ? (
-        <View>
+      <If when={open()} else={<View class="mt-4">
+          <Action label={props.plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service"} onPress={() => open.set(true)} />
+        </View>}><View>
           <Section title="Service">
             <Field label="Name" accessibilityLabel="Service name" testID="custom-name" placeholder={props.plugin.name} value={name()} onChange={(value) => name.set(value)} />
             <Field label="Endpoint" accessibilityLabel="Service endpoint" testID="custom-endpoint" placeholder="https://service.example.com/mcp" keyboardType="url" value={endpoint()} onChange={(value) => endpoint.set(value)} />
           </Section>
           <Section title="Authorization">
-            {props.plugin.id === "mcp" ? <SwitchRow testID="custom-browser" title="Sign in with browser" checked={browser()} onChange={(on) => browser.set(on)} /> : null}
-            {!browser() ? <Field label="Token" accessibilityLabel="Service token" testID="custom-token" placeholder="Optional for public services" masked value={token()} onChange={(value) => token.set(value)} /> : null}
+            <If when={props.plugin.id === "mcp"}><SwitchRow testID="custom-browser" title="Sign in with browser" checked={browser()} onChange={(on) => browser.set(on)} /></If>
+            <If when={!browser()}><Field label="Token" accessibilityLabel="Service token" testID="custom-token" placeholder="Optional for public services" masked value={token()} onChange={(value) => token.set(value)} /></If>
           </Section>
-          {props.plugin.id === "openapi" ? (
-            <Section title="OpenAPI document">
+          <If when={props.plugin.id === "openapi"}><Section title="OpenAPI document">
               <Field label="OpenAPI 3 JSON" accessibilityLabel="OpenAPI document" testID="custom-spec" placeholder="Paste the JSON document" multiline mono value={spec()} onChange={(value) => spec.set(value)} />
-            </Section>
-          ) : null}
-          <Section title="Network" footer="Only for an internal service you trust.">
+            </Section></If>
+          <Section title="Network">
             <SwitchRow title="Allow a private network" checked={trust()} onChange={(on) => trust.set(on)} />
-            {trust() ? <Field label="Trusted ranges" accessibilityLabel="Trusted network ranges" placeholder="192.168.1.10/32" value={networks()} onChange={(value) => networks.set(value)} /> : null}
+            <If when={trust()}><Field label="Trusted ranges" accessibilityLabel="Trusted network ranges" placeholder="192.168.1.10/32" value={networks()} onChange={(value) => networks.set(value)} /></If>
           </Section>
-          {error() ? <Notice tone="failed" title="Check the form" detail={error()} /> : null}
+          <If when={error()}><Notice tone="failed" title="Check the form" detail={error()} /></If>
           <View class="mt-4">
             <Action filled testID="custom-connect" label={browser() ? "Continue in browser" : "Connect service"} busy={connectingService() === props.plugin.id} disabled={!endpoint().trim() || (trust() && !networks().trim())} onPress={() => void connect()} />
           </View>
-          <Text testID="custom-note" class="mt-2 px-4 text-xs text-muted-foreground">{`Credentials stay on ${serverDisplayName(daemonName())}. Each tool needs your permission.`}</Text>
-        </View>
-      ) : (
-        <View class="mt-4">
-          <Action label={props.plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service"} onPress={() => open.set(true)} />
-        </View>
-      )}
+          <View class="mt-2 px-4"><Text testID="custom-note" class="text-caption text-muted-foreground">{`Credentials stay on ${serverDisplayName(daemonName())}. Each tool needs your permission.`}</Text></View>
+        </View></If>
     </View>
   );
 }
@@ -414,12 +436,7 @@ function HyperliquidForm(props: { plugin: PluginIntegration; keyed: boolean }) {
   };
   return (
     <View>
-      {!open() ? (
-        <Section title="Trading">
-          <Row testID="hyperliquid-add-key" icon="key" title={props.keyed ? "Add another key" : "Add API wallet key"} chevron onPress={() => open.set(true)} />
-        </Section>
-      ) : (
-        <View>
+      <If when={!open()} else={<View>
           <Section title="Trading" footer={`The key stays on ${serverDisplayName(daemonName())}.`}>
             <Field label="API wallet key" accessibilityLabel="Hyperliquid API wallet key" placeholder="0x…" masked value={key()} onChange={(value) => key.set(value)} />
           </Section>
@@ -427,8 +444,9 @@ function HyperliquidForm(props: { plugin: PluginIntegration; keyed: boolean }) {
             <Action filled label="Add key" busy={connectingService() === props.plugin.id} disabled={!key().trim()} onPress={() => void connect()} />
             <Action label="Create an API wallet" onPress={() => void openUrl(API_WALLETS)} />
           </View>
-        </View>
-      )}
+        </View>}><Section title="Trading">
+          <Row testID="hyperliquid-add-key" lead={tile("key")} title={props.keyed ? "Add another key" : "Add API wallet key"} chevron onPress={() => open.set(true)} />
+        </Section></If>
     </View>
   );
 }

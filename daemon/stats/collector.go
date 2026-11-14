@@ -429,27 +429,13 @@ func (c *Collector) refresh() {
 	dailyMap := buildDailySessions(workerByDate, codexDaily)
 
 	// Build time-range aggregates
-	now := time.Now()
-	today := now.Format("2006-01-02")
-	weekAgo := now.AddDate(0, 0, -6).Format("2006-01-02")
-	monthAgo := now.AddDate(0, 0, -29).Format("2006-01-02")
-
-	ranges := map[string]*RangeData{
-		"day":   c.aggregateRange(dailyMap, today, "9999-99-99"),
-		"week":  c.aggregateRange(dailyMap, weekAgo, "9999-99-99"),
-		"month": c.aggregateRange(dailyMap, monthAgo, "9999-99-99"),
-		"all":   c.aggregateRange(dailyMap, "0000-00-00", "9999-99-99"),
+	starts := rangeStarts(time.Now())
+	ranges := make(map[string]*RangeData, len(starts))
+	for rangeName, fromDate := range starts {
+		ranges[rangeName] = c.aggregateRange(dailyMap, fromDate, "9999-99-99")
 	}
 	for rangeName, rd := range ranges {
-		fromDate := "0000-00-00"
-		switch rangeName {
-		case "day":
-			fromDate = today
-		case "week":
-			fromDate = weekAgo
-		case "month":
-			fromDate = monthAgo
-		}
+		fromDate := starts[rangeName]
 
 		modelAgg := aggregateModelsByDate(workerByDate, fromDate, "9999-99-99")
 		mergeModelAgg(modelAgg, aggregateCodexModelsByDate(codexModelsByDate, fromDate, "9999-99-99"))
@@ -492,6 +478,19 @@ func (c *Collector) refresh() {
 
 	c.saveSummary()
 	debuglog.Printf("[stats] refresh complete: %d days of data", len(dailyMap))
+}
+
+// rangeStarts names each Stats range by the first local date it covers, today
+// included: day, the last 7 days (week), 14 (fortnight), 30 (month), and all.
+func rangeStarts(now time.Time) map[string]string {
+	daysBack := func(n int) string { return now.AddDate(0, 0, -(n - 1)).Format("2006-01-02") }
+	return map[string]string{
+		"day":       now.Format("2006-01-02"),
+		"week":      daysBack(7),
+		"fortnight": daysBack(14),
+		"month":     daysBack(30),
+		"all":       "0000-00-00",
+	}
 }
 
 // ── dailyEntry holds per-date aggregated data ──────────────

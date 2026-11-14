@@ -4,8 +4,8 @@ import UIKit
 
 /// `mewla.qrScanner`: AVFoundation's QR reader, running while `active`. `scan {value}` for each code
 /// read (a value again only after 1.5 s, so a rejected code still in view is not re-sent every frame);
-/// `unavailable {reason, message}` with `permission` (the app asks, through `scan.request`) or
-/// `camera` (none, as on the Simulator, or it would not start). It never asks for the camera itself.
+/// `unavailable {reason, message}` with `permission` (the app asks, through `scan.request`), `missing`
+/// (the device has no camera, as the Simulator) or `camera` (it would not start). It never asks for the camera itself.
 final class QrScanner: NSObject, NshComponent, AVCaptureMetadataOutputObjectsDelegate {
   private let camera = PreviewView()
   var view: UIView { camera }
@@ -35,7 +35,7 @@ final class QrScanner: NSObject, NshComponent, AVCaptureMetadataOutputObjectsDel
       return unavailable("permission", "camera access is off for Mewla")
     }
     if !configured {
-      guard let device = AVCaptureDevice.default(for: .video) else { return unavailable("camera", "no camera") }
+      guard let device = AVCaptureDevice.default(for: .video) else { return unavailable("missing", "no camera") }
       let input: AVCaptureDeviceInput
       do { input = try AVCaptureDeviceInput(device: device) } catch { return unavailable("camera", error.localizedDescription) }
       let output = AVCaptureMetadataOutput()

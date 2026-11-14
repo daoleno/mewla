@@ -826,6 +826,7 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 			if err != nil {
 				return brainWorkControlError(err)
 			}
+			a.recordSpawnWorkWorker(ownedWork.ID, workerID, name, cwd, a.spawnExecutorID(req))
 		}
 	}
 
@@ -880,6 +881,25 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		response.BrainWork = &ownedWork
 	}
 	return response
+}
+
+// recordSpawnWorkWorker keeps the name and executor a Work's new Worker was
+// spawned with, so the Work names it after its pane is gone.
+func (a *controlApp) recordSpawnWorkWorker(workID, sessionID, name, cwd, executorID string) {
+	if a == nil || a.brainStore == nil {
+		return
+	}
+	provider := ""
+	if a.execs != nil {
+		if executor, ok := a.execs.WorkerExecutor(executorID); ok {
+			provider = executor.Provider
+		}
+	}
+	if _, err := a.brainStore.RecordWorkWorker(brain.WorkWorkerRecord{
+		WorkID: workID, SessionID: sessionID, Name: name, ExecutorID: executorID, Provider: provider, Cwd: cwd,
+	}); err != nil {
+		log.Printf("brain Work %s Worker %s record failed: %v", workID, sessionID, err)
+	}
 }
 
 func spawnAdmissionConfirmation(pending bool) string {
@@ -1075,6 +1095,8 @@ func (a *controlApp) handleBrainWorkUpdate(req control.Request) control.Response
 			update.Question = &source.Question
 		case "choices":
 			update.Choices = &source.Choices
+		case "recommended":
+			update.Recommended = &source.Recommended
 		default:
 			return control.ErrorResponse("invalid_brain_work", "Unknown Brain Work field: "+field)
 		}
@@ -1800,7 +1822,7 @@ func controlWorker(worker *classifier.Worker) control.Worker {
 		ExpectedNextCheckAt: worker.ExpectedNextCheckAt,
 		LeaseSeconds:        worker.LeaseSeconds,
 		Cwd:                 worker.Cwd,
-		Command:             worker.Command,
+		Command:             work.ShownCommand(worker.Command),
 		ExecutorID:          worker.ExecutorID,
 		UpdatedAt:           worker.UpdatedAt,
 		LastSeenAt:          lastSeenAt,
@@ -1903,7 +1925,7 @@ Shared tools: mewla connections --help.
 Progress: run "$MEWLA_WORKER_PROGRESS_CMD" worker progress with the turn contract's --turn-id at phase changes, long steps, blockers and completion; MEWLA_WORKER_ID identifies this Session. It is a check-in: continue without waiting for a reply.
   --status running|done|failed|blocked --phase starting|reading|planning|working|verifying|reporting --attention none|done|blocked|failed|user_input|stale --summary "<result>"
   optional: --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease <seconds> (running status lapses to unknown after the lease; renew it during long quiet steps)
-Use --attention user_input only for a necessary decision, and --status done --attention done only after acceptance and feasible verification. A refusal that blocks you is blocked, not done.`, normalizeWorkerProfile(profile)))
+Use --attention user_input only for a decision for Brain, and --status done --attention done only after acceptance and feasible verification. A refusal that blocks you is blocked, not done.`, normalizeWorkerProfile(profile)))
 }
 
 func normalizeWorkerProfile(profile string) string {

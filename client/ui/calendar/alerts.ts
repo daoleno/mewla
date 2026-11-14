@@ -1,5 +1,4 @@
-import { computed, effect, signal } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { computed, effect, signal, lifecycle } from "nsh";
 import { nextAlertDueAt, openAlerts } from "../../core/calendar/alerts";
 import type { CalendarItem } from "../../core/calendar/model";
 import { calendar, calendarItems } from "./state";

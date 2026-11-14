@@ -8,6 +8,8 @@ import type { ActivityTimelineItem } from "./activityTypes";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { ComputerMessageTimelineItem } from "./computerMessageCardModel";
 import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
+import type { BrainCurrentWork } from "../work/types";
+import type { AnsweredRequest } from "./answered";
 
 // components/terminal/InterfaceTimelineItemView.tsx
 export type TimelineItem =
@@ -17,7 +19,17 @@ export type TimelineItem =
   | PlanTimelineItem
   | BrainWorkEventTimelineItem
   | TaskNotificationTimelineItem
-  | ComputerMessageTimelineItem;
+  | ComputerMessageTimelineItem
+  | AnsweredTimelineItem;
+
+/** An answered request's sealed line, where it was asked (WIRE §2); `keys` are its card keys. */
+export type AnsweredTimelineItem = {
+  type: "answered";
+  id: string;
+  timestamp?: string;
+  record: AnsweredRequest;
+  keys: readonly string[];
+};
 
 // components/terminal/InterfaceTimelineMessage.tsx
 export type DisplayAttachment = {
@@ -43,6 +55,8 @@ export interface MessageTimelineItem {
 
   /** Process-local presentation alias; provider id/body remain canonical. */
   turnFocusAnchorId?: string;
+  /** A delegated Worker's brief: its task alone, which the chat shows instead of `body` (`delegatedBrief.ts`). */
+  delegatedTask?: string;
 }
 
 // components/terminal/InterfaceTimelinePlanTypes.ts
@@ -71,77 +85,14 @@ export type BrainWorkEventTimelineItem = {
   sourceCount?: number;
   currentWork?: BrainCurrentWork;
   onPress?: () => void;
+  /** What `onPress` opens: its Session (listed on the computer) rather than its Work. */
+  canOpenSession?: boolean;
   /** Brain only: the cat sits on this slip because its Work needs you. */
   catPerched?: boolean;
 };
 
-// store/brain.tsx
-export type BrainWorkStatus =
-  | "open"
-  | "running"
-  | "waiting"
-  | "needs_input"
-  | "done"
-  | "cancelled";
-
-export type BrainWorkWake = {
-  kind: "session_terminal" | "calendar_result" | "user_input";
-  ref: string;
-};
-
-export type BrainWorkProgressMode = "owned" | "waiting" | "ready";
-
-export type BrainSessionFinalization = {
-  session_id: string;
-  delegated: boolean;
-  state: "pending" | "failed" | "complete" | "skipped";
-  attempts?: number;
-  last_error?: string;
-  updated_at: string;
-};
-
-export type BrainWorkAttentionState = "queued" | "reserved" | "reviewing";
-
-export type BrainCurrentWork = {
-  work_id: string;
-  revision: number;
-  title: string;
-  status: BrainWorkStatus;
-  progress_mode?: BrainWorkProgressMode;
-  attempt_session_id?: string;
-  attempt_delegated?: boolean;
-  wait_for?: string;
-  wake?: BrainWorkWake;
-  attention_state?: BrainWorkAttentionState;
-  session_finalizations?: BrainSessionFinalization[];
-  unread_result: boolean;
-  /** One line about the newest outcome; daemons before 0.2.1 omit it. */
-  summary?: string;
-  updated_at?: string;
-  /** What Brain asks you about this Work, with one-tap answers. */
-  question?: string;
-  choices?: string[];
-  /** When the Work started waiting on a decision; never moves while it waits. */
-  attention_since?: string;
-  /** The open review's reason, e.g. "turn_lost" for an unknown outcome. */
-  attention_reason?: string;
-  /** Hidden from Needs you until then; the app compares the time. */
-  snoozed_until?: string;
-  /** Your newest decision on it, until a newer result comes back. */
-  user_action?: BrainWorkUserAction;
-  /** The schedule and run a Calendar occurrence's Work came from. */
-  calendar?: BrainWorkCalendarRef;
-};
-
-export type BrainWorkCalendarRef = { item_id: string; run_id: string };
-
-export type BrainWorkUserAction = {
-  kind: "reply" | "close" | "snooze";
-  text?: string;
-  at: string;
-  /** For a reply: Brain's admission ("accepted", "uncertain"). */
-  admission?: string;
-};
+// Brain's Work: one source (core/work/types).
+export type { BrainCurrentWork, BrainSessionFinalization, BrainWorkAttentionState, BrainWorkCalendarRef, BrainWorkProgressMode, BrainWorkStatus, BrainWorkUserAction, BrainWorkWake } from "../work/types";
 
 // store/workers.tsx
 export type WorkerPromptKind = 'permission' | 'plan' | 'choice' | 'startup' | 'approval';
@@ -178,6 +129,9 @@ export interface WorkerPrompt {
   options?: WorkerPromptOption[];
   questions?: WorkerPromptQuestion[];
   call_id?: string;
+  /** A Claude permission's tool ("Bash", "Read") and its one line (the command, else the file), when the daemon can name the call (WIRE §7). */
+  tool?: string;
+  summary?: string;
 }
 
 // services/sessionFilePreview.ts

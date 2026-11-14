@@ -1,4 +1,3 @@
-import type { Zones } from "../calendar/zones";
 import { brainWorkSlipStale, type BrainWorkSlip } from "./surface";
 import type { BrainWorkUserActionKind } from "./types";
 
@@ -12,7 +11,7 @@ import type { BrainWorkUserActionKind } from "./types";
  * - ask: open Brain with the Work quoted in the composer
  * - open: open the Worker Session
  * - close / dismiss / stop: close the Work as the user (done / not needed / stop the Worker)
- * - snooze: hide it from Needs you until tomorrow morning
+ * - snooze: hide it from Needs you for an hour
  * - read: mark a closed Work's result read so it leaves
  */
 export type BrainWorkActionKind =
@@ -32,6 +31,8 @@ export type BrainWorkAction = {
   /** For answer: the choice sent as the reply. */
   text?: string;
   primary?: boolean;
+  /** For answer: the choice Brain recommends ("Brain's pick"). */
+  pick?: boolean;
   /** Ask before doing it; the confirm says what will happen. */
   confirm?: string;
 };
@@ -44,16 +45,18 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
     ];
   }
   if (slip.question) {
+    // Brain's pick leads when there is one, else the first choice, as before.
     const choices = (slip.choices ?? []).map<BrainWorkAction>((choice, index) => ({
       kind: "answer",
       label: choice,
       text: choice,
-      primary: index === 0,
+      primary: slip.recommended ? choice === slip.recommended : index === 0,
+      pick: choice === slip.recommended || undefined,
     }));
     return [
       ...choices,
       { kind: "reply", label: choices.length ? "Something else…" : "Reply", primary: choices.length === 0 },
-      { kind: "snooze", label: "Snooze" },
+      { kind: "snooze", label: "Snooze 1 hour" },
       { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
     ];
   }
@@ -80,23 +83,25 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
   if (slip.group === "needs") {
     return [
       { kind: "reply", label: "Reply", primary: true },
-      { kind: "snooze", label: "Snooze" },
+      { kind: "snooze", label: "Snooze 1 hour" },
       { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
     ];
   }
   if (slip.group === "running") {
     const open: BrainWorkAction[] = slip.sessionId ? [{ kind: "open", label: "Open Worker", primary: true }] : [];
-    // Calendar, not Brain, runs a Calendar run's Worker: Stop would cancel
-    // Brain's Work and leave the run going.
-    const stop: BrainWorkAction[] = slip.sessionId && !slip.calendar
+    // The daemon stops only a Work whose Attempt runs in a delegated Worker. Calendar, not Brain, runs a
+    // Calendar run's Worker: Stop would cancel Brain's Work and leave the run going.
+    const stop: BrainWorkAction[] = slip.stoppable && !slip.calendar
       ? [{ kind: "stop", label: "Stop", confirm: "The Worker is closed and its Work cancelled. Unsaved work in it is lost." }]
       : [];
-    return [...open, { kind: "ask", label: "Ask Brain about this" }, ...stop];
+    // Snoozed, it stays out of Needs you for the hour if it comes to need you (SPEC §11 Work detail).
+    return [...open, { kind: "ask", label: "Ask Brain about this" }, { kind: "snooze", label: "Snooze 1 hour" }, ...stop];
   }
   if (slip.group === "queued" || slip.group === "waiting") {
     // Nothing here asks for you, so the slip stays quiet; its sheet has these.
     return [
       { kind: "ask", label: "Ask Brain about this" },
+      { kind: "snooze", label: "Snooze 1 hour" },
       { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
     ];
   }
@@ -122,15 +127,8 @@ export function brainWorkUserAction(kind: BrainWorkActionKind): BrainWorkUserAct
   }
 }
 
-/** Tomorrow at 09:00 where the phone is, the snooze target. */
-export function brainWorkSnoozeUntil(zones: Zones, now = Date.now()): number {
-  const zone = zones.device;
-  const tomorrow = zones.dateKey(now + 86_400_000, zone);
-  const resolved = zones.resolveLocal(tomorrow, "09:00", zone);
-  if (resolved.status === "resolved") return resolved.instant;
-  if (resolved.status === "ambiguous") return resolved.instants[0];
-  return zones.resolveLocal(tomorrow, "10:00", zone).status === "resolved" ? (zones.resolveLocal(tomorrow, "10:00", zone) as { instant: number }).instant : now + 86_400_000;
-}
+/** Snooze's length: the computer ends it on its own clock (SPEC "Snooze 1 hour"). */
+export const BRAIN_WORK_SNOOZE_SECONDS = 3600;
 
 /**
  * The actions a slip carries in the list, beside the full set on its page: the

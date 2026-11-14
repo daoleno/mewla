@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/answered"
 	"hash/fnv"
 	"io"
 	"io/fs"
@@ -142,6 +143,7 @@ type Server struct {
 	calendarScheduler          *calendar.Scheduler
 	telegram                   *telegramchannel.Manager
 	computers                  *computers.Manager
+	openRequests               openRequestsCache
 	outsideAgents              *outsideagents.Manager
 	outsideAgentsDoor          http.Handler
 	computerName               string
@@ -176,6 +178,8 @@ type Server struct {
 	live                       liveHub // live state, see live_state.go
 	uploadDir                  string
 	uploadStore                *attachment.Store
+	// firstMessageSend submits a create_session's first message once the agent is ready (tests replace it).
+	firstMessageSend           func(workerID, command, text string) error
 	sessionFileWorkerLoader    func(workerID string) *classifier.Worker
 	sessionFileCapabilityClock func() time.Time
 	authRevocationUnsubscribe  func()
@@ -188,6 +192,11 @@ type Server struct {
 	enrollments                *enrollment.Manager
 	enrollmentObserver         func(enrollment.Request)
 	webUIFiles                 fs.FS
+	webUIDir                   string
+	webUIOverrideSeen          atomic.Bool
+	// webPort is the port this daemon listens on (0 until it binds): a
+	// loopback web UI is this daemon's only on it.
+	webPort atomic.Int32
 
 	workSubID                   int
 	workSub                     <-chan work.Event
@@ -224,8 +233,16 @@ type Server struct {
 	refusals           refusalLog
 	enrollmentRates    map[string][]time.Time
 	agentLevelsFn      func(*classifier.Worker) map[string]string
+	agentActivityFn    func(workerID string) AgentActivity
 	agentApprovals     AgentApprovals
-	codexStatus        func(ctx context.Context, workerID string) (any, error)
+	// answered is the answered-request ledger (answered_requests.go);
+	// prompts tracks open screen prompts for it.
+	answered *answered.Ledger
+	prompts  promptWatch
+	// afterPromptLeft runs a prompt's check once it has stayed off the
+	// screen for the grace; nil is time.AfterFunc. Tests run it themselves.
+	afterPromptLeft func(grace time.Duration, check func())
+	codexStatus     func(ctx context.Context, workerID string) (any, error)
 }
 
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.
@@ -417,6 +434,7 @@ type clientMessage struct {
 	SessionID            string                                 `json:"session_id"`
 	Text                 string                                 `json:"text"`
 	SnoozeUntil          *time.Time                             `json:"snooze_until,omitempty"`
+	SnoozeSeconds        int64                                  `json:"snooze_seconds,omitempty"`
 	Key                  string                                 `json:"key"`
 	OptionID             string                                 `json:"option_id"`
 	Data                 string                                 `json:"data"`
@@ -437,6 +455,7 @@ type clientMessage struct {
 	Col                  int                                    `json:"col"`
 	Row                  int                                    `json:"row"`
 	Lines                int                                    `json:"lines"`
+	Scroll               bool                                   `json:"scroll,omitempty"`
 	Since                *terminal.HistoryCursor                `json:"since,omitempty"`
 	ProcessID            int                                    `json:"process_id"`
 	Path                 string                                 `json:"path"`
@@ -556,6 +575,9 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 		if bound, ok := tcp.Addr().(*net.TCPAddr); ok {
 			s.connections.SetLoopbackPort(bound.Port)
 		}
+	}
+	if bound, ok := tcp.Addr().(*net.TCPAddr); ok {
+		s.webPort.Store(int32(bound.Port))
 	}
 	var listener net.Listener = tcp
 	if s.tlsConfig != nil {
@@ -1095,6 +1117,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSnoozeCalendarItem(conn, raw)
 	case "done_calendar_item":
 		s.handleDoneCalendarItem(conn, raw)
+	case "computers":
+		s.handleComputersList(conn, raw)
 	case "brain_snapshot":
 		s.sendBrainSnapshot(conn, raw.RequestID)
 	case "brain_context":
@@ -1103,6 +1127,10 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainGC(conn, raw)
 	case "brain_work_read":
 		s.handleBrainWorkRead(conn, raw)
+	case "brain_work_detail":
+		s.handleBrainWorkDetail(conn, raw)
+	case "answered_requests":
+		s.handleAnsweredRequests(conn, raw)
 	case "brain_work_action":
 		// A reply waits on the Brain host's input admission; keep reading.
 		go s.handleBrainWorkAction(conn, raw)
@@ -1240,6 +1268,16 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			}
 			command = ensured
 		}
+		firstMessage, firstErr := s.prepareFirstMessage(command, raw.Text, raw.Attachments)
+		if firstErr != nil {
+			code := "create_session_failed"
+			var refused *firstMessageError
+			if errors.As(firstErr, &refused) {
+				code = refused.code
+			}
+			s.sendErrorWithRequestID(conn, raw.RequestID, code, firstErr.Error())
+			return
+		}
 		connectionID := strings.TrimSpace(raw.ConnectionID)
 		if connectionID == "" {
 			connectionID = strings.TrimSpace(raw.ProfileID)
@@ -1267,8 +1305,15 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			"request_id": raw.RequestID,
 			"worker_id":  workerID,
 		}
+		launched := command
 		if worker := s.watcher.GetWorker(workerID); worker != nil {
 			response["worker_session"] = s.workerSessionWire(worker)
+			if strings.TrimSpace(worker.Command) != "" {
+				launched = worker.Command
+			}
+		}
+		if firstMessage != nil {
+			response["first_message"] = "pending"
 		}
 		if routeSnap != nil {
 			response["session_route"] = routeSnap
@@ -1281,6 +1326,9 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			}
 		}
 		s.sendJSON(conn, response)
+		if firstMessage != nil {
+			go s.deliverFirstMessage(workerID, launched, raw.RequestID, firstMessage)
+		}
 	case "kill_worker":
 		teardown := s.teardownWorkerSession(raw.WorkerID)
 		if teardown.Err != nil {
@@ -1734,7 +1782,13 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
 		}
 	case "terminal_input":
-		if err := s.terminal.Input(clientID(conn), raw.SessionID, raw.Data); err != nil {
+		// scroll: what a scroll drag made (wheel presses, cursor keys) is reading, not typing: it never takes
+		// the Session's size from another viewer.
+		input := s.terminal.Input
+		if raw.Scroll {
+			input = s.terminal.ScrollInput
+		}
+		if err := input(clientID(conn), raw.SessionID, raw.Data); err != nil {
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "session_id": raw.SessionID, "code": "input_failed", "message": err.Error()})
 		}
 	case "terminal_resize":
@@ -2045,7 +2099,10 @@ type codexConversationSubscriptionSnapshot struct {
 	// readerVersion is the provider reader content version of this snapshot.
 	// 0 means unknown (test loader or non-cached provider); never skip then.
 	readerVersion int64
-	attached      bool
+	// overlayVersion is the version of the thread's own overlays (rewinds,
+	// answered requests) this snapshot was projected with.
+	overlayVersion uint64
+	attached       bool
 }
 
 func (s *Server) runCodexConversationSubscription(
@@ -2129,7 +2186,9 @@ func (s *Server) publishCodexConversationSubscription(
 	}
 
 	now := time.Now()
-	rewoundVersion := s.rewound.version()
+	// The thread's overlays (a rewind, answered requests) move apart from
+	// the provider transcript; either moving reprojects it.
+	rewoundVersion := s.rewound.version() + s.answeredLedger().Version()
 	conversation, err := s.loadProviderConversation(reader, resolved, now)
 	if took := time.Since(now); took >= slowSessionInputLog {
 		// A snapshot cannot arrive before this load returns; the phone only
@@ -2164,6 +2223,7 @@ func (s *Server) publishCodexConversationSubscription(
 	// sanitize so the unchanged-poll claim is truthful end to end.
 	if readerVersion != 0 && (*previous) != nil &&
 		(*previous).readerVersion == readerVersion &&
+		(*previous).overlayVersion == rewoundVersion &&
 		(*previous).attached == resolved.fromWatcher &&
 		codexConversationIdentity((*previous).conversation) == codexConversationIdentity(conversation) &&
 		!brainScoped {
@@ -2213,6 +2273,11 @@ func (s *Server) publishCodexConversationSubscription(
 		}
 	}
 	providerConversation := conversation
+	if !brainScoped {
+		// Answered requests join the Session's thread after its projection;
+		// Brain's thread takes its own in brainScopedConversation.
+		conversation = s.withAnsweredRequests(resolved.targetID, conversation)
+	}
 	if brainScoped {
 		conversation = s.brainScopedConversation(raw.ConversationScopeKey, conversation, now)
 		if reusedProvider {
@@ -2292,6 +2357,7 @@ func (s *Server) publishCodexConversationSubscription(
 		eventFingerprints:    fingerprint.eventFingerprints,
 		revision:             1,
 		readerVersion:        readerVersion,
+		overlayVersion:       rewoundVersion,
 		attached:             resolved.fromWatcher,
 	}
 	if (*previous) != nil {
@@ -2356,6 +2422,7 @@ type brainProjectionKey struct {
 	store     uint64
 	calendar  uint64
 	computers uint64
+	answered  uint64
 }
 
 func (s *Server) brainProjectionKey(scopeKey string) brainProjectionKey {
@@ -2364,7 +2431,7 @@ func (s *Server) brainProjectionKey(scopeKey string) brainProjectionKey {
 		return brainProjectionKey{}
 	}
 	threadID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(scopeKey), prefix))
-	key := brainProjectionKey{store: s.brain.ConversationProjectionVersion()}
+	key := brainProjectionKey{store: s.brain.ConversationProjectionVersion(), answered: s.answeredLedger().Version()}
 	if s.calendar != nil {
 		key.calendar = s.calendar.Generation()
 	}
@@ -2611,6 +2678,9 @@ func (s *Server) brainScopedConversation(scopeKey string, conversation work.Code
 		appendUnique(calendarResultConversationEvent(result))
 	}
 	s.addComputerMessages(threadID, uniqueEvents, appendUnique)
+	for _, event := range s.brainThreadAnsweredRequests(threadID) {
+		appendUnique(event)
+	}
 	uniqueEvents = withoutWatchEvents(uniqueEvents)
 	if lifecycleErr := s.brain.AnnotateWorkResultEvents(uniqueEvents); lifecycleErr != nil {
 		conversation.Available = false
@@ -2728,8 +2798,9 @@ func codexConversationSubscriptionFingerprintMemoized(
 	writeFingerprintInt(hash, len(conversation.Events))
 	for _, event := range conversation.Events {
 		id := strings.TrimSpace(event.ID)
-		if _, ok := eventFingerprints[id]; !ok {
-			// New or unknown event: its fingerprint must be computed.
+		if _, ok := eventFingerprints[id]; !ok || event.Source == answeredConversationKind {
+			// New or unknown event: its fingerprint must be computed. An
+			// answered request is an overlay the reader does not version.
 			changed[id] = struct{}{}
 		}
 		if _, needs := changed[id]; needs {
@@ -2913,8 +2984,21 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 	writeFingerprintString(w, event.WorkAttention)
 	writeFingerprintString(w, event.WorkEventKind)
 	writeFingerprintString(w, event.WorkDetailsJSON)
-	writeFingerprintString(w, event.WorkNextAction)
 	writeFingerprintString(w, event.WorkWaitFor)
+	for _, action := range event.WorkActions {
+		writeFingerprintString(w, action.Kind)
+		writeFingerprintString(w, action.URL)
+		writeFingerprintString(w, action.SessionID)
+		writeFingerprintString(w, action.Cwd)
+		writeFingerprintString(w, action.Path)
+	}
+	writeFingerprintInt(w, len(event.WorkActions))
+	if request := event.Request; request == nil {
+		writeFingerprintString(w, "")
+	} else {
+		encoded, _ := json.Marshal(request)
+		writeFingerprintString(w, string(encoded))
+	}
 	writeFingerprintString(w, event.TaskID)
 	for _, count := range []*int{event.TaskTokens, event.TaskToolUses, event.TaskDurationMS} {
 		if count == nil {
@@ -3265,6 +3349,24 @@ func (s *Server) handleBrainWorkRead(conn *websocket.Conn, raw clientMessage) {
 	})
 }
 
+// handleBrainWorkDetail answers one Work's detail page, current or closed.
+func (s *Server) handleBrainWorkDetail(conn *websocket.Conn, raw clientMessage) {
+	if s.brain == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_unavailable", "Brain is not configured")
+		return
+	}
+	detail, err := s.brain.WorkDetail(strings.TrimSpace(raw.ID))
+	if err != nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_detail_failed", brainWorkActionMessage(err))
+		return
+	}
+	s.sendJSON(conn, map[string]any{
+		"type":       "brain_work_detail",
+		"request_id": raw.RequestID,
+		"work":       detail,
+	})
+}
+
 // handleBrainWorkAction applies one user action from a Work slip. The reply
 // carries the Brain admission outcome so the slip never claims Brain heard an
 // answer whose delivery is unknown.
@@ -3280,14 +3382,17 @@ func (s *Server) handleBrainWorkAction(conn *websocket.Conn, raw clientMessage) 
 		s.sendErrorWithRequestID(conn, raw.RequestID, "attachment_not_uploaded", confineErr.Error())
 		return
 	}
+	asked, _ := s.workQuestionBefore(raw.ID)
 	result, err := s.brain.ActOnWork(brain.WorkUserActionRequest{
 		WorkID: strings.TrimSpace(raw.ID), Kind: brain.WorkUserActionKind(strings.TrimSpace(raw.Action)),
-		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, RequestID: raw.RequestID, Attachments: files,
+		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, SnoozeFor: time.Duration(raw.SnoozeSeconds) * time.Second,
+		RequestID: raw.RequestID, Attachments: files,
 	})
 	if err != nil && !errors.Is(err, brain.ErrWorkCleanupPending) {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_action_failed", brainWorkActionMessage(err))
 		return
 	}
+	s.recordWorkReply(asked, result, s.answeredByConn(conn))
 	s.sendJSON(conn, map[string]any{
 		"type":       "brain_work_action",
 		"request_id": raw.RequestID,
@@ -3744,6 +3849,11 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 	}
 
 	switch ev.Type {
+	case "worker_discovered", "worker_state_change", "worker_metadata_change", "worker_removed":
+		// A Session that starts or stops running or asking changes the live state.
+		defer s.observeLiveSessions()
+	}
+	switch ev.Type {
 	case "worker_discovered":
 		if ev.Worker != nil {
 			s.publishWorkerSession("worker_session_created", ev.Worker)
@@ -3756,14 +3866,17 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 		if ev.Worker != nil {
 			s.publishWorkerSessionChange(ev.Worker)
 		}
+		s.observePromptLifecycle(ev)
 		s.maybeNotifyForSessionEvent(ev)
 		s.routeSessionEventToBrain(ev)
 	case "worker_metadata_change":
 		if ev.Worker != nil {
 			s.publishWorkerSessionChange(ev.Worker)
 		}
+		s.observePromptLifecycle(ev)
 		s.routeSessionEventToBrain(ev)
 	case "worker_removed":
+		s.observePromptLifecycle(ev)
 		if ev.Worker != nil {
 			s.publishWorkerSession("worker_session_archived", ev.Worker)
 		}
@@ -3889,6 +4002,12 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 	kind, ok := workerNotificationKind(ev.NewState)
 	if !ok {
 		s.noteWorkerMoved(ev)
+		return
+	}
+	// Blocked on its own report, the Worker asks Brain, not the owner: Brain
+	// decides, and reaches the owner only with its Work's question.
+	if kind == push.KindWorkerBlocked && !asksOwner(ev.Worker, len(s.pendingApprovals(ev.WorkerID))) {
+		s.noteSuppressedNotification(ev, "brain_decides")
 		return
 	}
 	if s.hasActiveViewer(ev.WorkerID) {

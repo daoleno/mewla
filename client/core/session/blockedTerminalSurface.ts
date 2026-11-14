@@ -46,7 +46,7 @@ export function hasActionableCard({
 }
 
 /**
- * A Session that is blocked on something the Interface has no card for shows
+ * A Session that is blocked on a terminal prompt the Interface has no card for shows
  * its live terminal, where the person can act on it. The decision is per
  * block: when the person goes back to the chat while the same block persists,
  * it is not forced again. It starts over when the block clears or a card
@@ -56,7 +56,10 @@ export function resolveBlockedTerminal(input: BlockedTerminalInput): BlockedTerm
   if (!input.live) {
     return { forceTerminal: false, blockKey: null, dismissedKey: input.dismissedKey };
   }
-  if (input.status !== "blocked" || hasActionableCard(input)) {
+  // Only a prompt on the terminal that no card can draw needs the terminal. Blocked with no prompt (a Worker's own
+  // report, a question in its reply) the chat is where it is answered (owner 11-13 19:4x: "open the chat when there
+  // is one").
+  if (input.status !== "blocked" || !input.prompt || hasActionableCard(input)) {
     return { forceTerminal: false, blockKey: null, dismissedKey: null };
   }
   const blockKey = `${input.identity}|${input.prompt?.id ?? ""}`;

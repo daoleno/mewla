@@ -73,6 +73,13 @@ type judge struct {
 	// routingPath is routing.md in the Brain workspace; routing caches its row.
 	routingPath string
 	routing     *routingCache
+	// routingTask names the routing.md row; empty is "Watch judgment".
+	routingTask string
+	// budgetUSD caps one Claude run; empty is judgeBudgetUSD.
+	budgetUSD string
+	// effort is Claude's reasoning when the route names none; empty is the
+	// CLI's own.
+	effort string
 
 	run sync.Mutex
 

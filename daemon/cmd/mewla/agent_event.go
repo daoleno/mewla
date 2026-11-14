@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/answered"
 	"io"
 	"os"
 	"path/filepath"
@@ -51,6 +52,19 @@ type agentEventService struct {
 	raised map[string]bool          // approval id -> Brain was told
 	told   map[string]chan struct{} // approval id -> closed once Brain was told or could not be
 	notes  map[string]string        // approval id -> what the answer relied on
+
+	// answered keeps the record of every approval answered here.
+	answered *answered.Ledger
+	// askedAt is when a screen prompt was shown (the server's prompt watch),
+	// so an answer from here names the same showing as the app's would.
+	askedAt func(sessionID, promptID string) *time.Time
+}
+
+func (s *agentEventService) promptAskedAt(sessionID, promptID string) *time.Time {
+	if s == nil || s.askedAt == nil {
+		return nil
+	}
+	return s.askedAt(sessionID, promptID)
 }
 
 func newAgentEventService(hub *agentevents.Hub, workers func() []*classifier.Worker) *agentEventService {
@@ -380,6 +394,14 @@ func (s *agentEventService) decide(workerID, approvalID, optionID, by, basis str
 		summary += " — basis: " + truncateRunes(basis, 300)
 	}
 	s.finishQuestion(workerID, *chosen, outcome, summary, who, basis)
+	if by == answeredByOperator {
+		// The app's answers are recorded by the server, which knows the device.
+		answerer := answered.Answerer{Kind: answered.ByOperator, Basis: basis}
+		if route == routeBrain {
+			answerer.Kind = answered.ByBrain
+		}
+		recordAnswered(s.answered, server.ApprovalAnswerRecord(workerID, approvalWire(*chosen), optionID, answerer, s.now()))
+	}
 	if by == answeredByOperator && route == routeBrain {
 		s.brainAnswered(workerID)
 	}
@@ -414,6 +436,16 @@ func agentLevelsFor(execs *work.ExecutorConfig, adapters *agentevents.Registry, 
 		provider := providerOf(execs, worker.ExecutorID, worker.Command)
 		state, known := hub.State(worker.ID)
 		return adapters.Levels(provider, known && !state.Exited)
+	}
+}
+
+// hubActivity says, for one Worker, what its agent reported it started last.
+func hubActivity(hub *agentevents.Hub) func(string) server.AgentActivity {
+	return func(workerID string) server.AgentActivity {
+		if state, ok := hub.State(workerID); ok && !state.Exited {
+			return server.AgentActivity{Line: state.Activity, Tool: state.ActivityTool, Summary: state.ActivitySummary}
+		}
+		return server.AgentActivity{}
 	}
 }
 
@@ -457,6 +489,34 @@ func (a appApprovals) Pending(workerID string) []server.ApprovalWire {
 		out = append(out, wire)
 	}
 	return out
+}
+
+// AnsweredInTerminal settles the hook-held permission whose dialog was
+// answered in the Worker's terminal: the one asking about this tool call, or
+// the only one pending when the prompt could not name its call.
+func (a appApprovals) AnsweredInTerminal(workerID, tool, summary string) {
+	state, ok := a.service.hub.State(workerID)
+	if !ok {
+		return
+	}
+	var permissions []agentevents.Approval
+	for _, pending := range state.Approvals {
+		if pending.Kind == "permission" {
+			permissions = append(permissions, pending)
+		}
+	}
+	if tool != "" {
+		for _, pending := range permissions {
+			if pending.Tool == tool && pending.Summary == summary {
+				a.service.hub.AnsweredInTerminal(workerID, pending.ID, a.service.now().UTC())
+				return
+			}
+		}
+		return
+	}
+	if len(permissions) == 1 {
+		a.service.hub.AnsweredInTerminal(workerID, permissions[0].ID, a.service.now().UTC())
+	}
 }
 
 func (a appApprovals) Decide(workerID, approvalID, optionID string) error {

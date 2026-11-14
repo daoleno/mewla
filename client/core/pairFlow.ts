@@ -74,6 +74,31 @@ export const NOTHING_TO_PASTE: PairingProblem = {
   detail: "Copy the link from mewla pair --details on your computer, then tap Paste again.",
 };
 
+/**
+ * The system refused to hand over the clipboard (iOS's "Don't Allow Paste", or Paste from Other Apps set to Deny:
+ * PBErrorDomain 13, "Operation not authorized"). It is not empty: say it was refused, with the system's words.
+ */
+export function pasteRefused(error: unknown): PairingProblem {
+  const reason = error instanceof Error ? error.message.trim().replace(/\.$/, "") : "";
+  return {
+    title: "Paste wasn't allowed",
+    detail: `${reason ? `${reason}. ` : ""}Tap Paste again and allow it, or type the link.`,
+  };
+}
+
+/**
+ * What a read of the clipboard came to. iOS answers a paste the person denied with no text and no error (NSH 0.5.0
+ * reads `UIPasteboard.string`, nil when denied, and resolves ""), while `hasStrings`, which asks nothing, still says
+ * text is there: no text from a clipboard that holds some is a refusal (Mac re-run 11-14, 6c: PBErrorDomain 13 in the
+ * log, "Nothing to paste" on screen). An error from the read is one too.
+ */
+export function clipboardRead(read: { text: string; has: boolean } | { error: unknown }): { kind: "text"; text: string } | { kind: "empty" } | { kind: "refused"; error?: unknown } {
+  if ("error" in read) return { kind: "refused", error: read.error };
+  if (read.text === "" && read.has) return { kind: "refused" };
+  const text = read.text.trim();
+  return text ? { kind: "text", text } : { kind: "empty" };
+}
+
 export const LINK_REQUIRED: PairingProblem = {
   title: "Pairing link required",
   detail: "Paste the link mewla pair --details prints, or scan its QR code.",

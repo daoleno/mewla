@@ -1,5 +1,4 @@
-import { effect, host, signal, Storage, Text, View } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { effect, host, signal, Storage, Text, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { askForReminders, reminderPermission, type PushHost, type ReminderPermission } from "../../core/push/registration";
 
@@ -46,22 +45,16 @@ export function ReminderBanner() {
   };
   const title = () => (permission() === "undetermined" ? "Reminders not enabled" : permission() === "denied" ? "Reminders disabled" : "Reminders unavailable");
   return (
-    <View>{permission() === "granted" ? null : (
-    <View testID="reminder-banner" class="mx-4 mt-3 gap-2 rounded-xl border border-border bg-card px-4 py-3">
+    <View><If when={!(permission() === "granted")}><View testID="reminder-banner" class="mx-4 mt-3 gap-2 rounded-xl border border-border bg-card px-4 py-3">
       <View class="flex-row items-center gap-3">
         <Text class="flex-1 text-base font-semibold">{title()}</Text>
-        {permission() === "undetermined" ? (
-          <Button testID="enable-reminders" accessibilityLabel="Enable reminders" onPress={() => void enable()} class="rounded-full bg-primary px-4 py-1.5">
-            <Text class="text-base font-semibold text-primary-foreground">Enable</Text>
-          </Button>
-        ) : permission() === "denied" ? (
-          <Button testID="reminder-settings" accessibilityLabel="Open notification settings" onPress={settings} class="rounded-full border border-border px-4 py-1.5 active:bg-accent">
+        <If when={permission() === "undetermined"} else={<If when={permission() === "denied"}><Button testID="reminder-settings" accessibilityLabel="Open notification settings" onPress={settings} class="rounded-full border border-border px-4 py-1.5 active:bg-accent">
             <Text class="text-base">Settings</Text>
-          </Button>
-        ) : null}
+          </Button></If>}><Button testID="enable-reminders" accessibilityLabel="Enable reminders" onPress={() => void enable()} class="rounded-full bg-primary px-4 py-1.5">
+            <Text class="text-base font-semibold text-primary-foreground">Enable</Text>
+          </Button></If>
       </View>
-      {failure() ? <Text class="text-sm text-destructive">{failure()}</Text> : null}
-    </View>
-    )}</View>
+      <If when={failure()}><Text class="text-sm text-destructive">{failure()}</Text></If>
+    </View></If></View>
   );
 }

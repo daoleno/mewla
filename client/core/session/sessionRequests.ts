@@ -10,6 +10,7 @@
  * Codex ones with an `Error` carrying the daemon's `code` when it gave one.
  */
 import type { Daemon } from "../more/daemon";
+import { PICTURE_READ_MS } from "../timeline/pictureRetry";
 import {
   invalidProviderReply,
   offlineProviderError,
@@ -267,10 +268,20 @@ export async function chatSlashCommands(daemon: Daemon): Promise<CodexSlashComma
   return buildChatuiSlashCommands((await codexSlashCommands(daemon)).commands);
 }
 
-/** An image a reply shows by its path on the computer (`codex_asset`): a data URL, or null when it is no image. */
+/**
+ * An image a reply shows by its path on the computer (`codex_asset`): a data URL, or null when the computer
+ * says it is no image it can show (missing, too large, not a picture). It throws when it could not ask or no
+ * answer came (offline, the link dropped, timed out): that read is worth asking again.
+ */
 export async function codexAsset(daemon: Daemon, path: string, cwd?: string): Promise<string | null> {
-  if (daemon.state !== "connected") return null;
-  const frame = await daemon.request<Reply>("codex_asset", { path, ...(cwd ? { cwd } : {}) }, { reply: "codex_asset", timeoutMs: 10_000 });
+  if (daemon.state !== "connected") throw new Error("Daemon is not connected.");
+  let frame: Reply;
+  try {
+    frame = await daemon.request<Reply>("codex_asset", { path, ...(cwd ? { cwd } : {}) }, { reply: "codex_asset", timeoutMs: PICTURE_READ_MS });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "codex_asset_failed") return null;
+    throw error;
+  }
   const url = typeof frame.data_url === "string" ? frame.data_url : "";
   return url.startsWith("data:image/") ? url : null;
 }

@@ -1,16 +1,19 @@
 name: Client (NSH)
 
-# The NSH client that replaces app/ in one cutover release (client/README.md).
-# Until it is stable it runs on pull requests and manual dispatch only, never on
-# a push to main, so it cannot turn main red; prove a change on a branch with
-# `gh workflow run client.yml --ref <branch> -f gate=false`. A run builds both hosts: the Android preview APK
+# The NSH client, which replaced the Expo app in one cutover release (client/README.md).
+# A release gate, not a development step (user, 2026-11-12): it runs on a push to main that
+# touches the client (the merge, which also saves the native caches ci.yml restores) and by
+# hand, never on each push to a branch or PR. Before the cutover merge, run it once by hand on
+# the final commit with the upgrade gate: `gh workflow run client.yml --ref <branch>`. Device
+# rounds during development build locally. A run builds both hosts: the Android preview APK
 # (com.daoleno.mewla.preview, an artifact to sideload; on dispatch signed with the release key so
 # every Preview installs over the last one, client/scripts/preview-signer.sh) and the iOS
 # Simulator app with its upgrade tests. The fast checks (core tests, nsh check,
 # nsh test) run in ci.yml's client job. The upgrade gate runs on manual dispatch:
 # the released Expo APK, then the release-signed NSH app installed over it.
 on:
-  pull_request:
+  push:
+    branches: [main]
     paths: ["client/**", ".github/workflows/client.yml"]
   workflow_dispatch:
     inputs:
@@ -21,6 +24,10 @@ on:
       old_version:
         description: "Expo release the gate upgrades from (a tag, or latest)"
         default: "latest"
+      android_only:
+        description: "Only the Android host: a Preview-signed APK to hand over (no iOS job)"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}-${{ github.event_name }}
@@ -64,6 +71,8 @@ jobs:
           MEWLA_ANDROID_KEY_ALIAS: ${{ github.event_name == 'workflow_dispatch' && secrets.ZEN_ANDROID_KEY_ALIAS || '' }}
           MEWLA_ANDROID_KEY_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && secrets.ZEN_ANDROID_KEY_PASSWORD || '' }}
         run: ./gradlew --no-daemon --console=plain assemblePreviewRelease -Pmewla.abis=arm64-v8a
+      - name: Every pet image the app names is in the APK
+        run: python3 client/scripts/check-pet-assets.py android "$(ls client/android/app/build/outputs/apk/preview/release/*.apk | head -1)"
       - name: Shred the keystore
         if: always() && github.event_name == 'workflow_dispatch'
         run: |
@@ -90,11 +99,12 @@ jobs:
 
   ios:
     name: iOS host (Simulator, upgrade tests)
+    if: github.event_name != 'workflow_dispatch' || !inputs.android_only
     runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      # The verified libghostty-vt XCFramework the terminal links (app/modules/terminal-vt/libs/ios, cached on main).
+      # The verified libghostty-vt XCFramework the terminal links (native/terminal-vt/libs/ios, cached on main).
       - name: iOS Ghostty XCFramework
         uses: ./.github/actions/ios-native
       - uses: actions/cache@v4
@@ -118,6 +128,8 @@ jobs:
         working-directory: client/ios
         env:
           TEST_RUNNER_MEWLA_TEST_OUT: ${{ github.workspace }}/client/ios/out
+          # The render corpus TerminalTests draws into out/corpus (the Simulator reads the checkout).
+          TEST_RUNNER_MEWLA_CORPUS: ${{ github.workspace }}/scripts/terminal-corpus
         run: |
           set -o pipefail
           mkdir -p out
@@ -131,6 +143,7 @@ jobs:
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -5
           APP=build/dd/Build/Products/Release-iphonesimulator/Mewla.app
           du -sh "$APP"
+          python3 ../scripts/check-pet-assets.py ios "$APP"
           mkdir -p out
           xcrun simctl boot "$SIM" || true
           xcrun simctl bootstatus "$SIM" -b

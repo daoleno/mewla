@@ -20,8 +20,11 @@ describe("the Calendar tab", () => {
     await app.waitFor("text:Dentist", SLOW);
     expect(app.texts()).not.toContain("Old plan");
     expect(app.texts().join(" ")).toMatch(/Scheduled · Reminder/);
+    // Each row leads with who acts (SPEC §10.4).
+    expect(app.count("id:calendar-item-lead")).toBe(2);
     await app.press("id:calendar-item-Call the bank");
     await app.waitFor("id:calendar-item-page", SLOW);
+    expect(app.shows("id:item-lead")).toBe(true);
     expect(app.texts().join(" ")).toMatch(/at \d+:\d\d (AM|PM)/);
   }, 20_000);
 
@@ -72,16 +75,41 @@ describe("the Calendar tab", () => {
     expect(app.texts()).toContain("None");
   }, 20_000);
 
-  test("the heading says Today, the month picks a day and Hide month goes back to the whole agenda", async () => {
+  test("the heading says Today, Month picks a day and Today goes back to the whole agenda", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
     await app.waitFor("text:Call the bank");
     expect(app.texts()).toContain("Today");
-    await app.press("id:toggle-month");
+    await app.press("id:calendar-view-month");
     await app.waitFor("id:calendar-month");
-    expect(app.texts()).toContain("Hide month");
     await app.press("id:back-to-today").catch(() => undefined);
-    await app.press("id:toggle-month");
-    await app.waitUntil(() => app.texts().includes("Show month"));
+    await app.press("id:calendar-view-today");
+    await app.waitUntil(() => !app.shows("id:calendar-month"));
+    expect(app.texts()).toContain("Pay rent");
+  }, 20_000);
+
+  test("a day picked on the month is let go when Today is chosen", async () => {
+    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    await app.waitFor("text:Call the bank");
+    await app.press("id:calendar-view-month");
+    await app.waitFor("id:calendar-month");
+    // Two days on: in this month's six weeks whatever the date and the zone.
+    await app.press(`id:day-${new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10)}`);
+    await app.waitFor("id:back-to-today");
+    await app.press("id:calendar-view-today");
+    await app.waitUntil(() => !app.shows("id:calendar-month") && !app.shows("id:back-to-today"));
+    expect(app.texts()).toContain("Pay rent");
+  }, 20_000);
+
+  test("Today and Month follow the finger (owner 11-13 20:05): a swipe shows the month, a swipe back the whole agenda again", async () => {
+    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    await app.waitFor("text:Call the bank");
+    await app.drag("id:calendar-pages-today", { x: -260 });
+    await app.waitFor("id:calendar-month");
+    // Two days on: in this month's six weeks whatever the date and the zone.
+    await app.press(`id:day-${new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10)}`);
+    await app.waitFor("id:back-to-today");
+    await app.drag("id:calendar-pages-month", { x: 260 });
+    await app.waitUntil(() => !app.shows("id:calendar-month") && !app.shows("id:back-to-today"));
     expect(app.texts()).toContain("Pay rent");
   }, 20_000);
 
@@ -186,6 +214,30 @@ describe("the Calendar tab", () => {
     expect(framesOf(app.host.posts(), "codex_asset")[0]).toMatchObject({ path: "out/chart.png", cwd: "/home/me/brain" });
     // (What a TextView draws through renderImage is not in `nsh test`'s tree; the picture itself is for the device.)
   }, 20_000);
+
+  test("a running item opens its Session while the computer lists it, and its page once the Session has gone (parity #45)", async () => {
+    const run = { id: "r1", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w1" };
+    const gone = { id: "r2", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w-gone" };
+    const sessions = [{ id: "w1", name: "digest run", status: "running", cwd: "/home/me", command: "claude", provider: "claude", updated_at: Date.now() }];
+    const app = await calendarApp({
+      calendar_items: [item("Digest", 0.5, { kind: "scheduled_action", status: "running", runs: [run] }), item("Brief", 1, { kind: "scheduled_action", status: "running", runs: [gone] })],
+      worker_sessions: sessions, conversations: { w1: [] },
+    });
+    await app.waitFor("id:calendar-item-Brief", SLOW);
+    await app.press("id:calendar-item-Brief");
+    await app.waitFor("id:calendar-item-page", SLOW);
+    // Its run's Session is not on the computer: the run opens its result, not a dead Session page.
+    await app.press("id:run-r2");
+    await app.waitFor("text:Still running.", SLOW);
+    expect(app.shows("id:open-session")).toBe(false);
+    expect(app.shows("id:session-menu")).toBe(false);
+    // Back from the run, then from the item, to the agenda.
+    await app.back();
+    await app.back();
+    await app.waitFor("id:calendar-item-Digest", SLOW);
+    await app.press("id:calendar-item-Digest");
+    await app.waitFor("id:session-menu", SLOW);
+  }, 30_000);
 
   test("a title is required, and the editor says so instead of saving", async () => {
     const app = await calendarApp({ calendar_items: [] });
@@ -298,15 +350,14 @@ describe("notifications", () => {
     expect(app.shows("id:work-detail")).toBe(true);
   }, 20_000);
 
-  test("another computer: the last one's Calendar item and Work pages close", async () => {
+  test("another computer: the last one's pages close (the stack returns home)", async () => {
     const brain = { current_work: [{ work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() }] };
     const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)], brain }), storage: pairedTwo, platform: "android", network: expoTokenService });
     await app.host.send("links.open", { url: "mewla://brain/work/w-q?serverId=s1" });
     await app.waitFor("id:work-detail", SLOW);
+    // A notification's link replaces what is above home: the item, over the Calendar.
     await app.host.send("links.open", { url: "mewla://calendar?id=Call%20the%20bank&serverId=s1" });
     await app.waitFor("id:calendar-item-page", SLOW);
-    // Both are open, the Work page on its hidden tab.
-    expect(app.shows("id:work-detail")).toBe(true);
     await app.host.send("links.open", { url: "mewla://sessions?serverId=s2" });
     await app.waitUntil(() => !app.shows("id:calendar-item-page") && !app.shows("id:work-detail"), SLOW);
   }, 20_000);

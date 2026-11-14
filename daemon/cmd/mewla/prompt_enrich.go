@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -9,9 +10,12 @@ import (
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-// choicePromptEnricher fills an AskUserQuestion prompt from the Claude
-// transcript. The pane shows one question at a time; the transcript holds all
-// of them, with their option descriptions and the tool call behind them.
+// choicePromptEnricher fills a Claude prompt from its transcript. An
+// AskUserQuestion prompt: the pane shows one question at a time; the transcript
+// holds all of them, with their option descriptions and the tool call behind
+// them. A permission prompt: the tool call it asks about, which names the tool
+// and the command or file from the transcript, found by the line the prompt
+// shows.
 func choicePromptEnricher(w *watcher.Watcher, execs *work.ExecutorConfig) watcher.PromptEnricher {
 	var mu sync.Mutex
 	reader := work.NewProviderConversationReader()
@@ -26,8 +30,32 @@ func choicePromptEnricher(w *watcher.Watcher, execs *work.ExecutorConfig) watche
 		if err != nil {
 			return prompt
 		}
+		if prompt.Kind == classifier.PromptPermission {
+			return promptWithTranscriptTool(prompt, conversation)
+		}
 		return promptWithTranscriptChoice(prompt, conversation)
 	}
+}
+
+// promptWithTranscriptTool returns the permission prompt with the tool call it
+// asks about: the call of the conversation with no result yet whose line the
+// prompt's own text shows (compared without whitespace, so a pane that wraps a
+// long command still matches). A call the prompt does not show is not taken,
+// whatever is pending: a sub-agent's prompt is for a call in the sub-agent's
+// own transcript, and the only call pending in this one is the Task that
+// started it. With no match the prompt stays as the pane showed it; missing
+// fields are honest, wrong ones are not.
+func promptWithTranscriptTool(prompt classifier.Prompt, conversation work.CodexConversation) classifier.Prompt {
+	shown := strings.Join(strings.Fields(prompt.Request), "")
+	for _, call := range work.PendingConversationToolCalls(conversation) {
+		line := strings.Join(strings.Fields(call.Summary), "")
+		if line == "" || line == strings.Join(strings.Fields(call.Tool), "") || !strings.Contains(shown, line) {
+			continue
+		}
+		prompt.CallID, prompt.Tool, prompt.Summary = call.CallID, call.Tool, call.Summary
+		return prompt
+	}
+	return prompt
 }
 
 // promptWithTranscriptChoice returns the prompt with every question of the

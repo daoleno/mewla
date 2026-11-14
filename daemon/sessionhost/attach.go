@@ -24,12 +24,14 @@ const (
 type viewTap struct {
 	output chan []byte
 	end    AttachEnd // set before output is closed
+	// redraw: the viewer attaches again when the Session is resized.
+	redraw bool
 }
 
 // attach takes the replay and starts the viewer's tap in one step under mu,
 // so the tap carries exactly the output after what the replay shows. It
 // reports ok=false while the parser is inside a sequence.
-func (s *session) attach() (attached Attached, replay []byte, tap *viewTap, ok bool, err error) {
+func (s *session) attach(redraw bool) (attached Attached, replay []byte, tap *viewTap, ok bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -43,7 +45,7 @@ func (s *session) attach() (attached Attached, replay []byte, tap *viewTap, ok b
 	if err != nil {
 		return Attached{}, nil, nil, false, errorf(ErrCodeInternal, "replay: %v", err)
 	}
-	tap = &viewTap{output: make(chan []byte, tapBuffer)}
+	tap = &viewTap{output: make(chan []byte, tapBuffer), redraw: redraw}
 	if s.viewsEnded != nil {
 		// The program has exited and its output is all in the replay.
 		tap.end = *s.viewsEnded
@@ -51,7 +53,7 @@ func (s *session) attach() (attached Attached, replay []byte, tap *viewTap, ok b
 	} else {
 		s.taps[tap] = struct{}{}
 	}
-	return Attached{Cols: state.Cols, Rows: state.Rows, OutputSeq: s.outputSeq}, replay, tap, true, nil
+	return Attached{Cols: state.Cols, Rows: state.Rows, OutputSeq: s.outputSeq, Redraw: redraw}, replay, tap, true, nil
 }
 
 func (s *session) detach(tap *viewTap) {
@@ -80,6 +82,16 @@ func (s *session) endTapLocked(tap *viewTap, end AttachEnd) {
 	delete(s.taps, tap)
 	tap.end = end
 	close(tap.output)
+}
+
+// endResizedLocked ends the viewers that redraw after a resize: what the
+// program writes next is for the new size. Callers hold mu.
+func (s *session) endResizedLocked() {
+	for tap := range s.taps {
+		if tap.redraw {
+			s.endTapLocked(tap, AttachEnd{Reason: AttachResized})
+		}
+	}
 }
 
 // endViewsLocked ends every viewer, and any that attaches later. Callers hold
@@ -158,7 +170,7 @@ func (s *Server) attachSession(req request) (Attached, []byte, *viewTap, *sessio
 	}
 	deadline := time.Now().Add(attachSettle)
 	for {
-		attached, replay, tap, ok, err := sess.attach()
+		attached, replay, tap, ok, err := sess.attach(p.Redraw)
 		if err != nil {
 			return Attached{}, nil, nil, nil, err
 		}

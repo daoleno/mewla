@@ -1,5 +1,5 @@
-import { cleanup, Clipboard, createMotion, effect, host, Image, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
-import type { JSX } from "nsh";
+import { cleanup, Clipboard, createMotion, effect, host, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
+import type { JSX, ScrollRef } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { BackHandler } from "nsh/mobile";
@@ -27,13 +27,14 @@ import {
   type OnboardingStep,
 } from "../../core/onboarding";
 import { Icon, type IconName } from "../icons/Icon";
-import { Field, Spinner } from "../more/kit/kit";
-import { restorePet } from "../more/pet/pets";
+import { Caption, DisplayTitle, Field, Spinner } from "../kit/kit";
+import { color } from "../kit/colors";
+import { restorePet } from "../pets/pets";
 import { justPaired, pairFromField, pairFromPicture, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
-import { petClip } from "../pets/clips";
+import { PetSprite } from "../pets/PetSprite";
 import { connection, problem, resumeConnection, servers } from "../session";
 import { probeComputer } from "../more/settings/computers";
-import { OnboardingScanner, scannerSearching } from "./OnboardingScanner";
+import { OnboardingScanner } from "./OnboardingScanner";
 
 export { pairFromText } from "../pairing";
 
@@ -66,7 +67,7 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
 
   const frame = (): Frame | null => {
     const s = size();
-    return s ? { ...s, top: safeArea().top, bottom: safeArea().bottom } : null;
+    return s ? { ...s, top: safeArea().top, bottom: safeArea().bottom, left: safeArea().left, right: safeArea().right } : null;
   };
   const compact = () => (frame() ? isCompactFrame(frame()!) : false);
   // The computer as saved now: one paired by its address takes the name it reports (asked here, as Settings does).
@@ -92,56 +93,50 @@ export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
         const s = size();
         if (s?.width !== width || s?.height !== height) size.set({ width, height });
       }}>
-      {step() === "welcome" ? (
-        <HeroStep frame={frame()} compact={compact()} center={
+      <If when={step() === "welcome"} else={<If when={step() === "install"} else={<If when={step() === "scan"} else={<HeroStep frame={frame()} compact={compact()} live center={
           <>
-            <Text role="header" class="text-center text-[34px] font-extrabold leading-10 tracking-tight text-foreground">{WELCOME_TITLE.replace(". ", ".\n")}</Text>
-            <Text class="max-w-[320px] text-center text-base text-muted-foreground">{WELCOME_LEDE}</Text>
+            <Text testID="connected-title" role="header" class="text-center text-display font-bold tracking-display text-foreground">
+              {connectedCopy(connection(), name(), problem()).title}
+            </Text>
+            {/* The pairing's success is the `ok` dot before "Connected to …" (SPEC §10.4: the scan's success is ok). */}
+            <View class="max-w-[320px] flex-row items-center justify-center gap-2">
+              <If when={connection() === "connected"}><View testID="connected-ok-dot" class="size-2 rounded-full" style={{ backgroundColor: color("ok") }} /></If>
+              <Text class="shrink text-center text-body text-muted-foreground">{connectedCopy(connection(), name(), problem()).lede}</Text>
+            </View>
+            <If when={connection() === "connecting" || connection() === "idle"}><Spinner /></If>
+          </>
+        } actions={
+          <>
+            <If when={connection() === "connected"}><FilledButton testID="open-brain" icon="arrow-forward" label="Open Brain" onPress={() => finish(props.onContinue)} /></If>
+            <If when={connection() === "waiting"}><FilledButton testID="retry" icon="refresh" label="Retry connection" onPress={() => resumeConnection()} /></If>
+            <If when={connection() !== "connected"}><PlainButton testID="server-settings" icon="settings" label="Server settings" onPress={() => finish(props.onSettings)} /></If>
+          </>
+        } />}><SplitStep compact={compact()} content={
+          <>
+            <StepHeader frame={frame()} compact={compact()} number={2} place="On this phone" title="Scan the code in your terminal" />
+            <OnboardingScanner compact={compact()} />
+            <ScanStatus />
+          </>
+        } actions={<PairAlternatives />} reveal={pairingIssue} /></If>}><SplitStep compact={compact()} content={
+          <>
+            <StepHeader frame={frame()} compact={compact()} number={1} place="On your computer" title="Install Mewla" />
+            <CommandCard />
+            <Text class="text-body text-muted-foreground">
+              Then run <Text class="font-mono text-code text-foreground">{START_COMMAND}</Text>. {START_NOTE}
+            </Text>
+          </>
+        } actions={<FilledButton testID="next-scan" label="Next: scan the code" onPress={() => go("scan")} />} /></If>}><HeroStep frame={frame()} compact={compact()} center={
+          <>
+            <Text role="header" class="text-center text-display font-bold tracking-display text-foreground">{WELCOME_TITLE.replace(". ", ".\n")}</Text>
+            <Text class="max-w-[320px] text-center text-body text-muted-foreground">{WELCOME_LEDE}</Text>
           </>
         } actions={
           <>
             <FilledButton testID="set-up" label="Set up my computer" onPress={() => go("install")} />
             <PlainButton testID="scan-now" label="Mewla already running? Scan its code" onPress={() => go("scan")} />
           </>
-        } />
-      ) : step() === "install" ? (
-        <SplitStep compact={compact()} content={
-          <>
-            <StepHeader frame={frame()} compact={compact()} number={1} place="ON YOUR COMPUTER" title="Install Mewla" />
-            <CommandCard />
-            <Text class="text-xs text-muted-foreground">{INSTALL_NOTE}</Text>
-            <Text class="mt-1.5 text-base text-muted-foreground">
-              Then run <Text class="rounded bg-secondary font-mono text-sm text-foreground">{` ${START_COMMAND} `}</Text>. {START_NOTE}
-            </Text>
-            <Text class="text-sm text-muted-foreground">It prints a QR code. Keep it on screen for the next step.</Text>
-          </>
-        } actions={<FilledButton testID="next-scan" label="Next: scan the code" onPress={() => go("scan")} />} />
-      ) : step() === "scan" ? (
-        <SplitStep compact={compact()} content={
-          <>
-            <StepHeader frame={frame()} compact={compact()} number={2} place="ON THIS PHONE" title="Scan the code in your terminal" />
-            <OnboardingScanner compact={compact()} />
-            <ScanStatus />
-          </>
-        } actions={<PairAlternatives />} />
-      ) : (
-        <HeroStep frame={frame()} compact={compact()} live center={
-          <>
-            <Text testID="connected-title" role="header" class="text-center text-[34px] font-extrabold leading-10 tracking-tight text-foreground">
-              {connectedCopy(connection(), name(), problem()).title}
-            </Text>
-            <Text class="max-w-[320px] text-center text-base text-muted-foreground">{connectedCopy(connection(), name(), problem()).lede}</Text>
-            {connection() === "connecting" || connection() === "idle" ? <Spinner /> : null}
-          </>
-        } actions={
-          <>
-            {connection() === "connected" ? <FilledButton testID="open-brain" icon="arrow-forward" label="Open Brain" onPress={() => finish(props.onContinue)} /> : null}
-            {connection() === "waiting" ? <FilledButton testID="retry" icon="refresh" label="Retry connection" onPress={() => resumeConnection()} /> : null}
-            {connection() !== "connected" ? <PlainButton testID="server-settings" icon="settings" label="Server settings" onPress={() => finish(props.onSettings)} /> : null}
-          </>
-        } />
-      )}
-      {frame() ? <Cat step={step()} frame={frame()!} /> : null}
+        } /></If>
+      <If when={frame()}><Cat step={step()} frame={frame()!} /></If>
     </View>
   );
 }
@@ -163,19 +158,25 @@ export function PairPage(props: { onPaired?(): void; onScreen?: () => boolean })
   return (
     <NavPage title="Pair a computer">
       {/* The field keeps its focus after the keyboard goes (Back): a tap on Pair still presses Pair. */}
-      <Scroll class="flex-1 bg-background" contentClass="gap-4 p-5" keyboardShouldPersistTaps="handled">
-        <Text class="text-base text-muted-foreground">
-          {camera ? "On your computer, run mewla pair, then scan the code it shows, or paste the link it prints." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
-        </Text>
-        {camera ? <OnboardingScanner onScreen={props.onScreen} /> : null}
-        <ScanStatus />
-        <View class="rounded-xl border border-border bg-card">
-          <Field testID="pair-link" label="Pairing link" mono multiline keyboardType="url" value={link()} disabled={pairingBusy()}
-            placeholder="mewla://settings?p=… or https://…/#pair=…" onChange={(value) => link.set(value)} onSubmit={pair} />
+      {/* The step flow's 480 column: a display title, one sentence, the finder, the field, the buttons ink last, the quiet ways out. */}
+      <Scroll class="flex-1 bg-background" contentClass="px-4 pb-8 pt-2" keyboardShouldPersistTaps="handled">
+        <View class="w-full max-w-[480px] gap-4 self-center">
+          <DisplayTitle title="Pair a computer" />
+          <View class="-mt-2 px-1"><Text class="text-body text-muted-foreground">
+            {camera ? "On your computer, run mewla pair, then scan the code it shows, or paste the link it prints." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
+          </Text></View>
+          <If when={camera}><OnboardingScanner onScreen={props.onScreen} /></If>
+          <ScanStatus />
+          <View class="overflow-hidden rounded-(--radius-group) bg-card">
+            <Field testID="pair-link" label="Pairing link" mono multiline keyboardType="url" value={link()} disabled={pairingBusy()}
+              placeholder="mewla://settings?p=… or https://…/#pair=…" onChange={(value) => link.set(value)} onSubmit={pair} />
+          </View>
+          <View class="gap-2">
+            <If when={camera}><OutlinedButton testID="pick-qr-image" icon="image" label="Pick QR image" disabled={pairingBusy()} onPress={() => void pairFromPicture()} /></If>
+            <FilledButton testID="pair-link-submit" label="Pair" disabled={pairingBusy()} onPress={pair} />
+          </View>
+          <OtherWays />
         </View>
-        <FilledButton testID="pair-link-submit" label="Pair" disabled={pairingBusy()} onPress={pair} />
-        {camera ? <OutlinedButton testID="pick-qr-image" icon="image" label="Pick QR image" disabled={pairingBusy()} onPress={() => void pairFromPicture()} /> : null}
-        <OtherWays />
       </Scroll>
     </NavPage>
   );
@@ -196,39 +197,38 @@ function HeroStep(props: { frame: Frame | null; compact: boolean; center: JSX.El
   // Components run once: the layout is chosen inside the JSX, so a rotation chooses again.
   return (
     <View class="flex-1">
-      {props.compact ? (
-        <View testID="step-compact" class="flex-1 pb-2 pl-0 pr-6" style={{ marginLeft: props.frame ? heroZoneWidth(props.frame) : 0, ...fade.style }}>
-          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow justify-center gap-5 py-3">
-            <View class="items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
-            <View class="w-full max-w-[360px] gap-2 self-center">{props.actions}</View>
-          </Scroll>
-        </View>
-      ) : (
-        <View testID="step-tall" class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={{ paddingTop: props.frame ? belowHero(props.frame) : 260, ...fade.style }}>
+      <If when={props.compact} else={<View testID="step-tall" class="w-full max-w-[480px] flex-1 self-center px-6 pb-4" style={{ paddingTop: props.frame ? belowHero(props.frame) : 260, ...fade.style }}>
           <View class="flex-1 items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
           <View class="gap-2">{props.actions}</View>
-        </View>
-      )}
+        </View>}><View testID="step-compact" class="flex-1 pb-2 pl-0 pr-6" style={{ marginLeft: props.frame ? heroZoneWidth(props.frame) : 0, ...fade.style }}>
+          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow justify-center gap-5 py-3">
+            <View class="items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
+            <View class="w-full max-w-[480px] gap-2 self-center">{props.actions}</View>
+          </Scroll>
+        </View></If>
     </View>
   );
 }
 
-/** Install and scan: the content scrolls, the buttons stay in reach (beside it when the window is short). */
-function SplitStep(props: { compact: boolean; content: JSX.Element; actions: JSX.Element }) {
+/**
+ * Install and scan: the content scrolls, the buttons stay in reach (beside it when the window is short). What `reveal`
+ * brings (the scan's problem, at the content's end) scrolls into view: it came under the buttons, unseen (11-14).
+ */
+function SplitStep(props: { compact: boolean; content: JSX.Element; actions: JSX.Element; reveal?: () => unknown }) {
   const fade = createMotion({ enter: "fadeIn", delay: 140, duration: 240 });
+  let scroll: ScrollRef | null = null;
+  effect(() => {
+    if (props.reveal?.()) untracked(() => setTimeout(() => scroll?.scrollToEnd({ animated: true }), 0));
+  });
   return (
     <View class="flex-1">
-      {props.compact ? (
-        <View testID="split-compact" class="flex-1 flex-row gap-6 px-6 pb-2" style={fade.style}>
-          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
-          <View class="w-[220px] justify-end gap-2">{props.actions}</View>
-        </View>
-      ) : (
-        <View testID="split-tall" class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={fade.style}>
-          <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+      <If when={props.compact} else={<View testID="split-tall" class="w-full max-w-[480px] flex-1 self-center px-6 pb-4" style={fade.style}>
+          <Scroll ref={(node) => (scroll = node)} keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
           <View class="gap-2">{props.actions}</View>
-        </View>
-      )}
+        </View>}><View testID="split-compact" class="flex-1 flex-row gap-6 px-6 pb-2" style={fade.style}>
+          <Scroll ref={(node) => (scroll = node)} keyboardShouldPersistTaps="handled" class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+          <View class="w-[220px] justify-end gap-2">{props.actions}</View>
+        </View></If>
     </View>
   );
 }
@@ -237,13 +237,9 @@ function StepHeader(props: { frame: Frame | null; compact: boolean; number: numb
   return (
     <View class={props.compact ? "gap-2.5 pb-1.5 pt-3" : "justify-end gap-2.5 pb-1.5 pr-[100px] pt-[22px]"}
       style={{ minHeight: props.frame && !props.compact ? headerHeight(props.frame) : undefined }}>
-      <View class="flex-row items-center gap-2">
-        <View class="h-5 w-5 items-center justify-center rounded-full border border-border">
-          <Text class="text-[11px] font-semibold text-muted-foreground">{props.number}</Text>
-        </View>
-        <Text class="text-[11px] font-semibold tracking-wider text-muted-foreground">{props.place}</Text>
-      </View>
-      <Text role="header" class="text-[30px] font-extrabold leading-9 tracking-tight text-foreground">{props.title}</Text>
+      {/* The eyebrow (SPEC §15 Step flow): which step of the two, and where it happens. */}
+      <Caption testID="step-eyebrow" text={`Step ${props.number} of 2 · ${props.place}`} />
+      <Text role="header" class="text-display font-bold tracking-display text-foreground">{props.title}</Text>
     </View>
   );
 }
@@ -252,14 +248,13 @@ function StepHeader(props: { frame: Frame | null; compact: boolean; number: numb
 function CommandCard() {
   const copied = signal(false);
   return (
-    <View class="gap-3.5 rounded-xl border border-border bg-card p-4">
-      <Text testID="install-command" style={{ userSelect: "text" }} class="font-mono text-sm leading-[21px] text-foreground">{INSTALL_COMMAND}</Text>
+    <View class="gap-3 rounded-(--radius-group) bg-card p-4">
+      <Text testID="install-command" style={{ userSelect: "text" }} class="font-mono text-code text-foreground">{INSTALL_COMMAND}</Text>
+      <Text class="text-caption text-muted-foreground">{INSTALL_NOTE}</Text>
       <View class="flex-row flex-wrap gap-2">
         <TintedButton testID="copy-command" icon={copied() ? "check" : "copy"} label={copied() ? "Copied" : "Copy"}
           onPress={() => void Clipboard.writeText(INSTALL_COMMAND).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); })} />
-        {host.available() ? (
-          <TintedButton testID="share-command" icon="share" label="Send to computer" onPress={() => void host.call("app.share", { text: INSTALL_COMMAND }).catch(() => {})} />
-        ) : null}
+        <If when={host.available()}><TintedButton testID="share-command" icon="share" label="Send to computer" onPress={() => void host.call("app.share", { text: INSTALL_COMMAND }).catch(() => {})} /></If>
       </View>
     </View>
   );
@@ -269,16 +264,18 @@ function CommandCard() {
 function ScanStatus() {
   return (
     <View class="gap-2" android={{ accessibilityLiveRegion: "polite" }}>
+      {/* SPEC §16.4 Scan and Pair: the finder and its scan line say it is looking (no words); a code found is
+          the computer awaited, so the waking cat and its state words, never a spinner beside words. */}
       <View class="min-h-6 flex-row items-center justify-center gap-2">
-        {pairingBusy() ? <Spinner size={16} /> : null}
-        {pairingBusy() || scannerSearching() ? <Text testID="scan-status" class="text-sm text-muted-foreground">{pairingBusy() ? pairingStatus() || "Pairing…" : "Looking for a Mewla code…"}</Text> : null}
+        <If when={pairingBusy()}>
+          <PetSprite testID="pairing-cat" state={() => "waking"} size={40} />
+          <Text testID="scan-status" class="text-sub text-muted-foreground">{pairingStatus() || "Connecting…"}</Text>
+        </If>
       </View>
-      {pairingIssue() ? (
-        <View testID="pair-issue" class="gap-1 rounded-xl border border-border bg-card p-3">
-          <Text class="text-base font-semibold text-destructive">{pairingIssue()!.title}</Text>
-          <Text style={{ userSelect: "text" }} class="text-sm text-muted-foreground">{pairingIssue()!.detail}</Text>
-        </View>
-      ) : null}
+      <If when={pairingIssue()}><View testID="pair-issue" class="gap-1 rounded-(--radius-group) bg-card px-4 py-3.5">
+          <Text class="text-body font-semibold">{pairingIssue()!.title}</Text>
+          <Text style={{ userSelect: "text" }} class="text-sub text-muted-foreground">{pairingIssue()!.detail}</Text>
+        </View></If>
     </View>
   );
 }
@@ -287,7 +284,7 @@ function ScanStatus() {
 function PairAlternatives() {
   return (
     <>
-      <OutlinedButton testID="paste" icon="clipboard" label="Paste a pairing link" disabled={pairingBusy()} onPress={() => void pasteFromClipboard()} />
+      <PlainButton testID="paste" icon="clipboard" label="Paste a pairing link" disabled={pairingBusy()} onPress={() => void pasteFromClipboard()} />
       <OtherWays />
     </>
   );
@@ -297,7 +294,7 @@ function OtherWays() {
   return (
     <Button testID="other-ways" role="link" accessibilityLabel="Other ways to connect" onPress={() => void openUrl(OTHER_WAYS_URL)}
       class="min-h-11 flex-row items-center justify-center gap-1.5 active:opacity-70">
-      <Text class="text-sm font-semibold text-muted-foreground">Other ways to connect</Text>
+      <Text class="text-sub font-semibold text-muted-foreground">Other ways to connect</Text>
       <Icon name="open-external" size={14} />
     </Button>
   );
@@ -314,19 +311,23 @@ function Cat(props: { step: OnboardingStep; frame: Frame }) {
   const move = () => (reduceMotion() ? 0 : 440);
   return (
     <>
-      <Image src={petClip("homeless")} accessibilityElementsHidden
+      <View
         style={{
           position: "absolute", pointerEvents: "none", left: hero().cx - hero().size / 2, top: hero().cy - hero().size / 2, width: hero().size, height: hero().size,
           opacity: seal() ? 1 : 0, transform: [{ scale: seal() ? 1 : 1.5 }],
           transitionProperty: "opacity, transform", transitionDuration: reduceMotion() ? 0 : 260, transitionDelay: seal() && !reduceMotion() ? 380 : 0,
-        }} />
+        }}>
+        <PetSprite state={() => "homeless"} size={hero().size} />
+      </View>
       {/* Drawn at one size and moved by a transform, so the move between spots runs natively. */}
-      <Image testID="cat" src={petClip(clip())} accessibilityElementsHidden
+      <View testID="cat"
         style={{
           position: "absolute", pointerEvents: "none", left: 0, top: 0, width: CAT_BASE, height: CAT_BASE,
           transform: [{ translateX: box().cx - CAT_BASE / 2 }, { translateY: box().cy - CAT_BASE / 2 }, { scale: box().size / CAT_BASE }],
           transitionProperty: "transform", transitionDuration: move(), transitionTimingFunction: "ease-in-out",
-        }} />
+        }}>
+        <PetSprite state={clip} size={CAT_BASE} />
+      </View>
     </>
   );
 }
@@ -334,9 +335,9 @@ function Cat(props: { step: OnboardingStep; frame: Frame }) {
 function FilledButton(props: { testID: string; label: string; icon?: IconName; disabled?: boolean; onPress(): void }) {
   return (
     <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.label}
-      class="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 active:opacity-80 disabled:opacity-50">
-      <Text class="text-base font-semibold text-primary-foreground">{props.label}</Text>
-      {props.icon ? <Icon name={props.icon} color="primary-foreground" size={18} /> : null}
+      class="h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-5 active:opacity-70 disabled:opacity-40">
+      <Text class="text-body font-semibold text-primary-foreground line-clamp-1">{props.label}</Text>
+      <If when={props.icon}>{(icon) => <Icon name={icon()} color="primary-foreground" size={18} />}</If>
     </Button>
   );
 }
@@ -344,19 +345,20 @@ function FilledButton(props: { testID: string; label: string; icon?: IconName; d
 function OutlinedButton(props: { testID: string; label: string; icon?: IconName; disabled?: boolean; onPress(): void }) {
   return (
     <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.label}
-      class="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl border border-border px-4 py-3.5 active:bg-accent disabled:opacity-50">
-      {props.icon ? <Icon name={props.icon} color="foreground" size={18} /> : null}
-      <Text class="text-base font-semibold text-foreground">{props.label}</Text>
+      class="h-[52px] flex-row items-center justify-center gap-2 rounded-2xl bg-card px-5 active:opacity-70 disabled:opacity-40">
+      <If when={props.icon}>{(icon) => <Icon name={icon()} color="foreground" size={18} />}</If>
+      <Text class="text-body font-semibold text-foreground line-clamp-1">{props.label}</Text>
     </Button>
   );
 }
 
-function PlainButton(props: { testID: string; label: string; icon?: IconName; onPress(): void }) {
+/** A quiet way out (SPEC §15 Step flow): a text button under the actions. */
+function PlainButton(props: { testID: string; label: string; icon?: IconName; disabled?: boolean; onPress(): void }) {
   return (
-    <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
-      class="min-h-11 flex-row items-center justify-center gap-2 px-4 py-2.5 active:opacity-70">
-      {props.icon ? <Icon name={props.icon} color="muted-foreground" size={16} /> : null}
-      <Text class="text-center text-base font-semibold text-muted-foreground">{props.label}</Text>
+    <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.label}
+      class="min-h-11 flex-row items-center justify-center gap-2 px-4 py-2.5 active:opacity-70 disabled:opacity-40">
+      <If when={props.icon}>{(icon) => <Icon name={icon()} color="muted-foreground" size={16} />}</If>
+      <Text class="text-center text-sub font-semibold text-muted-foreground">{props.label}</Text>
     </Button>
   );
 }
@@ -364,9 +366,10 @@ function PlainButton(props: { testID: string; label: string; icon?: IconName; on
 function TintedButton(props: { testID: string; label: string; icon: IconName; onPress(): void }) {
   return (
     <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
-      class="min-h-9 flex-row items-center gap-1.5 rounded-lg bg-secondary px-3 py-2 active:opacity-80">
+      hitSlop={4}
+      class="h-9 flex-row items-center gap-1.5 rounded-full bg-muted px-3.5 active:opacity-70">
       <Icon name={props.icon} color="foreground" size={16} />
-      <Text class="text-sm font-semibold text-foreground">{props.label}</Text>
+      <Text class="text-sub font-semibold text-foreground">{props.label}</Text>
     </Button>
   );
 }

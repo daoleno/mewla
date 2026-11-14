@@ -48,10 +48,13 @@ if [[ -n "${MEWLA_ANDROID_KEYSTORE:-}" && "$WITH_APK" -eq 0 && -z "$APK_PATH" ]]
   echo "note: MEWLA_ANDROID_KEYSTORE is set but this run is not building an APK; env ignored."
 fi
 
-IDENTITY_JSON="$ROOT/app/app.base.json"
-VERSION="$(python3 -c "import json;print(json.load(open('$IDENTITY_JSON'))['expo']['version'])")"
-PACKAGE="$(python3 -c "import json;print(json.load(open('$IDENTITY_JSON'))['expo']['android']['package'])")"
-VERSION_CODE="$(python3 -c "import json;print(json.load(open('$IDENTITY_JSON'))['expo']['android']['versionCode'])")"
+# Version from client/ui/nsh.json; the APK's versionCode follows from it
+# (scripts/lib/release_identity.py), the same number the client's Gradle build uses.
+IDENTITY="$ROOT/scripts/lib/release_identity.py"
+VERSION="$(python3 "$IDENTITY" version)"
+PACKAGE="$(python3 "$IDENTITY" package)"
+VERSION_CODE="$(python3 "$IDENTITY" version_code)"
+CANONICAL_CONFIG="$(python3 "$IDENTITY" source)"
 
 # Validate version before any path join or rm (reject traversal / separators).
 if ! python3 -c "
@@ -62,7 +65,7 @@ if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?', v):
 if any(x in v for x in ('/', '\\\\', '..', '\x00')):
     sys.exit('version must not contain path elements: ' + v)
 " "$VERSION"; then
-  echo "error: refusing unsafe or invalid version from app.base.json: ${VERSION@Q}" >&2
+  echo "error: refusing unsafe or invalid version from $CANONICAL_CONFIG: ${VERSION@Q}" >&2
   exit 1
 fi
 
@@ -238,11 +241,11 @@ SUMS="$STAGE_DIR/SHA256SUMS"
   done | LC_ALL=C sort -k2
 ) > "$SUMS"
 
-python3 - "$STAGE_DIR" "$VERSION" "$PACKAGE" "$VERSION_CODE" "${STAGED_APK:-}" "$BUILD_TMP" <<'PY'
+python3 - "$STAGE_DIR" "$VERSION" "$PACKAGE" "$VERSION_CODE" "${STAGED_APK:-}" "$BUILD_TMP" "$CANONICAL_CONFIG" <<'PY'
 import hashlib, json, sys
 from pathlib import Path
 
-stage, version, package, version_code, staged_apk, build_tmp = sys.argv[1:7]
+stage, version, package, version_code, staged_apk, build_tmp, canonical_config = sys.argv[1:8]
 stage_p = Path(stage)
 build_p = Path(build_tmp)
 
@@ -293,7 +296,7 @@ identity = {
         "package": package,
         "version_name": version,
         "version_code": int(version_code),
-        "canonical_config": "app/app.base.json",
+        "canonical_config": canonical_config,
         "certificate_sha256_fingerprint": (
             "C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:"
             "4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD"

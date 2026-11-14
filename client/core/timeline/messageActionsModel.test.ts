@@ -3,69 +3,30 @@ import { normalizeWorkerSessionCapabilities } from "./sessionCapabilities";
 import {
   isEditablePrompt,
   editIsSendable,
-  messageActionKinds,
-  messageCopyText,
   messageEditMode,
-  messageMenuEntries,
   type MessageActionEnvironment,
   type MessageActionSubject,
 } from "./messageActionsModel";
 
-const user: MessageActionSubject = {
-  id: "u1",
-  role: "user",
-  body: "ship it",
-  hasAttachments: false,
-  pending: false,
-  streaming: false,
-};
-const assistant: MessageActionSubject = { ...user, id: "a1", role: "assistant", body: "**done**" };
-const env: MessageActionEnvironment = {
-  messageRewind: true,
-  brain: false,
-  running: false,
-  connected: true,
-  canSelectText: true,
-};
+const user: MessageActionSubject = { role: "user", body: "ship it", hasAttachments: false, pending: false };
+const assistant: MessageActionSubject = { ...user, role: "assistant", body: "**done**" };
+const env: MessageActionEnvironment = { running: false, connected: true };
 
-describe("message menu", () => {
-  test("a user message offers copy, select text and edit", () => {
-    expect(messageActionKinds(user, env)).toEqual(["copy", "select", "edit"]);
+describe("a tap on a sent message edits it, where it can be", () => {
+  test("the person's own sent text, in a connected, idle chat", () => {
+    expect(isEditablePrompt(user, env)).toBe(true);
+    expect(isEditablePrompt(assistant, env)).toBe(false);
   });
 
-  test("an assistant message offers only copy and select", () => {
-    expect(messageActionKinds(assistant, env)).toEqual(["copy", "select"]);
+  test("not while the agent works or the computer is away", () => {
+    expect(isEditablePrompt(user, { ...env, running: true })).toBe(false);
+    expect(isEditablePrompt(user, { ...env, connected: false })).toBe(false);
   });
 
-  test("desktop has native selection, so no select entry", () => {
-    expect(messageActionKinds(user, { ...env, canSelectText: false })).toEqual(["copy", "edit"]);
-  });
-
-  test("edit waits for the agent to stop and for a connection", () => {
-    expect(messageActionKinds(user, { ...env, running: true })).toEqual(["copy", "select"]);
-    expect(messageActionKinds(user, { ...env, connected: false })).toEqual(["copy", "select"]);
-  });
-
-  test("a message still being sent, streaming or empty has nothing to act on", () => {
-    expect(messageActionKinds({ ...user, pending: true }, env)).toEqual(["copy", "select"]);
-    expect(messageActionKinds({ ...assistant, streaming: true }, env)).toEqual([]);
-    expect(messageActionKinds({ ...user, body: "  " }, env)).toEqual([]);
-  });
-
-  test("a message with attachments cannot be faithfully edited", () => {
-    expect(messageActionKinds({ ...user, hasAttachments: true }, env)).toEqual(["copy", "select"]);
-  });
-
-  test("copy keeps Markdown and drops only trailing whitespace", () => {
-    expect(messageCopyText({ body: "```ts\nlet a = 1;\n```\n\n- one\n" })).toBe("```ts\nlet a = 1;\n```\n\n- one");
-  });
-});
-
-describe("message menu rows", () => {
-  test("list Copy, Select Text and Edit in that order", () => {
-    const entries = messageMenuEntries(["copy", "select", "edit"]);
-    expect(entries.map((entry) => entry.label)).toEqual(["Copy", "Select Text", "Edit"]);
-    expect(entries.map((entry) => entry.kind)).toEqual(["copy", "select", "edit"]);
+  test("not a message still being sent, an empty one, or one with attachments (it cannot be faithfully edited)", () => {
+    expect(isEditablePrompt({ ...user, pending: true }, env)).toBe(false);
+    expect(isEditablePrompt({ ...user, body: "  " }, env)).toBe(false);
+    expect(isEditablePrompt({ ...user, hasAttachments: true }, env)).toBe(false);
   });
 });
 
@@ -120,7 +81,6 @@ describe("what Edit does per executor", () => {
       const messageRewind = wire(row.rewind)?.message_rewind === true;
       const environment = { ...env, messageRewind, brain: row.brain };
       expect(messageEditMode(environment)).toBe(row.edit);
-      expect(messageActionKinds(user, environment)).toContain("edit");
       expect(isEditablePrompt(user, environment)).toBe(true);
     });
   }

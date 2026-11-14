@@ -1,18 +1,18 @@
-import { effect, host, mount, platform, Storage, View } from "nsh";
-import { lifecycle } from "./lifecycle";
+import { cleanup, colorScheme, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, View } from "nsh";
 import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
+import { keepReadingPlaces, loadReadingPlaces } from "../core/timeline/readingPlace";
 import { nshPlatform } from "./platform";
-import { justPaired, pairFromText } from "./pairing";
+import { justPaired, linkPairing, pairFromText, pairingStatus } from "./pairing";
 import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
 import { current, loadSession, ready, resumeConnection } from "./session";
-import { FirstRun, openPhonePage, openSettingsLink, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
+import { FirstRun, openPhonePage, openSettingsLink, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
-import { startNotifications } from "./push/push";
+import { openNotificationLink, startNotifications } from "./push/push";
 import { startAppUpdate } from "./update/update";
-
-installPlatform(nshPlatform());
+// Registers the monospaced face theme.json's `font-mono` names, before the first frame.
+import "./kit/monoFont";
 
 // The first start after the in-place upgrade takes over what the Expo app kept (computers,
 // drafts, preferences); the device key stays where it was, in the host's secure store.
@@ -26,6 +26,8 @@ async function start(): Promise<void> {
       Storage,
     ).catch((error) => console.warn("legacy storage not copied:", error));
   }
+  // Where chats were read to before this start (a reload while reading), before any chat opens.
+  await loadReadingPlaces();
   await loadSession();
   void loadCrashReports();
   // A browser opened with `mewla pair`'s link (`<origin>/#pair=<link>`): pair with it, once.
@@ -34,34 +36,80 @@ async function start(): Promise<void> {
     if (link) void pairFromText(link);
   }
 }
-void start();
-startNotifications();
-startAppUpdate();
 
-// Coming back to the app skips the reconnect backoff.
-effect(() => {
-  if (lifecycle() === "active") resumeConnection();
-});
+// A hot patch (the dev channel) runs this module again. Starting again closed the live connection and Brain's chat
+// (its draft; the thread came back at its newest row) to open them anew, and registered notifications, app update
+// and the listeners below once more. The flag is on globalThis, which a re-run keeps.
+const processState = globalThis as { __mewlaStarted?: boolean };
 
-// Links the system opens in the app: a pairing link pairs, like a scan; the others open a section.
-host.on("links.open", (payload) => {
-  const url = (payload as { url?: string } | null)?.url;
-  if (!url) return;
-  if (readPairingLink(url)) return void pairFromText(url);
-  if (isPhoneLink(url)) return void openPhonePage();
-  if (openSettingsLink(url)) return;
-  const section = sectionOfLink(url);
-  if (section !== null) selectedTab.set(section);
-});
+/** The app's start: its platform, its computer and connection, notifications, app update, links. Runs once per process. */
+export function startApp(): void {
+  if (processState.__mewlaStarted) return;
+  processState.__mewlaStarted = true;
+  installPlatform(nshPlatform());
+  void start();
+  startNotifications();
+  startAppUpdate();
+
+  // Android's navigation bar draws its buttons for the app's appearance, also when it changes while the app runs
+  // (Settings › Appearance, or the system's when it follows it); NSH sets only the status bar. iOS has no such bar.
+  effect(() => {
+    const dark = colorScheme() === "dark";
+    if (platform.os === "android" && host.available()) void host.call("app.navigationBar", { dark }).catch(() => undefined);
+  });
+
+  // The Android host reopens the app when these beats stop for 10 s while it is in front (JsWatchdog.kt): NSH's
+  // engine can spin forever (longbridge/nsh#1984), and a reopened app beats a frozen one. iOS has no watchdog yet.
+  if (platform.os === "android" && host.available()) setInterval(() => void host.call("app.alive").catch(() => undefined), 2_000);
+
+  // Coming back to the app skips the reconnect backoff.
+  // Leaving it keeps where chats were read to: the system may make the app anew before it comes back.
+  effect(() => {
+    if (lifecycle() === "active") resumeConnection();
+    else keepReadingPlaces();
+  });
+
+  // Links the system opens in the app: a pairing link pairs, like a scan; the others open their page.
+  host.on("links.open", (payload) => {
+    const url = (payload as { url?: string } | null)?.url;
+    if (!url) return;
+    if (readPairingLink(url)) return void pairFromText(url);
+    if (isPhoneLink(url)) return void openPhonePage();
+    if (openSettingsLink(url)) return;
+    // Brain, a Session, the Calendar, a live answer, Friends: what a notification, an alert or a widget sends.
+    openNotificationLink(url);
+  });
+}
+startApp();
+
+/** A pairing link opened while the app runs: what it is doing, then why it failed (tap or 8 s to dismiss). */
+function LinkPairingNote() {
+  effect(() => {
+    if (!linkPairing()?.problem) return;
+    const timer = setTimeout(() => linkPairing.set(null), 8_000);
+    cleanup(() => clearTimeout(timer));
+  });
+  return (
+    <View class="absolute" style={{ top: safeArea().top + 8, left: safeArea().left + 12, right: safeArea().right + 12 }}>
+      <If when={linkPairing()}><View testID="link-pairing" onPress={() => linkPairing()?.problem && linkPairing.set(null)} class="gap-0.5 rounded-(--radius-group) bg-card px-4 py-3">
+          <Text class="text-body font-semibold">
+            {linkPairing()!.problem?.title ?? (pairingStatus() || "Pairing…")}
+          </Text>
+          <If when={linkPairing()!.problem}><Text class="text-sub text-muted-foreground">{linkPairing()!.problem!.detail}</Text></If>
+        </View></If>
+    </View>
+  );
+}
 
 mount(() => (
   // The ink every text takes unless it says its own (NSH draws a bare Text black, unreadable in Dark).
   <View class="flex-1 bg-background text-foreground">
     {/* The app is not under the connected step: on Android the step vanished behind the app while it still
         held (after the notification prompt, after a Settings pairing), most likely the app's native views. */}
-    {!ready() ? null : current() && !justPaired() ? <Shell /> : null}
+    <If when={ready()}><If when={current() && !justPaired()}><Shell /></If></If>
     {/* First run, and on a phone the connected step after any pairing. */}
-    {ready() && (!current() || justPaired()) ? <View class="absolute inset-0 bg-background"><FirstRun /></View> : null}
+    <If when={ready() && (!current() || justPaired())}><View class="absolute inset-0 bg-background"><FirstRun /></View></If>
+    <If when={ready() && current() && !justPaired()}><LinkPairingNote /></If>
     <CrashReportSheet />
   </View>
 ));

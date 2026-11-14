@@ -6,7 +6,7 @@ import { FriendsPageView } from "./friends/FriendsPages";
 import { FriendsSettings } from "./friends/FriendsSettings";
 import { GitPageView } from "./git/GitPages";
 import { PetPage } from "./pet/Pet";
-import { restorePet } from "./pet/pets";
+import { restorePet } from "../pets/pets";
 import { Resources } from "./resources/Resources";
 import { PhonePage } from "../phone/PhonePage";
 import { ScreenPage } from "./screen/Screen";
@@ -34,7 +34,7 @@ onTransport((transport) => {
 export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () => void }) {
   const route = props.route;
   switch (route.name) {
-    case "settings": return <Settings nav={props.nav} onPair={props.onPair} />;
+    case "settings": return <Settings nav={props.nav} />;
     case "settings-computer": return <Computer id={route.id} nav={props.nav} onPair={props.onPair} />;
     case "settings-telegram": return <Telegram />;
     case "settings-providers": return <Providers nav={props.nav} />;

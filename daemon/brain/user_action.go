@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,8 +57,13 @@ type WorkUserActionRequest struct {
 	WorkID string             `json:"work_id"`
 	Kind   WorkUserActionKind `json:"kind"`
 	// Text is the reply; for a choice it is the choice itself.
-	Text        string     `json:"text,omitempty"`
-	SnoozeUntil *time.Time `json:"snooze_until,omitempty"`
+	Text string `json:"text,omitempty"`
+	// A snooze names its end one of two ways: SnoozeUntil, a time the client
+	// chose (tomorrow morning where the phone is), or SnoozeFor, a length
+	// from now on this computer's clock (an hour), so the phone's clock never
+	// moves it. Exactly one is set; which lengths to offer is the client's.
+	SnoozeUntil *time.Time    `json:"snooze_until,omitempty"`
+	SnoozeFor   time.Duration `json:"-"`
 	// Attachments are files the reply carries. The caller has confined them to
 	// the upload store; they reach Brain as the same attachment tag a chat
 	// message carries, so Brain reads them by path.
@@ -73,16 +79,23 @@ type WorkUserActionResult struct {
 }
 
 // applyWorkQuestion sets or clears what Brain asks the user. Choices are
-// trimmed, de-duplicated and bounded so the slip stays one row of buttons.
-func applyWorkQuestion(item Work, question *string, choices *[]string, now time.Time) Work {
+// trimmed, de-duplicated and bounded so the slip stays one row of buttons; the
+// recommended choice is kept only while it is one of them.
+func applyWorkQuestion(item Work, question *string, choices *[]string, recommended *string, now time.Time) Work {
 	if question != nil {
 		item.Question = strings.TrimSpace(*question)
 	}
 	if choices != nil {
 		item.Choices = normalizeWorkChoices(*choices)
 	}
+	if recommended != nil {
+		item.Recommended = strings.Join(strings.Fields(*recommended), " ")
+	}
+	if !slices.Contains(item.Choices, item.Recommended) {
+		item.Recommended = ""
+	}
 	if item.Question == "" {
-		item.Question, item.Choices, item.QuestionAt = "", nil, nil
+		item.Question, item.Choices, item.QuestionAt, item.Recommended = "", nil, nil, ""
 		return item
 	}
 	at := now.UTC()
@@ -177,13 +190,13 @@ func (s *Store) RecordWorkUserAction(request WorkUserActionRequest, admission Ex
 				return Work{}, WorkEvent{}, err
 			}
 		}
-		database.BrainWork[index] = applyWorkQuestion(database.BrainWork[index], new(string), nil, now)
+		database.BrainWork[index] = applyWorkQuestion(database.BrainWork[index], new(string), nil, nil, now)
 	case WorkUserSnooze:
-		if request.SnoozeUntil == nil || !request.SnoozeUntil.After(now) {
+		until, err := workSnoozeUntil(request, now)
+		if err != nil {
 			s.mu.Unlock()
-			return Work{}, WorkEvent{}, fmt.Errorf("%w: snooze needs a future time", ErrWorkUserAction)
+			return Work{}, WorkEvent{}, err
 		}
-		until := request.SnoozeUntil.UTC()
 		event.Kind = "user.snoozed"
 		event.DedupeKey = "user:snooze:" + until.Format(time.RFC3339Nano)
 		event.Summary = "Snoozed until " + until.Format(time.RFC3339)
@@ -209,6 +222,26 @@ func (s *Store) RecordWorkUserAction(request WorkUserActionRequest, admission Ex
 	}
 	s.broadcastWorkChange(item.ID)
 	return item, recorded, nil
+}
+
+// workSnoozeMax bounds a snooze length: past it a typo, not a choice.
+const workSnoozeMax = 366 * 24 * time.Hour
+
+// workSnoozeUntil resolves a snooze request's end: its time, or its length
+// from now. Exactly one is set, and the end is in the future.
+func workSnoozeUntil(request WorkUserActionRequest, now time.Time) (time.Time, error) {
+	switch {
+	case request.SnoozeUntil != nil && request.SnoozeFor != 0:
+		return time.Time{}, fmt.Errorf("%w: a snooze takes a time or a length, not both", ErrWorkUserAction)
+	case request.SnoozeFor != 0:
+		if request.SnoozeFor < 0 || request.SnoozeFor > workSnoozeMax {
+			return time.Time{}, fmt.Errorf("%w: a snooze length is between a second and a year", ErrWorkUserAction)
+		}
+		return now.Add(request.SnoozeFor).UTC(), nil
+	case request.SnoozeUntil == nil || !request.SnoozeUntil.After(now):
+		return time.Time{}, fmt.Errorf("%w: snooze needs a future time", ErrWorkUserAction)
+	}
+	return request.SnoozeUntil.UTC(), nil
 }
 
 // latestWorkUserAction is the user's newest decision that no newer result

@@ -710,10 +710,8 @@ func workCardTimelineItem(workItem Work, event WorkEvent, unread bool) TimelineI
 	}
 	summary := strings.TrimSpace(event.Summary)
 	if summary == "" {
+		// Work.NextAction is Brain's own note and is never shown to a person.
 		summary = strings.TrimSpace(workItem.Objective)
-		if nextAction := strings.TrimSpace(workItem.NextAction); nextAction != "" {
-			summary = nextAction
-		}
 	}
 	attention := strings.TrimSpace(event.Attention)
 	if failure := reviewDeliveryFailureSummary(workItem.Review); failure != "" {
@@ -995,7 +993,6 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 			WorkAttention:   item.Attention,
 			WorkEventKind:   item.WorkerEventKind,
 			WorkDetailsJSON: item.DetailsJSON,
-			WorkNextAction:  item.NextAction,
 			WorkWaitFor:     item.WaitFor,
 		}, true
 	case timelineKindCalendarResult:

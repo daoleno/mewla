@@ -131,18 +131,8 @@ func workerPushKey(ev watcher.SessionEvent) string {
 	if worker == nil {
 		return "turn:" + ev.TurnID
 	}
-	if worker.Prompt != nil && worker.Prompt.ID != "" {
-		return "prompt:" + worker.Prompt.ID
-	}
-	if worker.DetailsJSON != "" {
-		var details struct {
-			Prompt struct {
-				ID string `json:"id"`
-			} `json:"prompt"`
-		}
-		if json.Unmarshal([]byte(worker.DetailsJSON), &details) == nil && details.Prompt.ID != "" {
-			return "prompt:" + details.Prompt.ID
-		}
+	if id := terminalPromptID(worker); id != "" && id != "-" {
+		return "prompt:" + id
 	}
 	return "turn:" + ev.TurnID + "|" + strings.TrimSpace(worker.Summary)
 }

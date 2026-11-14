@@ -101,10 +101,26 @@ func claudeKnownTranscript(worker classifier.Worker, configDirs []string, resume
 	paths := []string{}
 	if bound := ClaudeBoundTranscript(worker.ID); bound != "" {
 		paths = append(paths, bound)
+		// The reported path is where the conversation would live for the
+		// cwd; a conversation resumed from another folder lives where it was
+		// born, so a reported file that is not there is looked for by its id.
+		if info, err := os.Stat(bound); err != nil || info.IsDir() {
+			id := strings.TrimSuffix(filepath.Base(bound), ".jsonl")
+			root := filepath.Dir(filepath.Dir(filepath.Dir(bound)))
+			if filepath.Base(filepath.Dir(filepath.Dir(bound))) == "projects" {
+				if path, found := claudeConversationTranscript(root, worker.Cwd, id); found {
+					paths = append(paths, path)
+				}
+			}
+		}
 	} else if resumeID != "" {
 		for _, dir := range configDirs {
 			for _, cwd := range transcriptCWDCandidates(strings.TrimSpace(worker.Cwd)) {
 				paths = append(paths, filepath.Join(claudeProjectDir(dir, cwd), resumeID+".jsonl"))
+			}
+			// A conversation resumed from another folder stays where it was born.
+			if path, found := claudeConversationTranscript(dir, worker.Cwd, resumeID); found {
+				paths = append(paths, path)
 			}
 		}
 	}
@@ -279,7 +295,10 @@ func claudeProcessOwnedTranscript(worker classifier.Worker, configDir string) (c
 	if err != nil || !live || !pathsEquivalent(record.Cwd, worker.Cwd) {
 		return claudeTranscriptCandidate{}, false, false
 	}
-	path := filepath.Join(claudeProjectDir(configDir, record.Cwd), record.SessionID+".jsonl")
+	path, found := claudeConversationTranscript(configDir, record.Cwd, record.SessionID)
+	if !found {
+		return claudeTranscriptCandidate{}, true, false
+	}
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() {
 		return claudeTranscriptCandidate{}, true, false
@@ -554,6 +573,9 @@ type claudeConversationBuilder struct {
 	events            []CodexConversationEvent
 	eventByCall       map[string]int
 	activityLifecycle providerActivityLifecycle
+	// denialKind is the toolDenialKind of the record being read: its tool
+	// results are calls that were refused.
+	denialKind string
 	// pendingChoiceCalls are AskUserQuestion calls without a result yet.
 	pendingChoiceCalls []string
 	// pendingTaskTurn holds the activity a task notification would open. It
@@ -618,6 +640,10 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		} `json:"origin"`
 		Attachment    json.RawMessage `json:"attachment"`
 		ToolUseResult json.RawMessage `json:"toolUseResult"`
+		// ToolDenialKind is set on the result record of a tool call that was
+		// refused ("user-rejected", "permission-rule"): the structured fact
+		// that the call did not run because it was not allowed.
+		ToolDenialKind string `json:"toolDenialKind"`
 		// Claude Code writes a provider/transport failure as a synthetic
 		// assistant record: isApiErrorMessage, an error category and, when
 		// known, the upstream status.
@@ -688,7 +714,10 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		if envelope.IsCompactSummary {
 			origin = ConversationOriginProvider
 		}
-		if b.consumeUserContent(lineNumber, recordID, timestamp, origin, envelope.Message.Content, envelope.ToolUseResult) &&
+		b.denialKind = strings.TrimSpace(envelope.ToolDenialKind)
+		consumed := b.consumeUserContent(lineNumber, recordID, timestamp, origin, envelope.Message.Content, envelope.ToolUseResult)
+		b.denialKind = ""
+		if consumed &&
 			!b.activityLifecycle.running() {
 			b.pendingTaskTurn = claudePendingTaskTurn{}
 			b.activityLifecycle.start(activityID, timestamp)
@@ -793,6 +822,7 @@ func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID,
 				b.updateToolResult(lineNumber, recordID, index, timestamp, item.ToolUseID, output, true)
 			} else {
 				b.updateToolResult(lineNumber, recordID, index, timestamp, item.ToolUseID, output, false)
+				b.settleFileChange(item.ToolUseID, toolUseResults[strings.TrimSpace(item.ToolUseID)])
 			}
 		}
 	}
@@ -990,6 +1020,9 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(inner)))
 		} else if brief, delegated := UnwrapClaudeDelegatedInput(exact); delegated {
 			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
+			if event.Origin == "" {
+				event.Origin = ConversationOriginDelegated
+			}
 		}
 	}
 	if b.addEvent(event) {
@@ -1093,6 +1126,63 @@ func (b *claudeConversationBuilder) settleChoice(callID string, toolUseResult js
 	b.events[eventIndex].Choice = &choice
 }
 
+// settleFileChange gives a finished Edit, MultiEdit or Write the file it
+// changed with its line counts, from the hunks Claude recorded for it
+// (toolUseResult.structuredPatch), as a Codex patch carries them.
+func (b *claudeConversationBuilder) settleFileChange(callID string, toolUseResult json.RawMessage) {
+	eventIndex, exists := b.eventByCall[strings.TrimSpace(callID)]
+	if !exists || eventIndex < 0 || eventIndex >= len(b.events) {
+		return
+	}
+	event := &b.events[eventIndex]
+	if change, ok := claudeFileChange(event.ToolName, toolUseResult); ok {
+		event.FileChanges = []CodexConversationFileChange{change}
+	}
+}
+
+func claudeFileChange(toolName string, toolUseResult json.RawMessage) (CodexConversationFileChange, bool) {
+	if toolName != "Edit" && toolName != "MultiEdit" && toolName != "Write" || len(toolUseResult) == 0 {
+		return CodexConversationFileChange{}, false
+	}
+	var result struct {
+		Type            string  `json:"type"`
+		FilePath        string  `json:"filePath"`
+		Content         *string `json:"content"`
+		StructuredPatch []struct {
+			Lines []string `json:"lines"`
+		} `json:"structuredPatch"`
+	}
+	if json.Unmarshal(toolUseResult, &result) != nil || strings.TrimSpace(result.FilePath) == "" {
+		return CodexConversationFileChange{}, false
+	}
+	change := CodexConversationFileChange{Path: strings.TrimSpace(result.FilePath), Operation: "update"}
+	added, removed := 0, 0
+	if result.Type == "create" {
+		// A new file has no hunks: every line of it is added.
+		change.Operation = "add"
+		if result.Content != nil && *result.Content != "" {
+			added = strings.Count(strings.TrimSuffix(*result.Content, "\n"), "\n") + 1
+		}
+	} else {
+		if result.StructuredPatch == nil {
+			return CodexConversationFileChange{}, false
+		}
+		for _, hunk := range result.StructuredPatch {
+			for _, line := range hunk.Lines {
+				switch {
+				case strings.HasPrefix(line, "+"):
+					added++
+				case strings.HasPrefix(line, "-"):
+					removed++
+				}
+			}
+		}
+	}
+	change.Additions = intPointer(added)
+	change.Deletions = intPointer(removed)
+	return change, true
+}
+
 func (b *claudeConversationBuilder) updateToolResult(lineNumber int, recordID string, index int, timestamp, callID, output string, isError bool) {
 	callID = strings.TrimSpace(callID)
 	output = truncateConversationBody(codexToolPayloadText(output))
@@ -1106,6 +1196,7 @@ func (b *claudeConversationBuilder) updateToolResult(lineNumber int, recordID st
 		if eventIndex, exists := b.eventByCall[callID]; exists && eventIndex >= 0 && eventIndex < len(b.events) {
 			b.events[eventIndex].Output = output
 			b.events[eventIndex].Status = status
+			b.events[eventIndex].Rejected = b.denialKind != ""
 			if isError {
 				code := 1
 				b.events[eventIndex].ExitCode = &code

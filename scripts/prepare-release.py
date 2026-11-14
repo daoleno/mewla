@@ -12,6 +12,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import release_identity  # noqa: E402
+
 
 BETA_VERSION_RE = re.compile(
     r"^(?P<major>0|[1-9][0-9]*)\."
@@ -126,6 +129,10 @@ def run_git(root: Path, *args: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
+# The one version source and the project that carries what Xcode needs of it.
+VERSION_SOURCE = release_identity.SOURCE
+IOS_PROJECT = "client/ios/project.yml"
+
 MIN_COMPUTER_VERSION_RE = re.compile(
     r'export const MIN_COMPUTER_VERSION = "(?P<version>[^"]+)";'
 )
@@ -135,11 +142,8 @@ def validate_min_computer_version(root: Path, next_version: str) -> None:
     """The oldest computer the app accepts must not be newer than the release
     that ships the app: a release asking for a Mewla that does not exist yet
     would show every user "this computer needs an update"."""
-    relative = "app/constants/computerVersion.ts"
-    path = root / relative
-    if not path.is_file():
-        return
-    match = MIN_COMPUTER_VERSION_RE.search(path.read_text(encoding="utf-8"))
+    relative = "client/core/update/version.ts"
+    match = MIN_COMPUTER_VERSION_RE.search(read_text(root, relative))
     if match is None:
         raise PrepareError(f"{relative} must declare MIN_COMPUTER_VERSION")
     minimum = match.group("version")
@@ -401,27 +405,22 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     if dirty:
         raise PrepareError(f"repository has unexpected dirty state:\n{dirty}")
 
-    base = read_json(root, "app/app.base.json")
-    try:
-        expo = base["expo"]
-        android = expo["android"]
-        current_version = expo["version"]
-        android_package = android["package"]
-        android_version_code = require_positive_int(
-            android["versionCode"], label="app/app.base.json Android versionCode"
-        )
-    except (KeyError, TypeError) as exc:
-        raise PrepareError(f"app/app.base.json is missing release identity: {exc}") from exc
+    manifest = read_json(root, VERSION_SOURCE)
+    current_version = manifest.get("version")
     if not isinstance(current_version, str):
-        raise PrepareError("app/app.base.json expo.version must be a string")
-    if not isinstance(android_package, str) or not android_package.strip():
-        raise PrepareError("app/app.base.json Android package must be a non-empty string")
+        raise PrepareError(f"{VERSION_SOURCE} version must be a string")
 
     next_version = (
         next_release_version(current_version)
         if target_version is None
         else validate_target_version(current_version, target_version)
     )
+    # The build numbers follow from the version (scripts/lib/release_identity.py).
+    try:
+        current_code = release_identity.build_code(current_version)
+        next_code = release_identity.build_code(next_version)
+    except release_identity.IdentityError as exc:
+        raise PrepareError(str(exc)) from exc
     current_tag = f"v{current_version}"
     next_tag = f"v{next_version}"
     require_annotated_tag(root, current_tag)
@@ -432,13 +431,6 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     if (root / next_notes_relative).exists():
         raise PrepareError(f"next release notes already exist: {next_notes_relative}")
     commits = commit_range(root, current_tag)
-
-    ios_doc = read_json(root, "app/ios-build.json")
-    ios_build = require_positive_int(
-        ios_doc.get("buildNumber"), label="app/ios-build.json buildNumber"
-    )
-    next_version_code = android_version_code + 1
-    next_ios_build = ios_build + 1
 
     user_notes_relative = f"docs/releases/reviewed/{next_tag}.md"
     if not (root / user_notes_relative).is_file():
@@ -452,12 +444,11 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     sources = {
         relative: read_text(root, relative)
         for relative in (
-            "app/app.base.json",
-            "app/ios-build.json",
+            VERSION_SOURCE,
+            IOS_PROJECT,
             "daemon/cmd/mewla/version.go",
             "scripts/verify-release-identity.sh",
             "docs/install-daemon.md",
-            "docs/ios-ci-release.md",
             "CHANGELOG.md",
         )
     }
@@ -468,23 +459,24 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     )
 
     updates: dict[str, str] = {}
-    updates["app/app.base.json"] = replace_literal(
-        sources["app/app.base.json"],
+    updates[VERSION_SOURCE] = replace_literal(
+        sources[VERSION_SOURCE],
         f'"version": "{current_version}"',
         f'"version": "{next_version}"',
-        relative="app/app.base.json",
+        relative=VERSION_SOURCE,
     )
-    updates["app/app.base.json"] = replace_literal(
-        updates["app/app.base.json"],
-        f'"versionCode": {android_version_code}',
-        f'"versionCode": {next_version_code}',
-        relative="app/app.base.json",
+    # Xcode reads no JSON: the iOS project carries the derived marketing version and build number.
+    ios_project = replace_literal(
+        sources[IOS_PROJECT],
+        f'MARKETING_VERSION: "{release_identity.marketing_version(current_version)}"\n',
+        f'MARKETING_VERSION: "{release_identity.marketing_version(next_version)}"\n',
+        relative=IOS_PROJECT,
     )
-    updates["app/ios-build.json"] = replace_literal(
-        sources["app/ios-build.json"],
-        f'"buildNumber": {ios_build}',
-        f'"buildNumber": {next_ios_build}',
-        relative="app/ios-build.json",
+    updates[IOS_PROJECT] = replace_literal(
+        ios_project,
+        f'CURRENT_PROJECT_VERSION: "{current_code}"\n',
+        f'CURRENT_PROJECT_VERSION: "{next_code}"\n',
+        relative=IOS_PROJECT,
     )
     updates["daemon/cmd/mewla/version.go"] = replace_literal(
         sources["daemon/cmd/mewla/version.go"],
@@ -499,26 +491,6 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         next_tag,
         relative="docs/install-daemon.md",
     )
-    ios_docs = replace_literal(
-        sources["docs/ios-ci-release.md"],
-        f"tracked general/Android version is `{current_version}`",
-        f"tracked general/Android version is `{next_version}`",
-        relative="docs/ios-ci-release.md",
-    )
-    ios_docs = replace_literal(
-        ios_docs,
-        f"marketing version `{current_version.split('-', 1)[0]}`",
-        f"marketing version `{next_version.split('-', 1)[0]}`",
-        relative="docs/ios-ci-release.md",
-    )
-    ios_docs = replace_literal(
-        ios_docs,
-        f"baseline is build `{ios_build}` in `app/ios-build.json`",
-        f"baseline is build `{next_ios_build}` in `app/ios-build.json`",
-        relative="docs/ios-ci-release.md",
-    )
-    updates["docs/ios-ci-release.md"] = ios_docs
-
     changelog_entry = f"- [{next_tag}](docs/releases/{next_tag}.md)\n"
     updates["CHANGELOG.md"] = replace_literal(
         sources["CHANGELOG.md"],
@@ -559,8 +531,8 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         "current_version": current_version,
         "next_tag": next_tag,
         "next_version": next_version,
-        "android_version_code": next_version_code,
-        "ios_build_number": next_ios_build,
+        "android_version_code": next_code,
+        "ios_build_number": next_code,
         "commit_count": len(commits),
         "changed_paths": sorted(updates),
     }

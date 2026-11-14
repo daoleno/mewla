@@ -5,6 +5,8 @@
  * From the Expo app's components/terminal/timelineItemsSemanticEqual.ts.
  */
 
+import { sameProgress } from "../work/judgedProgress";
+import { sameResultActions } from "../work/resultActions";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { ToolDeveloperDetails } from "./toolCallDetails";
 import type {
@@ -45,10 +47,13 @@ export function timelineItemsSemanticEqual(
       left.body === right.body &&
       left.pending === right.pending &&
       left.pendingLifecycle === right.pendingLifecycle &&
-      left.onRetryPending === right.onRetryPending &&
-      left.onDiscardPending === right.onDiscardPending &&
+      // An action is made anew on every projection (a closure over the same message): the row is the
+      // same while it has the same actions. Compared by identity, every pending row was new each time.
+      Boolean(left.onRetryPending) === Boolean(right.onRetryPending) &&
+      Boolean(left.onDiscardPending) === Boolean(right.onDiscardPending) &&
       left.streaming === right.streaming &&
       left.turnFocusAnchorId === right.turnFocusAnchorId &&
+      left.delegatedTask === right.delegatedTask &&
       attachmentsEqual(left.attachments, right.attachments)
     );
   }
@@ -68,7 +73,10 @@ export function timelineItemsSemanticEqual(
       left.sourceCount === right.sourceCount &&
       left.catPerched === right.catPerched &&
       brainWorkResultEventArraysEqual(left.events, right.events) &&
-      left.onPress === right.onPress
+      // `onPress` is a new closure on every projection: what it does is its event (above) and where it leads.
+      // Compared by identity, every Work card of Brain's thread was drawn anew on each Brain snapshot (owner 11-13).
+      Boolean(left.onPress) === Boolean(right.onPress) &&
+      left.canOpenSession === right.canOpenSession
     );
   }
   if (
@@ -85,6 +93,10 @@ export function timelineItemsSemanticEqual(
       left.userSaid === right.userSaid &&
       left.body === right.body
     );
+  }
+  if (left.type === "answered" && right.type === "answered") {
+    // A stronger answer (who, not "in the terminal") replaces the record under the same id.
+    return JSON.stringify(left.record) === JSON.stringify(right.record);
   }
   return false;
 }
@@ -141,6 +153,7 @@ function brainCurrentWorkEqual(
     left.wake?.ref === right.wake?.ref &&
     left.attention_state === right.attention_state &&
     left.unread_result === right.unread_result &&
+    sameProgress(left.progress, right.progress) &&
     brainSessionFinalizationsEqual(
       left.session_finalizations,
       right.session_finalizations,
@@ -368,7 +381,7 @@ export function brainWorkResultEventsEqual(
     left.attention === right.attention &&
     left.event_kind === right.event_kind &&
     left.details_json === right.details_json &&
-    left.next_action === right.next_action &&
+    sameResultActions(left.actions, right.actions) &&
     left.wait_for === right.wait_for
   );
 }

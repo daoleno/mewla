@@ -345,7 +345,7 @@ func TestLiveStateIsPushedOnlyToADeviceThatAskedForIt(t *testing.T) {
 	// Registered without the flag: nothing is pushed, and the flag is false.
 	f.send(t, map[string]any{"type": "register_push", "push_token": "ExponentPushToken[x]", "server_ref": "srv"})
 	readWebSocketType(t, f.conn, "push_registered")
-	hub.projector.ObserveNow(running())
+	hub.projector.ObserveNow(live.Input{Snapshot: running()})
 	time.Sleep(50 * time.Millisecond)
 	if pusher.sends() != 0 {
 		t.Fatal("a device that did not declare live_state must get no live push")
@@ -359,7 +359,7 @@ func TestLiveStateIsPushedOnlyToADeviceThatAskedForIt(t *testing.T) {
 	}
 	phase := running()
 	phase.Workers[0].Phase = "verifying"
-	hub.projector.ObserveNow(phase)
+	hub.projector.ObserveNow(live.Input{Snapshot: phase})
 	waitForLive(t, "a live push", func() bool { return pusher.sends() == 1 })
 	data := pusher.sent[0]
 	var state live.State
@@ -374,9 +374,9 @@ func TestLiveStateIsPushedOnlyToADeviceThatAskedForIt(t *testing.T) {
 	}
 
 	// Idle after idle is not news; idle after running is (it ends the surface).
-	hub.projector.ObserveNow(brain.Snapshot{})
+	hub.projector.ObserveNow(live.Input{Snapshot: brain.Snapshot{}})
 	waitForLive(t, "the ending push", func() bool { return pusher.sends() == 2 })
-	hub.projector.ObserveNow(brain.Snapshot{})
+	hub.projector.ObserveNow(live.Input{Snapshot: brain.Snapshot{}})
 	time.Sleep(50 * time.Millisecond)
 	if pusher.sends() != 2 {
 		t.Fatalf("sends = %d", pusher.sends())
@@ -385,7 +385,7 @@ func TestLiveStateIsPushedOnlyToADeviceThatAskedForIt(t *testing.T) {
 
 func TestLiveStateBroadcastShape(t *testing.T) {
 	f := newLiveFixture(t)
-	f.server.liveRuntime().projector.ObserveNow(askingSnapshot())
+	f.server.liveRuntime().projector.ObserveNow(live.Input{Snapshot: askingSnapshot()})
 	message := readWebSocketType(t, f.conn, "live_state")
 	keys := []string{}
 	for key := range message {

@@ -44,9 +44,16 @@ type State struct {
 	Terminals []Turn
 	Admission *Admission
 	Approvals []Approval
-	Exited    bool
-	ExitCode  *int
-	LastEvent time.Time
+	// Activity is what the agent said it started last, within the turn that
+	// is running; empty between turns.
+	Activity string
+	// ActivityTool and ActivitySummary are Activity's tool and what it works
+	// on (Event.ActivityTool, Event.ActivitySummary).
+	ActivityTool    string
+	ActivitySummary string
+	Exited          bool
+	ExitCode        *int
+	LastEvent       time.Time
 }
 
 // Hub holds each Worker's state and fans events out to subscribers. It is the
@@ -57,6 +64,7 @@ type Hub struct {
 	nextSub     int
 	onApprovals func(workerID string)
 	onBound     func(workerID string)
+	onResolved  func(workerID string, approval Approval, e Event)
 }
 
 type workerState struct {
@@ -94,12 +102,21 @@ func (h *Hub) Publish(e Event) {
 	}
 	h.mu.Lock()
 	w := h.worker(e.WorkerID)
+	var resolved *Approval
+	if e.Kind == KindApprovalResolved {
+		for i := range w.Approvals {
+			if w.Approvals[i].ID == e.ApprovalID {
+				copied := w.Approvals[i]
+				resolved = &copied
+			}
+		}
+	}
 	before := approvalIDs(w.Approvals)
 	bindingBefore, boundBefore := w.Binding, w.Bound
 	w.apply(e)
 	changed := before != approvalIDs(w.Approvals)
 	rebound := e.Kind == KindBound && (w.Bound != boundBefore || w.Binding.ConversationID != bindingBefore.ConversationID || w.Binding.Ref != bindingBefore.Ref)
-	onApprovals, onBound := h.onApprovals, h.onBound
+	onApprovals, onBound, onResolved := h.onApprovals, h.onBound, h.onResolved
 	subs := make([]chan Event, 0, len(w.subs))
 	for _, ch := range w.subs {
 		subs = append(subs, ch)
@@ -111,12 +128,24 @@ func (h *Hub) Publish(e Event) {
 	if rebound && onBound != nil {
 		onBound(e.WorkerID)
 	}
+	if resolved != nil && onResolved != nil {
+		onResolved(e.WorkerID, *resolved, e)
+	}
 	for _, ch := range subs {
 		select {
 		case ch <- e:
 		default:
 		}
 	}
+}
+
+// OnApprovalResolved calls notify, outside the Hub's lock, with each pending
+// approval as it is resolved and the event that resolved it (By says who:
+// mewla, agent, timeout).
+func (h *Hub) OnApprovalResolved(notify func(workerID string, approval Approval, e Event)) {
+	h.mu.Lock()
+	h.onResolved = notify
+	h.mu.Unlock()
 }
 
 // OnApprovalsChanged calls notify, outside the Hub's lock, whenever the set of
@@ -181,13 +210,19 @@ func (w *workerState) apply(e Event) {
 			}
 			w.Binding, w.Bound = *e.Binding, true
 		}
+	case KindActivity:
+		if w.Current != nil && !w.Current.Status.Terminal() {
+			w.Activity, w.ActivityTool, w.ActivitySummary = e.Activity, e.ActivityTool, e.ActivitySummary
+		}
 	case KindTurnStarted:
+		w.Activity, w.ActivityTool, w.ActivitySummary = "", "", ""
 		w.Current = &Turn{ID: e.TurnID, Status: TurnRunning, StartedAt: e.At, ProgressAt: e.At}
 	case KindProgress:
 		if w.Current != nil && !w.Current.Status.Terminal() && e.At.After(w.Current.ProgressAt) {
 			w.Current.ProgressAt = e.At
 		}
 	case KindTurnFinished:
+		w.Activity, w.ActivityTool, w.ActivitySummary = "", "", ""
 		turn := Turn{ID: e.TurnID, Status: e.Status, SettledAt: e.At, Error: e.Error, ProgressAt: e.At}
 		if w.Current != nil && (w.Current.ID == e.TurnID || e.TurnID == "") {
 			turn.ID, turn.StartedAt = w.Current.ID, w.Current.StartedAt

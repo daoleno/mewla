@@ -1,4 +1,4 @@
-import { effect, keyboardFrame, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
+import { effect, host, keyboardFrame, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
@@ -53,6 +53,11 @@ export function needsSoftKeyboard(): boolean {
   return platform.os !== "web" || !platform.desktop;
 }
 
+/** "Full size" is offered where the page host can do it: a browser with a keyboard of its own (parity #29). */
+export function canShowFullSize(): boolean {
+  return !needsSoftKeyboard() && host.available();
+}
+
 
 /** Pixel-only document with no network access: the app relays the RFB bytes. */
 export function viewerHtml(): string {
@@ -92,7 +97,7 @@ export class RemoteSession {
   readonly stats = signal<ScreenStreamStats | null>(null);
   readonly viewerStats = signal<ViewerStats | null>(null);
   readonly holding = signal(false);
-  /** The viewer felt a long press (a right-click) or the remote bell rang. */
+  /** The viewer felt a long press (a right-click) or the remote bell rang. No haptic: the app has two (SPEC §16.3). */
   onHaptic: (() => void) | null = null;
   private connection: ScreenConnection | null = null;
   private web: WebViewRef | null = null;
@@ -247,6 +252,16 @@ export class RemoteSession {
     this.post([{ type: "fit" }]);
   }
 
+  /**
+   * Full size, with the keyboard locked where the browser allows it (⌘W and Ctrl+T reach the remote),
+   * as the Expo web app's menu did. The page host does it (`web.fullscreen`): the picture's frame
+   * cannot, and the click's user activation is the page's. `label` picks this picture's view.
+   */
+  fullSize(label: string): Promise<boolean> {
+    return host.call<{ keyboardLocked?: boolean } | null>("web.fullscreen", { testID: "remote-view", label })
+      .then(() => true, () => false);
+  }
+
   key(key: ScreenKey, mods: ScreenModifier[]): void {
     this.post([{ type: "key", key, mods }]);
   }
@@ -332,15 +347,14 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
         ref={(node: WebViewRef) => props.session.attach(node)}
         testID="remote-view"
         accessibilityLabel={props.label}
-        class="flex-1 bg-background"
+        class="flex-1 bg-black"
         html={html}
         baseUrl={viewerBaseUrl}
         scrollable={false}
         onMessage={(e) => props.session.onViewer(e.data)}
       />
       {/* A browser's own keyboard types into the picture: no field, no key bar. */}
-      {soft ? (
-        <Input
+      <If when={soft}><Input
           ref={(node: InputRef) => {
             input = node;
           }}
@@ -356,11 +370,8 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
           onChange={({ value: next }) => typed(next)}
           onSubmit={() => press("Return")}
           onBlur={() => props.onTypingChange(false)}
-        />
-      ) : null}
-      {soft && props.typing ? (
-        // A narrow phone may not fit every key: the bar scrolls sideways.
-        <Scroll horizontal testID="remote-key-bar" class="grow-0 border-t border-border bg-card" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
+        /></If>
+      <If when={soft && props.typing}><Scroll horizontal testID="remote-key-bar" class="grow-0 bg-black" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
           {props.modifiers.map((modifier) => {
             const state = () => (mods().locked.includes(modifier.key) ? "locked" : mods().armed.includes(modifier.key) ? "armed" : "off");
             return (
@@ -369,20 +380,19 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
                 accessibilityLabel={modifier.name}
                 selected={state() !== "off"}
                 onPress={() => mods.set(tapModifier(mods(), modifier.key))}
-                class={`min-w-[40px] items-center rounded-lg px-2 py-1.5 ${state() === "locked" ? "border-2 border-primary bg-secondary" : state() === "armed" ? "border border-primary bg-secondary" : "border border-border"}`}
+                class={`h-11 min-w-[44px] items-center justify-center rounded-[10px] px-2.5 ${state() === "locked" ? "border-2 border-white bg-white/35" : state() === "armed" ? "bg-white/35" : "bg-white/15"}`}
               >
-                <Text class="text-sm font-medium">{modifier.label}</Text>
+                <Text class="text-sub font-semibold text-white">{modifier.label}</Text>
               </Button>
             );
           })}
-          <View class="mx-1 h-5 w-px bg-border" />
+          <View class="mx-1 h-5 w-px bg-white/25" />
           {KEYS.map((key) => (
-            <Button testID={`key-${key.key}`} accessibilityLabel={key.name} onPress={() => press(key.key)} class="min-w-[36px] items-center rounded-lg border border-border px-2 py-1.5">
-              <Text class="text-sm">{key.label}</Text>
+            <Button testID={`key-${key.key}`} accessibilityLabel={key.name} onPress={() => press(key.key)} class="h-11 min-w-[44px] items-center justify-center rounded-[10px] bg-white/15 px-2.5 active:bg-white/30">
+              <Text class="text-sub text-white">{key.label}</Text>
             </Button>
           ))}
-        </Scroll>
-      ) : null}
+        </Scroll></If>
       {(() => {
         // Bring the keyboard up or down when the page asks.
         if (!soft) return null;

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { testClock } from "../calendar/testClock";
-import { brainWorkActions, brainWorkAskDraft, brainWorkSlipActions, brainWorkSnoozeUntil, brainWorkUserAction, brainWorkWaitForLine } from "./actions";
+import { brainWorkActions, brainWorkAskDraft, brainWorkSlipActions, brainWorkUserAction, brainWorkWaitForLine } from "./actions";
 import { BRAIN_WORK_STUCK_AFTER_MS, brainWorkSurface } from "./surface";
 import type { BrainCurrentWork } from "./types";
 
@@ -29,6 +28,15 @@ describe("every Work state has a way forward", () => {
     expect(brainWorkActions(slip).find((action) => action.kind === "dismiss")?.confirm).toBeTruthy();
   });
 
+  test("Brain's pick: the choice Brain recommends is tagged and is the primary one; the reply is still its text", () => {
+    const slip = slipOf(work({ question: "How long a trial?", choices: ["7 days", "14 days"], recommended: "14 days", wake: { kind: "user_input", ref: "x" } }));
+    const answers = brainWorkActions(slip).filter((action) => action.kind === "answer");
+    expect(answers.map((a) => [a.text, a.pick ?? false, a.primary ?? false])).toEqual([["7 days", false, false], ["14 days", true, true]]);
+    // A pick that names no choice (an older daemon would not send one) tags nothing.
+    const stray = slipOf(work({ question: "How long?", choices: ["7 days"], recommended: "30 days", wake: { kind: "user_input", ref: "x" } }));
+    expect(brainWorkActions(stray).filter((a) => a.pick)).toEqual([]);
+  });
+
   test("a question with no choices is answered in words", () => {
     expect(kinds(work({ question: "Which account?" }))).toEqual(["reply", "snooze", "dismiss"]);
   });
@@ -45,10 +53,14 @@ describe("every Work state has a way forward", () => {
     expect(kinds(work({ status: "done", unread_result: true }))).toEqual(["read", "ask"]);
   });
 
-  test("running: open the Worker, ask Brain, or stop it with a confirmation", () => {
+  test("running: open the Worker, ask Brain, snooze it, or stop it with a confirmation", () => {
     const item = work({ status: "running", progress_mode: "owned", attempt_session_id: "%9", attempt_delegated: true });
     const workers = [{ id: "%9", name: "w", status: "running", phase: "verifying", summary: "Running go test ./..." }];
-    expect(kinds(item, workers)).toEqual(["open", "ask", "stop"]);
+    expect(kinds(item, workers)).toEqual(["open", "ask", "snooze", "stop"]);
+    // The daemon stops only a delegated Worker's Attempt: no Stop to offer for another.
+    expect(kinds({ ...item, attempt_delegated: false }, workers)).toEqual(["open", "ask", "snooze"]);
+    // A delegated Attempt the list does not have yet is still stopped by the daemon.
+    expect(kinds(item, [])).toEqual(["ask", "snooze", "stop"]);
     expect(slipOf(item, workers).phase).toBe("verifying");
     expect(brainWorkActions(slipOf(item, workers)).at(-1)?.confirm).toContain("cancelled");
   });
@@ -82,9 +94,9 @@ describe("nothing stays stuck", () => {
     expect(slip.summary).toContain("You answered a day ago");
   });
 
-  test("a Worker that vanished without a result is a decision, not a dead card", () => {
+  test("a Worker that vanished without a result is Brain's to check (owner 11-13 19:4x), with the person's moves on Work detail", () => {
     const slip = slipOf(work({ status: "needs_input", progress_mode: "ready", attention_reason: "turn_lost", attention_since: hoursAgo(3) }));
-    expect(slip).toMatchObject({ group: "needs", stuck: "outcome_unknown", status: "warning", statusLabel: "Outcome unknown" });
+    expect(slip).toMatchObject({ group: "running", stuck: "outcome_unknown", status: "running", statusLabel: "Reviewing" });
     expect(brainWorkActions(slip).map((action) => action.kind)).toEqual(["ask", "close", "dismiss"]);
   });
 
@@ -111,10 +123,7 @@ test("slip actions map onto the daemon's user actions", () => {
   expect(brainWorkUserAction("open")).toBeNull();
 });
 
-test("snooze is tomorrow at nine, and Ask Brain quotes the Work", () => {
-  // 22:30 on Oct 8 in Shanghai: tomorrow 09:00 there.
-  const { zones } = testClock(0, "Asia/Shanghai");
-  expect(brainWorkSnoozeUntil(zones, Date.parse("2026-10-08T14:30:00Z"))).toBe(Date.parse("2026-10-09T01:00:00Z"));
+test("Ask Brain quotes the Work", () => {
   expect(brainWorkAskDraft({ title: "sync fix", workId: "w1", summary: "Keep both?" })).toBe("Re: sync fix (work w1)\n> Keep both?\n");
 });
 

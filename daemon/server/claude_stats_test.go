@@ -112,7 +112,7 @@ func TestNativeClaudeUsageReachesStatsWithCustomProvider(t *testing.T) {
 	if response.Type != "stats_data" || response.RequestID != "native-claude" {
 		t.Fatal("wrong stats response")
 	}
-	for _, name := range []string{"day", "week", "month", "all"} {
+	for _, name := range []string{"day", "week", "fortnight", "month", "all"} {
 		row := response.Ranges[name]
 		if row == nil || row.TotalTokens != 160 || row.InputTokens != 20 || row.OutputTokens != 20 || row.CacheRead != 100 || row.CacheCreate != 20 || row.Sessions != 1 {
 			t.Fatalf("%s lost/doubled native usage: %+v", name, row)

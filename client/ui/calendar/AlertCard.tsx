@@ -4,7 +4,7 @@ import { kindLabel } from "../../core/calendar/model";
 import { AppSheet } from "../shell/AppSheet";
 import { openedInCalendar, shownAlert } from "./alerts";
 import { clock, ensureZones } from "./clock";
-import { showCalendarItem } from "./routes";
+import { openCalendarItem } from "../shell/nav";
 import { calendar } from "./state";
 
 /**
@@ -46,22 +46,20 @@ export function CalendarAlertCard() {
     const shown = item();
     if (!shown) return;
     openedInCalendar(shown);
-    showCalendarItem(shown.id);
+    openCalendarItem(shown.id);
   };
   return (
     <AppSheet open={Boolean(shownAlert())} onOpenChange={() => {}} closeOnBackdropPress={false} closeOnEscape={false}
-      popupClass="rounded-t-2xl bg-background px-5 pt-5" backdropClass="bg-black/40">
+      popupClass="rounded-t-2xl bg-background pt-5" sidePadding={20} backdropClass="bg-black/40">
       <View testID="calendar-alert-card" class="gap-3 pb-8">
         <Text testID="alert-kind" class="text-sm font-semibold text-primary" role="header">{kind()}</Text>
         <Text testID="alert-title" class="text-2xl font-semibold">{item()?.title ?? ""}</Text>
         <Text testID="alert-when" class="text-lg text-muted-foreground">{when()}</Text>
-        {notes() ? <Text testID="alert-notes" class="text-base">{notes()}</Text> : null}
-        {failure() ? (
-          <View testID="alert-problem" class="gap-1 rounded-xl border border-border bg-card px-3 py-2.5">
+        <If when={notes()}><Text testID="alert-notes" class="text-base">{notes()}</Text></If>
+        <If when={failure()}><View testID="alert-problem" class="gap-1 rounded-xl border border-border bg-card px-3 py-2.5">
             <Text class="text-sm font-semibold text-destructive">That did not go through</Text>
             <Text class="text-sm text-muted-foreground">{failure()}</Text>
-          </View>
-        ) : null}
+          </View></If>
         <View class="mt-2 gap-2.5">
           <Button testID="alert-done" disabled={busy()} onPress={() => void act((id) => calendar()?.done(id))}
             class={busy() ? "items-center rounded-full bg-primary py-3 opacity-50" : "items-center rounded-full bg-primary py-3 active:opacity-80"}>

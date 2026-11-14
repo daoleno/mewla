@@ -7,7 +7,7 @@ else.
 ## Open it
 
 Open the tray (the state control next to **Brain**). **Today** shows the next
-three items; tap one to open it. Tap **Calendar** for the whole page:
+three items; tap one to open it. Tap **Calendar** for the whole page (on a keyboard, `G` then `C`):
 
 - **Today** lists the day, with past items dimmed above the line for now.
   **Month** shows the month grid; pick a day to see it.
