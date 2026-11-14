@@ -477,7 +477,10 @@ type clientMessage struct {
 	// FirstEvents, on codex_conversation_subscribe, asks for the thread's first
 	// snapshot in two parts: the newest FirstEvents events, then the rest as
 	// the next revision's delta (codexConversationFirstPage).
-	FirstEvents        int                                    `json:"first_events,omitempty"`
+	FirstEvents int `json:"first_events,omitempty"`
+	// MaxEdge asks codex_asset for a picture no longer than this on its long
+	// side (attachment.FitImage): a thread's row, not the full-size viewer.
+	MaxEdge            int                                    `json:"max_edge,omitempty"`
 	Attachments        []attachment.File                      `json:"attachments"`
 	Generation         int64                                  `json:"generation"`
 	Limit              int                                    `json:"limit"`
@@ -3236,6 +3239,9 @@ func (s *Server) handleCodexAsset(conn *websocket.Conn, raw clientMessage) {
 	if !strings.HasPrefix(contentType, "image/") {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "codex_asset_failed", "asset is not a supported image")
 		return
+	}
+	if raw.MaxEdge > 0 {
+		data, contentType = attachment.FitImage(data, min(max(raw.MaxEdge, 64), 4096))
 	}
 
 	s.sendJSON(conn, map[string]any{
