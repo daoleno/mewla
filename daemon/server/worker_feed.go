@@ -292,17 +292,17 @@ func (f *workerFeed) reconcile(build func() []*workerSessionWire, emit func([]by
 // publishWorkerSessionOutput is publishWorkerSession for a change that is only
 // the Session's terminal output; see workerFeed.publishOutput.
 func (s *Server) publishWorkerSessionOutput(worker *classifier.Worker) {
-	s.workerFeed.publishOutput(s.workerSessionWire(worker), s.broadcast)
+	s.workerFeed.publishOutput(s.workerSessionWire(worker), s.broadcastFeed)
 }
 
 func (s *Server) publishWorkerSession(kind string, worker *classifier.Worker) {
-	s.workerFeed.publish(kind, s.workerSessionWire(worker), s.broadcast)
+	s.workerFeed.publish(kind, s.workerSessionWire(worker), s.broadcastFeed)
 }
 
 // publishWorkerSessionChange is publishWorkerSession for a change that may be a
 // Session becoming visible.
 func (s *Server) publishWorkerSessionChange(worker *classifier.Worker) {
-	s.workerFeed.publishChange(s.workerSessionWire(worker), s.broadcast)
+	s.workerFeed.publishChange(s.workerSessionWire(worker), s.broadcastFeed)
 }
 
 func (s *Server) visibleWorkerSessionWires() []*workerSessionWire {
@@ -310,7 +310,7 @@ func (s *Server) visibleWorkerSessionWires() []*workerSessionWire {
 }
 
 func (s *Server) reconcileWorkerFeed() {
-	s.workerFeed.reconcile(s.visibleWorkerSessionWires, s.broadcast)
+	s.workerFeed.reconcile(s.visibleWorkerSessionWires, s.broadcastFeed)
 }
 
 // runWorkerFeedReconcile keeps the derived fields of the feed honest and tells

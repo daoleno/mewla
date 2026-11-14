@@ -669,12 +669,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	link := keepWebSocketAlive(conn)
 	link.deflate = clientOffersDeflate(r)
 	defer link.stop()
-	if clientOffersFrameDeflate(r) {
-		s.mu.Lock()
-		outbox := s.outboxes[conn]
-		s.mu.Unlock()
-		if outbox != nil {
+	if outbox := s.outboxFor(conn); outbox != nil {
+		if clientOffersFrameDeflate(r) {
 			outbox.useFrameDeflate()
+		}
+		if clientOffersTailless(r) {
+			outbox.useTailless()
 		}
 	}
 	// Brain first: an app opens on Brain, and subscribes to its thread once it
@@ -1869,7 +1869,11 @@ func (s *Server) sendTelegramStatus(conn *websocket.Conn, requestID string) {
 // after noticing a gap in the sequenced changes.
 func (s *Server) sendWorkerSessionList(conn *websocket.Conn) {
 	s.workerFeed.snapshot(s.visibleWorkerSessionWires, func(data []byte) {
-		if err := s.queueMessage(conn, websocket.TextMessage, data, false); err != nil {
+		var lite []byte
+		if outbox := s.outboxFor(conn); outbox != nil && outbox.isTailless() {
+			lite = withoutTerminalTail(data)
+		}
+		if err := s.queueFeedMessage(conn, data, lite); err != nil {
 			if errors.Is(err, errOutboxClosed) {
 				debuglog.Printf("websocket: send to closed client remote=%s: %v", conn.RemoteAddr(), err)
 				return
@@ -3879,7 +3883,7 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 	if ev.Worker != nil && ev.Worker.Hidden {
 		// A Session that was listed and has become hidden leaves the list now,
 		// not at the next reconcile.
-		s.workerFeed.retire(ev.Worker.ID, s.broadcast)
+		s.workerFeed.retire(ev.Worker.ID, s.broadcastFeed)
 		if s.brain != nil {
 			if _, err := s.brain.ObserveHostSessionEvent(ev); err != nil {
 				log.Printf("brain host event dispatch failed: %v", err)
@@ -4578,6 +4582,12 @@ func (s *Server) outboxStats(conn *websocket.Conn) outboxStats {
 		return outboxStats{}
 	}
 	return outbox.stats()
+}
+
+func (s *Server) outboxFor(conn *websocket.Conn) *clientOutbox {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.outboxes[conn]
 }
 
 // queueMessage hands one message to the client's writer. It never writes to

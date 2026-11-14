@@ -11,9 +11,17 @@ import { platform } from "./platform";
  */
 export const FRAME_DEFLATE_SUBPROTOCOL = "mewla.frames.deflate-raw";
 
+/**
+ * No Session's terminal tail (`last_output_lines`): the app never shows it, and a running Session's tail
+ * was most of each `worker_session_updated` (8-16 KB of terminal text every 10 s, per Session, on a link
+ * that carries 60 KB/s). A daemon that knows this subprotocol sends the Session list and changes without
+ * it; one from before ignores it. The daemon side is `daemon/server/feed_tailless.go`.
+ */
+export const TAILLESS_SUBPROTOCOL = "mewla.sessions.tailless";
+
 /** The subprotocols to offer after the auth one. */
 export function frameSubprotocols(): string[] {
-  return platform().inflateRaw ? [FRAME_DEFLATE_SUBPROTOCOL] : [];
+  return platform().inflateRaw ? [FRAME_DEFLATE_SUBPROTOCOL, TAILLESS_SUBPROTOCOL] : [TAILLESS_SUBPROTOCOL];
 }
 
 const decoder = new TextDecoder();
