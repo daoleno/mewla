@@ -97,9 +97,10 @@ jobs:
             client/android/app/build/generated/assets/bundleUi.js.map
           retention-days: 90
 
-  # Two Macs side by side: the unit tests (a Debug build) and the Release app opening on a Simulator
-  # the tests never touched. One after the other in one job they took 16 min (11-14), most of it two
-  # Simulator boots and two builds.
+  # One Simulator, booted while the job sets up and compiles: Xcode keeps a device it found booted
+  # running after the tests, so the Release app opens on it without a second boot. Booting it twice
+  # took about 6 of the job's 16 min (11-14). On two Macs side by side each paid for a cold build and
+  # a boot on three cores, and the slower took 11 min.
   ios:
     name: iOS host (Simulator, upgrade tests)
     if: github.event_name != 'workflow_dispatch' || !inputs.android_only
@@ -140,40 +141,6 @@ jobs:
           mkdir -p out
           xcodebuild test -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -40
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mewla-ios-simulator
-          path: client/ios/out
-          retention-days: 14
-
-  ios-launch:
-    name: iOS host (Simulator, the Release app opens)
-    if: github.event_name != 'workflow_dispatch' || !inputs.android_only
-    runs-on: xcode-27
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      # The verified libghostty-vt XCFramework the terminal links (native/terminal-vt/libs/ios, cached on main).
-      - name: iOS Ghostty XCFramework
-        uses: ./.github/actions/ios-native
-      - uses: actions/cache@v4
-        with:
-          path: ~/.nsh
-          key: nsh-${{ runner.os }}-${{ hashFiles('client/scripts/fetch-nsh.sh') }}
-      - name: Install NSH and the iOS framework
-        run: client/scripts/fetch-nsh.sh --ios
-      - name: Generate the Xcode project
-        run: |
-          brew install xcodegen > /dev/null
-          client/scripts/ios-project.sh
-      # A single-display iPhone: `simctl io screenshot` refuses a two-display one (iPhone Duo) without --display.
-      # Booted now, so the minutes a Simulator takes to boot on the runner pass while Xcode compiles.
-      - name: Pick a simulator and start booting it
-        run: |
-          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Duo' not in x['name']))")
-          echo "SIM=$SIM" >> "$GITHUB_ENV"
-          xcrun simctl boot "$SIM" || true
       - name: Open it on the Simulator
         working-directory: client/ios
         run: |
@@ -193,7 +160,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mewla-ios-simulator-first-run
+          name: mewla-ios-simulator
           path: client/ios/out
           retention-days: 14
 
