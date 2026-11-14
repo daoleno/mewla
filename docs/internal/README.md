@@ -38,7 +38,7 @@ and [third-party assets](../third-party-assets.md).
 
 - [Android development and native contract](android-development.md)
 - [iOS development and native contract](ios-development.md)
-- [Mobile interface structure](mobile-interface.md), [mobile copy](mobile-copy.md), [interface reading](interface-reading.md)
+- [Mobile copy](mobile-copy.md), [interface reading](interface-reading.md)
 - [Terminal rendering](terminal-rendering.md) and [terminal scrolling](terminal-scrolling.md)
 - [Git review](git-review.md) and [Git diff design](git-diff-design.md)
 - [Agents' browser on the virtual screen](persistent-browser.md)
