@@ -7,7 +7,7 @@ Mewla does not currently claim a generally available App Store build. The reposi
 
 ## TestFlight Preview access
 
-The [TestFlight Preview public invitation](https://testflight.apple.com/join/rTKCDzMt) is configured. The first external build is awaiting Apple Beta App Review, so the link does not yet guarantee that a new tester can install the Preview. Source builds remain available independently of TestFlight.
+The [TestFlight Preview public invitation](https://testflight.apple.com/join/nMQheDCE) installs the newest build that passed Apple's Beta App Review; a newer upload waits for that review before testers get it. The `ios-testflight` release's signed `testflight-manifest.json` names the build testers can install now. Source builds remain available independently of TestFlight.
 
 ## Supported mobile interfaces
 

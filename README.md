@@ -59,7 +59,7 @@ open foldable or a browser, what's running stays in a pane on the left.
 
 ## Get started
 
-You need Linux (`amd64`/`arm64`), an Apple Silicon Mac or Windows (x64). On
+You need Linux (`amd64`/`arm64`), an Apple Silicon Mac or Windows (x64, beta). On
 Linux and macOS, `mewla` offers to install an agent CLI (Claude Code or Codex)
 when none is ready.
 

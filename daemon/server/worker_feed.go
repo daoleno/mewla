@@ -28,11 +28,16 @@ const workerFeedHeartbeatInterval = 10 * time.Second
 // workerOutputUpdateGap is the least time between two worker_session_updated
 // messages that exist only because a Session's terminal changed. The watcher
 // polls every 500 ms and a running agent's screen changes on every poll (a
-// spinner's timer), and each message carries the Session's last output lines,
-// so a phone was sent about two of them a second per running Session, around
-// 12 KB/s per client on the wire even when nobody touched the app. A Session
-// that is still changing is sent at this pace, the newest state last.
-var workerOutputUpdateGap = 2 * time.Second
+// spinner's timer), and each message carries the Session's last output lines
+// (some 8 KB a message). At a 2 s gap six running Sessions still cost every
+// connected client 18-21 KB/s (owner 11-14, measured per connection), which
+// filled the ~60 KB/s a phone's tunnel carried before the thread it opened
+// could come through: Brain took 7-8 s to open, and longer opens ended in a
+// reconnect that paid for everything again. The apps since v0.4.0 never show
+// these lines (state and metadata changes are not paced and still arrive at
+// once); the Expo app's terminal preview refreshes at this pace. A Session that
+// is still changing is sent at this pace, the newest state last.
+var workerOutputUpdateGap = 10 * time.Second
 
 // workerFeed is the one ordered stream of Session changes a client follows.
 //
