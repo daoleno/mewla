@@ -11,6 +11,7 @@ import {
   type SemanticActionKind,
   type SemanticActionStatus,
 } from "./toolCallSemantics";
+import { commandHead, jsonAfterOutputHeader, textWindow, type TextWindow } from "./rowBounds";
 
 export interface ToolDeveloperDetails {
   providerToolId?: string;
@@ -26,6 +27,8 @@ export interface ExpandedToolDetails {
   command?: string;
   statusLine?: string;
   result?: string;
+  /** Characters of a long result left out of `result`, which keeps its start and end (rowBounds). */
+  resultOmitted?: number;
   /** Pure session/empty-chars poll — timeline must not render a card. */
   hideCard?: boolean;
   /** Prefer merging into a linked parent command when set. */
@@ -107,7 +110,9 @@ export function buildExpandedToolDetails(
   const exitCode = input.exitCode ?? transportExitCode;
   const status = normalizeStatus(input.status, exitCode);
   const kind = input.semanticKind || classifyName(toolName);
-  const result = cleanOutput(rawOutput);
+  const cleaned = cleanOutputWindow(rawOutput);
+  const result = cleaned.text;
+  const resultOmitted = cleaned.omitted || undefined;
 
   if (isWaitLikeToolName(toolName) || kind === "wait") {
     if (isWaitSessionPoll(toolName, input.input)) {
@@ -134,6 +139,7 @@ export function buildExpandedToolDetails(
       command: input.command?.trim() || undefined,
       statusLine,
       result: result || undefined,
+      resultOmitted: result ? resultOmitted : undefined,
       developer: developerFor(toolName, input.input, transport, kind),
     };
   }
@@ -145,9 +151,10 @@ export function buildExpandedToolDetails(
   const files = unique([
     ...(input.files || []),
     ...pathsFromInput(toolName, parsedInput, input.input),
-    ...pathsFromCommand(nestedCommand),
+    ...pathsFromCommand(commandHead(nestedCommand || "")),
   ]).slice(0, 12);
-  const query = queryFromInput(parsedInput) || queryFromCommand(nestedCommand);
+  const query =
+    queryFromInput(parsedInput) || queryFromCommand(commandHead(nestedCommand || ""));
   const command = nestedCommand || undefined;
 
   return {
@@ -163,6 +170,7 @@ export function buildExpandedToolDetails(
       transport.wall_time,
     ),
     result: result || undefined,
+    resultOmitted: result ? resultOmitted : undefined,
     developer: developerFor(toolName, input.input, transport, kind),
   };
 }
@@ -399,32 +407,50 @@ function classifyName(name: string): SemanticActionKind | "wait" {
 }
 
 function cleanOutput(value: string): string {
-  if (!value?.trim()) return "";
+  return cleanOutputWindow(value).text;
+}
+
+/**
+ * The output a row shows, from a long output's start and end only (rowBounds): its lines are cleaned one by one
+ * in JS. A JSON payload is still parsed whole (natively) to unwrap its output.
+ */
+function cleanOutputWindow(value: string): TextWindow {
+  const none = { text: "", omitted: 0 };
+  if (!value?.trim()) return none;
   const trimmed = value.replace(/\r\n/g, "\n").trim();
-  if (isTransportOnlyPayload(trimmed)) return "";
+  if (isTransportOnlyPayload(trimmed)) return none;
   const json = parseJson(trimmed);
   if (json) {
     const cleaned: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(json)) {
       if (!TRANSPORT_KEYS.has(k.toLowerCase())) cleaned[k] = v;
     }
-    if (!Object.keys(cleaned).length) return "";
-    if (typeof cleaned.output === "string") return cleanOutput(cleaned.output);
+    if (!Object.keys(cleaned).length) return none;
+    if (typeof cleaned.output === "string") return cleanOutputWindow(cleaned.output);
     if (typeof cleaned.content === "string")
-      return cleanOutput(cleaned.content);
+      return cleanOutputWindow(cleaned.content);
     try {
-      return JSON.stringify(cleaned);
+      return { text: JSON.stringify(cleaned), omitted: 0 };
     } catch {
-      return trimmed;
+      return { text: trimmed, omitted: 0 };
     }
   }
-  const lines = trimmed.split("\n");
+  const window = textWindow(trimmed);
+  if (window.omitted) {
+    // A long JSON body after a transport header stays whole: the preview compacts it natively, as it always has.
+    const jsonBody = jsonAfterOutputHeader(trimmed);
+    if (jsonBody !== null) return { text: jsonBody, omitted: 0 };
+  }
+  const lines = window.text.split("\n");
   const idx = lines.findIndex((l) => l.trim() === "Output:");
   const body = idx >= 0 ? lines.slice(idx + 1) : lines;
-  return body
-    .filter((l) => !isMetaLine(l))
-    .join("\n")
-    .trim();
+  return {
+    text: body
+      .filter((l) => !isMetaLine(l))
+      .join("\n")
+      .trim(),
+    omitted: window.omitted,
+  };
 }
 
 function extractTransport(
@@ -448,7 +474,8 @@ function extractTransport(
           ] = text;
       }
     }
-    for (const line of source.split("\n")) {
+    // A transport line is a header (or a closing line): the middle of a long payload is not read (rowBounds).
+    for (const line of textWindow(source).text.split("\n")) {
       const t = line.trim();
       let m;
       if ((m = /^Chunk ID:\s*(.+)$/i.exec(t))) out.chunk_id = m[1].trim();
