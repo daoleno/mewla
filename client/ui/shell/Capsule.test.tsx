@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
+import { answering, framesOf, paired, phoneHost, pressUntil } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
 const brain = { chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-11T07:00:00.000Z" } };
@@ -100,6 +100,57 @@ describe("a Session's capsule header (SPEC §11)", () => {
     await app.press("id:session-mode");
     await app.waitFor("id:session-chat");
     expect(app.shows("id:capsule")).toBe(true);
+  }, 30_000);
+
+  // Owner 2026-11-14: Git is the capsule's own button beside the view button, only for a Session in a repository.
+  const repoStatus = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 1, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 0, additions: 3, deletions: 1, files: [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }] };
+  async function gitSession(status: Record<string, unknown>) {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: thread }, replies: { ...noPicture, git_diff_status: { type: "git_diff_status", status } } }) });
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
+    await app.waitFor("id:session-chat", { timeout: 10_000 });
+    await app.waitUntil(() => framesOf(app.host.posts(), "git_diff_status").length > 0, { timeout: 10_000 });
+    return app;
+  }
+
+  test("a Session in a Git repository has a Git button beside the view button: it fades with it, and it opens the Session's Git review; ⋯ no longer lists Changes", async () => {
+    const app = await gitSession(repoStatus);
+    await app.waitFor("id:capsule >> id:session-git");
+    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla" });
+    expect(app.shows("label:Git changes")).toBe(true);
+    // Collapsed while the person reads, it goes with the view button and ⋯, and comes back with them.
+    await app.scroll("id:session-chat", -300);
+    await app.waitFor("id:capsule-collapsed");
+    expect(app.shows("id:session-git")).toBe(false);
+    await app.press("id:capsule-name");
+    await app.waitFor("id:capsule");
+    expect(app.shows("id:session-git")).toBe(true);
+    expect(app.shows("id:session-mode")).toBe(true);
+    // One door: ⋯ has no Changes.
+    app.onDialog((dialog) => (dialog.buttons.includes("Rename") ? "Cancel" : null));
+    await answering(app, () => app.press("id:session-menu"));
+    expect(app.dialogs().at(-1)!.buttons).toContain("Rename");
+    expect(app.dialogs().at(-1)!.buttons).not.toContain("Changes");
+    await app.press("id:session-git");
+    await app.waitFor("id:git-page");
+    // Read once for the Session; the Git page reads it again as it opens.
+    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla" });
+  }, 30_000);
+
+  test("a Session whose folder is not a Git repository has no Git button, and the status is read once, not per render", async () => {
+    const app = await gitSession({ available: false, reason: "not_git_repo", clean: true, file_count: 0, staged_file_count: 0, unstaged_file_count: 0, untracked_file_count: 0, additions: 0, deletions: 0, files: [] });
+    await app.wait(500);
+    expect(app.shows("id:capsule")).toBe(true);
+    expect(app.shows("id:session-mode")).toBe(true);
+    expect(app.shows("id:session-git")).toBe(false);
+    // Reading (collapse, expand) and the Session's own updates ask nothing more.
+    await app.scroll("id:session-chat", -300);
+    await app.waitFor("id:capsule-collapsed");
+    await app.press("id:capsule-name");
+    await app.waitFor("id:capsule");
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...session, status: "running" } });
+    await app.wait(300);
+    expect(app.shows("id:session-git")).toBe(false);
+    expect(framesOf(app.host.posts(), "git_diff_status")).toHaveLength(1);
   }, 30_000);
 
   test("a terminal Session's collapsed capsule has its mark bare, in its own box, not the terminal's tile (owner 11-13: the tile sat on the name)", async () => {

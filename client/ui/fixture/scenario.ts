@@ -243,6 +243,15 @@ export function scenario(): FakeDaemonState & { assets: Record<string, string> }
     replies: {
       brain_work_detail: { type: "brain_work_detail", work: DOCS_DETAIL },
       approval_decision: { type: "approval_decided" },
+      // Every Session's folder is a repository (the mock's `#git/ratelimit`): the header shows its Git button.
+      git_diff_status: { type: "git_diff_status", status: {
+        available: true, repo_root: "/home/me/work/atlas-api", repo_name: "atlas-api", branch: "fix/rate-limit-window", has_commits: true, clean: false,
+        file_count: 2, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 1, additions: 9, deletions: 5,
+        files: [
+          { path: "ratelimit/window.go", status: "modified", staged: false, unstaged: true, untracked: false, working_additions: 9, working_deletions: 5 },
+          { path: "ratelimit/window_test.go", status: "untracked", staged: false, unstaged: false, untracked: true, working_additions: 42 },
+        ],
+      } },
       // A getter: every read is sampled now, as the computer's own five-second poll would be.
       // Its history moves with it, so the window stays the five minutes it holds.
       get get_resource_telemetry() {

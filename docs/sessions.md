@@ -92,8 +92,10 @@ Open a Session to read it in one of three ways:
   them), and stops when you touch the screen. In a program that reads the
   mouse, a tap is a click there (Claude Code's "Jump to bottom"); the Keyboard
   key brings up the keyboard.
-- **Git**: read-only All, Working and Staged diffs for the Session's
-  repository. Reading a diff never stages or discards anything.
+- **Git**: when the Session's folder is a Git repository, a Git button sits
+  beside the Chat/Terminal button at the top. It opens the repository's
+  changes, staged and not staged, with each file's diff, History and the
+  repository's files. Reading a diff never stages or discards anything.
 
 What you type in either Chat or Terminal goes to the same terminal.
 
