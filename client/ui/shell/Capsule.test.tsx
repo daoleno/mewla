@@ -115,7 +115,7 @@ describe("a Session's capsule header (SPEC §11)", () => {
   test("a Session in a Git repository has a Git button beside the view button: it fades with it, and it opens the Session's Git review; ⋯ no longer lists Changes", async () => {
     const app = await gitSession(repoStatus);
     await app.waitFor("id:capsule >> id:session-git");
-    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla" });
+    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla", repository_only: true });
     expect(app.shows("label:Git changes")).toBe(true);
     // Collapsed while the person reads, it goes with the view button and ⋯, and comes back with them.
     await app.scroll("id:session-chat", -300);
@@ -132,7 +132,8 @@ describe("a Session's capsule header (SPEC §11)", () => {
     expect(app.dialogs().at(-1)!.buttons).not.toContain("Changes");
     await app.press("id:session-git");
     await app.waitFor("id:git-page");
-    // Read once for the Session; the Git page reads it again as it opens.
+    // The Session asked only whether it is a repository; the Git page reads the changes as it opens.
+    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)?.repository_only).toBeUndefined();
     expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla" });
   }, 30_000);
 
@@ -151,6 +152,7 @@ describe("a Session's capsule header (SPEC §11)", () => {
     await app.wait(300);
     expect(app.shows("id:session-git")).toBe(false);
     expect(framesOf(app.host.posts(), "git_diff_status")).toHaveLength(1);
+    expect(framesOf(app.host.posts(), "git_diff_status")[0]).toMatchObject({ repository_only: true });
   }, 30_000);
 
   test("a terminal Session's collapsed capsule has its mark bare, in its own box, not the terminal's tile (owner 11-13: the tile sat on the name)", async () => {
