@@ -1,7 +1,7 @@
 # Releases
 
-Each release ships daemon archives for Linux `amd64`, Linux `arm64` and Apple
-Silicon macOS, a signed Android `arm64` APK, `SHA256SUMS` and a signed update
+Each release ships daemon archives for Linux `amd64`, Linux `arm64`, Apple
+Silicon macOS and Windows x64, a signed Android `arm64` APK, `SHA256SUMS` and a signed update
 manifest. Run `mewla update` to move to the newest one; see
 [Install](../install-daemon.md#update).
 
