@@ -46,14 +46,16 @@ lead and gives you a remote. Open source, self-hosted, in beta.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/mewla-phone-dark.png">
-    <img src="docs/assets/mewla-phone-light.png" width="360" alt="Brain on a phone: the cat, the state control reading 1 needs you, a Work card with two Workers and a question with its answers">
+    <img src="docs/assets/mewla-phone-light.png" width="360" alt="Brain on a phone: the state control reading 3 need you, a Work with three Workers, and a push waiting for Approve">
   </picture>
   <br><sub>Brain on a phone. Demo data.</sub>
 </p>
 
-Around that loop: Calendar for things Brain should run later, Extensions so Brain
-can read Linear, Notion and GitHub, your own model keys, usage and cost per
-model, and a live view of what agents use on the machine.
+Around that loop: Calendar for things Brain should run later; Extensions so
+Brain can read Linear, Notion and GitHub; agents that use your screen, Chrome
+and your Android phone; your other computers; home-screen widgets and a Live
+Activity; your own model keys, and usage and cost per model. On a tablet, an
+open foldable or a browser, what's running stays in a pane on the left.
 
 ## Get started
 
@@ -102,7 +104,7 @@ Known issues: [Releases](docs/releases/README.md#known-issues).
 ## Documentation
 
 - **Get it running:** [Get started](docs/get-started.md) · [Install and update](docs/install-daemon.md) · [Connect and pair](docs/connect-and-pair.md)
-- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications and Telegram](docs/notifications.md) · [Calendar](docs/calendar.md) · [Extensions](docs/extensions.md)
+- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications and Telegram](docs/notifications.md) · [Calendar](docs/calendar.md) · [Extensions](docs/extensions.md) · [Screen](docs/screen.md) · [Phone use](docs/phone.md) · [Your other computers](docs/computers.md)
 - **Configure it:** [Agents and models](docs/executors.md) · [Usage and resources](docs/usage-and-resources.md)
 - **Reference:** [Commands](docs/cli.md) · [Security and privacy](docs/security-and-privacy.md) · [Troubleshooting](docs/troubleshooting.md)
 
