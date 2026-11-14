@@ -22,8 +22,8 @@ on:
         type: boolean
         default: true
       old_version:
-        description: "Expo release the gate upgrades from (a tag, or latest)"
-        default: "latest"
+        description: "Expo release the gate upgrades from (a tag; v0.3.1 is the last Expo release, Latest is the NSH app since v0.4.0)"
+        default: "v0.3.1"
       android_only:
         description: "Only the Android host: a Preview-signed APK to hand over (no iOS job)"
         type: boolean
@@ -159,7 +159,7 @@ jobs:
           retention-days: 14
 
   upgrade-gate:
-    name: Android upgrade gate (Expo ${{ inputs.old_version || 'latest' }} → NSH; Preview → Preview)
+    name: Android upgrade gate (Expo ${{ inputs.old_version || 'v0.3.1' }} → NSH; Preview → Preview)
     if: github.event_name == 'workflow_dispatch' && inputs.gate
     needs: android
     runs-on: ubuntu-latest
@@ -178,7 +178,7 @@ jobs:
       - name: The released Expo APK and daemon
         env:
           GH_TOKEN: ${{ github.token }}
-          OLD: ${{ inputs.old_version || 'latest' }}
+          OLD: ${{ inputs.old_version || 'v0.3.1' }}
         run: |
           set -euo pipefail
           # The gate upgrades from what users run: the latest release unless a tag is named.
