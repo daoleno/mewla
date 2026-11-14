@@ -1,0 +1,56 @@
+name: iOS TestFlight review
+
+# Where the newest Mewla Preview builds stand in Beta App Review, in the job summary: each build's
+# number, review state, TestFlight's external state and whether it is in the "Mewla Preview" group.
+# Once a build there has passed review, the group's public TestFlight link is turned on when it is
+# off, and the summary prints the link (or, when App Store Connect refuses, what to click).
+# Read-only otherwise: it uploads, submits and distributes nothing.
+
+on:
+  schedule:
+    - cron: "47 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-testflight-review
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Beta App Review and public link
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: app-store-connect-preview
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ask App Store Connect
+        env:
+          MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}
+          MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+          MEWLA_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
+          ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
+        run: |
+          set -euo pipefail
+          [[ "$MEWLA_ASC_APP_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "error: configure the numeric MEWLA_ASC_PREVIEW_APP_ID variable for Mewla Preview" >&2
+            exit 1
+          }
+          test -n "$MEWLA_ASC_KEY_ID"
+          printf '%s' "$MEWLA_ASC_API_KEY_BASE64" | base64 --decode > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+          test -s "$ASC_KEY_PATH"
+          ./scripts/testflight-review-state.py \
+            --app-id "$MEWLA_ASC_APP_ID" \
+            --key-id "$MEWLA_ASC_KEY_ID" \
+            --key-path "$ASC_KEY_PATH" \
+            --beta-group-name "Mewla Preview" \
+            --enable-public-link \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary Individual API key
+        if: always()
+        run: rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"
