@@ -274,14 +274,13 @@ for asset in (
 if "GH_REPO" not in wf or "github.repository" not in wf:
     errors.append("release-artifacts.yml publish path must set GH_REPO from github.repository")
 for required in (
-    # Desktop first: archives publish without waiting for Android, and the
-    # APK joins the same signed asset set when it is ready.
+    # One publication of the complete signed set, only after every check of the run
+    # (builds, platform runs, the Android upgrade, signing) passed.
     'needs: [validate, daemon]',
-    'needs: [validate, daemon, android, desktop-stage]',
-    'needs: [validate, desktop-publish, complete-stage]',
+    'needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-upgrade, stage]',
+    'needs: [validate, release-ready]',
     'RELEASE_IS_PRERELEASE=true',
     'RELEASE_IS_PRERELEASE=false',
-    'RELEASE_HOLD: ${{ vars.MEWLA_RELEASE_HOLD }}',
     '--prerelease="$RELEASE_IS_PRERELEASE"',
     '--latest="$RELEASE_IS_STABLE"',
 ):

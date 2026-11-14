@@ -16,9 +16,13 @@ name: Release artifacts
 # with Apple's toolchain on a Mac. Each binary is run on its own platform
 # before staging.
 #
-# Desktop first: the daemon archives are staged, signed and published as soon as
-# they are built. The signed APK, and the SHA256SUMS and signed manifest that
-# cover it, are attached to the same release when the Android build finishes.
+# Automatic, all or nothing: the daemons, the signed APK and the Android upgrade
+# from the previous release (android-upgrade) run side by side; once every one of
+# them and the signing stage passed (release-ready), the complete signed set is
+# published in one step, a stable tag as Latest, a beta tag as a prerelease. A red
+# or cancelled job publishes nothing; "Re-run failed jobs" reruns it and the jobs
+# after it. The published release then dispatches ios-release.yml (Preview to
+# TestFlight, submitted for beta review). There is no hold and no manual promotion.
 # Jobs that hold a signing key never hold a write token, and the reverse.
 #
 # Secrets (GitHub Actions repository secrets only; never commit values). Each
@@ -542,144 +546,127 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || 90 }}
 
-  desktop-stage:
-    name: Stage, sign, and verify desktop archives
-    needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin]
-    if: needs.validate.outputs.mode == 'release'
+  # What a person on the previous release gets when they install this one: its APK pairs with its daemon
+  # and keeps a draft, this run's signed APK installs over it, opens paired and Connected with the same
+  # device key and the draft, and its scanner runs in the release build (client/scripts/release-upgrade.sh).
+  # It starts with the run and waits for the APK only before the emulator boots.
+  android-upgrade:
+    name: Upgrade from the previous release on Android
+    needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout exact tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
-      - name: Revalidate tag before signing
+      - name: Revalidate tag at build boundary
+        if: needs.validate.outputs.mode == 'release'
         run: |
           git fetch --no-tags origin main
           ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
-      - name: Download daemon binaries
-        uses: actions/download-artifact@v4
-        with:
-          pattern: mewla-daemon-binaries-*-${{ needs.validate.outputs.tag }}
-          merge-multiple: true
-          path: dist-download/staging/bin
-      - name: Deterministically stage, sign, and verify
+      # The newest published stable release other than this one, checked against its own SHA256SUMS.
+      - name: The previous release's APK and daemon
         env:
-          MEWLA_UPDATE_SIGNING_KEY_BASE64: ${{ secrets.ZEN_UPDATE_SIGNING_KEY_BASE64 }}
-        run: |
-          set -euo pipefail
-          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
-          ./scripts/stage-release.sh --skip-build
-          STAGE="dist-download/${{ needs.validate.outputs.tag }}"
-          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}" --stage "$STAGE"
-          (cd "$STAGE" && sha256sum -c SHA256SUMS)
-      - name: Upload verified desktop stage
-        uses: actions/upload-artifact@v4
-        with:
-          name: mewla-release-desktop-${{ needs.validate.outputs.tag }}
-          path: dist-download/${{ needs.validate.outputs.tag }}
-          if-no-files-found: error
-
-  desktop-publish:
-    name: Publish the release with desktop archives
-    needs: [validate, desktop-stage]
-    if: ${{ needs.validate.outputs.publish == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout exact tag and tracked notes
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.validate.outputs.tag }}
-          fetch-depth: 0
-      - name: Revalidate immutable tag before external publication
-        run: |
-          git fetch --no-tags origin main
-          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
-      - name: Download desktop stage
-        uses: actions/download-artifact@v4
-        with:
-          name: mewla-release-desktop-${{ needs.validate.outputs.tag }}
-          path: stage
-
-      - name: Create/reuse safe draft, upload desktop assets, and publish
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.validate.outputs.tag }}
           VERSION: ${{ needs.validate.outputs.version }}
-          # A held stable release is published as a prerelease, which releases/latest (every updater,
-          # both installers, the site) skips, until it is promoted by hand; see docs/ci-release.md.
-          RELEASE_HOLD: ${{ vars.MEWLA_RELEASE_HOLD }}
         run: |
           set -euo pipefail
-          test -n "${GH_REPO:-}"
-          if [[ "$TAG" == *-beta.* || "${RELEASE_HOLD:-}" == "true" ]]; then
-            RELEASE_IS_PRERELEASE=true
-            RELEASE_IS_STABLE=false
-          else
-            RELEASE_IS_PRERELEASE=false
-            RELEASE_IS_STABLE=true
-          fi
-          notes="docs/releases/${TAG}.md"
-          test -s "$notes"
-          if ! meta="$(gh release view "$TAG" --json isPrerelease,isDraft,url 2>/dev/null)"; then
-            gh release create "$TAG" --verify-tag --draft \
-              --prerelease="$RELEASE_IS_PRERELEASE" \
-              --latest="$RELEASE_IS_STABLE" \
-              --title "Mewla $TAG" --notes-file "$notes"
-            meta="$(gh release view "$TAG" --json isPrerelease,isDraft,url)"
-          fi
-          is_pre="$(echo "$meta" | python3 -c 'import json,sys; print(json.load(sys.stdin)["isPrerelease"])')"
-          is_draft="$(echo "$meta" | python3 -c 'import json,sys; print(json.load(sys.stdin)["isDraft"])')"
-          actual_pre="$(printf '%s' "$is_pre" | tr '[:upper:]' '[:lower:]')"
-          if [[ "$actual_pre" != "$RELEASE_IS_PRERELEASE" ]]; then
-            echo "error: existing $TAG release prerelease state is $actual_pre; expected $RELEASE_IS_PRERELEASE" >&2
-            exit 1
-          fi
-          cd stage
-          assets=(
-            mewla-linux-amd64.tar.gz
-            mewla-linux-arm64.tar.gz
-            mewla-darwin-arm64.tar.gz
-            mewla-windows-amd64.zip
-            SHA256SUMS
-            release-manifest.json
-            release-manifest.json.sig
-          )
-          for f in "${assets[@]}"; do
-            test -s "$f" || { echo "error: missing/empty staged asset $f" >&2; exit 1; }
+          OLD="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" | python3 -c '
+          import json, re, sys
+          tag, version = sys.argv[1], tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", sys.argv[2]).groups())
+          found = []
+          for r in json.load(sys.stdin):
+              m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", r["tag_name"])
+              if not m or r["draft"] or r["prerelease"] or r["tag_name"] == tag:
+                  continue
+              key = tuple(map(int, m.groups()))
+              apk = "mewla-android-arm64-" + r["tag_name"] + ".apk"
+              if key < version and any(a["name"] == apk for a in r["assets"]):
+                  found.append((key, r["tag_name"]))
+          if not found:
+              sys.exit("error: no earlier stable release with an APK to upgrade from")
+          print(max(found)[1])' "$TAG" "$VERSION")"
+          echo "upgrading from $OLD"
+          mkdir -p "$RUNNER_TEMP/old"
+          gh release download "$OLD" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/old" \
+            --pattern "mewla-android-arm64-$OLD.apk" --pattern mewla-linux-amd64.tar.gz --pattern SHA256SUMS
+          cd "$RUNNER_TEMP/old"
+          grep -E " (mewla-android-arm64-$OLD.apk|mewla-linux-amd64.tar.gz)$" SHA256SUMS | sha256sum -c -
+          tar -xzf mewla-linux-amd64.tar.gz
+          command -v tmux > /dev/null || sudo apt-get install -y -qq tmux
+          {
+            echo "OLD_TAG=$OLD"
+            echo "OLD_APK=$RUNNER_TEMP/old/mewla-android-arm64-$OLD.apk"
+            echo "MEWLA=$(find "$RUNNER_TEMP/old" -name mewla -type f -perm -u+x | head -1)"
+          } >> "$GITHUB_ENV"
+      - name: Wait for this run's signed APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: mewla-android-apk-${{ needs.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          after_success=0
+          for _ in $(seq 1 240); do
+            if [[ -n "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$NAME" --jq '.artifacts[0].id // empty')" ]]; then
+              echo "$NAME is ready"
+              exit 0
+            fi
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "Build and verify signed Android") | "\(.status) \(.conclusion)"')"
+            case "$state" in
+              "completed success") after_success=$((after_success + 1)); [[ $after_success -lt 6 ]] || { echo "error: the Android build succeeded but kept no APK" >&2; exit 1; } ;;
+              completed*) echo "error: the Android build ended without an APK ($state)" >&2; exit 1 ;;
+            esac
+            sleep 10
           done
-          test ! -e "mewla-android-arm64-v${VERSION}.apk"
-          gh release upload "$TAG" "${assets[@]}" --clobber
-          # A rerun may find the APK from an earlier attach; nothing else is allowed.
-          desktop="$(printf '%s\n' "${assets[@]}" | LC_ALL=C sort)"
-          complete="$(printf '%s\n' "${assets[@]}" "mewla-android-arm64-v${VERSION}.apk" | LC_ALL=C sort)"
-          actual="$(gh release view "$TAG" --json assets --jq '.assets[] | select(.size > 0) | .name' | LC_ALL=C sort)"
-          [[ "$actual" == "$desktop" || "$actual" == "$complete" ]] || {
-            echo "error: uploaded non-empty asset set is neither the desktop nor the complete set" >&2
-            diff -u <(printf '%s\n' "$complete") <(printf '%s\n' "$actual") || true
-            exit 1
-          }
-          if [[ "$is_draft" == "True" || "$is_draft" == "true" ]]; then
-            gh release edit "$TAG" --draft=false \
-              --prerelease="$RELEASE_IS_PRERELEASE" \
-              --latest="$RELEASE_IS_STABLE" \
-              --notes-file "../$notes"
-          else
-            # Already public: keep its notes, which may carry the later iPhone line.
-            gh release edit "$TAG" \
-              --prerelease="$RELEASE_IS_PRERELEASE" \
-              --latest="$RELEASE_IS_STABLE"
-          fi
-          gh release view "$TAG" --json isDraft,isPrerelease,url
+          echo "error: no APK after 40 min" >&2
+          exit 1
+      - name: Download this run's signed APK
+        uses: actions/download-artifact@v4
+        with:
+          name: mewla-android-apk-${{ needs.validate.outputs.tag }}
+          path: ${{ runner.temp }}/new
+      - name: The new APK
+        run: |
+          set -euo pipefail
+          APK="$(find "$RUNNER_TEMP/new" -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          ./scripts/verify-apk-release.sh "$APK"
+          echo "NEW_APK=$APK" >> "$GITHUB_ENV"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Upgrade on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          OUT: ${{ runner.temp }}/upgrade
+          # A candidate is built from main's tracked version, which can equal the previous release's.
+          MEWLA_UPGRADE_SAME_VERSION_OK: ${{ needs.validate.outputs.mode == 'candidate' && '1' || '' }}
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: client/scripts/release-upgrade.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mewla-android-upgrade-${{ needs.validate.outputs.tag }}
+          path: ${{ runner.temp }}/upgrade
+          retention-days: 30
 
-  complete-stage:
-    name: Add the signed APK to the signed asset set
-    needs: [validate, daemon, android, desktop-stage]
+  stage:
+    name: Stage, sign, and verify the release
+    needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android]
     if: needs.validate.outputs.mode == 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -704,11 +691,6 @@ jobs:
         with:
           name: mewla-android-apk-${{ needs.validate.outputs.tag }}
           path: inputs/android
-      - name: Download desktop stage
-        uses: actions/download-artifact@v4
-        with:
-          name: mewla-release-desktop-${{ needs.validate.outputs.tag }}
-          path: inputs/desktop
       - name: Deterministically stage, sign, and verify
         env:
           MEWLA_UPDATE_SIGNING_KEY_BASE64: ${{ secrets.ZEN_UPDATE_SIGNING_KEY_BASE64 }}
@@ -722,10 +704,7 @@ jobs:
           STAGE="dist-download/${{ needs.validate.outputs.tag }}"
           ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}" --stage "$STAGE"
           (cd "$STAGE" && sha256sum -c SHA256SUMS)
-          # The desktop archives are already public: the complete set must carry
-          # the same bytes, or its checksums and manifest would not match them.
           daemon_sums() { grep -E '  mewla-(linux|darwin|windows)-[a-z0-9]+\.(tar\.gz|zip)$' "$1" | LC_ALL=C sort; }
-          diff -u <(daemon_sums inputs/desktop/SHA256SUMS) <(daemon_sums "$STAGE/SHA256SUMS")
           test "$(daemon_sums "$STAGE/SHA256SUMS" | wc -l)" -eq 4
       - name: Upload complete verified stage
         uses: actions/upload-artifact@v4
@@ -734,16 +713,47 @@ jobs:
           path: dist-download/${{ needs.validate.outputs.tag }}
           if-no-files-found: error
 
-  android-attach:
-    name: Attach the APK and the complete manifest
-    needs: [validate, desktop-publish, complete-stage]
-    if: ${{ needs.validate.outputs.publish == 'true' }}
+  # The one gate in front of publication: every build, run, upgrade and signing job of this run
+  # succeeded. Cancelled or skipped counts as not passed; the only skip allowed is the stage of a
+  # candidate, which is never signed. Publication needs this job and nothing overrides it.
+  release-ready:
+    name: Every check passed
+    needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-upgrade, stage]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every needed job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          MODE: ${{ needs.validate.outputs.mode }}
+          PUBLISH: ${{ needs.validate.outputs.publish }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          needs, mode = json.loads(os.environ["NEEDS"]), os.environ["MODE"]
+          bad = []
+          for job, need in sorted(needs.items()):
+              result = need["result"]
+              ok = result == "success" or (job == "stage" and result == "skipped" and mode == "candidate")
+              print(f"{'ok  ' if ok else 'FAIL'} {job}: {result}")
+              if not ok:
+                  bad.append(job)
+          if bad:
+              sys.exit(f"not ready: {', '.join(bad)}; nothing is published")
+          print("ready: " + ("publishing" if os.environ["PUBLISH"] == "true" else "a build-only run publishes nothing"))
+          PY
+
+  publish:
+    name: Publish the release
+    needs: [validate, release-ready]
+    if: needs.validate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
     steps:
-      - name: Checkout exact tag
+      - name: Checkout exact tag and tracked notes
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate.outputs.tag }}
@@ -757,8 +767,9 @@ jobs:
         with:
           name: mewla-release-stage-${{ needs.validate.outputs.tag }}
           path: stage
-
-      - name: Check published archives, upload Android assets, and verify
+      # One publication of the complete signed set: a draft with every asset, checked, then public.
+      # Stable tags become Latest; beta tags stay prereleases.
+      - name: Create the draft, upload every asset, verify, and publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -767,32 +778,15 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_REPO:-}"
-          is_draft="$(gh release view "$TAG" --json isDraft --jq .isDraft)"
-          [[ "$is_draft" == "false" ]] || {
-            echo "error: $TAG must already be public with its desktop archives" >&2
-            exit 1
-          }
-          published="$RUNNER_TEMP/published"
-          mkdir -p "$published"
-          gh release download "$TAG" --dir "$published" \
-            --pattern mewla-linux-amd64.tar.gz \
-            --pattern mewla-linux-arm64.tar.gz \
-            --pattern mewla-darwin-arm64.tar.gz \
-            --pattern mewla-windows-amd64.zip
-          cp stage/SHA256SUMS "$published/SHA256SUMS"
-          (cd "$published" && sha256sum -c --ignore-missing SHA256SUMS)
-          test "$(find "$published" -name '*.tar.gz' -o -name '*.zip' | wc -l)" -eq 4
-          cd stage
-          android=(
-            "mewla-android-arm64-v${VERSION}.apk"
-            SHA256SUMS
-            release-manifest.json
-            release-manifest.json.sig
-          )
-          for f in "${android[@]}"; do
-            test -s "$f" || { echo "error: missing/empty staged asset $f" >&2; exit 1; }
-          done
-          gh release upload "$TAG" "${android[@]}" --clobber
+          if [[ "$TAG" == *-beta.* ]]; then
+            RELEASE_IS_PRERELEASE=true
+            RELEASE_IS_STABLE=false
+          else
+            RELEASE_IS_PRERELEASE=false
+            RELEASE_IS_STABLE=true
+          fi
+          notes="docs/releases/${TAG}.md"
+          test -s "$notes"
           assets=(
             mewla-linux-amd64.tar.gz
             mewla-linux-arm64.tar.gz
@@ -803,11 +797,67 @@ jobs:
             release-manifest.json
             release-manifest.json.sig
           )
+          for f in "${assets[@]}"; do
+            test -s "stage/$f" || { echo "error: missing/empty staged asset $f" >&2; exit 1; }
+          done
           expected="$(printf '%s\n' "${assets[@]}" | LC_ALL=C sort)"
+          if meta="$(gh release view "$TAG" --json isDraft 2>/dev/null)"; then
+            if [[ "$(echo "$meta" | python3 -c 'import json,sys; print(json.load(sys.stdin)["isDraft"])')" == "False" ]]; then
+              # Already public (a rerun): the same signed set passes, anything else is refused.
+              mkdir -p "$RUNNER_TEMP/published"
+              gh release download "$TAG" --dir "$RUNNER_TEMP/published" --pattern SHA256SUMS
+              cmp -s "$RUNNER_TEMP/published/SHA256SUMS" stage/SHA256SUMS || {
+                echo "error: $TAG is already public with other bytes; refusing to replace them" >&2
+                exit 1
+              }
+              echo "$TAG is already public with this signed set"
+              exit 0
+            fi
+          else
+            gh release create "$TAG" --verify-tag --draft \
+              --prerelease="$RELEASE_IS_PRERELEASE" \
+              --latest="$RELEASE_IS_STABLE" \
+              --title "Mewla $TAG" --notes-file "$notes"
+          fi
+          (cd stage && gh release upload "$TAG" "${assets[@]}" --clobber)
           actual="$(gh release view "$TAG" --json assets --jq '.assets[] | select(.size > 0) | .name' | LC_ALL=C sort)"
           [[ "$actual" == "$expected" ]] || {
             echo "error: uploaded non-empty asset set does not exactly match expected set" >&2
             diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
             exit 1
           }
+          gh release edit "$TAG" --draft=false \
+            --prerelease="$RELEASE_IS_PRERELEASE" \
+            --latest="$RELEASE_IS_STABLE" \
+            --notes-file "$notes"
           gh release view "$TAG" --json isDraft,isPrerelease,url,assets
+
+  # The iPhone build follows the published release: the Preview to TestFlight, submitted for beta
+  # review (ios-release.yml), with the build number the release identity derives.
+  ios-testflight:
+    name: Send the iPhone build to TestFlight
+    needs: [validate, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - name: Dispatch the Preview TestFlight workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          IOS_BUILD_NUMBER="$(python3 scripts/lib/release_identity.py ios_build_number)"
+          gh workflow run ios-release.yml \
+            --ref "$TAG" \
+            -f "ref=$TAG" \
+            -f "build_number=$IOS_BUILD_NUMBER" \
+            -f "app_identity=preview" \
+            -f "destination=testflight"
+          echo "ios-release.yml dispatched for $TAG, build $IOS_BUILD_NUMBER"

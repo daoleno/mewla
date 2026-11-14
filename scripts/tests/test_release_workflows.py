@@ -58,7 +58,7 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
             self.assertIn("uses: ./.github/actions/android-native", source)
 
     def test_builds_the_signed_apk_from_the_nsh_client(self):
-        android = between(RELEASE, "  android:\n", "  desktop-stage:")
+        android = between(RELEASE, "  android:\n", "  android-upgrade:")
         self.assertIn("run: client/scripts/fetch-nsh.sh", android)
         self.assertLess(android.index("run: client/scripts/fetch-nsh.sh"), android.index("./scripts/android-release-apk.sh"))
         self.assertNotIn("bun ", android)
@@ -97,25 +97,69 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         ):
             self.assertIn(needle, IDENTITY_VERIFIER)
 
-    def test_publishes_desktop_archives_first_and_attaches_the_apk_when_ready(self):
+    def test_publishes_once_and_only_after_every_check_passed(self):
         self.assertIn("daemon:", RELEASE)
         self.assertIn("android:", RELEASE)
-        self.assertRegex(RELEASE, r"desktop-stage:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin\]\n")
-        self.assertRegex(RELEASE, r"desktop-publish:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, desktop-stage\]\n")
+        gate = between(RELEASE, "  release-ready:\n", "\n  publish:\n    name:")
+        self.assertIn("needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-upgrade, stage]", gate)
+        self.assertIn("if: always()", gate)
+        # Cancelled or skipped is not passed; only a candidate's unsigned stage may be skipped.
+        self.assertIn('ok = result == "success" or (job == "stage" and result == "skipped" and mode == "candidate")', gate)
+        publish = between(RELEASE, "\n  publish:\n    name:", "  ios-testflight:\n")
+        self.assertIn("needs: [validate, release-ready]\n    if: needs.validate.outputs.publish == 'true'\n", publish)
+        # Nothing lets publication run past a red or missing gate.
+        for override in ("always()", "failure()", "cancelled()", "!cancelled", "success() ||"):
+            self.assertNotIn(override, publish)
+        self.assertRegex(RELEASE, r"stage:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android\]\n")
         for needle in (
-            "needs: [validate, daemon, android, desktop-stage]",
-            "needs: [validate, desktop-publish, complete-stage]",
-            "./scripts/stage-release.sh --skip-build\n",
-            # The complete set must reuse the already-public archive bytes.
-            'diff -u <(daemon_sums inputs/desktop/SHA256SUMS) <(daemon_sums "$STAGE/SHA256SUMS")',
-            "sha256sum -c --ignore-missing SHA256SUMS",
+            'gh release create "$TAG" --verify-tag --draft',
+            'gh release upload "$TAG" "${assets[@]}" --clobber',
+            'gh release edit "$TAG" --draft=false',
+            "is already public with other bytes; refusing to replace them",
+            './scripts/stage-release.sh --skip-build --apk "$APK"',
+            "sha256sum -c SHA256SUMS",
             "grep -Eq 'ELF 64-bit.*(x86-64|x86_64).*statically linked'",
             "grep -Eq 'Mach-O 64-bit.*arm64'",
             '--out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin"',
-            './scripts/stage-release.sh --skip-build --apk "$APK"',
             "SOURCE_DATE_EPOCH",
         ):
             self.assertIn(needle, RELEASE)
+        # No hold: a stable tag is Latest, a beta tag a prerelease, decided by the tag alone.
+        self.assertNotIn("RELEASE_HOLD", RELEASE)
+        self.assertIn('if [[ "$TAG" == *-beta.* ]]; then', publish)
+        for gone in ("desktop-stage:", "desktop-publish:", "complete-stage:", "android-attach:"):
+            self.assertNotIn(gone, RELEASE)
+
+    def test_the_upgrade_from_the_previous_release_runs_in_the_release(self):
+        upgrade = between(RELEASE, "  android-upgrade:\n", "  stage:\n")
+        self.assertIn("needs: validate\n", upgrade)
+        for needle in (
+            'r["draft"] or r["prerelease"] or r["tag_name"] == tag',
+            "sha256sum -c -",
+            'select(.name == "Build and verify signed Android")',
+            "name: mewla-android-apk-${{ needs.validate.outputs.tag }}",
+            "./scripts/verify-apk-release.sh",
+            "script: client/scripts/release-upgrade.sh",
+            "MEWLA_UPGRADE_SAME_VERSION_OK: ${{ needs.validate.outputs.mode == 'candidate' && '1' || '' }}",
+        ):
+            self.assertIn(needle, upgrade)
+        android_name = re.search(r"\n  android:\n    needs: validate\n    name: ([^\n]+)\n", RELEASE).group(1)
+        self.assertEqual(android_name, "Build and verify signed Android")
+        script = read("client/scripts/release-upgrade.sh")
+        for step in ("install -r", "is not an upgrade", "same device", "the draft is not in storage", "qr-camera", "MEWLA_NO_AUTOUPDATE=1"):
+            self.assertIn(step, script)
+
+    def test_the_iphone_build_follows_publication(self):
+        ios = between(RELEASE, "  ios-testflight:\n")
+        self.assertIn("needs: [validate, publish]", ios)
+        self.assertIn("actions: write", ios)
+        for needle in ("gh workflow run ios-release.yml", '-f "app_identity=preview"', '-f "destination=testflight"',
+                       "python3 scripts/lib/release_identity.py ios_build_number"):
+            self.assertIn(needle, ios)
+        # Only the publish job can write the repository, and only this one can dispatch.
+        self.assertEqual(RELEASE.count("contents: write"), 1)
+        self.assertEqual(RELEASE.count("actions: write"), 1)
+        self.assertNotIn("ios-release.yml", PREPARATION)
 
     def test_builds_every_daemon_with_the_terminal_engine_on_its_own_platform(self):
         build = between(RELEASE, "  daemon-build:\n", "  daemon:\n")
@@ -133,7 +177,7 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
             "pattern: mewla-daemon-binaries-*-${{ needs.validate.outputs.tag }}",
         ):
             self.assertIn(needle, RELEASE)
-        self.assertEqual(RELEASE.count("mewla-windows-amd64.zip"), 3)
+        self.assertEqual(RELEASE.count("mewla-windows-amd64.zip"), 1)
         self.assertEqual(len(re.findall(r"go test -count=1 -v \./releasesmoke/", RELEASE)), 3)
 
     def test_the_daemons_inputs_are_built_fresh_in_this_run_at_the_checked_tag(self):
@@ -157,10 +201,9 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
     def test_candidates_are_built_without_signing_staging_or_publishing(self):
         self.assertIn("candidate_version:", RELEASE)
         self.assertIn("only a tag can be published", RELEASE)
-        for job in ("desktop-stage", "complete-stage"):
-            block = between(RELEASE, f"  {job}:")
-            self.assertIn("if: needs.validate.outputs.mode == 'release'", block[:block.index("steps:")])
-        self.assertEqual(len(re.findall(r"ZEN_UPDATE_SIGNING_KEY_BASE64 \}\}", RELEASE)), 2)
+        block = between(RELEASE, "  stage:\n")
+        self.assertIn("if: needs.validate.outputs.mode == 'release'", block[:block.index("steps:")])
+        self.assertEqual(len(re.findall(r"ZEN_UPDATE_SIGNING_KEY_BASE64 \}\}", RELEASE)), 1)
 
     def test_recovery_is_reviewed_and_caches_hold_no_signing_material(self):
         self.assertIn("workflow_dispatch:", RELEASE)
@@ -258,7 +301,9 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("6790486708", POSTPROCESS)
 
     def test_reviewed_tag_pushes_publish_as_preview(self):
-        self.assertRegex(IOS_RELEASE, TAG_PUSH)
+        # A bare tag push never reaches TestFlight: the published release dispatches it.
+        self.assertNotRegex(IOS_RELEASE, TAG_PUSH)
+        self.assertNotRegex(IOS_RELEASE, r"\n  push:")
         self.assertNotRegex(IOS_RELEASE, r"release:\s*\n\s*types:")
         for needle in (
             "github.event_name == 'push' && 'preview'",
