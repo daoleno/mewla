@@ -678,15 +678,12 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             '--ref "$NEXT_TAG"',
             '-f "ref=$NEXT_TAG"',
             '-f "publish=true"',
-            "gh workflow run ios-release.yml",
-            '-f "build_number=$IOS_BUILD_NUMBER"',
-            '-f "app_identity=preview"',
-            '-f "destination=testflight"',
-            "steps.release.outputs.ios_build_number",
             "actions: write",
             "contents: write",
         ):
             self.assertIn(marker, workflow)
+        # The iPhone build is dispatched by the published release, not at tag time.
+        self.assertNotIn("ios-release.yml", workflow)
         self.assertNotIn("gh release", workflow)
         self.assertNotIn("gh pr", workflow)
         self.assertNotIn("pull-requests:", workflow)

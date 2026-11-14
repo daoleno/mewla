@@ -1,7 +1,8 @@
 name: iOS signed release
 
-# Annotated Mewla release tag pushes automatically ship the closed Preview identity
-# to TestFlight. Manual dispatch remains available for Preview and Production;
+# A published release ships the closed Preview identity to TestFlight: release-artifacts.yml
+# dispatches this workflow (preview, testflight) once every check of the release passed and it is
+# public, never on a bare tag push. Manual dispatch remains available for Preview and Production;
 # Production is never selected by an automatic event.
 #
 # The app is the NSH client's iOS host (client/ios): xcodegen generates the
@@ -9,10 +10,6 @@ name: iOS signed release
 # extension (MewlaLiveWidgets, <bundle>.live) and both targets are signed into
 # the App Group group.<bundle>, so every run needs both App Store profiles.
 on:
-  push:
-    tags:
-      - "v*.*.*"
-      - "v*.*.*-beta.*"
   workflow_dispatch:
     inputs:
       ref:
