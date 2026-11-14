@@ -9,6 +9,7 @@ import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
 import { bringRequestBack, durableAnswered, RequestStack, requestsInView, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
+import { derived } from "../kit/derived";
 import { ThreadWait } from "../chat/ThreadWait";
 import { brainHostIdentity } from "../chat/links";
 import { chatImage } from "../chat/assets";
@@ -111,8 +112,9 @@ const workHandlers: WorkCardHandlers = {
   onLine: (model) => resultSheet.set(model),
   onAction: runResultAction,
 };
-// A past thread is read-only: its Work cards and messages offer no actions.
-const items = computed(() => timeline(brainThread(), {
+// A past thread is read-only: its Work cards and messages offer no actions. Derived, not computed: an update whose
+// projection a slow phone cut off (NSH's 2 s budget) must not stop the thread for the rest of the app's life.
+const items = derived(() => timeline(brainThread(), {
   onPendingAction: routedBrainThread() ? undefined : (id, action) => untracked(brainChat)?.actOnFailed(id, action),
   onWorkEvent: routedBrainThread() ? undefined : openWorkEvent,
   openSessionIds: new Set(workers().map((w) => w.id)),

@@ -1,5 +1,6 @@
 import { cleanup, Clipboard, colorScheme, computed, effect, ErrorBoundary, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
 import { delayed } from "../kit/wait";
+import { derived } from "../kit/derived";
 import { motion } from "../../core/motion/tokens";
 import { currentTransport } from "../session";
 import type { CapsuleReading } from "../shell/Capsule";
@@ -315,7 +316,7 @@ export function ChatTimeline(props: {
   if (!given.onFile) handlers.onFile = (path) => openChatPath(path, files);
   // The picture viewer: every picture of the thread, in order; the one shown by its key.
   const viewing = signal<string | null>(null);
-  const pictures = computed(() => threadPictures(props.items()), { equals: samePictures });
+  const pictures = derived(() => threadPictures(props.items()), { equals: samePictures });
   handlers.openPicture = (key) => viewing.set(key);
   const expansion = createExpansion();
   let list: ListRef | undefined;
@@ -327,8 +328,8 @@ export function ChatTimeline(props: {
   // A day's label is the same object while its day and its label are: made anew on every update, each one was a new row.
   const dividers = new Map<string, DateDividerItem>();
   type Row = TimelineItem | DateDividerItem | FootRow;
-  // The thread's rows as they are now.
-  const target = computed((): Row[] => {
+  // The thread's rows as they are now (derived: a run cut off keeps the rows it had, and the next change makes them).
+  const target = derived((): Row[] => {
     const all = withDayDividers(props.items()).map((row) => {
       if (row.type !== "date-divider") return row;
       const kept = dividers.get(row.id);

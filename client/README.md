@@ -39,6 +39,14 @@ cd client/ui && nsh check && nsh test
   the Live Activity / widget extension (`<id>.live`) and the App Group (`group.<id>`).
 - **Web:** `nsh dev --target web client/ui`.
 
+## A call into JS has 2 s
+
+NSH cuts off a call into JS that runs past 2 s (`Error: interrupted`). A `computed` whose run is cut off, or
+throws for any other reason, never tells what reads it of a change again while it lives (`ui/kit/derived.test.tsx`
+fails once NSH fixes that). So what a thread's rows are made from is `derived` (`ui/kit/derived.ts`, an effect's
+value: a failed run keeps the last value and the next change makes it again), never `computed`: on 11-14 one slow
+update froze Brain's thread until the app started again (`ui/chat/ThreadCutOff.test.tsx`).
+
 ## What the hosts give the app
 
 | Call / event / component | |
