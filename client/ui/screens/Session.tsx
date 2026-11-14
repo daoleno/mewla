@@ -123,6 +123,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     transport,
     outbox,
     target: { targetId: props.workerId, workerId: props.workerId, cwd: target.cwd, command: target.command, name: target.name, startedAt: target.started_at, processId: target.process_id },
+    readingScope: sessionKey,
   });
   const thread = signal(chat.current);
   const stopThread = chat.onChange((state) => thread.set(state));

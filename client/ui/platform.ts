@@ -1,4 +1,5 @@
 import { host, platform as device, Storage } from "nsh";
+import { inflateRawSync } from "zlib";
 import type { KeyValueStore, LinkTunnels, Platform, SocketLike } from "../core/platform";
 
 // The secure store is the host's (Keychain / Keystore). A browser has none: there the
@@ -32,7 +33,14 @@ export function nshPlatform(): Platform {
     sha256: async (data) => new Uint8Array(crypto.createHash("sha256").update(data).digest()),
     storage: Storage,
     secure: host.available() ? secureFromHost : secureInStorage,
-    openSocket: (url, protocols) => new WebSocket(url, protocols) as unknown as SocketLike,
+    openSocket: (url, protocols) => {
+      const socket = new WebSocket(url, protocols);
+      // Compressed messages (core/frames.ts) come as binary: as bytes, not a Blob.
+      socket.binaryType = "arraybuffer";
+      return socket as unknown as SocketLike;
+    },
+    // A browser negotiates permessage-deflate itself; the apps inflate the daemon's compressed messages.
+    inflateRaw: os === "web" ? undefined : (data) => inflateRawSync(data),
     fetch: (input, init) => fetch(input, init),
     linkTunnels: host.available() && (os === "ios" || os === "android") ? linkTunnels : undefined,
   };

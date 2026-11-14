@@ -2,6 +2,7 @@ import { computed, signal, Storage } from "nsh";
 import { brainThreadScopeKey, requestBrainSnapshot, type BrainSnapshot } from "../core/brain";
 import { Chat } from "../core/conversation/chat";
 import { chatCacheKey, Draft } from "../core/conversation/draft";
+import { brainThreadReadingScope } from "../core/timeline/readingPlace";
 import { createOutbox } from "../core/conversation/outboxRuntime";
 import { forgetInterfaceConversationsOutsideServer, initialInterfaceChatThreadState, type InterfaceChatThreadState } from "../core/conversation/thread";
 import { getCurrentServerId, getServers, markOnboarded, saveServer, setCurrentServerId, updateServer, type StoredServer } from "../core/servers";
@@ -275,6 +276,7 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
       processId: host.process_id,
       conversationScopeKey: scope,
     },
+    readingScope: brainThreadReadingScope(server.id, routedBrainThread() ?? threadId),
   });
   openHost = host.id;
   let waiting = sameThread;

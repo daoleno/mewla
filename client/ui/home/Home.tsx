@@ -1,5 +1,6 @@
 import { computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View } from "nsh";
 import { CAPSULE, capsuleInset } from "../../core/shell/capsule";
+import { brainThreadReadingScope } from "../../core/timeline/readingPlace";
 import { Capsule, CapsulePage, createCapsule, type CapsuleReading } from "../shell/Capsule";
 import { Button } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
@@ -312,7 +313,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
       <Each of={shows().startsWith("chat:") ? [shows()] : []} key={(thread) => thread}>{(thread) => (
         // Its reading place is kept by computer and thread: made again (a hot patch to this page, a past thread and
         // back) it opens where the person had read back to, or at its end.
-        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} sent={brainSends} capsule={props.capsule} scope={`brain:${untracked(current)?.id ?? ""}:${thread()}`}
+        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} sent={brainSends} capsule={props.capsule} scope={brainThreadReadingScope(untracked(current)?.id ?? "", thread().slice("chat:".length))}
           empty={() => (
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
             // 15 s; "What should Brain do?" only after a read that succeeded.

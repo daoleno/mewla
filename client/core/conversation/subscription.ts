@@ -28,14 +28,31 @@ export interface ConversationHandlers {
 let nextId = 0;
 
 /**
+ * How many of the newest events a chat that holds nothing yet asks for first (`first_events`): the
+ * daemon sends a snapshot of those, then the older ones as the next revision's delta. They are what
+ * the first screen shows, some 20 KB of a thread whose whole first snapshot is 250 KB compressed
+ * (Brain's, 750 KB as JSON); behind a slow link the end of the thread paints in a fraction of the
+ * time and the rest arrives while the person reads. A chat that already holds the thread (a
+ * reconnect) asks for the whole snapshot, so nothing above what is on screen goes away while it
+ * reloads. A daemon from before ignores the field and sends the whole thread at once.
+ */
+export const FIRST_EVENTS = 40;
+
+/**
  * Follows one conversation on the current connection: `codex_conversation_subscribe`,
  * then its snapshot and revisions, matched by the subscription's own request id.
  * Call it once the transport is connected and again after every reconnect (the
- * daemon forgets subscriptions with the socket). Never throws: on a connection
+ * daemon forgets subscriptions with the socket). `firstEvents` asks for the newest that many events
+ * first (FIRST_EVENTS). Never throws: on a connection
  * that is not open it does nothing and returns a no-op. The returned function
  * unsubscribes.
  */
-export function subscribeConversation(transport: Transport, target: ConversationTarget, handlers: ConversationHandlers): () => void {
+export function subscribeConversation(
+  transport: Transport,
+  target: ConversationTarget,
+  handlers: ConversationHandlers,
+  options: { firstEvents?: number } = {},
+): () => void {
   if (transport.state !== "connected") return () => {};
   const requestId = `sub${Date.now().toString(36)}${(nextId++).toString(36)}`;
   const mine = (frame: Frame) => frame.request_id === requestId;
@@ -58,6 +75,7 @@ export function subscribeConversation(transport: Transport, target: Conversation
       started_at: target.startedAt,
       process_id: target.processId,
       conversation_scope_key: target.conversationScopeKey,
+      first_events: options.firstEvents,
     });
   } catch {
     stop();

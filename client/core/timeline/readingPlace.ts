@@ -11,6 +11,11 @@ export function readingPlace(tokens: readonly { key: string; index: number; isVi
   return first?.key;
 }
 
+/** The scope Brain's thread keeps its reading place under, on one computer. */
+export function brainThreadReadingScope(serverId: string, threadId: string): string {
+  return `brain:${serverId}:chat:${threadId}`;
+}
+
 /** The index of the row a chat was read to, if it is still there. */
 export function readingPlaceIndex(rows: readonly { id: string }[], key: string | undefined): number | undefined {
   if (key === undefined) return undefined;

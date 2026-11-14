@@ -248,7 +248,15 @@ export class FakeDaemon {
         const scoped = `${String(frame.worker_id)}#${String(frame.conversation_scope_key ?? "")}`;
         const worker = this.state.conversations?.[scoped] ? scoped : String(frame.worker_id);
         this.subscriptions = [...this.subscriptions.filter((s) => s.socket !== socket || s.worker !== worker), { socket, worker, requestId: String(frame.request_id) }];
-        return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: this.revisionOf(worker), conversation: this.conversationOf(worker) });
+        // first_events: the newest that many first, then the older ones as the next revision (the daemon's split).
+        const conversation = this.conversationOf(worker);
+        const events = (conversation.events as Record<string, unknown>[]) ?? [];
+        const first = Number(frame.first_events ?? 0);
+        const revision = this.revisionOf(worker);
+        if (!(first > 0 && events.length > first)) return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision, conversation });
+        reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision, conversation: { ...conversation, events: events.slice(-first) } });
+        this.revisions.set(worker, revision + 1);
+        return reply("codex_conversation_delta", { worker_id: frame.worker_id, revision: revision + 1, base_revision: revision, upserts: events.slice(0, -first), deletes: [] });
       }
       case "answer_prompt": {
         const answer = frame.prompt_answer as { prompt_id?: string } | undefined;

@@ -29,6 +29,29 @@ async function readBackUp() {
   return app;
 }
 
+describe("Brain's thread, opened cold", () => {
+  test("asks for its newest 40 events first; the older ones follow and the end stays on screen, the first message there to read back to", async () => {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
+    await app.waitFor("id:brain-chat", { timeout: 10_000 });
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
+    expect(framesOf(app.host.posts(), "codex_conversation_subscribe").map((frame) => frame.first_events)).toEqual([40]);
+    await app.wait(300);
+    expect(app.texts().some((t) => t.startsWith("Message 59."))).toBe(true);
+    expect(app.shows("id:jump-latest")).toBe(false);
+    for (let i = 0; i < 12 && !app.texts().some((t) => t.startsWith("Message 0.")); i += 1) await app.scroll("id:brain-chat", -1500);
+    expect(app.texts().some((t) => t.startsWith("Message 0."))).toBe(true);
+  }, 30_000);
+
+  test("after a lost connection it asks for the whole thread: rows already on screen never go away while it reloads", async () => {
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
+    await app.waitFor("id:brain-chat", { timeout: 10_000 });
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
+    await app.host.send("app.daemonDrop");
+    await app.waitUntil(() => framesOf(app.host.posts(), "codex_conversation_subscribe").length === 2, { timeout: 15_000 });
+    expect(framesOf(app.host.posts(), "codex_conversation_subscribe").map((frame) => frame.first_events)).toEqual([40, undefined]);
+  }, 30_000);
+});
+
 describe("Brain's thread, read back up", () => {
   test("stays where it is when Brain's snapshot changes (a Work or a Worker changed)", async () => {
     const app = await readBackUp();
@@ -72,6 +95,8 @@ describe("Brain's thread, read back up", () => {
     expect(again.shows("id:jump-latest")).toBe(true);
     expect(again.texts()).toContain(before!);
     expect(again.texts().some((t) => t.startsWith("Message 59."))).toBe(false);
+    // Opened where it was read to, it asked for the whole thread: older events prepended later would move it.
+    expect(framesOf(again.host.posts(), "codex_conversation_subscribe").some((frame) => frame.first_events !== undefined)).toBe(false);
   }, 40_000);
 });
 
