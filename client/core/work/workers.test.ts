@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { WorkWorkerSession } from "./types";
-import { liveWorkerIds, workerName, workProject, workWorkerLines } from "./workers";
+import { liveWorkerIds, sameWorkWorkerLines, workerName, workProject, workWorkerLines } from "./workers";
 
 const NOW = new Date("2026-11-12T09:10:00Z");
 
@@ -88,5 +88,21 @@ describe("the project a Work is about", () => {
     expect(workProject("perpetuo", lines)).toBe("perpetuo");
     expect(workProject(undefined, lines)).toBe("atlas-docs");
     expect(workProject(undefined, workWorkerLines(rows, new Map(), NOW))).toBeUndefined();
+  });
+});
+
+describe("a Work card's lines are news only when they say something else", () => {
+  const live = () => new Map([["worker:@c", session("worker:@c", { summary: "Windows build green", phase: "reporting" })]]);
+  test("another Session of the computer changing leaves the card's lines equal", () => {
+    const before = workWorkerLines(rows, live(), NOW);
+    const others = live();
+    others.set("worker:@z", session("worker:@z", { summary: "Unrelated work", phase: "working" }));
+    expect(sameWorkWorkerLines(before, workWorkerLines(rows, others, NOW))).toBe(true);
+  });
+  test("its own live Session's report changing is news", () => {
+    const before = workWorkerLines(rows, live(), NOW);
+    const after = workWorkerLines(rows, new Map([["worker:@c", session("worker:@c", { summary: "macOS green too", phase: "reporting" })]]), NOW);
+    expect(sameWorkWorkerLines(before, after)).toBe(false);
+    expect(sameWorkWorkerLines(before, before.slice(0, 2))).toBe(false);
   });
 });

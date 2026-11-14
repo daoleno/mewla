@@ -9,7 +9,8 @@ import { compactPathLabel } from "../../core/timeline/pathDisplay";
 import { ChatImage, type PictureLoader } from "./ChatImage";
 import type { BrainWorkEventTimelineItem, PlanTimelineItem } from "../../core/timeline/types";
 import { workCardModel, type WorkCardModel } from "../../core/timeline/workCardModel";
-import { WORK_CARD_WORKERS, workDetailWorkerRow, workerName, type WorkWorkerLine } from "../../core/work/workers";
+import { sameWorkWorkerLines, WORK_CARD_WORKERS, workDetailWorkerRow, workerName, type WorkWorkerLine } from "../../core/work/workers";
+import { derived } from "../kit/derived";
 import type { TrayRow } from "../../core/tray/model";
 import { RowEnd, RowText, RowTile } from "../tray/rowParts";
 import { tray } from "../tray/state";
@@ -436,7 +437,11 @@ function WorkChoiceRow(props: { label: string; pick: boolean; busy: () => boolea
 export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handlers?: WorkCardHandlers }) {
   const model = () => workCardModel(props.item());
   const agent = () => props.handlers?.agentOf(model().sessionId) ?? null;
-  const lines = () => props.handlers?.workers(props.item().currentWork?.worker_sessions) ?? [];
+  // Its Sessions' lines, made once per change of the computer's Sessions or this Work and news only when they say
+  // something else. Read as a function, a card made them some eight times a draw, each making every Session's row
+  // model again, and every card of Brain's thread did so on every Session update: on the owner's phone (11-14,
+  // v0.4.2) such a draw passed NSH's 2 s call budget (sessionRowModel under a Work card, "Error: interrupted").
+  const lines = derived(() => props.handlers?.workers(props.item().currentWork?.worker_sessions) ?? [], { equals: sameWorkWorkerLines });
   const state = () => workCardState(model(), lines());
   const open = () => props.item().onPress?.();
   // Which card, as one word: made again only when it changes. `lines()` is new on every change of the

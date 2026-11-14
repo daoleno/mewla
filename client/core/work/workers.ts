@@ -94,6 +94,17 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
   });
 }
 
+/** Whether two lists of a Work's worker lines say the same: a card made anew for an equal list draws nothing new. */
+export function sameWorkWorkerLines(a: readonly WorkWorkerLine[], b: readonly WorkWorkerLine[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((line, index) => {
+    const other = b[index]!;
+    const keys = Object.keys(line) as (keyof WorkWorkerLine)[];
+    return keys.length === Object.keys(other).length && keys.every((key) => line[key] === other[key]);
+  });
+}
+
 /** The Sessions that work for a Work now: the tray shows the Work's row, not theirs. */
 export function liveWorkerIds(rows: readonly WorkWorkerSession[] | undefined): string[] {
   return (rows ?? []).filter((row) => row.live).map((row) => row.session_id);
