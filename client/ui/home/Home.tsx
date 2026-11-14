@@ -401,9 +401,9 @@ export function Home() {
     },
     workingSince: () => activity()?.started_at,
     // A reply's image (a Calendar run's result too) is a file on Brain's host.
-    loadImage: (path: string) => {
+    loadImage: (path: string, full?: boolean) => {
       const server = untracked(current);
-      return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path) : Promise.reject(new Error("No computer yet."));
+      return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path, full) : Promise.reject(new Error("No computer yet."));
     },
   };
   // The capsule header on a phone (SPEC §11); wide (an open iPhone Duo too) keeps its own header (crossing the gate switches them).

@@ -273,11 +273,11 @@ export async function chatSlashCommands(daemon: Daemon): Promise<CodexSlashComma
  * says it is no image it can show (missing, too large, not a picture). It throws when it could not ask or no
  * answer came (offline, the link dropped, timed out): that read is worth asking again.
  */
-export async function codexAsset(daemon: Daemon, path: string, cwd?: string): Promise<string | null> {
+export async function codexAsset(daemon: Daemon, path: string, cwd?: string, maxEdge?: number): Promise<string | null> {
   if (daemon.state !== "connected") throw new Error("Daemon is not connected.");
   let frame: Reply;
   try {
-    frame = await daemon.request<Reply>("codex_asset", { path, ...(cwd ? { cwd } : {}) }, { reply: "codex_asset", timeoutMs: PICTURE_READ_MS });
+    frame = await daemon.request<Reply>("codex_asset", { path, ...(cwd ? { cwd } : {}), ...(maxEdge ? { max_edge: maxEdge } : {}) }, { reply: "codex_asset", timeoutMs: PICTURE_READ_MS });
   } catch (error) {
     if ((error as { code?: string })?.code === "codex_asset_failed") return null;
     throw error;

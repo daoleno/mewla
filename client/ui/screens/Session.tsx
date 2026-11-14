@@ -154,7 +154,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     workingSince: () => workingSince(worker(), activity()?.started_at),
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),
-    loadImage: (path: string) => chatImage(transport, server.id, untracked(worker)?.cwd, path),
+    loadImage: (path: string, full?: boolean) => chatImage(transport, server.id, untracked(worker)?.cwd, path, full),
   };
   const stoppingFor = signal("");
   /** The person's sends from this screen: each brings the sent message to the top. */

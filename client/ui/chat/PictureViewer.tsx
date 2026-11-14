@@ -12,7 +12,8 @@ function Slide(props: { picture: ThreadPicture; near: () => boolean; load?: Pict
   // Asked for once it comes near, and kept after.
   let wanted = false;
   const src = computed(() => (wanted ||= props.near()) ? props.picture.src : "");
-  const picture = createPicture(src, (path) => (path ? props.load?.(path) ?? Promise.resolve(null) : Promise.resolve(null)));
+  // The viewer zooms: it reads the original, where a thread's row reads it phone-sized.
+  const picture = createPicture(src, (path) => (path ? props.load?.(path, true) ?? Promise.resolve(null) : Promise.resolve(null)));
   return (
     <View testID="picture-viewer-slide" class="flex-1">
       <If when={picture.url() && !picture.failed()} else={<View class="flex-1 items-center justify-center">

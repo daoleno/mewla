@@ -78,7 +78,8 @@ export type MessageHandlers = {
   /** A file a tool call names, pressed. None: the chat's own (`openChatPath` on Brain's files). */
   onFile?: (path: string) => void;
   /** An image a reply shows by its path on the computer, as a data URL. */
-  loadImage?: (path: string) => Promise<string | null>;
+  /** A picture by its path on the computer: phone-sized for a row, the original when `full` (the viewer). */
+  loadImage?: (path: string, full?: boolean) => Promise<string | null>;
   /** Brain's thread: where its Work cards lead. */
   work?: WorkCardHandlers;
   /** A picture pressed (its `pictureKey`): the chat's viewer opens on it. Set by the chat itself. */

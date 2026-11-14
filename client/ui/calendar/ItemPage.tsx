@@ -7,6 +7,7 @@ import {
   type CalendarItem, type CalendarRun,
 } from "../../core/calendar/model";
 import { codexAsset } from "../../core/session/sessionRequests";
+import { ROW_PICTURE_EDGE } from "../../core/timeline/pictureRetry";
 import { ChatImage } from "../chat/ChatImage";
 import { brain, currentTransport, workers } from "../session";
 import { clock } from "./clock";
@@ -31,10 +32,10 @@ const RUNS_SHOWN = 5;
  * An image in a run's result, by its path on the computer: read as the same result reads in Brain's
  * conversation, in Brain's host Session's folder (a relative path is under it).
  */
-function loadResultImage(path: string): Promise<string | null> {
+function loadResultImage(path: string, full?: boolean): Promise<string | null> {
   const transport = currentTransport();
   if (!transport) return Promise.reject(new Error("No computer yet."));
-  return codexAsset(transport, path, brain()?.host_worker?.cwd);
+  return codexAsset(transport, path, brain()?.host_worker?.cwd, full ? undefined : ROW_PICTURE_EDGE);
 }
 
 /** The item with its runs' full results, fetched for a scheduled action and again when it changes. */

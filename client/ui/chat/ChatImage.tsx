@@ -13,7 +13,7 @@ export const isDirectPicture = (src: string) => /^(https?:|data:image\/)/i.test(
  * when the computer says it is no picture it can show, and throws when no answer came (offline, the link
  * dropped, timed out): that read is asked again.
  */
-export type PictureLoader = (path: string) => Promise<string | null>;
+export type PictureLoader = (path: string, full?: boolean) => Promise<string | null>;
 
 /**
  * A picture's source made showable, following `src` (a recycled row's next picture loads its own):

@@ -1,4 +1,5 @@
 import { codexAsset } from "../../core/session/sessionRequests";
+import { ROW_PICTURE_EDGE } from "../../core/timeline/pictureRetry";
 import type { Transport } from "../../core/transport";
 
 /**
@@ -10,18 +11,21 @@ import type { Transport } from "../../core/transport";
 const assets = new Map<string, Promise<string | null>>();
 let assetsFor = "";
 
-/** The image at `path` (relative to `cwd`) on the computer as a data URL, or null when it is no image; it throws when it could not ask. */
-export function chatImage(transport: Transport | null, serverId: string, cwd: string | undefined, path: string): Promise<string | null> {
+/**
+ * The image at `path` (relative to `cwd`) on the computer as a data URL, or null when it is no image; it throws
+ * when it could not ask. A row's picture is phone-sized (ROW_PICTURE_EDGE); `full` is the viewer's original.
+ */
+export function chatImage(transport: Transport | null, serverId: string, cwd: string | undefined, path: string, full = false): Promise<string | null> {
   if (!transport || transport.state !== "connected") return Promise.reject(new Error("Daemon is not connected."));
   if (assetsFor !== serverId) {
     assets.clear();
     assetsFor = serverId;
   }
-  const key = `${cwd ?? ""}|${path}`;
+  const key = `${cwd ?? ""}|${path}|${full ? "full" : ROW_PICTURE_EDGE}`;
   let asset = assets.get(key);
   if (!asset) {
     // Only a picture is kept: a read that did not answer or "no picture" is asked again (by the picture's own retry, or a tap).
-    asset = codexAsset(transport, path, cwd).then(
+    asset = codexAsset(transport, path, cwd, full ? undefined : ROW_PICTURE_EDGE).then(
       (url) => {
         if (!url) assets.delete(key);
         return url;

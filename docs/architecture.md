@@ -166,6 +166,20 @@ phone on a slow link paints the end of the thread from a few KB while the
 rest follows. Without it, or for a thread of N events or fewer, the snapshot
 is the whole thread.
 
+What goes first on a slow link: a connection starts with `brain_snapshot`
+(an app opens on Brain), then the Session list. Work, Calendar and pictures
+(`work_item*`, `calendar_item*`, `codex_asset`) wait in a bulk lane while
+anything else is queued, in order among themselves, until 256 KiB of other
+messages went out past a waiting one. The Work and Calendar snapshots also
+wait for the connection's first `codex_conversation_snapshot` (at most 1.5 s),
+so the thread an app opens is not behind 300 KB of them. Each client socket
+sets TCP_NOTSENT_LOWAT (16 KiB) where the platform has it, so the backlog
+stays in that queue, where this order applies, instead of megabytes of it in
+the kernel. A `codex_asset` with `max_edge: N` answers the picture scaled down
+to N pixels on its long side and re-encoded (JPEG when opaque, else PNG) when
+that is smaller; GIFs stay as they are. The apps ask 1600 for a thread's row
+and the original for the full-size viewer.
+
 Connect snapshots stay small as history grows: `calendar_items_snapshot`,
 `calendar_item_changed` and Calendar mutation replies omit run history
 (`get_calendar_item` returns it), `brain_snapshot` carries no scheduled-result

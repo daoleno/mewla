@@ -53,6 +53,18 @@ describe("pictures in a chat", () => {
     await app.waitUntil(() => !app.shows("id:picture-viewer-count"));
   }, 20_000);
 
+  test("a row asks the computer for its picture phone-sized; the viewer asks for the original", async () => {
+    const app = await brainWithPictures();
+    await app.waitFor("label:the login page", { timeout: 10_000 });
+    const asks = () => framesOf(app.host.posts(), "codex_asset").map((frame) => `${frame.path} ${frame.max_edge ?? "full"}`);
+    await app.waitUntil(() => asks().includes("/home/me/shots/login.png 1600"), { timeout: 10_000 });
+    expect(asks().every((ask) => ask.endsWith(" 1600"))).toBe(true);
+    await app.wait(300);
+    await app.press("id:chat-image-open >> nth=2");
+    await app.waitFor("text:3 of 3");
+    await app.waitUntil(() => asks().includes("/home/me/shots/login.png full"), { timeout: 10_000 });
+  }, 20_000);
+
   test("a reply's picture opens the viewer too, and Back closes it", async () => {
     const app = await brainWithPictures();
     await app.waitFor("label:the login page", { timeout: 10_000 });
