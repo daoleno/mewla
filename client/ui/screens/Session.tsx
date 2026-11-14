@@ -582,14 +582,37 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       </Button>
     </View>
   );
-  const viewButton = () => (
-    <If when={props.brain || canChat()}>
-      <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
-        class="size-11 items-center justify-center rounded-full active:bg-accent">
-        <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
-      </Button>
-    </If>
-  );
+  // The trailing actions, Git, the view and ⋯, as one group (CAPSULE.action): 36 round with 2 between, so the
+  // glyphs sit 16 apart; each press is 44 high and reaches half the gap. The desktop and web bar use the same group
+  // with its hover and focus rings. Git sits first, only for a Session in a repository.
+  const ACTION = CAPSULE.action;
+  const actionSlop = { top: ACTION.slop, bottom: ACTION.slop, left: ACTION.gap / 2, right: ACTION.gap / 2 };
+  const actionStyle = { width: ACTION.size, height: ACTION.size };
+  const actions = (bar: boolean) => {
+    const look = `items-center justify-center rounded-full active:bg-accent${bar ? " hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : ""}`;
+    return (
+      <View testID="session-actions" class={`shrink-0 flex-row items-center${bar ? " ml-1.5" : ""}`} style={{ gap: ACTION.gap, marginRight: bar ? 0 : ACTION.end }}>
+        <If when={isRepo()}>
+          <Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit} hitSlop={actionSlop} class={look} style={actionStyle}>
+            <Icon name="diff" size={22} color="foreground" />
+          </Button>
+        </If>
+        {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a
+            chat. Brain's chat is home's, so on Brain's terminal the button goes back there. */}
+        <If when={props.brain || canChat()}>
+          <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
+            hitSlop={actionSlop} class={look} style={actionStyle}>
+            <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
+          </Button>
+        </If>
+        <If when={hasMenu()}>
+          <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} hitSlop={actionSlop} class={look} style={actionStyle}>
+            <Icon name="more-horizontal" size={22} color="foreground" />
+          </Button>
+        </If>
+      </View>
+    );
+  };
   // Collapsed, the name is a tap that expands; on the terminal, expanded, it folds the capsule again.
   const pressName = () => {
     if (untracked(capsule.collapsed)) capsule.expand();
@@ -609,15 +632,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
             style={{ fontSize: nameStyle().size, lineHeight: nameStyle().line }}>{title()}</Text>
         </View>
       </Button>
-      <If when={!capsule.collapsed()}>
-        <If when={isRepo()}>
-          <Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit} class="size-11 items-center justify-center rounded-full active:bg-accent">
-            <Icon name="git-branch" size={22} color="foreground" />
-          </Button>
-        </If>
-        {viewButton()}
-        <If when={hasMenu()}><Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="more-horizontal" size={22} color="foreground" /></Button></If>
-      </If>
+      <If when={!capsule.collapsed()}>{actions(false)}</If>
     </Capsule>
   );
   // Made once, here: a call in the page's props would be one of the getters NSH re-reads.
@@ -639,17 +654,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 <Text testID="session-state" class="shrink-0 text-sub text-muted-foreground line-clamp-1">{`${projectWord() ? " · " : ""}${connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)}`}</Text>
               </View></If>}><Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text></If>
           </View>
-          {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a chat.
-              Brain's chat is home's, so on Brain's terminal the button goes back there. Git sits before it. */}
-          <If when={isRepo()}><Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit}
-              class="ml-1.5 size-10 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-              <Icon name="git-branch" size={22} color="foreground" />
-            </Button></If>
-          <If when={props.brain || canChat()}><Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
-              class="ml-1.5 size-10 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-              <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
-            </Button></If>
-          <If when={hasMenu()}><Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Icon name="more-horizontal" size={22} color="foreground" /></Button></If>
+          {actions(true)}
         </View>
       }>
       <View class="flex-1 bg-background">

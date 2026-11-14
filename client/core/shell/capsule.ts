@@ -18,6 +18,14 @@ export const CAPSULE = {
   padding: 2,
   /** Every control inside: a 44 target. */
   control: 44,
+  /**
+   * The trailing actions (a Session's Git, view and ⋯; owner 11-14: 44 boxes side by side spread them 22 apart)
+   * are one group: `size` round, `gap` between, so the 22 glyphs sit 16 apart as a native toolbar's do. Each still
+   * takes a 44 high press (`slop` above and below) and half the gap on each side. `end` after the last keeps ⋯ as far
+   * from the capsule's edge as Back's arrow is from the other (2 + 11 = 2 + 4 + 7). The desktop and web bar uses the
+   * same group.
+   */
+  action: { size: 36, gap: 2, slop: 4, end: 4 },
   /** A Session's agent mark, with no base of its own, and the red dot at its corner while it needs you. */
   mark: 22,
   dot: { size: 9, ring: 2, right: -2, bottom: -2 },
