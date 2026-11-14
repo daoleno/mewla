@@ -52,6 +52,16 @@ const NO_STATUS: GitDiffStatusSnapshot = {
   files: [],
 };
 
+/**
+ * Whether the folder is a repository, without its changes (a Session's Git button): the computer runs no status
+ * and lists no file. One from before 11-14 ignores `repository_only` and sends its whole status; only `available`
+ * is read from it.
+ */
+export async function getGitRepository(daemon: Daemon, target: GitTarget): Promise<boolean> {
+  const status = await read<GitDiffStatusSnapshot | undefined>(daemon, "git_diff_status", body(target, { repository_only: true }), "status", 10_000, "git repository");
+  return status?.available === true;
+}
+
 export async function getGitStatus(daemon: Daemon, target: GitTarget): Promise<GitDiffStatusSnapshot> {
   return (await read<GitDiffStatusSnapshot | undefined>(daemon, "git_diff_status", body(target), "status", 10_000, "git diff status")) ?? NO_STATUS;
 }

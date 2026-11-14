@@ -61,8 +61,7 @@ import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
 import { showAlert } from "../shell/alert";
-import { daemon } from "../more/daemon";
-import { gitReview } from "../more/git/state";
+import { getGitRepository } from "../../core/git/requests";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 
@@ -307,17 +306,22 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     if (cwd) props.nav.push({ name: "git", targetId: props.workerId, cwd, title: untracked(title) });
   };
   // Git is the header's own button, beside the view button, once the computer says the Session's folder is a
-  // repository. That is the Git review's status (ui/more/git/state.ts), read once for the folder while the
-  // Session shows and nothing has answered yet (again after a reconnect or a new folder): never per render,
-  // never polled, and the Git page opens on the same answer.
+  // repository. It asks only that (`repository_only`: no status, no file list, owner 11-14: a checkout's whole
+  // status was 4 MB), once per folder while the Session shows and nothing has answered (again after a reconnect):
+  // never per render, never polled. The Git page reads the changes itself when it opens.
   const gitCwd = computed(() => (props.brain ? "" : worker()?.cwd ?? ""));
-  const repo = computed(() => (gitCwd() && daemon()?.server.id === server.id ? gitReview({ targetId: props.workerId, cwd: gitCwd() }) : null));
-  const isRepo = computed(() => repo()?.status()?.available === true);
+  const repoOf = signal<{ cwd: string; repo: boolean } | null>(null);
+  const isRepo = computed(() => repoOf()?.cwd === gitCwd() && repoOf()?.repo === true);
   effect(() => {
-    const review = repo();
-    if (!review || !connected() || !props.active()) return;
+    const cwd = gitCwd();
+    if (!cwd || !connected() || !props.active()) return;
     untracked(() => {
-      if (!review.status() && !review.loading()) void review.refresh();
+      if (repoOf()?.cwd === cwd) return;
+      void getGitRepository(transport, { targetId: props.workerId, cwd })
+        .then((repo) => {
+          if (untracked(gitCwd) === cwd) repoOf.set({ cwd, repo });
+        })
+        .catch(() => {});
     });
   });
   // A Git review of this Session closes when the Session changes folder, as the Expo app's sheet did;
