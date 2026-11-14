@@ -85,10 +85,9 @@ jobs:
         run: ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/release-bin"
 
   client:
-    name: Client (NSH core and UI)
+    name: Client (NSH core and typecheck)
     runs-on: ubuntu-latest
-    # The UI suite alone took 12 min on 11-14 and grows with every screen (the 15-min limit cut it off at 14:44).
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -107,9 +106,6 @@ jobs:
       - name: Typecheck
         run: ${NSH_HOME:-$HOME/.nsh}/bin/nsh check
         working-directory: client/ui
-      - name: UI tests
-        run: ${NSH_HOME:-$HOME/.nsh}/bin/nsh test
-        working-directory: client/ui
       - name: Open-source licenses are current
         run: python3 client/ui/more/settings/licenses/generate.py --check
       # noVNC (root package.json), which the Screen viewer bundles.
@@ -117,6 +113,29 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Screen viewer bundle is current
         run: bun client/ui/more/screen/runtime/generate.mjs --check
+
+  # The UI suite (`nsh test` in client/ui) on four runners: in one process it took 14 min on 11-14,
+  # mostly tests waiting on the clock. Each shard runs its files with `nsh test <file>`; together
+  # they run every test file once (client/scripts/ui-test-shard.py, scripts/tests/test_ui_test_shard.py).
+  client-ui:
+    name: Client UI tests (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      # Restore only: client.yml's runs on main save it.
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.nsh
+          key: nsh-${{ runner.os }}-${{ hashFiles('client/scripts/fetch-nsh.sh') }}
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
+      - name: UI tests
+        run: python3 client/scripts/ui-test-shard.py --shard ${{ matrix.shard }}/4
 
   windows:
     name: Windows (daemon build, platform tests, install.ps1)

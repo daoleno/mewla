@@ -97,6 +97,11 @@ jobs:
             client/android/app/build/generated/assets/bundleUi.js.map
           retention-days: 90
 
+  # One Simulator boot for the tests and the Release app: Xcode keeps a device it found booted running
+  # after the tests, where it shut down the one it booted itself (the second boot and install took
+  # about 4 of the job's 16 min, 11-14). The boot waits until the test build is done: a runner's first
+  # boot is minutes of CPU, and beside it the compile took 8 min instead of 1. On two Macs side by side
+  # each paid for a cold build and a boot, and the slower took 11 min.
   ios:
     name: iOS host (Simulator, upgrade tests)
     if: github.event_name != 'workflow_dispatch' || !inputs.android_only
@@ -123,6 +128,16 @@ jobs:
           SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Duo' not in x['name']))")
           echo "SIM=$SIM" >> "$GITHUB_ENV"
       # Signed to run locally: the Keychain refuses an unsigned app.
+      - name: Build the unit tests
+        working-directory: client/ios
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -5
+      - name: Boot the simulator
+        run: |
+          xcrun simctl boot "$SIM" || true
+          xcrun simctl bootstatus "$SIM" -b
       # TerminalTests saves the terminal it drew as out/terminal.png.
       - name: Unit tests (the Expo app's Keychain and AsyncStorage, the terminal)
         working-directory: client/ios
@@ -133,7 +148,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p out
-          xcodebuild test -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
+          xcodebuild test-without-building -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -40
       - name: Open it on the Simulator
         working-directory: client/ios
@@ -161,7 +176,8 @@ jobs:
   upgrade-gate:
     name: Android upgrade gate (Expo ${{ inputs.old_version || 'v0.3.1' }} → NSH; Preview → Preview)
     if: github.event_name == 'workflow_dispatch' && inputs.gate
-    needs: android
+    # Not `needs: android`: the gate sets up and builds its own app while that job builds the
+    # Preview, and waits for the Preview just before it needs it (one after the other: 12 min, 11-14).
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -213,6 +229,27 @@ jobs:
         run: |
           KS="${{ runner.temp }}/mewla-release.p12"
           [[ -f "$KS" ]] && { shred -u "$KS" 2>/dev/null || rm -f "$KS"; } || true
+      - name: Wait for this run's Preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          after_success=0
+          for _ in $(seq 1 180); do
+            if [[ -n "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=mewla-preview-android" --jq '.artifacts[0].id // empty')" ]]; then
+              echo "this run's Preview is ready"
+              exit 0
+            fi
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "Android host (preview APK)") | "\(.status) \(.conclusion)"')"
+            case "$state" in
+              "completed success") after_success=$((after_success + 1)); [[ $after_success -lt 6 ]] || { echo "error: the Android host job succeeded but kept no Preview" >&2; exit 1; } ;;
+              completed*) echo "error: the Android host job ended without a Preview ($state)" >&2; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "error: no Preview after 30 min" >&2
+          exit 1
       - name: This Preview and the last dispatched one on this branch
         env:
           GH_TOKEN: ${{ github.token }}

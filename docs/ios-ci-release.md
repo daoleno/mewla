@@ -19,10 +19,12 @@ The `ios` job in [`.github/workflows/client.yml`](../.github/workflows/client.ym
 
 1. validates the shared Android/iOS native contract, then restores, or builds when the cache misses, and verifies the pinned `native/terminal-vt/libs/ios/GhosttyVt.xcframework` device and Simulator slices through the shared `ios-native` action, whose caches only `native-cache.yml` on `main` saves;
 2. installs NSH and its iOS framework and generates the Xcode project with xcodegen;
-3. runs the unit tests (the Expo app's Keychain and AsyncStorage upgrade, the terminal) on a Simulator, ad hoc signed;
-4. builds the Release app, installs and launches it on the Simulator, and uploads a first-run screenshot.
+3. builds the unit tests, then boots an iPhone Simulator and runs them on it (the Expo app's Keychain and AsyncStorage upgrade, the terminal), ad hoc signed;
+4. builds the Release app, installs and launches it on the same Simulator, still booted, and uploads a first-run screenshot.
 
-This job contains no Apple credentials. The Linux `client` job of `ci.yml` keeps core tests, `nsh check` and `nsh test` on every push; none of them is a substitute for this macOS compile/link job.
+Until 11-14 the Simulator booted twice, once for the tests and again for the Release app. The boot waits for the test build: a runner's first boot is minutes of CPU, and a compile beside it took 8 min instead of about 1. Two jobs on two Macs were slower still.
+
+This job contains no Apple credentials. The Linux `client` and `client-ui` jobs of `ci.yml` keep core tests, `nsh check` and `nsh test` on every push; none of them is a substitute for this macOS compile/link job.
 
 Because pushes to `main` do not compile iOS, an iOS compile break that skipped a pull request is caught at release time by the signed archive in [`ios-release.yml`](../.github/workflows/ios-release.yml), which runs on every release before any IPA is exported or uploaded.
 
