@@ -237,7 +237,9 @@ describe("Sessions", () => {
     expect(framesOf(app.host.posts(), "set_active_worker").at(-1)?.worker_id).toBe("a");
   }, 20_000);
 
-  test("a switch of computer closes an open sheet first, then switches", async () => {
+  // NSH 0.5.0 crashed (SIGSEGV) on a page torn down under an open sheet, so the switch waited 400 ms for sheets to
+  // close; 0.5.1 does not (longbridge/nsh#1643), and the switch is at once.
+  test("a switch of computer closes an open sheet and switches at once", async () => {
     const servers = JSON.parse(paired["mewla:v3:servers"]);
     const storage = { ...paired, "mewla:v3:servers": JSON.stringify([...servers, { ...servers[0], id: "s2", name: "Lab", daemonId: "c".repeat(64) }]) };
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "dev server" })] }), storage, platform: "android" });
@@ -251,9 +253,8 @@ describe("Sessions", () => {
     }
     expect(app.shows("id:services-sheet")).toBe(true);
     await app.host.send("links.open", { url: "mewla://sessions?serverId=s2" });
-    await app.waitUntil(() => !app.shows("id:services-sheet"));
-    expect(app.storage()["mewla:v1:current_server_id"]).toBe("s1");
-    await app.waitUntil(() => app.storage()["mewla:v1:current_server_id"] === "s2");
+    await app.waitUntil(() => app.storage()["mewla:v1:current_server_id"] === "s2" && !app.shows("id:services-sheet"));
+    await app.wait(500);
     expect(app.shows("id:services-sheet")).toBe(false);
   }, 20_000);
 

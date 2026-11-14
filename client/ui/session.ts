@@ -1,4 +1,4 @@
-import { batch, computed, signal, Storage } from "nsh";
+import { batch, computed, signal, Storage, untracked } from "nsh";
 import { brainThreadScopeKey, requestBrainSnapshot, type BrainSnapshot } from "../core/brain";
 import { Chat } from "../core/conversation/chat";
 import { chatCacheKey, Draft } from "../core/conversation/draft";
@@ -132,54 +132,20 @@ export async function loadSession(): Promise<void> {
   const list = await getServers();
   servers.set(list);
   const id = await getCurrentServerId();
-  await switchTo(list.find((s) => s.id === id) ?? list[0] ?? null);
+  switchTo(list.find((s) => s.id === id) ?? list[0] ?? null);
   ready.set(true);
 }
 
 /**
- * NSH 0.4.0 crashes when the page under an open sheet is torn down, as a switch of
- * computer does. So a switch first closes every sheet (`switching`, which AppSheet
- * and GuardedSheet follow), lets them slide away, then switches. With no sheet open
- * it switches at once.
+ * Counts switches of computer. A sheet belongs to the computer it was opened on, so a switch closes every open one
+ * (AppSheet and GuardedSheet follow this) as the pages under it go. NSH 0.5.1 survives a page torn down under an open
+ * sheet (longbridge/nsh#1643, 0.5.0 crashed); the switch no longer waits for sheets to slide away first.
  */
-export const switching = signal(false);
-const SHEET_CLOSE_MS = 400;
-let openSheets = 0;
-let switchTarget: StoredServer | null = null;
-let switchDone: Promise<void> | null = null;
+export const switches = signal(0);
 
-/** A sheet opened; what it returns says it closed. */
-export function sheetOpened(): () => void {
-  openSheets += 1;
-  let closed = false;
-  return () => {
-    if (closed) return;
-    closed = true;
-    openSheets -= 1;
-  };
-}
-
-/** Makes `server` the current computer (null: none). Resolves once it is. */
-export function switchTo(server: StoredServer | null): Promise<void> {
-  switchTarget = server;
-  if (switchDone) return switchDone;
-  if (openSheets === 0) {
-    applySwitch(server);
-    return Promise.resolve();
-  }
-  switching.set(true);
-  switchDone = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      switchDone = null;
-      switching.set(false);
-      applySwitch(switchTarget);
-      resolve();
-    }, SHEET_CLOSE_MS);
-  });
-  return switchDone;
-}
-
-function applySwitch(server: StoredServer | null): void {
+/** Makes `server` the current computer (null: none), at once. */
+export function switchTo(server: StoredServer | null): void {
+  switches.set(untracked(switches) + 1);
   const previous = current();
   if (previous) outbox.onDisconnected(previous.id);
   stops.splice(0).forEach((stop) => stop());
@@ -349,7 +315,7 @@ export async function addPairedServer(server: Parameters<typeof saveServer>[0]):
   const saved = await saveServer(server);
   await markOnboarded();
   servers.set(await getServers());
-  await switchTo(saved);
+  switchTo(saved);
 }
 
 export function resumeConnection(): void {
