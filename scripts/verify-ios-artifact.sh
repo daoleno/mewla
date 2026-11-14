@@ -39,6 +39,17 @@ verify_ghostty_notice() {
   echo "ok: Ghostty MIT notice present at $NOTICE_BUNDLE_REL"
 }
 
+verify_iphone_only() {
+  local plist="$1" what="$2" family
+  # iPhone only, as the Expo app was: an iPad family makes App Store Connect require every
+  # orientation (90474). client/ios/project.yml sets TARGETED_DEVICE_FAMILY on each target.
+  family="$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily' "$plist" 2>/dev/null | tr -dc '0-9\n' | grep . | paste -sd, - || true)"
+  [[ "$family" == "1" ]] || {
+    echo "error: $what UIDeviceFamily is [${family}]; expected [1] (iPhone only)" >&2
+    exit 1
+  }
+}
+
 verify_app() {
   local app="$1"
   local require_signature="$2"
@@ -77,6 +88,7 @@ verify_app() {
     exit 1
   }
 
+  verify_iphone_only "$plist" "app"
   verify_ghostty_notice "$app"
 
   if [[ "$require_signature" == "yes" ]]; then
@@ -87,7 +99,7 @@ verify_app() {
     codesign --verify --deep --strict "$app"
   fi
 
-  echo "ok: $display_name ($bundle_id) app bundle contains a Mach-O executable"
+  echo "ok: $display_name ($bundle_id) app bundle contains a Mach-O executable, iPhone only"
 
   if [[ "${MEWLA_IOS_LIVE:-}" == "1" ]]; then
     verify_live_extension "$app" "$require_signature" "$bundle_id" "$build_number" "$version"
@@ -118,6 +130,7 @@ verify_live_extension() {
     echo "error: extension point is $point; expected com.apple.widgetkit-extension" >&2
     exit 1
   }
+  verify_iphone_only "$plist" "extension"
   /usr/libexec/PlistBuddy -c 'Print :NSSupportsLiveActivities' "$app/Info.plist" | grep -q true || {
     echo "error: app Info.plist does not set NSSupportsLiveActivities" >&2
     exit 1
@@ -137,7 +150,7 @@ verify_live_extension() {
       }
     done
   fi
-  echo "ok: Live Activity extension ($id) matches the app version and App Group"
+  echo "ok: Live Activity extension ($id) matches the app version and App Group, iPhone only"
 }
 
 if [[ "$MODE" == "simulator" ]]; then
