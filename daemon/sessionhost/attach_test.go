@@ -43,6 +43,30 @@ func (v *viewer) until(want string) {
 	}
 }
 
+// catchUp reads output until compare reports the replay and output so far
+// equal to what they should add up to, which may still grow while output flows.
+func (v *viewer) catchUp(compare func() (got, want string)) {
+	v.t.Helper()
+	deadline := time.After(10 * time.Second)
+	for {
+		got, want := compare()
+		if got == want {
+			return
+		}
+		select {
+		case chunk, ok := <-v.a.Output():
+			if !ok {
+				end, err := v.a.End()
+				v.t.Fatalf("stream ended (%+v, %v); replay and output = %q, want %q without the queries", end, err, got, want)
+			}
+			v.got.Write(chunk)
+		case <-time.After(50 * time.Millisecond):
+		case <-deadline:
+			v.t.Fatalf("replay and output = %q, want %q without the queries", got, want)
+		}
+	}
+}
+
 // end reads the stream to its end.
 func (v *viewer) end() AttachEnd {
 	v.t.Helper()
@@ -86,11 +110,15 @@ func TestAttachReplayAndOutputAddUp(t *testing.T) {
 	}
 	v.until("end")
 
-	all := screenText(t, c, "view")
-	want := strings.NewReplacer("\x1b[c", "", "\x1b]11;?\x07", "").Replace(all)
-	if got := string(v.a.Replay) + v.got.String(); got != want {
-		t.Fatalf("replay and output = %q, want %q without the queries", got, want)
-	}
+	// The terminal answers the program's \x1b[c, and with the tty echoing for
+	// `read y` that answer can come back as output after "end": wait until the
+	// stream has caught up with everything the host recorded.
+	withoutQueries := strings.NewReplacer("\x1b[c", "", "\x1b]11;?\x07", "")
+	var all string
+	v.catchUp(func() (string, string) {
+		all = screenText(t, c, "view")
+		return string(v.a.Replay) + v.got.String(), withoutQueries.Replace(all)
+	})
 	if !strings.Contains(all, "\x1b[c") {
 		t.Fatalf("the program's query never reached the host's terminal: %q", all)
 	}
