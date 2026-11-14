@@ -25,6 +25,7 @@ NATIVE_LIBS = read(".github/workflows/native-libs.yml")
 POSTPROCESS = read(".github/workflows/ios-testflight-postprocess.yml")
 AVAILABILITY = read(".github/workflows/ios-testflight-available.yml")
 REVIEW = read(".github/workflows/ios-testflight-review.yml")
+EXPIRE = read(".github/workflows/ios-testflight-expire.yml")
 PREPARATION = read(".github/workflows/release-next-beta.yml")
 ANDROID_NATIVE = read(".github/actions/android-native/action.yml")
 IOS_NATIVE = read(".github/actions/ios-native/action.yml")
@@ -294,6 +295,34 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("contents: write", REVIEW)
         self.assertNotIn("ZEN_UPDATE_SIGNING_KEY_BASE64", REVIEW)
         self.assertNotRegex(REVIEW, r"\b67\d{8}\b")
+
+    def test_a_submitted_preview_expires_the_older_builds_still_waiting_for_review(self):
+        upload = IOS_RELEASE.index("- name: Upload verified IPA to TestFlight")
+        step = between(IOS_RELEASE, "      - name: Expire older Preview builds still waiting for beta review\n", "      - name: Remove temporary signing material")
+        self.assertLess(upload, IOS_RELEASE.index("- name: Expire older Preview builds still waiting for beta review"))
+        for needle in (
+            "if: ${{ env.MEWLA_IOS_DESTINATION == 'testflight' && env.MEWLA_IOS_APP_VARIANT == 'preview' }}",
+            "./.release-automation/scripts/testflight-expire-waiting.py",
+            '--app-id "$MEWLA_ASC_APP_ID"',
+            '--keep-build-number "$MEWLA_IOS_BUILD_NUMBER"',
+        ):
+            self.assertIn(needle, step)
+        self.assertIn("scripts/testflight-expire-waiting.py\n", between(IOS_RELEASE, "path: .release-automation", "sparse-checkout-cone-mode"))
+        # The same step on demand, with the Preview key only.
+        for needle in (
+            "workflow_dispatch:",
+            "keep_build_number:",
+            "environment: app-store-connect-preview",
+            "vars.MEWLA_ASC_PREVIEW_APP_ID",
+            "./scripts/testflight-expire-waiting.py",
+            '--keep-build-number "$KEEP_BUILD_NUMBER"',
+            'rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"',
+        ):
+            self.assertIn(needle, EXPIRE)
+        self.assertNotIn("cron:", EXPIRE)
+        self.assertIn("permissions:\n  contents: read", EXPIRE)
+        self.assertNotIn("ZEN_UPDATE_SIGNING_KEY_BASE64", EXPIRE)
+        self.assertNotRegex(EXPIRE, r"\b67\d{8}\b")
 
     def test_postprocess_resumes_against_the_configured_preview_app(self):
         self.assertIn("MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}", POSTPROCESS)

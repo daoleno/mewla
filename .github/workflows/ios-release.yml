@@ -77,7 +77,9 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: .release-automation
-          sparse-checkout: scripts/app-store-connect-upload.py
+          sparse-checkout: |
+            scripts/app-store-connect-upload.py
+            scripts/testflight-expire-waiting.py
           sparse-checkout-cone-mode: false
 
       - name: Resolve and validate release invocation
@@ -476,6 +478,23 @@ jobs:
             --key-id "$MEWLA_ASC_KEY_ID" \
             --key-path "$ASC_KEY_PATH" \
             "${EXTRA_ARGS[@]}"
+
+      # Only the newest Preview waits for Beta App Review: once this build is submitted, every older
+      # Preview build still waiting is expired, so an older one can never be approved first and reach
+      # the public link. Approved builds and builds in beta testing are never touched.
+      - name: Expire older Preview builds still waiting for beta review
+        if: ${{ env.MEWLA_IOS_DESTINATION == 'testflight' && env.MEWLA_IOS_APP_VARIANT == 'preview' }}
+        env:
+          ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
+          MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          ./.release-automation/scripts/testflight-expire-waiting.py \
+            --app-id "$MEWLA_ASC_APP_ID" \
+            --key-id "$MEWLA_ASC_KEY_ID" \
+            --key-path "$ASC_KEY_PATH" \
+            --keep-build-number "$MEWLA_IOS_BUILD_NUMBER" \
+            --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Remove temporary signing material
         if: always()

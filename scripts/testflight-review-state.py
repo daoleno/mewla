@@ -164,12 +164,13 @@ def markdown(result: dict[str, Any]) -> str:
     lines = [
         f"## TestFlight review: {result['group']}",
         "",
-        "| Build | Uploaded | Processing | Beta App Review | External testing | In group |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Build | Uploaded | Processing | Expired | Beta App Review | External testing | In group |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in result["builds"]:
         lines.append(
             f"| {row['version']} ({row['build_number']}) | {(row['uploaded'] or '')[:16]} | {row['processing']} "
+            f"| {'yes' if row['expired'] else 'no'} "
             f"| {row['review'] or 'not submitted'} | {row['external'] or '—'} | {'yes' if row['in_group'] else 'no'} |"
         )
     newest = result["newest_approved"]

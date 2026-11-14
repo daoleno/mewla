@@ -71,7 +71,7 @@ class ReviewStateTests(unittest.TestCase):
         result, text = run(client)
         self.assertEqual(client.patches, [])
         self.assertIsNone(result["newest_approved"])
-        self.assertIn("| 0.4.1 (40200) | 2026-11-14T03:27 | VALID | WAITING_FOR_REVIEW | WAITING_FOR_BETA_REVIEW | yes |", text)
+        self.assertIn("| 0.4.1 (40200) | 2026-11-14T03:27 | VALID | no | WAITING_FOR_REVIEW | WAITING_FOR_BETA_REVIEW | yes |", text)
         self.assertIn("**Newest approved build:** none yet", text)
         self.assertIn("**Public link:** off (turned on once a build passes review)", text)
 

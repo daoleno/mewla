@@ -10,6 +10,12 @@ on:
   schedule:
     - cron: "47 * * * *"
   workflow_dispatch:
+    inputs:
+      builds:
+        description: "How many of the newest builds to list"
+        required: false
+        type: string
+        default: "5"
 
 concurrency:
   group: ios-testflight-review
@@ -33,8 +39,13 @@ jobs:
           MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
           MEWLA_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
           ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
+          BUILDS: ${{ inputs.builds || '5' }}
         run: |
           set -euo pipefail
+          [[ "$BUILDS" =~ ^[1-9][0-9]?$ ]] || {
+            echo "error: builds must be a number from 1 to 99" >&2
+            exit 1
+          }
           [[ "$MEWLA_ASC_APP_ID" =~ ^[1-9][0-9]*$ ]] || {
             echo "error: configure the numeric MEWLA_ASC_PREVIEW_APP_ID variable for Mewla Preview" >&2
             exit 1
@@ -48,6 +59,7 @@ jobs:
             --key-id "$MEWLA_ASC_KEY_ID" \
             --key-path "$ASC_KEY_PATH" \
             --beta-group-name "Mewla Preview" \
+            --builds "$BUILDS" \
             --enable-public-link \
             --summary "$GITHUB_STEP_SUMMARY"
 
