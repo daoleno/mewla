@@ -57,6 +57,14 @@ export function crashesToShow(reports: readonly CrashReport[]): CrashReport[] {
   return [];
 }
 
+/**
+ * Whether the hosts keep a report the computer already has: a run that ended stays for as long as it can still be part
+ * of a loop. A loop's runs reconnect in between, so one crash forgotten once sent would never be counted with the next.
+ */
+export function keptForLoop(report: CrashReport, now: number): boolean {
+  return endedTheRun(report) && now - report.at <= CRASH_LOOP.withinMs;
+}
+
 /** What the sheet is titled: a crash closed the app; a JS error only broke a screen. */
 export function crashTitle(reports: readonly CrashReport[]): string {
   return reports.some((report) => report.kind !== "js") ? "Mewla closed unexpectedly" : "Mewla hit an error";

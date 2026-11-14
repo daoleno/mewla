@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { crashDiagnostic, crashesToShow, crashSummary, crashTitle, endedTheRun, readCrashReports, type CrashReport } from "./crash";
+import { crashDiagnostic, crashesToShow, crashSummary, crashTitle, endedTheRun, keptForLoop, readCrashReports, type CrashReport } from "./crash";
 
 const javaCrash: CrashReport = {
   id: "1762818467989-java-12.txt",
@@ -73,5 +73,11 @@ describe("crash reports", () => {
   test("three runs ended within ten minutes are a crash loop: the sheet shows them, newest first", () => {
     const loop = [javaCrash, { ...javaCrash, id: "b", kind: "native" as const, at: javaCrash.at + 60_000 }, outOfMemory(javaCrash.at + 9 * 60_000)];
     expect(crashesToShow([...loop, cutOff(1)]).map((r) => r.id)).toEqual([loop[2]!.id, "b", javaCrash.id]);
+  });
+
+  test("a run that ended stays kept while it can still be part of a loop; what the app survived does not", () => {
+    expect(keptForLoop(javaCrash, javaCrash.at + 9 * 60_000)).toBe(true);
+    expect(keptForLoop(javaCrash, javaCrash.at + 11 * 60_000)).toBe(false);
+    expect(keptForLoop(cutOff(1), cutOff(1).at)).toBe(false);
   });
 });
