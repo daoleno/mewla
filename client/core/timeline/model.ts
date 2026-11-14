@@ -13,7 +13,9 @@ import {
   isWaitSessionPoll,
   toolResultStatusLine,
 } from "./toolCallDetails";
+import { codePointLength, commandHead, jsonAfterOutputHeader, textWindow } from "./rowBounds";
 import {
+  collapsedLabelFromAction,
   collapsedToolLabel,
   distinctivePath,
   hasDistinctToolIdentity,
@@ -84,6 +86,8 @@ type OutputPreview = {
 type OutputPreviewOptions = {
   maxLines: number;
   maxChars: number;
+  /** Characters already left out of `value` between its start and end (rowBounds). */
+  omitted?: number;
 };
 
 type ExplorationEntry = {
@@ -627,13 +631,6 @@ function activityFromEvent(
         : failed
           ? "failed"
           : event.status || "done";
-      const semantic = collapsedToolLabel({
-        kind: "command",
-        command,
-        toolName: "exec_command",
-        status,
-        exitCode: event.exit_code,
-      });
       const action = primarySemanticAction({
         kind: "command",
         command,
@@ -641,6 +638,7 @@ function activityFromEvent(
         status,
         exitCode: event.exit_code,
       });
+      const semantic = collapsedLabelFromAction(action);
       const details = buildExpandedToolDetails({
         kind: "command",
         toolName: "exec_command",
@@ -654,6 +652,7 @@ function activityFromEvent(
       const output = formatOutputPreview(details.result || event.body || "", {
         maxLines: COMMAND_OUTPUT_PREVIEW_LINES,
         maxChars: COMMAND_OUTPUT_PREVIEW_CHARS,
+        omitted: details.result ? details.resultOmitted : 0,
       });
       return {
         type: "activity",
@@ -766,16 +765,6 @@ function activityFromEvent(
       const presentation = toolPresentation(event);
       const previewPath =
         presentation.localImagePath || imagePathFromTool(event);
-      const semantic = collapsedToolLabel({
-        kind: "tool",
-        toolName: name,
-        title: event.title,
-        input: event.input,
-        command: event.command,
-        status,
-        exitCode: event.exit_code,
-        files: event.files,
-      });
       const action = primarySemanticAction({
         kind: "tool",
         toolName: name,
@@ -786,6 +775,7 @@ function activityFromEvent(
         exitCode: event.exit_code,
         files: event.files,
       });
+      const semantic = collapsedLabelFromAction(action);
       const details = buildExpandedToolDetails({
         kind: "tool",
         toolName: name,
@@ -804,6 +794,7 @@ function activityFromEvent(
       const result = formatOutputPreview(details.result || "", {
         maxLines: TOOL_PAYLOAD_PREVIEW_LINES,
         maxChars: TOOL_PAYLOAD_PREVIEW_CHARS,
+        omitted: details.resultOmitted,
       });
       const isWait = action.kind === "wait";
       const hasDistinctStatus = Boolean(
@@ -1416,21 +1407,16 @@ function imagePathFromTool(event: CodexConversationEvent) {
   return path;
 }
 
-/**
- * How much of a command's first line its row reads for the executable and its target. Every row is projected
- * again on each change of its thread, and a call into JS is cut off after 2 s ("Error: interrupted"): on iOS
- * 300 rows of 5 KB one-line commands took longer than that, all of it in the tokenizer.
- */
-const COMMAND_HEAD = 1024;
-
-function commandPresentation(command: string): CommandPresentation {
+/** A command row's executable and target, from the command's head (rowBounds). */
+function commandPresentation(fullCommand: string): CommandPresentation {
+  const command = commandHead(fullCommand);
   const normalized = cleanTerminalDisplayText(command);
   const firstLine =
     normalized
       .split("\n")
       .find((line) => line.trim())
       ?.trim() || "";
-  const tokens = commandTokens(firstLine.slice(0, COMMAND_HEAD));
+  const tokens = commandTokens(firstLine);
   const executable = commandExecutable(tokens);
   const lower = firstLine.toLowerCase();
   const fallbackDetail = commandSummary(command);
@@ -1562,7 +1548,7 @@ function commandOutputBodyKind(
   command: string,
   output: string,
 ): ActivityTimelineItem["bodyKind"] {
-  const summary = (commandSummary(command) || "").toLowerCase();
+  const summary = (commandSummary(commandHead(command)) || "").toLowerCase();
   if (/\bgit\s+diff\b/.test(summary) && /\s\|\s+\d+\s+[+-]+/.test(output)) {
     return "diff-stat";
   }
@@ -1919,7 +1905,7 @@ function isCommandFailed(
     if (
       presentation.kind === "search" &&
       event.exit_code === 1 &&
-      !cleanToolOutput(event.body || "")
+      !cleanToolOutput(textWindow(event.body || "").text)
     ) {
       return false;
     }
@@ -1938,7 +1924,7 @@ function isSemanticToolExitFailure(
   if (
     kind === "search_code" &&
     event.exit_code === 1 &&
-    !cleanToolOutput(event.output || event.body || "")
+    !cleanToolOutput(textWindow(event.output || event.body || "").text)
   ) {
     return false;
   }
@@ -1962,13 +1948,22 @@ function formatOutputPreview(
   value: string,
   options: OutputPreviewOptions,
 ): OutputPreview {
-  let output = cleanToolOutput(value);
+  // A long output is cleaned from its start and end only (rowBounds); a JSON payload is still compacted whole,
+  // natively.
+  const window = textWindow(value);
+  const compact = window.omitted
+    ? compactJsonPayload(jsonAfterOutputHeader(value) ?? value)
+    : null;
+  let output = compact ?? cleanToolOutput(window.text);
   if (!output) {
     return { text: "", truncated: false };
   }
 
-  output = compactJsonForPreview(output);
-  const charLimited = truncateOutputChars(output, options.maxChars);
+  if (!window.omitted) {
+    output = compactJsonForPreview(output);
+  }
+  const omitted = (compact === null ? window.omitted : 0) + (options.omitted ?? 0);
+  const charLimited = truncateOutputChars(output, options.maxChars, omitted);
   const lineLimited = truncateOutputLines(charLimited.text, options.maxLines);
   return {
     text: lineLimited.text,
@@ -1977,37 +1972,57 @@ function formatOutputPreview(
 }
 
 function compactJsonForPreview(value: string) {
+  return compactJsonPayload(value) ?? value;
+}
+
+function compactJsonPayload(value: string): string | null {
   const trimmed = value.trim();
   if (!/^[\[{]/.test(trimmed)) {
-    return value;
+    return null;
   }
   try {
     const parsed = JSON.parse(trimmed);
     const compact = JSON.stringify(parsed);
     return compact.replace(/":/g, '": ').replace(/,"/g, ', "');
   } catch {
-    return value;
+    return null;
   }
 }
 
-function truncateOutputChars(value: string, maxChars: number): OutputPreview {
-  const chars = Array.from(value);
-  if (chars.length <= maxChars) {
+function truncateOutputChars(
+  value: string,
+  maxChars: number,
+  omitted = 0,
+): OutputPreview {
+  const length = codePointLength(value);
+  if (length <= maxChars && omitted === 0) {
     return { text: value, truncated: false };
   }
-  const headCount = Math.max(120, Math.floor(maxChars * 0.58));
-  const tailCount = Math.max(80, maxChars - headCount - 80);
-  const hidden = chars.length - headCount - tailCount;
+  const headCount = Math.min(length, Math.max(120, Math.floor(maxChars * 0.58)));
+  const tailCount = Math.min(
+    length - headCount,
+    Math.max(80, maxChars - headCount - 80),
+  );
+  const hidden = length - headCount - tailCount + omitted;
   return {
     text: cleanTerminalDisplayText(
       [
-        chars.slice(0, headCount).join(""),
+        firstCodePoints(value, headCount),
         `... ${hidden} chars hidden. ${FULL_OUTPUT_HINT}`,
-        chars.slice(chars.length - tailCount).join(""),
+        lastCodePoints(value, tailCount),
       ].join("\n"),
     ),
     truncated: true,
   };
+}
+
+// The first or last characters as Array.from counts them, from a slice that holds them all.
+function firstCodePoints(value: string, count: number): string {
+  return count > 0 ? Array.from(value.slice(0, count * 2)).slice(0, count).join("") : "";
+}
+
+function lastCodePoints(value: string, count: number): string {
+  return count > 0 ? Array.from(value.slice(-count * 2)).slice(-count).join("") : "";
 }
 
 function truncateOutputLines(value: string, maxLines: number): OutputPreview {
