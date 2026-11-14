@@ -75,8 +75,7 @@ On the phone:
 
 1. Install the app: the Android APK from
    [Releases](https://github.com/daoleno/mewla/releases), or
-   [iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE) (the 0.3
-   Preview until Apple approves 0.4). Android
+   [iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE). Android
    asks you to allow installs from your browser or file manager the first time
    you open the APK; allow it for that app, then install.
 2. Open it. On the welcome screen, tap **Mewla already running? Scan its code**. (If

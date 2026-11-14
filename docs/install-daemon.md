@@ -349,8 +349,7 @@ leaves updates to the store and shows the version only.
 Install **Mewla Preview** from
 [TestFlight](https://testflight.apple.com/join/nMQheDCE): open the link on your
 iPhone, install Apple's TestFlight app if asked, then tap **Accept** and
-**Install**. TestFlight delivers new builds once Apple's beta review passes;
-until it approves 0.4, TestFlight has the 0.3.1 Preview.
+**Install**. TestFlight delivers new builds once Apple's beta review passes.
 When a newer build is in TestFlight, **Settings › About** reads **Update
 available**, and **Update** opens it in TestFlight.
 
