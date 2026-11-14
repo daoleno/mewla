@@ -2405,22 +2405,31 @@ func (s *Server) publishCodexConversationSubscription(
 			next.revision,
 			first,
 		))
-		if len(older) > 0 {
-			// The rest of the thread follows as the next revision, so what
-			// the client holds after it is the whole conversation, as later
-			// deltas expect.
-			page := codexConversationSubscriptionSnapshot{conversation: first, revision: next.revision}
-			next.revision++
+		// The rest of the thread follows as the next revisions, a page at a
+		// time and the newest first, so what the client holds after the last
+		// is the whole conversation, as later deltas expect. One delta of
+		// the 200 older events was one call of 125 ms on a dev box for an
+		// app to take in, and more than NSH's 2 s on the owner's phone
+		// (11-14); a page is a call of its own.
+		pages := codexConversationOlderPages(older)
+		final := next.revision + int64(len(pages))
+		for index, page := range pages {
+			if !s.isCurrentCodexSubscription(conn, subscriptionID, generation) {
+				return
+			}
+			from := codexConversationSubscriptionSnapshot{conversation: first, revision: next.revision + int64(index)}
+			to := codexConversationSubscriptionSnapshot{conversation: next.conversation, revision: from.revision + 1}
 			s.sendJSON(conn, codexConversationDeltaPayload(
 				subscriptionID,
 				generation,
 				resolved.targetID,
+				from,
+				to,
 				page,
-				next,
-				older,
 				nil,
 			))
 		}
+		next.revision = final
 		*previous = &next
 		return
 	}
@@ -2578,6 +2587,25 @@ func codexConversationFirstPage(conversation work.CodexConversation, firstEvents
 	first := conversation
 	first.Events = conversation.Events[split:]
 	return first, conversation.Events[:split]
+}
+
+// codexConversationOlderPageEvents is how many of a thread's older events
+// one delta carries after its first page (first_events).
+const codexConversationOlderPageEvents = 40
+
+// codexConversationOlderPages splits the events before a first page into
+// pages of codexConversationOlderPageEvents, the newest page first: the
+// client draws the thread upwards from what it already shows.
+func codexConversationOlderPages(older []work.CodexConversationEvent) [][]work.CodexConversationEvent {
+	var pages [][]work.CodexConversationEvent
+	for end := len(older); end > 0; end -= codexConversationOlderPageEvents {
+		start := end - codexConversationOlderPageEvents
+		if start < 0 {
+			start = 0
+		}
+		pages = append(pages, older[start:end])
+	}
+	return pages
 }
 
 func codexConversationSnapshotPayload(

@@ -38,6 +38,9 @@ export interface FakeDaemonState {
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
 
+/** How many older events one delta carries after a first page (the daemon's codexConversationOlderPageEvents). */
+const OLDER_PAGE_EVENTS = 40;
+
 export class FakeDaemon {
   private sockets = new Set<FakeSocket>();
   private revision = 100;
@@ -257,15 +260,20 @@ export class FakeDaemon {
         const scoped = `${String(frame.worker_id)}#${String(frame.conversation_scope_key ?? "")}`;
         const worker = this.state.conversations?.[scoped] ? scoped : String(frame.worker_id);
         this.subscriptions = [...this.subscriptions.filter((s) => s.socket !== socket || s.worker !== worker), { socket, worker, requestId: String(frame.request_id) }];
-        // first_events: the newest that many first, then the older ones as the next revision (the daemon's split).
+        // first_events: the newest that many first, then the older ones as the next revisions, 40 a page and the
+        // newest page first (the daemon's split, codexConversationOlderPages).
         const conversation = this.conversationOf(worker);
         const events = (conversation.events as Record<string, unknown>[]) ?? [];
         const first = Number(frame.first_events ?? 0);
-        const revision = this.revisionOf(worker);
+        let revision = this.revisionOf(worker);
         if (!(first > 0 && events.length > first)) return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision, conversation });
         reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision, conversation: { ...conversation, events: events.slice(-first) } });
-        this.revisions.set(worker, revision + 1);
-        return reply("codex_conversation_delta", { worker_id: frame.worker_id, revision: revision + 1, base_revision: revision, upserts: events.slice(0, -first), deletes: [] });
+        for (let end = events.length - first; end > 0; end -= OLDER_PAGE_EVENTS) {
+          reply("codex_conversation_delta", { worker_id: frame.worker_id, revision: revision + 1, base_revision: revision, upserts: events.slice(Math.max(0, end - OLDER_PAGE_EVENTS), end), deletes: [] });
+          revision += 1;
+        }
+        this.revisions.set(worker, revision);
+        return;
       }
       case "answer_prompt": {
         const answer = frame.prompt_answer as { prompt_id?: string } | undefined;
