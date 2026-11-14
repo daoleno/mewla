@@ -76,8 +76,14 @@ keep DNS and user lookups on the same pure-Go code as the earlier
 ./scripts/build-daemon-linux.sh                           # Linux: linux-amd64, linux-arm64, windows-amd64
 ./scripts/build-daemon-linux.sh --targets darwin-arm64    # on a Mac
 ./scripts/build-daemon-linux.sh --engine off              # every target, CGO_ENABLED=0, no session host
+./scripts/build-daemon-linux.sh --web-ui prebuilt         # embed the daemon/webui/dist build-web-ui.sh staged
 # → dist-download/staging/bin/mewla-<os>-<arch>
 ```
+
+The release workflow builds each target's engine and the web UI once, side by
+side on their own runners, and hands them to one daemon build per target:
+`MEWLA_GHOSTTY_DESKTOP_CACHE` points at the engine (used as it is when its
+manifest matches the lock), and `--web-ui prebuilt` embeds the web UI.
 
 The release workflow runs every binary on its own platform before staging it
 (`daemon/releasesmoke`): `mewla version`, the session host with the engine, a
