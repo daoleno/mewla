@@ -25,7 +25,7 @@ export function traceScroll(scope: string, kind: string, data: Record<string, un
 }
 
 /**
- * The splice NSH 0.5.0's List makes when its `each` changes (crates/nsh-js/src/list.rs `items_run`): the common
+ * The splice NSH 0.5.1's List makes when its `each` changes (crates/nsh-js/src/list.rs `items_run`): the common
  * start and end by key, and everything between removed and inserted again (measurements lost, sizes estimated).
  */
 export function keyedSplice(old: readonly string[], next: readonly string[]): { at: number; removed: number; inserted: number } | null {

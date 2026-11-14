@@ -1,7 +1,7 @@
 /**
  * How a chat's rows reach its list, one narrow change at a time.
  *
- * NSH's List (0.5.0) diffs keyed rows by their common start and end only: everything between is one splice, laid
+ * NSH's List (0.5.1; longbridge/nsh#2042 changes this on main, after 0.5.1) diffs keyed rows by their common start and end only: everything between is one splice, laid
  * out again from estimated sizes, with the reader's place and any scroll the list was making lost. A full thread
  * slides that way on every event: the daemon keeps a conversation's newest 240 events, so a new one comes with the
  * oldest deleted, one at each end, and the list re-laid every row (owner 11-14: reading history snapped to the
