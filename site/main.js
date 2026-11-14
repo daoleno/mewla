@@ -1,124 +1,69 @@
-// Mewla landing: the pet and its toys, the links and the small bits.
-import { startPet } from './pet.js';
-import { makeSound, startPlay } from './play.js';
+// mewla.ai: the install tabs, copy buttons and the bar. The screens are
+// screenshots of the app; each rises in once as it comes into view.
 
-// Every URL that depends on where Mewla's source and builds are published, in one
-// place. An empty value hides every link (and the install command) that uses it.
-const LINKS = {
-  source: 'https://github.com/daoleno/mewla',
-  releases: 'https://github.com/daoleno/mewla/releases',
-  apk: 'https://github.com/daoleno/mewla/releases/latest',
-  installScript: 'https://mewla.ai/install.sh',
-};
-for (const node of document.querySelectorAll('[data-link]')) {
-  const url = LINKS[node.dataset.link];
-  node.hidden = !url;
-  if (!url) continue;
-  if (node.tagName === 'A') node.href = url;
-  for (const code of node.querySelectorAll('[data-cmd]')) code.textContent = code.dataset.cmd.replace('{}', url);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+// ---- the bar, copy buttons, the install tabs --------------------------------
+// Where the install script lives, in one place; the app's first-run copy is
+// checked against this page (client/core/onboarding.test.ts).
+const LINKS = { installScript: 'https://mewla.ai/install.sh' };
+for (const node of $$('[data-link]')) {
+  for (const code of $$('[data-cmd]', node)) code.textContent = code.dataset.cmd.replace('{}', LINKS[node.dataset.link]);
 }
-
-
-// the works-with strip loops: a second, hidden copy follows the first
-const row = document.querySelector('.works .row');
-const twin = row.cloneNode(true);
-twin.setAttribute('aria-hidden', 'true');
-row.after(twin);
-
-// illustrations play once, as they come into view
-const shown = document.querySelectorAll('.rv');
-if ('IntersectionObserver' in window) {
-  const io = new IntersectionObserver((entries) => {
-    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
-  }, { rootMargin: '0px 0px -12% 0px' });
-  shown.forEach((n) => io.observe(n));
-} else shown.forEach((n) => n.classList.add('in'));
-
-const bar = document.querySelector('.bar');
+const bar = $('.bar');
 const onScroll = () => bar.classList.toggle('scrolled', scrollY > 8);
 addEventListener('scroll', onScroll, { passive: true });
 onScroll();
 
-for (const btn of document.querySelectorAll('[data-copy]')) {
+// A one-line command wider than its card scrolls; a fade at the right edge
+// shows there is more until it is scrolled to the end.
+for (const code of $$('.cmd-card code')) {
+  const edge = () => code.classList.toggle('more', code.scrollLeft + code.clientWidth < code.scrollWidth - 2);
+  code.addEventListener('scroll', edge, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(edge).observe(code);
+  else window.addEventListener('resize', edge);
+  edge();
+}
+
+for (const btn of $$('[data-copy]')) {
   btn.addEventListener('click', async () => {
     const text = btn.previousElementSibling.textContent.trim();
-    try {
-      await navigator.clipboard.writeText(text);
-      btn.textContent = 'Copied';
-    } catch {
-      btn.textContent = 'Select';
+    try { await navigator.clipboard.writeText(text); } catch { return; }
+    btn.classList.add('ok');
+    setTimeout(() => btn.classList.remove('ok'), 1400);
+  });
+}
+
+function tabs(buttons, key, pick) {
+  for (const b of buttons) {
+    b.addEventListener('click', () => {
+      for (const o of buttons) {
+        const on = o === b;
+        o.classList.toggle('on', on);
+        o.setAttribute(o.hasAttribute('aria-selected') ? 'aria-selected' : 'aria-pressed', String(on));
+      }
+      pick(b.dataset[key]);
+    });
+  }
+}
+tabs($$('[data-os]'), 'os', (os) => {
+  for (const c of $$('[data-os-cmd]')) c.hidden = c.dataset.osCmd !== os;
+  for (const c of $$('[data-os-note]')) c.hidden = c.dataset.osNote !== os;
+});
+if (/Windows/.test(navigator.userAgent)) $('[data-os="win"]')?.click();
+
+const rises = $$('.rise');
+if (reduce || !('IntersectionObserver' in window)) {
+  for (const el of rises) el.classList.add('seen');
+} else {
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add('seen');
+      io.unobserve(e.target);
     }
-    setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
-  });
-}
-
-// ---- playtime: pick a toy, keep score, optional sound ------------------------
-const MODES = {
-  yarn: { name: 'Yarn', unit: ['swat', 'swats'] },
-  laser: { name: 'Laser dot', unit: ['catch', 'catches'] },
-  feather: { name: 'Feather', unit: ['swat', 'swats'] },
-  treats: { name: 'Treats', unit: ['treat', 'treats'] },
-};
-const toy = document.querySelector('.toy');
-const pet = await startPet(document.querySelector('[data-pet="home"]'), document.querySelector('[data-pet="strip"]'));
-const cat = pet && startPlay(pet, (e) => onPlay(e));
-const menu = toy.querySelector('.toy-menu'), hud = toy.querySelector('.toy-hud');
-const openBtn = toy.querySelector('.toy-btn'), modeBtn = toy.querySelector('.toy-mode');
-const hits = hud.querySelector('.toy-score b'), unit = hud.querySelector('.toy-score span');
-const streak = hud.querySelector('.toy-streak'), soundBtn = hud.querySelector('.toy-sound');
-const sound = makeSound();
-
-function showMenu(open) {
-  menu.hidden = !open;
-  for (const b of [openBtn, modeBtn]) b.setAttribute('aria-expanded', String(open));
-  if (open) (menu.querySelector('[aria-pressed="true"]') ?? menu.querySelector('button')).focus();
-}
-function bump(node) { node.classList.remove('bump'); void node.offsetWidth; node.classList.add('bump'); }
-
-function onPlay(e) {
-  if (e.type === 'start') {
-    const m = MODES[e.mode];
-    modeBtn.querySelector('use').setAttribute('href', `#ti-${e.mode}`);
-    modeBtn.querySelector('.nm').textContent = m.name;
-    for (const b of menu.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === e.mode));
-    document.documentElement.classList.toggle('toy-laser', e.mode === 'laser');
-  }
-  if (e.type === 'stop') {
-    hud.hidden = true; openBtn.hidden = false;
-    for (const b of menu.querySelectorAll('[data-mode]')) b.setAttribute('aria-pressed', 'false');
-    document.documentElement.classList.remove('toy-laser');
-    return;
-  }
-  const m = MODES[e.mode];
-  if (hits.textContent !== String(e.hits)) { hits.textContent = e.hits; bump(hits); }
-  unit.textContent = m.unit[e.hits === 1 ? 0 : 1];
-  streak.hidden = e.streak < 2;
-  if (e.streak >= 2) { streak.querySelector('b').textContent = e.streak; bump(streak); }
-  sound.play(e.sound ?? e.type);
-  if (e.big) sound.play('streak');
-}
-
-if (cat) {
-  toy.hidden = false;
-  openBtn.addEventListener('click', () => showMenu(menu.hidden));
-  modeBtn.addEventListener('click', () => showMenu(menu.hidden));
-  menu.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-mode]');
-    if (!b) return;
-    showMenu(false);
-    cat.play(b.dataset.mode);
-    hud.hidden = false; openBtn.hidden = true;
-    modeBtn.focus();
-  });
-  hud.querySelector('.toy-close').addEventListener('click', () => { showMenu(false); cat.stop(); openBtn.focus(); });
-  soundBtn.addEventListener('click', () => {
-    sound.set(!sound.on);
-    soundBtn.setAttribute('aria-pressed', String(sound.on));
-  });
-  addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    if (!menu.hidden) { showMenu(false); (cat.playing ? modeBtn : openBtn).focus(); }
-    else if (cat.playing) { cat.stop(); openBtn.focus(); }
-  });
-  addEventListener('pointerdown', (e) => { if (!menu.hidden && !e.target.closest('.toy')) showMenu(false); }, { passive: true });
+  }, { rootMargin: '0px 0px -10% 0px' });
+  for (const el of rises) io.observe(el);
 }

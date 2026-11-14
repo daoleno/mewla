@@ -22,7 +22,7 @@
   let index = null;
   let loading = null;
   const load = () =>
-    (loading ||= fetch(root + "search-index.json")
+    loading || (loading = fetch(root + "search-index.json")
       .then((r) => r.json())
       .then((data) => (index = data))
       .catch(() => (index = [])));

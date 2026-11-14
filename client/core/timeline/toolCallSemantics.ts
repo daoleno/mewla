@@ -9,6 +9,8 @@
  * - Raw provider/tool identifiers stay secondary (expansion only).
  */
 
+import { commandHead } from "./rowBounds";
+
 export type SemanticActionKind =
   | "read_files"
   | "search_code"
@@ -82,7 +84,9 @@ export function stripToolNamespace(name: string): string {
 }
 
 export function parseExecWrapperCalls(input?: string): NestedToolCall[] {
-  if (!input || !input.trim()) {
+  // Every call site is `tools.NAME(`: without it there is none, and the lexical scan below (a JS loop over every
+  // character) would cost a 30 KB file write's row milliseconds for nothing.
+  if (!input || !input.includes("tools.")) {
     return [];
   }
   const source = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -306,7 +310,7 @@ export function buildSemanticActions(
   ) {
     return [
       semanticFromCommand(
-        input.command || commandFromInput(input.input),
+        commandHead(input.command || commandFromInput(input.input)),
         status,
         toolName || "exec_command",
       ),
@@ -368,14 +372,20 @@ export function primarySemanticAction(
   );
 }
 
-export function collapsedToolLabel(input: ToolCallPresentationInput): {
+export type CollapsedToolLabel = {
   title: string;
   detail?: string;
   accessibilityLabel: string;
   children?: SemanticAction[];
   providerToolId?: string;
-} {
-  const semantic = primarySemanticAction(input);
+};
+
+export function collapsedToolLabel(input: ToolCallPresentationInput): CollapsedToolLabel {
+  return collapsedLabelFromAction(primarySemanticAction(input));
+}
+
+/** `collapsedToolLabel` of an action already computed: a row needs both and reads its event once. */
+export function collapsedLabelFromAction(semantic: SemanticAction): CollapsedToolLabel {
   return {
     title: semanticActionTitle(semantic),
     detail: semantic.quietDetail,
@@ -564,7 +574,7 @@ function semanticFromToolName(
     );
   }
   if (lower === "shell" || lower === "bash" || lower === "exec_command") {
-    const command = commandFromInput(input) || undefined;
+    const command = commandHead(commandFromInput(input)) || undefined;
     return semanticFromCommand(command, status, name);
   }
   if (

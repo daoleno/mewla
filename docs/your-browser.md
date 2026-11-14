@@ -3,7 +3,7 @@
 Every agent Mewla starts has one browser tool, `mewla_chrome`, on every
 computer; the tool and its behaviour are the same everywhere. Only where the
 agent's Chrome window lives differs. On a Mac, on Windows, or a desktop without
-the virtual screen, it is your own Chrome (this page). On Linux with **Settings → Agents →
+the virtual screen, it is your own Chrome (this page). On Linux with **Settings › Agents ›
 Virtual screen** on, it is the agents' own Chrome on that virtual screen, each
 agent's window on a monitor of its own, with the same Mewla extension, which
 Mewla loads itself: there is nothing to add and no sign-in of yours in it (see [Screen](screen.md#linux-agents-on-a-virtual-screen)).
@@ -17,15 +17,16 @@ leave your other tabs alone. Nothing to configure; there is one switch.
 
 It is on unless you turn it off. The first time, Chrome needs one extension:
 
-1. Open **Settings** and tap the computer. Its page has a quiet row,
-   *Let agents use Chrome*. A missing Chrome or Node.js is not shown there as a
-   problem; `mewla agent-use` on the computer says what is missing.
-2. Tap **Set up**. Chrome on that computer opens its extensions page, and Mewla
+1. Tap the cat. Under **Needs fixing**, "Chrome extension missing" has
+   **Fix**. The computer's details (tap its name) show the same. A missing
+   Chrome or Node.js is not shown in the app; `mewla agent-use status` on the
+   computer says what is missing.
+2. Tap **Fix**. Chrome on that computer opens its extensions page, and Mewla
    says which folder to load. Turn on **Developer mode**, choose **Load
    unpacked** and pick `~/.mewla/extension/mewla` (the folder Mewla wrote;
    on Windows `%USERPROFILE%\.mewla\extension\mewla`).
    Do this at the computer or through [Screen](screen.md). Once the extension
-   is in the Chrome Web Store, **Set up** opens its page there and you click
+   is in the Chrome Web Store, **Fix** opens its page there and you click
    **Add to Chrome** instead.
 
 That is all: no key to copy. Mewla registers its helper with Chrome itself (on
@@ -43,7 +44,7 @@ and again.
 
 Mewla downloads the browser tools the first time (it needs Node.js 20 or later
 on the computer). A computer without a desktop session, such as a headless
-server, has no Chrome for agents to use; its page shows nothing about it. Mewla
+server, has no Chrome for agents to use; the app shows nothing about it. Mewla
 looks again every half minute until Chrome is ready, so a computer left alone
 picks the extension up by itself, and your other computers learn of it over
 their open connection.
@@ -51,7 +52,8 @@ their open connection.
 If you set the Playwright extension up before, with its key, that keeps
 working; adding the Mewla extension replaces it.
 
-The switch **Agents can use this computer** turns it off: agents started
+The switch **Agents can use this computer**, in the computer's details, turns
+it off: agents started
 after that don't get your Chrome, and agents already running lose it the next
 time they start their browser tools.
 
@@ -91,16 +93,18 @@ A Mac's Chrome is also reachable from your other computers: Brain on your
 Linux computer hands a logged-in-site task to the Mac, and the Mac's agents use
 the Mac's Chrome. See [Your other computers](computers.md).
 
-## When the row says something else
+## When status says something else
 
-| The row says | What to do |
+`mewla agent-use status` on the computer names what is missing and the one fix:
+
+| Status says | What to do |
 | --- | --- |
-| Google Chrome isn't installed | Install Google Chrome. Chrome from Flatpak or Snap is not supported. |
-| Add the Mewla extension to Chrome | Tap **Set up**, then load the Mewla folder (Developer mode, **Load unpacked**), or **Add to Chrome** once it is in the store. |
-| Open the Playwright extension in Chrome and copy its key | Only for the older Playwright extension: tap **Open it**, copy the key it shows, then run `mewla agent-use key` on the computer and paste it. Adding the Mewla extension instead needs no key. |
-| Sign in to this computer's desktop | On Linux, agents open Chrome in your desktop session. With nobody signed in to the desktop there is no Chrome to use; sign in and the row turns ready. |
+| Google Chrome isn't installed on this computer | Install Google Chrome. Chrome from Flatpak or Snap is not supported. |
+| Add the Mewla extension to Chrome | Tap **Fix** under **Needs fixing**, or run `mewla agent-use fix`, then load the Mewla folder (Developer mode, **Load unpacked**), or **Add to Chrome** once it is in the store. |
+| …or copy the Playwright extension's key | Only for the older Playwright extension: open it in Chrome, copy the key it shows, then run `mewla agent-use key` on the computer and paste it. Adding the Mewla extension instead needs no key. |
+| Sign in to this computer's desktop | On Linux, agents open Chrome in your desktop session. With nobody signed in to the desktop there is no Chrome to use; sign in and it turns ready. |
 | Install Node.js 20 or later | Install Node.js on that computer; Mewla finds it in the usual places, including version managers. |
-| Couldn't download the browser tools | Check the computer's network, then tap **Try again**. |
+| Couldn't download the browser tools | Check the computer's network, then run `mewla agent-use fix`, or tap **Try again** in the computer's details. |
 
 From a terminal on the computer:
 

@@ -14,12 +14,12 @@ mewla --lan                   # also listen on Wi-Fi/LAN and Tailscale, for a tr
 mewla -addr "$(tailscale ip -4):9876"   # listen on host:port only, here your Tailscale IP
 mewla -loopback-only          # this computer only: no TLS listeners on Wi-Fi/LAN or Tailscale (test daemons)
 mewla doctor [--json]         # is this machine ready? platform, state, port, agents
-mewla deps                    # offer this system's official agent CLI install, then sign-in
-mewla setup                   # guided first run: pick Brain's agent
+mewla deps                    # offer this system's official agent CLI install, then sign-in (Linux, macOS)
+mewla setup                   # guided setup on top of doctor: pick Brain's agent
 mewla setup remote            # over SSH: sign in with a code, run in the background, pair a phone
 mewla update [--check]        # verify and install the latest release
 mewla version [--json]        # version, commit and platform
-mewla boot install|status|uninstall   # start at login: systemd user service (Linux), LaunchAgent (macOS)
+mewla boot install|status|uninstall   # start at login: systemd user service (Linux), LaunchAgent (macOS), scheduled task (Windows)
 ```
 
 `-state-dir DIR` selects a state directory other than `~/.mewla`. Pass the same
@@ -34,6 +34,8 @@ your own Mewla is untouched.
 ## Pair and manage devices
 
 ```sh
+mewla login [-name <word>]    # remote access: an HTTPS address that works from any network
+mewla logout [-delete-account]   # turn remote access off; -delete-account deletes the account
 mewla web [--print]           # open the web UI in this computer's browser, paired; print its addresses
 mewla pair [address]          # one-time code: phone QR and a short link for this computer's browser
 mewla pair --details          # the same code as paste links for phone and every browser address
@@ -58,7 +60,7 @@ mewla brain executors add <name> -like claude|codex   # a second sign-in as its 
 mewla brain executors login <name>    # sign that executor in to its account
 mewla brain workspace                 # path to Brain's notes
 mewla brain objective show|clear
-mewla brain objective set "Ship atlas-notes v1.4 this week"   # the goal line in the app
+mewla brain objective set "Ship atlas-notes v1.4 this week"   # the first line of the tray in the app
 mewla brain work list --json          # open Work; -all, -full, -id <work> for more (-id adds transcript paths)
 mewla memory search "<phrase>" [--from user|brain|context|all] [--since 30d] [--limit 20] [--json]
 mewla memory show <id> [--around 3] [--json]   # a chat message with its neighbours
@@ -152,7 +154,7 @@ them with `answer`. The phone answers the same requests.
 `close`, `event`, `resolve`) are what Brain and its Workers call. You can run
 them, but you rarely need to.
 
-## Services, Calendar, Screen, Telegram, Plugins, Resources, Watch
+## Services, Calendar, Screen, Telegram, Extensions, Resources, Watch
 
 ```sh
 mewla service list --json
@@ -201,5 +203,5 @@ mewla watch project link-linear --project <id> --team KEY --confirm
 ```
 
 Details: [Services](sessions.md#services), [Calendar](calendar.md),
-[Telegram](notifications.md#telegram), [Plugins](plugins.md), [Agents outside Mewla](outside-agents.md),
+[Telegram](notifications.md), [Extensions](extensions.md), [Agents outside Mewla](outside-agents.md),
 [Resources](usage-and-resources.md#resources), [Watch](watch.md).

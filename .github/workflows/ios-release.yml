@@ -437,6 +437,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # What turns a captured JS stack back into names (`nsh symbolicate`): this build's client/ui
+      # source map, kept out of the app (client/ios/project.yml) and here, beside the build it belongs to.
+      - name: Upload the JS source map
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.MEWLA_IOS_ARTIFACT_NAME }}-symbols-${{ steps.invocation.outputs.build_number }}
+          path: client/ios/build/bundleUi.js.map
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Upload verified IPA to TestFlight
         if: ${{ env.MEWLA_IOS_DESTINATION == 'testflight' }}
         env:

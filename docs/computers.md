@@ -6,12 +6,20 @@ Linux box with your repositories. The other computer does the task with its
 own Brain, agents, files and logins. Replies and questions return to whoever
 sent the request: Brain or the sending Worker. Only messages cross between the two computers; nothing else is copied.
 
+## Switch between them
+
+Tap the cat. Under **Computers**, the computer page lists every other computer
+with its state (Online, Offline, Pair again, or how many requests wait for you
+there). Tap one to switch to it: the app returns to that computer's Brain, and
+the header reads "Connecting…" until it is up. ⓘ on a computer opens its
+details. Exactly one computer is current at a time.
+
 ## Connect two computers
 
-Pair your phone with both computers ([Connect and pair](connect-and-pair.md)).
-That is all: the computers on your phone work together by themselves. When
-you open **Settings**, or pair another computer, the phone asks each computer
-whether it is up, and introduces any two that answer and don't know each
+Pair your phone with both computers: tap the cat, then **Pair a computer**
+([Connect and pair](connect-and-pair.md)). That is all: the computers on your
+phone work together by themselves. When you open the computer page, or pair
+another computer, the phone asks each computer whether it is up, and introduces any two that answer and don't know each
 other yet. Your phone, which both already trust, asks one for a one-time
 invite and hands it to the other, which pairs with it and pins its key. No
 terminal, no copying links, no visit to either computer.
@@ -20,9 +28,9 @@ One of the two must be able to reach the other: over Tailscale, an HTTPS
 address, or the address your phone uses (not Mewla Relay, which only your phone
 can use). A Mac reached only through Mewla Relay dials out to the other
 computer instead, so one such computer is fine. When neither can reach the
-other, the computer's page in **Settings** says so.
+other, the computer's details say so.
 
-**Remove computer** on a computer's page in **Settings** ends it: your other
+**Remove computer** in a computer's details ends it: your other
 computers forget it, it forgets them, and messages still waiting are dropped.
 A computer that is offline then is told what to run when it is back. A
 computer that only another computer knows, not your phone, is not touched;
@@ -66,8 +74,8 @@ page, in a file or in a message never counts as your go-ahead.
 
 The conversation shows each handover as a card, such as *Handed to Mac* with
 *Delivered*, *Waiting* or *May not have arrived*, and each answer as *Reply
-from Mac*. Tap a card to read all of it. **Open on Mac** switches the app to
-that computer: its Brain shows the request marked as coming from your other
+from Mac*. Tap a card to read all of it. **Open on Mac** on the card switches
+the app to that computer: its Brain shows the request marked as coming from your other
 computer, and its Workers, terminals and [Screen](screen.md) are there as
 usual.
 
@@ -181,7 +189,8 @@ cannot open terminals or files, see the screen, or manage devices. It shows up
 in `mewla devices list` as *(computer)*. **Remove computer** in the app ends
 it at once and for good. `mewla computers remove` or `mewla devices revoke`
 also ends it at once, but while both computers are still on your phone, the
-phone connects them again the next time you open Settings; to stop for good,
+phone connects them again the next time you open the computer page; to stop
+for good,
 remove one of them from the phone.
 
 Because the other Brain can do anything you could ask it to do, a request from

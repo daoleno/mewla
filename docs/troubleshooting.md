@@ -9,6 +9,29 @@ mewla doctor
 It checks the platform, the state directory, the listen port, your agent CLIs
 and the network, and says what to fix.
 
+## What the app tells you
+
+The state control next to **Brain** says how the computer is, and the tray
+(tap it) says why and offers the fix:
+
+| State control | What it means | What to do |
+| --- | --- | --- |
+| **Connecting…** | The app is reaching the computer. Messages you send wait and go when it connects | Wait |
+| **Offline** | The app can't reach the computer. The tray names the problem, such as **Relay unreachable**, or **It may be asleep** | **Try again** in the tray, or **Details** for the computer page. If it stays offline, see [The phone cannot connect](#the-phone-cannot-connect) |
+| **Pair again** | This computer no longer trusts the phone | Tap it for the pairing sheet; run `mewla pair` on the computer and scan the new code |
+| **Starting…** | Brain is starting | Wait |
+| **Can't start** | Brain can't start; the tray says why | **Use …** moves Brain to the ready agent it names; **Switch executor** picks another. See [It paired, but no Sessions appear or agents fail to start](#it-paired-but-no-sessions-appear-or-agents-fail-to-start) |
+
+On a pushed page, a dot on Back means the computer is connecting, offline or
+must be paired again.
+
+The computer page (tap the cat) lists what **Needs fixing**, each with its fix:
+**Relay unreachable** › **Try again**, **Device not paired** › **Pair**,
+**Claude is not signed in** › **Switch**, **Chrome extension missing** ›
+**Fix**, **Update required** › **Update**. A dot on the cat means this
+computer must be paired again or needs a required update, or another computer
+has requests waiting for you.
+
 ## Reading the daemon's terminal output
 
 After the startup summary (version, listen address, data directory, pairing
@@ -83,6 +106,15 @@ a lost response from a captured one), `unknown-device` (revoked or never
 paired), `wrong-purpose` and `bad-signature`. The signature, nonce and
 Authorization header are never logged.
 
+## The app froze or closed
+
+On Android, if the app stops responding for 10 seconds while it is open, it
+reopens itself and reconnects; after a few reopens in a row it stays as it is
+instead of looping. On the next start a sheet shows what happened, such as
+**Stopped responding** or a crash, with **Copy** for the full report, and the
+computer's log gets a one-line summary. Include the copied report when you
+[open an issue](https://github.com/daoleno/mewla/issues).
+
 ## The daemon will not start
 
 - **`mewla: command not found`**: the install directory is not on `PATH`. Open a
@@ -106,16 +138,17 @@ Authorization header are never logged.
 3. Behind a tunnel or proxy, forward the whole origin with WebSocket upgrades,
    not only `/ws`. Path prefixes are not supported.
 4. Generate a fresh code with `mewla pair` (or `mewla pair <address>` for one
-   particular address); codes expire after 15 minutes and work once. Import it
-   in **Settings > Pair a computer**.
+   particular address); codes expire after 15 minutes and work once. Scan it
+   from the computer page's **Pair a computer** (tap the cat).
 5. With a custom `-state-dir`, pass the same value to `mewla` and `mewla pair`.
 
 ## It paired, but no Sessions appear or agents fail to start
 
 - Install and sign in to at least one agent CLI on the computer, as the same
-  user that runs `mewla`. One is enough. The Brain tab says which step is
-  missing (`mewla deps` installs one, `claude auth login` or `codex login`
-  signs in) and leaves that screen by itself once it is done; no restart needed.
+  user that runs `mewla`. One is enough. Until then the state control reads
+  **Can't start**, and the tray says which step is missing (`mewla deps`
+  installs one on Linux and macOS, `claude auth login` or `codex login` signs
+  in). Brain starts by itself once it is done; no restart needed.
 - `mewla doctor` also asks the running Mewla and warns when an agent is ready in
   your terminal but not for Mewla: a sign-in that lives in your shell's
   environment (an API key or token you export) is invisible to Mewla when it
@@ -125,9 +158,10 @@ Authorization header are never logged.
   terminal does not see (a different PATH or environment), Brain uses the running
   Mewla's view, not the terminal's. `mewla doctor` looks for agents where Mewla
   does: on PATH, then `~/.local/bin` and the other native-installer folders.
-- If the Brain tab says its agent is "open but not ready", the agent is waiting
-  at a sign-in or first-run question in its terminal. Run that agent once on the
-  computer, finish its questions, and Brain continues.
+- If the tray says Brain's session "is open but not ready", the agent is
+  waiting at a sign-in or first-run question in its terminal. Run that agent
+  once on the computer, or answer it in Brain's terminal (⋯ › **Open
+  terminal**), and Brain continues.
 - If you have `~/.mewla/executors.toml`, check its commands; a typo there makes
   launches fail. Restart `mewla` after editing it.
 
@@ -135,7 +169,9 @@ Authorization header are never logged.
 
 Chat comes from the agent's own history files. A brand-new Session shows
 little until the agent writes its first messages. Plain shells and other
-commands have Terminal only.
+commands have Terminal only. When Brain's chat reads **Chat isn't available**
+for its agent, or **Couldn't load the chat**, **Open terminal** shows the same
+Session as a terminal; **Try again** reloads the chat.
 
 ## The terminal is unavailable
 
@@ -159,12 +195,12 @@ Brain decides what to do with its Work.
   with `MEWLA_LOG_VERBOSE=1` to see skipped ones too.
 - Remote push on iOS is not yet available in official builds.
 - A fork's own build needs its own Expo project and Firebase app; see
-  [Notifications](notifications.md#push-notifications).
+  [Notifications](notifications.md).
 
-## A plugin says "Not yet available"
+## An extension says "Not yet available"
 
 That service's sign-in needs Mewla's own registration with the provider, which
-has not shipped yet. See [Plugins](plugins.md#sign-in-availability).
+has not shipped yet. See [Extensions](extensions.md).
 
 ## Codex or Claude fail outside Mewla while the daemon is stopped
 

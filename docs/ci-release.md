@@ -304,6 +304,8 @@ Under `dist-download/v<version>/` (and the workflow artifact):
 - `release-manifest.json`
 - `release-manifest.json.sig`
 
+Not published, kept 90 days as the workflow artifact `mewla-android-symbols-v<version>`: R8's `mapping.txt` (`retrace`) and the client's JS source map `bundleUi.js.map` (`nsh symbolicate`), which turn a captured Android trace or a minified JS stack from that release back into names. `ios-release.yml` keeps the iOS build's map the same way, as `<artifact name>-symbols-<build number>`.
+
 Daemon archives contain `mewla` (`mewla.exe` in the Windows zip), `LICENSE`, `NOTICE`, and `TRADEMARKS.md` at their root. The site serves `install.sh` and `install.ps1` from the repository byte for byte. Release notes stay in the GitHub Release body; Android third-party notices remain embedded in the APK. This keeps the download list focused without dropping required attribution.
 
 ## Local helper scripts

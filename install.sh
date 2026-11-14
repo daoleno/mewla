@@ -153,7 +153,7 @@ platform_archive() {
       die "Intel macOS is not supported. See $GITHUB_WEB/blob/main/docs/install-daemon.md#supported-platforms"
       ;;
     MINGW*/*|MSYS*/*|CYGWIN*/*|Windows_NT/*)
-      die "native Windows is not supported. Use WSL2, which installs the Linux build: $GITHUB_WEB/blob/main/docs/install-daemon.md#supported-platforms"
+      die "this installer is for Linux and macOS. On Windows, run in PowerShell: irm https://mewla.ai/install.ps1 | iex"
       ;;
     *)
       die "unsupported platform $os/$arch. Supported hosts: Linux amd64, Linux arm64, and Apple Silicon macOS. See $GITHUB_WEB/blob/main/docs/install-daemon.md#supported-platforms"

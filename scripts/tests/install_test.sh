@@ -205,9 +205,8 @@ test_unsupported_platforms() {
   assert_contains "$CASE_DIR/output" "Intel macOS is not supported"
   new_case unsupported-windows
   expect_failure FAKE_UNAME_S=MINGW64_NT FAKE_UNAME_M=x86_64 MEWLA_VERSION=v1.2.3 MEWLA_DRY_RUN=1
-  assert_contains "$CASE_DIR/output" "native Windows is not supported"
-  assert_contains "$CASE_DIR/output" "WSL2"
-  pass "fails clearly on Intel macOS and native Windows"
+  assert_contains "$CASE_DIR/output" "irm https://mewla.ai/install.ps1 | iex"
+  pass "fails clearly on Intel macOS and points native Windows at install.ps1"
 }
 
 test_unconfigured_version_is_dynamic() {

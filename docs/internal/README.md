@@ -19,11 +19,13 @@ and [third-party assets](../third-party-assets.md).
 - [Mewla Relay operations](mewla-relay.md)
 - [Calendar engineering](calendar-engineering.md)
 - [Notification policy](notification-policy.md)
+- [Live surfaces](live-surfaces.md): `live_state`, the widget token, Android and iOS hosts
 - [Telegram channel](telegram.md)
 - [Plugins engineering](plugins-engineering.md), [publisher setup](plugins-publisher-setup.md),
   [Slack manifest](plugins-slack-manifest.json)
 - [Usage and pricing details](usage-and-pricing.md) and [OpenCode local usage](opencode-local-usage.md)
 - [Web UI](web-ui.md)
+- [Requests and Session state on the wire](session-requests.md): answered-request records, a prompt's subject, running state
 
 ## Brain
 
