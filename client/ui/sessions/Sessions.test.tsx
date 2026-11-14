@@ -533,17 +533,19 @@ describe("a Session", () => {
     expect(framesOf(app.host.posts(), "set_active_worker").at(-1)?.worker_id).toBe("w7");
   }, 20_000);
 
-  test("a Session's Changes (its menu) opens Git review of its folder", async () => {
+  test("a Session's Git button, beside the view button, opens Git review of its folder; ⋯ no longer lists it", async () => {
     const files = [{ path: "app.ts", staged: false, unstaged: true, untracked: false, additions: 3, deletions: 1 }, { path: "notes.md", staged: false, unstaged: false, untracked: true, additions: 0, deletions: 0 }];
     const status = { available: true, repo_root: "/home/me/mewla", repo_name: "mewla", branch: "main", has_commits: true, clean: false, file_count: 2, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 1, additions: 3, deletions: 1, files };
     const app = await sessionsApp({ worker_sessions: [session("w5", { name: "repo work" })], conversations: { w5: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } }, { drawnHeader: true });
     await app.waitFor("text:repo work", { timeout: 10_000 });
     await app.press("text:repo work");
-    await app.waitFor("id:session-menu");
-    app.onDialog((dialog) => (dialog.buttons.includes("Changes") ? "Changes" : null));
-    await answering(app, () => app.press("id:session-menu"));
-    await app.waitFor("id:git-page");
+    await app.waitFor("id:session-git");
     expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w5", cwd: "/home/me/mewla" });
+    app.onDialog((dialog) => (dialog.buttons.includes("Rename") ? "Cancel" : null));
+    await answering(app, () => app.press("id:session-menu"));
+    expect(app.dialogs().at(-1)!.buttons).not.toContain("Changes");
+    await app.press("id:session-git");
+    await app.waitFor("id:git-page");
   }, 20_000);
 
   test("Attach File uploads a picked file and the message carries where the computer keeps it", async () => {
@@ -681,9 +683,8 @@ describe("a Session", () => {
     const app = await sessionsApp({ worker_sessions: [repo], conversations: { w8: [] }, replies: { git_diff_status: { type: "git_diff_status", status } } }, { drawnHeader: true });
     await app.waitFor("text:repo work", { timeout: 10_000 });
     await app.press("text:repo work");
-    await app.waitFor("id:session-menu");
-    app.onDialog((dialog) => (dialog.buttons.includes("Changes") ? "Changes" : null));
-    await answering(app, () => app.press("id:session-menu"));
+    await app.waitFor("id:session-git");
+    await app.press("id:session-git");
     await app.waitFor("id:git-page");
     await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...repo, cwd: "/home/me/site" } });
     await app.waitUntil(() => !app.shows("id:git-page"), { timeout: 5_000 });

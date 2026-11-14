@@ -61,6 +61,8 @@ import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
 import { showAlert } from "../shell/alert";
+import { daemon } from "../more/daemon";
+import { gitReview } from "../more/git/state";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 
@@ -303,6 +305,20 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     const cwd = untracked(worker)?.cwd;
     if (cwd) props.nav.push({ name: "git", targetId: props.workerId, cwd, title: untracked(title) });
   };
+  // Git is the header's own button, beside the view button, once the computer says the Session's folder is a
+  // repository. That is the Git review's status (ui/more/git/state.ts), read once for the folder while the
+  // Session shows and nothing has answered yet (again after a reconnect or a new folder): never per render,
+  // never polled, and the Git page opens on the same answer.
+  const gitCwd = computed(() => (props.brain ? "" : worker()?.cwd ?? ""));
+  const repo = computed(() => (gitCwd() && daemon()?.server.id === server.id ? gitReview({ targetId: props.workerId, cwd: gitCwd() }) : null));
+  const isRepo = computed(() => repo()?.status()?.available === true);
+  effect(() => {
+    const review = repo();
+    if (!review || !connected() || !props.active()) return;
+    untracked(() => {
+      if (!review.status() && !review.loading()) void review.refresh();
+    });
+  });
   // A Git review of this Session closes when the Session changes folder, as the Expo app's sheet did;
   // the chip then reads the new folder (parity #43).
   effect(() => {
@@ -469,7 +485,6 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       ...(connected() && canSwitchBrainExecutor(brain()) ? [{ id: "executor", label: "Switch executor" }] : []),
     ]
     : [
-      ...(worker()?.cwd ? [{ id: "changes", label: "Changes" }] : []),
       ...(switchable() ? [{ id: "model", label: "Model & Effort" }] : []),
       ...(dshWeb() ? [{ id: "web", label: "Open Web" }] : []),
       { id: "terminal", label: "New Terminal" },
@@ -483,7 +498,6 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     const action = await showMenu({ title: untracked(title), items: untracked(menuItems), anchor: menuAnchor.node(), testID: "session-menu-popover" });
     if (action === "workspace") browseWorkspace();
     else if (action === "executor") openBrainHost();
-    else if (action === "changes") openGit();
     else if (action === "calendar") openCalendarOrigin();
     else if (action === "model") modelOpen.set(true);
     else if (action === "work") {
@@ -596,6 +610,11 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         </View>
       </Button>
       <If when={!capsule.collapsed()}>
+        <If when={isRepo()}>
+          <Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit} class="size-11 items-center justify-center rounded-full active:bg-accent">
+            <Icon name="git-branch" size={22} color="foreground" />
+          </Button>
+        </If>
         {viewButton()}
         <If when={hasMenu()}><Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} class="size-11 items-center justify-center rounded-full active:bg-accent"><Icon name="more-horizontal" size={22} color="foreground" /></Button></If>
       </If>
@@ -621,7 +640,11 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               </View></If>}><Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text></If>
           </View>
           {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a chat.
-              Brain's chat is home's, so on Brain's terminal the button goes back there. */}
+              Brain's chat is home's, so on Brain's terminal the button goes back there. Git sits before it. */}
+          <If when={isRepo()}><Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit}
+              class="ml-1.5 size-10 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+              <Icon name="git-branch" size={22} color="foreground" />
+            </Button></If>
           <If when={props.brain || canChat()}><Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
               class="ml-1.5 size-10 items-center justify-center rounded-full active:bg-accent hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
               <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
