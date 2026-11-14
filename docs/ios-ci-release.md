@@ -18,11 +18,11 @@ An iPhone build must be signed and provisioned. App Store distribution IPAs are 
 The `ios` job in [`.github/workflows/client.yml`](../.github/workflows/client.yml) runs on the Apple Silicon `xcode-27` image on a push to `main` that touches `client/` and on manual dispatch. It:
 
 1. validates the shared Android/iOS native contract, then restores, or builds when the cache misses, and verifies the pinned `native/terminal-vt/libs/ios/GhosttyVt.xcframework` device and Simulator slices through the shared `ios-native` action, whose caches only `native-cache.yml` on `main` saves;
-2. installs NSH and its iOS framework, generates the Xcode project with xcodegen, and starts booting an iPhone Simulator, so the minutes a boot takes on the runner pass while Xcode compiles;
-3. runs the unit tests (the Expo app's Keychain and AsyncStorage upgrade, the terminal) on that Simulator, ad hoc signed;
+2. installs NSH and its iOS framework and generates the Xcode project with xcodegen;
+3. builds the unit tests, then boots an iPhone Simulator and runs them on it (the Expo app's Keychain and AsyncStorage upgrade, the terminal), ad hoc signed;
 4. builds the Release app, installs and launches it on the same Simulator, still booted, and uploads a first-run screenshot.
 
-Until 11-14 the Simulator booted twice, once for the tests and again for the Release app, about 6 of the job's 16 min. Two jobs on two Macs were slower still: each paid for a cold build while a Simulator booted on the same three cores.
+Until 11-14 the Simulator booted twice, once for the tests and again for the Release app. The boot waits for the test build: a runner's first boot is minutes of CPU, and a compile beside it took 8 min instead of about 1. Two jobs on two Macs were slower still.
 
 This job contains no Apple credentials. The Linux `client` and `client-ui` jobs of `ci.yml` keep core tests, `nsh check` and `nsh test` on every push; none of them is a substitute for this macOS compile/link job.
 
