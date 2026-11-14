@@ -70,7 +70,7 @@
         <a class="btn ink" href="#get">Get Mewla</a>
         <a class="btn ghost" href="docs/">Read the docs</a>
       </div>
-      <p class="runs">Open source · Runs on macOS, Linux and Windows · iPhone, Android and the web</p>
+      <p class="runs">Open source · Runs on macOS, Linux and Windows (Beta) · iPhone, Android and the web</p>
     </div>
     <div class="hero-shots">
       <figure class="phone back rise"><picture><source srcset="shots/tray-dark.webp" media="(prefers-color-scheme: dark)"><img src="shots/tray-light.webp" alt="" width="720" height="1557" fetchpriority="high"></picture></figure>
@@ -191,7 +191,7 @@
         <div class="cmd-card" data-os-cmd="unix" data-link="installScript"><code data-cmd="curl -fsSL {} | sh">curl -fsSL https://mewla.ai/install.sh | sh</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
         <div class="cmd-card" data-os-cmd="win" hidden><code>irm https://mewla.ai/install.ps1 | iex</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
         <div data-os-note="unix"><p class="small">Checksum-verified · no sudo · no telemetry</p></div>
-        <p class="small" data-os-note="win" hidden>Checksum-verified · no administrator · no telemetry</p>
+        <p class="small" data-os-note="win" hidden>Beta · Checksum-verified · no administrator · no telemetry · <a href="https://github.com/daoleno/mewla/issues/new?title=Windows%3A%20&amp;body=Windows%20version%3A%0A%0Amewla%20version%3A%0A%0Amewla%20doctor%3A%0A%0AWhat%20happened%3A%0A">Tell us how it went</a></p>
         </div>
       </li>
       <li class="step">
@@ -210,10 +210,11 @@
           <a class="btn ghost sm" href="https://testflight.apple.com/join/nMQheDCE"><svg class="ic s"><use href="#lg-apple"/></svg>iPhone</a>
           <a class="btn ghost sm" href="docs/connect-and-pair/#in-a-browser"><svg class="ic s"><use href="#i-desktop"/></svg>Web</a>
         </div>
+        <p class="small">iPhone runs the 0.3 Preview until Apple approves 0.4.</p>
         </div>
       </li>
     </ol>
-    <p class="needs-line">You need macOS on Apple Silicon, Linux or Windows, and one agent CLI. On macOS and Linux, Mewla offers to install Claude Code or Codex.</p>
+    <p class="needs-line">You need macOS on Apple Silicon, Linux or Windows (Beta), and one agent CLI. On macOS and Linux, Mewla offers to install Claude Code or Codex.</p>
     <p class="warn">Agents run with full authority on your computer and don't ask before each step. <a href="docs/agents/#permission-bypass-risks">Read the risks</a> before you use a work machine.</p>
     </div>
 </section>

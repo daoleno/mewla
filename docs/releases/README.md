@@ -13,7 +13,10 @@ installer and `mewla update` pick the highest version.
 - **iOS**: distributed as a TestFlight beta,
   [Mewla Preview](https://testflight.apple.com/join/nMQheDCE), not yet on the
   App Store. You need Apple's TestFlight app; see
-  [Install](../install-daemon.md#ios).
+  [Install](../install-daemon.md#ios). Until Apple approves 0.4, TestFlight
+  has the 0.3.1 Preview.
+- **Windows**: beta, not yet tested by us on real hardware.
+  [Tell us how it went](https://github.com/daoleno/mewla/issues/new?title=Windows%3A%20&body=Windows%20version%3A%0A%0Amewla%20version%3A%0A%0Amewla%20doctor%3A%0A%0AWhat%20happened%3A%0A).
 - **Android**: distributed as an APK outside the Play Store. Android asks to
   allow installs from your browser or file manager, and Play Protect may warn.
 - **Extensions**: first-time sign-in is not yet available for Slack, and for
