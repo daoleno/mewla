@@ -395,18 +395,6 @@ func (c *openCodeConversationCacheImpl) load(dbPath, sessionID string) (CodexCon
 	return entry.conversation, entry.version, entry.lastChangedIDs, nil
 }
 
-func (c *openCodeConversationCacheImpl) remove(sessionID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.entries, sessionID)
-	for index, id := range c.entryOrder {
-		if id == sessionID {
-			c.entryOrder = append(c.entryOrder[:index], c.entryOrder[index+1:]...)
-			break
-		}
-	}
-}
-
 func (c *openCodeConversationCacheImpl) evictIfNeeded() {
 	for len(c.entryOrder) > openCodeCacheMaxSessions {
 		oldest := c.entryOrder[0]

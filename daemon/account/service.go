@@ -260,11 +260,6 @@ func New(config Config) (*Service, error) {
 	return service, nil
 }
 
-// PublicKey returns the grant verification key for relays.
-func (s *Service) PublicKey() ed25519.PublicKey {
-	return s.config.GrantKey.Public().(ed25519.PublicKey)
-}
-
 // Handler returns the HTTP API.
 func (s *Service) Handler() http.Handler {
 	mux := http.NewServeMux()

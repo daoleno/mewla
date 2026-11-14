@@ -66,22 +66,6 @@ func (f *progressBindingFixture) report(turnID, kind string) (watcher.TurnProgre
 	})
 }
 
-func (f *progressBindingFixture) lose(t *testing.T) {
-	t.Helper()
-	st, err := f.store.FSM().State(lifecycle.WorkID(f.workID))
-	if err != nil || st.Attempt == nil {
-		t.Fatalf("no attempt to lose: %+v err=%v", st, err)
-	}
-	if _, err := f.store.FSM().ReportTurnLost(st.ID, lifecycle.AttemptIdentity{
-		SessionID: st.Attempt.SessionID, TurnToken: st.Attempt.TurnToken, Fence: st.Attempt.Generation,
-	}, "lease_expired_escalation"); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.store.SyncWorkProjection(f.workID); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func (f *progressBindingFixture) attempt(t *testing.T) lifecycle.TurnToken {
 	t.Helper()
 	st, err := f.store.FSM().State(lifecycle.WorkID(f.workID))

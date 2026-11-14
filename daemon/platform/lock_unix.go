@@ -21,8 +21,5 @@ func TryLock(file *os.File) (ok bool, err error) {
 	return true, nil
 }
 
-// Lock takes an exclusive lock on file, waiting for another holder.
-func Lock(file *os.File) error { return unix.Flock(int(file.Fd()), unix.LOCK_EX) }
-
 // Unlock releases a lock taken by TryLock or Lock.
 func Unlock(file *os.File) error { return unix.Flock(int(file.Fd()), unix.LOCK_UN) }

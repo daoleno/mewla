@@ -1,7 +1,6 @@
 package work
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -161,8 +160,4 @@ func TestProviderContractPiNotCollapsedToWorking(t *testing.T) {
 	if !conversation.Available || len(conversation.Events) == 0 {
 		t.Fatalf("live Pi must bind shared dir and project events: %+v", conversation)
 	}
-}
-
-func intString(value int64) string {
-	return fmt.Sprintf("%d", value)
 }

@@ -21,17 +21,6 @@ type personView struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
-// blockedEitherWay reports whether a block exists between two people.
-func (s *Service) blockedEitherWay(ctx context.Context, a, b string) (bool, error) {
-	var one int
-	err := s.config.Store.db.QueryRowContext(ctx,
-		`SELECT 1 FROM blocks WHERE (blocker_id = ?1 AND blocked_id = ?2) OR (blocker_id = ?2 AND blocked_id = ?1)`, a, b).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	return err == nil, err
-}
-
 // personFor loads a person the viewer may deal with. A person who blocked the
 // viewer, or who is hidden, does not exist for them. Someone the viewer
 // blocked is still returned (so the block can be lifted) unless forAction.

@@ -104,7 +104,6 @@ var (
 	cursorRowRe     = regexp.MustCompile(`^\s*[❯›]\s+(\S.*)$`)
 	promptBoxEdgeRe = regexp.MustCompile(`^[\s│┃|]+`)
 	promptRuleRe    = regexp.MustCompile(`^[\s─━╌╍┄┅┈┉-]{6,}$`)
-	promptTabBarRe  = regexp.MustCompile(`([☐☒])\s+(.+?)(?:\s{2,}|$)`)
 )
 
 // parseNumberedMenu returns the numbered rows that end the given lines and
@@ -444,14 +443,4 @@ func menuPrompt(provider string, kind PromptKind, body []string, options []Promp
 		Request:  withoutVolatileLines(request),
 		Options:  options,
 	}, meta
-}
-
-// ParseChoiceTabs reads the tab headers of an AskUserQuestion prompt, in
-// order, without the Submit tab.
-func ParseChoiceTabs(line string) (headers []string, answered []bool) {
-	for _, match := range promptTabBarRe.FindAllStringSubmatch(strings.Trim(strings.TrimSpace(line), "←→ "), -1) {
-		headers = append(headers, strings.TrimSpace(match[2]))
-		answered = append(answered, match[1] == "☒")
-	}
-	return headers, answered
 }

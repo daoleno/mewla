@@ -374,26 +374,6 @@ requestAnimationFrame(frame);
 	return strings.NewReplacer("DELAY", fmt.Sprint(delay), "RUN", fmt.Sprint(run), "LOOP", fmt.Sprint(loop), "LABEL", label).Replace(html.String())
 }
 
-func readPNG(t *testing.T, path string) *image.RGBA {
-	t.Helper()
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	dec, err := png.Decode(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := image.NewRGBA(dec.Bounds())
-	for y := out.Rect.Min.Y; y < out.Rect.Max.Y; y++ {
-		for x := out.Rect.Min.X; x < out.Rect.Max.X; x++ {
-			out.Set(x, y, dec.At(x, y))
-		}
-	}
-	return out
-}
-
 // textCrop is the left-hand column of the page, where the paragraphs are.
 func textCrop(screen image.Rectangle) image.Rectangle {
 	return image.Rect(screen.Min.X+40, screen.Min.Y+screen.Dy()/4, min(screen.Min.X+940, screen.Max.X), screen.Min.Y+screen.Dy()*3/4)
