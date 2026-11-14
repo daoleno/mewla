@@ -1,21 +1,36 @@
 # Interface Reading
 
-Android and iOS share one reading policy. At the newest edge, appended and
-streaming content remains followed. A manual move into history detaches that
-intent. Data, layout, keyboard and connection events cannot attach it again;
-an explicit return to latest or intentional send can establish a new intent.
-Subsequent manual scrolling cancels pending send-focus effects.
+Android and iOS share one reading policy, with one owner of a chat's position and
+two states. **Following**: within 120 pt of the newest end, appended and streaming
+rows keep that end in view. **Reading**: anywhere else, nothing moves the list:
+new rows, a streaming reply, cards, snapshots, reconnects, hot reload and the
+keyboard all leave the rows on screen where they are, and a Jump to latest
+control shows. Only the person changes the state: their scrolling, a send and the
+jump control (both go to the newest end), a tray row or link to a request (its
+card, centred).
 
 ## Position Ownership
 
 `Timeline` (`client/ui/chat/Timeline.tsx`) owns the reading position of every
-chat. A chat opens at its newest row (`initialScrollAtEnd`).
-`maintainVisibleContentPosition` with `autoscrollToBottomThreshold: 80` keeps a
-reader at the newest edge following appended and streaming rows, and holds the
-rows steady for a reader who has scrolled up. More than 240 pt from the end, a
-Jump to latest button appears, labelled with the age of the newest item; it
-scrolls to the end. A person's own send brings their newest message to the top
-(`sent`), with the reply under it.
+chat. A chat opens at its newest row (`initialScrollAtEnd`) or at the row it was
+read to. `maintainVisibleContentPosition` with `autoscrollToBottomThreshold: 120`
+is the following state; NSH's List keeps the visible rows in place for a reader.
+A send scrolls to the end (without animation from further than a screen away: NSH
+drops an animated scroll at the first change of the rows, short of the end).
+
+Rows reach the List one narrow change at a time (`rowSteps` in
+`client/core/timeline/rowFeed.ts`). NSH's List (0.5.0) diffs keyed rows by their
+common start and end only and lays out every row between them again from
+estimated sizes, dropping any scroll in progress. The daemon keeps a
+conversation's newest 240 events, so in a full thread (Brain's always is) each
+new event arrives with the oldest deleted: one change at each end, and before
+this every row was laid out again and a reader was carried to the newest end
+(owner 11-14). The feed gives the List the change after the rows both lists
+share, then the change before them, so each is a splice NSH keeps the screen
+still through. Row keys must therefore be stable: a day's divider is keyed by
+its date, not its label ("Today" becomes "Yesterday" at midnight). The chat's
+scroll trace (`client/core/timeline/scrollTrace.ts`) records every scroll
+command, splice and scroll report when a sink is set; `nsh test` reads it.
 
 The place a chat was read to is the key of its first visible row
 (`readingPlace` in `client/core/timeline/readingPlace.ts`), not a pixel offset: a

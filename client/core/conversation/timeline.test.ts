@@ -19,6 +19,16 @@ const pending = (id: string, lifecycle: PendingUserMessage["lifecycle"]): Pendin
 });
 
 describe("chat timeline", () => {
+  test("a full window slides (the newest event in, the oldest out): every row that stays is the same object", () => {
+    // The daemon keeps a conversation's newest 240 events; each new one comes with the oldest deleted.
+    const event = (i: number): CodexConversationEvent => ({ id: `m${i}`, seq: i + 1, kind: i % 2 ? "assistant_message" : "user_message", timestamp: new Date(Date.UTC(2026, 10, 14, 1, 0, i)).toISOString(), body: `Message ${i}` }) as never;
+    const timeline = createChatTimeline("brain");
+    const before = timeline(state(Array.from({ length: 240 }, (_, i) => event(i))));
+    const after = timeline(state(Array.from({ length: 240 }, (_, i) => event(i + 1))));
+    expect(after.map((item) => item.id)).toEqual([...before.slice(1).map((item) => item.id), "m240"]);
+    for (let i = 1; i < before.length; i += 1) expect(after[i - 1]).toBe(before[i]);
+  });
+
   test("a Session's finished tool run folds into one row; messages stay", () => {
     const items = createChatTimeline("session")(state(SCREENSHOT_CHAT_ACTIVITY_EVENTS));
     expect(items[0]).toMatchObject({ type: "message", role: "user" });
