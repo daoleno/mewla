@@ -11,7 +11,7 @@ describe("the keyboard goes down with its field", () => {
   test("a sheet that closes dismisses it (every AppSheet, GuardedSheet and GuardedDialog shares guardedOpen)", () => {
     const sheet = read("shell/AppSheet.tsx");
     const guarded = sheet.slice(sheet.indexOf("function guardedOpen"), sheet.indexOf("function aboveKeyboard"));
-    expect(guarded).toMatch(/if \(!open\) \{[\s\S]*?if \(closed\) Keyboard\.dismiss\(\);/);
+    expect(guarded).toMatch(/if \(open\) shown = true;\s*else \{[\s\S]*?if \(shown\) Keyboard\.dismiss\(\);/);
     expect(guarded).toMatch(/dismissed\.set\(true\);\s*Keyboard\.dismiss\(\);/);
   });
 
