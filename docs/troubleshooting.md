@@ -106,6 +106,15 @@ a lost response from a captured one), `unknown-device` (revoked or never
 paired), `wrong-purpose` and `bad-signature`. The signature, nonce and
 Authorization header are never logged.
 
+## The app froze or closed
+
+On Android, if the app stops responding for 10 seconds while it is open, it
+reopens itself and reconnects; after a few reopens in a row it stays as it is
+instead of looping. On the next start a sheet shows what happened, such as
+**Stopped responding** or a crash, with **Copy** for the full report, and the
+computer's log gets a one-line summary. Include the copied report when you
+[open an issue](https://github.com/daoleno/mewla/issues).
+
 ## The daemon will not start
 
 - **`mewla: command not found`**: the install directory is not on `PATH`. Open a
