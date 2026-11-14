@@ -82,6 +82,21 @@ describe("the light update hint", () => {
     expect(JSON.parse(app.storage()["mewla:update_seen"])).toEqual({ computers: { s1: "0.4.4" } });
   }, 30_000);
 
+  test("an update found after home is up lights the cat and, on a page already open, Settings' row; installed, the row's dot goes in place", async () => {
+    const app = await open(APP, setup({ appUpdate: { kind: "current" } }));
+    await app.waitFor("id:home-cat", { timeout: 10_000 });
+    await app.wait(300);
+    expect(app.shows("id:home-cat-update")).toBe(false);
+    await app.host.send("app.appUpdate", { kind: "available", update: apk });
+    await app.waitFor("id:home-cat-update");
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-settings-update");
+    await app.host.send("app.appUpdate", { kind: "current" });
+    await app.waitUntil(() => !app.shows("id:computer-settings-update"));
+    await app.host.send("app.appUpdate", { kind: "available", update: { ...apk, version: "0.4.5" } });
+    await app.waitFor("id:computer-settings-update");
+  }, 30_000);
+
   test("a required update is the red dot alone: red wins over ink", async () => {
     const app = await open(APP, setup({ appUpdate: { kind: "available", update: apk }, computer: { version: "0.0.1", supported: true, latest: "0.4.4" } }));
     await app.waitFor("id:home-cat-dot", { timeout: 10_000 });
