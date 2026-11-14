@@ -524,15 +524,16 @@ export function PostList(props: {
       header={props.header ? () => props.header! : undefined}
       viewabilityConfig={{ itemVisibleThreshold: VIDEO_VISIBLE_SHARE }}
       onViewableItemsChange={({ viewableItems }) => playingVideo.set(afterScroll(playingVideo(), owner, viewableItems.map((token) => token.item.id)))}
-      footer={() => (<View><If when={(posts() ?? []).length === 0}>
+      empty={() => (
         <EmptyState
           testID="friends-empty"
           title={error() ? "Could not load" : props.emptyTitle}
           detail={error() ?? props.emptyDetail}
           icon={error() ? "cloud-offline" : (props.emptyIcon ?? "people")}
         />
-      </If><If when={loadingMore()}><View class="items-center p-4"><Spinner /></View></If></View>)}
+      )}
       contentClass="pb-6"
+      footer={() => (<If when={loadingMore()}><View class="items-center p-4"><Spinner /></View></If>)}
       loadMoreThreshold={0.6}
       onLoadMore={() => {
         if (!next() || loadingMore()) return;
