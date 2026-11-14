@@ -59,7 +59,8 @@ export function startApp(): void {
   });
 
   // The Android host reopens the app when these beats stop for 10 s while it is in front (JsWatchdog.kt): NSH's
-  // engine can spin forever (longbridge/nsh#1984), and a reopened app beats a frozen one. iOS has no watchdog yet.
+  // engine can stall (0.5.0 spun forever, longbridge/nsh#1984, fixed in 0.5.1), and a reopened app beats a frozen
+  // one. iOS has no watchdog yet.
   if (platform.os === "android" && host.available()) setInterval(() => void host.call("app.alive").catch(() => undefined), 2_000);
 
   // Coming back to the app skips the reconnect backoff.

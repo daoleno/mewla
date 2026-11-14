@@ -12,7 +12,7 @@ const WEB = {
 const session = (id: string, patch: Record<string, unknown> = {}) => ({ id, name: "", status: "done", cwd: "/home/me/mewla", command: "claude --permission-mode bypassPermissions", provider: "claude", updated_at: Date.now(), ...patch });
 
 /**
- * `drawnHeader`: the phone-width web app, whose page header is the app's own laid-out row. NSH 0.5.0's
+ * `drawnHeader`: the phone-width web app, whose page header is the app's own laid-out row. NSH 0.5.1's
  * headless Android model lays a native header's items at the screen's origin, so a Session's title covers
  * ⋯ and the Git chip there (nsh-upstream-1111/DRAFT-headless-header-item-order.md); a test that presses a
  * header action runs here until NSH places them. Back to Android when it does.

@@ -34,7 +34,8 @@ describe("a focused field never swallows a tap", () => {
   // NSH's scroll views default to keyboardShouldPersistTaps="never": while a field has focus (it
   // keeps it after Back hides the keyboard on Android) a tap only dismisses the keyboard, so Pair,
   // Save, a chip or a date button did nothing (FINAL-VERIFY 6387f88f: Pair a computer, the
-  // Calendar editor, Snooze on a Work page). Every scroll view says what a tap does.
+  // Calendar editor, Snooze on a Work page). NSH 0.5.1 lets the tap through once the keyboard is down
+  // (longbridge/nsh#1755), but with it up "never" still only dismisses it. Every scroll view says what a tap does.
   test("every Scroll and List sets keyboardShouldPersistTaps", () => {
     const missing = sources(UI).flatMap((path) =>
       scrollTags(readFileSync(path, "utf8"))

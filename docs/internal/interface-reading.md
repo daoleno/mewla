@@ -19,7 +19,8 @@ A send scrolls to the end (without animation from further than a screen away: NS
 drops an animated scroll at the first change of the rows, short of the end).
 
 Rows reach the List one narrow change at a time (`rowSteps` in
-`client/core/timeline/rowFeed.ts`). NSH's List (0.5.0) diffs keyed rows by their
+`client/core/timeline/rowFeed.ts`). NSH's List (0.5.1; longbridge/nsh#2042 on main, after
+0.5.1, keeps the rows on screen when both ends change) diffs keyed rows by their
 common start and end only and lays out every row between them again from
 estimated sizes, dropping any scroll in progress. The daemon keeps a
 conversation's newest 240 events, so in a full thread (Brain's always is) each

@@ -34,7 +34,7 @@ import { brainFiles, openChatLink, openChatPath } from "./links";
  * block; hair lines between rows, none between columns; cells 15/22 and at least 132 wide, so a short cell stays
  * on one line and three columns or more scroll sideways inside the card rather than squeeze, with the scroll
  * indicator; the header 13/600 soft. The SPEC's 24 pt right-edge fade is not drawn: TextView has no part over its
- * table scroll (NSH 0.5.0), and a cell's non-breaking spaces do not widen its column (the text is clipped).
+ * table scroll (NSH 0.5.1), and a cell's non-breaking spaces do not widen its column (the text is clipped).
  */
 const TABLE = {
   table: "m-0 overflow-hidden rounded-[20px] border-0 bg-card",
@@ -499,7 +499,7 @@ export function ChatTimeline(props: {
           trace("drag", { phase: "end" });
         }}
         onScrollEnd={({ offset }) => props.capsule?.reading.rest(offset.y, fromEnd)}
-        // Opens at its newest row (NSH 0.5.0, before the first frame), or at the row it was read back to.
+        // Opens at its newest row (NSH 0.5, before the first frame), or at the row it was read back to.
         initialScrollAtEnd={opening.index === undefined}
         initialScrollIndex={opening.index}
         onViewableItemsChange={({ viewableItems }) => {

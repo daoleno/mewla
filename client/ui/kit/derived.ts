@@ -3,7 +3,7 @@ import { effect, signal, untracked, type Accessor, type SignalOptions } from "ns
 /**
  * A value made from signals, as `computed` makes one, that a failed run does not end.
  *
- * Under NSH 0.5.0 a `computed` whose run throws, any error or the engine cutting off a call into JS that passed its
+ * Under NSH 0.5.0 and 0.5.1 a `computed` whose run throws, any error or the engine cutting off a call into JS that passed its
  * 2 s budget ("Error: interrupted"), never tells what reads it of a change again, for as long as it lives (the
  * probe in derived.test.tsx). A thread's rows were one: a phone that took more than 2 s over one update of Brain's
  * thread cut off its projection, and the thread drew nothing new, not the reply, not the person's next message,

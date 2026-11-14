@@ -12,8 +12,8 @@ import com.longbridge.nsh.NshView
 
 /**
  * Reopens the app when its JS stops answering, instead of leaving a frozen screen the person has to kill.
- * NSH's engine thread can spin forever in native code (longbridge/nsh#1984), and NSH has no way to stop
- * it; the main thread stays free. The app beats (`app.alive`, App.tsx) every [WatchdogRules.BEAT_MS].
+ * NSH's engine thread can spin in native code with no way to stop it (NSH 0.5.0's freeze, longbridge/nsh#1984, is
+ * fixed in 0.5.1 by #1990 and #1991; this stays for whatever else stalls it); the main thread stays free. The app beats (`app.alive`, App.tsx) every [WatchdogRules.BEAT_MS].
  * While the activity is resumed, [WatchdogRules.STALL_MS] without a beat relaunches the app and ends
  * this process, at most [WatchdogRules.MAX_RESTARTS] times in [WatchdogRules.WINDOW_MS]; past that the
  * app is left as it is rather than restarting in a loop.

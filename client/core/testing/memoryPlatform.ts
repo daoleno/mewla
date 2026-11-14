@@ -39,7 +39,7 @@ export class FakeSocket implements SocketLike {
   onclose: SocketLike["onclose"] = null;
   onerror: SocketLike["onerror"] = null;
   sent: string[] = [];
-  /** Bytes sent in this turn, not yet gone out (NSH 0.5.0: up to 8 MiB in at most 1,024 messages wait). */
+  /** Bytes sent in this turn, not yet gone out (NSH 0.5: up to 8 MiB in at most 1,024 messages wait). */
   buffered = 0;
   private waiting = 0;
   constructor(readonly url: string, readonly protocols: string[], readonly quotaBytes = 8 << 20, readonly quotaMessages = 1024) {}
