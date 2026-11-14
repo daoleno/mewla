@@ -1,6 +1,6 @@
 import { Clipboard, host, Scroll, signal, Storage, Text, View } from "nsh";
 import { Button, Sheet, TextView } from "nsh/base";
-import { crashDiagnostic, crashesToShow, crashKindLabel, crashTitle, readCrashReports, type CrashReport } from "../../core/crash";
+import { crashDiagnostic, crashesToShow, crashKindLabel, crashTitle, keptForLoop, readCrashReports, type CrashReport } from "../../core/crash";
 import { current, onTransport } from "../session";
 import { sheetSides } from "../shell/AppSheet";
 
@@ -34,9 +34,11 @@ function sendWhenConnected(transport: Parameters<Parameters<typeof onTransport>[
       return; // not connected after all: the next connection tries again
     }
     await Storage.setItem(SENT_KEY, JSON.stringify([...sent].slice(-32))).catch(() => {});
-    // The computer has them: the hosts keep only what the sheet shows, until it is dismissed.
+    // The computer has them: the hosts keep only what the sheet shows, until it is dismissed, and a run that ended
+    // while it can still be part of a loop.
     const shown = new Set(crashReports().map((report) => report.id));
-    const told = kept.filter((report) => sent.has(report.id) && !shown.has(report.id)).map((report) => report.id);
+    const now = Date.now();
+    const told = kept.filter((report) => sent.has(report.id) && !shown.has(report.id) && !keptForLoop(report, now)).map((report) => report.id);
     kept = kept.filter((report) => !told.includes(report.id));
     if (told.length) await host.call("app.clearCrashReports", { ids: told }).catch(() => {});
   };

@@ -70,4 +70,27 @@ describe("what the app survived (owner 11-14: \"Mewla hit an error\" over the ap
     expect((clear?.data as { ids: string[] }).ids.sort()).toEqual(cutOffs.map((r) => r.id).sort());
     expect(app.shows("id:crash-sheet")).toBe(false);
   });
+
+  test("a loop whose runs reconnect in between still shows on the third: a run that ended is not forgotten once sent", async () => {
+    // One host across three runs: each crash is kept, the app starts and connects, and the next run crashes again.
+    const store: (typeof report)[] = [];
+    const runHost = () => phoneHost({ brain: {} }, {
+      "app.crashReports": () => store.slice(),
+      "app.clearCrashReports": ({ ids }: { ids: string[] }) => { for (const id of ids) store.splice(store.findIndex((r) => r.id === id), 1); return null; },
+    });
+    const crash = (n: number) => ({ ...report, id: `${Date.now()}-java-${n}.txt`, at: Date.now() - (3 - n) * 60_000 });
+    for (const n of [1, 2]) {
+      store.push(crash(n), { ...cutOffs[n]!, id: `cut-${n}`, at: Date.now() });
+      const kept = store.length;
+      const app = await open("../FakeDaemonApp.tsx", { platform: "android", storage: paired, host: runHost() });
+      await app.waitUntil(() => framesOf(app.host.posts(), "client_diagnostic").filter((f) => f.name === "app_crash").length === kept, { timeout: 10_000 });
+      await app.waitUntil(() => !store.some((r) => r.id === `cut-${n}`), { timeout: 5000 });
+      expect(app.shows("id:crash-sheet")).toBe(false);
+      expect(store.map((r) => r.id)).toEqual(Array.from({ length: n }, (_, i) => store[i]!.id));
+    }
+    store.push(crash(3));
+    const app = await open("../FakeDaemonApp.tsx", { platform: "android", storage: paired, host: runHost() });
+    await app.waitFor("id:crash-sheet", { timeout: 10_000 });
+    expect(app.texts().join(" ")).toContain("java.lang.NullPointerException: boom");
+  });
 });
