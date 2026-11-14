@@ -1,25 +1,30 @@
 import { Clipboard, host, Scroll, signal, Storage, Text, View } from "nsh";
 import { Button, Sheet, TextView } from "nsh/base";
-import { crashDiagnostic, crashKindLabel, crashTitle, readCrashReports, type CrashReport } from "../../core/crash";
+import { crashDiagnostic, crashesToShow, crashKindLabel, crashTitle, readCrashReports, type CrashReport } from "../../core/crash";
 import { current, onTransport } from "../session";
 import { sheetSides } from "../shell/AppSheet";
 
-/** The reports the hosts kept from the last run (crashes, JS errors), until the person dismisses them. */
+/** The reports the sheet shows (a crash loop's, core/crash.ts `crashesToShow`), until the person dismisses them. */
 export const crashReports = signal<CrashReport[]>([]);
+/** Every report the hosts kept: each goes to the computer once. */
+let kept: CrashReport[] = [];
 const SENT_KEY = "mewla:v1:crash_reports_sent";
 
-/** Reads what the hosts kept (once, at start) and sends each report's summary to the computer once. */
+/**
+ * Reads what the hosts kept (once, at start) and sends each report's summary to the computer once. Only a crash loop
+ * is the person's to see; the rest the hosts forget once the computer has them.
+ */
 export async function loadCrashReports(): Promise<void> {
   if (!host.available()) return;
-  const reports = readCrashReports(await host.call("app.crashReports").catch(() => []));
-  crashReports.set(reports);
-  if (reports.length) onTransport(sendWhenConnected);
+  kept = readCrashReports(await host.call("app.crashReports").catch(() => []));
+  crashReports.set(crashesToShow(kept));
+  if (kept.length) onTransport(sendWhenConnected);
 }
 
 function sendWhenConnected(transport: Parameters<Parameters<typeof onTransport>[0]>[0]) {
   const send = async () => {
     const sent = new Set<string>(JSON.parse((await Storage.getItem(SENT_KEY).catch(() => null)) ?? "[]"));
-    const fresh = crashReports().filter((report) => !sent.has(report.id));
+    const fresh = kept.filter((report) => !sent.has(report.id));
     try {
       for (const report of fresh) {
         transport.send(crashDiagnostic(report));
@@ -29,6 +34,11 @@ function sendWhenConnected(transport: Parameters<Parameters<typeof onTransport>[
       return; // not connected after all: the next connection tries again
     }
     await Storage.setItem(SENT_KEY, JSON.stringify([...sent].slice(-32))).catch(() => {});
+    // The computer has them: the hosts keep only what the sheet shows, until it is dismissed.
+    const shown = new Set(crashReports().map((report) => report.id));
+    const told = kept.filter((report) => sent.has(report.id) && !shown.has(report.id)).map((report) => report.id);
+    kept = kept.filter((report) => !told.includes(report.id));
+    if (told.length) await host.call("app.clearCrashReports", { ids: told }).catch(() => {});
   };
   const off = transport.on("connected", () => void send());
   if (transport.state === "connected") void send();
@@ -47,8 +57,8 @@ function when(at: number): string {
 }
 
 /**
- * What happened last time, on the next start: the user must never be left with a crash and
- * nothing to hand over. The trace is selectable; Copy takes all of them.
+ * A crash loop, on the next start: the app cannot go on, and the person must not be left with nothing to hand over.
+ * The trace is selectable; Copy takes all of them. Anything else the computer already has.
  */
 export function CrashReportSheet() {
   const copied = signal(false);
