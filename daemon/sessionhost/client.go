@@ -9,6 +9,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/ghosttyvt"
 )
 
 // ErrClosed is returned by calls on a closed client or one whose host went
@@ -178,6 +180,7 @@ func (c *Client) call(ctx context.Context, method string, params, result any) er
 func (c *Client) Create(ctx context.Context, params CreateParams) (Info, error) {
 	var info Info
 	err := c.call(ctx, MethodCreate, params, &info)
+	info.healCwd()
 	return info, err
 }
 
@@ -185,6 +188,9 @@ func (c *Client) Create(ctx context.Context, params CreateParams) (Info, error) 
 func (c *Client) List(ctx context.Context) ([]Info, error) {
 	var infos []Info
 	err := c.call(ctx, MethodList, struct{}{}, &infos)
+	for i := range infos {
+		infos[i].healCwd()
+	}
 	return infos, err
 }
 
@@ -192,7 +198,17 @@ func (c *Client) List(ctx context.Context) ([]Info, error) {
 func (c *Client) Info(ctx context.Context, id string) (Info, error) {
 	var info Info
 	err := c.call(ctx, MethodInfo, IDParams{ID: id}, &info)
+	info.healCwd()
 	return info, err
+}
+
+// healCwd turns a cwd a host from before OSC 7 reports were decoded sends
+// (file://host/path; a host outlives daemon upgrades) into its path, or the
+// start dir when it names no folder here, as a current host does.
+func (info *Info) healCwd() {
+	if info.Cwd = ghosttyvt.StoredDir(info.Cwd); info.Cwd == "" {
+		info.Cwd = info.Dir
+	}
 }
 
 // Input runs an input script. started reports whether any byte may have
