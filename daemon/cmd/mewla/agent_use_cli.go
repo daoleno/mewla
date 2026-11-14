@@ -31,7 +31,7 @@ giving Mewla its key once.
   key [-clear]    Paste the Playwright extension's key (shown on its page in
                   Chrome) from stdin; -clear forgets it
 
-The app shows the same status: Settings → Agents on this computer.
+The app shows the same status on this computer's page (tap the cat, then its name).
 `
 
 func runAgentUseCommand(args []string, stderr io.Writer) error {
@@ -151,7 +151,7 @@ func daemonAgentUse(stateDir string, local agentuse.Status) agentuse.Status {
 	return local
 }
 
-// printPhone says whether Phone use is on, which only the person turns on (Settings → Labs).
+// printPhone says whether Phone use is on, which only the person turns on (Settings → Agents → Phone use).
 func printPhone(w io.Writer, status agentuse.Status) {
 	phone := status.Phone
 	if phone == nil || !phone.Enabled {

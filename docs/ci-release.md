@@ -6,18 +6,20 @@ The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow 
 
 ## Ordinary CI triggers
 
-| Event | Fast checks (`installer`, `daemon`, `app`, `native-contract`, `release-identity`) | Native/packaging checks (`ios-native`, `android-native`, daemon release binaries) |
+| Event | Fast checks (`installer`, `daemon`, `client`, `native-contract`, `release-identity`) | Daemon release binaries |
 | --- | --- | --- |
 | Push to `main` | yes | no |
 | Pull request | yes | no |
 | Release tag push (`vX.Y.Z` / `vX.Y.Z-beta.N`) | yes | yes |
 | Manual `workflow_dispatch` of `ci.yml` | yes | yes |
 
-The `daemon` fast job runs `go test ./...`, `go vet`, the scripted behavior contracts, and the publisher-config check. It also tests the session host's terminal engine (`daemon/ghosttyvt`, build tag `ghosttyvt`) with libghostty-vt linked, through `scripts/test-ghosttyvt.sh -race`. That script builds the static library with `scripts/build-libghostty-desktop.sh` from the same signed, pinned release and Zig as the app, into `~/.cache/mewla/ghostty-desktop`, which the [`ghostty-desktop`](../.github/actions/ghostty-desktop/action.yml) action caches. It never writes `daemon/ghostty-libs`: that directory switches `mewla-dev` to the tagged build. Untagged builds (`go test ./...`, `mewla-dev` without `daemon/ghostty-libs`, `build-mewla-local.sh`) compile the engine's stub and stay `CGO_ENABLED=0`. Release binaries carry the engine: the release-shaped `build-daemon-linux.sh` binaries (linux amd64/arm64 static with `zig cc` and musl, with the embedded web UI) build only with the native/packaging checks; see [Daemon builds](internal/daemon-builds.md). The `app` fast job runs unit tests, typecheck and the Android and iOS JS exports; the web export runs only inside the daemon release build, which embeds it. `ci.yml` cancels superseded runs for the same ref.
+The client's native hosts are not built by `ci.yml`: [`client.yml`](../.github/workflows/client.yml) builds the Android preview APK and the iOS Simulator app (with its unit tests) on a push to `main` that touches `client/` and on dispatch (a release gate: development device rounds build locally), [`native-cache.yml`](../.github/workflows/native-cache.yml) builds the Android release task graph on `main`, and the release workflows build the signed APK and IPA.
+
+The `daemon` fast job runs `go test ./...`, `go vet`, the scripted behavior contracts, and the publisher-config check. It also tests the session host's terminal engine (`daemon/ghosttyvt`, build tag `ghosttyvt`) with libghostty-vt linked, through `scripts/test-ghosttyvt.sh -race`. That script builds the static library with `scripts/build-libghostty-desktop.sh` from the same signed, pinned release and Zig as the app, into `~/.cache/mewla/ghostty-desktop`, which the [`ghostty-desktop`](../.github/actions/ghostty-desktop/action.yml) action caches. It never writes `daemon/ghostty-libs`: that directory switches `mewla-dev` to the tagged build. Untagged builds (`go test ./...`, `mewla-dev` without `daemon/ghostty-libs`, `build-mewla-local.sh`) compile the engine's stub and stay `CGO_ENABLED=0`. Release binaries carry the engine: the release-shaped `build-daemon-linux.sh` binaries (linux amd64/arm64 static with `zig cc` and musl, with the embedded web UI) build only with the native/packaging checks; see [Daemon builds](internal/daemon-builds.md). The `client` fast job runs the core tests, `nsh check` and `nsh test`, and checks that the open-source licenses (`client/ui/more/settings/licenses/licenses.json`) and the Screen viewer bundle (`client/ui/more/screen/viewerSource.ts`) match what their generators write; the web UI build runs only inside the daemon release build, which embeds it. `ci.yml` cancels superseded runs for the same ref.
 
 A `windows` job on `windows-latest` builds every daemon package for Windows, vets and tests the Windows platform layer (`daemon/platform`: file locks, Job Objects, replacing a running executable, the per-user logon task; plus `control`, `sqlitedb` and `selfupdate`), builds `mewla.exe`, and runs `scripts/tests/install_ps1_test.ps1`, the offline tests of `install.ps1` under Windows PowerShell 5.1. Native Windows has not shipped yet, so the job is `continue-on-error`: it reports but does not fail the run. `scripts/ci-local.py` skips it on Linux.
 
-The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta.yml` pushes the tag with `GITHUB_TOKEN` (which does not recursively trigger workflows) and explicitly dispatches `release-artifacts.yml` and `ios-release.yml`. Those workflows build the signed Android APK and the signed iOS IPA, so an Android native break is caught by `release-artifacts.yml` before the public release is published, and an iOS compile break is caught by `ios-release.yml` before the IPA is exported or uploaded. The unsigned Simulator build and the bounded Android native link additionally run on a manual `ci.yml` dispatch and on a maintainer-pushed release tag.
+The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta.yml` pushes the tag with `GITHUB_TOKEN` (which does not recursively trigger workflows) and explicitly dispatches `release-artifacts.yml` and `ios-release.yml`. Those workflows build the signed Android APK and the signed iOS IPA, so an Android native break is caught by `release-artifacts.yml` before the public release is published, and an iOS compile break is caught by `ios-release.yml` before the IPA is exported or uploaded.
 
 ## What it does
 
@@ -28,7 +30,7 @@ The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta
 | Linux amd64/arm64 (static, musl) and Windows amd64 (static, MinGW) daemons with `zig cc` on Ubuntu; macOS arm64 daemon on a `macos-26` runner; all with the session host's terminal engine (`ghosttyvt`) | yes | — |
 | Run each daemon on its own platform: Linux amd64, Linux arm64 (`ubuntu-24.04-arm`), macOS (`daemon/releasesmoke`), Windows (`windows-latest`: version, the host with the engine, `/health`, `install.ps1` from a release-shaped zip, `scripts/tests/release_smoke_windows.ps1`) | yes | — |
 | Build release-grade `libghostty` arm64 | yes | — |
-| Clean Expo prebuild + signed arm64 APK | yes | — |
+| Signed arm64 APK of the NSH client (`client/android`, `:app:assembleProductionRelease -Pmewla.channel=github`) | yes | — |
 | Verify package / version / ABI / Ghostty native imports / notice / cert fingerprint | yes | — |
 | Stage tree + checksums + signed updater manifest | yes | — |
 | Upload workflow artifact | yes | — |
@@ -42,6 +44,18 @@ GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN
 2. When the signed APK is verified, a second signing job stages the complete set. It fails unless the daemon archives are byte-identical to the published ones. A write-scoped job then checks the published archives against the new `SHA256SUMS`, uploads the APK, `SHA256SUMS`, `release-manifest.json` and its signature with `--clobber`, and verifies the exact eight-asset set.
 
 Stable tags become normal Latest releases; beta tags remain prereleases. A failed daemon build cannot create a public release, and a failed first upload can leave only a draft. If Android fails, the release stays public with the desktop archives only, until a rerun of the failed jobs attaches the APK. While the Android assets replace the desktop-only `SHA256SUMS` and manifest, an install or update in those few seconds can fail its checksum or signature check and should be retried.
+
+### Holding a stable release
+
+To try the real signed APK before people get it, set the repository variable `MEWLA_RELEASE_HOLD` to `true` before the release is tagged (`gh variable set MEWLA_RELEASE_HOLD --body true`). The tag then publishes as a prerelease with every asset. Everything that looks for a new version follows GitHub's `releases/latest`, which skips prereleases: `mewla update` and the daemon's notice, `install.sh` and `install.ps1`, the app's update check, and the site's download link. So the previous release stays current.
+
+Then:
+1. Download the APK from the release and check it against its `SHA256SUMS`.
+2. Try it.
+3. Promote the same bytes, with no rebuild: `gh release edit vX.Y.Z --prerelease=false --latest=true`.
+4. Delete the variable: `gh variable delete MEWLA_RELEASE_HOLD`.
+
+Do not use a `publish=true` dispatch to promote: it rebuilds and replaces every asset. While the variable is set, any stable release tagged publishes held. A rerun after promotion fails on the prerelease check until the variable is deleted.
 
 ## Repository secrets (names only)
 
@@ -82,13 +96,15 @@ Release notes leave out maintainer identity. It lives in tracked files instead:
 
 | Fact | Source |
 | --- | --- |
-| Version | `app/app.base.json` `expo.version`, mirrored in `daemon/cmd/mewla/version.go` |
-| Android package | `com.daoleno.mewla` (`app/app.base.json`) |
-| Android `versionCode` | `app/app.base.json`; preparation increments it by one |
-| Android ABI | `arm64-v8a` only (`app/package.json` `build:apk`, `app/modules/terminal-vt/native.lock.json`) |
+| Version | `client/ui/nsh.json` `version`, mirrored in `daemon/cmd/mewla/version.go` |
+| Android package | `com.daoleno.mewla` (`client/ui/nsh.json` `id`, `client/android/app/build.gradle.kts`) |
+| Android `versionCode` and iOS `CFBundleVersion` | Derived from the version (below); `client/ios/project.yml` carries the iOS values |
+| Android ABI | `arm64-v8a` only (`scripts/android-release-apk.sh` `-Pmewla.abis=arm64-v8a`, `native/terminal-vt/native.lock.json`) |
 | iOS Preview bundle, marketing version and build number | See [iOS CI](ios-ci-release.md#signed-release-and-testflight) |
 
-`scripts/verify-release-identity.sh` reads the version, `versionCode` and iOS build number from `app/app.base.json` and `app/ios-build.json`, and checks that `version.go`, the resolved app config, the tag, the release notes and any stage agree with them. Preparation does not edit the verifier. The Android certificate fingerprint stays pinned in it.
+One rule (`scripts/lib/release_identity.py`, the same in the client's Gradle build) gives every build number from the version `X.Y.Z` or `X.Y.Z-beta.N`: `X·1 000 000 + Y·10 000 + Z·100 + 99` for a release and `+ N` instead of `+ 99` for `beta.N` (Y and Z at most 99, N at most 98). 0.3.2 is 30299 and 0.3.2-beta.1 is 30201, so the numbers grow with the version and start above every Expo build (Android `versionCode` 142, iOS build 140 at 0.3.1). The iOS marketing version is `X.Y.Z` without `-beta.N`.
+
+`scripts/verify-release-identity.sh` reads the version from `client/ui/nsh.json` and derives the build numbers, and checks that `version.go`, the client's Gradle and Xcode projects, the tag, the release notes and any stage agree with them. Preparation does not edit the verifier. The Android certificate fingerprint stays pinned in it.
 
 ## workflow_dispatch inputs
 
@@ -146,7 +162,6 @@ Keep at least one of `## New` and `## Fixed`, with `- ` bullets only. Preparatio
 
 The generated notes have no iPhone line, because the TestFlight upload runs after the tag. Once the build is in the public `Mewla Preview` group, add `- **iPhone:** [Mewla Preview on TestFlight](https://testflight.apple.com/join/nMQheDCE)` after the Android line in `docs/releases/vX.Y.Z.md`, commit it, and apply the same file to the GitHub Release with `gh release edit vX.Y.Z --notes-file docs/releases/vX.Y.Z.md`.
 
-Preparation, normal app CI and the Android release job run `app/androidAssetNames.test.js` before an expensive signed build. The gate uses Metro asset parsing and React Native's actual Android resource folder/name normalization across repository image and font assets, including density variants. Extensions, punctuation and letter case do not necessarily distinguish Android resource names: use distinct basenames for files such as a PNG and JPEG in the same directory.
 
 ### Maintainer fallback: manual annotated tag
 
@@ -172,7 +187,7 @@ gh workflow run release-artifacts.yml \
   -f publish=true
 ```
 
-Preview TestFlight recovery uses the tracked build number from `app/ios-build.json` at that tag:
+Preview TestFlight recovery derives the build number from that tag's version when `build_number` is left out; pass a larger one to upload again:
 
 ```bash
 gh workflow run ios-release.yml \
@@ -209,9 +224,9 @@ gh workflow run android-play.yml --ref main -f ref=vX.Y.Z -f destination=alpha -
 
 Every run checks the built AAB with `scripts/verify-aab-play.py` and the pinned bundletool:
 
-- package, `versionName` and `versionCode` match `app/app.base.json`; `targetSdkVersion` is 36;
+- package, `versionName` and `versionCode` match `client/ui/nsh.json` and the derived code; `targetSdkVersion` is 36;
 - no `REQUEST_INSTALL_PACKAGES`, `SYSTEM_ALERT_WINDOW` or `RECORD_AUDIO`, and no app-update `FileProvider` in the merged manifest;
-- the embedded Expo config says `distribution.android = play-store`, so the update check stays hidden;
+- nothing of the GitHub channel: no Phone use service, receiver, accessibility service or `WRITE_SECURE_SETTINGS`, and no in-app update (`-Pmewla.channel=play` links neither module);
 - only arm64-v8a libraries, every `.so` has 16 KB ELF `LOAD` alignment, and every split APK bundletool generates passes `zipalign -c -P 16`;
 - the universal APK carries the Ghostty notice and passes the native import check;
 - the upload certificate SHA-256 is the public release identity.
@@ -255,19 +270,19 @@ An uploaded, `VALID` build is not installable: the public `Mewla Preview` group 
 
 Android SDK setup explicitly requests `platform-tools` because the action's default also requests the removed SDK package `tools`. The following install step retains the pinned Android platform, build-tools, NDK, and CMake packages.
 
-The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before clean prebuild and Gradle. Native CI (release tag pushes and manual `ci.yml` dispatch) builds Android debug/release variants with development signing and the release-shaped daemon binaries; official certificate verification remains in the release workflow, and `release-artifacts.yml` rebuilds the daemon archives before publishing.
+The Linux release job builds all daemon targets with CGO disabled. The Android APK helper verifies pinned Ghostty terminal libraries before the client's Gradle build. CI on release tag pushes and manual `ci.yml` dispatch builds the release-shaped daemon binaries; official certificate verification remains in the release workflow, and `release-artifacts.yml` rebuilds the daemon archives before publishing.
 
-GitHub scopes a cache to the ref that saved it: a tag run can read `main`'s caches, but no later run can read a tag's. Until v0.2.5 every release saved a 2.2 GB Gradle cache under its own tag, keyed on `app/app.base.json`, so the next release always missed it. In v0.2.5 the Android Gradle step took 642 s with 131 of 996 tasks from cache, and the release was public 13 min 33 s after the tag; the daemon archives had been ready after 2 min 38 s.
+GitHub scopes a cache to the ref that saved it: a tag run can read `main`'s caches, but no later run can read a tag's. Until v0.2.5 every release saved a 2.2 GB Gradle cache under its own tag, keyed on the app's version file, so the next release always missed it. In v0.2.5 the Android Gradle step took 642 s with 131 of 996 tasks from cache, and the release was public 13 min 33 s after the tag; the daemon archives had been ready after 2 min 38 s.
 
-Now [`native-cache.yml`](../.github/workflows/native-cache.yml) is the only writer of the Android caches. On `main` it runs the release APK build with debug signing and no secrets whenever the dependencies, the Android plugins, the terminal module or the Ghostty scripts change, every five days so the entries are not evicted, and on dispatch. It saves the Gradle home (keyed on dependencies, not the app version), the verified arm64 Ghostty output, and the pinned Zig and Ghostty source. CI and the release only restore them, through the shared [`android-native`](../.github/actions/android-native/action.yml) action, so their cache keys cannot drift. v0.2.6 was the first release on this setup. Its desktop archives were public 3 min 26 s after the run started, and the APK was attached at 8 min 13 s. The Gradle step took 331 s, with 386 of 996 tasks from the restored cache. The rest is mostly CMake, which Gradle cannot cache, plus the app module, which changes with every release. `build-libghostty.sh` and `build-libghostty-ios.sh` bootstrap the pinned Zig themselves through `scripts/lib/zig.sh`, so no workflow installs Zig.
+Now [`native-cache.yml`](../.github/workflows/native-cache.yml) is the only writer of the Android caches. On `main` it runs the client's release APK build with debug signing and no secrets whenever its Gradle files, the terminal bridge, `native/terminal-vt` or the Ghostty scripts change, every five days so the entries are not evicted, and on dispatch. It saves the Gradle home (keyed on dependencies, not the app version), the verified arm64 Ghostty output, and the pinned Zig and Ghostty source. CI and the release only restore them, through the shared [`android-native`](../.github/actions/android-native/action.yml) action, so their cache keys cannot drift. v0.2.6 was the first release on this setup. Its desktop archives were public 3 min 26 s after the run started, and the APK was attached at 8 min 13 s. The Gradle step took 331 s, with 386 of 996 tasks from the restored cache. The rest is mostly CMake, which Gradle cannot cache, plus the app module, which changes with every release. `build-libghostty.sh` and `build-libghostty-ios.sh` bootstrap the pinned Zig themselves through `scripts/lib/zig.sh`, so no workflow installs Zig.
 
-The same action installs a pinned ccache and points CMake at it through `CMAKE_C_COMPILER_LAUNCHER`/`CMAKE_CXX_COMPILER_LAUNCHER`, so the React Native, codegen and native-module C++ objects come from the warmer's cache. The NDK is reinstalled on every runner, so ccache checks the compiler by content. The warmer, CI and the release each print `ccache --show-stats` after the build.
+The same action installs a pinned ccache and points CMake at it through `CMAKE_C_COMPILER_LAUNCHER`/`CMAKE_CXX_COMPILER_LAUNCHER`, so the terminal bridge's C++ objects come from the warmer's cache. The NDK is reinstalled on every runner, so ccache checks the compiler by content. The warmer, CI and the release each print `ccache --show-stats` after the build.
 
-`native-cache.yml` also has an `xcode-27` job that is the only writer of the iOS caches in the shared [`ios-native`](../.github/actions/ios-native/action.yml) action: the verified iOS Ghostty XCFramework, the pinned Zig and the signed Ghostty release tarballs, and the CocoaPods download cache (it runs an unsigned prebuild and `pod install`, no secrets). `ios-release.yml` and the tag-time `ios-native` CI job only restore them. Before this, the iOS release saved those caches under the tag and rebuilt the XCFramework (about 4 minutes) on every release. Xcode DerivedData remains uncached because signed, identity-sensitive intermediates are large and the observed evidence does not justify that risk and complexity.
+`native-cache.yml` also has an `xcode-27` job that is the only writer of the iOS caches in the shared [`ios-native`](../.github/actions/ios-native/action.yml) action: the verified iOS Ghostty XCFramework, the pinned Zig and the signed Ghostty release tarballs (no secrets). `ios-release.yml` and `client.yml` only restore them. Before this, the iOS release saved those caches under the tag and rebuilt the XCFramework (about 4 minutes) on every release. Xcode DerivedData remains uncached because signed, identity-sensitive intermediates are large and the observed evidence does not justify that risk and complexity.
 
 The iOS Ghostty build carries one workaround for an Xcode and Zig mismatch: Xcode's macOS SDK lists `libSystem` as arm64e only while Zig wants an exact arm64 match, so `scripts/build-libghostty-ios.sh` builds against a patched SDK clone and `scripts/zig-xcode-compat/xcrun` points Zig at it. (There used to be a second one, a patch to Zig 0.15.2's bundled libcxx for an undeclared `INFINITY` under the Xcode 27 SDK. Zig 0.17.0, which the pinned libghostty-vt release requires, builds libcxx against that SDK unpatched, so the patch, the private Zig lib dir and the `zig_lib_patches` manifest field are gone.) A separate `xcode-27` job in `native-cache.yml` (so that a red result never blocks the iOS cache refresh) runs [`scripts/check-zig-xcode-compat.sh`](../scripts/check-zig-xcode-compat.sh), which reads the SDK's libSystem stub. It passes while the workaround is still needed and fails, naming what to delete, once it is not. The job runs every five days, so the workaround cannot outlive its reason unnoticed.
 
-The generated viewer bundles (`app/components/markdown/mermaidRuntimeSource.js`, `app/components/screen/screenViewerSource.js` and `screenViewerRuntime.js`, about 4 MB) stay in the repository because the app's Metro bundle imports them. The `App` job in `ci.yml` runs `bun run mermaid:generate --check` and `bun run screen:generate --check`, which fail when a bundle no longer matches what its pinned dependency regenerates.
+The generated Screen viewer bundle (`client/ui/more/screen/viewerSource.ts`, noVNC 1.7.0 pinned in the root `package.json`) stays in the repository because the app's WebView loads no remote scripts. The `client` job in `ci.yml` runs `bun client/ui/more/screen/runtime/generate.mjs --check`, which fails when the bundle no longer matches what the pinned noVNC regenerates.
 
 Watch:
 
@@ -298,7 +313,8 @@ Daemon archives contain `mewla` (`mewla.exe` in the Windows zip), `LICENSE`, `NO
 | `scripts/prepare-release.py` | Validate the current annotated release and write the explicit newer identity, canonical notes, and changelog entry |
 | `scripts/materialize-android-keystore.sh` | Base64 → temp keystore file (0600); prints path only |
 | `scripts/verify-apk-release.sh` | Package/version/ABI/notice/certificate checks |
-| `scripts/android-release-apk.sh` | Clean prebuild + signed assembleRelease; `--aab` builds the play-store bundle |
+| `scripts/lib/release_identity.py` | The version (`client/ui/nsh.json`) and the build numbers derived from it |
+| `scripts/android-release-apk.sh` | The client's signed GitHub APK (`assembleProductionRelease`); `--aab` builds the Play bundle (`bundleProductionRelease -Pmewla.channel=play`) |
 | `scripts/verify-aab-play.py` | Play AAB manifest/channel/16 KB/ABI/notice/certificate checks |
 | `scripts/google-play-upload.py` | Play Developer API upload to a testing track (`--dry-run`, `--validate-only`) |
 | `scripts/stage-release.sh` | Deterministic stage tree |
@@ -308,7 +324,7 @@ Daemon archives contain `mewla` (`mewla.exe` in the Windows zip), `LICENSE`, `NO
 ## Safety
 
 - Secrets never appear in docs, commits, or intentional log lines.
-- The updater accepts one public release stream, including prereleases by semantic-version precedence; it has no channel setting.
+- The updater, both installers and the app follow GitHub's `releases/latest` (the newest non-prerelease release); there is no channel setting.
 - The detached Ed25519 signature authenticates manifest version, platform mapping, archive size, and SHA-256 before download installation.
 - CI does not read developer home directories (including `~/.mewla/release-keys`).
 - `Release reviewed version` can change `main` and create a tag only in one atomic push after all preparation gates pass and only while `origin/main` still equals its starting SHA.

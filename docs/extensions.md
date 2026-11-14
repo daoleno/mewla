@@ -26,7 +26,9 @@ then the result. It adds nothing while you wait. After a connect it offers
 page.
 
 From the web UI, the service returns your browser tab to the web UI's own
-Extensions page. From the phone app it returns to the app.
+Extensions page. From the phone app it returns to the app. A sign-in that comes
+back after Mewla restarted, or a second time, lands on Extensions saying it
+expired: tap the service's **Connect** to start again.
 
 If a sign-in comes back without connecting, the card names the step that
 failed: the service didn't complete sign-in, didn't accept it, its tools
@@ -75,15 +77,15 @@ Mewla's own app registration with the provider:
 | --- | --- | --- |
 | Linear | Official browser sign-in | Returns to the web UI's Extensions page |
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
-| Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
-| Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
+| Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://localhost` or `http://127.0.0.1`), and returns to its Extensions page |
+| Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://localhost` or `http://127.0.0.1`), and returns to its Extensions page |
 | Tailscale | One tap: Mewla opens the Tailscale admin console in your signed-in Chrome on the computer and creates an OAuth client named Mewla there, then keeps its ID and secret in the computer's vault. If Chrome isn't ready or isn't signed in to Tailscale, Extensions opens the console's Trust credentials page and you paste the client secret | Same flow; the paste field is on the Extensions page |
 | AWS | Local AWS CLI profiles. Sign in remotely and paste the code; Mewla maintains the official CLI automatically | Phone and web manage the same profiles on the current computer |
 | Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; automatic Linux and macOS SDK updates |
 | Google Workspace | Gmail, Calendar and Drive through Google's own `gws` CLI. Connect asks once for a Google client (below), then signs in with Google; paste the address the browser ends on | One account, shared with the CLI; Mewla installs a checksum-pinned `gws` in one tap |
 | Remote MCP | The service's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
-| Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address. On this computer (`http://127.0.0.1`) that page sends the browser straight back to Extensions. From any other web address it shows an address instead: copy it, paste it into the sign-in card in Mewla and choose **Continue** |
+| Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address. On this computer (`http://localhost` or `http://127.0.0.1`) that page sends the browser straight back to Extensions. From any other web address it shows an address instead: copy it, paste it into the sign-in card in Mewla and choose **Continue** |
 | Hyperliquid | No sign-in and no setup to read; one API wallet key you paste to let Brain trade | Works everywhere; the key field is on the service's page |
 
 Why Slack's return is not forwarded to every web address: the page at

@@ -338,7 +338,7 @@ func TestPrintPairing(t *testing.T) {
 
 	rendered := output.String()
 	for _, want := range []string{
-		"Phone — in Mewla, Settings → Pair a computer, scan:",
+		"Phone — in Mewla, tap the cat, then Pair a computer, and scan:",
 		"or paste:  mewla://settings?p=compact-payload",
 		"Address:   https://mewla.example.com",
 		"Browser on this computer:  http://127.0.0.1:9876/#pair=x",
@@ -462,6 +462,41 @@ func TestDaemonConfigLANModeAndAddrConflict(t *testing.T) {
 	}
 	if _, err := parseDaemonConfig([]string{"-addr", "192.168.1.42:9876", "--lan"}, io.Discard); err == nil || !strings.Contains(err.Error(), "cannot be used together") {
 		t.Fatalf("expected order-independent --lan/-addr conflict, got %v", err)
+	}
+}
+
+// A loopback daemon also listens on this computer's private addresses (Wi-Fi,
+// LAN, Tailscale) over TLS; -loopback-only keeps it on this computer, and is
+// refused where it cannot be true.
+func TestLoopbackOnlyOpensNoPrivateListener(t *testing.T) {
+	for _, tc := range []struct {
+		args     []string
+		port     int
+		listens  bool
+		rejected string
+	}{
+		{args: nil, port: 9876, listens: true},
+		{args: []string{"-addr", "127.0.0.1:9961"}, port: 9961, listens: true},
+		{args: []string{"-addr", "127.0.0.1:9961", "-loopback-only"}},
+		{args: []string{"-loopback-only", "-addr", "localhost:9961"}},
+		{args: []string{"--lan"}},
+		{args: []string{"-addr", "192.168.1.42:9876"}},
+		{args: []string{"--lan", "-loopback-only"}, rejected: "cannot be used together"},
+		{args: []string{"-addr", "192.168.1.42:9876", "-loopback-only"}, rejected: "needs a loopback -addr"},
+	} {
+		cfg, err := parseDaemonConfig(tc.args, io.Discard)
+		if tc.rejected != "" {
+			if err == nil || !strings.Contains(err.Error(), tc.rejected) {
+				t.Fatalf("%q: err = %v, want %q", tc.args, err, tc.rejected)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%q: %v", tc.args, err)
+		}
+		if port, listens := privateListenerPort(cfg); listens != tc.listens || port != tc.port {
+			t.Fatalf("%q: private listeners on %d = %v, want %d = %v", tc.args, port, listens, tc.port, tc.listens)
+		}
 	}
 }
 
@@ -961,7 +996,7 @@ func TestFirstDeviceStartupPrintsQRAndLink(t *testing.T) {
 		"Pair your phone",
 		"█",
 		"Mewla already running? Scan its code",
-		"Settings → Pair a computer",
+		"tap the cat, then Pair a computer",
 		"Phone connects to mewla.example.",
 		"Browser on this computer\n  http://127.0.0.1:9876/p/",
 		"mewla pair --details",

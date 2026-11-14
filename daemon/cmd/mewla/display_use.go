@@ -35,7 +35,7 @@ type displayInput struct {
 	DY      int      `json:"dy,omitempty" jsonschema:"for scroll: vertical notches, positive down"`
 }
 
-// displayOn is whether agents on this computer have displays: the Labs switch
+// displayOn is whether agents on this computer have displays: the Virtual screen switch
 // is on and Xvnc is installed.
 func (a *controlApp) displayOn() bool {
 	return a.displays != nil && a.browsers != nil && a.browsers.VirtualScreen() && vdisplay.Capability() == nil

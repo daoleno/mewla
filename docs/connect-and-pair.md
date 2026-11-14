@@ -362,7 +362,9 @@ refused, and only the routes a paired phone signs for are served there: not
 pairing, join requests or the web UI. Mewla follows the addresses as networks
 come and go. Each time the phone connects, the computer tells it the addresses
 it is listening on, and the phone remembers them. `mewla --lan` is still how you
-open plain HTTP, pairing and the web UI to your network.
+open plain HTTP, pairing and the web UI to your network. `mewla -loopback-only`
+keeps a computer to loopback alone: no listeners on its private addresses, so
+only this computer and the relay reach it.
 
 The phone tries them while it also measures the relay. It uses a direct address
 only after two proofs: the TLS connection to it is pinned to the computer's key

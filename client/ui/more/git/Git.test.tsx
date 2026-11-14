@@ -35,7 +35,7 @@ const COMMITS = [
  * A computer with one repository: `files` is its status, changed by the Git
  * requests the page sends. Every request is recorded.
  */
-function repository(initial: File[]) {
+function repository(initial: File[], sync: { ahead?: number; behind?: number } = {}) {
   let files = initial.map((f) => ({ ...f }));
   let discarded: File | null = null;
   let reads = 0;
@@ -54,8 +54,8 @@ function repository(initial: File[]) {
             repo_name: "repo",
             branch: "main",
             upstream: "origin/main",
-            ahead: 0,
-            behind: 0,
+            ahead: sync.ahead ?? 0,
+            behind: sync.behind ?? 0,
             has_commits: true,
             clean: files.length === 0,
             file_count: files.length,
@@ -130,15 +130,17 @@ const notes_md: File = { path: "notes.md", status: "untracked", staged: false, u
 const done_ts: File = { path: "done.ts", status: "modified", staged: true, unstaged: false, untracked: false, staged_additions: 2 };
 
 describe("Git review", () => {
-  test("groups the changes into Staged and Changes with their counts, and reads the status once with one fetch", async () => {
+  test("groups the changes into Staged and Not staged with their counts, and reads the status once with one fetch", async () => {
     const repo = repository([done_ts, app_ts, notes_md]);
     const app = await open(HARNESS, repo.options);
     await app.waitFor("id:git-group-changes");
-    expect(app.texts()).toContain("Staged · 1");
-    expect(app.texts()).toContain("Changes · 2");
+    expect(app.shows("label:Staged, 1 file")).toBe(true);
+    expect(app.shows("label:Not staged, 2 files")).toBe(true);
     expect(app.shows("id:git-row-staged:done.ts")).toBe(true);
     expect(app.shows("id:git-row-changes:app.ts")).toBe(true);
     expect(app.shows("id:git-row-changes:notes.md")).toBe(true);
+    // Each file leads with its status tile (SPEC §10.4: its mark in its colour on its wash).
+    expect(app.count("id:git-status-tile")).toBe(3);
     expect(app.texts()).toContain("Commit 1 file");
     await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_diff_status").length === 2);
     expect(repo.asked.find((r) => r.type === "git_diff_status")?.body).toEqual({ target_id: "w1", cwd: "/repo" });
@@ -148,21 +150,59 @@ describe("Git review", () => {
     expect(repo.asked.filter((r) => r.type === "git_diff_status")).toHaveLength(2);
   });
 
+  test("the page is the repository's (owner 11-13): its name the title, Changes said once, by the switch; ⋯ alone in the header; a pull is a pill with its arrow and count", async () => {
+    const repo = repository([app_ts], { behind: 1 });
+    const app = await open(HARNESS, repo.options);
+    await app.waitFor("id:git-row-changes:app.ts");
+    expect(app.texts()).toContain("repo");
+    expect(app.texts().filter((t) => t === "Changes")).toHaveLength(1);
+    expect(app.count("id:git-more")).toBe(1);
+    expect(app.count("id:git-search") + app.count("id:git-tree") + app.count("id:git-toggle-changes:app.ts")).toBe(0);
+    expect(app.shows("label:Pull 1 commit")).toBe(true);
+    await app.press("id:git-sync");
+    await app.waitUntil(() => repo.asked.some((r) => r.type.endsWith("pull")));
+  });
+
+  test("pushed on a phone (owner 11-13, shot 09): the capsule is Back and ⋯ side by side while the repository's title shows, and takes the name once it has scrolled under", async () => {
+    const repo = repository([app_ts, notes_md, done_ts, ...Array.from({ length: 20 }, (_, i) => ({ ...app_ts, path: `src/f${i}.ts` }))]);
+    const app = await open(HARNESS, { platform: "android", host: { params: { page: PAGE, below: { name: "stats" }, pageStack: true }, handlers: repo.options.host.handlers } });
+    await app.waitFor("id:git-row-changes:app.ts");
+    await app.waitFor("id:capsule-collapsed");
+    expect(app.shows("id:page-back")).toBe(true);
+    expect(app.shows("id:git-more")).toBe(true);
+    expect(app.shows("id:page-title")).toBe(false);
+    await app.scroll("id:git-list", 400);
+    await app.waitFor("id:page-title");
+    expect(app.texts().filter((t) => t === "repo").length).toBeGreaterThan(0);
+  });
+
+  test("in step with its upstream and clean: no sync pill, and the clean state has no button (Browse files is in ⋯)", async () => {
+    const repo = repository([]);
+    const app = await open(HARNESS, repo.options);
+    await app.waitFor("id:git-clean");
+    expect(app.shows("id:git-sync")).toBe(false);
+    expect(app.shows("text:Browse files")).toBe(false);
+    expect(app.shows("id:git-branch")).toBe(true);
+  });
+
   test("staging a file sends its path and reads the status again", async () => {
     const repo = repository([app_ts, notes_md]);
     const app = await open(HARNESS, repo.options);
-    await app.waitFor("id:git-toggle-changes:app.ts");
+    await app.waitFor("id:git-row-changes:app.ts");
     const before = repo.asked.filter((r) => r.type === "git_diff_status").length;
-    await app.press("id:git-toggle-changes:app.ts");
+    // A row's long press stages it (the row carries no toggle; its diff has Stage too).
+    app.onDialog((dialog) => (dialog.sheet ? "Stage" : null));
+    await answering(app, () => app.longPress("id:git-row-changes:app.ts"), 1);
     await app.waitFor("id:git-row-staged:app.ts");
     const stage = repo.asked.find((r) => r.type === "git_stage");
     expect(stage?.body).toEqual({ target_id: "w1", cwd: "/repo", repo_root: "/repo", paths: ["app.ts"] });
     expect(repo.asked.filter((r) => r.type === "git_diff_status").length).toBeGreaterThan(before);
-    expect(app.texts()).toContain("Staged · 1");
-    expect(app.texts()).toContain("Changes · 1");
+    expect(app.shows("label:Staged, 1 file")).toBe(true);
+    expect(app.shows("label:Not staged, 1 file")).toBe(true);
 
-    // The group's button stages the rest.
-    await app.press("id:git-bulk-changes");
+    // ⋯ stages the rest.
+    app.onDialog((dialog) => (dialog.sheet ? "Stage all" : null));
+    await answering(app, () => app.press("id:git-more"), 1);
     await app.waitFor("id:git-row-staged:notes.md");
     expect(repo.asked.filter((r) => r.type === "git_stage").at(-1)?.body.paths).toEqual(["notes.md"]);
   });
@@ -212,7 +252,7 @@ describe("Git review", () => {
     expect(repo.asked.find((r) => r.type === "git_commit")?.body).toEqual({ target_id: "w1", cwd: "/repo", repo_root: "/repo", message: "Tidy the parser" });
     expect(repo.asked.some((r) => r.type === "git_push")).toBe(false);
     await app.waitUntil(() => !app.shows("id:git-group-staged"));
-    expect(app.texts()).toContain("Changes · 1");
+    expect(app.shows("label:Not staged, 1 file")).toBe(true);
   });
 
   test("a row opens its diff in the reader, and the hunk actions stage what is chosen", async () => {
@@ -241,6 +281,34 @@ describe("Git review", () => {
     // The next file is the untracked one.
     await app.press("id:git-diff-next");
     await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_diff_patch").at(-1)?.body.path === "notes.md");
+  });
+
+  test("Changes and History follow the finger on a phone (owner 11-13 20:05): a swipe turns the page, a short one goes back, a vertical one scrolls, a tap still chooses", async () => {
+    const repo = repository([app_ts, notes_md]);
+    const app = await open(HARNESS, { platform: "android", host: { params: { page: PAGE, below: { name: "stats" }, pageStack: true }, handlers: repo.options.host.handlers } });
+    await app.waitFor("id:git-commit-bar");
+    const logs = () => repo.asked.filter((r) => r.type === "git_log").length;
+    // Up and down is the list's: no page turns and History is not made.
+    await app.drag("id:git-pages-changes", { y: -200 });
+    await app.wait(300);
+    expect(logs()).toBe(0);
+    expect(app.shows("id:git-commit-bar")).toBe(true);
+    // A short swipe makes History (it loads) but settles back on Changes.
+    await app.drag("id:git-pages-changes", { x: -80 });
+    await app.waitUntil(() => logs() === 1);
+    await app.wait(500);
+    expect(app.shows("id:git-commit-bar")).toBe(true);
+    // Past half the page: History, and the switch's shape follows.
+    await app.drag("id:git-pages-changes", { x: -260 });
+    await app.waitUntil(() => !app.shows("id:git-commit-bar"));
+    await app.waitFor("text:Add the parser");
+    expect(app.shows("id:git-tab-marker")).toBe(true);
+    // Back by swipe, then by tap.
+    await app.drag("id:git-pages-history", { x: 260 });
+    await app.waitFor("id:git-commit-bar");
+    await app.press("id:git-tab-history");
+    await app.waitUntil(() => !app.shows("id:git-commit-bar"));
+    expect(logs()).toBe(1);
   });
 
   test("History lists the commits and a commit opens with its files and their diff", async () => {
@@ -352,10 +420,10 @@ describe("Git review: the reader", () => {
   test("Ask the agent sends the comment about the file, then about a hunk's lines, to the Session's chat", async () => {
     const { app } = await openReview([app_ts], { workers: [AGENT] });
     await openDiffOf(app, "changes:app.ts");
-    await app.waitFor("label:Ask the agent about this file");
-    await app.press("label:Ask the agent about this file");
+    await app.waitFor("label:Ask Claude Code about this file");
+    await app.press("label:Ask Claude Code about this file");
     await app.waitFor("id:ask-sheet");
-    expect(app.texts()).toContain("Ask the agent");
+    expect(app.texts()).toContain("Ask Claude Code");
     expect(app.enabled("id:ask-send")).toBe(false);
     await app.type("id:ask-comment", "Rename b");
     await app.press("id:ask-send");
@@ -365,8 +433,8 @@ describe("Git review: the reader", () => {
     expect(sent()[0]).toMatchObject({ workerId: "w1", text: "In the working-tree diff, app.ts:\n\nRename b" });
 
     await app.press("id:git-hunk-next");
-    await app.waitFor("label:Ask the agent about this hunk");
-    await app.press("label:Ask the agent about this hunk");
+    await app.waitFor("label:Ask Claude Code about this hunk");
+    await app.press("label:Ask Claude Code about this hunk");
     await app.waitFor("id:ask-where");
     // The hunk's lines on the new side, quoted as the old sheet did (its first three).
     expect(app.texts()).toContain("app.ts:1-3");
@@ -414,8 +482,9 @@ describe("Git review: the list", () => {
 
   test("back closes an open filter before it leaves the review", async () => {
     const { app } = await openReview([app_ts, notes_md]);
-    await app.waitFor("id:git-search");
-    await app.press("id:git-search");
+    await app.waitFor("id:git-more");
+    app.onDialog((dialog) => (dialog.sheet ? "Filter files" : null));
+    await answering(app, () => app.press("id:git-more"), 1);
     await app.waitFor("id:git-query");
     await app.type("id:git-query", "notes");
     await app.waitFor("id:git-row-changes:app.ts", { state: "gone" });
@@ -431,14 +500,28 @@ describe("Git review: the list", () => {
     expect(app.texts()).toContain("Commit 1 file");
   });
 
-  test("on a wide screen the reader sits beside the list, and says No file selected until one is", async () => {
-    const { app } = await openReview([app_ts, notes_md], { width: 1024 });
+  test("with a right pane of 880 or more (a 1280 window with the default pane) the reader sits beside the list, and says No file selected until one is", async () => {
+    const { repo, app } = await openReview([app_ts, notes_md], { width: 1280 });
     await app.waitFor("id:git-no-file");
     expect(app.texts()).toContain("No file selected");
     await app.press("id:git-row-changes:app.ts");
     await app.waitFor("id:git-diff-view");
     expect(app.shows("id:git-diff-page")).toBe(false);
     expect(app.shows("id:git-list")).toBe(true);
+    // Another row opens its own file in the reader (the reader is made again for each choice from the list).
+    expect(app.count("text:app.ts")).toBe(2);
+    await app.press("id:git-row-changes:notes.md");
+    await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_diff_patch").at(-1)?.body.path === "notes.md");
+    await app.waitUntil(() => app.count("text:notes.md") === 2 && app.count("text:app.ts") === 1);
+  });
+
+  test("below 880 (a 1024 window: 704 beside the pane) the diff pushes, as on a phone; the split follows the width live", async () => {
+    const { app } = await openReview([app_ts, notes_md], { width: 1280 });
+    await app.waitFor("id:git-no-file");
+    await app.setViewport(1024, 800);
+    await app.waitFor("id:git-reader", { state: "gone" });
+    await app.press("id:git-row-changes:app.ts");
+    await app.waitFor("id:git-diff-page");
   });
 
   test("the branch sheet is titled, shows each branch's sync and remote, and offers Create only for a name Git takes", async () => {
@@ -475,6 +558,29 @@ describe("Git review: the repository's files", () => {
     const before = repo.asked.filter((r) => r.type === "git_repo_file_content").length;
     await app.press("id:git-file-refresh");
     await app.waitUntil(() => repo.asked.filter((r) => r.type === "git_repo_file_content").length === before + 1);
+  });
+});
+
+describe("Git review on wide (SPEC §14.2)", () => {
+  test("Git ⋯ is a popover at its button, Undo last discard in place but disabled; Browse files opens a file beside the tree", async () => {
+    const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }], { width: 1280 });
+    await app.waitFor("id:git-row-changes:app.ts");
+    await app.press("id:git-more");
+    await app.waitFor("id:git-menu-popover");
+    expect(app.enabled("id:menu-item-undo")).toBe(false);
+    expect(app.dialogs().length).toBe(0);
+    await app.press("id:menu-item-browse");
+    await app.waitFor("id:git-files-tree");
+    await app.waitFor("id:git-files-no-file");
+    await app.press("id:git-file-app.ts");
+    await app.waitFor("id:git-file-view");
+    expect(app.shows("id:git-files-tree")).toBe(true);
+    expect(app.shows("id:git-file-page")).toBe(false);
+    // Narrower than 880 beside the pane, a file pushes its own page again.
+    await app.setViewport(1024, 800);
+    await app.waitFor("id:git-file-reader", { state: "gone" });
+    await app.press("id:git-file-app.ts");
+    await app.waitFor("id:git-file-page");
   });
 });
 

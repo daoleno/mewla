@@ -9,31 +9,28 @@ Mewla deliberately uses two different Apple artifacts because CI validation and 
 | iOS signed Preview | pushed annotated `vX.Y.Z` or `vX.Y.Z-beta.N` tag, or manual `workflow_dispatch` with `app_identity=preview` | `app-store-connect-preview` environment | `Mewla` / `com.daoleno.mewla.preview` App Store Connect IPA | Automatic TestFlight path plus explicit manual recovery/testing |
 | Android release | the same release tag push; manual reviewed recovery/build | Android release keystore | arm64 signed APK | Direct sideload and automated GitHub Release attachment |
 
-An unsigned Simulator `.app` is the correct CI product: it proves Expo prebuild, CocoaPods, Swift/Objective-C++, the Ghostty XCFramework, and the final app link without granting CI access to Apple signing credentials. It only runs in a compatible Simulator.
+A Simulator `.app` is the correct CI product: it proves the xcodegen project, Swift/C++, the Ghostty XCFramework, and the final app link without granting CI access to Apple signing credentials. It only runs in a compatible Simulator.
 
 An iPhone build must be signed and provisioned. App Store distribution IPAs are delivered through App Store Connect and TestFlight; attaching one to a GitHub Release would suggest it can be installed like the Android APK, which is not true. The signed workflow stores the verified IPA briefly as a GitHub Actions workflow artifact for diagnostics, but it never attaches the IPA to a GitHub Release.
 
 ## Unsigned macOS CI
 
-The `ios-native` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on the Apple Silicon `xcode-27` image (Xcode 27.1 by default). Ordinary `push` to `main` and pull requests run only fast Linux checks and do not allocate a macOS runner; this job runs on a release tag push or a manual `ci.yml` dispatch. It:
+The `ios` job in [`.github/workflows/client.yml`](../.github/workflows/client.yml) runs on the Apple Silicon `xcode-27` image on a push to `main` that touches `client/` and on manual dispatch. It:
 
-1. installs the locked Bun workspace;
-2. validates the shared Android/iOS native contract;
-3. restores, or builds when the cache misses, and verifies the pinned `libs/ios/GhosttyVt.xcframework` device and Simulator slices through the shared `ios-native` action, whose caches only `native-cache.yml` on `main` saves;
-4. runs a clean Expo iOS prebuild and `pod install`;
-5. runs `xcodebuild` for a generic iOS Simulator with `CODE_SIGNING_ALLOWED=NO`;
-6. verifies the `.app` bundle identifier and Mach-O executable;
-7. uploads the unsigned Simulator `.app` as a seven-day workflow artifact.
+1. validates the shared Android/iOS native contract, then restores, or builds when the cache misses, and verifies the pinned `native/terminal-vt/libs/ios/GhosttyVt.xcframework` device and Simulator slices through the shared `ios-native` action, whose caches only `native-cache.yml` on `main` saves;
+2. installs NSH and its iOS framework and generates the Xcode project with xcodegen;
+3. runs the unit tests (the Expo app's Keychain and AsyncStorage upgrade, the terminal) on a Simulator, ad hoc signed;
+4. builds the Release app, installs and launches it on the Simulator, and uploads a first-run screenshot.
 
-This job contains no Apple credentials. The Linux `app` job keeps unit tests, typecheck and the Android and iOS JS exports on every push; none of them is a substitute for this macOS compile/link job.
+This job contains no Apple credentials. The Linux `client` job of `ci.yml` keeps core tests, `nsh check` and `nsh test` on every push; none of them is a substitute for this macOS compile/link job.
 
-Because ordinary pushes no longer compile iOS, an iOS compile break is caught at release time by the signed archive in [`ios-release.yml`](../.github/workflows/ios-release.yml), which runs on every release before any IPA is exported or uploaded, and earlier by this unsigned job on a manual `ci.yml` dispatch or a maintainer-pushed release tag.
+Because pushes to `main` do not compile iOS, an iOS compile break that skipped a pull request is caught at release time by the signed archive in [`ios-release.yml`](../.github/workflows/ios-release.yml), which runs on every release before any IPA is exported or uploaded.
 
 The optional [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow uses the same canonical iOS build script and artifact layout only when manually requested. Its redundant release tag trigger was removed; release workflows build and verify the required native outputs themselves.
 
 ## Signed release and TestFlight
 
-The [`.github/workflows/ios-release.yml`](../.github/workflows/ios-release.yml) workflow starts directly from a pushed stable or beta tag. Before Apple credentials are used, it checks out the immutable tag, requires strict `vX.Y.Z` or `vX.Y.Z-beta.N` syntax and an annotated tag object, proves the tag version equals the tracked Expo version, proves the tag resolves to checked-out HEAD, proves that commit is already on `origin/main`, and runs the tracked identity checks. It derives `CFBundleVersion` from the separate reviewed `app/ios-build.json`, selects only Preview and TestFlight, and enters the protected `app-store-connect-preview` Environment. The uploader helper is checked out separately at the immutable workflow revision so manual recovery of an older app ref still receives reviewed idempotency behavior. An automatic event can never select Production. The workflow has `contents: read` and creates no tag or release.
+The [`.github/workflows/ios-release.yml`](../.github/workflows/ios-release.yml) workflow starts directly from a pushed stable or beta tag. Before Apple credentials are used, it checks out the immutable tag, requires strict `vX.Y.Z` or `vX.Y.Z-beta.N` syntax and an annotated tag object, proves the tag version equals the tracked version (`client/ui/nsh.json`), proves the tag resolves to checked-out HEAD, proves that commit is already on `origin/main`, and runs the tracked identity checks. It derives `CFBundleVersion` from that version (`scripts/lib/release_identity.py`), selects only Preview and TestFlight, and enters the protected `app-store-connect-preview` Environment. The uploader helper is checked out separately at the immutable workflow revision so manual recovery of an older app ref still receives reviewed idempotency behavior. An automatic event can never select Production. The workflow has `contents: read` and creates no tag or release.
 
 Manual dispatch remains available for both Preview and Production and for both `artifact-only` and `testflight` destinations. It selects either the existing `app-store-connect` production GitHub Environment or the isolated `app-store-connect-preview` Environment so repository maintainers can add required reviewers or deployment restrictions.
 
@@ -42,21 +39,21 @@ Required dispatch inputs:
 | Input | Meaning |
 | --- | --- |
 | `ref` | Explicit branch, tag, or full commit SHA to check out |
-| `build_number` | Manual-only positive `CFBundleVersion`, greater than the builds already uploaded for the selected app identity and marketing version; automatic Preview release runs use the reviewed `app/ios-build.json` value and do not accept a free-form value |
+| `build_number` | Optional manual positive `CFBundleVersion`, greater than the builds already uploaded for the selected app identity and marketing version; empty, and on automatic Preview release runs (which accept no free-form value), it is the number derived from the version |
 | `app_identity` | Closed choice: `production` (default) or `preview`; it atomically selects the iOS identity contract, including the bundle ID, artifact name, manifest identity, and protected GitHub Environment |
 | `destination` | `artifact-only` (default) or `testflight` |
 
-The identity mapping is defined in `app/iosIdentity.js`; the workflow does not accept a free-form display name or bundle ID. Unset local configuration and the workflow default both resolve to canonical production. Production and Preview both install with `CFBundleDisplayName` set to `Mewla`, while Preview keeps the distinct bundle ID `com.daoleno.mewla.preview`. Expo's top-level name deliberately remains `Mewla`, so Android's normal name/package and the generated `Mewla.xcworkspace`/`Mewla` scheme cannot change when selecting the iOS Preview identity.
+The app is the NSH client's iOS host: `client/scripts/fetch-nsh.sh --ios` installs the pinned NativeShell framework, `client/scripts/ios-project.sh` generates `client/ios/Mewla.xcodeproj` with xcodegen, and `xcodebuild` archives the `Mewla` scheme. The identities are the Expo app's, so the App Store and TestFlight builds replace those installs in place: production `com.daoleno.mewla` and Preview `com.daoleno.mewla.preview` (`scripts/lib/release_identity.py`), passed to `xcodebuild` as `MEWLA_APP_ID`, from which the extension (`<bundle>.live`) and App Group (`group.<bundle>`) follow. The workflow does not accept a free-form display name or bundle ID; the workflow default is canonical production, and both install as `Mewla`.
 
-The tracked general/Android version is `0.3.1`. iOS derives the App Store-valid numeric marketing version `0.3.1` from that value and writes it to both `CFBundleShortVersionString` and every generated Xcode `MARKETING_VERSION`. Its reviewed monotonic baseline is build `140` in `app/ios-build.json`, independent of Android `versionCode` because App Store Connect history can be ahead. Release preparation increments that integer above every build already uploaded for the same Apple app and marketing version before creating the next tag. The required positive manual `build_number` overrides it for recovery/testing and is written to both `CFBundleVersion` and every generated `CURRENT_PROJECT_VERSION`. IPA verification and the release manifest use the resolved packaged iOS value.
+The version is `client/ui/nsh.json` `version`. The marketing version is that version without `-beta.N`, and `CFBundleVersion` follows from it by the rule in [CI release](ci-release.md): `X·1 000 000 + Y·10 000 + Z·100 + 99` for `X.Y.Z`, `+ N` for `X.Y.Z-beta.N` (0.3.2 is build 30299), above every build the Expo app uploaded (140 at 0.3.1). `client/ios/project.yml` carries both values for local builds; release preparation moves them with the version, and the release passes them to `xcodebuild` as `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`, which apply to the app and its extension alike. A manual `build_number` overrides the build number for recovery/testing. IPA verification and the release manifest use the resolved packaged iOS value. Preview TestFlight runs also pass `MEWLA_IOS_DISTRIBUTION=testflight` (Info.plist `MewlaDistribution`, checked in the archive); every other build is `none`.
 
-The workflow fails before building if an input or required signing secret is absent. It also cross-checks that the resolved Expo name, display name, and bundle ID are from the same identity. After building the XCFramework and generated project, it imports signing material into a temporary keychain, validates the provisioning profile's team, selected bundle identifier, expiration, distribution entitlements, and TestFlight eligibility, archives the app, exports exactly one IPA, verifies its display name, bundle ID, marketing version, build number, and code signature, and uploads it with a SHA-256 file and source/build manifest as a 14-day workflow artifact.
+The workflow fails before building if an input or required signing secret is absent, including the extension's profile: the client always embeds the Live Activity / widget extension. After the XCFramework and generated project, it imports signing material into a temporary keychain, validates both provisioning profiles' team, bundle identifier (`<bundle>` and `<bundle>.live`), App Group, expiration, distribution entitlements, and TestFlight eligibility, archives the app with each target on its own profile (`MEWLA_APP_PROFILE`, `MEWLA_LIVE_PROFILE`), exports exactly one IPA, verifies its display name, bundle ID, marketing version, build number, and code signature, and uploads it with a SHA-256 file and source/build manifest as a 14-day workflow artifact.
 
 When `destination=testflight`, the workflow uploads that same IPA through Apple's official App Store Connect Build Upload API. It creates a build-upload reservation, uploads every Apple-specified byte range to its temporary URL with the returned headers, commits the IPA's streamed MD5 file checksum, and waits for the build upload to become `COMPLETE` or `FAILED`. Preview first looks up both the exact processed build and its marketing-version/build-number upload reservation; if either has completed, a rerun resumes post-processing instead of creating a duplicate upload. An ambiguous identity or an existing incomplete/failed reservation stops for recovery rather than risking another upload. It then waits for the build resource to become `VALID`, records that Mewla uses no non-exempt encryption, requires and attaches the exact public `Mewla Preview` beta group, and creates the Beta App Review submission only when the build does not already have one. Apple still controls review and tester availability; the workflow does not submit the app for App Review.
 
 If upload succeeds but a later App Store operation fails, the manual `iOS TestFlight post-process` workflow resumes the existing Preview build by marketing/build number without rebuilding or uploading a duplicate IPA. It reads the same `MEWLA_ASC_PREVIEW_APP_ID` variable as the signed release workflow; neither workflow may fall back to Production or the old Zen record when that Preview variable is missing. Both workflows reject missing or nonnumeric app IDs before using Apple credentials. An export-compliance HTTP 409 is accepted only after a fresh exact-build query proves that `usesNonExemptEncryption` already equals the required `false`; every other 409 remains fatal.
 
-The signed release job caches only checksum-pinned Zig/Ghostty sources, verified unsigned Ghostty XCFramework output, and CocoaPods download repositories. Keys include runner architecture, Xcode/CocoaPods toolchain, native lock, and relevant build inputs; verification still runs after every native-output restore. It intentionally does not cache Xcode DerivedData: signed archive intermediates are large and identity-sensitive, and safe invalidation would erase most benefit. Certificates, profiles, keychains, API keys, archives, and signed IPAs are never cached.
+The signed release job caches only checksum-pinned Zig/Ghostty sources and verified unsigned Ghostty XCFramework output. Keys include runner architecture, Xcode toolchain, native lock, and relevant build inputs; verification still runs after every native-output restore. It intentionally does not cache Xcode DerivedData: signed archive intermediates are large and identity-sensitive, and safe invalidation would erase most benefit. Certificates, profiles, keychains, API keys, archives, and signed IPAs are never cached.
 
 Authentication is intentionally limited to an **Individual API Key**. The workflow creates short-lived ES256 JWTs with `sub=user`, `aud=appstoreconnect-v1`, and no `iss` claim, as Apple requires for individual keys. It does not invoke `altool` and does not accept or pass an issuer ID. The presigned binary-upload URLs do not receive the JWT.
 
@@ -113,9 +110,9 @@ An invitation alone is not sufficient for CI: the exact role and Certificates, I
 
 ## Live Activity and widget extension
 
-The Dynamic Island, Lock Screen Live Activity and home-screen widgets are one WidgetKit extension, `MewlaLiveWidgets` (`app/targets/mewla-live`), embedded in the app. It is a second signed target, so it needs Apple-side identifiers the app alone did not. The release workflow builds it only when the repository variable `MEWLA_IOS_LIVE` is `1`, or for a single manual dispatch that sets the `live_extension` input (use it with `destination=artifact-only` to prove a signed IPA with the extension before turning the variable on); unsigned CI always builds it so it keeps compiling.
+The Dynamic Island, Lock Screen Live Activity and home-screen widgets are one WidgetKit extension, `MewlaLiveWidgets`, embedded in the app. It lives in `client/ios/LiveExtension` and is always built: every release archive has a second signed target and both targets are signed into the App Group, so every run needs the steps below for its identity.
 
-Every release so far ships the Preview identity (tag pushes always build `preview` under `app-store-connect-preview`); the Production Environment `app-store-connect` does not exist yet. So the Live Activity extension ships on the Preview identity, and the Production steps below are needed only if Production ever starts being used. Note that `MEWLA_IOS_LIVE` is one repository variable read by the whole job, not by a Production-only check: a Production dispatch with it set fails at the validation step with a named missing-secret error, while the Preview release path is the one it is built for.
+Every release so far ships the Preview identity (tag pushes always build `preview` under `app-store-connect-preview`); the Production Environment `app-store-connect` does not exist yet. So the steps below are needed for Production only if Production ever starts being used; a Production dispatch without them fails at the validation step with a named missing-secret error.
 
 Per identity (Preview shown; Production uses the same names without `.preview`), an authorized member of the owning team must:
 
@@ -124,15 +121,14 @@ Per identity (Preview shown; Production uses the same names without `.preview`),
 3. Enable **App Groups** on both `com.daoleno.mewla.preview` and `com.daoleno.mewla.preview.live`, assigning that group to each.
 4. **Regenerate** the existing App Store profile for `com.daoleno.mewla.preview` (it must now carry the App Group) and update `ZEN_APPLE_PROVISIONING_PROFILE_BASE64` in the Environment.
 5. Create an App Store distribution profile for `com.daoleno.mewla.preview.live` with the same distribution certificate, and store it base64-encoded as the Environment secret `ZEN_APPLE_LIVE_PROVISIONING_PROFILE_BASE64`.
-6. Set the repository variable `MEWLA_IOS_LIVE` to `1`.
 
-The workflow checks, before archiving, that the extension profile is for `<bundle>.live`, belongs to the team, is an App Store profile, is unexpired, and that **both** profiles contain the App Group. `scripts/set-ios-target-signing.js` then gives each target its own profile (a single command-line profile would be applied to the extension too), the export options list both, and `scripts/verify-ios-artifact.sh` checks the extension's identity, version, extension point and App Group entitlement.
+The workflow checks, before archiving, that the extension profile is for `<bundle>.live`, belongs to the team, is an App Store profile, is unexpired, and that **both** profiles contain the App Group. Each target then takes its own profile from a build setting (`client/ios/project.yml`: `PROVISIONING_PROFILE_SPECIFIER: $(MEWLA_APP_PROFILE)` on the app, `$(MEWLA_LIVE_PROFILE)` on the extension; a single command-line profile would be applied to the extension too), the export options list both, and `scripts/verify-ios-artifact.sh` checks the extension's identity, version, extension point and App Group entitlement.
 
 Live Activities need no portal capability of their own; `NSSupportsLiveActivities` is in the app's Info.plist. The APNs key stays in Expo: it carries the ordinary and silent pushes, but cannot send an ActivityKit (`liveactivity`) push, see `docs/notifications.md`.
 
 ## Local verification boundary
 
-Linux can validate configuration, YAML structure, JavaScript/TypeScript tests, shell syntax, native lock consistency, and Android/daemon compatibility. It cannot run Xcode, CocoaPods integration, `security`, `codesign`, archive export, or App Store Connect upload.
+Linux can validate configuration, YAML structure, JavaScript/TypeScript tests, shell syntax, native lock consistency, and Android/daemon compatibility. It cannot run Xcode, `security`, `codesign`, archive export, or App Store Connect upload.
 
 The uploader's offline unit tests generate a disposable P-256 key and use only mocked HTTP responses. They verify `sub=user`, absence of `iss`, a 64-byte raw ES256 `R || S` signature that OpenSSL accepts, Build Upload API request bodies, Apple-reserved upload headers, full byte-range coverage, and the MD5 file-checksum commit. The test makes `Path.read_bytes()` fail during the upload flow to enforce streamed checksum calculation. Tests never contact App Store Connect:
 
@@ -143,23 +139,22 @@ python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 Both identity resolutions can be checked on Linux without generating native projects:
 
 ```bash
-cd app
-bunx expo config --json | jq '{name, bundleIdentifier: .ios.bundleIdentifier, displayName: .ios.infoPlist.CFBundleDisplayName, marketingVersion: .ios.infoPlist.CFBundleShortVersionString}'
-MEWLA_IOS_APP_VARIANT=preview bunx expo config --json | jq '{name, bundleIdentifier: .ios.bundleIdentifier, displayName: .ios.infoPlist.CFBundleDisplayName, marketingVersion: .ios.infoPlist.CFBundleShortVersionString}'
+python3 scripts/lib/release_identity.py ios_bundle_id
+python3 scripts/lib/release_identity.py ios_preview_bundle_id
+python3 scripts/lib/release_identity.py marketing_version
+python3 scripts/lib/release_identity.py ios_build_number
 ```
 
 On a Mac, reproduce the unsigned portion with:
 
 ```bash
-bun install --frozen-lockfile
-bun run native:contract
-bun run native:build:ios
-cd app
-bunx expo prebuild --platform ios --clean --no-install
-cd ios
-pod install
+./scripts/verify-libghostty.sh --contract
+./scripts/build-libghostty-ios.sh
+client/scripts/fetch-nsh.sh --ios
+client/scripts/ios-project.sh
+cd client/ios
 xcodebuild \
-  -workspace Mewla.xcworkspace \
+  -project Mewla.xcodeproj \
   -scheme Mewla \
   -configuration Debug \
   -sdk iphonesimulator \
@@ -171,7 +166,7 @@ xcodebuild \
 
 Do not test release signing by copying production secrets into a pull-request workflow or a developer `.env.local` file.
 
-For the Live Activity extension, build with `MEWLA_IOS_LIVE=1` and sign ad hoc (`CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES`): Xcode then writes the Simulator's App Group entitlement into the Mach-O `__TEXT/__entitlements` section, which is where a Simulator build reads it. Do not add device entitlements (`aps-environment`, the App Group) to the host signature itself: macOS refuses to launch the app (`FBSOpenApplicationServiceErrorDomain` / POSIX 163). To confirm the entitlement, read the section out of the binary rather than trusting `codesign -d --entitlements`.
+For the Live Activity extension (always built by the client's project), sign ad hoc (`CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES`): Xcode then writes the Simulator's App Group entitlement into the Mach-O `__TEXT/__entitlements` section, which is where a Simulator build reads it. Do not add device entitlements (`aps-environment`, the App Group) to the host signature itself: macOS refuses to launch the app (`FBSOpenApplicationServiceErrorDomain` / POSIX 163). To confirm the entitlement, read the section out of the binary rather than trusting `codesign -d --entitlements`.
 
 ## Remaining release gates
 

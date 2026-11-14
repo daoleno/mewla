@@ -89,8 +89,8 @@ forgets its token at once. Tokens are kept in memory only, so a phone hears
 pushes again after a daemon restart once its app connects.
 
 A fork that signs its own build needs its own Expo project and Firebase app:
-set `EXPO_PROJECT_ID` in `client/core/push/registration.ts`, replace
-`app/google-services.json` with the file for your Android package, and upload
+change `EXPO_PROJECT_ID` in `client/core/push/registration.ts`, replace
+`client/android/app/google-services.json` with the file for your Android package, and upload
 your FCM V1 key to that Expo project. Without them a fork still works, just
 without remote push.
 

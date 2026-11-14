@@ -85,6 +85,8 @@ export class Chat {
     const message = this.state.pendingUserMessages.find((m) => m.id === rowId && m.lifecycle === "failed");
     if (!message) return;
     const { outbox, serverId, target } = this.options;
+    // A message the computer holds is never the phone's to send (a new Session's first): no retry makes it twice.
+    if (outbox.get(message.dispatchRequestId)?.state === "held") return;
     if (action === "discard") {
       outbox.discard(message.dispatchRequestId);
       this.rowByRequest.delete(message.dispatchRequestId);
@@ -96,6 +98,11 @@ export class Chat {
     this.rowByRequest.set(requestId, message.id);
     this.dispatch({ type: "begin_pending_user_message_attempt", id: message.id, requestId });
     outbox.enqueue({ id: requestId, serverId, workerId: target.targetId, conversationScopeKey: target.conversationScopeKey, text: message.sentText, attachments: sendAttachments(message.attachments) });
+  }
+
+  /** Reads the conversation again ("Try again" on a chat that did not load); a no-op while disconnected. */
+  reload(): void {
+    this.follow();
   }
 
   close(): void {
@@ -189,6 +196,11 @@ export class Chat {
     }
     const rowId = this.rowFor(entry.id);
     if (!rowId) return;
+    if (event.kind === "withdrawn") {
+      this.rowByRequest.delete(entry.id);
+      this.dispatch({ type: "withdraw_pending_user_message", id: rowId });
+      return;
+    }
     if (event.kind === "accepted") {
       this.dispatch({ type: "settle_pending_user_message", id: rowId, settlement: { kind: "acknowledge", requestId: entry.id } });
     } else if (event.kind === "uncertain") {

@@ -180,11 +180,6 @@ inner TLS, and full-origin handler:
 ```bash
 cd daemon
 go test -run TestOpaqueRelayConnectorHealthAndAdmissionReplay -v ./link
-
-# Also execute the real TS importConnection owner through an on-demand
-# loopback pinned-transport adapter, the same Relay/Connector, and daemon /pair.
-MEWLA_RELAY_MOBILE_E2E=1 \
-  go test -run TestOpaqueRelayConnectorHealthAndAdmissionReplay -v ./link
 ```
 
 It proves:

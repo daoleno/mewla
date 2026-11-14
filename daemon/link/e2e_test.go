@@ -17,12 +17,8 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -106,10 +102,6 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 	devicePublicKey := devicePrivateKey.Public().(ed25519.PublicKey)
 	deviceID := "e2e-phone"
 	deviceName := "E2E Phone"
-	if os.Getenv("MEWLA_RELAY_MOBILE_E2E") == "1" {
-		deviceID = "00000000-0000-4000-8000-000000000009"
-		deviceName = "Relay E2E phone"
-	}
 	pairing, err := authManager.IssuePairingToken(time.Minute)
 	if err != nil {
 		t.Fatalf("IssuePairingToken: %v", err)
@@ -228,15 +220,8 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 		return relayServer.Snapshot().ActiveClients == 0
 	})
 
-	if !runMobilePairingImport(
-		t,
-		clientListener.Addr().String(),
-		connectorConfig,
-		authManager,
-		transportIdentity,
-		pairing,
-		offers,
-	) {
+	// Pair through the admission host: the real POST /pair over the opaque relay.
+	{
 		pairBody, err := json.Marshal(map[string]string{
 			"enrollment_token":           pairing.Value,
 			"expected_daemon_id":         authManager.DaemonID(),
@@ -365,7 +350,7 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 					devicePrivateKey,
 					"mewla-upload",
 				),
-				"Content-Type":      "application/octet-stream",
+				"Content-Type":        "application/octet-stream",
 				"X-Mewla-Upload-Name": "bounded.bin",
 			},
 		)
@@ -580,120 +565,6 @@ func TestConnectorFailsOverAndReregistersAfterRelayRestart(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("connector did not stop")
 	}
-}
-
-func runMobilePairingImport(
-	t *testing.T,
-	relayAddress string,
-	config link.ConnectorConfig,
-	authManager *auth.Manager,
-	identity *link.TransportIdentity,
-	pairing auth.PairingToken,
-	offers []link.AdmissionOffer,
-) bool {
-	t.Helper()
-	if os.Getenv("MEWLA_RELAY_MOBILE_E2E") != "1" {
-		return false
-	}
-	if len(offers) != 1 {
-		t.Fatalf("mobile Relay E2E requires one admission offer, got %d", len(offers))
-	}
-	pairingLink, _, err := link.BuildPairingLink(
-		authManager,
-		identity,
-		config,
-		pairing,
-		offers,
-	)
-	if err != nil {
-		t.Fatalf("build mobile Pairing link: %v", err)
-	}
-	bunPath, err := exec.LookPath("bun")
-	if err != nil {
-		t.Fatalf("mobile Relay E2E requires bun: %v", err)
-	}
-	appDirectory, err := filepath.Abs(filepath.Join("..", "..", "app"))
-	if err != nil {
-		t.Fatalf("resolve app directory: %v", err)
-	}
-	bridgeListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen for mobile pinned bridge: %v", err)
-	}
-	defer bridgeListener.Close()
-	var bridgeConnections atomic.Int64
-	bridgeDone := make(chan error, 1)
-	go func() {
-		local, acceptErr := bridgeListener.Accept()
-		if acceptErr != nil {
-			bridgeDone <- acceptErr
-			return
-		}
-		bridgeConnections.Add(1)
-		remote, dialErr := dialPinnedLink(
-			relayAddress,
-			offers[0].AdmissionHost,
-			identity.SPKISHA256,
-		)
-		if dialErr != nil {
-			_ = local.Close()
-			bridgeDone <- dialErr
-			return
-		}
-		copyDone := make(chan struct{}, 2)
-		go func() {
-			_, _ = io.Copy(remote, local)
-			_ = remote.Close()
-			copyDone <- struct{}{}
-		}()
-		go func() {
-			_, _ = io.Copy(local, remote)
-			_ = local.Close()
-			copyDone <- struct{}{}
-		}()
-		<-copyDone
-		<-copyDone
-		bridgeDone <- nil
-	}()
-	commandContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	command := exec.CommandContext(
-		commandContext,
-		bunPath,
-		"test",
-		"services/importConnectionRelayE2E.test.ts",
-	)
-	command.Dir = appDirectory
-	command.Env = append(
-		os.Environ(),
-		"MEWLA_RELAY_E2E=1",
-		"MEWLA_RELAY_E2E_PAIRING_LINK="+pairingLink,
-		fmt.Sprintf(
-			"MEWLA_RELAY_E2E_BRIDGE_PORT=%d",
-			portOf(t, bridgeListener.Addr()),
-		),
-		"MEWLA_RELAY_E2E_STABLE_URL="+offers[0].StableURL,
-	)
-	output, err := command.CombinedOutput()
-	if err != nil {
-		_ = bridgeListener.Close()
-		t.Fatalf("mobile import through Relay failed: %v\n%s", err, output)
-	}
-	select {
-	case bridgeErr := <-bridgeDone:
-		if bridgeErr != nil {
-			t.Fatalf("mobile pinned bridge failed: %v", bridgeErr)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("mobile pinned bridge did not close after pairing")
-	}
-	if bridgeConnections.Load() != 1 {
-		t.Fatalf(
-			"mobile pairing opened %d remote streams, want exactly one",
-			bridgeConnections.Load(),
-		)
-	}
-	return true
 }
 
 func requestThroughLink(

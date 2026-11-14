@@ -292,6 +292,16 @@ func TestHistoryScope(t *testing.T) {
 			t.Fatalf("history row %q does not start its own style", row)
 		}
 	}
+	// Rows stand alone both ways: a styled row starts from a reset and leaves the pen reset, a plain row
+	// has no style. The views draw any page of history rows on its own (client/core/terminal/history.ts).
+	for _, row := range rows {
+		if !strings.Contains(row, "\x1b[") {
+			continue
+		}
+		if !strings.HasPrefix(row, "\x1b[0m") || row[strings.LastIndex(row, "\x1b["):][:4] != "\x1b[0m" {
+			t.Fatalf("history row %q does not stand alone (all %q)", row, rows)
+		}
+	}
 	// Plain captures end rows with \n, styled ones with \r\n.
 	if plain := capture(t, term, CaptureOptions{Scope: ScopeHistory, History: 2}); plain != "still red \nplain" {
 		t.Fatalf("last 2 history rows = %q", plain)
@@ -459,6 +469,23 @@ func TestStateReportsKeyModes(t *testing.T) {
 	again := term.State()
 	if again.AppCursor || !again.AltScroll {
 		t.Fatalf("after ?1l ?1007h: app_cursor=%v alt_scroll=%v", again.AppCursor, again.AltScroll)
+	}
+}
+
+func TestStateReportsTheMouseEncoding(t *testing.T) {
+	term := newTerminal(t, 10, 3)
+	for _, step := range []struct{ write, want string }{
+		{"", "x10"},
+		{"\x1b[?1000h", "x10"},
+		{"\x1b[?1006h", "sgr"},
+		{"\x1b[?1006l\x1b[?1015h", "urxvt"},
+		{"\x1b[?1015l\x1b[?1005h", "utf8"},
+		{"\x1b[?1005l", "x10"},
+	} {
+		term.Write([]byte(step.write))
+		if got := term.State().MouseFormat; got != step.want {
+			t.Fatalf("after %q: mouse format %q, want %q", step.write, got, step.want)
+		}
 	}
 }
 

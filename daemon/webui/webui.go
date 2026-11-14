@@ -1,17 +1,20 @@
 // Package webui serves the browser build of the Mewla app from the daemon
-// binary. scripts/build-web-ui.sh exports the Expo web bundle into dist/ and
-// gzips every file; only the .gz files are embedded.
+// binary. scripts/build-web-ui.sh packages the NSH client for the web into
+// dist/ and gzips every file; only the .gz files are embedded.
 package webui
 
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"io"
 	"io/fs"
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -24,20 +27,22 @@ const (
 	immutableAge = "public, max-age=31536000, immutable"
 )
 
-// Hashed build outputs never change content under the same name.
-var immutablePrefixes = []string{"_expo/static/", "assets/"}
+// Hashed build outputs never change content under the same name: `nsh
+// package` names each file, or the folder it is in, `<name>.<10 hex>`.
+var hashedSegment = regexp.MustCompile(`^[^.]+(\.[^.]+)*\.[0-9a-f]{10}(\.[A-Za-z0-9]+)?$`)
 
 var contentTypes = map[string]string{
-	".css":  "text/css; charset=utf-8",
-	".html": "text/html; charset=utf-8",
-	".js":   "text/javascript; charset=utf-8",
-	".json": "application/json",
-	".otf":  "font/otf",
-	".png":  "image/png",
-	".svg":  "image/svg+xml",
-	".ttf":  "font/ttf",
-	".wasm": "application/wasm",
-	".webp": "image/webp",
+	".css":         "text/css; charset=utf-8",
+	".html":        "text/html; charset=utf-8",
+	".js":          "text/javascript; charset=utf-8",
+	".json":        "application/json",
+	".otf":         "font/otf",
+	".png":         "image/png",
+	".svg":         "image/svg+xml",
+	".ttf":         "font/ttf",
+	".wasm":        "application/wasm",
+	".webmanifest": "application/manifest+json",
+	".webp":        "image/webp",
 }
 
 // Embedded returns the bundle compiled into this binary.
@@ -49,8 +54,9 @@ func Embedded() fs.FS {
 	return files
 }
 
-// Handler serves a gzip-precompressed bundle. Paths without a file extension
-// are app routes and receive index.html.
+// Handler serves a gzip-precompressed NSH web package: the embedded one, or a
+// build the daemon was pointed at. Paths without a file extension are app
+// routes and receive index.html. Only hashed names are cached for good.
 func Handler(files fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -77,12 +83,24 @@ func Handler(files fs.FS) http.Handler {
 
 		header := w.Header()
 		header.Set("Content-Type", contentType(name))
-		header.Set("Cache-Control", cacheControl(name))
+		policy := cacheControl(name)
+		header.Set("Cache-Control", policy)
 		header.Add("Vary", "Accept-Encoding")
+		gzipped := acceptsGzip(r)
+		// A name that can change (index.html, a package's fixed names such as terminal/) is revalidated on every
+		// use: its ETag lets the browser and a cache in front keep it and get 304 Not Modified while it is the same.
+		if policy != immutableAge {
+			tag := entityTag(body, gzipped)
+			header.Set("ETag", tag)
+			if matchesNoneOf(r.Header.Get("If-None-Match"), tag) {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
 		if r.Method == http.MethodHead {
 			return
 		}
-		if acceptsGzip(r) {
+		if gzipped {
 			header.Set("Content-Encoding", "gzip")
 			_, _ = w.Write(body)
 			return
@@ -108,12 +126,33 @@ func contentType(name string) string {
 }
 
 func cacheControl(name string) string {
-	for _, prefix := range immutablePrefixes {
-		if strings.HasPrefix(name, prefix) {
+	for _, segment := range strings.Split(name, "/") {
+		if hashedSegment.MatchString(segment) {
 			return immutableAge
 		}
 	}
 	return "no-cache"
+}
+
+// entityTag names a file's content as served: the gzip bytes and their decompressed form are two representations.
+func entityTag(body []byte, gzipped bool) string {
+	sum := sha256.Sum256(body)
+	tag := hex.EncodeToString(sum[:12])
+	if gzipped {
+		tag += "-gzip"
+	}
+	return `"` + tag + `"`
+}
+
+// matchesNoneOf reports whether If-None-Match names tag (weak comparison, as RFC 9110 asks for it), or is "*".
+func matchesNoneOf(ifNoneMatch, tag string) bool {
+	for _, candidate := range strings.Split(ifNoneMatch, ",") {
+		candidate = strings.TrimPrefix(strings.TrimSpace(candidate), "W/")
+		if candidate == "*" || candidate == tag {
+			return true
+		}
+	}
+	return false
 }
 
 func acceptsGzip(r *http.Request) bool {

@@ -17,6 +17,21 @@ async function app(daemon: Record<string, unknown>, network: Record<string, Stub
 }
 
 describe("the floating screen: agents' displays and the Mac", () => {
+  test("on a wide window it docks in a strip beside the page, sized by the strip (no resize handle); at 1024 it floats in its corner", async () => {
+    const network = {
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
+      [`GET ${BASE}/screen`]: json(linux),
+    };
+    const daemon = { worker_sessions: [session("%1", { name: "Writer" })] };
+    const docked = await app(daemon, network, "android", { width: 1440, height: 900 });
+    await docked.waitFor("id:screen-float", { timeout: 10_000 });
+    expect(docked.shows("id:left-pane")).toBe(true);
+    expect(docked.shows("id:screen-float-resize")).toBe(false);
+    const cornered = await app(daemon, network, "android", { width: 1024, height: 768 });
+    await cornered.waitFor("id:screen-float", { timeout: 10_000 });
+    expect(cornered.shows("id:screen-float-resize")).toBe(true);
+  }, 25_000);
+
   test("an agent's display floats while its Worker runs, named after it; Stop in its menu stops that display", async () => {
     const shown = await app({ worker_sessions: [session("%1", { name: "Writer" })] }, {
       [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
@@ -61,6 +76,27 @@ describe("the floating screen: agents' displays and the Mac", () => {
     await shown.wait(1_500);
     expect(shown.shows("id:screen-float")).toBe(false);
     expect(shown.requests().some((r) => r.url === `${BASE}/display`)).toBe(false);
+  }, 25_000);
+
+  test("a running Worker's own news (its activity, its output) does not ask the computer again", async () => {
+    const writer = session("%1", { name: "Writer" });
+    const shown = await app({ worker_sessions: [writer] }, {
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
+      [`GET ${BASE}/screen`]: json(linux),
+    });
+    await shown.waitFor("id:screen-float", { timeout: 10_000 });
+    const asked = () => shown.requests().filter((r) => r.url === `${BASE}/display`).length;
+    const before = asked();
+    for (let i = 0; i < 6; i++) {
+      await shown.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...writer, activity: `Step ${i}`, last_output_lines: [`line ${i}`], updated_at: Date.now() + i } });
+      await shown.wait(50);
+    }
+    await shown.wait(300);
+    // Six updates asked six times before; the float's own 3 s poll may fall in this window once.
+    expect(asked() - before).toBeLessThan(3);
+    // It stopping is news: nothing runs, so nothing is asked or shown.
+    await shown.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...writer, status: "done" } });
+    await shown.waitUntil(() => !shown.shows("id:screen-float"), { timeout: 5_000 });
   }, 25_000);
 
   test("a Session's page shows its own Worker's screen only", async () => {

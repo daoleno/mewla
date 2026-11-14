@@ -131,15 +131,15 @@ func TestProjectorReportsOnlyMaterialChanges(t *testing.T) {
 	running := func(phase string, started time.Time) brain.Snapshot {
 		return brain.Snapshot{Workers: []brain.WorkerRef{worker("w", "w", "running", phase, started)}}
 	}
-	p.Observe(brain.Snapshot{})
-	p.Observe(brain.Snapshot{})
-	p.Observe(running("working", t0))
+	p.Observe(Input{Snapshot: brain.Snapshot{}})
+	p.Observe(Input{Snapshot: brain.Snapshot{}})
+	p.Observe(Input{Snapshot: running("working", t0)})
 	// Same run, only the clock anchor and the updated stamp move.
 	again := running("working", t0)
 	again.Workers[0].Updated = t0.Add(time.Minute)
-	p.Observe(again)
-	p.Observe(running("verifying", t0))
-	p.Observe(brain.Snapshot{})
+	p.Observe(Input{Snapshot: again})
+	p.Observe(Input{Snapshot: running("verifying", t0)})
+	p.Observe(Input{Snapshot: brain.Snapshot{}})
 
 	states := out.all()
 	kinds := []string{}
@@ -163,11 +163,11 @@ func TestProjectorReportsOnlyMaterialChanges(t *testing.T) {
 func TestProjectorSequenceOrdersAcrossRestarts(t *testing.T) {
 	first := &sink{}
 	a := NewProjector(1000, 0, first.add)
-	a.Observe(brain.Snapshot{})
-	a.Observe(brain.Snapshot{CurrentWork: []brain.CurrentWork{{ID: "w", Title: "t", Question: "go?", Choices: []string{"Y"}}}})
+	a.Observe(Input{Snapshot: brain.Snapshot{}})
+	a.Observe(Input{Snapshot: brain.Snapshot{CurrentWork: []brain.CurrentWork{{ID: "w", Title: "t", Question: "go?", Choices: []string{"Y"}}}}})
 	second := &sink{}
 	b := NewProjector(2000, 0, second.add)
-	b.Observe(brain.Snapshot{})
+	b.Observe(Input{Snapshot: brain.Snapshot{}})
 	lastOld, firstNew := first.all()[1], second.all()[0]
 	if firstNew.Seq >= lastOld.Seq {
 		t.Fatal("test needs the restarted counter to be lower than the old one")
@@ -181,7 +181,7 @@ func TestProjectorDebounceCoalescesBurst(t *testing.T) {
 	out := &sink{}
 	p := NewProjector(1, 40*time.Millisecond, out.add)
 	for _, phase := range []string{"reading", "planning", "working"} {
-		p.Observe(brain.Snapshot{Workers: []brain.WorkerRef{worker("w", "w", "running", phase, t0)}})
+		p.Observe(Input{Snapshot: brain.Snapshot{Workers: []brain.WorkerRef{worker("w", "w", "running", phase, t0)}}})
 	}
 	if len(out.all()) != 0 {
 		t.Fatal("nothing is reported before the debounce")

@@ -2,8 +2,10 @@
 # Verify a signed release APK against tracked product identity.
 #
 # Checks:
-#   - package / versionName / versionCode match app/app.base.json
+#   - package / versionName / versionCode match client/ui/nsh.json
+#     (scripts/lib/release_identity.py)
 #   - only arm64-v8a native libs (no armeabi-v7a / x86 / x86_64)
+#   - the GitHub channel (REQUEST_INSTALL_PACKAGES for the in-app update)
 #   - packaged libghostty_vt.so has no forbidden Android imports
 #   - Ghostty MIT notice embedded (verify-apk-notice.sh)
 #   - signing cert SHA-256 matches official public fingerprint in release notes /
@@ -56,21 +58,23 @@ APKSIGNER="$(find_tool apksigner 2>/dev/null || true)"
 
 "$ROOT/scripts/verify-apk-notice.sh" "$APK"
 "$ROOT/scripts/verify-android-native-symbols.py" --lock \
-  "$ROOT/app/modules/terminal-vt/native.lock.json" --apk "$APK"
+  "$ROOT/native/terminal-vt/native.lock.json" --apk "$APK"
 
-python3 - "$APK" "$ROOT/app/app.base.json" "$EXPECTED_CERT" "$AAPT" "$APKSIGNER" <<'PY'
+python3 - "$APK" "$ROOT" "$EXPECTED_CERT" "$AAPT" "$APKSIGNER" <<'PY'
 import re
 import subprocess
 import sys
 import zipfile
 from pathlib import Path
-import json
 
-apk, base_json, exp_cert, aapt, apksigner = sys.argv[1:6]
-base = json.loads(Path(base_json).read_text(encoding="utf-8"))
-exp_pkg = base["expo"]["android"]["package"]
-exp_ver = base["expo"]["version"]
-exp_vc = int(base["expo"]["android"]["versionCode"])
+apk, root, exp_cert, aapt, apksigner = sys.argv[1:6]
+sys.path.insert(0, str(Path(root) / "scripts" / "lib"))
+import release_identity
+
+tracked = release_identity.identity(release_identity.read_version(Path(root)))
+exp_pkg = tracked["package"]
+exp_ver = tracked["version"]
+exp_vc = int(tracked["version_code"])
 errors = []
 
 def normalize_fp(s: str) -> str:
@@ -120,6 +124,9 @@ if aapt:
         pkg, vc, ver = m.group(1), int(m.group(2)), m.group(3)
     else:
         errors.append("could not parse package line from aapt dump badging")
+    # The sideload APK is the GitHub channel: it installs its own updates (client/android/appupdate).
+    if out and "uses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'" not in out:
+        errors.append("not the GitHub channel: REQUEST_INSTALL_PACKAGES missing (build with -Pmewla.channel=github)")
 else:
     errors.append("aapt/aapt2 not found; install Android build-tools to verify package identity")
 
@@ -182,6 +189,7 @@ if errors:
 
 print(f"ok: APK package={exp_pkg} versionName={exp_ver} versionCode={exp_vc}")
 print("ok: APK arm64-v8a only")
+print("ok: APK is the GitHub channel (installs its own updates)")
 print("ok: APK Ghostty MIT notice")
 print(f"ok: APK certificate SHA-256 matches public identity")
 PY

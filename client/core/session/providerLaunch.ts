@@ -2,6 +2,8 @@
  * The Provider selection a new Session launches with, from the Expo app's
  * services/providers/presentation.ts (New Terminal from a Session sends it).
  */
+import type { Daemon } from "../more/daemon";
+import { listProviders } from "../providers/requests";
 import {
   normalizeProviderClient,
   type ProviderClient,
@@ -42,4 +44,20 @@ export function launchSelectionFromSnapshot(
     connectionId: connection.id,
     modelId: "",
   };
+}
+
+/**
+ * The Provider selection a New Terminal launches with (the Expo app's
+ * resolveLaunchSelection): the default connection of the command's agent.
+ * Best effort: a failure to read Providers returns null, and the computer
+ * resolves the connection itself.
+ */
+export async function resolveLaunchSelection(daemon: Daemon, command: string): Promise<{ connectionId: string; modelId: string } | null> {
+  const client = providerClientForCommand(command);
+  if (!client) return null;
+  try {
+    return launchSelectionFromSnapshot(await listProviders(daemon), client);
+  } catch {
+    return null;
+  }
 }

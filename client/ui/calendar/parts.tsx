@@ -4,7 +4,7 @@ import type { CalendarStatus } from "../../core/calendar/model";
 
 /** A grouped list's section title, as iOS Settings and Android preferences show them. */
 export function SectionTitle(props: { title: string }) {
-  return <Text class="px-4 pb-1.5 pt-5 text-sm font-semibold text-muted-foreground">{props.title}</Text>;
+  return <View class="px-4 pb-1.5 pt-5"><Text class="text-sm font-semibold text-muted-foreground">{props.title}</Text></View>;
 }
 
 /** A plain row of a grouped list: a title, an optional detail at the end. */
@@ -14,19 +14,22 @@ export function Row(props: { title: string; detail?: string; onPress?: () => voi
     <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled || !props.onPress}
       class="flex-row items-center justify-between gap-3 border-b border-border bg-card px-4 py-3.5 active:bg-accent">
       <Text class={`flex-1 text-base ${tone()}`}>{props.title}</Text>
-      {props.detail ? <Text class="text-base text-muted-foreground">{props.detail}</Text> : null}
+      <If when={props.detail}>{(detail) => <Text class="text-base text-muted-foreground">{detail()}</Text>}</If>
     </Button>
   );
 }
 
-/** The status dot: the seal for what waits on you, quiet for the rest (DESIGN.md's Work states). */
+/**
+ * The status dot (SPEC §10.4): the seal for what waits on you, `ok` for done, `warning` for a failure, ink while
+ * it runs, a ring for the rest.
+ */
 export function StatusDot(props: { status: CalendarStatus }) {
   const color = () => {
     switch (props.status) {
       case "waiting": return "bg-seal";
       case "running": return "bg-ring";
-      case "failed": return "bg-destructive";
-      case "completed": return "bg-muted-foreground";
+      case "failed": return "bg-warning";
+      case "completed": return "bg-ok";
       default: return "border border-muted-foreground";
     }
   };

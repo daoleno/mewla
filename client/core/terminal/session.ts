@@ -1,12 +1,26 @@
 import type { Frame, Transport } from "../transport";
 import { TerminalHistoryFeed, type HistoryRender, type TerminalHistoryModel } from "./history";
+import { clickBytes, paneForDrag, wheelBytes, wheelKind } from "./wheel";
+import { ClaudeWheel, LinePlanner, WheelGate, type GateClock } from "./wheelGate";
 
 export type TerminalScrollState = { atBottom: boolean; inCopyMode: boolean; position: number };
+
+/**
+ * What the page knows of the Session: `program` is the agent running in it ("claude", "codex", …), which
+ * says what one wheel press does there (Claude Code accelerates them: core/terminal/wheelGate.ts).
+ */
+export type TerminalSessionOptions = { program?: () => string | undefined; clock?: GateClock };
 
 export interface TerminalHandlers {
   /** A new attachment: clear the view before its output arrives. */
   reset(): void;
   output(data: string): void;
+  /**
+   * The Session's size, told before each replay (session host). When another viewer (mewla attach on a
+   * computer) holds the size, it is not this view's grid: the view draws the screen at this size, fitted
+   * into its area, until its person acts here and the size is the view's again. Older computers never say.
+   */
+  sessionSize(cols: number, rows: number): void;
   /** tmux copy mode on the computer (`terminal_scroll_state`); a session host Session never sends it. */
   scrollState(state: TerminalScrollState): void;
   /** The history above the screen changed: what the view does with the rows it holds. */
@@ -38,16 +52,24 @@ export class TerminalSession {
   private sessionId: string | null = null;
   private size: { cols: number; rows: number } | null = null;
   private opening = false;
+  /** The Session's size the computer told last (`terminal_size`). */
+  private told: { cols: number; rows: number } | null = null;
   private closed = false;
   private exited = false;
   private readonly stops: Array<() => void> = [];
   private readonly feed: TerminalHistoryFeed;
+  /** A drag on the program's own screen: one write in flight, one a frame (core/terminal/wheelGate.ts). */
+  private readonly wheel: WheelGate;
+  private readonly lines = new LinePlanner();
+  private readonly claude = new ClaudeWheel();
 
   constructor(
     private readonly transport: Transport,
     private readonly targetId: string,
     private readonly handlers: TerminalHandlers,
+    private readonly options: TerminalSessionOptions = {},
   ) {
+    this.wheel = new WheelGate((presses) => this.sendWheel(presses), this.lines, options.clock);
     this.feed = new TerminalHistoryFeed(transport, { rows: (render) => handlers.history(render), notice: (text) => handlers.historyNotice(text) });
     const mine = (frame: Frame) => this.sessionId !== null && frame.session_id === this.sessionId;
     this.stops.push(
@@ -55,12 +77,23 @@ export class TerminalSession {
       transport.on("disconnected", () => {
         this.sessionId = null;
         this.opening = false;
+        this.wheel.reset();
         if (!this.exited && !this.closed) this.feed.attach(null);
       }),
       transport.on("terminal_output", (frame) => {
         if (!mine(frame) || typeof frame.data !== "string") return;
         handlers.output(frame.data);
         this.feed.output();
+        // The program answered: the travel made meanwhile may go.
+        this.wheel.answered();
+      }),
+      transport.on("terminal_size", (frame) => {
+        const cols = Number(frame.cols), rows = Number(frame.rows);
+        if (!mine(frame) || !(cols >= 2 && rows >= 2)) return;
+        handlers.sessionSize(cols, rows);
+        // The Session was resized: its history comes again at the new width.
+        if (this.told && (this.told.cols !== cols || this.told.rows !== rows)) this.feed.output();
+        this.told = { cols, rows };
       }),
       transport.on("terminal_scroll_state", (frame) =>
         mine(frame) && handlers.scrollState({ atBottom: frame.at_bottom !== false, inCopyMode: frame.in_copy_mode === true, position: Number(frame.scroll_position) || 0 })),
@@ -97,13 +130,63 @@ export class TerminalSession {
     } else this.open();
   }
 
+  /**
+   * The terminal is in front of the person again (shown after the chat or another page): its grid becomes the
+   * Session's size again, if another viewer (mewla attach on a computer) took it meanwhile. The computer does
+   * nothing when the size is already this view's; the history is not asked for again.
+   */
+  claim(): void {
+    if (this.sessionId && this.size) this.send({ type: "terminal_resize", session_id: this.sessionId, ...this.size });
+  }
+
   input(data: string): void {
     if (this.sessionId && data) this.send({ type: "terminal_input", session_id: this.sessionId, data });
   }
 
-  /** History drag: `lines` > 0 is back in time (tmux copy mode). */
+  /**
+   * A drag the view did not take (it holds no history, or the program is on the alternate screen), `lines` > 0
+   * back in time: what the program scrolls with (core/terminal/wheel.ts), paced by the wheel gate, else tmux
+   * copy mode. `lines` 0 is a finger coming down: travel still waiting (a fling's tail) is dropped.
+   */
+  drag(lines: number): void {
+    if (lines === 0) return this.wheel.stop();
+    const pane = paneForDrag(this.history.panes);
+    const kind = wheelKind(pane);
+    if (kind === "none") return this.scroll(lines);
+    this.wheel.use(kind === "mouse" && this.options.program?.() === "claude" ? this.claude : this.lines);
+    this.wheel.add(lines);
+  }
+
+  private sendWheel(presses: number): void {
+    const bytes = wheelBytes(paneForDrag(this.history.panes), presses);
+    // Marked as a scroll: reading, so the computer never takes the Session's size from another viewer for it.
+    if (bytes) this.sendScrollInput(bytes);
+    else this.wheel.answered();
+  }
+
+  /** Whether a tap at a live cell is a click: the program asked for mouse reports. */
+  get clickable(): boolean {
+    return Boolean(paneForDrag(this.history.panes)?.mouse);
+  }
+
+  /**
+   * A tap at a live cell (0-based) as a click for the program (core/terminal/wheel.ts, clickBytes). It is
+   * acting, like typing: it takes the Session's size back from another viewer.
+   */
+  click(col: number, row: number): boolean {
+    const bytes = clickBytes(paneForDrag(this.history.panes), col, row);
+    if (!bytes || !this.sessionId) return false;
+    this.input(bytes);
+    return true;
+  }
+
+  private sendScrollInput(data: string): void {
+    if (this.sessionId) this.send({ type: "terminal_input", session_id: this.sessionId, data, scroll: true });
+  }
+
+  /** History drag: `lines` > 0 is back in time. The computer's tmux copy mode counts the other way (negative is toward history). */
   scroll(lines: number): void {
-    if (this.sessionId && lines) this.send({ type: "terminal_scroll", session_id: this.sessionId, lines });
+    if (this.sessionId && lines) this.send({ type: "terminal_scroll", session_id: this.sessionId, lines: -lines });
   }
 
   scrollToBottom(): void {
@@ -112,6 +195,11 @@ export class TerminalSession {
 
   focusPane(col: number, row: number): void {
     if (this.sessionId) this.send({ type: "terminal_focus_pane", session_id: this.sessionId, col, row });
+  }
+
+  /** Try again after the attachment failed to open ("Couldn't attach"): opens it now, if it is not open or opening. */
+  retry(): void {
+    this.open();
   }
 
   /** Ask for the history again (after "History could not load"). */
@@ -133,6 +221,7 @@ export class TerminalSession {
     this.closed = true;
     if (this.sessionId) this.send({ type: "terminal_close", session_id: this.sessionId });
     this.sessionId = null;
+    this.wheel.reset();
     this.feed.close();
     this.stops.splice(0).forEach((stop) => stop());
   }
@@ -165,6 +254,7 @@ export class TerminalSession {
         // Closed while it was opening: give the attachment back.
         if (this.closed) return this.send({ type: "terminal_close", session_id: id });
         this.sessionId = id;
+        this.wheel.reset();
         this.handlers.reset();
         this.feed.attach(id);
         const cols = Number(frame.cols), rows = Number(frame.rows);

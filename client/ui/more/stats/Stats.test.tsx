@@ -26,9 +26,9 @@ function daysAgo(n: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** A week with activity on the days `active` names (days ago), `1000 × (n + 1)` tokens each. */
+/** A week with activity on the days `active` names (days ago), `1000 × (n + 1)` tokens and `$(n + 1)` each. */
 function week(active: number[]) {
-  return active.map((n) => ({ date: daysAgo(n), cost: 1, totalTokens: 1000 * (n + 1), inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheRead: 0, cacheCreate: 0, sessions: 1 })).reverse();
+  return active.map((n) => ({ date: daysAgo(n), cost: n + 1, totalTokens: 1000 * (n + 1), inputTokens: 0, outputTokens: 0, reasoningTokens: 0, cacheRead: 0, cacheCreate: 0, sessions: 1 })).reverse();
 }
 
 function computer(stats: () => unknown, providers: unknown = { defaults: {} }) {
@@ -50,14 +50,21 @@ function computer(stats: () => unknown, providers: unknown = { defaults: {} }) {
 }
 
 describe("Stats", () => {
-  test("opens on Week with the totals, the models and the projects", async () => {
-    const c = computer(() => ({ ranges: { day: range(), week: range(), month: range(), all: range() } }));
+  test("opens on 14 days with the total spend as its title, the models and the projects", async () => {
+    const c = computer(() => ({ ranges: { day: range(), week: range({ cost: 3 }), fortnight: range(), month: range({ cost: 99 }), all: range() } }));
     const app = await open(HARNESS, c);
     await app.waitFor("id:stats-summary");
+    expect(app.texts().slice(0, 2)).toEqual(["Last 14 days", "$12.50"]);
+    expect(app.shows("id:stats-range-week")).toBe(true);
+    expect(app.shows("id:stats-range-fortnight")).toBe(true);
+    expect(app.shows("id:stats-range-month")).toBe(true);
+    expect(app.shows("id:stats-range-day")).toBe(false);
+    expect(app.shows("id:stats-range-all")).toBe(false);
     const texts = app.texts().join(" | ");
     expect(texts).toContain("$12.50");
     expect(texts).toContain("1.3M");
-    expect(texts).toContain("Cost · Reported");
+    expect(app.texts()).toContain("Cost");
+    expect(app.texts()).toContain("Reported");
     expect(texts).toContain("claude-opus-5-5");
     expect(texts).toContain("≈$2.50");
     expect(texts).toContain("mewla");
@@ -90,11 +97,21 @@ describe("Stats", () => {
     await flaky.waitFor("id:stats-summary");
   }, 15_000);
 
-  test("Day says there was no activity today when other ranges have some", async () => {
-    const app = await open(HARNESS, computer(() => ({ ranges: { day: range({ cost: 0, totalTokens: 0, sessions: 0, models: [], projects: [], tools: [], days: [] }), week: range(), all: range() } })));
+  test("a range without activity says so when other ranges have some", async () => {
+    const app = await open(HARNESS, computer(() => ({ ranges: { week: range({ cost: 0, totalTokens: 0, sessions: 0, models: [], projects: [], tools: [], days: [] }), fortnight: range(), month: range() } })));
     await app.waitFor("id:stats-summary");
-    await app.press("id:stats-range-day");
-    await app.waitFor("text:No activity today");
+    await app.press("id:stats-range-week");
+    await app.waitFor("text:No activity in the last 7 days");
+  });
+
+  test("a computer from before the 14-day range shows 7 and 30 days, opening on 7", async () => {
+    const app = await open(HARNESS, computer(() => ({ ranges: { day: range({ cost: 1 }), week: range({ cost: 7 }), month: range({ cost: 30 }), all: range({ cost: 500 }) } })));
+    await app.waitFor("id:stats-summary");
+    expect(app.texts().slice(0, 2)).toEqual(["Last 7 days", "$7.00"]);
+    expect(app.shows("id:stats-range-fortnight")).toBe(false);
+    await app.press("id:stats-range-month");
+    await app.waitFor("text:Last 30 days");
+    expect(app.texts()).toContain("$30.00");
   });
 
   test("a Provider routing Codex hides the subscription card; ChatGPT sign-in shows the time left", async () => {
@@ -103,13 +120,15 @@ describe("Stats", () => {
     await direct.waitFor("id:codex-card");
     expect(direct.texts()).toContain("ChatGPT Pro");
     expect(direct.texts()).toContain("70% left");
+    // The plan is Codex's: its row carries Codex's logo (SPEC §10.4).
+    expect(direct.shows("id:codex-plan")).toBe(true);
     const routed = await open(HARNESS, computer(() => ({ ranges: { week: range() }, codexSubscription: subscription }), { defaults: { codex: { connection_id: "c1" } } }));
     await routed.waitFor("id:stats-summary");
     expect(routed.shows("id:codex-card")).toBe(false);
   });
 
   test("a swipe across the page moves between ranges; the tabs still do too", async () => {
-    const app = await open(HARNESS, computer(() => ({ ranges: { day: range({ cost: 1 }), week: range(), month: range({ cost: 99 }), all: range({ cost: 500 }) } })));
+    const app = await open(HARNESS, computer(() => ({ ranges: { week: range({ cost: 1 }), fortnight: range(), month: range({ cost: 99 }) } })));
     await app.waitFor("text:$12.50");
     await app.drag("id:stats-summary", { x: -140 });
     await app.waitFor("text:$99.00");
@@ -120,12 +139,12 @@ describe("Stats", () => {
     // Past the first range there is nothing more to the right.
     await app.drag("id:stats-summary", { x: 140 });
     expect(app.texts()).toContain("$1.00");
-    await app.press("id:stats-range-all");
-    await app.waitFor("text:$500");
+    await app.press("id:stats-range-month");
+    await app.waitFor("text:$99.00");
   });
 
   test("in a browser the ranges change by their tabs only; a swipe leaves the range alone", async () => {
-    const app = await open(HARNESS, { ...computer(() => ({ ranges: { day: range({ cost: 1 }), week: range(), month: range({ cost: 99 }), all: range({ cost: 500 }) } })), platform: "web" });
+    const app = await open(HARNESS, { ...computer(() => ({ ranges: { week: range({ cost: 1 }), fortnight: range(), month: range({ cost: 99 }) } })), platform: "web" });
     await app.waitFor("text:$12.50");
     await app.drag("id:stats-summary", { x: -140 });
     await app.wait(100);
@@ -138,16 +157,18 @@ describe("Stats", () => {
   test("a swipe that starts on the activity chart scrubs it and leaves the range alone", async () => {
     const app = await open(HARNESS, computer(() => ({ ranges: { week: range({ days: week([0, 1, 2, 3, 4, 5, 6]) }), month: range({ cost: 99 }) } })));
     await app.waitFor("id:activity-chart");
-    expect(app.texts()).toContain("Today");
-    expect(app.texts()).toContain("1K tokens");
+    // The one chart is spend by day: "Today · $1.00".
+    expect(app.texts()).toContain("Spend");
+    expect(app.texts()).toContain("Today ·");
+    expect(app.texts()).toContain("$1.00");
     await app.dragAndHold("id:activity-chart", { x: -100 });
-    expect(app.texts()).not.toContain("1K tokens");
-    expect(app.texts()).not.toContain("Today");
+    expect(app.texts()).not.toContain("$1.00");
+    expect(app.texts()).not.toContain("Today ·");
     await app.drop();
     // Lifting the finger resets the readout and opens nothing.
     await app.wait(100);
     expect(app.shows("id:stats-day")).toBe(false);
-    expect(app.texts()).toContain("1K tokens");
+    expect(app.texts()).toContain("$1.00");
     expect(app.texts()).toContain("$12.50");
   });
 
@@ -168,8 +189,17 @@ describe("Stats", () => {
   test("the chart and the model rows say what they are to a screen reader", async () => {
     const app = await open(HARNESS, computer(() => ({ ranges: { week: range() } })));
     await app.waitFor("id:stats-summary");
-    expect(app.shows("label:Daily activity")).toBe(true);
+    expect(app.shows("label:Daily spend")).toBe(true);
     expect(app.shows("label:gpt-6, openai, Estimated cost $2.50, 250K tokens · 1 session")).toBe(true);
+  });
+
+  test("with no known cost on any day the chart draws activity instead", async () => {
+    const unpriced = week([0, 1]).map((d) => ({ ...d, cost: 0, costKnown: false }));
+    const app = await open(HARNESS, computer(() => ({ ranges: { week: range({ cost: 0, costKnown: false, days: unpriced }) } })));
+    await app.waitFor("id:activity-chart");
+    expect(app.texts()).toContain("Activity");
+    expect(app.texts()).toContain("1K tokens");
+    expect(app.shows("label:Daily activity")).toBe(true);
   });
 
   test("a model's id, facts and notes can be copied", async () => {
@@ -204,18 +234,18 @@ describe("Stats", () => {
   });
 
   test("a range with stats but no models, then one with models, shows the Models card", async () => {
-    const app = await open(HARNESS, computer(() => ({ ranges: { day: range({ models: [], projects: [] }), week: range() } })));
+    const app = await open(HARNESS, computer(() => ({ ranges: { week: range({ models: [], projects: [] }), fortnight: range(), month: range() } })));
     await app.waitFor("id:stats-summary");
-    await app.press("id:stats-range-day");
-    await app.waitFor("id:stats-models", { state: "gone" });
     await app.press("id:stats-range-week");
+    await app.waitFor("id:stats-models", { state: "gone" });
+    await app.press("id:stats-range-fortnight");
     await app.waitFor("id:stats-models");
     expect(app.shows("id:stats-projects")).toBe(true);
   });
 
   test("a switch to another computer drops the last computer's stats", async () => {
     let n = 0;
-    const app = await open(HARNESS, computer(() => (++n === 1 ? { ranges: { week: range() } } : { ranges: { week: range({ cost: 99, costKnown: true, projects: [] }) } })));
+    const app = await open(HARNESS, computer(() => (++n === 1 ? { ranges: { week: range() } } : { ranges: { week: range({ cost: 99, costKnown: true, projects: [], days: [] }) } })));
     await app.waitFor("text:$12.50");
     await app.host.send("app.daemonSwitch", { id: "s2", name: "Laptop" });
     await app.waitFor("text:$99.00");

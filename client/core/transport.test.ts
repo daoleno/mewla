@@ -51,10 +51,11 @@ describe("Transport", () => {
     transport.close();
   });
 
-  test("a burst larger than the socket's queue all goes out, in order", async () => {
+  test("a burst larger than the socket's 8 MiB all goes out, in order", async () => {
     const { transport, socket } = await connected();
-    const replies = Array.from({ length: 40 }, (_, i) => transport.request<{ n: number }>("get_stats", { n: i }, { reply: "stats" }));
-    expect(socket.sent.length).toBe(8);
+    const pad = "x".repeat(1 << 20);
+    const replies = Array.from({ length: 40 }, (_, i) => transport.request<{ n: number }>("get_stats", { n: i, pad }, { reply: "stats" }));
+    expect(socket.sent.length).toBe(7);
     await wait(30);
     expect(socket.sent.length).toBe(40);
     const sent = socket.sent.map((text) => JSON.parse(text));

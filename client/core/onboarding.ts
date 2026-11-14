@@ -67,6 +67,14 @@ export interface Frame {
   height: number;
   top: number;
   bottom: number;
+  /** The side safe areas (an island on its side, the iPhone Duo's status rail); none when left out. */
+  left?: number;
+  right?: number;
+}
+
+/** The width between the side safe areas. */
+function innerWidth(frame: Frame): number {
+  return frame.width - (frame.left ?? 0) - (frame.right ?? 0);
 }
 
 export interface CatBox {
@@ -88,22 +96,23 @@ export function isCompactFrame({ height, top, bottom }: Frame): boolean {
 
 /** Width of the cat's column in a compact welcome or connected step; 0 otherwise. */
 export function heroZoneWidth(frame: Frame): number {
-  return isCompactFrame(frame) ? Math.round(Math.min(frame.width * 0.4, COMPACT_ZONE_MAX)) : 0;
+  return isCompactFrame(frame) ? Math.round(Math.min(innerWidth(frame) * 0.4, COMPACT_ZONE_MAX)) : 0;
 }
 
 /** Where the cat stands on the welcome and connected steps; short windows give it a column of its own. */
 export function heroCatBox(frame: Frame): CatBox {
-  const { width, height, top, bottom } = frame;
+  const { height, top, bottom } = frame;
+  const left = frame.left ?? 0;
   const usable = height - top - bottom;
   if (isCompactFrame(frame)) {
-    return { cx: heroZoneWidth(frame) / 2, cy: top + usable / 2, size: Math.min(HERO_SIZE, usable - 32) };
+    return { cx: left + heroZoneWidth(frame) / 2, cy: top + usable / 2, size: Math.min(HERO_SIZE, usable - 32) };
   }
-  return { cx: width / 2, cy: top + Math.max(132, Math.round(usable * 0.27)), size: HERO_SIZE };
+  return { cx: left + innerWidth(frame) / 2, cy: top + Math.max(132, Math.round(usable * 0.27)), size: HERO_SIZE };
 }
 
 /** The cat keeping watch beside the title on the install and scan steps. */
-export function cornerCatBox({ width, top }: Frame): CatBox {
-  return { cx: width - 20 - CORNER_SIZE / 2, cy: top + 14 + CORNER_SIZE / 2, size: CORNER_SIZE };
+export function cornerCatBox({ width, top, right }: Frame): CatBox {
+  return { cx: width - (right ?? 0) - 20 - CORNER_SIZE / 2, cy: top + 14 + CORNER_SIZE / 2, size: CORNER_SIZE };
 }
 
 export function catBoxForStep(step: OnboardingStep, frame: Frame): CatBox {
@@ -135,16 +144,24 @@ export function readCameraPermission(value: unknown): CameraPermission | null {
 
 /**
  * What the viewfinder shows. One that has no answer yet says so, one that can still ask asks,
- * one the person turned off points to Settings, one that failed says so: none is a dark window
- * that promises a camera.
+ * one the person turned off points to Settings, a device without a camera says so, one that
+ * failed offers to try again: none is a dark window that promises a camera.
  */
-export type FinderState = "loading" | "request" | "denied" | "failed" | "camera";
+export type FinderState = "loading" | "request" | "denied" | "missing" | "failed" | "camera";
 
-export function finderState(permission: CameraPermission | null, failed: boolean, asking: boolean): FinderState {
+/** Why the camera stopped, as the scanner said (`unavailable {reason}`): none, no camera at all, or it would not start. */
+export type CameraFailure = "missing" | "failed" | null;
+
+/** The scanner's `unavailable` reason as a failure; `permission` is not one (the permission is asked again). */
+export function cameraFailure(reason: string): CameraFailure {
+  return reason === "missing" ? "missing" : "failed";
+}
+
+export function finderState(permission: CameraPermission | null, failure: CameraFailure, asking: boolean): FinderState {
   if (permission === null || asking) return "loading";
   if (permission === "denied") return "denied";
   if (permission === "undetermined") return "request";
-  return failed ? "failed" : "camera";
+  return failure ?? "camera";
 }
 
 /**

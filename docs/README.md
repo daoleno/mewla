@@ -20,7 +20,7 @@ New here? [Get started](get-started.md) is one path from install to your first g
 - [Calendar](calendar.md): reminders and scheduled actions that run as Work.
 - [Extensions](extensions.md): let Brain read Linear, Notion, GitHub and more, and change them with your consent.
 - [Screen](screen.md): see and control your computer's screen from the phone.
-- [Phone use](phone.md): agents use your Android phone on a hidden screen, or your iPhone through your Mac, with you in charge (Labs).
+- [Phone use](phone.md): agents use your Android phone on a hidden screen, or your iPhone through your Mac (Labs), with you in charge.
 - [Agents in your browser](your-browser.md): agents use your own Chrome and its logins, in a tab group of their own.
 - [Your other computers](computers.md): let Brain hand a task to your Mac, Mac mini or another computer running Mewla.
 - [Agents outside Mewla](outside-agents.md): let Claude Code or Codex in a terminal hand work to Brain over MCP.

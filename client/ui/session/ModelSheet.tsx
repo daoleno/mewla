@@ -1,4 +1,5 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { BusyPlace } from "../kit/wait";
 import { Button } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
 import type { Daemon } from "../../core/more/daemon";
@@ -24,7 +25,7 @@ function messageOf(error: unknown, fallback: string): string {
 }
 
 /**
- * Model & Effect: the Session's models (from its connection's catalog, or a dsh
+ * Model & Effort: the Session's models (from its connection's catalog, or a dsh
  * Session's own), each "Use <model>"; a model with effects opens its Effect list
  * (Back returns). A current model that is no longer offered is listed and
  * flagged. A switch closes the sheet once the computer saved it; a failure says
@@ -37,6 +38,24 @@ function messageOf(error: unknown, fallback: string): string {
  */
 export function ModelSheet(props: {
   open: () => boolean;
+  onClose: () => void;
+  transport: Daemon;
+  workerId: string;
+  onRuntime?: (selection: ThreadRuntimeSelection) => void;
+}) {
+  return (
+    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background pt-4" sidePadding={16} backdropClass="bg-black/40">
+      <ModelPanel shown={props.open} onClose={props.onClose} transport={props.transport} workerId={props.workerId} onRuntime={props.onRuntime} />
+    </AppSheet>
+  );
+}
+
+/**
+ * The sheet's content, for a sheet that shows it as one of its pages (Brain's
+ * menu › Model): each time `shown` turns true it reads the runtime again.
+ */
+export function ModelPanel(props: {
+  shown: () => boolean;
   onClose: () => void;
   transport: Daemon;
   workerId: string;
@@ -124,81 +143,65 @@ export function ModelSheet(props: {
 
   // Each opening reads the runtime again; closing leaves the Effect list.
   effect(() => {
-    if (props.open()) untracked(() => void load());
+    if (props.shown()) untracked(() => void load());
     else effectKey.set("");
   });
 
   return (
-    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
-      <View testID="model-sheet" class="gap-3 pb-8">
-        <View class="flex-row items-center gap-2">
-          {effectTarget() ? (
-            <Button testID="model-back" accessibilityLabel="Back to Model and Effect" onPress={() => effectKey.set("")} class="rounded-lg p-1 active:bg-accent">
-              <Icon name="chevron-left" size={22} color="foreground" />
-            </Button>
-          ) : null}
-          <Text class="flex-1 text-lg font-semibold">{effectTarget() ? "Effect" : "Model & Effect"}</Text>
-          <Button testID="model-close" accessibilityLabel="Close runtime selection" onPress={props.onClose} class="rounded-full p-1.5 active:bg-accent">
-            <Icon name="close" size={20} color="foreground" />
-          </Button>
-        </View>
+    <View testID="model-sheet" class="gap-3 pb-8">
+      <View class="flex-row items-center gap-2">
+        <If when={effectTarget()}><Button testID="model-back" accessibilityLabel="Back to Model and Effort" onPress={() => effectKey.set("")} class="rounded-lg p-1 active:bg-accent">
+            <Icon name="chevron-left" size={22} color="foreground" />
+          </Button></If>
+        <Text class="flex-1 text-lg font-semibold">{effectTarget() ? "Effort" : "Model & Effort"}</Text>
+        <Button testID="model-close" accessibilityLabel="Close runtime selection" onPress={props.onClose} class="rounded-full p-1.5 active:bg-accent">
+          <Icon name="close" size={20} color="foreground" />
+        </Button>
+      </View>
 
-        {loading() ? (
-          <Text class="py-8 text-center text-sm text-muted-foreground">Loading models…</Text>
-        ) : (
-          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }}>
-            <View class="gap-2">
-              {effectTarget() ? (
-                <View class="gap-2">
-                  <Text class="text-xs text-muted-foreground">{effectTarget()!.modelId}</Text>
-                  <View class="overflow-hidden rounded-xl border border-border bg-card">
-                    {effectRowsForRuntime(effectTarget()!).map((entry) => (
-                      <Button testID={`effect-row-${entry.key}`} accessibilityLabel={`Use ${reasoningEffortLabel(entry.effect)} effect`} disabled={activating()}
-                        onPress={() => {
-                          const target = effectTarget();
-                          const runtime = target ? runtimeChoiceForRow(target, entry.effect) : null;
-                          if (runtime) void activate(runtime);
-                        }}
-                        class="flex-row items-center gap-2 border-b border-border px-3 py-3 active:bg-accent">
-                        <Text class="flex-1 text-base">{reasoningEffortLabel(entry.effect)}</Text>
-                        {entry.selected ? <Icon name="check" size={18} color="primary" /> : null}
-                      </Button>
-                    ))}
-                  </View>
-                </View>
-              ) : rows().length > 0 ? (
+      <If when={loading()} else={<Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 420 }}>
+          <View class="gap-2">
+            <If when={effectTarget()} else={<If when={rows().length > 0}><View class="overflow-hidden rounded-xl border border-border bg-card">
+                {rows().map((row) => (
+                  <Button testID={`model-row-${row.modelId}`} accessibilityLabel={`Use ${row.modelId} model`} disabled={row.disabled} onPress={() => choose(row)}
+                    class={row.disabled ? "flex-row items-center gap-2 border-b border-border px-3 py-3 opacity-50" : "flex-row items-center gap-2 border-b border-border px-3 py-3 active:bg-accent"}>
+                    <View class="flex-1 gap-0.5">
+                      <Text class="text-base line-clamp-1">{row.label}</Text>
+                      <If when={row.unavailableCurrent}><Text testID="model-unavailable-current" class="text-xs text-muted-foreground">Current runtime is no longer selectable.</Text></If>
+                    </View>
+                    <If when={row.current}><Icon name="check" size={18} color="primary" /></If>
+                    <If when={row.effects.length > 0}><Icon name="chevron-right" size={18} /></If>
+                  </Button>
+                ))}
+              </View></If>}><View class="gap-2">
+                <Text class="text-xs text-muted-foreground">{effectTarget()!.modelId}</Text>
                 <View class="overflow-hidden rounded-xl border border-border bg-card">
-                  {rows().map((row) => (
-                    <Button testID={`model-row-${row.modelId}`} accessibilityLabel={`Use ${row.modelId} model`} disabled={row.disabled} onPress={() => choose(row)}
-                      class={row.disabled ? "flex-row items-center gap-2 border-b border-border px-3 py-3 opacity-50" : "flex-row items-center gap-2 border-b border-border px-3 py-3 active:bg-accent"}>
-                      <View class="flex-1 gap-0.5">
-                        <Text class="text-base line-clamp-1">{row.label}</Text>
-                        {row.unavailableCurrent ? <Text testID="model-unavailable-current" class="text-xs text-muted-foreground">Current runtime is no longer selectable.</Text> : null}
-                      </View>
-                      {row.current ? <Icon name="check" size={18} color="primary" /> : null}
-                      {row.effects.length > 0 ? <Icon name="chevron-right" size={18} /> : null}
+                  {effectRowsForRuntime(effectTarget()!).map((entry) => (
+                    <Button testID={`effect-row-${entry.key}`} accessibilityLabel={`Use ${reasoningEffortLabel(entry.effect)} effect`} disabled={activating()}
+                      onPress={() => {
+                        const target = effectTarget();
+                        const runtime = target ? runtimeChoiceForRow(target, entry.effect) : null;
+                        if (runtime) void activate(runtime);
+                      }}
+                      class="flex-row items-center gap-2 border-b border-border px-3 py-3 active:bg-accent">
+                      <Text class="flex-1 text-base">{reasoningEffortLabel(entry.effect)}</Text>
+                      <If when={entry.selected}><Icon name="check" size={18} color="primary" /></If>
                     </Button>
                   ))}
                 </View>
-              ) : null}
+              </View></If>
 
-              {activating() ? <Text class="py-1 text-sm text-muted-foreground">Switching…</Text> : null}
-              {problem() ? (
-                <View testID="model-problem" class="gap-2 rounded-xl border border-border bg-card px-3 py-3">
-                  <Text class="text-sm font-semibold text-destructive">{problem()!.title}</Text>
-                  <Text class="text-sm text-muted-foreground">{problem()!.message}</Text>
-                  <Button testID="model-retry" onPress={() => void load()} class="self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
-                    <Text class="text-sm font-semibold text-primary">Retry</Text>
-                  </Button>
-                </View>
-              ) : null}
-              {!activating() && !problem() && rows().length === 0 ? (
-                <Text class="text-sm text-muted-foreground">No configured runtime is available. Sync models in Settings.</Text>
-              ) : null}
-            </View>
-          </Scroll>
-        )}
-      </View>
-    </AppSheet>
+            <If when={activating()}><Text class="py-1 text-sm text-muted-foreground">Switching…</Text></If>
+            <If when={problem()}><View testID="model-problem" class="gap-2 rounded-xl border border-border bg-card px-3 py-3">
+                <Text class="text-sm font-semibold text-destructive">{problem()!.title}</Text>
+                <Text class="text-sm text-muted-foreground">{problem()!.message}</Text>
+                <Button testID="model-retry" onPress={() => void load()} class="self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
+                  <Text class="text-sm font-semibold text-primary">Retry</Text>
+                </Button>
+              </View></If>
+            <If when={!activating() && !problem() && rows().length === 0}><Text class="text-sm text-muted-foreground">No configured runtime is available. Sync models in Settings.</Text></If>
+          </View>
+        </Scroll>}><BusyPlace label="Reading models" testID="models-loading" rows={4} failMs={31_000 /* the runtime, then the catalog: 15 s each */} /></If>
+    </View>
   );
 }

@@ -40,9 +40,9 @@ type Listener = (frame: Frame) => void;
 
 /**
  * The one connection to the current computer. It owns reconnecting, the
- * silent-socket watchdog and a send queue: NSH's WebSocket takes at most eight
- * messages waiting to go out, so a burst (the connect snapshot, terminal
- * input) waits here instead of failing. A server switch makes a new Transport.
+ * silent-socket watchdog and a send queue: NSH's WebSocket lets at most 8 MiB
+ * (in 1,024 messages) wait to go out within a turn, so a bigger burst (a long
+ * paste, pictures in a message) waits here instead of failing. A server switch makes a new Transport.
  */
 export class Transport {
   state: ConnectionState = "idle";

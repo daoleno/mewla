@@ -10,8 +10,8 @@ Usage (repository root):
   scripts/ci-local.py --all        # every job that can run here
   scripts/ci-local.py --list       # print the plan, run nothing
   scripts/ci-local.py --base REF   # diff against REF (default origin/main)
-  scripts/ci-local.py --job app    # one job, whatever the diff is
-  scripts/ci-local.py --job app --step licenses   # only steps whose name contains the text
+  scripts/ci-local.py --job client    # one job, whatever the diff is
+  scripts/ci-local.py --job client --step licenses   # only steps whose name contains the text
 
 The diff is origin/main..HEAD plus uncommitted and untracked files.
 """
@@ -37,8 +37,6 @@ WORKFLOW = ROOT / ".github/workflows/ci.yml"
 
 # Jobs that need hardware or SDKs a Linux dev box does not have.
 SKIPPED_JOBS = {
-    "ios-native": "needs macOS and Xcode (unsigned Simulator build)",
-    "android-native": "needs the Android SDK and a Gradle native link",
     "windows": "needs a Windows runner (Windows PowerShell and the Win32 API)",
 }
 
@@ -48,15 +46,16 @@ EVERYTHING = [".github/workflows/ci.yml", "scripts/ci-local.py", "bunfig.toml"]
 JOB_PATHS = {
     "installer": ["install.sh", "scripts/tests/install_test.sh", "scripts/install*"],
     "daemon": ["daemon/*", "scripts/*plugin-publisher*", "scripts/build-daemon-linux.sh", "scripts/build-web-ui.sh"],
-    "app": [
-        "app/*", "bun.lock", "package.json", "patches/*", "scripts/app-licenses/*",
-        "scripts/generate-*.mjs", "docs/*",
+    "client": ["client/*", "bun.lock", "package.json"],
+    "native-contract": [
+        "scripts/verify-libghostty.sh", "scripts/lib/*", "native/terminal-vt/*",
+        "client/android/app/build.gradle.kts", "client/android/app/CMakeLists.txt", "client/ios/project.yml",
+        "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt",
     ],
-    "client": ["client/*"],
-    "native-contract": ["scripts/verify-libghostty.sh", "scripts/lib/*", "app/modules/terminal-vt/*"],
     "release-identity": [
-        "scripts/*", "app/app.base.json", "app/ios-build.json", "app/package.json",
-        "package.json", "CHANGELOG.md", "release/*", "docs/*",
+        "scripts/*", "client/ui/nsh.json", "client/ios/project.yml", "client/android/*",
+        "client/core/update/version.ts", "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt",
+        "native/terminal-vt/*", "package.json", "CHANGELOG.md", "release/*", "docs/*", ".github/*",
     ],
 }
 

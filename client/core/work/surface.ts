@@ -1,5 +1,7 @@
+import { workProgressMark, type BrainWorkProgress, type ProgressMark } from "./judgedProgress";
 import type { CalendarClock, CalendarItem } from "../calendar/model";
-import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef } from "./types";
+import { readableSummary } from "../sessions/activity";
+import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef, WorkWorkerSession } from "./types";
 
 /** How a Work's state reads: a ring, a seal, a check (DESIGN.md's Work states). */
 export type WorkStatus = "ready" | "running" | "needs" | "warning" | "failed" | "blocked";
@@ -63,9 +65,11 @@ export function brainCurrentWorkLifecycle(work: BrainCurrentWork): BrainWorkLife
   // Brain parked the Work on you (a user_input wake).
   if (work.wake?.kind === "user_input") return lifecyclePresentation("needs_you");
   if (work.attention_state === "reviewing") return lifecyclePresentation("reviewing");
+  // A Worker's request (the daemon's needs_input) is Brain's to resolve, whether Brain's review is queued or
+  // under way: it reaches you only as Brain's question (`work.question`), never by itself, and it is not a
+  // result that came back (owner 2026-11-13, shot 11).
+  if (work.status === "needs_input") return lifecyclePresentation("reviewing");
   if (work.attention_state === "queued" || work.attention_state === "reserved" || work.progress_mode === "ready") return lifecyclePresentation("ready");
-  // A Worker's question Brain is not reviewing is waiting on you.
-  if (work.status === "needs_input") return lifecyclePresentation("needs_you");
   if (work.status === "waiting" || work.progress_mode === "waiting") return lifecyclePresentation("waiting");
   return lifecyclePresentation("working");
 }
@@ -124,18 +128,28 @@ export type BrainWorkSlip = {
   title: string;
   /** "Claude Code · perpetuo" when the Work's Session is live. */
   who?: string;
+  /** The live Session's project ("perpetuo"): Work detail's eyebrow reads "Work · perpetuo". */
+  project?: string;
   summary?: string;
   updatedAt?: string;
   /** The live Session that owns the Work, when it is still open. */
   sessionId?: string;
+  /** A delegated Worker runs its Attempt: the daemon's `stop` cancels the Work and closes that Worker. */
+  stoppable?: boolean;
   unread: boolean;
   /** What Brain asks, with one-tap answers. */
   question?: string;
   choices?: readonly string[];
+  /** The choice Brain recommends, when it is one of `choices`. */
+  recommended?: string;
   /** What the Work waits on, as Brain wrote it. */
   waitFor?: string;
   /** A running Worker's reported phase ("verifying"). */
   phase?: string;
+  /** The judged progress (`judgedProgress.ts`), while the Work is open: Work detail lists its outcomes. */
+  progress?: BrainWorkProgress;
+  /** What its row and card draw of it (`workProgressMark`); none while a person has a part, or before a judgment. */
+  mark?: ProgressMark;
   /** Waiting on a decision since then (immutable while it waits). */
   attentionSince?: string;
   waitedMs?: number;
@@ -151,6 +165,8 @@ export type BrainWorkSlip = {
   calendarLabel?: string;
   /** "运营：挖稿 · Oct 27", the link back to the schedule. */
   calendarLink?: string;
+  /** Every Worker Session that joined it, oldest first (core/work/workers `workWorkerLines`). */
+  workerSessions?: readonly WorkWorkerSession[];
 };
 
 export type BrainWorkSurface = {
@@ -237,10 +253,15 @@ export function brainWorkSurface(
       group = "needs";
       status = "needs";
       statusLabel = "Needs you";
+    } else if (stuck === "outcome_unknown") {
+      // A lost or unconfirmed turn is Brain's to handle (it is woken for it), not the person's (owner 11-13 19:4x).
+      group = "running";
+      status = "running";
+      statusLabel = "Reviewing";
     } else if (stuck) {
       group = "needs";
       status = "warning";
-      statusLabel = stuck === "outcome_unknown" ? "Outcome unknown" : "No decision";
+      statusLabel = "No decision";
     } else if (replied && !stuck) {
       group = "running";
       status = "running";
@@ -259,6 +280,7 @@ export function brainWorkSurface(
       statusLabel,
       title: brainWorkTitle(work.title),
       who: worker ? workerWho(worker) : undefined,
+      project: projectName(worker?.cwd) || undefined,
       summary: work.question
         ? work.question
         : stuck
@@ -269,9 +291,11 @@ export function brainWorkSurface(
       // updated_at moves on every daemon sync; a waiting Work dates from when it began waiting.
       updatedAt: work.attention_since ?? work.updated_at,
       sessionId: worker?.id,
+      stoppable: (Boolean(work.attempt_session_id) && work.attempt_delegated === true) || undefined,
       unread: work.unread_result,
       question: work.question,
       choices: work.choices,
+      recommended: work.recommended && work.choices?.includes(work.recommended) ? work.recommended : undefined,
       waitFor: work.wait_for,
       phase: group === "running" && worker?.phase && worker.phase !== "working" ? worker.phase : undefined,
       attentionSince: work.attention_since,
@@ -280,6 +304,9 @@ export function brainWorkSurface(
       replied,
       closed: terminal || undefined,
       calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
+      workerSessions: work.worker_sessions,
+      progress: terminal ? undefined : work.progress,
+      mark: workProgressMark(work),
     });
   }
   const listed = new Set(slips.map((slip) => slip.workId));
@@ -299,6 +326,7 @@ export function brainWorkSurface(
       updatedAt: work.updated_at,
       unread: false,
       calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
+      workerSessions: work.worker_sessions,
     });
   }
   const rank = (group: BrainWorkGroup) => BRAIN_WORK_GROUP_ORDER.indexOf(group);
@@ -361,7 +389,8 @@ export function workerWho(worker: BrainWorkerRef): string | undefined {
   return [executor, project].filter(Boolean).join(" · ") || undefined;
 }
 
-function projectName(cwd: string | undefined): string {
+/** A working directory's last part ("perpetuo"), or "" with none. */
+export function projectName(cwd: string | undefined): string {
   const parts = (cwd ?? "").split("/").filter(Boolean);
   return parts[parts.length - 1] ?? "";
 }
@@ -406,15 +435,18 @@ function slipSummary(
   const waitFor = (work.wait_for && !work.wake && work.attempt_session_id) || work.calendar
     ? undefined
     : work.wait_for;
+  // A Session's summary is what it reported only once it reported a phase; before, it is the daemon reading
+  // its screen (a pasted command, the provider's footer), as core/sessions/activity says.
+  const reported = worker?.phase?.trim() ? worker.summary : undefined;
   const candidates =
     group === "running"
-      ? [worker?.summary, work.summary]
+      ? [reported, work.summary]
       : group === "back"
-        ? [work.summary, worker?.summary, waitFor]
+        ? [work.summary, reported, waitFor]
         : [waitFor, work.summary];
-  // A bare reference ("operator:2985…") is plumbing, not something to read.
+  // A bare reference ("operator:2985…") is plumbing, and a terminal's footer chrome: neither is something to read.
   return candidates
-    .map((value) => value?.replace(/\s+/g, " ").trim())
+    .map((value) => readableSummary(value))
     .find((value) => Boolean(value && value.includes(" ")));
 }
 

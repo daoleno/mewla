@@ -4,7 +4,7 @@ import { installPlatform } from "../../../../core/platform";
 import { nshPlatform } from "../../../platform";
 import { current, servers } from "../../../session";
 import { bindDaemon } from "../../daemon";
-import { restorePet } from "../../pet/pets";
+import { restorePet } from "../../../pets/pets";
 import type { MorePage } from "../../routes";
 import { FakeDaemon, testServer } from "../../testing/fakeDaemon";
 import { FriendsPageView } from "../FriendsPages";

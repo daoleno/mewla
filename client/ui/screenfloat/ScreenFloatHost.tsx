@@ -1,5 +1,4 @@
-import { cleanup, computed, effect, signal, Text, untracked, View, type JSX } from "nsh";
-import { lifecycle } from "../lifecycle";
+import { cleanup, computed, effect, signal, Text, untracked, View, type JSX, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { floatPlaceholder, phoneMode } from "../../core/phone/setup";
 import {
@@ -17,8 +16,8 @@ import { haltDisplay, listDisplays, screenRequest, ScreenRequestError, type Agen
 import { floatedScreenAgents } from "../../core/screen/screenPageModel";
 import { isWorkerActivelyRunning } from "../../core/sessions/workerStatusPresentation";
 import type { StoredServer } from "../../core/storedServerContract";
-import { Icon } from "../more/kit/Icon";
-import { Spinner } from "../more/kit/kit";
+import { Icon } from "../kit/Icon";
+import { Spinner } from "../kit/kit";
 import { LINUX_MODIFIERS, MAC_MODIFIERS, RemoteSession, RemoteView } from "../more/screen/RemoteView";
 import { PhoneLiveView } from "../phone/contract";
 import { phoneAvailable, phoneControl, phoneStatus } from "../phone/state";
@@ -43,6 +42,8 @@ export interface ScreenFloatHostProps {
   onOpenScreen: (worker: string | null) => void;
   /** What lies under the window's area at the bottom (the tab bar). */
   bottomInset?: () => number;
+  /** What lies left of it (the wide layout's left pane). */
+  leftInset?: () => number;
 }
 
 /**
@@ -63,7 +64,10 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
   let shown = new Set<string>();
   let missing = { server: "", display: false, mac: false };
 
-  const running = () => workers().some((worker) => isWorkerActivelyRunning(worker.status));
+  // A computed: only whether something runs. A Session's own news (its activity, its output, several a second
+  // while Workers run) must not run the reads below again: each one signs two requests on the JS thread, and
+  // Brain's thread stuttered under them (owner 11-13).
+  const running = computed(() => workers().some((worker) => isWorkerActivelyRunning(worker.status)));
   const mayUse = () => running() || holding() !== null;
 
   // A new computer, or nothing that could use a screen: nothing to show until the next read.
@@ -164,7 +168,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
     const first = untracked(source);
     if (!server || !first) return <View />;
     const live = () => sources().find((s) => s.key === first.key) ?? first;
-    if (first.kind === "phone") return <PhoneContent source={live} {...shared(first.key)} onOpen={props.onOpenPhone} bottomInset={props.bottomInset} />;
+    if (first.kind === "phone") return <PhoneContent source={live} {...shared(first.key)} onOpen={props.onOpenPhone} bottomInset={props.bottomInset} leftInset={props.leftInset} />;
     return (
       <RemoteContent
         server={server}
@@ -174,6 +178,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
         onHold={(on) => holding.set(on ? first.key : holding() === first.key ? null : holding())}
         onChanged={refresh}
         bottomInset={props.bottomInset}
+        leftInset={props.leftInset}
         key={key}
       />
     );
@@ -193,6 +198,7 @@ interface FloatProps {
   onCycle: () => void;
   onOpen: () => void;
   bottomInset?: () => number;
+  leftInset?: () => number;
 }
 
 /** Phone use: the native live view, watch only. Taking over is in the Phone page, which Take over opens. */
@@ -225,18 +231,17 @@ function PhoneContent(props: FloatProps) {
       menu={menu}
       attention={() => mode() === "handoff"}
       bottomInset={props.bottomInset}
+      leftInset={props.leftInset}
     >
       {(picture) => (
         <View class="flex-1">
           <View class="absolute inset-0" style={{ pointerEvents: "none" }}>
             <PhoneLiveView class="flex-1" fps={PHONE_FPS} maxWidth={Math.min(FRAME_MAX, Math.max(FRAME_MIN, Math.ceil((picture().width * 3) / FRAME_STEP) * FRAME_STEP))} />
           </View>
-          {placeholder() ? (
-            <View testID="screen-float-placeholder" class="absolute inset-0 items-center justify-center gap-2 bg-card p-3" style={{ pointerEvents: "none" }}>
-              {placeholder()!.failed ? null : <Spinner size={18} tone="faint" />}
-              {placeholder()!.text ? <Text class={`text-center text-xs ${placeholder()!.failed ? "text-destructive" : "text-muted-foreground"}`}>{placeholder()!.text!}</Text> : null}
-            </View>
-          ) : null}
+          <If when={placeholder()}><View testID="screen-float-placeholder" class="absolute inset-0 items-center justify-center gap-2 bg-card p-3" style={{ pointerEvents: "none" }}>
+              <If when={!placeholder()!.failed}><Spinner size={18} tone="faint" /></If>
+              <If when={placeholder()!.text}><Text class={`text-center text-xs ${placeholder()!.failed ? "text-destructive" : "text-muted-foreground"}`}>{placeholder()!.text!}</Text></If>
+            </View></If>
         </View>
       )}
     </ScreenFloat>
@@ -312,23 +317,18 @@ function RemoteContent(props: RemoteContentProps) {
       typing={typing}
       attention={() => session.holding()}
       bottomInset={props.bottomInset}
+      leftInset={props.leftInset}
     >
       {(picture) => (
         <View class="flex-1">
           <View style={{ width: picture().width, height: picture().height + (typing() ? KEY_BAR : 0) }}>
             <RemoteView session={session} label={`${display ? "Display" : "Screen"} of ${props.source().title}`} modifiers={display ? LINUX_MODIFIERS : MAC_MODIFIERS} typing={typing()} onTypingChange={(on) => typing.set(on)} class="flex-1" />
           </View>
-          {session.phase() !== "live" ? (
-            <View testID="screen-float-cover" class="absolute inset-x-0 top-0 items-center justify-center" style={{ height: picture().height, pointerEvents: session.phase() === "lost" ? "box-none" : "none" }}>
-              {session.phase() === "connecting" ? (
-                <Spinner size={20} tone="faint" />
-              ) : (
-                <Button testID="screen-float-reconnect" accessibilityLabel="Reconnect" onPress={() => session.connect()} class="size-12 items-center justify-center rounded-full bg-secondary">
+          <If when={session.phase() !== "live"}><View testID="screen-float-cover" class="absolute inset-x-0 top-0 items-center justify-center" style={{ height: picture().height, pointerEvents: session.phase() === "lost" ? "box-none" : "none" }}>
+              <If when={session.phase() === "connecting"} else={<Button testID="screen-float-reconnect" accessibilityLabel="Reconnect" onPress={() => session.connect()} class="size-12 items-center justify-center rounded-full bg-secondary">
                   <Icon name="refresh" size={22} />
-                </Button>
-              )}
-            </View>
-          ) : null}
+                </Button>}><Spinner size={20} tone="faint" /></If>
+            </View></If>
         </View>
       )}
     </ScreenFloat>

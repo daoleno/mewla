@@ -1,7 +1,7 @@
 import { cleanup, computed, effect, platform, Scroll, signal, Text, untracked, View, windowSize } from "nsh";
 import { BackHandler } from "nsh/mobile";
 import type { JSX } from "nsh";
-import { Button, Input } from "nsh/base";
+import { Button } from "nsh/base";
 import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
 import { agentExtensionsScopeLabel, pluginsForScope, skillCopyScope, skillsForScope, type AgentExtensionsScope } from "../../../../core/extensions/agentExtensionsModel";
 import type { InstalledPluginCopy } from "../../../../core/extensions/pluginsManagement";
@@ -10,9 +10,11 @@ import { skillAgentLabel, skillsRequestData, type InstalledSkill, type ManagedSk
 import { filterLogicalSkills, MANAGED_SKILL_AGENTS, skillCopyLocation, type LogicalSkill, type SkillFilters, type SkillScopeFilter, type SkillStatusFilter } from "../../../../core/extensions/skillsScreenModel";
 import { skillRowSupportsDelete, type SkillsSurfaceSection } from "../../../../core/extensions/skillsSurfaceModel";
 import { daemon, daemonState } from "../../daemon";
-import { Icon, type IconName } from "../../kit/Icon";
-import { EmptyState, Notice, Page, PillButton, Spinner } from "../../kit/kit";
-import { Segmented } from "../../kit/Segmented";
+import { Icon, type IconName } from "../../../kit/Icon";
+import { EmptyState, Notice, Page, PillButton, SearchField, Spinner } from "../../../kit/kit";
+import { Segmented } from "../../../kit/Segmented";
+import { LeadHero, tile } from "../../../kit/RowTile";
+import { AgentIcon } from "../../../icons/AgentIcon";
 import type { PageNav } from "../../routes";
 import { isManaged, PluginCopyCard, PluginDetails, SheetHeader, SkillInspector } from "./Inspector";
 import { AgentMarks } from "./marks";
@@ -37,8 +39,10 @@ import {
   uninstallPluginCopy,
 } from "./state";
 
-const SHEET = "max-h-[94%] rounded-t-3xl bg-card px-4 pb-8 pt-3";
-const BACKDROP = "bg-black/30";
+const SHEET = "max-h-[94%] rounded-t-(--radius-sheet) bg-sheet pb-8 pt-3 shadow-float";
+/** The sheets' side space (AppSheet adds the screen's side insets to it). */
+const SHEET_SIDES = 16;
+const BACKDROP = "bg-scrim";
 /** From this width, Skill and Plugin details sit beside the list (a tablet, a phone on its side). */
 const WIDE_DETAILS = 920;
 /** How far a sideways swipe goes before it switches between Plugins and Skills. */
@@ -130,7 +134,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
 
   const projectName = () => projectCwd().replace(/\/+$/, "").split("/").pop() || projectCwd();
   // Plugins and Skills are peer pages: a sideways swipe goes to the other one. In a browser
-  // only the tabs do (app/DESIGN.md: no swipe paging on the web), so a drag selects text.
+  // only the tabs do (client/DESIGN.md: no swipe paging on the web), so a drag selects text.
   const swipes = platform.os !== "web";
   const swipe = (dx: number) => {
     if (!hasPlugins || Math.abs(dx) < SWIPE_DISTANCE) return;
@@ -164,24 +168,22 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
         const deletable = () => skillRowSupportsDelete(copy, mutationOperations());
         const location = skillCopyLocation(copy);
         return (
-          <View class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2">
+          <View class="flex-row items-center gap-2 rounded-(--radius-control) bg-sheet-surface px-3 py-2">
             <View class="min-w-0 flex-1 gap-0.5">
               <AgentMarks agents={copy.agents as ManagedSkillAgent[]} size={16} />
-              <Text class="text-sm line-clamp-2">{location.label}</Text>
-              <View selectable><Text class="font-mono text-xs text-muted-foreground line-clamp-1">{location.path}</Text></View>
-              {deletable() ? null : <Text class="text-xs text-muted-foreground">{copy.capability.reason || "This copy cannot be deleted from here."}</Text>}
+              <Text class="text-sub line-clamp-2">{location.label}</Text>
+              <View selectable><Text class="font-mono text-code text-muted-foreground line-clamp-1">{location.path}</Text></View>
+              <If when={!deletable()}><Text class="text-caption text-muted-foreground">{copy.capability.reason || "This copy cannot be deleted from here."}</Text></If>
             </View>
-            {deletable() ? (
-              <Button
+            <If when={deletable()}><Button
                 testID={`pick-delete-${copy.id}`}
                 accessibilityLabel={`Delete ${copy.name} from ${copy.location}`}
                 disabled={Boolean(preparing())}
                 onPress={() => { skillPicker.set(null); void deleteSkillCopy(copy); }}
                 class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
               >
-                {preparing() === `delete:${copy.id}` ? <Spinner size={16} /> : <Icon name="trash" size={20} tone="seal" />}
-              </Button>
-            ) : null}
+                <If when={preparing() === `delete:${copy.id}`} else={<Icon name="trash" size={20} tone="ink" />}><Spinner size={16} /></If>
+              </Button></If>
           </View>
         );
       })}
@@ -203,24 +205,28 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
 
   return (
     <Page
+      display
       title={agentExtensionsScopeLabel(props.scope)}
+      hero={
+        <View testID="agent-hero" class="gap-3 px-1 pb-2 pt-3">
+          <LeadHero lead={props.scope === "shared" ? tile("swap-horizontal") : { kind: "logo", node: <AgentIcon kind={props.scope === "claude-code" ? "claude" : props.scope} size={40} slot={40} /> }} />
+          <Text class="text-display font-bold tracking-display" role="header" style={{ numberOfLines: 2 }}>{agentExtensionsScopeLabel(props.scope)}</Text>
+        </View>
+      }
       testID="agent-page"
       refreshing={loadingNow() && Boolean(skillsRequestData(skillsState()))}
       onRefresh={refresh}
       aside={
         <View testID="details-panel" class="w-[400px] flex-col border-l border-border bg-card" style={{ display: wide() && panel() ? "flex" : "none" }}>
-          {((key) => untracked(() => (!key ? null : <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll>)))(wide() ? panel() : "")}
+          {((key) => untracked(() => (<If when={key}><Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll></If>)))(wide() ? panel() : "")}
         </View>
       }
     >
-      {daemon() && projectCwd() ? (
-        <View testID="project-scope" class="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1" accessible accessibilityLabel={`Project ${projectName()}`}>
+      <If when={daemon() && projectCwd()}><View testID="project-scope" class="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1" accessible accessibilityLabel={`Project ${projectName()}`}>
           <Icon name="folder" size={14} />
-          <Text class="text-xs line-clamp-1">{projectName()}</Text>
-        </View>
-      ) : null}
-      {hasPlugins ? (
-        <View class="mt-2">
+          <Text class="text-caption line-clamp-1">{projectName()}</Text>
+        </View></If>
+      <If when={hasPlugins}><View class="mt-2">
           <Segmented
             testID="agent-section"
             accessibilityLabel="Plugins and Skills"
@@ -228,16 +234,24 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
             value={section()}
             onChange={(key) => chosen.set(key)}
           />
-        </View>
-      ) : null}
-      {notice() ? (
-        <View testID="mutation-notice">
+        </View></If>
+      <If when={notice()}><View testID="mutation-notice">
           <Notice live tone={notice()!.kind === "error" ? "failed" : "success"} title={notice()!.message} action="Dismiss" onAction={() => notice.set(null)} />
-        </View>
-      ) : null}
+        </View></If>
       <View testID="agent-sections" panActivation={swipes ? { activeOffsetX: 24, failOffsetY: 14 } : undefined} onPanEnd={swipes ? (event) => !event.cancelled && swipe(event.translation.x) : undefined}>
-      {section() === "skills" ? (
-        <SkillsList
+      <If when={section() === "skills"} else={<PluginsList
+          rows={shownPlugins()}
+          total={plugins().length}
+          query={pluginQuery()}
+          filters={pluginFilters()}
+          onQuery={(value) => pluginQuery.set(value)}
+          onFilters={() => filtersOpen.set("plugins")}
+          onClearFilters={() => { pluginQuery.set(""); pluginFilters.set(NO_PLUGIN_FILTERS); }}
+          onRemoveFilter={(next) => pluginFilters.set(next)}
+          onOpen={(plugin) => openPluginKey.set(plugin.key)}
+          onUninstall={chooseUninstall}
+          nav={props.nav}
+        />}><SkillsList
           rows={shownSkills()}
           total={skills().length}
           pluginOwned={hasPlugins ? pluginOwned() : 0}
@@ -251,44 +265,29 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
           onOpen={(skill) => void inspectSkill(skill.primaryCopy)}
           onDelete={chooseDelete}
           nav={props.nav}
-        />
-      ) : (
-        <PluginsList
-          rows={shownPlugins()}
-          total={plugins().length}
-          query={pluginQuery()}
-          filters={pluginFilters()}
-          onQuery={(value) => pluginQuery.set(value)}
-          onFilters={() => filtersOpen.set("plugins")}
-          onClearFilters={() => { pluginQuery.set(""); pluginFilters.set(NO_PLUGIN_FILTERS); }}
-          onRemoveFilter={(next) => pluginFilters.set(next)}
-          onOpen={(plugin) => openPluginKey.set(plugin.key)}
-          onUninstall={chooseUninstall}
-          nav={props.nav}
-        />
-      )}
+        /></If>
       </View>
 
-      <Sheet open={filtersOpen() === "skills"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={filtersOpen() === "skills"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <SkillFilterSheet agents={filterAgents()} filters={skillFilters()} onChange={(next) => skillFilters.set(next)} onClose={() => filtersOpen.set(null)} />
       </Sheet>
-      <Sheet open={filtersOpen() === "plugins"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={filtersOpen() === "plugins"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <PluginFilterSheet agents={MANAGED_SKILL_AGENTS.filter((agent) => plugins().some((plugin) => plugin.agents.includes(agent)))} filters={pluginFilters()} onChange={(next) => pluginFilters.set(next)} onClose={() => filtersOpen.set(null)} />
       </Sheet>
 
-      <Sheet open={skillPicker() !== null} onOpenChange={({ open }) => !open && skillPicker.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={skillPicker() !== null} onOpenChange={({ open }) => !open && skillPicker.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <View>{((skill) => untracked(() => (skill ? skillPickerView(skill) : null)))(skillPicker())}</View>
       </Sheet>
-      <Sheet open={pluginPicker() !== null} onOpenChange={({ open }) => !open && pluginPicker.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={pluginPicker() !== null} onOpenChange={({ open }) => !open && pluginPicker.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         <View>{((plugin) => untracked(() => (plugin ? pluginPickerView(plugin) : null)))(pluginPicker())}</View>
       </Sheet>
 
-      <Sheet open={!wide() && panel().startsWith("skill:")} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+      <Sheet open={!wide() && panel().startsWith("skill:")} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
         {/* The sheet takes its content once; the view inside follows the copy shown. */}
-        <View class="shrink">{((key) => untracked(() => (key.startsWith("skill:") ? <Scroll keyboardShouldPersistTaps="handled" class="shrink">{inspector()}</Scroll> : null)))(wide() ? "" : panel())}</View>
+        <View class="shrink">{((key) => untracked(() => (<If when={key.startsWith("skill:")}><Scroll keyboardShouldPersistTaps="handled" class="shrink">{inspector()}</Scroll></If>)))(wide() ? "" : panel())}</View>
       </Sheet>
-      <Sheet open={!wide() && panel().startsWith("plugin:")} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
-        <View class="shrink">{((key) => untracked(() => (key.startsWith("plugin:") ? <Scroll keyboardShouldPersistTaps="handled" class="shrink">{pluginDetails()}</Scroll> : null)))(wide() ? "" : panel())}</View>
+      <Sheet open={!wide() && panel().startsWith("plugin:")} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} sidePadding={SHEET_SIDES} backdropClass={BACKDROP}>
+        <View class="shrink">{((key) => untracked(() => (<If when={key.startsWith("plugin:")}><Scroll keyboardShouldPersistTaps="handled" class="shrink">{pluginDetails()}</Scroll></If>)))(wide() ? "" : panel())}</View>
       </Sheet>
     </Page>
   );
@@ -298,26 +297,11 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
 function Toolbar(props: { placeholder: string; label: string; query: string; onQuery: (value: string) => void; filterLabel: string; filtered: boolean; onFilters: () => void; testID: string }) {
   return (
     <View class="mt-4 flex-row items-center gap-2">
-      <View class="min-h-[44px] flex-1 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3">
-        <Icon name="search" size={16} />
-        <Input
-          testID={`${props.testID}-search`}
-          accessibilityLabel={props.label}
-          class="min-h-[44px] flex-1 py-2 text-base"
-          value={props.query}
-          placeholder={props.placeholder}
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChange={({ value }) => props.onQuery(value)}
-        />
-        {props.query ? (
-          <Button accessibilityLabel="Clear search" onPress={() => props.onQuery("")} class="size-8 items-center justify-center active:opacity-60">
-            <Icon name="close-circle" size={16} tone="faint" />
-          </Button>
-        ) : null}
+      <View class="flex-1">
+        <SearchField testID={`${props.testID}-search`} accessibilityLabel={props.label} placeholder={props.placeholder} value={props.query} onChange={props.onQuery} />
       </View>
-      <Button testID={`${props.testID}-filter`} accessibilityLabel={props.filterLabel} onPress={props.onFilters} class={`size-11 items-center justify-center rounded-xl border border-border active:bg-accent ${props.filtered ? "bg-secondary" : "bg-card"}`}>
-        <Icon name="options" size={18} tone={props.filtered ? "ink" : "soft"} />
+      <Button testID={`${props.testID}-filter`} accessibilityLabel={props.filterLabel} onPress={props.onFilters} class={`size-11 items-center justify-center rounded-[14px] active:bg-accent ${props.filtered ? "bg-primary" : "bg-card"}`}>
+        <Icon name="options" size={18} tone={props.filtered ? "canvas" : "soft"} />
       </Button>
     </View>
   );
@@ -327,7 +311,7 @@ function Toolbar(props: { placeholder: string; label: string; query: string; onQ
 function Chip(props: { label: string; removeLabel: string; onRemove: () => void }) {
   return (
     <Button accessibilityLabel={props.removeLabel} onPress={props.onRemove} class="flex-row items-center gap-1 rounded-full bg-secondary px-3 py-1 active:opacity-70">
-      <Text class="text-xs font-medium">{props.label}</Text>
+      <Text class="text-caption font-semibold">{props.label}</Text>
       <Icon name="close" size={12} />
     </Button>
   );
@@ -338,12 +322,12 @@ function ItemRow(props: { testID: string; name: string; summary: string; agents:
   return (
     <View class="flex-row items-center">
       <Button testID={props.testID} accessibilityLabel={props.openLabel} onPress={props.onOpen} class="min-w-0 flex-1 gap-1 py-3 pl-4 pr-2 active:bg-accent">
-        <Text class="text-base font-medium line-clamp-1">{props.name}</Text>
-        <Text class="text-sm text-muted-foreground line-clamp-2">{props.summary}</Text>
+        <Text class="text-body font-semibold line-clamp-1">{props.name}</Text>
+        <Text class="text-sub text-muted-foreground line-clamp-2">{props.summary}</Text>
         <AgentMarks agents={props.agents} size={15} />
       </Button>
       <Button testID={`${props.testID}-action`} accessibilityLabel={props.action.label} disabled={props.action.disabled} onPress={props.action.onPress} class="mr-1 size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50">
-        {props.action.busy ? <Spinner size={16} /> : <Icon name={props.action.icon} size={20} tone={props.action.destructive ? "seal" : "faint"} />}
+        <If when={props.action.busy} else={<Icon name={props.action.icon} size={20} tone={props.action.destructive ? "ink" : "faint"} />}><Spinner size={16} /></If>
       </Button>
       <View class="absolute bottom-0 left-4 right-0 h-px bg-border" />
     </View>
@@ -352,7 +336,7 @@ function ItemRow(props: { testID: string; name: string; summary: string; agents:
 
 function Card(props: { children?: JSX.Element }) {
   return (
-    <View class="mt-3 overflow-hidden rounded-2xl border border-border bg-card">
+    <View class="mt-3 overflow-hidden rounded-(--radius-group) bg-card">
       <View class="-mb-px">{props.children}</View>
     </View>
   );
@@ -384,7 +368,7 @@ function SkillsList(props: {
       return (
         <View>
           <EmptyState testID="skills-failed" icon={offline() ? "cloud-offline" : "warning"} title={offline() ? "Server disconnected" : "Skills unavailable"} detail={state().error} action="Try again" onAction={() => void refreshSkills()} />
-          {offline() ? <View class="items-center"><PillButton title="Open Settings" onPress={() => props.nav.push({ name: "settings" })} /></View> : null}
+          <If when={offline()}><View class="items-center"><PillButton title="Open Settings" onPress={() => props.nav.push({ name: "settings" })} /></View></If>
         </View>
       );
     }
@@ -423,22 +407,14 @@ function SkillsList(props: {
   };
   return (
     <View>
-      {inventory() ? (
-        <Toolbar testID="skills" placeholder="Search Skills" label="Search local Skills" query={props.query} onQuery={props.onQuery} filterLabel="Filter Skills" filtered={filtered()} onFilters={props.onFilters} />
-      ) : null}
-      {filtered() ? (
-        <View class="mt-2 flex-row flex-wrap gap-1.5">
+      <If when={inventory()}><Toolbar testID="skills" placeholder="Search Skills" label="Search local Skills" query={props.query} onQuery={props.onQuery} filterLabel="Filter Skills" filtered={filtered()} onFilters={props.onFilters} /></If>
+      <If when={filtered()}><View class="mt-2 flex-row flex-wrap gap-1.5">
           {props.filters.agents.map((agent) => (
             <Chip label={skillAgentLabel(agent)} removeLabel={`Remove ${skillAgentLabel(agent)} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, agents: props.filters.agents.filter((item) => item !== agent) })} />
           ))}
-          {props.filters.status !== "all" ? (
-            <Chip label={STATUS_LABEL[props.filters.status]} removeLabel={`Remove ${STATUS_LABEL[props.filters.status]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, status: "all" })} />
-          ) : null}
-          {props.filters.scope !== "all" ? (
-            <Chip label={SCOPE_LABEL[props.filters.scope]} removeLabel={`Remove ${SCOPE_LABEL[props.filters.scope]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, scope: "all" })} />
-          ) : null}
-        </View>
-      ) : null}
+          <If when={props.filters.status !== "all"}><Chip label={STATUS_LABEL[props.filters.status]} removeLabel={`Remove ${STATUS_LABEL[props.filters.status]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, status: "all" })} /></If>
+          <If when={props.filters.scope !== "all"}><Chip label={SCOPE_LABEL[props.filters.scope]} removeLabel={`Remove ${SCOPE_LABEL[props.filters.scope]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, scope: "all" })} /></If>
+        </View></If>
       <OwnershipNotice count={props.pluginOwned} onView={props.onShowPlugins} />
       {body()}
     </View>
@@ -450,11 +426,7 @@ function OwnershipNotice(props: { count: number; onView: () => void }) {
   const state = () => pluginsState();
   return (
     <View>
-      {state().status === "error" ? (
-        <Notice testID="ownership-failed" title="Plugin ownership unavailable" detail="Skills that come with plugins may appear here. They stay protected." action="Retry" onAction={() => void refreshPlugins()} />
-      ) : props.count > 0 ? (
-        <Notice testID="ownership-notice" tone="info" icon="puzzle" title={`${props.count} more ${props.count === 1 ? "Skill comes" : "Skills come"} with plugins`} action="View" onAction={props.onView} />
-      ) : null}
+      <If when={state().status === "error"} else={<If when={props.count > 0}><Notice testID="ownership-notice" tone="info" icon="puzzle" title={`${props.count} more ${props.count === 1 ? "Skill comes" : "Skills come"} with plugins`} action="View" onAction={props.onView} /></If>}><Notice testID="ownership-failed" title="Plugin ownership unavailable" detail="Skills that come with plugins may appear here. They stay protected." action="Retry" onAction={() => void refreshPlugins()} /></If>
     </View>
   );
 }
@@ -510,19 +482,13 @@ function PluginsList(props: {
   };
   return (
     <View>
-      {inventory() ? (
-        <Toolbar testID="plugins" placeholder="Search Plugins" label="Search installed Plugins" query={props.query} onQuery={props.onQuery} filterLabel="Filter Plugins" filtered={filtered()} onFilters={props.onFilters} />
-      ) : null}
-      {filtered() ? (
-        <View class="mt-2 flex-row flex-wrap gap-1.5">
+      <If when={inventory()}><Toolbar testID="plugins" placeholder="Search Plugins" label="Search installed Plugins" query={props.query} onQuery={props.onQuery} filterLabel="Filter Plugins" filtered={filtered()} onFilters={props.onFilters} /></If>
+      <If when={filtered()}><View class="mt-2 flex-row flex-wrap gap-1.5">
           {props.filters.agents.map((agent) => (
             <Chip label={skillAgentLabel(agent)} removeLabel={`Remove ${skillAgentLabel(agent)} Plugin filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, agents: props.filters.agents.filter((item) => item !== agent) })} />
           ))}
-          {props.filters.capability !== "all" ? (
-            <Chip label={CAPABILITY_LABEL[props.filters.capability]} removeLabel="Remove Plugin capability filter" onRemove={() => props.onRemoveFilter({ ...props.filters, capability: "all" })} />
-          ) : null}
-        </View>
-      ) : null}
+          <If when={props.filters.capability !== "all"}><Chip label={CAPABILITY_LABEL[props.filters.capability]} removeLabel="Remove Plugin capability filter" onRemove={() => props.onRemoveFilter({ ...props.filters, capability: "all" })} /></If>
+        </View></If>
       {body()}
     </View>
   );
@@ -536,7 +502,7 @@ const CAPABILITY_LABEL: Record<PluginCapabilityFilter, string> = { all: "All", u
 function Choice<K extends string>(props: { title: string; options: readonly K[]; labels: Record<K, string>; value: K; onChange: (value: K) => void; testID: string }) {
   return (
     <View class="mt-4 gap-2">
-      <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
+      <Text class="text-sub font-semibold text-muted-foreground" role="header">{props.title}</Text>
       <View class="flex-row flex-wrap gap-2">
         {props.options.map((option) => (
           <Button
@@ -546,7 +512,7 @@ function Choice<K extends string>(props: { title: string; options: readonly K[];
             onPress={() => props.onChange(option)}
             class={`rounded-full border px-3 py-1.5 active:opacity-70 ${props.value === option ? "border-foreground bg-secondary" : "border-border"}`}
           >
-            <Text class="text-sm">{props.labels[option]}</Text>
+            <Text class="text-sub">{props.labels[option]}</Text>
           </Button>
         ))}
       </View>
@@ -557,7 +523,7 @@ function Choice<K extends string>(props: { title: string; options: readonly K[];
 function AgentChoice(props: { agents: readonly ManagedSkillAgent[]; value: readonly ManagedSkillAgent[]; onChange: (agents: ManagedSkillAgent[]) => void; title: string }) {
   return (
     <View class="mt-4 flex-col gap-2" style={{ display: props.agents.length < 2 ? "none" : "flex" }}>
-      <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
+      <Text class="text-sub font-semibold text-muted-foreground" role="header">{props.title}</Text>
       <View class="flex-row flex-wrap gap-2">
         {props.agents.map((agent) => {
           const on = props.value.includes(agent);
@@ -569,7 +535,7 @@ function AgentChoice(props: { agents: readonly ManagedSkillAgent[]; value: reado
               onPress={() => props.onChange(on ? props.value.filter((item) => item !== agent) : [...props.value, agent])}
               class={`rounded-full border px-3 py-1.5 active:opacity-70 ${on ? "border-foreground bg-secondary" : "border-border"}`}
             >
-              <Text class="text-sm">{skillAgentLabel(agent)}</Text>
+              <Text class="text-sub">{skillAgentLabel(agent)}</Text>
             </Button>
           );
         })}

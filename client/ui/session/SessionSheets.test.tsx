@@ -56,7 +56,7 @@ describe("Model sheet", () => {
     const app = await open(HARNESS, c);
     await app.press("id:harness-open");
     await app.waitFor("id:model-row-sonnet");
-    expect(app.texts()).toContain("Model & Effect");
+    expect(app.texts()).toContain("Model & Effort");
     expect(app.count("id:model-row-opus")).toBe(1);
     await app.press("id:model-row-sonnet");
     await app.waitFor("text:closes:1");
@@ -71,7 +71,7 @@ describe("Model sheet", () => {
     await app.waitFor("id:model-row-gpt-6");
     await app.press("id:model-row-gpt-6");
     await app.waitFor("id:effect-row-high");
-    expect(app.texts()).toContain("Effect");
+    expect(app.texts()).toContain("Effort");
     expect(app.texts()).toContain("Default");
     await app.press("id:model-back");
     await app.waitFor("id:model-row-gpt-6-mini");

@@ -361,7 +361,7 @@ opens the phone, where Phone use is on.
   call says you hold the screen, and it waits. **Give back** lets it go on, and
   it hears how long you held it. Leaving Screen gives it back by itself.
 
-With **Settings › Labs › Virtual screen** on (tap the cat, then **Settings**), a
+With **Settings › Agents › Virtual screen** on (tap the cat, then **Settings**), a
 Worker (Claude or Codex) works in the agents' browser on the virtual screen
 instead of your Chrome. It is the same browser tool every Worker has,
 `mewla_chrome`, with the same Mewla extension in that Chrome, so nothing about

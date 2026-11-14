@@ -61,10 +61,13 @@ describe("a finger on the chart", () => {
 
 describe("swiping between ranges", () => {
   test("leftwards goes to the next range, rightwards to the previous, never past the ends", () => {
-    expect(swipedRange("week", -80, 4)).toBe("month");
-    expect(swipedRange("week", 80, 4)).toBe("day");
-    expect(swipedRange("all", -80, 0)).toBeNull();
-    expect(swipedRange("day", 80, 0)).toBeNull();
+    expect(swipedRange("fortnight", -80, 4)).toBe("month");
+    expect(swipedRange("fortnight", 80, 4)).toBe("week");
+    expect(swipedRange("month", -80, 0)).toBeNull();
+    expect(swipedRange("week", 80, 0)).toBeNull();
+    // A computer with 7 and 30 only: one swipe between them.
+    const old = [{ key: "week", label: "7 days", days: 7 }, { key: "month", label: "30 days", days: 30 }] as const;
+    expect(swipedRange("week", -80, 0, old)).toBe("month");
   });
 
   test("a short or mostly vertical drag is not a swipe", () => {

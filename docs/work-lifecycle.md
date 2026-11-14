@@ -108,7 +108,7 @@ Cursor and Grok record no turn error, so they have nothing to classify.
 | Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
 | Persistent error by code or status: login, billing, unknown model, invalid or oversized request, 4xx |
 | An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) | One stall escalation after 30 s (`provider_error`); never resumed |
-| Stopped with no error and no terminal report, the pane idle at its prompt | One stall escalation after 90 s (`stopped`, "Worker stopped; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents |
+| Stopped with no error and no terminal report, the pane idle at its prompt or the agent's own hook saying its turn ended | One stall escalation after 90 s (`stopped`, "Worker's turn ended without a progress report; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents |
 | Stopped with no error and no terminal report, the pane not recognized as idle | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease |
 
 A Turn that carries its identity in the prompt (a signal Turn) is settled only by
@@ -119,7 +119,21 @@ Turn still binds to the provider Activity that carried its exact input (matched
 by the input's digest) even when the Worker's first check-in arrived before the
 transcript was read; without that, every later provider fact stayed unbound. The
 `stopped` row above is how Brain hears about a Worker that ended without
-reporting.
+reporting. Until then the Turn reads "Turn ended without a progress report;
+waiting for the Worker's report" and its Work is `waiting` ("The Worker's turn
+ended without a progress report; Brain is told if none follows."), not
+`running`; a new provider Activity (a background wake) or the Worker's late
+report sets it running or settles it. A Claude Worker's composer may hold a dim
+prompt suggestion after its turn, which a screen capture cannot tell from typed
+text, so a turn end that Claude's `Stop` hook reported counts as stopped
+whatever the composer shows.
+
+A delegated prompt is admitted either by the Worker's own first report or by
+the provider admission that carried its exact bytes. Claude receives Mewla's
+typed prefix plus one paste envelope, so its `UserPromptSubmit` hook and its
+transcript carry the wrapped bytes; the admission is matched by the unwrapped
+digest too, so a Claude Worker that never reports, fresh or resumed (`-command
+"claude --resume <id>"`), is still admitted and its turn followed.
 
 The wait is counted from the first poll that saw the Session idle, not from when
 the provider settled. A Worker idle at its prompt while a background Monitor,
@@ -349,7 +363,40 @@ or ⋮ → Work); see
 `current_work`, then `open_work` (every unfinished Work `current_work` leaves
 out, newest first, with its status, progress mode and wait; Brain's own
 context keeps only the bounded `current_work`), and maps each lifecycle onto six marks in
-`brainWorkLifecycleStatus` (`app/components/brain/brainWorkEventPresentation.ts`).
+`brainWorkLifecycleStatus` (`client/core/work/surface.ts`).
+
+**Workers of a Work.** A Work can be run by several Worker Sessions over its
+life: `mewla worker spawn -work <id>` hands it to a new Session while Brain
+handles the previous result. Each `current_work` and `open_work` entry lists
+them as `worker_sessions`, in the order they joined, live and finished:
+`session_id`, `name`, `executor_id`, `provider`, `state` (`running`,
+`blocked`, `done`, `failed`, or `ended` for a Session that left without a
+result), `summary`, `phase` (live only), `live`, `joined_at`, `ended_at` and
+`updated_at`. Membership comes only from the Work's admissions and delegated
+turns; the name and executor a Session had when it joined are kept in
+`state/work_workers.jsonl`, so a finished Worker is still named after its pane
+is gone. A Session reused by another Work is finished for this one. A closed
+Work is in neither list; `brain_work_detail` (`id`: the Work id) answers its
+`work` with the same `worker_sessions`. `attempt_session_id` stays: it is the
+one Session that owns the Work right now.
+
+**A result's next steps.** Each Work result row in Brain's thread
+(`source: work_result`) carries `work_actions`, and `brain_work_detail`
+carries the newest result's as `result_actions`. They are only what the daemon
+can show is there (`brain/work_result_actions.go`):
+
+| Kind | When | Fields |
+| --- | --- | --- |
+| `pull_request` | A GitHub pull request or GitLab merge request URL is written in the result's summary or details | `url` |
+| `git_review` | The Worker's project has uncommitted changes now; only on the Work's current result | `session_id`, `cwd` (the repository root) |
+| `file` | The result names a file that exists inside the Worker's project; only on the Work's current result | `session_id`, `cwd`, `path` (relative to `cwd`) |
+| `brain_file` | The result names a file in the Brain workspace, or the Work's context is one | `path` (relative to the workspace) |
+| `brain_folder` | The Work's context is a Brain workspace folder (its worklog) | `path` |
+
+A result that names none of these, from a Worker whose project is unknown or
+clean, has none. The project is the cwd the Worker joined with
+(`work_workers.jsonl`), else its live cwd. `Work.next_action` is Brain's own
+note: it is not on the wire and never fills a result's text.
 
 ### User Decisions
 
@@ -364,7 +411,7 @@ Event with `source_name: user`, so Brain reads the decision as a fact.
 | `close` (Accept) | `CloseWork` as done, actor `user` | `brain.work_closed` |
 | `dismiss` (Not needed anymore) | `CloseWork` as cancelled, actor `user` | `brain.work_closed` |
 | `stop` | `CloseWork` as cancelled, then the delegated Worker Session is torn down; never the Host | `brain.work_closed` |
-| `snooze` | Records `snoozed_until`; no lifecycle change, nothing scheduled | `user.snoozed` |
+| `snooze` | Records `snoozed_until`: `snooze_seconds` from now on the computer's clock (the app offers the lengths, e.g. an hour), or a `snooze_until` time the app chose (tomorrow morning where the phone is); exactly one, at most a year. No lifecycle change, nothing scheduled | `user.snoozed` |
 
 **Who accepts Work.** Brain accepts Work after review, and the user can
 close it directly; both closes are final. When Brain reads a result and

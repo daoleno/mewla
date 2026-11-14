@@ -70,6 +70,11 @@ const (
 	KindUserMessage EventKind = "user_message"
 	// KindProgress: the agent did something within the current turn.
 	KindProgress EventKind = "progress"
+	// KindActivity: the agent started something (a tool call). It says what it
+	// is doing now (Event.Activity) and, unlike KindProgress, never settles a
+	// decision the agent is waiting on: a call started in parallel with one
+	// that asks is not the person's answer.
+	KindActivity EventKind = "activity"
 	// KindApprovalRequest: the agent is waiting on a decision.
 	KindApprovalRequest EventKind = "approval_request"
 	// KindApprovalResolved: a pending decision was made (by Mewla, by the
@@ -186,6 +191,14 @@ type Event struct {
 	ApprovalID string
 	By         string
 	OptionID   string
+
+	// Activity is the line a KindActivity event says: what the agent is doing.
+	Activity string
+	// ActivityTool and ActivitySummary are that line's parts: the tool the
+	// agent started ("Bash") and what it works on ("curl -sI …"), empty when
+	// the call names nothing. Clients word them as they word that tool's row.
+	ActivityTool    string
+	ActivitySummary string
 
 	// ExitCode is set on KindExit when the agent reports one.
 	ExitCode *int

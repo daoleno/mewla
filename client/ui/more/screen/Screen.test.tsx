@@ -1,5 +1,6 @@
 import { describe, expect, open, test, type StubResponse } from "nsh/test";
 import { KEYBOARD_SENTINEL } from "../../../core/screen/screenPageModel";
+import { pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "./testing/ScreenHarness.tsx";
 const SCREEN = "http://desk.test:9877/screen";
@@ -106,8 +107,7 @@ describe("Screen: setup", () => {
       "POST http://desk.test:9877/browser": json({ virtual_screen: false }),
     }));
     await app.waitFor("id:virtual-screen");
-    await app.waitUntil(() => app.enabled("id:virtual-screen"));
-    await app.press("id:virtual-screen");
+    await pressWhenEnabled(app, "id:virtual-screen");
     await app.waitUntil(() => app.requests().filter((r) => r.url === "http://desk.test:9877/browser").length === 2);
     const last = app.requests().filter((r) => r.url === "http://desk.test:9877/browser").at(-1)!;
     expect(JSON.parse(String(last.body))).toEqual({ action: "settings", enabled: true });
@@ -121,8 +121,7 @@ describe("Screen: setup", () => {
     }));
     // `enabled` throws while no view matches: the switch first, then that it takes a press.
     await app.waitFor("id:virtual-screen");
-    await app.waitUntil(() => app.enabled("id:virtual-screen"));
-    await app.press("id:virtual-screen");
+    await pressWhenEnabled(app, "id:virtual-screen");
     await app.waitFor("text:Nothing on screen");
   });
 });
@@ -355,7 +354,6 @@ describe("Screen: Linux agent displays", () => {
   test("a Linux computer lists each agent's display, or says nothing is on screen", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) }));
     await app.waitFor("text:Nothing on screen");
-    expect(app.texts()).toContain("An agent's screen shows up here while it works.");
   });
 
   test("on a phone, the Linux page's options show only when they hold the Phone row (screen [72])", async () => {
@@ -447,6 +445,16 @@ describe("Screen in a browser", () => {
     expect(app.shows("id:screen-keyboard")).toBe(false);
     expect(app.shows("id:remote-keyboard")).toBe(false);
     expect(app.shows("id:remote-key-bar")).toBe(false);
+  });
+
+  test("Full size asks the page to show the picture full size, with the keyboard locked (parity #29)", async () => {
+    const opts = options({ [`GET ${SCREEN}`]: json(base) }, web);
+    const app = await open(HARNESS, { ...opts, host: { ...opts.host, handlers: { ...opts.host.handlers, "web.fullscreen": () => ({ keyboardLocked: true }) } } });
+    await goLive(app);
+    await app.press("id:screen-options");
+    await app.press("text:Full size");
+    await app.waitUntil(() => app.host.calls().some((call) => call.name === "web.fullscreen"));
+    expect(app.host.calls().find((call) => call.name === "web.fullscreen")?.data).toEqual({ testID: "remote-view", label: "Screen of Studio" });
   });
 
   test("a wide window keeps its header and the picture at the top", async () => {

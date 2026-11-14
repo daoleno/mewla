@@ -1,8 +1,9 @@
 # iOS app
 
-The iOS client is available as a source build. It has been validated on an Apple Silicon Mac with Xcode 26.6 and an iPhone 17 Pro / iOS 26.5 Simulator, including pairing, daemon reconnect, session discovery, tmux attachment, Ghostty rendering, and terminal input/output.
+The iOS app is the NSH client's xcodegen host in `client/ios` (see
+[client/README.md](../../client/README.md)). It is available as a source build.
 
-Mewla does not currently claim a generally available App Store build. The repository includes macOS CI for an unsigned Simulator app and a manual, credential-gated signed IPA/TestFlight workflow. A physical-device source install requires an Apple development team and signing configuration.
+Mewla does not currently claim a generally available App Store build. The repository includes macOS CI for the client's Simulator app (`client.yml`) and a manual, credential-gated signed IPA/TestFlight workflow (`ios-release.yml`). A physical-device source install requires an Apple development team and signing configuration.
 
 ## TestFlight Preview access
 
@@ -10,23 +11,12 @@ The [TestFlight Preview public invitation](https://testflight.apple.com/join/rTK
 
 ## Supported mobile interfaces
 
-The agent interface is shared React Native code, not an Android-only feature. Codex, Claude Code, Cursor Agent, Grok, Pi, and OpenCode are classified as structured-chat agents by `supportsChatInterface` in `app/components/terminal/screen/useTerminalRouteModel.ts`.
-
-For all four agent kinds on both Android and iOS:
-
-- a session defaults to the structured Chat interface when transcript events are available;
-- the top-bar action can switch between Chat and Terminal;
-- the selected mode is persisted per session;
-- provider-specific composer labels, conversation timelines, tool calls, plans, attachments, Git diff, and action prompts use the shared UI;
-- Terminal mode attaches to the same daemon/tmux session and uses the platform's Ghostty bridge.
-
-Codex is currently the only kind that advertises the daemon-served Codex slash-command list in the composer. That is a provider capability distinction, not an iOS limitation. Empty or unavailable provider transcripts may also make Chat less informative; Terminal remains available as the authoritative live session view.
+The agent interface is the shared NSH UI in `client/ui`, not an Android-only feature. Codex, Claude Code, Cursor Agent, Grok, Pi, and OpenCode sessions open in the structured Chat interface when transcript events are available; the top-bar action switches between Chat and Terminal, and Terminal attaches to the same daemon/tmux session through the platform's Ghostty bridge.
 
 Platform-specific implementation is deliberately limited to native plumbing:
 
-- Android loads `libghostty_vt.so` through JNI.
-- iOS links `GhosttyVt.xcframework` through an Expo module/Objective-C++ bridge.
-- Both mobile platforms render messages with the same JavaScript Markdown reader (marked tokens drawn by React Native components); there is no native Markdown module.
+- Android loads `libghostty_vt.so` through JNI (`client/android/app/src/main/cpp/jni_bridge.cpp`).
+- iOS links `GhosttyVt.xcframework` statically through a C++ bridge (`client/ios/Sources/Terminal/TerminalVt.cpp`).
 - Keyboard inset behavior differs by platform, while the accessory keys and terminal controller are shared.
 
 ## Prerequisites
@@ -34,8 +24,8 @@ Platform-specific implementation is deliberately limited to native plumbing:
 - Apple Silicon Mac
 - Full Xcode selected with `xcode-select`
 - An installed iOS Simulator runtime, or a signed physical device target
-- CocoaPods
-- Bun and the workspace dependencies
+- xcodegen (`brew install xcodegen`)
+- NSH and its iOS framework: `client/scripts/fetch-nsh.sh --ios`
 - Network access for the first pinned Zig/Ghostty build
 
 The native build script downloads the pinned Zig release when the active `zig` is not the version in `native.lock.json`. Do not substitute an incompatible newer Zig release.
@@ -45,34 +35,29 @@ The native build script downloads the pinned Zig release when the active `zig` i
 From the repository root:
 
 ```bash
-bun install
-bun run native:build:ios
-bun run native:verify:ios
+./scripts/build-libghostty-ios.sh
+./scripts/verify-libghostty-ios.sh
 ```
 
 This creates the ignored native output under:
 
 ```text
-app/modules/terminal-vt/libs/ios/GhosttyVt.xcframework
+native/terminal-vt/libs/ios/GhosttyVt.xcframework
 ```
 
-The verifier checks the pinned Ghostty commit, checksums, headers/module map, an arm64 iOS-device slice, and an arm64 iOS-Simulator slice.
+The verifier checks the pinned Ghostty release, checksums, headers/module map, an arm64 iOS-device slice, and an arm64 iOS-Simulator slice. `xcodebuild MEWLA_GHOSTTY=<dir>` links one from elsewhere.
 
-## Generate and run the Expo native project
-
-From `app/`:
+## Generate and run the Xcode project
 
 ```bash
-bunx expo prebuild --platform ios --clean
-cd ios
-pod install
-cd ..
-bun run ios
+client/scripts/fetch-nsh.sh --ios
+client/scripts/ios-project.sh          # --dev links NativeShellDev for hot reload
+open client/ios/Mewla.xcodeproj
 ```
 
-You can also open `app/ios/Mewla.xcworkspace` in Xcode after `pod install`. The `app/ios/` directory is generated and gitignored; make durable native configuration changes through Expo config or the local Expo module instead of editing generated files.
+With `--dev`, launch with `-devServer ws://127.0.0.1:8790/ws` and run `nsh dev --server-only client/ui`. Preview builds pass `MEWLA_APP_ID=com.daoleno.mewla.preview`.
 
-The app uses bundle identifier `com.daoleno.mewla`, targets iOS 17.5 or newer, and declares local-network access because Mewla connects directly to a self-hosted daemon. Camera access is used for pairing QR codes; microphone access is not requested.
+The app uses bundle identifier `com.daoleno.mewla` and declares local-network access because Mewla connects directly to a self-hosted daemon. Camera access is used for pairing QR codes; microphone access is not requested.
 
 ## Pair and validate
 
@@ -98,38 +83,32 @@ An end-to-end terminal check should cover:
 ## Native terminal / XCFramework contract
 
 iOS uses the same [terminal row-update pipeline](terminal-rendering.md) as Android.
-The Objective-C++ bridge shares the native row formatter and update cache.
 
 The machine-readable source of truth is:
 
-[`app/modules/terminal-vt/native.lock.json`](../../app/modules/terminal-vt/native.lock.json)
+[`native/terminal-vt/native.lock.json`](../../native/terminal-vt/native.lock.json)
 
 Important invariants:
 
 1. The libghostty-vt release (signed tarball sha256, dependency tarball sha256, header digest) and the Zig version are pinned in the lock; the build never uses a git checkout. Every XCFramework slice must carry the pinned headers.
 2. `GhosttyVt.xcframework`, checksums, build manifest, and copied license notice are generated and gitignored.
 3. The XCFramework must contain arm64 device and arm64 Simulator slices.
-4. `TerminalVt.podspec` is the CocoaPods/autolinking boundary and must keep the deployment target aligned with the lockfile.
-5. Ghostty's MIT notice is packaged into redistributed iOS app bundles/IPAs by `withIOSBuild` at bundle-root `GHOSTTY-MIT.txt` (Xcode flattens ordinary resource files) and enforced by `scripts/verify-ios-artifact.sh`.
-6. `withIOSBuild` disables precompiled Expo Swift modules so the app does not mix incompatible Expo binary interfaces.
-7. App Transport Security is intentional: `NSAllowsLocalNetworking=true` for self-hosted LAN/tailnet daemons, and `NSAllowsArbitraryLoads=false` so cleartext internet remains denied.
+4. `client/ios/project.yml` links it from `$(MEWLA_GHOSTTY)/libs/ios` (default `native/terminal-vt`) and stops the build with a message when it is missing.
+5. Ghostty's MIT notice (`client/ui/more/settings/licenses/texts/Ghostty-MIT.txt`) is copied to bundle-root `GHOSTTY-MIT.txt` by project.yml's "Bundle the Ghostty notice" step and enforced by `scripts/verify-ios-artifact.sh`.
+6. App Transport Security is intentional: `NSAllowsLocalNetworking=true` for self-hosted LAN/tailnet daemons, and `NSAllowsArbitraryLoads=false` so cleartext internet remains denied.
 
 ## Verification
 
-After dependency or native changes, run:
+After native changes, run:
 
 ```bash
-cd app
-bunx tsc --noEmit
-bun test
-bunx expo-doctor
-cd ..
-bun run native:verify:ios
-git diff --check
+./scripts/verify-libghostty-ios.sh
+./scripts/verify-libghostty.sh --contract
+cd client/ui && ~/.nsh/bin/nsh check && ~/.nsh/bin/nsh test
 ```
 
-Then perform a real Xcode build-and-run. Static checks do not replace launching the app because Swift ABI, CocoaPods, signing, dyld, local-network permission, and native-module registration failures only appear in the Apple runtime path.
+Then perform a real Xcode build-and-run (client.yml runs the unit tests and launches the Simulator app). Static checks do not replace launching the app because Swift ABI, signing, dyld, local-network permission, and native registration failures only appear in the Apple runtime path.
 
 ## Current distribution status
 
-The source-build path is working, but a bare clone does not contain the ignored Ghostty XCFramework. CI rebuilds/checksums it and compiles an unsigned Simulator app. The protected Preview workflow has signed, exported, verified, and uploaded an IPA to App Store Connect; Apple Beta App Review remains the gate before public-link testers can install it. Mewla does not claim a generally available App Store build. See [iOS CI and release automation](../ios-ci-release.md).
+The source-build path is working, but a bare clone does not contain the ignored Ghostty XCFramework. CI rebuilds/checksums it and builds the client's Simulator app. The protected Preview workflow has signed, exported, verified, and uploaded an IPA to App Store Connect; Apple Beta App Review remains the gate before public-link testers can install it. Mewla does not claim a generally available App Store build. See [iOS CI and release automation](../ios-ci-release.md).

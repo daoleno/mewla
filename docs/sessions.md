@@ -38,6 +38,20 @@ window title. The Session starts on the current computer.
 The agent must already be installed and signed in on the computer; Mewla never
 signs in for you.
 
+For an agent, **Task** ("What should it do?") is the Session's first message.
+The computer holds it until the agent is ready; meanwhile it shows in the
+Session as sending, and anything else you send waits behind it and goes after
+it, in order. If it could not be delivered (or the connection dropped while it
+was held), it leaves the chat and comes back as the Session's draft. Mewla
+never sends it again by itself.
+
+Codex starts inline (`--no-alt-screen`): its transcript goes into the
+terminal's scrollback, so the phone's Terminal and a computer's own terminal
+scroll it on their own. If your Codex config names `[tui] alternate_screen`, or
+the command chooses the screen itself, Mewla leaves it as you set it. Claude
+Code keeps the renderer it picks for itself, or the `tui` your Claude settings
+name.
+
 ## Chat and Terminal
 
 A Session's header has a **Chat / Terminal** switch. The choice is remembered
@@ -51,15 +65,39 @@ per Session. What you type in either goes to the same terminal.
   reads as the task it was given. On Claude, tap a subagent to see the calls it
   made, folded the same way, with how many there were, how long it took and
   whether it is still working. Chat is available for Claude, Codex, Cursor,
-  Grok, Pi and OpenCode.
+  Grok, Pi and OpenCode. A delegated Worker's Chat opens with the task Brain
+  gave it, two lines at most; tap it to read the whole task.
 - **Terminal**: the live terminal, for any command, a Shell included. The key
   bar adds Esc, Tab, Ctrl (armed for one key), ⌃C, ⌃D, ⌃B and arrows that
   repeat while held. Scroll up for **Search history**, **Previous prompt**,
   **Next prompt** and **Scroll to bottom**. Tap a link to open it in the
   browser, or a file path to preview the file.
+  On Android, pinch to change the text size between 8 and 14 (10 by default).
+  The phone remembers it, and the terminal takes the new size once you lift
+  your fingers. Drag one finger up or down to scroll back through what the
+  Session printed, and flick to keep going; it returns to the live screen at
+  the bottom. A program that fills the whole screen (Claude Code, Codex, `less`)
+  has no history to scroll, so the drag goes to it the way a mouse wheel does:
+  as wheel presses when it reads the mouse, or as Up and Down when it lets the
+  wheel send arrow keys; it scrolls its own text as far as you drag (Claude
+  Code speeds up wheel presses that come close together, so it gets fewer of
+  them), and stops when you touch the screen. In a program that reads the
+  mouse, a tap is a click there (Claude Code's "Jump to bottom"); the Keyboard
+  key brings up the keyboard.
 
 When a Session is blocked on a prompt the chat cannot answer, it opens on the
 Terminal by itself.
+
+### Copy and paste in the Terminal on a phone
+
+Press and hold a word to select it. Drag either handle to stretch the selection
+over any rows, including the history above the screen, which scrolls as you
+reach an edge. The menu offers **Copy**, **Paste** and **Select All**; holding
+a blank spot offers **Paste** and **Select All**. A row that wrapped onto the next copies as
+one line. Paste goes to the program as typed text, framed as a paste when the
+program asks for that (bracketed paste), so a shell or an agent never runs a
+pasted line before you press Return. On a hardware keyboard, Ctrl+Shift+C and
+Ctrl+Shift+V copy and paste on Android.
 
 ### Copy from the Terminal in a browser
 
@@ -122,11 +160,12 @@ have their own **Copy**. Copy gives the text as written, Markdown included.
 Messages are read as standard GitHub-flavored Markdown on every platform:
 headings, quotes, nested and numbered lists, task lists, tables,
 strikethrough, links and bare URLs, HTML entities such as `&amp;`, images,
-code blocks and Mermaid diagrams. A reply that is still arriving never shows
+and code blocks with a copy button. A reply that is still arriving never shows
 half-typed syntax: an unfinished `-`, `1.` or `>` waits for its text.
 
-**Edit** puts the message back in the composer. What sending does depends on
-the agent:
+**Edit** puts the message back in the composer; with a hardware keyboard (a
+phone's too), ↑ in the empty composer edits your last message and Esc leaves
+the edit. What sending does depends on the agent:
 
 | Agent | Sending an edited message |
 | --- | --- |
@@ -156,11 +195,31 @@ that sits right beside Chinese text or punctuation, and email addresses open
 your mail app. A link that names a file, such as `[report](report.pdf)` or
 `[app](./out/app.apk)`, opens that file as above. Inside a Markdown file you
 opened, a link to another file is relative to that file. Links that can run
-code (`javascript:`, `data:`) never open.
+code (`javascript:`, `data:`) never open. A changed-files list shows each file
+with the lines it added and removed (+12 −3); a renamed file shows, and opens,
+its new path.
 
 A file that is not really what its name says (an `.mp4` that is not an MP4
 container, say) is not played. A codec the device can't decode, such as HEVC
 in some browsers, can't be played there; download it instead.
+
+### Pictures in a chat
+
+Pictures you sent show as pictures above your message (other files stay a row
+in it). A picture a tool call produced, such as an agent's screenshot, is a
+thumbnail under its row. Tap any picture to open the viewer: black, with × and
+"2 of 3" on top. Previous and next sit at the sides, and the arrow keys and a
+swipe step through every picture of the chat in order; double-tap or pinch to
+zoom, and Back closes it. While a picture loads, its frame is a plain block
+(a thin moving line along its top once it takes more than 3 seconds). A load the
+connection cut waits for the connection and loads by itself; with the
+connection up, an unanswered load tries again after 1, 2, 4 and 8 seconds. Only
+then, or when the computer says the file is no picture it can show, does the
+frame show a refresh mark; tap it to load it again.
+
+On the web, paste a screenshot or a copied picture into the composer and it
+becomes a chip above the field, the same as one you attached; pasted text goes
+in as typed. The phone's keyboard can paste a picture the same way.
 
 ## The Session's menu
 

@@ -24,7 +24,8 @@ export interface FlowDeps {
   /** One `connections` request; a refusal by the computer rejects with an Error carrying `code`. */
   request(request: ConnectionRequest): Promise<ConnectionResponse>;
   store: FlowStore;
-  openUrl(url: string): void | Promise<void>;
+  /** Resolves false when nothing opened (a browser that blocked the new tab). */
+  openUrl(url: string): void | boolean | Promise<void | boolean>;
   copy(text: string): void | Promise<void>;
   now(): number;
   /** Repeats `run` every `ms` until the returned stop is called. */
@@ -68,6 +69,11 @@ export interface FlowState {
   connectError: string;
   connectedId: string | null;
   flow: PendingConnection | null;
+  /**
+   * The sign-in page did not open: a browser blocks a new tab that comes long after the tap (the cloud CLIs take
+   * seconds to give their page). The card then leads with Open, a tap the browser lets through.
+   */
+  blocked: boolean;
 }
 
 export type ConnectOptions = {
@@ -80,7 +86,7 @@ export type ConnectOptions = {
 const POLL_MS = 3_000;
 
 export function initialFlowState(): FlowState {
-  return { catalog: [], accounts: [], details: {}, loaded: false, running: null, error: "", phase: "idle", service: null, connectError: "", connectedId: null, flow: null };
+  return { catalog: [], accounts: [], details: {}, loaded: false, running: null, error: "", phase: "idle", service: null, connectError: "", connectedId: null, flow: null, blocked: false };
 }
 
 export class ConnectionsFlow {
@@ -312,14 +318,14 @@ export class ConnectionsFlow {
     if (!active?.flow.authorization_url || !this.alive || this.openingBrowser) return;
     this.openingBrowser = true;
     try {
-      this.set({ phase: "waiting" });
+      this.set({ phase: "waiting", blocked: false });
       // The code is on screen too; a clipboard that refuses never keeps the page closed.
       if (active.flow.user_code) await Promise.resolve(this.deps.copy(active.flow.user_code)).catch(() => {});
       try {
         // In a browser, a provider that returns to the web UI takes this tab there (a popup would outlive its opener);
         // any other sign-in (a code, an address to paste) opens in a tab of its own while this one polls.
         if (this.deps.web && active.flow.web_return) await this.deps.web.openHere(active.flow.authorization_url);
-        else await this.deps.openUrl(active.flow.authorization_url);
+        else if ((await this.deps.openUrl(active.flow.authorization_url)) === false) this.set({ blocked: true });
       } catch {
         this.fail("The browser could not open. Try again.");
         return;
@@ -342,7 +348,7 @@ export class ConnectionsFlow {
     try {
       if (this.state.flow) await this.cancel();
       const attempt = ++this.attempt;
-      this.set({ service: serviceId, connectedId: null, phase: "opening", connectError: "" });
+      this.set({ service: serviceId, connectedId: null, phase: "opening", connectError: "", blocked: false });
       const input = options.input ?? { integration: serviceId, allow_writes: !!options.writes };
       if (options.signIn === false) {
         const added = await this.send({ action: "add", input }, `connect:${serviceId}`);

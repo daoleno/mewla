@@ -8,132 +8,74 @@ Subsequent manual scrolling cancels pending send-focus effects.
 
 ## Position Ownership
 
-`usePinnedTimeline` owns the reading intent and stable message anchor. The
-inverted native list preserves mounted content during drag and momentum without
-a native auto-follow threshold. At rest, the same hook reconciles measured
-position, including Android's keyboard-decorator translation. Native screen
-measurements and the inset at capture prevent a second JS compensation from
-undoing a native adjustment. Old measurement callbacks are fenced on unmount
-and conversation replacement. Geometry work is coalesced to an animation frame,
-not a timer-based retry or repeated scroll loop.
+`Timeline` (`client/ui/chat/Timeline.tsx`) owns the reading position of every
+chat. A chat opens at its newest row (`initialScrollAtEnd`).
+`maintainVisibleContentPosition` with `autoscrollToBottomThreshold: 80` keeps a
+reader at the newest edge following appended and streaming rows, and holds the
+rows steady for a reader who has scrolled up. More than 240 pt from the end, a
+Jump to latest button appears, labelled with the age of the newest item; it
+scrolls to the end. A person's own send brings their newest message to the top
+(`sent`), with the reply under it.
 
-Follow intent and the reading anchor answer different questions. A scroll event
-whose content height or viewport changed (virtualization mounting rows, a reply
-streaming in) cannot attach or detach follow intent, but when the reader is
-dragging, flinging or using the web wheel it still refreshes the anchor: moving
-into history mounts older rows on nearly every event, and a bookmark gated on
-unchanged geometry lagged the reader by whole scroll steps, so the next message
-snapped them back. Mutations below a resting reader are held by the platform
-(`maintainVisibleContentPosition` on native, CSS scroll anchoring on web); the
-at-rest reconcile then finds nothing to correct. Browsers without scroll
-anchoring (Safari before 27) only get that reconcile, one frame late.
-
-Navigation retains bounded, process-local metadata for up to 32 server and
-conversation identities: intent, message ID, intra-item offset and nearby IDs.
-No transcript copy is stored. If an anchor disappears, a surviving neighbor is
-preferred over the newest message. Cold process death is not a persistent
+The place a chat was read to is the key of its first visible row
+(`readingPlace` in `client/core/timeline/readingPlace.ts`), not a pixel offset: a
+reopened list measures its rows as they show, and an offset saved from a
+measured list can land past what the new one has measured. The place is kept per
+chat scope in a process-local map, written only after the person's own drag
+(`onScrollDragStart`), so the list settling as it mounts never moves it, and
+cleared when the person is back near the end. Reopening finds the row again by
+index (`readingPlaceIndex`); if it is gone, the chat opens at its newest row. No
+transcript copy is stored, and cold process death is not a persistent
 reading-position guarantee.
 
-Brain uses its explicit thread scope across host changes. Unscoped Terminal
-views bind to the confirmed provider conversation ID, retaining that identity
-through transient unavailable snapshots. Existing optimistic/provider-echo
-aliases rebind an anchor instead of treating the same logical message as deleted.
-
-A restored variable-height list waits for the first nonempty history snapshot,
-then measures at most eight preceding items around the saved anchor. Initial
-rendering is bounded to ten rows. Scrolling toward newer content reveals the
-existing rows in bounded increments; the explicit latest control removes that
-window boundary. The complete conversation remains in its existing source owner.
+On the web, a hidden tab's list loses its scroll (`display: none`). A chat given
+`shown` records its offset while on screen and, when it is shown again, scrolls
+back to that offset or to the newest row.
 
 ## Image Preview
 
-File references use the production `SessionFilePreviewSheet`, generation-bound
-metadata and binary source. Its request lifetime rejects responses after close
-or context replacement. No prewarming or automatic second-open retry is used.
-An unavailable image remains an explicit file error rather than a blank success.
-
-## Mermaid diagrams
-
-Fenced `mermaid` code blocks in Chat, Brain workspace Markdown, Work previews,
-and Skill file Markdown render as flowcharts when the source is a `flowchart`
-or `graph` diagram. Other Mermaid types stay as ordinary readable code.
-Rendering uses bundled mermaid `12.2.0` inside a sandboxed WebView: no CDN,
-no custom callbacks, and `%%{init}%%` / frontmatter cannot loosen security.
-One hidden engine WebView serializes render jobs (at most one in flight, eight
-queued; extra requests fail busy). At most three inline SVG preview WebViews
-are mounted; fullscreen preview is reserved separately. The SVG cache is
-capped at 24 entries. Copy returns the original Mermaid source. Incomplete
-streaming fences keep a stable placeholder until the message settles and do
-not enqueue a render. Dense diagrams open a pinch-and-pan full-screen view;
-closing it leaves the reading position intact.
-
-Limits: 32 KiB source, 80 nodes, 120 edges, 16 subgraphs, 2.5s render. Invalid
-or blocked diagrams fall back to the source with a short status label.
-
-Development fixture:
-
-```text
-mewla://screenshot-demo?demo=1&state=mermaid
-```
-
-Requires `EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1` in a development build. The demo screen
-(`app/components/screenshotDemo/ScreenshotDemoScreen.tsx`) and its fixtures are loaded
-by the `screenshot-demo` route behind `__DEV__`, so release bundles do not contain them.
+File references open `client/ui/more/files/FilePreview.tsx` over the Session's
+read capability (`client/core/files/sessionFilePreview.ts`). Changing server,
+daemon, Session, process or start closes the preview, and a missing or changed
+file stays retryable without keeping the old content. A video or audio file plays
+through `MediaPlayer` (`Media.tsx`), which signs a fresh capability when the
+2-minute one lapses. An unavailable image remains an explicit file error rather
+than a blank success.
 
 ## Verification
 
-`timelineReadingHooks.test.tsx` runs the actual React hook with controlled native
-geometry. It covers history mutation, native momentum, navigation, server
-isolation, empty reconnect, delayed focus, inset compensation and stale native
-callbacks. `sessionFilePreviewLifecycle.test.tsx` mounts the actual preview
-component for cold first open, second open and late-response rejection.
+`client/core/timeline/readingPlace.test.ts` covers the saved place;
+`client/core/files/sessionFilePreview.test.ts` covers the preview state, including
+closing on a context change and retrying a changed file.
+`client/ui/chat/BrainThread.test.tsx` and the other `nsh test` files under
+`client/ui` run the screens.
 
-The existing development-only screenshot route has a `reading` scenario:
-
-```text
-mewla://screenshot-demo?demo=1&state=reading
-```
-
-It requires `EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1` in a development build. It uses
-the production timeline/keyboard/preview components with isolated messages and
-normal, large and tall PNG assets plus a large JPEG. History initially arrives after mount, like a
-real subscription. Fixture actions change source data or navigation; they do not
-scroll the list to manufacture a passing anchor. Only the explicit Latest
-command requests latest-follow. Image metadata/binary loading is injected for
-the fixture, so this does not replace authentication/transport coverage.
-
-Run `bun test app`, `cd app && bunx tsc --noEmit`, and Android/iOS Expo exports.
+Run `cd client && bun test core` and `cd client/ui && nsh check && nsh test`.
 Native PID/log and before/after screen evidence remain necessary for crash,
-first-image, scrolling and keyboard claims. Export success is not a signed
+first-image, scrolling and keyboard claims. A passing test run is not a signed
 client release or iOS device proof.
 
 ## Shared images and attachment selection
 
 Message attachments, tool images, Markdown images and composer previews use the
-same typed image sources and fullscreen viewer on Android and iOS. Phone upload
-URIs retain their original grants. Persisted provider paths resolve through the
-Session's generation-bound file capability. External HTTP images receive no Mewla
-authorization. Images contain their full aspect ratio in bounded previews; tap
-opens inspection with pinch, pan, double-tap and gallery navigation. Text and code
-remain selectable. Markdown extraction uses structured tokens, including reference
-images; plain URLs, code and incomplete image syntax stay text.
+typed image sources in `client/core/files/imageSource.ts` on every platform.
+Persisted provider paths resolve through the Session's file capability.
+External HTTP images receive no Mewla authorization. A data URL image must be
+PNG, JPEG, GIF, WebP or SVG and at most 8 MiB encoded. SVG goes through
+`client/core/files/svgPreview.ts`, which reads at most 2 MiB and checks the
+structure before it is drawn. The daemon refuses images above 40 megapixels in
+its previews (`daemon/attachment/image_preview.go`). Text and code remain
+selectable.
 
-Brain workspace image reads use the existing workspace path authorization and
-reject unsupported images, files above 2 MiB and images above 40 megapixels.
-Workspace images support PNG, JPEG, GIF, WebP and bounded SVG. SVG uses the
-native vector renderer after strict XML, drawing-tag and local-reference checks;
-white transparent vectors use a neutral gray inspection backing. Original bytes are retained;
-Session file downloads keep their existing scoped authorization and size policy.
-
-The attachment chooser supports selecting multiple files in one confirmation.
-The shared composer and Terminal accessory reserve the remaining slots within the
-eight-file limit before dispatch. Unsupported picker count limits are enforced on
-return with an actionable error. A sequential native upload queue preserves order,
-shows subtle progress while pending and compact retry/remove on failure. Ready
-attachments show only their thumbnail or file chip, with no success label. Sending
-waits until attachments are ready or removed. Switching server or Session cancels
-pending work without deleting previously ready attachments. Android requires the
-updated Mewla Debug native module; iOS uses Expo's multi-document picker.
+The attachment chooser (`files.pick {maxCount}`, answered by the Android or iOS
+host, or the browser) selects multiple files in one confirmation. The composer
+reserves the remaining slots within the eight-file limit
+(`MAX_COMPOSER_ATTACHMENTS`) before dispatch, and an error is shown when the
+picker returns more. `AttachmentTray` (`client/ui/more/files/Attachments.tsx`)
+shows one chip per picked file in order, with progress while the upload is
+pending, Cancel, Retry on failure and Remove; a picture shows itself and a tap
+opens it whole, zoomable by pinch or double tap. Sending waits until attachments
+are ready or removed.
 
 Attachments are typed fields end to end. The phone sends `send_input` with
 `text` (what the person wrote) and `attachments: [{name, path, content_type}]`
@@ -150,15 +92,16 @@ the tag, and `content_type` is kept so a supported image without a file extensio
 remains an image when history reloads. The Brain admission digest covers the exact
 rendered provider input, so the files are part of what it matches the provider's
 echo against. Rows stored before attachments were typed are not special-cased in
-the app; the retired `Uploaded files:` text list is plain text. Data URLs are accepted for
-PNG/JPEG/GIF/WebP and SVG within an 8 MiB encoded source bound; SVG decoding is
-additionally capped at 2 MiB and never fetches embedded external resources. Composer image
-inspection navigates the selected batch without changing selection order.
+the app; the retired `Uploaded files:` text list is plain text.
 
-The Skills and Plugin file browser uses the same image viewer and exact-copy read
-owner. Markdown image paths resolve only within the selected package's advertised
-file list; traversal outside that copy is rejected. Selecting an image shows
-its original bytes with the shared 2 MiB / 40 megapixel bound. Gallery
-navigation loads sibling images on demand. These small previews share their
-server-side image bound with Brain workspace images; raster dimensions are
-validated server-side, while SVG structure and dimensions are checked on-device.
+A `user_message` says who wrote it in `origin`: empty is the person,
+`provider` is the provider itself (Claude's compaction summary), `delegated`
+is the brief Mewla handed a delegated Worker (`work.ConversationOriginDelegated`).
+Only Claude marks `delegated`: its native record keeps the typed `Execute: `
+intent and the paste envelope (`work.UnwrapClaudeDelegatedInput`); a Codex
+Worker's brief arrives as plain input and has no origin. `body` stays the
+whole brief. The app shows a delegated brief as its task alone (the text
+before `Mewla lifecycle protocol:`), clamped to two lines and expandable
+(`core/timeline/delegatedBrief.ts`). For daemons from before the field, the app
+also accepts the strict old shape: a body that starts with `Execute:` and has a
+line `Mewla lifecycle protocol:`.

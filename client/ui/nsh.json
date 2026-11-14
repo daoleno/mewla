@@ -1,7 +1,7 @@
 {
   "name": "Mewla",
   "id": "com.daoleno.mewla",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "build": 1,
   "appearance": "system",
   "capabilities": {
@@ -36,6 +36,48 @@
   },
   "theme": "./theme.json",
   "web": {
-    "host": "web/host.js"
+    "host": "web/host.js",
+    "base": "/"
+  },
+  "tailwind": {
+    "fontSize": {
+      "display": [
+        32,
+        1.1875
+      ],
+      "title": [
+        20,
+        1.3
+      ],
+      "body": [
+        17,
+        1.4118
+      ],
+      "message": [
+        17,
+        1.4706
+      ],
+      "sub": [
+        15,
+        1.3333
+      ],
+      "caption": [
+        13,
+        1.3846
+      ],
+      "code": [
+        13,
+        1.5385
+      ],
+      "term": [
+        12,
+        1.5
+      ]
+    },
+    "tracking": {
+      "display": -0.022,
+      "title": -0.01
+    },
+    "shadow": { "float": "0 8px 24px rgb(0 0 0 / 0.14)" }
   }
 }

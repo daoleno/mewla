@@ -1,11 +1,14 @@
 # Terminal scrolling
 
-Android and iOS use the same terminal path: PTY output updates the live
-libghostty-vt grid. The embedded WebView owns vertical scrolling, including
-finger tracking, momentum, and each platform's edge feedback. Plain-screen
-history scrolling stays entirely local. Alternate-screen scrolling forwards
-bounded mouse-wheel batches through the existing authenticated terminal input
-path so the application scrolls its own transcript.
+Android and iOS use the same path: PTY output updates the live libghostty-vt
+grid in the terminal view, and the history above it is the rows the page hands
+the view. The view scrolls through those rows itself, with the platform's own
+finger tracking and momentum. With no history, or while the program is on the
+alternate screen, a drag is not taken: the view reports it (`scroll`, in lines,
+positive going back in time) and the page sends `terminal_scroll`, which moves
+the computer's tmux copy mode. `terminal_scroll_cancel` leaves it. A tap on the
+live screen focuses the pane under the finger (`terminal_focus_pane`); a tap on a
+history row sends nothing to the live program.
 
 ## Session host Sessions: numbered scrollback
 
@@ -28,18 +31,62 @@ App is sent only what it is missing. `terminal_history` takes an optional
   another epoch, another view or another daemon run also gets a reset.
 - While the program is on the alternate screen the answer carries no rows and
   the viewer keeps its place; the primary history is unchanged until it leaves.
+  A program that starts on the alternate screen (Claude Code) leaves nothing
+  numbered yet, so the answer to a viewer that holds nothing is empty at epoch
+  0, not a reset. The App takes that as in step. Before it did, the App voided
+  its view and asked again every 750 ms, which dropped a long-press selection
+  half a second after it appeared.
 - `alt_scroll` (DEC 1007) and `app_cursor` (DECCKM) come with every answer
   from a host that reports them, `mouse` always. Absent means unknown.
 
+Several viewers can show one host Session (the App, `mewla attach` on a
+computer), and the program draws for one size: the viewer a person last acted
+on sets it (attaching, a resize, typing, the App's terminal shown again). The
+host ends every other viewer that asked to redraw (`AttachParams.Redraw`) with
+`AttachResized` when the size changes, and the viewer attaches again without a
+size for a full reset and a replay at the new size: output drawn for another
+width would otherwise write rows over rows on its grid, and stay so after the
+sizes match again. A viewer never takes the size back on its own (after
+`AttachBehind` or `AttachResized`), or two viewers of different sizes would take
+it from each other. A viewer that is not the one acted on still shows the
+screen right until its person acts (a focus-out report is not acting): the
+daemon tells the App's view the Session's size (`terminal_size`) before each
+replay, and the view's VT takes that grid and draws it fitted into its area
+(scaled down to 6 dp text, then panned; `TerminalFit`), while `mewla attach`
+mirrors the host's screen cut to its window (`mirrorFrame`) instead of writing
+output meant for another size. Viewers from before `Redraw` keep their stream.
+A host from before `Redraw` (every Session started before the upgrade runs on
+one until the host restarts)
+answers `Attached.Redraw` false and never ends a viewer for a resize: the
+daemon's view and `mewla attach` then ask the Session's size (`Info`) every
+half second and start over the same way when it is not the size their replay
+was drawn at.
+
 A request without `since` (an older App), and every tmux Session, still gets the
 snapshot described below. The App turns both into the same instruction for the
-WebView: void the history, drop `removed` rows from its front, append `rows`
-(`terminalHistoryModel.ts`).
+view: void the history, drop `removed` rows from its front, append `rows`
+(`client/core/terminal/history.ts`). While scrolled up, the rows on screen stay
+put.
 
-Rows only ever append at the end, which moves nothing the reader sees, so the
-WebView takes them at once, under a finger or a selection, and refreshes 250 ms
-after output. Voiding and dropping rows replace nodes under the finger and wait
-for the touch to end; held instructions merge in order.
+Several viewers can show one host Session (the App, `mewla attach` on a
+computer), and the program draws for one size: the viewer a person last acted
+on sets it (attaching, a resize, typing). The host ends every other viewer that
+asked to redraw (`AttachParams.Redraw`) with `AttachResized` when the size
+changes, and the viewer attaches again without a size for a full reset and a
+replay at the new size: output drawn for another width would otherwise write
+rows over rows on its grid, and stay so after the sizes match again. A viewer
+never takes the size back on its own (after `AttachBehind` or `AttachResized`),
+or two viewers of different sizes would take it from each other. Until its
+person acts (a focus-out report is not acting), a viewer that is not the one
+acted on is drawn at the other size: the daemon tells the App's view the
+Session's size (`terminal_size`) before each replay, so a view that can draw
+that grid fitted into its area does, and `mewla attach` mirrors the host's
+screen cut to its window (`mirrorFrame`) instead of writing output meant for
+another size. Viewers from before `Redraw` keep their stream. A host from before `Redraw` (every Session started before the
+upgrade runs on one until the host restarts) answers `Attached.Redraw` false
+and never ends a viewer for a resize: the daemon's view and `mewla attach` then
+ask the Session's size (`Info`) every half second and start over the same way
+when it is not the size their replay was drawn at.
 
 ## History and live output (tmux Sessions)
 
@@ -49,116 +96,47 @@ pane of that attachment's linked tmux view. It never enters tmux copy-mode.
 The response includes pane identity, pane width, history size, alternate-screen
 state, and ANSI history, excluding the live screen.
 
-Captures preserve physical rows and ANSI attributes (`capture-pane -e -N`). A
-separate 64-row Ghostty instance decodes them in small pages using the same theme
-and cell HTML formatter as the live terminal. History is not converted to plain
-text or reconstructed by comparing live screenshots. The live cursor stays in
-the live grid. History selection/copy uses physical row breaks: tmux's ANSI
-capture does not carry the live grid's soft-wrap metadata.
+Captures preserve physical rows and ANSI attributes (`capture-pane -e -N`). The
+view renders them with a second VT in the live terminal's theme, a page of
+rows at a time when first needed (see [terminal rendering](terminal-rendering.md)). History is not
+converted to plain text or reconstructed by comparing live screenshots. The live
+cursor stays in the live grid. History selection/copy uses physical row breaks:
+tmux's ANSI capture does not carry the live grid's soft-wrap metadata.
 
 History loads on attachment and refreshes after output, resize, or pane focus.
-Refresh is coalesced to a 750 ms idle timer, with one request/decoder at a time.
-Touch, momentum, and native text selection suspend new requests and cancel stale
-decoding; late results cannot replace a different attachment's history. The
-WebView also defers incoming history replacements until interaction ends.
+Refresh is coalesced to a 750 ms idle timer (`snapshotMs`), with one request at
+a time; late results cannot replace a different attachment's history.
 
-While reading older output, new output continues to update Ghostty. On the next
-idle refresh, the viewport remains on the same retained row, including when the
-bounded history drops old rows. If the reader's row has been evicted, the viewport
-stops at the oldest retained row. **Scroll to bottom**, keyboard input, and the
-keyboard accessory return to live output. Scrolling does not dismiss the IME or
-resize the PTY. Taps on history do not send clicks to the live TUI; taps in the
-live grid retain pane focus and terminal mouse/input behavior.
+While reading older output, new output continues to update the live grid. On
+the next idle refresh, the viewport remains on the same retained row, including
+when the bounded history drops old rows. If the reader's row has been evicted,
+the viewport stops at the oldest retained row. **Scroll to bottom**, keyboard
+input, and the keyboard accessory return to live output. Scrolling does not
+dismiss the IME or resize the PTY.
 
 ## Full-screen apps, resize, and limits
-
-Pane metadata includes each pane's rectangle, alternate-screen state and mouse
-reporting flag. Mewla chooses the pane under the touch, independently of tmux's
-outer terminal modes. Plain-screen panes retain native history scrolling;
-alternate-screen panes with mouse reporting use an invisible native scroll
-range to turn browser scroll deltas (including momentum) into wheel ticks at
-the touch cell. There is no alternate-screen error notice or copy-mode entry.
-
-The same WebView implementation runs on Android and iOS. Native scrolling owns
-fling, reversal and stop-on-touch. Batches are limited to three wheel ticks at
-most once per animation frame (at least 16 ms apart). A batch waits for an
-arriving app render before another is sent; intervening ticks are discarded, never queued. Because applications can
-consume a reverse tick without redrawing, a 32 ms no-output deadline permits
-a fresh tick; it never replays blocked deltas. Reversal and a new touch
-release that wait so reaching a transcript boundary cannot trap the gesture.
-Smoothness depends on app redraw and network latency. Output after an idle
-interval publishes immediately, with sustained updates bounded to 16 ms and
-presentation on the WebView animation frame. Native UI-queue dispatch avoids
-an additional Fabric mounting-frame wait. The first vertical touch-slop crossing
-primes one tick before the native scroll callback; native scrolling continues to
-own distance and momentum. Each reversal emits a tick without waiting a full cell.
-
-To soften line stepping, consecutive styled frames are compared for an exact
-contiguous row translation with at least eight matching rows and four nonblank
-rows. Only the longest proven region is interpolated; fixed headers, prompts
-and badges retain their incoming rendering. ANSI spans and CJK cells are copied
-unchanged. Interpolation finishes within one 16 ms display interval, without
-carrying residual displacement into another frame. Using the previous PTY
-redraw interval added up to 80 ms of old-content lag after output had already
-arrived. Touch, reversal, selection and context changes cancel
-it. Unmatched layouts and the system reduced-motion setting use direct redraws.
-Touch targets remain in the DOM while a separate, non-interactive layer displays the updated transcript.
-Touch cancellation retires that layer on the next frame, even without further
-PTY output; it does not wait for the idle timer or cursor blink.
-Selection suspends forwarding. Wheel input does not focus the IME, clear the
-composer, resize the PTY, or synthesize a click.
-
-This interpolation does not predict transcript rows that have not arrived.
-Initial response still includes the browser's gesture recognition, the WebView
-bridge and PTY round trip. Stopping prevents new wheel input immediately in the
-handler, but an already returning app redraw can still arrive afterward. Native
-momentum duration and post-momentum input backlog are different measurements;
-a sustained fling is not expected to settle within 100 ms of finger release.
-
-The native Ghostty mouse encoder uses the attached terminal's requested mode.
-For tmux attachments, tmux receives that client encoding through its existing
-PTY and translates it to the pane application's SGR 1006 or legacy X10 encoding
-and pane-local coordinates. No subprocess is started per wheel tick. Pane
-metadata/history refresh remains a coalesced idle operation, suspended throughout
-the drag and fling. App start/exit and pane focus refresh this metadata after
-output settles. Tmux does not expose DEC 1007 alternate-scroll opt-in; without
-mouse reporting, Mewla leaves the gesture alone rather than injecting arrow keys
-that could edit a prompt. A host Session does report it: on the alternate screen
-with no mouse reporting and DEC 1007 on, as a desktop terminal treats it, the
-swipe becomes cursor keys (`ESC [ A/B`, or `ESC O A/B` when the program asked
-for application cursor keys), at most three per frame; with 1007 off or unknown
-the gesture is left alone. Inline TUIs retain plain-screen history scrolling.
 
 On width changes, tmux remains responsible for terminal reflow. Mewla fetches the
 pane history again at its new width and retains the nearest physical reading
 position; it does not promise that the same logical paragraph keeps its exact
 pixel position after reflow. Switching pane, session, or current server replaces
-or clears the old history. Failed history loads expose a retry notice without
-replacing the live terminal.
+or clears the old history. Failed history loads expose a retry notice
+(`retryHistory`) without replacing the live terminal.
 
-Each snapshot is limited to 6,000 physical rows and 4 MiB of ANSI. Decoded HTML is
-limited to 16 MiB of UTF-16 string storage. Only the viewport and two screens
-on either side are mounted
-in the DOM. Native selection temporarily pins those nodes. During a touch, the
-row under the finger is retained even when it leaves that mounted range. Live
-HTML replacement waits for interaction to settle: replacing a touched DOM node
-was the Android regression that dropped subsequent touch events after the first
-few tmux scroll batches.
+Each history snapshot or delta is limited to 6,000 physical rows
+(`HISTORY_MAX_ROWS`) and 4 MiB of ANSI (`HISTORY_MAX_BYTES`).
 
 ## Selecting, links, prompts, search
 
-Rows carry their wrap flags as `data-wrap` and `data-wrap-continuation`, so
-copying a selection joins the rows a soft wrap split, in history as in the live
-grid. While a selection is held, 600 rows on either side of the viewport are
-mounted and none are unmounted, so a selection can be dragged across the
-scrollback.
+Rows carry their wrap flags (`HISTORY_ROW_WRAPPED`, `HISTORY_ROW_CONTINUATION`),
+so copying a selection joins the rows a soft wrap split.
 
 A tap on a URL (http, https) opens it; one on a path (absolute, `~/`, `./`,
 `../`, or with a directory and an extension, with an optional `:line:column`)
 or a `file:` URL opens the Session file preview, for a Worker whose run is
-known. The line is the logical one: a link a soft wrap split is found whole.
-A program that reports the mouse keeps taps on its own screen; history is
-always static. `terminalLinks.ts` holds the matcher.
+known. The tap reports the row's text and the tapped cell's index, so the link
+is found in the logical line. `linkAction` in `client/core/terminal/text.ts`
+holds the matcher.
 
 While scrolled up, the buttons beside **Scroll to bottom** jump to the previous
 and next prompt and open search. Prompts are the rows the program marked with
@@ -169,8 +147,8 @@ the match shows as a tinted row, older and newer matches are the arrows.
 
 ## Verification
 
-Run the terminal history and native-scroll tests in `app/components/terminal`,
-the wheel encoding/selection tests, the app TypeScript check, and `go test ./...`
+Run the terminal tests in `client/core/terminal` (`cd client && bun test core/terminal`) and
+`client/ui/terminal` (`cd client/ui && nsh test terminal`), `nsh check`, and `go test ./...`
 for daemon changes. Runtime checks
 need a real tmux pane with more than 6,000 mixed ANSI/CJK rows, an inline TUI and
 an alternate-screen TUI, and Android/iOS device coverage. Record gesture/frame

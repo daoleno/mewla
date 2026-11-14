@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CalendarItem } from "../calendar/model";
 import { testClock } from "../calendar/testClock";
-import { brainWorkCalendarOrigins, brainWorkGroup, brainWorkSummaryLine, brainWorkSurface } from "./surface";
+import { brainCurrentWorkLifecycle, brainWorkCalendarOrigins, brainWorkGroup, brainWorkSummaryLine, brainWorkSurface } from "./surface";
 import type { BrainCurrentWork, BrainWorkerRef } from "./types";
 
 const clock = testClock("2026-10-27T14:00:00Z", "Asia/Shanghai");
@@ -47,7 +47,7 @@ const live: BrainCurrentWork[] = [
 ];
 
 const workers: BrainWorkerRef[] = [
-  { id: "%107", name: "perpetuo-browser-reopen-2 (%107)", status: "running", command: "claude", cwd: "/home/me/acelabs/perpetuo", summary: "Fix v1 passes 7/9 at cpus 0.7" },
+  { id: "%107", name: "perpetuo-browser-reopen-2 (%107)", status: "running", command: "claude", cwd: "/home/me/acelabs/perpetuo", phase: "working", summary: "Fix v1 passes 7/9 at cpus 0.7" },
 ];
 
 describe("brainWorkSurface", () => {
@@ -75,11 +75,21 @@ describe("brainWorkSurface", () => {
     expect(slip).toMatchObject({
       title: "perpetuo browser reopen 2",
       who: "Claude Code · perpetuo",
+      project: "perpetuo",
       summary: "Fix v1 passes 7/9 at cpus 0.7",
       status: "running",
       statusLabel: "Working",
       sessionId: "%107",
     });
+  });
+
+  test("a running slip never reads its Session's screen: no report, no footer, the Work's own summary instead", () => {
+    const pasted = '"$MEWLA_WORKER_PROGRESS_CMD" worker progress --turn-id t1 --status running';
+    const unreported = workers.map((worker) => (worker.id === "%107" ? { ...worker, phase: undefined, summary: pasted } : worker));
+    const slip = brainWorkSurface(live, unreported).slips.find((item) => item.workId === "reopen")!;
+    expect(slip.summary ?? "").not.toContain("MEWLA_WORKER_PROGRESS");
+    const footer = workers.map((worker) => (worker.id === "%107" ? { ...worker, summary: "⏵⏵ bypass permissions on (shift+tab to cycle)" } : worker));
+    expect(brainWorkSurface(live, footer).slips.find((item) => item.workId === "reopen")!.summary ?? "").not.toContain("shift+tab");
   });
 
   test("a needs-you slip says what Brain is waiting on", () => {
@@ -94,7 +104,7 @@ describe("brainWorkSurface", () => {
   });
 
   test("Work leaves the surface when its status changes to closed", () => {
-    const before = brainWorkSurface([work({ status: "needs_input" })], []);
+    const before = brainWorkSurface([work({ status: "needs_input", question: "Ship it?" })], []);
     const after = brainWorkSurface([work({ status: "done" })], []);
     expect(before.counts.needs).toBe(1);
     expect(after.slips).toEqual([]);
@@ -102,8 +112,12 @@ describe("brainWorkSurface", () => {
     expect(unreadDone.slips.map((slip) => slip.group)).toEqual(["back"]);
   });
 
-  test("an unreviewed Worker question and a user_input wake both need you", () => {
-    expect(brainWorkGroup(work({ status: "needs_input", progress_mode: "waiting" }))).toBe("needs");
+  test("Brain's question and a user_input wake need you; a Worker's request is Brain's (owner 2026-11-13)", () => {
+    expect(brainWorkGroup(work({ status: "needs_input", progress_mode: "waiting" }))).toBe("running");
+    expect(brainCurrentWorkLifecycle(work({ status: "needs_input", progress_mode: "waiting" })).label).toBe("Reviewing");
+    // Brain's review queued (Brain not on it yet) is still Brain's, never a result under Done (shot 11, isolated run).
+    expect(brainWorkGroup(work({ status: "needs_input", attention_state: "queued" }))).toBe("running");
+    expect(brainWorkSurface([work({ status: "needs_input", progress_mode: "waiting", question: "Which name?" })], []).slips[0]).toMatchObject({ group: "needs", statusLabel: "Needs you" });
     expect(brainWorkGroup(work({ status: "needs_input", attention_state: "reviewing" }))).toBe("running");
     expect(brainWorkGroup(work({ status: "waiting", wake: { kind: "user_input", ref: "x" } }))).toBe("needs");
     expect(brainWorkGroup(work({ status: "waiting", progress_mode: "waiting" }))).toBe("waiting");

@@ -1,4 +1,6 @@
 import { platform } from "./platform";
+import { motion } from "./motion/tokens";
+import { bounded } from "./motion/wait";
 import {
   buildAuthorizationHeader,
   getOrCreateLocalDeviceIdentity,
@@ -41,7 +43,9 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
   const identity = await getOrCreateLocalDeviceIdentity();
   let response: Response;
   try {
-    response = await platform().fetch(pairURL, {
+    // No endless "Pairing…" (SPEC §16.4 Pair): no answer by `wait.fail` is the unreachable failure, with Try
+    // again; through Mewla Relay the tunnel takes its own time first, so twice that.
+    response = await bounded(platform().fetch(pairURL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -54,7 +58,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
         device_name: identity.deviceName,
         device_public_key: identity.publicKeyHex,
       }),
-    });
+    }), input.transport === "link" ? 2 * motion.wait.fail : motion.wait.fail);
   } catch (error) {
     throw input.transport === "link"
       ? new PairingUnreachableError(LINK_UNREACHABLE_MESSAGE)

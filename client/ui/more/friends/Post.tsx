@@ -1,13 +1,14 @@
 import { computed, effect, Scroll, signal, Text, untracked, View, type InputRef } from "nsh";
-import { AlertDialog, Button, Input } from "nsh/base";
+import { Button, Input } from "nsh/base";
 import { displayName, FRIENDS_COMMENT_LIMIT, relativeTime, type FriendsComment, type FriendsPerson, type FriendsPost } from "../../../core/friends/api";
 import { friendsCall } from "../../../core/friends/requests";
 import { formatDateTime } from "../../../core/more/dates";
-import { Icon } from "../kit/Icon";
-import { EmptyState, PillButton } from "../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { EmptyState, PillButton } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { ActionButton, AgentPill, Avatar, fail, FriendsPageFrame, keyboardLift, postMenu, PostMedia, report, togglePost, videoOwner, type PostHandlers } from "./parts";
 import { currentServerId, followFriends, followPage, serverFor } from "./state";
+import { showAlert } from "../../shell/alert";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -132,10 +133,10 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
       ...(!comment.mine ? [{ id: "report", label: "Report comment" }] : []),
       { id: "cancel", label: "Cancel", role: "cancel" as const },
     ];
-    const answer = await AlertDialog.show({ presentation: "actionSheet", actions });
+    const answer = await showAlert({ presentation: "actionSheet", actions });
     if (answer.action === "report") return void report("comment", comment.id, shownFrom);
     if (answer.action !== "delete") return;
-    const sure = await AlertDialog.show({
+    const sure = await showAlert({
       title: "Delete this comment?",
       actions: [
         { id: "cancel", label: "Cancel", role: "cancel" },
@@ -157,8 +158,7 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
 
   return (
     <FriendsPageFrame title="Post" testID="friends-post">
-      {loaded() ? (
-        <View class="flex-1" ref={keyboard.ref} onLayout={keyboard.onLayout}>
+      <If when={loaded()} else={<EmptyState busy />}><View class="flex-1" ref={keyboard.ref} onLayout={keyboard.onLayout}>
           <Scroll class="flex-1" contentClass="pb-6" keyboardShouldPersistTaps="handled">
             <View class="px-4 pt-3">
               <View class="flex-row items-center gap-3">
@@ -171,14 +171,13 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                   <Avatar author={post()!.author} size={48} />
                   <View class="min-w-0 flex-1">
                     <View class="flex-row items-center gap-1.5">
-                      <Text class="shrink text-lg font-semibold line-clamp-1" role="header">{displayName(post()!.author)}</Text>
-                      {post()!.author.agent_name ? <AgentPill /> : null}
+                      <Text class="shrink text-title font-bold line-clamp-1" role="header">{displayName(post()!.author)}</Text>
+                      <If when={post()!.author.agent_name}><AgentPill /></If>
                     </View>
-                    <Text class="text-sm text-muted-foreground">{`by @${post()!.author.handle}`}</Text>
+                    <Text class="text-sub text-muted-foreground">{`by @${post()!.author.handle}`}</Text>
                   </View>
                 </Button>
-                {!post()!.mine && author() ? (
-                  <PillButton
+                <If when={!post()!.mine && author()}><PillButton
                     testID="friends-follow"
                     title={author()!.followed ? "Following" : "Follow"}
                     filled={!author()!.followed}
@@ -186,24 +185,24 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                       const shownFrom = from();
                       void toggleFollow(author()!, shownFrom).then((next) => next && from() === shownFrom && author.set(next));
                     }}
-                  />
-                ) : null}
+                  /></If>
               </View>
-              <Text testID="friends-post-text" class="mt-3 text-xl">{post()!.text}</Text>
-              {mediaCount() ? <PostMedia media={post()!.media!} postId={post()!.id} owner={owner} active={props.top} /> : null}
-              <Text class="mt-3 text-sm text-muted-foreground">
+              <Text testID="friends-post-text" class="mt-3 text-body">{post()!.text}</Text>
+              <If when={mediaCount()}><PostMedia media={post()!.media!} postId={post()!.id} owner={owner} active={props.top} /></If>
+              <Text class="mt-3 text-sub text-muted-foreground">
                 {`${formatDateTime(post()!.created_at)} · ${post()!.via === "auto" ? "Auto-posted" : "Approved by owner"}`}
               </Text>
-              <Text testID="friends-post-counts" class="mt-1 text-sm">{`${plural(post()!.likes, "like")}   ${plural(post()!.comments, "comment")}`}</Text>
-              <View class="mt-1 flex-row items-center border-b border-border pb-1">
+              <Text testID="friends-post-counts" class="mt-1 text-sub">{`${plural(post()!.likes, "like")}   ${plural(post()!.comments, "comment")}`}</Text>
+              <View class="mt-3 flex-row items-center gap-2 pb-1">
                 <ActionButton
+                  soft
                   testID="friends-post-like"
                   icon={post()!.liked ? "heart-fill" : "heart"}
                   on={post()!.liked}
                   label={post()!.liked ? "Unlike" : "Like"}
                   onPress={() => void togglePost(post()!, "like", handlers())}
                 />
-                <ActionButton testID="friends-post-comment" icon="chat" label="Comment" onPress={() => input?.focus()} />
+                <ActionButton soft testID="friends-post-comment" icon="chat" label="Comment" onPress={() => input?.focus()} />
                 <ActionButton
                   icon={post()!.bookmarked ? "bookmark-fill" : "bookmark"}
                   on={post()!.bookmarked}
@@ -214,36 +213,32 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
                 <ActionButton testID="friends-post-more" icon="more-horizontal" label="More" onPress={() => void postMenu(post()!, handlers())} />
               </View>
             </View>
-            {comments().length === 0 ? (
-              <EmptyState title="No comments yet" detail="Be the first to say something kind." />
-            ) : (
-              comments().map((comment) => (
+            <If when={comments().length === 0} else={<>{comments().map((comment) => (
                 <View
                   testID={`comment-${comment.id}`}
                   role="button"
                   accessibilityHint="Long press for options"
                   onLongPress={() => void commentMenu(comment)}
-                  class="flex-row gap-3 border-b border-border px-4 py-3"
+                  class="mx-4 mt-2 flex-row gap-3 rounded-(--radius-group) bg-card px-4 py-3"
                 >
                   <Avatar author={{ ...comment.author, pet_id: "" }} size={36} />
                   <View class="min-w-0 flex-1">
-                    <Text class="text-sm text-muted-foreground">{`@${comment.author.handle} · ${relativeTime(comment.created_at, Date.now())}`}</Text>
-                    <Text class="mt-0.5 text-base">{comment.text}</Text>
+                    <Text class="text-sub text-muted-foreground">{`@${comment.author.handle} · ${relativeTime(comment.created_at, Date.now())}`}</Text>
+                    <Text class="mt-0.5 text-body">{comment.text}</Text>
                   </View>
                   <Button testID={`comment-options-${comment.id}`} accessibilityLabel="Comment options" onPress={() => void commentMenu(comment)} class="size-8 items-center justify-center active:opacity-60">
                     <Icon name="more-horizontal" size={18} />
                   </Button>
                 </View>
-              ))
-            )}
+              ))}</>}><EmptyState title="No comments yet" /></If>
           </Scroll>
-          <View testID="friends-composer" class="flex-row items-end gap-2 border-t border-border bg-card px-4 py-2" style={{ marginBottom: keyboard.lift() }}>
+          <View testID="friends-composer" class="flex-row items-end gap-2 bg-background px-4 py-2" style={{ marginBottom: keyboard.lift() }}>
             <Input
               testID="friends-comment"
               ref={(node) => {
                 input = node;
               }}
-              class="min-h-[40px] flex-1 rounded-2xl border border-border bg-background px-3 py-2 text-base"
+              class="min-h-[44px] flex-1 rounded-full bg-card px-4 py-2.5 text-body"
               placeholder="Add a comment"
               value={draft()}
               maxLength={FRIENDS_COMMENT_LIMIT}
@@ -256,15 +251,12 @@ export function Post(props: { id: string; nav: PageNav; top: () => boolean }) {
               accessibilityLabel="Send comment"
               disabled={!draft().trim() || sending()}
               onPress={() => void send()}
-              class="size-10 items-center justify-center rounded-full bg-primary active:opacity-70 disabled:opacity-40"
+              class="size-11 items-center justify-center rounded-full bg-primary active:opacity-70 disabled:opacity-40"
             >
-              <Icon name="arrow-up" tone="paper" size={18} />
+              <Icon name="arrow-up" tone="canvas" size={18} />
             </Button>
           </View>
-        </View>
-      ) : (
-        <EmptyState busy />
-      )}
+        </View></If>
     </FriendsPageFrame>
   );
 }

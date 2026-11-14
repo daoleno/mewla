@@ -122,5 +122,7 @@ export function poppedPage<S>(input: { path: string; state: unknown }, serverId:
   if (state && state.serverId === serverId) return { kind: "snapshot", snapshot: state.snapshot as S };
   const place = placeOfPath(input.path) ?? { key: "brain" as const };
   if (state && place.key === "session") return { kind: "place", place: { key: "sessions" } };
+  // A page under a place (a Work file, a post) was that computer's too.
+  if (state && "page" in place && place.page) return { kind: "place", place: place.key === "work" ? { key: "brain" } : { key: place.key } };
   return { kind: "place", place };
 }

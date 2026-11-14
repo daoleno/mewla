@@ -1,13 +1,14 @@
 import { computed, signal, Text, View } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { Button } from "nsh/base";
 import { displayName, type FriendsAuthor, type FriendsPerson } from "../../../core/friends/api";
 import { friendsCall } from "../../../core/friends/requests";
-import { Icon } from "../kit/Icon";
-import { EmptyState, PillButton, Row, Section } from "../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { EmptyState, PillButton, Row, Section } from "../../kit/kit";
 import type { PageNav } from "../routes";
 import { AgentPill, Avatar, BLOCK_DETAIL, blockPerson, fail, FriendsPageFrame, PostList, report } from "./parts";
 import { leaveWhenOnTop, toggleFollow } from "./Post";
 import { currentServerId, followFriends, followPage, serverFor } from "./state";
+import { showAlert } from "../../shell/alert";
 
 async function unblock(id: string, from: string): Promise<FriendsPerson | null> {
   const server = serverFor(from);
@@ -63,7 +64,7 @@ export function Person(props: { id: string; nav: PageNav; top: () => boolean }) 
     const p = person();
     if (!p) return;
     const shownFrom = from();
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       presentation: "actionSheet",
       description: p.blocked ? undefined : `Block @${p.handle}: ${BLOCK_DETAIL.toLowerCase()}`,
       actions: [
@@ -85,55 +86,45 @@ export function Person(props: { id: string; nav: PageNav; top: () => boolean }) 
         <Avatar author={person()!} size={76} />
         <View class="mt-2 flex-row items-center gap-1.5">
           <Text testID="friends-person-name" class="text-2xl font-semibold" role="header">{displayName(person()!)}</Text>
-          {person()!.agent_name ? <AgentPill /> : null}
+          <If when={person()!.agent_name}><AgentPill /></If>
         </View>
-        <Text class="text-sm text-muted-foreground">{`by @${person()!.handle}`}</Text>
-        {person()!.bio ? <Text class="mt-1 text-center text-base">{person()!.bio}</Text> : null}
-        <Text class="mt-1 text-sm text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>
+        <Text class="text-sub text-muted-foreground">{`by @${person()!.handle}`}</Text>
+        <If when={person()!.bio}><Text class="mt-1 text-center text-body">{person()!.bio}</Text></If>
+        <Text class="mt-1 text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>
           {`${person()!.posts} posts  ${person()!.following} following  ${person()!.followers} followers`}
         </Text>
-        {!person()!.mine ? (
-          <View class="flex-row items-center gap-2">
-            {person()!.blocked ? (
-              <PillButton testID="friends-unblock" title="Unblock" onPress={() => void unblock(person()!.id, from()).then(answered(from()))} />
-            ) : (
-              <PillButton
+        <If when={!person()!.mine}><View class="flex-row items-center gap-2">
+            <If when={person()!.blocked} else={<PillButton
                 testID="friends-follow"
                 title={person()!.followed ? "Following" : "Follow"}
                 filled={!person()!.followed}
                 onPress={() => void toggleFollow(person()!, from()).then(answered(from()))}
-              />
-            )}
+              />}><PillButton testID="friends-unblock" title="Unblock" onPress={() => void unblock(person()!.id, from()).then(answered(from()))} /></If>
             <Button testID="friends-person-more" accessibilityLabel="More" onPress={() => void menu()} class="mt-2 size-9 items-center justify-center rounded-full bg-secondary active:opacity-70">
               <Icon name="more-horizontal" size={18} />
             </Button>
-          </View>
-        ) : null}
+          </View></If>
       </View>
-      {person()!.mine ? (
-        <View class="px-4">
+      <If when={person()!.mine}><View class="px-4">
           <Section>
             <Row testID="friends-open-bookmarks" icon="bookmark" title="Bookmarks" chevron onPress={() => props.nav.push({ name: "friends-bookmarks" })} />
             <Row testID="friends-open-blocked" icon="person-remove" title="Blocked people" chevron onPress={() => props.nav.push({ name: "friends-blocked" })} />
           </Section>
-        </View>
-      ) : null}
+        </View></If>
       <View class="h-4 border-b border-border" />
     </View>
   );
 
   return (
     <FriendsPageFrame title="Profile" testID="friends-person">
-      {loaded() ? (
-        <PostList
+      <If when={loaded()}><PostList
           path={`/people/${props.id}/posts`}
           nav={props.nav}
           top={props.top}
           header={header()}
           emptyTitle="No posts yet"
           emptyDetail={person()?.mine ? "What Brain posts for you shows up here." : undefined}
-        />
-      ) : null}
+        /></If>
     </FriendsPageFrame>
   );
 }
@@ -170,12 +161,7 @@ export function Blocked(props: { top: () => boolean }) {
   });
   return (
     <FriendsPageFrame title="Blocked people" testID="friends-blocked">
-      {people() === null ? (
-        <EmptyState busy />
-      ) : people()!.length === 0 ? (
-        <EmptyState icon="person-remove" title="No one blocked" detail="People you block, and who block you, are hidden from each other." />
-      ) : (
-        <View class="px-4">
+      <If when={people() === null} else={<If when={people()!.length === 0} else={<View class="px-4">
           <Section>
             {people()!.map((p) => (
               <Row
@@ -186,8 +172,7 @@ export function Blocked(props: { top: () => boolean }) {
               />
             ))}
           </Section>
-        </View>
-      )}
+        </View>}><EmptyState icon="person-remove" title="No one blocked" detail="People you block, and who block you, are hidden from each other." /></If>}><EmptyState busy /></If>
     </FriendsPageFrame>
   );
 }

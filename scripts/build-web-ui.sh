@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Export the Expo web app and stage it for embedding in the mewla daemon.
+# Package the Mewla client for the browser and stage it for embedding in the
+# mewla daemon.
 #
-# Every exported file is stored gzip-only in daemon/webui/dist; the daemon
-# serves the compressed bytes directly. Run before `go build ./cmd/mewla`.
-# Requires `bun install` at the repository root.
+# `nsh package --target web` writes content-hashed files; each is stored
+# gzip-only in daemon/webui/dist and the daemon serves the compressed bytes
+# directly. Run before `go build ./cmd/mewla`. Uses the NSH on PATH, else the
+# pinned one in ~/.nsh (client/scripts/fetch-nsh.sh installs it).
 #
 # Usage:
 #   ./scripts/build-web-ui.sh
@@ -15,13 +17,38 @@ OUT="$ROOT/daemon/webui/dist"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/web-ui.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
-(
-  cd "$ROOT/app"
-  bunx expo export --platform web --output-dir "$STAGE/export"
-)
-test -f "$STAGE/export/index.html"
-find "$STAGE/export" -type f -exec gzip -9 -n {} +
+NSH="$(command -v nsh || true)"
+if [[ -z "$NSH" ]]; then
+  "$ROOT/client/scripts/fetch-nsh.sh" >/dev/null
+  NSH="${NSH_HOME:-$HOME/.nsh}/bin/nsh"
+fi
+
+"$NSH" package --target web -o "$STAGE/package" "$ROOT/client/ui"
+# The package is one folder named after the app.
+APP="$(dirname "$(find "$STAGE/package" -mindepth 2 -maxdepth 2 -name index.html | head -1)")"
+test -f "$APP/index.html"
+# The page's <base href="/"> (nsh.json web.base) keeps its files at the root, where the daemon
+# serves them, when a deep link such as /sessions/<id> is reloaded or opened.
+grep -q '^<base href="/">$' "$APP/index.html" || { echo "index.html has no <base href=\"/\"> (nsh.json web.base)" >&2; exit 1; }
+# Every pet image the app names is in the package, where index.html's asset map sends it.
+python3 "$ROOT/client/scripts/check-pet-assets.py" web "$APP"
+# While the runtime downloads (minutes through a slow tunnel), the page is Mewla's: the app's background and its pet.
+python3 -I "$ROOT/scripts/web-splash.py" "$APP" "$ROOT"
+# The web terminal's page (an NSH web view) loads these from <origin>/terminal/: its script, its VT
+# (libghostty-vt with the phones' packer and glyphs, WebAssembly; built once, then cached) and the
+# phones' face (client/native/terminal/fonts, SIL OFL 1.1).
+mkdir -p "$APP/terminal"
+cp "$ROOT/client/ui/web/terminal/terminal.js" "$APP/terminal/terminal.js"
+# An assignment, so a failed build stops here (pipefail); its last line is the module's path.
+VT_WASM="$("$ROOT/scripts/build-libghostty-web.sh" | tail -1)"
+cp "$VT_WASM" "$APP/terminal/mewla-vt.wasm"
+for file in MapleMono-NF-Regular.ttf MapleMono-NF-SemiBold.ttf MapleMono-NF-Italic.ttf MapleMono-NF-SemiBoldItalic.ttf; do
+  cp "$ROOT/client/native/terminal/fonts/$file" "$APP/terminal/$file"
+done
+# NSH writes .gz and .br beside some files: keep one gzip of every file.
+find "$APP" -type f \( -name '*.gz' -o -name '*.br' \) -delete
+find "$APP" -type f -exec gzip -9 -n {} +
 
 find "$OUT" -mindepth 1 ! -name .gitkeep -delete
-cp -R "$STAGE/export/." "$OUT/"
+cp -R "$APP/." "$OUT/"
 echo "Web UI staged in $OUT ($(du -sh "$OUT" | cut -f1) gzip)"

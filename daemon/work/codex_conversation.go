@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/answered"
 	"io"
 	"os"
 	"path/filepath"
@@ -225,6 +226,12 @@ func conversationWithActivity(conversation CodexConversation, lifecycle *provide
 // conversation. The person did not type it.
 const ConversationOriginProvider = "provider"
 
+// ConversationOriginDelegated marks a user-role record that is the brief
+// Mewla handed a delegated Worker (the typed "Execute: " intent and one exact
+// paste), not something the person typed. Its Body stays the whole brief;
+// the apps show the task and fold the rest.
+const ConversationOriginDelegated = "delegated"
+
 // ConversationKindUpdate is a line the provider's own terminal prints as the
 // agent speaking between steps (Claude "updates" thinking). It is not hidden
 // reasoning and not a final message.
@@ -245,6 +252,10 @@ type CodexConversationEvent struct {
 	CallID    string `json:"call_id,omitempty"`
 	ExitCode  *int   `json:"exit_code,omitempty"`
 	Status    string `json:"status,omitempty"`
+	// Rejected says a finished tool call did not run because the provider
+	// recorded it as refused (by the person at its prompt, or a permission
+	// rule). Daemon-internal; it is not on the wire.
+	Rejected bool `json:"-"`
 	// Partial means the provider may update this same logical event ID again.
 	// It does not imply or permit client-side splitting of completed text.
 	Partial bool `json:"partial,omitempty"`
@@ -259,8 +270,10 @@ type CodexConversationEvent struct {
 	Source      string                        `json:"source,omitempty"`
 	// Origin says who wrote a user_message when the provider records it:
 	// empty is the person, ConversationOriginProvider is the provider itself
-	// (Claude's compaction summary). Consumers read this field; they never
-	// infer authorship from the text.
+	// (Claude's compaction summary), ConversationOriginDelegated is Mewla
+	// handing a delegated Worker its brief (Claude only: its native record
+	// keeps the delegated intent and paste envelope). Consumers read this
+	// field; they never infer authorship from the text.
 	Origin string `json:"origin,omitempty"`
 	// Attachments are the files a user_message carried, as typed fields; Body
 	// is then the text the person wrote. The apps render chips from this and
@@ -281,8 +294,12 @@ type CodexConversationEvent struct {
 	WorkAttention     string `json:"work_attention,omitempty"`
 	WorkEventKind     string `json:"work_event_kind,omitempty"`
 	WorkDetailsJSON   string `json:"work_details_json,omitempty"`
-	WorkNextAction    string `json:"work_next_action,omitempty"`
 	WorkWaitFor       string `json:"work_wait_for,omitempty"`
+	// WorkActions are the result's typed next steps (brain/work_result_actions.go).
+	WorkActions []ResultAction `json:"work_actions,omitempty"`
+	// Request is set only for Source=request_answered rows: a request (a
+	// prompt, an approval, a question) and how it was answered.
+	Request *answered.Request `json:"request,omitempty"`
 	// Task fields are only set for Source=task_notification status items.
 	// CallID carries the provider tool call that launched the task.
 	TaskID         string `json:"task_id,omitempty"`
@@ -302,6 +319,18 @@ type CodexConversationEvent struct {
 	// AdmissionUnwrappedSHA256 preserves an exact alternative only when a provider
 	// adds a recognized whole-message transport envelope. Never a display digest.
 	AdmissionUnwrappedSHA256 string `json:"-"`
+}
+
+// ResultAction is one next step a Work result truthfully offers. Kind is
+// pull_request (URL), git_review (SessionID, Cwd: the repository root),
+// file (SessionID, Cwd, Path relative to Cwd), brain_file or brain_folder
+// (Path relative to the Brain workspace). The client labels and routes them.
+type ResultAction struct {
+	Kind      string `json:"kind"`
+	URL       string `json:"url,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Cwd       string `json:"cwd,omitempty"`
+	Path      string `json:"path,omitempty"`
 }
 
 // CodexConversationSubagent is the work a delegated subagent did, read from the

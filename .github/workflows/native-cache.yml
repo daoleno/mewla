@@ -9,12 +9,13 @@ on:
   push:
     branches: [main]
     paths:
-      - bun.lock
-      - app/package.json
-      - app/plugins/**
-      - app/modules/terminal-vt/**
-      - app/modules/*/android/**
-      - app/assets/notices/GHOSTTY-MIT.txt
+      - native/terminal-vt/**
+      - client/ui/more/settings/licenses/texts/Ghostty-MIT.txt
+      - client/android/**/*.gradle.kts
+      - client/android/gradle.properties
+      - client/android/gradle/wrapper/gradle-wrapper.properties
+      - client/android/app/CMakeLists.txt
+      - client/android/app/src/main/cpp/**
       - scripts/android-release-apk.sh
       - scripts/build-libghostty.sh
       - scripts/lib/zig.sh
@@ -23,7 +24,6 @@ on:
       - scripts/verify-libghostty.sh
       - scripts/verify-android-native-symbols.py
       - .github/actions/android-native/**
-      - app/modules/terminal-vt/TerminalVt.podspec
       - scripts/build-libghostty-ios.sh
       - scripts/verify-libghostty-ios.sh
       - scripts/zig-xcode-compat/**
@@ -51,15 +51,13 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.5"
-      - name: Install workspace dependencies
-        run: bun install --frozen-lockfile
       - name: Android SDK, arm64 Ghostty and Gradle home
         uses: ./.github/actions/android-native
         with:
           save-caches: "true"
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
+      # The NSH client's GitHub APK, as release-artifacts.yml builds it (no keystore).
       - name: Build the release APK with the release task graph
         env:
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
@@ -85,29 +83,15 @@ jobs:
         run: ./scripts/check-zig-xcode-compat.sh
 
   ios:
-    name: iOS Ghostty and CocoaPods (unsigned)
+    name: iOS Ghostty XCFramework (unsigned)
     if: github.ref == 'refs/heads/main'
-    # Same image as ios-release.yml: the cache keys hash the Xcode, SDK and
-    # CocoaPods versions.
+    # Same image as ios-release.yml and client.yml: the cache keys hash the
+    # Xcode and SDK versions.
     runs-on: xcode-27
     timeout-minutes: 60
-    env:
-      MEWLA_IOS_APP_VARIANT: preview
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.5"
-      - name: Install workspace dependencies
-        run: bun install --frozen-lockfile
-      - name: iOS Ghostty and CocoaPods caches
+      - name: iOS Ghostty cache
         uses: ./.github/actions/ios-native
         with:
           save-caches: "true"
-      - name: Generate the iOS project and install pods
-        run: |
-          set -euo pipefail
-          cd app
-          bunx expo prebuild --platform ios --clean --no-install
-          cd ios
-          pod install

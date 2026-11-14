@@ -210,6 +210,44 @@ func (s *Service) recordWorkTranscript(item Work, worker *classifier.Worker, tur
 	}
 }
 
+// factWork names the delegated Work a Session's fact belongs to, read before
+// the fact is applied.
+func (s *Service) factWork(fact watcher.TurnFact) (Work, bool) {
+	sessionID := strings.TrimSpace(fact.SessionID)
+	item, found, err := s.store.WorkByAttemptSession(sessionID)
+	if err != nil {
+		return Work{}, false
+	}
+	if found && item.AttemptDelegated {
+		return item, true
+	}
+	// The first matching signal admits a pending submission atomically, so
+	// a Worker that finishes quickly has no attempt yet when its terminal
+	// fact arrives, and the first report after Brain's next message (a
+	// send-back) arrives while the earlier attempt is already released. The
+	// pending delegated submission names the Work.
+	pending, err := s.store.PendingInputAdmissions(sessionID)
+	if err != nil {
+		return Work{}, false
+	}
+	workID := ""
+	for _, admission := range pending {
+		if admission.ClaimToken != "" || strings.TrimSpace(admission.WorkID) == "" {
+			continue
+		}
+		if workID == "" || admission.ProposedTurnID == fact.TurnID {
+			workID = strings.TrimSpace(admission.WorkID)
+		}
+	}
+	if workID == "" {
+		return Work{}, false
+	}
+	if item, err = s.store.Work(workID); err != nil || item.Status == WorkDone || item.Status == WorkCancelled {
+		return Work{}, false
+	}
+	return item, true
+}
+
 // recordTurnEndTranscript links the Work a Session's turn belongs to before
 // the fact is applied: the reducer may release the attempt (and the pane may
 // close soon after), so a Worker that finishes between two reconcile ticks
@@ -223,36 +261,9 @@ func (s *Service) recordTurnEndTranscript(fact watcher.TurnFact) {
 	if sessionID == "" {
 		return
 	}
-	item, found, err := s.store.WorkByAttemptSession(sessionID)
-	if err != nil {
+	item, ok := s.factWork(fact)
+	if !ok {
 		return
-	}
-	if found && !item.AttemptDelegated {
-		return
-	}
-	if !found {
-		// The first matching signal admits a pending submission atomically, so
-		// a Worker that finishes quickly has no attempt yet when its terminal
-		// fact arrives. The pending delegated submission names the Work.
-		pending, err := s.store.PendingInputAdmissions(sessionID)
-		if err != nil {
-			return
-		}
-		workID := ""
-		for _, admission := range pending {
-			if admission.ClaimToken != "" || strings.TrimSpace(admission.WorkID) == "" {
-				continue
-			}
-			if workID == "" || admission.ProposedTurnID == fact.TurnID {
-				workID = strings.TrimSpace(admission.WorkID)
-			}
-		}
-		if workID == "" {
-			return
-		}
-		if item, err = s.store.Work(workID); err != nil || item.Status == WorkDone || item.Status == WorkCancelled {
-			return
-		}
 	}
 	// The watcher calls into the ledger from paths that hold its own locks, so
 	// the worker lookup and the process proof run off that path. The attempt
@@ -262,6 +273,7 @@ func (s *Service) recordTurnEndTranscript(fact watcher.TurnFact) {
 		if worker == nil {
 			return
 		}
+		s.recordWorkWorker(item.ID, worker)
 		switch fact.Kind {
 		case "done", "failed", "attention":
 			s.recordWorkTranscript(item, worker, fact.TurnID, true)

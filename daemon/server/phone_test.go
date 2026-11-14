@@ -140,14 +140,22 @@ func (d *device) run() {
 		if kind != websocket.TextMessage || json.Unmarshal(data, &req) != nil || req.Type != phone.TypeRequest {
 			continue
 		}
+		// Answered before the test hears of it: a test that ends on a request (the last Release) never
+		// closes the connection under an answer still being written.
+		if d.handle != nil {
+			if res := d.handle(req); res != nil {
+				res.Type, res.ID = phone.TypeResult, req.ID
+				d.mu.Lock()
+				err := d.conn.WriteJSON(res)
+				d.mu.Unlock()
+				if err != nil {
+					// The daemon or the test closed the connection: this phone is gone. A missing
+					// answer fails the test where it waits for it, not here (t.Fatal is the test's own).
+					return
+				}
+			}
+		}
 		d.requests <- req
-		if d.handle == nil {
-			continue
-		}
-		if res := d.handle(req); res != nil {
-			res.Type, res.ID = phone.TypeResult, req.ID
-			d.send(res)
-		}
 	}
 }
 

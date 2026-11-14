@@ -8,7 +8,8 @@ never adds several computers together.
 ## Stats
 
 Stats reads the agents' own history on the computer. Its title is the total
-cost for the range you pick, with spend by day as a chart,
+cost for the last 7, 14 or 30 days (14 when it opens), with spend by day as a
+chart (touch or drag across it to read a day),
 then tokens, sessions and cost per model and per project. Tap a model for
 input, output and cache tokens, the price source and when it was refreshed, or
 a day in the chart for that day.

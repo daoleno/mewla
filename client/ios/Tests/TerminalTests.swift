@@ -27,6 +27,8 @@ final class TerminalTests: XCTestCase {
     XCTAssertEqual(row1.map(\.cells), [2, 1, 2, 15])
     XCTAssertEqual(row1[0].text, "中")
     XCTAssertEqual(row1[2].text, "😀")
+    XCTAssertFalse(row1[2].plain, "a wide emoji is two UTF-16 units in two cells, but one cell to draw")
+    XCTAssertTrue(row1[1].plain && !row1[0].plain)
     XCTAssertTrue(try XCTUnwrap(vt.frame(full: false)).dirty.isEmpty, "a second frame without output changes nothing")
   }
 
@@ -41,7 +43,7 @@ final class TerminalTests: XCTestCase {
     XCTAssertFalse(texts.contains("XY"))
     XCTAssertTrue(texts.contains("A") && texts.contains("B"))
     let row1 = try XCTUnwrap(frame.dirty.first { $0.row == 1 }).runs
-    XCTAssertTrue(row1.contains { $0.bg != 0 && !$0.underline }, "a concealed run keeps its background")
+    XCTAssertTrue(row1.contains { $0.bg != 0 && $0.underline == 0 }, "a concealed run keeps its background")
   }
 
   func testCssColors() {
@@ -97,8 +99,10 @@ final class TerminalTests: XCTestCase {
     let pixels = try XCTUnwrap(Pixels(image))
     XCTAssertTrue(pixels.near(x: 385, y: 297, 0x141210), "the theme's background, opaque")
     XCTAssertTrue(pixels.near(x: Int(view.cellW * 39.5), y: Int(view.cellH * 1.5), 0xe0685a), "the red background run (palette 1)")
-    // The cursor after "$ ": #f4f0ea at 80% over #141210.
-    XCTAssertTrue(pixels.near(x: Int(view.cellW * 2.5), y: Int(view.cellH * 2.5), 0xc7c4be, tolerance: 4), "the cursor after \"$ \"")
+    // The cursor after "$ ": without the keyboard a hollow block in #f4f0ea, its cell left readable.
+    let cursorEdge = (Int(view.cellW * 2) - 1...Int(view.cellW * 2) + 1).contains { pixels.near(x: $0, y: Int(view.cellH * 2.5), 0xf4f0ea, tolerance: 40) }
+    XCTAssertTrue(cursorEdge, "the cursor's left edge after \"$ \"")
+    XCTAssertTrue(pixels.near(x: Int(view.cellW * 2.5), y: Int(view.cellH * 2.5), 0x141210), "inside the hollow cursor")
     var lit = 0
     for x in 0..<Int(view.cellW * 10) where !pixels.near(x: x, y: Int(view.cellH * 0.5), 0x141210) { lit += 1 }
     XCTAssertGreaterThan(lit, 10, "the first line's text is drawn")
@@ -114,6 +118,170 @@ final class TerminalTests: XCTestCase {
     view.reset()
     XCTAssertEqual(view.lineText(0), "", "reset starts an empty screen")
   }
+
+  /// Parity #3: a long press selects the word; a copy joins a soft-wrapped row with the next and ends a
+  /// hard row with a newline (trailing blanks dropped); Select All takes every row; a paste reaches the
+  /// program framed only when it turned bracketed paste on.
+  @MainActor
+  func testSelectCopyAndPaste() throws {
+    let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+    var input: [String] = []
+    view.onInput = { input.append($0) }
+    view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    view.setFontSize(13)
+    view.frame = CGRect(x: 0, y: 0, width: ceil(20 * view.cellW), height: ceil(6 * view.cellH))
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    XCTAssertEqual(view.cols, 20)
+    // Row 0 wraps into row 1 (24 characters in 20 columns); row 2 is "hello world" and a newline.
+    view.write("abcdefghijklmnopqrstuvwx\r\nhello world   \r\nlast")
+    let at = { (col: Int, row: Int) in CGPoint(x: (CGFloat(col) + 0.5) * view.cellW, y: (CGFloat(row) + 0.5) * view.cellH) }
+
+    XCTAssertTrue(view.selectWord(at: at(7, 2)))
+    XCTAssertEqual(view.selectedText(), "world")
+    XCTAssertTrue(view.selectWord(at: at(3, 0)))
+    XCTAssertEqual(view.selectedText(), "abcdefghijklmnopqrst", "a word stops at the row's end; the handles stretch it")
+    XCTAssertFalse(view.selectWord(at: at(15, 2)), "a blank selects nothing")
+    view.selectAll()
+    XCTAssertEqual(view.selectedText(), "abcdefghijklmnopqrstuvwx\nhello world\nlast",
+                   "the wrapped row joins the next; hard rows end in a newline without their trailing blanks")
+
+    view.paste("echo a\necho b")
+    view.write("\u{1b}[?2004h")
+    view.paste("x\ny")
+    XCTAssertEqual(input, ["echo a\recho b", "\u{1b}[200~x\ny\u{1b}[201~"])
+  }
+
+  /// History is drawn a page (64 rows) at a time when first needed: every row reads back across page
+  /// boundaries, after rows leave the front, and after a theme change voids what was drawn.
+  @MainActor
+  func testHistoryDrawsLazilyByPage() throws {
+    let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+    view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    view.setFontSize(13)
+    view.frame = CGRect(x: 0, y: 0, width: ceil(20 * view.cellW), height: ceil(6 * view.cellH))
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    // Rows as a session host sends them: each on its own, styled.
+    let rows = (0..<200).map { "\u{1b}[0m\u{1b}[38;5;\($0 % 7 + 1)mrow \($0)\u{1b}[0m" }
+    view.applyHistory(reset: true, removed: 0, rows: rows, cols: 20, alternate: false)
+    view.write("live")
+    view.selectAll()
+    XCTAssertEqual(view.selectedText(), ((0..<200).map { "row \($0)" } + ["live"]).joined(separator: "\n"))
+
+    view.applyHistory(reset: false, removed: 70, rows: ["\u{1b}[0m\u{1b}[1mrow 200\u{1b}[0m"], cols: 20, alternate: false)
+    view.setTheme(background: "#ffffff", foreground: "#1c1c1e", cursor: "#1c1c1e", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    view.selectAll()
+    XCTAssertEqual(view.selectedText(), ((70..<201).map { "row \($0)" } + ["live"]).joined(separator: "\n"))
+  }
+
+  /// Parity #3 as the person sees it: the terminal in the app's window with a word selected, its
+  /// handles and the system edit menu, saved as `MEWLA_TEST_OUT`/selection-ios.png.
+  @MainActor
+  func testSelectionHandlesAndMenuOnScreen() throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let window = try XCTUnwrap(scene.windows.first { $0.isKeyWindow } ?? scene.windows.first)
+    let view = TerminalView(frame: window.bounds.inset(by: window.safeAreaInsets))
+    view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    window.addSubview(view)
+    defer { view.removeFromSuperview() }
+    view.layoutIfNeeded()
+    view.write("$ git log --oneline -3\r\n3cde66ce Client web: base href\r\nfb1f6b82 Merge remote-tracking branch\r\n" +
+               "6350ec0e Client web: pairing\r\n$ echo hello world\r\nhello world\r\n$ ")
+    let word = CGPoint(x: 8.5 * view.cellW, y: 5.5 * view.cellH)
+    XCTAssertTrue(view.selectWord(at: word))
+    XCTAssertEqual(view.selectedText(), "world")
+    view.showSelectionMenu(at: word)
+    RunLoop.main.run(until: Date().addingTimeInterval(2))
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = window.screen.scale
+    let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+      for shown in scene.windows.sorted(by: { $0.windowLevel < $1.windowLevel }) where !shown.isHidden {
+        shown.drawHierarchy(in: shown.bounds, afterScreenUpdates: true)
+      }
+    }
+    if let dir = ProcessInfo.processInfo.environment["MEWLA_TEST_OUT"], let png = image.pngData() {
+      try? png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("selection-ios.png"))
+    }
+    let attachment = XCTAttachment(image: image)
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
+  /// The render corpus (scripts/terminal-corpus, `MEWLA_CORPUS`): every screen drawn at its grid at
+  /// 3x, saved as `MEWLA_TEST_OUT`/corpus/<name>.png for the side-by-side with the reference.
+  @MainActor
+  func testCorpusScreensDraw() throws {
+    guard let corpus = ProcessInfo.processInfo.environment["MEWLA_CORPUS"] else { throw XCTSkip("MEWLA_CORPUS is not set") }
+    let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: corpus).appendingPathComponent("corpus.json"))) as? [String: [String: Any]] ?? [:]
+    let out = ProcessInfo.processInfo.environment["MEWLA_TEST_OUT"].map { URL(fileURLWithPath: $0).appendingPathComponent("corpus") }
+    if let out { try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true) }
+    for name in manifest.keys.sorted() {
+      let cols = manifest[name]?["cols"] as? Int ?? 52, rows = manifest[name]?["rows"] as? Int ?? 30
+      let bytes = try String(contentsOf: URL(fileURLWithPath: corpus).appendingPathComponent("\(name).vt"), encoding: .utf8)
+      let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+      view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                    palette: palette.map { String(format: "#%06x", $0) })
+      view.setFontSize(13)
+      view.frame = CGRect(x: 0, y: 0, width: ceil(CGFloat(cols) * view.cellW), height: ceil(CGFloat(rows) * view.cellH))
+      view.setNeedsLayout()
+      view.layoutIfNeeded()
+      view.write(bytes)
+      let format = UIGraphicsImageRendererFormat()
+      format.scale = 3
+      format.preferredRange = .standard
+      let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in view.draw(view.bounds) }
+      if let out, let png = image.pngData() { try png.write(to: out.appendingPathComponent("\(name).png")) }
+      if name == "box" { try assertWallTouches(image, cols: cols, rows: rows) }
+      if name == "emoji" { try assertEmojiFullSize(image, cols: cols, rows: rows) }
+    }
+  }
+}
+
+/// The box screen's wall (scripts/terminal-corpus/gen.py, rows 12-14; the same check as check.py): eight
+/// full blocks, eight light and eight heavy verticals, three rows tall, with no background between the rows.
+@MainActor
+private func assertWallTouches(_ image: UIImage, cols: Int, rows: Int, file: StaticString = #filePath, line: UInt = #line) throws {
+  let pixels = try XCTUnwrap(Pixels(image))
+  let cw = CGFloat(pixels.width) / CGFloat(cols), ch = CGFloat(pixels.height) / CGFloat(rows)
+  let y0 = Int((12 * ch).rounded()) + 1, y1 = Int((15 * ch).rounded()) - 2
+  var holes = 0
+  for y in y0...y1 {
+    for x in Int((0.5 * cw).rounded())..<Int((7.5 * cw).rounded()) where pixels.near(x: x, y: y, 0x141210, tolerance: 24) { holes += 1 }
+  }
+  XCTAssertEqual(holes, 0, "full blocks: background inside the wall", file: file, line: line)
+  let middle = Int((12.5 * ch).rounded())
+  for col in Array(9..<17) + Array(18..<26) {
+    // The x the line is drawn at: its most inked pixel in the first row.
+    let xs = Int((CGFloat(col) * cw).rounded())..<Int((CGFloat(col + 1) * cw).rounded())
+    guard let x = xs.max(by: { pixels.ink(x: $0, y: middle, 0x141210) < pixels.ink(x: $1, y: middle, 0x141210) }) else { continue }
+    let gaps = (y0...y1).filter { pixels.near(x: x, y: $0, 0x141210, tolerance: 24) }.count
+    XCTAssertEqual(gaps, 0, "the vertical in col \(col) breaks between rows", file: file, line: line)
+  }
+}
+
+/// The emoji screen (gen.py; the same check as check.py): the VS16 heart at row 0 col 7 inks the blank
+/// cell after it, the text heart at row 3 col 6 stays in its cell, and the regional indicators at row 2
+/// cols 7-10 draw one flag (colored pixels), not two letters.
+@MainActor
+private func assertEmojiFullSize(_ image: UIImage, cols: Int, rows: Int, file: StaticString = #filePath, line: UInt = #line) throws {
+  let pixels = try XCTUnwrap(Pixels(image))
+  let cw = CGFloat(pixels.width) / CGFloat(cols), ch = CGFloat(pixels.height) / CGFloat(rows)
+  func count(row: Int, cols c0: Int, _ c1: Int, _ test: (Int, Int) -> Bool) -> Int {
+    var n = 0
+    for y in Int((CGFloat(row) * ch).rounded()) + 1..<Int((CGFloat(row + 1) * ch).rounded()) - 1 {
+      for x in Int((CGFloat(c0) * cw).rounded()) + 1..<Int((CGFloat(c1 + 1) * cw).rounded()) - 1 where test(x, y) { n += 1 }
+    }
+    return n
+  }
+  let ink = { (x: Int, y: Int) in !pixels.near(x: x, y: y, 0x141210, tolerance: 40) }
+  XCTAssertGreaterThanOrEqual(count(row: 0, cols: 8, 8, ink), 4, "the VS16 heart reaches the blank cell after it", file: file, line: line)
+  XCTAssertEqual(count(row: 3, cols: 7, 7, ink), 0, "the text heart stays in its cell", file: file, line: line)
+  XCTAssertGreaterThanOrEqual(count(row: 2, cols: 7, 10, { pixels.saturation(x: $0, y: $1) > 80 }), 20, "one flag across the regional indicators", file: file, line: line)
 }
 
 /// An image's pixels, read as 0xRRGGBB at top-left-origin coordinates.
@@ -137,6 +305,20 @@ private struct Pixels {
     self.width = width
     self.height = height
     self.data = data
+  }
+
+  /// The spread between a pixel's strongest and weakest channel (0 for grays).
+  func saturation(x: Int, y: Int) -> Int {
+    let i = (min(max(y, 0), height - 1) * width + min(max(x, 0), width - 1)) * 4
+    let c = [Int(data[i]), Int(data[i + 1]), Int(data[i + 2])]
+    return c.max()! - c.min()!
+  }
+
+  /// How far a pixel is from `rgb` (the sum over the channels).
+  func ink(x: Int, y: Int, _ rgb: UInt32) -> Int {
+    let i = (min(max(y, 0), height - 1) * width + min(max(x, 0), width - 1)) * 4
+    let want = [Int(rgb >> 16 & 0xff), Int(rgb >> 8 & 0xff), Int(rgb & 0xff)]
+    return (0..<3).reduce(0) { $0 + abs(Int(data[i + $1]) - want[$1]) }
   }
 
   func near(x: Int, y: Int, _ rgb: UInt32, tolerance: Int = 3) -> Bool {

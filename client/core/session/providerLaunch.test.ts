@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ProvidersSnapshot } from "../sessions/providerTypes";
-import { launchSelectionFromSnapshot, providerClientForCommand } from "./providerLaunch";
+import { launchSelectionFromSnapshot, providerClientForCommand, resolveLaunchSelection } from "./providerLaunch";
+import type { Daemon } from "../more/daemon";
 
 // From the Expo app's services/providers/providers.test.ts.
 function providerSnapshot(
@@ -81,5 +82,18 @@ describe("Model sync and default binding policy", () => {
     expect(
       launchSelectionFromSnapshot({ ...snapshot, defaults: {} }, "codex"),
     ).toBeNull();
+  });
+});
+
+describe("New Terminal's Provider selection (parity #39)", () => {
+  const daemon = (reply: () => Promise<unknown>) => ({ state: "connected", request: reply } as unknown as Daemon);
+  test("a Provider agent carries its default connection; a shell or a failed read carries none", async () => {
+    const snapshot = providerSnapshot();
+    const asked: string[] = [];
+    const ok = daemon(async () => (asked.push("list"), { type: "providers", ...snapshot }));
+    expect(await resolveLaunchSelection(ok, "codex --yolo")).toEqual({ connectionId: "c1", modelId: "" });
+    expect(await resolveLaunchSelection(ok, "")).toBeNull();
+    expect(asked).toEqual(["list"]);
+    expect(await resolveLaunchSelection(daemon(async () => { throw new Error("offline"); }), "codex")).toBeNull();
   });
 });

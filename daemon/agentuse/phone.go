@@ -4,7 +4,7 @@ import "github.com/daoleno/mewla/daemon/phone"
 
 // PhoneStatus is Phone use as the app shows it: the switch, and the phone behind it.
 type PhoneStatus struct {
-	// Enabled is the person's switch (Settings → Labs). It is off until they turn it on.
+	// Enabled is the person's switch (Settings → Agents → Phone use). It is off until they turn it on.
 	Enabled bool `json:"enabled"`
 	phone.Status
 }

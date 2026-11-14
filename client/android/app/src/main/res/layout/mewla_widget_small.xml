@@ -1,33 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Small widget (option A): the one thing that matters now; quiet, the cat naps. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:id="@+id/root"
   android:layout_width="match_parent"
   android:layout_height="match_parent"
   android:background="@drawable/mewla_widget_bg"
-  android:orientation="vertical"
-  android:padding="16dp">
+  android:padding="14dp">
 
-  <ImageView
-    android:layout_width="22dp"
-    android:layout_height="22dp"
-    android:contentDescription="@null"
-    android:src="@drawable/mewla_widget_cat" />
+  <LinearLayout android:id="@+id/focus" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:visibility="gone">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+      <ImageView android:id="@+id/logo" android:layout_width="48dp" android:layout_height="48dp" android:contentDescription="@null" />
+      <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:gravity="end" android:orientation="horizontal">
+      <FrameLayout android:layout_width="wrap_content" android:layout_height="wrap_content">
+        <LinearLayout android:id="@+id/live" android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
+          <ImageView android:layout_width="7dp" android:layout_height="7dp" android:layout_marginEnd="5dp" android:contentDescription="@null" android:src="@drawable/mewla_dot_ink" />
+          <Chronometer android:id="@+id/time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/mewla_soft" android:textSize="13sp" />
+        </LinearLayout>
+        <TextView android:id="@+id/tag" android:layout_width="wrap_content" android:layout_height="26dp" android:background="@drawable/mewla_widget_tag" android:fontFamily="sans-serif-medium" android:gravity="center" android:paddingStart="10dp" android:paddingEnd="10dp" android:textColor="#FFFFFF" android:textSize="13sp" android:textStyle="bold" android:visibility="gone" />
+      </FrameLayout>
+      </LinearLayout>
+    </LinearLayout>
+    <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:ellipsize="end" android:fontFamily="sans-serif-medium" android:lineSpacingExtra="1sp" android:maxLines="2" android:textColor="@color/mewla_ink" android:textSize="17sp" android:textStyle="bold" />
+    <TextView android:id="@+id/line" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="1" android:textColor="@color/mewla_soft" android:textSize="13sp" />
+  </LinearLayout>
 
-  <TextView
-    android:id="@+id/headline"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:layout_marginTop="10dp"
-    android:fontFamily="sans-serif-black"
-    android:text="…"
-    android:textColor="@color/mewla_text_primary"
-    android:textSize="40sp" />
-
-  <TextView
-    android:id="@+id/label"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:fontFamily="sans-serif-medium"
-    android:textColor="@color/mewla_text_secondary"
-    android:textSize="13sp" />
-</LinearLayout>
+  <LinearLayout android:id="@+id/quiet" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical">
+    <ImageView android:id="@+id/quiet_cat" android:layout_width="92dp" android:layout_height="92dp" android:contentDescription="@null" android:src="@drawable/mewla_pet_offline" />
+    <TextView android:id="@+id/quiet_words" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textColor="@color/mewla_soft" android:textSize="15sp" />
+  </LinearLayout>
+</FrameLayout>

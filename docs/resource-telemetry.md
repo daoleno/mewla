@@ -314,7 +314,7 @@ grow with the size of a transcript or of the machine:
 
 ## App entry and refresh behavior
 
-Open **Resources** from the menu (☰ on a phone, the sidebar on a wide screen).
+Open **Resources** from the menu (☰ on a phone; on a wide screen, **Search or run** or `G` then `R`).
 That row is its only entry point; no page menu repeats it. The view always uses
 the canonical current server and shows its name above the latest machine
 snapshot. It never merges measurements across servers.
@@ -337,7 +337,7 @@ interval consumer CPU is unavailable (`—`), while measured zero is `0%`.
 
 ## Resources dashboard presentation
 
-The shared React Native view uses its measured content width: four trend cards
+The shared view (`client/ui/more/resources`) uses its measured content width: four trend cards
 at 1040 pt and above, two below that, and one below 340 pt. Consumers use aligned
 columns at 760 pt and a stacked row on phones. Both use the same normalized data,
 owner filters, sorting and inline process disclosure; there is no web-only view.
@@ -375,25 +375,15 @@ and sorting. Switching the canonical server still clears the previous snapshot.
 
 ### Reproducible fixture inspection
 
-`app/__fixtures__/telemetry/dashboard-v2.json` is synthetic, with all five owners,
-unknown names, missing CPU, orphaned status, process identities and five minutes
-of history. It is separate from existing local telemetry captures. The standalone
-Metro entry renders the actual ResourcesView, ThemeProvider, app fonts, native
-pressables and SVG charts without requiring pairing or modifying runtime routes.
-
-With the repository's Expo Metro server on port 8081, run from the repository root:
+`client/core/resources/fixtures/dashboard-v2.json` is synthetic, with all five
+owners, unknown names, missing CPU, orphaned status, process identities and five
+minutes of history. It is separate from existing local telemetry captures. The
+core and UI tests render Resources from it without pairing:
 
 ```sh
-bun app/__fixtures__/telemetry/serve-dashboard-preview.ts
+cd client && bun test core/resources
+cd client/ui && ~/.nsh/bin/nsh test more/resources
 ```
 
-Open `http://127.0.0.1:8097/` and emulate dark/light media and phone/wide viewport
-sizes. This loopback-only fixture server is a development tool; it is not a
-production route or a fallback for live Resources data. The Refresh callback is
-a no-op in this static fixture; real refresh/polling is covered by lifecycle tests.
-
-```sh
-cd app
-bun test services/resourceTelemetry.test.ts components/resources/resources.test.tsx components/resources/resourceConsumers.test.tsx
-bunx tsc --noEmit
-```
+The Refresh callback is a no-op in this static fixture; real refresh/polling is
+covered by the lifecycle tests (`client/core/resources/poll.test.ts`).

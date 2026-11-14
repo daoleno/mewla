@@ -6,15 +6,15 @@ import { displayRoute } from "../../../core/screen/displayRoute";
 import { haltDisplay, listDisplays, resumeDisplay, type AgentDisplay } from "../../../core/screen/screen";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { workers } from "../../session";
-import { EmptyState, Notice, Spinner } from "../kit/kit";
-import { Icon } from "../kit/Icon";
-import { inFront } from "../kit/inFront";
+import { EmptyState, Notice, Spinner } from "../../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { inFront } from "../../kit/inFront";
 import type { PageNav } from "../routes";
-import { modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
+import { canShowFullSize, modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 
 /** How often the list reads the computer again, so an agent that starts or ends shows up. */
 const REFRESH_MS = 4_000;
-const ITEM = "rounded-lg px-4 py-3 active:bg-accent disabled:opacity-50";
+const ITEM = "min-h-[48px] justify-center rounded-xl px-4 py-2.5 active:bg-accent disabled:opacity-40";
 
 /**
  * Screen on a Linux computer: every agent's own display, each with its live
@@ -109,14 +109,14 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
   const ids = computed(() => (displays() === null ? "loading" : `ids:${displays()!.map((d) => d.id).join(",")}:${displays()!.length ? "" : reason() ? "setup" : "empty"}`));
   const notice = () => {
     const current = issue();
-    return current ? <Notice testID="displays-issue" tone={current.tone === "danger" ? "failed" : "warning"} title={current.title} detail={current.detail} /> : null;
+    return <If when={current}>{(current) => <Notice testID="displays-issue" tone={current().tone === "danger" ? "failed" : "warning"} title={current().title} detail={current().detail} />}</If>;
   };
   return (
     <View class="flex-1">
       {((key) =>
         untracked(() => {
           const list = displays();
-          if (key === "loading" || list === null) return <View class="flex-1 px-4">{notice()}<EmptyState busy /></View>;
+          if (key === "loading" || list === null) return <View class="flex-1 px-4">{notice()}<EmptyState onBlack busy /></View>;
           // Cards whose agent is gone close their views.
           const shown = list.map((d) => d.id);
           for (const [worker, session] of sessions) {
@@ -130,19 +130,15 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
             return (
               <View class="flex-1 px-4">
                 {notice()}
-                {reason() ? (
-                  <View class="items-center gap-2 px-6 py-16">
-                    <Icon name="construct" size={28} />
-                    <Text class="mt-1 text-center text-lg font-semibold">Browser needs setup on this server</Text>
-                    <Text class="text-center text-sm text-muted-foreground">{reason()}</Text>
-                    <Button testID="displays-check" disabled={checking()} onPress={() => void check()} class="mt-2 flex-row items-center gap-2 rounded-full bg-secondary px-4 py-2 active:opacity-70 disabled:opacity-50">
-                      {checking() ? <Spinner size={14} /> : null}
-                      <Text class="text-sm font-medium">Check again</Text>
+                <If when={reason()} else={<EmptyState onBlack icon="desktop" title="Nothing on screen" />}><View class="items-center gap-2 px-6 py-16">
+                    <Icon name="construct" size={28} tone="onBlack" />
+                    <Text class="mt-1 text-center text-title font-semibold text-white">Browser needs setup on this server</Text>
+                    <Text class="text-center text-sub text-white/60">{reason()}</Text>
+                    <Button testID="displays-check" disabled={checking()} onPress={() => void check()} class="mt-2 h-[52px] flex-row items-center gap-2 rounded-2xl bg-white px-5 active:opacity-70 disabled:opacity-40">
+                      <If when={checking()}><Spinner size={14} tone="onBlackSoft" /></If>
+                      <Text class="text-body font-semibold text-black">Check again</Text>
                     </Button>
-                  </View>
-                ) : (
-                  <EmptyState icon="desktop" title="Nothing on screen" detail="An agent's screen shows up here while it works." />
-                )}
+                  </View></If>
               </View>
             );
           }
@@ -196,38 +192,29 @@ function DisplayCard(props: { display: () => AgentDisplay; name: () => string; s
     }
   };
   return (
-    <View class="overflow-hidden rounded-2xl border border-border bg-card" testID={`display-${props.display().id}`}>
-      <View class="flex-row items-center gap-2 py-1.5 pl-4 pr-1">
-        <View class={`size-2 rounded-full ${holding() ? "bg-destructive" : stopped() || elsewhere() ? "bg-muted-foreground" : "bg-primary"}`} />
+    <View class="overflow-hidden rounded-(--radius-group) bg-white/10" testID={`display-${props.display().id}`}>
+      <View class="min-h-[52px] flex-row items-center gap-2 py-1.5 pl-4 pr-1">
+        <View class={`size-2 rounded-full ${stopped() || elsewhere() ? "bg-white/30" : "bg-white"}`} />
         <View class="min-w-0 flex-1">
-          <Text class="text-base font-medium line-clamp-1">{title()}</Text>
-          {holding() ? <Text class="text-xs text-muted-foreground line-clamp-1">You hold the agent</Text> : elsewhere() ? <Text class="text-xs text-muted-foreground line-clamp-1">Held on another device</Text> : stopped() ? <Text class="text-xs text-muted-foreground line-clamp-1">Stopped</Text> : null}
+          <Text class="text-body font-semibold text-white line-clamp-1">{title()}</Text>
+          <If when={holding()} else={<If when={elsewhere()} else={<If when={stopped()}><Text class="text-caption text-white/60 line-clamp-1">Stopped</Text></If>}><Text class="text-caption text-white/60 line-clamp-1">Held on another device</Text></If>}><Text class="text-caption text-white/60 line-clamp-1">You hold the agent</Text></If>
         </View>
-        {live() && needsSoftKeyboard() ? (
-          <Button accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`rounded-full p-2 ${typing() ? "bg-secondary" : ""}`}>
-            <Icon name="keyboard" size={18} tone={typing() ? "ink" : "soft"} />
-          </Button>
-        ) : null}
-        <Menu trigger={<View accessibilityLabel={`Options for ${title()}`} role="button" class="p-2"><Icon name="more-horizontal" size={18} /></View>} popupClass="rounded-2xl bg-popover p-2" backdropClass="bg-black/30">
-          <View class="px-4 pb-1 pt-2"><Text class="text-sm font-medium text-muted-foreground line-clamp-1">{title()}</Text></View>
-          {live() ? (
-            <MenuItem onSelect={() => props.session.hold(!holding())} class={ITEM}><Text class="text-base">{holding() ? "Let the agent go on" : "Hold the agent"}</Text></MenuItem>
-          ) : null}
-          {live() ? <MenuItem onSelect={() => props.session.fit()} class={ITEM}><Text class="text-base">Fit</Text></MenuItem> : null}
-          {stopped() ? (
-            <MenuItem disabled={busy()} onSelect={() => void run(props.onResume)} class={ITEM}><Text class="text-base">Resume</Text></MenuItem>
-          ) : (
-            <MenuItem disabled={busy() || elsewhere()} accessibilityLabel={`Stop ${title()}`} onSelect={() => void run(props.onStop)} class={ITEM}><Text class="text-base text-destructive">Stop</Text></MenuItem>
-          )}
-          {props.session.phase() === "lost" ? <MenuItem onSelect={() => props.session.connect()} class={ITEM}><Text class="text-base">Reconnect</Text></MenuItem> : null}
+        <If when={live() && needsSoftKeyboard()}><Button accessibilityLabel={typing() ? "Hide keyboard" : "Show keyboard"} selected={typing()} onPress={() => typing.set(!typing())} class={`size-11 items-center justify-center rounded-full ${typing() ? "bg-white/20" : ""}`}>
+            <Icon name="keyboard" size={18} tone={typing() ? "onBlack" : "onBlackSoft"} />
+          </Button></If>
+        <Menu trigger={<View accessibilityLabel={`Options for ${title()}`} role="button" class="size-11 items-center justify-center"><Icon name="more-horizontal" size={18} tone="onBlack" /></View>} popupClass="rounded-[18px] bg-popover p-1.5 shadow-float" backdropClass="bg-scrim">
+          <View class="px-4 pb-1 pt-2"><Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{title()}</Text></View>
+          <If when={live()}><MenuItem onSelect={() => props.session.hold(!holding())} class={ITEM}><Text class="text-body">{holding() ? "Let the agent go on" : "Hold the agent"}</Text></MenuItem></If>
+          <If when={live()}><MenuItem onSelect={() => props.session.fit()} class={ITEM}><Text class="text-body">Fit</Text></MenuItem></If>
+          <If when={live() && canShowFullSize()}><MenuItem testID="display-full-size" onSelect={() => void props.session.fullSize(`Display of ${untracked(title)}`)} class={ITEM}><Text class="text-body">Full size</Text></MenuItem></If>
+          <If when={stopped()} else={<MenuItem disabled={busy() || elsewhere()} accessibilityLabel={`Stop ${title()}`} onSelect={() => void run(props.onStop)} class={ITEM}><Text class="text-body">Stop</Text></MenuItem>}><MenuItem disabled={busy()} onSelect={() => void run(props.onResume)} class={ITEM}><Text class="text-body">Resume</Text></MenuItem></If>
+          <If when={props.session.phase() === "lost"}><MenuItem onSelect={() => props.session.connect()} class={ITEM}><Text class="text-body">Reconnect</Text></MenuItem></If>
         </Menu>
       </View>
-      {props.session.phase() === "lost" ? (
-        <View class="px-3 pb-2">
+      <If when={props.session.phase() === "lost"}><View class="px-3 pb-2">
           <Notice title="Lost connection to the display" detail={props.session.reason() || "It may have been closed."} action="Reconnect" onAction={() => props.session.connect()} />
-        </View>
-      ) : null}
-      {props.session.phase() === "connecting" ? <View class="flex-row items-center gap-2 px-4 pb-2"><Spinner size={14} /><Text class="text-sm text-muted-foreground">Connecting…</Text></View> : null}
+        </View></If>
+      <If when={props.session.phase() === "connecting"}><View class="flex-row items-center gap-2 px-4 pb-2"><Spinner size={14} tone="onBlackSoft" /><Text class="text-sub text-white/60">Connecting…</Text></View></If>
       <View style={{ aspectRatio: (props.display().width || 1280) / (props.display().height || 800) }}>
         <RemoteView session={props.session} label={`Display of ${title()}`} modifiers={modifiersFor("linux")} typing={typing()} onTypingChange={(on) => typing.set(on)} />
       </View>

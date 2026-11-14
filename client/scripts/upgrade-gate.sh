@@ -44,14 +44,26 @@ mkdir -p "$state/home" "$state/bin"
 # A daemon of its own: own state, own tmux server, nothing from this shell, and an inert Brain host:
 # a cursor-agent that answers nothing, so Brain starts (the Expo app shows its composer) and never replies.
 printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-gate; exit 0; }\nexec sleep 86400\n' > "$state/bin/cursor-agent"
-chmod +x "$state/bin/cursor-agent"
+# No systemd-run: the daemon's session host is then its own child, never a mewla-session-host-* user
+# unit. On a dev machine such a unit outlived the gate, holding whatever the gate's caller held open
+# (the emulator lock), and Workers may not stop those units.
+printf '#!/bin/sh\necho "systemd-run is off for the upgrade gate daemon" >&2\nexit 1\n' > "$state/bin/systemd-run"
+chmod +x "$state/bin/cursor-agent" "$state/bin/systemd-run"
 tmux -S "$state/tmux.sock" new-session -d -s gate
+# On loopback (127.0.0.1; the released daemon it runs may predate -loopback-only): the emulator reaches it as 10.0.2.2.
 env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent TMUX="$state/tmux.sock,0,0" \
-  "$MEWLA" serve -addr "0.0.0.0:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
+  "$MEWLA" serve -addr "127.0.0.1:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
 daemon=$!
+# The session host outlives its daemon: stop it and its Sessions by the pids it reports.
+stop_host() {
+  env -i HOME="$state/home" PATH="$PATH" "$MEWLA" host status --state-dir "$state/mewla" --json > "$state/host.json" 2>/dev/null || return 0
+  python3 -c 'import json, sys
+d = json.load(open(sys.argv[1]))
+print(" ".join(str(s["pid"]) for s in d.get("sessions") or []), (d.get("host") or {}).get("pid", ""))' "$state/host.json" 2>/dev/null
+}
 # The trap's last status becomes the script's: a cleanup that trips (the daemon still writing as
 # its state is removed) must not turn a PASS into a failure.
-trap 'kill "$daemon" 2>/dev/null || true; wait "$daemon" 2>/dev/null || true; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state" 2>/dev/null || true' EXIT
+trap 'host_pids=$(stop_host); kill "$daemon" 2>/dev/null || true; wait "$daemon" 2>/dev/null || true; [[ -n "${host_pids// }" ]] && kill $host_pids 2>/dev/null; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state" 2>/dev/null || true' EXIT
 for _ in $(seq 1 60); do (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && break; sleep 1; done
 link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" 2>&1 | grep -o 'mewla://settings?p=[^ ]*' | head -1)
 [[ -n "$link" ]] || fail "the daemon gave no pairing link"
@@ -103,12 +115,13 @@ adb shell am start -W -n "$PKG/.MainActivity" > /dev/null
 sleep 10
 shot 3-opened
 shows "Pair a computer" && fail "the NSH app asks to pair again"
-tap "^More$" 10 || true
-for _ in $(seq 1 30); do shows "· Connected" && break; sleep 1; done
-shot 3-more
-shows "· Connected" || fail "the NSH app does not show the computer as connected"
+# Home is Brain's thread; the cat (labelled Computer) opens the computer page, which says the connection.
+tap "^Computer$" 20 || { shot 3-no-cat; fail "home has no cat to open the computer page"; }
+for _ in $(seq 1 30); do shows "\"Connected\"" && break; sleep 1; done
+shot 3-computer
+shows "\"Connected\"" || fail "the NSH app does not show the computer as connected"
 log "the app shows the computer as Connected"
-tap "^Brain$" 10 || true
+adb shell input keyevent KEYCODE_BACK
 for _ in $(seq 1 60); do shows "$DRAFT" && break; sleep 1; done
 shot 3-brain-draft
 shows "$DRAFT" || fail "Brain's composer does not show the draft typed in the Expo app"
@@ -140,20 +153,20 @@ print("draft and computers came over")
 
 # The M1 preview died on its first "Scan code" in a release build (R8 had dropped ML Kit's registrar):
 # open the scanner in this release build, answer the system's camera prompt, and the app must stay up
-# with the camera looking for a code.
+# with the camera looking for a code: the finder holds the camera view (qr-camera) only while it runs
+# (it no longer says "Looking for a Mewla code…", e22f8ce5).
 log "4. the scanner runs in the release build"
 adb logcat -c
-adb shell am start -W -a android.intent.action.VIEW -d "mewla://more" "$PKG" > /dev/null
-tap "^Settings$" 20 || { shot 4-no-settings; fail "More has no Settings row"; }
-tap "^Pair a computer$" 20 || { shot 4-no-pair; fail "Settings has no Pair a computer"; }
+tap "^Computer$" 20 || { shot 4-no-cat; fail "home has no cat to open the computer page"; }
+tap "^Pair a computer$" 20 || { shot 4-no-pair; fail "the computer page has no Pair a computer"; }
 tap "^While using the app$" 20 || { shot 4-no-prompt; fail "the scanner did not ask for the camera"; }
-for _ in $(seq 1 20); do shows "Looking for a Mewla code" && break; sleep 1; done
+for _ in $(seq 1 20); do shows 'resource-id="qr-camera"' && break; sleep 1; done
 sleep 3
 shot 4-scanner
 if [[ -z "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; then
   adb logcat -d -b crash > "$OUT/scanner-crash.txt"
   fail "the app died with the scanner open (scanner-crash.txt)"
 fi
-shows "Looking for a Mewla code" || fail "the scanner is not looking for a code"
+shows 'resource-id="qr-camera"' || fail "the scanner is not looking for a code"
 log "the scanner runs: camera allowed, app up, looking for a code"
 log "PASS"

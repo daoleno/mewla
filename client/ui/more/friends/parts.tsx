@@ -1,7 +1,6 @@
 import type { JSX } from "nsh";
-import { computed, effect, Image, keyboardFrame, List, signal, Text, untracked, Video, View, windowSize, type VideoRef, type ViewRef } from "nsh";
-import { lifecycle } from "../../lifecycle";
-import { AlertDialog, Button } from "nsh/base";
+import { computed, effect, Image, keyboardFrame, List, signal, Text, untracked, Video, View, windowSize, type VideoRef, type ViewRef, lifecycle } from "nsh";
+import { Button } from "nsh/base";
 import { GuardedDialog as Dialog } from "../../shell/AppSheet";
 import { NavPage } from "../../shell/NavPage";
 import {
@@ -18,30 +17,27 @@ import {
 import { appendPage, replacePost, toggled, withCursor, type PostPage } from "../../../core/friends/paging";
 import { friendsCall } from "../../../core/friends/requests";
 import { afterScroll, isPlaying, stopped, VIDEO_VISIBLE_SHARE, type PlayingVideo } from "../../../core/friends/video";
-import { Icon, type IconName } from "../kit/Icon";
-import { EmptyState, Spinner } from "../kit/kit";
-import { findPet } from "../pet/pets";
+import { Icon, type IconName } from "../../kit/Icon";
+import { EmptyState, Spinner } from "../../kit/kit";
+import { petOrDefault } from "../../pets/pets";
 import type { PageNav } from "../routes";
 import { currentServerId, followPage, serverFor } from "./state";
+import { showAlert } from "../../shell/alert";
 
-/** A person's face: their pet's portrait in a rounded square, else their initials in a circle. */
+/** A person's face: their pet's portrait in a rounded square (a removed pet's is Dango's), else their initials in a circle. */
 export function Avatar(props: { author: Pick<FriendsAuthor, "agent_name" | "handle" | "pet_id">; size?: number }) {
   const size = () => props.size ?? 44;
-  const portrait = () => findPet(props.author.pet_id)?.portrait;
-  return (<>{portrait() ? (
-    <Image src={portrait()!} style={{ width: size(), height: size(), borderRadius: size() * 0.28 }} accessibilityElementsHidden />
-  ) : (
-    <View class="items-center justify-center rounded-full bg-secondary" style={{ width: size(), height: size() }} accessibilityElementsHidden>
+  const portrait = () => (props.author.pet_id ? petOrDefault(props.author.pet_id).art.portrait : undefined);
+  return (<><If when={portrait()} else={<View class="items-center justify-center rounded-full bg-muted" style={{ width: size(), height: size() }} accessibilityElementsHidden>
       <Text class="font-semibold text-muted-foreground" style={{ fontSize: Math.round(size() * 0.36) }}>{initials(props.author)}</Text>
-    </View>
-  )}</>);
+    </View>}><Image src={portrait()!} style={{ width: size(), height: size(), borderRadius: size() * 0.28 }} accessibilityElementsHidden /></If></>);
 }
 
 /** "Agent": the person posts as their agent. */
 export function AgentPill() {
   return (
-    <View class="rounded-full border border-border px-1.5 py-px">
-      <Text class="text-[11px] font-medium text-muted-foreground">Agent</Text>
+    <View class="rounded-full bg-muted px-2 py-0.5">
+      <Text class="text-caption font-semibold text-muted-foreground">Agent</Text>
     </View>
   );
 }
@@ -69,15 +65,13 @@ export function fail(reason: unknown, fallback = "That did not work"): void {
 
 export function FlashLine() {
   return (
-    <>{flash() ? (
-    <View testID="friends-flash" role="alert" class="mx-4 mt-2 flex-row items-start gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+    <><If when={flash()}><View testID="friends-flash" role="alert" class="mx-4 mt-2 flex-row items-start gap-3 rounded-(--radius-group) bg-card px-4 py-3.5">
       <Icon name={flash()!.tone === "error" ? "alert-circle" : "check-circle"} size={18} tone={flash()!.tone === "error" ? "failed" : "ready"} />
       <View class="flex-1">
-        <Text class="text-sm font-medium">{flash()!.title}</Text>
-        <Text class="mt-0.5 text-sm text-muted-foreground">{flash()!.detail}</Text>
+        <Text class="text-sub font-semibold">{flash()!.title}</Text>
+        <Text class="mt-0.5 text-sub text-muted-foreground">{flash()!.detail}</Text>
       </View>
-    </View>
-  ) : null}</>
+    </View></If></>
   );
 }
 
@@ -104,11 +98,21 @@ export function keyboardLift() {
 }
 
 /** A quiet icon button of a post's action row. */
-export function ActionButton(props: { icon: IconName; label: string; count?: number; on?: boolean; testID?: string; onPress: () => void }) {
+/**
+ * A post's action. `soft`: a 44 pt soft button with its count (SPEC §15 Feed: the reactions and Comments);
+ * else a quiet 44 pt icon (Bookmark, ⋯).
+ */
+export function ActionButton(props: { icon: IconName; label: string; count?: number; on?: boolean; soft?: boolean; testID?: string; onPress: () => void }) {
   return (
-    <Button testID={props.testID} accessibilityLabel={props.label} selected={props.on} onPress={props.onPress} class="min-h-[36px] flex-row items-center gap-1.5 pr-4 active:opacity-60">
+    <Button
+      testID={props.testID}
+      accessibilityLabel={props.label}
+      selected={props.on}
+      onPress={props.onPress}
+      class={props.soft ? `h-11 flex-row items-center gap-1.5 rounded-full px-4 active:opacity-70 ${props.on ? "bg-accent" : "bg-muted"}` : "size-11 items-center justify-center rounded-full active:bg-accent"}
+    >
       <Icon name={props.icon} size={20} tone={props.on ? "ink" : "soft"} />
-      {props.count !== undefined ? <Text class={props.on ? "text-sm" : "text-sm text-muted-foreground"} style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text> : null}
+      <If when={props.count !== undefined}><Text class={props.on ? "text-sub font-semibold" : "text-sub text-muted-foreground"} style={{ fontVariant: ["tabular-nums"] }}>{String(props.count)}</Text></If>
     </Button>
   );
 }
@@ -130,7 +134,7 @@ export function stopVideo(owner: string, postId?: string): void {
 
 function PlayDisc() {
   return (
-    <View class="size-14 items-center justify-center rounded-full bg-primary/70"><Icon name="play" size={26} tone="paper" /></View>
+    <View class="size-14 items-center justify-center rounded-full bg-primary/70"><Icon name="play" size={26} tone="canvas" /></View>
   );
 }
 
@@ -144,7 +148,7 @@ function SoundButton(props: { muted: boolean; onPress: () => void; testID?: stri
       onPress={props.onPress}
       class={`${props.class ?? "absolute bottom-2 right-2 size-8"} items-center justify-center rounded-full bg-primary/70 active:opacity-70`}
     >
-      <Icon name={props.muted ? "volume-off" : "volume"} size={18} tone="paper" />
+      <Icon name={props.muted ? "volume-off" : "volume"} size={18} tone="canvas" />
     </Button>
   );
 }
@@ -195,8 +199,20 @@ function PostVideo(props: { media: FriendsMedia; postId: string; owner: string; 
   });
 
   return (
-    <View style={{ width: "100%", aspectRatio: aspect() }}>{mine() ? (
-      <View class="flex-1" style={{ backgroundColor: "#000000" }}>
+    <View style={{ width: "100%", aspectRatio: aspect() }}><If when={mine()} else={<Button
+        testID="friends-video"
+        accessibilityLabel={`Play video, ${label()}`}
+        onPress={start}
+        class="flex-1 active:opacity-80"
+      >
+        <If when={props.media.poster}>{(poster) => <Image src={poster().url} class="absolute inset-0" style={{ objectFit: "cover" }} />}</If>
+        <View class="absolute inset-0 items-center justify-center">
+          <PlayDisc />
+        </View>
+        <If when={props.media.duration_ms}><View class="absolute bottom-2 right-2 rounded-md bg-primary/70 px-1.5 py-0.5">
+            <Text class="text-caption text-primary-foreground">{label()}</Text>
+          </View></If>
+      </Button>}><View class="flex-1" style={{ backgroundColor: "#000000" }}>
         <Video
           testID="friends-video-player"
           ref={(node) => {
@@ -216,11 +232,9 @@ function PostVideo(props: { media: FriendsMedia; postId: string; owner: string; 
           fullAt = at;
           full.set(true);
         }} class="absolute inset-0" />
-        {paused() ? (
-          <Button testID="friends-video-play" accessibilityLabel="Play" onPress={() => paused.set(false)} class="absolute inset-0 items-center justify-center">
+        <If when={paused()}><Button testID="friends-video-play" accessibilityLabel="Play" onPress={() => paused.set(false)} class="absolute inset-0 items-center justify-center">
             <PlayDisc />
-          </Button>
-        ) : null}
+          </Button></If>
         <SoundButton testID="friends-video-sound" muted={muted()} onPress={() => muted.set(!muted())} />
         <Dialog
           testID="friends-video-dialog"
@@ -250,31 +264,13 @@ function PostVideo(props: { media: FriendsMedia; postId: string; owner: string; 
             />
             <View class="absolute left-0 right-0 top-0 flex-row items-center justify-between px-3" style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}>
               <Button testID="friends-video-close" accessibilityLabel="Close" onPress={closeFull} class="size-10 items-center justify-center rounded-full bg-primary/70 active:opacity-70">
-                <Icon name="close" size={18} tone="paper" />
+                <Icon name="close" size={18} tone="canvas" />
               </Button>
               <SoundButton testID="friends-video-wide-sound" class="size-10" muted={muted()} onPress={() => muted.set(!muted())} />
             </View>
           </View>
         </Dialog>
-      </View>
-    ) : (
-      <Button
-        testID="friends-video"
-        accessibilityLabel={`Play video, ${label()}`}
-        onPress={start}
-        class="flex-1 active:opacity-80"
-      >
-        {props.media.poster ? <Image src={props.media.poster.url} class="absolute inset-0" style={{ objectFit: "cover" }} /> : null}
-        <View class="absolute inset-0 items-center justify-center">
-          <PlayDisc />
-        </View>
-        {props.media.duration_ms ? (
-          <View class="absolute bottom-2 right-2 rounded-md bg-primary/70 px-1.5 py-0.5">
-            <Text class="text-xs text-primary-foreground">{label()}</Text>
-          </View>
-        ) : null}
-      </Button>
-    )}</View>
+      </View></If></View>
   );
 }
 
@@ -290,24 +286,14 @@ export function PostMedia(props: { media: readonly FriendsMedia[]; postId: strin
     />
   );
   return (
-    <View class="mt-2 overflow-hidden rounded-xl border border-border bg-secondary">
-      {first().kind === "video" ? (
-        <PostVideo media={first()} postId={props.postId} owner={props.owner} active={props.active} />
-      ) : mediaLayout(props.media.length) === "single" ? (
-        <View style={{ width: "100%", aspectRatio: singleMediaAspect(first().width, first().height) }}>{tile(first(), 0, 1)}</View>
-      ) : mediaLayout(props.media.length) === "pair" ? (
-        <View class="flex-row gap-0.5" style={{ width: "100%", aspectRatio: 2 }}>{props.media.slice(0, 2).map((m, i) => tile(m, i, 2))}</View>
-      ) : mediaLayout(props.media.length) === "trio" ? (
-        <View class="flex-row gap-0.5" style={{ width: "100%", aspectRatio: 1.25 }}>
-          {tile(props.media[0], 0, 3)}
-          <View class="flex-1 gap-0.5">{props.media.slice(1, 3).map((m, i) => tile(m, i + 1, 3))}</View>
-        </View>
-      ) : (
-        <View class="gap-0.5" style={{ width: "100%", aspectRatio: 1.25 }}>
+    <View class="mt-3 overflow-hidden rounded-[14px] bg-muted">
+      <If when={first().kind === "video"} else={<If when={mediaLayout(props.media.length) === "single"} else={<If when={mediaLayout(props.media.length) === "pair"} else={<If when={mediaLayout(props.media.length) === "trio"} else={<View class="gap-0.5" style={{ width: "100%", aspectRatio: 1.25 }}>
           <View class="flex-1 flex-row gap-0.5">{props.media.slice(0, 2).map((m, i) => tile(m, i, 4))}</View>
           <View class="flex-1 flex-row gap-0.5">{props.media.slice(2, 4).map((m, i) => tile(m, i + 2, 4))}</View>
-        </View>
-      )}
+        </View>}><View class="flex-row gap-0.5" style={{ width: "100%", aspectRatio: 1.25 }}>
+          {tile(props.media[0], 0, 3)}
+          <View class="flex-1 gap-0.5">{props.media.slice(1, 3).map((m, i) => tile(m, i + 1, 3))}</View>
+        </View></If>}><View class="flex-row gap-0.5" style={{ width: "100%", aspectRatio: 2 }}>{props.media.slice(0, 2).map((m, i) => tile(m, i, 2))}</View></If>}><View style={{ width: "100%", aspectRatio: singleMediaAspect(first().width, first().height) }}>{tile(first(), 0, 1)}</View></If>}><PostVideo media={first()} postId={props.postId} owner={props.owner} active={props.active} /></If>
     </View>
   );
 }
@@ -340,7 +326,7 @@ export async function togglePost(post: FriendsPost, field: "like" | "bookmark", 
 }
 
 async function confirm(title: string, description: string, action: string): Promise<boolean> {
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title,
     description,
     actions: [
@@ -391,7 +377,7 @@ export async function postMenu(post: FriendsPost, handlers: PostHandlers): Promi
         { id: "report", label: "Report post" },
         { id: "block", label: `Block @${post.author.handle}`, role: "destructive" as const },
       ];
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     presentation: "actionSheet",
     description: post.mine ? undefined : `Block @${post.author.handle}: ${BLOCK_DETAIL.toLowerCase()}`,
     actions: [...actions, { id: "cancel", label: "Cancel", role: "cancel" }],
@@ -419,40 +405,44 @@ export function PostCard(props: { post: FriendsPost; now: number; nav: PageNav; 
   // A like replaces the post; its media (a video playing) stays as it is.
   const media = computed(() => props.post.media ?? [], { equals: (a, b) => a.length === b.length && a.every((m, i) => m.url === b[i].url) });
   return (
-    <View testID={`post-${props.post.id}`} class="flex-row gap-3 border-b border-border px-4 pb-1 pt-3">
-      <Button accessibilityLabel={`Open ${name()}'s profile`} onPress={() => props.nav.push({ name: "friends-person", id: props.post.author.id })} class="active:opacity-70">
-        <Avatar author={props.post.author} />
-      </Button>
-      <View class="min-w-0 flex-1">
-        <Button testID={`open-post-${props.post.id}`} accessibilityLabel={`Open post by ${name()}`} onPress={() => props.nav.push({ name: "friends-post", id: props.post.id })} class="active:opacity-70">
-          <View class="flex-row items-center gap-1.5">
-            <Text class="shrink text-base font-semibold line-clamp-1">{name()}</Text>
-            {props.post.author.agent_name ? <AgentPill /> : null}
-            <Text class="shrink text-sm text-muted-foreground line-clamp-1">{`@${props.post.author.handle} · ${relativeTime(props.post.created_at, props.now)}`}</Text>
-          </View>
-          <Text class="mt-1 text-base">{props.post.text}</Text>
+    // A surface card (SPEC §15 Feed): the face, who and when, ⋯; the text; its media; the reactions as soft buttons.
+    <View testID={`post-${props.post.id}`} class="mx-4 mt-3 rounded-(--radius-group) bg-card px-4 pb-3 pt-4">
+      <View class="flex-row items-center gap-3">
+        <Button accessibilityLabel={`Open ${name()}'s profile`} onPress={() => props.nav.push({ name: "friends-person", id: props.post.author.id })} class="active:opacity-70">
+          <Avatar author={props.post.author} size={36} />
         </Button>
-        {media().length ? ((list) => untracked(() => <PostMedia media={list} postId={props.post.id} owner={props.owner} active={props.active} />))(media()) : null}
-        <View class="mt-1 flex-row items-center">
-          <ActionButton icon="chat" label={`${props.post.comments} comments`} count={props.post.comments} onPress={() => props.nav.push({ name: "friends-post", id: props.post.id })} />
-          <ActionButton
-            testID={`like-${props.post.id}`}
-            icon={props.post.liked ? "heart-fill" : "heart"}
-            on={props.post.liked}
-            label={props.post.liked ? `Unlike, ${props.post.likes} likes` : `Like, ${props.post.likes} likes`}
-            count={props.post.likes}
-            onPress={() => void togglePost(props.post, "like", props.handlers)}
-          />
-          <ActionButton
-            testID={`bookmark-${props.post.id}`}
-            icon={props.post.bookmarked ? "bookmark-fill" : "bookmark"}
-            on={props.post.bookmarked}
-            label={props.post.bookmarked ? "Remove bookmark" : "Bookmark"}
-            onPress={() => void togglePost(props.post, "bookmark", props.handlers)}
-          />
-          <View class="flex-1" />
-          <ActionButton testID={`more-${props.post.id}`} icon="more-horizontal" label="More" onPress={() => void postMenu(props.post, props.handlers)} />
+        <View class="min-w-0 flex-1">
+          <View class="flex-row items-center gap-1.5">
+            <Text class="shrink text-sub font-semibold line-clamp-1">{name()}</Text>
+            <If when={props.post.author.agent_name}><AgentPill /></If>
+          </View>
+          <Text class="text-caption text-muted-foreground line-clamp-1">{`@${props.post.author.handle} · ${relativeTime(props.post.created_at, props.now)}`}</Text>
         </View>
+        <ActionButton testID={`more-${props.post.id}`} icon="more-horizontal" label="More" onPress={() => void postMenu(props.post, props.handlers)} />
+      </View>
+      <Button testID={`open-post-${props.post.id}`} accessibilityLabel={`Open post by ${name()}`} onPress={() => props.nav.push({ name: "friends-post", id: props.post.id })} class="mt-2 active:opacity-70">
+        <Text class="text-body">{props.post.text}</Text>
+      </Button>
+      {media().length ? ((list) => untracked(() => <PostMedia media={list} postId={props.post.id} owner={props.owner} active={props.active} />))(media()) : null}
+      <View class="mt-3 flex-row items-center gap-2">
+        <ActionButton
+          soft
+          testID={`like-${props.post.id}`}
+          icon={props.post.liked ? "heart-fill" : "heart"}
+          on={props.post.liked}
+          label={props.post.liked ? `Unlike, ${props.post.likes} likes` : `Like, ${props.post.likes} likes`}
+          count={props.post.likes}
+          onPress={() => void togglePost(props.post, "like", props.handlers)}
+        />
+        <ActionButton soft icon="chat" label={`${props.post.comments} comments`} count={props.post.comments} onPress={() => props.nav.push({ name: "friends-post", id: props.post.id })} />
+        <View class="flex-1" />
+        <ActionButton
+          testID={`bookmark-${props.post.id}`}
+          icon={props.post.bookmarked ? "bookmark-fill" : "bookmark"}
+          on={props.post.bookmarked}
+          label={props.post.bookmarked ? "Remove bookmark" : "Bookmark"}
+          onPress={() => void togglePost(props.post, "bookmark", props.handlers)}
+        />
       </View>
     </View>
   );
@@ -526,13 +516,7 @@ export function PostList(props: {
   };
 
   return (
-    <View class="flex-1 bg-background">{posts() === null && !error() ? (
-    <View class="flex-1 bg-background">
-      {props.header ?? null}
-      <EmptyState busy />
-    </View>
-  ) : (
-    <List keyboardShouldPersistTaps="handled"
+    <View class="flex-1 bg-background"><If when={posts() === null && !error()} else={<List keyboardShouldPersistTaps="handled"
       testID={props.testID}
       class="flex-1 bg-background"
       each={posts() ?? []}
@@ -540,15 +524,15 @@ export function PostList(props: {
       header={props.header ? () => props.header! : undefined}
       viewabilityConfig={{ itemVisibleThreshold: VIDEO_VISIBLE_SHARE }}
       onViewableItemsChange={({ viewableItems }) => playingVideo.set(afterScroll(playingVideo(), owner, viewableItems.map((token) => token.item.id)))}
-      empty={() => (
+      footer={() => (<View><If when={(posts() ?? []).length === 0}>
         <EmptyState
           testID="friends-empty"
           title={error() ? "Could not load" : props.emptyTitle}
           detail={error() ?? props.emptyDetail}
           icon={error() ? "cloud-offline" : (props.emptyIcon ?? "people")}
         />
-      )}
-      footer={() => (loadingMore() ? <View class="items-center p-4"><Spinner /></View> : null)}
+      </If><If when={loadingMore()}><View class="items-center p-4"><Spinner /></View></If></View>)}
+      contentClass="pb-6"
       loadMoreThreshold={0.6}
       onLoadMore={() => {
         if (!next() || loadingMore()) return;
@@ -562,8 +546,10 @@ export function PostList(props: {
       }}
     >
       {(post) => <PostCard post={post()} now={Date.now()} nav={props.nav} handlers={handlers()} owner={owner} active={props.top} />}
-    </List>
-  )}</View>
+    </List>}><View class="flex-1 bg-background">
+      {props.header ?? null}
+      <EmptyState busy />
+    </View></If></View>
   );
 }
 

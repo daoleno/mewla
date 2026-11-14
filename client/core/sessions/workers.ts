@@ -66,6 +66,13 @@ export interface Worker {
   last_output_lines: string[];
   started_at?: number;
   updated_at?: number;
+  /** While `running` by the terminal: when this run began (WIRE §9); absent on a delegated Worker. */
+  running_since?: number;
+  /** While `running`: the tool call the agent started last ("Bash curl -sI https://example.org"), from its hook. */
+  activity?: string;
+  /** That call's tool ("Bash") and what it works on ("curl -sI https://example.org"), to word it as its tool row. */
+  activity_tool?: string;
+  activity_summary?: string;
   process_id?: number;
   delegated?: boolean;
   capabilities?: WorkerCapabilities;
@@ -128,6 +135,10 @@ export type RawWorker = {
   last_output_lines?: string[];
   started_at?: string | number | Date;
   updated_at?: string | number | Date;
+  running_since?: string | number | Date;
+  activity?: string;
+  activity_tool?: string;
+  activity_summary?: string;
   process_id?: number;
   delegated?: boolean;
   capabilities?: {
@@ -435,6 +446,10 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       stringArraysEqual(left.last_output_lines, right.last_output_lines) &&
       left.started_at === right.started_at &&
       left.updated_at === right.updated_at &&
+      left.running_since === right.running_since &&
+      left.activity === right.activity &&
+      left.activity_tool === right.activity_tool &&
+      left.activity_summary === right.activity_summary &&
       left.process_id === right.process_id &&
       left.delegated === right.delegated &&
       left.capabilities?.structured_events ===
@@ -490,10 +505,17 @@ function normalizeWorker(
     task_class: typeof agent.task_class === 'string' ? agent.task_class : undefined,
     event_kind: typeof agent.event_kind === 'string' ? agent.event_kind : undefined,
     details_json: typeof agent.details_json === 'string' ? agent.details_json : undefined,
-    needs_attention: agent.needs_attention === true,
+    // Whether it waits on the person. A delegated Worker's own report (`--attention user_input`, done, blocked) is
+    // addressed to Brain, which decides and asks the person only through its Work's question (owner 2026-10-26,
+    // 11-13): it raises no card, tray row, count or dot here. A prompt or an approval on its terminal still does.
+    needs_attention: agent.needs_attention === true && agent.delegated !== true,
     last_output_lines: Array.isArray(agent.last_output_lines) ? agent.last_output_lines : [],
     started_at: normalizeTimestamp(agent.started_at),
     updated_at: normalizeTimestamp(agent.updated_at),
+    running_since: agent.status === 'running' ? normalizeTimestamp(agent.running_since) : undefined,
+    activity: agent.status === 'running' && typeof agent.activity === 'string' && agent.activity.trim() ? agent.activity.trim() : undefined,
+    activity_tool: agent.status === 'running' && typeof agent.activity_tool === 'string' && agent.activity_tool.trim() ? agent.activity_tool.trim() : undefined,
+    activity_summary: agent.status === 'running' && typeof agent.activity_summary === 'string' && agent.activity_summary.trim() ? agent.activity_summary.trim() : undefined,
     process_id: typeof agent.process_id === 'number' && Number.isFinite(agent.process_id)
       ? agent.process_id
       : undefined,
@@ -574,6 +596,10 @@ export function normalizePrompt(raw: unknown): WorkerPrompt | undefined {
     request: optionalString(entry.request),
     call_id: optionalString(entry.call_id),
   };
+  const tool = optionalString(entry.tool)?.trim();
+  const summary = optionalString(entry.summary)?.trim();
+  if (tool) prompt.tool = tool;
+  if (summary) prompt.summary = summary;
   if (kind === 'choice') {
     const questions: WorkerPromptQuestion[] = [];
     for (const item of Array.isArray(entry.questions) ? entry.questions : []) {

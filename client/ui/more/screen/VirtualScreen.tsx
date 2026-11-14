@@ -2,12 +2,12 @@ import { effect, signal, untracked, View } from "nsh";
 import { failureText } from "../../../core/more/daemon";
 import { virtualScreen } from "../../../core/screen/screen";
 import { daemon } from "../daemon";
-import { Notice, Page, Section, SwitchRow } from "../kit/kit";
+import { Notice, Page, Section, SwitchRow } from "../../kit/kit";
 
 /**
  * Linux: whether the agents' browsers get a screen of their own (the computer's
  * `/browser` settings). One state for the current computer, shared by Screen and
- * Settings → Labs → Virtual screen; a switch of computer drops it.
+ * Settings → Agents → Virtual screen; a switch of computer drops it.
  */
 export interface VirtualScreenState {
   /** null until the computer answered. */
@@ -77,15 +77,15 @@ export function VirtualScreenSwitch() {
           onChange={setVirtualScreen}
         />
       </Section>
-      {state().error ? <Notice tone="failed" title={state().error} action="Retry" onAction={readVirtualScreen} /> : null}
+      <If when={state().error}><Notice tone="failed" title={state().error} action="Retry" onAction={readVirtualScreen} /></If>
     </View>
   );
 }
 
-/** Settings → Labs → Virtual screen: the one switch; what it does shows on Screen. */
+/** Settings → Agents → Virtual screen: the one switch; what it does shows on Screen. */
 export function VirtualScreenPage() {
   return (
-    <Page title="Virtual screen" testID="virtual-screen-page">
+    <Page display title="Virtual screen" testID="virtual-screen-page">
       <VirtualScreenSwitch />
     </Page>
   );

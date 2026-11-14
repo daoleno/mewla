@@ -289,7 +289,7 @@ func TestRouteCalendarEventKeepsInFlightRunWhenNextOccurrenceIsRouted(t *testing
 func TestCalendarOccurrenceWorkNamesItsScheduleAndRun(t *testing.T) {
 	store, service := newCalendarRouteService(t)
 	calendarRouteRoute(t, service, calendarRouteItem("item-1", calendarRouteRun("run-1", calendar.StatusRunning, "%77")), nil)
-	inventory, err := store.ProjectWorkInventory(map[string]bool{})
+	inventory, err := store.ProjectWorkInventory(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

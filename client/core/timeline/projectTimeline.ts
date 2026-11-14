@@ -1,3 +1,4 @@
+import { sameResultActions } from "../work/resultActions";
 import {
   conversationChoicesEqual,
   conversationSubagentsEqual,
@@ -540,6 +541,7 @@ function isBoundedStreamingFieldDelta(
     previous.exit_code === next.exit_code &&
     previous.transient === next.transient &&
     previous.source === next.source &&
+    previous.origin === next.origin &&
     previous.work_id === next.work_id &&
     previous.work_session_id === next.work_session_id &&
     previous.session_name === next.session_name &&
@@ -551,7 +553,8 @@ function isBoundedStreamingFieldDelta(
     previous.work_attention === next.work_attention &&
     previous.work_event_kind === next.work_event_kind &&
     previous.work_details_json === next.work_details_json &&
-    previous.work_next_action === next.work_next_action &&
+    sameResultActions(previous.work_actions, next.work_actions) &&
+    JSON.stringify(previous.answered) === JSON.stringify(next.answered) &&
     previous.work_wait_for === next.work_wait_for &&
     previous.explanation === next.explanation &&
     sameStringArray(previous.files, next.files) &&

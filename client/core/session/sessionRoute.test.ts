@@ -3,8 +3,10 @@ import { describe, expect, test } from "bun:test";
 import {
   defaultInterfaceRenderModeForKind,
   resolveInterfaceRenderMode,
+  resolveTerminalRouteWorker,
   supportsChatInterface,
 } from "./sessionRoute";
+import { presentWorker } from "../sessions/workerPresentation";
 
 describe("supportsChatInterface", () => {
   test("Claude is eligible for Open Chat / Open terminal like other structured agents", () => {
@@ -130,5 +132,20 @@ describe("resolveInterfaceRenderMode", () => {
         storedModes: { [sessionKey]: "chat" },
       }),
     ).toBe("chat");
+  });
+});
+
+describe("resolveTerminalRouteWorker", () => {
+  test("Brain's hidden host keeps what it runs: its provider gives its mark and type label", () => {
+    const worker = resolveTerminalRouteWorker({
+      routeSessionHint: {},
+      sessionKey: "s1:brain-host",
+      serverId: "s1",
+      workerId: "brain-host",
+      brainHostWorker: { id: "brain-host", name: "Brain", status: "running", provider: "claude", cwd: "/home/me/brain", command: "claude" },
+      brainHostServerId: "s1",
+    });
+    expect(worker?.provider).toBe("claude");
+    expect(presentWorker(worker).typeLabel).toBe("Claude Code");
   });
 });

@@ -94,7 +94,38 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		}
 	}
 
+	// Claude's footer says "esc to interrupt" for as long as it works, as
+	// Codex's working line does. Only the last lines of the pane count: the
+	// phrase in the conversation above proves nothing. A hidden Session (Brain's
+	// host) keeps the status its own lifecycle gives it.
+	if !in.Worker.Hidden && claudeFooterSaysWorking(pane) {
+		return ActivitySignal{State: StateRunning, Summary: "Claude working", Source: "claude_pane_working", Provider: a.Name()}
+	}
+
 	return ActivitySignal{State: StateUnknown, Source: "claude_idle", Provider: a.Name()}
+}
+
+var claudeInterruptRe = regexp.MustCompile(`(?i)\besc to interrupt\b`)
+
+// claudeFooterSaysWorking reports whether the status footer (the last lines
+// of the pane; a narrow pane wraps it onto a second one) carries Claude's
+// interrupt hint, which is shown only while a turn runs.
+func claudeFooterSaysWorking(pane string) bool {
+	for _, line := range claudePromptTail(pane, 2) {
+		if claudeInterruptRe.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
+// isClaudePane reports whether the pane is a Claude Code Session: its command
+// says so, or its own banner line is on the screen.
+func isClaudePane(command string, lines []string) bool {
+	if strings.Contains(commandBaseName(command), "claude") {
+		return true
+	}
+	return claudeBannerRe.MatchString(strings.Join(lines, "\n"))
 }
 
 // claudeBannerRe is Claude's own banner line: its name alone, or with a

@@ -1,11 +1,9 @@
-import { Clipboard, signal, Text, untracked, View } from "nsh";
-import { AlertDialog, Button } from "nsh/base";
+import { signal, Text, untracked, View } from "nsh";
+import { Icon } from "../icons/Icon";
+import { Button } from "nsh/base";
 import type { MessageTimelineItem } from "../../core/timeline/types";
-import { isEditablePrompt, messageCopyText, messageEditMode, type MessageEdit } from "../../core/timeline/messageActionsModel";
-import type { ComposerText } from "./Composer";
-
-/** The text the Select Text sheet shows; "" while it is closed. */
-export const selectingText = signal("");
+import { isEditablePrompt, messageEditMode, type MessageEdit } from "../../core/timeline/messageActionsModel";
+import { composerEdits, type ComposerText } from "./Composer";
 
 const INPUT_NOT_CLEAN = "Rewound, but the agent's input box still has text. Clear it in the Terminal, then send.";
 
@@ -67,40 +65,40 @@ export function createMessageEdit(options: {
     options.send(value);
     options.text.set(saved);
   };
+  composerEdits.set(options.text, { open: () => edit() !== null, cancel });
   return { edit, error, busy, open, cancel, send };
 }
 export type MessageEditor = ReturnType<typeof createMessageEdit>;
 
-/** "Editing message" above the composer, with what it was and Cancel. */
+/**
+ * The edit's chip above the composer (soft-final SPEC §1.4, §11 chips): 56 pt, radius 14, "Editing" and
+ * the message's first words, × to leave it (Esc too). The field holds the text being edited.
+ */
 export function EditChip(props: { editor: MessageEditor }) {
   const e = props.editor;
   return (
-    <View testID="edit-chip" class="mb-1.5 gap-1 rounded-xl bg-secondary px-3 py-2">
-      <View class="flex-row items-center gap-2">
-        <Text class="flex-1 text-xs font-semibold uppercase text-muted-foreground">{e.busy() ? "Rewinding…" : e.edit()?.mode === "rewind" && !e.edit()?.rewound ? "Editing · rewinds the agent" : "Editing message"}</Text>
-        <Button testID="edit-cancel" onPress={e.cancel} disabled={e.busy()}><Text class="text-sm text-primary">Cancel</Text></Button>
+    <View class="mb-2 gap-1">
+      <View testID="edit-chip" class="h-14 max-w-full flex-row items-center gap-2 self-start rounded-[14px] bg-card pl-3">
+        <Icon name="edit" size={18} color="muted-foreground" />
+        <Text class="min-w-0 shrink text-sub text-foreground line-clamp-1">
+          <Text class="font-semibold">{e.busy() ? "Rewinding…" : "Editing"}</Text>
+          {`  ${e.edit()?.original ?? ""}`}
+        </Text>
+        <Button testID="edit-cancel" accessibilityLabel="Stop editing" onPress={e.cancel} disabled={e.busy()} class="size-11 items-center justify-center">
+          <Icon name="close" size={16} color="muted-foreground" />
+        </Button>
       </View>
-      <Text class="text-sm text-muted-foreground line-clamp-2">{e.edit()?.original ?? ""}</Text>
-      {e.error() ? <Text testID="edit-error" class="text-sm text-destructive">{e.error()}</Text> : null}
+      <If when={e.error()}><Text testID="edit-error" class="text-sub text-foreground">{e.error()}</Text></If>
     </View>
   );
 }
 
-/** The menu of a message: Copy, and Edit for a sent prompt of a connected, idle chat. */
-export async function showMessageMenu(item: MessageTimelineItem, env: { editor?: MessageEditor; connected: boolean; running: boolean }): Promise<void> {
-  const subject = { id: item.id, role: item.role, body: item.body, hasAttachments: item.attachments.length > 0, pending: Boolean(item.pending), streaming: Boolean(item.streaming) };
-  if (subject.streaming || !subject.body.trim()) return;
-  const editable = env.editor && isEditablePrompt(subject, { messageRewind: false, brain: false, running: env.running, connected: env.connected, canSelectText: false });
-  const { action } = await AlertDialog.show({
-    presentation: "actionSheet",
-    actions: [
-      { id: "copy", label: "Copy" },
-      { id: "select", label: "Select Text" },
-      ...(editable ? [{ id: "edit", label: "Edit" }] : []),
-      { id: "cancel", label: "Cancel", role: "cancel" as const },
-    ],
-  });
-  if (action === "copy") await Clipboard.writeText(messageCopyText(subject)).catch(() => {});
-  else if (action === "select") selectingText.set(subject.body);
-  else if (action === "edit") env.editor?.open(item);
+/**
+ * A tap on one of the person's own sent messages: it goes into the composer to edit (the ✎ Editing chip, ×
+ * leaves it), where it can be edited (a sent text-only prompt of a connected, idle chat). Copying is the
+ * system's: a long press selects the text.
+ */
+export function editOnTap(item: MessageTimelineItem, env: { editor: MessageEditor; connected: boolean; running: boolean }): void {
+  const subject = { role: item.role, body: item.body, hasAttachments: item.attachments.length > 0, pending: Boolean(item.pending) };
+  if (isEditablePrompt(subject, { connected: env.connected, running: env.running })) env.editor.open(item);
 }

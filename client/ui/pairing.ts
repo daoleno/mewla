@@ -1,9 +1,10 @@
 import { Clipboard, host, platform, signal } from "nsh";
-import { AlertDialog } from "nsh/base";
 import { PairLatch } from "../core/onboarding";
-import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
+import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, clipboardRead, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
+import { haptic } from "./shell/haptics";
+import { showAlert } from "./shell/alert";
 
 /**
  * Pairing, one pipeline for every way in: a scanned code, a pasted link, a `mewla://` link the
@@ -16,6 +17,12 @@ export const pairingStatus = signal("");
 export const pairingIssue = signal<PairingProblem | null>(null);
 /** The computer just paired: on a phone the connected step shows over everything until the person goes on. */
 export const justPaired = signal<StoredServer | null>(null);
+/**
+ * A pairing link the system opened while the app runs: "Pairing…" (or what a slow pairing is doing)
+ * while it pairs, then why it did not. The pairing pages show their own; the app shows this one over
+ * the rest, as the Expo app's toasts did (parity #36).
+ */
+export const linkPairing = signal<{ problem: PairingProblem | null } | null>(null);
 /** Counts finished pairings, on every platform: a pairing page closes when it moves. */
 export const pairings = signal(0);
 const device = () => (platform.os === "web" ? "browser" : "phone");
@@ -33,9 +40,11 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     pairingIssue.set(NOT_A_CODE);
     return latch.release(value);
   }
+  // A pairing code found in the finder: one of the app's two light ticks (SPEC §16.3 Haptics).
+  if (source === "camera") haptic.impact("light");
   if (!alreadyPairedWith(servers(), payload)) {
     const copy = pairingScopeCopy(device());
-    const { action } = await AlertDialog.show({
+    const { action } = await showAlert({
       title: copy.title,
       description: copy.message,
       actions: [
@@ -48,6 +57,7 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
   }
   pairingBusy.set(true);
   pairingStatus.set("");
+  if (source === "link") linkPairing.set({ problem: null });
   try {
     await addPairedServer(await pairWith(payload, (message) => pairingStatus.set(message)));
     const paired = current();
@@ -62,9 +72,11 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
     pairings.set(pairings() + 1);
     // A browser goes straight to the app; a phone sees Brain come home first (the app goes until then).
     if (paired && device() === "phone") justPaired.set(paired);
+    if (source === "link") linkPairing.set(null);
     latch.release();
   } catch (error) {
     pairingIssue.set(pairingProblem(error));
+    if (source === "link") linkPairing.set({ problem: pairingProblem(error) });
     latch.release(value);
   } finally {
     pairingBusy.set(false);
@@ -74,17 +86,31 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
 
 /** "Paste a pairing link": the clipboard's text, or a word about what to copy. */
 export async function pasteFromClipboard(): Promise<void> {
-  const text = (await Clipboard.readText().catch(() => null))?.trim() ?? "";
-  if (!text) return pairingIssue.set(NOTHING_TO_PASTE);
-  await pairFromText(text, "paste");
+  const read = await readClipboard();
+  if (read.kind === "refused") return pairingIssue.set(pasteRefused(read.error));
+  if (read.kind === "empty") return pairingIssue.set(NOTHING_TO_PASTE);
+  await pairFromText(read.text, "paste");
+}
+
+/** The clipboard's text, or that the system refused it, or that it is empty (core/pairFlow.ts `clipboardRead`). */
+async function readClipboard(): Promise<ReturnType<typeof clipboardRead>> {
+  try {
+    const text = await Clipboard.readText();
+    // Asked only when no text came: `hasText` shows no paste prompt.
+    const has = text === "" ? await Clipboard.hasText().catch(() => false) : true;
+    return clipboardRead({ text, has });
+  } catch (error) {
+    return clipboardRead({ error });
+  }
 }
 
 /** Settings' "Pair": the link typed or pasted into the field, else the clipboard's. */
 export async function pairFromField(text: string): Promise<void> {
   if (text.trim()) return pairFromText(text, "paste");
-  const clipboard = (await Clipboard.readText().catch(() => null))?.trim() ?? "";
-  if (!clipboard) return pairingIssue.set(LINK_REQUIRED);
-  await pairFromText(clipboard, "paste");
+  const read = await readClipboard();
+  if (read.kind === "refused") return pairingIssue.set(pasteRefused(read.error));
+  if (read.kind === "empty") return pairingIssue.set(LINK_REQUIRED);
+  await pairFromText(read.text, "paste");
 }
 
 /** "Pick QR image": the code in a screenshot or photo the person picks (the host reads it). */

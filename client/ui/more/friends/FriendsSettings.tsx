@@ -1,6 +1,6 @@
 import { signal, Text, View } from "nsh";
-import { AlertDialog } from "nsh/base";
-import { Page, PillButton, Row, Section, Spinner, SwitchRow } from "../kit/kit";
+import { Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { tile } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
 import { Avatar } from "./parts";
 import {
@@ -17,10 +17,11 @@ import {
   turnOff,
   turnOn,
 } from "./state";
+import { showAlert } from "../../shell/alert";
 
 /** Asks with the points that matter; true when the person chose `confirm`. */
 async function ask(title: string, points: string[], confirm: string, cancel: string, destructive = false): Promise<boolean> {
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title,
     description: points.join("\n\n"),
     actions: [
@@ -88,7 +89,7 @@ export function FriendsSettings(props: { nav: PageNav }) {
   };
 
   return (
-    <Page title="Friends" testID="friends-settings">
+    <Page display title="Friends" testID="friends-settings">
       <Section footer="A Labs feature: your agent posts what it made to people you follow. Your computer holds the account; this phone has no Friends password.">
         <SwitchRow
           testID="friends-switch"
@@ -99,23 +100,18 @@ export function FriendsSettings(props: { nav: PageNav }) {
           disabled={deleting() || (!available() && !friendsEnabled())}
           onChange={toggle}
         />
-        {friendsEnabled() ? (
-          <SwitchRow
+        <If when={friendsEnabled()}><SwitchRow
             testID="friends-auto-post"
             title="Post without asking"
             subtitle={me()?.auto_post ? `Up to ${me()!.daily_cap} a day` : undefined}
             checked={me()?.auto_post === true}
             onChange={(on) => void autoPost(on)}
-          />
-        ) : null}
-        {friendsEnabled() && me()?.auto_post ? (
-          <SwitchRow testID="friends-auto-media" title="Let it attach pictures and video" checked={me()!.auto_media === true} onChange={(on) => void autoMedia(on)} />
-        ) : null}
-        {friendsEnabled() ? <Row testID="friends-open" icon="chat" title="Open Friends" chevron onPress={() => props.nav.push({ name: "friends" })} /> : null}
+          /></If>
+        <If when={friendsEnabled() && me()?.auto_post}><SwitchRow testID="friends-auto-media" title="Let it attach pictures and video" checked={me()!.auto_media === true} onChange={(on) => void autoMedia(on)} /></If>
+        <If when={friendsEnabled()}><Row testID="friends-open" lead={tile("chat")} title="Open Friends" chevron onPress={() => props.nav.push({ name: "friends" })} /></If>
       </Section>
 
-      {phase() === "signing_in" && friends().signIn ? (
-        <Section title="Sign in to Mewla">
+      <If when={phase() === "signing_in" && friends().signIn}><Section title="Sign in to Mewla">
           <View class="items-center gap-4 p-5">
             {/* The code can be selected and copied, to paste it on the sign-in page. */}
             <View selectable>
@@ -128,11 +124,9 @@ export function FriendsSettings(props: { nav: PageNav }) {
               <PillButton testID="friends-cancel-sign-in" title="Cancel" onPress={cancelSignIn} />
             </View>
           </View>
-        </Section>
-      ) : null}
+        </Section></If>
 
-      {friends().status?.handle ? (
-        <Section title="Friends account">
+      <If when={friends().status?.handle}><Section title="Friends account">
           <Row
             title={`@${friends().status!.handle}`}
             subtitle={friends().status!.signed_in ? (friends().status!.account ? `Signed in as ${friends().status!.account}` : "Signed in") : undefined}
@@ -143,11 +137,10 @@ export function FriendsSettings(props: { nav: PageNav }) {
             title="Delete Friends account"
             destructive
             disabled={phase() === "working" || deleting()}
-            trailing={deleting() ? <View testID="friends-deleting" accessibilityLabel="Deleting"><Spinner size={16} /></View> : undefined}
+            trailing={<If when={deleting()}><View testID="friends-deleting" accessibilityLabel="Deleting"><Spinner size={16} /></View></If>}
             onPress={() => void remove()}
           />
-        </Section>
-      ) : null}
+        </Section></If>
     </Page>
   );
 }

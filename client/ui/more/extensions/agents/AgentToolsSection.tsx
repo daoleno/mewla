@@ -1,11 +1,11 @@
-import { effect, Text, untracked, View } from "nsh";
+import { effect, untracked, View } from "nsh";
 import { agentExtensionsCountLabel, agentExtensionsSummaries, joinAgentLabels } from "../../../../core/extensions/agentExtensionsModel";
 import { skillsRequestData } from "../../../../core/extensions/skillsManagement";
 import { daemon, daemonState } from "../../daemon";
-import { Icon } from "../../kit/Icon";
-import { EmptyState, Row } from "../../kit/kit";
+import { AgentIcon } from "../../../icons/AgentIcon";
+import { EmptyState, Row, Section } from "../../../kit/kit";
+import { LEAD_SLOT, tile } from "../../../kit/RowTile";
 import type { PageNav } from "../../routes";
-import { AgentMark } from "./marks";
 import { followComputer, listableSkills, pluginCopies, refreshAll, skillsState } from "./state";
 
 /**
@@ -29,15 +29,16 @@ export function AgentToolsSection(props: { nav: PageNav }) {
       return <EmptyState testID="agent-tools-failed" icon="warning" title="Agent plugins and Skills unavailable" detail={state.error} action="Try again" onAction={refreshAll} />;
     }
     if (!inventory()) return <EmptyState busy title="Reading your agents" />;
-    const { rows, empty } = summaries();
-    if (!rows.length) return <Text class="px-4 text-sm text-muted-foreground">Your agents have no plugins or Skills of their own.</Text>;
+    const { rows } = summaries();
+    // Nothing the agents installed is nothing to look at: no section.
+    if (!rows.length) return null;
     return (
       <View>
-        <View class="overflow-hidden rounded-2xl border border-border bg-card"><View class="-mb-px">
+        <Section title="From your agents">
         {rows.map((row) => (
           <Row
             testID={`agent-tool-${row.scope}`}
-            leading={row.scope === "shared" ? <View class="size-6 items-center justify-center rounded-md bg-secondary"><Icon name="swap-horizontal" size={16} /></View> : <AgentMark agent={row.scope} size={24} />}
+            lead={row.scope === "shared" ? tile("swap-horizontal") : { kind: "logo", node: <AgentIcon kind={row.scope === "claude-code" ? "claude" : row.scope} size={28} slot={LEAD_SLOT} /> }}
             title={row.label}
             subtitle={row.scope === "shared" ? `${agentExtensionsCountLabel(row)} · used by ${joinAgentLabels(row.agents)}` : agentExtensionsCountLabel(row)}
             chevron
@@ -45,17 +46,12 @@ export function AgentToolsSection(props: { nav: PageNav }) {
             onPress={() => props.nav.push({ name: "extensions-agent", scope: row.scope })}
           />
         ))}
-        </View></View>
-        {empty.length ? <Text class="mt-1.5 px-4 text-xs text-muted-foreground">{`${joinAgentLabels(empty)} ${empty.length === 1 ? "has" : "have"} nothing installed.`}</Text> : null}
+        </Section>
       </View>
     );
   };
   return (
-    <View testID="agent-tools" class="mt-6 flex-col" style={{ display: hidden() ? "none" : "flex" }}>
-      <View class="mb-1.5 gap-0.5 px-4">
-        <Text class="text-sm font-medium text-muted-foreground" role="header">From your agents</Text>
-        <Text class="text-xs text-muted-foreground">Plugins and Skills that each tool installed itself. Manage or remove them here.</Text>
-      </View>
+    <View testID="agent-tools" class="flex-col" style={{ display: hidden() ? "none" : "flex" }}>
       {body()}
     </View>
   );

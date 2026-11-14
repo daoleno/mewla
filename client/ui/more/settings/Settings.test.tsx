@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { typeUntil, pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -45,15 +46,38 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("Settings", () => {
-  test("lists the computer, the channels, the agents, Labs, Appearance, Pet and About", async () => {
+  test("lists the channels, the agents, Labs, Appearance, Pet and About", async () => {
     const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "connected", enabled: true, bot_username: "mewla_bot", owner_hint: "@me", binding_pending: false } } : null), {
       network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
     });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("id:pair-another");
     await app.waitFor("text:@mewla_bot");
     const texts = app.texts();
-    for (const word of ["Desk", "Current", "Telegram", "Model Providers", "Outside agents", "Friends", "Auto", "Light", "Dark", "Open-source Licenses"]) expect(texts).toContain(word);
+    for (const word of ["Telegram", "Model Providers", "Outside agents", "Friends", "Auto", "Light", "Dark", "Open-source Licenses"]) expect(texts).toContain(word);
+    // A connected bot shows its state with a dot (SPEC §10.4), not a Connect button.
+    expect(app.shows("id:settings-telegram-state")).toBe(true);
+    expect(app.shows("id:settings-telegram-state-dot")).toBe(true);
+    expect(app.shows("id:settings-telegram-connect")).toBe(false);
+  });
+
+  test("Telegram with no bot set up offers Connect, which opens its page", async () => {
+    const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "disabled", enabled: false, binding_pending: false } } : null), {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:settings-telegram-connect");
+    expect(app.shows("id:settings-telegram-state")).toBe(false);
+    await app.press("id:settings-telegram-connect");
+    await app.waitFor("id:telegram");
+  });
+
+  test("a disconnected bot reads as off: its word, no dot", async () => {
+    const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "disabled", enabled: false, bot_username: "mewla_bot", owner_hint: "@me", binding_pending: false } } : null), {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Disconnected");
+    expect(app.shows("id:settings-telegram-state-dot")).toBe(false);
   });
 
   test("the appearance chosen is kept in the Expo app's key", async () => {
@@ -67,14 +91,20 @@ describe("Settings", () => {
 });
 
 describe("Pet", () => {
-  test("the pet the Expo app chose stays chosen, and a new choice is kept in the same key", async () => {
+  test("the pet the Expo app chose stays chosen, and a new choice applies at once and is kept in the same key", async () => {
+    const c = computer({ name: "settings-pet" }, () => null, { storage: { "mewla:pet_preference": "p13" } });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Bit at work");
+    await app.press("id:pet-p14");
+    await app.waitFor("text:Doodle at work");
+    await app.waitFor("text:Doodle moved in");
+    await app.waitUntil(() => app.storage()["mewla:pet_preference"] === "p14");
+  });
+
+  test("a pet that was removed falls back to Dango", async () => {
     const c = computer({ name: "settings-pet" }, () => null, { storage: { "mewla:pet_preference": "p03" } });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("id:pet-chosen");
-    await app.waitUntil(() => app.texts()[0] === "Pip");
-    await app.press("id:pet-p09");
-    await app.waitUntil(() => app.texts()[0] === "Tama");
-    await app.waitUntil(() => app.storage()["mewla:pet_preference"] === "p09");
+    await app.waitFor("text:Dango at work");
   });
 });
 
@@ -97,6 +127,18 @@ describe("Model Providers", () => {
     await app.waitUntil(() => c.asked.some((a) => a.type === "set_provider_connection"));
     const sent = c.asked.find((a) => a.type === "set_provider_connection")!.body;
     expect(sent).toEqual({ client: "codex", executor_id: "codex", connection_id: "c1", revision: 3 });
+  });
+
+  test("Codex and Claude Code follow the finger on a phone (owner 11-13 20:05): a swipe shows Claude Code's Providers, a tap goes back", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot() : null), { platform: "android" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Work gateway");
+    expect(app.texts()).not.toContain("Claude Code uses");
+    await app.drag("id:provider-pages-codex", { x: -260 });
+    await app.waitFor("text:Claude Code uses");
+    await app.waitUntil(() => !app.shows("text:Work gateway"));
+    await app.press("id:provider-agent-codex");
+    await app.waitFor("text:Work gateway");
   });
 
   test("a connection without a key opens its editor instead of being chosen", async () => {
@@ -179,7 +221,7 @@ describe("Telegram", () => {
     });
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:telegram-token");
-    await app.type("id:telegram-token", "123:abc");
+    await typeUntil(app, "id:telegram-token", "123:abc", "id:telegram-verify");
     await app.press("id:telegram-verify");
     await app.waitFor("text:@mewla_bot");
     expect(app.shows("id:telegram-connect")).toBe(true);
@@ -244,8 +286,7 @@ describe("iPhone use", () => {
     await app.press("label:Done: tell the agent you finished");
     await app.waitUntil(() => sent.length === 1);
     // Done holds both buttons until the computer answers it.
-    await app.waitUntil(() => app.enabled("label:Stop Codex"));
-    await app.press("label:Stop Codex");
+    await pressWhenEnabled(app, "label:Stop Codex");
     await app.waitUntil(() => sent.length === 2);
     expect(sent).toEqual([{ handoff_done: true }, { stop_agent: true }]);
   });
@@ -259,7 +300,20 @@ describe("iPhone use", () => {
   });
 });
 
-describe("Labs", () => {
+describe("Virtual screen and Phone use", () => {
+  test("Virtual screen is a row of Agents, not of Labs, and Labs keeps Friends", async () => {
+    const c = computer({ name: "settings" }, () => null, {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "POST http://desk.test:9877/browser": json({ virtual_screen: false }) },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:settings-virtual-screen");
+    const texts = app.texts();
+    const at = (word: string) => texts.indexOf(word);
+    expect(at("Agents")).toBeLessThan(at("Virtual screen"));
+    expect(at("Virtual screen")).toBeLessThan(at("Labs"));
+    expect(at("Labs")).toBeLessThan(at("Friends"));
+  });
+
   test("Virtual screen shows the computer's switch and opens its page, which turns it on", async () => {
     let on = false;
     const c = computer({ name: "settings" }, () => null, {
@@ -278,8 +332,7 @@ describe("Labs", () => {
     await app.waitFor("id:virtual-screen-page");
     // `enabled` throws while no view matches: the switch first, then that it takes a press.
     await app.waitFor("id:virtual-screen");
-    await app.waitUntil(() => app.enabled("id:virtual-screen"));
-    await app.press("id:virtual-screen");
+    await pressWhenEnabled(app, "id:virtual-screen");
     await app.waitUntil(() => on);
     await app.back();
     await app.waitUntil(() => app.texts().includes("On"));
@@ -291,7 +344,7 @@ describe("Labs", () => {
     });
     const app = await open(HARNESS, c.options);
     await app.waitUntil(() => app.requests().some((r) => r.url === "http://desk.test:9877/browser"));
-    await app.waitFor("text:Labs");
+    await app.waitFor("text:Outside agents");
     expect(app.shows("id:settings-virtual-screen")).toBe(false);
   });
 
@@ -302,19 +355,21 @@ describe("Labs", () => {
     const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, handlers } });
     await app.waitFor("id:settings-phone");
     expect(app.texts()).toContain("Off");
+    // A row of Agents, above Labs.
+    expect(app.texts().indexOf("Phone use")).toBeLessThan(app.texts().indexOf("Labs"));
     await app.press("id:settings-phone");
     await app.waitFor("id:phone-page");
 
     const play = computer({ name: "settings" }, () => null, { platform: "android", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
     const other = await open(HARNESS, play.options);
-    await other.waitFor("text:Labs");
+    await other.waitFor("text:Outside agents");
     expect(other.shows("id:settings-phone")).toBe(false);
   });
 
   test("on iOS there is no Phone use row", async () => {
     const c = computer({ name: "settings" }, () => null, { platform: "ios", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("text:Labs");
+    await app.waitFor("text:Outside agents");
     expect(app.shows("id:settings-phone")).toBe(false);
   });
 });
@@ -323,7 +378,7 @@ describe("In a browser", () => {
   const mac = { enabled: true, state: "ready", summary: "Agents on Studio can use your iPhone." };
   const alertCalls = ["calendar.alertsSetStrong", "calendar.alertsCapabilities", "calendar.alertsOpenSettings", "phone.status", "phone.follow"];
 
-  test("Labs offers only Virtual screen; no Friends, Phone use, iPhone use or Calendar section, and nothing asks the device", async () => {
+  test("Virtual screen is offered; no Labs (Friends, iPhone use), Phone use or Calendar section, and nothing asks the device", async () => {
     const c = computer({ name: "settings" }, () => null, {
       platform: "web",
       network: {
@@ -336,25 +391,13 @@ describe("In a browser", () => {
     for (const name of alertCalls) handlers[name] = () => null;
     const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, handlers } });
     await app.waitFor("id:settings-virtual-screen");
-    await app.waitFor("id:pair-another");
     for (const id of ["settings-friends", "settings-phone", "settings-iphone", "strong-alerts", "full-screen-alerts"]) expect(app.shows(`id:${id}`)).toBe(false);
     expect(app.texts()).not.toContain("Calendar");
+    expect(app.texts()).not.toContain("Labs");
     for (const word of ["Appearance", "Pet", "About", "Privacy Policy", "Support", "Open-source Licenses"]) expect(app.texts()).toContain(word);
     await app.wait(200);
     expect(app.requests().some((r) => r.url.startsWith("http://desk.test:9877/iphone"))).toBe(false);
     expect(app.host.calls().filter((call) => alertCalls.includes(call.name))).toEqual([]);
-  });
-
-  test("the computer serving the page has no connection-path mark", async () => {
-    // On a phone this LAN address shows the link mark (SettingsFlows "the computer in use shows how the phone reaches it").
-    const c = computer({ name: "settings" }, () => null, { platform: "web", network: { "GET http://192.168.1.20:9877/auth-check": { status: 503 } } });
-    const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, params: { page: { name: "settings" }, server: { url: "ws://192.168.1.20:9877/ws" } } } });
-    await app.waitFor("id:pair-another");
-    await app.wait(100);
-    expect(app.shows("id:computer-path")).toBe(false);
-    expect(app.texts()).toContain("Current");
-    await app.longPress("id:computer-s1");
-    expect(app.texts()).not.toContain("LAN · 192.168.1.20");
   });
 });
 

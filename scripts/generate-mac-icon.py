@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Build daemon/macapp/Mewla.icns, the macOS app icon, from the Mewla app icon.
 
-Run from anywhere after changing app/assets/branding/mewla-icon.png:
+Run from anywhere after changing the iOS app icon
+(client/ios/Assets.xcassets/AppIcon.appiconset/icon.png):
     python3 scripts/generate-mac-icon.py
 """
 from pathlib import Path
@@ -9,7 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 root = Path(__file__).resolve().parent.parent
-source = root / "app/assets/branding/mewla-icon.png"
+source = root / "client/ios/Assets.xcassets/AppIcon.appiconset/icon.png"
 target = root / "daemon/macapp/Mewla.icns"
 
 image = Image.open(source).convert("RGBA")

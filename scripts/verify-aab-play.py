@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Verify a signed Google Play App Bundle against the Play channel contract.
 
-Checks, all on the built AAB (never on the prebuild tree):
+Checks, all on the built AAB (client/android, -Pmewla.channel=play):
   - bundletool validate
   - merged base manifest: package / versionName / versionCode from
-    app/app.base.json, targetSdk 36, no REQUEST_INSTALL_PACKAGES,
-    SYSTEM_ALERT_WINDOW or RECORD_AUDIO, no self-update FileProvider
-  - embedded Expo config: extra.distribution.android == "play-store", so the
-    GitHub update check never runs (services/useAppUpdate.ts)
+    client/ui/nsh.json (scripts/lib/release_identity.py), targetSdk 36, no
+    REQUEST_INSTALL_PACKAGES, SYSTEM_ALERT_WINDOW or RECORD_AUDIO, no
+    self-update FileProvider
+  - nothing of the GitHub channel: no Phone use services, receivers or
+    permissions (WRITE_SECURE_SETTINGS, the accessibility service) and no
+    in-app update, so the Play build has neither (ChannelHosts in src/play)
   - arm64-v8a native libraries only; every .so has 16 KB ELF LOAD alignment
   - every split APK bundletool generates passes `zipalign -c -P 16`
   - the universal APK carries the Ghostty notice and no forbidden imports
@@ -37,6 +39,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts" / "lib"))
+import release_identity  # noqa: E402
+
 EXPECTED_CERT = "C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD"
 TARGET_SDK = 36
 PAGE_ALIGN = 16 * 1024
@@ -45,8 +50,16 @@ FORBIDDEN_PERMISSIONS = (
     "android.permission.REQUEST_INSTALL_PACKAGES",
     "android.permission.SYSTEM_ALERT_WINDOW",
     "android.permission.RECORD_AUDIO",
+    # Phone use grants it to itself over Wireless debugging (client/android/phone).
+    "android.permission.WRITE_SECURE_SETTINGS",
 )
-UPDATE_PROVIDER = "expo.modules.appupdate.AppUpdateFileProvider"
+UPDATE_PROVIDER = "com.daoleno.mewla.appupdate.AppUpdateFileProvider"
+# Components only the GitHub channel merges in (client/android/phone, client/android/appupdate).
+GITHUB_COMPONENT_PREFIXES = (
+    "com.daoleno.mewla.phone.",
+    "com.daoleno.mewla.appupdate.",
+    "expo.modules.mewlaphone.",
+)
 ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 LIB_RE = re.compile(r"^[^/]+/lib/([^/]+)/[^/]+\.so$")
 
@@ -85,6 +98,14 @@ def check_manifest(xml_text: str, package: str, version_name: str, version_code:
         authorities = android_attr(provider, "authorities") or ""
         if name == UPDATE_PROVIDER or any(a.endswith(".appupdate") for a in authorities.split(";")):
             errors.append(f"self-update FileProvider in Play manifest: {name} ({authorities})")
+
+    for tag in ("service", "receiver", "provider", "activity"):
+        for component in root.iter(tag):
+            name = android_attr(component, "name") or ""
+            if name.startswith(GITHUB_COMPONENT_PREFIXES):
+                errors.append(f"GitHub-channel {tag} in Play manifest: {name}")
+            if android_attr(component, "permission") == "android.permission.BIND_ACCESSIBILITY_SERVICE":
+                errors.append(f"accessibility service in Play manifest: {name}")
     return errors
 
 
@@ -159,17 +180,6 @@ def check_native_libraries(bundle: zipfile.ZipFile) -> tuple[list[str], list[str
     return errors, report
 
 
-def check_distribution(bundle: zipfile.ZipFile) -> list[str]:
-    try:
-        config = json.loads(bundle.read("base/assets/app.config"))
-    except KeyError:
-        return ["embedded Expo config base/assets/app.config is missing"]
-    channel = config.get("extra", {}).get("distribution", {}).get("android")
-    if channel != "play-store":
-        return [f"embedded extra.distribution.android: got {channel!r} want 'play-store'"]
-    return []
-
-
 def normalize_fingerprint(value: str) -> str:
     hexonly = re.sub(r"[^0-9A-Fa-f]", "", value).upper()
     return ":".join(hexonly[i : i + 2] for i in range(0, len(hexonly), 2)) if len(hexonly) == 64 else ""
@@ -211,10 +221,10 @@ def main() -> int:
     if not aab.is_file():
         raise SystemExit(f"error: AAB not found: {aab}")
 
-    base = json.loads((ROOT / "app/app.base.json").read_text(encoding="utf-8"))["expo"]
-    package = base["android"]["package"]
-    version_name = base["version"]
-    version_code = int(base["android"]["versionCode"])
+    tracked = release_identity.identity(release_identity.read_version(ROOT))
+    package = tracked["package"]
+    version_name = tracked["version"]
+    version_code = int(tracked["version_code"])
     bundletool = ["java", "-jar", str(args.bundletool)]
     zipalign = find_build_tool("zipalign")
     errors: list[str] = []
@@ -227,7 +237,6 @@ def main() -> int:
     print("manifest:", json.dumps(manifest_summary(manifest), indent=2))
 
     with zipfile.ZipFile(aab) as bundle:
-        errors += check_distribution(bundle)
         lib_errors, lib_report = check_native_libraries(bundle)
         errors += lib_errors
         print("\n".join(lib_report))
@@ -259,7 +268,7 @@ def main() -> int:
         for cmd in (
             [str(ROOT / "scripts/verify-apk-notice.sh"), str(apk)],
             [str(ROOT / "scripts/verify-android-native-symbols.py"), "--lock",
-             str(ROOT / "app/modules/terminal-vt/native.lock.json"), "--apk", str(apk)],
+             str(ROOT / "native/terminal-vt/native.lock.json"), "--apk", str(apk)],
         ):
             if subprocess.run(cmd).returncode != 0:
                 errors.append(f"universal APK check failed: {Path(cmd[0]).name}")
@@ -271,7 +280,7 @@ def main() -> int:
         return 1
     print(f"ok: AAB package={package} versionName={version_name} versionCode={version_code} targetSdk={TARGET_SDK}")
     print("ok: no REQUEST_INSTALL_PACKAGES / SYSTEM_ALERT_WINDOW / RECORD_AUDIO, no update FileProvider")
-    print("ok: embedded distribution play-store (no GitHub update check)")
+    print("ok: no Phone use or in-app update component (Play channel)")
     print("ok: arm64-v8a only; every .so 16 KB LOAD-aligned; split APKs pass zipalign -P 16")
     print("ok: upload certificate SHA-256 matches public identity")
     return 0

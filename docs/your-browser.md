@@ -3,7 +3,7 @@
 Every agent Mewla starts has one browser tool, `mewla_chrome`, on every
 computer; the tool and its behaviour are the same everywhere. Only where the
 agent's Chrome window lives differs. On a Mac, on Windows, or a desktop without
-the virtual screen, it is your own Chrome (this page). On Linux with **Settings › Labs ›
+the virtual screen, it is your own Chrome (this page). On Linux with **Settings › Agents ›
 Virtual screen** on, it is the agents' own Chrome on that virtual screen, each
 agent's window on a monitor of its own, with the same Mewla extension, which
 Mewla loads itself: there is nothing to add and no sign-in of yours in it (see [Screen](screen.md#linux-agents-on-a-virtual-screen)).

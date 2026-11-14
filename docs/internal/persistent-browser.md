@@ -6,7 +6,7 @@ difference between computers is where the agent's Chrome window lives:
 
 - **A Mac, or a desktop without the virtual screen:** the person's own Chrome, as
   [your-browser.md](../your-browser.md) says.
-- **Linux with Settings → Labs → Virtual screen on:** the **agent browser**: one
+- **Linux with Settings → Agents → Virtual screen on:** the **agent browser**: one
   Chrome on one private profile (`~/.mewla/browsers/agent`), running on the
   **agent screen**, carrying the same Mewla extension and joined through the same
   native host and bridge. A Worker gets a **window of its own** in that Chrome,
@@ -169,8 +169,7 @@ viewer uses) with `reason` when the computer cannot run the screen or Chrome, an
 
 ## Verification
 
-Run `go test -race ./agentuse ./browser ./vdisplay`, the app typecheck and both
-Android and iOS Expo exports. Behavioral tests cover the monitors (a program
+Run `go test -race ./agentuse ./browser ./vdisplay`, and `cd client/ui && nsh check`. Behavioral tests cover the monitors (a program
 opens on its Worker's monitor, a viewer is shown only that rectangle, a monitor
 goes with its Worker and the others keep their places), the gate (refusal with a
 reason, notes with the result), a concurrent cold start (the second agent waits

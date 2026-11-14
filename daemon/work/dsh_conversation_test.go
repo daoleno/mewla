@@ -149,7 +149,7 @@ func TestDSHNativeImageIntakeRejectsForeignPaths(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "uploads"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	image, err := os.ReadFile("../../app/assets/reading-fixture/normal.png")
+	image, err := os.ReadFile("../testdata/reading-normal.png")
 	if err != nil {
 		t.Fatal(err)
 	}

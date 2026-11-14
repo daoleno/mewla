@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { retainedOverlap, TerminalHistoryModel, validateHistoryDelta, type HistoryDelta } from "./history";
-import { findTerminalLink, linkAction, promptRows, promptTarget, rowText, searchCount, searchHistory } from "./text";
+import { retainedOverlap, standAloneRows, TerminalHistoryModel, validateHistoryDelta, type HistoryDelta } from "./history";
+import { findTerminalLink, linkAction, promptRows, promptTarget, rowText, searchCount, searchHistory, tapAction } from "./text";
 
 const delta = (patch: Partial<HistoryDelta>): HistoryDelta => ({
   pane_id: "mh-1", cols: 80, rows: 24, alternate: false, mouse: false, epoch: 1, reset: false, first: 0, from: 0, next: 0, lines: [], ...patch,
@@ -64,6 +64,28 @@ describe("links", () => {
   });
 });
 
+describe("standAloneRows", () => {
+  const R = "\x1b[0m";
+  test("a row that leans on the style above it starts with a reset and that style", () => {
+    expect(standAloneRows(["\x1b[31mred", "still red", "\x1b[0mplain", "plain too"]))
+      .toEqual(["\x1b[31mred", R + "\x1b[31mstill red", R + "\x1b[31m\x1b[0mplain", "plain too"]);
+  });
+  test("an empty SGR is a reset; a reset in the middle of a sequence keeps what follows it", () => {
+    expect(standAloneRows(["\x1b[1mbold\x1b[m", "plain"])).toEqual(["\x1b[1mbold\x1b[m", "plain"]);
+    expect(standAloneRows(["\x1b[1;0;32mgreen", "next"])).toEqual(["\x1b[1;0;32mgreen", R + "\x1b[32mnext"]);
+  });
+  test("the 0 of an extended color is a color, not a reset", () => {
+    expect(standAloneRows(["\x1b[38;5;0mblack", "next"])).toEqual(["\x1b[38;5;0mblack", R + "\x1b[38;5;0mnext"]);
+    expect(standAloneRows(["\x1b[48;2;0;0;0mbg\x1b[1m", "next"])).toEqual(["\x1b[48;2;0;0;0mbg\x1b[1m", R + "\x1b[48;2;0;0;0m\x1b[1mnext"]);
+    expect(standAloneRows(["\x1b[48:2::0:0:0mbg", "next"])).toEqual(["\x1b[48:2::0:0:0mbg", R + "\x1b[48:2::0:0:0mnext"]);
+    expect(standAloneRows(["\x1b[38;5;0;0mreset after the color", "next"])).toEqual(["\x1b[38;5;0;0mreset after the color", "next"]);
+  });
+  test("rows a session host sends (each on its own) are left as they are", () => {
+    const rows = ["\x1b[0m\x1b[38;5;1mred\x1b[0m", "plain", "\x1b[0m\x1b[1mbold\x1b[0m tail"];
+    expect(standAloneRows(rows)).toEqual(rows);
+  });
+});
+
 describe("TerminalHistoryModel", () => {
   test("overlap: the held rows' suffix that starts the new snapshot", () => {
     expect(retainedOverlap(["a", "b", "c"], ["b", "c", "d"])).toBe(2);
@@ -87,10 +109,38 @@ describe("TerminalHistoryModel", () => {
     expect(model.applyDelta(delta({ from: 3, next: 4, lines: ["d"] }))).toBe("resync");
   });
 
+  test("a host with nothing numbered yet (a program on the alternate screen from the start) is in step, not a resync", () => {
+    const model = new TerminalHistoryModel();
+    const empty = delta({ epoch: 0, alternate: true });
+    expect(model.applyDelta(empty)).toEqual({ reset: false, removed: 0, rows: [], cols: 80, alternate: true });
+    expect(model.cursor()).toEqual({ epoch: 0, next: 0 });
+    expect(model.applyDelta(empty)).toBe(null);
+    // The program leaves the alternate screen: the host numbers its rows from a new epoch.
+    expect(model.applyDelta(delta({ epoch: 5, reset: true, next: 1, lines: ["$ "] }))?.reset).toBe(true);
+    // Rows held, or a delta that names rows, still resync.
+    expect(new TerminalHistoryModel().applyDelta(delta({ epoch: 0, from: 0, next: 1, lines: ["a"] }))).toBe("resync");
+  });
+
   test("a delta outside its bounds is refused before the view allocates", () => {
     expect(() => validateHistoryDelta(delta({ from: 0, next: 5, lines: ["a"] }))).toThrow();
     expect(() => validateHistoryDelta(delta({ cols: 0 }))).toThrow();
     expect(() => validateHistoryDelta(delta({ next: 1, lines: ["a"], flags: [99] }))).toThrow();
     expect(validateHistoryDelta(delta({ next: 1, lines: ["a"], flags: [4] })).lines).toEqual(["a"]);
+  });
+});
+
+describe("a tap on the terminal", () => {
+  const url = { kind: "url" as const, url: "https://example.com" };
+  test("a link opens before anything else, even on a program that reads the mouse", () => {
+    expect(tapAction({ link: url, row: 3, live: true, clickable: true })).toBe("link");
+    expect(tapAction({ link: url, row: -4, live: false, clickable: false })).toBe("link");
+  });
+  test("on the live screen of a program that reads the mouse it clicks; history and copy mode never click", () => {
+    expect(tapAction({ link: null, row: 3, live: true, clickable: true })).toBe("click");
+    expect(tapAction({ link: null, row: 3, live: false, clickable: true })).toBe("focus");
+    expect(tapAction({ link: null, row: 3, live: true, clickable: false })).toBe("focus");
+  });
+  test("a tap on history above the screen does nothing", () => {
+    expect(tapAction({ link: null, row: -1, live: false, clickable: true })).toBe("none");
   });
 });

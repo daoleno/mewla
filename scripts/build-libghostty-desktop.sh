@@ -27,7 +27,7 @@ set -euo pipefail
 umask 022
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
+LOCK="$ROOT/native/terminal-vt/native.lock.json"
 
 "$ROOT/scripts/verify-libghostty.sh" --contract >/dev/null
 

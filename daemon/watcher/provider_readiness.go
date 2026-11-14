@@ -214,6 +214,14 @@ func isCursorWorkspaceTrustPrompt(command, content string) bool {
 		strings.Contains(lower, "trust this workspace")
 }
 
+// HoldsFirstMessage reports whether a Session started with command can be
+// handed a first message: its agent UI has a known input prompt to wait for.
+// A shell (or an unknown program) has none, so text sent at start would run
+// as a command line instead of reaching an agent.
+func HoldsFirstMessage(command string) bool {
+	return needsInputReadinessWait(command, "")
+}
+
 func needsInputReadinessWait(command, content string) bool {
 	if workerCommandName(command) == "dsh" {
 		return true

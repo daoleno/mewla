@@ -38,6 +38,8 @@ async function connected() {
   await until(() => transport.state === "connected");
   return transport;
 }
+/** The socket the transport uses now: another file's leftover transport may have made a later one in `sockets`. */
+const own = (transport: Transport) => (transport as unknown as { socket: FakeSocket | null }).socket!;
 const frames = (socket: FakeSocket, type: string) => socket.sent.map((t) => JSON.parse(t)).filter((f) => f.type === type);
 
 function recorder() {
@@ -47,6 +49,7 @@ function recorder() {
   const handlers: TerminalHandlers = {
     reset: () => log.push("reset"),
     output: (data) => log.push(`out:${data}`),
+    sessionSize: (cols, rows) => log.push(`size:${cols}x${rows}`),
     scrollState: (s) => log.push(`scroll:${s.atBottom}:${s.inCopyMode}`),
     history: (render) => history.push(render),
     historyNotice: (text) => notices.push(text),
@@ -57,11 +60,11 @@ function recorder() {
 }
 
 /** A terminal attached as `t1` at 80×24 on a fresh connection. */
-async function attachedTerminal() {
+async function attachedTerminal(program?: string) {
   const transport = await connected();
-  const socket = sockets.at(-1)!;
+  const socket = own(transport);
   const rec = recorder();
-  const term = new TerminalSession(transport, "w1", rec.handlers);
+  const term = new TerminalSession(transport, "w1", rec.handlers, { program: () => program });
   term.resize(80, 24);
   await until(() => frames(socket, "terminal_open").length > 0);
   socket.receive({ type: "terminal_opened", session_id: "t1", cols: 80, rows: 24 });
@@ -76,7 +79,7 @@ const delta = (patch: Record<string, unknown>) => ({
 describe("TerminalSession", () => {
   test("opens once the view has a size, then carries output and input of its own attachment only", async () => {
     const transport = await connected();
-    const socket = sockets.at(-1)!;
+    const socket = own(transport);
     const { log, handlers } = recorder();
     const term = new TerminalSession(transport, "w1", handlers);
     expect(frames(socket, "terminal_open")).toHaveLength(0);
@@ -96,9 +99,42 @@ describe("TerminalSession", () => {
     transport.close();
   });
 
+  test("shown again, the terminal claims its grid as the Session's size (unchanged) without asking for the history again", async () => {
+    const { transport, socket, term } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    await wait(30);
+    const asked = historyRequests(socket).length;
+    term.claim();
+    expect(frames(socket, "terminal_resize")).toEqual([{ type: "terminal_resize", session_id: "t1", cols: 80, rows: 24 }]);
+    await wait(30);
+    expect(historyRequests(socket)).toHaveLength(asked);
+    term.close();
+    term.claim();
+    expect(frames(socket, "terminal_resize")).toHaveLength(1);
+    transport.close();
+  });
+
+  test("the Session's size the computer tells reaches the view before the replay at it, for its own attachment only", async () => {
+    const { transport, socket, term, log } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    await wait(30);
+    const asked = historyRequests(socket).length;
+    // Another viewer took the size: the view hears it, then the full redraw; its own grid is not sent back.
+    socket.receive({ type: "terminal_size", session_id: "t1", cols: 160, rows: 45 });
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "\u001bcwide" });
+    socket.receive({ type: "terminal_size", session_id: "other", cols: 20, rows: 5 });
+    expect(log).toEqual(["reset", "size:160x45", "out:\u001bcwide"]);
+    expect(frames(socket, "terminal_resize")).toHaveLength(0);
+    // Its history reflowed at the other width: asked for again.
+    await until(() => historyRequests(socket).length > asked);
+    expect(historyRequests(socket).length).toBeGreaterThan(asked);
+    term.close();
+    transport.close();
+  });
+
   test("only a tmux terminal gets the FocusIn; a session host terminal would show it as text", async () => {
     const transport = await connected();
-    const socket = sockets.at(-1)!;
+    const socket = own(transport);
     const term = new TerminalSession(transport, "w1", recorder().handlers);
     term.resize(80, 24);
     await until(() => frames(socket, "terminal_open").length > 0);
@@ -111,7 +147,7 @@ describe("TerminalSession", () => {
 
   test("two terminals open one after the other, so neither takes the other's attachment", async () => {
     const transport = await connected();
-    const socket = sockets.at(-1)!;
+    const socket = own(transport);
     const a = recorder(), b = recorder();
     const ta = new TerminalSession(transport, "w1", a.handlers);
     const tb = new TerminalSession(transport, "w2", b.handlers);
@@ -137,12 +173,13 @@ describe("TerminalSession", () => {
     const term = new TerminalSession(transport, "w1", handlers);
     term.resize(80, 24);
     await wait();
-    sockets.at(-1)!.receive({ type: "terminal_opened", session_id: "t1", cols: 80, rows: 24 });
-    sockets.at(-1)!.close(1006, "gone");
-    await wait(30);
-    sockets.at(-1)!.open();
-    await wait();
-    const next = sockets.at(-1)!;
+    const first = own(transport);
+    first.receive({ type: "terminal_opened", session_id: "t1", cols: 80, rows: 24 });
+    first.close(1006, "gone");
+    await until(() => !!own(transport) && own(transport) !== first);
+    const next = own(transport);
+    next.open();
+    await until(() => frames(next, "terminal_open").length > 0);
     expect(frames(next, "terminal_open")).toHaveLength(1);
     next.receive({ type: "terminal_opened", session_id: "t9", cols: 80, rows: 24 });
     next.receive({ type: "terminal_exit", session_id: "t9", exit_code: 0 });
@@ -160,8 +197,106 @@ describe("TerminalSession", () => {
     const term = new TerminalSession(transport, "gone", handlers);
     term.resize(80, 24);
     await wait();
-    sockets.at(-1)!.receive({ type: "terminal_error", code: "open_failed", message: "no such pane" });
+    own(transport).receive({ type: "terminal_error", code: "open_failed", message: "no such pane" });
     expect(log).toEqual(["error:no such pane"]);
+    term.close();
+    transport.close();
+  });
+
+  test("a history drag reaches tmux copy mode the way the computer counts: negative is toward history", async () => {
+    const { transport, socket, term } = await attachedTerminal();
+    term.scroll(4);
+    term.scroll(-2);
+    term.scroll(0);
+    expect(frames(socket, "terminal_scroll")).toEqual([
+      { type: "terminal_scroll", session_id: "t1", lines: -4 },
+      { type: "terminal_scroll", session_id: "t1", lines: 2 },
+    ]);
+    term.close();
+    transport.close();
+  });
+
+  test("a drag on a host Session's alternate screen reaches the program as wheel presses or cursor keys, never as a no-op tmux scroll", async () => {
+    const { transport, socket, term } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    // Claude Code's fullscreen view: alternate screen with mouse reports.
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1",
+      history: delta({ reset: true, next: 0, alternate: true, mouse: true, cols: 54, rows: 40 }) });
+    await until(() => term.history.alternate);
+    // (The attachment's own focus report is input too.)
+    const sent = () => frames(socket, "terminal_input").filter((f) => f.scroll === true).map((f) => f.data);
+    // A scroll report is marked as one (the computer does not take the size back for it); typing is not.
+    term.input("x");
+    expect(frames(socket, "terminal_input").filter((f) => f.data === "x").map((f) => f.scroll)).toEqual([undefined]);
+    term.drag(2);
+    // One write in flight: the travel made meanwhile waits for the program's answer.
+    term.drag(-1);
+    expect(sent()).toEqual(["\u001b[<64;28;21M\u001b[<64;28;21M"]);
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "redrawn" });
+    await until(() => sent().length === 2);
+    expect(sent()).toEqual(["\u001b[<64;28;21M\u001b[<64;28;21M", "\u001b[<65;28;21M"]);
+    expect(frames(socket, "terminal_scroll")).toEqual([]);
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "redrawn" });
+    // Codex's transcript: the wheel sends cursor keys.
+    term.history.panes = [{ ...term.history.panes[0], mouse: false, alt_scroll: true }];
+    term.drag(2);
+    await until(() => sent().length === 3);
+    expect(sent().pop()).toBe("\u001b[A\u001b[A");
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "redrawn" });
+    // A pane with nothing to scroll with falls back to tmux's copy mode (a no-op on a host).
+    term.history.panes = [{ ...term.history.panes[0], alt_scroll: false }];
+    term.drag(2);
+    expect(frames(socket, "terminal_scroll")).toEqual([{ type: "terminal_scroll", session_id: "t1", lines: -2 }]);
+    term.close();
+    transport.close();
+  });
+
+  test("Claude Code gets the presses that move it as far as the finger went, and a touch drops what waits", async () => {
+    const { transport, socket, term } = await attachedTerminal("claude");
+    await until(() => historyRequests(socket).length > 0);
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1",
+      history: delta({ reset: true, next: 0, alternate: true, mouse: true, mouse_format: "sgr", cols: 54, rows: 40 }) });
+    await until(() => term.history.alternate);
+    const presses = () => frames(socket, "terminal_input").filter((f) => f.scroll === true)
+      .map((f) => (f.data.match(/\u001b\[<6[45];/g) ?? []).length);
+    // Ten lines of travel at once: seven presses close together move Claude 1,1,1,1,2,2,2 rows (one a press
+    // would move it 16).
+    term.drag(10);
+    expect(presses()).toEqual([7]);
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "redrawn" });
+    // Right after that run one press would move two rows: one line of travel waits for Claude's 40 ms window.
+    term.drag(1);
+    await wait(5);
+    expect(presses()).toEqual([7]);
+    await until(() => presses().length === 2);
+    expect(presses()).toEqual([7, 1]);
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "redrawn" });
+    // A fling's tail waiting behind a write in flight is dropped when a finger comes down.
+    await wait(50);
+    term.drag(3);
+    term.drag(5);
+    term.drag(0);
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "redrawn" });
+    await wait(60);
+    expect(presses()).toEqual([7, 1, 3]);
+    term.close();
+    transport.close();
+  });
+
+  test("a tap is a click for a program that takes mouse reports, in its encoding, and takes the size like typing", async () => {
+    const { transport, socket, term } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1",
+      history: delta({ reset: true, next: 0, alternate: true, mouse: true, mouse_format: "sgr", cols: 54, rows: 40 }) });
+    await until(() => term.history.alternate);
+    expect(term.clickable).toBe(true);
+    expect(term.click(9, 30)).toBe(true);
+    const clicks = frames(socket, "terminal_input").filter((f) => f.data.includes("[<0;"));
+    expect(clicks).toEqual([{ type: "terminal_input", session_id: "t1", data: "\u001b[<0;10;31M\u001b[<0;10;31m" }]);
+    // No mouse reports: no click, and the page does what a tap did before.
+    term.history.panes = [{ ...term.history.panes[0], mouse: false }];
+    expect(term.clickable).toBe(false);
+    expect(term.click(9, 30)).toBe(false);
     term.close();
     transport.close();
   });
@@ -244,6 +379,25 @@ describe("TerminalSession history", () => {
     await until(() => historyRequests(socket).length > 2);
     expect(history[2]).toEqual({ reset: true, removed: 0, rows: [], cols: 0, alternate: false });
     expect(historyRequests(socket)[2].since).toEqual({ epoch: 0, next: 0 });
+    term.close();
+    transport.close();
+  });
+
+  test("a program on the alternate screen from the start: the host's empty answer at epoch 0 holds, and the view is not voided again", async () => {
+    const { transport, socket, term, history } = await attachedTerminal();
+    await until(() => historyRequests(socket).length > 0);
+    const empty = delta({ epoch: 0, alternate: true });
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[0].request_id, session_id: "t1", history: empty });
+    await until(() => history.length > 1);
+    expect(history[1]).toEqual({ reset: false, removed: 0, rows: [], cols: 80, alternate: true });
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "x" });
+    await until(() => historyRequests(socket).length > 1);
+    expect(historyRequests(socket)[1].since).toEqual({ epoch: 0, next: 0 });
+    socket.receive({ type: "terminal_history", request_id: historyRequests(socket)[1].request_id, session_id: "t1", history: empty });
+    await wait(historyTiming.snapshotMs * 4);
+    // No void and no request of its own: only output asks again.
+    expect(history.length).toBe(2);
+    expect(historyRequests(socket).length).toBe(2);
     term.close();
     transport.close();
   });

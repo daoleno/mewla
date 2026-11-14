@@ -28,7 +28,13 @@ export type OutboxEntryState =
    */
   | "uncertain"
   /** Stopped. Only the person can send it again, as a new message, or delete it. */
-  | "undeliverable";
+  | "undeliverable"
+  /**
+   * The computer holds it (a new Session's first message, which went with
+   * create_session, WIRE §11): never sent from here, never persisted, and the
+   * worker's later messages wait behind it until it is `release`d.
+   */
+  | "held";
 
 export type OutboxEntry = {
   /** The client id: the request id the daemon dedupes on. */
@@ -66,7 +72,9 @@ export type OutboxEvent =
   | { kind: "uncertain"; entry: OutboxEntry }
   | { kind: "undeliverable"; entry: OutboxEntry }
   /** The daemon refused the id; the same message continues under a new one. */
-  | { kind: "reidentified"; entry: OutboxEntry; previousId: string };
+  | { kind: "reidentified"; entry: OutboxEntry; previousId: string }
+  /** A held message did not go: it leaves the thread (its text is the Session's draft again). */
+  | { kind: "withdrawn"; entry: OutboxEntry };
 
 export type OutboxTransport = {
   /** True when this server is the live connection and its socket is open. */
@@ -230,6 +238,40 @@ export class MessageOutbox {
     return entry;
   }
 
+  /**
+   * A message the computer holds for `workerId` (a new Session's first message): it shows as sending in the
+   * Session's thread and the worker's later messages queue behind it. `release` settles it.
+   */
+  hold(input: OutboxEnqueueInput): OutboxEntry {
+    const entry: OutboxEntry = {
+      id: input.id ?? this.newId(),
+      serverId: input.serverId,
+      workerId: input.workerId,
+      ...(input.conversationScopeKey ? { conversationScopeKey: input.conversationScopeKey } : {}),
+      text: input.text,
+      createdAt: this.clock.now(),
+      state: "held",
+      attempts: 0,
+    };
+    this.entries.push(entry);
+    this.emit({ kind: "changed", serverId: entry.serverId });
+    return entry;
+  }
+
+  /**
+   * The computer said how a held message went: `sent`, the agent has it (its row waits for the echo, as an
+   * accepted send does); `withdrawn`, it did not go or nobody can tell. Either way what queued behind it goes.
+   */
+  release(id: string, outcome: "sent" | "withdrawn") {
+    const entry = this.get(id);
+    if (!entry || entry.state !== "held") return;
+    if (outcome === "sent") return this.settleAccepted(entry);
+    this.entries = this.entries.filter((other) => other !== entry);
+    this.emit({ kind: "withdrawn", entry });
+    this.emit({ kind: "changed", serverId: entry.serverId });
+    this.scheduleDrain(entry.serverId);
+  }
+
   /** The connection to `serverId` is open: send everything that is waiting. */
   onConnected(serverId: string) {
     this.generations.set(serverId, (this.generations.get(serverId) ?? 0) + 1);
@@ -255,7 +297,7 @@ export class MessageOutbox {
    */
   resend(id: string): OutboxEntry | undefined {
     const entry = this.get(id);
-    if (!entry || entry.state === "queued") {
+    if (!entry || entry.state === "queued" || entry.state === "held") {
       return undefined;
     }
     const previousId = entry.id;
@@ -341,6 +383,11 @@ export class MessageOutbox {
         continue;
       }
       if (busyWorkers.has(entry.workerId)) {
+        continue;
+      }
+      if (entry.state === "held") {
+        // The computer holds it: the ones behind it wait.
+        busyWorkers.add(entry.workerId);
         continue;
       }
       if (entry.state === "uncertain") {
@@ -527,7 +574,9 @@ export class MessageOutbox {
     // only the new entries would erase the rest.
     this.saveTail = this.saveTail
       .then(() => this.hydrate())
-      .then(() => this.store.save(this.entries.map((entry) => ({ ...entry }))))
+      // A held message lives as long as this run: after a restart nobody knows how it went (its text is the
+      // Session's draft, ui/screens/firstMessage.ts), and a held entry read back would stop the queue for good.
+      .then(() => this.store.save(this.entries.filter((entry) => entry.state !== "held").map((entry) => ({ ...entry }))))
       .catch(() => undefined);
   }
 

@@ -146,12 +146,21 @@ func (a *controlApp) handleWorkerAnswer(req control.Request) control.Response {
 	if len(answer.Answers) == 0 && answer.Number < 1 {
 		return control.ErrorResponse("invalid_request", "Give an option number or the answers to the questions.")
 	}
+	throughApproval := false
 	hook := func(prompt classifier.Prompt, number int) (bool, error) {
-		return a.answerPromptThroughApproval(workerID, prompt, number, req.ApprovalBasis)
+		handled, err := a.answerPromptThroughApproval(workerID, prompt, number, req.ApprovalBasis)
+		throughApproval = handled
+		return handled, err
 	}
+	asked, _ := pane.CurrentPrompt(workerID)
 	recorded, err := server.AnswerPanePrompt(pane, workerID, answer, hook, a.choiceConversationLoader(worker))
 	if err != nil {
 		return promptAnswerError(err)
+	}
+	// An answer through the held approval was recorded there.
+	if asked != nil && asked.ID == answer.PromptID && !throughApproval && a.agentEvents != nil {
+		recordAnswered(a.agentEvents.answered, server.PromptAnswerRecord(workerID, *asked, answer, recorded,
+			operatorAnswerer(worker, req.ApprovalBasis), a.agentEvents.promptAskedAt(workerID, asked.ID), time.Now()))
 	}
 	resp := control.Response{OK: true, Confirmation: "answered"}
 	if len(recorded) > 0 {

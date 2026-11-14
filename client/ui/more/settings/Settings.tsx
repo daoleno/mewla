@@ -1,19 +1,17 @@
-import { announce, cleanup, effect, host, Image, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
-import { lifecycle } from "../../lifecycle";
+import { cleanup, effect, host, openUrl, platform, signal, Storage, setColorScheme, untracked, View, lifecycle } from "nsh";
 import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
-import { phoneAvailable, phoneLabsWord } from "../../phone";
+import { phoneAvailable, phoneStateWord } from "../../phone";
 import { daemon, daemonState } from "../daemon";
-import { Icon } from "../kit/Icon";
-import { Notice, Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
+import { Page, Row, RowButton, Section, SwitchRow } from "../../kit/kit";
+import { StateLine, tile } from "../../kit/RowTile";
 import { followFriends, friendsEnabled } from "../friends/state";
-import { pet } from "../pet/pets";
+import { pet } from "../../pets/pets";
 import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";
 import type { PageNav } from "../routes";
-import { current, servers } from "../../session";
+import { current } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
-import { currentPathMark, probeComputers, removedNotice, statusWord } from "./computers";
 import { loadTelegram, telegramRow, telegramRowLabel } from "./telegramState";
 
 /** The appearance this phone chose: the system's, or always light or dark. */
@@ -52,11 +50,11 @@ function readAlertCapabilities(): void {
 
 /**
  * A browser is served by its computer and has no phone, alerts or iPhone of its own to
- * offer: Labs keeps only Virtual screen there, and the Calendar section goes (as v0.3.1).
+ * offer: Phone use, Labs and the Calendar section go there (as v0.3.1).
  */
 const onWeb = () => platform.os === "web";
 
-/** iPhone use on the current computer; Labs shows the row only where it is offered (a Mac). */
+/** iPhone use on the current computer; its row shows only where it is offered (a Mac). */
 const iphone = signal<IPhoneDaemonStatus | null>(null);
 let iphoneFor = "";
 
@@ -71,21 +69,12 @@ function readIPhone(): void {
 export const PRIVACY_URL = "https://mewla.ai/privacy/";
 export const SUPPORT_URL = "https://mewla.ai/support/";
 
-/** What a long press on the current computer revealed (how the phone reaches it), for a few seconds. */
-const pathDetail = signal("");
-let pathTimer: ReturnType<typeof setTimeout> | null = null;
-
-function showPathDetail(detail: string): void {
-  pathDetail.set(detail);
-  announce(detail);
-  if (pathTimer) clearTimeout(pathTimer);
-  pathTimer = setTimeout(() => pathDetail.set(""), 4_000);
-}
-
-/** Settings: the computers, then each thing this phone decides, then About. */
-export function Settings(props: { nav: PageNav; onPair: () => void }) {
-  // Each computer is asked again whenever Settings is shown again: back from a page
-  // above it, the app back in front, or a computer added or removed.
+/**
+ * Settings: what this phone decides and what this app connects to, then About. The computers
+ * (which one is in use, pairing, each one's details) are on the cat's computer page.
+ */
+export function Settings(props: { nav: PageNav }) {
+  // Telegram is read again whenever Settings is shown again: back from a page above it, or the app back in front.
   const depth = untracked(() => {
     const routes = props.nav.routes?.() ?? [];
     const at = routes.findIndex((route) => route.name === "settings");
@@ -94,12 +83,11 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
   let shownAs = "";
   effect(() => {
     const top = (props.nav.routes?.().length ?? depth) === depth;
-    const key = `${top && lifecycle() === "active"}|${servers().map((s) => `${s.id}@${s.url}`).join(",")}`;
+    const key = `${top && lifecycle() === "active"}|${current()?.id ?? ""}`;
     untracked(() => {
       if (key === shownAs) return;
       shownAs = key;
       if (!key.startsWith("true|")) return;
-      void probeComputers();
       loadTelegram();
     });
   });
@@ -132,42 +120,19 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
     if (daemon() && daemonState() === "connected") untracked(loadTelegram);
   });
   return (
-    <Page title="Settings" testID="settings">
-      {removedNotice() ? (
-        <Notice testID="removed-notice" tone="failed" title={removedNotice()!.title} detail={removedNotice()!.detail} action="OK" onAction={() => removedNotice.set(null)} />
-      ) : null}
-      <Section title="Computers" footer={pathDetail() || undefined}>
-        {servers().map((s) => {
-          const mark = () => (s.id === current()?.id ? currentPathMark() : null);
-          return (
-            <Row
-              testID={`computer-${s.id}`}
-              leading={<Icon name="desktop" />}
-              title={s.name || s.url}
-              subtitle={statusWord(s) || undefined}
-              value={s.id === current()?.id ? "Current" : undefined}
-              trailing={mark() ? <View testID="computer-path" accessibilityElementsHidden><Icon name={mark()!.kind === "relay" ? "cloud" : "link"} size={15} tone="faint" /></View> : undefined}
-              accessibilityLabel={[s.name || s.url, statusWord(s), mark()?.label].filter(Boolean).join(", ")}
-              chevron
-              onPress={() => props.nav.push({ name: "settings-computer", id: s.id })}
-              onLongPress={mark() ? () => showPathDetail(mark()!.detail) : undefined}
-            />
-          );
-        })}
-        <Row testID="pair-another" icon="add" title="Pair a computer" accessibilityLabel="Pair a computer" chevron onPress={props.onPair} />
-      </Section>
-
+    <Page display title="Settings" testID="settings">
       <Section title="Channels">
         <Row
           testID="settings-telegram"
-          icon="paper-plane"
+          lead={{ kind: "mark", mark: "telegram" }}
           title="Telegram"
           subtitle={current() ? telegramRow().subtitle : "No current server"}
           disabled={!current()}
-          trailing={current() && telegramRow().status ? <StatusMark status={telegramRow().status!} label={telegramRow().label} /> : undefined}
+          // While the first read runs the value stays empty: an endless spinner here kept the app from ever going quiet.
+          trailing={<If when={current()}><If when={!telegramRow().loading}><If when={telegramRow().connect} else={<If when={telegramRow().tone && telegramRow().label}><StateLine testID="settings-telegram-state" tone={telegramRow().tone!} label={telegramRow().label!} /></If>}><RowButton testID="settings-telegram-connect" label="Connect" accessibilityLabel="Connect Telegram" onPress={() => props.nav.push({ name: "settings-telegram" })} /></If></If></If>}
           accessibilityLabel={current() ? telegramRowLabel() : "Telegram, No current server"}
           accessibilityHint={current() ? "Open Telegram details and actions" : undefined}
-          chevron={Boolean(current())}
+          chevron={Boolean(current()) && !telegramRow().connect}
           onPress={current() ? () => props.nav.push({ name: "settings-telegram" }) : undefined}
         />
       </Section>
@@ -175,7 +140,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
       <Section title="Agents">
         <Row
           testID="settings-providers"
-          icon="key"
+          lead={tile("key")}
           title="Model Providers"
           subtitle={current() ? undefined : "No current server"}
           accessibilityHint="Choose how Codex and Claude connect to models"
@@ -184,7 +149,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
         />
         <Row
           testID="settings-outside-agents"
-          icon="brain"
+          lead={tile("brain")}
           title="Outside agents"
           subtitle={current() ? undefined : "No current server"}
           disabled={!current()}
@@ -192,35 +157,32 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
           chevron
           onPress={current() ? () => props.nav.push({ name: "settings-agents" }) : undefined}
         />
+        <If when={daemon() && !virtualScreenState().unsupported}><Row testID="settings-virtual-screen" lead={tile("desktop")} title="Virtual screen" value={virtualScreenState().enabled ? "On" : virtualScreenState().enabled === false ? "Off" : undefined} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /></If>
+        <If when={!onWeb() && phoneAvailable()}><Row testID="settings-phone" lead={tile("phone")} title="Phone use" value={phoneStateWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /></If>
       </Section>
 
-      <Section title="Labs">
-        {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" icon="desktop" title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
-        {onWeb() ? null : <Row testID="settings-friends" icon="people" title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />}
-        {!onWeb() && phoneAvailable() ? <Row testID="settings-phone" icon="phone" title="Phone use" value={phoneLabsWord()} chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
-        {!onWeb() && iphoneOffered(iphone()) ? <Row testID="settings-iphone" icon="phone" title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
-      </Section>
+      {/* Labs: Friends and iPhone use, still trials. A browser offers neither, so there the section goes. */}
+      <If when={!onWeb()}><Section title="Labs">
+        <Row testID="settings-friends" lead={tile("people")} title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
+        <If when={iphoneOffered(iphone())}><Row testID="settings-iphone" lead={tile("phone")} title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /></If>
+      </Section></If>
 
-      {onWeb() ? null : (
-        <Section title="Calendar">
-          <SwitchRow testID="strong-alerts" title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
-          {platform.os === "android" && strongAlerts() && fullScreenAllowed() === false ? (
-            <Row
+      <If when={!onWeb()}><Section title="Calendar">
+          <SwitchRow testID="strong-alerts" lead={tile("bell")} title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
+          <If when={platform.os === "android" && strongAlerts() && fullScreenAllowed() === false}><Row
               testID="full-screen-alerts"
+              lead={tile("lock")}
               title="Allow full-screen alerts"
-              subtitle="Android needs your OK to show an alert over the lock screen"
               chevron
               onPress={() => void host.call("calendar.alertsOpenSettings").catch(() => {})}
-            />
-          ) : null}
-        </Section>
-      )}
+            /></If>
+        </Section></If>
 
       <Section title="Appearance">
         {(["system", "light", "dark"] as const).map((choice) => (
           <Row
             testID={`appearance-${choice}`}
-            icon={choice === "system" ? "contrast" : choice === "light" ? "sun" : "moon"}
+            lead={tile(choice === "system" ? "contrast" : choice === "light" ? "sun" : "moon")}
             title={choice === "system" ? "Auto" : choice === "light" ? "Light" : "Dark"}
             check={appearance() === choice}
             role="radio"
@@ -231,15 +193,15 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
       </Section>
 
       <Section title="Pet">
-        <Row testID="settings-pet" leading={<Image src={pet().portrait} style={{ width: 22, height: 22 }} />} title="Pet" value={pet().name} chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
+        <Row testID="settings-pet" lead={{ kind: "art", src: pet().art.portrait }} title="Pet" value={pet().name} chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
       </Section>
 
       <Section title="About">
-        <Row title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
+        <Row lead={tile("info")} title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
         <AboutUpdateRow />
-        <Row icon="shield-check" title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
-        <Row icon="help" title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
-        <Row testID="settings-licenses" icon="book" title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />
+        <Row lead={tile("shield-check")} title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
+        <Row lead={tile("help")} title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
+        <Row testID="settings-licenses" lead={tile("book")} title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />
       </Section>
       <View class="h-6" />
     </Page>

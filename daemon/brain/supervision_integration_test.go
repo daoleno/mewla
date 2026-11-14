@@ -124,7 +124,7 @@ func TestReusedWorkerTerminalThroughHostEndFairnessAndPresentation(t *testing.T)
 	if workDeliveries() != before {
 		t.Fatal("failed resolve/Host-end loop sent another LLM input")
 	}
-	inventory, err := store.ProjectWorkInventory(map[string]bool{workerID: true})
+	inventory, err := store.ProjectWorkInventory([]WorkerRef{{ID: workerID, Delegated: true}})
 	if err != nil {
 		t.Fatal(err)
 	}

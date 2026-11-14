@@ -1012,3 +1012,52 @@ func TestParseClaudeConversation_CompactSummaryCarriesProviderOrigin(t *testing.
 		}
 	}
 }
+
+// An Edit and a Write carry the file they changed with its line counts, from
+// the hunks Claude recorded (toolUseResult), as a Codex patch does; a Read
+// carries none.
+func TestParseClaudeConversation_EditAndWriteCarryFileChanges(t *testing.T) {
+	use := func(uuid, id, name string, input map[string]any) map[string]any {
+		return map[string]any{
+			"type": "assistant", "sessionId": "edit-1", "uuid": uuid,
+			"message": map[string]any{"role": "assistant", "content": []map[string]any{{"type": "tool_use", "id": id, "name": name, "input": input}}},
+		}
+	}
+	result := func(uuid, id string, toolUseResult any) map[string]any {
+		return map[string]any{
+			"type": "user", "sessionId": "edit-1", "uuid": uuid,
+			"message":       map[string]any{"role": "user", "content": []map[string]any{{"type": "tool_result", "tool_use_id": id, "content": "ok"}}},
+			"toolUseResult": toolUseResult,
+		}
+	}
+	got := parseClaudeFixture(t,
+		use("a1", "toolu_edit", "Edit", map[string]any{"file_path": "/p/notes.md", "old_string": "line two", "new_string": "line 2 edited"}),
+		// The shape Claude Code 2.x records (a real transcript, 2026-11-12).
+		result("u1", "toolu_edit", map[string]any{
+			"filePath": "/p/notes.md", "oldString": "line two", "newString": "line 2 edited", "originalFile": "line one\nline two\nline three\n",
+			"structuredPatch": []map[string]any{{"oldStart": 1, "oldLines": 3, "newStart": 1, "newLines": 4, "lines": []string{" line one", "-line two", "+line 2 edited", "+line 2b", " line three"}}},
+			"userModified":    false, "replaceAll": false,
+		}),
+		use("a2", "toolu_write", "Write", map[string]any{"file_path": "/p/new.md", "content": "a\nb\nc\n"}),
+		result("u2", "toolu_write", map[string]any{"type": "create", "filePath": "/p/new.md", "content": "a\nb\nc\n", "structuredPatch": []any{}, "originalFile": nil}),
+		use("a3", "toolu_read", "Read", map[string]any{"file_path": "/p/notes.md"}),
+		result("u3", "toolu_read", map[string]any{"type": "text", "file": map[string]any{"filePath": "/p/notes.md", "content": "x"}}),
+	)
+	if len(got.Events) != 3 {
+		t.Fatalf("events = %#v", got.Events)
+	}
+	want := []struct {
+		path, operation string
+		added, removed  int
+	}{{"/p/notes.md", "update", 2, 1}, {"/p/new.md", "add", 3, 0}}
+	for index, expected := range want {
+		changes := got.Events[index].FileChanges
+		if len(changes) != 1 || changes[0].Path != expected.path || changes[0].Operation != expected.operation ||
+			changes[0].Additions == nil || *changes[0].Additions != expected.added || changes[0].Deletions == nil || *changes[0].Deletions != expected.removed {
+			t.Fatalf("event %d file changes = %#v", index, changes)
+		}
+	}
+	if len(got.Events[2].FileChanges) != 0 {
+		t.Fatalf("a Read changed nothing: %#v", got.Events[2].FileChanges)
+	}
+}

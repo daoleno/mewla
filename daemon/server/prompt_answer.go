@@ -141,11 +141,18 @@ func (s *Server) handleAnswerPrompt(conn *websocket.Conn, raw clientMessage) {
 	hook := func(prompt classifier.Prompt, number int) (bool, error) {
 		return s.answerPromptThroughApproval(resolved.targetID, prompt, number)
 	}
-	if _, err := AnswerPanePrompt(pane, resolved.targetID, answer, hook, s.choiceConversationLoader(resolved)); err != nil {
+	// What was asked, read before the answer takes it off the screen.
+	asked, _ := pane.CurrentPrompt(resolved.targetID)
+	recorded, err := AnswerPanePrompt(pane, resolved.targetID, answer, hook, s.choiceConversationLoader(resolved))
+	if err != nil {
 		code, message := PromptAnswerCode(err)
 		log.Printf("answer_prompt %s prompt=%s: %s: %v", resolved.targetID, answer.PromptID, code, err)
 		s.sendErrorWithRequestID(conn, raw.RequestID, code, message)
 		return
+	}
+	if asked != nil && asked.ID == strings.TrimSpace(answer.PromptID) {
+		s.recordAnswered(PromptAnswerRecord(resolved.targetID, *asked, answer, recorded, s.answeredByConn(conn),
+			s.PromptAskedAt(resolved.targetID, asked.ID), time.Now()))
 	}
 	s.sendJSON(conn, map[string]any{
 		"type":       "prompt_answered",

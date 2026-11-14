@@ -433,7 +433,11 @@ func (s *session) resize(cols, rows int) error {
 		return errorf(ErrCodeBadRequest, "size %dx%d is outside 1x1..1000x1000", cols, rows)
 	}
 	s.mu.Lock()
+	before := s.screen.State()
 	out, err := s.screen.Resize(cols, rows)
+	if err == nil && (before.Cols != cols || before.Rows != rows) {
+		s.endResizedLocked()
+	}
 	s.mu.Unlock()
 	if err != nil {
 		return errorf(ErrCodeInternal, "resize terminal: %v", err)
@@ -486,6 +490,7 @@ func (s *session) capture(params CaptureParams) (Capture, error) {
 		Modes:          true,
 		AppCursor:      state.AppCursor,
 		AltScroll:      state.AltScroll,
+		MouseFormat:    state.MouseFormat,
 		RowFlags:       flags,
 		Text:           text,
 		Cols:           state.Cols,

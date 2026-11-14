@@ -14,13 +14,14 @@ import {
 /** How Resources lays out and words what the telemetry says: tiles, PSI, consumer rows and what can be copied from them. */
 
 /** Tiles four across from 1040 points, one column below 340, else two across. */
-export function tileBasis(width: number): `${number}%` {
-  return width >= 1040 ? "23%" : width < 340 ? "100%" : "48%";
+export function tileBasis(width: number, wide = false): `${number}%` {
+  // On wide the page has the 680 column and still four tiles across (SPEC §15 Metrics).
+  return wide || width >= 1040 ? "23%" : width < 340 ? "100%" : "48%";
 }
 
-/** The consumers table shows the process count as a column from 760 points. */
-export function consumersWide(width: number): boolean {
-  return width >= 760;
+/** The consumers table shows the process count as a column from 760 points, and on wide in its 680 column. */
+export function consumersWide(width: number, wide = false): boolean {
+  return wide || width >= 760;
 }
 
 /** Memory in use: total less available when both are known, else what the computer called used. */
@@ -135,4 +136,29 @@ export function processCopyChoices(process: ResourceProcess): CopyChoice[] {
     ...(process.command ? [{ label: "Copy command", value: process.command }] : []),
     ...(process.start ? [{ label: "Copy start token", value: process.start }] : []),
   ];
+}
+
+const PRESSED_WORD: Record<string, string> = { cpu: "CPU", memory: "Memory", io: "Disk", swap: "Swap" };
+
+/** What the signals over their thresholds are about, in words and in their order: "Memory", "CPU". */
+export function pressedResources(telemetry: ResourceTelemetry): string[] {
+  const about = (name: string) => (name.startsWith("memory.swap") ? "swap" : name.replace(/^psi\./, "").split(".")[0]);
+  const words = telemetry.signals.map((signal) => PRESSED_WORD[about(signal.name)]).filter((word): word is string => Boolean(word));
+  const level = telemetry.memoryPressure?.level;
+  if (level && level !== "normal") words.push("Memory");
+  return [...new Set(words)];
+}
+
+/** The line under Resources' title, in words (SPEC §15 Metrics): "Pressure low", "Memory under pressure", "Memory and CPU under pressure". */
+export function pressureWords(telemetry: ResourceTelemetry): string {
+  if (telemetry.state === "normal" && pressedResources(telemetry).length === 0) return "Pressure low";
+  const what = pressedResources(telemetry).map((word, index) => (index === 0 || word === "CPU" ? word : word.toLowerCase()));
+  if (what.length === 0) return "Under pressure";
+  const named = what.length === 1 ? what[0] : `${what.slice(0, -1).join(", ")} and ${what[what.length - 1]}`;
+  return `${named} under pressure`;
+}
+
+/** The disk the Disk tile shows: the root mount, else the largest. */
+export function primaryDisk(telemetry: ResourceTelemetry): ResourceTelemetry["disks"][number] | undefined {
+  return telemetry.disks.find((disk) => disk.mount === "/") ?? [...telemetry.disks].sort((a, b) => b.totalBytes - a.totalBytes)[0];
 }

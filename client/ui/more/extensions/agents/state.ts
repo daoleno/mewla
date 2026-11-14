@@ -1,5 +1,4 @@
 import { effect, signal, untracked } from "nsh";
-import { AlertDialog } from "nsh/base";
 import { failureText, type Daemon } from "../../../../core/more/daemon";
 import { groupLogicalPlugins } from "../../../../core/extensions/pluginsScreenModel";
 import { evaluatePluginUninstall, reconcilePluginUninstallInventory } from "../../../../core/extensions/pluginsScreenModel";
@@ -22,6 +21,7 @@ import {
 import { selectStableSkillsProjectCwd } from "../../../../core/extensions/skillsScreenModel";
 import { workers } from "../../../session";
 import { daemon } from "../../daemon";
+import { showAlert } from "../../../shell/alert";
 
 /**
  * What the current computer's agents installed themselves: the Skills and
@@ -213,7 +213,7 @@ function showNotice(next: MutationNotice): void {
 }
 
 async function confirm(title: string, message: string, label: string): Promise<boolean> {
-  const answer = await AlertDialog.show({
+  const answer = await showAlert({
     title,
     description: message,
     actions: [

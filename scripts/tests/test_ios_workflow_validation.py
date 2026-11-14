@@ -34,6 +34,7 @@ class IOSWorkflowValidationTests(unittest.TestCase):
                 "MEWLA_APPLE_CERTIFICATE_BASE64": "test-certificate",
                 "MEWLA_APPLE_CERTIFICATE_PASSWORD": "test-password",
                 "MEWLA_APPLE_PROVISIONING_PROFILE_BASE64": "test-profile",
+                "MEWLA_APPLE_LIVE_PROVISIONING_PROFILE_BASE64": "test-live-profile",
                 "MEWLA_APPLE_TEAM_ID": "HD84J3DJ2B",
                 "MEWLA_ASC_KEY_ID": "test-key-id",
                 "MEWLA_ASC_API_KEY_BASE64": "test-key",
@@ -71,6 +72,17 @@ class IOSWorkflowValidationTests(unittest.TestCase):
             with self.subTest(value=value):
                 result, exported = self.validate(PREVIEW_ASC_APP_ID=value)
                 self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(exported, "")
+
+    def test_every_release_needs_the_live_extension_profile(self):
+        # The client always embeds the Live Activity / widget extension, a second signed target.
+        for destination in ("testflight", "artifact-only"):
+            with self.subTest(destination=destination):
+                result, exported = self.validate(
+                    MEWLA_IOS_DESTINATION=destination, MEWLA_APPLE_LIVE_PROVISIONING_PROFILE_BASE64=""
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("ZEN_APPLE_LIVE_PROVISIONING_PROFILE_BASE64", result.stderr)
                 self.assertEqual(exported, "")
 
     def test_artifact_only_needs_no_app_id(self):

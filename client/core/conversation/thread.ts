@@ -169,7 +169,9 @@ export type InterfaceChatThreadAction =
       id: string;
       settlement: PendingUserMessageSettlement;
     }
-  | { type: "discard_pending_user_message"; id: string };
+  | { type: "discard_pending_user_message"; id: string }
+  /** A message the computer held (a new Session's first) did not go: it leaves the thread, its text the draft again. */
+  | { type: "withdraw_pending_user_message"; id: string };
 
 /**
  * The last messages each Brain thread showed, so reopening it starts from them
@@ -331,6 +333,10 @@ export function interfaceChatThreadReducer(
         return next;
       });
       return !changed ? state : { ...state, pendingUserMessages };
+    }
+    case "withdraw_pending_user_message": {
+      const pendingUserMessages = state.pendingUserMessages.filter((message) => message.id !== action.id);
+      return pendingUserMessages.length === state.pendingUserMessages.length ? state : { ...state, pendingUserMessages };
     }
     case "discard_pending_user_message": {
       // Only a row the computer did not take can be discarded; an in-flight

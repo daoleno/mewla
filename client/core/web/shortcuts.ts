@@ -1,4 +1,4 @@
-import type { DesktopPlaceKey } from "./places";
+import type { PlaceKey } from "./places";
 
 /**
  * The desktop keyboard model, pure so it is tested without a browser. The
@@ -78,24 +78,26 @@ export function isTypingTarget(target: KeyTarget | null | undefined): boolean {
 }
 
 export type DesktopCommand =
-  | { kind: "go"; key: DesktopPlaceKey }
+  | { kind: "go"; key: PlaceKey }
   | { kind: "palette" }
   | { kind: "shortcuts" }
   | { kind: "new-session" }
   | { kind: "focus-composer" };
 
 /** `G` then a letter goes to a place, as in Linear and GitHub. */
-export const DESKTOP_GO_KEYS: Readonly<Record<string, DesktopPlaceKey>> = {
+export const DESKTOP_GO_KEYS: Readonly<Record<string, PlaceKey>> = {
   b: "brain",
   s: "sessions",
   c: "calendar",
+  m: "computer",
+  x: "screen",
   e: "extensions",
   t: "stats",
   r: "resources",
   ",": "settings",
 };
 
-const GO_LETTER: Partial<Record<DesktopPlaceKey, string>> = Object.fromEntries(
+const GO_LETTER: Partial<Record<PlaceKey, string>> = Object.fromEntries(
   Object.entries(DESKTOP_GO_KEYS).map(([letter, key]) => [key, letter]),
 );
 
@@ -171,7 +173,7 @@ export function keyOfKeystroke(keystroke: string): KeyLike {
 }
 
 /** Shown in the cheat sheet, the palette and tooltips; none for a place without a letter. */
-export function goShortcutLabel(key: DesktopPlaceKey): string | undefined {
+export function goShortcutLabel(key: PlaceKey): string | undefined {
   const letter = GO_LETTER[key];
   if (!letter) return undefined;
   return letter === "," ? "G then ," : `G then ${letter.toUpperCase()}`;
@@ -187,16 +189,19 @@ export interface ShortcutRow {
   label: string;
 }
 
+/** The shortcuts sheet (SPEC §14.3): the keys in the table's order, each in a key cap. */
 export function desktopShortcutRows(mod: string): ShortcutRow[] {
-  const go = (key: DesktopPlaceKey, label: string): ShortcutRow => ({ keys: goShortcutLabel(key) ?? "", label });
+  const go = (key: PlaceKey, label: string): ShortcutRow => ({ keys: goShortcutLabel(key) ?? "", label });
   return [
     { keys: `${mod}+K`, label: "Command palette" },
     { keys: "?", label: "Keyboard shortcuts" },
     { keys: "N", label: "New session" },
-    { keys: "/", label: "Focus the message box" },
+    { keys: "/", label: "Message box" },
     go("brain", "Brain"),
-    go("sessions", "Sessions"),
+    go("sessions", "All Sessions"),
     go("calendar", "Calendar"),
+    go("computer", "Computer"),
+    go("screen", "Screen"),
     go("extensions", "Extensions"),
     go("stats", "Stats"),
     go("resources", "Resources"),
@@ -204,13 +209,7 @@ export function desktopShortcutRows(mod: string): ShortcutRow[] {
     { keys: "Enter", label: "Send" },
     { keys: "Shift+Enter", label: "New line" },
     { keys: `${mod}+Enter`, label: "Send, always" },
-    { keys: "↑", label: "Edit your last message (empty box)" },
+    { keys: "↑", label: "Edit your last message" },
     { keys: "Esc", label: "Close, or leave the message box" },
   ];
-}
-
-/** A sidebar row's tooltip: its name and how to get there. */
-export function desktopShortcutTooltip(label: string, key: DesktopPlaceKey): string | undefined {
-  const shortcut = goShortcutLabel(key);
-  return shortcut ? `${label} (${shortcut})` : undefined;
 }

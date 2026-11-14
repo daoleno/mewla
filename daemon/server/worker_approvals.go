@@ -2,6 +2,7 @@ package server
 
 import (
 	"strings"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/gorilla/websocket"
@@ -38,6 +39,11 @@ type AgentApprovals interface {
 	Pending(workerID string) []ApprovalWire
 	// Decide answers one with an option the agent offered.
 	Decide(workerID, approvalID, optionID string) error
+	// AnsweredInTerminal says the permission prompt asking about this tool
+	// call (tool and summary, empty when the prompt could not name it) was
+	// answered in the Session's terminal, so the decision the agent's hook
+	// waits on for it is settled.
+	AnsweredInTerminal(workerID, tool, summary string)
 }
 
 // SetAgentApprovals installs where approvals come from and go to.
@@ -58,13 +64,14 @@ func (s *Server) pendingApprovals(workerID string) []ApprovalWire {
 }
 
 // WorkerApprovalsChanged tells every connected app that a Worker's pending
-// decisions changed.
+// decisions changed, as the Session feed's next change: apps apply only
+// sequenced changes. A hidden Session (Brain's host) is not on the list.
 func (s *Server) WorkerApprovalsChanged(workerID string) {
 	worker := s.lookupWorker(workerID)
-	if worker == nil {
+	if worker == nil || worker.Hidden {
 		return
 	}
-	s.broadcastJSON(map[string]any{"type": "worker_session_updated", "worker_session": s.workerSessionWire(worker)})
+	s.publishWorkerSessionChange(worker)
 }
 
 func (s *Server) handleApprovalDecision(conn *websocket.Conn, raw clientMessage) {
@@ -76,6 +83,13 @@ func (s *Server) handleApprovalDecision(conn *websocket.Conn, raw clientMessage)
 		s.sendErrorWithRequestID(conn, raw.RequestID, "approval_invalid", "An approval answer needs a worker, an approval and an option.")
 		return
 	}
+	var asked *ApprovalWire
+	for _, pending := range approvals.Pending(workerID) {
+		if pending.ID == strings.TrimSpace(raw.ID) {
+			copied := pending
+			asked = &copied
+		}
+	}
 	if err := approvals.Decide(workerID, strings.TrimSpace(raw.ID), strings.TrimSpace(raw.OptionID)); err != nil {
 		code, message := "approval_failed", err.Error()
 		if refused, ok := err.(*ApprovalDecisionError); ok {
@@ -83,6 +97,9 @@ func (s *Server) handleApprovalDecision(conn *websocket.Conn, raw clientMessage)
 		}
 		s.sendErrorWithRequestID(conn, raw.RequestID, code, message)
 		return
+	}
+	if asked != nil {
+		s.recordAnswered(ApprovalAnswerRecord(workerID, *asked, strings.TrimSpace(raw.OptionID), s.answeredByConn(conn), time.Now()))
 	}
 	s.sendJSON(conn, map[string]any{
 		"type":        "approval_decided",

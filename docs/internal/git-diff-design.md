@@ -16,10 +16,9 @@ What the sheet took from the tools people already know, and what it left out:
 - **Working Copy, GitHub mobile:** one-line rows, the diff one tap away, hunks as
   the unit of review, next/previous file without going back. Kept. A reviewing
   workflow with approvals is not part of it.
-- **Pierre's own review UI:** Pierre Diffs draws every diff, with line selection;
-  Pierre Trees stays the Files browser. The changed-files list is native, because
-  a row there carries a stage toggle and two groups, which a WebView tree
-  cannot host and two of them would cost two documents.
+- **Pierre's own review UI:** the client draws every diff with NSH's `DiffView`,
+  with line selection, and the Files browser with its `Tree`. The changed-files
+  list is its own list, because a row there carries a stage toggle and two groups.
 - **Mewla-specific:** "Ask the agent" turns a selected hunk or lines into a message
   to the Session's agent with `file:line` and the quoted lines.
 

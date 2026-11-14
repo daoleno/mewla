@@ -1,0 +1,122 @@
+{
+  "box": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Box drawing, blocks, braille, Powerline, Nerd and TUI symbols",
+    "source": "gen.py"
+  },
+  "build": {
+    "cols": 52,
+    "rows": 30,
+    "what": "400 lines of build output and a \\r progress bar (history)",
+    "source": "gen.py"
+  },
+  "cjk": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Wide CJK, emoji (VS16, ZWJ, flags), combining marks, wrap at the edge",
+    "source": "gen.py"
+  },
+  "claude": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Claude Code 2.1.322: trust prompt, a CJK answer with tool calls, the input box",
+    "source": "record.sh"
+  },
+  "codex": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Codex 0.167.0: trust prompt, braille logo, a CJK answer with tool calls",
+    "source": "record.sh"
+  },
+  "cursor-bar": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Steady bar cursor",
+    "source": "gen.py"
+  },
+  "cursor-blink": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Blinking block cursor",
+    "source": "gen.py"
+  },
+  "cursor-block": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Steady block cursor",
+    "source": "gen.py"
+  },
+  "cursor-underline": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Steady underline cursor",
+    "source": "gen.py"
+  },
+  "emoji": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Narrow emoji (VS16, keycap) spilling into a blank cell or fitted, flags from regional-indicator pairs",
+    "source": "gen.py"
+  },
+  "gitdiff": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Real git log --graph --decorate and git diff with color",
+    "source": "record.sh"
+  },
+  "htop": {
+    "cols": 52,
+    "rows": 30,
+    "what": "htop 3: meters, header, process list, function-key footer",
+    "source": "record.sh"
+  },
+  "less": {
+    "cols": 52,
+    "rows": 30,
+    "what": "less -R paging a colored git log -p, inverse prompt",
+    "source": "record.sh"
+  },
+  "meters": {
+    "cols": 52,
+    "rows": 30,
+    "what": "htop-style meters, inverse header, selected row, footer",
+    "source": "gen.py"
+  },
+  "nvim": {
+    "cols": 52,
+    "rows": 30,
+    "what": "nvim -u NONE: two splits, syntax, cursorline, CJK with soft wrap",
+    "source": "record.sh"
+  },
+  "prompt": {
+    "cols": 52,
+    "rows": 30,
+    "what": "A Powerline prompt, git log --graph, git diff",
+    "source": "gen.py"
+  },
+  "reflow": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Soft-wrapped long lines (resize and reflow)",
+    "source": "gen.py"
+  },
+  "region": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Scroll region with fixed header and footer",
+    "source": "gen.py"
+  },
+  "sgr": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Colors (16/256/rgb) and every attribute",
+    "source": "gen.py"
+  },
+  "vim": {
+    "cols": 52,
+    "rows": 30,
+    "what": "Editor on the alternate screen, inverse status line, bar cursor",
+    "source": "gen.py"
+  }
+}

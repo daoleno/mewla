@@ -7,6 +7,8 @@ import {
   FLOAT_WIDE,
   FLOAT_WIDE_LARGE,
   clampFloatFraction,
+  dockedCorner,
+  screenDockWidth,
   displayShown,
   displaySource,
   floatOrigin,
@@ -242,5 +244,25 @@ describe("float geometry", () => {
     expect(floatSize(1.6, FLOAT_DEFAULT, wide).width).toBe(FLOAT_WIDE);
     expect(floatSize(1.6, FLOAT_LARGE, wide).width).toBe(FLOAT_WIDE_LARGE);
     expect(floatSize(1.6, 0.5, wide).width).toBeCloseTo(700, 5);
+  });
+});
+
+describe("the dock on wide", () => {
+  test("a pane that holds the 760 column and a 240 strip docks the float; the strip grows to 480 and then the page's room grows", () => {
+    // 1024 window, 320 pane: 704 for the stack, no room beside a thread.
+    expect(screenDockWidth(704)).toBe(0);
+    // Just short of 760 + 240 + 2 × 16.
+    expect(screenDockWidth(1031)).toBe(0);
+    expect(screenDockWidth(1032)).toBe(272);
+    // The owner's 1400 window with the 320 pane.
+    expect(screenDockWidth(1080)).toBe(320);
+    // A 1920 screen: the strip stops at 480, the page has the rest.
+    expect(screenDockWidth(1600)).toBe(512);
+  });
+
+  test("docked, a corner keeps its side of top and bottom", () => {
+    expect(dockedCorner("top-left")).toBe("top-right");
+    expect(dockedCorner("bottom-left")).toBe("bottom-right");
+    expect(dockedCorner("top-right")).toBe("top-right");
   });
 });

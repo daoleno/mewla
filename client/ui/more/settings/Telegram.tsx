@@ -1,5 +1,4 @@
-import { Clipboard, cleanup, effect, openUrl, signal, Text, untracked, View } from "nsh";
-import { lifecycle } from "../../lifecycle";
+import { Clipboard, cleanup, effect, openUrl, signal, Text, untracked, View, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { formatFullDateTime } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";
@@ -14,9 +13,9 @@ import {
   type TelegramAction,
 } from "../../../core/settings/telegram";
 import { connected, daemon } from "../daemon";
-import { color } from "../kit/colors";
-import { Icon } from "../kit/Icon";
-import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner } from "../kit/kit";
+import { Icon } from "../../kit/Icon";
+import { MarkView, StateLine } from "../../kit/RowTile";
+import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner } from "../../kit/kit";
 import { loadTelegram, setTelegram, telegram } from "./telegramState";
 
 const POLL_MS = 5_000;
@@ -39,14 +38,17 @@ export function Telegram() {
   const copied = signal(false);
 
   // Read now, then every five seconds while the page is open and the app in front.
+  // A token typed or pasted goes when the app leaves the front or the computer changes, not when the connection
+  // drops and comes back (a pasted token vanished on a blip, as on Extensions 11-13).
   let timer: ReturnType<typeof setInterval> | null = null;
+  let forServer = untracked(() => daemon()?.server.id ?? "");
   effect(() => {
     if (timer) clearInterval(timer);
     timer = null;
-    if (!daemon() || !connected() || lifecycle() !== "active") {
-      untracked(() => token.set(""));
-      return;
-    }
+    const server = daemon()?.server.id ?? "";
+    if (server !== forServer || lifecycle() !== "active") untracked(() => token.set(""));
+    forServer = server;
+    if (!daemon() || !connected() || lifecycle() !== "active") return;
     untracked(loadTelegram);
     timer = setInterval(loadTelegram, POLL_MS);
   });
@@ -128,42 +130,72 @@ export function Telegram() {
   const label = () => telegramLabel(status(), connected(), telegram().loading);
 
   return (
-    <Page title="Telegram" testID="telegram">
+    <Page display title="Telegram" testID="telegram">
       <>
-        {!daemon() ? (
-          <EmptyState icon="paper-plane" title="No current server" detail="Pair a computer in Settings to connect Telegram." />
-        ) : !connected() && !status() ? (
-          <EmptyState icon="paper-plane" title="Server offline" detail="Reconnect the current server in Settings." />
-        ) : (
-          <View>
+        <If when={!daemon()} else={<If when={!connected() && !status()} else={<View>
             <View class="mt-4 flex-row items-center gap-3 px-1">
-              <Icon name="paper-plane" size={28} tone="ink" />
+              <MarkView mark="telegram" size={40} />
               <View class="flex-1">
                 <Text class="text-xl font-semibold" role="header">{status()?.bot_username ? `@${status()!.bot_username}` : "Telegram"}</Text>
                 <View class="flex-row items-center gap-1.5">
-                  {telegram().loading || busy() ? <Spinner size={12} /> : null}
-                  <Text testID="telegram-state" class="text-sm" style={{ color: color(telegramLabelTone(label())) }}>{label()}</Text>
+                  <If when={telegram().loading || busy()}><Spinner size={12} /></If>
+                  <StateLine testID="telegram-state" tone={telegramLabelTone(label())} label={label()} />
                 </View>
-                {status()?.owner_hint ? <Text class="text-xs text-muted-foreground">{status()!.owner_hint}</Text> : null}
+                <If when={status()?.owner_hint}><Text class="text-xs text-muted-foreground">{status()!.owner_hint}</Text></If>
               </View>
             </View>
-            {failure() ? (
-              <Notice testID="telegram-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} />
-            ) : status()?.last_error || loadError() ? (
-              <Notice testID="telegram-problem" tone="failed" title="Telegram problem" detail={status()?.last_error || loadError()} />
-            ) : null}
+            <If when={failure()} else={<If when={status()?.last_error || loadError()}><Notice testID="telegram-problem" tone="failed" title="Telegram problem" detail={status()?.last_error || loadError()} /></If>}><Notice testID="telegram-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
 
-            {!connected() ? (
-              <Text testID="telegram-offline" class="mt-3 px-4 text-sm text-muted-foreground">Reconnect the current server in Settings.</Text>
-            ) : null}
+            <If when={!connected()}><View class="mt-3 px-4"><Text testID="telegram-offline" class="text-sm text-muted-foreground">Reconnect the current server in Settings.</Text></View></If>
 
-            {view() === "loading" ? null : view() === "retry" ? (
-              <View class="mt-3">
-                <PillButton testID="telegram-retry" filled title="Retry" disabled={blocked()} onPress={loadTelegram} />
-              </View>
-            ) : view() === "token" ? (
-              <View>
-                <Section title="Bot token" footer="Bot chats are stored by Telegram. Your token stays on the connected server.">
+            <If when={!(view() === "loading")}><If when={view() === "retry"} else={<If when={view() === "token"} else={<View>
+                <View class="mt-3">
+                  <If when={view() === "connect" || view() === "open-link"} else={<If when={view() === "reconnect"} else={<PillButton testID="telegram-open" filled title="Open Telegram" onPress={() => void openChat()} />}><PillButton testID="telegram-reconnect" filled title="Reconnect" busy={busy() === "enable"} disabled={blocked()} onPress={() => run("enable")} /></If>}><PillButton testID="telegram-connect" filled title={view() === "open-link" ? "Open connection link" : "Connect Telegram"} busy={busy() === "connect"} disabled={blocked()} onPress={connect} /></If>
+                </View>
+                <Section>
+                  <Row title="Status" value={telegramLabel(status(), connected(), false)} />
+                  <If when={status()?.owner_hint}><Row title="Recipient" value={telegramRecipient(status()!)} /></If>
+                  <If when={status()?.owner_hint && status()?.enabled}><Row testID="telegram-disconnect" icon="pause" title="Disconnect" onPress={() => run("disable")} disabled={blocked()} /></If>
+                  <If when={status()?.owner_hint && !status()?.enabled}><Row testID="telegram-open-row" icon="open-external" title="Open Telegram" onPress={() => void openChat()} /></If>
+                </Section>
+                <If when={connected() && !(telegram().loading && !status())}><Section>
+                    <Row testID="telegram-advanced" title="Advanced" accessibilityLabel="Advanced" trailing={<Icon name={advanced() ? "chevron-up" : "chevron-down"} size={16} tone="faint" />} onPress={() => advanced.set(!advanced())} />
+                    <If when={advanced()}><View>
+                        <Row title="Chat mode" value={status()?.topics_available ? "Native topics" : "Private chat"} />
+                        <If when={status()?.topic_mappings}><Row title="Session topics" value={String(status()!.topic_mappings)} /></If>
+                        <If when={status()?.brain_thread_id}><Row
+                            title="Brain conversation"
+                            value={copied() ? "Copied" : status()!.brain_thread_id}
+                            accessibilityLabel={`Brain conversation ${status()!.brain_thread_id}`}
+                            accessibilityHint="Copies the brain conversation ID"
+                            onPress={() => copyId(status()!.brain_thread_id!)}
+                          /></If>
+                        <If when={status()?.brain_topic_id}><Row title="Brain topic" value={String(status()!.brain_topic_id)} /></If>
+                        <Row title="Delivery checks" value={String((status()?.ambiguous_delivery_count ?? 0) + (status()?.topic_ambiguous_ops_count ?? 0))} />
+                        <If when={status()?.last_receive_at}><Row title="Last received" value={formatFullDateTime(status()!.last_receive_at!)} /></If>
+                        <If when={status()?.last_send_at}><Row title="Last sent" value={formatFullDateTime(status()!.last_send_at!)} /></If>
+                        <Row icon="refresh" title="Refresh" disabled={blocked()} onPress={loadTelegram} />
+                        <Row icon="key" title="Replace token" disabled={blocked()} onPress={() => replacing.set(true)} />
+                      </View></If>
+                  </Section></If>
+                <If when={connected() && advanced() && !(telegram().loading && !status())}><Section>
+                    <If when={status()?.owner_hint}><Row
+                        destructive
+                        icon="person-remove"
+                        title="Unlink account"
+                        disabled={blocked()}
+                        onPress={() => void confirmDestructive(`Unlink ${telegramRecipient(status()!)}?`, "Remove the verified Telegram owner and require a new binding?", "Unlink").then((yes) => { if (yes) void run("revoke"); })}
+                      /></If>
+                    <Row
+                      destructive
+                      icon="trash"
+                      title="Remove bot"
+                      disabled={blocked()}
+                      onPress={() => void confirmDestructive(status()?.bot_username ? `Remove @${status()!.bot_username}?` : "Remove the Telegram bot?", "Remove this server's token, binding and delivery state? Telegram cloud messages are not deleted.", "Remove").then((yes) => { if (yes) void run("remove"); })}
+                    />
+                  </Section></If>
+              </View>}><View>
+                <Section title="Bot token">
                   <Field
                     testID="telegram-token"
                     accessibilityLabel="Telegram bot token"
@@ -181,76 +213,12 @@ export function Telegram() {
                 </Section>
                 <View class="mt-3 flex-row gap-3">
                   <PillButton testID="telegram-verify" filled title={busy() === "verify" ? "Verifying" : "Verify token"} busy={busy() === "verify"} disabled={blocked() || !token().trim()} onPress={verify} />
-                  {replacing() ? (
-                    <PillButton title="Cancel" onPress={() => { token.set(""); replacing.set(false); }} />
-                  ) : (
-                    <PillButton testID="telegram-botfather" title="BotFather" onPress={() => void openBotFather()} />
-                  )}
+                  <If when={replacing()} else={<PillButton testID="telegram-botfather" title="BotFather" onPress={() => void openBotFather()} />}><PillButton title="Cancel" onPress={() => { token.set(""); replacing.set(false); }} /></If>
                 </View>
-              </View>
-            ) : (
-              <View>
-                <View class="mt-3">
-                  {view() === "connect" || view() === "open-link" ? (
-                    <PillButton testID="telegram-connect" filled title={view() === "open-link" ? "Open connection link" : "Connect Telegram"} busy={busy() === "connect"} disabled={blocked()} onPress={connect} />
-                  ) : view() === "reconnect" ? (
-                    <PillButton testID="telegram-reconnect" filled title="Reconnect" busy={busy() === "enable"} disabled={blocked()} onPress={() => run("enable")} />
-                  ) : (
-                    <PillButton testID="telegram-open" filled title="Open Telegram" onPress={() => void openChat()} />
-                  )}
-                </View>
-                <Section>
-                  <Row title="Status" value={telegramLabel(status(), connected(), false)} />
-                  {status()?.owner_hint ? <Row title="Recipient" value={telegramRecipient(status()!)} /> : null}
-                  {status()?.owner_hint && status()?.enabled ? <Row testID="telegram-disconnect" icon="pause" title="Disconnect" onPress={() => run("disable")} disabled={blocked()} /> : null}
-                  {status()?.owner_hint && !status()?.enabled ? <Row testID="telegram-open-row" icon="open-external" title="Open Telegram" onPress={() => void openChat()} /> : null}
-                </Section>
-                {connected() && !(telegram().loading && !status()) ? (
-                  <Section>
-                    <Row testID="telegram-advanced" title="Advanced" accessibilityLabel="Advanced" trailing={<Icon name={advanced() ? "chevron-up" : "chevron-down"} size={16} tone="faint" />} onPress={() => advanced.set(!advanced())} />
-                    {advanced() ? (
-                      <View>
-                        <Row title="Chat mode" value={status()?.topics_available ? "Native topics" : "Private chat"} />
-                        {status()?.topic_mappings ? <Row title="Session topics" value={String(status()!.topic_mappings)} /> : null}
-                        {status()?.brain_thread_id ? (
-                          <Row
-                            title="Brain conversation"
-                            value={copied() ? "Copied" : status()!.brain_thread_id}
-                            accessibilityLabel={`Brain conversation ${status()!.brain_thread_id}`}
-                            accessibilityHint="Copies the brain conversation ID"
-                            onPress={() => copyId(status()!.brain_thread_id!)}
-                          />
-                        ) : null}
-                        {status()?.brain_topic_id ? <Row title="Brain topic" value={String(status()!.brain_topic_id)} /> : null}
-                        <Row title="Delivery checks" value={String((status()?.ambiguous_delivery_count ?? 0) + (status()?.topic_ambiguous_ops_count ?? 0))} />
-                        {status()?.last_receive_at ? <Row title="Last received" value={formatFullDateTime(status()!.last_receive_at!)} /> : null}
-                        {status()?.last_send_at ? <Row title="Last sent" value={formatFullDateTime(status()!.last_send_at!)} /> : null}
-                        <Row icon="refresh" title="Refresh" disabled={blocked()} onPress={loadTelegram} />
-                        <Row icon="key" title="Replace token" disabled={blocked()} onPress={() => replacing.set(true)} />
-                        {status()?.owner_hint ? (
-                          <Row
-                            destructive
-                            icon="person-remove"
-                            title="Unlink account"
-                            disabled={blocked()}
-                            onPress={() => void confirmDestructive("Unlink Telegram account", "Remove the verified Telegram owner and require a new binding?", "Unlink").then((yes) => { if (yes) void run("revoke"); })}
-                          />
-                        ) : null}
-                        <Row
-                          destructive
-                          icon="trash"
-                          title="Remove bot"
-                          disabled={blocked()}
-                          onPress={() => void confirmDestructive("Remove Telegram bot", "Remove this server's token, binding and delivery state? Telegram cloud messages are not deleted.", "Remove").then((yes) => { if (yes) void run("remove"); })}
-                        />
-                      </View>
-                    ) : null}
-                  </Section>
-                ) : null}
-              </View>
-            )}
-          </View>
-        )}
+              </View></If>}><View class="mt-3">
+                <PillButton testID="telegram-retry" filled title="Retry" disabled={blocked()} onPress={loadTelegram} />
+              </View></If></If>
+          </View>}><EmptyState icon="paper-plane" title="Server offline" detail="Reconnect the current server in Settings." /></If>}><EmptyState icon="paper-plane" title="No current server" detail="Pair a computer in Settings to connect Telegram." /></If>
       </>
     </Page>
   );

@@ -1,3 +1,4 @@
+import { answeredKeys } from "./answered";
 import type {
   CodexConversation,
   CodexConversationEvent,
@@ -36,7 +37,7 @@ import {
   type ActivityTimelineItem,
 } from "./activityTypes";
 import type { DisplayAttachment } from "./types";
-import type { ReplyIds } from "./messageActionsModel";
+import { delegatedTask } from "./delegatedBrief";
 import type { TimelineItem } from "./types";
 import { compareConversationEvents } from "../conversation/reconciliation";
 import { isImageAttachment } from "./imageSource";
@@ -143,6 +144,11 @@ export function buildTimelineFromSortedEvents(
         event.kind === "user_message"
           ? turnFocusAnchorAliases?.get(event.id)
           : undefined;
+      // A delegated Worker's brief shows its task, never Mewla's protocol; with no task it is no row.
+      const task = event.kind === "user_message" ? delegatedTask(event) : null;
+      if (task === "") {
+        continue;
+      }
       items.push({
         type: "message",
         id: event.id || `${event.kind}:${event.seq}`,
@@ -152,6 +158,7 @@ export function buildTimelineFromSortedEvents(
         attachments,
         streaming: event.partial,
         ...(turnFocusAnchorId ? { turnFocusAnchorId } : {}),
+        ...(task ? { delegatedTask: task } : {}),
       });
       continue;
     }
@@ -204,6 +211,18 @@ export function buildTimelineFromSortedEvents(
         continue;
       }
       if (event.source === "work_result") {
+        continue;
+      }
+      if (event.source === "request_answered") {
+        if (event.answered) {
+          const item = { type: "answered" as const, id: event.id, timestamp: event.timestamp, record: event.answered, keys: answeredKeys(event.answered) };
+          // A record again under its id is its newer version (WIRE §8: a terminal answer's outcome follows within
+          // about 2 s): it takes the first one's place, so the thread keeps one line.
+          const recordId = event.answered.id;
+          const earlier = items.findIndex((other) => other.type === "answered" && other.record.id === recordId);
+          if (earlier >= 0) items[earlier] = { ...item, id: items[earlier].id, timestamp: items[earlier].timestamp };
+          else items.push(item);
+        }
         continue;
       }
       if (shouldRenderStatusAsMessage(event)) {
@@ -589,6 +608,7 @@ export function attachBrainWorkEventActions(
       ...item,
       currentWork: work,
       onPress,
+      canOpenSession,
     };
   });
 }
@@ -824,8 +844,18 @@ function activityFromEvent(
           ? "Waiting"
           : "Finished"
         : semantic.title;
+      // A Claude Edit or Write counts its lines as a patch does: the row says them too.
+      const fileSummaries = structuredFileSummaries(event);
+      const lineTotals = fileSummaries.length
+        ? knownPatchTotals(fileSummaries)
+        : undefined;
+      const lineDetail = lineTotals
+        ? patchLineTotals(lineTotals.totalAdded, lineTotals.totalRemoved)
+        : undefined;
       const detail = safeCollapsedDetail(
-        details.statusLine || (isWait ? details.quietDetail : semantic.detail),
+        (hasDistinctStatus ? details.statusLine : lineDetail) ||
+          details.statusLine ||
+          (isWait ? details.quietDetail : semantic.detail),
       );
       return {
         type: "activity",
@@ -857,6 +887,7 @@ function activityFromEvent(
         queryText: details.query,
         statusLine: details.statusLine,
         files: details.files,
+        ...(fileSummaries.length ? { fileSummaries } : {}),
         previewPath,
         defaultExpanded: false,
         semanticKind: action.kind,
@@ -1096,33 +1127,6 @@ function explorationEntryLine(entry: ExplorationEntry) {
   return `${action}${suffix}`;
 }
 
-/**
- * The id of each turn's final finished reply. A turn with tool calls between
- * pieces of text gets its row under the last piece only.
- */
-export function finalReplyIdsOf(unsortedEvents: readonly CodexConversationEvent[]): ReplyIds {
-  const events = [...unsortedEvents].sort(compareConversationEvents);
-  const ids = new Set<string>();
-  let reply: CodexConversationEvent | undefined;
-  const close = () => {
-    if (reply) ids.add(reply.id || `${reply.kind}:${reply.seq}`);
-    reply = undefined;
-  };
-  for (const event of events) {
-    if (event.kind === "user_message") {
-      close();
-    } else if (
-      event.kind === "assistant_message" &&
-      !event.partial &&
-      cleanStructuredMessageText(event.body || "")
-    ) {
-      reply = event;
-    }
-  }
-  close();
-  return ids;
-}
-
 function displayAttachments(event: CodexConversationEvent): DisplayAttachment[] {
   return (event.attachments ?? []).map((file) => ({
     name: file.name,
@@ -1182,14 +1186,19 @@ function stripProgressSpinnerPrefix(line: string) {
   return line.replace(/^[ \t]*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◐◓◑◒]+[ \t]*(?=\S)/, "");
 }
 
-function patchSummaryFromEvent(event: CodexConversationEvent): PatchSummary {
-  const structuredFiles = (event.file_changes ?? []).map((change) => ({
+/** The files an event changed as the provider counted them (a Codex patch, a Claude Edit or Write). */
+function structuredFileSummaries(event: CodexConversationEvent): PatchFileSummary[] {
+  return (event.file_changes ?? []).map((change) => ({
     path: change.path,
     movePath: change.move_path,
     operation: change.operation,
     added: change.additions,
     removed: change.deletions,
   }));
+}
+
+function patchSummaryFromEvent(event: CodexConversationEvent): PatchSummary {
+  const structuredFiles = structuredFileSummaries(event);
   const parsed = parseApplyPatchSummary(event.body || "");
   const fallbackFiles =
     structuredFiles.length > 0
@@ -1396,12 +1405,23 @@ function imagePathFromTool(event: CodexConversationEvent) {
   if (!isRecord(parsed)) {
     return undefined;
   }
-  const path = stringField(parsed, "path") || stringField(parsed, "image_url");
+  // Claude's Read names its file `file_path`: a picture it read shows like one a tool made.
+  const path =
+    stringField(parsed, "path") ||
+    stringField(parsed, "image_url") ||
+    (event.tool_name === "Read" ? stringField(parsed, "file_path") : "");
   if (!path || previewableImageUri(path) || !isImageAttachment({ path })) {
     return undefined;
   }
   return path;
 }
+
+/**
+ * How much of a command's first line its row reads for the executable and its target. Every row is projected
+ * again on each change of its thread, and a call into JS is cut off after 2 s ("Error: interrupted"): on iOS
+ * 300 rows of 5 KB one-line commands took longer than that, all of it in the tokenizer.
+ */
+const COMMAND_HEAD = 1024;
 
 function commandPresentation(command: string): CommandPresentation {
   const normalized = cleanTerminalDisplayText(command);
@@ -1410,7 +1430,7 @@ function commandPresentation(command: string): CommandPresentation {
       .split("\n")
       .find((line) => line.trim())
       ?.trim() || "";
-  const tokens = commandTokens(firstLine);
+  const tokens = commandTokens(firstLine.slice(0, COMMAND_HEAD));
   const executable = commandExecutable(tokens);
   const lower = firstLine.toLowerCase();
   const fallbackDetail = commandSummary(command);
@@ -1720,6 +1740,8 @@ function commandSummary(command: string) {
   return truncateRunes(firstLine, 72);
 }
 
+const SPACE = /\s/;
+
 function tokenizeShellLike(value: string): string[] {
   const tokens: string[] = [];
   let current = "";
@@ -1748,7 +1770,7 @@ function tokenizeShellLike(value: string): string[] {
       quote = char;
       continue;
     }
-    if (/\s/.test(char)) {
+    if (SPACE.test(char)) {
       if (current) {
         tokens.push(current);
         current = "";
@@ -1813,6 +1835,14 @@ function commandPositionals(tokens: string[], executable: string) {
   const positionals: string[] = [];
   for (let index = 0; index < relevant.length; index++) {
     const token = relevant[index];
+    // The command ends at a shell operator: "cat a.md | head -60; cat b.md" names a.md, not "head".
+    if (token === "|" || token === "||" || token === "&&" || token === ";") {
+      break;
+    }
+    if (token?.endsWith(";") && token.length > 1) {
+      if (!token.startsWith("-")) positionals.push(token.slice(0, -1));
+      break;
+    }
     if (!token || token === "--") {
       continue;
     }

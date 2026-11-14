@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering } from "../../testing/fixtures";
+import { answering, pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "./testing/Harness.tsx";
 const DOOR = "POST http://desk.test:9877/friends";
@@ -67,7 +67,7 @@ describe("Friends in Labs", () => {
       return undefined;
     }, { name: "settings-friends" });
     c.options.network[STATUS] = () => ({ body: signedIn ? on() : c.status });
-    const app = await open(HARNESS, { ...c.options, storage: { "mewla:pet_preference": "p09" } });
+    const app = await open(HARNESS, { ...c.options, storage: { "mewla:pet_preference": "p13" } });
     await app.press("id:friends-switch");
     await app.waitFor("id:friends-code");
     expect(app.texts()).toContain("WXYZ");
@@ -75,7 +75,7 @@ describe("Friends in Labs", () => {
     expect(app.openedUrls()).toContain("https://mewla.test/device?code=WXYZ");
     await app.waitFor("id:friends-open", { timeout: 8000 });
     const enable = c.ops.find((op) => op.op === "enable")!;
-    expect([enable.agent_name, enable.pet_id]).toEqual(["Tama", "p09"]);
+    expect([enable.agent_name, enable.pet_id]).toEqual(["Bit", "p13"]);
     expect(app.texts()).toContain("@me");
     expect(app.texts()).toContain("Signed in as me@example.com");
   });
@@ -113,6 +113,25 @@ describe("the Friends feed", () => {
     await app.waitFor("label:Unlike, 2 likes");
     await app.waitUntil(() => c.ops.some((op) => op.method === "PUT"));
     expect(c.ops.find((op) => op.method === "PUT")).toMatchObject({ path: "/posts/p1/like", body: null });
+  });
+
+  test("All and Following follow the finger on a phone (owner 11-13 20:05): Following is asked for only once a swipe heads to it", async () => {
+    const c = computer(on(), (op) => {
+      if (op.op !== "call") return undefined;
+      if (op.method === "GET" && op.path === "/feed") return { status: 200, body: { posts: [post("p1")], next: "" } };
+      if (op.method === "GET" && op.path === "/feed?scope=following") return { status: 200, body: { posts: [post("f1")], next: "" } };
+      return { status: 404, error: "not_found" };
+    }, { name: "friends" });
+    const app = await open(HARNESS, { ...c.options, platform: "android" });
+    await app.waitFor("text:Post p1");
+    const following = () => c.ops.some((op) => op.path === "/feed?scope=following");
+    expect(following()).toBe(false);
+    await app.drag("id:friends-pages-all", { x: -260 });
+    await app.waitUntil(following);
+    await app.waitFor("text:Post f1");
+    await app.waitUntil(() => !app.shows("text:Post p1"));
+    await app.press("id:friends-scope-all");
+    await app.waitFor("text:Post p1");
   });
 
   test("a failed like goes back and says why", async () => {
@@ -193,8 +212,7 @@ describe("a draft", () => {
     await app.clear("id:draft-text-d1");
     await app.type("id:draft-text-d1", "Fixed it.");
     await app.waitFor("text:Checked: no private names or keys", { timeout: 4000 });
-    await app.waitUntil(() => app.enabled("id:draft-post-d1"));
-    await app.press("id:draft-post-d1");
+    await pressWhenEnabled(app, "id:draft-post-d1");
     await app.waitFor("id:friends-post-text");
     expect(c.ops.find((op) => op.op === "post_draft")).toEqual({ op: "post_draft", draft_id: "d1", text: "Fixed it.", reviewed: ["a.jpg"] });
   });

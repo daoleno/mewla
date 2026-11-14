@@ -50,7 +50,7 @@ func TestHostScrollbackDeltas(t *testing.T) {
 	if !first.Reset || first.From != first.First || first.First != 0 || first.Next != uint64(len(first.Lines)) || len(first.Lines) < 20 {
 		t.Fatalf("first answer: reset %v first %d from %d next %d lines %d", first.Reset, first.First, first.From, first.Next, len(first.Lines))
 	}
-	if first.Epoch == 0 || first.Cols != 70 || first.Alternate || first.AltScroll == nil || !*first.AltScroll || first.AppCursor == nil || *first.AppCursor {
+	if first.Epoch == 0 || first.Cols != 70 || first.Alternate || first.AltScroll == nil || !*first.AltScroll || first.AppCursor == nil || *first.AppCursor || first.MouseFormat != "x10" {
 		t.Fatalf("modes: %+v", first)
 	}
 	if len(first.Flags) != len(first.Lines) {

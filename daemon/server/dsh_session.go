@@ -168,10 +168,35 @@ func (s *Server) handleDSHInteraction(conn *websocket.Conn, raw clientMessage) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	// What was asked, read before the answer settles it.
+	var asked *work.DSHInteraction
+	if method == "session.respond" && s.answeredLedger() != nil {
+		var pending struct {
+			Items []work.DSHInteraction `json:"items"`
+		}
+		if work.CallDSH(ctx, id, "session.interactions", map[string]any{}, &pending) == nil {
+			for _, item := range pending.Items {
+				if rpcID, _ := payload["rpcId"].(string); item.RPCID == rpcID {
+					copied := item
+					asked = &copied
+				}
+			}
+		}
+	}
 	var result json.RawMessage
 	if err := work.CallDSH(ctx, id, method, payload, &result); err != nil {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "dsh_interaction_failed", err.Error())
 		return
+	}
+	if asked != nil {
+		var outcome struct {
+			Accepted bool `json:"accepted"`
+		}
+		if json.Unmarshal(result, &outcome) == nil && outcome.Accepted {
+			if record, ok := DSHAnswerRecord(worker.ID, *asked, payload, s.answeredByConn(conn), time.Now()); ok {
+				s.recordAnswered(record)
+			}
+		}
 	}
 	s.sendJSON(conn, map[string]any{"type": "dsh_interaction", "request_id": raw.RequestID, "result": result})
 }

@@ -8,8 +8,8 @@ function brain() {
   return {
     workers: [{ id: "%7", name: "release", status: "running", phase: "verifying", summary: "Running the release checks", command: "claude", cwd: "/home/me/perpetuo" }],
     current_work: [
-      { work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name do we ship?", choices: ["Mewla", "Zen"], attention_since: now(), updated_at: now() },
-      { work_id: "w-run", revision: 1, title: "ship-the-beta", status: "running", progress_mode: "owned", attempt_session_id: "%7", unread_result: false, updated_at: now() },
+      { work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name do we ship?", choices: ["Mewla", "Zen"], recommended: "Zen", attention_since: now(), updated_at: now() },
+      { work_id: "w-run", revision: 1, title: "ship-the-beta", status: "running", progress_mode: "owned", attempt_session_id: "%7", attempt_delegated: true, unread_result: false, updated_at: now() },
       { work_id: "w-back", revision: 1, title: "fix-sync", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: true, summary: "Fixed the sync race and added a test.", attention_since: now(), updated_at: now() },
     ],
     open_work: [{ work_id: "w-queued", title: "write-the-docs", status: "open", progress_mode: "owned" }],
@@ -18,55 +18,61 @@ function brain() {
 
 async function workApp(daemon: Record<string, unknown> = { brain: brain() }) {
   const app = await open(APP, { host: phoneHost(daemon), storage: paired, platform: "android", network: expoTokenService });
-  await app.waitFor("text:Work · 1");
-  await app.press("id:open-work");
-  await app.waitFor("id:work-page");
+  await app.waitFor("id:composer");
+  // Brain's snapshot is in: the state control counts what waits on you.
+  await app.waitUntil(() => app.texts().some((text) => /needs? you/.test(text)), { timeout: 10_000 });
   return app;
 }
 
+/** Work detail, as a Brain notification about it opens it (on home, so Back leads home). */
+async function openWork(app: Awaited<ReturnType<typeof workApp>>, workId: string) {
+  await app.host.send("links.open", { url: `mewla://brain/work/${workId}` });
+  await app.waitFor("id:work-detail");
+}
+
 describe("Brain's Work", () => {
-  test("Brain's header says how many need you, and the Work page groups it by what it asks of you", async () => {
+  test("the tray is the Work list: a Work that waits on you is under Needs you and counts, and its row opens Work detail", async () => {
     const app = await workApp();
-    await app.waitFor("text:pick a name");
-    const shown = app.texts();
-    for (const label of ["Needs you", "Running", "Back", "Queued", "ship the beta", "fix sync", "write the docs", "Claude Code · perpetuo · " + shown.find((t) => t.startsWith("Claude Code · perpetuo · "))?.slice(25)]) expect(shown).toContain(label);
-    expect(shown.join(" ")).toContain("1 needs you · 1 running · 1 back · 1 queued");
-    expect(shown.join(" ")).toContain("Verifying · Running the release checks");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-needs");
+    await app.press("text:Which name do we ship?");
+    await app.waitFor("id:work-detail");
+    expect(app.texts()).toContain("Which name do we ship?");
   }, 20_000);
 
   test("answers a question with one tap, and Brain has it", async () => {
     const app = await workApp();
-    await app.press("id:work-w-q");
-    await app.waitFor("id:work-detail");
+    await openWork(app, "w-q");
     expect(app.texts()).toContain("Which name do we ship?");
+    // Brain's pick is tagged once, on its own choice (WIRE §10).
+    expect(app.texts().filter((t) => t === "Brain's pick")).toHaveLength(1);
+    expect(app.shows("id:work-pick")).toBe(true);
     await app.press("id:work-action-answer-Mewla");
-    await app.waitFor("text:Brain has your answer");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "reply", text: "Mewla" });
   }, 20_000);
 
-  test("a question is answered right on its slip, and a page that acted closes back to the list", async () => {
+  test("a page that acted closes back to where it was opened", async () => {
     const app = await workApp();
-    await app.waitFor("text:pick a name");
+    await openWork(app, "w-q");
     await app.press("id:work-action-answer-Zen");
-    await app.waitFor("id:work-notice");
-    expect(app.texts()).toContain("Brain has your answer");
+    await app.waitUntil(() => !app.shows("id:work-detail"));
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "reply", text: "Zen" });
-    expect(app.shows("id:work-detail")).toBe(false);
+    expect(app.shows("id:home-header")).toBe(true);
   }, 20_000);
 
   test("a Work's page says what it waits for when its summary says something else", async () => {
     const waiting = brain();
     waiting.current_work.push({ work_id: "w-wait", revision: 1, title: "merge-the-push-change", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: false, summary: "Pushed the change for review.", wait_for: "Reviewer approval on the pull request", updated_at: now() } as never);
     const app = await workApp({ brain: waiting });
-    await app.waitFor("text:merge the push change");
-    await app.press("id:work-w-wait");
+    await openWork(app, "w-wait");
     await app.waitFor("id:work-wait-for");
     expect(app.texts()).toContain("Waiting for: Reviewer approval on the pull request");
   }, 20_000);
 
   test("Not needed anymore asks first, and only then tells Brain", async () => {
     const app = await workApp();
-    await app.press("id:work-w-q");
+    await openWork(app, "w-q");
     await app.waitFor("id:work-action-dismiss");
     let decline = true;
     app.onDialog((dialog) => (dialog.title === "Not needed anymore?" ? (decline ? "Cancel" : "Not needed anymore") : null));
@@ -79,22 +85,223 @@ describe("Brain's Work", () => {
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "dismiss" });
   }, 20_000);
 
+  test("Snooze 1 hour tells the computer the length, which ends it on its own clock", async () => {
+    const app = await workApp();
+    await openWork(app, "w-q");
+    await app.waitFor("text:Snooze 1 hour");
+    await app.press("id:work-action-snooze");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
+    expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-q", action: "snooze", snooze_seconds: 3600 });
+    expect("snooze_until" in framesOf(app.host.posts(), "brain_work_action")[0]!).toBe(false);
+  }, 20_000);
+
+  test("Workers: every Session that joined, oldest first; a live one with its progress, and it opens its Session", async () => {
+    const daemon = brain();
+    const at = now();
+    (daemon.current_work[1] as Record<string, unknown>).worker_sessions = [
+      { session_id: "%5", name: "planner", provider: "codex", state: "done", summary: "Plan written", live: false, joined_at: at, ended_at: at, updated_at: at },
+      { session_id: "%7", name: "release", provider: "claude", state: "running", summary: "Running the release checks", phase: "verifying", live: true, joined_at: at, updated_at: at },
+      { session_id: "%8", name: "builder", provider: "claude", state: "failed", summary: "Build broke on Windows", live: false, joined_at: at, ended_at: at, updated_at: at },
+      { session_id: "%9", name: "verifier", provider: "claude", state: "ended", summary: "", live: false, joined_at: at, ended_at: at, updated_at: at },
+      { session_id: "%6", name: "reviewer", provider: "claude", state: "blocked", summary: "Wants to push a branch", live: true, joined_at: at, updated_at: at },
+    ];
+    const app = await workApp({ brain: daemon, worker_sessions: [{ id: "%7", name: "release", status: "running", phase: "verifying", summary: "Running the release checks", command: "claude", provider: "claude", cwd: "/home/me/perpetuo", updated_at: Date.now() }] });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-workers");
+    expect(app.count("id:work-worker")).toBe(5);
+    // One that waits on you ends in a red dot and "Needs you", never a clock time.
+    expect(app.count("id:work-workers >> id:row-needs")).toBe(1);
+    expect(app.texts()).toContain("Needs you");
+    expect(app.texts()).toContain("Wants to push a branch");
+    // SPEC §11 Work detail: the logo names the agent, so the title is the task name alone.
+    expect(app.texts()).toContain("planner");
+    expect(app.texts()).toContain("Failed · Build broke on Windows");
+    expect(app.texts()).toContain("Ended");
+    expect(app.texts()).toContain("release");
+    expect(app.texts().some((text) => text.startsWith("Claude Code ·") || text.startsWith("OpenAI Codex ·"))).toBe(false);
+    // A Worker's row has no progress of its own: the judged one is the Work's (SPEC §11 Progress).
+    expect(app.count("id:work-workers >> id:progress-mark")).toBe(0);
+    // The live one ends in its live dot and how long it has worked on the Work, as a tray row does.
+    expect(app.count("id:work-workers >> id:row-live")).toBe(1);
+    expect(app.enabled("id:work-worker >> nth=0")).toBe(false);
+    await app.press("id:work-worker >> nth=1");
+    await app.waitFor("id:session-status");
+  }, 20_000);
+
+  test("its progress: why it went back, in amber, then the judge's outcomes in order, each done, under way or to do", async () => {
+    const daemon = brain();
+    const current_work = daemon.current_work.map((work) => (work.work_id === "w-run" ? { ...work, progress: { stage: "back", percent: 60, back: "More was asked", outcomes: [
+      { id: "o1", text: "Parser committed with tests", weight: 2, state: "done" },
+      { id: "o2", text: "Crossed tags fixed", weight: 1, state: "doing" },
+      { id: "o3", text: "README updated", weight: 1, state: "todo" },
+    ] } } : work));
+    const app = await workApp({ brain: { ...daemon, current_work } });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-progress");
+    expect(app.texts()).toContain("Outcomes");
+    expect(app.shows("label:60 percent, sent back")).toBe(true);
+    expect(app.texts()).toContain("More was asked");
+    expect(app.count("id:work-outcome-done")).toBe(1);
+    expect(app.count("id:work-outcome-doing")).toBe(1);
+    expect(app.count("id:work-outcome-todo")).toBe(1);
+    expect(app.shows("label:Crossed tags fixed, under way")).toBe(true);
+    // A Work not judged yet has no Progress group.
+    await app.back();
+    await openWork(app, "w-back");
+    expect(app.count("id:work-progress")).toBe(0);
+  }, 20_000);
+
+  test("the live daemon's Claude Worker: \"Hello writer\", never its (mh-…) id nor its terminal footer", async () => {
+    const daemon = brain();
+    const at = now();
+    const id = "mh-17b3337d43f38037916f0e5b";
+    const footer = "⏵⏵ bypass permissions on (shift+tab to cycle)";
+    (daemon.current_work[1] as Record<string, unknown>).worker_sessions = [
+      { session_id: id, name: `Hello writer (${id})`, provider: "claude", state: "running", summary: footer, live: true, joined_at: at, updated_at: at },
+    ];
+    const app = await workApp({ brain: daemon, worker_sessions: [{ id, name: `Hello writer (${id})`, status: "unknown", summary: footer, command: "claude", provider: "claude", cwd: "/home/me/perpetuo", updated_at: Date.now() }] });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-workers");
+    expect(app.texts()).toContain("Hello writer");
+    expect(app.texts().some((text) => text.includes("(mh-") || text.includes("shift+tab") || text.includes("⏵"))).toBe(false);
+  }, 20_000);
+
+  test("a closed Work's page comes from the computer: its title, how it ended, who worked on it", async () => {
+    const at = now();
+    const app = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work: {
+      work_id: "w-old", revision: 9, title: "rename-the-app", status: "done", created_at: at, updated_at: at,
+      worker_sessions: [{ session_id: "%3", name: "renamer", provider: "claude", state: "done", summary: "Renamed everywhere", live: false, joined_at: at, ended_at: at, updated_at: at }],
+    } } } });
+    await openWork(app, "w-old");
+    await app.waitFor("id:work-workers");
+    expect(framesOf(app.host.posts(), "brain_work_detail")[0]).toMatchObject({ id: "w-old" });
+    expect(app.texts()).toContain("rename-the-app");
+    // The state line: how it ended, and since when.
+    expect(app.texts().some((text) => /^Done · since /.test(text))).toBe(true);
+    expect(app.texts()).toContain("renamer");
+    expect(app.texts()).not.toContain("This Work is no longer open");
+  }, 20_000);
+
+  test("Work detail shows the Work's brief whole under the top block: an open Work asks the computer for it once", async () => {
+    const at = now();
+    const objective = "Ship the beta: fix the checkout flake, refresh the docs screenshots, and tag 0.4.0 once CI is green.";
+    const app = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work: {
+      work_id: "w-run", revision: 3, title: "ship the beta", objective, status: "running", created_at: at, updated_at: at, worker_sessions: [],
+    } } } });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-brief");
+    expect(app.texts()).toContain(objective);
+    expect(framesOf(app.host.posts(), "brain_work_detail")).toHaveLength(1);
+  }, 20_000);
+
+  test("a closed Work's page shows its brief too; a computer that sends none shows no brief", async () => {
+    const at = now();
+    const work = { work_id: "w-old", revision: 9, title: "rename-the-app", status: "done", created_at: at, updated_at: at, worker_sessions: [] };
+    const app = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work: { ...work, objective: "Rename the app to Mewla everywhere." } } } });
+    await openWork(app, "w-old");
+    await app.waitFor("id:work-brief");
+    expect(app.texts()).toContain("Rename the app to Mewla everywhere.");
+    const older = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work } } });
+    await openWork(older, "w-old");
+    await older.waitFor("text:rename-the-app");
+    expect(older.shows("id:work-brief")).toBe(false);
+  }, 30_000);
+
+  test("Work detail's top block: the eyebrow names the project on one line, then the title and the state line", async () => {
+    const app = await workApp();
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-eyebrow");
+    expect(app.texts()).toContain("Work · perpetuo");
+    expect(app.texts()).toContain("ship the beta");
+    expect(app.shows("id:work-state")).toBe(true);
+    // Ask Brain about this, then the ways to move it on: Stop with them, not with the links.
+    expect(app.count("id:work-links >> id:work-action-ask")).toBe(1);
+    // SPEC §11 Work detail: Snooze 1 hour and Stop, together.
+    expect(app.count("id:work-moves >> id:work-action-snooze")).toBe(1);
+    expect(app.count("id:work-moves >> id:work-action-stop")).toBe(1);
+  }, 20_000);
+
+  test("the Work file its Worker writes into is a row with the file's name, and opens the file", async () => {
+    const file = { id: "wf-run", project: "perpetuo", path: "perpetuo/ship-the-beta.md", title: "Ship the beta", mtime: now(), body: "# Ship the beta\n\nRelease checks.\n",
+      frontmatter: { id: "wf-run", created: now(), worker_session: "%7" } };
+    const app = await workApp({ brain: brain(), work_items: [file] });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-file", { timeout: 10_000 });
+    expect(app.texts()).toContain("ship-the-beta.md");
+    await app.press("id:work-file");
+    await app.waitFor("id:work-file-page");
+  }, 20_000);
+
+  test("Stop asks with the Work's title, and only then tells Brain", async () => {
+    const app = await workApp();
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-action-stop");
+    app.onDialog((dialog) => (dialog.title === "Stop “ship the beta”?" ? "Stop" : null));
+    await answering(app, () => app.press("id:work-action-stop"));
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
+    expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-run", action: "stop" });
+  }, 20_000);
+
+  test("the dock replies to Brain about this Work, and the page closes once Brain has it", async () => {
+    const app = await workApp();
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-detail >> id:composer");
+    await app.type("id:work-detail >> id:composer", "check the logs too");
+    await app.waitUntil(() => app.value("id:work-detail >> id:composer") === "check the logs too");
+    await app.press("id:work-detail >> id:send");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
+    expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-run", action: "reply", text: "check the logs too" });
+    await app.waitUntil(() => !app.shows("id:work-detail"));
+  }, 20_000);
+
   test("a result that came back is accepted with one tap and its unread mark is cleared on opening", async () => {
     const app = await workApp();
-    await app.press("id:work-w-back");
-    await app.waitFor("id:work-detail");
+    await openWork(app, "w-back");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_read").length > 0);
     expect(framesOf(app.host.posts(), "brain_work_read")[0]).toMatchObject({ id: "w-back" });
     expect(app.texts()).toContain("Fixed the sync race and added a test.");
     await app.press("id:work-action-close");
     await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_action").length === 1);
     expect(framesOf(app.host.posts(), "brain_work_action")[0]).toMatchObject({ id: "w-back", action: "close" });
   }, 20_000);
+});
 
-  test("with nothing open it says so", async () => {
-    const app = await open(APP, { host: phoneHost({ brain: { current_work: [] } }), storage: paired, platform: "android", network: expoTokenService });
-    await app.waitFor("id:open-work");
-    await app.press("id:open-work");
-    await app.waitFor("text:No open Work");
+describe("Ask Brain about this", () => {
+  const quote = "Re: fix sync (work w-back)\n> Fixed the sync race and added a test.\n";
+  // Brain's thread is known: its composer holds that thread's draft.
+  const daemon = () => ({ brain: { ...brain(), chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude" } } });
+  /** Work detail from the tray's row, pushed over home, which stays as it was under it. */
+  async function askFromTray(app: Awaited<ReturnType<typeof workApp>>) {
+    await app.press("id:state-control");
+    await app.waitFor("text:fix sync");
+    await app.press("text:fix sync");
+    await app.waitFor("id:work-detail");
+    await app.press("id:work-action-ask");
+    await app.waitFor("id:home-header");
+  }
+
+  test("the quote lands in Brain's open composer", async () => {
+    const app = await workApp(daemon());
+    await askFromTray(app);
+    await app.waitUntil(() => app.value("id:composer") === quote);
+  }, 20_000);
+
+  test("what was typed in the composer stays, the quote below it", async () => {
+    const app = await workApp(daemon());
+    await app.type("id:composer", "also check the logs");
+    await app.waitUntil(() => app.value("id:composer") === "also check the logs");
+    await askFromTray(app);
+    await app.waitUntil(() => app.value("id:composer") === `also check the logs\n\n${quote}`);
+  }, 20_000);
+
+  test("from a notification's Work page too: what was typed a moment before is kept", async () => {
+    const app = await workApp(daemon());
+    await app.type("id:composer", "also check the logs");
+    await app.waitUntil(() => app.value("id:composer") === "also check the logs");
+    await openWork(app, "w-back");
+    await app.press("id:work-action-ask");
+    await app.waitFor("id:home-header");
+    await app.waitUntil(() => app.value("id:composer") === `also check the logs\n\n${quote}`);
   }, 20_000);
 });
 
@@ -208,5 +415,18 @@ describe("a Calendar run's Work file", () => {
     await app.waitFor("id:work-file-body");
     await app.type("id:work-file-body", " Also the fourth.");
     await app.waitFor("text:Save failed. disk is full", { timeout: 10_000 });
+  }, 25_000);
+
+  test("a link in the file opens: a web page in the browser, a path in Brain's file preview, and Back returns to the file", async () => {
+    const linked = { ...work, body: "# Daily digest\n\nSee [the paper](https://example.com/paper) and [my notes](/home/me/worklog/notes.md).\n" };
+    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+    const app = await openWorkFile({ work_items: [linked], brain: { chat_thread_id: "t-now", host_worker } });
+    await app.waitFor("text:the paper", { timeout: 10_000 });
+    await app.press("text:the paper");
+    await app.waitUntil(() => app.openedUrls().includes("https://example.com/paper"));
+    await app.press("text:my notes");
+    await app.waitFor("id:file-preview", { timeout: 10_000 });
+    await app.back();
+    await app.waitFor("id:work-file-page");
   }, 25_000);
 });

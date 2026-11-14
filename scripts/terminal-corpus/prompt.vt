@@ -1,0 +1,26 @@
+[H[2J[38;2;30;30;46m[48;2;137;180;250m  daoleno [38;2;137;180;250m[48;2;49;50;68m[38;2;205;214;244m ~/src/mewla [38;2;49;50;68m[48;2;166;227;161m[38;2;30;30;46m  main ✚2 [0m[38;2;166;227;161m[0m
+[32m❯ [0mgit log --oneline --graph -6
+[31m* [0m[33m3cde66ce[0m[1;36m (HEAD -> [32mmain, origin/main)[0m Client web: base href
+[31m*   [0m[33mfb1f6b82[0m Merge remote-tracking branch
+[31m[31m|[32m\  [0m
+[31m[31m| * [0m[33m01839b7d[0m[1;36m (tag: v0.3.2)[0m libghostty-vt 1.0.1
+[31m* [31m| [0m[33m6350ec0e[0m Client web: pairing
+[31m[31m|[32m/  [0m
+[31m* [0m[33mc3f0ca4b[0m Session host engine
+[32m❯ [0mgit diff --stat
+ client/ui/terminal/TerminalPane.tsx | 12 [32m++++++[31m------[0m
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+[32m❯ [0mgit diff
+[1mdiff --git a/main.go b/main.go[0m
+[1mindex 3f2a1c0..9b8e7d6 100644[0m
+[1m--- a/main.go[0m
+[1m+++ b/main.go[0m
+[36m@@ -10,7 +10,7 @@[0m func main() {
+     fmt.Println("start")
+[31m-    if err := run(); err != nil {[0m
+[32m+    if err := run(ctx); err != nil {[0m
+[31m-[0m[41m   [0m
+[32m+[42m	[0m[32mlog.Fatal(err)[0m
+     }
+[38;2;30;30;46m[48;2;137;180;250m  daoleno [38;2;137;180;250m[48;2;49;50;68m[38;2;205;214;244m ~/src/mewla [38;2;49;50;68m[48;2;166;227;161m[38;2;30;30;46m  main ✚2 [0m[38;2;166;227;161m[0m
+[32m❯ [0mecho done [2m# a dim comment[0m

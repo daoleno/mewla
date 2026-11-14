@@ -1,4 +1,5 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { BusyPlace } from "../kit/wait";
 import { Button, Input } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
 import type { Daemon } from "../../core/more/daemon";
@@ -55,7 +56,7 @@ export function CodexSkillsSheet(props: {
   };
 
   return (
-    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
+    <AppSheet open={props.open()} onOpenChange={({ open }) => !open && props.onClose()} closeOnSwipe popupClass="rounded-t-2xl bg-background pt-4" sidePadding={16} backdropClass="bg-black/40">
       <View testID="skills-sheet" class="gap-3 pb-8">
         <View class="flex-row items-center gap-2">
           <Text class="flex-1 text-lg font-semibold">Skills</Text>
@@ -67,24 +68,12 @@ export function CodexSkillsSheet(props: {
           <Icon name="search" size={16} />
           <Input testID="skills-search" accessibilityLabel="Search skills" value={query()} placeholder="Search skills" autoFocus autoCapitalize="none" autoCorrect={false}
             returnKeyType="search" onChange={({ value }) => query.set(value)} class="flex-1 py-2 text-base" />
-          {query() ? (
-            <Button testID="skills-search-clear" accessibilityLabel="Clear skill search" onPress={() => query.set("")} class="p-1">
+          <If when={query()}><Button testID="skills-search-clear" accessibilityLabel="Clear skill search" onPress={() => query.set("")} class="p-1">
               <Icon name="close-circle-fill" size={16} />
-            </Button>
-          ) : null}
+            </Button></If>
         </View>
 
-        {loading() ? (
-          <Text class="py-10 text-center text-sm text-muted-foreground">Loading skills…</Text>
-        ) : problem() ? (
-          <View testID="skills-failed" class="items-center gap-1 py-8">
-            <Text class="text-base font-semibold text-destructive">Couldn't load skills</Text>
-            <Text class="text-center text-sm text-muted-foreground">{problem()}</Text>
-          </View>
-        ) : visible().length === 0 ? (
-          <Text class="py-10 text-center text-sm text-muted-foreground">No matching skills</Text>
-        ) : (
-          <Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 430 }}>
+        <If when={loading()} else={<If when={problem()} else={<If when={visible().length === 0} else={<Scroll keyboardShouldPersistTaps="handled" style={{ maxHeight: 430 }}>
             <View class="overflow-hidden rounded-xl border border-border bg-card">
               {visible().map((skill) => (
                 <Button testID={`skill-${skill.name}`} accessibilityLabel={`Use ${skill.name}`} onPress={() => pick(skill)}
@@ -92,14 +81,16 @@ export function CodexSkillsSheet(props: {
                   <Icon name="add" size={18} color={skill.enabled ? "primary" : "muted-foreground"} />
                   <View class={skill.enabled ? "flex-1 gap-0.5" : "flex-1 gap-0.5 opacity-60"}>
                     <Text class="text-base line-clamp-1">{skill.name}</Text>
-                    {skill.description ? <Text class="text-xs text-muted-foreground line-clamp-2">{skill.description}</Text> : null}
+                    <If when={skill.description}>{(description) => <Text class="text-xs text-muted-foreground line-clamp-2">{description()}</Text>}</If>
                   </View>
                   <Text class="text-xs text-muted-foreground">{skill.scope}</Text>
                 </Button>
               ))}
             </View>
-          </Scroll>
-        )}
+          </Scroll>}><Text class="py-10 text-center text-sm text-muted-foreground">No matching skills</Text></If>}><View testID="skills-failed" class="items-center gap-1 py-8">
+            <Text class="text-base font-semibold text-destructive">Couldn't load skills</Text>
+            <Text class="text-center text-sm text-muted-foreground">{problem()}</Text>
+          </View></If>}><BusyPlace label="Reading skills" testID="skills-loading" rows={4} /></If>
       </View>
     </AppSheet>
   );

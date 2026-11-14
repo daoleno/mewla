@@ -1,11 +1,13 @@
 import { computed, effect, Scroll, signal, Text, View } from "nsh";
-import { AlertDialog, Button, Input, TextView } from "nsh/base";
+import { Button, Input, TextView } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { calendarOriginOfWork, originLabel } from "../../core/calendar/model";
 import { readableBody, WorkItemConflict, workItemStatus, workItemStatusLabel, type WorkItem } from "../../core/work/workItems";
 import { clock } from "../calendar/clock";
 import { calendarItems } from "../calendar/state";
 import { workFiles, workFilesModel } from "./state";
+import { brainFiles, openChatLink } from "../chat/links";
+import { showAlert } from "../shell/alert";
 
 const AUTOSAVE_MS = 600;
 
@@ -31,6 +33,8 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
   const newer = signal(false);
   const failure = signal("");
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // A link in the file: a web page opens in the browser, a path previews Brain's file (a Work file is Brain's).
+  const files = brainFiles((why) => failure.set(why));
 
   effect(() => {
     const current = item();
@@ -91,7 +95,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
     }
   };
   const remove = async (current: WorkItem) => {
-    const answer = await AlertDialog.show({
+    const answer = await showAlert({
       title: "Delete work item?", description: "This removes the Markdown work file from the server.",
       actions: [{ id: "keep", label: "Cancel", role: "cancel" }, { id: "delete", label: "Delete", role: "destructive" }],
     });
@@ -119,35 +123,23 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
 
   return (
     <NavPage title={item()?.project ?? "Work"} testID="work-file-page"
-      headerRight={!gone() ? <Button testID="work-file-edit" onPress={() => { if (editingBody()) void save(); editingBody.set(!editingBody()); }}><Text class="text-base text-primary">{editingBody() ? "Preview" : "Edit"}</Text></Button> : undefined}>
+      headerRight={<If when={!gone()}><Button testID="work-file-edit" onPress={() => { if (editingBody()) void save(); editingBody.set(!editingBody()); }}><Text class="text-base text-primary">{editingBody() ? "Preview" : "Edit"}</Text></Button></If>}>
       {/* NSH's NavPage takes its children once: the choice sits inside a View of this page's own. */}
       <View class="flex-1 bg-background">
-        {gone() ? (
-          <View class="flex-1 items-center gap-2 bg-background px-6 py-16">
-            <Text class="text-lg font-semibold">Work item not found</Text>
-            <Text class="text-center text-base text-muted-foreground">It may have been deleted or belongs to another server.</Text>
-          </View>
-        ) : (
-          <View class="flex-1 bg-background">
-            {newer() ? (
-              <View testID="work-file-newer" class="gap-2 border-b border-border bg-secondary px-4 py-3">
+        <If when={gone()} else={<View class="flex-1 bg-background">
+            <If when={newer()}><View testID="work-file-newer" class="gap-2 border-b border-border bg-secondary px-4 py-3">
                 <Text class="text-base font-semibold">Newer version on the server</Text>
-                {state() !== "saved" ? <Text class="text-sm text-muted-foreground">Loading it discards your unsaved edits.</Text> : null}
+                <If when={state() !== "saved"}><Text class="text-sm text-muted-foreground">Loading it discards your unsaved edits.</Text></If>
                 <Button testID="work-file-load" onPress={loadRemote} class="self-start"><Text class="text-base text-primary">Load remote changes</Text></Button>
-              </View>
-            ) : null}
+              </View></If>
             <Scroll keyboardShouldPersistTaps="handled" class="flex-1">
               <View class="gap-2 px-4 pb-8 pt-4">
                 <Text class="text-sm text-muted-foreground">{`${workItemStatusLabel[workItemStatus(shown()!)]} · ${age(shown()!.mtime)}`}</Text>
                 <Text class="text-xl font-semibold">{shown()!.title || "Untitled work"}</Text>
-                {origin() ? (
-                  <Button testID="work-file-calendar-link" onPress={() => props.openCalendarItem(origin()!.itemId, origin()!.runId)} class="self-start">
+                <If when={origin()}><Button testID="work-file-calendar-link" onPress={() => props.openCalendarItem(origin()!.itemId, origin()!.runId)} class="self-start">
                     <Text class="text-base text-primary">{originLabel(origin()!, calendarItems(), clock(), { title: shown()!.title, at: shown()!.frontmatter.created }) ?? "Calendar"}</Text>
-                  </Button>
-                ) : null}
-                {editingBody()
-                  ? <Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} onBlur={() => void save()} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" />
-                  : <TextView testID="work-file-preview" markdown={readableBody(text())} />}
+                  </Button></If>
+                <If when={editingBody()} else={<TextView testID="work-file-preview" markdown={readableBody(text())} onLinkPress={(event) => openChatLink(event.url, files)} />}><Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} onBlur={() => void save()} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" /></If>
               </View>
             </Scroll>
             <View class="flex-row items-center justify-between border-t border-border px-4 py-3">
@@ -157,8 +149,10 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
                 <Button testID="work-file-done" onPress={() => void toggleDone(shown()!)}><Text class="text-base font-semibold text-primary">{workItemStatus(shown()!) === "done" ? "Reopen" : "Mark done"}</Text></Button>
               </View>
             </View>
-          </View>
-        )}
+          </View>}><View class="flex-1 items-center gap-2 bg-background px-6 py-16">
+            <Text class="text-lg font-semibold">Work item not found</Text>
+            <Text class="text-center text-base text-muted-foreground">It may have been deleted or belongs to another server.</Text>
+          </View></If>
       </View>
     </NavPage>
   );
