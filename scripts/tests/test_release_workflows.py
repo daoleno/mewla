@@ -388,6 +388,18 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("mewla-live-app-store.mobileprovision", IOS_RELEASE)
 
 
+class ClientWorkflowTests(unittest.TestCase):
+    def test_the_upgrade_gate_waits_for_this_runs_preview_by_the_android_jobs_name(self):
+        android_name = re.search(r"\n  android:\n    name: ([^\n]+)\n", CLIENT).group(1)
+        gate = between(CLIENT, "  upgrade-gate:\n")
+        self.assertIn(f'select(.name == "{android_name}")', gate)
+        self.assertIn("artifacts?name=mewla-preview-android", gate)
+        self.assertLess(gate.index("name: Wait for this run's Preview"), gate.index("-n mewla-preview-android"))
+        # The same upgrade path as before: Expo release → NSH, and the last Preview → this one.
+        for needle in ("client/scripts/upgrade-gate.sh", "client/scripts/preview-upgrade.sh", "assembleProductionRelease"):
+            self.assertIn(needle, gate)
+
+
 class CIWorkflowTests(unittest.TestCase):
     def test_the_offline_installer_suite_runs_in_a_bounded_linux_job(self):
         self.assertIn('"installer:test": "./scripts/tests/install_test.sh"', ROOT_PACKAGE)
