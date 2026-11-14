@@ -4,7 +4,6 @@ import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../../shell/NavPage";
 import { listDetail } from "../../shell/layout";
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
-import { padGitDiffText } from "../../../core/git/gitDiffLinePad";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import { formatGitDiffBytes } from "../../../core/git/gitDiffReview";
 import { matchesGitReviewQuery } from "../../../core/git/gitReviewModel";
@@ -243,15 +242,13 @@ function FileBody(props: { review: GitReview; path: string }) {
               if (snapshot.binary) return <View class="px-4"><EmptyState title="Binary file" detail={formatGitDiffBytes(snapshot.byte_count)} /></View>;
               const content = snapshot.content ?? "";
               if (!content) return <View class="px-4"><EmptyState title="Empty file" /></View>;
-              // Padded for NSH's Android line layout (R4#3, gitDiffLinePad.ts).
-              const shown = padGitDiffText(content);
               return (
                 <View class="flex-1">
                   <If when={snapshot.truncated}><View class="px-4">
                       <Notice tone="warning" title="Showing part of this file" detail={`First ${formatGitDiffBytes(content.length)} of ${formatGitDiffBytes(snapshot.byte_count)}.`} />
                     </View></If>
                   <View class="mx-4 mb-4 mt-2 flex-1 overflow-hidden rounded-(--radius-group) bg-card">
-                    <DiffView testID="git-file-view" class="flex-1" classes={{ lineNumber: "text-faint" }} oldValue={shown} newValue={shown} expandAll language={props.path} layout="unified" />
+                    <DiffView testID="git-file-view" class="flex-1" classes={{ lineNumber: "text-faint" }} oldValue={content} newValue={content} expandAll language={props.path} layout="unified" />
                   </View>
                 </View>
               );
