@@ -14,3 +14,10 @@ export function pictureRetry(failures: number, linkUp: boolean): { wait: "link" 
 
 /** A picture read over the computer's link (`codex_asset`) answers in this long: a phone photo over the relay, behind the thread's own news. */
 export const PICTURE_READ_MS = 30_000;
+
+/**
+ * The long edge a thread's row asks a picture at (`codex_asset` max_edge): the computer scales a larger one
+ * down and re-encodes it, so three screenshots are some 300 KB instead of 2 MB (owner 11-14: 35 s on a slow
+ * link). The full-size viewer asks without it.
+ */
+export const ROW_PICTURE_EDGE = 1600;
