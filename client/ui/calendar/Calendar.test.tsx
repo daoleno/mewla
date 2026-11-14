@@ -330,7 +330,7 @@ describe("notifications", () => {
     await app.waitFor("id:calendar-item-page");
   }, 20_000);
 
-  // Switching computers under the editor's open sheet crashed `nsh test` 0.4.0 (SIGSEGV); the link closes the editor first.
+  // Switching computers under the editor's open sheet crashed `nsh test` up to NSH 0.5.0 (SIGSEGV, longbridge/nsh#1643).
   test("a tap for another paired computer switches to it and still lands on its page; the last one's editor closes", async () => {
     const brain = { current_work: [{ work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() }] };
     const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)], brain }), storage: pairedTwo, platform: "android", network: expoTokenService });

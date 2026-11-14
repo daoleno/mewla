@@ -152,10 +152,10 @@ export function openNotificationLink(url: string): void {
   if (serverId && serverId !== current()?.id) {
     const target = servers().find((s) => s.id === serverId);
     if (!target) return;
-    // The editor goes first: switching under an open sheet crashes NSH 0.4.0's runtime (SIGSEGV in `nsh test`).
+    // The editor holds the last computer's item: it closes with the switch.
     closeEditor();
-    // Open the link once the switch is done (it waits for open sheets to close).
-    void switchTo(target).then(() => openNotificationLink(url));
+    switchTo(target);
+    openNotificationLink(url);
     return;
   }
   // Each opens its page on home, so Back leads home (SPEC §3.8).

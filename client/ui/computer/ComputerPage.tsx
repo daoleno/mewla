@@ -55,7 +55,8 @@ function showPathDetail(detail: string): void {
 /** Another computer: one tap switches to it; the stack returns to home, which says Connecting… until it is up. */
 function useComputer(server: StoredServer): void {
   void setServerAutoConnect(server.id, true);
-  void switchTo(server).then(() => goHome());
+  switchTo(server);
+  goHome();
 }
 
 /** "Connected · 18 ms" while the phone has measured the way there, else "Connected · LAN" (how it reaches it), else the word. */
