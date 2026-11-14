@@ -210,10 +210,8 @@ function applySwitch(server: StoredServer | null): void {
       linkWatch.update(state);
       problem.set(next.problem);
     }),
-    next.on("connected", () => {
-      outbox.onConnected(server.id);
-      requestBrainSnapshot(next);
-    }),
+    // Each connection starts with the computer's brain_snapshot; asking again only sent it twice.
+    next.on("connected", () => outbox.onConnected(server.id)),
     next.on("disconnected", () => {
       outbox.onDisconnected(server.id);
       stopWakePoll();
