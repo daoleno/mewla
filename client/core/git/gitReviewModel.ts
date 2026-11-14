@@ -64,7 +64,10 @@ export function adjacentGitReviewEntry(
 ): GitReviewEntry | null {
   const index = order.findIndex((entry) => entry.key === key);
   if (index === -1) return null;
-  return order[index + (direction === "next" ? 1 : -1)] ?? null;
+  // A new folder has no diff to read: the reader steps over it.
+  const step = direction === "next" ? 1 : -1;
+  for (let at = index + step; at >= 0 && at < order.length; at += step) if (!order[at].file.directory) return order[at];
+  return null;
 }
 
 export function sumGitReviewEntries(entries: readonly GitReviewEntry[]) {
@@ -126,7 +129,8 @@ export function buildGitReviewRows(
   }
   const root: TreeNode = { name: "", path: "", dirs: new Map(), files: [], count: 0 };
   for (const entry of visible) {
-    const parts = entry.file.path.split("/");
+    // A new folder ("build/out/") is a row in its parent, not a folder of its own with an empty name in it.
+    const parts = entry.file.path.replace(/\/$/, "").split("/");
     let node = root;
     node.count += 1;
     for (const part of parts.slice(0, -1)) {
@@ -160,9 +164,25 @@ export function buildGitReviewRows(
   return rows;
 }
 
+/** A path's folder and name; a new folder ("build/out/") keeps its slash: `build/` and `out/`. */
 export function splitGitReviewPath(path: string): { directory: string; name: string } {
-  const index = path.lastIndexOf("/");
-  return index === -1 ? { directory: "", name: path } : { directory: path.slice(0, index + 1), name: path.slice(index + 1) };
+  const folder = path.endsWith("/");
+  const bare = folder ? path.slice(0, -1) : path;
+  const index = bare.lastIndexOf("/");
+  const name = `${bare.slice(index + 1)}${folder ? "/" : ""}`;
+  return index === -1 ? { directory: "", name } : { directory: bare.slice(0, index + 1), name };
+}
+
+/**
+ * Rows a group draws at once: a checkout with thousands of changes drew every row in one go and froze the app
+ * (owner 11-14: 14,883 rows). The rest come a page at a time ("Show 200 more").
+ */
+export const GIT_REVIEW_ROWS_PAGE = 200;
+
+/** The first `shown` rows (at least a page) and how many are left. */
+export function pageGitReviewRows<T>(rows: readonly T[], shown: number): { rows: readonly T[]; more: number } {
+  const limit = Math.max(GIT_REVIEW_ROWS_PAGE, shown);
+  return rows.length <= limit ? { rows, more: 0 } : { rows: rows.slice(0, limit), more: rows.length - limit };
 }
 
 /** Every path of the given entries, plus rename sources, for a stage or unstage request. */

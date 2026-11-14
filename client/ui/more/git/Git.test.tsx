@@ -10,6 +10,7 @@ interface File {
   staged: boolean;
   unstaged: boolean;
   untracked: boolean;
+  directory?: boolean;
   staged_additions?: number;
   working_additions?: number;
   working_deletions?: number;
@@ -35,7 +36,7 @@ const COMMITS = [
  * A computer with one repository: `files` is its status, changed by the Git
  * requests the page sends. Every request is recorded.
  */
-function repository(initial: File[], sync: { ahead?: number; behind?: number } = {}) {
+function repository(initial: File[], sync: { ahead?: number; behind?: number } = {}, extra: Record<string, unknown> = {}) {
   let files = initial.map((f) => ({ ...f }));
   let discarded: File | null = null;
   let reads = 0;
@@ -65,6 +66,7 @@ function repository(initial: File[], sync: { ahead?: number; behind?: number } =
             additions: 0,
             deletions: 0,
             files,
+            ...extra,
           },
         };
       case "git_fetch":
@@ -673,4 +675,49 @@ describe("Git review on the web", () => {
     await answering(app, () => app.rightClick("id:git-file-src/lib/util.ts"));
     await app.waitFor("id:git-file-view");
   });
+});
+
+describe("a big change (owner 11-14: Git on a checkout with 14,883 untracked files froze the app)", () => {
+  const untracked = (path: string, more: Partial<File> = {}): File => ({ path, status: "untracked", staged: false, unstaged: false, untracked: true, working_additions: 1, ...more });
+
+  test("a computer that lists every file (before 11-14) opens in a page of rows; Show more adds the next", async () => {
+    const files = Array.from({ length: 14_883 }, (_, i) => untracked(`app/node_modules/f${String(i).padStart(5, "0")}.js`));
+    const repo = repository(files);
+    const started = Date.now();
+    const app = await open(HARNESS, repo.options);
+    await app.waitFor("id:git-group-changes", { timeout: 20_000 });
+    const took = Date.now() - started;
+    expect(app.shows("label:Not staged, 14883 files")).toBe(true);
+    expect(app.shows("id:git-row-changes:app/node_modules/f00199.js")).toBe(true);
+    expect(app.shows("id:git-row-changes:app/node_modules/f00200.js")).toBe(false);
+    expect(app.texts()).toContain("Show 200 more");
+    // Every row of the old page in one go took the engine past this; a page is well inside it.
+    expect(took).toBeLessThan(8_000);
+    await app.press("id:git-more-changes");
+    await app.waitFor("id:git-row-changes:app/node_modules/f00399.js");
+    expect(app.shows("id:git-row-changes:app/node_modules/f00400.js")).toBe(false);
+  }, 60_000);
+
+  test("a computer that lists a page of a vast change says how many it left out", async () => {
+    const files = Array.from({ length: 3 }, (_, i) => untracked(`f${i}.txt`));
+    const repo = repository(files, {}, { file_count: 25_000, untracked_file_count: 25_000, truncated: true });
+    const app = await open(HARNESS, repo.options);
+    await app.waitFor("id:git-truncated");
+    expect(app.texts()).toContain("Showing 3 of 25,000 files");
+  }, 30_000);
+
+  test("a new folder is one row: no diff of its own; a tap offers Stage and Copy path, not Discard", async () => {
+    const repo = repository([untracked("app/", { directory: true, working_additions: 0 }), app_ts]);
+    const app = await open(HARNESS, repo.options);
+    await app.waitFor("id:git-row-changes:app/");
+    expect(app.texts()).toContain("app/");
+    expect(app.shows("label:app/, new folder, not staged")).toBe(true);
+    app.onDialog((dialog) => (dialog.buttons.includes("Copy path") ? "Cancel" : null));
+    await answering(app, () => app.press("id:git-row-changes:app/"));
+    const buttons = app.dialogs().at(-1)!.buttons;
+    expect(buttons).toContain("Stage");
+    expect(buttons).toContain("Copy path");
+    for (const not of ["View diff", "Discard changes", "Open working file"]) expect(buttons).not.toContain(not);
+    expect(repo.asked.filter((r) => r.type === "git_diff_patch")).toHaveLength(0);
+  }, 30_000);
 });

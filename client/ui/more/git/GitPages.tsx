@@ -7,7 +7,9 @@ import type { GitCommitSummary } from "../../../core/git/gitDiff";
 import { gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import {
   buildGitReviewRows,
+  GIT_REVIEW_ROWS_PAGE,
   gitSyncAction,
+  pageGitReviewRows,
   splitGitReviewPath,
   sumGitReviewEntries,
   type GitReviewEntry,
@@ -56,14 +58,16 @@ export function openWorkingFile(review: GitReview, nav: PageNav, path: string): 
 /** The row menu: what a long press on a changed file offers. */
 async function entryMenu(review: GitReview, nav: PageNav, entry: GitReviewEntry, open: (entry: GitReviewEntry) => void): Promise<void> {
   const staged = entry.group === "staged";
+  // A new folder has no diff and no working file of its own, and is not discarded here (the computer refuses it).
+  const folder = entry.file.directory === true;
   const answer = await showAlert({
     title: entry.file.path,
     presentation: "actionSheet",
     actions: [
-      { id: "view", label: "View diff" },
+      ...(folder ? [] : [{ id: "view", label: "View diff" }]),
       { id: "stage", label: staged ? "Unstage" : "Stage" },
-      ...(staged ? [] : [{ id: "discard", label: "Discard changes" }]),
-      { id: "open", label: "Open working file" },
+      ...(staged || folder ? [] : [{ id: "discard", label: "Discard changes" }]),
+      ...(folder ? [] : [{ id: "open", label: "Open working file" }]),
       { id: "copy", label: "Copy path" },
       { id: "cancel", label: "Cancel", role: "cancel" as const },
     ],
@@ -356,6 +360,10 @@ function ChangesBody(props: { review: GitReview; nav: PageNav; selected: string 
             <If when={review.error()}><Notice tone="failed" title="Couldn't refresh Git status" detail={review.error()} action="Retry" onAction={() => void review.refresh()} /></If>
             <If when={groups.staged.length}><Group review={review} nav={props.nav} group="staged" rows={visible("staged")} entries={groups.staged} selected={props.selected} onOpen={props.onOpen} /></If>
             <Group review={review} nav={props.nav} group="changes" rows={visible("changes")} entries={groups.changes} selected={props.selected} onOpen={props.onOpen} />
+            {/* The computer lists at most 1000 files of a vast change; the counts above are all of them. */}
+            <If when={snapshot.truncated}>
+              <View class="px-4 pt-3"><Text testID="git-truncated" class="text-sub text-muted-foreground">{`Showing ${(snapshot.files?.length ?? 0).toLocaleString()} of ${snapshot.file_count.toLocaleString()} files`}</Text></View>
+            </If>
           </View>
         );
       })()}
@@ -373,6 +381,7 @@ function Group(props: { review: GitReview; nav: PageNav; group: GitReviewGroup; 
   const count = props.entries.length;
   const totals = sumGitReviewEntries(props.entries);
   const label = GROUP_LABEL[props.group];
+  const page = () => pageGitReviewRows(props.rows, props.review.shown()[props.group] ?? GIT_REVIEW_ROWS_PAGE);
   return (
     <View testID={`git-group-${props.group}`}>
       <SectionLabel
@@ -386,7 +395,13 @@ function Group(props: { review: GitReview; nav: PageNav; group: GitReviewGroup; 
       />
       <If when={!collapsed()}><View class="overflow-hidden rounded-(--radius-group) bg-card">
           <View class="-mb-px">
-            <If when={props.rows.length} else={<Row title="No changes" />}>{props.rows.map((row) => <ReviewRow review={props.review} nav={props.nav} row={row} selected={props.selected} onOpen={props.onOpen} />)}</If>
+            <If when={props.rows.length} else={<Row title="No changes" />}>{page().rows.map((row) => <ReviewRow review={props.review} nav={props.nav} row={row} selected={props.selected} onOpen={props.onOpen} />)}</If>
+            <If when={page().more}>
+              <View testID={`git-more-${props.group}`} role="button" accessibilityLabel={`Show ${Math.min(page().more, GIT_REVIEW_ROWS_PAGE)} more of ${page().more}`}
+                onPress={() => props.review.showMore(props.group, GIT_REVIEW_ROWS_PAGE)} class="min-h-[48px] flex-row items-center justify-center px-4 py-2.5 active:bg-accent">
+                <Text class="text-body font-semibold text-primary">{`Show ${Math.min(page().more, GIT_REVIEW_ROWS_PAGE)} more`}</Text>
+              </View>
+            </If>
           </View>
         </View></If>
     </View>
@@ -418,14 +433,15 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
   const staged = entry.group === "staged";
   const name = splitGitReviewPath(entry.file.path).name;
   const word = gitDiffStatusWord(gitDiffTone(entry.file));
+  const folder = entry.file.directory === true;
   return (
     <View
       testID={`git-row-${entry.key}`}
       role="button"
-      accessibilityLabel={`${name}, ${word}, ${entry.additions} added, ${entry.deletions} removed, ${staged ? "staged" : "not staged"}`}
-      accessibilityHint="Opens the diff. Press and hold to stage, discard or copy"
+      accessibilityLabel={folder ? `${name}, new folder, ${staged ? "staged" : "not staged"}` : `${name}, ${word}, ${entry.additions} added, ${entry.deletions} removed, ${staged ? "staged" : "not staged"}`}
+      accessibilityHint={folder ? "Stage or copy its path" : "Opens the diff. Press and hold to stage, discard or copy"}
       accessibilityState={{ selected: props.selected === entry.key }}
-      onPress={() => props.onOpen(entry)}
+      onPress={() => (folder ? void entryMenu(props.review, props.nav, entry, props.onOpen) : props.onOpen(entry))}
       onLongPress={() => void entryMenu(props.review, props.nav, entry, props.onOpen)}
       // A mouse's right click (the web, the desktops) opens the same menu.
       onContextMenu={() => void entryMenu(props.review, props.nav, entry, props.onOpen)}
@@ -437,7 +453,7 @@ function ReviewRow(props: { review: GitReview; nav: PageNav; row: GitReviewRow; 
         <If when={props.review.tree()} else={<FileName path={entry.file.path} />}><Text class="font-mono text-code font-semibold line-clamp-1">{name}</Text></If>
         <If when={entry.file.old_path}>{(old_path) => <Text class="font-mono text-caption text-muted-foreground line-clamp-1">{`from ${old_path()}`}</Text>}</If>
       </View>
-      <If when={props.review.isBusy(entry.key)} else={<If when={entry.file.binary} else={<Counts additions={entry.additions} deletions={entry.deletions} />}><Text class="font-mono text-code text-muted-foreground">bin</Text></If>}><Spinner size={16} /></If>
+      <If when={props.review.isBusy(entry.key)} else={<If when={folder} else={<If when={entry.file.binary} else={<Counts additions={entry.additions} deletions={entry.deletions} />}><Text class="font-mono text-code text-muted-foreground">bin</Text></If>}><Icon name="folder" size={16} tone="soft" /></If>}><Spinner size={16} /></If>
       <View class="absolute bottom-0 right-0 h-px bg-border" style={{ left: 16 + row.depth * 16 + 40 }} />
     </View>
   );

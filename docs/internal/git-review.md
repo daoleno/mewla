@@ -14,7 +14,9 @@ The status groups changes the way the index holds them:
 
 - **Staged**: HEAD against the index, including an initial, unborn index.
 - **Changes**: the index against the working tree, plus untracked files as
-  additions.
+  additions. A new folder is one row (`app/`, `directory`), as `git status`
+  shows it, not one row per file inside: it can be staged, has no diff of its
+  own and is not discarded here.
 
 A file edited both ways is listed once in each group, and each row opens that
 group's patch (`gitDiffSectionsForGroup`). Git handles rename detection, binary
@@ -81,7 +83,12 @@ Update both the client and its current daemon when installing Git review:
 Files tree. Verify the current server identity and deploy the matching daemon.
 
 `git_diff_status` uses NUL-delimited status and batched statistics, preserving
-literal filenames, including whitespace and Git pathspec metacharacters.
+literal filenames, including whitespace and Git pathspec metacharacters. It
+lists at most 1000 files (tracked changes before untracked ones); the counts and
+`+/−` totals cover them all and `truncated` says some were left out. With
+`repository_only` it answers only whether the folder is a repository (no status,
+no files): a Session's header shows its Git button by that. The page draws 200
+rows per group and offers the rest 200 at a time.
 `git_diff_patch` returns the complete patch of one file as sections (`staged`,
 `unstaged`, `untracked`); the client keeps the sections of the selected
 group (Changes is unstaged plus untracked) and hands them to the reader.
