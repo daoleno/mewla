@@ -9,7 +9,8 @@ name: Client (NSH)
 # (com.daoleno.mewla.preview, an artifact to sideload; on dispatch signed with the release key so
 # every Preview installs over the last one, client/scripts/preview-signer.sh) and the iOS
 # Simulator app with its upgrade tests. The fast checks (core tests, nsh check,
-# nsh test) run in ci.yml's client job. The upgrade gate runs on manual dispatch:
+# nsh test) run in ci.yml's client job. Releases do not wait for this workflow: release-artifacts.yml
+# upgrades from the previous release itself (android-upgrade). The upgrade gate runs on manual dispatch:
 # the released Expo APK, then the release-signed NSH app installed over it.
 on:
   push:

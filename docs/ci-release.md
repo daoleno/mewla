@@ -19,7 +19,7 @@ The `daemon` fast job runs `go test ./...`, `go vet`, the scripted behavior cont
 
 A `windows` job on `windows-latest` builds every daemon package for Windows, vets and tests the Windows platform layer (`daemon/platform`: file locks, Job Objects, replacing a running executable, the per-user logon task; plus `control`, `sqlitedb` and `selfupdate`), builds `mewla.exe`, and runs `scripts/tests/install_ps1_test.ps1`, the offline tests of `install.ps1` under Windows PowerShell 5.1. Native Windows has not shipped yet, so the job is `continue-on-error`: it reports but does not fail the run. `scripts/ci-local.py` skips it on Linux.
 
-The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta.yml` pushes the tag with `GITHUB_TOKEN` (which does not recursively trigger workflows) and explicitly dispatches `release-artifacts.yml` and `ios-release.yml`. Those workflows build the signed Android APK and the signed iOS IPA, so an Android native break is caught by `release-artifacts.yml` before the public release is published, and an iOS compile break is caught by `ios-release.yml` before the IPA is exported or uploaded.
+The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta.yml` pushes the tag with `GITHUB_TOKEN` (which does not recursively trigger workflows) and explicitly dispatches `release-artifacts.yml`. That workflow builds and checks everything, publishes the release when every check passed, and then dispatches `ios-release.yml`, which builds the signed iOS IPA and sends the Preview to TestFlight. An Android native break is caught by `release-artifacts.yml` before anything is published, and an iOS compile break by `ios-release.yml` before the IPA is exported or uploaded.
 
 ## What it does
 
@@ -32,31 +32,32 @@ The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta
 | Run each daemon on its own platform: Linux amd64, Linux arm64 (`ubuntu-24.04-arm`), macOS (`daemon/releasesmoke`), Windows (`windows-latest`: version, the host with the engine, `/health`, `install.ps1` from a release-shaped zip, `scripts/tests/release_smoke_windows.ps1`) | yes | — |
 | Build release-grade `libghostty` arm64 | yes | — |
 | Signed arm64 APK of the NSH client (`client/android`, `:app:assembleProductionRelease -Pmewla.channel=github`) | yes | — |
+| Android upgrade from the previous release on an emulator (`android-upgrade`, `client/scripts/release-upgrade.sh`): the newest published stable release's APK pairs with its daemon and keeps a draft; this APK installs over it, opens paired and Connected with the same device key and the draft, and its scanner runs | yes | — |
 | Verify package / version / ABI / Ghostty native imports / notice / cert fingerprint | yes | — |
-| Stage tree + checksums + signed updater manifest | yes | — |
+| Stage tree + checksums + signed updater manifest (tags only; a candidate is never signed) | yes | — |
 | Upload workflow artifact | yes | — |
-| Upload/replace assets on **existing** GitHub Release | **no** | yes |
+| `release-ready`: every job above succeeded | yes | — |
+| Publish the complete set once: a stable tag as Latest, a beta tag as a prerelease | **no** | yes |
+| Dispatch `ios-release.yml` (Preview to TestFlight, submitted for beta review) | **no** | yes |
 
 The canonical normal flow is one manual **Release reviewed version** dispatch with an explicit `X.Y.Z` or `X.Y.Z-beta.N` version. It checks out current `main` with full tag history, proves the target is newer than the tracked current version and annotated current tag, increments Android and iOS build identities, builds the canonical notes from the committed user-facing notes, updates the root changelog index, and runs the release identity and focused contract tests. Only after every gate passes does it commit exactly those generated paths as `github-actions[bot]`, create the annotated target tag at that commit, prove `origin/main` still equals the starting SHA, and atomically push the new `main` commit and tag. Main drift, malformed identity, missing history, missing or malformed user-facing notes, dirty state, existing output, or any failed test stops before that atomic push.
 
-GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN`, so the workflow explicitly dispatches both downstream workflows after the atomic push. It dispatches `release-artifacts.yml` with the exact new tag and `publish=true`, and dispatches `ios-release.yml` at the same tag with the tracked next iOS build number, `app_identity=preview`, and `destination=testflight`. This preserves the two downstream effects of a maintainer-pushed release tag. The artifact workflow checks out that immutable tag, proves strict syntax, version equality, annotated-tag identity, exact HEAD resolution, and ancestry on `origin/main`, then reruns the tracked identity verifier. Daemon builds and Android/native work run in parallel, and the desktop archives do not wait for Android:
+GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN`, so the workflow explicitly dispatches `release-artifacts.yml` with the exact new tag and `publish=true` after the atomic push. The artifact workflow checks out that immutable tag, proves strict syntax, version equality, annotated-tag identity, exact HEAD resolution, and ancestry on `origin/main`, then reruns the tracked identity verifier. Everything after that is automatic; there is no hold and no manual promotion:
 
-1. As soon as the daemon binaries are verified, a signing job creates the deterministic archives, `SHA256SUMS` and the signed updater manifest for them. A write-scoped job then creates or reuses the matching draft, uploads that set and publishes the release. `mewla update` and the installer can use it from this point.
-2. When the signed APK is verified, a second signing job stages the complete set. It fails unless the daemon archives are byte-identical to the published ones. A write-scoped job then checks the published archives against the new `SHA256SUMS`, uploads the APK, `SHA256SUMS`, `release-manifest.json` and its signature with `--clobber`, and verifies the exact eight-asset set.
+1. The daemons, the signed APK and the Android upgrade from the previous release run side by side. The upgrade job starts with the run and waits for this run's APK only before its emulator boots.
+2. Once the daemons have run on their platforms and the APK is verified, a signing job stages the complete set: the four archives, the APK, `SHA256SUMS`, and the signed updater manifest.
+3. `release-ready` passes only if every one of those jobs succeeded. Cancelled or skipped counts as not passed; the one skip allowed is the stage of a build-only candidate, which is never signed.
+4. A write-scoped job then creates the draft, uploads the eight assets, verifies the exact set, and makes it public: a stable tag as Latest, a beta tag as a prerelease. A rerun after publication passes only if the release already carries the same `SHA256SUMS`, and never replaces public bytes.
+5. Then `ios-testflight` dispatches `ios-release.yml` at the tag (`app_identity=preview`, `destination=testflight`, the build number `release_identity.py` derives). That workflow uploads the Preview to TestFlight and submits it for beta review. A bare tag push no longer starts `ios-release.yml`.
 
-Stable tags become normal Latest releases; beta tags remain prereleases. A failed daemon build cannot create a public release, and a failed first upload can leave only a draft. If Android fails, the release stays public with the desktop archives only, until a rerun of the failed jobs attaches the APK. While the Android assets replace the desktop-only `SHA256SUMS` and manifest, an install or update in those few seconds can fail its checksum or signature check and should be retried.
+A red job publishes nothing: no draft, no assets. Fix the cause and **Re-run failed jobs**; GitHub reruns the failed jobs and every job that depends on them, so `release-ready`, publish and the iPhone dispatch follow. A flaky emulator in `android-upgrade` is the expected reason for such a rerun.
 
-### Holding a stable release
+Until v0.4.4 the desktop archives were public a few minutes before the APK, the release could be held as a prerelease (`MEWLA_RELEASE_HOLD`) while a Worker replayed the real APK on an emulator, and Brain promoted it by hand before dispatching TestFlight. The replay's upgrade from the previous release is now `android-upgrade`. Its other two checks are gone from releases:
 
-To try the real signed APK before people get it, set the repository variable `MEWLA_RELEASE_HOLD` to `true` before the release is tagged (`gh variable set MEWLA_RELEASE_HOLD --body true`). The tag then publishes as a prerelease with every asset. Everything that looks for a new version follows GitHub's `releases/latest`, which skips prereleases: `mewla update` and the daemon's notice, `install.sh` and `install.ps1`, the app's update check, and the site's download link. So the previous release stays current.
+- **30 computer switches with one computer frozen** were added for the v0.4.0 freeze, NSH's List leaking its `empty` cell. CI covers that cause. `client/core/listEmpty.test.ts` fails the moment an `empty=` comes back. `Sessions.test.tsx` ("a link for the other computer while All Sessions waits…") runs the same switch headless. With one `empty=` put back on NSH 0.5.0 that test hangs, which fails the run, and on the fixed tree it passes in about 2 s. The switches passed every release since (v0.4.1–v0.4.3) without catching anything.
+- **Opening on the owner's dev daemon** needed the owner's machine, which a release must not depend on.
 
-Then:
-1. Download the APK from the release and check it against its `SHA256SUMS`.
-2. Try it.
-3. Promote the same bytes, with no rebuild: `gh release edit vX.Y.Z --prerelease=false --latest=true`.
-4. Delete the variable: `gh variable delete MEWLA_RELEASE_HOLD`.
-
-Do not use a `publish=true` dispatch to promote: it rebuilds and replaces every asset. While the variable is set, any stable release tagged publishes held. A rerun after promotion fails on the prerelease check until the variable is deleted.
+`client.yml`'s upgrade gate (the Expo app to the NSH app, and Preview to Preview) remains a manual check for the client; releases do not wait for it.
 
 ## Repository secrets (names only)
 
