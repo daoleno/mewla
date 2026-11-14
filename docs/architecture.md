@@ -160,11 +160,12 @@ client.
 
 A thread's first snapshot can come in two parts. A
 `codex_conversation_subscribe` with `first_events: N` gets a
-`codex_conversation_snapshot` of the newest N events, then a
-`codex_conversation_delta` (the next revision) with every older event, so a
-phone on a slow link paints the end of the thread from a few KB while the
-rest follows. Without it, or for a thread of N events or fewer, the snapshot
-is the whole thread.
+`codex_conversation_snapshot` of the newest N events, then the older events
+as `codex_conversation_delta`s of the next revisions, 40 events each and the
+newest first, so a phone on a slow link paints the end of the thread from a
+few KB while the rest follows, and takes in each page in a call of its own.
+Without it, or for a thread of N events or fewer, the snapshot is the whole
+thread.
 
 What goes first on a slow link: a connection starts with `brain_snapshot`
 (an app opens on Brain), then the Session list. Work, Calendar and pictures
@@ -198,7 +199,10 @@ ignores it.
 The NSH host hands the app's JS the WebSocket messages that came in together
 in one call (9 to 36 in a row, measured). The app hands each turn's messages
 to its state on the next tick inside one `batch`, so what reads them (the
-tray, the Session list) is worked out once a turn, not once a message.
+tray, the Session list) is worked out once a turn, not once a message. A
+message of 32 KiB or more (a thread's snapshot or page, the Session list, the
+Work items) is a batch of its own on a tick of its own: NSH gives each call
+into JS 2 s, and an open's messages in one call passed it on a phone.
 
 Connect snapshots stay small as history grows: `calendar_items_snapshot`,
 `calendar_item_changed` and Calendar mutation replies omit run history
