@@ -52,6 +52,7 @@ import i_copy from "./svg/copy.svg";
 import i_cube from "./svg/cube.svg";
 import i_cut from "./svg/cut.svg";
 import i_desktop from "./svg/desktop.svg";
+import i_diff from "./svg/diff.svg";
 import i_document from "./svg/document.svg";
 import i_document_text from "./svg/document-text.svg";
 import i_dot from "./svg/dot.svg";
@@ -205,6 +206,7 @@ export const ICON_ASSETS = {
   "cube": i_cube,
   "cut": i_cut,
   "desktop": i_desktop,
+  "diff": i_diff,
   "document": i_document,
   "document-text": i_document_text,
   "dot": i_dot,

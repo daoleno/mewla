@@ -549,6 +549,8 @@ export const MEWLA_GLYPHS = {
     strokes: [circle(6.25, 6.5, 2.75), circle(6.25, 17.5, 2.75), "M8.6,8.05L20.25,17", "M8.6,15.95L20.25,7"],
   },
   desktop: { strokes: [box(2.75, 3.5, 18.5, 13, 3.25), "M12,16.5V20.5", "M8,20.75H16"] },
+  /** A page of changes, ± inside: a Session's Git button. The terminal's box family (radius 4), upright. */
+  diff: { strokes: [box(4.25, 2.75, 15.5, 18.5, 4), "M12,6.75V11.75", "M9.5,9.25H14.5", "M9.5,16H14.5"] },
   document: {
     strokes: [
       "M13.75,2.75H8.25a4,4 0 0 0 -4,4v10.5a4,4 0 0 0 4,4h7.5a4,4 0 0 0 4,-4V8.75Z",

@@ -58,6 +58,21 @@ describe("its room", () => {
   });
 });
 
+describe("its trailing actions (owner 11-14: Git, the view and ⋯ sat too far apart)", () => {
+  const glyph = 22;
+  const { size, gap, slop, end } = CAPSULE.action;
+  test("one group: the glyphs sit 14 to 18 apart, as a native toolbar's", () => {
+    expect(size + gap - glyph).toBeGreaterThanOrEqual(14);
+    expect(size + gap - glyph).toBeLessThanOrEqual(18);
+  });
+  test("each press is still 44 high", () => {
+    expect(size + 2 * slop).toBe(CAPSULE.control);
+  });
+  test("⋯ is as far from the capsule's edge as Back's arrow is from the other", () => {
+    expect(CAPSULE.padding + end + (size - glyph) / 2).toBe(CAPSULE.padding + (CAPSULE.control - glyph) / 2);
+  });
+});
+
 describe("the terminal over the keyboard of a phone held sideways (11-14)", () => {
   test("an SE (375 pt) and an iPhone 18 Pro (402 pt) sideways with the keyboard up are cramped", () => {
     expect(crampedOverKeyboard(375, 194)).toBe(true);
