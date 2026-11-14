@@ -20,7 +20,7 @@ Your code, keys and agent state stay on your computer.
 ## What you need
 
 - Linux (`amd64` or `arm64`), WSL2, an Apple Silicon Mac, or Windows 10
-  (version 1809 or later) or 11 on x64 (64-bit Intel or AMD)
+  (version 1809 or later) or 11 on x64 (64-bit Intel or AMD; beta)
 - One signed-in agent CLI. On Linux and macOS, `mewla` offers to install one;
   on Windows, install and sign in to one yourself first
 - An arm64 Android phone, an iPhone, or a browser
@@ -45,6 +45,7 @@ irm https://mewla.ai/install.ps1 | iex
 
 It installs Mewla for your user only, with no administrator rights and no WSL,
 adds it to your `PATH`, starts it, and starts it again each time you log in.
+Windows is in beta: [tell us how it went](https://github.com/daoleno/mewla/issues/new?title=Windows%3A%20&body=Windows%20version%3A%0A%0Amewla%20version%3A%0A%0Amewla%20doctor%3A%0A%0AWhat%20happened%3A%0A).
 
 ## 2. Start it and pair your phone
 

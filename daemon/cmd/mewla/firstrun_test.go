@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"github.com/daoleno/mewla/daemon/remote"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,6 +96,37 @@ func TestFirstRunChoiceWithoutAnAnswerAsksAgain(t *testing.T) {
 	}
 	if !firstRunPromptAllowed(nil, dir, true) {
 		t.Fatal("the question does not come back")
+	}
+}
+
+// Ctrl-C while waiting for the sign-in cancels the context: Mewla starts for
+// this computer only, saves no answer, and the next mewla asks again.
+func TestFirstRunSignInCancelledAsksAgain(t *testing.T) {
+	t.Setenv("CI", "")
+	t.Setenv("INVOCATION_ID", "")
+	t.Setenv("XPC_SERVICE_NAME", "")
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("cancelled sign-in reached the service: %s %s", r.Method, r.URL.Path)
+		http.Error(w, "unexpected", http.StatusTeapot)
+	}))
+	defer service.Close()
+	t.Setenv("MEWLA_REMOTE_SERVICE_URL", service.URL)
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out bytes.Buffer
+	choice, err := runFirstRunChoice(ctx, bufio.NewReader(strings.NewReader("1\n")), &out, dir)
+	if err != nil || choice != choiceLater {
+		t.Fatalf("choice = %q, %v", choice, err)
+	}
+	if !strings.Contains(out.String(), "Remote access is not on") || !strings.Contains(out.String(), "mewla login") {
+		t.Fatalf("cancelled sign-in did not say how to try again: %q", out.String())
+	}
+	if _, ok := loadStartupChoice(dir); ok {
+		t.Fatal("a cancelled sign-in saved a choice")
+	}
+	if !firstRunPromptAllowed(nil, dir, true) {
+		t.Fatal("the question does not come back after a cancelled sign-in")
 	}
 }
 
