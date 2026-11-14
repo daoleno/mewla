@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -146,6 +147,10 @@ func TestOutboxKeepsASlowButProgressingClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := time.Now()
+	// The 3 MB message is announced first (frame_coming); then the message itself.
+	if _, notice, err := client.ReadMessage(); err != nil || !strings.Contains(string(notice), `"frame_coming"`) {
+		t.Fatalf("want the notice first, got %q (%v)", notice, err)
+	}
 	_, reader, err := client.NextReader()
 	if err != nil {
 		t.Fatal(err)
@@ -408,12 +413,14 @@ func TestOutboxSendsBulkAfterEverythingElse(t *testing.T) {
 		}
 	}
 	var got []string
-	for range 7 {
+	for len(got) < 7 {
 		_, data, err := client.ReadMessage()
 		if err != nil {
 			t.Fatal(err)
 		}
-		got = append(got, wireMessageType(websocket.TextMessage, data))
+		if kind := wireMessageType(websocket.TextMessage, data); kind != "frame_coming" {
+			got = append(got, kind)
+		}
 	}
 	want := "brain_snapshot codex_conversation_snapshot worker_session_updated work_items_snapshot calendar_items_snapshot work_item_changed codex_asset"
 	if strings.Join(got, " ") != want {
@@ -456,12 +463,14 @@ func TestOutboxBulkGetsAShareOfABusyLink(t *testing.T) {
 		}
 	}
 	var got []string
-	for range 7 {
+	for len(got) < 7 {
 		_, data, err := client.ReadMessage()
 		if err != nil {
 			t.Fatal(err)
 		}
-		got = append(got, wireMessageType(websocket.TextMessage, data))
+		if kind := wireMessageType(websocket.TextMessage, data); kind != "frame_coming" {
+			got = append(got, kind)
+		}
 	}
 	// Updates go first; once about 2.5 KB of them passed the waiting picture, it
 	// goes, then the rest. (The first message went before anything waited.)
@@ -563,5 +572,56 @@ func TestKeepBacklogInOutboxReachesTheSocketUnderThePeek(t *testing.T) {
 	})
 	if err != nil || got != wsNotSentLowat {
 		t.Fatalf("TCP_NOTSENT_LOWAT = %d (%v), want %d", got, err, wsNotSentLowat)
+	}
+}
+
+// A message big on the wire is announced first with its size, so a client on a
+// slow link allows for its transit instead of counting the socket dead under
+// it; a small one, or a big one that deflates small, goes alone.
+func TestOutboxAnnouncesAMessageBigOnTheWire(t *testing.T) {
+	read := func(client *websocket.Conn) string {
+		t.Helper()
+		_ = client.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_, data, err := client.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(data) > 80 {
+			return fmt.Sprintf("<%d bytes>", len(data))
+		}
+		return string(data)
+	}
+	random := make([]byte, 150<<10)
+	for i := range random {
+		random[i] = byte('a' + (i*7919+i/13)%26)
+	}
+	big := `{"type":"git_diff_status","pad":"` + string(random) + `"}`
+
+	serverConn, client := upgradedTestPair(t, websocket.DefaultDialer)
+	outbox := newClientOutbox(serverConn)
+	defer outbox.close()
+	for _, msg := range []string{`{"type":"direct_addresses"}`, big} {
+		if err := outbox.enqueue(websocket.TextMessage, []byte(msg), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := []string{read(client), read(client), read(client)}
+	want := []string{`{"type":"direct_addresses"}`, `{"type":"frame_coming","bytes":` + strconv.Itoa(len(big)) + `}`, fmt.Sprintf("<%d bytes>", len(big))}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+
+	serverConn, client = upgradedTestPair(t, websocket.DefaultDialer)
+	deflated := newClientOutbox(serverConn)
+	defer deflated.close()
+	deflated.useFrameDeflate()
+	compressible := `{"type":"git_diff_status","pad":"` + strings.Repeat("p", 150<<10) + `"}`
+	for _, msg := range []string{compressible, `{"type":"direct_addresses"}`} {
+		if err := deflated.enqueue(websocket.TextMessage, []byte(msg), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if first, second := read(client), read(client); strings.Contains(first, "frame_coming") || second != `{"type":"direct_addresses"}` {
+		t.Fatalf("a message that deflates small went with a notice: %q then %q", first, second)
 	}
 }
