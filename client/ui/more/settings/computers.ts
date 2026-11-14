@@ -183,7 +183,7 @@ export async function removeComputer(server: StoredServer): Promise<{ title: str
   if (wasCurrent) {
     // A browser arms no calendar alerts (as v0.3.1).
     if (platform.os !== "web") clearCalendarAlerts();
-    await switchTo(list[0] ?? null);
+    switchTo(list[0] ?? null);
   }
   return missedComputersMessage(server, missed);
 }

@@ -1,37 +1,37 @@
-import { cleanup, effect, Keyboard, keyboardFrame, platform, safeArea, signal, split, untracked, windowSize } from "nsh";
+import { effect, Keyboard, keyboardFrame, platform, safeArea, signal, split, untracked, windowSize } from "nsh";
 import { Dialog, Sheet, type DialogProps, type SheetProps } from "nsh/base";
-import { sheetOpened, switching } from "../session";
+import { switches } from "../session";
 import { dialogFrame } from "../../core/shell/sheet";
 import { wide } from "./layout";
 
 /**
- * Whether a sheet may show: a switch of computer closes it first (NSH 0.4.0 crashes
- * when the page under an open sheet goes) and tells its owner, and it stays closed
- * until the owner opens it again.
+ * Whether a sheet may show: a switch of computer closes it (what it shows is the last computer's) and tells its
+ * owner, and it stays closed until the owner opens it again.
  */
 function guardedOpen(props: { open?: boolean | null; onOpenChange?: (event: { open: boolean; reason: "cancel" }) => void }): () => boolean {
   const dismissed = signal(false);
-  let closed: (() => void) | null = null;
+  let shown = false;
   effect(() => {
     const open = Boolean(props.open);
-    if (open && !closed) closed = sheetOpened();
-    if (!open) {
+    if (open) shown = true;
+    else {
       // A sheet that closes takes the keyboard its field raised with it (R4#4: it stayed up over a page with no field).
-      if (closed) Keyboard.dismiss();
-      closed?.();
-      closed = null;
+      if (shown) Keyboard.dismiss();
+      shown = false;
       dismissed.set(false);
     }
   });
+  let seen = untracked(switches);
   effect(() => {
-    if (!switching() || !untracked(() => Boolean(props.open))) return;
+    const now = switches();
+    if (now === seen) return;
+    seen = now;
+    if (!untracked(() => Boolean(props.open))) return;
     dismissed.set(true);
     Keyboard.dismiss();
-    closed?.();
-    closed = null;
+    shown = false;
     props.onOpenChange?.({ open: false, reason: "cancel" });
   });
-  cleanup(() => closed?.());
   return () => Boolean(props.open) && !dismissed();
 }
 
