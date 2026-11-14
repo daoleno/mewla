@@ -362,14 +362,44 @@ export function buildSemanticActions(
   ];
 }
 
+/**
+ * A call's action, read once per what it says. A thread's rows, a Work card, the tray and the Sessions list each ask
+ * for the same call's action, every time they are made again, and reading a command is regular expressions over its
+ * text (a heredoc's kilobytes): Brain's thread of 152 commands took 21 ms of its 95 ms projection here, under NSH's
+ * engine on a dev box, and a phone took over 2 s for the open as a whole (owner 11-14, `buildSemanticActions` among the
+ * frames NSH cut off). An action is never changed once made, so the same one is handed out again.
+ */
+const SEMANTIC_CACHE_MAX = 4000;
+/** Calls longer than this are read every time: the key would be most of their cost and of the cache's memory. */
+const SEMANTIC_KEY_MAX = 16_384;
+const semanticCache = new Map<string, SemanticAction>();
+
 export function primarySemanticAction(
   input: ToolCallPresentationInput,
 ): SemanticAction {
+  const key = semanticKey(input);
+  if (key !== null) {
+    const hit = semanticCache.get(key);
+    if (hit) return hit;
+  }
   const actions = buildSemanticActions(input);
-  return (
+  const made =
     actions[0] ||
-    action("use_tool", normalizeStatus(input.status, input.exitCode), "tool")
-  );
+    action("use_tool", normalizeStatus(input.status, input.exitCode), "tool");
+  if (key !== null) {
+    if (semanticCache.size >= SEMANTIC_CACHE_MAX) {
+      const oldest = semanticCache.keys().next().value;
+      if (oldest !== undefined) semanticCache.delete(oldest);
+    }
+    semanticCache.set(key, made);
+  }
+  return made;
+}
+
+function semanticKey(input: ToolCallPresentationInput): string | null {
+  const size = (input.input?.length ?? 0) + (input.command?.length ?? 0) + (input.title?.length ?? 0);
+  if (size > SEMANTIC_KEY_MAX) return null;
+  return JSON.stringify([input.kind, input.toolName, input.title, input.input, input.command, input.status, input.exitCode, input.files]);
 }
 
 export type CollapsedToolLabel = {
