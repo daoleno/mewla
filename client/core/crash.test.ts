@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { crashDiagnostic, crashSummary, crashTitle, readCrashReports, type CrashReport } from "./crash";
+import { crashDiagnostic, crashesToShow, crashSummary, crashTitle, endedTheRun, readCrashReports, type CrashReport } from "./crash";
 
 const javaCrash: CrashReport = {
   id: "1762818467989-java-12.txt",
@@ -46,5 +46,32 @@ describe("crash reports", () => {
 
   test("goes to the computer as the daemon's client_diagnostic", () => {
     expect(crashDiagnostic(javaCrash)).toEqual({ type: "client_diagnostic", name: "app_crash", request_id: javaCrash.id, body: crashSummary(javaCrash) });
+  });
+
+  // The owner's eight reports of 11-14 (v0.4.2), two minutes apart at most: every one a 2 s cut-off.
+  const cutOff = (i: number): CrashReport => ({
+    id: `17946716${i}-js-${i}.txt`, kind: "js", at: Date.UTC(2026, 10, 14, 15, 53, 55) + i * 15_000,
+    text: "Mewla 0.4.2 (40299, release) com.daoleno.mewla\nOnePlus PYR110, Android 16 (API 36), arm64-v8a\njs at 2026-11-14T15:55:41Z\n\nthe script was interrupted: a call into JS exceeded its budget of 2000 ms\nError: interrupted\n    at filter (native)",
+  });
+  const outOfMemory = (at: number): CrashReport => ({ id: `${at}-js-oom.txt`, kind: "js", at, text: "Mewla 0.4.2 (40299, release) x\n\nthe script ran out of memory (the JS heap is limited to 256 MB) and was stopped." });
+  const anr: CrashReport = { id: "1-anr.txt", kind: "anr", at: 1, text: "The app stopped answering for 34 s (its JS thread) and was reopened." };
+
+  test("what the app survived is never shown: cut-offs, other JS errors, an ANR the system reopened", () => {
+    const eight = Array.from({ length: 8 }, (_, i) => cutOff(i));
+    expect(crashesToShow(eight)).toEqual([]);
+    expect(crashesToShow([...eight, anr, { ...javaCrash, kind: "js", text: "TypeError: x is undefined" }])).toEqual([]);
+    expect(eight.some(endedTheRun)).toBe(false);
+    expect(endedTheRun(anr)).toBe(false);
+  });
+
+  test("one crash, or crashes far apart, are not shown either: the computer has them", () => {
+    expect(crashesToShow([javaCrash])).toEqual([]);
+    const hour = 60 * 60_000;
+    expect(crashesToShow([javaCrash, { ...javaCrash, id: "b", at: javaCrash.at + hour }, outOfMemory(javaCrash.at + 2 * hour)])).toEqual([]);
+  });
+
+  test("three runs ended within ten minutes are a crash loop: the sheet shows them, newest first", () => {
+    const loop = [javaCrash, { ...javaCrash, id: "b", kind: "native" as const, at: javaCrash.at + 60_000 }, outOfMemory(javaCrash.at + 9 * 60_000)];
+    expect(crashesToShow([...loop, cutOff(1)]).map((r) => r.id)).toEqual([loop[2]!.id, "b", javaCrash.id]);
   });
 });

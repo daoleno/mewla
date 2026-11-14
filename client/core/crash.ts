@@ -29,6 +29,34 @@ export function readCrashReports(value: unknown): CrashReport[] {
   }).sort((a, b) => b.at - a.at);
 }
 
+/**
+ * A report of a run that ended: the system closed the app (a Java or native crash), or its JS engine was stopped (out
+ * of memory). A JS error, NSH's 2 s cut-off ("Error: interrupted") among them, left the app running, and an ANR's app
+ * was reopened.
+ */
+export function endedTheRun(report: CrashReport): boolean {
+  if (report.kind === "java" || report.kind === "native") return true;
+  return report.kind === "js" && /ran out of memory|was stopped/i.test(report.text.slice(0, 2000));
+}
+
+/** Runs that ended this close together are a crash loop: the app cannot go on, and the person is the one to tell us. */
+export const CRASH_LOOP = { runs: 3, withinMs: 10 * 60_000 };
+
+/**
+ * What the person is shown on the next start: a crash loop's reports, else nothing. Everything the hosts kept goes to
+ * the computer either way (`crashDiagnostic`); a report the app survived, or one crash, is ours to read there, not a
+ * sheet over the app the person just opened (owner 11-14: eight 2 s cut-offs, each a "Mewla hit an error").
+ */
+export function crashesToShow(reports: readonly CrashReport[]): CrashReport[] {
+  const ended = reports.filter(endedTheRun).sort((a, b) => a.at - b.at);
+  for (let index = 0; index + CRASH_LOOP.runs - 1 < ended.length; index += 1) {
+    if (ended[index + CRASH_LOOP.runs - 1]!.at - ended[index]!.at <= CRASH_LOOP.withinMs) {
+      return ended.slice().sort((a, b) => b.at - a.at);
+    }
+  }
+  return [];
+}
+
 /** What the sheet is titled: a crash closed the app; a JS error only broke a screen. */
 export function crashTitle(reports: readonly CrashReport[]): string {
   return reports.some((report) => report.kind !== "js") ? "Mewla closed unexpectedly" : "Mewla hit an error";

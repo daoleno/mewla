@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { framesOf, paired, phoneHost } from "../testing/fixtures";
 
 const report = {
   id: "1762818467989-java-12.txt",
@@ -22,9 +23,18 @@ function host(reports: unknown[]) {
   };
 }
 
-describe("a crash last time", () => {
-  test("shows on the next start with the trace, Copy and Dismiss; Dismiss clears it in the host", async () => {
-    const app = await open("../App.tsx", { host: host([report]), platform: "android" });
+// Three runs that ended within ten minutes: a crash loop (core/crash.ts CRASH_LOOP).
+const loop = [report, { ...report, id: "1762818527989-java-13.txt", at: report.at + 60_000 }, { ...report, id: "1762818587989-native-14.txt", kind: "native", at: report.at + 120_000 }];
+
+// The owner's of 11-14 (v0.4.2): eight 2 s cut-offs in two minutes, the app running all along.
+const cutOffs = Array.from({ length: 8 }, (_, i) => ({
+  id: `17946716${i}0000-js-${i}.txt`, kind: "js", at: Date.UTC(2026, 10, 14, 15, 53, 55) + i * 15_000,
+  text: `Mewla 0.4.2 (40299, release) com.daoleno.mewla\nOnePlus PYR110, Android 16 (API 36), arm64-v8a\njs at 2026-11-14T15:55:41Z\n\nthe script was interrupted: a call into JS exceeded its budget of 2000 ms\nError: interrupted\n    at filter (native)`,
+}));
+
+describe("a crash loop last time", () => {
+  test("shows on the next start with the traces, Copy and Dismiss; Dismiss clears them in the host", async () => {
+    const app = await open("../App.tsx", { host: host(loop), platform: "android" });
     await app.waitFor("id:crash-sheet");
     expect(app.texts()).toContain("Mewla closed unexpectedly");
     expect(app.texts().join(" ")).toContain("java.lang.NullPointerException: boom");
@@ -32,13 +42,32 @@ describe("a crash last time", () => {
     expect(app.clipboard()).toContain("QrScanner.kt:45");
     await app.press("id:crash-dismiss");
     const clear = app.host.calls().find((call) => call.name === "app.clearCrashReports");
-    expect(clear?.data).toEqual({ ids: [report.id] });
+    expect((clear?.data as { ids: string[] }).ids.sort()).toEqual(loop.map((r) => r.id).sort());
     await app.waitUntil(() => !app.shows("id:crash-sheet"));
   });
 
   test("nothing kept, nothing shown", async () => {
     const app = await open("../App.tsx", { host: host([]), platform: "android" });
     await app.waitFor("id:set-up");
+    expect(app.shows("id:crash-sheet")).toBe(false);
+  });
+});
+
+describe("what the app survived (owner 11-14: \"Mewla hit an error\" over the app, eight times a 2 s cut-off)", () => {
+  test("one crash shows nothing", async () => {
+    const app = await open("../App.tsx", { host: host([report]), platform: "android" });
+    await app.waitFor("id:set-up");
+    await app.wait(300);
+    expect(app.shows("id:crash-sheet")).toBe(false);
+  });
+
+  test("cut-offs show nothing: each goes to the computer once, then the host forgets them", async () => {
+    const app = await open("../FakeDaemonApp.tsx", { platform: "android", storage: paired, host: phoneHost({ brain: {} }, { "app.crashReports": () => cutOffs, "app.clearCrashReports": () => null }) });
+    await app.waitUntil(() => framesOf(app.host.posts(), "client_diagnostic").filter((f) => f.name === "app_crash").length === 8, { timeout: 10_000 });
+    expect(framesOf(app.host.posts(), "client_diagnostic").map((f) => f.request_id).sort()).toEqual(cutOffs.map((r) => r.id).sort());
+    await app.waitUntil(() => app.host.calls().some((call) => call.name === "app.clearCrashReports"), { timeout: 5000 });
+    const clear = app.host.calls().find((call) => call.name === "app.clearCrashReports");
+    expect((clear?.data as { ids: string[] }).ids.sort()).toEqual(cutOffs.map((r) => r.id).sort());
     expect(app.shows("id:crash-sheet")).toBe(false);
   });
 });
