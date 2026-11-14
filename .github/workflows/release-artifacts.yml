@@ -399,6 +399,18 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || '' }}
 
+      # What turns a captured trace back into names: R8's mapping (`retrace`) and the JS source map
+      # (`nsh symbolicate`), kept beside the APK they belong to.
+      - name: Upload symbols (R8 mapping, JS source map)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mewla-android-symbols-${{ needs.validate.outputs.tag }}
+          path: |
+            client/android/app/build/outputs/mapping/productionRelease/mapping.txt
+            client/android/app/build/generated/assets/bundleUi.js.map
+          if-no-files-found: error
+          retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || 90 }}
+
   desktop-stage:
     name: Stage, sign, and verify desktop archives
     needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin]

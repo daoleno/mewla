@@ -71,7 +71,9 @@ targets:
         script: |
           set -e
           "${NSH:-$HOME/.nsh/bin/nsh}" build --release -o "$SRCROOT/build/nsh" "$SRCROOT/../ui"
-          rm -f "$SRCROOT/build/nsh/bundle.js.map"
+          # The source map is for `nsh symbolicate`, not for the phone: out of the bundled folder, where
+          # ios-release.yml keeps it as the build's symbols artifact.
+          [ ! -f "$SRCROOT/build/nsh/bundle.js.map" ] || mv -f "$SRCROOT/build/nsh/bundle.js.map" "$SRCROOT/build/bundleUi.js.map"
     postCompileScripts:
       # The Ghostty MIT notice (the text Settings > Open-source licenses shows) also at the bundle root, where
       # the Expo app had it: scripts/verify-ios-artifact.sh checks it in the Simulator app and the IPA.
