@@ -58,7 +58,9 @@ export class CalendarModel {
   ) {
     this.took = alertHost === null;
     this.stops.push(
-      transport.on("connected", () => this.refresh()),
+      // Each connection starts with the computer's calendar_items_snapshot (asking again only sent it twice);
+      // what was done on alerts while the app was closed still goes to the computer.
+      transport.on("connected", () => void this.replayNativeActions()),
       transport.on("calendar_items_snapshot", (frame) => {
         const list = frame.calendar_items;
         if (!Array.isArray(list)) return;

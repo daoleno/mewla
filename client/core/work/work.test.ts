@@ -77,6 +77,16 @@ describe("the Markdown Work files", () => {
     expect(items.items.size).toBe(0);
   });
 
+  test("a reconnect does not ask again: each connection starts with the computer's own snapshot", () => {
+    const transport = new FakeTransport();
+    const items = new WorkItems(transport);
+    transport.emit({ type: "connected" });
+    transport.emit({ type: "connected" });
+    expect(transport.sent).toEqual([{ type: "list_work_items" }]);
+    transport.emit({ type: "work_items_snapshot", work_items: [raw({ id: "run-2", frontmatter: { id: "run-2", kind: "calendar_action", created: "2026-07-17T03:00:00Z" } })] });
+    expect([...items.items.keys()]).toEqual(["run-2"]);
+  });
+
   test("status: an explicit one, else done, else started, else queued", () => {
     expect(workItemStatus({ frontmatter: { id: "", created: "", done: "x" } })).toBe("done");
     expect(workItemStatus({ frontmatter: { id: "", created: "", started: "x" } })).toBe("running");

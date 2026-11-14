@@ -48,7 +48,7 @@ const item = (id: string, patch: Partial<CalendarItem> = {}): CalendarItem => ({
 });
 
 describe("the current computer's Calendar", () => {
-  test("asks for the list when connected and on every reconnect; a snapshot replaces it, a change upserts", () => {
+  test("asks for the list once, made on a link already up; a reconnect's own snapshot replaces it, a change upserts", () => {
     const transport = new FakeTransport();
     const calendar = new CalendarModel("s1", transport, null, () => NOW);
     expect(transport.sent).toEqual([{ type: "list_calendar_items" }]);
@@ -58,8 +58,11 @@ describe("the current computer's Calendar", () => {
     expect(calendar.items.map((i) => i.id)).toEqual(["a", "b"]);
     transport.emit({ type: "calendar_item_changed", calendar_item: item("a", { title: "renamed", next_at: "2026-07-16T00:00:00Z" }) });
     expect(calendar.items.map((i) => i.title)).toEqual(["b", "renamed"]);
+    // A reconnect starts with the computer's own snapshot: the app does not ask again (it came twice).
     transport.emit({ type: "connected" });
-    expect(transport.sent).toHaveLength(2);
+    expect(transport.sent).toHaveLength(1);
+    transport.emit({ type: "calendar_items_snapshot", calendar_items: [item("c")] });
+    expect(calendar.items.map((i) => i.id)).toEqual(["c"]);
   });
 
   test("arms the phone's alerts from each change, once per burst, and stops when closed", async () => {

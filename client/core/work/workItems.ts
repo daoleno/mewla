@@ -92,7 +92,8 @@ export class WorkItems {
       if (item.id) this.items.set(item.id, item);
     };
     this.stops = [
-      transport.on("connected", () => this.refresh()),
+      // Each connection starts with the computer's work_items_snapshot: asking again only sent it twice
+      // (owner 11-14: 230 KB more per connection on a slow link). A store made on a link already up asks below.
       transport.on("work_items_snapshot", (frame) => {
         if (!Array.isArray(frame.work_items)) return;
         this.items = new Map();
