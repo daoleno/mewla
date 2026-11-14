@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
@@ -85,7 +86,7 @@ func (s *Store) RecordWorkWorker(record WorkWorkerRecord) (bool, error) {
 	record.Name = strings.TrimSpace(record.Name)
 	record.ExecutorID = strings.TrimSpace(record.ExecutorID)
 	record.Provider = strings.TrimSpace(record.Provider)
-	record.Cwd = strings.TrimSpace(record.Cwd)
+	record.Cwd = ghosttyvt.StoredDir(strings.TrimSpace(record.Cwd))
 	if s == nil || record.WorkID == "" || record.SessionID == "" {
 		return false, nil
 	}
@@ -155,6 +156,8 @@ func (s *Store) workWorkersLocked() (map[string]WorkWorkerRecord, error) {
 		if json.Unmarshal(scanner.Bytes(), &record) != nil || record.WorkID == "" || record.SessionID == "" {
 			continue
 		}
+		// A cwd recorded from a raw OSC 7 report (file://host/path) reads as its path.
+		record.Cwd = ghosttyvt.StoredDir(record.Cwd)
 		records[workWorkerKey(record.WorkID, record.SessionID)] = record
 	}
 	if err := scanner.Err(); err != nil {

@@ -150,7 +150,7 @@ type State struct {
 	ScrollbackRows int
 	TotalRows      int
 	Title          string
-	Pwd            string // the working directory the program reported (OSC 7)
+	Pwd            string // the working directory the program reported (OSC 7), as an absolute local path (LocalDir)
 	Ground         bool   // the parser is between sequences
 }
 

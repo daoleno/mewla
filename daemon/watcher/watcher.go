@@ -22,6 +22,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/google/uuid"
 )
@@ -3963,7 +3964,9 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		return "", err
 	}
 
-	cwd := strings.TrimSpace(opts.Cwd)
+	// An app may still offer a folder an older daemon read from a raw OSC 7
+	// report (file://host/path): it starts in that path.
+	cwd := ghosttyvt.StoredDir(strings.TrimSpace(opts.Cwd))
 	if cwd == "" && preferredTarget != "" {
 		currentPath, err := backend.currentPath(preferredTarget)
 		if err == nil {

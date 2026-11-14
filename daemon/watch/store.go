@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/ghosttyvt"
 )
 
 // Store keeps Watch state under <state>/watch: the setting, inferred
@@ -457,7 +458,7 @@ func (s *Store) DeleteCursor(key string) error {
 
 // Place records where a turn, Session or Work ran.
 func (s *Store) Place(kind, key, cwd string) {
-	key, cwd = strings.TrimSpace(key), strings.TrimSpace(cwd)
+	key, cwd = strings.TrimSpace(key), ghosttyvt.StoredDir(strings.TrimSpace(cwd))
 	if key == "" || cwd == "" {
 		return
 	}
@@ -474,7 +475,8 @@ func (s *Store) Place(kind, key, cwd string) {
 func (s *Store) PlaceOf(kind, key string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.placeMapLocked(kind)[strings.TrimSpace(key)]
+	// A place stored from a raw OSC 7 report (file://host/path) reads as its path.
+	return ghosttyvt.StoredDir(s.placeMapLocked(kind)[strings.TrimSpace(key)])
 }
 
 func (s *Store) placeMapLocked(kind string) map[string]string {

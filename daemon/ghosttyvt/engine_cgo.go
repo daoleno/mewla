@@ -529,7 +529,7 @@ func (term *Terminal) State() State {
 		state.Title = goString(title)
 	}
 	if get(C.GHOSTTY_TERMINAL_DATA_PWD, unsafe.Pointer(&pwd)) {
-		state.Pwd = goString(pwd)
+		state.Pwd = LocalDir(goString(pwd))
 	}
 	return state
 }
