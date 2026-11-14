@@ -4,6 +4,10 @@ import { host, Storage } from "nsh";
 import { startApp } from "./App";
 import { installPlatform, platform } from "../core/platform";
 import { FakeDaemon, type FakeDaemonState } from "./testing/fakeDaemon";
+import { setScrollTraceSink } from "../core/timeline/scrollTrace";
+
+// A chat list's scroll trace reaches the test as the host post `app.scrollTrace` (`app.host.posts()`).
+setScrollTraceSink((entry) => host.post("app.scrollTrace", entry));
 
 const daemon = new FakeDaemon(((host.params as { daemon?: FakeDaemonState }).daemon ?? {}) as FakeDaemonState);
 // How many connections the app opened, in storage as `fake:sockets` (`app.storage()`).
