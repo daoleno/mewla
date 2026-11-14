@@ -32,7 +32,10 @@ describe("news that comes in together", () => {
     // The list came as seq 1; the burst is the next 36.
     await app.host.send("app.burst", { sessions, seq: 2 });
     await app.waitUntil(() => app.host.posts().some((post) => post.name === "app.trayRuns"), { timeout: 10_000 });
-    expect(app.host.posts().find((post) => post.name === "app.trayRuns")!.data).toEqual({ during: 0, after: 1 });
+    const runs = app.host.posts().find((post) => post.name === "app.trayRuns")!.data as { during: number; after: number };
+    // None inside the call; one after it (two when the elapsed clock's 1 s tick fell in the 50 ms after).
+    expect(runs.during).toBe(0);
+    expect(runs.after >= 1 && runs.after <= 2).toBe(true);
   }, 30_000);
 
   test("a Brain reply streaming in reruns the tray only when its turn starts", async () => {
