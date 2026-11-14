@@ -15,12 +15,14 @@ An iPhone build must be signed and provisioned. App Store distribution IPAs are 
 
 ## Unsigned macOS CI
 
-The `ios` and `ios-launch` jobs in [`.github/workflows/client.yml`](../.github/workflows/client.yml) run side by side on the Apple Silicon `xcode-27` image on a push to `main` that touches `client/` and on manual dispatch. Each:
+The `ios` job in [`.github/workflows/client.yml`](../.github/workflows/client.yml) runs on the Apple Silicon `xcode-27` image on a push to `main` that touches `client/` and on manual dispatch. It:
 
 1. validates the shared Android/iOS native contract, then restores, or builds when the cache misses, and verifies the pinned `native/terminal-vt/libs/ios/GhosttyVt.xcframework` device and Simulator slices through the shared `ios-native` action, whose caches only `native-cache.yml` on `main` saves;
-2. installs NSH and its iOS framework, generates the Xcode project with xcodegen, and starts booting an iPhone Simulator, which takes minutes on the runner, while it builds.
+2. installs NSH and its iOS framework, generates the Xcode project with xcodegen, and starts booting an iPhone Simulator, so the minutes a boot takes on the runner pass while Xcode compiles;
+3. runs the unit tests (the Expo app's Keychain and AsyncStorage upgrade, the terminal) on that Simulator, ad hoc signed;
+4. builds the Release app, installs and launches it on the same Simulator, still booted, and uploads a first-run screenshot.
 
-Then `ios` runs the unit tests (the Expo app's Keychain and AsyncStorage upgrade, the terminal) on its Simulator, ad hoc signed, and `ios-launch` builds the Release app, installs and launches it on a Simulator the tests never touched, and uploads a first-run screenshot (`mewla-ios-simulator-first-run`). In one job, one after the other, they took 16 min (11-14).
+Until 11-14 the Simulator booted twice, once for the tests and again for the Release app, about 6 of the job's 16 min. Two jobs on two Macs were slower still: each paid for a cold build while a Simulator booted on the same three cores.
 
 This job contains no Apple credentials. The Linux `client` and `client-ui` jobs of `ci.yml` keep core tests, `nsh check` and `nsh test` on every push; none of them is a substitute for this macOS compile/link job.
 
