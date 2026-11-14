@@ -3,6 +3,7 @@ import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { gitDiffStatusMark, gitDiffStatusWord, gitDiffTone } from "../../../core/git/gitDiffPresentation";
 import type { GitDiffFileInfo } from "../../../core/git/gitDiff";
+import { splitGitReviewPath } from "../../../core/git/gitReviewModel";
 import { statusTileLook } from "../../../core/git/colour";
 import { color, withAlpha } from "../../kit/colors";
 import { Icon, type IconName } from "../../kit/Icon";
@@ -41,11 +42,12 @@ export function Counts(props: { additions: number; deletions: number; binary?: b
 
 /** A file's name over its folder (a file row's two lines). */
 export function FileName(props: { path: string }) {
-  const index = props.path.lastIndexOf("/");
+  // A new folder ("build/out/") reads "out/" in "build", not an empty name.
+  const parts = splitGitReviewPath(props.path);
   return (
     <View class="min-w-0">
-      <Text class="font-mono text-code font-semibold line-clamp-1">{index === -1 ? props.path : props.path.slice(index + 1)}</Text>
-      <If when={index > 0}><Text class="font-mono text-caption text-muted-foreground line-clamp-1">{props.path.slice(0, index)}</Text></If>
+      <Text class="font-mono text-code font-semibold line-clamp-1">{parts.name}</Text>
+      <If when={parts.directory}><Text class="font-mono text-caption text-muted-foreground line-clamp-1">{parts.directory.slice(0, -1)}</Text></If>
     </View>
   );
 }

@@ -20,6 +20,8 @@ export interface GitDiffFileInfo {
   additions?: number;
   deletions?: number;
   binary?: boolean;
+  /** A new folder reported whole ("app/"), as `git status` shows it: no lines, no diff of its own. */
+  directory?: boolean;
   staged_additions?: number;
   staged_deletions?: number;
   working_additions?: number;
@@ -58,6 +60,8 @@ export interface GitDiffStatusSnapshot {
   additions: number;
   deletions: number;
   files?: GitDiffFileInfo[];
+  /** `files` holds only the first of `file_count` (the computer lists at most 1000); the counts cover them all. */
+  truncated?: boolean;
   /** Tracking branch, e.g. `origin/main`; empty when none is set. */
   upstream?: string;
   ahead?: number;

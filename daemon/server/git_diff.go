@@ -40,22 +40,33 @@ type gitDiffStatusPayload struct {
 	Additions          int               `json:"additions"`
 	Deletions          int               `json:"deletions"`
 	Files              []gitDiffFileInfo `json:"files,omitempty"`
+	// Truncated: Files holds the first gitDiffStatusMaxFiles of FileCount (tracked
+	// changes before untracked ones); the counts and totals above are over all of them.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
+// gitDiffStatusMaxFiles bounds the files one status lists. A checkout with a vast
+// change (a mass rename, generated output) sent every file in one frame: 14,883
+// entries were 4 MB, which the app parsed and drew in one go and froze on (11-14).
+var gitDiffStatusMaxFiles = 1000
+
 type gitDiffFileInfo struct {
-	Path             string `json:"path"`
-	OldPath          string `json:"old_path,omitempty"`
-	Status           string `json:"status"`
-	Staged           bool   `json:"staged"`
-	Unstaged         bool   `json:"unstaged"`
-	Untracked        bool   `json:"untracked"`
-	Additions        int    `json:"additions"`
-	Deletions        int    `json:"deletions"`
-	Binary           bool   `json:"binary,omitempty"`
-	StagedAdditions  int    `json:"staged_additions,omitempty"`
-	StagedDeletions  int    `json:"staged_deletions,omitempty"`
-	WorkingAdditions int    `json:"working_additions,omitempty"`
-	WorkingDeletions int    `json:"working_deletions,omitempty"`
+	Path      string `json:"path"`
+	OldPath   string `json:"old_path,omitempty"`
+	Status    string `json:"status"`
+	Staged    bool   `json:"staged"`
+	Unstaged  bool   `json:"unstaged"`
+	Untracked bool   `json:"untracked"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Binary    bool   `json:"binary,omitempty"`
+	// Directory: an untracked folder, reported whole as `git status` does ("app/"),
+	// not file by file. It has no lines to count and no diff of its own.
+	Directory        bool `json:"directory,omitempty"`
+	StagedAdditions  int  `json:"staged_additions,omitempty"`
+	StagedDeletions  int  `json:"staged_deletions,omitempty"`
+	WorkingAdditions int  `json:"working_additions,omitempty"`
+	WorkingDeletions int  `json:"working_deletions,omitempty"`
 }
 
 type gitDiffPatchPayload struct {
@@ -134,8 +145,44 @@ func (s *Server) buildGitDiffStatus(targetID, cwd string) (gitDiffStatusPayload,
 			payload.UntrackedFileCount += 1
 		}
 	}
+	payload.Files, payload.Truncated = limitGitDiffFiles(files, gitDiffStatusMaxFiles)
 
 	return payload, nil
+}
+
+// buildGitRepositoryStatus answers only whether the folder is a repository (a
+// Session's header shows its Git button by it): no `git status`, no file list,
+// whatever the size of the checkout.
+func (s *Server) buildGitRepositoryStatus(targetID, cwd string) (gitDiffStatusPayload, error) {
+	repoRoot, reason, err := s.resolveGitRepoRoot(targetID, cwd)
+	if err != nil {
+		return gitDiffStatusPayload{}, err
+	}
+	if reason != "" {
+		return gitDiffStatusPayload{Available: false, Reason: reason, Clean: true}, nil
+	}
+	return gitDiffStatusPayload{Available: true, RepoRoot: repoRoot, RepoName: filepath.Base(repoRoot)}, nil
+}
+
+// limitGitDiffFiles keeps at most max files, tracked changes before untracked
+// ones, in path order; true when some were left out.
+func limitGitDiffFiles(files []gitDiffFileInfo, max int) ([]gitDiffFileInfo, bool) {
+	if len(files) <= max {
+		return files, false
+	}
+	kept := make([]gitDiffFileInfo, 0, max)
+	for _, untracked := range []bool{false, true} {
+		for _, file := range files {
+			if len(kept) == max {
+				break
+			}
+			if file.Untracked == untracked {
+				kept = append(kept, file)
+			}
+		}
+	}
+	sort.Slice(kept, func(left, right int) bool { return kept[left].Path < kept[right].Path })
+	return kept, true
 }
 
 func (s *Server) buildGitDiffPatch(targetID, cwd, path string) (gitDiffPatchPayload, error) {
@@ -200,7 +247,7 @@ func (s *Server) buildGitDiffPatch(targetID, cwd, path string) (gitDiffPatchPayl
 		}
 	}
 
-	if file.Untracked {
+	if file.Untracked && !file.Directory {
 		patch, err := gitCommandOutput(
 			repoRoot,
 			true,
@@ -254,6 +301,9 @@ func (s *Server) buildGitDiffFileContent(targetID, cwd, path, scope string) (git
 	file, err := gitDiffTargetFile(repoRoot, path)
 	if err != nil {
 		return gitDiffFileContentPayload{}, err
+	}
+	if file.Directory {
+		return gitDiffFileContentPayload{}, fmt.Errorf("%s is a new folder; open its files in Files", path)
 	}
 
 	var base, current gitDiffContentSnapshot
@@ -345,7 +395,9 @@ func listGitDiffFiles(repoRoot string) ([]gitDiffFileInfo, error) {
 }
 
 func readGitDiffStatus(repoRoot string) ([]gitDiffFileInfo, error) {
-	out, err := gitCommandOutput(repoRoot, false, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	// Untracked folders whole, as `git status` shows them ("app/"): listing every
+	// file under a new folder made one entry per file of an untracked build tree.
+	out, err := gitCommandOutput(repoRoot, false, "status", "--porcelain=v1", "-z", "--untracked-files=normal")
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +439,7 @@ func readGitDiffStatus(repoRoot string) ([]gitDiffFileInfo, error) {
 			Staged:    !untracked && x != ' ',
 			Unstaged:  !untracked && y != ' ',
 			Untracked: untracked,
+			Directory: untracked && strings.HasSuffix(path, "/"),
 		})
 	}
 
@@ -446,7 +499,7 @@ func hydrateGitDiffFileStats(repoRoot string, files []gitDiffFileInfo) error {
 		return err
 	}
 	for index := range files {
-		if !files[index].Untracked {
+		if !files[index].Untracked || files[index].Directory {
 			continue
 		}
 		attribute := attributes[files[index].Path]
@@ -468,7 +521,7 @@ func hydrateGitDiffFileStats(repoRoot string, files []gitDiffFileInfo) error {
 func untrackedDiffAttributes(repoRoot string, files []gitDiffFileInfo) (map[string]string, error) {
 	var input strings.Builder
 	for _, file := range files {
-		if file.Untracked {
+		if file.Untracked && !file.Directory {
 			input.WriteString(file.Path)
 			input.WriteByte(0)
 		}

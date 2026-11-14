@@ -427,6 +427,7 @@ type clientMessage struct {
 	WorkerID             string                  `json:"worker_id"`
 	TargetID             string                  `json:"target_id"`
 	Cwd                  string                  `json:"cwd"`
+	RepositoryOnly       bool                    `json:"repository_only"` // git_diff_status: only whether cwd is a repository
 	Command              string                  `json:"command"`
 	Name                 string                  `json:"name"`
 	StartedAt            json.RawMessage         `json:"started_at"`
@@ -1650,7 +1651,11 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 func (s *Server) handleRepositoryMessage(conn *websocket.Conn, raw clientMessage) {
 	switch raw.Type {
 	case "git_diff_status":
-		payload, err := s.buildGitDiffStatus(raw.TargetID, raw.Cwd)
+		build := s.buildGitDiffStatus
+		if raw.RepositoryOnly {
+			build = s.buildGitRepositoryStatus
+		}
+		payload, err := build(raw.TargetID, raw.Cwd)
 		if err != nil {
 			s.sendErrorWithRequestID(conn, raw.RequestID, "git_diff_status_failed", err.Error())
 			return

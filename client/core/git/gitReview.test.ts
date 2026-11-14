@@ -11,6 +11,9 @@ import {
   gitReviewSummary,
   gitReviewSync,
   matchesGitReviewQuery,
+  GIT_REVIEW_ROWS_PAGE,
+  pageGitReviewRows,
+  splitGitReviewPath,
 } from "./gitReviewModel";
 
 const file = (path: string, extra: Partial<GitDiffFileInfo> = {}): GitDiffFileInfo => ({
@@ -131,6 +134,37 @@ const PATCH = [
   "\\ No newline at end of file",
   " twenty-two",
 ].join("\n");
+
+describe("a big change (owner 11-14: 14,883 untracked files froze the app)", () => {
+  const folder = file("app/", { status: "untracked", unstaged: false, untracked: true, directory: true });
+  const scope = { tree: true, collapsed: new Set<string>(), query: "", scope: "changes" };
+
+  test("a new folder reads as its name with its slash, in its parent", () => {
+    expect(splitGitReviewPath("app/")).toEqual({ directory: "", name: "app/" });
+    expect(splitGitReviewPath("build/out/")).toEqual({ directory: "build/", name: "out/" });
+    expect(splitGitReviewPath("src/a.ts")).toEqual({ directory: "src/", name: "a.ts" });
+  });
+
+  test("in folders, a new folder is a row of its parent, not a folder holding an empty name", () => {
+    const entries = buildGitReviewGroups([folder, file("build/out/", { status: "untracked", unstaged: false, untracked: true, directory: true })]).changes;
+    const rows = buildGitReviewRows(entries, scope);
+    expect(rows.map((row) => (row.kind === "dir" ? `dir ${row.label}` : `file ${row.entry.file.path}`))).toEqual(["dir build", "file build/out/", "file app/"]);
+  });
+
+  test("the diff reader steps over a new folder", () => {
+    const order = gitReviewOrder(buildGitReviewGroups([file("a.ts"), folder, file("z.ts")]));
+    expect(adjacentGitReviewEntry(order, "changes:a.ts", "next")?.file.path).toBe("z.ts");
+    expect(adjacentGitReviewEntry(order, "changes:z.ts", "previous")?.file.path).toBe("a.ts");
+  });
+
+  test("a group draws a page of rows at a time and says how many are left", () => {
+    const rows = Array.from({ length: 14_883 }, (_, i) => i);
+    expect(pageGitReviewRows(rows, 0)).toMatchObject({ more: 14_883 - GIT_REVIEW_ROWS_PAGE });
+    expect(pageGitReviewRows(rows, 0).rows).toHaveLength(GIT_REVIEW_ROWS_PAGE);
+    expect(pageGitReviewRows(rows, 400).rows).toHaveLength(400);
+    expect(pageGitReviewRows(rows.slice(0, 12), 0)).toEqual({ rows: rows.slice(0, 12), more: 0 });
+  });
+});
 
 describe("git patch hunks", () => {
   const parsed = parseGitPatch(PATCH);

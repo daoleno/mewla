@@ -1,4 +1,4 @@
-import { Clipboard, effect, signal, untracked, type Signal } from "nsh";
+import { Clipboard, computed, effect, signal, untracked, type Signal } from "nsh";
 import type { Daemon } from "../../../core/more/daemon";
 import type { GitBranchesPayload, GitCommitDetail, GitCommitSummary, GitDiffStatusSnapshot, GitDiscardUndo, GitHunkAction, GitRepoFileContentPayload, GitRepoPathsPayload } from "../../../core/git/gitDiff";
 import { buildGitReviewGroups, gitReviewOrder, gitReviewPaths, type GitReviewEntry, type GitReviewGroup } from "../../../core/git/gitReviewModel";
@@ -77,6 +77,8 @@ export class GitReview {
   readonly query = signal("");
   readonly searchOpen = signal(false);
   readonly collapsed = signal<ReadonlySet<string>>(new Set());
+  /** How many rows each group draws (`pageGitReviewRows`): a page, more after each "Show more". */
+  readonly shown = signal<Record<string, number>>({});
   readonly history = signal<History>({ commits: [], hasMore: false, loaded: false, loading: false, error: "", moreError: "" });
   readonly commits = signal<Record<string, Loaded<GitCommitDetail>>>({});
   readonly paths = signal<Loaded<GitRepoPathsPayload>>({ value: null, loading: false, error: "" });
@@ -102,9 +104,8 @@ export class GitReview {
     return reviews.get(reviewKey(this.serverId, this.target)) === this;
   }
 
-  groups() {
-    return buildGitReviewGroups(this.status()?.files ?? []);
-  }
+  /** Grouped once per status, not on every read: a big change has thousands of files. */
+  readonly groups = computed(() => buildGitReviewGroups(this.status()?.files ?? []));
 
   order(): GitReviewEntry[] {
     return gitReviewOrder(this.groups());
@@ -365,6 +366,11 @@ export class GitReview {
   }
 
   /** Collapses or expands a group (`section:staged`), a folder of the tree, or anything else keyed. */
+  showMore(group: string, page: number): void {
+    const now = this.shown();
+    this.shown.set({ ...now, [group]: Math.max(page, now[group] ?? page) + page });
+  }
+
   toggleCollapsed(key: string): void {
     const next = new Set(this.collapsed());
     if (next.has(key)) next.delete(key);
