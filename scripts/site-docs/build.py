@@ -304,20 +304,19 @@ TEMPLATE = """<!doctype html>
 <title>{title}</title>
 <meta name="description" content="{description}">
 <link rel="canonical" href="{canonical}">
-<meta name="color-scheme" content="light">
-<meta name="theme-color" content="#fbfaf7">
-{icon}<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
-<link rel="stylesheet" href="{docs_root}docs.css">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#18191C" media="(prefers-color-scheme: dark)">
+{icon}<link rel="stylesheet" href="{docs_root}docs.css">
 <script>document.documentElement.classList.add("js")</script>
 <script defer src="{docs_root}search.js"></script>
 </head>
 <body data-docs-root="{docs_root}">
 <a class="skip" href="#content">Skip to content</a>
 <header class="d-top">
-  <a class="d-word" href="{site_root}" aria-label="Mewla home">mewla</a>
-  <a class="d-section" href="{docs_root}">docs</a>
+  <a class="d-word" href="{site_root}" aria-label="Mewla home"><img src="{site_root}mark.png" alt="" width="28" height="28"><span>Mewla</span></a>
+  <a class="d-section" href="{docs_root}">Docs</a>
+  <a class="d-get" href="{site_root}#get">Get Mewla</a>
   <button class="d-menu" type="button" aria-expanded="false" aria-controls="d-side">Menu</button>
 </header>
 <div class="d-shell">

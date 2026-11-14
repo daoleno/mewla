@@ -1,27 +1,30 @@
 # Sessions
 
-A **Session** is one agent or shell running on your computer in Mewla's session
-host. Mewla starts it, lists it and lets you read or drive it from the phone.
-The session host keeps it running while Mewla restarts or updates, and the same
-Session is there when you sit down at the desk: `mewla attach` lists the live
-ones to pick from (or `mewla attach <name>` goes straight in, or `mewla attach
---all` tiles every Session as a live grid to choose from), and Ctrl-\ detaches. `mewla host status` lists them in full.
+A **Session** is one agent or shell running on your computer. Mewla starts it,
+lists it and lets you read or drive it from the phone. Mewla's session host
+keeps it running while Mewla restarts or updates, and the same Session is there
+when you sit down at the desk ([`mewla attach`](#at-the-desk-mewla-attach)).
 
-On Linux with a systemd user session, the session host runs as a user service
-of its own (`mewla-session-host-…`), not inside the terminal or service that
-started Mewla. When the computer runs out of memory and the kernel ends one
-process, systemd does not stop the host and the Sessions with it; closing the
-terminal Mewla was started from does not either. Without a systemd user
-session the host starts directly, as before.
+## Find a Session
 
-Sessions an earlier Mewla started in `tmux` move to the session host when their
-agent is idle; see [Updating from Mewla 0.2](install-daemon.md#updating-from-mewla-02).
+Tap the state control next to **Brain** to open the tray. It lists your
+Sessions by what they need: **Needs you**, **Running**, **Idle** and **Done**.
+Running rows are ordered by when you last opened them, so the Session you live
+in is always the first Running row. Back from a Session returns to the open
+tray, so hopping between Sessions is Back, then a row.
+
+**All Sessions**, at the bottom of the tray, is the full list grouped by folder.
+Tap a folder's name to fold it. Long-press a row to select several and
+terminate them together (on the web, right-click a row).
+
+Brain's Workers are ordinary Sessions and appear here too. A Work with several
+Workers is one row with Brain's mark and "N Workers"; it opens Work detail (see
+[Brain and Work](brain-and-work.md)).
 
 ## Start a Session
 
-In **Sessions**, tap the **New session** pill (or ⋮ > **New session**; in a
-desktop browser, the **+** at the top or the N key), pick a directory and tap
-what to run:
+Tap **+** in the tray (or on All Sessions; on the web, press N), pick a folder
+and tap what to run:
 
 | Choice | Runs |
 | --- | --- |
@@ -29,8 +32,11 @@ what to run:
 | Shell | Your login shell |
 | DSH | The DSH harness, opened as a web page rather than a terminal |
 
-**Advanced** lets you set the working directory, any command (for example
-`claude --model opus`) and a window title.
+**Advanced** lets you set any command (for example `claude --model opus`) and a
+window title. The Session starts on the current computer.
+
+The agent must already be installed and signed in on the computer; Mewla never
+signs in for you.
 
 For an agent, **Task** ("What should it do?") is the Session's first message.
 The computer holds it until the agent is ready; meanwhile it shows in the
@@ -39,9 +45,6 @@ it, in order. If it could not be delivered (or the connection dropped while it
 was held), it leaves the chat and comes back as the Session's draft. Mewla
 never sends it again by itself.
 
-The agent must already be installed and signed in on the computer; Mewla never
-signs in for you.
-
 Codex starts inline (`--no-alt-screen`): its transcript goes into the
 terminal's scrollback, so the phone's Terminal and a computer's own terminal
 scroll it on their own. If your Codex config names `[tui] alternate_screen`, or
@@ -49,37 +52,28 @@ the command chooses the screen itself, Mewla leaves it as you set it. Claude
 Code keeps the renderer it picks for itself, or the `tui` your Claude settings
 name.
 
-## The list
+## Chat and Terminal
 
-Sessions are grouped by directory. Each row shows the agent, the Session's
-name, its latest line and, on the right, its state mark: a spinning arc while
-it works, a red dot when it needs you, a crossed box when it failed, a check
-when it finished.
-
-Tap a directory's name to fold it. A folded directory keeps its Session count
-and the most urgent mark among its Sessions (needs you, then failed, then
-running), so nothing waiting on you hides. Folds are remembered per computer.
-
-Brain's Workers are ordinary Sessions and appear here too. Long-press a row to
-select several and terminate them together.
-
-## Chat, Terminal and Git
-
-![The same Session as Chat and as the live Terminal](assets/sessions-pair.svg)
-
-Open a Session to read it in one of three ways:
+A Session's header has a **Chat / Terminal** switch. The choice is remembered
+per Session. What you type in either goes to the same terminal. When the
+Session's folder is a Git repository, a **Git** button sits beside the switch;
+it opens [Git review](#git-review).
 
 - **Chat**: the structured conversation, with your messages, the agent's
-  replies, tool calls, plans and attachments. A run of finished tool calls
-  folds into one row that says what it did ("Read 3 files and ran 2
-  commands"); tap it for the calls. A call that failed is folded like any other
-  and the row says so ("4 steps · 1 failed"); a call that is running or waiting
-  on you stays on its own row, and so does a subagent, which reads as the task it was given. On Claude, tap a subagent to see the calls it made, folded the same way, with how many there were, how long it took and whether it is still working. Available for Claude, Codex, Cursor, Grok, Pi and OpenCode.
-  A delegated Worker's Chat opens with the task Brain gave it, two lines at
-  most; tap it to read the whole task. The protocol Mewla adds to every brief
-  is not shown.
-- **Terminal**: the live terminal, rendered natively. Works for any command,
-  including a Shell. A key row above the keyboard adds Ctrl, Esc, Tab and arrows.
+  replies, tool calls, plans and pictures. A run of finished tool calls folds
+  into one row that says what it did ("Read 3 files"); tap it for the calls. A
+  call that failed is folded like any other and the row says so; a call that is
+  running or waiting on you stays on its own row, and so does a subagent, which
+  reads as the task it was given. On Claude, tap a subagent to see the calls it
+  made, folded the same way, with how many there were, how long it took and
+  whether it is still working. Chat is available for Claude, Codex, Cursor,
+  Grok, Pi and OpenCode. A delegated Worker's Chat opens with the task Brain
+  gave it, two lines at most; tap it to read the whole task.
+- **Terminal**: the live terminal, for any command, a Shell included. The key
+  bar adds Esc, Tab, Ctrl (armed for one key), ⌃C, ⌃D, ⌃B and arrows that
+  repeat while held. Scroll up for **Search history**, **Previous prompt**,
+  **Next prompt** and **Scroll to bottom**. Tap a link to open it in the
+  browser, or a file path to preview the file.
   On Android, pinch to change the text size between 8 and 14 (10 by default).
   The phone remembers it, and the terminal takes the new size once you lift
   your fingers. Drag one finger up or down to scroll back through what the
@@ -92,12 +86,9 @@ Open a Session to read it in one of three ways:
   them), and stops when you touch the screen. In a program that reads the
   mouse, a tap is a click there (Claude Code's "Jump to bottom"); the Keyboard
   key brings up the keyboard.
-- **Git**: when the Session's folder is a Git repository, a Git button sits
-  beside the Chat/Terminal button at the top. It opens the repository's
-  changes, staged and not staged, with each file's diff, History and the
-  repository's files. Reading a diff never stages or discards anything.
 
-What you type in either Chat or Terminal goes to the same terminal.
+When a Session is blocked on a prompt the chat cannot answer, it opens on the
+Terminal by itself.
 
 ### Copy and paste in the Terminal on a phone
 
@@ -126,130 +117,57 @@ set-clipboard on` for that. Mewla never lets a program read your clipboard.
 
 ### When an agent is waiting for you
 
-A waiting prompt is either a card you can answer by tapping, or no card at all.
-Every card is read from the prompt the agent has open in its terminal and is
-answered by Mewla, which checks the screen is still showing that same prompt
-before it presses a key. When a Session is blocked on a prompt Mewla cannot
-answer this way, the Session opens on its live **Terminal** instead. Going back
-to the chat leaves it there until the Session is blocked on something else.
-Brain's chat shows the same cards for the prompts Brain itself is blocked on.
+A prompt the agent stops on becomes a **request**: a card in the Session's
+chat, a **Needs you** row in the tray and a notification. If the Session works
+for Brain, Brain's chat shows the same card. Answer in any of them and all of
+them close at once: the card shrinks to one line with your answer, the tray row
+goes and the count drops. A plain yes/no gets **Approve** right on the tray
+row; anything else takes you to the card.
 
-**Claude's questions** (AskUserQuestion) show a card above the composer. It
-works like Claude's own prompt: one question at a time, with a tab for each
-question and a final **Review** tab. Tapping an option on a single-choice
-question moves on to the next question. Where a question allows several
-options, tick any and tap **Next**. Type your own answer in the **Type
-something** row. Review lists every answer; tap a row or a tab to change it,
-then tap **Submit**. Questions you have not answered are marked there, and the
-button counts them. The Working row is hidden while a question is open. Once it
-is answered, from the card or from the Terminal, the card becomes an
-**Answered** line in the chat. Mewla answers by pressing keys in the Session's
-terminal, so it needs to see the whole question there: when the Terminal window
-is shorter than the question (a long multi-question card, a keyboard open over
-the Terminal), sending says the window is too short rather than that the
-question has passed. Make it taller or close the keyboard and send again.
+Every card is read from the prompt the agent has open in its terminal and is
+answered by Mewla, which checks the screen still shows that same prompt before
+it presses a key. A prompt Mewla cannot answer this way has no card: the
+Session is a Needs you row and opens on its Terminal.
+
+**Claude's questions** (AskUserQuestion) come one at a time, as in Claude's own
+prompt. Tapping an option on a single-choice question moves on to the next.
+Where a question allows several options (**Choose any**), tick any and tap
+**Next**. **Other…** takes your own words. **Review** lists every answer; tap
+one to change it, then **Submit**. Mewla answers by pressing keys in the
+Session's terminal, so it needs to see the whole question there: when the
+terminal is shorter than the question (a long multi-question prompt, a keyboard
+open over it), sending says the window is too short. Make it taller or close
+the keyboard and send again.
 
 **Permission, plan, startup and approval prompts** (run this command, accept
-this plan, trust this folder, a Codex approval) show a card with the prompt's
-own heading, what it asks about, and one button per numbered option, labelled as
-the agent labels it. Tapping a button answers that option.
-
-A Claude permission prompt also says what it asks about as data, not as screen
-text: `tool` (`Bash`) and `summary` (the command, or the file), taken from the
-tool call Claude wrote to its transcript before it asked. Claude's own hints in
-the box (such as "Tip: auto mode handles these prompts") are left out of
-`request`. They are absent when the transcript has no such call yet.
-
-If the prompt has already passed (answered in the Terminal, replaced by another,
-or timed out), Mewla says **This prompt has already passed** and the card goes
-away. If Mewla cannot send the answer, it says so on the card and the card
-stays, so you can try again.
+this plan, trust this folder, a Codex approval) show the prompt's own heading,
+what it asks about, and one choice per numbered option, labelled as the agent
+labels it.
 
 When Claude, Codex or OpenCode asks to run a command or change files, and Mewla
 started that Worker, the card names the command and offers the agent's own
-options (Allow or Deny; OpenCode also offers Always allow). Tapping one answers
+options (Allow or Deny; OpenCode also offers Always allow). Your choice answers
 the agent directly, and a request that was already answered, or that belongs to
 another conversation, is refused.
 
-**An answered request stays answered.** The daemon keeps one record for each
-request that is answered: a screen prompt, an agent approval, an agent's
-question, or Brain's question on a Work. The record holds the short form of
-what was asked, the answer, the outcome (`answered`, `approved`, `denied`,
-`dismissed`, or `not_answered` when it timed out), who answered, and when.
-A permission or approval also carries `tool` and `summary`, the tool and the
-command or file it asked about, so the sealed line can say what was approved.
-One answered in the Session's own terminal gets its outcome (`approved` or
-`denied`) from the tool call Claude recorded; the option picked there is not
-recorded, so it has no `answer`.
-A request from a delegated Worker also names the Work it was working on
-(`work_id`). A Session that asks the same thing again gets a new record for
-each time it asks. Who answered is one of:
-
-- a paired device, with its id and name;
-- Brain, with the sentence of its brief it relied on;
-- an operator using `mewla worker answer`;
-- the Session's own terminal, when the prompt left the screen and no answer
-  came through Mewla within 5 seconds;
-- a timeout.
-
-The records are kept in `<state>/answered_requests.jsonl`: each Session's
-newest 240 (its thread's window), and every Work question. A device can read
-them in three places:
-
-- In the request's thread, as a row of kind `request_answered` placed where
-  the request was asked. The row carries `request`, whose `anchor` names the
-  transcript call, screen prompt or approval when there is one. Brain's thread
-  shows only what was answered in it (`thread_id`): Brain's own prompts, and
-  questions on the Work that thread started. An app that does not know the
-  kind drops the row.
-- In the `request_answered` broadcast, sent to every device the moment a record
-  is written.
-- In `answered_requests`, the history the tray lists, newest first. It takes
-  an optional `session_id` and a `limit`.
-
-The first explicit answer stands. A terminal answer, which is inferred, gives
-way to the app's or Brain's answer if that is recorded a moment later.
-
-**A Session that is working.** A Claude, Codex or Cursor Session you started
-reports `running` while its own terminal says it works (Claude's footer shows
-"esc to interrupt") and `unknown`, which apps list as idle, when it does not.
-`running_since` is the poll that first saw the run. A prompt ends the run and
-the answer starts a new one, so the time a Session waits on you is not counted.
-A Claude Session that Mewla's hooks follow also carries `activity`, the tool
-call it started last (`Bash curl -sI https://example.org`), with its parts in
-`activity_tool` (`Bash`) and `activity_summary` (`curl -sI https://example.org`),
-from the hook, not the screen. A Session whose agent is not followed by hooks
-(one launched with its own `--settings`, for example) has `running_since` and
-no `activity`. A Brain-delegated Worker keeps the status of its turn; its
-`running_since` is when its turn was accepted, and after a prompt, the answer.
+A prompt that passed without your answer (answered in the Terminal, replaced
+by another, or timed out) reads **Not answered**. If Mewla cannot send your
+answer, it says so and the card stays, so you can try again.
 
 ### Copy and edit a message
 
-Press and hold one of your messages on the phone, as in the ChatGPT and Claude
-apps, and a small menu opens next to it: the time it was sent, then **Copy**,
-**Select Text** and **Edit**. The menu follows the message, opens above or below
-it depending on the room, stays clear of the keyboard, and closes when you tap
-elsewhere, scroll or press Back. A very long message anchors the menu to where
-you pressed.
-
-Replies keep the system's own text selection: press and hold a word, drag the
-handles, tap a link. Under every reply a quiet row shows **Copy** and a **...**
-menu with **Copy** and **Select Text** (the message in a sheet, for selecting a
-whole block at once). On desktop, hover over
-a message for Copy and Edit; right-click and text selection are the browser's
-own. Copy gives the text as written, Markdown included; code blocks keep their
-own copy button. Each button is a 44 dp target that commits when you lift your
-finger, so a slightly drifting tap still counts.
+Tap one of your messages for **Copy**, **Select Text** and **Edit**. Code blocks
+have their own **Copy**. Copy gives the text as written, Markdown included.
 
 Messages are read as standard GitHub-flavored Markdown on every platform:
-headings, quotes (including a line that continues a quote without its `>`),
-nested and numbered lists, task lists, tables, strikethrough, links and bare
-URLs, HTML entities such as `&amp;`, images and code blocks with a copy button. A reply that is still arriving never shows half-typed
-syntax: an unfinished `-`, `1.` or `>` waits for its text.
+headings, quotes, nested and numbered lists, task lists, tables,
+strikethrough, links and bare URLs, HTML entities such as `&amp;`, images,
+and code blocks with a copy button. A reply that is still arriving never shows
+half-typed syntax: an unfinished `-`, `1.` or `>` waits for its text.
 
-**Edit** puts the message in the composer with a small bar above it and an x to
-cancel; with a hardware keyboard (a phone's too), ↑ in the empty composer edits
-your last message and Esc leaves the edit. What sending does depends on the agent:
+**Edit** puts the message back in the composer; with a hardware keyboard (a
+phone's too), ↑ in the empty composer edits your last message and Esc leaves
+the edit. What sending does depends on the agent:
 
 | Agent | Sending an edited message |
 | --- | --- |
@@ -261,28 +179,31 @@ the message you chose. If it cannot prove that, nothing is rewound or sent, and
 the text waits in the composer as a new message you can still send. Brain's own
 thread is never rewound.
 
-### Files in a reply
+A message that could not be delivered shows **Not sent**, with **Send again**
+and **Delete**.
 
-Tap a file path in a reply, a tool row or a changed-files list to open it
-without leaving the chat: Markdown and text are shown as text, images can be
-zoomed, and PDFs open on the phone. Video (mp4, m4v, mov, webm) and audio
-(mp3, m4a, wav, ogg, opus, flac) play right there with play/pause, a
-scrubber you can drag to seek, the time, mute and, for video, full screen.
+### Files and links in a reply
+
+Tap a file path in a reply, a tool row or a changed-files list to preview it
+without leaving the chat: Markdown and text as text, images you can zoom,
+PDFs, video (mp4, m4v, mov, webm) and audio (mp3, m4a, wav, ogg, opus, flac).
 Playback streams from the computer, so a long recording starts at once and
-seeking does not download the whole file. The header offers Download for any
-file; text files (Markdown, code, txt, JSON) also offer Copy, which copies the
-whole file content. Images and binaries have no Copy — download them instead.
+seeking does not download the whole file. Every file has **Download**; text
+files (Markdown, code, txt, JSON) also have **Copy**, which copies the whole
+file.
 
-Links in a reply work the same way. Web addresses, with or without
-`[text](…)`, open in your browser, including one that sits right beside Chinese
-text or punctuation, and email addresses open your mail app. A link that
-names a file, such as `[report](report.pdf)` or `[app](./out/app.apk)`, opens
-that file as above, and the header's Download saves it. Inside a Markdown file
-you opened, a link to another file is relative to that file. Links that can run
-code (`javascript:`, `data:`) never open.
+Web addresses, with or without `[text](…)`, open in your browser, including one
+that sits right beside Chinese text or punctuation, and email addresses open
+your mail app. A link that names a file, such as `[report](report.pdf)` or
+`[app](./out/app.apk)`, opens that file as above. Inside a Markdown file you
+opened, a link to another file is relative to that file. Links that can run
+code (`javascript:`, `data:`) never open. A changed-files list shows each file
+with the lines it added and removed (+12 −3); a renamed file shows, and opens,
+its new path.
 
-A changed-files list shows each file with the lines it added and removed
-(+12 −3); a renamed file shows, and opens, its new path.
+A file that is not really what its name says (an `.mp4` that is not an MP4
+container, say) is not played. A codec the device can't decode, such as HEVC
+in some browsers, can't be played there; download it instead.
 
 ### Pictures in a chat
 
@@ -302,23 +223,64 @@ On the web, paste a screenshot or a copied picture into the composer and it
 becomes a chip above the field, the same as one you attached; pasted text goes
 in as typed. The phone's keyboard can paste a picture the same way.
 
-A file that is not really what its name says (an `.mp4` that is not an MP4
-container, say) is not played. A codec the device can't decode, such as HEVC
-in some browsers, shows "can't be played here"; download it instead.
+## The Session's menu
 
-A Session's ⋮ menu holds:
+**⋯** in a Session's header holds:
 
 | Item | Does |
 | --- | --- |
-| Open terminal / Open chat | Switch between the two views |
-| New Terminal | Start a Shell in the same directory |
-| Rename | Change the Session's name |
-| Model | Pick the model for this Session only |
-| Open Web | Open a DSH Session's web page |
-| Open Brain | Jump to the Brain conversation about this Worker's Work |
-| Terminate | Stop the Session, after you confirm |
+| **Files** | The Session's [files](#files) |
+| **Model & Effort** | The model and effort for this Session only |
+| **Open Web** | A DSH Session's web page |
+| **New Terminal** | A Shell in the same folder and on the same computer |
+| **Rename** | The Session's name |
+| **Open its Work** | Work detail for the Work this Worker does |
+| **Terminate** | Stops the Session, after you confirm |
 
-Items appear only where they apply: Open Web for DSH, Open Brain for a Worker.
+## Git review
+
+**Git** in the Session's header, or the changed-files card in the chat, opens
+the Session's repository:
+
+- **Changes** lists the files in **Staged** and **Not staged**, with their
+  added and removed lines. The branch pill opens **Branches**; beside it, how
+  many commits wait to be pushed.
+- Tap a file for its diff. Under the hunks: **Ask {agent}** (for
+  example **Ask Claude**) about the change, **Discard** (after you confirm) and
+  **Stage** or **Unstage**.
+- **Commit N files** opens the commit sheet.
+- **History** lists the commits; tap one to read it.
+- Git's **⋯**: **Refresh**, **Browse files**, **Fetch**, **Pull**, **Push**,
+  **Copy path**, **Copy branch**, **Undo last discard** and **Discard all
+  changes**.
+
+## Files
+
+**⋯ › Files** browses the Session's folder: folders first, then files with
+their size. A file opens in the preview, as a file in a reply does.
+
+## At the desk: `mewla attach`
+
+```sh
+mewla attach            # list the live Sessions and pick one
+mewla attach brain      # go straight to one by name
+mewla attach --all      # every Session at once, as a live grid to choose from
+mewla host status       # the session host's Sessions in full
+```
+
+Ctrl-\ detaches; the Session keeps running. In the grid, Ctrl-] goes back from
+a Session to the grid. A Session still running in `tmux` from an earlier Mewla
+opens in `tmux`, which detaches with its own prefix key.
+
+On Linux with a systemd user session, the session host runs as a user service
+of its own (`mewla-session-host-…`), not inside the terminal or service that
+started Mewla. When the computer runs out of memory and the kernel ends one
+process, systemd does not stop the host and the Sessions with it; closing the
+terminal Mewla was started from does not either. Without a systemd user
+session the host starts directly.
+
+Sessions an earlier Mewla started in `tmux` move to the session host when their
+agent is idle; see [Updating from Mewla 0.2](install-daemon.md#updating-from-mewla-02).
 
 ## How Mewla follows each agent
 
@@ -366,11 +328,11 @@ starts a server of its own.
 
 The daemon watches your Sessions by listing them and reading the process table,
 not by attaching to them. With nothing happening it settles to under 1% of one
-CPU core (it was above 6% when it forked `ps` several times a second):
+CPU core:
 
-- The process table is read straight from `/proc` on Linux (`ps` elsewhere), and
-  again only when a Session printed, appeared or went away, or when it is five
-  seconds old.
+- The process table is read straight from `/proc` on Linux, from the system's
+  process list on Windows and through `ps` on macOS, and again only when a
+  Session printed, appeared or went away, or when it is five seconds old.
 - A Session's screen is read again only when the session host says it printed,
   or when the last read is 30 seconds old.
 - After three quiet seconds the Session list is checked every two seconds
@@ -378,19 +340,20 @@ CPU core (it was above 6% when it forked `ps` several times a second):
 
 ## Services
 
-![Services: two ports from atlas-notes Sessions, one with a public Quick Tunnel, and a persistent postgres](assets/services.svg)
-
-Agents start dev servers, previews and APIs. **Services**, in the Sessions ⋮
-menu, lists the ports they listen on, by project:
+Agents start dev servers, previews and APIs. **Services**, in the tray's **⋯**
+menu (and All Sessions' **⋯**), lists the ports they listen on, by project:
 
 | Source | Shown when |
 | --- | --- |
-| Session | A process inside a live Session listens on a port. The row opens that Session's terminal. |
+| Session | A process inside a live Session listens on a port. |
 | Persistent | A registered user `systemd` unit is running and listening. It has no terminal. |
 
-Mewla finds the listening ports itself (from `/proc` on Linux, through `lsof`
-on macOS), so no `ss` or other tool needs to be installed on Linux. It sees the
-processes your user owns.
+Tap a port for its details, **Open Web** and a public tunnel.
+
+Mewla finds the listening ports itself: from `/proc` on Linux, so no `ss` or
+other tool needs to be installed, and through `lsof` on macOS. It sees the
+processes your user owns. Windows has no `lsof`, so Services lists no ports
+there.
 
 A service bound only to `127.0.0.1` is marked local; Mewla does not invent a
 network URL for it. A registered unit that stopped shows **Inactive**; one
@@ -414,7 +377,7 @@ and owns the port. This needs Linux with a user `systemd`.
 
 ### Share one with a temporary public URL
 
-A service row can start a Cloudflare **Quick Tunnel**: a random
+A service can start a Cloudflare **Quick Tunnel**: a random
 `trycloudflare.com` URL for that one service. It needs `cloudflared` on the
 computer, but no Cloudflare account.
 

@@ -7,11 +7,14 @@ travel over the same signed connection as everything else; nothing is opened on
 the phone's network and no account is needed.
 
 Phone use is off until you turn it on. It is for Android 11 or
-later, in the APK from GitHub (the Play Store build leaves it out).
+later, in the APK from GitHub (the Play Store build leaves it out). On an
+iPhone, agents on a Mac use it through iPhone Mirroring instead: see
+[iPhone use](#iphone-use).
 
 ## Turn it on
 
-1. **Settings → Agents → Phone use**, switch on. The Phone page opens, and Phone is added to the menu of **Screen**.
+1. Tap the cat, then **Settings › Agents › Phone use**, and switch it on. The
+   Phone use page opens, and **Phone** appears in Screen's **⋯**.
 2. The page lists what the phone needs and checks it live: **Developer
    options**, **Wi‑Fi**, **Wireless debugging**, **Pairing** and **Helper**.
 3. Tap **Allow**. Android has you switch on Mewla's Accessibility service, once
@@ -43,41 +46,45 @@ with another computer and switch to it, and Phone use follows. Agents on
 
 ## What you see
 
-While an agent works, the Phone page shows its screen live, and a notification
-says who is using your phone.
+While an agent works, the Phone use page shows its screen live, and a
+notification says who is using your phone. Open the page from **Settings ›
+Agents › Phone use**, from Screen's **⋯ › Phone**, or from the notification.
 
 The ongoing notification only says **Phone use is on** while the helper is really
 running. Until then it says **Finish setting up Phone use** (not paired yet) or
-**Phone use isn't ready** (paired, helper not up); tapping it opens the Phone page.
+**Phone use isn't ready** (paired, helper not up); tapping it opens the Phone
+use page.
 
 - **Take over** makes the picture touchable: your finger drives the agent's
   screen. **Give back** returns it.
 - **Stop** ends the agent's work at once, from the page, the notification or the
   floating window. The agent is told and stops, and the page and the notification
   offer **Resume** when you want it to work again.
-- When an agent needs you (a login, a code, a payment) your phone notifies you
-  with what to do. Tap it, do it on the live screen, and tap **Done**; the agent
-  carries on.
+- When an agent needs you (a login, a code, a payment), it is a request: your
+  phone notifies you with what to do, the floating window shows it, and the
+  tray lists it under **Needs you**. Tap any of them to open the Phone use page,
+  do it on the live screen, and tap **Done**; the agent carries on. **Stop**
+  ends the agent's work instead.
 - While an agent works, its screen also floats as a live window over the page
   you are on, so you can keep chatting and watch at once. It is the same window
-  as for an agent's Linux display or the Mac (see Screen). It has the agent
-  screen's exact shape and starts at a bit over half the screen's width, in the
-  bottom-right corner above the chat input. Until the agent's screen has drawn
-  anything, it shows a light card with a spinner (and the app's name, *微信*,
-  once it is opening, or *Couldn't open 微信*) instead of a black slab. Drag its
-  bar to move it: it snaps to a corner and remembers its corner and size. Drag
-  the handle in its inner corner to resize it (from about a third of the screen
-  to nearly all of it); double-tap the bar to go between the default and a large
-  size. It stays above the chat input and the keyboard. The bar's ⋮ menu has
-  Take over (which opens the Phone page), Stop; its expand button opens the Phone
-  page. When the agent needs you, it shows a pulsing ring, and ⋮ has Done. It
-  shows over the Session or Work whose agent is using the phone (and over pages
-  that belong to no Session), and disappears when the agent finishes (its Worker
-  ends or is closed) or you Stop, and on the Phone page itself.
-- Leave Mewla from any page while an agent works and its screen floats in a small
-  window (Android's picture-in-picture), still live and showing only the agent's
-  screen; tap it for Take over and Stop. Coming back returns it to the in-app
-  float.
+  as for an agent's Linux display or the Mac (see
+  [the floating screen](screen.md#the-floating-screen)). It has the agent
+  screen's exact shape and starts at a bit over half the screen's width, at the
+  top right under the header. Until the agent's screen has drawn anything, it
+  shows a light card with a spinner (and the app's name, *微信*, once it is
+  opening, or *Couldn't open 微信*) instead of a black slab. Drag it to move
+  it: it snaps to a corner and remembers its corner and size. Drag the handle
+  in its inner corner to resize it (from about a third of the screen to nearly
+  all of it); double-tap to go between the default and a large size. It stays
+  above the composer and the keyboard. **Open** opens the Phone use page. When
+  the agent needs you, it shows a pulsing ring. It shows over the Session or
+  Work whose agent is using the phone (and over pages that belong to no
+  Session), and disappears when the agent finishes (its Worker ends or is
+  closed) or you Stop, and on the Phone use page itself.
+- Leave Mewla from any page while an agent works, or tap **Float** on the Phone
+  use page, and its screen floats in a small window over other apps (Android's
+  picture-in-picture), still live and showing only the agent's screen; tap it
+  for Take over and Stop. Coming back returns it to the in-app float.
 
 You always come first: while you are driving or after you Stop, agents wait.
 
@@ -139,13 +146,14 @@ back on when it can.
 - After you update or reinstall Mewla over a paired phone, nothing is paired
   again: Mewla starts a helper of the new version by itself once Wireless
   debugging is on (it switches it on itself when it may). Until then the old
-  helper keeps working, and the **Phone** page offers one **Start**, or, if
+  helper keeps working, and the Phone use page offers one **Start**, or, if
   Mewla may not switch Wireless debugging on yet, that one switch. A phone that
-  is not ready tells an agent so (*Phone use isn't ready on the phone: open
-  Mewla → Phone*, or, when the phone knows why, that reason alone) instead of
-  showing a black screen. The agent is told to wait about 15 seconds and try
-  again for up to a minute, since Mewla on the phone keeps trying by itself, and
-  to tell the person the reason only if it still is not ready.
+  is not ready tells an agent so (*Phone use isn't ready on the phone: the
+  person has to open Mewla → Phone on their phone*, or, when the phone knows
+  why, that reason alone) instead of showing a black screen. The agent is told
+  to wait about 15 seconds and try again for up to a minute, since Mewla on the
+  phone keeps trying by itself, and to tell the person the reason only if it
+  still is not ready.
 - Why a phone is not ready is never just "setup": the phone says it in a
   sentence (not on Wi‑Fi, Wireless debugging off and Mewla has not been given the
   permission to switch it on, switching it keeps falling back on this network,
@@ -162,11 +170,120 @@ back on when it can.
   raises the system's prompt. Mewla only does that by itself on a network where
   it worked, and stops asking for five minutes after the prompt is dismissed
   twice in a row; the phone says when it tries again.
-- iOS has no Phone use; agents on a Mac can use an iPhone through [iPhone use](iphone.md).
+- iOS has no Phone use; agents on a Mac can use an iPhone through
+  [iPhone use](#iphone-use).
 
 ## Turn it off
 
-Switch **Phone use** off in **Settings → Agents → Phone use**. The helper stops, the notification goes,
+Switch **Phone use** off in **Settings › Agents › Phone use**. The helper stops, the notification goes,
 the Accessibility service is disabled, and agents lose the phone tools for new
 Workers. To forget the pairing, remove Mewla under **Wireless debugging → Paired
 devices** in Settings.
+
+## iPhone use
+
+Agents on your Mac can use your iPhone: its apps and its logins, the way you
+would. They work through **iPhone Mirroring**, the Mac app that shows a locked
+iPhone nearby in a window. Mewla moves that window off your screen, onto a
+display of its own, and reads and taps it from there. Your iPhone stays locked
+in your hand or on the desk, and you keep using your Mac.
+
+iPhone use is off until you turn it on.
+
+### What you need
+
+- Mewla running on a **Mac** with macOS 15 or later (Apple silicon, or an Intel
+  Mac with the T2 chip). A Mewla on Linux or Windows can't use an iPhone.
+- An iPhone with iOS 18 or later, signed in to the **same Apple Account** as the
+  Mac, with a passcode, Bluetooth and Wi-Fi on.
+- An Apple Account outside the **EU**: Apple doesn't offer iPhone Mirroring there.
+- What agents on the Mac's screen already need: **Agents can use this computer**
+  on, and Mewla's **Screen Recording** and **Accessibility** permissions (see
+  [Screen](screen.md#agents-on-the-screen)).
+
+### Set up iPhone use
+
+1. On the Mac, open **iPhone Mirroring** and follow it: unlock your iPhone and
+   confirm there. Only you can do this, on your iPhone.
+2. In **iPhone Mirroring → Settings**, choose to sign in **automatically**.
+   Otherwise the Mac asks for Touch ID or your password at each start, which an
+   agent never types.
+3. In Mewla, with that Mac as the current computer, tap the cat, then
+   **Settings › Labs › iPhone use**, and switch it on. The page says where it
+   stands, and `mewla agent-use status` on the Mac prints the same line with
+   the one thing to fix, if any.
+
+From then on, keep the iPhone **locked and near the Mac**. iPhone Mirroring
+opens by itself when an agent needs it, behind your apps.
+
+### The iPhone tools
+
+Agents Mewla starts on that Mac get a `mewla_iphone` tool set while iPhone use
+is on. It has the shape of the phone tools above:
+
+| Tool | What it does |
+| --- | --- |
+| `iphone_screen` | Reads the screen: each text on it with an id and its place; with a picture on request |
+| `iphone_tap` | Taps a text by id or by its words, or a point on the picture; long press |
+| `iphone_type` | Types into the focused field; replace clears it first, submit presses Return |
+| `iphone_swipe` | Swipes up, down, left or right, or from one point to another |
+| `iphone_key` | Home, the app switcher, Spotlight, Return, Delete, Tab, Escape |
+| `iphone_launch` | Opens an app by its name, through Spotlight |
+| `iphone_wait` | Waits, or waits for a text to appear |
+| `iphone_steps` | Runs up to 12 of these in one go |
+| `iphone_handoff` | Asks you to do something only you can |
+
+iPhone Mirroring shows a picture, not the iPhone's buttons and fields, so the
+screen is read as the text on it (on the Mac, with Apple's own text
+recognition). An icon with no words is tapped by a point on the picture. Text
+a US keyboard types goes in as keys; Chinese and other text goes in by paste:
+it is on the Mac's clipboard for a moment, marked so clipboard managers skip
+it, and what you had copied comes back after, unless you copied something
+else meanwhile. There is no list of apps: an agent opens one by the name it
+has on your iPhone. An iPhone has no back key; agents tap the app's own back
+button.
+
+### You come first on the iPhone
+
+- **Unlock your iPhone and the agent pauses.** iPhone Mirroring stops while the
+  iPhone is in your hand, and the agent is told you are using it. Lock it again
+  and the agent can go on.
+- **Handoffs.** For a login, a captcha, a payment, Face ID or a code, an agent
+  asks you instead (`iphone_handoff`): you get a notification on your phone and
+  the Mac. Do it on your iPhone and lock it again, or do it in iPhone Mirroring
+  on the Mac, then tap **Done** on **Settings › Labs › iPhone use**. The agent
+  never reads or types your passwords or codes.
+- **Watch.** The iPhone use page shows your iPhone as the agent last read it,
+  updated as it works. It takes no picture of its own.
+- **Stop.** **Stop** next to the agent on the iPhone use page ends what it is
+  doing at once, a handoff it waits on included, and that agent can't use the
+  iPhone again; another agent can, and so can this one after you switch iPhone
+  use off and on. **Take over** in [Screen](screen.md) ends every agent on the
+  Mac and puts iPhone Mirroring back on your screen; agents wait while you have
+  the controls. Switching iPhone use off stops the agent at once.
+- **One agent at a time** uses the iPhone; another is told which agent has it.
+  An agent that goes quiet for a minute lets it go.
+- **The Mac's own rules apply**: a locked Mac stops agents until it is unlocked,
+  and iPhone Mirroring in front on your Mac is yours: agents wait. A Mac without
+  iPhone Mirroring (macOS 13 and 14) has no iPhone use.
+- **What is kept.** Each action is recorded in `~/.mewla/iphone-agent-audit.jsonl`
+  on the Mac (readable only by you, kept 30 days), without screenshots, what was
+  read, or what was typed beyond its length and a fingerprint.
+
+### iPhone limits
+
+- Calls, the camera, the microphone, Face ID and the Notification Center don't
+  work through iPhone Mirroring (Apple's limits).
+- iOS may tell an app that a screenshot was taken while an agent reads the
+  screen; some apps react to that.
+- Some apps and games don't respond to input from iPhone Mirroring.
+- Input from behind other windows uses parts of macOS Apple doesn't document. A
+  macOS update can change them; `mewla agent-use status` and the agent's own
+  answers then say what fails.
+- One Mac drives one iPhone.
+
+### Turn iPhone use off
+
+Switch **iPhone use** off in **Settings › Labs › iPhone use**. Agents lose the
+tools at their next start and the agent using the iPhone stops at once. iPhone
+Mirroring stays set up on your Mac; quit it there if you like.

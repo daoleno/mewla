@@ -32,9 +32,9 @@ Watch records five kinds of signal:
 |---|---|---|
 | Human | What you said in Brain and Worker conversations, with the reply you were answering. Every agent Mewla supports is read: Claude Code, Codex, Pi, Cursor, Grok, OpenCode and dsh. Prompts that Brain wrote for a Worker are kept separate from what you typed. | The Session's working directory |
 | Process | Problems in the Work store: lost or stalled turns, automatic resumes, reconcile requests, ambiguous deliveries, input requests, failed turns, follow-up turns sent to a Worker, and Work reopened after it was closed. | The Work's working directory |
-| Runtime | Problems the daemon reports about itself (a failed plugin connection, a dropped upload, a collection that keeps failing), each with a kind, a severity and a subject. The daemon log carries the same problems as plain lines for you to read ([Troubleshooting](troubleshooting.md#reading-the-daemons-terminal-output)); Watch does not read the log. | Mewla |
+| Runtime | Problems the daemon reports about itself (a failed connection to an extension, a dropped upload, a collection that keeps failing), each with a kind, a severity and a subject. The daemon log carries the same problems as plain lines for you to read ([Troubleshooting](troubleshooting.md#reading-the-daemons-terminal-output)); Watch does not read the log. | Mewla |
 | Notification | Every push Mewla sends to your phone, and every one it held back: the text as sent, the kind (a Worker needing input, failing or finishing; a Brain message; a scheduled result; a Watch alert), the Work or thread it was about, whether it was delivered, whether the app was in the foreground and whether you had that Session open. After the send it keeps what you did with it: tapped it, opened that Session, or brought the app forward. Push tokens are never stored. | The Session's working directory |
-| External | From connected [Plugins](plugins.md), read only. GitHub: failed CI runs on the default branch, open issues and pull requests with new activity, and Dependabot and code scanning alerts where your grant allows. Linear: issues and comments for the team you linked. | GitHub: by the repository's remote. Linear: by the team you confirm. |
+| External | From connected [Extensions](extensions.md), read only. GitHub: failed CI runs on the default branch, open issues and pull requests with new activity, and Dependabot and code scanning alerts where your grant allows. Linear: issues and comments for the team you linked. | GitHub: by the repository's remote. Linear: by the team you confirm. |
 
 Collection is local and doesn't run a model, so it is always on, whatever the
 Watch setting says. Local sources are read about once a minute and the daemon
@@ -46,9 +46,9 @@ API keys, tokens and passwords are removed from every signal before it's
 stored. Text fetched from GitHub or Linear is only stored as data. Watch never
 acts on it.
 
-### GitHub and Linear go through Plugins
+### GitHub and Linear go through Extensions
 
-Watch reads GitHub and Linear through the same [Plugins](plugins.md) Brain
+Watch reads GitHub and Linear through the same [Extensions](extensions.md) Brain
 uses, and follows the same switches:
 
 - An account that is off or disconnected is not read.

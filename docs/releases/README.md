@@ -1,7 +1,7 @@
 # Releases
 
-Each release ships daemon archives for Linux `amd64`, Linux `arm64` and Apple
-Silicon macOS, a signed Android `arm64` APK, `SHA256SUMS` and a signed update
+Each release ships daemon archives for Linux `amd64`, Linux `arm64`, Apple
+Silicon macOS and Windows x64, a signed Android `arm64` APK, `SHA256SUMS` and a signed update
 manifest. Run `mewla update` to move to the newest one; see
 [Install](../install-daemon.md#update).
 
@@ -16,9 +16,9 @@ installer and `mewla update` pick the highest version.
   [Install](../install-daemon.md#ios).
 - **Android**: distributed as an APK outside the Play Store. Android asks to
   allow installs from your browser or file manager, and Play Protect may warn.
-- **Plugins**: first-time sign-in is not yet available for Slack, and for
+- **Extensions**: first-time sign-in is not yet available for Slack, and for
   Google Workspace unless your daemon already has Google sign-in configured.
-  See [Plugins](../plugins.md#sign-in-availability).
+  See [Extensions](../extensions.md#sign-in-availability).
 - **macOS daemon**: the Apple Silicon binary is cross-built; report problems you
   hit on a real Mac.
 - **Push notifications** are a single best-effort attempt each; a missed alert

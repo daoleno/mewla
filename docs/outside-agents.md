@@ -13,9 +13,11 @@ On the computer where the agent runs, with Mewla running there:
 mewla agents mcp connect -for claude     # or -for codex, or the default -for print
 ```
 
-It prints the agent's name and a three-digit number, then waits. Approve it in
-the app under **Settings > Outside agents**, where the same name and number
-show, or at the terminal with `mewla agents mcp approve <number>`. A request
+It prints the agent's name and a three-digit number, then waits. In the app
+the request is a **Needs you** row in the tray, which opens **Settings ›
+Outside agents** (tap the cat, then **Settings**). Check that the name and
+number match, then tap **Approve** (or **Deny**). At the terminal,
+`mewla agents mcp approve <number>` does the same. A request
 expires after five minutes. Once approved, `-for claude` runs
 `claude mcp add` for you; `-for codex` prints the two lines Codex needs; the
 default prints both. Use `-name` to say which agent or project this is.
@@ -53,5 +55,5 @@ mewla agents mcp revoke <agent id> # its token stops working at once
 mewla agents mcp requests          # what agents handed to Brain
 ```
 
-The app lists the same agents under **Settings > Outside agents**, with
+The app lists the same agents under **Settings › Outside agents**, with
 **Revoke** on each. See [Security and privacy](security-and-privacy.md#agents-outside-mewla).

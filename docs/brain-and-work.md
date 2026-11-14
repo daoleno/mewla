@@ -16,7 +16,8 @@ it calls you only when a decision is yours.
 
 ## Give Brain a goal
 
-Open **Brain** and say the outcome you want and anything Brain must not do:
+Brain's conversation is the app's home screen. Say the outcome you want and
+anything Brain must not do:
 
 > Ship atlas-notes v1.4 this week: fix the sync bug, tidy the settings copy,
 > write release notes, post them to Notion.
@@ -25,122 +26,66 @@ Brain records each part as Work, starts Workers, and names the goal. Workers
 run unattended, so read [Permission bypass risks](executors.md#permission-bypass-risks)
 before you let Brain work on a machine with secrets.
 
+The composer's **+** attaches a photo, a file, a screenshot of the computer or
+a file on the computer. Typing `@` lists your installed agents, and `/` at the
+start lists the slash commands of the agent Brain runs on.
+
 ## Follow the Work
 
-![Brain on a wide screen: the goal, Work slips in the conversation and the Work column](assets/mewla-brain-wide-light.png)
+**The state control.** Next to **Brain** in the header, it says how things
+stand: "All quiet", "3 running", "2 need you". A Work with three Workers counts
+as one. Tap it to open the tray.
 
-*Demo data.*
+**The tray.** Everything open, by what it asks of you: **Needs you**,
+**Running** (queued and waiting Work sit here as quiet rows), **Today**,
+**Idle** and **Done** (unread results first). A row with an agent's logo opens
+that Session; a row with Brain's mark (a Work with several Workers, or none)
+opens Work detail.
 
-**The goal line.** At the top of the Work column (wide screens) and the Work
-sheet (phones), with how much has come back: "Ship atlas-notes v1.4 this
-week · 2 of 5 back". Brain sets it; a new chat starts without one. The app
-stops showing it once it is no longer current: all its Work is done,
-everything has been back for 30 minutes, or nothing in it has moved for 12
-hours.
+**The goal.** When Brain has set one, it is the tray's first line, with how
+much has come back: "Ship atlas-notes v1.4 this week · 2 of 5 back". A new chat
+starts without one. The app stops showing it once it is no longer current: all
+its Work is done, everything has been back for 30 minutes, or nothing in it has
+moved for 12 hours.
 
-**Slips in the conversation.** Each Work appears as one slip: agent, project
-and time, its state, its title and one line of result. When a Work reports
-again, its slip moves down to that moment instead of piling up copies.
-
-| Mark | State |
-| --- | --- |
-| Check | Ready: done, or back and accepted |
-| Spinning arc | Running, or Brain is reviewing the result |
-| Red "Needs you" pill, dark outline | Waiting for your decision |
-| Open triangle | Needs review, for example the Worker stopped reporting |
-| Crossed box, with the cause | Failed |
-| Dashed ring | Queued, blocked or waiting on something else |
-
-Red always means "needs you", never "failed".
+**Work cards in the conversation.** Each Work has one live card: its title, up
+to three Workers (logo, name, what it does, time) and "N more". When the Work
+reports again, earlier cards of it shrink to one line, so the thread never
+fills with copies. Tap the title for Work detail, or a Worker for its Session.
+Work detail lists every Worker that joined the Work, finished ones too; in the
+tray a Work with several Workers is one row reading "N Workers".
 
 **How far a running Work has come.** A running Work has a ring round its
 Worker's logo, filled as far as a model judges the Work has come, not as its
 Worker reports. No number is written; a screen reader speaks it, rounded to 5.
 When the Work starts, the judge turns the brief into a short weighted list of
 outcomes, things that will be true when it is done, such as "fix merged and
-released" or "review posted". It then marks each outcome from evidence: a
-commit, a passing run, a file written, a posted review. How far the ring fills
-is computed from those marks.
+released" or "review posted", and marks each from evidence: a commit, a
+passing run, a file written, a posted review.
 
-- **It only moves forward**, unless an outcome is reopened: Brain sent the Work
-  back, or a later check failed. Then the ring goes back once, in amber, and
-  the Work's page says why.
+- **It only moves forward**, unless an outcome is reopened (Brain sent the Work
+  back, or a later check failed). Then the ring goes back once, in amber, and
+  Work detail says why.
 - **It never fills to 100 %.** When every outcome is done, the Work is in its
   last stretch (the Worker reporting, Brain reading the result), and the ring
   closes in green.
 - **No ring** while the Work waits on you, or for a Work with no finish line.
 - **Tap the Work** to see its outcomes and which are done.
 
-The judge runs only when there is new evidence: a progress report, a turn
-ending, or Brain's next message to the Worker. It runs at most once every two
-minutes per Work, and never on a timer alone. A Worker that keeps reporting is
-still judged within about a minute of its first report. When a turn ends, or
-Brain sends the Worker something new (a send-back, a further ask), the next
-judgment comes within seconds, so a Work that was sent back drops right away
-rather than keeping its last stretch for two minutes. The
+The judge runs only on new evidence (a progress report, a turn ending, Brain's
+next message to the Worker), at most once every two minutes per Work and never
+on a timer alone; after a turn ends or a send-back, within seconds. The
 `Work progress` row of `routing.md` picks its model (see
 [Worker routing](#worker-routing)). Each judgment is recorded on the Work as a
 `progress.judged` or `progress.back` event (`mewla brain work list -id`).
 
-**All open Work in one place.** The cat's line at the end of the
-conversation says what is out: "3 Workers running", "Brought something back".
-On a phone the chat gets the whole screen: tap that line, or ⋮ → Work, to open
-the list as a sheet, with all the counts in one line at its top. On a wide
-screen the list is the Work column beside the chat, and tapping the cat's line
-scrolls the column to the Work it counts. Both group Work by what it asks of
-you: Needs you, Running, Back, Waiting, Queued. Queued is Work no Worker has
-picked up yet; it carries no buttons, since nothing there needs you (open it
-to ask Brain about it or drop it). With nothing open the list says "No open
-Work". Each group's caption says its state once,
-so a slip in it shows a state word only when it differs, such as Failed under
-Running. Under a goal line ("2 of 5 back") the sheet's count line leaves out its
-own "back". Closed Work leaves the list. When Work needs you while you are
-elsewhere, "Brain" gets a red dot (like "Sessions" does for a Session; on Brain
-itself the cat's line already says so), and the cat sits on that Work's slip in
-the conversation.
-
-**Who a request is for.** A Worker that Brain started reports to Brain, not to
-you: when it stops on a decision of its own (`--attention user_input`), Brain
-decides, and asks you only through its Work's question, which shows under
-Needs you with its choices. Until then the Work reads Reviewing, and nothing
-for that report reaches you: no card, no tray row, no count, no notification.
-A prompt or an approval on that Worker's terminal that Brain cannot answer (a
-sign-in, an approval outside the brief) still comes to you, and a Session you
-started yourself keeps asking you directly.
-
-**When the computer is unreachable** the cat's line says so, "Can't reach your
-computer", or "Reconnecting" after ten seconds of trying, at the same moment
-the menu's server line does. The message box keeps saying "Tell Brain…"; the
-cat owns connection and loading.
-
-**The cat.** Tap it and Brain answers. It also plays when you address it:
-tap twice and a standing cat does a happy hop; hold it to pet it (it purrs,
-with a light tap on the phone); hold and drag to pick it up, and it springs
-back to its spot. It never moves on its own beyond showing Brain's state,
-stays still while you type, and with Reduce Motion on it keeps only the
-haptics.
-
-**Connection.** When the app can't reach your computer, the menu (☰) gets a
-dot and the menu's last line says why. Nothing is pinned over the chat. The
-app keeps the connection fresh by itself: a link that stops answering is
-replaced within about half a minute, and a connection that was healthy
-reconnects at once.
-
-**Sending is a queue.** Press Send and the message is yours to forget: it
-appears in the chat with a small clock and goes to your computer as soon as it
-can, again and again if the connection drops, even if you close the app and
-come back. Messages in a row arrive in the order you sent them, and a message
-that did arrive is never sent twice. While the agent is busy, the message
-goes to it anyway, the way you would type into the CLI mid-turn: Claude Code
-queues it, Codex takes it into the running turn, and Brain reads it between
-steps. It keeps the same clock and nothing else is added. The clock turns into the normal message once the agent
-shows it.
-
-**A message that can't be delivered.** Only a message your computer keeps
-refusing (for example, its session no longer exists), or one whose delivery it
-could never confirm, shows a small **!** next to it. Tap the ! to send it
-again, or press and hold it to delete it. Nothing else ever asks you to retry.
-Session chats behave the same way.
+**Results.** When a Work comes back, a result card arrives: the agent, the
+title, when it finished, the summary and the next steps it truthfully offers,
+as buttons: the pull request it opened, **Review changes** when its project
+has uncommitted changes, the files it names, and the Work's worklog. A result
+that names none has none. Once you open it or act on it, the
+card becomes one line; tap the line to see the result again, with **Open
+session**. A result that needs a decision is a request instead (below).
 
 **Folded steps.** The searches, reads and commands Brain runs in a turn fold
 into one row that says what happened ("Ran 3 commands, read 2 files"), with
@@ -151,31 +96,53 @@ fold the same way.
 monitor reports back, the chat shows a task card with its status, duration,
 tool uses and tokens. Tap it for the full result.
 
-## Act on a slip
+**Sending is a queue.** Press Send and the message is yours to forget: it
+appears in the chat with a small clock and goes to your computer as soon as it
+can, again and again if the connection drops, even if you close the app and
+come back. While the computer is offline the composer says "Sends when back
+online". Messages in a row arrive in the order you sent them, and a message
+that did arrive is never sent twice. While the agent is busy, the message goes
+to it anyway, the way you would type into the CLI mid-turn: Claude Code queues
+it, Codex takes it into the running turn, and Brain reads it between steps. The
+clock turns into the normal message once the agent shows it. Only a message
+your computer keeps refusing (for example, its session no longer exists), or
+one whose delivery it could never confirm, shows **Not sent**, with **Send
+again** and **Delete**.
 
-Every slip carries its next step:
+**Connection.** The state control and the cat carry it: "Connecting…",
+"Offline", "Pair again". Nothing is pinned over the chat. Open the tray while
+offline for the reason ("Relay unreachable") with **Try again** and
+**Details**. The app keeps the connection fresh by itself: a link that stops
+answering is replaced within about half a minute, and a connection that was
+healthy reconnects at once.
 
-| The Work | You can |
-| --- | --- |
-| Asks a question | Tap one of Brain's answers ("Keep both"), reply in your own words, snooze it for an hour, or say it is not needed anymore |
-| Came back | **Accept** it, which closes it, or **Ask Brain about this**, which goes back to Brain with the Work quoted in the composer, below anything you had typed there |
-| Is running | Open its Worker, ask Brain about it, or **Stop** it (after a confirmation; the Worker closes and the Work is cancelled) |
-| Failed | Retry it through Brain, or dismiss it |
-| Ended with no result | "Outcome unknown": ask Brain to check, or close it |
+## Requests
 
-A result that came back also carries the next steps it truthfully offers, as
-small buttons on its card in Brain's thread and in its sheet: the pull request
-it opened, **Review changes** when its project has uncommitted changes, the
-files it names, and the Work's worklog. A result that names none has none.
-Using one reads the result.
+Anything that waits for you is one **request**, shown in three places:
 
-Your reply goes to Brain as a message about that Work, and the slip says
-"With Brain" until Brain acts on it. You never have to close finished Work:
-once Brain has read a result and nothing is pending, Mewla asks a small model
-whether the Work is over and closes it if so. Brain reopens a Work closed that
-way as soon as it acts on it again. A result no Brain has received, or one
-Mewla could not judge, moves to Needs you after a day, so nothing sits there
-forever.
+- a card in the thread of whoever asked: Brain's questions in Brain's thread,
+  an agent's prompt in its Session (and in Brain's thread too when that Session
+  works for Brain);
+- a **Needs you** row in the tray;
+- a [notification](notifications.md) when the app is closed.
+
+Answer in any one of them and all three close at once: the card shrinks to one
+line with your answer, the tray row goes and the count drops. A plain yes/no
+gets **Approve** right on the tray row; anything else takes you to the card.
+Several open requests in a row stack, oldest first. A request that passed
+without an answer reads **Not answered**.
+
+A Work that came back failed, with no result, or needing a decision is a
+request too. Its tray row opens Work detail, where the card sits under
+**Waits on you**.
+
+**Who a request is for.** A Worker that Brain started reports to Brain, not to
+you: when it stops on a decision of its own, Brain decides, and asks you only
+through its Work's question, which shows under Needs you with its choices.
+Until then the Work reads Reviewing, and nothing for that report reaches you:
+no card, no tray row, no count, no notification. A prompt on that Worker's
+terminal that Brain cannot answer (a sign-in, an approval outside the brief)
+still comes to you, and a Session you started yourself asks you directly.
 
 Brain asks with buttons by setting a question on the Work:
 
@@ -185,8 +152,34 @@ mewla brain work update -id <work-id> -status waiting \
   -recommend "Newest wins"
 ```
 
-`-recommend` names the choice Brain recommends, word for word; the phone tags that button
-"Brain's pick". It must be one of the choices, and a new question starts without one.
+`-recommend` names the choice Brain recommends, word for word; the app tags
+that answer "Brain's pick". It must be one of the choices, and a new question
+starts without one.
+
+## Work detail
+
+Tap a Work card's title, a tray row with Brain's mark, or a Session's **⋯ ›
+Open its Work**. Work detail shows the state ("Needs you", "N running" or
+"Done", and since when), Brain's brief, and:
+
+| Part | Does |
+| --- | --- |
+| **Waits on you** | The open request itself; answering here answers it everywhere |
+| **Workers** | Each Worker; tap one for its Session |
+| **Work file** | The Work's notes, to read or edit |
+| **Ask Brain about this** | Back to Brain with the Work quoted in the composer, below anything you had typed there |
+| **Snooze 1 hour** | Takes it out of Needs you for an hour |
+| **Stop** | After you confirm, closes its Workers and cancels the Work |
+| **Reply about this Work** | Sends your message to Brain about this Work |
+
+A Work started by a Calendar item also links that item.
+
+Your reply goes to Brain as a message about that Work. You never have to close
+finished Work: once Brain has read a result and nothing is pending, Mewla asks a
+small model whether the Work is over and closes it if so. Brain reopens a Work
+closed that way as soon as it acts on it again. A result no Brain has received,
+or one Mewla could not judge, moves to Needs you after a day, so nothing sits
+there forever.
 
 ## Who decides that Work is done
 
@@ -195,8 +188,8 @@ exiting or a pane going quiet is evidence, not completion. When a Worker
 reports, Brain reads the result and accepts the Work, sends a follow-up or
 tries again. A Worker that disappears leaves its Work marked for review.
 
-When you close Work from a slip, that is final: Brain does not reopen it. The
-same from the computer:
+When you close Work yourself, that is final: Brain does not reopen it. From the
+computer:
 
 ```sh
 mewla brain work list --json                 # open Work
@@ -210,6 +203,21 @@ the agent, its conversation id and the path of its transcript. The link stays
 after the Worker and the Work are closed, so a past result can be traced back
 to what the Worker did. Mewla records the path; the agent owns the file, and
 Claude Code removes its own transcripts after about 30 days.
+
+## Brain's menu
+
+**⋯** at the right of the header:
+
+| Row | Does |
+| --- | --- |
+| **Open terminal** | Brain's own Session, on its terminal. A prompt Brain is blocked on can be answered there. |
+| **Browse workspace** | Brain's notes ([below](#brains-workspace)); a file opens in the preview |
+| **Switch executor** | The agent Brain runs on ([below](#switch-brains-agent)) |
+| **Model** | Brain's model, and **Effort**: **Low**, **Medium** or **High** |
+| **New chat** | After you confirm, a fresh thread. Open requests stay open in it. |
+
+A row that does not apply right now is dimmed. Earlier threads have no list: a
+notification about one opens it read-only, with **Current chat** to return.
 
 ## Brain's memory of the chat
 
@@ -238,29 +246,27 @@ seconds. Text that looks like a credential (known key prefixes, JWTs, private
 keys, `KEY=value` secrets, long random strings) is masked before it is stored.
 The chat log itself is unchanged.
 
-## The pet
+## The cat
 
-Brain is a pet, a small cat by default. It is on screen once, and what it
-does is Brain's real state:
+The cat at the left of the header is Brain on this computer. Tap it for the
+computer page. What it does is Brain's real state:
 
-| Pet | Brain |
+| Cat | Brain |
 | --- | --- |
-| Asleep in the seal | Idle |
-| Hops out of the seal | The app is starting, connecting or loading the conversation |
-| Walking | Working on your message |
-| Peeking over the seal, on a slip | That Work needs you |
-| Sitting, watching | Workers hold delegated Work |
-| A happy hop | A result is waiting for you to read |
-| Asleep in a grey seal | Your computer is offline |
-| Empty seal | No computer is paired yet |
+| Naps | All quiet |
+| Wakes and sits up | Connecting, or Brain is starting |
+| Works | Brain's own turn is running |
+| Delegates | Workers are running and Brain waits on them |
+| Raises a paw | Something needs you |
+| A short "done" | A Work came back done |
+| Naps, greyed | Offline, must pair again, or Brain can't start |
 
-Tap it and it answers: idle, it says how things stand ("All quiet. 2 running,
-nothing needs you."); when Work needs you, it opens the first one; while Brain
-works, it says what Brain is doing; offline, it tries to reconnect. It holds
-still when your device asks for reduced motion.
+It moves once when the state changes, then holds still. It never moves while
+you scroll or type, and with reduced motion on it shows only a still.
 
-Pick another pet in **Settings → Pet** (the row opens the picker): ten to choose from, and the choice
-stays on that device (the phone and the web UI each keep their own).
+Pick another pet in **Settings › Pet**: Dango (the default), Ash, Kami, Bit,
+Doodle or Riso. The choice stays on that device (the phone and the web app each
+keep their own).
 
 ## Worker routing
 
@@ -304,11 +310,8 @@ clients, not capabilities: no `codex-high`.
 
 ## Watch and steer Workers
 
-Workers are in **Sessions** like any other Session: open one, read it as Chat
-or Terminal, type into it. A Work's card in Brain's thread lists up to three
-of its Workers (then "N more"), and its page lists every Worker that joined it,
-finished ones too; a Work with several Workers is one row in the tray reading
-"N Workers". From the computer:
+Workers are in the tray like any other Session: open one, read it as Chat or
+Terminal, type into it. From the computer:
 
 ```sh
 mewla worker list --json
@@ -328,7 +331,7 @@ up this way.
 ## Brain's workspace
 
 Brain keeps plain-file notes under `~/.mewla/brain`; `mewla brain workspace`
-prints the path. **Browse workspace** in Brain's ⋮ menu opens them in the app.
+prints the path. **Browse workspace** in Brain's menu opens them in the app.
 
 | File | Holds |
 | --- | --- |
@@ -347,6 +350,10 @@ Edit them freely. Mewla refreshes only its own marked blocks in `AGENTS.md`.
 
 ## Switch Brain's agent
 
+In the app, **⋯ › Switch executor** lists the installed agents with their
+provider and account, the current one checked, then "Install more with mewla
+deps". Pick one and Brain moves to it. From the computer:
+
 ```sh
 mewla brain executors --json
 mewla brain use claude
@@ -357,26 +364,27 @@ uses when more than one is ready and keeps that answer. A start without a
 terminal (a service, CI) never asks: Brain takes the first installed agent in
 the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, preferring one
 `mewla doctor` verified as signed in over one it could not verify, and the daemon
-log names it and the `mewla brain use` command that changes it. When Brain has
-no running host, the app's Brain tab says why instead of waiting: the agent is
-not installed, is not signed in, did not start, or is open but never became ready
-(a sign-in or first-run prompt waiting in its terminal), each with the step to
-take and a one-tap switch to an installed agent that is signed in. **Switch
-executor** appears there only when the computer has another agent installed; with
-none installed the sentence (`mewla deps`) is the next step and there is nothing
-to switch to. The executor list offers only installed agents, signed-in ones
-first, with one line (`Install more with mewla deps`) when others are missing. Nothing needs a
-restart: Mewla checks again every few seconds, starts Brain's host as soon as the
-agent is installed or signed in, and starts it again after a reboot (a host that
-never held a conversation restarts by itself; one holding a conversation Mewla
-cannot resume is never replaced blind). Brain's pane starts in your login
-shell, so an agent Mewla sees as signed out still starts: it may be signed in
-through that shell. If it is not, it shows as open but not ready. In the app, Brain's ⋮ menu has
-**Switch executor**, **New chat** (a fresh thread), **Open terminal** (Brain's
-own Session) and **Browse workspace**.
+log names it and the `mewla brain use` command that changes it.
+
+When Brain has no running host, the state control reads "Can't start". The
+tray says why: the agent is not installed, is not signed in, did not start, or
+is open but never became ready (a sign-in or first-run prompt waiting in its
+terminal). It offers **Use** and an agent's name (**Use Codex**) for an installed agent
+that is signed in,
+and **Switch executor** when the computer has another agent installed; with
+none installed, `mewla deps` is the next step. Nothing needs a restart: Mewla
+checks again every few seconds, starts Brain's host as soon as the agent is
+installed or signed in, and starts it again after a reboot (a host that never
+held a conversation restarts by itself; one holding a conversation Mewla cannot
+resume is never replaced blind). Brain's pane starts in your login shell, so an
+agent Mewla sees as signed out still starts: it may be signed in through that
+shell. If it is not, it shows as open but not ready.
+
+When the agent Brain runs on has no chat view, the thread says "Chat isn't
+available" with **Open terminal** and **Switch executor**.
 
 ## Brain from elsewhere
 
 - **Telegram**: your bot chat talks to the same Brain thread. See [Telegram](notifications.md#telegram).
-- **Calendar**: a scheduled action runs as Work and posts back to the thread it came from. See [Calendar](calendar.md).
-- **Plugins**: Brain and Workers can read Linear, Notion, GitHub and more, and change them with your consent. See [Plugins](plugins.md).
+- **Calendar**: a **Mewla action** runs as Work and posts back to the thread it came from. See [Calendar](calendar.md).
+- **Extensions**: Brain and Workers can read Linear, Notion, GitHub and more, and change them with your consent. See [Extensions](extensions.md).

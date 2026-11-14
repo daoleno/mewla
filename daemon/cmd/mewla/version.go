@@ -14,7 +14,7 @@ import (
 // Version is the product version for banners and release ldflags.
 // Default must match client/ui/nsh.json version (scripts/prepare-release.py moves both).
 // Override: -ldflags "-X main.Version=<semver>"
-var Version = "0.4.0"
+var Version = "0.4.1"
 
 // versionInfo is the machine-readable shape of `mewla version --json`.
 type versionInfo struct {

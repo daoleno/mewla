@@ -18,7 +18,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/mewla-brain-wide-dark.png">
-    <img src="docs/assets/mewla-brain-wide-light.png" width="880" alt="Brain on a wide screen: the goal 'Ship atlas-notes v1.4 this week, 2 of 5 back', Work slips in the conversation, and the Work column with one slip that needs you">
+    <img src="docs/assets/mewla-brain-wide-light.png" width="880" alt="Mewla on a wide screen: what is running and what needs you on the left, Brain's conversation on the right">
   </picture>
   <br><sub>Demo data.</sub>
 </p>
@@ -46,23 +46,27 @@ lead and gives you a remote. Open source, self-hosted, in beta.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/mewla-phone-dark.png">
-    <img src="docs/assets/mewla-phone-light.png" width="560" alt="The phone app: Brain with the goal line and Work slips, and Sessions grouped by project with state marks and the New session pill">
+    <img src="docs/assets/mewla-phone-light.png" width="360" alt="Brain on a phone: the state control reading 3 need you, a Work with three Workers, and a push waiting for Approve">
   </picture>
-  <br><sub>Brain and Sessions on a phone. Demo data.</sub>
+  <br><sub>Brain on a phone. Demo data.</sub>
 </p>
 
-Around that loop: Calendar for things Brain should run later, Plugins so Brain
-can read Linear, Notion and GitHub, your own model keys, usage and cost per
-model, and a live view of what agents use on the machine.
+Around that loop: Calendar for things Brain should run later; Extensions so
+Brain can read Linear, Notion and GitHub; agents that use your screen, Chrome
+and your Android phone; your other computers; home-screen widgets and a Live
+Activity; your own model keys, and usage and cost per model. On a tablet, an
+open foldable or a browser, what's running stays in a pane on the left.
 
 ## Get started
 
-You need Linux (`amd64`/`arm64`), WSL2 or an Apple Silicon Mac. `mewla`
-offers to install an agent CLI (Claude Code or Codex) when none is ready.
+You need Linux (`amd64`/`arm64`), an Apple Silicon Mac or Windows (x64). On
+Linux and macOS, `mewla` offers to install an agent CLI (Claude Code or Codex)
+when none is ready.
 
 ```sh
 # 1. Install: checksum-verified, no telemetry
-curl -fsSL https://mewla.ai/install.sh | sh
+curl -fsSL https://mewla.ai/install.sh | sh     # Linux, macOS
+irm https://mewla.ai/install.ps1 | iex          # Windows, in PowerShell
 
 # 2. Start; press Enter to accept each suggestion and sign in with GitHub
 mewla
@@ -72,8 +76,9 @@ mewla
    [Releases](https://github.com/daoleno/mewla/releases), or
    [iOS on TestFlight](https://testflight.apple.com/join/nMQheDCE)
    ([or build from source](docs/install-daemon.md#ios)).
-4. Scan the QR code. Open **Sessions** to start an agent, or **Brain** to give
-   it a goal. For later phones and browsers, run `mewla pair`.
+4. Scan the QR code, then tell Brain a goal. To start an agent yourself, tap
+   the state control next to **Brain** and then **+**. For later phones and
+   browsers, run `mewla pair`.
 
 Other ways to connect, such as the same Wi-Fi only or Tailscale, are in
 [Connect and pair](docs/connect-and-pair.md). The full path is in
@@ -88,18 +93,18 @@ Other ways to connect, such as the same Wi-Fi only or Tailscale, are in
 
 | Part | Status |
 | --- | --- |
-| Daemon: Linux `amd64`/`arm64`, WSL2, Apple Silicon macOS | Beta |
+| Daemon: Linux `amd64`/`arm64`, WSL2, Apple Silicon macOS, Windows x64 | Beta |
 | Android app (arm64 APK) | Beta |
 | iOS app | Beta on [TestFlight](https://testflight.apple.com/join/nMQheDCE) |
 | Web UI, served by the daemon | Beta; no QR scanning or push |
-| Plugins | Preview; sign-in is not ready for every service |
+| Extensions | Preview; sign-in is not ready for every service |
 
 Known issues: [Releases](docs/releases/README.md#known-issues).
 
 ## Documentation
 
 - **Get it running:** [Get started](docs/get-started.md) · [Install and update](docs/install-daemon.md) · [Connect and pair](docs/connect-and-pair.md)
-- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications and Telegram](docs/notifications.md) · [Calendar](docs/calendar.md) · [Plugins](docs/plugins.md)
+- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications and Telegram](docs/notifications.md) · [Calendar](docs/calendar.md) · [Extensions](docs/extensions.md) · [Screen](docs/screen.md) · [Phone use](docs/phone.md) · [Your other computers](docs/computers.md)
 - **Configure it:** [Agents and models](docs/executors.md) · [Usage and resources](docs/usage-and-resources.md)
 - **Reference:** [Commands](docs/cli.md) · [Security and privacy](docs/security-and-privacy.md) · [Troubleshooting](docs/troubleshooting.md)
 
