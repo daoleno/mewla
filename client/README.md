@@ -47,6 +47,11 @@ fails once NSH fixes that). So what a thread's rows are made from is `derived` (
 value: a failed run keeps the last value and the next change makes it again), never `computed`: on 11-14 one slow
 update froze Brain's thread until the app started again (`ui/chat/ThreadCutOff.test.tsx`).
 
+Keep each call well inside the 2 s: a phone runs it some 8 times slower than a dev box. `ui/chat/OpenBudget.test.tsx`
+opens the app on a computer shaped as the owner's (`ui/testing/ownerShape.ts`) and fails when one call that hands the
+app its messages passes 100 ms. What a thread or a Session list shows is made once per event or Session object and kept
+(`activityOf`, `sessionRowModel`, `primarySemanticAction`), not again on every change.
+
 ## What the hosts give the app
 
 | Call / event / component | |
