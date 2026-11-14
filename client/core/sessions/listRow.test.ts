@@ -52,3 +52,21 @@ describe("Sessions list rows", () => {
     expect(label.endsWith(listTime(updated))).toBe(true);
   });
 });
+
+describe("a Session's row is made once per Session object (owner 11-14: the tray made it three times per Session per change)", () => {
+  test("the same Session and names give back the same row; another name, a changed Session or a new day make it again", () => {
+    const session = worker({ id: "w1", name: "release", status: "done", cwd: "/home/me/mewla", provider: "claude", summary: "Reporting: green", updated_at: Date.now() - 60_000 });
+    const row = sessionRowModel(session);
+    expect(sessionRowModel(session)).toBe(row);
+    const named = sessionRowModel(session, { alias: "Ship it" });
+    expect(named).not.toBe(row);
+    expect(named.title).toBe("Ship it");
+    expect(sessionRowModel(session, { alias: "Ship it" })).toBe(named);
+    const changed = worker({ id: "w1", name: "release", status: "failed", cwd: "/home/me/mewla", provider: "claude", summary: "Reporting: green", updated_at: Date.now() - 60_000 });
+    expect(sessionRowModel(changed)).not.toBe(row);
+    expect(sessionRowModel(changed).status).toBe("failed");
+    // The screen reader's day ("Yesterday") reads the clock: a Session last changed two days ago reads its date.
+    const old = worker({ id: "w2", name: "old", status: "done", provider: "claude", summary: "", updated_at: Date.now() - 2 * 86_400_000 });
+    expect(sessionRowModel(old).accessibilityLabel).toContain(listTime(old.updated_at));
+  });
+});

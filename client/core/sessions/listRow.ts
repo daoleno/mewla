@@ -59,7 +59,33 @@ function hasGeneratedName(worker: Worker): boolean {
  * else the Session's own name, else the Calendar or Work it runs for, else a
  * short title from its command and directory.
  */
+/*
+ * A Session's row, made once per Session object and what it is shown with. The tray, the Sessions list, Brain's Work
+ * cards and the Session's header each make it, every time any Session changes, and making it is the Session's name,
+ * path and last tool call read through regular expressions: the tray made it three times per Session per change, and
+ * the owner's phone passed NSH's 2 s inside it (11-14, v0.4.2: sessionRowModel under the tray model). An unchanged
+ * Session keeps its object (workers.ts reuses it), so its row is handed out again; the one part that reads the clock
+ * (the screen reader's "Yesterday") is part of the key.
+ */
+const rowModels = new WeakMap<Worker, Map<string, SessionRowModel>>();
+
 export function sessionRowModel(worker: Worker, options: { alias?: string; calendarLabel?: string; workTitle?: string } = {}): SessionRowModel {
+  const key = `${options.alias ?? ""}\u0000${options.calendarLabel ?? ""}\u0000${options.workTitle ?? ""}\u0000${worker.status === "running" ? "" : listTime(worker.updated_at)}`;
+  let models = rowModels.get(worker);
+  const kept = models?.get(key);
+  if (kept) return kept;
+  const made = makeSessionRowModel(worker, options);
+  if (!models) {
+    models = new Map();
+    rowModels.set(worker, models);
+  }
+  // A Session shown under many names would keep them all: keep the few in use.
+  if (models.size >= 8) models.clear();
+  models.set(key, made);
+  return made;
+}
+
+function makeSessionRowModel(worker: Worker, options: { alias?: string; calendarLabel?: string; workTitle?: string }): SessionRowModel {
   const generated = hasGeneratedName(worker);
   const presented = presentWorker(generated ? { ...worker, name: "" } : worker, options.alias);
   const workTitle = options.calendarLabel?.trim() || options.workTitle?.trim();
