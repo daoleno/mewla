@@ -60,15 +60,15 @@ const toneColor = (tone: string | undefined) => (tone === "failed" || tone === "
  */
 /**
  * Selected text in the app's ink, as in the terminal (SPEC §11): the handles take it and the highlight is it at
- * the platform's wash (NSH 0.5.0 draws it at 33 % on Android; SPEC's 20 % is not settable).
+ * the platform's wash (NSH 0.5.1 draws it at 33 % on Android; SPEC's 20 % is not settable).
  */
 export const SELECTION = "selection:bg-foreground";
 
 /**
  * Code in a reply's text (SPEC §11 Inline code): the mono face a step under the 17 pt body (15), so the
- * x-heights meet, on the surface chip (radius 5) that shows on the canvas in both appearances. NSH 0.5.0
+ * x-heights meet, on the surface chip (radius 5) that shows on the canvas in both appearances. NSH 0.5.1
  * sizes it in points for the whole reply (no `em`: a heading's or a table cell's code is 15 too) and gives
- * spans no padding.
+ * spans no padding (longbridge/nsh#1901, #1902).
  */
 export const INLINE_CODE = "font-mono text-[15px] text-foreground bg-card rounded-[5px]";
 

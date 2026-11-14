@@ -87,8 +87,8 @@ export function pasteRefused(error: unknown): PairingProblem {
 }
 
 /**
- * What a read of the clipboard came to. iOS answers a paste the person denied with no text and no error (NSH 0.5.0
- * reads `UIPasteboard.string`, nil when denied, and resolves ""), while `hasStrings`, which asks nothing, still says
+ * What a read of the clipboard came to. iOS answers a paste the person denied with no text and no error (NSH 0.5.1
+ * reads `UIPasteboard.string`, nil when denied, and resolves ""; longbridge/nsh#2004 rejects it on main, after 0.5.1), while `hasStrings`, which asks nothing, still says
  * text is there: no text from a clipboard that holds some is a refusal (Mac re-run 11-14, 6c: PBErrorDomain 13 in the
  * log, "Nothing to paste" on screen). An error from the read is one too.
  */
