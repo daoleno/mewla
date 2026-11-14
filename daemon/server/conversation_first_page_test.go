@@ -10,9 +10,10 @@ import (
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-// A client that asks for first_events gets a thread's first snapshot in two
-// parts: a snapshot of the newest events, so it paints the end of the thread
-// from a few KB, then one delta (the next revision) with every older event.
+// A client that asks for first_events gets a thread's first snapshot in parts:
+// a snapshot of the newest events, so it paints the end of the thread from a
+// few KB, then the older events as the next revisions' deltas (one here: they
+// fit one page).
 // After both it holds exactly what one snapshot would have carried, and the
 // subscription's later deltas build on that.
 func TestFirstEventsSendsTheNewestEventsFirst(t *testing.T) {
@@ -89,6 +90,80 @@ func TestFirstEventsSendsTheNewestEventsFirst(t *testing.T) {
 	if len(after.Events) != len(whole.Events)+1 {
 		t.Fatalf("after the append the thread has %d events, want %d", len(after.Events), len(whole.Events)+1)
 	}
+	assertSameEvents(t, f.replay, afterEvents)
+}
+
+// The older events come a page at a time, the newest page first, each the next
+// revision: one delta of 200 older events was one call of 125 ms on a dev box
+// for an app to take in, and past NSH's 2 s on the owner's phone (11-14).
+// After the last page the client holds exactly what one snapshot carries.
+func TestFirstEventsSendsTheOlderEventsInPages(t *testing.T) {
+	f := newBrainTickFixture(t)
+	start := time.Now().UTC().Add(-400 * time.Minute)
+	for i := 0; i < 150; i++ {
+		f.appendLine("user", fmt.Sprintf("question %d", i), start.Add(time.Duration(2*i)*time.Minute))
+		f.appendLine("assistant", fmt.Sprintf("answer %d", i), start.Add(time.Duration(2*i+1)*time.Minute))
+	}
+	whole, wholeEvents := f.reference()
+	older := len(whole.Events) - 10
+	if older <= 2*codexConversationOlderPageEvents {
+		t.Fatalf("the thread has %d events, want more than two pages before the newest 10", len(whole.Events))
+	}
+
+	request := f.request(f.liveID)
+	request.FirstEvents = 10
+	f.srv.publishCodexConversationSubscription(
+		context.Background(), f.serverConn, request, f.liveID, f.generation, f.reader, &f.live)
+	f.takeTicks()
+
+	snapshot := f.nextMessage()
+	var head struct {
+		Revision int64 `json:"revision"`
+	}
+	raw, _ := json.Marshal(snapshot)
+	if err := json.Unmarshal(raw, &head); err != nil {
+		t.Fatal(err)
+	}
+	f.follow(snapshot)
+
+	revision := head.Revision
+	end := len(whole.Events) - 10
+	for end > 0 {
+		message := f.nextMessage()
+		var delta struct {
+			Type         string            `json:"type"`
+			BaseRevision int64             `json:"base_revision"`
+			Revision     int64             `json:"revision"`
+			Upserts      []json.RawMessage `json:"upserts"`
+		}
+		raw, _ := json.Marshal(message)
+		if err := json.Unmarshal(raw, &delta); err != nil {
+			t.Fatal(err)
+		}
+		size := min(codexConversationOlderPageEvents, end)
+		if delta.Type != "codex_conversation_delta" || delta.BaseRevision != revision || delta.Revision != revision+1 || len(delta.Upserts) != size {
+			t.Fatalf("page: %s %d→%d with %d events, want a delta %d→%d with %d", delta.Type, delta.BaseRevision, delta.Revision, len(delta.Upserts), revision, revision+1, size)
+		}
+		// The newest of the older events first: this page ends where the last began.
+		for i, event := range delta.Upserts {
+			if id := eventID(t, event); id != whole.Events[end-size+i].ID {
+				t.Fatalf("page event %d is %s, want %s", i, id, whole.Events[end-size+i].ID)
+			}
+		}
+		f.follow(message)
+		revision = delta.Revision
+		end -= size
+	}
+	if f.live == nil || f.live.revision != revision {
+		t.Fatalf("the subscription is at revision %v, want %d", f.live, revision)
+	}
+	assertSameEvents(t, f.replay, wholeEvents)
+
+	f.appendLine("assistant", "one more answer", time.Now().UTC())
+	if _, sent := f.tick(); !sent {
+		t.Fatal("an appended answer sent nothing")
+	}
+	_, afterEvents := f.reference()
 	assertSameEvents(t, f.replay, afterEvents)
 }
 
