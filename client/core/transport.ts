@@ -86,8 +86,8 @@ export class Transport {
   /** Until when an announced message may keep the socket quiet (`frame_coming`); 0 with none on its way. */
   private comingUntil = 0;
   private nextId = 0;
-  /** The frames of this turn, handed over together on the next tick (see FrameBatcher). */
-  private inbox: Frame[] = [];
+  /** The frames of this turn, handed over together on the next tick (see FrameBatcher), each with its size. */
+  private inbox: { frame: Frame; bytes: number }[] = [];
   private inboxTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -238,9 +238,11 @@ export class Transport {
       if (attempt !== this.attempt) return;
       this.lastFrameAt = Date.now();
       let frame: Frame;
+      let bytes = 0;
       try {
         const text = frameText(event.data);
         if (text === null) return;
+        bytes = text.length;
         frame = JSON.parse(text);
       } catch {
         return;
@@ -251,7 +253,7 @@ export class Transport {
         return;
       }
       this.comingUntil = 0;
-      this.receive(frame);
+      this.receive(frame, bytes);
     };
     const end = (why: string) => {
       if (ended) return;
@@ -331,22 +333,30 @@ export class Transport {
     this.stateListeners.forEach((listener) => listener(state));
   }
 
-  private receive(frame: Frame): void {
+  private receive(frame: Frame, bytes = 0): void {
     const batcher = frameBatcher;
     if (!batcher) return this.emit(frame);
-    this.inbox.push(frame);
-    if (this.inboxTimer) return;
+    this.inbox.push({ frame, bytes });
+    this.scheduleInbox();
+  }
+
+  private scheduleInbox(): void {
+    const batcher = frameBatcher;
+    if (this.inboxTimer || !batcher || this.inbox.length === 0) return;
     this.inboxTimer = setTimeout(() => {
       this.inboxTimer = null;
-      batcher(() => this.deliverInbox());
+      batcher(() => this.deliverInbox(takeBatch(this.inbox)));
+      // The rest on a tick of its own: a call of its own, with NSH's 2 s of its own.
+      this.scheduleInbox();
     }, 0);
   }
 
-  private deliverInbox(): void {
+  /** Hands over `count` frames of the inbox (all of them by default: the socket ended, or the computer changed). */
+  private deliverInbox(count = this.inbox.length): void {
     if (this.inboxTimer) clearTimeout(this.inboxTimer);
     this.inboxTimer = null;
-    const frames = this.inbox;
-    this.inbox = [];
+    const frames = this.inbox.slice(0, count).map((entry) => entry.frame);
+    this.inbox = this.inbox.slice(count);
     for (const frame of frames) {
       try {
         this.emit(frame);
@@ -360,6 +370,22 @@ export class Transport {
   private emit(frame: Frame): void {
     this.listeners.get(frame.type)?.forEach((listener) => listener(frame));
   }
+}
+
+/**
+ * A frame this big is a batch of its own (a thread's snapshot, the Session list, the Work items): what reads it is
+ * remade in the call that hands it over, and an open's frames together took one call 138 ms on a dev box, more than
+ * 2 s on the owner's phone (11-14, v0.4.2: NSH cut it off, "Error: interrupted"). Small frames (a burst of Session
+ * updates, a streaming reply) still go together, so what reads them reruns once.
+ */
+export const BIG_FRAME_BYTES = 32 * 1024;
+
+/** How many of the inbox's first frames go in one batch: the small ones up to the next big one, or one big one. */
+function takeBatch(inbox: readonly { bytes: number }[]): number {
+  if (inbox.length === 0) return 0;
+  if (inbox[0]!.bytes >= BIG_FRAME_BYTES) return 1;
+  const big = inbox.findIndex((entry) => entry.bytes >= BIG_FRAME_BYTES);
+  return big < 0 ? inbox.length : big;
 }
 
 /** How long an announced message of `bytes` may take on the slowest link allowed for. */
