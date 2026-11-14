@@ -97,10 +97,11 @@ jobs:
             client/android/app/build/generated/assets/bundleUi.js.map
           retention-days: 90
 
-  # One Simulator, booted while the job sets up and compiles: Xcode keeps a device it found booted
-  # running after the tests, so the Release app opens on it without a second boot. Booting it twice
-  # took about 6 of the job's 16 min (11-14). On two Macs side by side each paid for a cold build and
-  # a boot on three cores, and the slower took 11 min.
+  # One Simulator boot for the tests and the Release app: Xcode keeps a device it found booted running
+  # after the tests, where it shut down the one it booted itself (the second boot and install took
+  # about 4 of the job's 16 min, 11-14). The boot waits until the test build is done: a runner's first
+  # boot is minutes of CPU, and beside it the compile took 8 min instead of 1. On two Macs side by side
+  # each paid for a cold build and a boot, and the slower took 11 min.
   ios:
     name: iOS host (Simulator, upgrade tests)
     if: github.event_name != 'workflow_dispatch' || !inputs.android_only
@@ -122,13 +123,21 @@ jobs:
           brew install xcodegen > /dev/null
           client/scripts/ios-project.sh
       # A single-display iPhone: `simctl io screenshot` refuses a two-display one (iPhone Duo) without --display.
-      # Booted now, so the minutes a Simulator takes to boot on the runner pass while Xcode compiles.
-      - name: Pick a simulator and start booting it
+      - name: Pick a simulator
         run: |
           SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Duo' not in x['name']))")
           echo "SIM=$SIM" >> "$GITHUB_ENV"
-          xcrun simctl boot "$SIM" || true
       # Signed to run locally: the Keychain refuses an unsigned app.
+      - name: Build the unit tests
+        working-directory: client/ios
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -5
+      - name: Boot the simulator
+        run: |
+          xcrun simctl boot "$SIM" || true
+          xcrun simctl bootstatus "$SIM" -b
       # TerminalTests saves the terminal it drew as out/terminal.png.
       - name: Unit tests (the Expo app's Keychain and AsyncStorage, the terminal)
         working-directory: client/ios
@@ -139,7 +148,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p out
-          xcodebuild test -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
+          xcodebuild test-without-building -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -40
       - name: Open it on the Simulator
         working-directory: client/ios
