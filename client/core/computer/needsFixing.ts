@@ -122,7 +122,7 @@ export function needsFixing(input: NeedsFixingInput): FixRow[] {
   return [hostRow(input), ...agentUseRows(input.agentUse), updateRow(input.update, input.minVersion)].filter((row): row is FixRow => Boolean(row));
 }
 
-/** A newer Mewla the computer can install, when nothing requires it: a quiet row, no dot. */
+/** A newer Mewla the computer can install, when nothing requires it: a quiet row, no red dot (the cat's ink update dot: core/update/hint). */
 export function optionalUpdate(update: DaemonUpdateStatus | null, minVersion: string): string | null {
   if (!update || update.updating || !update.supported || !update.latest || update.error) return null;
   if (compareVersions(update.version, minVersion) === -1) return null;

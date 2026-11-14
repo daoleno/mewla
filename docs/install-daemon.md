@@ -202,11 +202,12 @@ running: they live in the session host, not in the daemon.
 
 A released `mewla` on Linux and Windows checks every six hours and installs a
 newer stable release once no Brain turn or Worker is running. When a newer
-release exists, the computer page (tap the cat) shows an update row with
-**Update**, which does the same right away; the computer's details show the
-version it runs. When the app and the computer no longer fit together,
+release exists, the cat on home carries a small ink dot and the computer page
+(tap the cat) shows an update row with **Update**, which does the same right
+away; once you have seen that row, the cat's dot goes until the next release.
+The computer's details show the version it runs. When the app and the computer no longer fit together,
 **Needs fixing** reads **Update required** with **Update**, and the cat
-carries a dot.
+carries the red dot instead.
 
 An update never leaves the computer without a working Mewla. The running
 process shuts down, then starts the new binary itself and replaces the
@@ -331,8 +332,11 @@ Mewla looks for a newer release on its own, at launch and when you come back to
 it (at most every six hours). **Settings › About** shows the version and an
 update row under it: **Check for updates** says **Up to date** and checks again
 when you tap it, and offers **Retry** if it can't reach GitHub. When a newer
-release exists, the row reads **Update available** with an **Update** button,
-and the computer page shows **Update available** too.
+release exists, the row moves to the top of **Settings** and reads **Update
+available** with the version and an **Update** button. The cat on home carries
+a small ink dot until you have opened Settings once for that version, and the
+computer page's **Settings** row carries the same dot until the update is
+installed.
 
 Tap **Update** to download the APK, with progress in the row. Mewla checks the
 release's signed manifest and the APK's SHA-256, then opens the Android
@@ -350,8 +354,9 @@ Install **Mewla Preview** from
 [TestFlight](https://testflight.apple.com/join/nMQheDCE): open the link on your
 iPhone, install Apple's TestFlight app if asked, then tap **Accept** and
 **Install**. TestFlight delivers new builds once Apple's beta review passes.
-When a newer build is in TestFlight, **Settings › About** reads **Update
-available**, and **Update** opens it in TestFlight.
+When a newer build is in TestFlight, the row at the top of **Settings** reads
+**Update available**, and **Update** opens it in TestFlight; the cat and the
+computer page's **Settings** row carry the same dot as on Android.
 
 You can also build the app from source on an Apple Silicon Mac.
 

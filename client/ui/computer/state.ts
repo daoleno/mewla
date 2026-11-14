@@ -1,5 +1,5 @@
 import { computed, effect, signal, untracked } from "nsh";
-import { needsFixing, catNeedsYouOf, type FixRow } from "../../core/computer/needsFixing";
+import { needsFixing, catNeedsYouOf, optionalUpdate, type FixRow } from "../../core/computer/needsFixing";
 import { getAgentUse, getDaemonUpdate, MIN_COMPUTER_VERSION, type AgentUseStatus, type DaemonUpdateStatus } from "../../core/settings/computer";
 import { effectiveMinComputerVersion } from "../../core/update/version";
 import manifest from "../nsh.json";
@@ -70,6 +70,9 @@ export const fixRows = computed<FixRow[]>(() => {
     minVersion: minComputerVersion(),
   });
 });
+
+/** A newer Mewla the current computer can install when nothing requires it (its quiet row), while connected. */
+export const computerOptionalUpdate = computed(() => (connection() === "connected" ? optionalUpdate(computerUpdate(), minComputerVersion()) : null));
 
 /**
  * The red dot on home's cat (SPEC §1.3): this computer must be paired again or updated to work

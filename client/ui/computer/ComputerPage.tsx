@@ -1,6 +1,6 @@
 import { announce, cleanup, effect, Image, lifecycle, platform, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
-import { fixButtonKind, optionalUpdate, type FixRow } from "../../core/computer/needsFixing";
+import { fixButtonKind, type FixRow } from "../../core/computer/needsFixing";
 import { failureText } from "../../core/more/daemon";
 import { setServerAutoConnect, type StoredServer } from "../../core/servers";
 import { changeAgentUse, installDaemonUpdate } from "../../core/settings/computer";
@@ -18,8 +18,9 @@ import { otherState } from "./computers";
 import { pet } from "../pets/pets";
 import { connection, current, resumeConnection, servers, shownConnection, switchTo, transportPath } from "../session";
 import { goHome, nav } from "../shell/nav";
-import { updatePending } from "../update/update";
-import { computerAgentUse, computerUpdate, fixRows, minComputerVersion, readComputer } from "./state";
+import { markComputerUpdateSeen } from "../update/hint";
+import { appUpdateWaiting } from "../update/update";
+import { computerAgentUse, computerOptionalUpdate, computerUpdate, fixRows, readComputer } from "./state";
 
 export { catNeedsYou } from "./state";
 
@@ -134,6 +135,11 @@ export function ComputerPage(props: {
       if (connection() === "connected") readComputer();
     });
   });
+  // Shown with the current computer's update row: the cat's dot for that version goes.
+  effect(() => {
+    const top = (props.nav.routes?.().length ?? depth) === depth;
+    if (top && lifecycle() === "active" && computerOptionalUpdate()) untracked(markComputerUpdateSeen);
+  });
 
   // While what it shows can change (an update installing, a fix under way), read again.
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -187,7 +193,7 @@ export function ComputerPage(props: {
   }
 
   const others = () => servers().filter((s) => s.id !== current()?.id);
-  const optional = () => (connection() === "connected" ? optionalUpdate(computerUpdate(), minComputerVersion()) : null);
+  const optional = computerOptionalUpdate;
   const updateRow = (): FixRow | null => (optional() ? { key: "update-optional", title: `Update available · ${optional()}`, button: "Update", action: { kind: "update" }, blocking: false } : null);
 
   return (
@@ -262,7 +268,9 @@ export function ComputerPage(props: {
       </Section>
 
       <Section>
-        <Row testID="computer-settings" lead={tile("settings")} title="Settings" value={updatePending() ? "Update available" : undefined} chevron onPress={() => props.nav.push({ name: "settings" })} />
+        {/* This app's update waits there: the same ink dot as the cat's, until it is installed. */}
+        <Row testID="computer-settings" lead={tile("settings")} title="Settings" accessibilityLabel={appUpdateWaiting() ? "Settings, Update available" : "Settings"} chevron onPress={() => props.nav.push({ name: "settings" })}
+          trailing={<If when={appUpdateWaiting()}><View testID="computer-settings-update" class="size-2.5 rounded-full bg-primary" /></If>} />
       </Section>
       <View class="h-6" />
     </Page>

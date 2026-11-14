@@ -1,7 +1,9 @@
 // The app on a scripted computer, for `nsh test` only (never bundled: App.tsx is the app's entry).
 // The test gives the computer's state as host params: `host: { params: { daemon: {...} } }`.
-import { host, Storage } from "nsh";
+import { host, signal, Storage } from "nsh";
+import type { AppUpdateState } from "../core/update/appUpdate";
 import { startApp } from "./App";
+import { bindAppUpdate } from "./update/update";
 import { installPlatform, platform } from "../core/platform";
 import { FakeDaemon, type FakeDaemonState } from "./testing/fakeDaemon";
 import { setScrollTraceSink } from "../core/timeline/scrollTrace";
@@ -16,6 +18,13 @@ installPlatform({ ...platform(), openSocket: () => {
   void Storage.setItem("fake:sockets", String(++opened));
   return daemon.open();
 } });
+// `host: { params: { appUpdate: {...} } }`: this app's update stands so (the event `app.appUpdate` moves it); presses post `app.appUpdatePressed`.
+const appUpdateParam = (host.params as { appUpdate?: AppUpdateState }).appUpdate;
+if (appUpdateParam) {
+  const state = signal<AppUpdateState>(appUpdateParam);
+  host.on<AppUpdateState>("app.appUpdate", (next) => state.set(next));
+  bindAppUpdate({ state, pending: () => "update" in state(), start: () => {}, press: () => host.post("app.appUpdatePressed") });
+}
 // A test sends the computer's own news (a Session's update, a file changed there) with `app.host.send("app.daemonPush", frame)`.
 host.on<Record<string, unknown>>("app.daemonPush", (frame) => daemon.push(frame as { type: string }));
 // `app.host.send("app.conversation", { worker, upserts?, deletes?, activity?, snapshot? })`: a conversation's news to its followers.
