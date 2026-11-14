@@ -22,7 +22,7 @@ The `ios` job in [`.github/workflows/client.yml`](../.github/workflows/client.ym
 3. runs the unit tests (the Expo app's Keychain and AsyncStorage upgrade, the terminal) on a Simulator, ad hoc signed;
 4. builds the Release app, installs and launches it on the Simulator, and uploads a first-run screenshot.
 
-This job contains no Apple credentials. The Linux `client` job of `ci.yml` keeps core tests, `nsh check` and `nsh test` on every push; none of them is a substitute for this macOS compile/link job.
+This job contains no Apple credentials. The Linux `client` and `client-ui` jobs of `ci.yml` keep core tests, `nsh check` and `nsh test` on every push; none of them is a substitute for this macOS compile/link job.
 
 Because pushes to `main` do not compile iOS, an iOS compile break that skipped a pull request is caught at release time by the signed archive in [`ios-release.yml`](../.github/workflows/ios-release.yml), which runs on every release before any IPA is exported or uploaded.
 

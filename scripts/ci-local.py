@@ -47,6 +47,7 @@ JOB_PATHS = {
     "installer": ["install.sh", "scripts/tests/install_test.sh", "scripts/install*"],
     "daemon": ["daemon/*", "scripts/*plugin-publisher*", "scripts/build-daemon-linux.sh", "scripts/build-web-ui.sh"],
     "client": ["client/*", "bun.lock", "package.json"],
+    "client-ui": ["client/*"],
     "native-contract": [
         "scripts/verify-libghostty.sh", "scripts/lib/*", "native/terminal-vt/*",
         "client/android/app/build.gradle.kts", "client/android/app/CMakeLists.txt", "client/ios/project.yml",
@@ -73,12 +74,29 @@ SCRUBBED_ENV = re.compile(r"^(MEWLA_STATE_DIR|ANTHROPIC_.*|CLAUDE_CODE_.*)$")
 
 
 class Step:
-    def __init__(self, job, name, run, cwd, env, skip=None, prerequisites=()):
+    def __init__(self, job, name, run, cwd, env, skip=None, prerequisites=(), variant=""):
         self.job, self.name, self.run, self.cwd, self.env = job, name, run, cwd, env
         self.skip, self.prerequisites = skip, tuple(prerequisites)
+        # "shard=2" for one value of the job's matrix; "" for a job without one.
+        self.variant = variant
+
+    @property
+    def label(self):
+        return f"[{self.job}{' ' + self.variant if self.variant else ''}] {self.name}"
 
 
-def expand(text, runner_temp):
+def matrix_values(job_id, job):
+    """Every combination of the job's matrix (one empty one without a matrix): CI runs each, so do we."""
+    matrix = (job.get("strategy") or {}).get("matrix") or {}
+    combos = [{}]
+    for key, values in matrix.items():
+        if key in ("include", "exclude") or not isinstance(values, list):
+            raise ValueError(f"job {job_id}: matrix key {key!r} is not a plain list, which scripts/ci-local.py does not know")
+        combos = [{**combo, key: value} for combo in combos for value in values]
+    return combos
+
+
+def expand(text, runner_temp, matrix=None):
     """Substitute the few ${{ }} expressions CI uses; refuse any other."""
     values = {
         "runner.temp": runner_temp,
@@ -86,6 +104,7 @@ def expand(text, runner_temp):
         "github.ref_type": "branch",
         "github.sha": "local",
         "github.workspace": str(ROOT),
+        **{f"matrix.{key}": str(value) for key, value in (matrix or {}).items()},
     }
 
     def replace(match):
@@ -112,31 +131,40 @@ def plan(runner_temp):
         if job_id not in JOB_PATHS:
             raise ValueError(f"job {job_id} in ci.yml is neither in JOB_PATHS nor in SKIPPED_JOBS of scripts/ci-local.py")
         job_dir = (job.get("defaults") or {}).get("run", {}).get("working-directory", ".")
-        for index, step in enumerate(job["steps"]):
-            name = step.get("name") or step.get("uses") or f"step {index + 1}"
-            condition = str(step.get("if", ""))
-            if "uses" in step:
-                if not step["uses"].startswith(IGNORED_ACTIONS) and not step["uses"].startswith("./"):
-                    raise ValueError(f"job {job_id}: action {step['uses']} is unknown to scripts/ci-local.py")
-                if step["uses"].startswith("./"):
-                    steps.append(Step(job_id, name, None, ROOT, {}, skip="local action (native caches)"))
-                continue
-            if "run" not in step:
-                raise ValueError(f"job {job_id}: step {name!r} has neither run nor uses")
-            if condition and RELEASE_ONLY.search(condition):
-                steps.append(Step(job_id, name, None, ROOT, {}, skip="runs only on release tags and manual dispatch"))
-                continue
-            if condition:
-                raise ValueError(f"job {job_id}: step {name!r} has condition {condition!r} that scripts/ci-local.py does not know")
-            cwd = ROOT / expand(step.get("working-directory", job_dir), runner_temp)
-            env = {key: expand(str(value), runner_temp) for key, value in {**(job.get("env") or {}), **(step.get("env") or {})}.items()}
-            run = expand(step["run"], runner_temp)
-            if "apt-get" in run:
-                packages = re.findall(r"install\s+(?:-y\s+)?([\w .+-]+)", run)
-                steps.append(Step(job_id, name, None, cwd, env, prerequisites=" ".join(packages).split(),
-                                  skip="apt-get install replaced by a check that the tools exist"))
-                continue
-            steps.append(Step(job_id, name, run, cwd, env))
+        for matrix in matrix_values(job_id, job):
+            steps.extend(plan_job(job_id, job, job_dir, matrix, runner_temp))
+    return steps
+
+
+def plan_job(job_id, job, job_dir, matrix, runner_temp):
+    """The steps of one run of a job: one value of its matrix."""
+    variant = " ".join(f"{key}={value}" for key, value in matrix.items())
+    steps = []
+    for index, step in enumerate(job["steps"]):
+        name = step.get("name") or step.get("uses") or f"step {index + 1}"
+        condition = str(step.get("if", ""))
+        if "uses" in step:
+            if not step["uses"].startswith(IGNORED_ACTIONS) and not step["uses"].startswith("./"):
+                raise ValueError(f"job {job_id}: action {step['uses']} is unknown to scripts/ci-local.py")
+            if step["uses"].startswith("./"):
+                steps.append(Step(job_id, name, None, ROOT, {}, skip="local action (native caches)", variant=variant))
+            continue
+        if "run" not in step:
+            raise ValueError(f"job {job_id}: step {name!r} has neither run nor uses")
+        if condition and RELEASE_ONLY.search(condition):
+            steps.append(Step(job_id, name, None, ROOT, {}, skip="runs only on release tags and manual dispatch", variant=variant))
+            continue
+        if condition:
+            raise ValueError(f"job {job_id}: step {name!r} has condition {condition!r} that scripts/ci-local.py does not know")
+        cwd = ROOT / expand(step.get("working-directory", job_dir), runner_temp, matrix)
+        env = {key: expand(str(value), runner_temp, matrix) for key, value in {**(job.get("env") or {}), **(step.get("env") or {})}.items()}
+        run = expand(step["run"], runner_temp, matrix)
+        if "apt-get" in run:
+            packages = re.findall(r"install\s+(?:-y\s+)?([\w .+-]+)", run)
+            steps.append(Step(job_id, name, None, cwd, env, prerequisites=" ".join(packages).split(),
+                              skip="apt-get install replaced by a check that the tools exist", variant=variant))
+            continue
+        steps.append(Step(job_id, name, run, cwd, env, variant=variant))
     return steps
 
 
@@ -216,7 +244,7 @@ def run_plan(args, runner_temp):
     if args.list:
         for step in steps:
             if step.job in chosen or step.job in SKIPPED_JOBS:
-                print(f"    [{step.job}] {step.name}" + (f"  -- skipped: {step.skip}" if step.skip else ""))
+                print(f"    {step.label}" + (f"  -- skipped: {step.skip}" if step.skip else ""))
         return 0
 
     results, failed = [], False
@@ -225,17 +253,20 @@ def run_plan(args, runner_temp):
         for job in jobs:
             if job not in chosen:
                 continue
+            stopped = set()  # the job's variants (matrix values) that failed: CI stops only those
             for step in (s for s in steps if s.job == job):
+                if step.variant in stopped:
+                    continue
                 if args.step and not any(text.lower() in step.name.lower() for text in args.step):
                     continue
-                label = f"[{job}] {step.name}"
+                label = step.label
                 if step.prerequisites:
                     missing = [tool for tool in step.prerequisites if not shutil.which(tool)]
                     print(f"\n== {label}: needs {', '.join(step.prerequisites)}" + (f"; MISSING {', '.join(missing)}" if missing else "; present"))
                     if missing:
                         results.append((label, "FAIL", 0.0))
                         failed = True
-                        break
+                        stopped.add(step.variant)
                     continue
                 if step.skip:
                     print(f"\n== {label}: skipped ({step.skip})")
@@ -249,9 +280,9 @@ def run_plan(args, runner_temp):
                 seconds = time.monotonic() - t0
                 results.append((label, "ok" if code == 0 else "FAIL", seconds))
                 if code != 0:
-                    print(f"\nFAILED [{job}] {step.name} (exit {code}); CI would stop this job here", flush=True)
+                    print(f"\nFAILED {label} (exit {code}); CI would stop this job here", flush=True)
                     failed = True
-                    break
+                    stopped.add(step.variant)
 
     print("\nci-local summary")
     for label, status, seconds in results:
