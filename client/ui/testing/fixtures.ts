@@ -46,6 +46,7 @@ export function phoneHost(daemon: Record<string, unknown>, extra: Record<string,
       "live.apply": () => true,
       "live.widgetState": () => "ok",
       "app.testFrame": () => undefined,
+      "app.scrollTrace": () => undefined,
       ...extra,
     },
   };

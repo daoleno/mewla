@@ -16,6 +16,7 @@ import { withDayDividers } from "../../core/timeline/dayDividers";
 import { FOLDED_TEXT_HEIGHT, messageFolds } from "../../core/timeline/messageFold";
 import { readingPlace, readingPlaceIndex, readingPlaceOf, rememberReadingPlace } from "../../core/timeline/readingPlace";
 import { fromNewest, roomLeft, sentRowIndex, type SentRowCandidate } from "../../core/conversation/sendRoom";
+import { keyedSplice, scrollTraceOn, traceScroll } from "../../core/timeline/scrollTrace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
@@ -318,6 +319,9 @@ export function ChatTimeline(props: {
   handlers.openPicture = (key) => viewing.set(key);
   const expansion = createExpansion();
   let list: ListRef | undefined;
+  const scope = props.scope ?? props.testID;
+  const trace = (kind: string, data: Record<string, unknown> = {}) => traceScroll(scope, kind, data);
+  trace("make");
   // Read back from the newest row: the jump button brings it into view again.
   const away = signal(false);
   // A day's label is the same object while its day is: made anew on every update, each one was a new row.
@@ -330,6 +334,19 @@ export function ChatTimeline(props: {
       return kept;
     });
     return props.foot?.shown() ? [...all, FOOT] : all;
+  });
+  // The trace: each change of the rows' keys as NSH's List splices it, and whether it covers the rows on screen.
+  let tracedKeys: string[] = [];
+  let firstShown = -1;
+  let lastShown = -1;
+  if (scrollTraceOn()) effect(() => {
+    const keys = rows().map((row) => row.id);
+    const old = tracedKeys;
+    const splice = keyedSplice(old, keys);
+    tracedKeys = keys;
+    if (!splice) return;
+    const covers = firstShown >= 0 && splice.removed > 0 && firstShown >= splice.at && firstShown < splice.at + splice.removed;
+    trace("splice", { index: splice.at, removed: splice.removed, inserted: splice.inserted, rows: keys.length, firstShown, lastShown, covers, removedKeys: old.slice(splice.at, splice.at + Math.min(splice.removed, 6)), insertedKeys: keys.slice(splice.at, splice.at + Math.min(splice.inserted, 6)) });
   });
   /*
    * The one rule (owner 11-13): the list follows its end while the person is at it (`AT_END`); otherwise
@@ -345,6 +362,7 @@ export function ChatTimeline(props: {
     // Read when the rows are in, not when the list is made: places kept from before a restart load meanwhile.
     const saved = props.scope ? readingPlaceOf(props.scope) : undefined;
     opening = { index: untracked(() => readingPlaceIndex(rows(), saved)), centre: untracked(openRequests) };
+    trace("open", { saved, index: opening.index, rows: untracked(rows).length, centre: opening.centre });
     ready.set(true);
   };
   let touched = false;
@@ -362,6 +380,7 @@ export function ChatTimeline(props: {
     const all = untracked(rows);
     const index = all.length - 1;
     const view = untracked(anchor);
+    trace("cmd", { by: "centreRequest", cmd: "scrollToEnd?", foot: all[index] === FOOT, view: Boolean(view), rows: all.length });
     if (!list || all[index] !== FOOT || !view) return void list?.scrollToEnd({ animated });
     let card = await view.measure();
     if (!card) {
@@ -373,6 +392,7 @@ export function ChatTimeline(props: {
     // In the band below a capsule header: the list runs under it.
     const under = untracked(() => props.capsule?.top() ?? 0);
     const top = under + Math.max(0, (box.bounds.size.height - under - card.bounds.size.height) / 2);
+    trace("cmd", { by: "centreRequest", cmd: "scrollToIndex", index, rows: untracked(rows).length });
     list.scrollToIndex({ index, viewPosition: 0, viewOffset: top - card.bounds.origin.y, animated });
   };
   const openRequests = () => Boolean(props.foot?.shown()) && (props.requests?.() ?? 0) > 0;
@@ -411,19 +431,26 @@ export function ChatTimeline(props: {
     if (untracked(room) === 0 || !roomNode || !list || Date.now() < settledAt) return;
     const [box, top] = await Promise.all([list.measure(), roomNode.measure()]);
     if (!box || !top || Date.now() < settledAt) return;
-    room.set(roomLeft(untracked(room), box.pagePosition.y + box.bounds.size.height, top.pagePosition.y));
+    const next = roomLeft(untracked(room), box.pagePosition.y + box.bounds.size.height, top.pagePosition.y);
+    if (next !== untracked(room)) trace("room", { by: "fitRoom", from: untracked(room), to: next });
+    room.set(next);
   };
   const placeSent = async () => {
     if (sentAt === null || !list) return;
     const index = sentRowIndex(untracked(rows) as SentRowCandidate[], sentAt);
+    trace("placeSent", { index, key: index >= 0 ? untracked(rows)[index]?.id : undefined, rows: untracked(rows).length });
     if (index < 0) return;
     sentAt = null;
     const box = await list.measure();
     if (!box || !list) return;
+    trace("room", { by: "placeSent", from: untracked(room), to: box.bounds.size.height });
     room.set(box.bounds.size.height);
     settledAt = Date.now() + SETTLE_MS;
     // Once the room is laid out, the sent row can come to the top.
-    setTimeout(() => list?.scrollToIndex({ index, viewPosition: 0, viewOffset: untracked(() => props.capsule?.top() ?? 0), animated: true }), 0);
+    setTimeout(() => {
+      trace("cmd", { by: "placeSent", cmd: "scrollToIndex", index, keyNow: untracked(rows)[index]?.id, rows: untracked(rows).length });
+      list?.scrollToIndex({ index, viewPosition: 0, viewOffset: untracked(() => props.capsule?.top() ?? 0), animated: true });
+    }, 0);
     setTimeout(() => void fitRoom(), SETTLE_MS + 50);
   };
   const seenSent = props.sent ? untracked(props.sent) : 0;
@@ -462,16 +489,33 @@ export function ChatTimeline(props: {
       });
     });
   }
+  if (scrollTraceOn()) {
+    let mvcp: boolean | undefined;
+    effect(() => {
+      const holding = room() > 0;
+      if (holding !== mvcp) trace("mvcp", { followEnd: !holding });
+      mvcp = holding;
+    });
+  }
+  let dragging = false;
+  let lastTraced = Number.NaN;
   return (
     <View class="flex-1">
       <PictureViewer pictures={pictures} open={viewing} load={handlers.loadImage} />
       <If when={ready()} else={<View testID={props.testID} class="flex-1">{props.empty() as never}</View>}><List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
           list = node;
+          trace("ref", { set: Boolean(node) });
           mounted.set(true);
         }}
         onScrollDragStart={() => {
+          dragging = true;
+          trace("drag", { phase: "start" });
           touched = true;
           props.capsule?.reading.dragStart();
+        }}
+        onScrollDragEnd={() => {
+          dragging = false;
+          trace("drag", { phase: "end" });
         }}
         onScrollEnd={({ offset }) => props.capsule?.reading.rest(offset.y, fromEnd)}
         // Opens at its newest row (NSH 0.5.0, before the first frame), or at the row it was read back to.
@@ -480,6 +524,10 @@ export function ChatTimeline(props: {
         onViewableItemsChange={({ viewableItems }) => {
           // A hidden list's rows (a browser resets its scroll) are not where the person was.
           if (untracked(shown)) shownFirst = readingPlace(viewableItems);
+          const shownIndices = viewableItems.filter((token) => token.isViewable).map((token) => token.index);
+          firstShown = shownIndices.length ? Math.min(...shownIndices) : -1;
+          lastShown = shownIndices.length ? Math.max(...shownIndices) : -1;
+          trace("viewable", { first: firstShown, last: lastShown, firstKey: shownFirst });
         }}
         // While the reply has room under the sent message, the list holds still (the sent message stays at the top).
         maintainVisibleContentPosition={room() > 0 ? {} : { autoscrollToBottomThreshold: AT_END }} keyboardDismissMode="interactive"
@@ -488,6 +536,10 @@ export function ChatTimeline(props: {
           // A hidden list's scroll (a browser resets it) is not where the person was.
           if (!untracked(shown)) return;
           fromEnd = fromNewest(contentSize.height, untracked(room), offset.y, size.height);
+          if (scrollTraceOn() && (Number.isNaN(lastTraced) || Math.abs(offset.y - lastTraced) > 1)) {
+            trace("scroll", { offset: Math.round(offset.y), content: Math.round(contentSize.height), viewport: Math.round(size.height), room: untracked(room), fromEnd: Math.round(fromEnd), dragging, jump: Number.isNaN(lastTraced) ? 0 : Math.round(offset.y - lastTraced) });
+            lastTraced = offset.y;
+          }
           props.capsule?.reading.scroll(offset.y, fromEnd);
           // The person's own scrolling holds the header cat still.
           if (touched) noteScroll();
@@ -515,7 +567,10 @@ export function ChatTimeline(props: {
         }}
       </List></If>
       <If when={!props.capsule}><HeaderFade /></If>
-      <If when={away()}><If when={(props.requests?.() ?? 0) > 0} else={<Button testID="jump-latest" accessibilityLabel="Jump to latest" onPress={() => list?.scrollToEnd({ animated: true })}
+      <If when={away()}><If when={(props.requests?.() ?? 0) > 0} else={<Button testID="jump-latest" accessibilityLabel="Jump to latest" onPress={() => {
+            trace("cmd", { by: "jump", cmd: "scrollToEnd", rows: untracked(rows).length });
+            list?.scrollToEnd({ animated: true });
+          }}
             class={`absolute bottom-3 right-4 size-11 items-center justify-center rounded-full active:opacity-70 ${jumpFloat()}`}>
             <Icon name="arrow-down" size={18} color="foreground" />
           </Button>}><Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}
