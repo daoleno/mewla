@@ -117,18 +117,20 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
 
             <If when={runs().length}><SectionTitle title="Runs" /></If>
             <View class="border-t border-border">
-              {(allRuns() ? runs() : runs().slice(0, RUNS_SHOWN)).map((run) => (
-                <Button testID={`run-${run.id}`}
+              {/* Keyed: a row stays the same view while the clock, the zone table or the item changes, so a tap that lands as
+                  one of them changes is not lost with a row made anew (11-15: every row was made again by each of them). */}
+              <Each of={allRuns() ? runs() : runs().slice(0, RUNS_SHOWN)} key={(run: CalendarRun) => run.id}>{(run: () => CalendarRun) => (
+                <Button testID={`run-${run().id}`}
                   // A run still running opens its Session while the computer lists it; the others, and one whose Session has gone, their result (parity #45).
-                  onPress={() => (run.status === "running" && run.worker_session && workers().some((worker) => worker.id === run.worker_session)
-                    ? props.openSession(run.worker_session) : props.nav.push({ name: "run", itemId: props.id, runId: run.id }))} class="gap-1 border-b border-border bg-card px-4 py-3 active:bg-accent">
+                  onPress={() => (run().status === "running" && run().worker_session && workers().some((worker) => worker.id === run().worker_session)
+                    ? props.openSession(run().worker_session!) : props.nav.push({ name: "run", itemId: props.id, runId: run().id }))} class="gap-1 border-b border-border bg-card px-4 py-3 active:bg-accent">
                   <View class="flex-row items-center gap-1.5">
-                    <RunMark status={run.status} />
-                    <Text class="text-sm text-muted-foreground">{`${runWhen(run, item()!, clock())} · ${statusLabel[run.status]}`}</Text>
+                    <RunMark status={run().status} />
+                    <Text class="text-sm text-muted-foreground">{`${runWhen(run(), item()!, clock())} · ${statusLabel[run().status]}`}</Text>
                   </View>
-                  <If when={runPreview(run)}><Text class="text-base line-clamp-2">{runPreview(run)}</Text></If>
+                  <If when={runPreview(run())}><Text class="text-base line-clamp-2">{runPreview(run())}</Text></If>
                 </Button>
-              ))}
+              )}</Each>
               <If when={!allRuns() && runs().length > RUNS_SHOWN}><Row title={`Show all ${runs().length}`} onPress={() => allRuns.set(true)} /></If>
             </View>
 

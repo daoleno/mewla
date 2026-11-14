@@ -123,6 +123,20 @@ describe("the Calendar tab", () => {
     await app.waitFor("id:cancel-item", SLOW);
   }, 20_000);
 
+  test("a tap on a run that spans a change to its item still opens the run: the change does not rebuild the rows under the finger", async () => {
+    // 11-15 00:xx: Work.test's run tap opened nothing until a 3 s wait. Every change to the item (its full copy arriving after
+    // the snapshot's, a change on the computer) made every run row anew, and a tap on a row made anew is lost.
+    const runs = [{ id: "r1", status: "completed", scheduled_for: "2026-07-17T03:00:00Z", started_at: "2026-07-17T03:00:00Z", result_preview: "Three papers read." }];
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Paper digest", 20, { id: "c1", kind: "scheduled_action", action_instruction: "Read papers.", runs })] }), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar?id=c1" });
+    await app.waitFor("text:Fri, Jul 17, 11:00 AM · Done", SLOW);
+    await app.dragAndHold("id:run-r1", { x: 0, y: 0 });
+    await app.host.send("app.daemonPush", { type: "calendar_item_changed", calendar_item: item("Paper digest", 20, { id: "c1", kind: "scheduled_action", action_instruction: "Read the papers.", runs }) });
+    await app.waitFor("text:Read the papers.", SLOW);
+    await app.drop();
+    await app.waitFor("id:calendar-run-page", SLOW);
+  }, 20_000);
+
   test("cancels an item after asking, goes back to the agenda, and the item leaves it", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1)] });
     await app.waitFor("id:calendar-item-Call the bank", SLOW);
