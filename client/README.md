@@ -16,7 +16,7 @@ so a phone keeps its pairing and its drafts. The terminal links libghostty-vt fr
 ## Set up
 
 ```sh
-client/scripts/fetch-nsh.sh          # NSH 0.5.0 and its Android AARs into $NSH_HOME (default ~/.nsh, checksums pinned); --ios also fetches the framework
+client/scripts/fetch-nsh.sh          # NSH 0.5.1 and its Android AARs into $NSH_HOME (default ~/.nsh, checksums pinned); --ios also fetches the framework
 cd client && bun test core           # core
 cd client/ui && nsh check && nsh test
 ```
