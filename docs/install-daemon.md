@@ -6,7 +6,7 @@ running as a service, updates, the app builds and uninstalling.
 ## What you need
 
 - Linux `amd64`/`arm64`, WSL2, an Apple Silicon Mac, or Windows 10 (version
-  1809 or later) or 11 on x64
+  1809 or later) or 11 on x64 (beta)
 - `curl`, `tar`, and `sha256sum` (Linux) or `shasum` (macOS); on Windows,
   PowerShell
 - At least one agent CLI on `PATH` and already signed in: `claude`, `codex`,
@@ -66,6 +66,10 @@ runs [`mewla boot install`](#keep-it-running): Mewla starts now and each time
 you log in. Nothing needs administrator rights. Running it again installs over
 the existing copy, even while Mewla is running, but the running Mewla keeps its
 old version until it restarts; to update, use `mewla update`.
+
+Windows is in beta. Tell us how it went, good or bad:
+[open an issue](https://github.com/daoleno/mewla/issues/new?title=Windows%3A%20&body=Windows%20version%3A%0A%0Amewla%20version%3A%0A%0Amewla%20doctor%3A%0A%0AWhat%20happened%3A%0A) with your Windows version and the
+output of `mewla version` and `mewla doctor`.
 
 `irm | iex` takes no arguments, so options are environment variables set
 before it:
@@ -157,7 +161,7 @@ usual "Next, start Mewla" line.
 | Linux `arm64` / `aarch64` | `mewla-linux-arm64.tar.gz` | Supported |
 | WSL2 on either architecture | The matching Linux archive | Supported |
 | Apple Silicon macOS | `mewla-darwin-arm64.tar.gz` | Supported |
-| Windows 10 (1809 or later) and 11, x64 | `mewla-windows-amd64.zip` | Supported since 0.3.0 |
+| Windows 10 (1809 or later) and 11, x64 | `mewla-windows-amd64.zip` | Beta, since 0.3.0 |
 | Windows on ARM | None | Not supported |
 | Intel macOS | None | Not supported |
 
@@ -345,7 +349,8 @@ leaves updates to the store and shows the version only.
 Install **Mewla Preview** from
 [TestFlight](https://testflight.apple.com/join/nMQheDCE): open the link on your
 iPhone, install Apple's TestFlight app if asked, then tap **Accept** and
-**Install**. TestFlight delivers new builds as they're released.
+**Install**. TestFlight delivers new builds once Apple's beta review passes;
+until it approves 0.4, TestFlight has the 0.3.1 Preview.
 When a newer build is in TestFlight, **Settings › About** reads **Update
 available**, and **Update** opens it in TestFlight.
 
