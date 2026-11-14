@@ -149,7 +149,22 @@ writer sends each message in 32 KiB chunks and renews the 30 s write deadline
 per chunk, so the deadline measures progress: a slow link that keeps draining
 is never cut off mid-snapshot, while a client that accepts nothing for 30 s or
 lets its queue pass 16 MiB is closed and reconnects to fresh snapshots. JSON
-messages use permessage-deflate when the client offers it.
+messages use permessage-deflate when the client offers it. A client whose
+WebSocket cannot negotiate that (the apps, on NSH's WebSocket) offers the
+subprotocol `mewla.frames.deflate-raw` beside its auth subprotocol; the writer
+then sends each JSON message of 1 KiB or more as one binary message of raw
+DEFLATE (RFC 1951), and smaller ones as text. The handshake still selects the
+auth subprotocol, and a client that does not offer it gets text. The
+connection-lost log line adds `frames=deflate-raw wire=<bytes>` for such a
+client.
+
+A thread's first snapshot can come in two parts. A
+`codex_conversation_subscribe` with `first_events: N` gets a
+`codex_conversation_snapshot` of the newest N events, then a
+`codex_conversation_delta` (the next revision) with every older event, so a
+phone on a slow link paints the end of the thread from a few KB while the
+rest follows. Without it, or for a thread of N events or fewer, the snapshot
+is the whole thread.
 
 Connect snapshots stay small as history grows: `calendar_items_snapshot`,
 `calendar_item_changed` and Calendar mutation replies omit run history

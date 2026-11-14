@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"compress/flate"
 	"errors"
 	"fmt"
 	"net"
@@ -67,12 +69,75 @@ type clientOutbox struct {
 	lastSendSize int
 	lastSendTook time.Duration
 	failure      string // why the writer gave up on this client, if it did
+
+	// frameDeflate: the client offered frameDeflateSubprotocol, so the writer
+	// sends JSON text of frameDeflateMin bytes or more as one binary message
+	// of its raw DEFLATE bytes. wire counts the bytes that went out.
+	frameDeflate bool
+	wire         int64
+	deflater     *flate.Writer
+	deflated     bytes.Buffer
+}
+
+// frameDeflateSubprotocol is the WebSocket subprotocol a client offers, beside
+// its auth subprotocol, to say it inflates binary messages: each one is a JSON
+// message as raw DEFLATE (RFC 1951). It is for clients whose WebSocket cannot
+// negotiate permessage-deflate (NSH's native one): a 750 KB thread snapshot is
+// some 250 KB on the wire, and a phone behind a slow tunnel waits on every
+// byte. The daemon never selects it (the handshake echoes the auth
+// subprotocol); a client that did not offer it gets text as before.
+const frameDeflateSubprotocol = "mewla.frames.deflate-raw"
+
+// frameDeflateMin is the smallest message the writer deflates: below it, the
+// bytes saved do not pay for the work on either end.
+const frameDeflateMin = 1024
+
+// clientOffersFrameDeflate reports whether the upgrade offered
+// frameDeflateSubprotocol.
+func clientOffersFrameDeflate(r *http.Request) bool {
+	for _, protocol := range websocket.Subprotocols(r) {
+		if protocol == frameDeflateSubprotocol {
+			return true
+		}
+	}
+	return false
+}
+
+// useFrameDeflate turns deflated frames on, before the first message is queued.
+func (o *clientOutbox) useFrameDeflate() {
+	o.mu.Lock()
+	o.frameDeflate = true
+	o.mu.Unlock()
+}
+
+// wireMessage is msg as it goes out: deflated into a binary message when the
+// client asked for that and it is large enough, else unchanged. Only the
+// writer goroutine calls it.
+func (o *clientOutbox) wireMessage(msg outboundMessage, deflate bool) outboundMessage {
+	if !deflate || msg.messageType != websocket.TextMessage || len(msg.data) < frameDeflateMin {
+		return msg
+	}
+	o.deflated.Reset()
+	if o.deflater == nil {
+		o.deflater, _ = flate.NewWriter(&o.deflated, flate.DefaultCompression)
+	} else {
+		o.deflater.Reset(&o.deflated)
+	}
+	if _, err := o.deflater.Write(msg.data); err != nil {
+		return msg
+	}
+	if err := o.deflater.Close(); err != nil {
+		return msg
+	}
+	return outboundMessage{messageType: websocket.BinaryMessage, data: append([]byte(nil), o.deflated.Bytes()...), kind: msg.kind}
 }
 
 // outboxStats is what the writer has done for one client, kept so a dropped
 // connection can say whether it died mid-send.
 type outboxStats struct {
 	sent         int64
+	wire         int64 // bytes written; sent counts them before frame deflate
+	frameDeflate bool
 	byType       []typeStat // heaviest first
 	pending      int
 	lastSendAt   time.Time
@@ -84,7 +149,7 @@ type outboxStats struct {
 func (o *clientOutbox) stats() outboxStats {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return outboxStats{sent: o.sent, byType: sortedTally(o.byType), pending: o.bytes, lastSendAt: o.lastSendAt, lastSendSize: o.lastSendSize, lastSendTook: o.lastSendTook, failure: o.failure}
+	return outboxStats{sent: o.sent, wire: o.wire, frameDeflate: o.frameDeflate, byType: sortedTally(o.byType), pending: o.bytes, lastSendAt: o.lastSendAt, lastSendSize: o.lastSendSize, lastSendTook: o.lastSendTook, failure: o.failure}
 }
 
 func newClientOutbox(conn *websocket.Conn) *clientOutbox {
@@ -128,16 +193,19 @@ func (o *clientOutbox) run() {
 		}
 		batch := o.queue
 		o.queue = nil
+		deflate := o.frameDeflate
 		o.mu.Unlock()
 
 		for _, msg := range batch {
 			started := time.Now()
-			err := writeWithProgressDeadline(o.conn, msg)
+			out := o.wireMessage(msg, deflate)
+			err := writeWithProgressDeadline(o.conn, out)
 			o.mu.Lock()
 			if err != nil {
 				o.failLocked(err)
 			} else {
 				o.sent += int64(len(msg.data))
+				o.wire += int64(len(out.data))
 				if o.byType == nil {
 					o.byType = make(map[string]typeTally)
 				}
@@ -292,8 +360,12 @@ func (l *wsLink) describe(out outboxStats) string {
 		}
 		return now.Sub(t).Round(10 * time.Millisecond).String()
 	}
-	return fmt.Sprintf("sent=%dB pending=%dB lastSend=%dB/%s took %s pongs=%d/%d lastPong=%s deflate=%t types=%s",
-		out.sent, out.pending, out.lastSendSize, since(out.lastSendAt), out.lastSendTook.Round(time.Millisecond), pongs, pings, since(lastPongAt), l.deflate, describeTally(out.byType, out.sent))
+	frames := ""
+	if out.frameDeflate {
+		frames = fmt.Sprintf(" frames=deflate-raw wire=%dB", out.wire)
+	}
+	return fmt.Sprintf("sent=%dB pending=%dB lastSend=%dB/%s took %s pongs=%d/%d lastPong=%s deflate=%t%s types=%s",
+		out.sent, out.pending, out.lastSendSize, since(out.lastSendAt), out.lastSendTook.Round(time.Millisecond), pongs, pings, since(lastPongAt), l.deflate, frames, describeTally(out.byType, out.sent))
 }
 
 // keepWebSocketAlive pings conn on a timer and drops it when the client goes
