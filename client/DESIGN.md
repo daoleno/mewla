@@ -285,7 +285,7 @@ pointer with a keyboard (a browser, a desktop) get the same frame.
 
 On an iPhone (the Duo opened) the right pane's pages keep their phone
 headers: Brain's header loses its cat and state control to the pane, and a
-pushed page keeps its capsule. A half-open fold is not yet followed: NSH 0.5.0
+pushed page keeps its capsule. A half-open fold is not yet followed: NSH 0.5.1
 reports no fold, so nothing snaps to it.
 
 1. **One tree.** `Shell` (`ui/shell/Shell.tsx`) is one row at every width: the
