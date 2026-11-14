@@ -395,7 +395,10 @@ function Group(props: { review: GitReview; nav: PageNav; group: GitReviewGroup; 
       />
       <If when={!collapsed()}><View class="overflow-hidden rounded-(--radius-group) bg-card">
           <View class="-mb-px">
-            <If when={props.rows.length} else={<Row title="No changes" />}>{page().rows.map((row) => <ReviewRow review={props.review} nav={props.nav} row={row} selected={props.selected} onOpen={props.onOpen} />)}</If>
+            {/* Keyed: Show more makes only the next page's rows, the ones on screen stay. */}
+            <If when={props.rows.length} else={<Row title="No changes" />}>
+              <Each of={page().rows} key={(row) => row.key}>{(row) => <ReviewRow review={props.review} nav={props.nav} row={row()} selected={props.selected} onOpen={props.onOpen} />}</Each>
+            </If>
             <If when={page().more}>
               <View testID={`git-more-${props.group}`} role="button" accessibilityLabel={`Show ${Math.min(page().more, GIT_REVIEW_ROWS_PAGE)} more of ${page().more}`}
                 onPress={() => props.review.showMore(props.group, GIT_REVIEW_ROWS_PAGE)} class="min-h-[48px] flex-row items-center justify-center px-4 py-2.5 active:bg-accent">
