@@ -243,7 +243,7 @@ export function buildTimelineFromSortedEvents(
           });
         }
       } else {
-        const activity = activityFromEvent(event);
+        const activity = activityOf(event);
         if (activity) {
           items.push(activity);
         }
@@ -252,7 +252,7 @@ export function buildTimelineFromSortedEvents(
     }
 
     if (event.kind === "command") {
-      const entry = explorationEntryFromEvent(event);
+      const entry = explorationEntryOf(event);
       if (entry) {
         explorationEntries.push(entry);
         continue;
@@ -269,7 +269,7 @@ export function buildTimelineFromSortedEvents(
       attachWaitStatusToLastCommand(items, event);
       continue;
     }
-    const activity = activityFromEvent(event);
+    const activity = activityOf(event);
     if (activity) {
       items.push(
         event.subagent ? withSubagentWork(activity, event.subagent) : activity,
@@ -332,6 +332,34 @@ export function formatSubagentDuration(
   const hours = Math.floor(minutes / 60);
   const restMinutes = minutes % 60;
   return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`;
+}
+
+/*
+ * An event's row and its place in a run of commands, made once per event. A thread keeps its events' objects from one
+ * update to the next (the reducer reuses what did not change), and a page of older events (first_events) or a command
+ * at the edge of what changed projects the whole thread again: Brain's 152 commands were read again for every page,
+ * 72 ms of a page's call on a dev box, past 2 s on the owner's phone with the rest of the open (11-14). Both depend on
+ * the event alone, and rows are replaced, never changed in place, so the same object is handed out again.
+ */
+const activityByEvent = new WeakMap<CodexConversationEvent, TimelineItem | null>();
+const explorationByEvent = new WeakMap<CodexConversationEvent, ExplorationEntry | null>();
+
+function activityOf(event: CodexConversationEvent): TimelineItem | null {
+  let activity = activityByEvent.get(event);
+  if (activity === undefined) {
+    activity = activityFromEvent(event);
+    activityByEvent.set(event, activity);
+  }
+  return activity;
+}
+
+function explorationEntryOf(event: CodexConversationEvent): ExplorationEntry | null {
+  let entry = explorationByEvent.get(event);
+  if (entry === undefined) {
+    entry = explorationEntryFromEvent(event);
+    explorationByEvent.set(event, entry);
+  }
+  return entry;
 }
 
 function attachWaitStatusToLastCommand(
