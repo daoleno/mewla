@@ -413,104 +413,108 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 }
 
 type clientMessage struct {
-	ConnectionRequest    *connections.Request                   `json:"connection_request"`
-	DSHAnswer            json.RawMessage                        `json:"dsh_answer"`
-	DSHAfterRev          *int64                                 `json:"dsh_after_rev"`
-	ChoiceAnswer         json.RawMessage                        `json:"choice_answer"`
-	PromptAnswer         json.RawMessage                        `json:"prompt_answer"`
-	MessageRewind        json.RawMessage                        `json:"message_rewind"`
-	ServiceID            string                                 `json:"service_id"`
-	ServiceGeneration    string                                 `json:"service_generation"`
-	TunnelAction         string                                 `json:"tunnel_action"`
-	Type                 string                                 `json:"type"`
-	RequestID            string                                 `json:"request_id"`
-	WorkerID             string                                 `json:"worker_id"`
-	TargetID             string                                 `json:"target_id"`
-	Cwd                  string                                 `json:"cwd"`
-	Command              string                                 `json:"command"`
-	Name                 string                                 `json:"name"`
-	StartedAt            json.RawMessage                        `json:"started_at"`
-	Backend              string                                 `json:"backend"`
-	SessionID            string                                 `json:"session_id"`
-	Text                 string                                 `json:"text"`
-	SnoozeUntil          *time.Time                             `json:"snooze_until,omitempty"`
-	SnoozeSeconds        int64                                  `json:"snooze_seconds,omitempty"`
-	Key                  string                                 `json:"key"`
-	OptionID             string                                 `json:"option_id"`
-	Data                 string                                 `json:"data"`
-	Body                 string                                 `json:"body"`
-	Action               string                                 `json:"action"`
-	PushToken            string                                 `json:"push_token"`
-	Platform             string                                 `json:"platform"`
-	StrongAlerts         *bool                                  `json:"strong_alerts"`
-	SnoozeMinutes        int                                    `json:"snooze_minutes"`
-	NotificationID       string                                 `json:"notification_id"`
-	AppState             string                                 `json:"app_state"`
-	OccurredAtMS         int64                                  `json:"occurred_at_ms"`
-	ServerRef            string                                 `json:"server_ref"`
-	TimeZone             string                                 `json:"time_zone"`
-	Locale               string                                 `json:"locale"`
-	Cols                 int                                    `json:"cols"`
-	Rows                 int                                    `json:"rows"`
-	Col                  int                                    `json:"col"`
-	Row                  int                                    `json:"row"`
-	Lines                int                                    `json:"lines"`
-	Scroll               bool                                   `json:"scroll,omitempty"`
-	Since                *terminal.HistoryCursor                `json:"since,omitempty"`
-	ProcessID            int                                    `json:"process_id"`
-	Path                 string                                 `json:"path"`
-	FileGeneration       string                                 `json:"file_generation"`
-	ID                   string                                 `json:"id"`
-	Project              string                                 `json:"project"`
-	Frontmatter          map[string]interface{}                 `json:"frontmatter"`
-	BaseMtime            string                                 `json:"base_mtime"`
-	Prompt               string                                 `json:"prompt"`
-	Executor             string                                 `json:"executor"`
-	ExecutorID           string                                 `json:"executor_id"`
-	Client               string                                 `json:"client"`
-	AdapterID            string                                 `json:"adapter_id"`
-	Personality          string                                 `json:"personality"`
-	Done                 bool                                   `json:"done"`
-	CalendarItem         *calendar.Item                         `json:"calendar_item"`
-	Revision             int64                                  `json:"revision"`
-	ConversationScopeKey string                                 `json:"conversation_scope_key"`
-	Attachments          []attachment.File                      `json:"attachments"`
-	Generation           int64                                  `json:"generation"`
-	Limit                int                                    `json:"limit"`
-	Operation            string                                 `json:"operation"`
-	Scope                string                                 `json:"scope"`
-	SkillAgents          []string                               `json:"agents"`
-	SkillID              string                                 `json:"skill_id"`
-	SkillRoot            string                                 `json:"root_path"`
-	SkillCanonical       string                                 `json:"canonical_path"`
-	SkillAllowedRoot     string                                 `json:"allowed_root"`
-	Source               string                                 `json:"source"`
-	SkillName            string                                 `json:"skill_name"`
-	Ref                  string                                 `json:"ref"`
-	PluginID             string                                 `json:"plugin_id"`
-	PluginCopyID         string                                 `json:"plugin_copy_id"`
-	PluginName           string                                 `json:"plugin_name"`
-	PluginHost           string                                 `json:"plugin_host"`
-	PluginSource         string                                 `json:"plugin_source"`
-	PluginVersion        string                                 `json:"plugin_version"`
-	PluginRevision       string                                 `json:"plugin_revision"`
-	ProfileID            string                                 `json:"profile_id"`
-	ConnectionID         string                                 `json:"connection_id"`
-	ModelID              string                                 `json:"model_id"`
-	ModelIDs             []string                               `json:"model_ids"`
-	ReasoningEffort      string                                 `json:"reasoning_effort"`
-	Runtime              *modelprofiles.ThreadRuntimeChoice     `json:"runtime"`
-	Credential           string                                 `json:"credential"`
-	ProviderConnection   *modelprofiles.ProviderConnectionInput `json:"provider_connection"`
-	GitRepoRoot          string                                 `json:"repo_root"`
-	GitPaths             []string                               `json:"paths"`
-	GitPatch             string                                 `json:"patch"`
-	GitMessage           string                                 `json:"message"`
-	GitSHA               string                                 `json:"sha"`
-	GitBranch            string                                 `json:"branch"`
-	GitCreate            bool                                   `json:"create"`
-	GitSkip              int                                    `json:"skip"`
-	GitUndo              []gitDiscardUndo                       `json:"undo"`
+	ConnectionRequest    *connections.Request    `json:"connection_request"`
+	DSHAnswer            json.RawMessage         `json:"dsh_answer"`
+	DSHAfterRev          *int64                  `json:"dsh_after_rev"`
+	ChoiceAnswer         json.RawMessage         `json:"choice_answer"`
+	PromptAnswer         json.RawMessage         `json:"prompt_answer"`
+	MessageRewind        json.RawMessage         `json:"message_rewind"`
+	ServiceID            string                  `json:"service_id"`
+	ServiceGeneration    string                  `json:"service_generation"`
+	TunnelAction         string                  `json:"tunnel_action"`
+	Type                 string                  `json:"type"`
+	RequestID            string                  `json:"request_id"`
+	WorkerID             string                  `json:"worker_id"`
+	TargetID             string                  `json:"target_id"`
+	Cwd                  string                  `json:"cwd"`
+	Command              string                  `json:"command"`
+	Name                 string                  `json:"name"`
+	StartedAt            json.RawMessage         `json:"started_at"`
+	Backend              string                  `json:"backend"`
+	SessionID            string                  `json:"session_id"`
+	Text                 string                  `json:"text"`
+	SnoozeUntil          *time.Time              `json:"snooze_until,omitempty"`
+	SnoozeSeconds        int64                   `json:"snooze_seconds,omitempty"`
+	Key                  string                  `json:"key"`
+	OptionID             string                  `json:"option_id"`
+	Data                 string                  `json:"data"`
+	Body                 string                  `json:"body"`
+	Action               string                  `json:"action"`
+	PushToken            string                  `json:"push_token"`
+	Platform             string                  `json:"platform"`
+	StrongAlerts         *bool                   `json:"strong_alerts"`
+	SnoozeMinutes        int                     `json:"snooze_minutes"`
+	NotificationID       string                  `json:"notification_id"`
+	AppState             string                  `json:"app_state"`
+	OccurredAtMS         int64                   `json:"occurred_at_ms"`
+	ServerRef            string                  `json:"server_ref"`
+	TimeZone             string                  `json:"time_zone"`
+	Locale               string                  `json:"locale"`
+	Cols                 int                     `json:"cols"`
+	Rows                 int                     `json:"rows"`
+	Col                  int                     `json:"col"`
+	Row                  int                     `json:"row"`
+	Lines                int                     `json:"lines"`
+	Scroll               bool                    `json:"scroll,omitempty"`
+	Since                *terminal.HistoryCursor `json:"since,omitempty"`
+	ProcessID            int                     `json:"process_id"`
+	Path                 string                  `json:"path"`
+	FileGeneration       string                  `json:"file_generation"`
+	ID                   string                  `json:"id"`
+	Project              string                  `json:"project"`
+	Frontmatter          map[string]interface{}  `json:"frontmatter"`
+	BaseMtime            string                  `json:"base_mtime"`
+	Prompt               string                  `json:"prompt"`
+	Executor             string                  `json:"executor"`
+	ExecutorID           string                  `json:"executor_id"`
+	Client               string                  `json:"client"`
+	AdapterID            string                  `json:"adapter_id"`
+	Personality          string                  `json:"personality"`
+	Done                 bool                    `json:"done"`
+	CalendarItem         *calendar.Item          `json:"calendar_item"`
+	Revision             int64                   `json:"revision"`
+	ConversationScopeKey string                  `json:"conversation_scope_key"`
+	// FirstEvents, on codex_conversation_subscribe, asks for the thread's first
+	// snapshot in two parts: the newest FirstEvents events, then the rest as
+	// the next revision's delta (codexConversationFirstPage).
+	FirstEvents        int                                    `json:"first_events,omitempty"`
+	Attachments        []attachment.File                      `json:"attachments"`
+	Generation         int64                                  `json:"generation"`
+	Limit              int                                    `json:"limit"`
+	Operation          string                                 `json:"operation"`
+	Scope              string                                 `json:"scope"`
+	SkillAgents        []string                               `json:"agents"`
+	SkillID            string                                 `json:"skill_id"`
+	SkillRoot          string                                 `json:"root_path"`
+	SkillCanonical     string                                 `json:"canonical_path"`
+	SkillAllowedRoot   string                                 `json:"allowed_root"`
+	Source             string                                 `json:"source"`
+	SkillName          string                                 `json:"skill_name"`
+	Ref                string                                 `json:"ref"`
+	PluginID           string                                 `json:"plugin_id"`
+	PluginCopyID       string                                 `json:"plugin_copy_id"`
+	PluginName         string                                 `json:"plugin_name"`
+	PluginHost         string                                 `json:"plugin_host"`
+	PluginSource       string                                 `json:"plugin_source"`
+	PluginVersion      string                                 `json:"plugin_version"`
+	PluginRevision     string                                 `json:"plugin_revision"`
+	ProfileID          string                                 `json:"profile_id"`
+	ConnectionID       string                                 `json:"connection_id"`
+	ModelID            string                                 `json:"model_id"`
+	ModelIDs           []string                               `json:"model_ids"`
+	ReasoningEffort    string                                 `json:"reasoning_effort"`
+	Runtime            *modelprofiles.ThreadRuntimeChoice     `json:"runtime"`
+	Credential         string                                 `json:"credential"`
+	ProviderConnection *modelprofiles.ProviderConnectionInput `json:"provider_connection"`
+	GitRepoRoot        string                                 `json:"repo_root"`
+	GitPaths           []string                               `json:"paths"`
+	GitPatch           string                                 `json:"patch"`
+	GitMessage         string                                 `json:"message"`
+	GitSHA             string                                 `json:"sha"`
+	GitBranch          string                                 `json:"branch"`
+	GitCreate          bool                                   `json:"create"`
+	GitSkip            int                                    `json:"skip"`
+	GitUndo            []gitDiscardUndo                       `json:"undo"`
 }
 
 // Handler exposes the daemon's complete origin as one transport boundary.
@@ -661,6 +665,14 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	link := keepWebSocketAlive(conn)
 	link.deflate = clientOffersDeflate(r)
 	defer link.stop()
+	if clientOffersFrameDeflate(r) {
+		s.mu.Lock()
+		outbox := s.outboxes[conn]
+		s.mu.Unlock()
+		if outbox != nil {
+			outbox.useFrameDeflate()
+		}
+	}
 	s.sendWorkerSessionList(conn)
 	if s.work != nil {
 		s.sendJSON(conn, map[string]any{
@@ -2369,13 +2381,30 @@ func (s *Server) publishCodexConversationSubscription(
 		if !s.isCurrentCodexSubscription(conn, subscriptionID, generation) {
 			return
 		}
+		first, older := codexConversationFirstPage(conversation, raw.FirstEvents)
 		s.sendJSON(conn, codexConversationSnapshotPayload(
 			subscriptionID,
 			generation,
 			resolved.targetID,
 			next.revision,
-			conversation,
+			first,
 		))
+		if len(older) > 0 {
+			// The rest of the thread follows as the next revision, so what
+			// the client holds after it is the whole conversation, as later
+			// deltas expect.
+			page := codexConversationSubscriptionSnapshot{conversation: first, revision: next.revision}
+			next.revision++
+			s.sendJSON(conn, codexConversationDeltaPayload(
+				subscriptionID,
+				generation,
+				resolved.targetID,
+				page,
+				next,
+				older,
+				nil,
+			))
+		}
 		*previous = &next
 		return
 	}
@@ -2513,6 +2542,26 @@ func codexConversationSyncStatusPayload(
 		"state":           "syncing",
 		"reason":          reason,
 	}
+}
+
+// maxConversationFirstEvents bounds first_events; a thread is 240 events.
+const maxConversationFirstEvents = 240
+
+// codexConversationFirstPage splits a thread's first snapshot for a client that
+// asked for its newest firstEvents events first: the conversation with only
+// those, and the older events, which follow as a delta. A phone behind a slow
+// link paints the end of the thread from some 20 KB (deflated) instead of
+// waiting for all of it (250 KB for a Brain thread): the rest arrives while
+// the person reads. firstEvents <= 0, or a thread no longer than that, is one
+// snapshot as before.
+func codexConversationFirstPage(conversation work.CodexConversation, firstEvents int) (work.CodexConversation, []work.CodexConversationEvent) {
+	if firstEvents <= 0 || firstEvents > maxConversationFirstEvents || len(conversation.Events) <= firstEvents {
+		return conversation, nil
+	}
+	split := len(conversation.Events) - firstEvents
+	first := conversation
+	first.Events = conversation.Events[split:]
+	return first, conversation.Events[:split]
 }
 
 func codexConversationSnapshotPayload(
