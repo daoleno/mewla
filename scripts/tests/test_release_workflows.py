@@ -118,8 +118,11 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
             self.assertIn(needle, RELEASE)
 
     def test_builds_every_daemon_with_the_terminal_engine_on_its_own_platform(self):
+        build = between(RELEASE, "  daemon-build:\n", "  daemon:\n")
+        for target, lib in (("linux-amd64", "linux_amd64_musl"), ("linux-arm64", "linux_arm64_musl"), ("windows-amd64", "windows_amd64")):
+            self.assertIn(f"- {{ target: {target}, lib: {lib}, ", build)
+        self.assertIn('--targets "${{ matrix.target }}" --web-ui prebuilt', build)
         for needle in (
-            "--targets linux-amd64,linux-arm64,windows-amd64",
             "runs-on: windows-latest",
             "./scripts/tests/release_smoke_windows.ps1",
             "grep -Eq 'PE32\\+ executable.*x86-64'",
@@ -132,6 +135,24 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
             self.assertIn(needle, RELEASE)
         self.assertEqual(RELEASE.count("mewla-windows-amd64.zip"), 3)
         self.assertEqual(len(re.findall(r"go test -count=1 -v \./releasesmoke/", RELEASE)), 3)
+
+    def test_the_daemons_inputs_are_built_fresh_in_this_run_at_the_checked_tag(self):
+        engine = between(RELEASE, "  engine:\n", "  web-ui:\n")
+        for lib, os_ in (("linux_amd64_musl", "ubuntu-latest"), ("linux_arm64_musl", "ubuntu-latest"),
+                         ("windows_amd64", "ubuntu-latest"), ("darwin_arm64", "macos-26")):
+            self.assertIn(f"- {{ lib: {lib}, os: {os_} }}", engine)
+        self.assertIn('./scripts/build-libghostty-desktop.sh --out "$RUNNER_TEMP/ghostty-desktop" --targets "${{ matrix.lib }}"', engine)
+        self.assertIn("run: ./scripts/build-web-ui.sh", between(RELEASE, "  web-ui:\n", "  daemon-build:\n"))
+        for job, end in (("engine", "web-ui"), ("web-ui", "daemon-build"), ("daemon-build", "daemon"), ("daemon-darwin", "android")):
+            block = between(RELEASE, f"  {job}:\n", f"  {end}:\n")
+            self.assertIn("ref: ${{ needs.validate.outputs.checkout }}", block, job)
+            self.assertIn("if: needs.validate.outputs.mode == 'release'\n        run: |\n          git fetch --no-tags origin main\n"
+                          '          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"', block, job)
+        # Intermediates never match the published pattern; the merged names stay what they were.
+        self.assertNotRegex(RELEASE, r"name: mewla-daemon-binaries-[^\n]*matrix")
+        self.assertIn("name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}\n          pattern: daemon-part-bin-*-", RELEASE)
+        self.assertIn("name: mewla-daemon-binaries-darwin-${{ needs.validate.outputs.tag }}", RELEASE)
+        self.assertIn('== "./mewla-linux-amd64 ./mewla-linux-arm64 ./mewla-windows-amd64.exe " ]]', RELEASE)
 
     def test_candidates_are_built_without_signing_staging_or_publishing(self):
         self.assertIn("candidate_version:", RELEASE)
@@ -377,17 +398,24 @@ class CIWorkflowTests(unittest.TestCase):
         self.assertRegex(CI, r"pull_request:\s*\n\s*workflow_dispatch:")
 
     def test_the_client_job_runs_core_ui_license_and_viewer_checks_on_every_push(self):
-        client = between(CI, "  client:\n", "  windows:")
+        client = between(CI, "  client:\n", "  client-ui:")
         for needle in (
             "run: bun test core",
             "run: ${NSH_HOME:-$HOME/.nsh}/bin/nsh check",
-            "run: ${NSH_HOME:-$HOME/.nsh}/bin/nsh test",
             "run: python3 client/ui/more/settings/licenses/generate.py --check",
             "run: bun install --frozen-lockfile",
             "run: bun client/ui/more/screen/runtime/generate.mjs --check",
         ):
             self.assertIn(needle, client)
         self.assertNotIn("if:", client)
+        # The UI suite runs in shards, one runner each; every shard of the count, nothing else.
+        ui = between(CI, "  client-ui:\n", "  windows:")
+        self.assertNotIn("if:", ui)
+        count = int(re.search(r"--shard \$\{\{ matrix\.shard \}\}/(\d+)", ui).group(1))
+        shards = re.search(r"matrix:\s*\n\s*shard: \[([\d, ]+)\]", ui).group(1)
+        self.assertEqual([int(n) for n in shards.split(",")], list(range(1, count + 1)))
+        self.assertIn(f"name: Client UI tests (${{{{ matrix.shard }}}}/{count})", ui)
+        self.assertIn("fail-fast: false", ui)
 
     def test_no_job_builds_the_expo_app(self):
         for source in (CI, CLIENT, NATIVE_CACHE, NATIVE_LIBS, RELEASE, IOS_RELEASE, PREPARATION):

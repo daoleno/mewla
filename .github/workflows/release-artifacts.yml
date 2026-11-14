@@ -137,11 +137,93 @@ jobs:
           echo "mode=release" >> "$GITHUB_OUTPUT"
           echo "checkout=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
-  daemon:
-    name: Build Linux and Windows daemons
+  # The daemons' inputs, built fresh from the signed, pinned sources in this run, each on its own
+  # runner and side by side: the session host's terminal engine (libghostty-vt) per target, and the
+  # web UI every daemon embeds, once. Release builds restore no cache. In one job, one after the
+  # other, the engine alone took 11 min of the Linux job's 21 (v0.4.3).
+  engine:
+    name: Build the terminal engine (${{ matrix.lib }})
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - { lib: linux_amd64_musl, os: ubuntu-latest }
+          - { lib: linux_arm64_musl, os: ubuntu-latest }
+          - { lib: windows_amd64, os: ubuntu-latest }
+          # Apple's toolchain: built on a Mac.
+          - { lib: darwin_arm64, os: macos-26 }
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.checkout }}
+          fetch-depth: 0
+      - name: Revalidate tag at build boundary
+        if: needs.validate.outputs.mode == 'release'
+        run: |
+          git fetch --no-tags origin main
+          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
+      # The terminal engine's static library and Zig are built and fetched
+      # fresh from the signed, pinned sources: release builds restore no cache.
+      - name: Build libghostty-vt from the signed release with the pinned Zig
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: ./scripts/build-libghostty-desktop.sh --out "$RUNNER_TEMP/ghostty-desktop" --targets "${{ matrix.lib }}"
+      - name: Upload the engine for the daemon build
+        uses: actions/upload-artifact@v4
+        with:
+          name: daemon-part-engine-${{ matrix.lib }}-${{ needs.validate.outputs.tag }}
+          path: ${{ runner.temp }}/ghostty-desktop
+          if-no-files-found: error
+          retention-days: 1
+
+  web-ui:
+    name: Build the web UI the daemons embed
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.checkout }}
+          fetch-depth: 0
+      - name: Revalidate tag at build boundary
+        if: needs.validate.outputs.mode == 'release'
+        run: |
+          git fetch --no-tags origin main
+          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
+      - name: Install NSH for the web UI
+        run: client/scripts/fetch-nsh.sh
+      # The NSH web package and the browser terminal's VT (libghostty-vt for WebAssembly, built
+      # fresh from the signed release with the pinned Zig), staged gzip-only in daemon/webui/dist.
+      - name: Build the web UI
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: ./scripts/build-web-ui.sh
+      - name: Upload the web UI for the daemon builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: daemon-part-web-ui-${{ needs.validate.outputs.tag }}
+          path: daemon/webui/dist
+          if-no-files-found: error
+          # go:embed all:dist takes every file, dot files too.
+          include-hidden-files: true
+          retention-days: 1
+
+  daemon-build:
+    name: Build the ${{ matrix.target }} daemon
+    needs: [validate, engine, web-ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - { target: linux-amd64, lib: linux_amd64_musl, file: mewla-linux-amd64 }
+          - { target: linux-arm64, lib: linux_arm64_musl, file: mewla-linux-arm64 }
+          - { target: windows-amd64, lib: windows_amd64, file: mewla-windows-amd64.exe }
     steps:
       - name: Checkout exact tag
         uses: actions/checkout@v4
@@ -157,37 +239,76 @@ jobs:
         with:
           go-version-file: daemon/go.mod
           cache-dependency-path: daemon/go.sum
-      - name: Install NSH for the web UI
-        run: client/scripts/fetch-nsh.sh
-      # The terminal engine's static libraries and Zig are built and fetched
-      # fresh from the signed, pinned sources: release builds restore no cache.
+      - name: Download this run's terminal engine
+        uses: actions/download-artifact@v4
+        with:
+          name: daemon-part-engine-${{ matrix.lib }}-${{ needs.validate.outputs.tag }}
+          path: ${{ runner.temp }}/ghostty-desktop
+      - name: Download this run's web UI
+        uses: actions/download-artifact@v4
+        with:
+          name: daemon-part-web-ui-${{ needs.validate.outputs.tag }}
+          path: daemon/webui/dist
+      # Linux static with zig cc and musl, Windows static with zig cc and MinGW. The engine's
+      # manifest must match native.lock.json and the library its sha256, or this builds it again.
       - name: Build daemon binaries once
         env:
           MEWLA_VERSION: ${{ needs.validate.outputs.version }}
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
-        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin" --targets linux-amd64,linux-arm64,windows-amd64
+          MEWLA_GHOSTTY_DESKTOP_CACHE: ${{ runner.temp }}/ghostty-desktop
+        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin" --targets "${{ matrix.target }}" --web-ui prebuilt
       - name: Verify daemon formats and architectures
+        env:
+          BIN: dist-download/staging/bin/${{ matrix.file }}
         run: |
           set -euo pipefail
-          file dist-download/staging/bin/mewla-linux-amd64 | grep -Eq 'ELF 64-bit.*(x86-64|x86_64).*statically linked'
-          file dist-download/staging/bin/mewla-linux-arm64 | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64).*statically linked'
-          file dist-download/staging/bin/mewla-windows-amd64.exe | grep -Eq 'PE32\+ executable.*x86-64'
-          for f in dist-download/staging/bin/mewla-*; do
-            go version -m "$f" | grep -E '^[[:space:]]+build[[:space:]]+(-tags=|CGO_ENABLED=)'
-          done
+          case "${{ matrix.target }}" in
+            linux-amd64) file "$BIN" | grep -Eq 'ELF 64-bit.*(x86-64|x86_64).*statically linked' ;;
+            linux-arm64) file "$BIN" | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64).*statically linked' ;;
+            windows-amd64) file "$BIN" | grep -Eq 'PE32\+ executable.*x86-64' ;;
+            *) exit 1 ;;
+          esac
+          go version -m "$BIN" | grep -E '^[[:space:]]+build[[:space:]]+(-tags=|CGO_ENABLED=)'
+          sha256sum "$BIN"
       - name: Run the amd64 binary (version, session host, shell, vi, attach, /health)
+        if: matrix.target == 'linux-amd64'
         working-directory: daemon
         env:
           MEWLA_RELEASE_SMOKE_BINARY: ${{ github.workspace }}/dist-download/staging/bin/mewla-linux-amd64
           MEWLA_RELEASE_SMOKE_VERSION: ${{ needs.validate.outputs.version }}
         run: go test -count=1 -v ./releasesmoke/
-      - name: Upload verified daemon inputs
+      - name: Upload the verified binary
         uses: actions/upload-artifact@v4
         with:
-          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
-          path: dist-download/staging/bin/mewla-*
+          name: daemon-part-bin-${{ matrix.target }}-${{ needs.validate.outputs.tag }}
+          path: dist-download/staging/bin/${{ matrix.file }}
           if-no-files-found: error
+          retention-days: 1
+
+  # The artifact every later job, and anyone testing a candidate, downloads: the three binaries
+  # under one name, as before the build was split.
+  daemon:
+    name: Build Linux and Windows daemons
+    needs: [validate, daemon-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Upload verified daemon inputs
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
+          pattern: daemon-part-bin-*-${{ needs.validate.outputs.tag }}
           retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || '' }}
+      - name: Download the merged artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
+          path: bin
+      - name: It holds exactly the three binaries
+        run: |
+          set -euo pipefail
+          sha256sum bin/*
+          [[ "$(cd bin && find . -type f | LC_ALL=C sort | tr '\n' ' ')" == "./mewla-linux-amd64 ./mewla-linux-arm64 ./mewla-windows-amd64.exe " ]]
 
   daemon-linux-arm64:
     name: Run the Linux arm64 daemon
@@ -242,7 +363,7 @@ jobs:
 
   daemon-darwin:
     name: Build and run the macOS daemon
-    needs: validate
+    needs: [validate, engine, web-ui]
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -260,13 +381,23 @@ jobs:
         with:
           go-version-file: daemon/go.mod
           cache-dependency-path: daemon/go.sum
-      - name: Install NSH for the web UI
-        run: client/scripts/fetch-nsh.sh
+      - name: Download this run's terminal engine
+        uses: actions/download-artifact@v4
+        with:
+          name: daemon-part-engine-darwin_arm64-${{ needs.validate.outputs.tag }}
+          path: ${{ runner.temp }}/ghostty-desktop
+      # The same web UI as the Linux and Windows daemons: one build per release.
+      - name: Download this run's web UI
+        uses: actions/download-artifact@v4
+        with:
+          name: daemon-part-web-ui-${{ needs.validate.outputs.tag }}
+          path: daemon/webui/dist
       - name: Build the macOS daemon
         env:
           MEWLA_VERSION: ${{ needs.validate.outputs.version }}
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
-        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin" --targets darwin-arm64
+          MEWLA_GHOSTTY_DESKTOP_CACHE: ${{ runner.temp }}/ghostty-desktop
+        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin" --targets darwin-arm64 --web-ui prebuilt
       - name: Verify format, architecture and minimum macOS
         run: |
           set -euo pipefail

@@ -22,10 +22,15 @@
 #   ./scripts/build-daemon-linux.sh --targets windows-amd64
 #   ./scripts/build-daemon-linux.sh --engine off           # every target, CGO_ENABLED=0, no engine
 #   MEWLA_VERSION=0.1.2 ./scripts/build-daemon-linux.sh
+#   ./scripts/build-daemon-linux.sh --web-ui prebuilt      # embed the daemon/webui/dist already there
 #
 # --targets defaults to linux-amd64,linux-arm64,windows-amd64 on Linux and
 # darwin-arm64 on a Mac (all four with --engine off). Library cache:
-# ${MEWLA_GHOSTTY_DESKTOP_CACHE:-$HOME/.cache/mewla/ghostty-desktop}.
+# ${MEWLA_GHOSTTY_DESKTOP_CACHE:-$HOME/.cache/mewla/ghostty-desktop}; one that
+# build-libghostty-desktop.sh wrote for the same pinned release and Zig is used
+# as it is. --web-ui prebuilt skips scripts/build-web-ui.sh and embeds the
+# daemon/webui/dist it staged earlier (the release workflow builds it once for
+# every target); it must be there, with its <base href="/">.
 
 set -euo pipefail
 
@@ -35,6 +40,7 @@ cd "$ROOT"
 OUT_DIR=""
 TARGETS=""
 ENGINE="required"
+WEB_UI="build"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out-dir)
@@ -49,8 +55,12 @@ while [[ $# -gt 0 ]]; do
       ENGINE="${2:?--engine needs required or off}"
       shift 2
       ;;
+    --web-ui)
+      WEB_UI="${2:?--web-ui needs build or prebuilt}"
+      shift 2
+      ;;
     -h|--help)
-      sed -n '2,28p' "$0"
+      sed -n '2,33p' "$0"
       exit 0
       ;;
     *)
@@ -63,6 +73,10 @@ done
 case "$ENGINE" in
   required|off) ;;
   *) echo "error: --engine must be required or off, not $ENGINE" >&2; exit 2 ;;
+esac
+case "$WEB_UI" in
+  build|prebuilt) ;;
+  *) echo "error: --web-ui must be build or prebuilt, not $WEB_UI" >&2; exit 2 ;;
 esac
 
 if [[ -z "$TARGETS" ]]; then
@@ -130,7 +144,16 @@ if [[ "$ENGINE" == required ]]; then
   fi
 fi
 
-"$ROOT/scripts/build-web-ui.sh"
+if [[ "$WEB_UI" == build ]]; then
+  "$ROOT/scripts/build-web-ui.sh"
+else
+  # What build-web-ui.sh stages: gzip-only files with the page at the root.
+  WEB_DIST="$ROOT/daemon/webui/dist"
+  [[ -f "$WEB_DIST/index.html.gz" ]] || { echo "error: --web-ui prebuilt: no $WEB_DIST/index.html.gz (run scripts/build-web-ui.sh)" >&2; exit 1; }
+  gzip -dc "$WEB_DIST/index.html.gz" | grep -q '^<base href="/">$' || { echo "error: --web-ui prebuilt: $WEB_DIST/index.html.gz has no <base href=\"/\">" >&2; exit 1; }
+  [[ -f "$WEB_DIST/terminal/mewla-vt.wasm.gz" ]] || { echo "error: --web-ui prebuilt: no terminal/mewla-vt.wasm.gz in $WEB_DIST" >&2; exit 1; }
+  echo "Web UI: the prebuilt one in $WEB_DIST ($(du -sh "$WEB_DIST" | cut -f1) gzip)"
+fi
 
 PUBLISHER_FLAGS="$(python3 "$ROOT/scripts/plugin-publisher-flags.py")"
 # releaseBuild marks a binary that may update itself; local and dev builds never do.
