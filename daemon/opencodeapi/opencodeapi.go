@@ -330,17 +330,6 @@ func ParseDebugPaths(out []byte) Paths {
 	return paths
 }
 
-// Version returns the installed CLI version ("2.0.32").
-func Version(ctx context.Context) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, callTimeout)
-	defer cancel()
-	out, err := Runner(ctx, "--version")
-	if err != nil {
-		return "", err
-	}
-	return ParseVersion(out), nil
-}
-
 // ParseVersion extracts the semantic version from `opencode --version`
 // ("opencode v2.0.32" in OpenCode 2, a bare "1.18.4" in OpenCode 1).
 func ParseVersion(out []byte) string {

@@ -138,14 +138,6 @@ func (v *Verifier) AuthenticateBody(r *http.Request, body []byte) (Result, *Reje
 	return Result{Key: key, Body: body}, nil
 }
 
-// Valid reports whether r carries a correct, fresh signature of this scheme,
-// without spending the nonce. Callers use it to tell a wrong-credential-class
-// request (403) from a bad one (401).
-func (v *Verifier) Valid(r *http.Request, body []byte) (string, bool) {
-	key, _, ok := v.verify(r, body)
-	return key, ok
-}
-
 func (v *Verifier) verify(r *http.Request, body []byte) (string, string, bool) {
 	key, timestamp, nonce, signature, ok := v.Scheme.parse(r.Header.Get("Authorization"))
 	if !ok || !isOpaqueHex(key, v.KeyBytes) || !isOpaqueHex(nonce, 16) {

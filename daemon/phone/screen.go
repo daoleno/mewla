@@ -92,9 +92,8 @@ func (e *Elements) Size() (w, h int) {
 }
 
 type candidate struct {
-	el    Element
-	key   string
-	label string
+	el  Element
+	key string
 }
 
 // Observe takes a reading of the display: it gives its elements ids and replaces what Resolve

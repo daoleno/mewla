@@ -95,9 +95,7 @@ CREATE INDEX IF NOT EXISTS notifications_person ON notifications(person_id, seq)
 ` + mediaSchema
 
 var (
-	errNotFound      = errors.New("not found")
-	errHandleTaken   = errors.New("handle is taken")
-	errHandleChanged = errors.New("handle was already changed once")
+	errNotFound = errors.New("not found")
 )
 
 // Store is the Friends SQLite database.
@@ -143,12 +141,6 @@ func addColumn(db *sql.DB, table, column, definition string) error {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
-
-type queryer interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-}
 
 // personColumns and scanPerson read the whole person row.
 const personColumns = `id, account_id, handle, handle_changed, agent_name, pet_id, bio, auto_post, auto_media, daily_cap, tz, hidden, created_at`

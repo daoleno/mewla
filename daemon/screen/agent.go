@@ -1603,14 +1603,6 @@ func (a *agentSession) watchInput(kind InputKind) {
 	a.inMu.Unlock()
 }
 
-// letGo releases a button the agent left down between actions, so a paused
-// or stopped agent never holds one under the person's hand.
-func (a *agentSession) letGo() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.letGoLocked()
-}
-
 func (a *agentSession) letGoLocked() {
 	if a.buttons != 0 {
 		_ = a.session.Pointer(a.pointer.X, a.pointer.Y, 0)

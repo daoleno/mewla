@@ -121,8 +121,6 @@ func (d *Door) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.http.ServeHTTP(w, r)
 }
 
-type emptyInput struct{}
-
 type listWorkInput struct {
 	All bool `json:"all,omitempty" jsonschema:"include finished and cancelled Work; by default only open Work is listed"`
 }

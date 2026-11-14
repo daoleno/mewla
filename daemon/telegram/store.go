@@ -197,10 +197,6 @@ func newDurableState() durableState {
 		TopicProjection: map[string]string{}, TopicMessages: map[string]int64{}}
 }
 
-func (s *store) ensureMapsLocked() {
-	ensureDurableMaps(&s.state)
-}
-
 func (s *store) snapshot() durableState {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -139,8 +139,6 @@ func lastUsedProfile(userDataDir string) string {
 	return state.Profile.LastUsed
 }
 
-func extensionInstalled(profileDir string) bool { return extensionInstalledAs(profileDir, ExtensionID) }
-
 func extensionInstalledAs(profileDir, id string) bool {
 	if info, err := os.Stat(filepath.Join(profileDir, "Extensions", id)); err == nil && info.IsDir() {
 		return true

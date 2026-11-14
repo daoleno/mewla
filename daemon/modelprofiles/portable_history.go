@@ -202,17 +202,6 @@ func projectJSONObjectFieldsFromMap(obj map[string]json.RawMessage, allow []stri
 	return encodeJSONObject(out)
 }
 
-func jsonRawString(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return ""
-	}
-	return s
-}
-
 func decodeJSONObject(body []byte) (map[string]json.RawMessage, error) {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()

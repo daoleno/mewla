@@ -54,12 +54,6 @@ func NewMapper(workerID, session string) *Mapper {
 	return &Mapper{workerID: workerID, session: session, asked: map[string]bool{}}
 }
 
-// Session is the session the Worker follows.
-func (m *Mapper) Session() string { return m.session }
-
-// Running reports that the Mapper has seen an execution start and not end.
-func (m *Mapper) Running() bool { return m.turn != "" }
-
 // Bound is the event that names the Worker's conversation: the session id
 // Mewla launched it with.
 func (m *Mapper) Bound(at time.Time) agentevents.Event {
