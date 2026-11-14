@@ -531,9 +531,7 @@ export function ChatTimeline(props: {
           if (!props.scope || !touched) return;
           rememberReadingPlace(props.scope, far ? shownFirst : undefined);
         }}
-        footer={<>
-          <If when={rows().length === 0}>{props.empty() as never}</If>
-        </>}>
+        empty={props.empty() as never}>
         {(item) => {
           // A recycled cell takes whatever row comes next: the foot's cell can become a row and back,
           // so which of the two it draws follows its item, not the item it was made for.
