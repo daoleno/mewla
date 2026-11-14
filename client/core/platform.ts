@@ -43,6 +43,11 @@ export interface Platform {
   storage: KeyValueStore;
   /** The device key: the Keychain on iOS, the Keystore on Android. */
   secure: KeyValueStore;
+  /**
+   * Raw DEFLATE (RFC 1951) undone natively. Where it is, the connection offers the daemon
+   * `mewla.frames.deflate-raw` and takes its large messages compressed (`core/frames.ts`).
+   */
+  inflateRaw?(data: Uint8Array): Uint8Array;
   openSocket(url: string, protocols: string[]): SocketLike;
   fetch(input: string, init?: RequestInit): Promise<Response>;
   /** Absent where no host carries them (a browser, an old build). */

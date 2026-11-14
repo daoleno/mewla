@@ -2,7 +2,8 @@ import type { Transport } from "../transport";
 import { chatCacheKey } from "./draft";
 import type { MessageOutbox, OutboxEntry, OutboxEvent } from "./outbox";
 import { UNCERTAIN_SEND_ERROR, UNDELIVERED_SEND_ERROR } from "./pendingUserMessages";
-import { subscribeConversation, type ConversationTarget } from "./subscription";
+import { readingPlaceOf } from "../timeline/readingPlace";
+import { subscribeConversation, type ConversationTarget, FIRST_EVENTS } from "./subscription";
 import {
   initialInterfaceChatThreadState,
   interfaceChatThreadReducer,
@@ -27,6 +28,12 @@ export interface ChatOptions {
   transport: Transport;
   target: ConversationTarget;
   outbox: MessageOutbox;
+  /**
+   * The scope its timeline keeps its reading place under (readingPlace.ts). A chat opened where it was read
+   * back to asks for the whole thread at once: the newest events first, then the older ones above, would
+   * move the rows it opens on.
+   */
+  readingScope?: string;
 }
 
 /**
@@ -123,7 +130,13 @@ export class Chat {
       onDelta: (delta) => this.dispatch({ type: "delta", delta, generation }),
       onSyncStatus: (status) => this.dispatch({ type: "sync_status", status, generation }),
       onError: (error) => this.dispatch({ type: "stream_error", error: interfaceConversationStreamErrorMessage(error), generation }),
-    });
+    }, { firstEvents: this.opensAtItsEnd() ? FIRST_EVENTS : undefined });
+  }
+
+  /** Holds nothing yet and opens at its newest row: the newest events are what it shows first. */
+  private opensAtItsEnd(): boolean {
+    if (this.state.conversation?.events.length) return false;
+    return !(this.options.readingScope && readingPlaceOf(this.options.readingScope));
   }
 
   private stopFollowing(): void {

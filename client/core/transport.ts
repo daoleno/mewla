@@ -1,6 +1,7 @@
 import { buildAuthorizationHeader } from "./auth";
 import { directPathBecameAvailable, invalidateStoredServerTransport, resolveStoredServerURL, transportFailed } from "./link/pinnedTransport";
 import { platform, type SocketLike } from "./platform";
+import { frameSubprotocols, frameText } from "./frames";
 import type { StoredServer } from "./storedServerContract";
 import { authSubprotocol } from "./webSocketAuth";
 
@@ -183,7 +184,7 @@ export class Transport {
         this.resolveURL(this.server),
       ]);
       if (attempt !== this.attempt) return;
-      socket = platform().openSocket(url, [authSubprotocol(authorization)]);
+      socket = platform().openSocket(url, [authSubprotocol(authorization), ...frameSubprotocols()]);
     } catch (error) {
       if (attempt === this.attempt) {
         void transportFailed(this.server);
@@ -207,7 +208,9 @@ export class Transport {
       this.lastFrameAt = Date.now();
       let frame: Frame;
       try {
-        frame = JSON.parse(String(event.data));
+        const text = frameText(event.data);
+        if (text === null) return;
+        frame = JSON.parse(text);
       } catch {
         return;
       }
