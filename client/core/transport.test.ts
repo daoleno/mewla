@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { getOrCreateLocalDeviceIdentity } from "./auth";
 import type { StoredServer } from "./storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "./testing/memoryPlatform";
-import { Transport, transportTiming } from "./transport";
+import { setFrameBatcher, Transport, transportTiming } from "./transport";
 import { AUTH_SUBPROTOCOL_PREFIX } from "./webSocketAuth";
 
 const server = {
@@ -28,7 +28,10 @@ beforeEach(() => {
   });
   Object.assign(transportTiming, { firstRetryMs: 10, maxRetryMs: 40, checkMs: 10, silentLimitMs: 50 });
 });
-afterEach(() => Object.assign(transportTiming, saved));
+afterEach(() => {
+  Object.assign(transportTiming, saved);
+  setFrameBatcher(null);
+});
 
 async function connected(): Promise<{ transport: Transport; socket: FakeSocket }> {
   const transport = new Transport(server);
@@ -123,6 +126,66 @@ describe("Transport", () => {
     const { transport } = await connected();
     await wait(80);
     expect(sockets.length).toBeGreaterThan(1);
+    transport.close();
+  });
+
+  test("a big message the computer announced is not silence while it can still be on its way", async () => {
+    Object.assign(transportTiming, { slowLinkBytesPerSecond: 1_000 });
+    const { transport, socket } = await connected();
+    const seen: string[] = [];
+    transport.on("frame_coming", (frame) => seen.push(frame.type));
+    // 100 bytes at 1 KB/s: 100 ms beyond the 50 ms limit.
+    socket.receive({ type: "frame_coming", bytes: 100 });
+    await wait(110);
+    expect(sockets).toHaveLength(1);
+    await wait(120);
+    expect(sockets.length).toBeGreaterThan(1);
+    // The notice is the transport's own: no listener gets it.
+    expect(seen).toEqual([]);
+    transport.close();
+  });
+
+  test("the announced message's arrival ends its allowance: silence after it counts again", async () => {
+    Object.assign(transportTiming, { slowLinkBytesPerSecond: 1_000 });
+    const { transport, socket } = await connected();
+    socket.receive({ type: "frame_coming", bytes: 10_000_000 });
+    socket.receive({ type: "git_diff_status", request_id: "r1" });
+    await wait(90);
+    expect(sockets.length).toBeGreaterThan(1);
+    transport.close();
+  });
+
+  test("with a batcher, the frames of a turn reach the listeners together, in order, on the next tick", async () => {
+    const batches: number[] = [];
+    let inBatch = 0;
+    setFrameBatcher((deliver) => {
+      inBatch = 0;
+      deliver();
+      batches.push(inBatch);
+    });
+    const { transport, socket } = await connected();
+    const seen: number[] = [];
+    transport.on("worker_session_updated", (frame) => {
+      seen.push(frame.seq as number);
+      inBatch++;
+    });
+    for (let seq = 1; seq <= 5; seq++) socket.receive({ type: "worker_session_updated", seq });
+    expect(seen).toEqual([]);
+    await wait();
+    expect(seen).toEqual([1, 2, 3, 4, 5]);
+    expect(batches).toEqual([5]);
+    transport.close();
+  });
+
+  test("with a batcher, what came in before a drop is handed over before the drop", async () => {
+    setFrameBatcher((deliver) => deliver());
+    const { transport, socket } = await connected();
+    const seen: string[] = [];
+    transport.on("worker_session_updated", () => seen.push("update"));
+    transport.on("disconnected", () => seen.push("disconnected"));
+    socket.receive({ type: "worker_session_updated", seq: 1 });
+    socket.close(1006, "gone");
+    expect(seen).toEqual(["update", "disconnected"]);
     transport.close();
   });
 });

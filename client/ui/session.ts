@@ -1,4 +1,4 @@
-import { computed, signal, Storage } from "nsh";
+import { batch, computed, signal, Storage } from "nsh";
 import { brainThreadScopeKey, requestBrainSnapshot, type BrainSnapshot } from "../core/brain";
 import { Chat } from "../core/conversation/chat";
 import { chatCacheKey, Draft } from "../core/conversation/draft";
@@ -9,7 +9,7 @@ import { getCurrentServerId, getServers, markOnboarded, saveServer, setCurrentSe
 import { learnDirectAddresses, withDirectAddresses } from "../core/link/directAddresses";
 import { WorkerSessions } from "../core/sessions/store";
 import type { Worker } from "../core/sessions/workers";
-import { Transport, type ConnectionState } from "../core/transport";
+import { setFrameBatcher, Transport, type ConnectionState } from "../core/transport";
 import { subscribeTransportPath, transportPathInfo, type TransportPathInfo } from "../core/link/pinnedTransport";
 import { LinkWatch } from "../core/motion/wait";
 import { forcedLink, linkHooks, linkState } from "./kit/wait";
@@ -20,6 +20,9 @@ import { forcedLink, linkHooks, linkState } from "./kit/wait";
  * the previous computer's state survives into the next.
  */
 export const servers = signal<StoredServer[]>([]);
+// The frames that came in together reach the screens together: what reads them reruns once a turn,
+// not once a frame (a burst of 36 Session updates reran the tray 36 times in one call).
+setFrameBatcher(batch);
 export const current = signal<StoredServer | null>(null);
 export const connection = signal<ConnectionState>("idle");
 export const problem = signal("");
