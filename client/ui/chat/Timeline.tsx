@@ -15,7 +15,7 @@ import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem,
 import { withDayDividers } from "../../core/timeline/dayDividers";
 import { FOLDED_TEXT_HEIGHT, messageFolds } from "../../core/timeline/messageFold";
 import { readingPlace, readingPlaceIndex, readingPlaceOf, rememberReadingPlace } from "../../core/timeline/readingPlace";
-import { fromNewest, roomLeft, sentRowIndex, type SentRowCandidate } from "../../core/conversation/sendRoom";
+import { rowSteps } from "../../core/timeline/rowFeed";
 import { keyedSplice, scrollTraceOn, traceScroll } from "../../core/timeline/scrollTrace";
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
@@ -259,10 +259,9 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
   );
 }
 
-/** A chat's rows, kept at the newest one while the person reads at the bottom. */
 /**
- * Within this of its end the list is at its end: it follows new rows there, and further up the jump control
- * shows. One distance for both: between two, the list did neither.
+ * Within this of its end the list is at its end (following): it follows new rows there, and further up (reading) the
+ * jump control shows. One distance for both: between two, the list did neither.
  */
 const AT_END = 120;
 
@@ -277,7 +276,7 @@ export function ChatTimeline(props: {
   handlers?: MessageHandlers;
   /** The chat's identity for its reading position (a Session's key); none keeps no position. */
   scope?: string;
-  /** Counts the person's sends: each brings their newest message to the top, with the reply under it. */
+  /** Counts the person's sends: each brings the chat to its newest end, the sent message there and its reply under it. */
   sent?: () => number;
   /** Whether the chat is on screen: its tab or page can stay mounted, hidden, under another. */
   shown?: () => boolean;
@@ -324,17 +323,40 @@ export function ChatTimeline(props: {
   trace("make");
   // Read back from the newest row: the jump button brings it into view again.
   const away = signal(false);
-  // A day's label is the same object while its day is: made anew on every update, each one was a new row.
+  // A day's label is the same object while its day and its label are: made anew on every update, each one was a new row.
   const dividers = new Map<string, DateDividerItem>();
-  const rows = computed((): (TimelineItem | DateDividerItem | FootRow)[] => {
+  type Row = TimelineItem | DateDividerItem | FootRow;
+  // The thread's rows as they are now.
+  const target = computed((): Row[] => {
     const all = withDayDividers(props.items()).map((row) => {
       if (row.type !== "date-divider") return row;
-      const kept = dividers.get(row.id) ?? row;
-      dividers.set(row.id, kept);
-      return kept;
+      const kept = dividers.get(row.id);
+      if (kept?.label === row.label) return kept;
+      dividers.set(row.id, row);
+      return row;
     });
     return props.foot?.shown() ? [...all, FOOT] : all;
   });
+  /*
+   * The rows the list holds: the thread's, one narrow change at a time (core/timeline/rowFeed.ts). NSH's List lays
+   * out again every row between the first and the last key that changed; a full thread changes at both ends with
+   * each event (the newest in, the oldest out), and the reader's place went with it. A change at both ends reaches
+   * the list as two, a moment apart, and NSH keeps the rows on screen where they are through each.
+   */
+  const rows = signal<readonly Row[]>(untracked(target));
+  let feeding: ReturnType<typeof setTimeout> | undefined;
+  const feed = () => {
+    feeding = undefined;
+    const steps = rowSteps(untracked(rows), untracked(target));
+    rows.set(steps[0]);
+    // The rest from what the list holds then to the rows as they are then (more may have come meanwhile).
+    if (steps.length > 1) feeding = setTimeout(feed, 0);
+  };
+  effect(() => {
+    target();
+    untracked(() => feeding === undefined && feed());
+  });
+  cleanup(() => clearTimeout(feeding));
   // The trace: each change of the rows' keys as NSH's List splices it, and whether it covers the rows on screen.
   let tracedKeys: string[] = [];
   let firstShown = -1;
@@ -349,11 +371,11 @@ export function ChatTimeline(props: {
     trace("splice", { index: splice.at, removed: splice.removed, inserted: splice.inserted, rows: keys.length, firstShown, lastShown, covers, removedKeys: old.slice(splice.at, splice.at + Math.min(splice.removed, 6)), insertedKeys: keys.slice(splice.at, splice.at + Math.min(splice.inserted, 6)) });
   });
   /*
-   * The one rule (owner 11-13): the list follows its end while the person is at it (`AT_END`); otherwise
-   * only their own acts move it: sending, the jump control, a tray row or link to a request. Where it opens
-   * is decided once, when its first rows are in: the list is made then, at the row the person last read to
-   * or at its end, so nothing has to scroll it afterwards. (Before, five effects scrolled it as rows came
-   * and went, each kept in check by whether the person had touched it.)
+   * One owner of where the chat is, in two states: following (within `AT_END` of its newest end: NSH's List keeps
+   * that end in view as rows come and grow) and reading (anywhere else: nothing moves it, NSH keeps the rows on
+   * screen where they are as rows change around them). Only the person's acts change it: their scrolling, a send
+   * and the jump control (to the end), a tray row or link to a request (to its card). Where it opens is decided
+   * once, when its first rows are in: the list is made then, at the row the person last read to or at its end.
    */
   let opening: { index?: number; centre: boolean } = { centre: false };
   const ready = signal(false);
@@ -417,55 +439,20 @@ export function ChatTimeline(props: {
     untracked(() => void centreRequest(true));
   });
   /*
-   * A send puts the sent message at the top of what shows, below a capsule header, the reply under it
-   * (core/conversation/sendRoom.ts): the thread ends in room as high as the list, which the reply grows into, so the
-   * newest row can reach the top; scrolling there waits for the sent row (a thread's rows can follow its send).
+   * A send and the jump control: to the newest end, following from then on. From further than a screen away the
+   * list goes there at once: an animated scroll is dropped by NSH at the first change of the rows (the send's echo
+   * comes within a moment), short of the end.
    */
-  const room = signal(0);
-  let roomNode: ViewRef | undefined;
-  let sentAt: number | null = null;
-  // The scroll to the sent row runs a moment: measured meanwhile, the room would read the list where it was.
-  let settledAt = 0;
-  const SETTLE_MS = 600;
-  const fitRoom = async () => {
-    if (untracked(room) === 0 || !roomNode || !list || Date.now() < settledAt) return;
-    const [box, top] = await Promise.all([list.measure(), roomNode.measure()]);
-    if (!box || !top || Date.now() < settledAt) return;
-    const next = roomLeft(untracked(room), box.pagePosition.y + box.bounds.size.height, top.pagePosition.y);
-    if (next !== untracked(room)) trace("room", { by: "fitRoom", from: untracked(room), to: next });
-    room.set(next);
-  };
-  const placeSent = async () => {
-    if (sentAt === null || !list) return;
-    const index = sentRowIndex(untracked(rows) as SentRowCandidate[], sentAt);
-    trace("placeSent", { index, key: index >= 0 ? untracked(rows)[index]?.id : undefined, rows: untracked(rows).length });
-    if (index < 0) return;
-    sentAt = null;
-    const box = await list.measure();
-    if (!box || !list) return;
-    trace("room", { by: "placeSent", from: untracked(room), to: box.bounds.size.height });
-    room.set(box.bounds.size.height);
-    settledAt = Date.now() + SETTLE_MS;
-    // Once the room is laid out, the sent row can come to the top.
-    setTimeout(() => {
-      trace("cmd", { by: "placeSent", cmd: "scrollToIndex", index, keyNow: untracked(rows)[index]?.id, rows: untracked(rows).length });
-      list?.scrollToIndex({ index, viewPosition: 0, viewOffset: untracked(() => props.capsule?.top() ?? 0), animated: true });
-    }, 0);
-    setTimeout(() => void fitRoom(), SETTLE_MS + 50);
+  let viewport = 0;
+  const toEnd = (by: string) => {
+    const animated = fromEnd <= viewport;
+    trace("cmd", { by, cmd: "scrollToEnd", animated, rows: untracked(rows).length });
+    list?.scrollToEnd({ animated });
   };
   const seenSent = props.sent ? untracked(props.sent) : 0;
   effect(() => {
     if (!props.sent || props.sent() === seenSent) return;
-    sentAt = Date.now();
-    untracked(() => void placeSent());
-  });
-  // The sent row coming in after its send, and the reply growing into the room.
-  effect(() => {
-    rows();
-    untracked(() => {
-      if (sentAt !== null) void placeSent();
-      else if (room() > 0) void fitRoom();
-    });
+    untracked(() => toEnd("send"));
   });
   // Where the list was while on screen. A browser drops a hidden list's scroll (its tab is
   // `display: none`), so on the web a return brings back that place, or the newest row
@@ -487,14 +474,6 @@ export function ChatTimeline(props: {
         clearTimeout(first);
         clearTimeout(settled);
       });
-    });
-  }
-  if (scrollTraceOn()) {
-    let mvcp: boolean | undefined;
-    effect(() => {
-      const holding = room() > 0;
-      if (holding !== mvcp) trace("mvcp", { followEnd: !holding });
-      mvcp = holding;
     });
   }
   let dragging = false;
@@ -529,15 +508,16 @@ export function ChatTimeline(props: {
           lastShown = shownIndices.length ? Math.max(...shownIndices) : -1;
           trace("viewable", { first: firstShown, last: lastShown, firstKey: shownFirst });
         }}
-        // While the reply has room under the sent message, the list holds still (the sent message stays at the top).
-        maintainVisibleContentPosition={room() > 0 ? {} : { autoscrollToBottomThreshold: AT_END }} keyboardDismissMode="interactive"
+        // Following: the newest end stays in view as rows come and grow (and the keyboard takes room).
+        maintainVisibleContentPosition={{ autoscrollToBottomThreshold: AT_END }} keyboardDismissMode="interactive"
         contentStyle={{ paddingTop: (props.capsule?.top() ?? 0) + 12, paddingBottom: 12 }}
         onScroll={({ offset, contentSize, size }) => {
           // A hidden list's scroll (a browser resets it) is not where the person was.
           if (!untracked(shown)) return;
-          fromEnd = fromNewest(contentSize.height, untracked(room), offset.y, size.height);
+          fromEnd = contentSize.height - (offset.y + size.height);
+          viewport = size.height;
           if (scrollTraceOn() && (Number.isNaN(lastTraced) || Math.abs(offset.y - lastTraced) > 1)) {
-            trace("scroll", { offset: Math.round(offset.y), content: Math.round(contentSize.height), viewport: Math.round(size.height), room: untracked(room), fromEnd: Math.round(fromEnd), dragging, jump: Number.isNaN(lastTraced) ? 0 : Math.round(offset.y - lastTraced) });
+            trace("scroll", { offset: Math.round(offset.y), content: Math.round(contentSize.height), viewport: Math.round(size.height), fromEnd: Math.round(fromEnd), dragging, jump: Number.isNaN(lastTraced) ? 0 : Math.round(offset.y - lastTraced) });
             lastTraced = offset.y;
           }
           props.capsule?.reading.scroll(offset.y, fromEnd);
@@ -551,7 +531,6 @@ export function ChatTimeline(props: {
         }}
         footer={<>
           <If when={rows().length === 0}>{props.empty() as never}</If>
-          <View testID="send-room" ref={(node) => (roomNode = node)} style={{ height: room() }} />
         </>}>
         {(item) => {
           // A recycled cell takes whatever row comes next: the foot's cell can become a row and back,
@@ -567,10 +546,7 @@ export function ChatTimeline(props: {
         }}
       </List></If>
       <If when={!props.capsule}><HeaderFade /></If>
-      <If when={away()}><If when={(props.requests?.() ?? 0) > 0} else={<Button testID="jump-latest" accessibilityLabel="Jump to latest" onPress={() => {
-            trace("cmd", { by: "jump", cmd: "scrollToEnd", rows: untracked(rows).length });
-            list?.scrollToEnd({ animated: true });
-          }}
+      <If when={away()}><If when={(props.requests?.() ?? 0) > 0} else={<Button testID="jump-latest" accessibilityLabel="Jump to latest" onPress={() => toEnd("jump")}
             class={`absolute bottom-3 right-4 size-11 items-center justify-center rounded-full active:opacity-70 ${jumpFloat()}`}>
             <Icon name="arrow-down" size={18} color="foreground" />
           </Button>}><Button testID="jump-requests" accessibilityLabel={`${props.requests!()} open, jump to ${props.requests!() === 1 ? "it" : "them"}`} onPress={() => void centreRequest(true)}

@@ -21,4 +21,11 @@ describe("day dividers", () => {
     const today = new Date().toISOString();
     expect(labels(withDayDividers([message("a"), message("b"), message("c", today), message("d")]))).toEqual(["[Today]", "a", "b", "c", "d"]);
   });
+
+  test("a day's row is keyed by its date, not its label: at midnight its label changes, its row does not", () => {
+    const now = new Date();
+    const rows = withDayDividers([message("a", now.toISOString())]);
+    expect(labels(rows)).toEqual(["[Today]", "a"]);
+    expect(rows[0].id).toBe(`date-divider:${now.toDateString()}`);
+  });
 });

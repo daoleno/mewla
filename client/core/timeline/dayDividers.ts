@@ -1,9 +1,10 @@
-import { formatDateDividerLabel } from "./dates";
+import { dayKeyFromTimestamp, formatDateDividerLabel } from "./dates";
 import type { DateDividerItem, TimelineItem } from "./types";
 
 export type TimelineRow = TimelineItem | DateDividerItem;
 
-const labelOf = (item: TimelineItem) => formatDateDividerLabel((item as { timestamp?: string }).timestamp);
+const timeOf = (item: TimelineItem) => (item as { timestamp?: string }).timestamp;
+const dayOf = (item: TimelineItem) => (dayKeyFromTimestamp(timeOf(item)) ? timeOf(item)! : null);
 
 /**
  * A chat read top down: a day's label ("Today", "Yesterday", "November 9")
@@ -16,20 +17,25 @@ export function withDayDividers(items: readonly TimelineItem[]): TimelineRow[] {
   const rows: TimelineRow[] = [];
   let day: string | null = null;
   for (const item of items) {
-    const label: string | null = labelOf(item) ?? (day === null ? firstLabel(items) : null);
-    if (label && label !== day) {
-      day = label;
-      rows.push({ type: "date-divider", id: `date-divider:${label}`, label });
+    // A day's row is keyed by its date, not its label: at midnight "Today" becomes "Yesterday" while the
+    // thread is open, and a key that changes in the middle of a list makes NSH's List lay out every row
+    // between it and the end again (the reader's place goes with them).
+    const time: string | null = dayOf(item) ?? (day === null ? firstTime(items) : null);
+    const key: string | null = time ? dayKeyFromTimestamp(time) : null;
+    const label: string | null = time ? formatDateDividerLabel(time) : null;
+    if (key && label && key !== day) {
+      day = key;
+      rows.push({ type: "date-divider", id: `date-divider:${key}`, label });
     }
     rows.push(item);
   }
   return rows;
 }
 
-function firstLabel(items: readonly TimelineItem[]): string | null {
+function firstTime(items: readonly TimelineItem[]): string | null {
   for (const item of items) {
-    const label = labelOf(item);
-    if (label) return label;
+    const time = dayOf(item);
+    if (time) return time;
   }
   return null;
 }
