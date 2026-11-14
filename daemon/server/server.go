@@ -650,6 +650,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("websocket: upgrade failed remote=%s device=%s: %v", r.RemoteAddr, device.ID, err)
 		return
 	}
+	keepBacklogInOutbox(conn.UnderlyingConn())
 	owner := &authenticatedClient{
 		deviceID: device.ID,
 	}
@@ -673,6 +674,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			outbox.useFrameDeflate()
 		}
 	}
+	// Brain first: an app opens on Brain, and subscribes to its thread once it
+	// knows the thread. Work and Calendar go in the bulk lane (isBulkMessage),
+	// behind whatever thread the app opens meanwhile.
+	s.sendBrainSnapshot(conn, "")
 	s.sendWorkerSessionList(conn)
 	if s.work != nil {
 		s.sendJSON(conn, map[string]any{
@@ -683,7 +688,6 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if s.calendar != nil {
 		s.sendCalendarSnapshot(conn, "")
 	}
-	s.sendBrainSnapshot(conn, "")
 	s.sendDirectEndpoints(conn)
 
 	for {

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -374,5 +375,193 @@ func TestOutboxTalliesBytesByMessageType(t *testing.T) {
 		if !strings.Contains(line, want) {
 			t.Errorf("log line %q lacks %q", line, want)
 		}
+	}
+}
+
+// Work, Calendar and pictures wait while anything else is queued: on a slow link
+// the thread a person opened goes out before the bundle's 300 KB of Work and
+// Calendar, and a change to Work never overtakes the snapshot before it.
+func TestOutboxSendsBulkAfterEverythingElse(t *testing.T) {
+	serverConn, client := upgradedTestPair(t, stalledReaderDialer())
+	outbox := newClientOutbox(serverConn)
+	defer outbox.close()
+
+	// The writer is busy with this one while the client does not read.
+	first := `{"type":"brain_snapshot","pad":"` + strings.Repeat("p", 4<<20) + `"}`
+	if err := outbox.enqueue(websocket.TextMessage, []byte(first), false); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		outbox.mu.Lock()
+		writing := len(outbox.queue) == 0
+		outbox.mu.Unlock()
+		if writing {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the writer never took the first message")
+		}
+	}
+	for _, kind := range []string{"work_items_snapshot", "calendar_items_snapshot", "work_item_changed", "codex_asset", "codex_conversation_snapshot", "worker_session_updated"} {
+		if err := outbox.enqueue(websocket.TextMessage, []byte(`{"type":"`+kind+`"}`), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got []string
+	for range 7 {
+		_, data, err := client.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, wireMessageType(websocket.TextMessage, data))
+	}
+	want := "brain_snapshot codex_conversation_snapshot worker_session_updated work_items_snapshot calendar_items_snapshot work_item_changed codex_asset"
+	if strings.Join(got, " ") != want {
+		t.Fatalf("sent in order %v, want %s", got, want)
+	}
+}
+
+// Once bulkShare bytes of other messages went out since the last bulk message,
+// the next bulk one goes, so a busy link still delivers Work and pictures.
+func TestOutboxBulkGetsAShareOfABusyLink(t *testing.T) {
+	previous := bulkShare
+	bulkShare = 2500
+	defer func() { bulkShare = previous }()
+	serverConn, client := upgradedTestPair(t, stalledReaderDialer())
+	outbox := newClientOutbox(serverConn)
+	defer outbox.close()
+	first := `{"type":"brain_snapshot","pad":"` + strings.Repeat("p", 4<<20) + `"}`
+	if err := outbox.enqueue(websocket.TextMessage, []byte(first), false); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		outbox.mu.Lock()
+		writing := len(outbox.queue) == 0
+		outbox.mu.Unlock()
+		if writing {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the writer never took the first message")
+		}
+	}
+	pad := `,"pad":"` + strings.Repeat("u", 1000) + `"}`
+	for _, kind := range []string{"codex_asset", "worker_session_updated", "worker_session_updated", "worker_session_updated", "worker_session_updated", "worker_session_updated"} {
+		msg := `{"type":"` + kind + `"}`
+		if kind != "codex_asset" {
+			msg = `{"type":"` + kind + `"` + pad
+		}
+		if err := outbox.enqueue(websocket.TextMessage, []byte(msg), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got []string
+	for range 7 {
+		_, data, err := client.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, wireMessageType(websocket.TextMessage, data))
+	}
+	// Updates go first; once about 2.5 KB of them passed the waiting picture, it
+	// goes, then the rest. (The first message went before anything waited.)
+	if strings.Join(got, " ") != "brain_snapshot worker_session_updated worker_session_updated worker_session_updated codex_asset worker_session_updated worker_session_updated" {
+		t.Fatalf("sent in order %v", got)
+	}
+}
+
+// The Work and Calendar snapshots wait for the connection's first thread page,
+// or threadWait when it opens none: an app opening Brain on a slow link sees
+// Brain before 300 KB of Work and Calendar.
+func TestOutboxHoldsWorkAndCalendarForTheFirstThread(t *testing.T) {
+	previous := threadWait
+	threadWait = 300 * time.Millisecond
+	defer func() { threadWait = previous }()
+
+	read := func(client *websocket.Conn, n int) []string {
+		t.Helper()
+		var got []string
+		for range n {
+			_, data, err := client.ReadMessage()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got = append(got, wireMessageType(websocket.TextMessage, data))
+		}
+		return got
+	}
+
+	serverConn, client := upgradedTestPair(t, stalledReaderDialer())
+	outbox := newClientOutbox(serverConn)
+	defer outbox.close()
+	for _, kind := range []string{"brain_snapshot", "work_items_snapshot", "calendar_items_snapshot", "work_item_changed", "worker_session_list"} {
+		if err := outbox.enqueue(websocket.TextMessage, []byte(`{"type":"`+kind+`"}`), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := strings.Join(read(client, 2), " "); got != "brain_snapshot worker_session_list" {
+		t.Fatalf("first %s, want brain_snapshot worker_session_list", got)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if err := outbox.enqueue(websocket.TextMessage, []byte(`{"type":"codex_conversation_snapshot"}`), false); err != nil {
+		t.Fatal(err)
+	}
+	opened := time.Now()
+	if got := strings.Join(read(client, 4), " "); got != "codex_conversation_snapshot work_items_snapshot calendar_items_snapshot work_item_changed" {
+		t.Fatalf("then %s, want the thread, then Work and Calendar in order", got)
+	}
+	if waited := time.Since(opened); waited > 200*time.Millisecond {
+		t.Fatalf("Work waited %s after the thread page went out", waited)
+	}
+
+	// No thread: Work and Calendar go threadWait after the connection opened.
+	serverConn, client = upgradedTestPair(t, stalledReaderDialer())
+	outbox = newClientOutbox(serverConn)
+	defer outbox.close()
+	started := time.Now()
+	if err := outbox.enqueue(websocket.TextMessage, []byte(`{"type":"work_items_snapshot"}`), false); err != nil {
+		t.Fatal(err)
+	}
+	read(client, 1)
+	if waited := time.Since(started); waited < threadWait-20*time.Millisecond || waited > threadWait+500*time.Millisecond {
+		t.Fatalf("Work went out after %s without a thread, want about %s", waited, threadWait)
+	}
+}
+
+// The daemon's listener hands net/http a peeked (and maybe TLS) connection;
+// TCP_NOTSENT_LOWAT must still reach the TCP socket under it.
+func TestKeepBacklogInOutboxReachesTheSocketUnderThePeek(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("reads the option back with Linux's getsockopt")
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		c, err := net.Dial("tcp", listener.Addr().String())
+		if err == nil {
+			_, _ = c.Write([]byte("G"))
+			time.Sleep(time.Second)
+			c.Close()
+		}
+	}()
+	accepted, err := (&tlsHTTPListener{Listener: listener}).Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer accepted.Close()
+	keepBacklogInOutbox(accepted)
+	raw, err := accepted.(peekedConn).Conn.(*net.TCPConn).SyscallConn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got int
+	_ = raw.Control(func(fd uintptr) {
+		got, err = syscall.GetsockoptInt(int(fd), syscall.IPPROTO_TCP, 0x19) // TCP_NOTSENT_LOWAT
+	})
+	if err != nil || got != wsNotSentLowat {
+		t.Fatalf("TCP_NOTSENT_LOWAT = %d (%v), want %d", got, err, wsNotSentLowat)
 	}
 }
