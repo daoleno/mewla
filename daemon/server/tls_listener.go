@@ -16,6 +16,12 @@ func (c peekedConn) Read(p []byte) (int, error) {
 	return c.reader.Read(p)
 }
 
+// NetConn is the accepted connection under the peek, as tls.Conn's NetConn is
+// under TLS (keepBacklogInOutbox reaches the TCP socket through both).
+func (c peekedConn) NetConn() net.Conn {
+	return c.Conn
+}
+
 type tlsHTTPListener struct {
 	net.Listener
 	config *tls.Config

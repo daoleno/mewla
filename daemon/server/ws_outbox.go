@@ -42,6 +42,35 @@ type outboundMessage struct {
 	messageType int
 	data        []byte
 	kind        string // wire "type" of a JSON message, for the byte tally
+	queuedAt    time.Time
+}
+
+// Bulk messages wait while anything else is queued: Work and Calendar (their
+// snapshots are some 300 KB of the bundle every connection starts with, and
+// their changes ride with them so a change never overtakes the snapshot it
+// follows) and pictures (codex_asset, hundreds of KB each). On a slow link the
+// thread a person just opened, a Session's news and replies to what they typed
+// go first. Once bulkShare bytes of other messages went out since the last bulk
+// one, the next bulk message goes regardless, so a busy link still delivers it.
+var bulkShare = 256 << 10
+
+// wsNotSentLowat is how much a client's socket may hold unsent
+// (keepBacklogInOutbox): a quarter second of a 60 KB/s link.
+const wsNotSentLowat = 16 << 10
+
+// The Work and Calendar snapshots (every connection starts with them, and an
+// app may ask again) also wait for the connection's first thread page: an app
+// opens on Brain, and on a slow link those 300 KB would otherwise go out first
+// and leave Brain blank for seconds. A connection that opens no thread gets
+// them threadWait after it opened.
+var threadWait = 1500 * time.Millisecond
+
+func waitsForFirstThread(kind string) bool {
+	return kind == "work_items_snapshot" || kind == "calendar_items_snapshot"
+}
+
+func isBulkMessage(kind string) bool {
+	return kind == "codex_asset" || strings.HasPrefix(kind, "work_item") || strings.HasPrefix(kind, "calendar_item")
 }
 
 // typeTally is what one message type has cost one client.
@@ -55,13 +84,18 @@ type typeTally struct {
 // every write to the socket. A client that stops reading therefore costs only
 // its own connection.
 type clientOutbox struct {
-	conn   *websocket.Conn
-	mu     sync.Mutex
-	cond   *sync.Cond
-	queue  []outboundMessage
-	bytes  int // queued plus in-flight
-	closed bool
-	err    error
+	conn  *websocket.Conn
+	mu    sync.Mutex
+	cond  *sync.Cond
+	queue []outboundMessage
+	bulk  []outboundMessage // isBulkMessage, in order; sent when queue is empty
+	bytes int               // queued plus in-flight
+
+	openedAt   time.Time
+	threadSent bool // a codex_conversation_snapshot went out (waitsForFirstThread)
+	sinceBulk  int  // bytes of other messages sent while a bulk one was ready
+	closed     bool
+	err        error
 
 	sent         int64 // bytes written to the socket so far
 	byType       map[string]typeTally
@@ -153,8 +187,13 @@ func (o *clientOutbox) stats() outboxStats {
 }
 
 func newClientOutbox(conn *websocket.Conn) *clientOutbox {
-	o := &clientOutbox{conn: conn}
+	o := &clientOutbox{conn: conn, openedAt: time.Now()}
 	o.cond = sync.NewCond(&o.mu)
+	time.AfterFunc(threadWait, func() {
+		o.mu.Lock()
+		o.cond.Broadcast()
+		o.mu.Unlock()
+	})
 	go o.run()
 	return o
 }
@@ -175,7 +214,12 @@ func (o *clientOutbox) enqueue(messageType int, data []byte, waitForRoom bool) e
 	if o.closed {
 		return o.err
 	}
-	o.queue = append(o.queue, outboundMessage{messageType: messageType, data: data, kind: wireMessageType(messageType, data)})
+	msg := outboundMessage{messageType: messageType, data: data, kind: wireMessageType(messageType, data), queuedAt: time.Now()}
+	if isBulkMessage(msg.kind) {
+		o.bulk = append(o.bulk, msg)
+	} else {
+		o.queue = append(o.queue, msg)
+	}
 	o.bytes += len(data)
 	o.cond.Broadcast()
 	return nil
@@ -184,46 +228,65 @@ func (o *clientOutbox) enqueue(messageType int, data []byte, waitForRoom bool) e
 func (o *clientOutbox) run() {
 	for {
 		o.mu.Lock()
-		for !o.closed && len(o.queue) == 0 {
+		for !o.closed && len(o.queue) == 0 && !o.bulkReadyLocked() {
 			o.cond.Wait()
 		}
 		if o.closed {
 			o.mu.Unlock()
 			return
 		}
-		batch := o.queue
-		o.queue = nil
+		var msg outboundMessage
+		if ready := o.bulkReadyLocked(); len(o.queue) > 0 && (!ready || o.sinceBulk < bulkShare) {
+			msg, o.queue = o.queue[0], o.queue[1:]
+			if ready {
+				o.sinceBulk += len(msg.data)
+			}
+		} else {
+			msg, o.bulk = o.bulk[0], o.bulk[1:]
+			o.sinceBulk = 0
+		}
 		deflate := o.frameDeflate
 		o.mu.Unlock()
 
-		for _, msg := range batch {
-			started := time.Now()
-			out := o.wireMessage(msg, deflate)
-			err := writeWithProgressDeadline(o.conn, out)
-			o.mu.Lock()
-			if err != nil {
-				o.failLocked(err)
-			} else {
-				o.sent += int64(len(msg.data))
-				o.wire += int64(len(out.data))
-				if o.byType == nil {
-					o.byType = make(map[string]typeTally)
-				}
-				tally := o.byType[msg.kind]
-				tally.bytes += int64(len(msg.data))
-				tally.count++
-				o.byType[msg.kind] = tally
-				o.lastSendAt, o.lastSendSize, o.lastSendTook = time.Now(), len(msg.data), time.Since(started)
+		started := time.Now()
+		out := o.wireMessage(msg, deflate)
+		err := writeWithProgressDeadline(o.conn, out)
+		o.mu.Lock()
+		if err != nil {
+			o.failLocked(err)
+		} else {
+			o.sent += int64(len(msg.data))
+			o.wire += int64(len(out.data))
+			if o.byType == nil {
+				o.byType = make(map[string]typeTally)
 			}
-			o.bytes -= len(msg.data)
-			o.cond.Broadcast()
-			closed := o.closed
-			o.mu.Unlock()
-			if closed {
-				return
+			tally := o.byType[msg.kind]
+			tally.bytes += int64(len(msg.data))
+			tally.count++
+			o.byType[msg.kind] = tally
+			o.lastSendAt, o.lastSendSize, o.lastSendTook = time.Now(), len(msg.data), time.Since(started)
+			if msg.kind == "codex_conversation_snapshot" {
+				o.threadSent = true
 			}
 		}
+		o.bytes -= len(msg.data)
+		o.cond.Broadcast()
+		closed := o.closed
+		o.mu.Unlock()
+		if closed {
+			return
+		}
 	}
+}
+
+// bulkReadyLocked reports whether the bulk lane's next message may go: it has
+// one, and it is not a Work or Calendar snapshot still waiting for the first
+// thread page (which holds the bulk messages behind it too, in order).
+func (o *clientOutbox) bulkReadyLocked() bool {
+	if len(o.bulk) == 0 {
+		return false
+	}
+	return !waitsForFirstThread(o.bulk[0].kind) || o.threadSent || time.Since(o.openedAt) >= threadWait
 }
 
 // writeWithProgressDeadline writes one message in chunks and renews the write
@@ -281,6 +344,7 @@ func (o *clientOutbox) closeLocked(err error) {
 	o.closed = true
 	o.err = err
 	o.queue = nil
+	o.bulk = nil
 	o.cond.Broadcast()
 }
 
