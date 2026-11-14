@@ -32,7 +32,29 @@ export const transportTiming = {
   maxRetryMs: 30_000,
   /** On Mewla Relay's relay, how often to look for a direct path (a phone that joined the computer's Wi-Fi). */
   directCheckMs: 20_000,
+  /**
+   * The slowest link a big message is allowed for: the computer announces a message of 64 KB or more on the
+   * wire (`frame_coming`, its size), and the socket may stay quiet for as long as that size takes at this rate,
+   * beyond the silent limit. Nothing of a message reaches JS until all of it is in.
+   */
+  slowLinkBytesPerSecond: 8_000,
+  /** The most a single announced message is allowed. */
+  maxComingMs: 10 * 60_000,
 };
+
+/**
+ * How a turn's frames reach the listeners. The host hands JS the frames that came in together
+ * (9 to 36 in a row in one call, measured), and every frame's writes rerun what reads them: a
+ * burst of 36 Session updates reran the tray 36 times in one call. The app installs its UI's
+ * `batch`; the frames of a turn are then handed over together on the next tick, inside one batch,
+ * and whatever reads them reruns once. Without one (core's tests), each frame is handed over at once.
+ */
+export type FrameBatcher = (deliver: () => void) => void;
+let frameBatcher: FrameBatcher | null = null;
+
+export function setFrameBatcher(batcher: FrameBatcher | null): void {
+  frameBatcher = batcher;
+}
 
 /** Resolves the socket URL for a server: the stored address, or a local tunnel the host opens (Mewla Relay). */
 export type URLResolver = (server: StoredServer) => Promise<string>;
@@ -61,7 +83,12 @@ export class Transport {
   private watchdog: ReturnType<typeof setInterval> | null = null;
   private directCheck: ReturnType<typeof setInterval> | null = null;
   private lastFrameAt = 0;
+  /** Until when an announced message may keep the socket quiet (`frame_coming`); 0 with none on its way. */
+  private comingUntil = 0;
   private nextId = 0;
+  /** The frames of this turn, handed over together on the next tick (see FrameBatcher). */
+  private inbox: Frame[] = [];
+  private inboxTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     readonly server: StoredServer,
@@ -82,6 +109,10 @@ export class Transport {
     const socket = this.socket;
     this.socket = null;
     this.queue = [];
+    // A computer that is no longer current: what it sent and was not handed over yet is dropped.
+    if (this.inboxTimer) clearTimeout(this.inboxTimer);
+    this.inboxTimer = null;
+    this.inbox = [];
     socket?.close(1000, "closed");
     // A computer that is no longer current keeps no tunnels open; coming back measures afresh.
     void invalidateStoredServerTransport(this.server);
@@ -214,7 +245,13 @@ export class Transport {
       } catch {
         return;
       }
-      if (frame && typeof frame.type === "string") this.emit(frame);
+      if (!frame || typeof frame.type !== "string") return;
+      if (frame.type === "frame_coming") {
+        this.comingUntil = Date.now() + transportTiming.silentLimitMs + comingMs(frame.bytes);
+        return;
+      }
+      this.comingUntil = 0;
+      this.receive(frame);
     };
     const end = (why: string) => {
       if (ended) return;
@@ -223,6 +260,8 @@ export class Transport {
       if (attempt !== this.attempt) return;
       this.clearTimers();
       this.queue = [];
+      // What came in before the end is the computer's state as of then: it is handed over first.
+      this.deliverInbox();
       const wasConnected = this.state === "connected";
       if (wasConnected) this.emit({ type: "disconnected", intentional: false });
       // Moving onto a direct path keeps the relay open as the fallback; any other end measures afresh.
@@ -251,7 +290,8 @@ export class Transport {
       // A late tick means the app itself was away; frames may be queued behind it.
       const away = now - lastTick > transportTiming.checkMs * 3;
       lastTick = now;
-      if (!away && now - this.lastFrameAt > transportTiming.silentLimitMs) this.kill("silent");
+      // A big message on its way (`frame_coming`) is not silence until its time at the slowest link is up.
+      if (!away && now - this.lastFrameAt > transportTiming.silentLimitMs && now > this.comingUntil) this.kill("silent");
     }, transportTiming.checkMs);
     if (this.server.transportKind !== "link") return;
     // A phone that joined the computer's network after connecting through the relay moves onto
@@ -291,9 +331,41 @@ export class Transport {
     this.stateListeners.forEach((listener) => listener(state));
   }
 
+  private receive(frame: Frame): void {
+    const batcher = frameBatcher;
+    if (!batcher) return this.emit(frame);
+    this.inbox.push(frame);
+    if (this.inboxTimer) return;
+    this.inboxTimer = setTimeout(() => {
+      this.inboxTimer = null;
+      batcher(() => this.deliverInbox());
+    }, 0);
+  }
+
+  private deliverInbox(): void {
+    if (this.inboxTimer) clearTimeout(this.inboxTimer);
+    this.inboxTimer = null;
+    const frames = this.inbox;
+    this.inbox = [];
+    for (const frame of frames) {
+      try {
+        this.emit(frame);
+      } catch (error) {
+        // One listener's failure must not cost the frames after it.
+        console.error(error);
+      }
+    }
+  }
+
   private emit(frame: Frame): void {
     this.listeners.get(frame.type)?.forEach((listener) => listener(frame));
   }
+}
+
+/** How long an announced message of `bytes` may take on the slowest link allowed for. */
+function comingMs(bytes: unknown): number {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes <= 0) return 0;
+  return Math.min(Math.ceil((bytes / transportTiming.slowLinkBytesPerSecond) * 1000), transportTiming.maxComingMs);
 }
 
 /** A daemon error reply as an Error that keeps its `code` (`answer_choice_gone`, `input_uncertain`, …). */

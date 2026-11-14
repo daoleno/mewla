@@ -187,6 +187,19 @@ tail) gets `worker_session_list` and every `worker_session_*` change without
 was most of each update (8-16 KB of terminal text every 10 s per Session). A
 client that does not offer it gets the tail as before.
 
+A message of 64 KiB or more on the wire (after frame deflate) is announced
+first by `{"type":"frame_coming","bytes":N}`, its size on the wire. The apps
+count a socket that carried no message for 25 s as dead and see nothing of a
+message until all of it is in; told the size, they allow for it at 8 KB/s on
+top of the 25 s, until the next message arrives (a full-size picture of 3 MB
+takes about a minute at 60 KB/s). A client that does not know the type
+ignores it.
+
+The NSH host hands the app's JS the WebSocket messages that came in together
+in one call (9 to 36 in a row, measured). The app hands each turn's messages
+to its state on the next tick inside one `batch`, so what reads them (the
+tray, the Session list) is worked out once a turn, not once a message.
+
 Connect snapshots stay small as history grows: `calendar_items_snapshot`,
 `calendar_item_changed` and Calendar mutation replies omit run history
 (`get_calendar_item` returns it), `brain_snapshot` carries no scheduled-result

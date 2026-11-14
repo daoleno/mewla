@@ -80,6 +80,20 @@ export const brainChoice = computed(() => {
   return pending?.call_id ? { callId: pending.call_id, choice: pending.choice } : null;
 });
 
+/**
+ * What the tray reads of Brain's thread: its pending question and whether a turn runs. Each stays the same
+ * value while the thread's other news comes in, so a reply streaming in does not rerun the tray.
+ */
+let lastAsk: { callId: string; question: string } | null = null;
+const brainAsk = computed(() => {
+  const choice = brainChoice();
+  const next = choice ? { callId: choice.callId, question: choice.choice.questions.find((q) => q.question)?.question ?? "" } : null;
+  if (next && lastAsk && next.callId === lastAsk.callId && next.question === lastAsk.question) return lastAsk;
+  lastAsk = next;
+  return next;
+});
+const brainTurn = computed(() => brainThread().conversation?.activity?.status === "running");
+
 function today(): TrayTodayInput[] {
   const now = clock();
   const listed = new Set(workers().map((worker) => worker.id));
@@ -106,8 +120,8 @@ export const tray = computed(() => {
     hostProblem: snapshot?.host_problem,
     workers: workers(),
     brainHost: brainHost(),
-    brainTurn: brainThread().conversation?.activity?.status === "running",
-    brainChoice: brainChoice() ? { callId: brainChoice()!.callId, question: brainChoice()!.choice.questions.find((q) => q.question)?.question ?? "" } : null,
+    brainTurn: brainTurn(),
+    brainChoice: brainAsk(),
     answered: answered(),
     currentWork: snapshot?.current_work as BrainCurrentWork[] | undefined,
     openWork: snapshot?.open_work as BrainOpenWork[] | undefined,
