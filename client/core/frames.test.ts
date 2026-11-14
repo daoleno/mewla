@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { deflateRawSync, inflateRawSync } from "zlib";
 import type { StoredServer } from "./storedServerContract";
-import { FRAME_DEFLATE_SUBPROTOCOL } from "./frames";
+import { FRAME_DEFLATE_SUBPROTOCOL, TAILLESS_SUBPROTOCOL } from "./frames";
 import { FakeSocket, installMemoryPlatform } from "./testing/memoryPlatform";
 import { Transport, type Frame } from "./transport";
 import { AUTH_SUBPROTOCOL_PREFIX } from "./webSocketAuth";
@@ -37,11 +37,11 @@ describe("compressed messages", () => {
   beforeEach(() => platformWith(true));
   afterEach(() => platformWith(false));
 
-  test("where the platform inflates, the connection offers mewla.frames.deflate-raw after its auth subprotocol", async () => {
+  test("where the platform inflates, the connection offers mewla.frames.deflate-raw and mewla.sessions.tailless after its auth subprotocol", async () => {
     const { transport, socket } = await connected();
-    expect(socket.protocols).toHaveLength(2);
+    expect(socket.protocols).toHaveLength(3);
     expect(socket.protocols[0].startsWith(AUTH_SUBPROTOCOL_PREFIX)).toBe(true);
-    expect(socket.protocols[1]).toBe(FRAME_DEFLATE_SUBPROTOCOL);
+    expect(socket.protocols.slice(1)).toEqual([FRAME_DEFLATE_SUBPROTOCOL, TAILLESS_SUBPROTOCOL]);
     transport.close();
   });
 
@@ -60,9 +60,9 @@ describe("compressed messages", () => {
 describe("without an inflater", () => {
   beforeEach(() => platformWith(false));
 
-  test("nothing is offered beyond the auth subprotocol, and a stray binary message is dropped", async () => {
+  test("only mewla.sessions.tailless is offered beyond the auth subprotocol, and a stray binary message is dropped", async () => {
     const { transport, socket, heard } = await connected();
-    expect(socket.protocols).toHaveLength(1);
+    expect(socket.protocols.slice(1)).toEqual([TAILLESS_SUBPROTOCOL]);
     socket.onmessage?.({ data: new Uint8Array(deflateRawSync(Buffer.from(JSON.stringify({ type: "brain_snapshot", brain: {} })))) });
     socket.onmessage?.({ data: JSON.stringify({ type: "brain_snapshot", brain: { note: "text" } }) });
     expect(heard).toHaveLength(1);

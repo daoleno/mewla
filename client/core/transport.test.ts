@@ -43,7 +43,7 @@ describe("Transport", () => {
   test("signs in with the device key as a subprotocol, never in the URL", async () => {
     const { transport, socket } = await connected();
     expect(socket.url).toBe(server.url);
-    expect(socket.protocols).toHaveLength(1);
+    expect(socket.protocols).toHaveLength(2); // the auth one, then mewla.sessions.tailless (frames.ts)
     expect(socket.protocols[0].startsWith(AUTH_SUBPROTOCOL_PREFIX)).toBe(true);
     const header = Buffer.from(socket.protocols[0].slice(AUTH_SUBPROTOCOL_PREFIX.length), "base64url").toString();
     expect(header).toContain((await getOrCreateLocalDeviceIdentity()).deviceId);

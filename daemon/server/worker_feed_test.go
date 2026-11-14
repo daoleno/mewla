@@ -175,7 +175,7 @@ func TestWorkerFeedReconcileSendsOnlyDifferencesAsSequencedChanges(t *testing.T)
 	}
 }
 
-func feedTestSocket(t *testing.T, srv *Server) *websocket.Conn {
+func feedTestSocket(t *testing.T, srv *Server, subprotocols ...string) *websocket.Conn {
 	t.Helper()
 	manager, err := auth.NewManager(t.TempDir())
 	if err != nil {
@@ -197,7 +197,8 @@ func feedTestSocket(t *testing.T, srv *Server) *websocket.Conn {
 	host := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	t.Cleanup(host.Close)
 	header := http.Header{"Authorization": []string{calendarAuthHeader(private, manager.DaemonID(), "feed-test", "mewla-connect")}}
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(host.URL, "http"), header)
+	dialer := websocket.Dialer{Subprotocols: subprotocols}
+	conn, _, err := dialer.Dial("ws"+strings.TrimPrefix(host.URL, "http"), header)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -495,5 +496,42 @@ func TestWorkerSessionWireCarriesTheActivityOfARunningSession(t *testing.T) {
 	encoded, _ = json.Marshal(idle)
 	if strings.Contains(string(encoded), "activity") || strings.Contains(string(encoded), "running_since") {
 		t.Fatalf("an idle Session's line from its last turn is not news: %s", encoded)
+	}
+}
+
+// A client that offers mewla.sessions.tailless gets the Session list and
+// changes without last_output_lines, in the same seq; one that does not (the
+// Expo app's terminal preview) gets them as before.
+func TestWorkerFeedLeavesTheTerminalTailOutForATaillessClient(t *testing.T) {
+	srv := New(nil, nil, nil, nil, nil, nil, nil)
+	defer srv.shutdownAuthenticatedClients()
+	lines := []string{"building 12:00:01 3f9c…", "building 12:00:03 a81e…"}
+	srv.publishWorkerSession("worker_session_created", &classifier.Worker{ID: "w", Name: "n", LastLines: lines})
+	full := feedTestSocket(t, srv)
+	lite := feedTestSocket(t, srv, taillessSubprotocol)
+
+	readFeedType(t, full, "worker_session_list")
+	readFeedType(t, lite, "worker_session_list")
+	srv.publishWorkerSession("worker_session_updated", &classifier.Worker{ID: "w", Name: "n2", LastLines: lines})
+	fullChange, fullRaw := readFeedType(t, full, "worker_session_updated")
+	liteChange, liteRaw := readFeedType(t, lite, "worker_session_updated")
+	if fullChange.Seq != liteChange.Seq || !strings.Contains(string(fullRaw), "building 12:00:03") || strings.Contains(string(liteRaw), "last_output_lines") || !strings.Contains(string(liteRaw), `"name":"n2"`) {
+		t.Fatalf("full %s\nlite %s", fullRaw, liteRaw)
+	}
+}
+
+func TestWithoutTerminalTailStripsEverySessionOfAList(t *testing.T) {
+	out := withoutTerminalTail([]byte(`{"type":"worker_session_list","seq":2,"worker_sessions":[{"id":"a","last_output_lines":["x"]},{"id":"b","last_output_lines":["y"],"name":"B"}]}`))
+	if want := `{"seq":2,"type":"worker_session_list","worker_sessions":[{"id":"a"},{"id":"b","name":"B"}]}`; string(out) != want {
+		t.Fatalf("got %s, want %s", out, want)
+	}
+}
+
+func TestWithoutTerminalTailLeavesOtherMessagesAlone(t *testing.T) {
+	if out := withoutTerminalTail([]byte(`{"type":"worker_session_heartbeat","seq":3}`)); out != nil {
+		t.Fatalf("a heartbeat changed: %s", out)
+	}
+	if out := withoutTerminalTail([]byte(`{"type":"worker_session_archived","seq":4,"worker_session":{"id":"w"}}`)); out != nil {
+		t.Fatalf("a message without a tail changed: %s", out)
 	}
 }

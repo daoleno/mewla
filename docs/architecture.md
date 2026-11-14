@@ -180,6 +180,13 @@ to N pixels on its long side and re-encoded (JPEG when opaque, else PNG) when
 that is smaller; GIFs stay as they are. The apps ask 1600 for a thread's row
 and the original for the full-size viewer.
 
+A client that offers the subprotocol `mewla.sessions.tailless` beside its auth
+subprotocol (the NSH apps since v0.4.3, which never show a Session's terminal
+tail) gets `worker_session_list` and every `worker_session_*` change without
+`last_output_lines`, in the same seq as everyone else. A running Session's tail
+was most of each update (8-16 KB of terminal text every 10 s per Session). A
+client that does not offer it gets the tail as before.
+
 Connect snapshots stay small as history grows: `calendar_items_snapshot`,
 `calendar_item_changed` and Calendar mutation replies omit run history
 (`get_calendar_item` returns it), `brain_snapshot` carries no scheduled-result

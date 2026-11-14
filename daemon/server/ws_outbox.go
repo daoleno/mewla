@@ -108,6 +108,7 @@ type clientOutbox struct {
 	// sends JSON text of frameDeflateMin bytes or more as one binary message
 	// of its raw DEFLATE bytes. wire counts the bytes that went out.
 	frameDeflate bool
+	tailless     bool // taillessSubprotocol: Session feed messages without last_output_lines
 	wire         int64
 	deflater     *flate.Writer
 	deflated     bytes.Buffer
@@ -135,6 +136,20 @@ func clientOffersFrameDeflate(r *http.Request) bool {
 		}
 	}
 	return false
+}
+
+// useTailless marks a client that never shows a Session's terminal tail
+// (taillessSubprotocol), before the first message is queued.
+func (o *clientOutbox) useTailless() {
+	o.mu.Lock()
+	o.tailless = true
+	o.mu.Unlock()
+}
+
+func (o *clientOutbox) isTailless() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.tailless
 }
 
 // useFrameDeflate turns deflated frames on, before the first message is queued.
