@@ -190,7 +190,10 @@ have it:
   10 s the daemon sends a `worker_session_heartbeat` with the current `seq`
   and no Session: it keeps an idle socket from being judged silent, and a
   `seq` ahead of the app's last means a change was lost, which asks for a
-  fresh list. A daemon check once a minute publishes, as ordinary sequenced changes, any
+  fresh list. A change that is only a Session's terminal output (its
+  `last_output_lines`, which the apps since v0.4.0 do not show) is sent at most
+  once every 10 s per Session, newest last; state and metadata changes are
+  never held. A daemon check once a minute publishes, as ordinary sequenced changes, any
   Session whose derived fields (capabilities, executor, provider) moved
   without a watcher event. Absence from a list is never proof of anything:
   `kill_worker` is answered with `worker_killed` (or `error`), which is what a
