@@ -1,0 +1,71 @@
+name: iOS TestFlight expire waiting
+
+# The same step ios-release.yml runs after it submits a Preview build, on demand: every Mewla
+# Preview build numbered below keep_build_number that is still waiting for Beta App Review is
+# expired (scripts/testflight-expire-waiting.py). Approved builds, builds in beta testing, the kept
+# build and newer builds are never touched. The job summary lists each build and Apple's answer.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_build_number:
+        description: "The build that stays in review (CFBundleVersion); older waiting builds are expired"
+        required: true
+        type: string
+      dry_run:
+        description: "Only list what would be expired"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-testflight-expire
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  expire:
+    name: Expire older builds waiting for beta review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: app-store-connect-preview
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Expire them in App Store Connect
+        env:
+          MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}
+          MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+          MEWLA_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
+          ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
+          KEEP_BUILD_NUMBER: ${{ inputs.keep_build_number }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          [[ "$KEEP_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
+            echo "error: keep_build_number must be a positive integer" >&2
+            exit 1
+          }
+          [[ "$MEWLA_ASC_APP_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "error: configure the numeric MEWLA_ASC_PREVIEW_APP_ID variable for Mewla Preview" >&2
+            exit 1
+          }
+          test -n "$MEWLA_ASC_KEY_ID"
+          printf '%s' "$MEWLA_ASC_API_KEY_BASE64" | base64 --decode > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+          test -s "$ASC_KEY_PATH"
+          EXTRA_ARGS=()
+          if [[ "$DRY_RUN" == "true" ]]; then EXTRA_ARGS=(--dry-run); fi
+          ./scripts/testflight-expire-waiting.py \
+            --app-id "$MEWLA_ASC_APP_ID" \
+            --key-id "$MEWLA_ASC_KEY_ID" \
+            --key-path "$ASC_KEY_PATH" \
+            --keep-build-number "$KEEP_BUILD_NUMBER" \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            "${EXTRA_ARGS[@]}"
+
+      - name: Remove temporary Individual API key
+        if: always()
+        run: rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"
