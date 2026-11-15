@@ -59,6 +59,9 @@ In PowerShell, as yourself (not as Administrator):
 irm https://mewla.ai/install.ps1 | iex
 ```
 
+Windows PowerShell (built into Windows 10 and 11) and PowerShell 7 both work;
+PowerShell is the one Windows shell Mewla's instructions use.
+
 It finds the newest stable release the same way, verifies
 `mewla-windows-amd64.zip` against `SHA256SUMS`, and installs `mewla.exe` into
 `%LOCALAPPDATA%\Programs\Mewla`. It adds that folder to your user `PATH`, then
@@ -66,6 +69,25 @@ runs [`mewla boot install`](#keep-it-running): Mewla starts now and each time
 you log in. Nothing needs administrator rights. Running it again installs over
 the existing copy, even while Mewla is running, but the running Mewla keeps its
 old version until it restarts; to update, use `mewla update`.
+
+Install an agent the same way, in PowerShell, with its own installer:
+`irm https://claude.ai/install.ps1 | iex` for Claude Code,
+`powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"`
+for Codex. Then run it once in a new PowerShell window to sign in and finish
+its first-run questions. Claude Code's installer does not add
+`%USERPROFILE%\.local\bin` to your `PATH`; Mewla finds `claude.exe` there
+anyway, and in your own terminal you can run it as
+`& "$env:USERPROFILE\.local\bin\claude.exe"`. If an agent's first-run
+questions are still open when a Session starts it, the Session shows
+**Blocked** until you answer them in its terminal.
+
+Mewla starts once at login, but each new Session gets your environment as it
+is now, as a new PowerShell window does: an agent installed, a `PATH` entry or
+a variable such as `HTTPS_PROXY` set with `setx` or System Properties after
+Mewla started reaches the next Session without logging in again. A Shell
+Session runs PowerShell 7 (`pwsh`) when it is installed and Windows PowerShell
+otherwise. Installed from an Administrator PowerShell, which starts in
+`C:\Windows\System32`, Sessions still start in your home folder.
 
 Windows is in beta. Tell us how it went, good or bad:
 [open an issue](https://github.com/daoleno/mewla/issues/new?title=Windows%3A%20&body=Windows%20version%3A%0A%0Amewla%20version%3A%0A%0Amewla%20doctor%3A%0A%0AWhat%20happened%3A%0A) with your Windows version and the

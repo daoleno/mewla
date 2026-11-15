@@ -22,7 +22,8 @@ Your code, keys and agent state stay on your computer.
 - Linux (`amd64` or `arm64`), WSL2, an Apple Silicon Mac, or Windows 10
   (version 1809 or later) or 11 on x64 (64-bit Intel or AMD; beta)
 - One signed-in agent CLI. On Linux and macOS, `mewla` offers to install one;
-  on Windows, install and sign in to one yourself first
+  on Windows, install one with its PowerShell installer and run it once to sign
+  in ([how](install-daemon.md#windows))
 - An arm64 Android phone, an iPhone, or a browser
 
 ## 1. Install the daemon
@@ -37,7 +38,7 @@ It verifies the release checksum, installs `mewla` without `sudo` and sends no
 telemetry. The last line is the command that starts Mewla: `mewla`, or its
 full path when your current shell cannot find it yet.
 
-On Windows, in PowerShell:
+On Windows, in PowerShell (Windows PowerShell or PowerShell 7):
 
 ```powershell
 irm https://mewla.ai/install.ps1 | iex
