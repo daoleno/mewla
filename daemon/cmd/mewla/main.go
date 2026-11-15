@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/daoleno/mewla/daemon/answered"
+	"image"
 	"io"
 	"log"
 	"net"
@@ -835,8 +836,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	browserManager.SetWindowCloser(agentUse.Bridge().CloseWindow)
 	browserManager.SetSwitchHook(func() { go agentUse.Refresh() })
 	srv.SetBrowser(browserManager)
-	// A Worker's window goes with its session, not with its last answer.
-	bindAgentScreenLifetime(displayService, browserManager, controlHandler)
 	workerName := func(id string) string {
 		if worker := w.GetWorker(id); worker != nil {
 			return worker.Name
@@ -847,7 +846,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	// A display (and the browser window on it) Mewla closes, because nobody
 	// used it for an hour or another agent needed it, is told to the person;
 	// the Worker hears it with its next result.
-	displayService.SetIdleClose(vdisplay.IdleClose, func(worker, name, why string) {
+	screenClosed := func(worker, name, why string) {
 		browserManager.Forget(worker)
 		who := strings.TrimSpace(name)
 		if who == "" {
@@ -857,12 +856,32 @@ func runDaemon(args []string, stderr io.Writer) error {
 		if err := pusher.NotifyWorkerNote(worker, "Screen", who+"'s browser window closed: "+why+"."); err != nil && !errors.Is(err, push.ErrNoRegistration) {
 			log.Printf("display: couldn't tell the person: %v", err)
 		}
-	})
+	}
+	displayService.SetIdleClose(vdisplay.IdleClose, screenClosed)
 	// When every display is taken, one whose Worker's turn ended may be given to another agent.
 	displayService.SetEvictable(func(id string) bool { return controlHandler.workerOpen(id) && !controlHandler.liveWorker(id) })
-	// A Work whose Worker left a page or app open on its display is not closed by the judge (and its Session with it).
-	brainService.SetOpenScreens(displayService.InUse)
 	screenService := screen.NewPlatformService(authManager.StorageDir(), displayService)
+	// On a Mac, agents' browser windows open on the agent display, in the
+	// person's Chrome; they are Screen's agent displays there: listed under
+	// their Workers as soon as they open, viewed, held and stopped as Linux's
+	// monitors are, through the same /display contract.
+	agentWindows := screenService.AgentWindows()
+	// A Worker's window goes with its session, not with its last answer.
+	if agentWindows != nil {
+		bindAgentScreenLifetime(controlHandler, browserManager, displayService, agentWindows)
+		agentWindows.SetNames(workerName)
+		agentWindows.SetCloser(agentUse.Bridge().CloseWindow)
+		agentWindows.SetIdleClose(vdisplay.IdleClose, screenClosed)
+		defer agentWindows.Close()
+		srv.SetDisplays(agentWindows)
+		controlHandler.agentWindows = agentWindows
+	} else {
+		bindAgentScreenLifetime(controlHandler, browserManager, displayService)
+	}
+	// A Work whose Worker left a page or app open on its display is not closed by the judge (and its Session with it).
+	brainService.SetOpenScreens(func(id string) bool {
+		return displayService.InUse(id) || (agentWindows != nil && agentWindows.InUse(id))
+	})
 	go screenService.Run(ctx)
 	if daemonSupervised() {
 		// Exiting with an error makes launchd or systemd start Mewla again,
@@ -895,11 +914,21 @@ func runDaemon(args []string, stderr io.Writer) error {
 	})
 	if hold, release, ok := screenService.AgentDisplay(); ok {
 		// The browser's agent windows open on the agent display too, off the
-		// person's screen.
-		agentUse.SetAgentDisplay(func(key string) (agentuse.WindowBounds, error) {
-			bounds, err := hold(key)
-			return agentuse.WindowBounds{Left: bounds.Min.X, Top: bounds.Min.Y, Width: bounds.Dx(), Height: bounds.Dy()}, err
-		}, release)
+		// person's screen; a Worker's is listed in Screen while it is open.
+		hooks := agentuse.AgentDisplayHooks{
+			Hold: func(key string) (agentuse.WindowBounds, error) {
+				bounds, err := hold(key)
+				return agentuse.WindowBounds{Left: bounds.Min.X, Top: bounds.Min.Y, Width: bounds.Dx(), Height: bounds.Dy()}, err
+			},
+			Release: release,
+		}
+		if agentWindows != nil {
+			hooks.Opened = func(key, worker string, cell agentuse.WindowBounds) {
+				agentWindows.Opened(key, worker, image.Rect(cell.Left, cell.Top, cell.Left+cell.Width, cell.Top+cell.Height))
+			}
+			hooks.Closed = agentWindows.Closed
+		}
+		agentUse.SetAgentDisplay(hooks)
 	}
 	controlHandler.agentUse = agentUse
 	controlHandler.phone = phone.NewAgent(phoneManager, phone.NewAudit(authManager.StorageDir()))

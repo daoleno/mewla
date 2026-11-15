@@ -20,8 +20,20 @@ var displayUpgrader = websocket.Upgrader{
 	CheckOrigin:     func(*http.Request) bool { return true },
 }
 
-// SetDisplays installs the private displays agents open apps on.
-func (s *Server) SetDisplays(service *vdisplay.Service) { s.displays = service }
+// Displays are the agents' displays Screen lists, views and stops one by one:
+// on Linux each agent's monitor of the agent screen (vdisplay.Service), on a
+// Mac the agents' browser windows on the agent display (screen.AgentWindows).
+type Displays interface {
+	// Capability says why agents have no display here, or nil.
+	Capability() error
+	List() []vdisplay.Info
+	View(worker string) (*vdisplay.Viewer, error)
+	Halt(worker string) error
+	Resume(worker string) error
+}
+
+// SetDisplays installs the agents' displays.
+func (s *Server) SetDisplays(service Displays) { s.displays = service }
 
 // handleDisplay lists the agents' displays (GET) and stops or resumes one (POST).
 func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
@@ -40,17 +52,18 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 		if list == nil {
 			list = []vdisplay.Info{}
 		}
-		// reason says what is missing when agents cannot have a screen (or a
-		// browser on it) on this computer.
+		// reason says what is missing when agents cannot have a screen (or,
+		// on the agent screen, a browser on it) on this computer.
 		reason := ""
-		if err := vdisplay.Capability(); err != nil {
-			reason = err.Error()
-		} else if s.browsers != nil {
+		capability := s.displays.Capability()
+		if capability != nil {
+			reason = capability.Error()
+		} else if _, agentScreen := s.displays.(*vdisplay.Service); agentScreen && s.browsers != nil {
 			if c := s.browsers.Capability(r.Context()); !c.Available {
 				reason = c.Reason
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": vdisplay.Capability() == nil, "reason": reason})
+		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": capability == nil, "reason": reason})
 	case http.MethodPost:
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 		var q struct {

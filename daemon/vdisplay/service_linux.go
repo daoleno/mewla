@@ -129,7 +129,7 @@ type closedNote struct {
 
 // Why a monitor was closed, as the person and the agent are told.
 const (
-	whyIdle    = "nobody used it for an hour"
+	whyIdle    = WhyIdle
 	whyEvicted = "another agent needed its display"
 )
 
@@ -154,6 +154,9 @@ func (s *Service) InUse(worker string) bool {
 	defer w.mu.Unlock()
 	return w.windows > 0 || w.liveApps() > 0
 }
+
+// Capability says why agents cannot have a display here, or nil.
+func (s *Service) Capability() error { return Capability() }
 
 // SetAlive tells the service which Workers are still open; a display whose
 // Worker has closed is closed. A Worker that only ended its turn keeps its
@@ -423,10 +426,6 @@ func (s *Service) End(worker string) []string {
 	}
 	return out
 }
-
-// WindowNote is what an agent hears once its browser window is open: who sees
-// it, and how long it lasts.
-const WindowNote = "The person sees this browser window in Mewla's Screen, under your name, and can take it over there. It stays open after your turn ends: until your Session closes, the person closes it, or nobody uses it for an hour. To hand the person a page (a sign-in, a code, a captcha, a payment), leave it open and tell them; your Work card in Mewla has a Screen button that opens it."
 
 func settleFor(action string) time.Duration {
 	switch action {

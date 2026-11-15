@@ -81,6 +81,7 @@ type controlApp struct {
 	calendarScheduler *calendar.Scheduler
 	screen            *screen.Service
 	displays          *vdisplay.Service
+	agentWindows      *screen.AgentWindows // a Mac's agents' browser windows on the agent display; nil elsewhere
 	phone             *phone.Agent
 	iphone            *phone.Agent
 	agentUse          *agentuse.Service

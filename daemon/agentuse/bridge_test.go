@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -80,7 +81,7 @@ func waitHost(t *testing.T, b *Bridge) {
 func TestConnectAsksTheExtensionToOpenAnAgentWindow(t *testing.T) {
 	b, dir := startBridge(t)
 	var held, released atomic.Int32
-	b.Display = func(string) (WindowBounds, func(), error) {
+	b.Display = func(string, string) (WindowBounds, func(), error) {
 		held.Add(1)
 		return WindowBounds{1512, 0, 1600, 1000}, func() { released.Add(1) }, nil
 	}
@@ -133,7 +134,7 @@ func TestConnectAsksTheExtensionToOpenAnAgentWindow(t *testing.T) {
 func TestTheDisplayIsLetGoWhenChromeEndsTheHostWithAWindowOpen(t *testing.T) {
 	b, dir := startBridge(t)
 	var released atomic.Int32
-	b.Display = func(string) (WindowBounds, func(), error) {
+	b.Display = func(string, string) (WindowBounds, func(), error) {
 		return WindowBounds{}, func() { released.Add(1) }, nil
 	}
 	conn, err := DialBridgeHost(dir, false)
@@ -391,7 +392,7 @@ func fileExists(path string) bool {
 // quarter of the agent display, and its tab group carries its Worker's name.
 func TestWorkersConnectAtOnceEachWithItsOwnWindowAndLabel(t *testing.T) {
 	b, dir := startBridge(t)
-	b.Display = func(key string) (WindowBounds, func(), error) {
+	b.Display = func(key, _ string) (WindowBounds, func(), error) {
 		return WindowBounds{1512, 0, 1600, 1000}, func() {}, nil
 	}
 	b.WorkerName = func(worker string) string {
@@ -426,6 +427,116 @@ func TestWorkersConnectAtOnceEachWithItsOwnWindowAndLabel(t *testing.T) {
 			t.Fatalf("labels %v, missing %q", labels, want)
 		}
 	}
+}
+
+// A Worker's window on the agent display is placed for that Worker: Display
+// hears whose window it makes room for, and Placed hears it once the extension
+// opened the window, with the quarter it went to, so Screen can list it under
+// the Worker and show just that part of the display. A connection that is no
+// Worker's still gets its place, and nothing is listed for it.
+func TestAWorkersWindowIsPlacedForItsWorker(t *testing.T) {
+	b, dir := startBridge(t)
+	var mu sync.Mutex
+	held := map[string]string{} // connection id -> worker Display was asked for
+	type placedWindow struct {
+		key, worker string
+		cell        WindowBounds
+	}
+	var placed []placedWindow
+	released := map[string]bool{}
+	b.Display = func(key, worker string) (WindowBounds, func(), error) {
+		mu.Lock()
+		held[key] = worker
+		mu.Unlock()
+		return WindowBounds{1512, 0, 1600, 1000}, func() {
+			mu.Lock()
+			released[key] = true
+			mu.Unlock()
+		}, nil
+	}
+	b.Placed = func(key, worker string, cell WindowBounds) {
+		mu.Lock()
+		placed = append(placed, placedWindow{key, worker, cell})
+		mu.Unlock()
+	}
+	conn, err := DialBridgeHost(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	enc := json.NewEncoder(conn)
+	_ = enc.Encode(hostMessage{Type: "hello", Version: "9.9"})
+	asked := make(chan hostMessage, 4)
+	answer := make(chan struct{}, 4)
+	go func() {
+		dec := json.NewDecoder(conn)
+		for {
+			var m hostMessage
+			if dec.Decode(&m) != nil {
+				return
+			}
+			if m.Type != "connect" {
+				continue
+			}
+			asked <- m
+			<-answer
+			_ = enc.Encode(hostMessage{Type: "connected", ID: m.ID})
+		}
+	}()
+	waitHost(t, b)
+
+	done := make(chan error, 1)
+	go func() { done <- ConnectViaBridgeFor(dir, goodRelay, "claude", "mh-signin") }()
+	m := <-asked
+	if m.Worker != "mh-signin" {
+		t.Fatalf("the extension was asked for worker %q", m.Worker)
+	}
+	mu.Lock()
+	if held[m.ID] != "mh-signin" {
+		t.Fatalf("Display made room for %q, not the Worker", held[m.ID])
+	}
+	if len(placed) != 0 {
+		t.Fatalf("placed before the extension opened the window: %+v", placed)
+	}
+	mu.Unlock()
+	answer <- struct{}{}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	if len(placed) != 1 || placed[0].key != m.ID || placed[0].worker != "mh-signin" || placed[0].cell != *m.Bounds || placed[0].cell != (WindowBounds{1512, 0, 800, 500}) {
+		t.Fatalf("placed %+v, want %s for mh-signin at %+v", placed, m.ID, *m.Bounds)
+	}
+	mu.Unlock()
+
+	// No Worker: the window still goes on the agent display, unlisted.
+	go func() { done <- ConnectViaBridge(dir, goodRelay, "claude") }()
+	plain := <-asked
+	answer <- struct{}{}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	if w, ok := held[plain.ID]; !ok || w != "" || plain.Bounds == nil || *plain.Bounds != (WindowBounds{2312, 0, 800, 500}) {
+		t.Fatalf("a connection with no Worker: held %v (%q), bounds %+v", ok, w, plain.Bounds)
+	}
+	if len(placed) != 1 {
+		t.Fatalf("a connection with no Worker was placed for one: %+v", placed)
+	}
+	mu.Unlock()
+
+	// The Worker's window closing lets its place go.
+	_ = enc.Encode(hostMessage{Type: "closed", ID: m.ID, Reason: "The agent window was closed"})
+	for i := 0; i < 100; i++ {
+		mu.Lock()
+		gone := released[m.ID]
+		mu.Unlock()
+		if gone {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the Worker's window closed but its place was kept")
 }
 
 func TestAnOlderExtensionIsAskedToReloadOncePerRunningVersion(t *testing.T) {
@@ -490,5 +601,38 @@ func TestVersionOlder(t *testing.T) {
 func TestTheBundledExtensionVersionIsTheManifests(t *testing.T) {
 	if v := BundledExtensionVersion(); v == "" || !versionOlder("0.0.1", v) {
 		t.Fatalf("bundled version %q", v)
+	}
+}
+
+// The daemon's agent display hooks: the display is held under the window's
+// own key, the Worker's open window is heard with its raw connection id (the
+// one CloseWindow takes), and its closing is heard before the hold goes.
+func TestAgentDisplayHooksKeyTheHoldAndTellTheWindow(t *testing.T) {
+	svc, err := New(t.TempDir(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []string
+	svc.SetAgentDisplay(AgentDisplayHooks{
+		Hold: func(key string) (WindowBounds, error) {
+			calls = append(calls, "hold "+key)
+			return WindowBounds{1512, 0, 1600, 1000}, nil
+		},
+		Release: func(key string) { calls = append(calls, "release "+key) },
+		Opened: func(key, worker string, cell WindowBounds) {
+			calls = append(calls, fmt.Sprintf("opened %s %s %v", key, worker, cell))
+		},
+		Closed: func(key string) { calls = append(calls, "closed "+key) },
+	})
+	b := svc.Bridge()
+	bounds, release, err := b.Display("c1-1", "mh-signin")
+	if err != nil || bounds != (WindowBounds{1512, 0, 1600, 1000}) {
+		t.Fatalf("display %v %v", bounds, err)
+	}
+	b.Placed("c1-1", "mh-signin", WindowBounds{2312, 0, 800, 500})
+	release()
+	want := []string{"hold browser:c1-1", "opened c1-1 mh-signin {2312 0 800 500}", "closed c1-1", "release browser:c1-1"}
+	if strings.Join(calls, "|") != strings.Join(want, "|") {
+		t.Fatalf("calls %q, want %q", calls, want)
 	}
 }
