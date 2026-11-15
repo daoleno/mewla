@@ -51,17 +51,18 @@ func sweepBinary(t *testing.T) string {
 // plain child, TMUX_TMPDIR points tmux at an empty directory, and every agent
 // config is a copy.
 type env struct {
-	t     *testing.T
-	bin   string
-	dir   string
-	home  string
-	state string
-	tools string // first on PATH: stubs and the agents of this scenario
-	port  int
-	path  []string
-	extra []string
-	serve *exec.Cmd
-	log   string
+	t      *testing.T
+	bin    string
+	dir    string
+	home   string
+	state  string
+	tmpdir string
+	tools  string // first on PATH: stubs and the agents of this scenario
+	port   int
+	path   []string
+	extra  []string
+	serve  *exec.Cmd
+	log    string
 }
 
 type envOptions struct {
@@ -76,6 +77,9 @@ type envOptions struct {
 	// gateway passes this shell's ANTHROPIC_* and OPENAI_* variables, for
 	// scenarios with a real agent.
 	gateway bool
+	// home and tmpdir put HOME and TMPDIR elsewhere (another filesystem, a
+	// noexec mount); empty keeps them in the scenario's directory.
+	home, tmpdir string
 }
 
 func newEnv(t *testing.T, opts envOptions) *env {
@@ -86,6 +90,13 @@ func newEnv(t *testing.T, opts envOptions) *env {
 		t.Fatal(err)
 	}
 	e := &env{t: t, bin: bin, dir: dir, home: filepath.Join(dir, "home"), tools: filepath.Join(dir, "tools"), log: filepath.Join(dir, "daemon.log")}
+	if opts.home != "" {
+		e.home = opts.home
+	}
+	e.tmpdir = filepath.Join(dir, "tmp")
+	if opts.tmpdir != "" {
+		e.tmpdir = opts.tmpdir
+	}
 	e.state = filepath.Join(e.home, ".mewla")
 	for _, sub := range []string{e.state, e.tools, filepath.Join(dir, "tmux"), filepath.Join(dir, "tmp")} {
 		if err := os.MkdirAll(sub, 0o700); err != nil {
@@ -149,7 +160,7 @@ func (e *env) environ() []string {
 		"LANG=C.UTF-8",
 		"TMUX_TMPDIR=" + filepath.Join(e.dir, "tmux"),
 		// Its own: Workers refuse a folder under TMPDIR (volatile storage).
-		"TMPDIR=" + filepath.Join(e.dir, "tmp"),
+		"TMPDIR=" + e.tmpdir,
 		"MEWLA_NO_AUTOUPDATE=1",
 	}, e.extra...)
 }
@@ -486,6 +497,7 @@ func record(t *testing.T, scenario, outcome, detail string) {
 	if dir == "" {
 		return
 	}
+	_ = os.MkdirAll(dir, 0o700)
 	raw, _ := json.Marshal(map[string]string{"scenario": scenario, "outcome": outcome, "detail": detail, "at": time.Now().UTC().Format(time.RFC3339)})
 	file, err := os.OpenFile(filepath.Join(dir, "results.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {

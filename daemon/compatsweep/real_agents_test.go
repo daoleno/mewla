@@ -81,7 +81,11 @@ func newRealEnv(t *testing.T, opts realOptions) *env {
 		copyFile(t, filepath.Join(realHome, ".claude", ".credentials.json"), filepath.Join(e.home, ".claude", ".credentials.json"))
 		copyFile(t, filepath.Join(realHome, ".codex", "auth.json"), filepath.Join(e.home, ".codex", "auth.json"))
 	}
-	writeFile(t, filepath.Join(e.home, ".codex", "config.toml"), minimalCodexConfig(t, filepath.Join(realHome, ".codex", "config.toml")), 0o600)
+	if !opts.signedOut {
+		// This machine's provider block reaches its gateway without a
+		// sign-in; a signed-out computer has OpenAI's default, which needs one.
+		writeFile(t, filepath.Join(e.home, ".codex", "config.toml"), minimalCodexConfig(t, filepath.Join(realHome, ".codex", "config.toml")), 0o600)
+	}
 	if !opts.fresh {
 		key := os.Getenv("ANTHROPIC_API_KEY")
 		approved := []string{}

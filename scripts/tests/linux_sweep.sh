@@ -7,6 +7,10 @@
 #   scripts/tests/linux_sweep.sh [out-dir]                 fake agents only
 #   MEWLA_SWEEP_REAL=claude,codex scripts/tests/linux_sweep.sh [out-dir]
 #                                                          plus real agents
+#   MEWLA_SWEEP_MOUNTS=1 ...                               plus TMPDIR on a
+#                                                          noexec tmpfs and a
+#                                                          read-only folder (a
+#                                                          user namespace)
 #   MEWLA_SWEEP_UNIT=1 ...                                 plus mewla update and
 #                                                          restart on a systemd
 #                                                          user unit (docker)
@@ -29,6 +33,18 @@ CACHE="${MEWLA_GHOSTTY_DESKTOP_CACHE:-$HOME/.cache/mewla/ghostty-desktop}"
 status=0
 (cd "$ROOT/daemon" && MEWLA_SWEEP_BINARY="$BUILD/mewla" MEWLA_SWEEP_OUT="$OUT" \
   go test ./compatsweep -count=1 -v -timeout 90m) || status=$?
+if [[ "${MEWLA_SWEEP_MOUNTS:-}" == 1 ]]; then
+  # Mounts need no root inside a user namespace of their own; they vanish
+  # with it.
+  MOUNTS="$BUILD/mounts"
+  mkdir -p "$MOUNTS/noexec" "$MOUNTS/ro" "$BUILD/ro-src/project"
+  (cd "$ROOT/daemon" && MEWLA_SWEEP_BINARY="$BUILD/mewla" MEWLA_SWEEP_OUT="$OUT" unshare -Urm sh -c '
+    set -e
+    mount -t tmpfs -o noexec,nosuid tmpfs "$1/noexec"
+    mount --bind "$2" "$1/ro" && mount -o remount,bind,ro "$1/ro"
+    MEWLA_SWEEP_MOUNTS="$1" exec go test ./compatsweep -run TestMounts -count=1 -v -timeout 10m
+  ' sh "$MOUNTS" "$BUILD/ro-src") || status=$?
+fi
 if [[ "${MEWLA_SWEEP_UNIT:-}" == 1 ]]; then
   "$ROOT/scripts/tests/linux_unit_update.sh" "$OUT" || status=$?
 fi
