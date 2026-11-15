@@ -175,7 +175,7 @@ export function linkAction(text: string, index: number): LinkAction | null {
 /**
  * What a tap on the terminal does: a link opens; on the live screen of a program that reads the mouse it
  * clicks (and the keyboard stays down); otherwise it raises the keyboard (back to the live screen first).
- * `row` < 0 is a tap on history above the screen; `live` is false while scrolled back or in copy mode.
+ * `row` < 0 is a tap on history above the screen; `live` is false while scrolled back.
  */
 export function tapAction(tap: { link: LinkAction | null; row: number; live: boolean; clickable: boolean }): "link" | "click" | "focus" | "none" {
   if (tap.link) return "link";
