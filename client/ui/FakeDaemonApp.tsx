@@ -31,6 +31,8 @@ host.on<Record<string, unknown>>("app.daemonPush", (frame) => daemon.push(frame 
 host.on<{ worker: string; upserts?: Record<string, unknown>[]; deletes?: string[]; activity?: Record<string, unknown> | null; snapshot?: boolean }>("app.conversation", (update) => daemon.conversation(update));
 // `app.host.send("app.daemonDrop")`: every connection drops; the app connects again.
 host.on("app.daemonDrop", () => daemon.drop());
+// `app.host.send("app.daemonNewsThenDrop", { worker, upserts?, ... })`: a conversation's news and the drop, in one call into the app.
+host.on<Parameters<FakeDaemon["conversation"]>[0]>("app.daemonNewsThenDrop", (update) => daemon.newsThenDrop(update));
 // `app.host.send("app.daemonDown")`: the computer goes offline and stays so.
 host.on("app.daemonDown", () => daemon.goDown());
 // `app.host.send("app.entryAgain")`: the entry's top level runs again, as a hot patch runs it.

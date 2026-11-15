@@ -28,6 +28,14 @@ export const transportTiming = {
   /** A connected socket that has carried no frame for this long is treated as dead. */
   silentLimitMs: 25_000,
   checkMs: 5_000,
+  /**
+   * How long the computer keeps a socket whose phone answers nothing (the daemon's wsReadIdleTimeout). An app that
+   * was away (frozen in the background) and comes back to a socket this silent is on one the computer already
+   * dropped: it connects again at once.
+   */
+  peerGivesUpMs: 60_000,
+  /** An attempt (the tunnel, the sign-in, the socket's handshake) that has not opened in this long is made again. */
+  connectLimitMs: 30_000,
   firstRetryMs: 1_000,
   maxRetryMs: 30_000,
   /** On Mewla Relay's relay, how often to look for a direct path (a phone that joined the computer's Wi-Fi). */
@@ -80,6 +88,10 @@ export class Transport {
   private attempt = 0;
   private retryMs = transportTiming.firstRetryMs;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The deadline of the attempt in flight; null when none is. */
+  private attemptTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The state the state listeners were last told. */
+  private told: ConnectionState = "idle";
   private watchdog: ReturnType<typeof setInterval> | null = null;
   private directCheck: ReturnType<typeof setInterval> | null = null;
   private lastFrameAt = 0;
@@ -120,20 +132,52 @@ export class Transport {
     this.emit({ type: "disconnected", intentional: true });
   }
 
-  /** Back in the foreground or on a new network: skip the backoff. */
+  /**
+   * Back in the foreground or on a new network: whatever cannot be working is made again now, without the backoff.
+   * A socket silent past what the computer keeps is one it already dropped; a wait, or a state nothing backs, starts
+   * over. Only a live socket and an attempt still within its time are kept.
+   */
   resume(): void {
-    if (!this.wanted || this.state === "connected" || this.state === "connecting") return;
-    this.retryMs = transportTiming.firstRetryMs;
-    if (this.retryTimer) clearTimeout(this.retryTimer);
-    this.retryTimer = null;
-    void this.open();
+    if (!this.wanted) return;
+    if (this.socket && this.state === "connected") {
+      const why = this.silence(Date.now(), true);
+      if (!why) return;
+      this.kill(why);
+      return this.restart();
+    }
+    if (this.state === "waiting" || this.stranded()) this.restart();
   }
 
-  /** Replaces a socket that stopped answering: closes it as lost and reconnects without waiting. */
+  /** Replaces a connection that stopped answering: closes the socket as lost, or starts over, and reconnects without waiting. */
   drop(reason: string): void {
-    if (!this.socket) return;
+    if (!this.wanted) return;
     this.retryMs = transportTiming.firstRetryMs;
-    this.kill(reason);
+    if (this.socket) return this.kill(reason);
+    if (this.stranded()) this.restart();
+  }
+
+  /**
+   * Whether the state is one nothing backs: "connected" with no socket, "connecting" with no attempt in flight,
+   * "waiting" with no retry to come. Only a call cut off halfway (NSH stops a call into JS past 2 s, and no catch or
+   * finally runs) can leave one; nothing would ever move it on (owner 11-15: no socket for 9 min after coming back).
+   */
+  private stranded(): boolean {
+    if (this.state === "connected") return !this.socket;
+    if (this.state === "connecting") return !this.attemptTimer;
+    if (this.state === "waiting") return !this.retryTimer;
+    return false;
+  }
+
+  /** Starts a new attempt now: the one in flight, if any, is given up (what it brings later is dropped). */
+  private restart(): void {
+    this.retryMs = transportTiming.firstRetryMs;
+    this.clearTimers();
+    const socket = this.socket;
+    this.socket = null;
+    // Its attempt is over: its end changes nothing.
+    this.attempt++;
+    socket?.close(4000, "restart");
+    void this.open();
   }
 
   on(type: string, listener: Listener): () => void {
@@ -205,34 +249,51 @@ export class Transport {
     }
   }
 
+  /*
+   * Every step below sets the Transport's own fields and arms what comes next (the attempt's deadline, the retry)
+   * before anything outside it runs: the state listeners, the frame and "disconnected" listeners, the tunnel's
+   * bookkeeping. A listener that throws, or a call NSH cuts off past its 2 s (no catch or finally runs then), can cost
+   * only what the listeners hear, never the reconnect. Before, an end whose listeners were cut off left the Transport
+   * "connected" with no socket and nothing to come (owner 11-15: no socket to the computer for 9 min after coming back).
+   */
   private async open(): Promise<void> {
     const attempt = ++this.attempt;
-    this.setState("connecting");
-    let socket: SocketLike;
+    if (this.attemptTimer) clearTimeout(this.attemptTimer);
+    // A host call or socket event that never lands (the app was frozen under it) must not hold "connecting" for good.
+    this.attemptTimer = setTimeout(() => this.giveUp(attempt), transportTiming.connectLimitMs);
+    this.state = "connecting";
+    let ready: Promise<[string, string]>;
     try {
-      const [authorization, url] = await Promise.all([
+      ready = Promise.all([
         buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-connect" }),
         this.resolveURL(this.server),
       ]);
+    } catch (error) {
+      ready = Promise.reject(error);
+    }
+    this.tellState();
+    let socket: SocketLike;
+    try {
+      const [authorization, url] = await ready;
       if (attempt !== this.attempt) return;
       socket = platform().openSocket(url, [authSubprotocol(authorization), ...frameSubprotocols()]);
     } catch (error) {
-      if (attempt === this.attempt) {
-        void transportFailed(this.server);
-        this.retry(error instanceof Error ? error.message : String(error));
-      }
+      if (attempt === this.attempt) this.failed(error instanceof Error ? error.message : String(error), true);
       return;
     }
     this.socket = socket;
     let ended = false;
     socket.onopen = () => {
       if (attempt !== this.attempt) return socket.close();
+      this.clearAttempt();
       this.retryMs = transportTiming.firstRetryMs;
       this.problem = "";
       this.lastFrameAt = Date.now();
       this.startWatchdog();
-      this.setState("connected");
-      this.emit({ type: "connected" });
+      this.state = "connected";
+      this.tellState();
+      // Behind whatever of the last socket is still being handed over, in a call of its own.
+      this.receive({ type: "connected" }, BIG_FRAME_BYTES);
     };
     socket.onmessage = (event) => {
       if (attempt !== this.attempt) return;
@@ -260,24 +321,50 @@ export class Transport {
       ended = true;
       if (this.socket === socket) this.socket = null;
       if (attempt !== this.attempt) return;
+      const wasConnected = this.state === "connected";
       this.clearTimers();
       this.queue = [];
-      // What came in before the end is the computer's state as of then: it is handed over first.
-      this.deliverInbox();
-      const wasConnected = this.state === "connected";
-      if (wasConnected) this.emit({ type: "disconnected", intentional: false });
+      this.armRetry(why);
       // Moving onto a direct path keeps the relay open as the fallback; any other end measures afresh.
       if (why !== "direct-available") void transportFailed(this.server);
-      this.retry(why);
+      this.tellState();
+      // What came in before the end is the computer's state as of then: it is handed over first, on the ticks it
+      // was given, and the end after it in a call of its own. Handing it all over here, in the socket's own call,
+      // was what took that call past 2 s on the owner's phone.
+      if (wasConnected) this.receive({ type: "disconnected", intentional: false }, BIG_FRAME_BYTES);
     };
     socket.onerror = () => end("error");
     socket.onclose = (event) => end(event.reason || `closed (${event.code})`);
   }
 
-  private retry(problem: string): void {
+  /** The attempt in flight is past its time: its socket is closed as lost, or, with none yet, the attempt is dropped. */
+  private giveUp(attempt: number): void {
+    this.attemptTimer = null;
+    if (attempt !== this.attempt) return;
+    if (this.socket) return this.kill("timed out");
+    // What the attempt brings later is dropped.
+    this.attempt++;
+    this.failed("timed out", true);
+  }
+
+  /** An attempt that never opened failed: the retry is armed first, then the tunnel's bookkeeping and the listeners run. */
+  private failed(problem: string, measureAfresh: boolean): void {
+    this.clearAttempt();
+    this.armRetry(problem);
+    if (measureAfresh) void transportFailed(this.server);
+    this.tellState();
+  }
+
+  /** Sets the next state and arms the retry; the state listeners are told afterwards (`tellState`). */
+  private armRetry(problem: string): void {
     this.problem = problem;
-    if (!this.wanted) return this.setState("idle");
-    this.setState("waiting");
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    if (!this.wanted) {
+      this.state = "idle";
+      return;
+    }
+    this.state = "waiting";
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       void this.open();
@@ -285,15 +372,27 @@ export class Transport {
     this.retryMs = Math.min(this.retryMs * 2, transportTiming.maxRetryMs);
   }
 
+  /**
+   * Why the open socket is to be given up now, or null. After the app was away (a late tick, the app back in front),
+   * frames may still be queued behind the freeze: only a silence past what the computer keeps counts then.
+   * A big message on its way (`frame_coming`) is not silence until its time at the slowest link is up.
+   */
+  private silence(now: number, away: boolean): string | null {
+    if (now <= this.comingUntil) return null;
+    const quiet = now - this.lastFrameAt;
+    if (away) return quiet > transportTiming.peerGivesUpMs ? "stale" : null;
+    return quiet > transportTiming.silentLimitMs ? "silent" : null;
+  }
+
   private startWatchdog(): void {
     let lastTick = Date.now();
     this.watchdog = setInterval(() => {
       const now = Date.now();
-      // A late tick means the app itself was away; frames may be queued behind it.
+      // A late tick means the app itself was away.
       const away = now - lastTick > transportTiming.checkMs * 3;
       lastTick = now;
-      // A big message on its way (`frame_coming`) is not silence until its time at the slowest link is up.
-      if (!away && now - this.lastFrameAt > transportTiming.silentLimitMs && now > this.comingUntil) this.kill("silent");
+      const why = this.silence(now, away);
+      if (why) this.kill(why);
     }, transportTiming.checkMs);
     if (this.server.transportKind !== "link") return;
     // A phone that joined the computer's network after connecting through the relay moves onto
@@ -318,19 +417,38 @@ export class Transport {
     socket?.onclose?.({ code: 4000, reason });
   }
 
+  private clearAttempt(): void {
+    if (this.attemptTimer) clearTimeout(this.attemptTimer);
+    this.attemptTimer = null;
+  }
+
   private clearTimers(): void {
     if (this.watchdog) clearInterval(this.watchdog);
     if (this.directCheck) clearInterval(this.directCheck);
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.clearAttempt();
     this.watchdog = null;
     this.directCheck = null;
     this.retryTimer = null;
   }
 
   private setState(state: ConnectionState): void {
-    if (this.state === state) return;
     this.state = state;
-    this.stateListeners.forEach((listener) => listener(state));
+    this.tellState();
+  }
+
+  /** Tells the state listeners the current state, once per change; one that throws does not cost the others. */
+  private tellState(): void {
+    const state = this.state;
+    if (state === this.told) return;
+    this.told = state;
+    for (const listener of [...this.stateListeners]) {
+      try {
+        listener(state);
+      } catch (error) {
+        console.error(error);
+      }
+    }
   }
 
   private receive(frame: Frame, bytes = 0): void {
@@ -345,30 +463,24 @@ export class Transport {
     if (this.inboxTimer || !batcher || this.inbox.length === 0) return;
     this.inboxTimer = setTimeout(() => {
       this.inboxTimer = null;
-      batcher(() => this.deliverInbox(takeBatch(this.inbox)));
-      // The rest on a tick of its own: a call of its own, with NSH's 2 s of its own.
+      const batch = this.inbox.splice(0, takeBatch(this.inbox)).map((entry) => entry.frame);
+      // The rest on a tick of its own (a call of its own, with NSH's 2 s of its own), armed before this batch is
+      // handed over: a batch NSH cuts off costs only itself.
       this.scheduleInbox();
+      // One listener's failure costs neither the others nor the frames after it (`emit`).
+      batcher(() => batch.forEach((frame) => this.emit(frame)));
     }, 0);
   }
 
-  /** Hands over `count` frames of the inbox (all of them by default: the socket ended, or the computer changed). */
-  private deliverInbox(count = this.inbox.length): void {
-    if (this.inboxTimer) clearTimeout(this.inboxTimer);
-    this.inboxTimer = null;
-    const frames = this.inbox.slice(0, count).map((entry) => entry.frame);
-    this.inbox = this.inbox.slice(count);
-    for (const frame of frames) {
+  /** Hands a frame to its listeners; one that throws does not cost the others. */
+  private emit(frame: Frame): void {
+    this.listeners.get(frame.type)?.forEach((listener) => {
       try {
-        this.emit(frame);
+        listener(frame);
       } catch (error) {
-        // One listener's failure must not cost the frames after it.
         console.error(error);
       }
-    }
-  }
-
-  private emit(frame: Frame): void {
-    this.listeners.get(frame.type)?.forEach((listener) => listener(frame));
+    });
   }
 }
 
