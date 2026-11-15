@@ -1445,6 +1445,26 @@ func validateSessionInputPane(pane sessionInputPane) error {
 	}
 }
 
+// draftClearLines is how many lines of an unsent draft draftClearKeys removes.
+const draftClearLines = 16
+
+// draftClearKeys clears the composer before Chat's input is pasted: Chat is
+// authoritative over an unsent draft. Ctrl-U clears only the line the cursor
+// is on in Claude's and Codex's multi-line composers, so a draft of several
+// lines (a pasted Brain activation left unsent, a person's draft) kept its
+// first lines and Chat's text was submitted joined to them: "Brain Host
+// activation contract:\n<the person's message>", which the timeline then hid
+// as private. Backspace at the start of a line joins it to the line above,
+// and Ctrl-U clears that; on an empty composer or a shell prompt both do
+// nothing.
+func draftClearKeys() []string {
+	keys := []string{"C-u"}
+	for range draftClearLines {
+		keys = append(keys, "BSpace", "C-u")
+	}
+	return keys
+}
+
 // DelegatedInputPrefix is typed before a delegated Worker input is pasted, so
 // the input reads as an instruction to carry out.
 const DelegatedInputPrefix = "Execute: "

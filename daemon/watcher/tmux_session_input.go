@@ -190,10 +190,8 @@ func sessionInputSubmitQueue(
 	buffer string,
 	adapter sessionInputProvider,
 ) []string {
-	args := []string{
-		// Chat is authoritative over an unsent Terminal draft.
-		"send-keys", "-t", paneID, "C-u",
-	}
+	// Chat is authoritative over an unsent Terminal draft, all of its lines.
+	args := append([]string{"send-keys", "-t", paneID}, draftClearKeys()...)
 	if adapter.prepare > 0 {
 		args = append(args,
 			";", "run-shell", "sleep "+strconv.FormatFloat(adapter.prepare.Seconds(), 'f', 3, 64),

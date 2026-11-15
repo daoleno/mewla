@@ -43,7 +43,8 @@ The computer holds it until the agent is ready; meanwhile it shows in the
 Session as sending, and anything else you send waits behind it and goes after
 it, in order. If it could not be delivered (or the connection dropped while it
 was held), it leaves the chat and comes back as the Session's draft. Mewla
-never sends it again by itself.
+never sends it again by itself. A message sent from Chat replaces whatever is
+typed but not sent in the agent's input in the terminal, every line of it.
 
 Codex starts inline (`--no-alt-screen`): its transcript goes into the
 terminal's scrollback, so the phone's Terminal and a computer's own terminal
