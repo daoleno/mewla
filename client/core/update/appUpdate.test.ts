@@ -84,8 +84,8 @@ describe("app version precedence", () => {
 });
 
 describe("signed release manifest", () => {
-  test("verifies the real v0.2.8 release with the daemon's update key", () => {
-    expect(verifyAndroidUpdateManifest(realManifest, realSignature)).toEqual({
+  test("verifies the real v0.2.8 release with the daemon's update key", async () => {
+    expect(await verifyAndroidUpdateManifest(realManifest, realSignature)).toEqual({
       version: "0.2.8",
       versionCode: 48,
       fileName: "mewla-android-arm64-v0.2.8.apk",
@@ -95,19 +95,19 @@ describe("signed release manifest", () => {
     });
   });
 
-  test("rejects a manifest whose bytes changed after signing", () => {
+  test("rejects a manifest whose bytes changed after signing", async () => {
     const tampered = new TextEncoder().encode(
       new TextDecoder().decode(realManifest).replace("594dc0b6", "00000000"),
     );
-    expect(() => verifyAndroidUpdateManifest(tampered, realSignature)).toThrow("signature");
-    expect(() => verifyAndroidUpdateManifest(realManifest, realSignature.slice(1))).toThrow("signature");
+    await expect(verifyAndroidUpdateManifest(tampered, realSignature)).rejects.toThrow("signature");
+    await expect(verifyAndroidUpdateManifest(realManifest, realSignature.slice(1))).rejects.toThrow("signature");
   });
 
-  test("rejects a manifest signed by another key", () => {
+  test("rejects a manifest signed by another key", async () => {
     const other = nacl.sign.keyPair();
     const signature = nacl.sign.detached(realManifest, other.secretKey);
-    expect(() => verifyAndroidUpdateManifest(realManifest, signature)).toThrow("signature");
-    expect(verifyAndroidUpdateManifest(realManifest, signature, other.publicKey)?.version).toBe("0.2.8");
+    await expect(verifyAndroidUpdateManifest(realManifest, signature)).rejects.toThrow("signature");
+    expect((await verifyAndroidUpdateManifest(realManifest, signature, other.publicKey))?.version).toBe("0.2.8");
   });
 
   test("reads the Ed25519 key out of its PKIX wrapper only", () => {
@@ -301,10 +301,10 @@ describe("TestFlight availability", () => {
   }
   const sign = (text: string) => nacl.sign.detached(new TextEncoder().encode(text), keys.secretKey);
 
-  test("reads a signed manifest for this app", () => {
+  test("reads a signed manifest for this app", async () => {
     const text = manifest();
     const bytes = new TextEncoder().encode(text);
-    expect(verifyTestFlightManifest(bytes, sign(text), bundle, keys.publicKey)).toEqual({
+    expect(await verifyTestFlightManifest(bytes, sign(text), bundle, keys.publicKey)).toEqual({
       version: "0.2.88",
       buildNumber: 130,
       appId: "6790486999",
@@ -312,12 +312,12 @@ describe("TestFlight availability", () => {
     });
   });
 
-  test("rejects a bad signature, another app, and malformed fields", () => {
+  test("rejects a bad signature, another app, and malformed fields", async () => {
     const text = manifest();
     const bytes = new TextEncoder().encode(text);
     const tampered = new TextEncoder().encode(manifest({ build_number: 131 }));
-    expect(() => verifyTestFlightManifest(tampered, sign(text), bundle, keys.publicKey)).toThrow("signature");
-    expect(() => verifyTestFlightManifest(bytes, sign(text), bundle)).toThrow("signature");
+    await expect(verifyTestFlightManifest(tampered, sign(text), bundle, keys.publicKey)).rejects.toThrow("signature");
+    await expect(verifyTestFlightManifest(bytes, sign(text), bundle)).rejects.toThrow("signature");
     expect(() => parseTestFlightManifest(text, "com.daoleno.mewla")).toThrow("this app");
     expect(() => parseTestFlightManifest(text, "")).toThrow("this app");
     expect(() => parseTestFlightManifest(manifest({ marketing_version: "0.2.88-beta.1" }), bundle)).toThrow("version");

@@ -73,7 +73,7 @@ export async function diagnoseConnectionIssue(
   try {
     const health = await get(healthURL);
     if (!health.ok) return mapProbeFailure(health.status, "health");
-    if (!trusted(await readJSON(health), { purpose: "mewla-health", daemonId, daemonPublicKey })) {
+    if (!(await trusted(await readJSON(health), { purpose: "mewla-health", daemonId, daemonPublicKey }))) {
       return issue(
         "wrong_daemon",
         "Wrong daemon identity",
@@ -94,7 +94,7 @@ export async function diagnoseConnectionIssue(
       );
     }
     if (authCheck.status !== 200) return mapProbeFailure(authCheck.status, "auth-check");
-    if (!trusted(await readJSON(authCheck), { purpose: "mewla-probe", daemonId, daemonPublicKey })) {
+    if (!(await trusted(await readJSON(authCheck), { purpose: "mewla-probe", daemonId, daemonPublicKey }))) {
       return issue(
         "wrong_daemon",
         "Wrong daemon identity",
@@ -115,7 +115,7 @@ export async function diagnoseConnectionIssue(
       );
     }
     if (probe.status !== 200) return mapProbeFailure(probe.status, "ws");
-    if (!trusted(await readJSON(probe), { purpose: "mewla-probe", daemonId, daemonPublicKey })) {
+    if (!(await trusted(await readJSON(probe), { purpose: "mewla-probe", daemonId, daemonPublicKey }))) {
       return issue(
         "wrong_daemon",
         "Wrong daemon identity",
@@ -226,7 +226,7 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function trusted(payload: TrustedDaemonPayload | null, input: { purpose: string; daemonId: string; daemonPublicKey: string }): boolean {
+async function trusted(payload: TrustedDaemonPayload | null, input: { purpose: string; daemonId: string; daemonPublicKey: string }): Promise<boolean> {
   if (!payload) return false;
   const daemonId = normalizeDaemonId(text(payload.daemon_id));
   const daemonPublicKey = normalizePublicKeyHex(text(payload.daemon_public_key));

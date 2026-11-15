@@ -165,7 +165,7 @@ export class AppUpdateController {
       this.deps.fetchBytes(TESTFLIGHT_MANIFEST_URL),
       this.deps.fetchBytes(TESTFLIGHT_SIGNATURE_URL),
     ]);
-    const build = verifyTestFlightManifest(manifest, signature, this.info?.appId ?? "", this.publicKey);
+    const build = await verifyTestFlightManifest(manifest, signature, this.info?.appId ?? "", this.publicKey);
     return isNewerTestFlightBuild(build, installed) ? build : null;
   }
 

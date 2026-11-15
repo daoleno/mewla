@@ -128,7 +128,7 @@ export function withDirectAddresses(server: StoredServer, addresses: DirectAddre
  * pinned key. A recorded response answers another challenge; another daemon fails the key; a
  * daemon that predates challenges ignores it and fails the nonce.
  */
-export function verifyHealthChallenge(input: { challengeHex: string; daemonId: string; daemonPublicKey: string; payload: unknown }): boolean {
+export async function verifyHealthChallenge(input: { challengeHex: string; daemonId: string; daemonPublicKey: string; payload: unknown }): Promise<boolean> {
   if (!input.payload || typeof input.payload !== "object") return false;
   const payload = input.payload as Record<string, unknown>;
   const daemonId = normalizeDaemonId(input.daemonId);

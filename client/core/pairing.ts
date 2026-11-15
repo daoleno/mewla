@@ -97,14 +97,14 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
     throw new Error("Pairing target identity did not match the scanned link.");
   }
   if (
-    !verifyDaemonAssertion({
+    !(await verifyDaemonAssertion({
       purpose: "mewla-pair",
       daemonId: pairedDaemonId,
       daemonPublicKey: pairedDaemonPublicKey,
       timestamp: payload.assertion_timestamp,
       nonceHex: payload.assertion_nonce,
       signatureHex: payload.assertion_signature,
-    })
+    }))
   ) {
     throw new Error("Pairing target failed daemon identity proof.");
   }
@@ -189,14 +189,14 @@ export async function confirmPairedDevice(input: {
     payload.device_id !== identity.deviceId ||
     normalizeDaemonId(payload.daemon_id) !== daemonId ||
     normalizePublicKeyHex(payload.daemon_public_key) !== daemonPublicKey ||
-    !verifyDaemonAssertion({
+    !(await verifyDaemonAssertion({
       purpose: "mewla-probe",
       daemonId,
       daemonPublicKey,
       timestamp: payload.assertion_timestamp,
       nonceHex: payload.assertion_nonce,
       signatureHex: payload.assertion_signature,
-    })
+    }))
   ) {
     throw new Error("Pairing target failed daemon identity proof.");
   }

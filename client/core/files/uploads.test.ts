@@ -50,8 +50,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-async function flush() {
-  for (let index = 0; index < 20; index += 1) await Promise.resolve();
+/** Until the upload reaches the host: it is signed by the platform (core/ed25519.ts), on a later turn, not in a microtask. */
+async function flush(h: { calls: readonly unknown[] }) {
+  const deadline = Date.now() + 2_000;
+  while (h.calls.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 1));
+  expect(h.calls).toHaveLength(1);
 }
 
 beforeEach(() => {
@@ -102,7 +105,7 @@ describe("attachment upload through the host", () => {
     const h = fakeHost(() => answer.promise);
     const snapshots: unknown[] = [];
     const operation = createAttachmentUploadOperation(asset(), server, h.host, { onProgress: (p) => snapshots.push(p), now: () => 0 });
-    await flush();
+    await flush(h);
     h.progress(128, -1);
     h.progress(640, 1024);
     h.progress(512, 1024);
@@ -121,7 +124,7 @@ describe("attachment upload through the host", () => {
     const snapshots: unknown[] = [];
     let now = 1_000;
     const operation = createAttachmentUploadOperation(asset(), server, h.host, { now: () => now, onProgress: (p) => snapshots.push(p) });
-    await flush();
+    await flush(h);
     now = 1_100;
     h.progress(128, 1024);
     now = 1_500;
@@ -139,7 +142,7 @@ describe("attachment upload through the host", () => {
     const h = fakeHost(() => answer.promise);
     const snapshots: unknown[] = [];
     const operation = createAttachmentUploadOperation(asset(), server, h.host, { onProgress: (p) => snapshots.push(p), now: () => 0 });
-    await flush();
+    await flush(h);
     h.progress(128, 1024);
     expect(operation.cancel()).toBeNull();
     expect(operation.cancel()).toBeNull();
@@ -155,7 +158,7 @@ describe("attachment upload through the host", () => {
     const h = fakeHost(() => answer.promise);
     h.failCancel(new Error("native cancellation failed"));
     const operation = createAttachmentUploadOperation(asset(), server, h.host);
-    await flush();
+    await flush(h);
     expect(operation.cancel()?.message).toBe("native cancellation failed");
     expect(operation.cancel()).toBeNull();
     expect(h.cancelled).toHaveLength(1);

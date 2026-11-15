@@ -40,7 +40,9 @@ function fakeHost() {
 }
 
 async function started(fake: ReturnType<typeof fakeHost>) {
-  for (let i = 0; i < 50 && fake.calls.length === 0; i += 1) await Promise.resolve();
+  // Signing is the platform's (core/ed25519.ts): it settles on a later turn, not in a microtask.
+  const deadline = Date.now() + 2_000;
+  while (fake.calls.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 1));
   expect(fake.calls).toHaveLength(1);
 }
 

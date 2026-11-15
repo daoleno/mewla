@@ -1,4 +1,4 @@
-import nacl from "../vendor/nacl";
+import { ED25519_SIGNATURE_BYTES, ed25519Verify } from "../ed25519";
 import { compareVersions, parseVersion } from "./version";
 
 /**
@@ -89,12 +89,12 @@ function base64Bytes(text: string): Uint8Array {
  * Android sideload APK it vouches for. Throws on anything not trustworthy;
  * null means the release carries no APK (yet), which is not an update.
  */
-export function verifyAndroidUpdateManifest(
+export async function verifyAndroidUpdateManifest(
   manifestBytes: Uint8Array,
   signature: Uint8Array,
   publicKey: Uint8Array = publicKeyFromPKIX(UPDATE_PUBLIC_KEY_PKIX),
-): AndroidUpdateArtifact | null {
-  if (signature.length !== nacl.sign.signatureLength || !nacl.sign.detached.verify(manifestBytes, signature, publicKey)) {
+): Promise<AndroidUpdateArtifact | null> {
+  if (signature.length !== ED25519_SIGNATURE_BYTES || !(await ed25519Verify(manifestBytes, signature, publicKey))) {
     throw new Error("Release signature didn't verify.");
   }
   return parseAndroidUpdateManifest(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes));
@@ -192,13 +192,13 @@ export function isNewerTestFlightBuild(candidate: TestFlightBuild, installed: In
  * read the build it names. Throws on anything not trustworthy, including a manifest
  * for another app identity.
  */
-export function verifyTestFlightManifest(
+export async function verifyTestFlightManifest(
   manifestBytes: Uint8Array,
   signature: Uint8Array,
   bundleIdentifier: string,
   publicKey: Uint8Array = publicKeyFromPKIX(UPDATE_PUBLIC_KEY_PKIX),
-): TestFlightBuild {
-  if (signature.length !== nacl.sign.signatureLength || !nacl.sign.detached.verify(manifestBytes, signature, publicKey)) {
+): Promise<TestFlightBuild> {
+  if (signature.length !== ED25519_SIGNATURE_BYTES || !(await ed25519Verify(manifestBytes, signature, publicKey))) {
     throw new Error("TestFlight signature didn't verify.");
   }
   return parseTestFlightManifest(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes), bundleIdentifier);
