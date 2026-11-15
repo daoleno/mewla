@@ -212,3 +212,48 @@ func TestDelegatedCodexResumeWithFolderTrustIsNotAmbiguous(t *testing.T) {
 		t.Fatalf("token=%q present=%v err=%v for %s", token, present, err, prepared)
 	}
 }
+
+// A .claude.json last saved by Windows PowerShell 5.1 starts with a UTF-8 byte
+// order mark. Claude reads it; the trust step failed on it, so Brain's Claude
+// started at the folder-trust dialog (seen on Windows 11).
+func TestDelegatedClaudeTrustReadsAConfigWithAByteOrderMark(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "work")
+	if err := os.Mkdir(cwd, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".claude.json")
+	if err := os.WriteFile(path, []byte("\xef\xbb\xbf{\"hasCompletedOnboarding\":true}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	command, _ := PrepareDelegatedCommand("claude", "claude")
+	if _, err := PrepareDelegatedWorkspace(command, cwd, map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": root}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	var cfg struct {
+		Onboarded bool `json:"hasCompletedOnboarding"`
+		Projects  map[string]struct {
+			Trust bool `json:"hasTrustDialogAccepted"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil || !cfg.Onboarded || !cfg.Projects[cwd].Trust {
+		t.Fatalf("config = %s, err %v", raw, err)
+	}
+}
+
+// Node's os.homedir() on Windows is USERPROFILE, whatever HOME says.
+func TestClaudeHomeOnWindowsIsUserProfile(t *testing.T) {
+	env := map[string]string{"HOME": `C:\msys\home\me`, "USERPROFILE": `C:\Users\me`}
+	value := func(key string) string { return env[key] }
+	if got := claudeHome("windows", value); got != `C:\Users\me` {
+		t.Fatalf("windows home = %q", got)
+	}
+	if got := claudeHome("linux", value); got != `C:\msys\home\me` {
+		t.Fatalf("linux home = %q", got)
+	}
+	delete(env, "USERPROFILE")
+	if got := claudeHome("windows", value); got != `C:\msys\home\me` {
+		t.Fatalf("windows without USERPROFILE = %q", got)
+	}
+}

@@ -105,11 +105,7 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 		}
 		return os.Getenv(key)
 	}
-	home := value("HOME")
-	if home == "" && runtime.GOOS == "windows" {
-		// Claude's home on Windows (Node's os.homedir()).
-		home = value("USERPROFILE")
-	}
+	home := claudeHome(runtime.GOOS, value)
 	if home == "" {
 		return "", fmt.Errorf("delegated provider HOME is missing")
 	}
@@ -121,6 +117,9 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 	}
 	if err := updateTrustFile(path, func(raw []byte) ([]byte, error) {
 		config := map[string]json.RawMessage{}
+		// A file last saved by Windows PowerShell 5.1 or Notepad may start
+		// with a UTF-8 byte order mark, which Claude reads past.
+		raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf"))
 		if len(bytes.TrimSpace(raw)) != 0 {
 			if err := json.Unmarshal(raw, &config); err != nil {
 				return nil, err
@@ -169,6 +168,18 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 		return "", err
 	}
 	return command, nil
+}
+
+// claudeHome is the folder Claude Code keeps .claude.json in: Node's
+// os.homedir(), which on Windows is USERPROFILE even when HOME is set (Git
+// for Windows and OpenSSH set one).
+func claudeHome(goos string, value func(string) string) string {
+	if goos == "windows" {
+		if home := value("USERPROFILE"); home != "" {
+			return home
+		}
+	}
+	return value("HOME")
 }
 
 func updateTrustFile(path string, patch func([]byte) ([]byte, error)) error {
