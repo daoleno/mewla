@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -243,5 +244,97 @@ func TestPromptWithTranscriptToolNamesTheCallThePromptShows(t *testing.T) {
 	conversation.Events[1].Status, conversation.Events[2].Status = "done", "done"
 	if untouched := promptWithTranscriptTool(pane, conversation); !reflect.DeepEqual(untouched, pane) {
 		t.Fatalf("nothing pending must not enrich: %+v", untouched)
+	}
+}
+
+// screenWatcher is a control watcher whose pane shows a fixed screen, read as
+// the watcher reads it: the Claude adapter on an exact capture of the
+// alternate screen, and a blocked dialog with no id refused with its reason.
+// Every key it is asked to send is recorded and none reaches anything.
+type screenWatcher struct {
+	*promptWatcher
+	screen string
+	keys   []int
+}
+
+func (p *screenWatcher) CurrentPrompt(string) (*classifier.Prompt, error) {
+	signal := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{
+		Worker: classifier.Worker{Command: "claude"}, Capture: &classifier.CaptureInfo{Exact: true, Alternate: true}, PaneContent: p.screen,
+	})
+	if signal.State != classifier.StateBlocked {
+		return nil, nil
+	}
+	if signal.Prompt == nil {
+		return nil, fmt.Errorf("%w: this dialog cannot be identified exactly (%s); no key was sent", watcher.ErrClaudeChoiceRefused, signal.Unidentified)
+	}
+	return signal.Prompt, nil
+}
+
+func (p *screenWatcher) AnswerPrompt(_, _ string, number int) error {
+	p.keys = append(p.keys, number)
+	return nil
+}
+
+// The 2026-11-15 incident: a delegated Worker's Bash command taller than its
+// pane (real Claude 2.1.325 capture) scrolls the dialog's head away, so the
+// screen gives it no id. `mewla worker approvals` listed the request its
+// PermissionRequest hook holds, and `worker answer -prompt <that approval id>`
+// was refused for the screen. The approval is the exact request: answering it
+// by its id resolves the hook and sends no key.
+func TestWorkerAnswerByApprovalIDResolvesADialogTallerThanThePane(t *testing.T) {
+	raw, err := os.ReadFile("../../classifier/testdata/claude-2.1.325/tall-60-lines-200x50.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := gateService(t, true)
+	done := start(s, askedPush)
+	held := pending(t, s, false, 1)[0]
+
+	app, fw := newPromptApp(nil)
+	fw.workers["%9"] = &classifier.Worker{ID: "%9", Name: "Other", Delegated: true, Command: "claude", State: classifier.StateBlocked}
+	pane := &screenWatcher{promptWatcher: fw, screen: string(raw)}
+	app.watcher, app.agentEvents = pane, s
+	if _, err := pane.CurrentPrompt("%4"); err == nil || !strings.Contains(err.Error(), "does not show where the dialog starts") {
+		t.Fatalf("fixture: the screen should give the dialog no id, got %v", err)
+	}
+	answer := func(workerID, promptID, basis string) control.Response {
+		return app.HandleControlRequest(control.Request{Type: "worker_answer", WorkerID: workerID, PromptID: promptID, PromptChoice: 1, ApprovalBasis: basis})
+	}
+	refusal := func(resp control.Response) string {
+		if resp.Error == nil {
+			return fmt.Sprintf("ok=%v confirmation=%q", resp.OK, resp.Confirmation)
+		}
+		return resp.Error.Code + ": " + resp.Error.Message
+	}
+
+	// Another Worker's answer does not reach this approval.
+	if resp := answer("%9", held.ID, "the brief authorizes it"); resp.OK {
+		t.Fatalf("another Worker answered it: %s", refusal(resp))
+	}
+	// Brain still has to say what authorizes it.
+	if resp := answer("%4", held.ID, ""); resp.OK || resp.Error.Code != "approval_basis_required" {
+		t.Fatalf("no basis: %s", refusal(resp))
+	}
+	select {
+	case out := <-done:
+		t.Fatalf("the hook was answered by a refused request: %+v", out)
+	default:
+	}
+
+	resp := answer("%4", held.ID, "the brief authorizes pushing main")
+	if !resp.OK || resp.Confirmation != "answered" {
+		t.Fatalf("answer by approval id: %s", refusal(resp))
+	}
+	if out := <-done; !strings.Contains(out.HookOutput, `"allow"`) {
+		t.Fatalf("the hook was not told: %+v", out)
+	}
+
+	// Once answered it is not pending: the same id is refused, and the screen
+	// that still shows a dialog gets no key either.
+	if again := answer("%4", held.ID, "the brief authorizes pushing main"); again.OK {
+		t.Fatalf("answered twice: %s", refusal(again))
+	}
+	if len(pane.keys) != 0 || len(fw.pressed) != 0 {
+		t.Fatalf("keys reached the pane: %v %v", pane.keys, fw.pressed)
 	}
 }

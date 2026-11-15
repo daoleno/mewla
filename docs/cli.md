@@ -82,8 +82,8 @@ mewla worker status -id <session> --json
 mewla worker capture -id <session> --json     # the transcript
 mewla worker send -id <session> --work-id <work> -text "Also update the tests"
 mewla worker receipt -id <session> --work-id <work> --turn-id <turn>   # did an input arrive?
-mewla worker answer -id <session> -prompt <id> -choice 1   # any blocking prompt: permission, plan, startup, question
-mewla worker approvals [-id <session>]        # decisions agents wait on (Codex app-server requests)
+mewla worker answer -id <session> -prompt <id> -choice 1   # any blocking prompt: permission, plan, startup, question; -prompt also takes an approval id
+mewla worker approvals [-id <session>]        # decisions agents wait on (Claude permission hooks, Codex app-server requests)
 mewla worker approve -id <session> -approval <id> -option allow   # or deny
 mewla worker close -id <session>
 mewla attach [name|id]                        # pick a live Session, or name one; Ctrl-\ detaches
