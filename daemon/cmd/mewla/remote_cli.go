@@ -386,6 +386,10 @@ func openURL(target string) error {
 			return errors.New("no desktop session")
 		}
 		command = exec.Command("xdg-open", target)
+	case "windows":
+		// The URL's default handler, as a link clicked in Explorer opens it;
+		// no shell parses the link, so its & and # stay as they are.
+		command = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", target)
 	default:
 		return errors.New("unsupported platform")
 	}
