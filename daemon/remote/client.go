@@ -164,6 +164,11 @@ func (client *Client) do(ctx context.Context, method, path string, body any, out
 	if err != nil {
 		return response.StatusCode, err
 	}
+	if response.StatusCode == http.StatusUnauthorized {
+		if skew := clockSkew(response.Header.Get("Date"), time.Now()); skew != 0 {
+			return response.StatusCode, &ClockSkewError{Skew: skew}
+		}
+	}
 	switch {
 	case response.StatusCode == http.StatusUnauthorized ||
 		response.StatusCode == http.StatusForbidden && path == "/v1/machine" ||
@@ -192,6 +197,42 @@ func (client *Client) authorization(method, path string, body []byte) string {
 	nonce, _ := linkproto.RandomID(16)
 	signature := client.Auth.CreateLinkSignature(reqsign.AccountScheme.Payload(method, path, timestamp, nonce, body))
 	return reqsign.AccountScheme.Header(client.Auth.PublicKeyHex(), timestamp, nonce, signature)
+}
+
+// maxClockSkew is how far this computer's clock may be from the service's
+// before a refused signature is put down to the clock: every request is signed
+// with the time, and the service refuses one outside its window.
+const maxClockSkew = 5 * time.Minute
+
+// ClockSkewError is a request the service refused while this computer's clock
+// is far from the service's. It is not a sign-out: the computer is fine once
+// its clock is right. (A dual-boot PC or a VM whose hardware clock holds local
+// time is often hours off.)
+type ClockSkewError struct {
+	Skew time.Duration // this computer's clock minus the service's
+}
+
+func (e *ClockSkewError) Error() string {
+	direction := "ahead of"
+	skew := e.Skew
+	if skew < 0 {
+		direction, skew = "behind", -skew
+	}
+	return fmt.Sprintf("this computer's clock is %s %s the Mewla service's, so the service refused the request; set the correct time (on Windows: Settings > Time & language > Date & time > Sync now) and try again", skew.Round(time.Minute), direction)
+}
+
+// clockSkew is now minus the service's Date header when they are more than
+// maxClockSkew apart, otherwise 0.
+func clockSkew(date string, now time.Time) time.Duration {
+	server, err := http.ParseTime(date)
+	if err != nil {
+		return 0
+	}
+	skew := now.Sub(server)
+	if skew > maxClockSkew || skew < -maxClockSkew {
+		return skew
+	}
+	return 0
 }
 
 // ServiceError is a non-success answer from the service.
