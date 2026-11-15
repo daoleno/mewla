@@ -2288,3 +2288,52 @@ func TestControlAppWorkerSpawnSaysHowTheAgentEnded(t *testing.T) {
 		t.Fatalf("response = %#v", resp.Error)
 	}
 }
+
+// exitingAgentControlWatcher is a computer where the spawned agent exits at
+// once: not on the Session's PATH.
+type exitingAgentControlWatcher struct{ *fakeControlWatcher }
+
+func (w exitingAgentControlWatcher) SessionExitReport(id string) (watcher.SessionExit, bool) {
+	code := 127
+	return watcher.SessionExit{Code: &code, Tail: "zsh:1: command not found: codex\n"}, true
+}
+
+// A Worker whose agent cannot start used to be answered ok and then sat
+// "awaiting provider admission" with nothing to say why (Linux sweep, agent
+// only on the login shell's PATH). Spawn now fails with the agent's exit and
+// output, and the Work it made says why it ended.
+func TestControlAppWorkerSpawnReportsAnAgentThatExitedAtLaunch(t *testing.T) {
+	fw := newFakeControlWatcher()
+	app := &controlApp{
+		watcher:    exitingAgentControlWatcher{fw},
+		brainStore: newControlBrainStore(t),
+		execs: work.NewExecutorConfig(map[string]work.Executor{
+			"codex": {Name: "codex", Command: "codex"},
+		}),
+	}
+	resp := app.HandleControlRequest(control.Request{
+		Type: "worker_spawn", Name: "Never starts", Cwd: "/repo/mewla", Prompt: "go",
+	})
+	if resp.OK || resp.Error == nil || resp.Error.Code != "agent_exited" ||
+		!strings.Contains(resp.Error.Message, "(exit code 127). It printed: zsh:1: command not found: codex") {
+		t.Fatalf("response = %#v", resp.Error)
+	}
+	items, err := app.brainStore.ListWork()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Status != brain.WorkCancelled {
+		t.Fatalf("Work = %#v", items)
+	}
+	events, err := app.brainStore.ListWorkEvents(items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	said := false
+	for _, event := range events {
+		said = said || (event.Kind == "launch_failed" && strings.Contains(event.Summary, "command not found: codex"))
+	}
+	if !said {
+		t.Fatalf("Work does not say why it ended: %#v", events)
+	}
+}

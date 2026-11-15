@@ -24,7 +24,18 @@ type hostStartFailure struct {
 	// the same launch would end the same way, so Mewla waits
 	// hostExitRetryAfter before it tries again by itself.
 	ExitedAt time.Time
+	// Session is the Host Session that ended; Repeats counts the Host
+	// Sessions in a row that ended at start the same way (exit status and
+	// output). After hostExitRepeats Mewla stops starting it by itself.
+	Session string
+	Repeats int
+	cause   string
 }
+
+// hostExitRepeats is how many Host Sessions in a row may end at start the
+// same way before Mewla stops starting that agent by itself, until the person
+// chooses it again: retrying a launch that keeps failing only hides it.
+const hostExitRepeats = 2
 
 // hostExitedAtStartWithin is how soon after it started a Host's program may
 // end for that to count as the launch failing, not the Brain stopping later.
@@ -33,7 +44,7 @@ const hostExitedAtStartWithin = 2 * time.Minute
 // hostExitRetryAfter is how long Mewla waits before starting a Host again by
 // itself after its program ended at start. Choosing an agent again (mewla
 // brain use, or from the app) tries at once.
-const hostExitRetryAfter = 2 * time.Minute
+var hostExitRetryAfter = 2 * time.Minute
 
 // errHostExitedAtStart is the start failure of a Host whose program ended at
 // start; its text is what the person sees.
@@ -44,15 +55,30 @@ func (e errHostExitedAtStart) Error() string { return e.detail }
 // noteHostExitedAtStart records a Host Session whose program ended within
 // hostExitedAtStartWithin of starting, with what it printed last, so the
 // problem a client shows is the real cause and not the respawn after it.
-func (s *Service) noteHostExitedAtStart(executor work.WorkerExecutor, command string, exit watcher.SessionExit) bool {
+func (s *Service) noteHostExitedAtStart(id string, executor work.WorkerExecutor, command string, exit watcher.SessionExit) bool {
 	if exit.Ran <= 0 || exit.Ran > hostExitedAtStartWithin {
 		return false
 	}
 	detail := exit.Describe(executorProgram(executor))
-	log.Printf("brain host exited at start (%s): ran=%s exit=%s command=%q last output: %q", executor.ID, exit.Ran.Round(time.Millisecond), exit.Status(), command, exit.TailLine(12, 1200))
+	cause := exit.Status() + "\x00" + exit.TailLine(12, 1200)
 	s.hostProblemMu.Lock()
 	defer s.hostProblemMu.Unlock()
-	s.hostStartFailure = &hostStartFailure{Executor: executor.ID, Detail: detail, ExitedAt: time.Now()}
+	previous := s.hostStartFailure
+	if previous != nil && previous.Executor == executor.ID && previous.Session == id {
+		return true // this Session's end is already recorded
+	}
+	repeats := 1
+	if previous != nil && previous.Executor == executor.ID && previous.cause == cause {
+		repeats = previous.Repeats + 1
+	}
+	if repeats >= hostExitRepeats {
+		detail += fmt.Sprintf(" It ended this way %d times in a row, so Mewla stopped starting it: fix it on this computer and choose %s again, or switch Brain to another agent.", repeats, executor.ID)
+	}
+	log.Printf("brain host exited at start (%s): session=%s ran=%s exit=%s repeats=%d command=%q last output: %q", executor.ID, id, exit.Ran.Round(time.Millisecond), exit.Status(), repeats, command, exit.TailLine(12, 1200))
+	if repeats == hostExitRepeats {
+		log.Printf("brain host: %s ended at start %d times in a row the same way; Mewla stopped starting it until it is chosen again", executor.ID, repeats)
+	}
+	s.hostStartFailure = &hostStartFailure{Executor: executor.ID, Detail: detail, ExitedAt: time.Now(), Session: id, Repeats: repeats, cause: cause}
 	return true
 }
 
@@ -66,19 +92,23 @@ func (s *Service) hostExitedAtStart(id, command string, executor work.WorkerExec
 		return nil
 	}
 	exit, ok := reporter.SessionExitReport(id)
-	if !ok || !s.noteHostExitedAtStart(executor, command, exit) {
+	if !ok || !s.noteHostExitedAtStart(id, executor, command, exit) {
 		return nil
 	}
-	return errHostExitedAtStart{detail: exit.Describe(executorProgram(executor))}
+	return errHostExitedAtStart{detail: s.currentHostStartFailure(executor.ID).Detail}
 }
 
 // hostExitWait is the error that keeps an automatic Host start from running
-// the launch that just ended again, until hostExitRetryAfter has passed.
+// the launch that just ended again: until hostExitRetryAfter has passed, and
+// for good once it ended the same way hostExitRepeats times in a row.
 func (s *Service) hostExitWait(executorID string) error {
 	s.hostProblemMu.Lock()
 	defer s.hostProblemMu.Unlock()
 	failure := s.hostStartFailure
-	if failure == nil || failure.Executor != executorID || failure.ExitedAt.IsZero() || time.Since(failure.ExitedAt) >= hostExitRetryAfter {
+	if failure == nil || failure.Executor != executorID || failure.ExitedAt.IsZero() {
+		return nil
+	}
+	if failure.Repeats < hostExitRepeats && time.Since(failure.ExitedAt) >= hostExitRetryAfter {
 		return nil
 	}
 	return errHostExitedAtStart{detail: failure.Detail}

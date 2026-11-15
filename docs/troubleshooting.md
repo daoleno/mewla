@@ -158,6 +158,10 @@ computer's log gets a one-line summary. Include the copied report when you
   terminal does not see (a different PATH or environment), Brain uses the running
   Mewla's view, not the terminal's. `mewla doctor` looks for agents where Mewla
   does: on PATH, then `~/.local/bin` and the other native-installer folders.
+  On Linux and macOS Mewla also adds the directories your login shell puts on
+  `PATH` (nvm, fnm, volta, bun, an npm prefix, mise or asdf set up in
+  `~/.profile`, `~/.bashrc` or `~/.zshrc`), so an agent installed that way is
+  found when Mewla starts at login too.
 - If the tray says Brain's session "is open but not ready", the agent is
   waiting at a sign-in or first-run question in its terminal. Run that agent
   once on the computer, or answer it in Brain's terminal (⋯ › **Open

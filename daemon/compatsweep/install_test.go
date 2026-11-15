@@ -78,9 +78,10 @@ func TestAgentInstallStyles(t *testing.T) {
 func waitBrainLaunch(out string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		raw, _ := os.ReadFile(out + ".log")
-		if strings.Contains(string(raw), "--add-dir") {
-			return true
+		for _, got := range launches(out) {
+			if strings.Contains(strings.Join(got.Argv, " "), "--add-dir") {
+				return true
+			}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
