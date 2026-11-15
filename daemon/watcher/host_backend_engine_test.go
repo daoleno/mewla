@@ -220,7 +220,7 @@ func TestHostInputSubmitsAndKeepsReceipts(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "in.bin")
 	payload := "first line\nsecond line"
-	want := "\x15" + payload + "\r"
+	want := "\x15" + strings.Repeat("\x7f\x15", draftClearLines) + payload + "\r"
 	id := createHostSession(t, w, backendCreateSpec{
 		name:    "raw",
 		cwd:     dir,
