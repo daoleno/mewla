@@ -21,6 +21,8 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("HOME", home)
+	// Claude's home on Windows.
+	os.Setenv("USERPROFILE", home)
 	os.Unsetenv("CLAUDE_CONFIG_DIR")
 	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	code := m.Run()
@@ -61,6 +63,7 @@ func claudeHostService(t *testing.T) (*Service, *fakeWatcher, *Store) {
 func TestClaudeHostTrustsItsWorkspaceBeforeLaunch(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	config := filepath.Join(home, ".claude.json")
 	if err := os.WriteFile(config, []byte(`{"hasCompletedOnboarding":true,"theme":"dark","projects":{"/other":{"allowedTools":["x"]}}}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -96,6 +99,7 @@ func TestClaudeHostTrustHonorsConfigDirAndWrappedCommand(t *testing.T) {
 	home := t.TempDir()
 	configDir := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
 	service, fw, store := claudeHostService(t)
 
@@ -116,6 +120,7 @@ func TestClaudeHostTrustHonorsConfigDirAndWrappedCommand(t *testing.T) {
 func TestClaudeHostTrustFailureStillLaunchesHost(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`not json`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +133,7 @@ func TestClaudeHostTrustFailureStillLaunchesHost(t *testing.T) {
 func TestNonClaudeHostLeavesClaudeConfigAlone(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "codex")
 	store, err := NewStore(t.TempDir())
 	if err != nil {
