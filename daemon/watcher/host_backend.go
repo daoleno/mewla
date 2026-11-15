@@ -721,11 +721,14 @@ func (io hostInputIO) pane(_ string, sessionID string) sessionInputPane {
 	return sessionInputPane{alive: true, paneID: sessionID, generation: io.b.observedGeneration(sessionID)}
 }
 
-// submitPaste clears the draft, pastes the payload as one paste and submits
+// submitPaste clears the draft (every line of it), pastes the payload as one paste and submits
 // it with the adapter's timing, all in one input script the host runs with
 // nothing else in between, as the tmux command queue does.
 func (io hostInputIO) submitPaste(_ string, paneID, payload string, adapter sessionInputProvider, beforeStart func() error) (bool, error) {
-	steps := []sessionhost.InputStep{{Key: "C-u"}}
+	var steps []sessionhost.InputStep
+	for _, key := range draftClearKeys() {
+		steps = append(steps, sessionhost.InputStep{Key: key})
+	}
 	if adapter.prepare > 0 {
 		steps = append(steps, sessionhost.InputStep{SleepMS: int(adapter.prepare / time.Millisecond)})
 	}
