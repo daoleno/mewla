@@ -1,10 +1,9 @@
 package brain
 
 import (
+	"database/sql"
 	"encoding/json"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,12 +18,17 @@ import (
 // in the Brain workspace since it started, or the one its command resumes, so
 // the App's Brain chat follows it.
 func TestCodexBrainBindsItsConversationFromCodexsRecords(t *testing.T) {
-	sqlite3, err := exec.LookPath("sqlite3")
+	// The Store keeps brain.db open for its life, and Windows cannot delete
+	// an open file, so the folder is removed as far as it can be.
+	home, err := os.MkdirTemp("", "codex-brain-")
 	if err != nil {
-		t.Skip("sqlite3 unavailable")
+		t.Fatal(err)
 	}
-	home := t.TempDir()
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	// Codex's records are read in this process: Windows has no sqlite3 program.
+	t.Setenv("PATH", "")
 	store, err := NewStore(filepath.Join(home, ".mewla", "brain"))
 	if err != nil {
 		t.Fatal(err)
@@ -34,14 +38,18 @@ func TestCodexBrainBindsItsConversationFromCodexsRecords(t *testing.T) {
 	if err := os.MkdirAll(sessions, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	db := filepath.Join(home, ".codex", "state_5.sqlite")
-	sql := func(statement string) {
+	db, err := sql.Open("sqlite", filepath.Join(home, ".codex", "state_5.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	exec := func(statement string, args ...any) {
 		t.Helper()
-		if out, err := exec.Command(sqlite3, db, statement).CombinedOutput(); err != nil {
-			t.Fatalf("sqlite3: %v %s", err, out)
+		if _, err := db.Exec(statement, args...); err != nil {
+			t.Fatalf("sqlite: %v", err)
 		}
 	}
-	sql(`CREATE TABLE threads (id TEXT, rollout_path TEXT, created_at INTEGER, updated_at INTEGER, cwd TEXT, archived INTEGER, created_at_ms INTEGER, updated_at_ms INTEGER);`)
+	exec(`CREATE TABLE threads (id TEXT, rollout_path TEXT, created_at INTEGER, updated_at INTEGER, cwd TEXT, archived INTEGER, created_at_ms INTEGER, updated_at_ms INTEGER);`)
 	started := time.Now().Add(-10 * time.Minute)
 	thread := func(id string, written time.Time) string {
 		path := filepath.Join(sessions, "rollout-2026-11-10T10-00-00-"+id+".jsonl")
@@ -52,7 +60,7 @@ func TestCodexBrainBindsItsConversationFromCodexsRecords(t *testing.T) {
 		if err := os.Chtimes(path, written, written); err != nil {
 			t.Fatal(err)
 		}
-		sql(fmt.Sprintf(`INSERT INTO threads VALUES ('%s', '%s', 1, 1, '%s', 0, 1000, 1000);`, id, path, workspace))
+		exec(`INSERT INTO threads VALUES (?, ?, 1, 1, ?, 0, 1000, 1000);`, id, path, workspace)
 		return path
 	}
 	before := thread("01a1c34f-0000-7000-8000-00000000000a", started.Add(-time.Hour))

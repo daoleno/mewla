@@ -158,6 +158,10 @@ jobs:
         run: go vet ./platform ./control ./sqlitedb ./selfupdate ./launchsh ./sessionhost ./hostdeps
       - name: Test the Windows platform layer
         run: go test -count=1 ./platform ./control ./sqlitedb ./selfupdate ./launchsh ./hostdeps
+      - name: Test finding Codex conversations on Windows
+        run: go test -count=1 -run 'TestCodexWorkspace|TestCodexRecordedCWDs|TestQueryCodexThreadsUsesMinimalSourceSchema|TestIdleCodexPolls|TestCodexSelectionIsRevisited|TestCodexResumedInAnotherFolder' ./work
+      - name: Test a Codex Brain's chat binding on Windows
+        run: go test -count=1 -run '^TestCodexBrainBindsItsConversationFromCodexsRecords$' ./brain
       - name: Build mewla.exe
         run: go build -o "$env:RUNNER_TEMP\mewla.exe" ./cmd/mewla
       - name: Test install.ps1 offline (Windows PowerShell 5.1)

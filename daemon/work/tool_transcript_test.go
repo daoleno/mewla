@@ -1,9 +1,9 @@
 package work
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -241,12 +241,8 @@ func TestLatestUpdatedCodexTranscriptSupportsResume(t *testing.T) {
 }
 
 func TestQueryCodexThreadsUsesMinimalSourceSchema(t *testing.T) {
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		t.Skip("sqlite3 unavailable")
-	}
 	dbPath := filepath.Join(t.TempDir(), "state_5.sqlite")
-	runSQLite(t, sqlite3, dbPath, `
+	runSQLite(t, dbPath, `
 CREATE TABLE threads (
   id TEXT,
   rollout_path TEXT,
@@ -261,7 +257,7 @@ INSERT INTO threads (id, rollout_path, created_at, updated_at, cwd, archived, cr
 VALUES ('thread-1', '/tmp/rollout-1.jsonl', 100, 200, '/repo/mewla', 0, 100000, 200000);
 `)
 
-	rows, err := queryCodexThreads(sqlite3, dbPath, "/repo/mewla")
+	rows, err := queryCodexThreads(dbPath, "/repo/mewla")
 	if err != nil {
 		t.Fatalf("queryCodexThreads: %v", err)
 	}
@@ -396,10 +392,6 @@ func TestMatchCodexTranscriptToOpenRolloutsUsesNewestOpenFile(t *testing.T) {
 }
 
 func TestFindCodexTranscriptAllowsStaleOpenRollout(t *testing.T) {
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		t.Skip("sqlite3 unavailable")
-	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -439,7 +431,7 @@ func TestFindCodexTranscriptAllowsStaleOpenRollout(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(db): %v", err)
 	}
-	runSQLite(t, sqlite3, dbPath, `
+	runSQLite(t, dbPath, `
 CREATE TABLE threads (
   id TEXT,
   rollout_path TEXT,
@@ -453,7 +445,7 @@ CREATE TABLE threads (
 `)
 	insert := `INSERT INTO threads (id, rollout_path, created_at, updated_at, cwd, archived, created_at_ms, updated_at_ms)
 VALUES ('019eee5e-7dec-71b1-bc2b-adcb2bad1c4c', ` + sqlString(rolloutPath) + `, 1782115630, 1782116683, ` + sqlString(cwd) + `, 0, 1782115630572, 1782116683915);`
-	runSQLite(t, sqlite3, dbPath, insert)
+	runSQLite(t, dbPath, insert)
 
 	file, err := os.Open(rolloutPath)
 	if err != nil {
@@ -570,12 +562,29 @@ func writeJSONL(t *testing.T, path string, values ...any) {
 	}
 }
 
-func runSQLite(t *testing.T, sqlite3, dbPath, script string) {
+// runSQLite writes a database as Codex does, in this process: the tests need
+// no sqlite3 program, which Windows does not have.
+func runSQLite(t *testing.T, dbPath, script string) {
 	t.Helper()
-	out, err := exec.Command(sqlite3, dbPath, script).CombinedOutput()
-	if err != nil {
-		t.Fatalf("sqlite failed: %v%s", err, stderrSuffix(string(out)))
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatal(err)
 	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(script); err != nil {
+		t.Fatalf("sqlite failed: %v", err)
+	}
+}
+
+// useHome makes home the home folder os.UserHomeDir reports, on every OS
+// (Windows reads USERPROFILE).
+func useHome(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 }
 
 func TestCleanCodexDisplayText_KeepsOrdinaryMessagesThatMentionSandboxTooling(t *testing.T) {

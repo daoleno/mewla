@@ -2,7 +2,6 @@ package work
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -43,7 +42,7 @@ func writeResumedClaudeTranscript(t *testing.T, configDir, bornIn, id string, no
 // (transcript_not_found) and its turns went turn_lost (owner 2026-11-13).
 func TestClaudeResumedInAnotherFolderReadsItsConversationWhereClaudeKeepsIt(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	useHome(t, home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	configDir := filepath.Join(home, ".claude")
 	bornIn := filepath.Join(home, "workspace", "mewla")
@@ -79,12 +78,8 @@ func TestClaudeResumedInAnotherFolderReadsItsConversationWhereClaudeKeepsIt(t *t
 // app-server, so nothing binds it) is found by its thread id, not by a folder
 // it never ran in.
 func TestCodexResumedInAnotherFolderReadsItsThreadByID(t *testing.T) {
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		t.Skip("sqlite3 unavailable")
-	}
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	useHome(t, home)
 	bornIn := filepath.Join(home, "workspace", "mewla")
 	worktree := filepath.Join(home, ".mewla", "worktrees", "mewla-progress-client")
 	for _, dir := range []string{bornIn, worktree} {
@@ -106,7 +101,7 @@ func TestCodexResumedInAnotherFolderReadsItsThreadByID(t *testing.T) {
 		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "019eee5e-0000-0000-0000-000000000000", "cwd": bornIn, "originator": "codex-tui"}},
 	)
 	dbPath := filepath.Join(home, ".codex", "state_5.sqlite")
-	runSQLite(t, sqlite3, dbPath, `
+	runSQLite(t, dbPath, `
 CREATE TABLE threads (id TEXT, rollout_path TEXT, created_at INTEGER, updated_at INTEGER, cwd TEXT, archived INTEGER, created_at_ms INTEGER, updated_at_ms INTEGER);
 INSERT INTO threads VALUES (`+sqlString(id)+`, `+sqlString(rollout)+`, 1794560000, 1794560100, `+sqlString(bornIn)+`, 0, 1794560000000, 1794560100000);
 INSERT INTO threads VALUES ('019eee5e-0000-0000-0000-000000000000', `+sqlString(other)+`, 1794561000, 1794561100, `+sqlString(bornIn)+`, 0, 1794561000000, 1794561100000);
@@ -131,7 +126,7 @@ INSERT INTO threads VALUES ('019eee5e-0000-0000-0000-000000000000', `+sqlString(
 // writes; the bound conversation is then found by its id.
 func TestClaudeHookBoundTranscriptOfAConversationResumedElsewhereIsFoundByID(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	useHome(t, home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	configDir := filepath.Join(home, ".claude")
 	bornIn := filepath.Join(home, "workspace", "mewla")
