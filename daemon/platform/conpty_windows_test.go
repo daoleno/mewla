@@ -177,3 +177,28 @@ func TestLookPathInFindsAStoreAppAlias(t *testing.T) {
 	}
 	t.Skip("no Store app execution alias here")
 }
+
+// Windows starts no program in a folder past MAX_PATH; a Session there used
+// to fail with "The system cannot find the file specified" for a folder
+// that exists.
+func TestCheckWorkDirNamesTheWindowsFolderLimit(t *testing.T) {
+	dir := t.TempDir()
+	for len(dir) < 270 {
+		dir += `\a-rather-long-folder-name`
+	}
+	if err := os.MkdirAll(`\\?\`+dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := CheckWorkDir(dir)
+	if err == nil || !strings.Contains(err.Error(), "shorter path") {
+		t.Fatalf("CheckWorkDir(%d chars) = %v", len(dir), err)
+	}
+	if err := CheckWorkDir(t.TempDir()); err != nil {
+		t.Fatalf("a short folder: %v", err)
+	}
+	pc, startErr := StartPseudoConsole(ConsoleSpec{Argv: []string{"cmd.exe", "/c", "exit 0"}, Dir: dir})
+	if startErr == nil {
+		pc.Close()
+		t.Log("this Windows started a program past MAX_PATH after all")
+	}
+}

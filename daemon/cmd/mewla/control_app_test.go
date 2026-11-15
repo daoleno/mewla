@@ -2257,3 +2257,34 @@ var claudeSessionIDFlag = regexp.MustCompile(` --session-id [0-9a-f-]{36}`)
 func stripClaudeSessionID(command string) string {
 	return claudeSessionIDFlag.ReplaceAllString(command, "")
 }
+
+// exitReportingWatcher is a computer where the Worker's program ended before
+// its brief (an agent that is not installed: the Session's shell says so
+// and exits).
+type exitReportingWatcher struct {
+	*fakeControlWatcher
+}
+
+func (w *exitReportingWatcher) SessionExitReport(string) (watcher.SessionExit, bool) {
+	code := 127
+	return watcher.SessionExit{Code: &code, Ran: 200 * time.Millisecond, Tail: "mewla sh: grok: executable file not found in %PATH%\n"}, true
+}
+
+// A Worker whose agent ended before its brief fails with how it ended, not
+// only "the program in this Session has ended" (a Windows sweep spawned a
+// Worker on an agent that is not installed and Brain learned nothing more).
+func TestControlAppWorkerSpawnSaysHowTheAgentEnded(t *testing.T) {
+	fw := newFakeControlWatcher()
+	fw.sendErr = watcher.ErrSessionEnded
+	app := &controlApp{
+		watcher:    &exitReportingWatcher{fw},
+		brainStore: newControlBrainStore(t),
+		execs: work.NewExecutorConfig(map[string]work.Executor{
+			"grok": {Name: "grok", Command: "grok"},
+		}),
+	}
+	resp := app.HandleControlRequest(control.Request{Type: "worker_spawn", Name: "Absent", Executor: "grok", Cwd: "/repo/mewla", Prompt: "hi"})
+	if resp.OK || resp.Error == nil || !strings.Contains(resp.Error.Message, "exit code 127") || !strings.Contains(resp.Error.Message, "executable file not found") {
+		t.Fatalf("response = %#v", resp.Error)
+	}
+}

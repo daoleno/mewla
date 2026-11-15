@@ -95,7 +95,10 @@ func TestMain(m *testing.M) {
 // those quotes cannot pass, and 0.4.6 refused them: Brain's Claude exited
 // 127 before it drew a frame, every time (a Windows user's Brain never
 // started). The shim's program now gets the command's arguments exactly.
-func TestNpmClaudeGetsBrainsLaunchArgumentsExactly(t *testing.T) {
+// npmClaude lays out what `npm i -g @anthropic-ai/claude-code` installs, with
+// this test binary as claude.exe, and returns the npm folder.
+func npmClaude(t *testing.T) string {
+	t.Helper()
 	npm := t.TempDir()
 	bin := filepath.Join(npm, "node_modules", "@anthropic-ai", "claude-code", "bin")
 	if err := os.MkdirAll(bin, 0o755); err != nil {
@@ -113,6 +116,11 @@ func TestNpmClaudeGetsBrainsLaunchArgumentsExactly(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(npm, "claude.cmd"), []byte(shim), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return npm
+}
+
+func TestNpmClaudeGetsBrainsLaunchArgumentsExactly(t *testing.T) {
+	npm := npmClaude(t)
 	workspace := `C:\Users\100% "me" & ^you\.mewla\brain\workspace\`
 	command, err := work.EnsureClaudeSessionLaunchCommand(work.HardenClaudeCommand("claude") + " --add-dir " + shellquote.Word(workspace))
 	if err != nil {
