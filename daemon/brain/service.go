@@ -3070,10 +3070,10 @@ func calendarWorkID(itemID, runID string) string {
 // Host replacement reasons are durable audit tags written to host_replacements.jsonl.
 // They answer: why did ensureHostWorker create a new Brain host instead of reusing one?
 const (
-	hostReplaceReasonMissingTmux               = "missing_tmux"
+	hostReplaceReasonMissingTmux               = "session_missing"
 	hostReplaceReasonLeftInTmux                = "left_in_tmux"
-	hostReplaceReasonMissingTmuxResumeLaunched = "missing_tmux_resume_launched"
-	hostReplaceReasonMissingTmuxUnrecoverable  = "missing_tmux_unrecoverable"
+	hostReplaceReasonMissingTmuxResumeLaunched = "session_missing_resume_launched"
+	hostReplaceReasonMissingTmuxUnrecoverable  = "session_missing_unrecoverable"
 	hostReplaceReasonProviderMismatch          = "provider_mismatch"
 	hostReplaceReasonNoRecordedHost            = "no_recorded_host"
 	hostReplaceReasonRecoveredAlive            = "recovered_alive_host"
@@ -3125,6 +3125,14 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	replaceDetail := discovery.replaceDetail
 	if discovery.bootstrap {
 		return hostBootstrapRef(s, discovery), nil
+	}
+	if automatic {
+		// A Host whose program just ended at start is not started again at
+		// once: its cause stays the problem a client shows, not a new Host
+		// every few seconds.
+		if err := s.hostExitWait(executor.ID); err != nil {
+			return WorkerRef{}, err
+		}
 	}
 
 	discovery, err = s.resolveHostResume(executor, discovery)
@@ -3293,6 +3301,11 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 		})
 	}
 	if err := s.ensureHostActivation(workerID, command, executor, true, resumeToken == ""); err != nil {
+		// A program that ended at start fails its activation with whatever
+		// the input path noticed first; how it ended is the error to report.
+		if exited := s.hostExitedAtStart(workerID, command, executor); exited != nil {
+			return WorkerRef{}, exited
+		}
 		return WorkerRef{}, err
 	}
 	if worker := s.watcher.GetWorker(workerID); worker != nil {
@@ -3514,7 +3527,7 @@ func (s *Service) recoverMatchingHost(executor work.WorkerExecutor, hostSession 
 		switch {
 		case probeErr != nil || presence == watcher.SessionPresenceUnknown:
 			if probeErr == nil {
-				probeErr = fmt.Errorf("tmux probe returned unknown for %q", worker.ID)
+				probeErr = fmt.Errorf("Session probe returned unknown for %q", worker.ID)
 			}
 			return nil, fmt.Errorf("brain host candidate liveness unknown: %w", probeErr)
 		case presence != watcher.SessionPresencePresent:
@@ -3974,6 +3987,11 @@ func (s *Service) projectHostProblem(host WorkerRef, executor work.WorkerExecuto
 		problem = s.hostProblem(executor)
 	} else {
 		problem = s.hostNotReadyProblem(executor)
+		if failure := s.currentHostStartFailure(executor.ID); problem == nil && failure != nil && !failure.ExitedAt.IsZero() {
+			// The Host started again after its program ended at start; until
+			// it answers, how the last one ended is still the problem.
+			problem = &HostProblem{Code: "start_failed", Executor: executor.ID, Detail: fmt.Sprintf("Brain could not start on %s: %s", executor.ID, failure.Detail), SuggestExecutor: s.verifiedAlternativeHost(executor.ID)}
+		}
 	}
 	key := ""
 	if problem != nil {

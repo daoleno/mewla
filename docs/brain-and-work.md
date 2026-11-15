@@ -380,6 +380,13 @@ resume is never replaced blind). Brain's pane starts in your login shell, so an
 agent Mewla sees as signed out still starts: it may be signed in through that
 shell. If it is not, it shows as open but not ready.
 
+When the agent ends right after it starts, Chat and the tray show how it ended:
+its exit code and the last lines it printed. Mewla then waits two minutes before
+it starts that agent again by itself; `mewla brain use`, or choosing the agent in
+the app, tries again at once and prints the same reason if it ends again.
+`mewla brain use` waits up to a minute for the agent to answer and reports a
+slow start as started, not failed.
+
 When the agent Brain runs on has no chat view, the thread says "Chat isn't
 available" with **Open terminal** and **Switch executor**.
 

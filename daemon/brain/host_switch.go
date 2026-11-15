@@ -3,6 +3,7 @@ package brain
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -19,6 +20,127 @@ import (
 type hostStartFailure struct {
 	Executor string
 	Detail   string
+	// ExitedAt is set when the Host's program ended soon after it started:
+	// the same launch would end the same way, so Mewla waits
+	// hostExitRetryAfter before it tries again by itself.
+	ExitedAt time.Time
+}
+
+// hostExitedAtStartWithin is how soon after it started a Host's program may
+// end for that to count as the launch failing, not the Brain stopping later.
+const hostExitedAtStartWithin = 2 * time.Minute
+
+// hostExitRetryAfter is how long Mewla waits before starting a Host again by
+// itself after its program ended at start. Choosing an agent again (mewla
+// brain use, or from the app) tries at once.
+const hostExitRetryAfter = 2 * time.Minute
+
+// errHostExitedAtStart is the start failure of a Host whose program ended at
+// start; its text is what the person sees.
+type errHostExitedAtStart struct{ detail string }
+
+func (e errHostExitedAtStart) Error() string { return e.detail }
+
+// noteHostExitedAtStart records a Host Session whose program ended within
+// hostExitedAtStartWithin of starting, with what it printed last, so the
+// problem a client shows is the real cause and not the respawn after it.
+func (s *Service) noteHostExitedAtStart(executor work.WorkerExecutor, command string, exit watcher.SessionExit) bool {
+	if exit.Ran <= 0 || exit.Ran > hostExitedAtStartWithin {
+		return false
+	}
+	detail := describeHostExit(executorProgram(executor), command, exit)
+	log.Printf("brain host exited at start (%s): ran=%s exit=%s command=%q last output: %q", executor.ID, exit.Ran.Round(time.Millisecond), hostExitStatus(exit), command, hostExitTail(exit.Tail, 12, 1200))
+	s.hostProblemMu.Lock()
+	defer s.hostProblemMu.Unlock()
+	s.hostStartFailure = &hostStartFailure{Executor: executor.ID, Detail: detail, ExitedAt: time.Now()}
+	return true
+}
+
+// hostExitedAtStart is the start failure of the Host Session id when its
+// program has already ended at start, nil otherwise.
+func (s *Service) hostExitedAtStart(id, command string, executor work.WorkerExecutor) error {
+	reporter, ok := s.watcher.(interface {
+		SessionExitReport(string) (watcher.SessionExit, bool)
+	})
+	if !ok {
+		return nil
+	}
+	exit, ok := reporter.SessionExitReport(id)
+	if !ok || !s.noteHostExitedAtStart(executor, command, exit) {
+		return nil
+	}
+	return errHostExitedAtStart{detail: describeHostExit(executorProgram(executor), command, exit)}
+}
+
+// hostExitWait is the error that keeps an automatic Host start from running
+// the launch that just ended again, until hostExitRetryAfter has passed.
+func (s *Service) hostExitWait(executorID string) error {
+	s.hostProblemMu.Lock()
+	defer s.hostProblemMu.Unlock()
+	failure := s.hostStartFailure
+	if failure == nil || failure.Executor != executorID || failure.ExitedAt.IsZero() || time.Since(failure.ExitedAt) >= hostExitRetryAfter {
+		return nil
+	}
+	return errHostExitedAtStart{detail: failure.Detail}
+}
+
+func describeHostExit(program, command string, exit watcher.SessionExit) string {
+	name := strings.TrimSpace(program)
+	if fields := strings.Fields(name); len(fields) > 0 {
+		name = fields[0]
+	}
+	if name == "" {
+		name = "The agent"
+	}
+	text := fmt.Sprintf("%s exited %s after it started (%s)", name, roundRan(exit.Ran), hostExitStatus(exit))
+	if tail := hostExitTail(exit.Tail, 6, 600); tail != "" {
+		text += ". It printed: " + tail
+	} else {
+		text += " without printing anything"
+	}
+	return text + "."
+}
+
+func hostExitStatus(exit watcher.SessionExit) string {
+	switch {
+	case exit.Signal != "":
+		return "signal " + exit.Signal
+	case exit.Code != nil:
+		return fmt.Sprintf("exit code %d", *exit.Code)
+	}
+	return "exit status unknown"
+}
+
+func roundRan(d time.Duration) string {
+	if d < time.Second {
+		return "less than a second"
+	}
+	return d.Round(time.Second).String()
+}
+
+// hostExitTail is the last lines of a Session's screen, the Mewla launch
+// marker left out, joined on one line and clipped to max bytes.
+func hostExitTail(screen string, lines, max int) string {
+	var kept []string
+	for _, line := range strings.Split(screen, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.Contains(line, "mewla-origin ") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(kept) > lines {
+		kept = kept[len(kept)-lines:]
+	}
+	text := strings.Join(kept, " / ")
+	if len(text) > max {
+		cut := len(text) - max
+		for cut < len(text) && !utf8.RuneStart(text[cut]) {
+			cut++
+		}
+		text = "…" + text[cut:]
+	}
+	return text
 }
 
 // resolveHostChoice is the part of choosing a Host executor that can be
@@ -85,12 +207,17 @@ func (s *Service) noteHostChosen() {
 func (s *Service) noteHostStartResult(executor work.WorkerExecutor, err error) {
 	s.hostProblemMu.Lock()
 	defer s.hostProblemMu.Unlock()
+	var exited errHostExitedAtStart
 	switch {
 	case err == nil:
 		s.hostStartFailure = nil
 	case errors.Is(err, watcher.ErrWorkerInputNotReady),
 		errors.Is(err, watcher.ErrOwnershipProbeUnavailable),
-		errors.Is(err, ErrHostNotRunnable):
+		errors.Is(err, ErrHostNotRunnable),
+		errors.As(err, &exited):
+	case s.hostStartFailure != nil && s.hostStartFailure.Executor == executor.ID && !s.hostStartFailure.ExitedAt.IsZero():
+		// What failed after the program ended (its input, its process) says
+		// less than how it ended: keep that.
 	default:
 		s.hostStartFailure = &hostStartFailure{Executor: executor.ID, Detail: err.Error()}
 	}
@@ -206,4 +333,11 @@ func formatHostConversationHandoff(items []TimelineItem) string {
 	}
 	footer := "Older history: mewla memory search \"<words>\" [--from user|brain] [--since 7d], then mewla memory show <id> --around 5. Wait for the next user message or Work Event."
 	return strings.Join([]string{header, chat, strings.Join(lines, "\n"), footer}, "\n")
+}
+
+// HostExitedAtStart reports an error that says the Host's program ended at
+// start; its text says how.
+func HostExitedAtStart(err error) bool {
+	var exited errHostExitedAtStart
+	return errors.As(err, &exited)
 }
