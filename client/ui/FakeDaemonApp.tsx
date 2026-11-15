@@ -7,6 +7,7 @@ import { bindAppUpdate } from "./update/update";
 import { installPlatform, platform } from "../core/platform";
 import { FakeDaemon, type FakeDaemonState } from "./testing/fakeDaemon";
 import { setScrollTraceSink } from "../core/timeline/scrollTrace";
+import { onTransport } from "./session";
 
 // A chat list's scroll trace reaches the test as the host post `app.scrollTrace` (`app.host.posts()`).
 setScrollTraceSink((entry) => host.post("app.scrollTrace", entry));
@@ -31,8 +32,16 @@ host.on<Record<string, unknown>>("app.daemonPush", (frame) => daemon.push(frame 
 host.on<{ worker: string; upserts?: Record<string, unknown>[]; deletes?: string[]; activity?: Record<string, unknown> | null; snapshot?: boolean }>("app.conversation", (update) => daemon.conversation(update));
 // `app.host.send("app.daemonDrop")`: every connection drops; the app connects again.
 host.on("app.daemonDrop", () => daemon.drop());
-// `app.host.send("app.daemonNewsThenDrop", { worker, upserts?, ... })`: a conversation's news and the drop, in one call into the app.
-host.on<Parameters<FakeDaemon["conversation"]>[0]>("app.daemonNewsThenDrop", (update) => daemon.newsThenDrop(update));
+// `app.host.send("app.daemonNewsThenDrop", { worker, upserts?, ..., busyMs? })`: a conversation's news (and a `test_busy`
+// frame of `busyMs`) and the drop, in one call into the app.
+host.on<Parameters<FakeDaemon["newsThenDrop"]>[0]>("app.daemonNewsThenDrop", (update) => daemon.newsThenDrop(update));
+// A frame `test_busy {ms}` keeps the call that hands it over busy that long: past 2 s, NSH cuts that call off.
+onTransport((transport) => transport.on("test_busy", (frame) => {
+  const until = Date.now() + Number(frame.ms ?? 0);
+  while (Date.now() < until) {
+    // busy
+  }
+}));
 // `app.host.send("app.daemonDown")`: the computer goes offline and stays so.
 host.on("app.daemonDown", () => daemon.goDown());
 // `app.host.send("app.entryAgain")`: the entry's top level runs again, as a hot patch runs it.

@@ -158,11 +158,12 @@ export class FakeDaemon {
    * together, the socket's end with it (a phone back from the background gets the frames queued behind the freeze
    * and the close of a socket the computer already dropped).
    */
-  newsThenDrop(update: Parameters<FakeDaemon["conversation"]>[0]): void {
+  newsThenDrop(update: Parameters<FakeDaemon["conversation"]>[0] & { busyMs?: number }): void {
     const held: Array<[FakeSocket, Frame]> = [];
     this.held = held;
     try {
       this.conversation(update);
+      if (update.busyMs) this.broadcast({ type: "test_busy", ms: update.busyMs });
     } finally {
       this.held = null;
     }

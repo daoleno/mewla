@@ -353,6 +353,30 @@ function activityOf(event: CodexConversationEvent): TimelineItem | null {
   return activity;
 }
 
+/**
+ * Makes the rows of the events whose rows are not made yet, until `deadline` (ms since the epoch); true once every
+ * event's are. A thread whose events are new (a first open, a page of older ones, the update that brought thousands)
+ * is made a slice at a time, each slice a call of its own (ui/kit/derived.ts `preparedRows`): made in the one call that
+ * projects the thread, 4000 tool events took that call past NSH's 2 s on a CI runner, and the owner's phone, some 8
+ * times slower, past it with a few hundred. A row made for an event the projection does not ask for is only kept.
+ */
+export function prepareEventRows(events: readonly CodexConversationEvent[], deadline: number): boolean {
+  for (const event of events) {
+    if (unpreparable.has(event)) continue;
+    if (activityByEvent.has(event) && (event.kind !== "command" || explorationByEvent.has(event))) continue;
+    if (Date.now() >= deadline) return false;
+    try {
+      if (event.kind === "command") explorationEntryOf(event);
+      activityOf(event);
+    } catch {
+      // Left to the projection, which makes it again and fails where it always would.
+      unpreparable.add(event);
+    }
+  }
+  return true;
+}
+const unpreparable = new WeakSet<CodexConversationEvent>();
+
 function explorationEntryOf(event: CodexConversationEvent): ExplorationEntry | null {
   let entry = explorationByEvent.get(event);
   if (entry === undefined) {

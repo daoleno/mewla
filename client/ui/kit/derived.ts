@@ -1,4 +1,6 @@
 import { effect, signal, untracked, type Accessor, type SignalOptions } from "nsh";
+import { prepareEventRows } from "../../core/timeline/model";
+import type { CodexConversationEvent } from "../../core/conversation/conversation";
 
 /**
  * A value made from signals, as `computed` makes one, that a failed run does not end.
@@ -21,4 +23,31 @@ export function derived<T>(make: () => T, options: SignalOptions<T> = {}): Acces
     value.set(make());
   });
   return () => value();
+}
+
+/** How long one call spends making a thread's new rows: some 8 times this on a slow phone, well inside NSH's 2 s. */
+export const PREPARE_SLICE_MS = 40;
+
+/**
+ * A thread's rows, `derived`, with the rows of its new events made first a slice at a time, each slice a call of its own
+ * (core/timeline/model.ts `prepareEventRows`). Until they all are, the rows stay as they were (`initial` before any);
+ * then the thread is put together from what is made, in one cheap call. Made in that one call, thousands of new
+ * events took it past NSH's 2 s: NSH cut it off, and every run after it started over.
+ */
+export function preparedRows<T>(events: () => readonly CodexConversationEvent[], make: () => T, initial: T): Accessor<T> {
+  const slice = signal(0);
+  let next: ReturnType<typeof setTimeout> | null = null;
+  let last = initial;
+  return derived(() => {
+    slice();
+    if (!prepareEventRows(events(), Date.now() + PREPARE_SLICE_MS)) {
+      next ??= setTimeout(() => {
+        next = null;
+        slice.set(untracked(slice) + 1);
+      }, 0);
+      return last;
+    }
+    last = make();
+    return last;
+  });
 }
