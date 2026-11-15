@@ -3658,6 +3658,7 @@ func (w *Watcher) waitForInputReadyGuarded(
 	}
 	deadline := time.Now().Add(timeout)
 	advancedWorkspaceTrustPrompt := false
+	firstRun := claudeFirstRun{}
 	for {
 		if guard != nil && guard() != nil {
 			return false
@@ -3666,6 +3667,22 @@ func (w *Watcher) waitForInputReadyGuarded(
 		content, alive, _ := capturePane(sessionID)
 		if !alive {
 			return false
+		}
+		if screen := claudeFirstRunScreen(command, content); screen != "" {
+			if firstRun.due(screen, time.Now()) {
+				if guard != nil && guard() != nil {
+					return false
+				}
+				if w.sessions().sendKeys(sessionID, "Enter") != nil {
+					return false
+				}
+				firstRun[screen] = time.Now()
+			}
+			if time.Now().After(deadline) {
+				return false
+			}
+			time.Sleep(300 * time.Millisecond)
+			continue
 		}
 		var advanced, ok bool
 		advancedWorkspaceTrustPrompt, advanced, ok = advanceStartupTrustPromptOnce(

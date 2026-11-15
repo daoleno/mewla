@@ -167,7 +167,14 @@ if ($Workers) {
       }
       $status = Invoke-Exact $Mewla @("worker", "status", "-state-dir", $StateDir, "-id", $id) "" 30
       $close = Invoke-Exact $Mewla @("worker", "close", "-state-dir", $StateDir, "-id", $id, "--force") "" 60
+      $workId = if ($spawn.out -match '"work_id"\s*:\s*"([^"]+)"') { $Matches[1] } else { "" }
+      $work = if ($workId) { (Invoke-Exact $Mewla @("brain", "work", "list", "-state-dir", $StateDir, "-all", "-id", $workId, "--json") "" 30).out } else { "" }
       if ($seen) { Add-Result $label "PASS" "replied; closed exit $($close.code)" }
+      elseif ($work -match '"status"\s*:\s*"done"') {
+        # Mewla closes a Worker's Session once its Work is done, sometimes
+        # before this script's next look at the screen.
+        Add-Result $label "PASS" "Work $workId done; its Session closed before the reply was read"
+      }
       else {
         $tail = (($last -replace '\\n', "`n") -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 6) -join " / "
         Add-Result $label "FAIL" ("no reply in {0}s; status: {1}; screen: {2}" -f $ReplySeconds, ($status.out -replace "\s+", " ").Substring(0, [Math]::Min(300, ($status.out -replace "\s+", " ").Length)), $tail)
