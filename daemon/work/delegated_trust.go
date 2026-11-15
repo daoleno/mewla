@@ -245,3 +245,44 @@ func updateTrustFileOnce(path string, patch func([]byte) ([]byte, error)) error 
 	defer dir.Close()
 	return platform.SyncOpenDir(dir)
 }
+
+// TrustChosenFolder answers Claude's folder trust dialog for a Session the
+// person creates in Mewla in a folder they picked: picking it there is their
+// consent, and the dialog would otherwise stop the Session where Chat cannot
+// see it (it opens on "No, exit", so a message's Enter quits Claude). Only
+// a Claude command and an existing folder are prepared, never the home
+// folder or a drive root, which Claude asks about on every start anyway.
+func TrustChosenFolder(command, dir string) error {
+	if InferWorkerProvider(command) != WorkerProviderClaude || strings.TrimSpace(dir) == "" {
+		return nil
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+		return nil
+	}
+	if filepath.Dir(abs) == abs {
+		return nil
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		if same, _ := sameDir(abs, home); same {
+			return nil
+		}
+	}
+	_, err = PrepareDelegatedWorkspace(command, abs, nil)
+	return err
+}
+
+func sameDir(a, b string) (bool, error) {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false, err
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false, err
+	}
+	return os.SameFile(ai, bi), nil
+}

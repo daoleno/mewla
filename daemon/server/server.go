@@ -43,6 +43,7 @@ import (
 	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/daoleno/mewla/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/pairlink"
@@ -1304,6 +1305,9 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 		connectionID := strings.TrimSpace(raw.ConnectionID)
 		if connectionID == "" {
 			connectionID = strings.TrimSpace(raw.ProfileID)
+		}
+		if err := work.TrustChosenFolder(command, ghosttyvt.StoredDir(strings.TrimSpace(raw.Cwd))); err != nil {
+			log.Printf("WARN create_session folder trust in %q: %v", raw.Cwd, err)
 		}
 		workerID, routeSnap, persist, err := s.createSessionWithProfiles(raw.TargetID, watcher.CreateSessionOptions{
 			Cwd:     raw.Cwd,
