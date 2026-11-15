@@ -3,7 +3,12 @@ package vdisplay
 import (
 	"io"
 	"net"
+	"time"
 )
+
+// IdleClose is how long a monitor may go unused (by the agent, or by the
+// person, who also keeps it by having it open in Screen) before it closes.
+const IdleClose = time.Hour
 
 // Action is one thing an agent asks of its display.
 type Action struct {

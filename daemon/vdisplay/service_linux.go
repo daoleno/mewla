@@ -117,10 +117,6 @@ func (s *Service) SetAlive(alive func(worker string) bool) { s.alive = alive }
 // SetNames tells the service the Workers' names, for Screen's list.
 func (s *Service) SetNames(names func(worker string) string) { s.names = names }
 
-// IdleClose is how long a monitor may go unused (by the agent, or by the
-// person, who also keeps it by having it open in Screen) before it closes.
-const IdleClose = time.Hour
-
 // SetIdleClose closes, from now on, every monitor nobody has used for after:
 // closed is told first, to close the Worker's browser windows and tell the
 // person; the Worker hears it with its next result.
