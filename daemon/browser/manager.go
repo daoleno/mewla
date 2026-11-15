@@ -256,6 +256,9 @@ func (m *Manager) countLocked(worker string) int {
 
 // Closed takes a window off the Screen when the extension reports it closed.
 func (m *Manager) Closed(key string) {
+	if m.closed.Load() {
+		return // this daemon let go of the browser: its windows are the next one's
+	}
 	m.mu.Lock()
 	name, ok := m.keys[key]
 	delete(m.keys, key)
@@ -270,6 +273,9 @@ func (m *Manager) Closed(key string) {
 // Forget closes a Worker's windows. The browser stops with its last window;
 // the profile and its sign-ins stay.
 func (m *Manager) Forget(worker string) {
+	if m.closed.Load() {
+		return
+	}
 	m.mu.Lock()
 	var keys []string
 	for k, w := range m.keys {
@@ -372,6 +378,9 @@ func (m *Manager) withHost(ctx context.Context) error {
 func (m *Manager) stopIdleHost() {
 	<-m.hostGate
 	defer func() { m.hostGate <- struct{}{} }()
+	if m.closed.Load() {
+		return
+	}
 	m.mu.Lock()
 	windows := len(m.keys)
 	m.mu.Unlock()
@@ -381,6 +390,52 @@ func (m *Manager) stopIdleHost() {
 	_ = m.host.Close()
 	m.host = nil
 	log.Printf("browser: agent browser stopped, no agent has a window")
+}
+
+// AdoptHost takes back the browser a daemon before this one left running (a
+// restart or an update of Mewla), so the agents' windows in it carry on; the
+// extension reports them again as it reconnects. It says whether there was one.
+func (m *Manager) AdoptHost(ctx context.Context) bool {
+	if !m.VirtualScreen() {
+		return false
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case <-m.hostGate:
+	}
+	defer func() { m.hostGate <- struct{}{} }()
+	if m.closed.Load() || m.host != nil {
+		return false
+	}
+	h, err := m.backend.Adopt(ctx, filepath.Join(m.root, agentProfile))
+	if err != nil || h == nil {
+		if err != nil {
+			log.Printf("browser: couldn't take back the agent browser: %v", err)
+		}
+		return false
+	}
+	m.host = h
+	// Its windows have the idle grace to report again before it counts as unused.
+	m.ensuredAt.Store(time.Now().UnixNano())
+	time.AfterFunc(hostGrace+time.Second, func() { m.stopIdleHost() })
+	log.Printf("browser: took back the agent browser after a restart")
+	return true
+}
+
+// Detach lets go of the browser for the next daemon (a restart or an update):
+// it keeps running, with every agent's window, and nothing is closed.
+func (m *Manager) Detach() {
+	if !m.closed.CompareAndSwap(false, true) {
+		return
+	}
+	close(m.done)
+	<-m.hostGate
+	defer func() { m.hostGate <- struct{}{} }()
+	if m.host != nil {
+		m.host.Detach()
+		m.host = nil
+	}
 }
 
 // Close ends the browser.

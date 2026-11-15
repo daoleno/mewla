@@ -15,5 +15,6 @@ func (unavailableBackend) Capability(context.Context) Capability {
 	return Capability{Reason: "The agent screen currently requires a Linux host"}
 }
 func (unavailableBackend) Start(context.Context, string) (Host, error) { return nil, ErrUnavailable }
+func (unavailableBackend) Adopt(context.Context, string) (Host, error) { return nil, nil }
 
 var _ = image.Rectangle{}

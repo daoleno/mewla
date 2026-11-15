@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -16,7 +17,13 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/keeper"
 )
+
+// KeepLinger is how long the agent screen outlives a daemon that does not come
+// back: a restart attaches again well within it.
+const KeepLinger = 10 * time.Minute
 
 // Capability says whether this computer can run a virtual display.
 func Capability() error {
@@ -38,7 +45,10 @@ type Display struct {
 	Width  int
 	Height int
 
-	cmd  *exec.Cmd
+	// keep is the daemon's attachment to the keeper that runs Xvnc (package
+	// keeper), so the screen outlives a restart of Mewla; its end means the
+	// display ended.
+	keep *keeper.Conn
 	done chan struct{}
 	// a11y is the display's accessibility bus; nil without AT-SPI.
 	a11y *a11yBus
@@ -48,7 +58,14 @@ type Display struct {
 }
 
 // XPid is the display server's process ID.
-func (d *Display) XPid() int { return d.cmd.Process.Pid }
+func (d *Display) XPid() int { return d.keep.Pid }
+
+// Cookie is the display's X authority cookie, hex, kept with the screen's
+// state so a restarted daemon can use the display again.
+func (d *Display) Cookie() string { return d.cookie }
+
+// keeperSocket is where the display's keeper listens.
+func (d *Display) keeperSocket() string { return filepath.Join(d.Dir, "keeper.sock") }
 
 // SocketPath is the private RFB socket.
 func (d *Display) SocketPath() string { return filepath.Join(d.Dir, "rfb.sock") }
@@ -118,20 +135,29 @@ func startOn(ctx context.Context, dir string, number, width, height int) (*Displ
 		return nil, err
 	}
 	d.cookie = cookie
-	cmd := exec.Command("Xvnc", fmt.Sprintf(":%d", number),
-		"-auth", d.AuthPath(),
-		"-rfbport", "-1",
-		"-rfbunixpath", d.SocketPath(), "-rfbunixmode", "0600",
-		"-SecurityTypes", "None",
-		"-nolisten", "tcp",
-		"-AlwaysShared",
-		"-geometry", fmt.Sprintf("%dx%d", width, height), "-depth", "24")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
-	if err := cmd.Start(); err != nil {
+	xvnc, err := exec.LookPath("Xvnc")
+	if err != nil {
 		return nil, err
 	}
-	d.cmd = cmd
-	go func() { _ = cmd.Wait(); close(d.done) }()
+	err = keeper.Spawn(keeper.Spec{
+		Socket: d.keeperSocket(), Linger: KeepLinger, Env: filteredEnv(), Log: filepath.Join(dir, "keeper.log"),
+		Cleanup: []string{d.SocketPath(), d.AuthPath()},
+		Argv: []string{xvnc, fmt.Sprintf(":%d", number),
+			"-auth", d.AuthPath(),
+			"-rfbport", "-1",
+			"-rfbunixpath", d.SocketPath(), "-rfbunixmode", "0600",
+			"-SecurityTypes", "None",
+			"-nolisten", "tcp",
+			"-AlwaysShared",
+			"-geometry", fmt.Sprintf("%dx%d", width, height), "-depth", "24"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("the display could not start: %w", err)
+	}
+	if err := d.attach(); err != nil {
+		_ = keeper.Stop(d.keeperSocket())
+		return nil, err
+	}
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
@@ -153,6 +179,35 @@ func startOn(ctx context.Context, dir string, number, width, height int) (*Displ
 	}
 	d.Stop()
 	return nil, errors.New("the display took too long to start")
+}
+
+// attach joins the display's keeper; done closes when the display ends.
+func (d *Display) attach() error {
+	c, err := keeper.Attach(d.keeperSocket())
+	if err != nil {
+		return err
+	}
+	d.keep = c
+	go func() { _, _ = io.Copy(io.Discard, c); close(d.done) }()
+	return nil
+}
+
+// Adopt is the display a daemon before this one started in dir and left
+// running (Detach), at the number and with the cookie it saved; nil and an
+// error when it is not there any more.
+func Adopt(dir string, number int, cookie string, width, height int) (*Display, error) {
+	d := &Display{Dir: dir, Number: number, Width: width, Height: height, cookie: cookie, done: make(chan struct{})}
+	if err := d.attach(); err != nil {
+		return nil, err
+	}
+	c, err := d.Dial()
+	if err != nil {
+		d.Detach()
+		return nil, err
+	}
+	_ = c.Close()
+	d.a11y, _ = startA11y(dir)
+	return d, nil
 }
 
 func writeCookieFor(path string, number int) (string, error) {
@@ -265,15 +320,23 @@ func (d *Display) Stop() {
 		}
 	}
 	d.a11y.stop()
-	if d.cmd != nil && d.cmd.Process != nil {
-		_ = syscall.Kill(-d.cmd.Process.Pid, syscall.SIGTERM)
+	if d.keep != nil {
+		_ = keeper.Stop(d.keeperSocket())
+		_ = d.keep.Close()
 		select {
 		case <-d.done:
-		case <-time.After(3 * time.Second):
-			_ = syscall.Kill(-d.cmd.Process.Pid, syscall.SIGKILL)
-			<-d.done
+		case <-time.After(5 * time.Second):
 		}
 	}
 	_ = os.Remove(d.SocketPath())
 	_ = os.Remove(d.AuthPath())
+}
+
+// Detach lets go of the display without stopping it: it keeps running in its
+// keeper for a restarted daemon to adopt. Its apps end with this daemon.
+func (d *Display) Detach() {
+	d.a11y.stop()
+	if d.keep != nil {
+		_ = d.keep.Close()
+	}
 }

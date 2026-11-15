@@ -362,3 +362,44 @@ func TestFullScreenEvicts(t *testing.T) {
 		t.Fatalf("the Worker whose display was given away was not told: %q", notes)
 	}
 }
+
+// A daemon that restarts takes the agent screen back: the same display, each
+// Worker's monitor where it was, listed again. A monitor whose window never
+// reports again is let go after restoreGrace.
+func TestRestartKeepsTheScreen(t *testing.T) {
+	if err := Capability(); err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	first := NewService(dir)
+	ctx := context.Background()
+	for _, w := range []string{"w1", "w2"} {
+		if _, err := first.Monitor(ctx, w); err != nil {
+			t.Fatal(err)
+		}
+		first.Windows(w, 1)
+	}
+	number := first.shared.display.Number
+	first.Detach()
+	second := NewService(dir)
+	t.Cleanup(second.Close)
+	if n := second.Adopt(); n != 2 {
+		t.Fatalf("took back %d monitors, want 2", n)
+	}
+	if second.shared.display.Number != number || len(second.List()) != 2 {
+		t.Fatalf("display :%d (want :%d), list %+v", second.shared.display.Number, number, second.List())
+	}
+	r1, _ := second.Monitor(ctx, "w1")
+	if r1.Min.X != MonitorWidth {
+		t.Fatalf("w1's monitor moved: %v", r1)
+	}
+	if _, err := second.View("w1"); err != nil {
+		t.Fatalf("no view of the monitor taken back: %v", err)
+	}
+	// w1's window reports again; w2's never does.
+	second.Windows("w1", 1)
+	second.SweepIdle(time.Now().Add(restoreGrace + time.Second))
+	if l := second.List(); len(l) != 1 || l[0].ID != "w1" {
+		t.Fatalf("after the grace = %+v", l)
+	}
+}

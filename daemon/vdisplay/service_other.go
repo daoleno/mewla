@@ -37,3 +37,12 @@ func (*Service) DisplayEnv(context.Context) (int, string, error) { return 0, "",
 func (*Service) Monitor(context.Context, string) (image.Rectangle, error) {
 	return image.Rectangle{}, errUnsupported
 }
+
+// Adopt takes back nothing: only Linux has an agent screen.
+func (s *Service) Adopt() int { return 0 }
+
+// Detach lets go of nothing.
+func (s *Service) Detach() {}
+
+// StableRoot has no directory to give: only Linux has an agent screen.
+func StableRoot(string) (string, error) { return "", nil }

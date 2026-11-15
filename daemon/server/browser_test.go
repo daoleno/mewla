@@ -19,6 +19,7 @@ func (quietBackend) Capability(context.Context) browser.Capability {
 func (quietBackend) Start(context.Context, string) (browser.Host, error) {
 	return nil, browser.ErrUnavailable
 }
+func (quietBackend) Adopt(context.Context, string) (browser.Host, error) { return nil, nil }
 
 // The only thing the app asks of /browser is the Virtual screen switch; the
 // browser itself is a window on the agent screen, listed and shown by /display.

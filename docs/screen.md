@@ -388,9 +388,13 @@ Chrome with one profile; every agent has a window of its own in it, placed on
 that agent's monitor (so are the windows its pages open, such as a sign-in
 pop-up), and several agents work at the same time. The window stays after the
 agent's turn ends and closes as described above; the browser stops when no
-agent has a window. The browser runs under the Mewla daemon, so restarting or
-updating Mewla closes it and every agent's page in it. The switch lives on the
-computer, so every device sees the same answer.
+agent has a window. Restarting or updating Mewla keeps the browser, every
+agent's page in it and the agent screen: they run in processes of their own,
+the new Mewla takes them back and lists the same agents in Screen, and agents
+keep driving their windows. If Mewla does not come back within ten minutes,
+the browser and the screen stop by themselves. Desktop apps an agent opened
+end with the old Mewla. The switch lives on the computer, so every device sees
+the same answer.
 
 Desktop apps need no switch. A Worker (Claude or Codex) has the same computer
 tool as on a Mac (`mewla_computer`): `open_app` starts an installed app (by the

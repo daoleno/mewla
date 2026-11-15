@@ -13,6 +13,12 @@
  * group named for the Worker, so the person can see whose they are, and any
  * number of Workers can work in this Chrome at once, each in its own window.
  * When the agent is done its window closes with its tabs.
+ *
+ * In the agent browser (the daemon says so with {type: "role", agent: true})
+ * the windows outlive a daemon that goes away for a restart or an update: they
+ * keep working, the extension reconnects, and its hello lists them again
+ * ({windows: [{id, worker, windowId}]}). With no daemon back in
+ * AGENT_KEEP_MS they close. The person's Chrome closes them at once.
  */
 import { debugLog, drivenAt, openRelayConnection } from './relay.js';
 
@@ -89,6 +95,10 @@ const sessions = new Map();
 /** @type {chrome.runtime.Port | undefined} */
 let port;
 let backoff = 1000;
+// This is the agent browser's extension: its windows outlive the daemon.
+let agentBrowser = false;
+const AGENT_KEEP_MS = 10 * 60_000;
+let keepTimer;
 
 function tell(message) {
   try { port?.postMessage(message); } catch (error) { debugLog('host gone', error); }
@@ -104,6 +114,7 @@ const options_bounds = bounds => ({
 class AgentWindow {
   constructor(id) {
     this.id = id;
+    this.worker = '';
     this.bounds = undefined;
     this.windowId = undefined;
     this.groupId = undefined;
@@ -232,6 +243,7 @@ async function onHostMessage(message) {
         return;
       }
       const session = new AgentWindow(message.id);
+      session.worker = String(message.worker || '');
       sessions.set(message.id, session);
       try {
         await session.open(message);
@@ -242,6 +254,12 @@ async function onHostMessage(message) {
       }
       return;
     }
+    case 'role':
+      // The daemon is back: windows kept while it was gone carry on.
+      agentBrowser = !!message.agent;
+      clearTimeout(keepTimer);
+      keepTimer = undefined;
+      return;
     case 'disconnect':
       await sessions.get(message.id)?.close('The daemon asked to disconnect');
       return;
@@ -295,11 +313,23 @@ function connectHost() {
     const error = chrome.runtime.lastError?.message;
     debugLog('native host disconnected', error);
     port = undefined;
-    for (const session of [...sessions.values()])
-      void session.close('The Mewla daemon disconnected');
+    if (agentBrowser) {
+      // Mewla is restarting or updating: the agents' windows keep working, for a while.
+      keepTimer ??= setTimeout(() => {
+        keepTimer = undefined;
+        for (const session of [...sessions.values()])
+          void session.close('Mewla did not come back');
+      }, AGENT_KEEP_MS);
+    } else {
+      for (const session of [...sessions.values()])
+        void session.close('The Mewla daemon disconnected');
+    }
     scheduleReconnect();
   });
-  tell({ type: 'hello', version: chrome.runtime.getManifest().version });
+  const windows = [...sessions.values()]
+    .filter(session => session.connection && !session.closed)
+    .map(session => ({ id: session.id, worker: session.worker, windowId: session.windowId }));
+  tell({ type: 'hello', version: chrome.runtime.getManifest().version, windows });
   backoff = 1000;
 }
 
