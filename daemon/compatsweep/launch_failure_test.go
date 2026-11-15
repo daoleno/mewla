@@ -52,28 +52,26 @@ func TestBrainAgentThatExitsAtLaunch(t *testing.T) {
 		record(t, "brain-agent-exits-at-launch", "fail", "no start_failed host problem with the agent's output reached the client")
 		t.Fatalf("no start_failed host problem with the output; types %v\n%s", c.types(), e.logTail(30))
 	}
-	if code, _ := problem["exit_code"].(float64); code != 3 {
-		t.Errorf("exit_code = %v", problem["exit_code"])
+	if !strings.Contains(str(problem["detail"]), "exit code 3") {
+		t.Errorf("the problem does not say the exit code: %v", problem["detail"])
 	}
-	line, logged := e.waitLog(`brain host launch failed: executor=claude .* exit_code=3 .*boom from fake claude`, 10*time.Second)
+	line, logged := e.waitLog(`brain host exited at start \(claude\): .* exit=exit code 3 .*boom from fake claude`, 10*time.Second)
 	if !logged {
 		t.Errorf("no launch-failed log line:\n%s", e.logTail(30))
 	}
-	// It stops: no more than two launches in the next minute.
+	// It is not started again every few seconds: one launch in the next
+	// minute (the retry waits two minutes, and stops after the same end twice).
 	time.Sleep(60 * time.Second)
-	launches := strings.Count(e.logText(), "brain host launch failed: executor=claude")
-	if launches > 2 {
-		t.Errorf("launched %d times, want at most 2:\n%s", launches, e.logTail(40))
-	}
-	stopped, _ := hostProblem(c, 20*time.Second, func(p map[string]any) bool { return strings.Contains(str(p["detail"]), "stopped trying") })
-	if stopped == nil {
-		t.Errorf("the problem never said Mewla stopped trying")
+	launches := strings.Count(e.logText(), "brain host exited at start (claude)")
+	if launches > 1 {
+		t.Errorf("launched %d times in a minute, want 1:\n%s", launches, e.logTail(40))
 	}
 	// brain use names the cause.
 	out, _ := e.cli(90*time.Second, "brain", "use", "@state", "claude")
-	if !strings.Contains(out, "exited with code 3") || !strings.Contains(out, "boom from fake claude") {
+	if !strings.Contains(out, "exit code 3") || !strings.Contains(out, "boom from fake claude") {
 		t.Errorf("brain use output does not name the cause:\n%s", out)
 	}
 	record(t, "brain-agent-exits-at-launch", map[bool]string{true: "fail", false: "pass"}[t.Failed()],
 		fmt.Sprintf("problem=%q; log=%q; launches=%d; brain use=%q", str(problem["detail"]), line, launches, strings.TrimSpace(out)))
+	e.hold()
 }

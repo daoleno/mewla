@@ -88,3 +88,45 @@ func TestABrainThatExitsAtStartShowsHowAndIsNotRespawned(t *testing.T) {
 		t.Fatalf("after a restart: %v, created %d", err, len(fw.created))
 	}
 }
+
+// A launch that ends the same way twice in a row is not started again by
+// itself, even after the retry wait: Chat says Mewla stopped, and choosing
+// the agent again tries at once.
+func TestABrainThatExitsTheSameWayTwiceIsNotStartedAgainByItself(t *testing.T) {
+	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "claude")
+	previous := hostExitRetryAfter
+	hostExitRetryAfter = 0
+	t.Cleanup(func() { hostExitRetryAfter = previous })
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := 3
+	fw := &exitingWatcher{
+		fakeWatcher: &fakeWatcher{sendErr: errors.New("Session input was definitely not submitted: target provider could not be proven")},
+		exit:        watcher.SessionExit{Code: &code, Ran: 300_000_000, Tail: "Error: boom from fake claude: cannot start\n"},
+	}
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+		"claude": {Name: "claude", Command: "claude"},
+	}))
+	if _, err := service.SetHostExecutor("claude"); !HostExitedAtStart(err) {
+		t.Fatalf("choosing claude: %v", err)
+	}
+	for range 4 {
+		_, _ = service.ReconcileHostContinuity()
+	}
+	if len(fw.created) != 2 {
+		t.Fatalf("launches = %d, want 2 (the first and one retry)", len(fw.created))
+	}
+	snapshot, err := service.ProjectionSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if problem := snapshot.HostProblem; problem == nil || !strings.Contains(problem.Detail, "exit code 3") ||
+		!strings.Contains(problem.Detail, "boom from fake claude") || !strings.Contains(problem.Detail, "Mewla stopped starting it") {
+		t.Fatalf("problem = %+v", snapshot.HostProblem)
+	}
+	if _, err := service.SetHostExecutor("claude"); !HostExitedAtStart(err) || len(fw.created) != 3 {
+		t.Fatalf("choosing it again: %v, launches %d", err, len(fw.created))
+	}
+}

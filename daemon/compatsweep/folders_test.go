@@ -3,7 +3,6 @@
 package compatsweep
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,39 +16,58 @@ import (
 // launched, where, with what, without a model.
 func recordingAgent(t *testing.T, path, out string) {
 	t.Helper()
+	// Plain sh, so it runs on a machine with nothing else installed: the
+	// folder and the NUL-separated arguments, then the record appears whole.
 	script := `#!/bin/sh
 [ "$1" = --version ] && { echo '2.1.325 (Claude Code)'; exit 0; }
 [ "$1" = auth ] && { echo '{"loggedIn":true}'; exit 0; }
-f="` + out + `/$$.json"
-{ printf '{"cwd":'; pwd | python3 -I -c 'import json,sys; print(json.dumps(sys.stdin.read().rstrip("\n")), end="")'
-  printf ',"argv":'; python3 -I -c 'import json,sys; print(json.dumps(sys.argv[1:]), end="")' "$@"
-  printf '}\n'; } > "$f.tmp" && cat "$f.tmp" >> "` + out + `.log" && mv "$f.tmp" "$f"
+f="` + out + `/$$"
+pwd > "$f.cwd.tmp"
+printf '%s\0' "$@" > "$f.args"
+mv "$f.cwd.tmp" "$f.cwd"
 exec sleep 600
 `
 	writeFile(t, path, script, 0o755)
 }
 
 type launch struct {
-	Cwd  string   `json:"cwd"`
-	Argv []string `json:"argv"`
+	Cwd  string
+	Argv []string
 }
 
-// waitLaunch waits for the recording agent's first launch record.
+// launches are the recording agent's launches so far, in no order.
+func launches(out string) []launch {
+	entries, _ := os.ReadDir(out)
+	var all []launch
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".cwd") {
+			continue
+		}
+		base := filepath.Join(out, strings.TrimSuffix(name, ".cwd"))
+		cwd, err := os.ReadFile(base + ".cwd")
+		if err != nil {
+			continue
+		}
+		args, _ := os.ReadFile(base + ".args")
+		got := launch{Cwd: strings.TrimRight(string(cwd), "\n")}
+		for _, arg := range strings.Split(strings.TrimSuffix(string(args), "\x00"), "\x00") {
+			if arg != "" {
+				got.Argv = append(got.Argv, arg)
+			}
+		}
+		all = append(all, got)
+	}
+	return all
+}
+
+// waitLaunch waits for a Worker's launch: Brain's host (--add-dir) and probes
+// are not one.
 func waitLaunch(out string, timeout time.Duration) (launch, bool) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		entries, _ := os.ReadDir(out)
-		for _, entry := range entries {
-			if !strings.HasSuffix(entry.Name(), ".json") {
-				continue
-			}
-			raw, err := os.ReadFile(filepath.Join(out, entry.Name()))
-			if err != nil {
-				continue
-			}
-			var got launch
-			// A Worker's launch: Brain's host (--add-dir) and probes are not.
-			if json.Unmarshal(raw, &got) == nil && strings.Contains(strings.Join(got.Argv, " "), "--mcp-config") {
+		for _, got := range launches(out) {
+			if strings.Contains(strings.Join(got.Argv, " "), "--mcp-config") {
 				return got, true
 			}
 		}

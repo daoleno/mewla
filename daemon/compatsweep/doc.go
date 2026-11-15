@@ -11,6 +11,6 @@
 // Scenarios that need a real agent (MEWLA_SWEEP_REAL=claude,codex) copy its
 // sign-in into the scenario's HOME and pass this shell's ANTHROPIC_*/OPENAI_*
 // gateway variables. Build the binary with -tags ghosttyvt (see
-// scripts/sweep/linux-sweep.sh); without the terminal engine the session host
+// scripts/tests/linux_sweep.sh); without the terminal engine the session host
 // exits at start and every scenario fails for that reason.
 package compatsweep

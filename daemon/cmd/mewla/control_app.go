@@ -841,8 +841,9 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 
 	// A successful paste is not proof that the provider survived startup.
 	if exit, exited := a.spawnedAgentExit(workerID, launchedAt); exited {
+		// Not ambiguous: the agent is gone, so the Work spawn made ends with why.
 		launchErr := spawnExitError(workerID, createOpts.Command, exit)
-		a.recordSpawnWorkFailure(ownedWork, launchErr, false)
+		a.recordSpawnWorkFailure(ownedWork, launchErr, autoCreatedWork)
 		return control.ErrorResponse("agent_exited", launchErr.Error())
 	}
 	presence, probeErr := a.watcher.ProbeSession(workerID)
@@ -1024,6 +1025,16 @@ func (a *controlApp) recordSpawnWorkFailure(item brain.Work, spawnErr error, aut
 	if autoCreated {
 		status := brain.WorkCancelled
 		next = "Delegated launch ended before a usable Session was created."
+		// An agent that exited: the Work says why it ended, not only that it did.
+		var exited *agentExitedError
+		if errors.As(spawnErr, &exited) {
+			if _, _, err := a.brainStore.AppendWorkEvent(brain.WorkEvent{
+				WorkID: item.ID, Kind: "launch_failed", DedupeKey: "launch-failed:" + item.ID,
+				SourceName: "worker spawn", Summary: spawnErr.Error(),
+			}); err != nil {
+				log.Printf("spawn work failure event: %v", err)
+			}
+		}
 		if _, err := a.brainStore.UpdateWork(item.ID, brain.WorkUpdate{Status: &status, NextAction: &next}); err != nil {
 			log.Printf("spawn work failure update: %v", err)
 		}

@@ -494,3 +494,26 @@ func record(t *testing.T, scenario, outcome, detail string) {
 	defer file.Close()
 	_, _ = file.Write(append(raw, '\n'))
 }
+
+// hold keeps the scenario's daemon up for a look in the web UI when
+// MEWLA_SWEEP_HOLD names a file: the browser link is written there, and the
+// scenario ends when the file is removed (or after 20 minutes).
+func (e *env) hold() {
+	file := os.Getenv("MEWLA_SWEEP_HOLD")
+	if file == "" {
+		return
+	}
+	link, err := e.cli(30*time.Second, "web", "-print", "@state")
+	if err != nil {
+		e.t.Logf("mewla web -print: %v: %s", err, link)
+		return
+	}
+	writeFile(e.t, file, link, 0o600)
+	deadline := time.Now().Add(20 * time.Minute)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(file); err != nil {
+			return
+		}
+		time.Sleep(time.Second)
+	}
+}

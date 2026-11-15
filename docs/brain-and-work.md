@@ -382,8 +382,15 @@ shell. If it is not, it shows as open but not ready.
 
 When the agent ends right after it starts, Chat and the tray show how it ended:
 its exit code and the last lines it printed. Mewla then waits two minutes before
-it starts that agent again by itself; `mewla brain use`, or choosing the agent in
+it starts that agent again by itself, and stops starting it once it has ended the
+same way twice in a row; `mewla brain use`, or choosing the agent in
 the app, tries again at once and prints the same reason if it ends again.
+
+A Worker whose agent ends right after it starts fails `mewla worker spawn` with
+how it ended (exit code and last output) instead of answering ok, and its Work
+says why it was cancelled. A Worker report Mewla could not record (for a turn
+that was replaced, say) is logged, shows on the Worker as **Report not
+recorded** with the reason, and is kept on its Work with what the Worker said.
 `mewla brain use` waits up to a minute for the agent to answer and reports a
 slow start as started, not failed.
 
