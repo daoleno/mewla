@@ -282,6 +282,10 @@ export class Transport {
       return;
     }
     this.socket = socket;
+    // The handshake gets a budget of its own: on Mewla Relay the tunnel's measurement and the bridged socket's own
+    // dial each take up to some 20 s on a slow link that does work.
+    if (this.attemptTimer) clearTimeout(this.attemptTimer);
+    this.attemptTimer = setTimeout(() => this.giveUp(attempt), transportTiming.connectLimitMs);
     let ended = false;
     socket.onopen = () => {
       if (attempt !== this.attempt) return socket.close();
