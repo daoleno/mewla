@@ -11,7 +11,7 @@ The [TestFlight Preview public invitation](https://testflight.apple.com/join/nMQ
 
 ## Supported mobile interfaces
 
-The agent interface is the shared NSH UI in `client/ui`, not an Android-only feature. Codex, Claude Code, Cursor Agent, Grok, Pi, and OpenCode sessions open in the structured Chat interface when transcript events are available; the top-bar action switches between Chat and Terminal, and Terminal attaches to the same daemon/tmux session through the platform's Ghostty bridge.
+The agent interface is the shared NSH UI in `client/ui`, not an Android-only feature. Codex, Claude Code, Cursor Agent, Grok, Pi, and OpenCode sessions open in the structured Chat interface when transcript events are available; the top-bar action switches between Chat and Terminal, and Terminal attaches to the same Session through the platform's Ghostty bridge.
 
 Platform-specific implementation is deliberately limited to native plumbing:
 
@@ -75,8 +75,8 @@ An end-to-end terminal check should cover:
 1. Pair and reconnect without reusing an expired enrollment token.
 2. Confirm Codex, Claude Code, Cursor Agent, Grok, Pi, or OpenCode sessions appear in Sessions.
 3. Open a structured Worker session and verify Chat is the default interface.
-4. Toggle to Terminal and attach to its tmux session.
-5. Confirm existing output, cursor, colors, and tmux status are rendered.
+4. Toggle to Terminal and attach to its Session.
+5. Confirm existing output, cursor and colors are rendered.
 6. Enter a command and confirm shell output returns to the same terminal surface.
 7. Background/foreground the app and confirm it resumes the connection and mounted surface.
 

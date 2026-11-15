@@ -171,9 +171,9 @@ the hub, and drives a choice with the same code as `answer_choice`.
 
 **What a pane-read id for a command dialog proves.** A Claude permission or Codex
 approval is answerable only when its id is exact (`classifier.PromptIdentity`: the
-displayed text of the dialog, caret and countdown excluded). The watcher captures
-it with `capture-pane -p -J -S -` and reads, in the same tmux call, whether the
-pane is on its alternate screen and the pane's own `@mewla_origin` option.
+displayed text of the dialog, caret and countdown excluded). The watcher reads
+the Session's screen and history from the session host, with whether it is on
+its alternate screen and the Session's own `origin` label.
 - Claude's dialog begins at a solid rule at column 0 that is followed by the tool's
   header line ("Bash command"); the header tells the rule from a line of dashes in
   the request. Measured on Claude 2.1.318 (alternate screen, no scrollback): the box
@@ -199,10 +199,10 @@ pane is on its alternate screen and the pane's own `@mewla_origin` option.
   because the screen never holds the whole command). Observed at 40 and 14 rows on
   that version only.
 - On the main screen (an inline Codex) the id needs the origin marker as the
-  capture's first line: Mewla's launch of every Worker pane prints
-  `mewla-origin <nonce>` (concealed) before anything else, and tmux evicts the oldest
-  lines first. How full the scrollback is proves nothing (tmux trims in batches).
-  No marker (an adopted or older pane, `clear-history`, `ESC[3J`, a shell rc that
+  capture's first line: Mewla's launch of every Worker Session prints
+  `mewla-origin <nonce>` (concealed) before anything else, and the session host evicts
+  the oldest lines first. How full the scrollback is proves nothing.
+  No marker (a Session started outside Mewla, `clear-history`, `ESC[3J`, a shell rc that
   clears the screen) means blocked with no id, and `worker answer` sends no key.
 - Blanks: Codex pads its grid with blanks of arbitrary width, so blanks outside the
   request (heading, Environment/Reason rows, separators, menu) are provider UI and
@@ -370,11 +370,11 @@ Brain and other control-plane callers use the executor catalog name `claude`
 through the provider-neutral `mewla worker spawn -executor claude` and
 `mewla worker send` protocol; Claude-specific startup and input readiness remain
 
-Any `[[executors]]` entry with `name` + `command` overrides or extends the map. Unknown tools are treated as custom tmux-backed agents.
+Any `[[executors]]` entry with `name` + `command` overrides or extends the map. Unknown tools are treated as custom agents in a Session.
 
 ## Delegated resource lifecycle
 
-Visible Brain-delegated sessions and Calendar-launched Work run as plain processes in tmux. Mewla does not create cgroups/scopes, apply memory or process limits, run a supervisor, enforce pool budgets, or refuse launches because of resource pressure.
+Visible Brain-delegated sessions and Calendar-launched Work run as plain processes in the session host. Mewla does not create cgroups/scopes, apply memory or process limits, run a supervisor, enforce pool budgets, or refuse launches because of resource pressure.
 
 Each delegated Session retains a daemon-namespaced ownership token and a short private temporary directory under `~/.mewla/t/<digest>`. `TMPDIR`, `TMP`, `TEMP`, and `MEWLA_BUILD_TMPDIR` point there. The inherited `MEWLA_WORKER_RESOURCE_UNIT` identifies descendants even after detachment. Observed PID/start-time identities are persisted in ownership leases; cleanup follows these identities and child relationships, checks the boot identity and PID generation, sends TERM, then KILL only to remaining exact owned processes. User sessions and the Brain host are outside delegated cleanup. Closing a Worker or accepting completed Work still performs this cleanup. Observation alone never kills an orphan.
 
@@ -406,6 +406,6 @@ Update granularity is intentionally limited to what each current Mewla adapter r
 - **Block-level — Pi:** Mewla owns an absolute `--session` JSONL path per live Session and projects the active parent chain after Pi's late first-assistant flush.
 - **Block-level — OpenCode:** OpenCode 2 only. A delegated launch passes its own `--session ses_*`; Mewla reads that session through the background service's API (`opencode api session.message.list`), refreshing only the newest pages when the service's database file changes, and projects text, reasoning and tool content. Sessions started outside Mewla bind by exact CWD plus start window.
 
-The CLIs themselves have richer direct protocols that the current tmux/transcript integration does not own: Codex app-server emits item-keyed assistant/reasoning/output deltas, Claude supports `stream-json` with partial message events, and Cursor supports `stream-json --stream-partial-output`. Genuine delta support for those providers requires a daemon-owned structured executor runtime that owns process or app-server I/O, translates native lifecycle notifications into this reducer, persists reconnectable snapshots, and coordinates send/interrupt/terminal attachment. Adding flags to the existing interactive tmux command is not sufficient, and parsing raw NDJSON from terminal chrome would violate the protocol boundary.
+The CLIs themselves have richer direct protocols that the current terminal/transcript integration does not own: Codex app-server emits item-keyed assistant/reasoning/output deltas, Claude supports `stream-json` with partial message events, and Cursor supports `stream-json --stream-partial-output`. Genuine delta support for those providers requires a daemon-owned structured executor runtime that owns process or app-server I/O, translates native lifecycle notifications into this reducer, persists reconnectable snapshots, and coordinates send/interrupt/terminal attachment. Adding flags to the existing interactive command is not sufficient, and parsing raw NDJSON from terminal chrome would violate the protocol boundary.
 
 On Linux, managed Claude sessions read project JSONL from the owning process's `CLAUDE_CONFIG_DIR` (or its `HOME/.claude`) when available. Other hosts retain the established default-home lookup; custom per-process config roots have not been verified there. A live Claude process that registered itself in that root's `sessions/<pid>.json` (matching `procStart` and cwd) binds exactly the transcript of that record's `sessionId`, before any resume or start-time heuristic (including an explicit `--resume`, because the process can move to a new session in place with `/branch`; the Brain Host binding follows the same record): Workers launched seconds apart in one directory otherwise look like near-tie candidates and would read as lost provider evidence. Until that transcript exists the Session has no transcript, never a sibling's; a stale, missing or malformed record falls back to the lookup below. On all hosts, an explicit `--resume <id>` binds only that ID, even when its transcript is older than the ordinary discovery window; if the file is missing, Mewla does not select a different same-directory chat. Claude keeps a conversation under the project folder of the cwd it was started in, and keeps appending there when it is resumed from another folder (`claude --resume <id>` in a worktree), so a registry record's or `--resume`'s id that the cwd's project folder does not hold is looked for by that id in every project folder of the same config root (a hit is remembered; a miss is looked for again after 15 s). Likewise an unbound `codex resume <id>` (not wrapped in an app-server) reads that thread's rollout from Codex's state database by id, whatever folder the thread was started in; a rollout the process holds open still wins. Selecting a Claude Provider connection updates future launches and retargets every routed, running Claude session in the same transaction: the process keeps its loopback route URL and client model, and its next request reaches the newly selected connection. After a cross-provider switch the route stays transparent except for one thing: thinking blocks are signed by the backend that produced them, and other backends reject them. The router learns which signatures the current connection issued (from its streamed or JSON replies) and drops only thinking it did not issue. Every other byte reaches the new connection unchanged, so upstreams that verify Claude Code requests still accept them. The learned set is held in memory; after a daemon restart a switched Session drops its older thinking once and relearns. Codex Responses routes instead strip provider-side state (`previous_response_id`, reasoning items, `item_reference`). The per-session Provider/model picker stays unavailable because no native process-control owner can acknowledge a model change.

@@ -20,16 +20,13 @@ agent. A passing provider exit or a model's assertion of PASS is not an oracle.
 | BDD-005 `PartialResultNeedsScopedFollowup` | Objective needs A and B; result contains A only | Scripted Brain asks only for missing B, then runtime reopens | Incomplete result is not accepted; later result requires explicit acceptance; no replay of original input |
 | BDD-006 `UnrelatedCleanupCannotInvalidateDecision` | Historical cleanup ownership conflict | Independent Work is accepted | Decision succeeds with scoped cleanup; global recovery still reports the genuine historical conflict |
 | BDD-007 `CompletedCleanupSerializesWithNewInput` | Old cleanup waiting for input lock | New turn acquires ownership first | Production watcher rejects old cleanup before transport IO |
-| BDD-008 `AlreadyReclaimedSessionCleanupIsIdempotent` | Completed ledger identity, missing tmux window | Production watcher cleanup runs twice | Proven absence succeeds idempotently through the actual cleanup boundary |
+| BDD-008 `AlreadyReclaimedSessionCleanupIsIdempotent` | Completed ledger identity, Session gone from the host | Production watcher cleanup runs twice | Proven absence succeeds idempotently through the actual cleanup boundary |
 | BDD-009 `LostOriginalResultSurvivesWaitAndRestart` | Original admitted turn provisionally lost | Brain waits and Store restarts before exact supplied terminal progress | Original result supersedes loss and requires fresh judgment; duplicates dedupe; cancelled/superseded turns cannot revive |
 | BDD-010 `IncompleteInventoryDoesNotDeclareOriginalLost` | Discovery snapshot lacks original Session | Authoritative probe says present, unreadable, or absent | Only proven absence records loss; present/unreadable preserves original progress eligibility without replay |
 | BDD-011 `RealProviderDecision` | Fresh arithmetic objective and independent numeric oracle | Two real API calls produce Worker result and Brain judgment | Actual delivered result checked, explicit decision persisted, exact cleanup asserted; opt-in hybrid, not native E2E |
 | BDD-012 `ProviderPathBudgetAndFailures` | Same provider harness using scripted HTTP | Full loop, 429, truncation, invalid envelope or timeout | Correct side effects or classified failure; no retry and no third call |
 | BDD-013 `DecisionSavedWithCleanupPending` | Cleanup failure on current completed Session | Control accepts Work | `brain_work_cleanup_pending` includes persisted Work; recovery completes only cleanup, not the business action |
-| BDD-014 `QuietMissingSessionCleanupIsAbsentNotUnowned` | Completed ledger identity, tmux 3.6a quiet show-options success for a gone session | Production watcher cleanup runs twice | Proven absence succeeds; not classified as `ErrUnownedTmuxTarget` |
-| BDD-015 `UnownedPresentCompletedCleanupIsProtected` | Completed ledger identity, live tmux target without Mewla ownership marker | Cleanup reconciled twice | Target is untouched and `ErrUnownedTmuxTarget` stays visible |
-| BDD-016 `RealTmuxCompletedCleanupDistinguishesAbsenceAndUnowned` | Isolated tmux socket with reclaimed owned window and later unowned identity reuse | Official completed cleanup | Absence is idempotent; reused unowned window is not killed |
-| BDD-017 `RealTmuxWrongSocketAndRebootOwnership` | Completed target on a different socket; leftover owned window after a fresh watcher | Official completed cleanup | Wrong-socket ambient is untouched; reboot leftover owned window is reclaimed; retry is idempotent |
+| BDD-015 `UnownedPresentCompletedCleanupIsProtected` | Completed ledger identity, live Session without Mewla ownership marker | Cleanup reconciled twice | Session is untouched and `ErrUnownedSession` stays visible |
 | BDD-018 `StartupReconciliationAbsentCompletedIsIdempotent` | Mixed absent completed Session and genuine unowned present target | `ReconcileSignalSystemStartup` twice | Absent target is reclaimed; unowned/active/Host survive; unowned error remains visible |
 | BDD-019 `PresentOwnedCleanupRequiresProvenIdentity` | Present owned completed target with recorded identity | Resolver unknown, mismatched/reused generation, matching generation, or dead pane with matching pane generation | Unknown/mismatch refuse with no kill or resource release; known match and proven-absent remain idempotent |
 
@@ -172,8 +169,8 @@ retroactively prove that a previously rejected live report was delivered.
 
 These regressions cover an owned Session missing from discovery and the
 wait/restart supplied-progress rejection. They do not prove arbitrary orphaned
-native-process recovery after the underlying tmux Session truly disappears.
+native-process recovery after the underlying Session truly disappears.
 The process may still run outside discoverable ownership; that uncertainty
 must remain distinct from success and must never authorize business replay.
 
-Worker pane ownership and migration are described in [Worker pane identity](internal/worker-pane-identity.md). The real-tmux regressions are `TestRealTmuxWorkerOwnsPaneAcrossSplitAndRemoval`, `TestRealTmuxWorkerEnvironmentAndOwnershipStayInPane`, and `TestPaneMigrationPreservesRunningTurnAcrossRestart`. All mutations use owned scratch sockets.
+Worker Session ownership is described in [Worker Session identity](internal/worker-session-identity.md).

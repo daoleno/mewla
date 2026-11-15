@@ -3,19 +3,18 @@
 Android and iOS use the same path: PTY output updates the live libghostty-vt
 grid in the terminal view, and the history above it is the rows the page hands
 the view. The view scrolls through those rows itself, with the platform's own
-finger tracking and momentum. With no history, or while the program is on the
-alternate screen, a drag is not taken: the view reports it (`scroll`, in lines,
-positive going back in time) and the page sends `terminal_scroll`, which moves
-the computer's tmux copy mode. `terminal_scroll_cancel` leaves it. A tap on the
-live screen focuses the pane under the finger (`terminal_focus_pane`); a tap on a
-history row sends nothing to the live program.
+finger tracking and momentum. While the program is on the alternate screen, a
+drag goes to the program: as wheel presses when it takes mouse reports, as
+cursor keys when it asks for them (DEC 1007), and not at all otherwise
+(`client/core/terminal/wheel.ts`). A tap on a history row sends nothing to the
+live program.
 
-## Session host Sessions: numbered scrollback
+## Numbered scrollback
 
-A Session that runs in the session host (`mewla host`) has no copy-mode and no
-snapshot. The host's libghostty-vt keeps the history (10,000 rows), and the
-App is sent only what it is missing. `terminal_history` takes an optional
-`since` cursor, `{epoch, next}`, and a host Session answers with a delta:
+The session host's libghostty-vt keeps each Session's history (10,000 rows),
+and the App is sent only what it is missing. `terminal_history` takes a
+`since` cursor, `{epoch, next}` (a request without one is refused), and the
+answer is a delta:
 
 - `lines` are styled ANSI rows, oldest first, and `flags` has one bit set per
   row: 1 soft-wrapped onto the next row, 2 continues the row above, 4 starts a
@@ -62,68 +61,26 @@ daemon's view and `mewla attach` then ask the Session's size (`Info`) every
 half second and start over the same way when it is not the size their replay
 was drawn at.
 
-A request without `since` (an older App), and every tmux Session, still gets the
-snapshot described below. The App turns both into the same instruction for the
-view: void the history, drop `removed` rows from its front, append `rows`
-(`client/core/terminal/history.ts`). While scrolled up, the rows on screen stay
-put.
-
-Several viewers can show one host Session (the App, `mewla attach` on a
-computer), and the program draws for one size: the viewer a person last acted
-on sets it (attaching, a resize, typing). The host ends every other viewer that
-asked to redraw (`AttachParams.Redraw`) with `AttachResized` when the size
-changes, and the viewer attaches again without a size for a full reset and a
-replay at the new size: output drawn for another width would otherwise write
-rows over rows on its grid, and stay so after the sizes match again. A viewer
-never takes the size back on its own (after `AttachBehind` or `AttachResized`),
-or two viewers of different sizes would take it from each other. Until its
-person acts (a focus-out report is not acting), a viewer that is not the one
-acted on is drawn at the other size: the daemon tells the App's view the
-Session's size (`terminal_size`) before each replay, so a view that can draw
-that grid fitted into its area does, and `mewla attach` mirrors the host's
-screen cut to its window (`mirrorFrame`) instead of writing output meant for
-another size. Viewers from before `Redraw` keep their stream. A host from before `Redraw` (every Session started before the
-upgrade runs on one until the host restarts) answers `Attached.Redraw` false
-and never ends a viewer for a resize: the daemon's view and `mewla attach` then
-ask the Session's size (`Info`) every half second and start over the same way
-when it is not the size their replay was drawn at.
-
-## History and live output (tmux Sessions)
-
-The authenticated `terminal_history` request takes an open `session_id` and is
-checked against that connection's terminal-session owner. It captures the active
-pane of that attachment's linked tmux view. It never enters tmux copy-mode.
-The response includes pane identity, pane width, history size, alternate-screen
-state, and ANSI history, excluding the live screen.
-
-Captures preserve physical rows and ANSI attributes (`capture-pane -e -N`). The
-view renders them with a second VT in the live terminal's theme, a page of
-rows at a time when first needed (see [terminal rendering](terminal-rendering.md)). History is not
-converted to plain text or reconstructed by comparing live screenshots. The live
-cursor stays in the live grid. History selection/copy uses physical row breaks:
-tmux's ANSI capture does not carry the live grid's soft-wrap metadata.
-
-History loads on attachment and refreshes after output, resize, or pane focus.
-Refresh is coalesced to a 750 ms idle timer (`snapshotMs`), with one request at
-a time; late results cannot replace a different attachment's history.
-
-While reading older output, new output continues to update the live grid. On
-the next idle refresh, the viewport remains on the same retained row, including
-when the bounded history drops old rows. If the reader's row has been evicted,
-the viewport stops at the oldest retained row. **Scroll to bottom**, keyboard
-input, and the keyboard accessory return to live output. Scrolling does not
-dismiss the IME or resize the PTY.
+The App turns every answer into one instruction for the view: void the
+history, drop `removed` rows from its front, append `rows`
+(`client/core/terminal/history.ts`). History loads on attachment and refreshes
+250 ms after output, one request at a time; a late answer cannot replace a
+different attachment's history. While scrolled up, the rows on screen stay put
+and new output keeps updating the live grid. If the reader's row has been
+evicted, the viewport stops at the oldest retained row. **Scroll to bottom**,
+keyboard input, and the keyboard accessory return to live output. Scrolling
+does not dismiss the IME or resize the PTY.
 
 ## Full-screen apps, resize, and limits
 
-On width changes, tmux remains responsible for terminal reflow. Mewla fetches the
-pane history again at its new width and retains the nearest physical reading
-position; it does not promise that the same logical paragraph keeps its exact
-pixel position after reflow. Switching pane, session, or current server replaces
+On width changes the session host reflows the terminal and starts a new epoch.
+The App fetches the history again at its new width and retains the nearest
+physical reading position; it does not promise that the same logical paragraph keeps its exact
+pixel position after reflow. Switching Session or current server replaces
 or clears the old history. Failed history loads expose a retry notice
 (`retryHistory`) without replacing the live terminal.
 
-Each history snapshot or delta is limited to 6,000 physical rows
+Each history delta is limited to 6,000 physical rows
 (`HISTORY_MAX_ROWS`) and 4 MiB of ANSI (`HISTORY_MAX_BYTES`).
 
 ## Selecting, links, prompts, search
@@ -150,13 +107,13 @@ the match shows as a tinted row, older and newer matches are the arrows.
 Run the terminal tests in `client/core/terminal` (`cd client && bun test core/terminal`) and
 `client/ui/terminal` (`cd client/ui && nsh test terminal`), `nsh check`, and `go test ./...`
 for daemon changes. Runtime checks
-need a real tmux pane with more than 6,000 mixed ANSI/CJK rows, an inline TUI and
+need a real Session with more than 6,000 mixed ANSI/CJK rows, an inline TUI and
 an alternate-screen TUI, and Android/iOS device coverage. Record gesture/frame
-timing and terminal history/copy-mode command counts separately from unrelated
+timing and terminal history request counts separately from unrelated
 daemon discovery work.
 
 Never start a verification daemon against the user's home or state. Isolate
-`HOME`, `CODEX_HOME`, tmux socket and temporary paths, and remove inherited
+`HOME`, `CODEX_HOME`, the state directory and temporary paths, and remove inherited
 `MEWLA_STATE_DIR` and Worker control variables. Record the real route-listener and
 model-route state hashes before and after. A source checkout watched by
 `mewla-dev` cannot receive production Go edits without restarting that live daemon;

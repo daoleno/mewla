@@ -304,7 +304,7 @@ grow with the size of a transcript or of the machine:
   Only a decision that a process is gone, such as stopping a Worker, reads every
   process again.
 - The daemon's I/O counters include what its reaped child processes read, so a
-  process started per tick is a read cost of its own. A poll does not ask tmux
+  process started per tick is a read cost of its own. A poll does not ask the session host
   for what it just observed (a pane's generation is the digest of its id), and
   the sign-in probes of the configured agents, which start every agent CLI
   (several MB of reads each for a Node or Bun CLI), run every 15 minutes once

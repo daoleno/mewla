@@ -22,7 +22,7 @@ so unrelated conversation does not revise the Work or create a card.
 
 The visible Brain timeline is a projection. One Work owns one replaceable card;
 repeated delivery of its stable Event cannot append duplicate cards. Session,
-provider, tmux, transcript, and process observations help decide whether an
+provider, transcript, and process observations help decide whether an
 Attempt is viable, but none can mark Work done.
 
 Assistant replies are ingested from the current Host's provider transcript and
@@ -65,7 +65,7 @@ evidence of a different provider invalidates the binding; missing or partial
 files do not. A mismatched saved transcript must never replace the live Host's
 conversation or hide its subsequent replies behind the prior Host's history.
 
-Host continuity uses the daemon's fixed tmux socket. A negative cleanup probe
+Host continuity uses the daemon's session host socket. A negative cleanup probe
 alone cannot replace a Host: a second successful inventory must confirm absence.
 Unavailable transport and unknown provider identity preserve the binding and
 block a new launch. Host discovery and launch are serialized within the daemon.
@@ -97,7 +97,7 @@ the persisted address and any addresses retained by live clients; shutdown
 closes them together. No provider input or process restart is needed. This
 repairs listener metadata contaminated by an older secondary daemon while
 preserving newer clients already using the recorded address. Verification must
-check the Host's actual embedded route URL as well as its tmux/process binding.
+check the Host's actual embedded route URL as well as its Session/process binding.
 
 Fresh Claude Hosts receive an explicit `--session-id`; resumes keep the recorded
 native identity. Recovery can adopt an older Host with no resume argument using

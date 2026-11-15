@@ -50,8 +50,7 @@ ANSI and draws a page of 64 rows the first time one of its rows is needed (on
 screen, selected or copied), so a flood that hands over thousands of rows costs
 only an append; a theme or width change voids the drawn pages. Each row
 therefore has to stand on its own: session-host rows start and end their style
-with a reset, and core's `standAloneRows` carries a tmux capture's style from
-the rows above into each row. Search and the prompt jumps
+with a reset. Search and the prompt jumps
 run in the page over the same rows and move the view (`scrollTo`, `mark`). See
 [terminal scrolling](terminal-scrolling.md) for that contract and its limits.
 

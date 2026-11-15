@@ -71,7 +71,7 @@ The daemon uses maintained Go MCP, OAuth2, OpenAPI and JSON-schema packages. The
 
 Run meaningful connection regressions, `GOMAXPROCS=2 go test -p 1 ./...`, daemon build, `cd client && bun test core` and `cd client/ui && nsh check && nsh test`. Build the normal Android and iOS hosts serially; start only one small emulator after the build exits. Protocol fixtures prove protocol behavior, not real vendor consent.
 
-`TestPluginsOwnedRuntime` provides disposable production pairing/WebSocket/control dispatch without starting Brain or schedulers. Keep its state private and remove it after verification. A live `mewla-dev` watcher can restart the Brain host when original Go source changes; build in isolation, then use the current private checkpoint/recovery loading procedure to integrate and load safely. Never reset the original provider, tmux or state.
+`TestPluginsOwnedRuntime` provides disposable production pairing/WebSocket/control dispatch without starting Brain or schedulers. Keep its state private and remove it after verification. A live `mewla-dev` watcher can restart the Brain host when original Go source changes; build in isolation, then use the current private checkpoint/recovery loading procedure to integrate and load safely. Never reset the original provider, session host or state.
 
 ### CLI cloud accounts
 

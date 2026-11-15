@@ -25,7 +25,7 @@ curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent
 
 ## Build from source
 
-Startup prints the listening address, available private-network addresses, and one pairing command. Saved model routes are reclaimed when the selected tmux server confirms their sessions are absent. Live or unobservable sessions retain their routes; a model-settings warning for a retained route does not mean the HTTP server failed to start.
+Startup prints the listening address, available private-network addresses, and one pairing command. Saved model routes are reclaimed when the session host confirms their Sessions are absent. Live or unobservable sessions retain their routes; a model-settings warning for a retained route does not mean the HTTP server failed to start.
 
 Source builds require the Go toolchain declared in `daemon/go.mod`:
 
@@ -159,10 +159,10 @@ target already orders itself after the units it wants, so that line would form
 an ordering cycle at boot and drop the implicit ordering. Ownership is bound
 to the unit, not to a same-binary guess: an active unit that owns a different
 state does not satisfy the cgroup-lock and identity checks above.
-`KillMode=process` is intentional: the daemon reuses the user's ordinary tmux
-server, a shared per-user resource, so stopping or restarting `mewla.service`
-terminates only the daemon and never tears down tmux or Worker sessions; tmux,
-Worker sessions and the pairing/state files are outside the unit's lifecycle.
+`KillMode=process` is intentional: the session host the daemon starts, and
+every Session in it, outlive the daemon, so stopping or restarting
+`mewla.service` terminates only the daemon; the session host, its Sessions and
+the pairing/state files are outside the unit's lifecycle.
 
 Known dependency: the DEV runner (`mewla-dev`) binds its daemon child to the
 watcher lifetime on Linux (`PR_SET_PDEATHSIG`), so an abrupt watcher death
@@ -193,4 +193,4 @@ See `daemon/Dockerfile`. Prefer the host binary so agents and their CLIs share y
 docker build -f daemon/Dockerfile -t mewla .
 ```
 
-The image's daemon carries the session host's terminal engine, built and linked statically the same way as the Linux release binaries (`zig cc`, musl, `ghosttyvt`), so Sessions run in the container without tmux. `daemon/Dockerfile.dockerignore` keeps the build context to `daemon/`, `scripts/`, `native/terminal-vt/` and the few client files the engine's library build checks (`verify-libghostty.sh --contract`). The image never updates itself; rebuild it. Container use requires mounting state, publishing or proxying port 9876, and installing or mounting the agent CLIs yourself.
+The image's daemon carries the session host's terminal engine, built and linked statically the same way as the Linux release binaries (`zig cc`, musl, `ghosttyvt`), so Sessions run in the container. `daemon/Dockerfile.dockerignore` keeps the build context to `daemon/`, `scripts/`, `native/terminal-vt/` and the few client files the engine's library build checks (`verify-libghostty.sh --contract`). The image never updates itself; rebuild it. Container use requires mounting state, publishing or proxying port 9876, and installing or mounting the agent CLIs yourself.

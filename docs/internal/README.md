@@ -32,7 +32,7 @@ and [third-party assets](../third-party-assets.md).
 - [Brain lifecycle](brain-lifecycle.md)
 - [Brain engineering](brain-engineering.md) and [engineering evaluation](brain-engineering-evaluation.md)
 - [Prompt design](prompting.md)
-- [Worker pane identity](worker-pane-identity.md)
+- [Worker Session identity](worker-session-identity.md)
 
 ## App and terminal
 

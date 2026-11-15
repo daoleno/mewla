@@ -8,7 +8,7 @@ cover the alternatives.
 
 - **The daemon** (`mewla`) runs on your computer next to your repositories and
   agent CLIs. It owns Sessions, Brain, Work and pairing, and runs every agent
-  in its own session host, so nothing else, such as `tmux`, is needed. One
+  in its own session host, so nothing else is needed. One
   binary; no cloud service is required, and remote access is an opt-in sign-in.
 - **The app** on Android or iOS connects to one computer at a time. The daemon
   also serves it as a web page.

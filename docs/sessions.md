@@ -275,8 +275,7 @@ mewla host status       # the session host's Sessions in full
 ```
 
 Ctrl-\ detaches; the Session keeps running. In the grid, Ctrl-] goes back from
-a Session to the grid. A Session still running in `tmux` from an earlier Mewla
-opens in `tmux`, which detaches with its own prefix key.
+a Session to the grid.
 
 On Linux with a systemd user session, the session host runs as a user service
 of its own (`mewla-session-host-…`), not inside the terminal or service that
@@ -284,9 +283,6 @@ started Mewla. When the computer runs out of memory and the kernel ends one
 process, systemd does not stop the host and the Sessions with it; closing the
 terminal Mewla was started from does not either. Without a systemd user
 session the host starts directly.
-
-Sessions an earlier Mewla started in `tmux` move to the session host when their
-agent is idle; see [Updating from Mewla 0.2](install-daemon.md#updating-from-mewla-02).
 
 ## How Mewla follows each agent
 

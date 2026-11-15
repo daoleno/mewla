@@ -77,7 +77,7 @@ Important:
 
 ### Labels
 
-Prefer a short user-facing label, not raw tmux or shell names.
+Prefer a short user-facing label, not raw terminal or shell names.
 
 Preferred order when available:
 
