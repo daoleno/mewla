@@ -101,6 +101,30 @@ describe("the floating screen: agents' displays and the Mac", () => {
     expect(shown.texts()).toContain("ZeroGAccounts");
   }, 25_000);
 
+  test("on a Mac, a Chrome-only Worker's sign-in window: its Work card's Screen opens Screen at that window, not the Mac's own screen", async () => {
+    const id = "mh-signin";
+    const mac = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: true, permissions: [] };
+    const shown = await app(workThread(id, "SignIn"), {
+      [`GET ${BASE}/display`]: json({ displays: [display(id, { name: "SignIn", width: 800, height: 500, apps: 0, browser: 1, idle_s: 600 })], available: true }),
+      [`GET ${BASE}/screen`]: json(mac),
+    });
+    await shown.waitFor("id:work-card-screen", { timeout: 10_000 });
+    await shown.press("id:work-card-screen");
+    await shown.waitFor(`id:display-${id}`, { timeout: 10_000 });
+    expect(shown.texts()).toContain("SignIn");
+    expect(shown.shows("id:displays-own-screen")).toBe(true);
+  }, 25_000);
+
+  test("on a Mac, a running Chrome-only Worker's window floats under its name", async () => {
+    const mac = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: true, permissions: [] };
+    const shown = await app({ worker_sessions: [session("mh-signin", { name: "SignIn" })] }, {
+      [`GET ${BASE}/display`]: json({ displays: [display("mh-signin", { width: 800, height: 500, apps: 0, browser: 1, idle_s: 1 })], available: true }),
+      [`GET ${BASE}/screen`]: json(mac),
+    });
+    await shown.waitFor("id:screen-float", { timeout: 10_000 });
+    expect(shown.texts()).toContain("SignIn");
+  }, 25_000);
+
   test("a display with nothing left on it gives the Work card no Screen", async () => {
     const id = "mh-empty";
     const shown = await app(workThread(id, "Tidy"), {

@@ -433,6 +433,69 @@ describe("Screen: Linux agent displays", () => {
   });
 });
 
+describe("Screen: a Mac's agent browser windows", () => {
+  const window = (id: string, name: string, extra: Record<string, unknown> = {}) => ({ id, name, width: 800, height: 500, control: "agent", apps: 0, browser: 1, idle_s: 3, ...extra });
+  const DISPLAY_VIEWER = "ws://desk.test:9877/display/viewer";
+
+  test("a Chrome-only Worker's window is listed first, by name, live; the Mac's own screen is one tap away and back", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true }) }));
+    await app.waitFor("id:display-mh-signin");
+    expect(app.texts()).toContain("SignIn");
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
+    expect((opened(app, DISPLAY_VIEWER)[0].data as { url: string }).url).toContain("worker=mh-signin");
+    // Nothing of the Mac's own screen opens under the agents' windows.
+    expect(opened(app)).toHaveLength(0);
+    await app.press("id:displays-own-screen");
+    await app.waitUntil(() => opened(app).length === 1);
+    await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 1);
+    await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
+    await app.waitFor("id:screen-indicator");
+    await app.press("id:screen-options");
+    await app.waitFor("id:screen-agent-windows");
+    expect(app.texts()).toContain("Agent's browser window");
+    await app.press("id:screen-agent-windows");
+    await app.waitFor("id:display-mh-signin");
+    await app.waitUntil(() => closed(app).length === 1);
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 2);
+  });
+
+  test("opened for a Worker (its Work card's Screen), it is at that Worker's window", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-a", "Research"), window("mh-signin", "SignIn")], available: true }) }, { worker: "mh-signin" }));
+    await app.waitFor("id:display-mh-signin");
+    expect(app.shows("id:display-mh-a")).toBe(true);
+    expect(opened(app)).toHaveLength(0);
+  });
+
+  test("Hold from the window's card holds the agent; its keyboard has the Mac's keys", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true }) }, { platform: "android" }));
+    await app.waitFor("id:display-mh-signin");
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
+    await app.host.send("app.viewer", { type: "connected", width: 800, height: 500 });
+    await app.press("label:Options for SignIn");
+    await app.press("text:Hold the agent");
+    await app.waitFor("text:You hold the agent");
+    expect(app.host.posts().filter((p) => p.name === "app.socketSent").map((p) => (p.data as { message: unknown }).message)).toContainEqual({ type: "hold", on: true });
+    await app.press("label:Show keyboard");
+    await app.waitFor("text:⌘");
+  });
+
+  test("the last window closing hands the page to the Mac's own screen", async () => {
+    let list = [window("mh-signin", "SignIn")];
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: () => json({ displays: list, available: true }) }));
+    await app.waitFor("id:display-mh-signin");
+    list = [];
+    await app.waitUntil(() => opened(app).length === 1, { timeout: 10_000 });
+    await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 1);
+  });
+
+  test("a Mac without agent windows (or an older Mewla) opens its own screen as before", async () => {
+    const none = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) }));
+    await none.waitUntil(() => opened(none).length === 1);
+    const older = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: { status: 404, headers: { "content-type": "text/plain" }, body: "404 page not found" } }));
+    await older.waitUntil(() => opened(older).length === 1);
+  });
+});
+
 describe("Screen in a browser", () => {
   const web = { platform: "web" as const, width: 1280, height: 800 };
   const linux = { ...base, platform: "linux", supported: false, ready: false, agent_displays: true };
