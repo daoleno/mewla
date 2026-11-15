@@ -77,4 +77,14 @@ func TestABrainThatExitsAtStartShowsHowAndIsNotRespawned(t *testing.T) {
 	if _, err := service.SetHostExecutor("claude"); !HostExitedAtStart(err) || len(fw.created) != 2 {
 		t.Fatalf("second choice: %v, created %d", err, len(fw.created))
 	}
+
+	// A daemon that starts again finds the ended Host and says how it ended,
+	// without starting the same launch again in the same breath.
+	restarted := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+		"claude": {Name: "claude", Command: "claude"},
+		"codex":  {Name: "codex", Command: "codex"},
+	}))
+	if _, err := restarted.ReconcileHostContinuity(); !HostExitedAtStart(err) || len(fw.created) != 2 {
+		t.Fatalf("after a restart: %v, created %d", err, len(fw.created))
+	}
 }

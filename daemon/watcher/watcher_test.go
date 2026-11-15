@@ -2357,6 +2357,7 @@ func TestResolveTargetIdentityReportsPaneStillInLaunchShell(t *testing.T) {
 				t.Fatalf("hook saw %+v, want the launch shell", got)
 			}
 		},
+		nil,
 	)
 	if known || !launching {
 		t.Fatalf("known=%v launching=%v, want unknown identity still in launch shell", known, launching)
@@ -2368,10 +2369,22 @@ func TestResolveTargetIdentityReportsPaneStillInLaunchShell(t *testing.T) {
 	// A resolver that never answers is unprovable, not a launching pane.
 	_, known, launching = resolveTargetIdentityLaunching(
 		func(string) (targetProcessIdentity, bool) { return targetProcessIdentity{}, false },
-		"session:@1", "claude --session-id x", 100*time.Millisecond, nil,
+		"session:@1", "claude --session-id x", 100*time.Millisecond, nil, nil,
 	)
 	if known || launching {
 		t.Fatalf("known=%v launching=%v, want an unprovable identity", known, launching)
+	}
+
+	// A program that ended is not waited for: on Windows Brain's agent ended
+	// in under a second and its first message waited out the whole budget,
+	// so the reason it ended reached nobody for 20 seconds.
+	start := time.Now()
+	_, known, launching = resolveTargetIdentityLaunching(
+		func(string) (targetProcessIdentity, bool) { return targetProcessIdentity{}, false },
+		"session:@1", "claude --session-id x", 10*time.Second, nil, func() bool { return true },
+	)
+	if known || launching || time.Since(start) > time.Second {
+		t.Fatalf("known=%v launching=%v after %s, want an ended program reported at once", known, launching, time.Since(start))
 	}
 }
 

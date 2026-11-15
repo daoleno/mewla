@@ -183,7 +183,7 @@ func resolveTargetIdentityWhenReadyTimeout(
 	commandHint string,
 	timeout time.Duration,
 ) (targetProcessIdentity, bool) {
-	identity, known, _ := resolveTargetIdentityLaunching(resolver, target, commandHint, timeout, nil)
+	identity, known, _ := resolveTargetIdentityLaunching(resolver, target, commandHint, timeout, nil, nil)
 	return identity, known
 }
 
@@ -203,6 +203,7 @@ func resolveTargetIdentityLaunching(
 	commandHint string,
 	timeout time.Duration,
 	onLaunchShell func(targetProcessIdentity),
+	ended func() bool,
 ) (identity targetProcessIdentity, known bool, stillLaunching bool) {
 	deadline := time.Now().Add(timeout)
 	expectedExecutable := commandExecutableBase(strings.TrimSpace(commandHint))
@@ -243,6 +244,9 @@ func resolveTargetIdentityLaunching(
 			// pane's launch state as last observed.
 			previous = targetProcessIdentity{}
 			stable = 0
+			if ended != nil && ended() {
+				return targetProcessIdentity{}, false, false
+			}
 		}
 		if !time.Now().Before(deadline) {
 			return targetProcessIdentity{}, false, stillLaunching
@@ -260,7 +264,18 @@ func (w *Watcher) resolveLaunchIdentity(
 	sessionID, command, receipt string,
 	timeout time.Duration,
 ) (targetProcessIdentity, error) {
-	resolver := w.targetForSession
+	// A program that already ended has no identity to wait for: say so at
+	// once rather than when the wait runs out.
+	var lastEndedCheck time.Time
+	ended := false
+	resolver := func(target string) (targetProcessIdentity, bool) {
+		identity, ok := w.targetForSession(target)
+		if !ok && time.Since(lastEndedCheck) >= launchShellPromptInterval {
+			lastEndedCheck = time.Now()
+			ended = w.SessionExited(target)
+		}
+		return identity, ok
+	}
 	dismissed := false
 	identity, known, stillLaunching := resolveTargetIdentityLaunching(
 		resolver, sessionID, command, timeout,
@@ -270,9 +285,13 @@ func (w *Watcher) resolveLaunchIdentity(
 			}
 			dismissed = w.dismissLaunchShellPrompt(sessionID, shell, resolver)
 		},
+		func() bool { return ended },
 	)
 	if known {
 		return identity, nil
+	}
+	if ended {
+		return targetProcessIdentity{}, definitelyNotSubmitted(receipt, ErrSessionEnded)
 	}
 	if stillLaunching {
 		return targetProcessIdentity{}, workerInputNotReadyFor(receipt, command)
@@ -1394,6 +1413,9 @@ var ErrOwnershipProbeUnavailable = errors.New("delegated Session ownership probe
 // lacks Mewla's durable ownership marker. Mutating it would cross the lifecycle
 // boundary into an ambient user session.
 var ErrUnownedTmuxTarget = errors.New("Session is not owned by Mewla")
+
+// ErrSessionEnded is input refused because the Session's program has ended.
+var ErrSessionEnded = errors.New("the program in this Session has ended")
 
 // ErrNotOwnedDelegatedWorker means a completed Session's pane is present but
 // is no longer a delegated Worker (for example the agent exited and a shell is
