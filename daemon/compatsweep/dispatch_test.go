@@ -157,9 +157,10 @@ func TestWorkerDispatchOnEachExecutor(t *testing.T) {
 	}
 }
 
-// TestWorkerPromptAnsweredFromChat: a claude Worker that asks permission (not
-// bypassed) shows the decision, and answering it the way the Chat card does
-// lets it go on.
+// TestWorkerPromptAnsweredFromChat: a claude Worker asks the person a
+// question (its AskUserQuestion menu); the Worker card shows the prompt, and
+// answering it the way the Chat card does lets the Worker go on with that
+// answer.
 func TestWorkerPromptAnsweredFromChat(t *testing.T) {
 	realAgent(t, "claude")
 	e := newRealEnv(t, realOptions{})
@@ -169,64 +170,69 @@ func TestWorkerPromptAnsweredFromChat(t *testing.T) {
 	}
 	e.start()
 	c := e.connect(e.pair())
-	response, err := e.cli(2*time.Minute, "worker", "spawn", "@state", "-name", "SweepAsk", "-executor", "claude", "-cwd", project,
-		"-command", "claude --model claude-sonnet-5-5 --permission-mode default", "-profile", "quick",
-		"-prompt", "Run this exact shell command with your Bash tool: touch approved-by-chat.txt")
+	response, err := e.cli(2*time.Minute, "worker", "spawn", "@state", "-name", "SweepAsk", "-executor", "claude", "-cwd", project, "-profile", "quick",
+		"-prompt", "Use your AskUserQuestion tool now to ask me exactly one question, \"Which color?\", with the two options Red and Blue. "+
+			"Then write the color I chose, as one word, to the file color.txt in the current folder, and report done.")
 	if err != nil {
 		record(t, "worker-prompt-answered-from-chat", "fail", "spawn: "+oneLine(response))
 		t.Fatal(response)
 	}
-	var approval map[string]any
 	var workerID string
+	var prompt map[string]any
 	deadline := time.Now().Add(4 * time.Minute)
-	for approval == nil && time.Now().Before(deadline) {
-		out, _ := e.cli(30*time.Second, "worker", "approvals", "@state")
+	for prompt == nil && time.Now().Before(deadline) {
+		out, _ := e.cli(30*time.Second, "worker", "list", "@state", "--json")
 		if index := strings.Index(out, "{"); index >= 0 {
-			var reply map[string]any
+			var reply struct {
+				Workers []map[string]any `json:"workers"`
+			}
 			if json.Unmarshal([]byte(out[index:]), &reply) == nil {
-				if list, ok := find(reply, "approvals").([]any); ok && len(list) > 0 {
-					approval, _ = list[0].(map[string]any)
-					workerID = str(approval["worker_id"])
+				for _, w := range reply.Workers {
+					if p, ok := w["prompt"].(map[string]any); ok && strings.HasPrefix(str(w["name"]), "SweepAsk") && len(asSlice(p["questions"])) > 0 {
+						prompt, workerID = p, str(w["id"])
+					}
 				}
 			}
 		}
-		if approval == nil {
+		if prompt == nil {
 			time.Sleep(3 * time.Second)
 		}
 	}
-	if approval == nil {
-		record(t, "worker-prompt-answered-from-chat", "fail", "no decision was ever listed:\n"+e.logTail(10))
-		t.Fatal("no approval")
+	if prompt == nil {
+		record(t, "worker-prompt-answered-from-chat", "fail", "the Worker's question never showed on its card:\n"+e.logTail(10))
+		t.Fatal("no prompt")
 	}
-	if workerID == "" {
-		if w, ok := e.waitWorker(t, "SweepAsk", time.Second, nil); ok {
-			workerID = w.ID
+	blue := 0.0
+	for _, option := range asSlice(asSlice(prompt["questions"])[0].(map[string]any)["options"]) {
+		o, _ := option.(map[string]any)
+		if strings.Contains(strings.ToLower(str(o["label"])), "blue") {
+			blue, _ = o["number"].(float64)
 		}
 	}
-	allow := ""
-	if options, ok := approval["options"].([]any); ok {
-		for _, option := range options {
-			o, _ := option.(map[string]any)
-			if id := str(o["id"]); allow == "" && strings.Contains(strings.ToLower(id+str(o["label"])), "allow") {
-				allow = id
-			}
-		}
-	}
-	requestID := "approve-" + uuid.NewString()[:6]
-	c.send(map[string]any{"type": "approval_decision", "request_id": requestID, "worker_id": workerID, "id": str(approval["id"]), "option_id": allow})
+	requestID := "answer-" + uuid.NewString()[:6]
+	c.send(map[string]any{"type": "answer_prompt", "request_id": requestID, "worker_id": workerID,
+		"prompt_answer": map[string]any{"prompt_id": str(prompt["id"]), "answers": []any{map[string]any{"selected": []int{int(blue)}}}}})
 	answer, _ := c.waitFor(30*time.Second, func(m map[string]any) bool { return str(m["request_id"]) == requestID })
-	created := false
+	color := ""
 	deadline = time.Now().Add(3 * time.Minute)
-	for !created && time.Now().Before(deadline) {
-		_, statErr := os.Stat(filepath.Join(project, "approved-by-chat.txt"))
-		created = statErr == nil
-		if !created {
+	for color == "" && time.Now().Before(deadline) {
+		raw, _ := os.ReadFile(filepath.Join(project, "color.txt"))
+		color = strings.TrimSpace(string(raw))
+		if color == "" {
 			time.Sleep(2 * time.Second)
 		}
 	}
-	detail := fmt.Sprintf("decision %q (%s) answered %q -> reply %s; command ran=%v", str(approval["summary"]), str(approval["id"]), allow, str(answer["type"])+" "+str(answer["message"]), created)
-	record(t, "worker-prompt-answered-from-chat", map[bool]string{true: "pass", false: "fail"}[created], detail)
-	if !created {
-		t.Fatal(detail)
+	pass := strings.EqualFold(color, "blue")
+	detail := fmt.Sprintf("card showed %q (%s); answered Blue (%v) -> %s %s; Worker wrote %q", str(prompt["title"]), str(prompt["kind"]), blue,
+		str(answer["type"]), str(answer["message"]), color)
+	record(t, "worker-prompt-answered-from-chat", map[bool]string{true: "pass", false: "fail"}[pass], detail)
+	if !pass {
+		t.Fatal(detail + "\n" + e.logTail(10))
 	}
+	_, _ = e.cli(time.Minute, "worker", "close", "@state", "-id", workerID, "--force")
+}
+
+func asSlice(value any) []any {
+	list, _ := value.([]any)
+	return list
 }

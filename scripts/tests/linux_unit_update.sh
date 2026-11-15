@@ -141,8 +141,8 @@ after_main="$(main_pid)"
 [[ "$after_main" != "$before_main" && "$after_main" != 0 ]] && pass "the unit restarted onto $NEW (MainPID $before_main -> $after_main)" || fail "MainPID $before_main -> $after_main"
 [[ "$(host_pid)" == "$before_host" ]] && pass "update kept the session host ($before_host)" || fail "session host changed: $before_host -> $(host_pid)"
 agent_alive && pass "update kept the Worker's agent ($agent_pid)" || fail "the Worker's agent ended on update"
-listed() { for _ in $(seq 1 30); do as_user 'mewla worker list --json' 2>/dev/null | grep -q Keeper && return 0; sleep 1; done; return 1; }
-listed && pass "the Worker is still listed after update" || { fail "the Worker is not listed after update"; as_user 'mewla worker list --json' | head -c 600; }
+listed() { for i in $(seq 0 30); do as_user 'mewla worker list --json' 2>/dev/null | grep -q Keeper && { WAITED=$i; return 0; }; sleep 1; done; return 1; }
+listed && pass "the Worker is still listed after update (after ${WAITED}s)" || { fail "the Worker is not listed after update"; as_user 'mewla worker list --json' | head -c 600; }
 printf -- '--- mewla update said:\n%s\n' "$(cat "$S/update.txt")"
 
 as_user 'mewla restart' > "$S/restart.txt" 2>&1 || true
