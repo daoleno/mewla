@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/addressbook"
+	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/outsideagents"
@@ -95,8 +97,9 @@ reaches a Worker. Each agent is approved once, by name, and can be revoked.
   reply <request id> "<text>" [-work <work id>]
                        What Brain runs to answer an agent
 
-The door is http://127.0.0.1:9876/mcp on this computer. An agent on another
-computer uses this computer's remote access address (https only).
+The door is /mcp at this computer's Mewla address (http://127.0.0.1:9876/mcp,
+or the port Mewla took when another Windows user's Mewla holds 9876). An agent
+on another computer uses this computer's remote access address (https only).
 `
 
 func runAgentsCommand(args []string, stderr io.Writer) error {
@@ -130,7 +133,7 @@ func runAgentsCommand(args []string, stderr io.Writer) error {
 	case "connect":
 		fs.StringVar(&name, "name", "", "the agent's name as the person will see it (default: Claude Code or Codex from -for)")
 		fs.StringVar(&target, "for", "print", "print, claude or codex: how to hand the token to the agent")
-		fs.StringVar(&mcpURL, "url", "", "MCP address (default http://127.0.0.1:9876/mcp)")
+		fs.StringVar(&mcpURL, "url", "", "MCP address (default: /mcp at this computer's Mewla address)")
 		fs.BoolVar(&asJSON, "json", false, "print the URL and token as JSON")
 		fs.BoolVar(&noWait, "no-wait", false, "return after asking, without waiting for approval")
 		fs.DurationVar(&wait, "wait", outsideagents.ApprovalTTL, "how long to wait for approval")
@@ -173,6 +176,9 @@ func runAgentsCommand(args []string, stderr io.Writer) error {
 	out := os.Stdout
 	switch action {
 	case "connect":
+		if mcpURL == "" {
+			mcpURL = thisComputerMCPURL(cfg.stateDir)
+		}
 		return agentsConnect(call, out, stderr, name, target, mcpURL, asJSON, noWait, wait)
 	case "list":
 		pending, err := call(outsideagents.ControlRequest{Action: "pending"})
@@ -267,6 +273,35 @@ func validMCPURL(raw string) error {
 		return nil
 	}
 	return errors.New("the MCP address must be https, or http on this computer (127.0.0.1)")
+}
+
+// thisComputerMCPURL is /mcp at the address this computer's Mewla found for
+// itself, most recently seen first: a second Windows user's Mewla listens on
+// the next free port, because the first one's holds 127.0.0.1:9876.
+func thisComputerMCPURL(stateDir string) string {
+	const fallback = "http://127.0.0.1:9876/mcp"
+	dir, err := auth.ResolveStorageDir(stateDir)
+	if err != nil {
+		return fallback
+	}
+	book, err := addressbook.New(dir)
+	if err != nil {
+		return fallback
+	}
+	entries, err := book.List()
+	if err != nil {
+		return fallback
+	}
+	local, seen := "", time.Time{}
+	for _, entry := range entries {
+		if classifyAddress(entry.URL) == kindThisComputer && (local == "" || entry.LastSeenAt.After(seen)) {
+			local, seen = strings.TrimRight(entry.URL, "/"), entry.LastSeenAt
+		}
+	}
+	if local == "" {
+		return fallback
+	}
+	return local + "/mcp"
 }
 
 func agentsConnect(call func(outsideagents.ControlRequest) (outsideagents.ControlResult, error), out, stderr io.Writer, name, target, mcpURL string, asJSON, noWait bool, wait time.Duration) error {
