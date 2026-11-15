@@ -488,6 +488,15 @@ describe("Screen: a Mac's agent browser windows", () => {
     await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 1);
   });
 
+  test("a window that opens while Screen is up shows at once, also before this device may view the Mac", async () => {
+    let list: unknown[] = [];
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, approved: false, ready: false }), [`GET ${DISPLAY}`]: () => json({ displays: list, available: true }) }));
+    await app.waitFor("id:screen-enable");
+    list = [window("mh-signin", "SignIn")];
+    await app.waitFor("id:display-mh-signin", { timeout: 6_000 });
+    expect(app.texts()).toContain("SignIn");
+  });
+
   test("a Mac without agent windows (or an older Mewla) opens its own screen as before", async () => {
     const none = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) }));
     await none.waitUntil(() => opened(none).length === 1);
