@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { installMemoryPlatform } from "../testing/memoryPlatform";
 import type { StoredServer } from "../storedServerContract";
-import { changePhone, getPhoneStatus } from "./api";
-import { isPhoneLink, PHONE_CLOSE, PHONE_LINK_BACKOFF_MS, PHONE_PROTOCOL_VERSION, phoneDeviceURL, phoneLinkTarget, sameTarget } from "./link";
+import { changePhone } from "./api";
+import { isPhoneLink, phoneDeviceURL, phoneLinkTarget, sameTarget } from "./link";
 
 const DAEMON = "ab".repeat(32);
 
@@ -36,12 +36,6 @@ describe("the link's computer", () => {
     expect(sameTarget(a, null)).toBe(false);
     expect(sameTarget(null, null)).toBe(true);
   });
-
-  test("protocol 1, the daemon's close codes and the 1-2-4-8-15 s backoff", () => {
-    expect(PHONE_PROTOCOL_VERSION).toBe(1);
-    expect(PHONE_CLOSE).toEqual({ replaced: 4001, unsupported: 4002, protocol: 4003 });
-    expect([...PHONE_LINK_BACKOFF_MS]).toEqual([1_000, 2_000, 4_000, 8_000, 15_000]);
-  });
 });
 
 describe("mewla://phone", () => {
@@ -73,14 +67,6 @@ describe("the computer's Phone use", () => {
       },
     });
   }
-
-  test("GET /phone is signed for mewla-phone:GET:/phone", async () => {
-    answering({ enabled: true, connected: false });
-    expect(await getPhoneStatus(server)).toEqual({ enabled: true, connected: false });
-    expect(seen[0]).toMatchObject({ url: "http://desk.local:9877/phone", method: "GET" });
-    expect(seen[0].auth).toStartWith(`Device v1:`);
-    expect(seen[0].auth).toContain(`:${DAEMON}:`);
-  });
 
   test("the switch and Stop are one POST each, the signature over the body", async () => {
     answering({ enabled: true, connected: true });

@@ -13,7 +13,6 @@ import {
   sessionFileDownloadFileName,
   sessionFileDownloadMimeType,
   sessionFileDownloadNameCandidates,
-  sessionFileDownloadRequest,
 } from "./sessionFilePreviewDownload";
 import { normalizeSessionFileMetadata } from "./sessionFilePreview";
 
@@ -336,22 +335,6 @@ describe("Session file preview download", () => {
       "text/markdown",
     );
     expect(sessionFileDownloadMimeType("")).toBe("application/octet-stream");
-    expect(
-      sessionFileDownloadRequest(
-        {
-          workerId: "main:@7",
-          processId: 412,
-          startedAt: 1_784_518_400_123,
-        },
-        metadata,
-      ),
-    ).toEqual({
-      workerId: "main:@7",
-      processId: 412,
-      startedAt: 1_784_518_400_123,
-      path: "/host/repo/docs/guide.md",
-      generation: "generation-token",
-    });
   });
 
   test("download eligibility stays inside the existing binary size bound", () => {

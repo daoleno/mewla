@@ -108,10 +108,6 @@ export function linkPathText(info: { path: DirectKind | "relay"; host: string | 
   return [DIRECT_LABELS[info.path], info.host, info.rttMs === null ? null : `${info.rttMs} ms`].filter(Boolean).join(" · ");
 }
 
-export function forgetDirectAddresses(serverId: string): void {
-  known.delete(serverId);
-}
-
 /**
  * The server's candidates with its direct addresses replaced by `addresses` (Link candidates
  * kept), for saving what the computer announced.

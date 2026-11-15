@@ -38,11 +38,6 @@ export type UploadProgressSnapshot = {
   etaSeconds?: number;
 };
 
-export type ActiveAttachmentUpload = {
-  name: string;
-  progress: UploadProgressSnapshot | null;
-};
-
 /** What the host reports while it streams: `totalBytes` is -1 when unknown. */
 export type NativeUploadProgress = { bytesSent: number; totalBytes: number };
 

@@ -1,7 +1,7 @@
 import type { Frame, Transport } from "../transport";
 import { reconcileCreateSessionFailure, reconcileCreateSessionSuccess, type CreateSessionReconciliation } from "./createSessionReconcile";
-import { invalidProviderReply, providerErrorFromPayload } from "./providerErrors";
-import { classifyMutationPersistence, parseOptionalMutationPersistence } from "./providerPersistence";
+import { invalidProviderReply, providerErrorFromPayload } from "../providers/errors";
+import { classifyMutationPersistence, parseOptionalMutationPersistence } from "../providers/persistence";
 
 export type CreateSessionOptions = {
   cwd?: string;

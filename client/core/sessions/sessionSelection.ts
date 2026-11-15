@@ -1,5 +1,4 @@
 /** From the Expo app's services/sessionSelection.ts. */
-import type { Worker, WorkerConnectionState as ConnectionState } from "./workers";
 
 /**
  * Telegram-style multi-selection over the Sessions list.
@@ -26,34 +25,6 @@ export function toggleSessionSelection(
     next.add(sessionKey);
   }
   return next;
-}
-
-/** Add one Session key. Returns the same set when already selected. */
-export function addSessionToSelection(
-  selection: SessionSelection,
-  sessionKey: string,
-): SessionSelection {
-  if (selection.has(sessionKey)) {
-    return selection;
-  }
-  const next = new Set(selection);
-  next.add(sessionKey);
-  return next;
-}
-
-/** Remove Session keys. Returns the same set when none were selected. */
-export function removeSessionsFromSelection(
-  selection: SessionSelection,
-  sessionKeys: Iterable<string>,
-): SessionSelection {
-  const next = new Set(selection);
-  let changed = false;
-  for (const sessionKey of sessionKeys) {
-    if (next.delete(sessionKey)) {
-      changed = true;
-    }
-  }
-  return changed ? next : selection;
 }
 
 /**
@@ -83,38 +54,4 @@ export function countSessionSelection(selection: SessionSelection): number {
 
 export function selectionCountLabel(count: number): string {
   return count === 1 ? "1 selected" : `${count} selected`;
-}
-
-/** Truthful, human-readable reason a row cannot be terminated (or null). */
-export interface SessionTerminationEligibility {
-  eligible: boolean;
-  reason: string | null;
-}
-
-/**
- * Termination eligibility follows the daemon contract and the existing
- * single-Session terminate rule: every Session in the authoritative list is
- * terminable through `kill_worker` (kill is idempotent for already-gone
- * Sessions, and Brain/user-owned Sessions are regular tmux Sessions on the
- * daemon), but only while its daemon connection is established. Offline rows
- * stay visible but are excluded from selection with a truthful reason.
- */
-export function sessionTerminationEligibility(
-  connectionState: ConnectionState | undefined,
-): SessionTerminationEligibility {
-  if (connectionState === "connected") {
-    return { eligible: true, reason: null };
-  }
-  return {
-    eligible: false,
-    reason: "Daemon is not connected",
-  };
-}
-
-export function isSessionTerminable(
-  agent: Pick<Worker, "serverId">,
-  serverConnections: Record<string, ConnectionState>,
-): boolean {
-  return sessionTerminationEligibility(serverConnections[agent.serverId])
-    .eligible;
 }

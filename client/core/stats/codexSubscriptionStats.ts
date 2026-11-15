@@ -29,15 +29,6 @@ export function codexPlanLabel(plan?: string): string {
   return known[plan.toLowerCase()] ?? 'ChatGPT plan';
 }
 
-export function codexAuthSummary(authKind: string): string {
-  switch (authKind) {
-    case 'official': return 'ChatGPT plan';
-    case 'api_key': return 'API key authentication';
-    case 'absent': return 'Not signed in';
-    default: return 'Authentication unavailable';
-  }
-}
-
 export function isOfficialCodexSubscription(
   subscription: { authKind?: unknown } | null | undefined,
 ): subscription is { authKind: 'official' } {

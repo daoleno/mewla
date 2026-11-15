@@ -86,27 +86,6 @@ export interface SessionFileReadCapability {
   headSignature: string;
 }
 
-export interface SessionFilePreviewState {
-  reference: string | null;
-  status: "closed" | "loading" | "ready" | "error";
-  metadata: SessionFileMetadata | null;
-  text: SessionFileTextPreview | null;
-  binarySource: SessionFileBinarySource | null;
-  error: string | null;
-  stale: boolean;
-  requestEpoch: number;
-}
-
-export type SessionFilePreviewAction =
-  | { type: "open"; reference: string }
-  | { type: "metadata_loaded"; metadata: SessionFileMetadata }
-  | { type: "text_loaded"; text: SessionFileTextPreview }
-  | { type: "binary_ready"; source: SessionFileBinarySource }
-  | { type: "ready" }
-  | { type: "failed"; message: string; stale: boolean }
-  | { type: "retry" }
-  | { type: "close" | "context_changed" };
-
 const KNOWN_FILE_BASENAMES = new Set([
   ".env",
   ".gitignore",
@@ -123,17 +102,6 @@ const KNOWN_FILE_BASENAMES = new Set([
 
 const FILE_EXTENSION_RE =
   /\.(?:c|cc|conf|cpp|css|csv|env|flac|gif|go|graphql|h|hpp|html?|ini|java|jpe?g|js|json|jsx|kt|kts|log|lua|m|m4a|m4v|markdown|md|mdx|mm|mov|mp3|mp4|oga|ogg|ogv|opus|pdf|php|plist|png|properties|py|rb|rs|sh|sql|svg|swift|toml|ts|tsx|txt|wav|webm|webp|xml|ya?ml|zsh)$/i;
-
-export const initialSessionFilePreviewState: SessionFilePreviewState = {
-  reference: null,
-  status: "closed",
-  metadata: null,
-  text: null,
-  binarySource: null,
-  error: null,
-  stale: false,
-  requestEpoch: 0,
-};
 
 export function recognizeSessionFileReference(
   rawValue: string | null | undefined,
@@ -201,93 +169,6 @@ export function classifySessionFileRenderer(
     default:
       return "unsupported";
   }
-}
-
-export function reduceSessionFilePreviewState(
-  state: SessionFilePreviewState,
-  action: SessionFilePreviewAction,
-): SessionFilePreviewState {
-  switch (action.type) {
-    case "open":
-      return {
-        ...initialSessionFilePreviewState,
-        reference: action.reference,
-        status: "loading",
-        requestEpoch: state.requestEpoch + 1,
-      };
-    case "metadata_loaded":
-      return {
-        ...state,
-        status: "loading",
-        metadata: action.metadata,
-        text: null,
-        binarySource: null,
-        error: null,
-        stale: false,
-      };
-    case "text_loaded":
-      return {
-        ...state,
-        status: "ready",
-        text: action.text,
-        binarySource: null,
-        error: null,
-        stale: false,
-      };
-    case "binary_ready":
-      return {
-        ...state,
-        status: "ready",
-        text: null,
-        binarySource: action.source,
-        error: null,
-        stale: false,
-      };
-    case "ready":
-      return { ...state, status: "ready", error: null, stale: false };
-    case "failed":
-      return {
-        ...state,
-        status: "error",
-        text: null,
-        binarySource: null,
-        error: action.message,
-        stale: action.stale,
-      };
-    case "retry":
-      if (!state.reference) return state;
-      return {
-        ...state,
-        status: "loading",
-        metadata: null,
-        text: null,
-        binarySource: null,
-        error: null,
-        stale: false,
-        requestEpoch: state.requestEpoch + 1,
-      };
-    case "close":
-    case "context_changed":
-      return initialSessionFilePreviewState;
-    default:
-      return state;
-  }
-}
-
-export function sessionFilePreviewScopeKey(input: {
-  serverId: string;
-  daemonId: string;
-  workerId: string;
-  processId?: number;
-  startedAt?: number;
-}): string {
-  return [
-    input.serverId,
-    input.daemonId,
-    input.workerId,
-    input.processId ?? "",
-    input.startedAt ?? "",
-  ].join("\u0000");
 }
 
 export function buildSessionFileBinaryUrl(

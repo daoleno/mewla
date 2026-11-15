@@ -10,7 +10,6 @@ import {
   isPromptGoneError,
   PROMPT_GONE_CODE,
   choiceAnsweredSummary,
-  choiceCardMaxHeight,
   choiceDraftAnswerText,
   choiceDraftComplete,
   choiceReviewStep,
@@ -222,11 +221,6 @@ describe("one-question-at-a-time steps", () => {
     expect(choiceDraftAnswerText(wizard.questions[1], draft[1])).toBe("");
     draft = setChoiceOtherText(draft, 1, "mine");
     expect(choiceDraftAnswerText(wizard.questions[1], draft[1])).toBe("b1, b2, mine");
-  });
-
-  test("the card height budget keeps the card under the header and never collapses", () => {
-    expect(choiceCardMaxHeight({ windowHeight: 844, topChromeInset: 100, bottomInset: 34 })).toBe(590);
-    expect(choiceCardMaxHeight({ windowHeight: 300, topChromeInset: 100, bottomInset: 34 })).toBe(200);
   });
 });
 

@@ -5,7 +5,6 @@ import {
   presentPendingUserMessageLifecycle,
   reconcilePendingUserMessagesAgainstEvents,
   rejectPendingUserMessage,
-  showsPendingSendStatusMark,
 } from "./pendingUserMessages";
 import {
   buildTimeline,
@@ -43,17 +42,6 @@ describe("pending user message lifecycle", () => {
       accessibilityLabel:
         "Message not delivered. Tap to send again. Press and hold to delete.",
     });
-  });
-
-  test("pending send mark is shown only for in-flight transport", () => {
-    expect(
-      showsPendingSendStatusMark({ pending: true, lifecycle: "pending" }),
-    ).toBe(true);
-    expect(
-      showsPendingSendStatusMark({ pending: true, lifecycle: "failed" }),
-    ).toBe(false);
-    expect(showsPendingSendStatusMark({ pending: false })).toBe(false);
-    expect(showsPendingSendStatusMark({})).toBe(false);
   });
 
   test("manual retry keeps one UI row but starts a fresh request attempt", () => {

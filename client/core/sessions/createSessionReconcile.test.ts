@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { reconcileCreateSessionFailure, reconcileCreateSessionSuccess } from "./createSessionReconcile";
-import { ProviderError } from "./providerErrors";
+import { ProviderError } from "../providers/errors";
 
 // The Expo app had no test for this file; these pin what list.tsx relies on.
 describe("create_session outcomes", () => {

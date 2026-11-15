@@ -4,8 +4,6 @@ import {
   consumerMeta,
   formatBytes,
   formatPercent,
-  MEMORY_PRESSURE_LABEL,
-  type MemoryPressureLevel,
   type ResourceConsumer,
   type ResourceProcess,
   type ResourceTelemetry,
@@ -49,13 +47,6 @@ export function usesMemoryPressure(telemetry: ResourceTelemetry): boolean {
   return psiPeak(telemetry) === undefined && telemetry.memoryPressure !== undefined;
 }
 
-/** How many of the meter's three segments a level lights. */
-export const MEMORY_PRESSURE_STEPS: Record<MemoryPressureLevel, number> = { normal: 1, warn: 2, critical: 3 };
-
-export function memoryPressureMeterLabel(level: MemoryPressureLevel): string {
-  return `Memory pressure ${MEMORY_PRESSURE_LABEL[level]}`;
-}
-
 /** "42% free · Load 2.1 · 8 cores", "—" when the computer said none of it. */
 export function memoryPressureMicro(telemetry: ResourceTelemetry): string {
   const free = telemetry.memoryPressure?.freePercent;
@@ -65,14 +56,6 @@ export function memoryPressureMicro(telemetry: ResourceTelemetry): string {
     free === undefined ? null : `${Math.round(free)}% free`,
     load1 !== undefined && cores > 0 ? `Load ${load1.toFixed(1)} · ${cores} cores` : null,
   ].filter(Boolean).join(" · ") || "—";
-}
-
-export function psiChartLabel(key: PsiKey | undefined): string {
-  return `PSI ${key ? PSI_LABEL[key] : "unavailable"} some history, scale 0–100%`;
-}
-
-export function psiResourceChartLabel(key: PsiKey): string {
-  return `${PSI_LABEL[key]} PSI some history, scale 0–100%`;
 }
 
 /** A Worker's status is news on its row; an orphan's is residue; an unknown status says nothing. */

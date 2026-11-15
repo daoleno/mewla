@@ -20,75 +20,6 @@ export const DSH_CAPABILITIES = {
   webServiceUnit: "dsh-web.service",
 } as const;
 
-export type SupportedAgentID =
-  | "claude"
-  | "codex"
-  | "cursor"
-  | "grok"
-  | "pi"
-  | "opencode"
-  | "dsh";
-
-export interface SupportedAgentTarget {
-  id: SupportedAgentID;
-  handle: string;
-  label: string;
-  command: string;
-  description: string;
-}
-
-export const SUPPORTED_AGENT_TARGETS: SupportedAgentTarget[] = [
-  {
-    id: "dsh",
-    handle: "dsh",
-    label: "DSH",
-    command: DSH_COMMAND,
-    description: "Native DSH session with optional Web access.",
-  },
-  {
-    id: "claude",
-    handle: "claude",
-    label: "Claude Code",
-    command: CLAUDE_CODE_COMMAND,
-    description: "Autonomous Claude Code run for this work item.",
-  },
-  {
-    id: "codex",
-    handle: "codex",
-    label: "Codex",
-    command: CODEX_COMMAND,
-    description: "Autonomous Codex run for this work item.",
-  },
-  {
-    id: "cursor",
-    handle: "agent",
-    label: "Cursor Agent",
-    command: CURSOR_AGENT_COMMAND,
-    description: "Autonomous Cursor Agent run for this work item.",
-  },
-  {
-    id: "grok",
-    handle: "grok",
-    label: "Grok",
-    command: GROK_COMMAND,
-    description: "Autonomous Grok run for this work item.",
-  },
-  {
-    id: "pi",
-    handle: "pi",
-    label: "Pi",
-    command: PI_COMMAND,
-    description: "Pi Coding Agent run for this work item.",
-  },
-  {
-    id: "opencode",
-    handle: "opencode",
-    label: "OpenCode",
-    command: OPENCODE_AUTO_COMMAND,
-    description: "Autonomous OpenCode run for this work item.",
-  },
-];
-
 function normalizeCommand(command?: string) {
   return command?.trim().toLowerCase() || "";
 }
@@ -102,44 +33,6 @@ export function commandBinary(command?: string) {
   const token = normalized.split(/\s+/, 1)[0]?.replace(QUOTE_TRIM_RE, "") || "";
   const parts = token.split("/");
   return parts[parts.length - 1] || token;
-}
-
-export function findSupportedAgentByHandle(handle?: string) {
-  const normalized = handle?.trim().toLowerCase() || "";
-  if (!normalized) {
-    return null;
-  }
-
-  return (
-    SUPPORTED_AGENT_TARGETS.find((target) => target.handle === normalized) ||
-    null
-  );
-}
-
-export function findSupportedAgentMention(text?: string) {
-  const source = text || "";
-  for (const target of SUPPORTED_AGENT_TARGETS) {
-    const pattern = new RegExp(`(^|\\s)@${target.handle}(?=\\s|$)`, "i");
-    if (pattern.test(source)) {
-      return target;
-    }
-  }
-  return null;
-}
-
-export function stripSupportedAgentMentions(text?: string) {
-  let next = text || "";
-
-  for (const target of SUPPORTED_AGENT_TARGETS) {
-    const pattern = new RegExp(`(^|\\s)@${target.handle}(?=\\s|$)`, "gi");
-    next = next.replace(pattern, "$1");
-  }
-
-  return next
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
 }
 
 // components/terminal/NewTerminalLaunchPresetList.tsx

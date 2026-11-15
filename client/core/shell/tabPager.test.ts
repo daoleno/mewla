@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { indicatorStops, pagerProgress, settlePage } from "./tabPager";
+import { indicatorStops, settlePage } from "./tabPager";
 
 const W = 390;
 const at = (from: number, offset: number, velocity = 0, count = 2, rest = from) => settlePage({ rest, from, count, width: W, offset, velocity });
@@ -37,13 +37,6 @@ describe("a swipe between tabs settles like a pager", () => {
 });
 
 describe("the chosen segment follows the row", () => {
-  test("progress is the page index under the finger", () => {
-    expect(pagerProgress(0, 0, W)).toBe(0);
-    expect(pagerProgress(0, -W / 2, W)).toBe(0.5);
-    expect(pagerProgress(1, W / 4, W)).toBe(0.75);
-    expect(pagerProgress(1, 50, 0)).toBe(1);
-  });
-
   test("its mark covers each segment exactly, whatever their widths", () => {
     const segments = [{ x: 3, width: 60 }, { x: 63, width: 70 }];
     const stops = indicatorStops(segments, 60);

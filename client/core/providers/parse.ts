@@ -5,7 +5,6 @@ import {
   normalizeProviderId,
   type ProviderConnection,
   type ProviderConnectionTestResult,
-  type ProviderCredentialResult,
   type ProviderConnectionSelection,
   type ProviderModel,
   type ProviderModelsResult,
@@ -13,7 +12,6 @@ import {
   type ThreadRuntimeSelection,
   type ProvidersSnapshot,
 } from "./types";
-import { requireAppliedPersistence } from "./persistence";
 
 const FORBIDDEN_REPLY_KEYS = new Set([
   "credential",
@@ -334,28 +332,6 @@ export function parseProviderModelsResult(
   };
 }
 
-export function parseProviderCredentialResult(
-  raw: unknown,
-  expectedConnectionId?: string,
-): ProviderCredentialResult | null {
-  const record = asRecord(raw);
-  if (!record) return null;
-  assertSecretFree(record);
-  const connectionId = asString(record.connection_id);
-  if (
-    !connectionId ||
-    (expectedConnectionId && connectionId !== expectedConnectionId.trim()) ||
-    typeof record.credential_ready !== "boolean"
-  ) {
-    return null;
-  }
-  return {
-    connection_id: connectionId,
-    credential_ready: record.credential_ready,
-    persistence: requireAppliedPersistence(record),
-  };
-}
-
 export function parseProviderConnectionTestResult(
   raw: unknown,
   expectedClient: string,
@@ -379,15 +355,6 @@ export function parseProviderConnectionTestResult(
     return null;
   }
   return { client, modelCount, latencyMs };
-}
-
-export function parseProviderModelsDiscovery(
-  raw: unknown,
-): ProviderModelsResult | null {
-  const record = asRecord(raw);
-  const connectionId = asString(record?.connection_id);
-  if (!connectionId) return null;
-  return parseProviderModelsResult(raw, connectionId);
 }
 
 export function assertThreadRuntimeMatches(

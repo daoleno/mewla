@@ -48,7 +48,7 @@ export interface DaemonUpdateStatus {
 export type ComputerCheck = { state: "online"; name?: string } | { state: "unpaired" } | { state: "offline" };
 
 /** The oldest computer this app works with, and SemVer order: one definition, the update's. */
-export { compareVersions, MIN_COMPUTER_VERSION } from "../update/version";
+export { MIN_COMPUTER_VERSION } from "../update/version";
 
 export function getAgentUse(server: StoredServer): Promise<AgentUseStatus> {
   return signedJSON<AgentUseStatus>(server, "GET", "/agent-use", "mewla-agent-use:GET:/agent-use");
@@ -115,4 +115,3 @@ export async function revokeThisDevice(server: StoredServer): Promise<boolean> {
     return false;
   }
 }
-

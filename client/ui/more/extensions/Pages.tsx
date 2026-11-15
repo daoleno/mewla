@@ -2,12 +2,12 @@ import { computed, effect, signal, Text, untracked, View } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { accountRow } from "../../../core/extensions/accountListModel";
 import { cloudProfilesSummary } from "../../../core/extensions/cloudProfilesModel";
-import { isConnecting, pluginCatalogRows, toolUpdates, type ConnectionTone, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
+import { isConnecting, pluginCatalogRows, toolUpdates, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
 import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { connectionStateTone } from "../../../core/extensions/colour";
 import { daemon } from "../daemon";
 import { color } from "../../kit/colors";
-import { EmptyState, Notice, Page, Row, RowButton, SearchField, Section, Spinner, type Status } from "../../kit/kit";
+import { EmptyState, Notice, Page, Row, RowButton, SearchField, Section, Spinner } from "../../kit/kit";
 import { stateTextColor } from "../../kit/RowTile";
 import type { PageNav } from "../routes";
 import { AgentPage } from "./agents/AgentPage";
@@ -28,10 +28,6 @@ export function ExtensionsPageView(props: { route: ExtensionsPage; nav: PageNav 
     case "extensions-tools": return <ToolsPage service={route.service} account={route.account} nav={props.nav} />;
     case "extensions-agent": return <AgentPage scope={route.scope} nav={props.nav} />;
   }
-}
-
-export function toneStatus(tone: ConnectionTone): Status {
-  return tone === "success" ? "ready" : tone === "danger" ? "failed" : tone === "accent" ? "needs" : tone;
 }
 
 /** The service whose sign-in is starting or under way: its row spins, the others wait. */

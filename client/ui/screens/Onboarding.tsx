@@ -36,8 +36,6 @@ import { connection, problem, resumeConnection, servers } from "../session";
 import { probeComputer } from "../more/settings/computers";
 import { OnboardingScanner } from "./OnboardingScanner";
 
-export { pairFromText } from "../pairing";
-
 /**
  * First run: Welcome → Install → Scan → Connected, with Brain's cat hopping between the hero spot
  * and the corner. Also the connected step after any later pairing (Settings, an opened link):

@@ -7,8 +7,8 @@ import type {
   ThreadRuntimeSelection,
   ProvidersSnapshot,
   ThreadRuntimeChoice,
-} from "../sessions/providerTypes";
-import { normalizeProviderClient, normalizeProviderId } from "../sessions/providerTypes";
+} from "../providers/types";
+import { normalizeProviderClient, normalizeProviderId } from "../providers/types";
 
 export type ComposerModelControlPresentation = {
   label: string;
@@ -35,13 +35,6 @@ function modelEffectChoices(client: string, effects: string[]): string[] {
     effect.trim() !== "" && effects.indexOf(effect) === index
   )];
 }
-
-export type SessionEffortContract = {
-  current: string;
-  override: string;
-  defaultEffort: string;
-  supported: string[];
-};
 
 export function threadRuntimeRows(input: {
   snapshot: ProvidersSnapshot | null | undefined;
@@ -146,22 +139,6 @@ export function refetchFoundBindingNotSwitchable(input: {
   hotSwitchable: boolean;
 }): boolean {
   return input.activationCapable && !input.hotSwitchable;
-}
-
-export function sessionEffortContract(
-  selection: ThreadRuntimeSelection | null | undefined,
-): SessionEffortContract | null {
-  if (!selection) return null;
-  const supported = selection.reasoning_efforts ?? [];
-  const defaultEffort = selection.reasoning_effort_default?.trim() ?? "";
-  if (supported.length === 0 || !defaultEffort) return null;
-  const override = selection.reasoning_effort?.trim() ?? "";
-  return {
-    current: override || defaultEffort,
-    override,
-    defaultEffort,
-    supported,
-  };
 }
 
 export function reasoningEffortLabel(value: string): string {

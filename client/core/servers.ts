@@ -8,7 +8,7 @@ import {
 } from "./storedServerContract";
 
 export { serverAddressForDisplay, serverAddressProblem, serverNamedByAddress } from "./storedServerContract";
-export type { ServerTransportKind, StoredServer, StoredTransportCandidate } from "./storedServerContract";
+export type { StoredServer, StoredTransportCandidate } from "./storedServerContract";
 
 // The keys are the ones the previous app wrote; the host copies them over on upgrade.
 export const SERVER_KEYS = {
@@ -70,10 +70,6 @@ export async function setCurrentServerId(serverId: string | null): Promise<void>
   const id = serverId?.trim();
   if (id) await store().setItem(SERVER_KEYS.currentServer, id);
   else await store().removeItem(SERVER_KEYS.currentServer);
-}
-
-export async function isOnboarded(): Promise<boolean> {
-  return (await store().getItem(SERVER_KEYS.onboarded)) === "true";
 }
 
 export async function markOnboarded(): Promise<void> {

@@ -1,4 +1,4 @@
-import { brainWorkSlipStale, type BrainWorkSlip } from "./surface";
+import type { BrainWorkSlip } from "./surface";
 import type { BrainWorkUserActionKind } from "./types";
 
 /**
@@ -129,18 +129,6 @@ export function brainWorkUserAction(kind: BrainWorkActionKind): BrainWorkUserAct
 
 /** Snooze's length: the computer ends it on its own clock (SPEC "Snooze 1 hour"). */
 export const BRAIN_WORK_SNOOZE_SECONDS = 3600;
-
-/**
- * The actions a slip carries in the list, beside the full set on its page: the
- * answers (or the reply), the way out beside a reply left for days, or the one
- * primary step; nothing destructive otherwise.
- */
-export function brainWorkSlipActions(slip: BrainWorkSlip): BrainWorkAction[] {
-  const all = brainWorkActions(slip);
-  if (slip.question) return all.filter((action) => action.kind === "answer" || action.kind === "reply").slice(0, 3);
-  if (brainWorkSlipStale(slip)) return all.filter((action) => action.primary || action.kind === "dismiss").slice(0, 2);
-  return all.filter((action) => action.primary).slice(0, 1);
-}
 
 /** "Waiting for: …" on a Work's page, when it says something the page does not already. */
 export function brainWorkWaitForLine(slip: Pick<BrainWorkSlip, "waitFor" | "calendar" | "summary" | "question">): string | undefined {

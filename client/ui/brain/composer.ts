@@ -137,5 +137,3 @@ export function createBrainComposer(options: {
     insertSkill: (name: string) => source.text.set(insertSkillMention(untracked(source.text.text), name)),
   };
 }
-
-export type BrainComposer = ReturnType<typeof createBrainComposer>;

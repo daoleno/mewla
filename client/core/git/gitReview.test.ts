@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { GitDiffFileInfo, GitDiffStatusSnapshot } from "./gitDiff";
 import { formatGitAskAgentMessage } from "./gitAskAgent";
-import { gitHunkAtLine, gitHunkChangeCounts, gitHunkSelection, gitSelectedLines, parseGitPatch } from "./gitDiffHunks";
+import { gitHunkAtLine, gitHunkSelection, gitSelectedLines, parseGitPatch } from "./gitDiffHunks";
 import {
-  adjacentGitReviewEntry,
   buildGitReviewGroups,
   buildGitReviewRows,
   gitReviewOrder,
   gitReviewPaths,
-  gitReviewSummary,
   gitReviewSync,
   matchesGitReviewQuery,
   GIT_REVIEW_ROWS_PAGE,
@@ -48,12 +46,9 @@ describe("git review groups", () => {
     ]);
   });
 
-  test("reading order is staged then changes, and neighbours stop at the ends", () => {
+  test("reading order is staged then changes", () => {
     const order = gitReviewOrder(buildGitReviewGroups(files));
     expect(order.map((entry) => entry.key)).toEqual(["staged:a.ts", "staged:b.ts", "changes:a.ts", "changes:dir/c.ts"]);
-    expect(adjacentGitReviewEntry(order, "staged:b.ts", "next")?.key).toBe("changes:a.ts");
-    expect(adjacentGitReviewEntry(order, "staged:a.ts", "previous")).toBeNull();
-    expect(adjacentGitReviewEntry(order, "changes:dir/c.ts", "next")).toBeNull();
   });
 
   test("stage and unstage requests carry rename sources once", () => {
@@ -61,9 +56,7 @@ describe("git review groups", () => {
     expect(gitReviewPaths(entries)).toEqual(["new.ts", "old.ts", "x.ts"]);
   });
 
-  test("summary and sync read once", () => {
-    expect(gitReviewSummary({ available: true, clean: false, file_count: 1, additions: 3, deletions: 0 } as never)).toBe("+3 −0 · 1 file");
-    expect(gitReviewSummary({ available: true, clean: true } as never)).toBe("");
+  test("sync reads once", () => {
     expect(gitReviewSync({ ahead: 2, behind: 1 })).toBe("↑2 ↓1");
     expect(gitReviewSync({ ahead: 0, behind: 0 })).toBe("");
   });
@@ -151,12 +144,6 @@ describe("a big change (owner 11-14: 14,883 untracked files froze the app)", () 
     expect(rows.map((row) => (row.kind === "dir" ? `dir ${row.label}` : `file ${row.entry.file.path}`))).toEqual(["dir build", "file build/out/", "file app/"]);
   });
 
-  test("the diff reader steps over a new folder", () => {
-    const order = gitReviewOrder(buildGitReviewGroups([file("a.ts"), folder, file("z.ts")]));
-    expect(adjacentGitReviewEntry(order, "changes:a.ts", "next")?.file.path).toBe("z.ts");
-    expect(adjacentGitReviewEntry(order, "changes:z.ts", "previous")?.file.path).toBe("a.ts");
-  });
-
   test("a group draws a page of rows at a time and says how many are left", () => {
     const rows = Array.from({ length: 14_883 }, (_, i) => i);
     expect(pageGitReviewRows(rows, 0)).toMatchObject({ more: 14_883 - GIT_REVIEW_ROWS_PAGE });
@@ -199,7 +186,6 @@ describe("git patch hunks", () => {
     expect(gitHunkSelection(parsed.hunks[0])).toEqual({ side: "additions", start: 1, end: 4 });
     const removal = parseGitPatch("@@ -5,2 +5,0 @@\n-a\n-b\n").hunks[0];
     expect(gitHunkSelection(removal)).toEqual({ side: "deletions", start: 5, end: 6 });
-    expect(gitHunkChangeCounts(parsed.hunks[0])).toEqual({ additions: 1, deletions: 1 });
   });
 
   test("selected lines come back in hunk order", () => {

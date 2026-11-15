@@ -4,7 +4,6 @@ import { DisplayTitle, PillButton, SectionLabel } from "../kit/kit";
 import { BackHandler } from "nsh/mobile";
 import { BusyPlace } from "../kit/wait";
 import { capsuleScrollTop, NavPage } from "../shell/NavPage";
-import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { sessionRow } from "../../core/tray/model";
 import { clock } from "../calendar/clock";
@@ -274,12 +273,6 @@ export function AllSessions(props: { nav: NavStackState<Route> }) {
       </View>
     </NavPage>
   );
-}
-
-/** Builds the key the device state and the route use for a Session of the current computer. */
-export function currentSessionKey(workerId: string): string | null {
-  const server = current();
-  return server ? makeSessionKey(server.id, workerId) : null;
 }
 
 /** Android's Back while the page lives; a browser has its own back (NSH's web runtime has no `BackHandler.on`). */

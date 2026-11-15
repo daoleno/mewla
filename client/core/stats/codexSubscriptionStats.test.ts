@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from 'bun:test';
 import {
-  codexAuthSummary,
   codexRemainingPercent,
   codexPlanLabel,
   codexSubscriptionVisibleForProviderState,
@@ -32,12 +31,6 @@ describe('Codex subscription stats presentation', () => {
     expect(codexPlanLabel('plus')).toBe('ChatGPT Plus');
     expect(codexPlanLabel('enterprise')).toBe('ChatGPT Enterprise');
     expect(codexPlanLabel('<unknown>')).toBe('ChatGPT plan');
-  });
-
-  test('does not present API keys or unknown auth as subscriptions', () => {
-    expect(codexAuthSummary('official')).toBe('ChatGPT plan');
-    expect(codexAuthSummary('api_key')).toBe('API key authentication');
-    expect(codexAuthSummary('unknown')).toBe('Authentication unavailable');
   });
 
   test('only official auth produces a subscription card candidate', () => {

@@ -188,22 +188,6 @@ export function providerMutationRequiresRefresh(error: unknown): boolean {
   );
 }
 
-export function activationBusyAllowsRetryWithoutRefresh(
-  error: unknown,
-): boolean {
-  return error instanceof ProviderError && error.kind === "busy";
-}
-
-export function activationConflictRequiresRefresh(error: unknown): boolean {
-  return (
-    error instanceof ProviderError &&
-    (error.kind === "conflict" ||
-      error.kind === "offline" ||
-      error.kind === "timeout" ||
-      error.kind === "unknown")
-  );
-}
-
 export function presentProviderError(error: unknown): {
   title: string;
   message: string;

@@ -17,11 +17,6 @@ export function workOfSnapshot(snapshot: Record<string, unknown> | null | undefi
   };
 }
 
-/** "Ship the beta · 3 of 5 back". */
-export function objectiveLine(objective: BrainObjective | null): string | null {
-  return objective ? `${objective.title} · ${objective.back} of ${objective.total} back` : null;
-}
-
 export interface WorkActionResult {
   status?: string;
   /** "uncertain": sent, but Brain may not have it. */

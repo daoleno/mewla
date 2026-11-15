@@ -8,7 +8,7 @@ import { uploadFile as uploadThrough, type UploadFile, type UploadOptions, type 
 import { keepAppFiles } from "./appFiles";
 import { pickFiles, uploadHost } from "./host";
 
-export { AttachmentUploadCancelledError, type UploadFile, type UploadOptions, type UploadResult } from "../../../core/files/upload";
+export { type UploadFile, type UploadOptions, type UploadResult } from "../../../core/files/upload";
 export { pickFiles } from "./host";
 
 /**

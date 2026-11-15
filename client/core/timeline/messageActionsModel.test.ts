@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { normalizeWorkerSessionCapabilities } from "./sessionCapabilities";
 import {
   isEditablePrompt,
-  editIsSendable,
   messageEditMode,
   type MessageActionEnvironment,
   type MessageActionSubject,
@@ -35,14 +34,6 @@ describe("edit mode per executor", () => {
     expect(messageEditMode({ messageRewind: true, brain: false })).toBe("rewind");
     expect(messageEditMode({ messageRewind: false, brain: false })).toBe("copy");
     expect(messageEditMode({ messageRewind: true, brain: true })).toBe("copy");
-  });
-
-  test("an edit is sent whenever it says something", () => {
-    const edit = { id: "u1", original: "ship it", mode: "rewind" as const };
-    expect(editIsSendable(edit, "ship it")).toBe(true);
-    expect(editIsSendable(edit, "ship it today")).toBe(true);
-    expect(editIsSendable(edit, "  ")).toBe(false);
-    expect(editIsSendable(edit, "")).toBe(false);
   });
 
   test("Edit applies to a sent text prompt of an idle, connected Session", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { motion, bezier } from "./tokens";
-import { loops, play, settle } from "./transitions";
+import { loops, play } from "./transitions";
 import { ActionWait, FORCED, LinkWatch, optimistic, Wait, type Clock, type WaitState } from "./wait";
 
 /** A manual clock: time moves only by `run(ms)`, timers fire in order. */
@@ -397,11 +397,9 @@ describe("reduced motion: fades or cuts", () => {
     expect(play("jumpIn", true).scale).toBe(1);
   });
 
-  test("the slow line's pass stops; the spinner turns; the spring is a cut", () => {
+  test("the slow line's pass stops; the spinner turns", () => {
     expect(loops("slide", true)).toBe(false);
     expect(loops("spin", true)).toBe(true);
-    expect(settle(400, true)).toBeNull();
-    expect(settle(400, false)).toEqual({ stiffness: 380, damping: 39, mass: 1, velocity: 400 });
   });
 });
 

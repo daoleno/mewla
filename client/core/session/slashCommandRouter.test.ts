@@ -9,7 +9,6 @@ import {
 import {
   routePickedSlashCommand,
   routeSlashCommand,
-  slashCommandActionHandled,
   slashCommandAlert,
 } from "./slashCommandRouter";
 
@@ -85,9 +84,6 @@ describe("routeSlashCommand (a sent draft)", () => {
   test("plain text and insert-only commands go out as messages", () => {
     expect(route("hello")).toEqual({ kind: "none" });
     expect(route("/mention @file")).toMatchObject({ kind: "insert" });
-    expect(slashCommandActionHandled(route("hello"))).toBe(false);
-    expect(slashCommandActionHandled(route("/mention x"))).toBe(false);
-    expect(slashCommandActionHandled(route("/status"))).toBe(true);
   });
 
   test("attachments with a non-native command ask first; native commands ignore them", () => {

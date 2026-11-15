@@ -36,10 +36,3 @@ export function terminalGroupPadding(tight: boolean): typeof GROUP_PADDING {
 export function keyBarPadding(tight: boolean): { top: number; bottom: number } {
   return tight ? { top: 4, bottom: 4 } : { top: 8, bottom: 10 };
 }
-
-/** Rows the group shows: `room` measured with the usual padding (`terminalTight`), given back by a tight one. */
-export function terminalRows(room: number, tight: boolean): number {
-  const bar = keyBarPadding(false).top + keyBarPadding(false).bottom - keyBarPadding(tight).top - keyBarPadding(tight).bottom;
-  const pad = terminalGroupPadding(tight);
-  return Math.floor((room + bar - pad.top - pad.bottom) / ROW_HEIGHT);
-}

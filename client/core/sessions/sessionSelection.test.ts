@@ -1,24 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
-  addSessionToSelection,
   countSessionSelection,
   EMPTY_SESSION_SELECTION,
-  isSessionTerminable,
   pruneSessionSelection,
-  removeSessionsFromSelection,
   selectionCountLabel,
-  sessionTerminationEligibility,
   toggleSessionSelection,
   type SessionSelection,
 } from "./sessionSelection";
-import type { Worker } from "./workers";
-
-function workerWith(
-  key: string,
-  serverId: string = "srv-a",
-): Pick<Worker, "key" | "serverId"> {
-  return { key, serverId };
-}
 
 describe("toggleSessionSelection", () => {
   test("adds a key that was not selected", () => {
@@ -36,15 +24,6 @@ describe("toggleSessionSelection", () => {
     const selected = toggleSessionSelection(EMPTY_SESSION_SELECTION, "k1");
     toggleSessionSelection(selected, "k2");
     expect([...selected]).toEqual(["k1"]);
-  });
-
-  test("add and remove helpers are idempotent", () => {
-    const once = addSessionToSelection(EMPTY_SESSION_SELECTION, "k1");
-    const twice = addSessionToSelection(once, "k1");
-    expect(twice).toBe(once);
-    const removed = removeSessionsFromSelection(once, ["k1"]);
-    expect(removed.size).toBe(0);
-    expect(removeSessionsFromSelection(removed, ["k1"])).toBe(removed);
   });
 });
 
@@ -86,40 +65,6 @@ describe("countSessionSelection + labels", () => {
     expect(selectionCountLabel(3)).toBe("3 selected");
   });
 
-});
-
-describe("sessionTerminationEligibility", () => {
-  test("connected daemon makes every listed Session terminable", () => {
-    expect(sessionTerminationEligibility("connected")).toEqual({
-      eligible: true,
-      reason: null,
-    });
-  });
-
-  test("offline daemon excludes rows with a truthful reason", () => {
-    for (const state of ["offline", "connecting"] as const) {
-      const result = sessionTerminationEligibility(state);
-      expect(result.eligible).toBe(false);
-      expect(result.reason).toBe("Daemon is not connected");
-    }
-  });
-
-  test("unknown connection state is not eligible", () => {
-    expect(sessionTerminationEligibility(undefined).eligible).toBe(false);
-  });
-
-  test("isSessionTerminable reads the per-server connection", () => {
-    const connections = {
-      "srv-a": "connected",
-      "srv-b": "offline",
-    } as Record<string, "connected" | "offline">;
-    expect(isSessionTerminable(workerWith("a", "srv-a"), connections)).toBe(
-      true,
-    );
-    expect(isSessionTerminable(workerWith("b", "srv-b"), connections)).toBe(
-      false,
-    );
-  });
 });
 
 describe("selection is a plain Set", () => {

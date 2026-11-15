@@ -53,8 +53,3 @@ export function play(name: MoveName | Move, reduce: boolean): Move {
 export function loops(kind: "slide" | "spin", reduce: boolean): boolean {
   return kind === "spin" || !reduce;
 }
-
-/** The spring after a finger lets go, from its velocity; with reduced motion a cut (null: set the value at once). */
-export function settle(velocity: number, reduce: boolean): (typeof motion.spring & { velocity: number }) | null {
-  return reduce ? null : { ...motion.spring, velocity };
-}

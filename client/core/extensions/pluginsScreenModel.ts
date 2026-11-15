@@ -1,7 +1,6 @@
 import type { ManagedSkillAgent } from "./skillsManagement";
 import { skillAgentLabel } from "./skillsManagement";
 import type {
-  AvailablePlugin,
   InstalledPluginCopy,
   PluginInventory,
 } from "./pluginsManagement";
@@ -113,13 +112,6 @@ export function reconcilePluginUninstallInventory(
       (candidate) => candidate.name === selected.name,
     ).length,
   };
-}
-
-export function evaluatePluginInstall(
-  entry: AvailablePlugin,
-): { supported: true } | { supported: false; reason: string } {
-  if (entry.installable) return { supported: true };
-  return { supported: false, reason: "This Plugin is already installed." };
 }
 
 export function pluginCopyLabel(copy: InstalledPluginCopy): string {

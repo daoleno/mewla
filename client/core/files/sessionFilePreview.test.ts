@@ -4,13 +4,10 @@ import {
   bindSessionFileRequestToGeneration,
   buildSessionFileBinaryUrl,
   classifySessionFileRenderer,
-  initialSessionFilePreviewState,
   normalizeSessionFileMetadata,
   normalizeSessionFileText,
   recognizeSessionFileReference,
-  reduceSessionFilePreviewState,
   sessionFileTooLargeMessage,
-  sessionFilePreviewScopeKey,
 } from "./sessionFilePreview";
 
 describe("current-Session file reference recognition", () => {
@@ -151,92 +148,5 @@ describe("current-Session file renderer contract", () => {
     expect(sessionFileTooLargeMessage(metadata)).toBe(
       "This 50 MB file exceeds Mewla's 50 MB preview limit. It was not downloaded.",
     );
-
-    const opened = reduceSessionFilePreviewState(
-      initialSessionFilePreviewState,
-      {
-        type: "open",
-        reference: "manual.pdf",
-      },
-    );
-    const inspected = reduceSessionFilePreviewState(opened, {
-      type: "metadata_loaded",
-      metadata,
-    });
-    const rejected = reduceSessionFilePreviewState(inspected, {
-      type: "failed",
-      message: sessionFileTooLargeMessage(metadata),
-      stale: false,
-    });
-    expect(rejected.metadata).toBe(metadata);
-    expect(rejected.binarySource).toBeNull();
-    expect(rejected.status).toBe("error");
-  });
-});
-
-describe("current-Session preview lifecycle", () => {
-  test("missing and changed files remain retryable without retaining old content", () => {
-    const opened = reduceSessionFilePreviewState(
-      initialSessionFilePreviewState,
-      {
-        type: "open",
-        reference: "notes.md",
-      },
-    );
-    const missing = reduceSessionFilePreviewState(opened, {
-      type: "failed",
-      message: "file does not exist",
-      stale: false,
-    });
-    expect(missing.status).toBe("error");
-    expect(missing.reference).toBe("notes.md");
-    expect(missing.text).toBeNull();
-
-    const retrying = reduceSessionFilePreviewState(missing, { type: "retry" });
-    expect(retrying.status).toBe("loading");
-    expect(retrying.requestEpoch).toBe(missing.requestEpoch + 1);
-
-    const changed = reduceSessionFilePreviewState(retrying, {
-      type: "failed",
-      message: "file changed",
-      stale: true,
-    });
-    expect(changed.stale).toBe(true);
-    expect(changed.text).toBeNull();
-  });
-
-  test("server, daemon, Session, process, or start changes close the sheet", () => {
-    const scope = sessionFilePreviewScopeKey({
-      serverId: "server-a",
-      daemonId: "daemon-a",
-      workerId: "main:@7",
-      processId: 412,
-      startedAt: 1_784_518_400_123,
-    });
-    expect(scope).toBe(
-      "server-a\u0000daemon-a\u0000main:@7\u0000412\u00001784518400123",
-    );
-
-    expect(
-      sessionFilePreviewScopeKey({
-        serverId: "server-a",
-        daemonId: "daemon-a",
-        workerId: "main:@7",
-        processId: 412,
-        startedAt: 1_784_518_400_123,
-      }),
-    ).toBe(scope);
-
-    const opened = reduceSessionFilePreviewState(
-      initialSessionFilePreviewState,
-      {
-        type: "open",
-        reference: "notes.md",
-      },
-    );
-    const closed = reduceSessionFilePreviewState(opened, {
-      type: "context_changed",
-    });
-    expect(closed).toEqual(initialSessionFilePreviewState);
   });
 });

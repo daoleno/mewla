@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CLAUDE_CODE_COMMAND, commandBinary, findSupportedAgentMention, LAUNCH_PRESETS, stripSupportedAgentMentions } from "./agentCommands";
+import { CLAUDE_CODE_COMMAND, commandBinary, LAUNCH_PRESETS } from "./agentCommands";
 
 // The Expo app had no test for this file.
 describe("agent commands", () => {
@@ -13,10 +13,5 @@ describe("agent commands", () => {
     expect(commandBinary("  /usr/bin/Python3 -m http.server")).toBe("python3");
     expect(commandBinary("'codex' exec")).toBe("codex");
     expect(commandBinary(undefined)).toBe("");
-  });
-
-  test("@mentions name an agent and are stripped from the text", () => {
-    expect(findSupportedAgentMention("ask @agent to fix it")?.id).toBe("cursor");
-    expect(stripSupportedAgentMentions("ask @codex  to fix it")).toBe("ask to fix it");
   });
 });

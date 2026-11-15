@@ -20,16 +20,6 @@ export const workFiles = signal<WorkItem[]>([]);
 export const workFilesModel = signal<WorkItems | null>(null);
 
 /**
- * The Work file a Session writes into, the newest when there are several: what a
- * Session's "Open Brain" opens (`WorkFilePage` with this id).
- */
-export function workFileOfSession(sessionId: string): string | undefined {
-  return workFiles()
-    .filter((item) => item.frontmatter.worker_session === sessionId)
-    .sort((a, b) => Date.parse(b.mtime) - Date.parse(a.mtime))[0]?.id;
-}
-
-/**
  * The Work file of a Brain Work (SPEC §11 Work detail's "Work file" row), the newest when there are several:
  * a Calendar run's file (the run's Work id, or its run), else the one a Worker of it writes into.
  */

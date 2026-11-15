@@ -369,19 +369,6 @@ export function brainWorkGroup(
   return "back";
 }
 
-/** "3 running · 1 needs you", or null when nothing is current. */
-export function brainWorkSummaryLine(
-  counts: Record<BrainWorkGroup, number>,
-): string | null {
-  const parts: string[] = [];
-  if (counts.needs) parts.push(`${counts.needs} ${counts.needs === 1 ? "needs" : "need"} you`);
-  if (counts.running) parts.push(`${counts.running} running`);
-  if (counts.back) parts.push(`${counts.back} back`);
-  if (counts.waiting) parts.push(`${counts.waiting} waiting`);
-  if (counts.queued) parts.push(`${counts.queued} queued`);
-  return parts.length ? parts.join(" · ") : null;
-}
-
 /** "Claude Code · perpetuo": a live Session's executor and project. */
 export function workerWho(worker: BrainWorkerRef): string | undefined {
   const executor = worker.command ? providerLabel(worker.command) : "";
@@ -418,11 +405,6 @@ function withAge(summary: string | undefined, group: BrainWorkGroup, waited: num
   if (group !== "needs" || waited <= BRAIN_WORK_STUCK_AFTER_MS) return summary;
   const age = `Waiting ${brainWorkAge(waited)}`;
   return summary ? `${age} · ${summary}` : age;
-}
-
-/** A Needs-you slip that has waited over a day on you. */
-export function brainWorkSlipStale(slip: Pick<BrainWorkSlip, "group" | "waitedMs" | "stuck">): boolean {
-  return slip.group === "needs" && !slip.stuck && (slip.waitedMs ?? 0) > BRAIN_WORK_STUCK_AFTER_MS;
 }
 
 function slipSummary(

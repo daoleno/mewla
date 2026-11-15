@@ -4,7 +4,7 @@ import {
   runtimeChoiceForRow,
   threadRuntimeRows,
 } from "./sessionModelHelpers";
-import type { ThreadRuntimeSelection, ProvidersSnapshot } from "../sessions/providerTypes";
+import type { ThreadRuntimeSelection, ProvidersSnapshot } from "../providers/types";
 
 const selection: ThreadRuntimeSelection = {
   session_id: "s1",

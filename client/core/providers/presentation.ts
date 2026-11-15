@@ -1,11 +1,7 @@
 import { invalidProviderReply } from "./errors";
 import type {
-  ProviderClient,
   ProviderConnection,
   ProviderConnectionInput,
-  ProviderModel,
-  ProviderPreset,
-  ThreadRuntimeSelection,
   ProvidersSnapshot,
 } from "./types";
 import {
@@ -13,26 +9,6 @@ import {
   normalizeProviderClient,
   normalizeProviderId,
 } from "./types";
-
-export type ProviderModelChoice = {
-  connection: ProviderConnection;
-  model: ProviderModel;
-  current: boolean;
-  disabled: boolean;
-};
-
-export function connectionsForSession(
-  snapshot: ProvidersSnapshot | null | undefined,
-  selection: ThreadRuntimeSelection | null | undefined,
-): ProviderConnection[] {
-  if (!snapshot || !selection) return [];
-  const client = normalizeProviderClient(selection.client);
-  return snapshot.connections.filter((connection) =>
-    connection.clients.some(
-      (candidate) => normalizeProviderClient(candidate) === client,
-    ),
-  );
-}
 
 export function connectionsForClient(
   snapshot: ProvidersSnapshot,
@@ -44,88 +20,6 @@ export function connectionsForClient(
       (candidate) => normalizeProviderClient(candidate) === normalized,
     ),
   );
-}
-
-export function availableModelsForConnection(
-  snapshot: ProvidersSnapshot,
-  connectionId: string,
-): ProviderModel[] {
-  return (snapshot.models[connectionId] ?? []).filter(
-    (model) => model.available,
-  );
-}
-
-/**
- * The single client a connection serves. Curated and custom connections are
- * always created client-scoped, so a missing/unsupported client means the
- * projection is malformed.
- */
-export function clientForConnection(
-  connection: ProviderConnection | null | undefined,
-): ProviderClient | null {
-  if (!connection) return null;
-  const client = connection.clients[0];
-  return isSupportedProviderClient(client) ? client : null;
-}
-
-/**
- * The client the launch command targets, when it is a managed Provider client.
- * Shells and other executors return null (no Provider selection applies).
- */
-export function providerClientForCommand(command: string): ProviderClient | null {
-  const fields = command.trim().split(/\s+/).filter(Boolean);
-  for (const field of fields) {
-    if (field.includes("=")) continue;
-    const bin = field.split("/").pop() ?? "";
-    if (normalizeProviderClient(bin) === "codex") return "codex";
-    if (normalizeProviderClient(bin) === "claude") return "claude";
-  }
-  return null;
-}
-
-/**
- * The authoritative connection selection for a new Session. Both Agents
- * inherit their local model configuration unless the Session requests one.
- */
-export function launchSelectionFromSnapshot(
-  snapshot: ProvidersSnapshot | null | undefined,
-  client: ProviderClient | null,
-): { connectionId: string; modelId: string } | null {
-  if (!snapshot || !client) return null;
-  const entry = snapshot.defaults[client];
-  if (!entry?.connection_id) return null;
-  const connection = snapshot.connections.find(
-    (item) => item.id === entry.connection_id,
-  );
-  if (!connection) return null;
-  return {
-    connectionId: connection.id,
-    modelId: "",
-  };
-}
-
-/**
- * Model access inventory for one connection after discovery: every
- * discovered model with an on/off switch. "On" means the gateway lets every
- * agent on this connection use the model (the client enable allowlist); it
- * never picks a Session's model. The on state comes from the live catalog
- * whenever it lists the model, so a switch reflects each write instead of the
- * discovery result the sheet opened with.
- */
-export function modelSupportChoices(
-  snapshot: ProvidersSnapshot | null | undefined,
-  connection: ProviderConnection,
-  models: ProviderModel[],
-): ProviderModelChoice[] {
-  const live = new Map(
-    (snapshot?.models[connection.id] ?? []).map((model) => [model.id, model]),
-  );
-  return models.map((model) => ({
-    connection,
-    model,
-    current: live.get(model.id)?.available ?? model.available,
-    disabled: false,
-  }));
 }
 
 /**
@@ -175,95 +69,6 @@ export function toggleModelSupport(
   return (snapshot?.models[connectionId] ?? [])
     .map((model) => model.id)
     .filter((id) => current.has(id));
-}
-
-export function modelChoicesForSession(
-  snapshot: ProvidersSnapshot | null | undefined,
-  selection: ThreadRuntimeSelection | null | undefined,
-): ProviderModelChoice[] {
-  if (!snapshot || !selection) return [];
-  return connectionsForSession(snapshot, selection).flatMap((connection) =>
-    (snapshot.models[connection.id] ?? [])
-      .filter((model) => model.available)
-      .map((model) => ({
-        connection,
-        model,
-        current:
-          selection.connection_id === connection.id &&
-          selection.model_id === model.id,
-        disabled: !connection.credential_ready,
-      })),
-  );
-}
-
-export type ConnectionSelectionOption = {
-  connectionId: string;
-  connectionName: string;
-  selected: boolean;
-};
-
-export type ConnectionSelectionClientRow = {
-  client: string;
-  label: string;
-  currentConnectionId: string | null;
-  currentConnectionName: string | null;
-  options: ConnectionSelectionOption[];
-};
-
-function connectionSelectionClientLabel(client: string): string {
-  const normalized = normalizeProviderClient(client);
-  if (normalized === "codex") return "Codex";
-  if (normalized === "claude") return "Claude";
-  return client;
-}
-
-/**
- * One compact connection selection surface: Codex and Claude each select
- * among ready, client-compatible Provider connections. Cards stay glance-only.
- */
-export function connectionSelectionRows(
-  snapshot: ProvidersSnapshot | null | undefined,
-  clients: readonly string[] = ["codex", "claude"],
-): ConnectionSelectionClientRow[] {
-  if (!snapshot) return [];
-  return clients.map((client) => {
-    const normalized = normalizeProviderClient(client) || client.trim().toLowerCase();
-    const currentId = snapshot.defaults[normalized]?.connection_id ?? null;
-    const currentConnection = currentId
-      ? snapshot.connections.find((connection) => connection.id === currentId)
-      : undefined;
-    const options = connectionsForClient(snapshot, normalized)
-      .filter((connection) => connection.credential_ready)
-      .map((connection) => ({
-        connectionId: connection.id,
-        connectionName: connection.name,
-        selected: connection.id === currentId,
-      }));
-    return {
-      client: normalized,
-      label: connectionSelectionClientLabel(normalized),
-      currentConnectionId: currentId,
-      currentConnectionName: currentConnection?.name ?? null,
-      options,
-    };
-  });
-}
-
-export function curatedConnectionInput(
-  preset: ProviderPreset,
-  client: string,
-): ProviderConnectionInput {
-  if (preset.advanced) {
-    throw invalidProviderReply("Advanced Providers require Gateway details.");
-  }
-  const normalizedClient = normalizeProviderClient(client);
-  if (
-    !isSupportedProviderClient(normalizedClient) ||
-    !preset.clients.includes(normalizedClient)
-  ) {
-    throw invalidProviderReply("Choose a supported client.");
-  }
-  return { preset_id: preset.id, client: normalizedClient };
 }
 
 /**
@@ -380,54 +185,4 @@ export function createdConnectionFromMutation(
     );
   }
   return added[0];
-}
-
-export function withProviderCredentialReadiness(
-  snapshot: ProvidersSnapshot,
-  connectionId: string,
-  credentialReady: boolean,
-): ProvidersSnapshot {
-  return {
-    ...snapshot,
-    connections: snapshot.connections.map((connection) =>
-      connection.id === connectionId
-        ? { ...connection, credential_ready: credentialReady }
-        : connection,
-    ),
-  };
-}
-
-export function withDiscoveredProviderModels(
-  snapshot: ProvidersSnapshot,
-  connectionId: string,
-  models: ProviderModel[],
-): ProvidersSnapshot {
-  return {
-    ...snapshot,
-    models: { ...snapshot.models, [connectionId]: models },
-  };
-}
-
-export function sanitizeProviderConnectionInput(
-  input: ProviderConnectionInput,
-): ProviderConnectionInput {
-  const presetId = normalizeProviderId(input.preset_id);
-  if (!presetId) {
-    throw invalidProviderReply("Choose a Provider preset.");
-  }
-  const id = normalizeProviderId(input.id);
-  const name = normalizeProviderId(input.name);
-  const client = normalizeProviderClient(input.client);
-  const baseUrl = normalizeProviderId(input.base_url);
-  const modelId = normalizeProviderId(input.model_id);
-  if (!isSupportedProviderClient(client)) {
-    throw invalidProviderReply("Choose Codex or Claude Code.");
-  }
-  const out: ProviderConnectionInput = { preset_id: presetId, client };
-  if (id) out.id = id;
-  if (name) out.name = name;
-  if (baseUrl) out.base_url = baseUrl;
-  if (modelId) out.model_id = modelId;
-  if (input.advanced === true) out.advanced = true;
-  return out;
 }

@@ -59,10 +59,6 @@ export async function finishPluginReturn(
   if (Date.parse(pending.flow.expires) <= now) throw new Error("This connection expired. Connect again.");
   return send(pending.serverId, { action: "connect_finish", flow_id: pending.flow.id, callback });
 }
-/** What Brain can now do, in one line, from the service's read job. */
-export function brainCanNow(read: string | undefined, name: string): string {
-  return read ? `Brain can now ${read.charAt(0).toLowerCase()}${read.slice(1)}.` : `Brain can read and search ${name}.`;
-}
 type ConnectInput = NonNullable<ConnectionRequest["input"]>;
 // The web UI asks the daemon to return sign-in to its own origin; native apps
 // return to PLUGIN_CALLBACK. The daemon accepts only origins it serves.

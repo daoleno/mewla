@@ -2,10 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { WorkerDirectorySection } from "./workerDirectory";
 import {
   MAX_REMEMBERED_COLLAPSED_SECTIONS,
-  MAX_ANIMATED_NEW_ROWS,
   buildSessionListSections,
   collapsedSectionsToStore,
-  newRowKeys,
   sectionAttentionMark,
   toggleCollapsedSection,
 } from "./sessionSections";
@@ -66,24 +64,5 @@ describe("remembering folds", () => {
     const stored = collapsedSectionsToStore(many);
     expect(stored).toHaveLength(MAX_REMEMBERED_COLLAPSED_SECTIONS);
     expect(stored.at(-1)).toBe(`k${MAX_REMEMBERED_COLLAPSED_SECTIONS + 4}`);
-  });
-});
-
-describe("rows new to the list", () => {
-  const rows = (...keys: string[]) => [{ data: keys.map((key) => ({ key })) as never }];
-  test("the first list and an empty one animate nothing", () => {
-    expect(newRowKeys(null, rows("a", "b")).size).toBe(0);
-    expect(newRowKeys(new Set(), rows("a", "b")).size).toBe(0);
-  });
-  test("a row that arrives later is new; rows already known are not", () => {
-    expect([...newRowKeys(new Set(["a", "b"]), rows("a", "b", "c"))]).toEqual(["c"]);
-    expect(newRowKeys(new Set(["a", "b"]), rows("b", "a")).size).toBe(0);
-  });
-  test("a list that shares nothing with the last one (another computer) is a reload", () => {
-    expect(newRowKeys(new Set(["a", "b"]), rows("x", "y")).size).toBe(0);
-  });
-  test("too many new rows at once is a reload, not news", () => {
-    const many = Array.from({ length: MAX_ANIMATED_NEW_ROWS + 1 }, (_, index) => `n${index}`);
-    expect(newRowKeys(new Set(["a"]), rows("a", ...many)).size).toBe(0);
   });
 });

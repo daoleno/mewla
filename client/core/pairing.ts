@@ -203,19 +203,6 @@ export async function confirmPairedDevice(input: {
   return { daemonId, daemonPublicKey };
 }
 
-export async function buildSignedRequestHeaders(input: {
-  serverUrl: string;
-  daemonId: string;
-  purpose: "mewla-probe" | "mewla-upload";
-}): Promise<Record<string, string>> {
-  return {
-    Authorization: await buildAuthorizationHeader({
-      daemonId: input.daemonId,
-      purpose: input.purpose,
-    }),
-  };
-}
-
 export function buildHTTPURL(
   serverUrl: string,
   pathname: string,

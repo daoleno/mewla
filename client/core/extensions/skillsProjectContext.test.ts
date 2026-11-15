@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  SkillsAutomaticInventoryOwner,
   selectStableSkillsProjectCwd,
 } from "./skillsScreenModel";
 
@@ -27,10 +26,8 @@ describe("stable Skills project context", () => {
     expect(afterBetaActivity).toBe("/repo/alpha");
   });
 
-  test("alternating Agent activity produces one automatic inventory refresh", () => {
-    const owner = new SkillsAutomaticInventoryOwner();
+  test("alternating Agent activity keeps the selected project", () => {
     let selected = "";
-    let requests = 0;
     for (const [alphaUpdatedAt, betaUpdatedAt] of [
       [20, 10],
       [20, 30],
@@ -53,11 +50,9 @@ describe("stable Skills project context", () => {
         "local",
         selected,
       );
-      if (owner.shouldRefresh(1, `local\u0000${selected}`)) requests += 1;
     }
 
     expect(selected).toBe("/repo/alpha");
-    expect(requests).toBe(1);
   });
 
   test("chooses a fallback only after the selected cwd disappears", () => {

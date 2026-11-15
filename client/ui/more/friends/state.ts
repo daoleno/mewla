@@ -205,16 +205,6 @@ export async function changeAutoMedia(media: boolean): Promise<void> {
   }
 }
 
-/** A newer status (after a draft was posted or discarded) replaces what was read. */
-export function setStatus(status: FriendsStatus): void {
-  patch(friends().serverId, { status });
-}
-
-/** The current computer, for a page's own requests. */
-export function friendsServer(): StoredServer | null {
-  return server();
-}
-
 /** The current computer's id (reactive); "" with none. */
 export function currentServerId(): string {
   return daemon()?.server.id ?? "";

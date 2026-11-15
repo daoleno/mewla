@@ -5,16 +5,6 @@ import type {
 } from "../conversation/conversation";
 import type { WorkerPrompt } from "./types";
 
-/** The pending choice the Interface composer renders as a card. */
-export type InterfaceChoicePrompt = {
-  /** The same question set keeps the draft; a new one starts over. */
-  key: string;
-  choice: ConversationChoice;
-  /** The daemon connection is up, which is all an answer needs: the daemon re-checks the screen. */
-  connected: boolean;
-  onSubmit(answers: ChoiceAnswer[]): Promise<void>;
-};
-
 /** One question's in-progress answer on the Interface card. */
 export type ChoiceDraftAnswer = {
   selected: number[];
@@ -51,9 +41,6 @@ export function latestPendingChoice(
 
 /** The daemon code for "the question already passed" (answered, dismissed or replaced). */
 export const CHOICE_GONE_CODE = "answer_choice_gone";
-
-/** What the person is told when the card disappears because the question passed. */
-export const CHOICE_GONE_NOTICE = "That question has already passed.";
 
 /** The daemon code for "the prompt on screen is no longer the one this answer was for". */
 export const PROMPT_GONE_CODE = "answer_prompt_gone";
@@ -232,24 +219,6 @@ export function buildChoiceAnswers(
     const answer = draft[index];
     return { selected: answer.selected, other: answerOther(answer) };
   });
-}
-
-/** Room the composer needs under the card, in dp. */
-const CHOICE_CARD_COMPOSER_RESERVE = 112;
-const CHOICE_CARD_MIN_HEIGHT = 200;
-
-/**
- * The tallest the card may be so it never reaches the floating header: the
- * card sits in the composer overlay, which has no height limit of its own.
- */
-export function choiceCardMaxHeight(input: {
-  windowHeight: number;
-  topChromeInset: number;
-  bottomInset: number;
-}) {
-  const room =
-    input.windowHeight - input.topChromeInset - input.bottomInset - CHOICE_CARD_COMPOSER_RESERVE - 8;
-  return Math.max(CHOICE_CARD_MIN_HEIGHT, Math.floor(room));
 }
 
 /**

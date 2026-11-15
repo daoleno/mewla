@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  createSkillsSurfaceState,
   isPluginProvidedSkill,
-  reduceSkillsSurface,
   skillRowSupportsDelete,
 } from "./skillsSurfaceModel";
 import type { InstalledSkill } from "./skillsManagement";
@@ -25,17 +23,6 @@ function skill(canDelete: boolean): InstalledSkill {
 }
 
 describe("local Skills action gates", () => {
-  test("Plugins and Skills remain separate top-level sections", () => {
-    const initial = createSkillsSurfaceState();
-    expect(initial.section).toBe("skills");
-    expect(
-      reduceSkillsSurface(initial, {
-        type: "select_section",
-        section: "plugins",
-      }).section,
-    ).toBe("plugins");
-  });
-
   test("delete requires both copy and daemon capability", () => {
     expect(skillRowSupportsDelete(skill(true), ["delete"])).toBe(true);
     expect(skillRowSupportsDelete(skill(true), [])).toBe(false);

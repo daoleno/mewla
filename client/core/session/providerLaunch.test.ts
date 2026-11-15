@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ProvidersSnapshot } from "../sessions/providerTypes";
+import type { ProvidersSnapshot } from "../providers/types";
 import { launchSelectionFromSnapshot, providerClientForCommand, resolveLaunchSelection } from "./providerLaunch";
 import type { Daemon } from "../more/daemon";
 

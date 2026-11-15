@@ -65,14 +65,6 @@ export function formatLongDay(value: DateInput): string {
   return date ? `${WEEKDAYS[date.getDay()]}, ${MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}` : "";
 }
 
-/** "1,234,567": digits grouped by three. */
-export function groupDigits(value: number, fractionDigits = 0): string {
-  const fixed = Math.abs(value).toFixed(fractionDigits);
-  const [whole, fraction] = fixed.split(".");
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${value < 0 ? "-" : ""}${grouped}${fraction ? `.${fraction}` : ""}`;
-}
-
 /** "$1,234.50", "$0.001234": US dollars, at least two and at most `maxFraction` decimals. */
 export function formatUSD(value: number, maxFraction = 2): string {
   const fixed = Math.abs(value).toFixed(Math.max(2, maxFraction));

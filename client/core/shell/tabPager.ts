@@ -29,11 +29,6 @@ export function settlePage(options: { rest: number; from: number; count: number;
   return clamp(clamp(projected, from - 1, from + 1), 0, count - 1);
 }
 
-/** Where the row is between pages, as a page index (1.5: halfway from the second to the third). The control's chosen segment follows it. */
-export function pagerProgress(rest: number, offset: number, width: number): number {
-  return width > 0 ? rest - offset / width : rest;
-}
-
 /**
  * The chosen segment's mark at each page, from the segments as laid out (`x` and `width` in the control): one
  * shape `base` wide at the control's left, moved by `translate` and stretched by `scale` (about its centre), so

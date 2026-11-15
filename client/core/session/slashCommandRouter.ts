@@ -36,11 +36,6 @@ export type SlashCommandAction =
   | { kind: "new_chat"; command: CodexSlashCommand; text: string }
   | { kind: "send"; command: CodexSlashCommand; text: string };
 
-/** The router's return value: false for `none` and `insert`, where the draft goes out as a message. */
-export function slashCommandActionHandled(action: SlashCommandAction): boolean {
-  return action.kind !== "none" && action.kind !== "insert";
-}
-
 /** A draft the person sent (routeDraftSubmission). */
 export function routeSlashCommand(input: {
   draft: string;

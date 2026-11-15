@@ -92,7 +92,7 @@ export type BrainWorkEventTimelineItem = {
 };
 
 // Brain's Work: one source (core/work/types).
-export type { BrainCurrentWork, BrainSessionFinalization, BrainWorkAttentionState, BrainWorkCalendarRef, BrainWorkProgressMode, BrainWorkStatus, BrainWorkUserAction, BrainWorkWake } from "../work/types";
+export type { BrainCurrentWork } from "../work/types";
 
 // store/workers.tsx
 export type WorkerPromptKind = 'permission' | 'plan' | 'choice' | 'startup' | 'approval';
@@ -132,11 +132,4 @@ export interface WorkerPrompt {
   /** A Claude permission's tool ("Bash", "Read") and its one line (the command, else the file), when the daemon can name the call (WIRE §7). */
   tool?: string;
   summary?: string;
-}
-
-// services/sessionFilePreview.ts
-export interface SessionFileBinarySource {
-  uri: string;
-  headers: Record<string, string>;
-  mimeType?: string;
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { activationBusyAllowsRetryWithoutRefresh, ProviderError, providerMutationRequiresRefresh } from "../providers/errors";
+import { ProviderError, providerMutationRequiresRefresh } from "../providers/errors";
 import type { StoredServer } from "../storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "../testing/memoryPlatform";
 import { Transport, transportTiming } from "../transport";
@@ -134,7 +134,6 @@ describe("the Model sheet's requests", () => {
     answer("error", { code: "route_binding_busy", message: "session route busy" });
     const error = await done.catch((e) => e);
     expect(error).toMatchObject({ kind: "busy", message: "Session Model selection busy" });
-    expect(activationBusyAllowsRetryWithoutRefresh(error)).toBe(true);
     transport.close();
   });
 

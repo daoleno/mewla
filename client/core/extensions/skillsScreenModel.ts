@@ -2,7 +2,6 @@ import type {
   InstalledSkill,
   ManagedSkillAgent,
   PackageFile,
-  SkillsInventory,
 } from "./skillsManagement";
 import { skillAgentLabel } from "./skillsManagement";
 
@@ -15,7 +14,6 @@ export const MANAGED_SKILL_AGENTS: readonly ManagedSkillAgent[] = [
   "pi",
 ];
 
-export type SkillsAgentCounts = Record<ManagedSkillAgent, number>;
 export type SkillStatusFilter = "all" | "enabled" | "disabled";
 export type SkillScopeFilter = "all" | "global" | "project";
 
@@ -79,16 +77,6 @@ export function selectStableSkillsProjectCwd(
         (a.cwd?.trim() || "").localeCompare(b.cwd?.trim() || ""),
     )[0]?.cwd?.trim() || ""
   );
-}
-
-export function skillsSectionProjection(
-  inventory: SkillsInventory | undefined,
-  agent: ManagedSkillAgent,
-): { agent: ManagedSkillAgent; count: number; skills: InstalledSkill[] } {
-  const skills = (inventory?.skills ?? []).filter(
-    (skill) => skill.agents.includes(agent),
-  );
-  return { agent, count: skills.length, skills };
 }
 
 const agentOrder = new Map(
@@ -164,28 +152,6 @@ export function filterLogicalSkills(
       ].some((value) => value?.toLocaleLowerCase().includes(needle));
     })
     .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Kept for non-screen callers while the screen consumes logical rows. */
-export function filterInstalledSkills(
-  skills: readonly InstalledSkill[],
-  query: string,
-  status: SkillStatusFilter,
-  scope: SkillScopeFilter,
-): InstalledSkill[] {
-  return skills.filter((skill) => {
-    if (status === "enabled" && !skill.enabled) return false;
-    if (status === "disabled" && skill.enabled) return false;
-    if (scope !== "all" && skill.scope !== scope)
-      return false;
-    const needle = query.trim().toLocaleLowerCase();
-    return (
-      !needle ||
-      [skill.name, skill.description, skill.location, skill.rootPath].some(
-        (value) => value?.toLocaleLowerCase().includes(needle),
-      )
-    );
-  });
 }
 
 export function skillCopyLocation(copy: InstalledSkill): {
@@ -272,18 +238,4 @@ export function skillRenderer(
     }
   }
   return "text";
-}
-
-export class SkillsAutomaticInventoryOwner {
-  private identity = "";
-  shouldRefresh(
-    focusGeneration: number,
-    serverId: string | null | undefined,
-  ): boolean {
-    if (focusGeneration < 1) return false;
-    const identity = `${focusGeneration}:${serverId?.trim() || "none"}`;
-    if (identity === this.identity) return false;
-    this.identity = identity;
-    return true;
-  }
 }
