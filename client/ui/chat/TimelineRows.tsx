@@ -31,6 +31,8 @@ import { workAction } from "../../core/work/brainWork";
 import { brainWorkTitle } from "../../core/work/surface";
 import { delayed, RING, Spinner } from "../kit/wait";
 import { haptic } from "../shell/haptics";
+import { nav } from "../shell/nav";
+import { agentDisplays, displayOfWorker } from "../screenfloat/agentDisplays";
 
 /**
  * Which rows are open. A list recycles its cells, so a row's own signal would
@@ -280,6 +282,21 @@ export function ResultActions(props: { actions: readonly ResultAction[]; disable
 }
 
 /**
+ * A page or app a Worker has open on its display (a sign-in it left for the person, after its turn too): the one tap
+ * to it in Screen, where the person sees and takes it over.
+ */
+export function WorkerScreenButton(props: { worker: () => string | undefined }) {
+  const open = computed(() => !!displayOfWorker(agentDisplays(), props.worker()));
+  return (
+    <If when={open()}><Button testID="work-card-screen" accessibilityLabel="Open its screen" onPress={() => { const worker = props.worker(); if (worker) nav.push({ name: "screen", worker }); }}
+        class="h-[30px] flex-row items-center gap-1 rounded-full bg-background px-3 active:opacity-70">
+        <KitIcon name="desktop" size={16} tone="ink" />
+        <Text class="text-caption font-semibold">Screen</Text>
+      </Button></If>
+  );
+}
+
+/**
  * A Worker of a Work on its card (SPEC §11 Work card): 44 pt, its logo, its task name, what it does, then its state as
  * a tray row ends ("● 10m", a red dot and "Needs you"), never a clock time while it works. Pushes its Session.
  */
@@ -293,6 +310,7 @@ function WorkerLine(props: { line: WorkWorkerLine; onPress: () => void }) {
       <View class="min-w-0 flex-1">
         <Text class="text-sub line-clamp-1"><Text class="font-semibold">{row().title}</Text><Text class="text-muted-foreground">{row().line ? `  ${row().line}` : ""}</Text></Text>
       </View>
+      <WorkerScreenButton worker={() => line.sessionId} />
       <RowEnd row={row} />
     </Button>
   );
@@ -350,6 +368,7 @@ function OneSessionWork(props: { model: () => WorkCardModel; line: () => WorkWor
       class="min-h-[68px] flex-row items-center gap-3.5 overflow-hidden rounded-(--radius-group) bg-card px-4 py-3 active:opacity-70">
       <RowTile tile={() => row().tile} mark={() => row().mark} />
       <RowText row={() => { const r = request(); return r ? { ...row(), line: r.ask ?? r.title, mark: undefined } : row(); }} />
+      <WorkerScreenButton worker={sessionId} />
       <If when={request()} else={<RowEnd row={row} />}><Button testID={request()?.oneTap ? "work-card-approve" : "work-card-answer"} disabled={sending()} onPress={() => (request()?.oneTap ? void approve() : press())}
           class="h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 disabled:opacity-40">
           <Text class="text-caption font-semibold text-seal-foreground">{request()?.oneTap ? "Approve" : "Answer"}</Text>

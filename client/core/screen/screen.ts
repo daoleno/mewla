@@ -111,6 +111,8 @@ export async function screenRequest(server: StoredServer, action?: ScreenAction)
 export interface AgentDisplay {
   /** The Worker it belongs to. */
   id: string;
+  /** The Worker's name, from the computer (newer daemons). */
+  name?: string;
   width: number;
   height: number;
   /** Who holds it now: the person while they hold it, otherwise the agent. */
@@ -118,6 +120,8 @@ export interface AgentDisplay {
   /** The person stopped this agent; it stays stopped until they resume it. */
   stopped?: boolean;
   apps: number;
+  /** The agent's browser windows on it (newer daemons). */
+  browser?: number;
   /** Seconds since the agent last used it; 0 while it acts. */
   idle_s?: number;
 }

@@ -517,6 +517,14 @@ func (c *Client) NotifyWorker(kind string, notice WorkerNotice) error {
 	})
 }
 
+// NotifyWorkerNote tells the person something about one Worker; a tap opens its
+// Session.
+func (c *Client) NotifyWorkerNote(workerID, title, body string) error {
+	return c.dispatch(KindOther, func(r registration) Message {
+		return Message{Title: title, Body: buildNotificationBody(body, title), Data: notificationData(workerID, r.serverRef)}
+	})
+}
+
 // BrainNotifier returns a sender for notifications that open the Brain
 // thread, recorded under kind (KindBrainReply, KindWatchUrgent). The body is
 // one line Brain chose to show; the message itself stays in Brain.

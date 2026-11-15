@@ -338,10 +338,19 @@ computer with a monitor for each agent. An agent's browser window and the
 desktop apps it opens are both on its monitor, and nothing else is.
 
 On a Linux computer, **⋯ › Display** in Screen lists the agents using the
-screen right now, and each one's live view shows only its own monitor (you are
-never sent another agent's). An agent appears there when it asks for a browser
-or opens an app; you never open or manage a browser yourself. **⋯ › Phone**
-opens the phone, where Phone use is on.
+screen, by name, and each one's live view shows only its own monitor (you are
+never sent another agent's). An agent appears there as soon as its browser
+window opens or it opens an app, whichever tool it used; you never open or
+manage a browser yourself. **⋯ › Phone** opens the phone, where Phone use is on.
+
+A page an agent leaves open for you (a sign-in, a code, a captcha, a payment)
+stays after its turn ends. Its Work card in Brain's thread then has a
+**Screen** button that opens Screen at that agent's view, so you don't have to
+look for it. The window and the agent's monitor go when its Worker closes, when
+you close the window (Chrome's own tab or window close), or when nobody has
+used them for an hour: no action by the agent, nothing from you, and no view of
+it open in Screen. Mewla then tells you in a notification, and the agent hears
+it with its next tool result.
 
 - **The view is the computer.** It opens live and is the input surface: on a
   desktop or in the web app, the mouse (click, double click, right click, drag),
@@ -369,9 +378,11 @@ the tool differs from a Mac's. The browser comes up when the agent first asks
 for it, not when the Worker starts, and the agent waits for it. It is one
 Chrome with one profile; every agent has a window of its own in it, placed on
 that agent's monitor (so are the windows its pages open, such as a sign-in
-pop-up), and several agents work at the same time. The window closes when its
-Worker ends, and the browser stops when no agent is using it. The switch lives
-on the computer, so every device sees the same answer.
+pop-up), and several agents work at the same time. The window stays after the
+agent's turn ends and closes as described above; the browser stops when no
+agent has a window. The browser runs under the Mewla daemon, so restarting or
+updating Mewla closes it and every agent's page in it. The switch lives on the
+computer, so every device sees the same answer.
 
 Desktop apps need no switch. A Worker (Claude or Codex) has the same computer
 tool as on a Mac (`mewla_computer`): `open_app` starts an installed app (by the
@@ -391,7 +402,8 @@ The screen is private to Mewla and off your desktop; it needs TigerVNC's
 window manager: Mewla moves each app's window to its agent's monitor and a
 window keeps the size it opens with). The picture travels over a Unix socket
 only your user can open, no network port is used, and an agent's monitor is
-given up when its Worker ends or closes it.
+given up when its Worker closes, when nothing is left on it, or after an hour
+nobody used it.
 
 The browser has one profile for all agents on the computer, not your everyday
 Chrome: to give it a sign-in, take over an agent's screen, sign in yourself and

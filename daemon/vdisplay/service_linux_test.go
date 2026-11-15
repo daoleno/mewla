@@ -219,3 +219,92 @@ func blank(pix []byte) bool {
 	}
 	return true
 }
+
+// An agent that only uses its browser is on Screen's list as soon as its
+// window opens (the bridge asks for the Worker's monitor, then reports the
+// window), under its name, and it hears once who sees the window.
+func TestBrowserWindowListsItsWorker(t *testing.T) {
+	s := newService(t)
+	s.SetNames(func(w string) string { return map[string]string{"w1": "SignIn"}[w] })
+	ctx := context.Background()
+	if _, err := s.Monitor(ctx, "w1"); err != nil {
+		t.Fatal(err)
+	}
+	s.Windows("w1", 1)
+	list := s.List()
+	if len(list) != 1 || list[0].ID != "w1" || list[0].Name != "SignIn" || list[0].Browser != 1 || list[0].Apps != 0 {
+		t.Fatalf("list = %+v", list)
+	}
+	if err := s.Begin("w1"); err != nil {
+		t.Fatal(err)
+	}
+	if notes := s.End("w1"); len(notes) != 1 || notes[0] != WindowNote {
+		t.Fatalf("first notes = %q", notes)
+	}
+	_ = s.Begin("w1")
+	if notes := s.End("w1"); len(notes) != 0 {
+		t.Fatalf("the window note was repeated: %q", notes)
+	}
+	// The person closing the window (the extension reports it) takes it off.
+	s.Windows("w1", 0)
+	if list := s.List(); len(list) != 0 {
+		t.Fatalf("list after the window closed = %+v", list)
+	}
+}
+
+// A display lasts as long as its Worker is open (SetAlive), not its turn:
+// a Worker that closes takes its display with it.
+func TestDisplayGoesWithItsWorker(t *testing.T) {
+	s := newService(t)
+	open := map[string]bool{"w1": true}
+	s.SetAlive(func(w string) bool { return open[w] })
+	if _, err := s.Monitor(context.Background(), "w1"); err != nil {
+		t.Fatal(err)
+	}
+	s.Windows("w1", 1)
+	if len(s.List()) != 1 {
+		t.Fatalf("list = %+v", s.List())
+	}
+	open["w1"] = false
+	if list := s.List(); len(list) != 0 {
+		t.Fatalf("a closed Worker's display stayed: %+v", list)
+	}
+}
+
+// A display nobody uses closes after the idle time: an open view keeps it,
+// and the idle time starts again when the view closes. The Worker hears it.
+func TestIdleDisplayCloses(t *testing.T) {
+	s := newService(t)
+	s.SetNames(func(string) string { return "SignIn" })
+	var closed []string
+	s.SetIdleClose(time.Hour, func(worker, name string, _ time.Duration) { closed = append(closed, worker+"/"+name) })
+	if _, err := s.Monitor(context.Background(), "w1"); err != nil {
+		t.Fatal(err)
+	}
+	s.Windows("w1", 1)
+	now := time.Now()
+	s.SweepIdle(now.Add(30 * time.Minute))
+	if len(s.List()) != 1 || len(closed) != 0 {
+		t.Fatalf("closed before the idle time: %v %+v", closed, s.List())
+	}
+	view, err := s.View("w1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SweepIdle(now.Add(2 * time.Hour))
+	if len(s.List()) != 1 || len(closed) != 0 {
+		t.Fatalf("closed while the person had it open: %v", closed)
+	}
+	view.Close()
+	s.SweepIdle(time.Now().Add(59 * time.Minute))
+	if len(s.List()) != 1 {
+		t.Fatal("closed right after the person looked at it")
+	}
+	s.SweepIdle(time.Now().Add(61 * time.Minute))
+	if len(s.List()) != 0 || len(closed) != 1 || closed[0] != "w1/SignIn" {
+		t.Fatalf("not closed when idle: %v %+v", closed, s.List())
+	}
+	if notes := s.End("w1"); len(notes) != 1 || !strings.Contains(notes[0], "nobody had used them for 60 minutes") {
+		t.Fatalf("the Worker was not told: %q", notes)
+	}
+}
