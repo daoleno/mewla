@@ -115,17 +115,34 @@ func (s *Service) withComputer(status Status) Status {
 	return status
 }
 
-// SetAgentDisplay lets the browser's agent windows open on the agent display
-// (off the person's screen) when the computer has one. hold makes it and
-// returns where it is, in global points; release lets go of one hold.
-func (s *Service) SetAgentDisplay(hold func(key string) (WindowBounds, error), release func(key string)) {
-	s.Bridge().Display = func(key string) (WindowBounds, func(), error) {
-		bounds, err := hold("browser:" + key)
+// AgentDisplayHooks put the browser's agent windows on the agent display (off
+// the person's screen) when the computer has one. Hold makes it and returns
+// where it is, in global points; Release lets go of one hold. Opened hears that
+// a Worker's window is open there and where; Closed that it closed. Keys are
+// the bridge's connection ids.
+type AgentDisplayHooks struct {
+	Hold    func(key string) (WindowBounds, error)
+	Release func(key string)
+	Opened  func(key, worker string, cell WindowBounds)
+	Closed  func(key string)
+}
+
+// SetAgentDisplay lets the browser's agent windows open on the agent display.
+func (s *Service) SetAgentDisplay(h AgentDisplayHooks) {
+	b := s.Bridge()
+	b.Display = func(key, worker string) (WindowBounds, func(), error) {
+		bounds, err := h.Hold("browser:" + key)
 		if err != nil {
 			return WindowBounds{}, nil, err
 		}
-		return bounds, func() { release("browser:" + key) }, nil
+		return bounds, func() {
+			if h.Closed != nil {
+				h.Closed(key)
+			}
+			h.Release("browser:" + key)
+		}, nil
 	}
+	b.Placed = h.Opened
 }
 
 // SetWorkerNames lets the tab group of a Worker's browser tabs carry its name.

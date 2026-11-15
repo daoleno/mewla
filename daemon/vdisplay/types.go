@@ -10,6 +10,14 @@ import (
 // person, who also keeps it by having it open in Screen) before it closes.
 const IdleClose = time.Hour
 
+// WhyIdle is why Mewla closed a window nobody used for IdleClose, in the words
+// the person and the agent are told.
+const WhyIdle = "nobody used it for an hour"
+
+// WindowNote is what an agent hears once its browser window is open: who sees
+// it, and how long it lasts.
+const WindowNote = "The person sees this browser window in Mewla's Screen, under your name, and can take it over there. It stays open after your turn ends: until your Session closes, the person closes it, or nobody uses it for an hour. To hand the person a page (a sign-in, a code, a captcha, a payment), leave it open and tell them; your Work card in Mewla has a Screen button that opens it."
+
 // Action is one thing an agent asks of its display.
 type Action struct {
 	// Action is open, screenshot, click, double_click, move, scroll, type, key

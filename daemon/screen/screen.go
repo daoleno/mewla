@@ -156,6 +156,9 @@ type Service struct {
 	// parkHolds are the apps an idle agent left on the agent display, by Worker
 	// (see parking.go); parkLease is how long, 0 for the default.
 	parkHolds map[string]*parkHold
+	// agentWindows are the agents' browser windows on the agent display, as
+	// Screen lists them (made on first use; see AgentWindows).
+	agentWindows *AgentWindows
 	parkLease time.Duration
 	// alive says whether a Worker is still running (see SetWorkerAlive);
 	// aliveEvery is how often to ask, 0 for the default.

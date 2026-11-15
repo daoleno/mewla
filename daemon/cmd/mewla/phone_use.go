@@ -45,10 +45,13 @@ func (a *controlApp) workerOpen(id string) bool {
 }
 
 // bindAgentScreenLifetime gives a Worker's display and its browser windows the Worker's lifetime
-// (workerOpen), not its turn's (liveWorker, which only says whether it may act).
-func bindAgentScreenLifetime(displays interface{ SetAlive(func(string) bool) }, browsers interface{ SetWorkerLive(func(string) bool) }, a *controlApp) {
-	displays.SetAlive(a.workerOpen)
+// (workerOpen), not its turn's (liveWorker, which only says whether it may act): Linux's agent
+// screen and agent browser, and a Mac's agent windows on its agent display.
+func bindAgentScreenLifetime(a *controlApp, browsers interface{ SetWorkerLive(func(string) bool) }, displays ...interface{ SetAlive(func(string) bool) }) {
 	browsers.SetWorkerLive(a.workerOpen)
+	for _, d := range displays {
+		d.SetAlive(a.workerOpen)
+	}
 }
 
 // handlePhoneControl performs one phone action for a live Worker. The daemon does it: the phone's

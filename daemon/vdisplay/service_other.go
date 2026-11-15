@@ -27,6 +27,7 @@ func (*Service) SetNames(func(string) string)                             {}
 func (*Service) SetIdleClose(time.Duration, func(string, string, string)) {}
 func (*Service) SetEvictable(func(string) bool)                           {}
 func (*Service) InUse(string) bool                                        { return false }
+func (*Service) Capability() error                                        { return Capability() }
 func (*Service) Forget(string)                                            {}
 func (*Service) Close()                                                   {}
 

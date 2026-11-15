@@ -114,12 +114,12 @@ func TestMewlaExtensionE2E(t *testing.T) {
 		if !ok {
 			t.Fatal("this computer has no agent display")
 		}
-		svc.SetAgentDisplay(func(key string) (WindowBounds, error) {
+		svc.SetAgentDisplay(AgentDisplayHooks{Hold: func(key string) (WindowBounds, error) {
 			r, err := hold(key)
 			b := WindowBounds{Left: r.Min.X, Top: r.Min.Y, Width: r.Dx(), Height: r.Dy()}
 			displayBounds = &b
 			return b, err
-		}, release)
+		}, Release: release})
 	}
 	svc.executable = func() (string, error) { return mewla, nil }
 	extDir, err := svc.ExtensionDir()

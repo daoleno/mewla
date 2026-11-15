@@ -138,8 +138,13 @@ type Bridge struct {
 	dir string
 	// Display, when set, makes the agent display (the display Mewla keeps for
 	// agents, off the person's screen) and says where it is, for the agent's
-	// window to open on; release lets it go when the window closes.
-	Display func(key string) (bounds WindowBounds, release func(), err error)
+	// window to open on; release lets it go when the window closes. worker is
+	// the Worker whose window it is, "" for a connection that is no Worker's.
+	Display func(key, worker string) (bounds WindowBounds, release func(), err error)
+	// Placed, when set, hears that a Worker's window is open on the agent
+	// display and where (cell, in global points), once the extension says so.
+	// The window's release (Display's) takes it off again.
+	Placed func(key, worker string, cell WindowBounds)
 	// WorkerName gives a Worker's name for its tab group, when it has one.
 	WorkerName func(worker string) string
 	// Agent, when set and on, puts agents' windows in the agent browser on the
@@ -640,6 +645,8 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 		delete(b.waiting, id)
 		b.mu.Unlock()
 	}()
+	// placed: a Worker's window that has its place on the agent display.
+	placed := false
 	if agent {
 		// The window fills the Worker's monitor on the agent screen.
 		name := worker
@@ -655,12 +662,13 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 		}
 		bounds = &cell
 	} else if bounds == nil && b.Display != nil {
-		if got, release, err := b.Display(id); err == nil {
+		if got, release, err := b.Display(id, worker); err == nil {
 			b.mu.Lock()
 			b.releases[id] = release
 			cell := cellOf(got, b.takeSlotLocked(id))
 			b.mu.Unlock()
 			bounds = &cell
+			placed = worker != ""
 		}
 	}
 	label := ""
@@ -681,6 +689,9 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 		if m.Type != "connected" {
 			b.release(id)
 			return fmt.Errorf("the extension couldn't open the agent's window: %s", m.Message)
+		}
+		if placed && b.Placed != nil {
+			b.Placed(id, worker, *bounds)
 		}
 		if agent {
 			b.mu.Lock()

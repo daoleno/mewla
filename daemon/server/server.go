@@ -54,7 +54,6 @@ import (
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/terminal"
-	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
@@ -116,7 +115,7 @@ type notificationRecorder interface {
 // Server handles WebSocket connections from the Mewla mobile app.
 type Server struct {
 	browsers                   *browser.Manager
-	displays                   *vdisplay.Service
+	displays                   Displays
 	screen                     *screen.Service
 	phone                      *phone.Manager
 	phonePing                  time.Duration // the phone's ping interval; zero is the default
