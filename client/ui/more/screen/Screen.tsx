@@ -7,7 +7,7 @@ import { wide } from "../../shell/layout";
 import { NavPage, PageStack } from "../../shell/NavPage";
 import { failureText } from "../../../core/more/daemon";
 import { directHint, SLOW_NOTE_MS, SlowWatch } from "../../../core/screen/connectionWatch";
-import { screenRequest, type ScreenAction, type ScreenAgent, type ScreenStatus } from "../../../core/screen/screen";
+import { listDisplays, screenRequest, type ScreenAction, type ScreenAgent, type ScreenStatus } from "../../../core/screen/screen";
 import {
   connectionProblem,
   diagnosticRows,
@@ -29,6 +29,7 @@ import { tile } from "../../kit/RowTile";
 import { Icon, type IconName } from "../../kit/Icon";
 import { inFront } from "../../kit/inFront";
 import type { PageNav } from "../routes";
+import { agentDisplays, displayOfWorker } from "../../screenfloat/agentDisplays";
 import { AgentDisplays } from "./Displays";
 import { canShowFullSize, modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 import { VirtualScreenSwitch, virtualScreenOn } from "./VirtualScreen";
@@ -47,7 +48,9 @@ const ITEM = "min-h-[48px] justify-center rounded-xl px-4 py-2.5 hover:bg-accent
 
 /**
  * Screen: the current computer's own screen (Mac, Windows), or on Linux each
- * agent's display. Exactly one computer: a switch drops everything and reads
+ * agent's display. A Mac whose agents have browser windows on its agent display
+ * lists those first, the same way (and opened for a Worker, at its window),
+ * with its own screen one tap away. Exactly one computer: a switch drops everything and reads
  * the next. Leaving the page, the app going to the background or a switch
  * closes the viewer; returning to the app looks again, and waits for an agent
  * at work instead of taking over.
@@ -78,6 +81,8 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
 
   const server = () => daemon()?.server ?? null;
   const isCurrent = (id: string) => untracked(server)?.id === id;
+  /** The person chose this computer's own screen over its agents' browser windows. */
+  const ownScreen = signal(false);
   const title = () => status()?.name || server()?.name || "this computer";
 
   const clearNote = () => {
@@ -122,6 +127,18 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     }
     if (!active()) return;
     status.set(next);
+    // A computer with a screen of its own may have agents' browser windows on its agent display (a Mac's):
+    // those come first, and nothing of its own screen opens under them.
+    if (next.platform !== "linux" && how === "auto" && !untracked(ownScreen)) {
+      try {
+        const list = await listDisplays(target);
+        if (!active()) return;
+        agentDisplays.set(list.available ? list.displays : []);
+      } catch {
+        // An older daemon, or a moment away: its own screen, as before.
+      }
+      if (!active() || untracked(agentWindows)) return;
+    }
     const entry = screenEntry(next, how);
     if (entry === "setup") {
       reason.set(next.reason || "");
@@ -247,6 +264,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       serverId = id;
       epoch++;
       dropSession();
+      ownScreen.set(false);
       status.set(null);
       iphone.set(null);
       watching.set(null);
@@ -285,6 +303,33 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     const target = server();
     return !!s && !!target && s.platform === "linux" && (!!s.agent_displays || virtualScreenOn(target.id));
   };
+  /**
+   * The agents' browser windows on a Mac's agent display, listed one by one as Linux's displays are: while there are
+   * any, unless the person chose the computer's own screen; opened for a Worker, while that Worker has one.
+   */
+  const agentWindows = () => {
+    const s = status();
+    if (!s || s.platform === "linux" || ownScreen()) return false;
+    const list = agentDisplays();
+    return props.worker ? !!displayOfWorker(list, props.worker) : list.some((d) => (d.browser ?? 0) > 0 || d.apps > 0);
+  };
+  const displaysPage = () => linuxDisplays() || agentWindows();
+  // The agents' windows coming close the computer's own viewer (an open one counts as a person at the computer);
+  // their going, or the person choosing the computer's screen, opens it.
+  let windowsShown = false;
+  effect(() => {
+    const on = agentWindows();
+    untracked(() => {
+      if (on === windowsShown) return;
+      windowsShown = on;
+      if (on) {
+        epoch++;
+        dropSession();
+        watching.set(null);
+        phase.set("checking");
+      } else if (server() && !gone) void connect();
+    });
+  });
 
   // While an allowed device waits for permissions, follow the computer: the
   // person there turns switches on, and Mewla may restart to apply them. While
@@ -294,7 +339,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     const p = phase();
     const s = status();
     const target = server();
-    if (!target || !inFront() || linuxDisplays()) return;
+    if (!target || !inFront() || displaysPage()) return;
     const waitingForPermissions = p === "setup" && !!s?.supported && !s.disabled && s.approved && !s.ready;
     if (!waitingForPermissions && p !== "agent" && p !== "local" && p !== "live") return;
     const timer = setInterval(() => {
@@ -382,7 +427,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   const menuKind = computed(() => (phase() === "local" ? "local" : watching() && phase() === "live" ? "watch" : "full"));
   // A browser with a mouse types into the picture with its own keyboard: no button for one.
   const showKeyboard = computed(() => isLive() && !watching() && needsSoftKeyboard());
-  const headerKind = computed(() => (!server() ? "none" : linuxDisplays() ? "linux" : "own"));
+  const headerKind = computed(() => (!server() ? "none" : displaysPage() ? "linux" : "own"));
 
   const agentLabel = () => {
     const worker = watching()?.worker;
@@ -412,9 +457,18 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
           <Text class="text-body">{status()?.keep_awake ? "Let this computer sleep" : "Keep this computer awake"}</Text>
         </MenuItem></If>,
     );
+  // Back from the computer's own screen to its agents' browser windows, while there are any.
+  const windowCount = computed(() => (ownScreen() ? agentDisplays().filter((d) => (d.browser ?? 0) > 0 || d.apps > 0).length : 0));
+  const agentWindowsItem = () =>
+    keyed(windowCount, (n) =>
+      <If when={n > 0}><MenuItem testID="screen-agent-windows" onSelect={() => ownScreen.set(false)} class={ITEM}>
+          <Text class="text-body">{n === 1 ? "Agent's browser window" : `Agents' browser windows (${n})`}</Text>
+        </MenuItem></If>,
+    );
   const optionsMenu = (testID: string) => (
     <Menu trigger={<View testID={testID} accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full active:bg-white/15"><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={menuPopup()} backdropClass={MENU_BACKDROP}>
       <View class="px-4 pb-1 pt-2"><Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{title()}</Text></View>
+      {agentWindowsItem()}
       {keyed(menuKind, (kind) =>
         <If when={kind === "local"} else={<If when={kind === "watch"} else={<>
             <MenuItem onSelect={toggleMode} class={ITEM}><Text class="text-body">{mode() === "touch" ? "Use as trackpad" : "Touch to click"}</Text></MenuItem>
@@ -474,7 +528,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       const target = server();
       const s = status();
       if (!target) return { key: "none" };
-      if (linuxDisplays()) return { key: `displays:${target.id}` };
+      if (displaysPage()) return { key: `displays:${target.id}` };
       const p = phase();
       if (p === "setup" && s) return { key: `setup:${setupKind(s)}` };
       if (p === "live") return { key: `live:${sessions}:${session() ? "s" : ""}` };
@@ -485,7 +539,11 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
 
   const body = (key: string): JSX.Element => {
     if (key === "none") return <EmptyState onBlack icon="desktop" title="No current server" action="Open Settings" onAction={() => props.nav.push({ name: "settings" })} />;
-    if (key.startsWith("displays:")) return <AgentDisplays server={server()!} nav={props.nav} focus={props.worker} />;
+    if (key.startsWith("displays:")) {
+      // On a computer with a screen of its own, the way to it heads the list.
+      const own = untracked(status)?.platform !== "linux";
+      return <AgentDisplays server={server()!} nav={props.nav} focus={props.worker} platform={untracked(status)?.platform} ownScreen={own ? { title: untracked(title), open: () => ownScreen.set(true) } : undefined} />;
+    }
     const p = phase();
     if (p === "checking" && !status()) return <EmptyState onBlack busy />;
     if (p === "checking") return <View class="flex-1 items-center justify-center"><Spinner size={28} tone="onBlackSoft" /></View>;
@@ -555,13 +613,13 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
 
   return (
     <NavPage
-      title={linuxDisplays() ? "Screen" : title()}
+      title={displaysPage() ? "Screen" : title()}
       testID="screen-page"
       column="full"
       headerVisible={!fullBleed()}
       // Black in both themes, like the picture viewer (SPEC §15 Full-screen remote).
       headerClass="bg-black text-white tint-white"
-      header={<If when={!mobile}><BlackHeader title={linuxDisplays() ? "Screen" : title()} right={headerRight()} /></If>}
+      header={<If when={!mobile}><BlackHeader title={displaysPage() ? "Screen" : title()} right={headerRight()} /></If>}
       statusBar={{ hidden: fullBleed(), foreground: "light" }}
       headerRight={mobile ? headerRight() : undefined}
     >

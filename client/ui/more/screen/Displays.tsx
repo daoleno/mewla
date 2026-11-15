@@ -6,6 +6,7 @@ import { displayRoute } from "../../../core/screen/displayRoute";
 import { haltDisplay, listDisplays, resumeDisplay, type AgentDisplay } from "../../../core/screen/screen";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { workers } from "../../session";
+import { agentDisplays } from "../../screenfloat/agentDisplays";
 import { EmptyState, Notice, Spinner } from "../../kit/kit";
 import { Icon } from "../../kit/Icon";
 import { inFront } from "../../kit/inFront";
@@ -18,12 +19,21 @@ const ITEM = "min-h-[48px] justify-center rounded-xl px-4 py-2.5 active:bg-accen
 
 /**
  * Screen on a Linux computer: every agent's own display, each with its live
- * view, Hold and Stop. `focus` (the floating screen's Expand) opens on that
+ * view, Hold and Stop. On a Mac, the agents' browser windows on its agent
+ * display, the same way, headed by the way to the Mac's own screen (`ownScreen`). `focus` (the floating screen's Expand) opens on that
  * agent's card. Leaving the page, a switch of computer or the app going to the
  * background closes every view, which also lets a held agent go on; coming
  * back to the app reconnects them.
  */
-export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus?: string }) {
+export function AgentDisplays(props: {
+  server: StoredServer;
+  nav: PageNav;
+  focus?: string;
+  /** The computer's platform, for the keyboard's modifier keys. */
+  platform?: string;
+  /** A computer with a screen of its own: its name, and how to open it instead. */
+  ownScreen?: { title: string; open: () => void };
+}) {
   const displays = signal<AgentDisplay[] | null>(null);
   const reason = signal("");
   const issue = signal<DisplayIssue | null>(null);
@@ -40,6 +50,8 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
       const list = await listDisplays(props.server);
       if (gone) return;
       displays.set(list.displays);
+      // The same list the floating screen and the Work cards read: one model of the computer's displays.
+      agentDisplays.set(list.displays);
       reason.set(list.reason ?? "");
       issue.set(null);
     } catch (failure) {
@@ -146,12 +158,20 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
             <Scroll keyboardShouldPersistTaps="handled" ref={(node: ScrollRef) => { scroller = node; focusCard(); }} class="flex-1" contentClass="px-4 pb-10 pt-2">
               <View class="w-full max-w-[720px] gap-3 self-center">
                 {notice()}
+                <If when={props.ownScreen}>{(own) => (
+                  <Button testID="displays-own-screen" accessibilityLabel={`Open the screen of ${own().title}`} onPress={() => own().open()} class="min-h-[52px] flex-row items-center gap-3 rounded-(--radius-group) bg-white/10 px-4 active:opacity-70">
+                    <Icon name="desktop" size={18} tone="onBlack" />
+                    <Text class="min-w-0 flex-1 text-body font-semibold text-white line-clamp-1">{own().title}</Text>
+                    <Icon name="chevron-right" size={16} tone="onBlackSoft" />
+                  </Button>
+                )}</If>
                 {list.map((display) => (
                   <View onLayout={({ bounds }) => { tops.set(display.id, bounds.origin.y); focusCard(); }}>
                     <DisplayCard
                       display={() => displays()?.find((d) => d.id === display.id) ?? display}
                       name={() => workers().find((w) => w.id === display.id)?.name || displays()?.find((d) => d.id === display.id)?.name || ""}
                       session={sessionFor(display.id)}
+                      platform={props.platform}
                       onStop={() => run(() => haltDisplay(props.server, display.id))}
                       onResume={() => run(() => resumeDisplay(props.server, display.id))}
                     />
@@ -172,7 +192,7 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
  * holds the two hard switches: Hold (the agent waits until released or the view closes)
  * and Stop.
  */
-function DisplayCard(props: { display: () => AgentDisplay; name: () => string; session: RemoteSession; onStop: () => Promise<void>; onResume: () => Promise<void> }) {
+function DisplayCard(props: { display: () => AgentDisplay; name: () => string; session: RemoteSession; platform?: string; onStop: () => Promise<void>; onResume: () => Promise<void> }) {
   const typing = signal(false);
   const busy = signal(false);
   const title = () => props.name() || props.display().id;
@@ -216,7 +236,7 @@ function DisplayCard(props: { display: () => AgentDisplay; name: () => string; s
         </View></If>
       <If when={props.session.phase() === "connecting"}><View class="flex-row items-center gap-2 px-4 pb-2"><Spinner size={14} tone="onBlackSoft" /><Text class="text-sub text-white/60">Connecting…</Text></View></If>
       <View style={{ aspectRatio: (props.display().width || 1280) / (props.display().height || 800) }}>
-        <RemoteView session={props.session} label={`Display of ${title()}`} modifiers={modifiersFor("linux")} typing={typing()} onTypingChange={(on) => typing.set(on)} />
+        <RemoteView session={props.session} label={`Display of ${title()}`} modifiers={modifiersFor(props.platform ?? "linux")} typing={typing()} onTypingChange={(on) => typing.set(on)} />
       </View>
     </View>
   );
