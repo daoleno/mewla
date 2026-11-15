@@ -19,9 +19,24 @@ export const FRAME_DEFLATE_SUBPROTOCOL = "mewla.frames.deflate-raw";
  */
 export const TAILLESS_SUBPROTOCOL = "mewla.sessions.tailless";
 
+/**
+ * Which app this is, `mewla.app.<os>.<version>`: the computer keeps it per paired device and
+ * `mewla devices list` shows it, so it is known when no phone still runs an app that needs an old
+ * path. A daemon from before ignores it. The daemon side is `daemon/server/client_app.go`.
+ */
+export const APP_SUBPROTOCOL_PREFIX = "mewla.app.";
+
+/** The app subprotocol, or null without a version it can carry. */
+export function appSubprotocol(): string | null {
+  const { os, appVersion } = platform();
+  if (!appVersion || !/^[0-9][0-9A-Za-z.+-]{0,31}$/.test(appVersion)) return null;
+  return `${APP_SUBPROTOCOL_PREFIX}${os}.${appVersion}`;
+}
+
 /** The subprotocols to offer after the auth one. */
 export function frameSubprotocols(): string[] {
-  return platform().inflateRaw ? [FRAME_DEFLATE_SUBPROTOCOL, TAILLESS_SUBPROTOCOL] : [TAILLESS_SUBPROTOCOL];
+  const app = appSubprotocol();
+  return [...(platform().inflateRaw ? [FRAME_DEFLATE_SUBPROTOCOL] : []), TAILLESS_SUBPROTOCOL, ...(app ? [app] : [])];
 }
 
 const decoder = new TextDecoder();

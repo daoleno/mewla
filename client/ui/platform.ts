@@ -1,4 +1,4 @@
-import { host, platform as device, Storage } from "nsh";
+import { appInfo, host, platform as device, Storage } from "nsh";
 import { inflateRawSync } from "zlib";
 import type { KeyValueStore, LinkTunnels, Platform, SocketLike } from "../core/platform";
 
@@ -27,6 +27,7 @@ export function nshPlatform(): Platform {
   const params = host.params as { deviceName?: string };
   return {
     os,
+    appVersion: appInfo().version ?? undefined,
     deviceName: () => params.deviceName ?? (os === "web" ? "Mewla Web" : "Mewla mobile"),
     randomBytes: (length) => crypto.getRandomValues(new Uint8Array(length)),
     randomUUID: () => crypto.randomUUID(),
