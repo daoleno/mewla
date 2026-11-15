@@ -54,13 +54,12 @@ const fullReset = "\x1bc"
 
 // hostSession is one Terminal view of a host Session. The host replays the
 // screen and then streams the program's output. The host keeps the history,
-// so there is no copy-mode to scroll: the App reads History instead.
+// so the App reads History to scroll.
 //
 // The Session has one size, the one its program writes for, and the last
 // viewer a person acted on sets it: this view sets it when it opens, when the
 // App's grid changes or is shown again (Resize), and when the person types
-// while another viewer has it. Any resize draws the view again, as tmux
-// redraws a client: output written for another size, drawn on this view's
+// while another viewer has it. Any resize draws the view again: output written for another size, drawn on this view's
 // grid, writes rows over rows (the host ends the view with AttachResized),
 // and a replay that reached the view while its grid was another size (the
 // App's grid settles while the view opens) would stay misdrawn. Attaching
@@ -380,14 +379,6 @@ func (s *hostSession) Resize(cols, rows int) error {
 	return nil
 }
 
-// Scroll and CancelScroll do nothing: there is no copy-mode, and the App
-// scrolls the History it reads.
-func (s *hostSession) Scroll(int) error    { return nil }
-func (s *hostSession) CancelScroll() error { return nil }
-
-// FocusPane does nothing: a host Session is one pane.
-func (s *hostSession) FocusPane(int, int) error { return nil }
-
 func (s *hostSession) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -405,41 +396,4 @@ func (s *hostSession) Close() error {
 		s.client.Close()
 	}
 	return nil
-}
-
-// History is the Session's history above the screen, in the shape tmux's is:
-// one styled row per line, the newest last, none while the alternate screen
-// is active, and one pane covering the whole grid.
-func (s *hostSession) History() (History, error) {
-	client, err := s.started()
-	if err != nil {
-		return History{}, err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	capture, err := client.Capture(ctx, sessionhost.CaptureParams{ID: s.targetID, Scope: sessionhost.ScopeHistory, History: historyLineLimit, Styled: true})
-	if err != nil {
-		return History{}, fmt.Errorf("capture Session history: %w", err)
-	}
-	ansi := ""
-	if !capture.Alt && capture.Text != "" {
-		ansi = strings.ReplaceAll(capture.Text, "\r\n", "\n") + "\n"
-	}
-	if len(ansi) > historyByteLimit {
-		return History{}, fmt.Errorf("pane history exceeds 4 MiB")
-	}
-	return History{
-		PaneID:    s.targetID,
-		Cols:      capture.Cols,
-		Total:     capture.ScrollbackRows,
-		Alternate: capture.Alt,
-		ANSI:      ansi,
-		Panes: []PaneScrollMode{{
-			ID:        s.targetID,
-			Cols:      capture.Cols,
-			Rows:      capture.Rows,
-			Alternate: capture.Alt,
-			Mouse:     capture.MouseTracking,
-		}},
-	}, nil
 }

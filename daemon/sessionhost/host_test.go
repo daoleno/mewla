@@ -356,7 +356,7 @@ func TestSessionLifecycle(t *testing.T) {
 		t.Fatalf("created = %+v", info)
 	}
 	if runtime.GOOS == "linux" {
-		// The foreground process, named as tmux names it: here the shell.
+		// The foreground process, by its program name: here the shell.
 		waitFor(t, 5*time.Second, "foreground command", func() bool {
 			info, _ := c.Info(ctx, "s1")
 			return info.Command == "sh" && info.Cwd == dir

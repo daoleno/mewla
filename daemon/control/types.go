@@ -259,11 +259,6 @@ type Worker struct {
 	// a dialog that is open has none.
 	PromptID           string `json:"prompt_id,omitempty"`
 	PromptUnidentified string `json:"prompt_unidentified,omitempty"`
-	// Terminal names what runs the Session's terminal, "host" or "tmux", and
-	// TmuxSocket the tmux server of a Session still in tmux ("" is the user's
-	// default server); `mewla attach` follows them.
-	Terminal   string `json:"terminal,omitempty"`
-	TmuxSocket string `json:"tmux_socket,omitempty"`
 }
 
 // Approval is a decision a Worker's agent is waiting on. Each option carries
@@ -297,7 +292,6 @@ type Executor struct {
 	Name         string               `json:"name"`
 	Provider     string               `json:"provider"`
 	Command      string               `json:"command,omitempty"`
-	Runtime      string               `json:"runtime"`
 	Capabilities ExecutorCapabilities `json:"capabilities"`
 	Host         bool                 `json:"host,omitempty"`
 }

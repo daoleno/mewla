@@ -424,7 +424,7 @@ func (c *Client) post(url string, body []byte) ([]byte, int, error) {
 // WorkerNotice is what a Worker notification says, as the sender knows it.
 type WorkerNotice struct {
 	WorkerID string
-	// Window is the Worker's tmux window name, which names it in the title. It
+	// Window is the Worker's Session name, which names it in the title. It
 	// can be a command path; only its last element is shown.
 	Window string
 	// Summary is the Worker's one-line state.

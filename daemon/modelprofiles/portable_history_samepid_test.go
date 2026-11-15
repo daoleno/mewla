@@ -94,8 +94,8 @@ func TestPortableHistorySamePIDCodex(t *testing.T) {
 	}
 
 	sess := fmt.Sprintf("mewla-samepid-codex-%d", time.Now().UnixNano())
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
+	t.Cleanup(func() { _ = liveTmux("kill-server").Run() })
+	cmd := liveTmux("new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "CODEX_HOME="+codexHome,
 		"-e", "HOME="+artRoot,
 		"-e", "OPENAI_API_KEY="+modelprofiles.LoopbackAuthPlaceholder,
@@ -243,8 +243,8 @@ func TestPortableHistorySamePIDClaude(t *testing.T) {
 	}
 
 	sess := fmt.Sprintf("mewla-samepid-claude-%d", time.Now().UnixNano())
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
+	t.Cleanup(func() { _ = liveTmux("kill-server").Run() })
+	cmd := liveTmux("new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "HOME="+artRoot,
 		"-e", "CLAUDE_CONFIG_DIR="+claudeCfg,
 		"-e", "ANTHROPIC_BASE_URL="+root,
@@ -334,7 +334,7 @@ type processIdentity struct {
 
 func captureIdentity(t *testing.T, sess, home, kind string) processIdentity {
 	t.Helper()
-	out, err := exec.Command("tmux", "list-panes", "-t", sess, "-F", "#{session_name}:#{window_id}.#{pane_id}\t#{pane_pid}").Output()
+	out, err := liveTmux("list-panes", "-t", sess, "-F", "#{session_name}:#{window_id}.#{pane_id}\t#{pane_pid}").Output()
 	if err != nil {
 		t.Fatalf("list-panes: %v", err)
 	}
@@ -403,18 +403,18 @@ func waitCodexReady(t *testing.T, sess string) {
 		// footer is live, treat as ready.
 		if strings.Contains(pane, "gpt-5 default") || (strings.Contains(pane, "OpenAI Codex") && strings.Contains(pane, "›")) {
 			if strings.Contains(pane, "Yes, continue") && !strings.Contains(pane, "gpt-5 default") {
-				_ = exec.Command("tmux", "send-keys", "-t", sess, "1").Run()
+				_ = liveTmux("send-keys", "-t", sess, "1").Run()
 				time.Sleep(150 * time.Millisecond)
-				_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+				_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 				time.Sleep(time.Second)
 				continue
 			}
 			return
 		}
 		if strings.Contains(pane, "Yes, continue") || strings.Contains(pane, "trust the contents") {
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "1").Run()
+			_ = liveTmux("send-keys", "-t", sess, "1").Run()
 			time.Sleep(150 * time.Millisecond)
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 			time.Sleep(time.Second)
 			continue
 		}
@@ -427,25 +427,25 @@ func waitClaudeReady(t *testing.T, sess string) {
 	t.Helper()
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
-		if exec.Command("tmux", "has-session", "-t", sess).Run() != nil {
+		if liveTmux("has-session", "-t", sess).Run() != nil {
 			t.Fatal("claude tmux session died during onboarding")
 		}
 		pane := capturePane(t, sess)
 		switch {
 		case strings.Contains(pane, "Choose the text style that looks best"):
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 		case strings.Contains(pane, "Press Enter to continue"):
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 		case strings.Contains(pane, "I trust this folder"):
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 		case strings.Contains(pane, "Do you want to use this API key"):
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Up").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Up").Run()
 			time.Sleep(150 * time.Millisecond)
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 		case strings.Contains(pane, "Yes, I accept"):
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Down").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Down").Run()
 			time.Sleep(150 * time.Millisecond)
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 		case strings.Contains(pane, "bypass permissions on") || (strings.Contains(pane, "╭") && !strings.Contains(pane, "Security notes")):
 			return
 		}
@@ -456,18 +456,18 @@ func waitClaudeReady(t *testing.T, sess string) {
 
 func sendTmuxLine(t *testing.T, sess, line string) {
 	t.Helper()
-	if err := exec.Command("tmux", "send-keys", "-t", sess, "-l", "--", line).Run(); err != nil {
+	if err := liveTmux("send-keys", "-t", sess, "-l", "--", line).Run(); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(200 * time.Millisecond)
-	if err := exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run(); err != nil {
+	if err := liveTmux("send-keys", "-t", sess, "Enter").Run(); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func capturePane(t *testing.T, sess string) string {
 	t.Helper()
-	out, err := exec.Command("tmux", "capture-pane", "-t", sess, "-p", "-S", "-120").Output()
+	out, err := liveTmux("capture-pane", "-t", sess, "-p", "-S", "-120").Output()
 	if err != nil {
 		return ""
 	}

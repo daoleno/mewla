@@ -567,7 +567,7 @@ func (term *Terminal) Close() {
 	term.release()
 }
 
-// EncodeKey returns the bytes a terminal sends for one key press, in tmux's
+// EncodeKey returns the bytes a terminal sends for one key press, in Mewla's
 // key notation ("Enter", "C-c", "BTab", "Up", "q"), encoded for the modes the
 // program has set: cursor key mode, the Kitty keyboard protocol and the rest.
 func (term *Terminal) EncodeKey(spec string) ([]byte, error) {

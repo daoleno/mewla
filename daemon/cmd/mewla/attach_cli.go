@@ -22,7 +22,7 @@ import (
 const detachKey = 0x1c
 
 const (
-	// enterAttach gives the Session a screen of its own, as tmux attach does.
+	// enterAttach gives the Session a screen of its own.
 	enterAttach = "\x1b[?1049h\x1b[H\x1b[2J"
 	// leaveAttach undoes what the Session's program may have turned on (styles,
 	// a hidden cursor, cursor key and keypad modes, mouse and focus reports,
@@ -45,13 +45,12 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stderr, "Usage: mewla attach [--all] [--state-dir DIR] [--socket PATH] [SESSION]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Show a live Session in this terminal and type into it. SESSION is a Worker's")
-		fmt.Fprintln(stderr, "name (any case, or the start of one name), \"brain\", an id (mh-... or %N). With")
+		fmt.Fprintln(stderr, "name (any case, or the start of one name), \"brain\" or an id (mh-...). With")
 		fmt.Fprintln(stderr, "none, pick from the live Sessions: arrow keys and typing filter, Enter attaches")
 		fmt.Fprintln(stderr, "(without a terminal the list is printed). Ctrl-\\ detaches; the Session keeps")
 		fmt.Fprintln(stderr, "running. This terminal's size becomes the Session's when it attaches, is resized")
 		fmt.Fprintln(stderr, "or is typed into; while another viewer has it at another size, this terminal")
-		fmt.Fprintln(stderr, "shows the Session's screen cut to its window. A Session still in tmux opens in")
-		fmt.Fprintln(stderr, "tmux, which detaches with its own prefix key.")
+		fmt.Fprintln(stderr, "shows the Session's screen cut to its window.")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "--all (or Tab in the picker) tiles every live Session in this terminal and keeps")
 		fmt.Fprintln(stderr, "them updating, without touching them. Arrow keys, Tab, 1-9 or a click choose;")
@@ -133,13 +132,7 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		if client == nil {
 			return fmt.Errorf("no session host is running on %s", path)
 		}
-		outside := 0
-		for _, listed := range listedAttachEntries(all) {
-			if listed.Tmux != nil {
-				outside++
-			}
-		}
-		outcome, err := runGridCommand(ctx, client, outside, in, out)
+		outcome, err := runGridCommand(ctx, client, in, out)
 		if err != nil {
 			return err
 		}
@@ -147,9 +140,6 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintln(stdout, outcome)
 		}
 		return nil
-	}
-	if entry.Tmux != nil {
-		return runTmuxAttach(entry)
 	}
 	if client == nil {
 		return fmt.Errorf("no session host is running on %s", path)
@@ -178,10 +168,9 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
-// gatherAttachEntries lists every Session this computer has: those the session
-// host runs (client is nil when none runs), and those still in tmux, which the
-// daemon knows. A daemon that does not answer only means no tmux Sessions are
-// listed and no prompt is reported.
+// gatherAttachEntries lists every Session the session host runs (client is nil
+// when none runs). A daemon that does not answer only means no prompt is
+// reported.
 func gatherAttachEntries(ctx context.Context, client *sessionhost.Client, stateDir string) ([]attachEntry, error) {
 	var workers []control.Worker
 	if socketPath, err := control.DefaultSocketPath(resolveCLIStateDir(stateDir)); err == nil {
@@ -195,21 +184,16 @@ func gatherAttachEntries(ctx context.Context, client *sessionhost.Client, stateD
 			needsInput[worker.ID] = true
 		}
 	}
-	var all []attachEntry
-	hostIDs := map[string]bool{}
-	if client != nil {
-		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		infos, err := client.List(callCtx)
-		if err != nil {
-			return nil, err
-		}
-		all = hostAttachEntries(infos, needsInput)
-		for _, info := range infos {
-			hostIDs[info.ID] = true
-		}
+	if client == nil {
+		return nil, nil
 	}
-	return append(all, tmuxAttachEntries(workers, hostIDs, listTmuxPanes)...), nil
+	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	infos, err := client.List(callCtx)
+	if err != nil {
+		return nil, err
+	}
+	return hostAttachEntries(infos, needsInput), nil
 }
 
 // pickAttachEntry shows the picker on this terminal and returns the chosen
@@ -473,7 +457,7 @@ func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string,
 
 // runGridCommand tiles the live Sessions on this terminal until the person
 // leaves, reporting how it ended ("" when they left from the grid).
-func runGridCommand(ctx context.Context, client *sessionhost.Client, outside int, in, out *os.File) (string, error) {
+func runGridCommand(ctx context.Context, client *sessionhost.Client, in, out *os.File) (string, error) {
 	saved, err := term.MakeRaw(int(in.Fd()))
 	if err != nil {
 		return "", fmt.Errorf("raw terminal: %w", err)
@@ -491,5 +475,5 @@ func runGridCommand(ctx context.Context, client *sessionhost.Client, outside int
 	}
 	pumpCtx, stopPump := context.WithCancel(ctx)
 	defer stopPump()
-	return runGrid(ctx, client, outside, startInputPump(pumpCtx, in), out, size, resized, styleForWriter(out))
+	return runGrid(ctx, client, startInputPump(pumpCtx, in), out, size, resized, styleForWriter(out))
 }

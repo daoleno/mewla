@@ -1544,7 +1544,7 @@ func (e *Engine) RetireAbsentPreparedAdmission(id WorkID, prior AdmissionState) 
 	})
 }
 
-// MarkAdmissionTransportStarted is persisted before starting the tmux mutation.
+// MarkAdmissionTransportStarted is persisted before starting the Session mutation.
 // It deliberately retains the active preparation fence until admission or loss.
 func (e *Engine) MarkAdmissionTransportStarted(id WorkID, token TurnToken) (*State, error) {
 	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {

@@ -4,14 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/sessionhost"
 )
 
@@ -154,91 +150,6 @@ func TestResolveAttachNotFound(t *testing.T) {
 	// "brain" with no Brain running is not found, and does not match a Worker.
 	if _, err := resolveAttach(all[1:], "brain"); err == nil {
 		t.Fatalf("brain without a Brain resolved")
-	}
-}
-
-func TestTmuxAttachEntries(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("tmux does not run on Windows")
-	}
-	workers := []control.Worker{
-		{ID: "%222", Name: "MewlaReleaseGates (%222)", ExecutorID: "claude", Cwd: "/r", Terminal: "tmux", TmuxSocket: "/s/one"},
-		{ID: "%263", Name: "Gone (%263)", Terminal: "tmux", TmuxSocket: "/s/one"}, // pane no longer exists
-		{ID: "%300", Name: "Asking (%300)", Terminal: "tmux", TmuxSocket: "/s/two", PromptID: "p1"},
-		{ID: "mh-aaa", Name: "OnHost (mh-aaa)", Terminal: "host"},
-		{ID: "%2", Name: "Moved (%2)", Terminal: "tmux"}, // the host has this id: it wins
-	}
-	asked := map[string]int{}
-	entries := tmuxAttachEntries(workers, map[string]bool{"%2": true}, func(socket string) map[string]tmuxPane {
-		asked[socket]++
-		switch socket {
-		case "/s/one":
-			return map[string]tmuxPane{"%222": {Session: "$4"}}
-		case "/s/two":
-			return map[string]tmuxPane{"%300": {Session: "$9"}}
-		}
-		return nil
-	})
-	if len(entries) != 2 {
-		t.Fatalf("entries %+v", entries)
-	}
-	first, second := entries[0], entries[1]
-	if first.ID != "%222" || first.Name != "MewlaReleaseGates" || first.Tmux == nil || *first.Tmux != (attachTmux{Socket: "/s/one", Session: "$4", Pane: "%222"}) {
-		t.Fatalf("first %+v tmux=%+v", first, first.Tmux)
-	}
-	if second.State != "needs input" || second.Tmux.Session != "$9" {
-		t.Fatalf("second %+v", second)
-	}
-	if asked["/s/one"] != 1 {
-		t.Fatalf("a server was asked %d times for its panes", asked["/s/one"])
-	}
-}
-
-func TestParseTmuxPanes(t *testing.T) {
-	panes := parseTmuxPanes("%0 $0\n%12 $3\n\nbad\n")
-	if len(panes) != 2 || panes["%12"].Session != "$3" {
-		t.Fatalf("%v", panes)
-	}
-}
-
-func TestTmuxAttachArgs(t *testing.T) {
-	target := attachTmux{Socket: "/s/one", Session: "$4", Pane: "%222"}
-	got := strings.Join(tmuxAttachArgs(target, false), " ")
-	want := "-u -S /s/one -N attach-session -t $4 ; select-window -t %222 ; select-pane -t %222"
-	if got != want {
-		t.Fatalf("attach:\n got %s\nwant %s", got, want)
-	}
-	got = strings.Join(tmuxAttachArgs(attachTmux{Session: "$4", Pane: "%222"}, true), " ")
-	want = "-u switch-client -t $4 ; select-window -t %222 ; select-pane -t %222"
-	if got != want {
-		t.Fatalf("switch:\n got %s\nwant %s", got, want)
-	}
-}
-
-func TestInsideSameTmux(t *testing.T) {
-	target := attachTmux{Socket: "/s/one"}
-	if !insideSameTmux(target, "/s/one,123,0") {
-		t.Fatalf("same server")
-	}
-	if insideSameTmux(target, "/s/two,123,0") || insideSameTmux(target, "") {
-		t.Fatalf("different or no server")
-	}
-	t.Setenv("TMUX_TMPDIR", "")
-	if !insideSameTmux(attachTmux{}, defaultTmuxSocket("", os.Getuid())+",5,0") {
-		t.Fatalf("default server")
-	}
-	if got := defaultTmuxSocket("/run/t", 7); got != filepath.Join("/run/t", "tmux-7", "default") {
-		t.Fatalf("default socket %s", got)
-	}
-}
-
-func TestTmuxDetachNoteNamesTmuxKey(t *testing.T) {
-	note := tmuxDetachNote("C-a\n")
-	if !strings.Contains(note, "C-a then d") || !strings.Contains(note, "Ctrl-\\") {
-		t.Fatalf("note %q", note)
-	}
-	if !strings.Contains(tmuxDetachNote(""), "C-b then d") {
-		t.Fatalf("default prefix")
 	}
 }
 

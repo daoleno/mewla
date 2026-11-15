@@ -436,7 +436,7 @@ func (t *RouteTable) SetCodexControlSocket(sessionID, socketPath string) error {
 
 // RebindSession moves an existing binding from fromID to toID while preserving
 // RouteID, generation, history, and upstream fields. Used when a Mewla Session
-// identity is remapped (e.g. missing-tmux native resume) without allocating a
+// identity is remapped (e.g. missing-Session native resume) without allocating a
 // new opaque route or native conversation.
 func (t *RouteTable) RebindSession(fromID, toID string) error {
 	if t == nil {

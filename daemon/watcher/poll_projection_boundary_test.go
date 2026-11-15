@@ -216,8 +216,8 @@ func TestWorkerSnapshotsDoNotExposeMutableProjectionStorage(t *testing.T) {
 
 func TestNewWatchersOwnDistinctInputAndPollSources(t *testing.T) {
 	left, right := New(time.Second), New(time.Second)
-	left.SetTmuxServer("left.sock", "")
-	right.SetTmuxServer("right.sock", "")
+	left.SetSessionHost(SessionHostConfig{SocketPath: "left.sock"})
+	right.SetSessionHost(SessionHostConfig{SocketPath: "right.sock"})
 	if left.sessionInputOwner() == right.sessionInputOwner() {
 		t.Fatal("Watchers share a global input owner")
 	}
@@ -229,9 +229,9 @@ func TestNewWatchersOwnDistinctInputAndPollSources(t *testing.T) {
 		if list == nil || capture == nil || snapshot == nil {
 			t.Fatal("constructor omitted an instance reader")
 		}
-		io, ok := item.watcher.sessionInputOwner().io.(realSessionInputIO)
-		if !ok || io.socketFor("worker:@1") != item.socket {
-			t.Fatal("input IO is not bound to its Watcher socket")
+		io, ok := item.watcher.sessionInputOwner().io.(hostInputIO)
+		if !ok || io.b.cfg.SocketPath != item.socket {
+			t.Fatal("input IO is not bound to its Watcher's session host")
 		}
 	}
 }

@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// A pane's screen only changes when the pane prints, and tmux says when it last
-// did: window_activity, in whole seconds, comes in the same list-panes call that
-// already inventories the panes. A pane whose activity has not moved since the
-// screen was read, and was read in a later second than that activity, shows the
-// same screen now, so it is not read again. An idle Worker costs no tmux call
-// at all; a streaming one is read once per poll as before.
+// A Session's screen only changes when it prints, and the session host says
+// when it last did: its last output time, in whole seconds, comes in the same
+// list call that already inventories the Sessions. A Session whose activity has
+// not moved since the screen was read, and was read in a later second than that
+// activity, shows the same screen now, so it is not read again. An idle Worker
+// costs no host call at all; a streaming one is read once per poll as before.
 const (
 	// paneCaptureRefresh bounds how stale a reused screen can be, in case an
 	// activity stamp is wrong or missing.
@@ -158,7 +158,7 @@ func (p *paneScreens) remember(target, content string, alive bool, deadStatus in
 }
 
 // ownership splits panes into those whose ownership is already believed and
-// those that need asking tmux.
+// those that need asking the session host.
 func (p *paneScreens) ownership(panes []sessionPane) (owned map[string]bool, ask []sessionPane) {
 	if p == nil {
 		return map[string]bool{}, panes

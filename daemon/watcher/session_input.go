@@ -15,7 +15,7 @@ import (
 // InputOutcome describes what Mewla knows at the provider-mutation boundary.
 // Accepted means a delegated provider turn was observed (or, for direct
 // receipt input, that the existing provider transaction completed). Ambiguous
-// means the target-bound tmux queue started and may have submitted; callers
+// means the target-bound input script started and may have submitted; callers
 // must retain ownership and must not automatically replay it.
 type InputOutcome string
 
@@ -32,7 +32,7 @@ type InputResult struct {
 	// ProviderConfirmed reports whether the submission was correlated with an
 	// exact provider-native admission. Delegated transport-submitted inputs
 	// (SignalProtocol) return InputAccepted with ProviderConfirmed false: the
-	// owned tmux paste+submit succeeded and is queued, but provider execution
+	// owned paste+submit succeeded and is queued, but provider execution
 	// and completion are owned by the lifecycle signal and background evidence.
 	ProviderConfirmed bool
 	Duplicate         bool
@@ -109,10 +109,10 @@ const (
 	inputReuseBrainHost
 )
 
-// ErrDelegatedInputAdmissionUnavailable means the Mewla-owned tmux target was
+// ErrDelegatedInputAdmissionUnavailable means the Mewla-owned Session was
 // still proven, but the provider currently cannot be safely correlated with
 // the canonical Turn. This is a retryable input-admission conflict, not proof
-// that tmux control ownership was lost.
+// that Session control ownership was lost.
 var ErrDelegatedInputAdmissionUnavailable = errors.New("delegated input admission unavailable")
 
 var errDelegatedProviderOwnershipMismatch = fmt.Errorf(
@@ -197,8 +197,8 @@ type sessionInputProvider struct {
 func sessionInputProviderForCommand(command string) sessionInputProvider {
 	return sessionInputProvider{
 		submitKey: "Enter",
-		prepare:   tmuxPrepareDelay(command),
-		settle:    tmuxSubmitDelay(command),
+		prepare:   prepareDelay(command),
+		settle:    submitDelay(command),
 	}
 }
 
@@ -453,7 +453,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 ) (InputResult, error) {
 	result := InputResult{Outcome: InputNotSubmitted, Receipt: strings.TrimSpace(receipt)}
 	requiresConfirmation := turn != nil
-	// Delegated transport contract: a successful owned tmux paste+submit is the
+	// Delegated transport contract: a successful owned paste+submit is the
 	// submission outcome. The provider transcript digest and completion are owned
 	// by the prompt-carried lifecycle signal and the background evidence poll and
 	// never gate the send. Brain/host submissions have no prompt signal contract
@@ -490,7 +490,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 			}
 		}
 
-		// The Brain ledger, never the tmux receipt, decides the canonical Turn
+		// The Brain ledger, never the Session's input receipt, decides the canonical Turn
 		// for a delegated duplicate. A pending retry may resolve from exact
 		// provider admission evidence, but it never replays provider input.
 		if turn != nil {
@@ -960,7 +960,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 	return result, err
 }
 
-// ioSocket resolves the target's tmux server for the Session input IO
+// ioSocket resolves the target's session host for the Session input IO
 // through the owner's IO implementation.
 func (owner *sessionInputOwner) ioSocket(sessionID string) string {
 	if owner == nil || owner.io == nil {
@@ -1088,8 +1088,8 @@ func (owner *sessionInputOwner) resolvePendingFromBaseline(
 //     post-mutation digest-confirmed admission may own the fresh candidate.
 //
 // A different live Activity, missing binding for a mutable Turn, or
-// non-lifecycle evidence fails closed before the tmux mutation boundary. These
-// are input-admission conflicts; they do not by themselves revoke tmux control.
+// non-lifecycle evidence fails closed before the Session mutation boundary. These
+// are input-admission conflicts; they do not by themselves revoke Session control.
 func (owner *sessionInputOwner) reconcileSubmissionActivity(
 	sessionID string,
 	turn TurnSnapshot,

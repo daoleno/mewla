@@ -10,7 +10,7 @@ import (
 )
 
 // TestReconcileDelegatedSessionsObservationGapKeepsLiveTurn covers the restart
-// reconciliation observation gap: when the selected tmux server is unreadable,
+// reconciliation observation gap: when the session host is unreadable,
 // an owner that is absent from the inventory snapshot must remain owned and the
 // canonical Turn must not become Unknown.
 func TestReconcileDelegatedSessionsObservationGapKeepsLiveTurn(t *testing.T) {
@@ -24,7 +24,7 @@ func TestReconcileDelegatedSessionsObservationGapKeepsLiveTurn(t *testing.T) {
 	bootstrapAdmittedTurnFixture(t, store, item.ID, watcher.AdmittedTurn{
 		SessionID: "worker", TurnID: "worker-turn", AcceptedAt: base,
 	})
-	fw := &fakeWatcher{turnStore: store, probeErr: errors.New("tmux server unavailable")}
+	fw := &fakeWatcher{turnStore: store, probeErr: errors.New("session host unavailable")}
 	service := NewService(store, fw, nil)
 	service.now = func() time.Time { return base }
 

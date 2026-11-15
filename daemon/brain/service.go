@@ -145,7 +145,7 @@ type Service struct {
 
 // SessionRouteLifecycle remaps, resumes, prepares, or releases Model Profile
 // routes across host Session identity changes. New Brain-host launches use
-// Prepare/Commit; missing-tmux resume reuses an immutable existing binding via
+// Prepare/Commit; missing-Session resume reuses an immutable existing binding via
 // ResumeLaunch+Transfer and must not re-resolve the executor default.
 type SessionRouteLifecycle interface {
 	TransferSession(fromID, toID string) (modelprofiles.PersistResult, error)
@@ -326,7 +326,7 @@ func (s *Service) reconcileCompletedSessions(workID string) error {
 		err := s.teardownSessionWith(turn.SessionID, func(id string) error {
 			return s.watcher.KillCompletedSession(id, turn.TurnID)
 		})
-		if errors.Is(err, watcher.ErrUnownedTmuxTarget) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) ||
+		if errors.Is(err, watcher.ErrUnownedSession) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) ||
 			errors.Is(err, watcher.ErrCompletedSessionGenerationChanged) {
 			err = &cleanupRefusal{sessionID: turn.SessionID, err: err}
 		}
@@ -811,7 +811,7 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 }
 
 // projectedHostAgent returns the recorded host for wire projection only.
-// It never probes for replacement and never mutates store/route/tmux state.
+// It never probes for replacement and never mutates store/route/Session state.
 func (s *Service) projectedHostWorker(executor work.WorkerExecutor) (WorkerRef, error) {
 	if s == nil || s.store == nil {
 		return WorkerRef{}, nil
@@ -2095,7 +2095,7 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 		if worker == nil {
 			// Inventory is a discovery snapshot, not proof of process death. A
 			// restarted watcher may not have rediscovered an owned Session yet,
-			// and the selected tmux server may itself be momentarily unreadable.
+			// and the session host may itself be momentarily unreadable.
 			// Only a reachable server that definitively no longer owns the
 			// target proves end-of-identity.
 			if s.watcher == nil {
@@ -3133,13 +3133,12 @@ func calendarWorkID(itemID, runID string) string {
 // Host replacement reasons are durable audit tags written to host_replacements.jsonl.
 // They answer: why did ensureHostWorker create a new Brain host instead of reusing one?
 const (
-	hostReplaceReasonMissingTmux               = "session_missing"
-	hostReplaceReasonLeftInTmux                = "left_in_tmux"
-	hostReplaceReasonMissingTmuxResumeLaunched = "session_missing_resume_launched"
-	hostReplaceReasonMissingTmuxUnrecoverable  = "session_missing_unrecoverable"
-	hostReplaceReasonProviderMismatch          = "provider_mismatch"
-	hostReplaceReasonNoRecordedHost            = "no_recorded_host"
-	hostReplaceReasonRecoveredAlive            = "recovered_alive_host"
+	hostReplaceReasonSessionMissing               = "session_missing"
+	hostReplaceReasonSessionMissingResumeLaunched = "session_missing_resume_launched"
+	hostReplaceReasonSessionMissingUnrecoverable  = "session_missing_unrecoverable"
+	hostReplaceReasonProviderMismatch             = "provider_mismatch"
+	hostReplaceReasonNoRecordedHost               = "no_recorded_host"
+	hostReplaceReasonRecoveredAlive               = "recovered_alive_host"
 )
 
 func (s *Service) ensureHostWorker(executor work.WorkerExecutor) (WorkerRef, error) {
@@ -3210,11 +3209,11 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	}
 	command, replaceDetail = discovery.command, discovery.replaceDetail
 	resumeToken := discovery.resumeToken
-	if automatic && replaceReason == hostReplaceReasonMissingTmux && resumeToken == "" && !s.hostHoldsNoConversation(hostSession) {
+	if automatic && replaceReason == hostReplaceReasonSessionMissing && resumeToken == "" && !s.hostHoldsNoConversation(hostSession) {
 		return WorkerRef{}, fmt.Errorf("brain host %q has no proven native session identity; refusing automatic blank replacement", id)
 	}
-	// No pane for an agent that cannot run: a missing CLI or one verified signed
-	// out leaves a dead pane and a tmux server that exits with it.
+	// No Session for an agent that cannot run: a missing CLI or one verified
+	// signed out leaves only a Session whose program ended.
 	if err := s.hostRunnable(executor); err != nil {
 		return WorkerRef{}, err
 	}
@@ -3266,7 +3265,7 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 		}
 		if resumeToken != "" {
 			s.recordHostReplacement(HostReplacementEvent{
-				Reason:           hostReplaceReasonMissingTmuxUnrecoverable,
+				Reason:           hostReplaceReasonSessionMissingUnrecoverable,
 				FromID:           id,
 				FromExecutorID:   hostSession.ExecutorID,
 				ResolvedExecutor: executor.ID,
@@ -3306,7 +3305,7 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 		persist, transferErr := routes.TransferSession(id, workerID)
 		if settleErr := s.settleHostIdentityRouteTransfer(routes, id, workerID, persist, transferErr, true); settleErr != nil {
 			s.recordHostReplacement(HostReplacementEvent{
-				Reason:           hostReplaceReasonMissingTmuxUnrecoverable,
+				Reason:           hostReplaceReasonSessionMissingUnrecoverable,
 				FromID:           id,
 				FromExecutorID:   hostSession.ExecutorID,
 				ResolvedExecutor: executor.ID,
@@ -3322,7 +3321,7 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 		}
 	}
 	if resumeToken != "" {
-		// CreateSession only proves tmux launch. Persist binding atomically with the
+		// CreateSession only proves the Session launched. Persist binding atomically with the
 		// true resume token; do not clear-then-reseal.
 		if err := s.store.ReplaceHostSessionBinding(
 			workerID,
@@ -3354,11 +3353,11 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 		killErr := s.watcher.KillSession(workerID)
 		return WorkerRef{}, errors.Join(err, killErr)
 	}
-	if replaceReason == hostReplaceReasonMissingTmux || replaceReason == hostReplaceReasonProviderMismatch || replaceReason == hostReplaceReasonLeftInTmux {
+	if replaceReason == hostReplaceReasonSessionMissing || replaceReason == hostReplaceReasonProviderMismatch {
 		createdReason := replaceReason + "_created"
 		if resumeToken != "" {
-			// Honest: tmux launched a resume command; provider acceptance is later.
-			createdReason = hostReplaceReasonMissingTmuxResumeLaunched
+			// Honest: the Session launched a resume command; provider acceptance is later.
+			createdReason = hostReplaceReasonSessionMissingResumeLaunched
 		}
 		s.recordHostReplacement(HostReplacementEvent{
 			Reason:           createdReason,
@@ -3934,7 +3933,7 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 			}
 		}
 	}
-	return work.NewWorkerExecutor("codex", work.Executor{Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux})
+	return work.NewWorkerExecutor("codex", work.Executor{Name: "codex", Command: "codex", Kind: "codex"})
 }
 
 // hostLookPath finds executor commands; tests replace it.

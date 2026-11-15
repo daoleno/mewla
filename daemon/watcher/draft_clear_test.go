@@ -51,7 +51,7 @@ func TestChatClearsEveryLineOfAnUnsentDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	queue := io.queues[0]
-	paste := indexOf(queue, "paste-buffer")
+	paste := indexOf(queue, "paste")
 	clears := 0
 	for _, arg := range queue[:paste] {
 		if arg == "BSpace" {

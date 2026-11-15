@@ -25,7 +25,7 @@ func TestTermStyleIsPlainOffATerminal(t *testing.T) {
 	if got := color.seal(); !strings.Contains(got, "38;5;166") {
 		t.Fatalf("seal = %q", got)
 	}
-	if got := s.check(false, "tmux", "missing"); got != "  ○ tmux             missing" {
+	if got := s.check(false, "git", "missing"); got != "  ○ git              missing" {
 		t.Fatalf("check = %q", got)
 	}
 }

@@ -13,7 +13,7 @@ const (
 )
 
 // envelopePattern is the one reader of the provider-input rendering. Providers
-// (and the tmux terminal a DSH Session reads) can only be handed text, so they
+// (and the terminal a DSH Session reads) can only be handed text, so they
 // echo the rendering back in their transcripts; Split turns that echo into the
 // typed fields again. Nothing else in Mewla reads the tag.
 var envelopePattern = regexp.MustCompile(`(?s)` + envelopeOpenTag + `\s*(.*?)\s*` + envelopeCloseTag)

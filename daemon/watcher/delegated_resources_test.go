@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,24 +130,8 @@ func TestDelegatedWorkspacePathAcceptsDurableHomePath(t *testing.T) {
 	}
 }
 
-func TestCreateDelegatedSessionPassesOwnedResourceToTmux(t *testing.T) {
+func TestCreateDelegatedSessionPassesOwnedResourceToTheSession(t *testing.T) {
 	dir := t.TempDir()
-	logPath := filepath.Join(dir, "tmux.log")
-	tmuxPath := filepath.Join(dir, "tmux")
-	script := `#!/bin/sh
-[ "$1" = -u ] && shift
-printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
-case "$1" in
-  new-session) printf '%%1\n' ;;
-esac
-exit 0
-`
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
-
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{spec: &delegatedResourceSpec{
 		Owner:   "abc123",
@@ -154,6 +139,7 @@ exit 0
 		TempDir: filepath.Join(dir, "owned-tmp"),
 	}}
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
 	w.resources = manager
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -177,47 +163,28 @@ exit 0
 	if _, exists := callerEnv[delegatedMarkerEnv]; exists {
 		t.Fatal("CreateSession mutated caller Env")
 	}
-	raw, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
+	if len(backend.created) != 1 {
+		t.Fatalf("created = %+v", backend.created)
 	}
-	calls := string(raw)
+	spec := backend.created[0]
+	env := strings.Join(spec.env, "\n")
 	for _, want := range []string{
 		delegatedMarkerEnv + "=1",
 		delegatedResourceUnitEnv + "=" + unit,
 		"TMPDIR=" + filepath.Join(dir, "owned-tmp"),
 		"MEWLA_BUILD_TMPDIR=" + filepath.Join(dir, "owned-tmp"),
-		"set-option -p -t " + target + " @mewla_worker_delegated 1",
-		"set-option -p -t " + target + " @mewla_worker_resource_unit " + unit,
 	} {
-		if !strings.Contains(calls, want) {
-			t.Fatalf("tmux calls missing %q:\n%s", want, calls)
+		if !strings.Contains(env, want) {
+			t.Fatalf("Session environment missing %q:\n%s", want, env)
 		}
+	}
+	if !spec.labels.delegated || spec.labels.resourceUnit != unit || !spec.agent {
+		t.Fatalf("labels = %+v agent=%v", spec.labels, spec.agent)
 	}
 }
 
-func TestCreateDelegatedSessionRollsBackWhenOwnershipMarkersFail(t *testing.T) {
+func TestCreateDelegatedSessionReleasesItsResourceWhenTheSessionCannotStart(t *testing.T) {
 	dir := t.TempDir()
-	logPath := filepath.Join(dir, "tmux.log")
-	tmuxPath := filepath.Join(dir, "tmux")
-	script := `#!/bin/sh
-[ "$1" = -u ] && shift
-printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
-case "$1" in
-  new-session) printf '%%7\n' ;;
-  set-option)
-    case "$*" in
-      *@mewla_worker_resource_unit*) exit 1 ;;
-    esac
-    ;;
-esac
-exit 0
-`
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{spec: &delegatedResourceSpec{
 		Owner:   "abc123",
@@ -225,6 +192,8 @@ exit 0
 		TempDir: filepath.Join(dir, "owned-tmp"),
 	}}
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
+	backend.createErr = errors.New("session host refused the Session")
 	w.resources = manager
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -236,18 +205,11 @@ exit 0
 		Name:      "test",
 		Detached:  true,
 		Delegated: true,
-	}); err == nil || !strings.Contains(err.Error(), "mark owned tmux pane") {
+	}); err == nil || !strings.Contains(err.Error(), "refused the Session") {
 		t.Fatalf("CreateSession error = %v", err)
 	}
 	if len(manager.released) != 1 || manager.released[0] != "\t"+unit {
 		t.Fatalf("released = %#v", manager.released)
-	}
-	raw, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(raw), "kill-pane -t %7") {
-		t.Fatalf("unmarked window was not rolled back:\n%s", raw)
 	}
 }
 
@@ -621,35 +583,11 @@ func TestShortDelegatedTempDigestIsStableURLSafe(t *testing.T) {
 }
 
 func TestKillDelegatedSessionReleasesExactBoundUnit(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "tmux.log")
-	tmuxPath := filepath.Join(dir, "tmux")
-	script := `#!/bin/sh
-[ "$1" = -u ] && shift
-printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
-target=
-prev=
-for arg in "$@"; do
-  if [ "$prev" = "-t" ]; then target=$arg; fi
-  prev=$arg
-done
-if [ "$1" = "list-panes" ]; then
-  echo "%42"
-  exit 0
-fi
-if [ "$1" = "show-options" ]; then
-  echo 1
-fi
-exit 0
-`
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{boundTarget: "%42", boundUnit: unit}
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
+	backend.set("%42", fakeOwned)
 	w.resources = manager
 	if err := w.KillSession("%42"); err != nil {
 		t.Fatal(err)
@@ -657,11 +595,7 @@ exit 0
 	if len(manager.released) != 1 || manager.released[0] != "%42\t"+unit {
 		t.Fatalf("released = %#v", manager.released)
 	}
-	raw, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(raw), "kill-pane -t %42") {
-		t.Fatalf("tmux calls:\n%s", raw)
+	if kills := backend.kills(); len(kills) != 1 || kills[0] != "%42" {
+		t.Fatalf("killed = %v", kills)
 	}
 }

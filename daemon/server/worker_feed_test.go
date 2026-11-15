@@ -256,7 +256,7 @@ func TestWorkerFeedConnectSnapshotThenSequencedChangesAndResync(t *testing.T) {
 
 func TestKillWorkerRepliesWithAnExplicitSuccessFact(t *testing.T) {
 	owner := startProfileOwner(t)
-	commitTestRoute(t, owner, "tmux:@ws-kill-ok")
+	commitTestRoute(t, owner, "mh-ws-kill-ok")
 	srv := New(nil, watcher.New(time.Second), nil, nil, nil, nil, nil)
 	srv.SetModelProfiles(owner)
 	srv.killSessionOverride = func(string) error { return nil }
@@ -265,7 +265,7 @@ func TestKillWorkerRepliesWithAnExplicitSuccessFact(t *testing.T) {
 	}
 	conn := feedTestSocket(t, srv)
 	defer srv.shutdownAuthenticatedClients()
-	if err := conn.WriteJSON(map[string]any{"type": "kill_worker", "request_id": "kill-ok", "worker_id": "tmux:@ws-kill-ok"}); err != nil {
+	if err := conn.WriteJSON(map[string]any{"type": "kill_worker", "request_id": "kill-ok", "worker_id": "mh-ws-kill-ok"}); err != nil {
 		t.Fatal(err)
 	}
 	_, raw := readFeedType(t, conn, "worker_killed", "error")
@@ -273,7 +273,7 @@ func TestKillWorkerRepliesWithAnExplicitSuccessFact(t *testing.T) {
 	if err := json.Unmarshal(raw, &reply); err != nil {
 		t.Fatal(err)
 	}
-	if reply["type"] != "worker_killed" || reply["request_id"] != "kill-ok" || reply["worker_id"] != "tmux:@ws-kill-ok" {
+	if reply["type"] != "worker_killed" || reply["request_id"] != "kill-ok" || reply["worker_id"] != "mh-ws-kill-ok" {
 		t.Fatalf("reply = %v", reply)
 	}
 }

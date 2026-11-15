@@ -7,25 +7,17 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // TestSessionHostLeavesNoTraceUntilUsed: until a Session is created, the
-// daemon inventories as tmux alone and starts, creates or dials nothing for
-// the host; a new Session is placed in the host.
+// daemon starts, creates or dials nothing for the host, and its inventory is
+// "nothing running".
 func TestSessionHostLeavesNoTraceUntilUsed(t *testing.T) {
 	root := t.TempDir()
 	runtimeDir := filepath.Join(root, "runtime", "mewla")
 	logPath := filepath.Join(root, "state", "session-host", "host.log")
-	noTmux := filepath.Join(root, "no-tmux")
-
-	plain := New(50 * time.Millisecond)
-	plain.SetTmuxServer(noTmux, t.TempDir())
-	plainPanes, plainErr := plain.sessions().listOwned()
 
 	w := New(50 * time.Millisecond)
-	w.SetTmuxServer(noTmux, t.TempDir())
 	w.SetSessionHost(SessionHostConfig{
 		SocketPath: filepath.Join(runtimeDir, "host-00000000.sock"),
 		Executable: "/nonexistent/mewla",
@@ -33,21 +25,20 @@ func TestSessionHostLeavesNoTraceUntilUsed(t *testing.T) {
 		LogPath:    logPath,
 		Version:    "t",
 	})
-	if _, ok := w.sessions().(*compositeBackend); !ok {
+	if _, ok := w.sessions().(*hostBackend); !ok {
 		t.Fatalf("backend = %T", w.sessions())
 	}
-	panes, err := w.sessions().listOwned()
-	if len(panes) != len(plainPanes) || errors.Is(err, ErrTmuxServerGone) != errors.Is(plainErr, ErrTmuxServerGone) || (err == nil) != (plainErr == nil) {
-		t.Fatalf("inventory = %v, %v; tmux alone = %v, %v", panes, err, plainPanes, plainErr)
+	if panes, err := w.sessions().listOwned(); !errors.Is(err, ErrSessionHostGone) || len(panes) != 0 {
+		t.Fatalf("inventory = %v, %v; want nothing running", panes, err)
 	}
 	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
 		t.Fatalf("services = %v, %v", services, err)
 	}
-	if at, err := w.sessions().place("%3", false, "x"); err != nil || at.backend != backendHost {
-		t.Fatalf("a new Session was placed in %v (%v), not the host", at.backend, err)
+	if _, err := w.sessions().place("", false, "x"); err != nil {
+		t.Fatalf("place: %v", err)
 	}
 	host := "mh-0123456789abcdef01234567"
-	if gone, err := w.sessions().resolveAbsence(host, false); err != nil || !gone {
+	if gone, err := w.sessions().resolveAbsence(host); err != nil || !gone {
 		t.Fatalf("a host Session from an earlier run, no host now: %v, %v", gone, err)
 	}
 	if present, _, err := w.sessions().probeOwnership(host); err != nil || present {
@@ -78,105 +69,59 @@ func TestHostSessionIDs(t *testing.T) {
 			t.Errorf("validID(%q)", bad)
 		}
 	}
-	tmux := &tmuxBackend{}
-	if tmux.validID("mh-0123456789abcdef01234567") || !tmux.validID("%12") {
-		t.Fatal("tmux and host ids overlap")
-	}
 	if b.observedGeneration("mh-0123456789abcdef01234567") == "" || b.observedGeneration("%1") != "" {
 		t.Fatal("generation")
 	}
 }
 
-// TestHostGoneAfterARestartIsAbsentEvenWithTmuxSeen: after a reboot or a restart the
-// session host is not running and this process never reached one, so a host Session an
-// earlier run recorded (Brain's) is gone with it, also when a tmux server answered the
-// inventory. It read as unknown, so Brain was neither reused nor replaced and never
-// started again (FAILURES Round 4 #15).
-func TestHostGoneAfterARestartIsAbsentEvenWithTmuxSeen(t *testing.T) {
+// TestHostGoneAfterARestartIsAbsent: after a reboot or a restart the session
+// host is not running and this process never reached one, so a host Session
+// an earlier run recorded (Brain's) is gone with it. It read as unknown, so
+// Brain was neither reused nor replaced and never started again (FAILURES
+// Round 4 #15).
+func TestHostGoneAfterARestartIsAbsent(t *testing.T) {
 	root := t.TempDir()
 	w := New(50 * time.Millisecond)
-	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
 	w.SetSessionHost(SessionHostConfig{
 		SocketPath: filepath.Join(root, "run", "host-00000000.sock"),
 		Executable: "/nonexistent/mewla",
 		StateDir:   filepath.Join(root, "state"),
 		Version:    "t",
 	})
-	w.sawTmuxServer.Store(true) // a tmux server answered the inventory
 	recorded := "mh-0123456789abcdef01234567"
 	if gone, err := w.ResolveDelegatedAbsence(recorded); err != nil || !gone {
 		t.Fatalf("Brain's Session from before the restart = gone %v, %v; want gone", gone, err)
 	}
 }
 
-// TestHostOnlyInventoryNeedsNoTmux: on a computer without tmux (Windows) the
-// first inventory is empty until the host runs, so the watcher becomes ready
-// and Brain's host can start; tmux is never asked.
-func TestHostOnlyInventoryNeedsNoTmux(t *testing.T) {
+// TestFirstInventoryBeforeTheHostRuns: the first inventory is empty until the
+// host runs, so the watcher becomes ready and Brain's host can start.
+func TestFirstInventoryBeforeTheHostRuns(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("PATH", filepath.Join(root, "empty-path"))
-	config := SessionHostConfig{
+	w := New(50 * time.Millisecond)
+	w.SetSessionHost(SessionHostConfig{
 		SocketPath: filepath.Join(root, "run", "host-00000000.sock"),
 		Executable: "/nonexistent/mewla",
 		StateDir:   filepath.Join(root, "state"),
 		LogPath:    filepath.Join(root, "state", "session-host", "host.log"),
 		Version:    "t",
-		HostOnly:   true,
-	}
-	w := New(50 * time.Millisecond)
-	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
-	w.SetSessionHost(config)
-	if panes, err := w.sessions().listOwned(); !errors.Is(err, ErrTmuxServerGone) || len(panes) != 0 {
-		t.Fatalf("host-only inventory before the host runs = %v, %v; want nothing running", panes, err)
-	}
-	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
-		t.Fatalf("host-only services = %v, %v", services, err)
-	}
+	})
 	// The first poll is an empty, ready inventory that saw no host, so a
 	// Session an earlier run recorded (Brain's, before a reboot) is gone.
 	w.poll()
 	if !w.SnapshotReady() {
-		t.Fatal("watcher not ready after the first host-only poll")
+		t.Fatal("watcher not ready after the first poll")
 	}
 	recorded := "mh-0123456789abcdef01234567"
 	if gone, err := w.ResolveDelegatedAbsence(recorded); err != nil || !gone {
 		t.Fatalf("a Session from before the reboot = gone %v, %v", gone, err)
 	}
-	// Once the watcher holds a host Session, a vanished host is unknown.
-	w.mu.Lock()
-	w.workers[recorded] = &classifier.Worker{}
-	w.mu.Unlock()
-	if panes, err := w.sessions().listOwned(); err == nil {
-		t.Fatalf("host-only inventory with a known Session and no host = %v, nil", panes)
-	}
 }
 
-// TestNoTmuxIsNoSessions: Mewla no longer needs tmux. Without it installed,
-// the inventory is the host's alone, not a failure.
-func TestNoTmuxIsNoSessions(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	root := t.TempDir()
-	w := New(50 * time.Millisecond)
-	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
-	w.SetSessionHost(SessionHostConfig{SocketPath: filepath.Join(root, "host.sock"), Executable: "/nonexistent/mewla", StateDir: root, Version: "t"})
-	// With no host running either, this is the "no server" answer the poll
-	// reads as nothing running; it is never a tmux failure.
-	panes, err := w.sessions().listOwned()
-	if (err != nil && !errors.Is(err, ErrTmuxServerGone)) || len(panes) != 0 {
-		t.Fatalf("inventory without tmux = %v, %v", panes, err)
-	}
-	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
-		t.Fatalf("services without tmux = %v, %v", services, err)
-	}
-	if n := w.LeftInTmux(); n != 0 {
-		t.Fatalf("LeftInTmux without tmux = %d", n)
-	}
-}
-
-// TestSessionHostUnreachableLeavesMovedIDsUnknown: while the host cannot say
-// which Sessions moved from tmux, a %id is neither tmux's nor gone; once it
-// answers, the next question gets the host's answer.
-func TestSessionHostUnreachableLeavesMovedIDsUnknown(t *testing.T) {
+// TestSessionHostUnreachableIsUnknown: a host that is there and cannot answer
+// leaves a Session neither present nor gone; once no host runs, it is absent.
+func TestSessionHostUnreachableIsUnknown(t *testing.T) {
 	dir, err := os.MkdirTemp("", "wu")
 	if err != nil {
 		t.Fatal(err)
@@ -199,18 +144,18 @@ func TestSessionHostUnreachableLeavesMovedIDsUnknown(t *testing.T) {
 		}
 	}()
 	w := New(50 * time.Millisecond)
-	w.SetTmuxServer(filepath.Join(dir, "tmux.sock"), t.TempDir())
 	w.SetSessionHost(SessionHostConfig{SocketPath: socket, Executable: "/nonexistent/mewla", StateDir: dir, Version: "t"})
-	if presence, err := w.ProbeSession("%7"); !errors.Is(err, ErrOwnershipProbeUnavailable) || presence != SessionPresenceUnknown {
+	id := "mh-0123456789abcdef01234567"
+	if presence, err := w.ProbeSession(id); !errors.Is(err, ErrOwnershipProbeUnavailable) || presence != SessionPresenceUnknown {
 		t.Fatalf("ProbeSession with the host unreachable = %v, %v", presence, err)
 	}
-	if gone, err := w.sessions().resolveAbsence("%7", false); !errors.Is(err, ErrOwnershipProbeUnavailable) || gone {
+	if gone, err := w.sessions().resolveAbsence(id); !errors.Is(err, ErrOwnershipProbeUnavailable) || gone {
 		t.Fatalf("resolveAbsence with the host unreachable = %v, %v", gone, err)
 	}
-	// The host stops: no host holds nothing, and a %id is tmux's again.
+	// The host stops: no host holds nothing.
 	listener.Close()
 	os.Remove(socket)
-	if presence, err := w.ProbeSession("%7"); err != nil || presence != SessionPresenceAbsent {
+	if presence, err := w.ProbeSession(id); err != nil || presence != SessionPresenceAbsent {
 		t.Fatalf("ProbeSession with no host = %v, %v", presence, err)
 	}
 }

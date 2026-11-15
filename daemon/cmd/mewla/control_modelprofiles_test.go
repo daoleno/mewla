@@ -479,7 +479,7 @@ func TestControlThreadRuntimeLaunchedSurvivesHistoryTrimAndRestart(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "tmux:@trim"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "mh-trim"); err != nil {
 		t.Fatal(err)
 	}
 	app := &controlApp{profiles: owner, stateDir: t.TempDir()}
@@ -494,12 +494,12 @@ func TestControlThreadRuntimeLaunchedSurvivesHistoryTrimAndRestart(t *testing.T)
 			t.Fatal(err)
 		}
 		rev++
-		_, ok := owner.Table().Get("tmux:@trim")
+		_, ok := owner.Table().Get("mh-trim")
 		if !ok {
 			t.Fatal("missing")
 		}
 		act := app.HandleControlRequest(control.Request{
-			Type: "thread_runtime_set", WorkerID: "tmux:@trim",
+			Type: "thread_runtime_set", WorkerID: "mh-trim",
 			Runtime: &modelprofiles.ThreadRuntimeChoice{ConnectionID: p.ID, ModelID: p.Model},
 		})
 		if !act.OK || act.SessionRoute == nil || act.SessionRoute.Launched == nil {
@@ -523,14 +523,14 @@ func TestControlThreadRuntimeLaunchedSurvivesHistoryTrimAndRestart(t *testing.T)
 	}
 	t.Cleanup(func() { _ = owner2.Close() })
 	app2 := &controlApp{profiles: owner2, stateDir: t.TempDir()}
-	get := app2.HandleControlRequest(control.Request{Type: "thread_runtime_get", WorkerID: "tmux:@trim"})
+	get := app2.HandleControlRequest(control.Request{Type: "thread_runtime_get", WorkerID: "mh-trim"})
 	if !get.OK || get.SessionRoute == nil || get.SessionRoute.Launched == nil {
 		t.Fatalf("get after restart %#v", get)
 	}
 	if get.SessionRoute.Launched.ConnectionID != "p0" || get.SessionRoute.Current == nil {
 		t.Fatalf("restart snapshot %#v", get.SessionRoute)
 	}
-	restored, ok := owner2.Table().Get("tmux:@trim")
+	restored, ok := owner2.Table().Get("mh-trim")
 	if !ok || len(restored.History) > modelprofiles.MaxRouteHistoryEvents {
 		t.Fatalf("history len=%d ok=%v", len(restored.History), ok)
 	}
@@ -576,7 +576,7 @@ func TestControlSpawnCreateFailureSurfacesAbortCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := newFakeControlWatcher()
-	fw.createErr = errors.New("injected tmux create failure")
+	fw.createErr = errors.New("injected Session create failure")
 	app := &controlApp{
 		watcher:  fw,
 		execs:    &work.ExecutorConfig{ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}}},
@@ -599,7 +599,7 @@ func TestControlSpawnCreateFailureSurfacesAbortCleanup(t *testing.T) {
 	if resp.OK || resp.Error == nil {
 		t.Fatalf("resp=%#v", resp)
 	}
-	if !strings.Contains(resp.Error.Message, "injected tmux create failure") {
+	if !strings.Contains(resp.Error.Message, "injected Session create failure") {
 		t.Fatalf("create error missing: %#v", resp.Error)
 	}
 	if !strings.Contains(resp.Error.Message, "injected abort pre-rename") {

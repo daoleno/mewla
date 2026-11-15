@@ -27,8 +27,7 @@ func processCwd(ptmx *os.File, pid int) string {
 	return cwd
 }
 
-// processCommand names the Session's foreground process the way tmux's
-// pane_current_command does: its argv[0] (which a program may rewrite, as
+// processCommand names the Session's foreground process by its argv[0] (which a program may rewrite, as
 // node does for process.title), read from /proc/<pgrp>/cmdline.
 func processCommand(ptmx *os.File, pid int) string {
 	cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", foreground(ptmx, pid)))

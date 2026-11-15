@@ -100,7 +100,7 @@ type frame struct {
 }
 
 // Origin is local routing authority. It is never sent to another computer.
-// PaneGeneration prevents a recycled tmux target from inheriting a reply.
+// PaneGeneration prevents a replaced Session from inheriting a reply.
 type Origin struct {
 	SessionID      string `json:"session_id,omitempty"`
 	PaneGeneration string `json:"pane_generation,omitempty"`

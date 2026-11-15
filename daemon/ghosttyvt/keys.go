@@ -63,7 +63,7 @@ var namedKeys = map[string]keyPress{
 	"IC":       {name: keyInsert},
 }
 
-// parseKey reads a key in tmux's notation: an optional chain of C-, M- and
+// parseKey reads a key in Mewla's notation: an optional chain of C-, M- and
 // S- modifier prefixes, then a key name (Enter, Escape, Tab, BTab, Space,
 // BSpace, Up, Down, Left, Right, Home, End, PageUp/PPage, PageDown/NPage, DC,
 // IC, F1-F12) or one character.
@@ -103,7 +103,7 @@ func parseKey(spec string) (keyPress, error) {
 	press.name = keyText
 	if r >= 'A' && r <= 'Z' {
 		if press.ctrl {
-			// C-A is C-a, as in tmux.
+			// C-A is C-a.
 			r = r - 'A' + 'a'
 		} else {
 			press.shift = true

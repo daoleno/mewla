@@ -211,17 +211,17 @@ func TestWindowsHostRunsALaunchScriptThroughMewlaSh(t *testing.T) {
 	ctx := windowsCtx(t)
 	// The watcher's launch: origin marker, then a login shell around the
 	// program.
-	script := `printf '\033[8m%s\033[0m\n' 'mewla-origin 0123abcd'; exec '/bin/sh' -i -l -c 'MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"; export MEWLA_WORKER_ID; unset TMUX; exec cmd.exe /d /q'`
+	script := `printf '\033[8m%s\033[0m\n' 'mewla-origin 0123abcd'; exec '/bin/sh' -i -l -c 'MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-}"; export MEWLA_WORKER_ID; exec cmd.exe /d /q'`
 	params := cmdSession("launch", t.TempDir(), mewla, "sh", "-c", script)
-	params.Env = append(os.Environ(), asShEnv+"=1", "TMUX=stale")
+	params.Env = append(os.Environ(), asShEnv+"=1")
 	if _, err := c.Create(ctx, params); err != nil {
 		t.Fatal(err)
 	}
 	waitWindowsScreen(t, c, "launch", "mewla-origin 0123abcd")
-	if _, err := c.Input(ctx, "launch", []InputStep{{Bytes: []byte("echo worker-%MEWLA_WORKER_ID%-tmux-%TMUX%")}, {Key: "Enter"}}); err != nil {
+	if _, err := c.Input(ctx, "launch", []InputStep{{Bytes: []byte("echo worker-%MEWLA_WORKER_ID%-done")}, {Key: "Enter"}}); err != nil {
 		t.Fatal(err)
 	}
-	waitWindowsScreen(t, c, "launch", "worker-launch-tmux-%TMUX%")
+	waitWindowsScreen(t, c, "launch", "worker-launch-done")
 	// The Session is named after the program, not the launcher.
 	if info, err := c.Info(ctx, "launch"); err != nil || info.Command != "cmd" {
 		t.Fatalf("info = %+v, %v", info, err)

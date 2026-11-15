@@ -38,9 +38,8 @@ import (
 // it runs the same binary. The boot CLI never kills a process it did not
 // start.
 //
-// KillMode=process is required because the daemon reuses the user's ordinary
-// tmux server, a shared per-user resource that must survive unit stop and
-// restart. The DEV runner binds its daemon child to the watcher lifetime on
+// KillMode=process is required because the session host the daemon starts,
+// and every Session in it, must survive unit stop and restart. The DEV runner binds its daemon child to the watcher lifetime on
 // Linux (PR_SET_PDEATHSIG), so an abrupt watcher death stops the child and
 // releases the state lock; install/uninstall still detect and refuse an own
 // leftover in the unit cgroup rather than deleting its configuration.
@@ -427,11 +426,9 @@ func renderBootUnit(config bootConfig) (string, error) {
 	builder.WriteString("Environment=\"PATH=" + systemdEnvironmentValue(config.PathEnv) + "\"\n")
 	builder.WriteString("Restart=on-failure\n")
 	builder.WriteString("RestartSec=5\n")
-	// The daemon reuses the user's ordinary tmux server, a shared per-user
-	// resource that can predate this unit. Only the daemon process belongs to
-	// this unit, so a stop or restart must not kill the whole cgroup (tmux and
-	// Worker sessions survive; systemd still terminates and restarts the
-	// daemon itself).
+	// Only the daemon process belongs to this unit, so a stop or restart must
+	// not kill the whole cgroup (the session host and its Sessions survive;
+	// systemd still terminates and restarts the daemon itself).
 	builder.WriteString("KillMode=process\n")
 	builder.WriteString("\n[Install]\n")
 	builder.WriteString("WantedBy=default.target\n")
@@ -1261,7 +1258,7 @@ func bootInstall(config bootConfig, runner bootRunner, out io.Writer) error {
 	} else if active && !commandChanged {
 		fmt.Fprintln(out, "Unit file updated; the live daemon was not restarted because the runtime contract is unchanged.")
 	}
-	fmt.Fprintln(out, "tmux and Worker sessions are not owned by this unit and are never stopped here.")
+	fmt.Fprintln(out, "Sessions are not owned by this unit and are never stopped here.")
 
 	linger, err := bootLingerState(runner)
 	if err != nil {

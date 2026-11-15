@@ -19,7 +19,7 @@ func TestClaudeDelegatedBriefHasTypedIntentOutsidePaste(t *testing.T) {
 		t.Fatal("brief must use one target-bound queue")
 	}
 	queue := strings.Join(io.queues[0], "|")
-	if !strings.Contains(queue, "send-keys|-l|-t|"+io.paneValue.paneID+"|Execute: ") {
+	if !strings.Contains(queue, "|type:"+DelegatedInputPrefix) {
 		t.Fatalf("delegated brief is only untrusted pasted content: %s", queue)
 	}
 }

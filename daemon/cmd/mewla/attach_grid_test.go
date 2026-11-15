@@ -183,11 +183,11 @@ func TestTileLinesAreExactlyTheTileSize(t *testing.T) {
 }
 
 func TestGridStatusSaysWhatIsLeftOut(t *testing.T) {
-	g := newGridState(2)
+	g := newGridState()
 	g.update(gridInfos(9))
 	layout := layoutGrid(len(g.entries), 80, 24)
 	status := gridStatus(g, layout, 200)
-	for _, want := range []string{"newest 6 of 9 shown", "3 more", "2 in tmux not tiled", "Ctrl-] back"} {
+	for _, want := range []string{"newest 6 of 9 shown", "3 more", "Ctrl-] back"} {
 		if !strings.Contains(status, want) {
 			t.Errorf("status lacks %q: %s", want, status)
 		}
@@ -290,7 +290,7 @@ func runGridWith(t *testing.T, host *fakeGridHost, input []string, size func() (
 	var out lockedBuffer
 	done := make(chan string, 1)
 	go func() {
-		id, err := runGridView(context.Background(), host, newGridState(0), typed, &out, size, nil, termStyle{}, 5*time.Millisecond)
+		id, err := runGridView(context.Background(), host, newGridState(), typed, &out, size, nil, termStyle{}, 5*time.Millisecond)
 		if err != nil {
 			id = "error: " + err.Error()
 		}
@@ -372,7 +372,7 @@ func TestGridViewReadsOnlyScreensThatMoved(t *testing.T) {
 	var out lockedBuffer
 	done := make(chan struct{})
 	go func() {
-		runGridView(context.Background(), host, newGridState(0), typed, &out, func() (int, int) { return 120, 40 }, nil, termStyle{}, 5*time.Millisecond)
+		runGridView(context.Background(), host, newGridState(), typed, &out, func() (int, int) { return 120, 40 }, nil, termStyle{}, 5*time.Millisecond)
 		close(done)
 	}()
 	waitOutput(t, &out, "screen of mh-02")
@@ -403,7 +403,7 @@ func TestGridViewRetilesOnResizeAndTracksSessions(t *testing.T) {
 	var out lockedBuffer
 	done := make(chan struct{})
 	go func() {
-		runGridView(context.Background(), host, newGridState(0), typed, &out, size, nil, termStyle{}, 5*time.Millisecond)
+		runGridView(context.Background(), host, newGridState(), typed, &out, size, nil, termStyle{}, 5*time.Millisecond)
 		close(done)
 	}()
 	waitOutput(t, &out, "Worker05")
@@ -424,7 +424,7 @@ func TestGridViewRetilesOnResizeAndTracksSessions(t *testing.T) {
 }
 
 func TestGridStateFollowsTheHost(t *testing.T) {
-	g := newGridState(0)
+	g := newGridState()
 	g.update(gridInfos(3))
 	if len(g.entries) != 3 || g.sel != "mh-00" {
 		t.Fatalf("start: %d entries, selected %q", len(g.entries), g.sel)

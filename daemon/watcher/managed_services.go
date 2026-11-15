@@ -20,7 +20,7 @@ import (
 )
 
 // Managed service discovery covers Agent-retained user services that outlive
-// the tmux Sessions that created them (typically user systemd units). tmux
+// the Sessions that created them (typically user systemd units). Session
 // discovery in services.go is unchanged; this file adds the smallest explicit
 // persistent registration/attribution path on top of it.
 //
@@ -34,7 +34,7 @@ import (
 // positive: every discovery re-reads live unit properties and live sockets.
 
 const (
-	// ServiceSourceSession marks rows owned by a live tmux Session.
+	// ServiceSourceSession marks rows owned by a live Session.
 	ServiceSourceSession = "session"
 	// ServiceSourcePersistent marks rows owned by a registered persistent unit.
 	ServiceSourcePersistent = "persistent"
@@ -161,7 +161,7 @@ func (w *Watcher) RegisterManagedService(desc ManagedServiceDescriptor) (Managed
 		return ManagedServiceDescriptor{}, fmt.Errorf("invalid port %d", desc.Port)
 	}
 	if runtime.GOOS != "linux" {
-		return ManagedServiceDescriptor{}, fmt.Errorf("persistent service registration requires Linux user systemd; tmux discovery remains available on this platform")
+		return ManagedServiceDescriptor{}, fmt.Errorf("persistent service registration requires Linux user systemd; Session discovery remains available on this platform")
 	}
 	path := w.managedServicesFilePath()
 	if strings.TrimSpace(path) == "" {
@@ -387,7 +387,7 @@ func (w *Watcher) listeningSocketsForServices() ([]listeningSocket, error) {
 // querySystemdUnit reads structured properties for one user unit. It never
 // starts, stops or modifies the unit. The passed context bounds the query
 // (shared discovery deadline or per-call cap): expiry fails this unit while
-// tmux rows stay intact. Non-zero exit (unknown unit, broken bus) is a hard
+// Session rows stay intact. Non-zero exit (unknown unit, broken bus) is a hard
 // error so callers surface it instead of guessing.
 func querySystemdUnit(ctx context.Context, unit string) (systemdUnitStatus, error) {
 	if err := ValidateManagedServiceUnit(unit); err != nil {
@@ -545,9 +545,9 @@ func (w *Watcher) managedDiscoverySeam() func(map[string]bool, []SessionServiceI
 
 // discoverPersistentServices resolves every registered unit against live
 // systemd properties and live socket ownership. claimed marks pid|port pairs
-// already attributed to tmux sessions so one socket is never reported twice.
+// already attributed to Sessions so one socket is never reported twice.
 // A broken systemd query yields a per-row error state, never silent success
-// and never a corrupted tmux list.
+// and never a corrupted Session list.
 func (w *Watcher) discoverPersistentServices(claimed map[string]bool, interfaces []SessionServiceInterface) []SessionService {
 	if seam := w.managedDiscoverySeam(); seam != nil {
 		return seam(claimed, interfaces)
@@ -571,7 +571,7 @@ func (w *Watcher) discoverPersistentServices(claimed map[string]bool, interfaces
 	}
 	// One shared deadline for every unit: N hung queries cannot multiply
 	// beyond the aggregate budget, and expiry degrades to per-row errors
-	// while tmux rows stay intact.
+	// while Session rows stay intact.
 	budgetCtx, budgetCancel := context.WithTimeout(context.Background(), managedDiscoveryBudget)
 	defer budgetCancel()
 	sockets, socketsErr := w.listeningSocketsForServices()
@@ -691,7 +691,7 @@ func (w *Watcher) resolveManagedService(ctx context.Context, desc ManagedService
 		rows = append(rows, *service)
 	}
 	if len(rows) == 0 {
-		// A live owned socket that tmux already represents is omitted, not
+		// A live owned socket a Session already represents is omitted, not
 		// duplicated as a bogus inactive row. Only a unit with genuinely no
 		// live owned socket reports inactive.
 		if claimedSkipped {

@@ -2,60 +2,22 @@ package watcher
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestKillSessionMissingIsIdempotentSuccess(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "tmux.log")
-	tmuxPath := filepath.Join(dir, "tmux")
-	script := `#!/bin/sh
-[ "$1" = -u ] && shift
-printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
-echo "can't find window: %1" >&2
-exit 1
-`
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
 	if err := w.KillSession("%1"); err != nil {
 		t.Fatalf("missing target must be idempotent success: %v", err)
+	}
+	if kills := backend.kills(); len(kills) != 0 {
+		t.Fatalf("killed a missing Session: %v", kills)
 	}
 }
 
 func TestKillSessionResourceReleaseFailureAfterSuccessfulKill(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "tmux.log")
-	tmuxPath := filepath.Join(dir, "tmux")
-	script := `#!/bin/sh
-[ "$1" = -u ] && shift
-printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
-target=
-prev=
-for arg in "$@"; do
-  if [ "$prev" = "-t" ]; then target=$arg; fi
-  prev=$arg
-done
-if [ "$1" = "list-panes" ]; then
-  echo "%42"
-  exit 0
-fi
-if [ "$1" = "show-options" ]; then
-  echo 1
-fi
-exit 0
-`
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{
 		boundTarget: "%42",
@@ -63,6 +25,8 @@ exit 0
 		releaseErr:  errors.New("injected cgroup release failure"),
 	}
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
+	backend.set("%42", fakeOwned)
 	w.resources = manager
 	err := w.KillSession("%42")
 	if err == nil || !errors.Is(err, ErrDelegatedResourceRelease) {
@@ -71,29 +35,16 @@ exit 0
 	if !strings.Contains(err.Error(), "injected cgroup release failure") {
 		t.Fatalf("err=%v", err)
 	}
-	if len(manager.released) != 1 {
-		t.Fatalf("released=%#v", manager.released)
+	if len(manager.released) != 1 || len(backend.kills()) != 1 {
+		t.Fatalf("released=%#v killed=%v", manager.released, backend.kills())
 	}
 }
 
 func TestKillSessionMissingStillReleasesBoundUnit(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "tmux.log")
-	tmuxPath := filepath.Join(dir, "tmux")
-	script := `#!/bin/sh
-[ "$1" = -u ] && shift
-printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
-echo "can't find window" >&2
-exit 1
-`
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{boundTarget: "%42", boundUnit: unit}
 	w := New(0)
+	useFakeSessionBackend(w, newFakeSessionBackend())
 	w.resources = manager
 	if err := w.KillSession("%42"); err != nil {
 		t.Fatal(err)
@@ -104,37 +55,6 @@ exit 1
 }
 
 func TestKillSessionRetryAfterResourceFailureConverges(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "tmux.log")
-	tmuxPath := filepath.Join(dir, "tmux")
-	script := `#!/bin/sh
-[ "$1" = -u ] && shift
-printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
-target=
-prev=
-for arg in "$@"; do
-  if [ "$prev" = "-t" ]; then target=$arg; fi
-  prev=$arg
-done
-if [ "$1" = "list-panes" ]; then
-  echo "%42"
-  exit 0
-fi
-if [ "$1" = "show-options" ]; then
-  echo 1
-  exit 0
-fi
-if echo "$*" | grep -q 'kill-pane'; then
-  echo "can't find window" >&2
-  exit 1
-fi
-exit 0
-`
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	manager := &fakeDelegatedResourceManager{
 		boundTarget: "%42",
@@ -142,6 +62,8 @@ exit 0
 		releaseErr:  errors.New("first release fail"),
 	}
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
+	backend.set("%42", fakeOwned)
 	w.resources = manager
 	if err := w.KillSession("%42"); !errors.Is(err, ErrDelegatedResourceRelease) {
 		t.Fatalf("first=%v", err)
@@ -155,60 +77,41 @@ exit 0
 	}
 }
 
-func TestProbeSessionDistinguishesAbsentFromTransportError(t *testing.T) {
-	dir := t.TempDir()
-	tmuxPath := filepath.Join(dir, "tmux")
-	writeTmux := func(body string) {
-		t.Helper()
-		if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\n[ \"$1\" = -u ] && shift\n"+body+"\n"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Setenv("PATH", dir)
-
-	writeTmux(`echo "failed to connect to server" >&2
-exit 1`)
+func TestKillSessionNeverEndsAnUnownedSession(t *testing.T) {
 	w := New(0)
-	presence, err := w.ProbeSession("%1")
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
+	backend.set("%1", fakeUnowned)
+	if err := w.KillSession("%1"); !errors.Is(err, ErrUnownedSession) {
+		t.Fatalf("err=%v, want ErrUnownedSession", err)
+	}
+	if kills := backend.kills(); len(kills) != 0 {
+		t.Fatalf("killed an unowned Session: %v", kills)
+	}
+}
+
+func TestProbeSessionDistinguishesAbsentFromTransportError(t *testing.T) {
+	w := New(0)
+	// No session host running: nothing is.
+	presence, err := w.ProbeSession("mh-0123456789abcdef01234567")
 	if err != nil || presence != SessionPresenceAbsent {
-		t.Fatalf("no-server presence=%v err=%v", presence, err)
+		t.Fatalf("no-host presence=%v err=%v", presence, err)
 	}
 
-	writeTmux(`echo "can't find session: %1" >&2
-exit 1`)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
 	presence, err = w.ProbeSession("%1")
 	if err != nil || presence != SessionPresenceAbsent {
 		t.Fatalf("missing presence=%v err=%v", presence, err)
 	}
 
-	reachableTmuxSocket(t)
-	writeTmux(`echo "permission denied reading tmux socket" >&2
-exit 1`)
+	backend.set("%1", fakeUnreachable)
 	presence, err = w.ProbeSession("%1")
-	if presence != SessionPresenceUnknown || err == nil {
+	if presence != SessionPresenceUnknown || !errors.Is(err, ErrOwnershipProbeUnavailable) {
 		t.Fatalf("transport presence=%v err=%v", presence, err)
 	}
 
-	writeTmux(`cmd=
-for arg in "$@"; do
-  case "$arg" in list-panes|show-options) cmd=$arg ;; esac
-done
-if [ "$cmd" = "list-panes" ]; then
-  echo "%2"
-  exit 0
-fi
-if [ "$cmd" = "show-options" ]; then
-  exit 0
-fi
-exit 1`)
+	backend.set("%1", fakeOwned)
 	presence, err = w.ProbeSession("%1")
-	if err != nil || presence != SessionPresenceAbsent {
-		t.Fatalf("quiet-missing presence=%v err=%v", presence, err)
-	}
-
-	writeTmux(`exit 0`)
-	presence, err = w.ProbeSession("%1")
-	if presence != SessionPresenceUnknown || err == nil || !errors.Is(err, ErrOwnershipProbeUnavailable) {
-		t.Fatalf("empty list-panes presence=%v err=%v", presence, err)
+	if err != nil || presence != SessionPresencePresent {
+		t.Fatalf("owned presence=%v err=%v", presence, err)
 	}
 }

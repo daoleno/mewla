@@ -3,14 +3,13 @@ package watcher
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
 
-// No tmux command is needed: stale ownership must fail before any transport IO.
+// No backend is needed: stale ownership must fail before any transport IO.
 // BDD-007: Given old cleanup waiting for the input lock, when a new turn is
 // admitted first, then cleanup rejects the old identity before transport IO.
 func TestBDD_007_CompletedCleanupSerializesWithNewInput(t *testing.T) {
@@ -40,12 +39,7 @@ func TestBDD_007_CompletedCleanupSerializesWithNewInput(t *testing.T) {
 }
 
 func TestBDD_008_AlreadyReclaimedSessionCleanupIsIdempotent(t *testing.T) {
-	// Given exact completed ownership in the ledger but a reclaimed tmux window.
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\necho \"can't find window: %1\" >&2\nexit 1\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
+	// Given exact completed ownership in the ledger but a Session that is gone.
 	w := New(0)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
@@ -73,95 +67,27 @@ func TestCompletedSessionCleanupRejectsNonterminalAndUncontractedTurns(t *testin
 	}
 }
 
-func TestBDD_014_QuietMissingSessionCleanupIsAbsentNotUnowned(t *testing.T) {
-	// Given tmux 3.6a quiet show-options success for a session that list-panes
-	// proves is gone, completed cleanup must be idempotent absence — not Unowned.
-	dir := writeFakeTmux(t, `cmd=
-for arg in "$@"; do
-  case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
-done
-if [ "$cmd" = "list-panes" ]; then
-  echo "can't find session: %1" >&2
-  exit 1
-fi
-if [ "$cmd" = "show-options" ]; then
-  exit 0
-fi
-if [ "$cmd" = "kill-pane" ]; then
-  echo "kill-pane must not run for a proven-absent target" >&2
-  exit 1
-fi
-echo "unexpected tmux invocation: $*" >&2
-exit 1
-`)
-	t.Setenv("PATH", dir)
-	w := New(0)
-	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
-		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
-	}})
-	for range 2 {
-		if err := w.KillCompletedSession("%1", "completed"); err != nil {
-			t.Fatalf("quiet missing session: %v", err)
-		}
-	}
-	present, owned, err := probeTmuxTargetOwnership("", "%1")
-	if err != nil || present || owned {
-		t.Fatalf("quiet missing classified as present=%v owned=%v err=%v", present, owned, err)
-	}
-}
-
 func TestBDD_015_UnownedPresentCompletedCleanupIsProtected(t *testing.T) {
-	dir := writeFakeTmux(t, `log=${MEWLA_TEST_TMUX_LOG:?}
-printf '%s\n' "$*" >>"$log"
-target=
-prev=
-for arg in "$@"; do
-  if [ "$prev" = "-t" ]; then target=$arg; fi
-  prev=$arg
-done
-cmd=
-for arg in "$@"; do
-  case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
-done
-if [ "$cmd" = "list-panes" ]; then
-  echo "%1"
-  exit 0
-fi
-if [ "$cmd" = "show-options" ]; then
-  exit 0
-fi
-if [ "$cmd" = "kill-pane" ]; then
-  echo "killed $target" >>"$log"
-  exit 0
-fi
-exit 0
-`)
-	logPath := filepath.Join(dir, "tmux.log")
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
+	backend.set("%1", fakeUnowned)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
 	for range 2 {
 		err := w.KillCompletedSession("%1", "completed")
-		if !errors.Is(err, ErrUnownedTmuxTarget) {
+		if !errors.Is(err, ErrUnownedSession) {
 			t.Fatalf("unowned present err=%v", err)
 		}
 	}
-	raw, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "killed ") || strings.Contains(string(raw), "kill-pane") {
-		t.Fatalf("unowned target was mutated:\n%s", raw)
+	if kills := backend.kills(); len(kills) != 0 {
+		t.Fatalf("unowned target was killed: %v", kills)
 	}
 }
 
 func TestCompletedCleanupRejectsReusedOwnedGeneration(t *testing.T) {
-	dir := writeFakeTmux(t, ownedPresentTmuxScript())
-	t.Setenv("PATH", dir)
 	w := New(0)
+	useFakeSessionBackend(w, newFakeSessionBackend()).set("%1", fakeOwned)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {
 			SessionID: "%1", TurnID: "old", Status: TurnDone, SignalProtocol: true,
@@ -177,18 +103,14 @@ func TestCompletedCleanupRejectsReusedOwnedGeneration(t *testing.T) {
 	}
 }
 
-func TestCompletedCleanupUnreachableSocketIsNotAbsence(t *testing.T) {
-	reachableTmuxSocket(t)
-	dir := writeFakeTmux(t, `echo "permission denied reading tmux socket" >&2
-exit 1
-`)
-	t.Setenv("PATH", dir)
+func TestCompletedCleanupUnreachableHostIsNotAbsence(t *testing.T) {
 	w := New(0)
+	useFakeSessionBackend(w, newFakeSessionBackend()).set("%1", fakeUnreachable)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {SessionID: "%1", TurnID: "done", Status: TurnDone, SignalProtocol: true},
 	}})
 	err := w.KillCompletedSession("%1", "done")
-	if err == nil || errors.Is(err, ErrUnownedTmuxTarget) {
+	if err == nil || errors.Is(err, ErrUnownedSession) {
 		t.Fatalf("unreachable classified as success or unowned: %v", err)
 	}
 	if presence, probeErr := w.ProbeSession("%1"); presence != SessionPresenceUnknown || probeErr == nil {
@@ -197,10 +119,6 @@ exit 1
 }
 
 func TestCompletedCleanupMissingScratchAfterAbsenceSucceeds(t *testing.T) {
-	dir := writeFakeTmux(t, `echo "can't find session: %1" >&2
-exit 1
-`)
-	t.Setenv("PATH", dir)
 	manager := newTestPortableResourceManager(t, "abc123")
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	tempDir, err := manager.createOwnedTempDir(unit)
@@ -222,44 +140,8 @@ exit 1
 }
 
 func TestCompletedCleanupRaceDoesNotKillAppearingUnownedTarget(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "tmux.log")
-	scriptPath := filepath.Join(dir, "tmux")
-	statePath := filepath.Join(dir, "state")
-	if err := os.WriteFile(statePath, []byte("absent\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	script := `#!/bin/sh
-printf '%s\n' "$*" >> "$MEWLA_TEST_TMUX_LOG"
-state=$(cat "$MEWLA_TEST_TMUX_STATE")
-cmd=
-for arg in "$@"; do
-  case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
-done
-if [ "$state" = "absent" ]; then
-  echo "can't find session: %1" >&2
-  exit 1
-fi
-if [ "$cmd" = "list-panes" ]; then
-  echo "%1"
-  exit 0
-fi
-if [ "$cmd" = "show-options" ]; then
-  exit 0
-fi
-if [ "$cmd" = "kill-pane" ]; then
-  echo killed >> "$MEWLA_TEST_TMUX_LOG"
-  exit 0
-fi
-exit 0
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
-	t.Setenv("MEWLA_TEST_TMUX_STATE", statePath)
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true},
 	}})
@@ -273,7 +155,7 @@ exit 0
 	go func() {
 		defer wg.Done()
 		time.Sleep(5 * time.Millisecond)
-		_ = os.WriteFile(statePath, []byte("unowned\n"), 0o600)
+		backend.set("%1", fakeUnowned)
 		errs <- w.KillCompletedSession("%1", "completed")
 	}()
 	wg.Wait()
@@ -283,18 +165,14 @@ exit 0
 		if err == nil {
 			continue
 		}
-		if errors.Is(err, ErrUnownedTmuxTarget) {
+		if errors.Is(err, ErrUnownedSession) {
 			sawUnowned = true
 			continue
 		}
 		t.Fatalf("unexpected race err=%v", err)
 	}
-	raw, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "killed") {
-		t.Fatalf("race killed unowned target:\n%s", raw)
+	if kills := backend.kills(); len(kills) != 0 {
+		t.Fatalf("race killed unowned target: %v", kills)
 	}
 	if !sawUnowned {
 		t.Fatal("appearing unowned target was not protected")
@@ -324,13 +202,6 @@ func TestBDD_019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 		{name: "known-match", known: true, current: identity, pane: "pane-1", wantKill: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := writeFakeTmux(t, ownedPresentTmuxScript())
-			logPath := filepath.Join(dir, "tmux.log")
-			t.Setenv("PATH", dir)
-			t.Setenv("MEWLA_TEST_TMUX_LOG", logPath)
-			if err := os.WriteFile(logPath, nil, 0o600); err != nil {
-				t.Fatal(err)
-			}
 			unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 			manager := &fakeDelegatedResourceManager{boundTarget: "%1", boundUnit: unit}
 			turn := TurnSnapshot{
@@ -339,6 +210,8 @@ func TestBDD_019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 			}
 			ledger := &fakeTurnLedger{turns: map[string]TurnSnapshot{"%1": turn}}
 			w := New(0)
+			backend := useFakeSessionBackend(w, newFakeSessionBackend())
+			backend.set("%1", fakeOwned)
 			w.resources = manager
 			w.SetTurnLedger(ledger)
 			w.targetProcessResolver = func(string) (targetProcessIdentity, bool) {
@@ -350,22 +223,18 @@ func TestBDD_019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 			if !found || after.TurnID != turn.TurnID || after.ProcessIdentity != turn.ProcessIdentity || after.Status != turn.Status {
 				t.Fatalf("ledger mutated: %+v", after)
 			}
-			raw, readErr := os.ReadFile(logPath)
-			if readErr != nil {
-				t.Fatal(readErr)
-			}
-			killed := strings.Contains(string(raw), "kill-pane")
+			killed := len(backend.kills()) > 0
 			if tc.wantKill {
 				if err != nil {
 					t.Fatalf("expected successful cleanup: %v", err)
 				}
 				if !killed || len(manager.released) != 1 {
-					t.Fatalf("kill/release missing: killed=%v released=%#v log=\n%s", killed, manager.released, raw)
+					t.Fatalf("kill/release missing: killed=%v released=%#v", killed, manager.released)
 				}
 				return
 			}
 			if killed || len(manager.released) != 0 {
-				t.Fatalf("present owned window was mutated: killed=%v released=%#v log=\n%s", killed, manager.released, raw)
+				t.Fatalf("present owned Session was mutated: killed=%v released=%#v", killed, manager.released)
 			}
 			if tc.wantUnavailable && !errors.Is(err, ErrOwnershipProbeUnavailable) {
 				t.Fatalf("err=%v, want ErrOwnershipProbeUnavailable", err)
@@ -379,9 +248,9 @@ func TestBDD_019_PresentOwnedCleanupRequiresProvenIdentity(t *testing.T) {
 
 func TestCompletedCleanupKnownMatchAndAbsentSucceedRepeatedly(t *testing.T) {
 	identity := targetProcessIdentity{Command: "cursor-agent", ProcessID: 3, ProcessStart: 3}
-	dir := writeFakeTmux(t, ownedPresentTmuxScript())
-	t.Setenv("PATH", dir)
 	w := New(0)
+	backend := useFakeSessionBackend(w, newFakeSessionBackend())
+	backend.set("%1", fakeOwned)
 	w.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {
 			SessionID: "%1", TurnID: "completed", Status: TurnDone, SignalProtocol: true,
@@ -396,10 +265,6 @@ func TestCompletedCleanupKnownMatchAndAbsentSucceedRepeatedly(t *testing.T) {
 		}
 	}
 
-	missing := writeFakeTmux(t, `echo "can't find window: %1" >&2
-exit 1
-`)
-	t.Setenv("PATH", missing)
 	absent := New(0)
 	absent.SetTurnLedger(&fakeTurnLedger{turns: map[string]TurnSnapshot{
 		"%1": {
@@ -412,42 +277,4 @@ exit 1
 			t.Fatalf("absent recorded identity: %v", err)
 		}
 	}
-}
-
-func writeFakeTmux(t *testing.T, body string) string {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\n[ \"$1\" = -u ] && shift\n"+body+"\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
-func ownedPresentTmuxScript() string {
-	return `log=${MEWLA_TEST_TMUX_LOG:-/dev/null}
-printf '%s\n' "$*" >>"$log"
-target=
-prev=
-for arg in "$@"; do
-  if [ "$prev" = "-t" ]; then target=$arg; fi
-  prev=$arg
-done
-cmd=
-for arg in "$@"; do
-  case "$arg" in list-panes|show-options|kill-pane) cmd=$arg ;; esac
-done
-if [ "$cmd" = "list-panes" ]; then
-  echo "%1"
-  exit 0
-fi
-if [ "$cmd" = "show-options" ]; then
-  echo 1
-  exit 0
-fi
-if [ "$cmd" = "kill-pane" ]; then
-  echo "kill-pane -t $target" >>"$log"
-  exit 0
-fi
-exit 0
-`
 }

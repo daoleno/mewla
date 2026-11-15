@@ -3,8 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -118,14 +116,6 @@ func TestSubscriptionPublishesProviderTranscriptWithBrainOverlay(t *testing.T) {
 }
 
 func TestSubscriptionPreservesProviderUnavailableWithoutCapturingPane(t *testing.T) {
-	binDir := t.TempDir()
-	captureCounter := filepath.Join(t.TempDir(), "pane-capture-called")
-	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf capture >> \"$MEWLA_PANE_CAPTURE_COUNTER\"\nexit 1\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("MEWLA_PANE_CAPTURE_COUNTER", captureCounter)
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	var loads atomic.Int32
 	srv := &Server{
@@ -177,9 +167,6 @@ func TestSubscriptionPreservesProviderUnavailableWithoutCapturingPane(t *testing
 	}
 	if got := loads.Load(); got != 1 {
 		t.Fatalf("provider transcript loads before first snapshot = %d, want 1", got)
-	}
-	if _, err := os.Stat(captureCounter); !os.IsNotExist(err) {
-		t.Fatalf("Chat subscription invoked tmux pane capture: %v", err)
 	}
 }
 

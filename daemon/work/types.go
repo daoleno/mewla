@@ -33,7 +33,6 @@ type Executor struct {
 	Name    string `json:"name" toml:"name"`
 	Command string `json:"command" toml:"command"`
 	Kind    string `json:"kind,omitempty" toml:"kind"`
-	Runtime string `json:"runtime,omitempty" toml:"runtime"`
 	// ConfigDir makes this a separate sign-in of a Claude Code or Codex CLI:
 	// its CLAUDE_CONFIG_DIR or CODEX_HOME. Empty uses the CLI's own default.
 	ConfigDir string `json:"config_dir,omitempty" toml:"config_dir"`

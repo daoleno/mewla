@@ -1,3 +1,5 @@
+//go:build ghosttyvt && cgo && (linux || darwin)
+
 package main
 
 import (
@@ -28,7 +30,7 @@ func (recoveryNativeProbe) ForgetProviderActivity(string) {}
 
 // Real control -> watcher identity/paste/receipt -> Store/FSM. The owned native
 // executable only records stdin; no provider executable or network is used.
-func TestControlSendAfterLostOriginalAndClosedRecovery(t *testing.T) {
+func TestHostControlSendAfterLostOriginalAndClosedRecovery(t *testing.T) {
 	for _, orphan := range []bool{false, true} {
 		t.Run(fmt.Sprintf("orphan_prepare=%t", orphan), func(t *testing.T) { testControlRecoverySend(t, orphan) })
 	}
@@ -40,10 +42,6 @@ func testControlRecoverySend(t *testing.T, orphan bool) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(root) })
-	realTmux, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Skip("tmux required")
-	}
 	cc, err := exec.LookPath("cc")
 	if err != nil {
 		t.Skip("C compiler required for inert native fixture")
@@ -61,16 +59,9 @@ int main(int argc, char **argv) { signal(SIGINT,SIG_IGN); FILE *f=fopen(argv[1],
 	if out, err := exec.Command(cc, "-o", native, source).CombinedOutput(); err != nil {
 		t.Fatalf("native fixture: %v %s", err, out)
 	}
-	socket := filepath.Join(root, "tmux.sock")
-	if out, err := exec.Command(realTmux, "-S", socket, "-f", "/dev/null", "new-session", "-d", "-s", "keeper", "/bin/cat").CombinedOutput(); err != nil {
-		t.Fatalf("owned server: %v %s", err, out)
-	}
-	t.Cleanup(func() { exec.Command(realTmux, "-S", socket, "kill-server").Run() })
-	// Reject any accidental attempt to reach the caller's tmux socket.
+	socket, _ := attachTestHostSocket(t)
 	bin := filepath.Join(root, "bin")
 	os.MkdirAll(bin, 0700)
-	shim := fmt.Sprintf("#!/bin/sh\n[ \"$1\" = -u ] && shift\n[ \"$1\" = -S ] && [ \"$2\" = '%s' ] || exit 97\nexec '%s' \"$@\"\n", socket, realTmux)
-	os.WriteFile(filepath.Join(bin, "tmux"), []byte(shim), 0700)
 	for _, name := range []string{"codex", "claude", "pi", "opencode", "cursor-agent", "amp", "grok"} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf blocked > '"+filepath.Join(root, "unexpected-provider")+"'\nexit 98\n"), 0700); err != nil {
 			t.Fatal(err)
@@ -87,7 +78,8 @@ int main(int argc, char **argv) { signal(SIGINT,SIG_IGN); FILE *f=fopen(argv[1],
 		t.Fatal(err)
 	}
 	w := watcher.New(time.Hour)
-	w.SetTmuxServer(socket, filepath.Join(root, "scratch"))
+	w.SetPrivateTmuxDir(filepath.Join(root, "scratch"))
+	w.SetSessionHost(watcher.SessionHostConfig{SocketPath: socket, Executable: "/nonexistent/mewla", StateDir: root, Version: "test"})
 	w.SetProviderActivityProbe(recoveryNativeProbe{})
 	store, err := brain.NewStore(filepath.Join(root, "brain"))
 	if err != nil {
@@ -142,8 +134,8 @@ int main(int argc, char **argv) { signal(SIGINT,SIG_IGN); FILE *f=fopen(argv[1],
 		}
 		t.Cleanup(func() {
 			if t.Failed() {
-				out, _ := exec.Command(realTmux, "-S", socket, "capture-pane", "-p", "-t", id).CombinedOutput()
-				t.Logf("owned fixture pane: %s", out)
+				out, _ := w.CapturePaneContent(id)
+				t.Logf("owned fixture Session: %s", out)
 			}
 		})
 		wait("native fixture entered", func() bool { _, e := os.Stat(filepath.Join(root, name+".input")); return e == nil })

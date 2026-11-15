@@ -81,7 +81,7 @@ func TestPopulatedStartupMeasurement(t *testing.T) {
 	}
 	mark("brain_store")
 	w := watcher.New(time.Second)
-	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), filepath.Join(root, "tmux-scratch"))
+	w.SetPrivateTmuxDir(filepath.Join(root, "tmux-scratch"))
 	service := brain.NewService(store, w, nil)
 	srv := New(manager, w, nil, nil, workStore, nil, service)
 	defer srv.shutdownAuthenticatedClients()

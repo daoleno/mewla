@@ -1,3 +1,5 @@
+//go:build ghosttyvt && cgo && (linux || darwin)
+
 package watcher
 
 import (
@@ -8,8 +10,8 @@ import (
 
 // Visible launches gain this computer's agent tools; hidden ones (the Brain
 // host) keep their command.
-func TestRealAgentToolsApplyOnlyToVisibleLaunches(t *testing.T) {
-	h := newSharedTmuxHarness(t, false)
+func TestHostRealAgentToolsApplyOnlyToVisibleLaunches(t *testing.T) {
+	h := newHostHarness(t)
 	var mu sync.Mutex
 	var seen []string
 	var workers []bool
@@ -39,8 +41,8 @@ func TestRealAgentToolsApplyOnlyToVisibleLaunches(t *testing.T) {
 // The tools go on the command before the launch adapter wraps it: Codex's
 // adapter turns the command into shell with an app-server, which tool
 // injection cannot parse, so a Codex Worker would have had no tools.
-func TestRealAgentToolsAreAddedBeforeTheLaunchAdapterWrapsTheCommand(t *testing.T) {
-	h := newSharedTmuxHarness(t, false)
+func TestHostRealAgentToolsAreAddedBeforeTheLaunchAdapterWrapsTheCommand(t *testing.T) {
+	h := newHostHarness(t)
 	h.w.SetAgentTools(func(command string, worker bool) string { return command + " # tools" })
 	var adapted string
 	h.w.SetLaunchAdapter(func(executorID, command string) (agentevents.Launch, error) {

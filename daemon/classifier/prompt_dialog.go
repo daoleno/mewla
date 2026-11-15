@@ -20,12 +20,12 @@ import (
 // What the screen can and cannot prove, and what is done about it:
 //   - It is the displayed text, not the program's bytes. A tab, or a line the
 //     program trimmed or re-wrapped, cannot be told from the spaces it drew.
-//     tmux joins lines the terminal wrapped (capture-pane -J), so a soft wrap
-//     is not mistaken for a newline.
-//   - Blanks at the end of a line are not evidence. tmux reports a cell that
-//     was written with a space and a cell that an earlier, longer line left
-//     erased alike (measured with tmux 3.6: a line overwritten in place and
-//     erased to its end still reports the old extent as trailing spaces). They
+//     The capture joins lines the terminal wrapped, so a soft wrap is not
+//     mistaken for a newline.
+//   - Blanks at the end of a line are not evidence. A terminal reports a cell
+//     that was written with a space and a cell that an earlier, longer line
+//     left erased alike (a line overwritten in place and erased to its end can
+//     still report the old extent as trailing spaces). They
 //     are therefore left out of the id, and a dialog in which any line that is
 //     followed by more request text ends in blanks is refused: inside a quoted
 //     string or a heredoc those blanks can be the command's, and the screen
@@ -33,9 +33,9 @@ import (
 //   - Whether the capture holds the whole dialog is a property of the capture,
 //     not of the text. A heading-looking line proves nothing: a command can
 //     contain one, and a clipped capture can begin at it. How full the pane's
-//     scrollback is proves nothing either: tmux trims history in batches, so a
-//     pane below its limit can have lost lines (measured: limit 20, 30 lines
-//     printed, 19 held, first line gone). What does prove it:
+//     scrollback is proves nothing either: a terminal can trim history in
+//     batches, so a Session below its limit can have lost lines. What does
+//     prove it:
 //     Claude: the box begins at a solid rule line at the margin followed by
 //     the tool's header line ("Bash command"). A command's own rows are drawn
 //     after the header and a `╌` separator (multi-line ones with a " │ " gutter),
@@ -53,8 +53,8 @@ import (
 //     scrolling its head away. Measured on Codex 0.166.0 at 40 and 14 rows;
 //     other versions are not covered by that observation.
 //     Codex on the main screen (inline mode): the pane's origin marker
-//     (CaptureInfo.Origin) as the capture's first line; tmux evicts from the
-//     top, so the pane's first output still being first means nothing was
+//     (CaptureInfo.Origin) as the capture's first line; scrollback evicts from
+//     the top, so the Session's first output still being first means nothing was
 //     evicted. A copy of the marker elsewhere is not looked at.
 //   - Blanks. Codex pads its grid (measured: the heading, menu rows and blank
 //     rows carry painted trailing blanks of arbitrary width), so blanks outside

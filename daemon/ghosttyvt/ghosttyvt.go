@@ -32,7 +32,7 @@ type Options struct {
 }
 
 // DefaultScrollbackLines is the history a terminal keeps unless told
-// otherwise; it matches the tmux history-limit Mewla sessions ran with.
+// otherwise.
 const DefaultScrollbackLines = 10000
 
 // DefaultXTVersion is the terminal name programs see in an XTVERSION reply.

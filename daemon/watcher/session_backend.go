@@ -11,10 +11,9 @@ import (
 // are made, where a Session's labels and input receipts are kept, and how keys
 // and pastes reach the program in it.
 //
-// tmux is the backend (tmux_*.go). Nothing outside a backend's own files may
-// read or write its storage (tmux pane options) or parse its ids;
-// TestSessionBackendBoundary enforces that, so a backend can be removed by
-// deleting its files.
+// The session host is the backend (host_backend.go). Nothing outside the
+// backend's own files may read or write its storage (Session labels and data)
+// or parse its ids; TestSessionBackendBoundary enforces that.
 type sessionBackend interface {
 	// validID is a syntax check on an id this backend could have issued. It
 	// says nothing about presence.
@@ -28,7 +27,7 @@ type sessionBackend interface {
 
 	// listOwned is the authoritative inventory of this daemon's Sessions. A
 	// backend that cannot be read is an error, never an empty inventory;
-	// ErrTmuxServerGone says that nothing is running at all.
+	// ErrSessionHostGone says that nothing is running at all.
 	listOwned() ([]sessionPane, error)
 	// listServices lists the owned Sessions with the facts service discovery
 	// attributes ports by. A backend with nothing running is an empty list.
@@ -37,10 +36,10 @@ type sessionBackend interface {
 	// A backend with nothing running reads as absent.
 	probeOwnership(id string) (present, owned bool, err error)
 	// resolveAbsence is the strict probe behind restart reconciliation: an
-	// unreadable backend is ErrOwnershipProbeUnavailable, except when no
-	// inventory has succeeded in this process (sawInventory false) and nothing
-	// is running, which proves a Session recorded by an earlier run is gone.
-	resolveAbsence(id string, sawInventory bool) (gone bool, err error)
+	// unreadable backend is ErrOwnershipProbeUnavailable, except when this
+	// process never reached it and nothing is running, which proves a Session
+	// recorded by an earlier run is gone.
+	resolveAbsence(id string) (gone bool, err error)
 	// processRoot returns the pid of the process the Session started; an
 	// error when the Session is gone or dead.
 	processRoot(id string) (pid int, err error)
@@ -85,19 +84,10 @@ type sessionBackend interface {
 	inputIO() sessionInputIO
 }
 
-// backendPlacement is a backend's answer to place; only the backend reads it,
-// and backend says which one gave it.
+// backendPlacement is a backend's answer to place; only the backend reads it.
 type backendPlacement struct {
-	group    string
-	newGroup bool
-	backend  string
+	group string
 }
-
-// Backends a placement can name.
-const (
-	backendTmux = ""
-	backendHost = "host"
-)
 
 // backendCreateSpec is everything a backend needs to start a Session.
 type backendCreateSpec struct {
@@ -107,9 +97,9 @@ type backendCreateSpec struct {
 	env     []string // KEY=value entries for the Session's environment
 	labels  sessionLabels
 	// agent says the Session runs an agent (Brain, a Worker, an agent the
-	// person launched). Its plain tmux stays in the daemon's private
-	// TMUX_TMPDIR; a person's own shell keeps their environment and reaches
-	// their own tmux.
+	// person launched). A plain tmux it runs stays in the daemon's private
+	// TMUX_TMPDIR, away from the person's own tmux; a person's own shell keeps
+	// their environment.
 	agent bool
 }
 
@@ -125,11 +115,10 @@ type sessionLabels struct {
 	resourceOwner string
 }
 
-// TerminalTarget is how a Terminal view of a Session is opened: the terminal
-// backend that shows it and the server that backend reaches.
+// TerminalTarget is how a Terminal view of a Session is opened: the session
+// host that runs it.
 type TerminalTarget struct {
-	Backend string // "tmux" or "host", the terminal package's backend names
-	Socket  string
+	Socket string
 }
 
 // TerminalTarget says how to open a Terminal view of a Session this watcher

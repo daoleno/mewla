@@ -29,14 +29,11 @@ func TestPiLiveSubscriptionBindsOwnedTranscriptSnapshotAndDelta(t *testing.T) {
 	owned := filepath.Join(t.TempDir(), "owned.jsonl")
 	writePiServerFixture(t, owned, cwd)
 
-	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	w := watcher.New(time.Second)
+	w.SetPollSources(watcher.PollSources{StartSession: func(watcher.PollStart) (string, error) { return "%1", nil }})
 	launchCommand := "pi --session " + owned
 	workerID, err := w.CreateSession("", watcher.CreateSessionOptions{
 		Detached: true,
@@ -49,7 +46,7 @@ func TestPiLiveSubscriptionBindsOwnedTranscriptSnapshotAndDelta(t *testing.T) {
 	}
 	worker := w.GetWorker(workerID)
 	if worker == nil {
-		t.Fatal("fake tmux session was not registered")
+		t.Fatal("the started Session was not registered")
 	}
 	if worker.Command != launchCommand {
 		t.Fatalf("registered launch command = %q, want %q", worker.Command, launchCommand)
@@ -160,14 +157,11 @@ func TestPiLiveSubscriptionAmbiguityFailsClosed(t *testing.T) {
 	foreign := filepath.Join(t.TempDir(), "foreign.jsonl")
 	writePiServerFixture(t, foreign, filepath.Join(t.TempDir(), "elsewhere"))
 
-	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%2'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	w := watcher.New(time.Second)
+	w.SetPollSources(watcher.PollSources{StartSession: func(watcher.PollStart) (string, error) { return "%2", nil }})
 	workerID, err := w.CreateSession("", watcher.CreateSessionOptions{
 		Detached: true,
 		Cwd:      cwd,
@@ -230,14 +224,11 @@ func TestPiLiveSubscriptionQuotedOwnedPathBinds(t *testing.T) {
 	// apostrophe, so the simple wrap is byte-identical to its output.
 	quoted := "'" + spaced + "'"
 
-	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%3'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	w := watcher.New(time.Second)
+	w.SetPollSources(watcher.PollSources{StartSession: func(watcher.PollStart) (string, error) { return "%3", nil }})
 	launchCommand := "pi --session " + quoted
 	workerID, err := w.CreateSession("", watcher.CreateSessionOptions{
 		Detached: true,
@@ -250,7 +241,7 @@ func TestPiLiveSubscriptionQuotedOwnedPathBinds(t *testing.T) {
 	}
 	worker := w.GetWorker(workerID)
 	if worker == nil {
-		t.Fatal("fake tmux session was not registered")
+		t.Fatal("the started Session was not registered")
 	}
 	if worker.Command != launchCommand {
 		t.Fatalf("registered launch command = %q, want %q", worker.Command, launchCommand)
@@ -316,16 +307,13 @@ func TestPiLiveSubscriptionColdReplayAutoBindsOwnedTranscript(t *testing.T) {
 	// reports startedAt 2026-08-07T10:00:02Z).
 	writePiServerFixtureAt(t, owned, cwd, time.Date(2026, 8, 7, 10, 0, 3, 0, time.UTC))
 
-	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	// Run 1: the daemon creates the session with the injected owned launch
 	// command; markCreatedSession writes no durable binding in this shape.
 	w1 := watcher.New(time.Second)
+	w1.SetPollSources(watcher.PollSources{StartSession: func(watcher.PollStart) (string, error) { return "%1", nil }})
 	launchCommand := "pi --session " + owned
 	workerID, err := w1.CreateSession("", watcher.CreateSessionOptions{
 		Detached: true,
@@ -485,8 +473,8 @@ func waitForWatcherWorker(t *testing.T, w *watcher.Watcher, workerID string) *cl
 // the restart/reopen path end to end: run 1 creates the delegated Pi session
 // with the injected owned --session launch command; the daemon then restarts
 // (a fresh watcher with no in-memory launch record), and the window is
-// re-discovered from tmux where the durable @mewla_worker_pi_session ownership
-// binding survives while the pi process rewrites its argv to bare "pi". The
+// re-discovered from the session host where the durable pi-session ownership
+// label survives while the pi process rewrites its argv to bare "pi". The
 // new subscription must snapshot the exact same transcript history with
 // stable event IDs — never a transcript_not_found empty state.
 func TestPiLiveSubscriptionRebindsOwnedTranscriptAcrossDaemonRestart(t *testing.T) {
@@ -499,15 +487,12 @@ func TestPiLiveSubscriptionRebindsOwnedTranscriptAcrossDaemonRestart(t *testing.
 	owned := filepath.Join(t.TempDir(), "owned.jsonl")
 	writePiServerFixture(t, owned, cwd)
 
-	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	// Run 1: the daemon creates the session with the owned launch command.
 	w1 := watcher.New(time.Second)
+	w1.SetPollSources(watcher.PollSources{StartSession: func(watcher.PollStart) (string, error) { return "%1", nil }})
 	launchCommand := "pi --session " + owned
 	workerID, err := w1.CreateSession("", watcher.CreateSessionOptions{
 		Detached: true,
@@ -520,7 +505,7 @@ func TestPiLiveSubscriptionRebindsOwnedTranscriptAcrossDaemonRestart(t *testing.
 	}
 
 	// Run 2: daemon restart. The fresh watcher has no launch record; the
-	// window comes back from tmux with the durable Pi ownership binding and
+	// Session comes back from the host with the durable Pi ownership binding and
 	// the argv-rewritten pi process (pane command "pi").
 	w2 := watcher.New(10 * time.Millisecond)
 	restore := w2.SetPollSources(watcher.PollSources{
@@ -614,14 +599,11 @@ func TestPiLiveSubscriptionUnavailableLoadNeverErasesHistory(t *testing.T) {
 	writePiServerFixture(t, owned, cwd)
 	hidden := owned + ".hidden"
 
-	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	w := watcher.New(time.Second)
+	w.SetPollSources(watcher.PollSources{StartSession: func(watcher.PollStart) (string, error) { return "%1", nil }})
 	workerID, err := w.CreateSession("", watcher.CreateSessionOptions{
 		Detached: true,
 		Cwd:      cwd,

@@ -7,7 +7,6 @@ type EventType string
 
 const (
 	EventOutput EventType = "output"
-	EventScroll EventType = "scroll"
 	EventExit   EventType = "exit"
 	EventError  EventType = "error"
 	// EventSize: the size the output that follows is drawn for (Size), the
@@ -17,29 +16,19 @@ const (
 )
 
 // Event is emitted by a terminal session.
-type ScrollState struct {
-	AtBottom   bool
-	InCopyMode bool
-	Position   int
-}
-
 type Event struct {
-	Type        EventType
-	Data        string
-	ExitCode    int
-	Err         error
-	ScrollState ScrollState
-	Size        Size
+	Type     EventType
+	Data     string
+	ExitCode int
+	Err      error
+	Size     Size
 }
 
 // OpenOptions configures a terminal session.
 type OpenOptions struct {
 	Cols int
 	Rows int
-	// Socket is the tmux server for the target: the daemon-namespaced server
-	// for Mewla-owned Brain/delegated Sessions, or "" (the user's default
-	// server) for manual Terminal Sessions. The linked view session is
-	// created on the same server so link-window stays server-local.
+	// Socket is the session host that runs the target.
 	Socket string
 }
 
@@ -65,19 +54,6 @@ type Session interface {
 // and must not take the Session's size from another viewer the way typing does.
 type ScrollWriter interface {
 	WriteScroll(data string) error
-}
-
-// Scroller is optionally implemented by sessions that expose native tmux
-// copy-mode scrolling through the attached client's PTY redraw stream.
-type Scroller interface {
-	Scroll(lines int) error
-	CancelScroll() error
-}
-
-// PaneFocuser is optionally implemented by sessions that can focus a pane
-// from terminal cell coordinates.
-type PaneFocuser interface {
-	FocusPane(col, row int) error
 }
 
 // Backend opens terminal sessions for a given target.

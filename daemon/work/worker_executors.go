@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	WorkerRuntimeTmux      = "tmux"
 	WorkerProviderCodex    = "codex"
 	WorkerProviderCursor   = "cursor"
 	WorkerProviderGrok     = "grok"
@@ -600,7 +599,6 @@ type WorkerExecutor struct {
 	Name         string             `json:"name"`
 	Provider     string             `json:"provider"`
 	Command      string             `json:"command,omitempty"`
-	Runtime      string             `json:"runtime"`
 	Capabilities WorkerCapabilities `json:"capabilities"`
 	Host         bool               `json:"host,omitempty"`
 	// ConfigDir is the absolute config directory of a separate sign-in; Command
@@ -685,7 +683,6 @@ func NewWorkerExecutor(name string, executor Executor) WorkerExecutor {
 	if provider == "" {
 		provider = WorkerProviderCustom
 	}
-	runtime := normalizeWorkerRuntime(executor.Runtime)
 	bare, configDir := command, ""
 	if variable := ConfigDirEnv(provider); variable != "" && !strings.Contains(command, variable+"=") {
 		if dir := ExpandConfigDir(executor.ConfigDir); dir != "" {
@@ -698,8 +695,7 @@ func NewWorkerExecutor(name string, executor Executor) WorkerExecutor {
 		Name:         firstNonEmpty(strings.TrimSpace(executor.Name), id),
 		Provider:     provider,
 		Command:      command,
-		Runtime:      runtime,
-		Capabilities: workerCapabilities(provider, runtime),
+		Capabilities: workerCapabilities(provider),
 		ConfigDir:    configDir,
 		BareCommand:  bare,
 	}
@@ -774,19 +770,9 @@ func inferWorkerProviderOne(value string) string {
 	return ""
 }
 
-func normalizeWorkerRuntime(value string) string {
-	value = strings.TrimSpace(strings.ToLower(value))
-	if value == "" {
-		return WorkerRuntimeTmux
-	}
-	return value
-}
-
-func workerCapabilities(provider, runtime string) WorkerCapabilities {
-	caps := WorkerCapabilities{}
-	if runtime == WorkerRuntimeTmux {
-		caps.InteractiveTTY = true
-	}
+func workerCapabilities(provider string) WorkerCapabilities {
+	// Every Session is a terminal in the session host.
+	caps := WorkerCapabilities{InteractiveTTY: true}
 	switch provider {
 	case WorkerProviderCodex:
 		caps.NativeThreads = true

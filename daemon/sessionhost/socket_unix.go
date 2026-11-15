@@ -51,7 +51,7 @@ func socketDir() string {
 
 // EnsureSocketDir makes the socket's directory 0700 when it is missing and
 // requires it to be this user's and private: a directory anyone else could
-// have prepared is refused, as tmux does.
+// have prepared is refused.
 func EnsureSocketDir(socketPath string) error {
 	if err := ensurePrivateDir(filepath.Dir(socketPath), os.Getuid()); err != nil {
 		return fmt.Errorf("session host socket directory: %w", err)

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// SessionRunner is the tmux side of starting Calendar-owned Work.
+// SessionRunner is the Session side of starting Calendar-owned Work.
 type SessionRunner interface {
 	Spawn(role, cwd, command string) (string, error)
 	SendWhenReady(sessionID, command, text string) error

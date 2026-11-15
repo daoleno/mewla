@@ -297,8 +297,8 @@ func (rt daemonRuntime) restartWindows(stateDir string, daemon runningDaemon, wa
 }
 
 func (rt daemonRuntime) restartLinux(stateDir string, daemon runningDaemon, want string) error {
-	// KillMode=process: only the daemon stops; tmux, the session host and
-	// Workers keep running.
+	// KillMode=process: only the daemon stops; the session host and its
+	// Sessions keep running.
 	if output, err := rt.runner.run("systemctl", "--user", "restart", bootServiceName); err != nil {
 		return fmt.Errorf("systemctl --user restart %s: %v: %s", bootServiceName, err, strings.TrimSpace(string(output)))
 	}

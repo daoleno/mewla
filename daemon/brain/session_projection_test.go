@@ -215,7 +215,7 @@ func TestSessionProjectionDoesNotInferAbsenceFromUnreadableInventory(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	fw := &fakeWatcher{probeErr: errors.New("tmux inventory temporarily unavailable")}
+	fw := &fakeWatcher{probeErr: errors.New("session host inventory temporarily unavailable")}
 	service := NewService(store, fw, nil)
 	projection, err := service.SessionProjection("missing-from-snapshot")
 	if err != nil || projection.Present || projection.AbsenceConfirmed {

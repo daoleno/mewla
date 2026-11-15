@@ -43,7 +43,7 @@ func TestHostSessionPlainTmuxNeverReachesTheDefaultServer(t *testing.T) {
 		os.RemoveAll(own)
 	})
 	w := New(50 * time.Millisecond)
-	w.SetTmuxServer(filepath.Join(t.TempDir(), "no-tmux"), private)
+	w.SetPrivateTmuxDir(private)
 	w.SetSessionHost(SessionHostConfig{SocketPath: h.socket, Executable: "/nonexistent/mewla", StateDir: t.TempDir(), Version: "watcher-test"})
 	path := "PATH=" + filepath.Dir(tmux) + ":/usr/bin:/bin"
 	result := func(cwd string) string {

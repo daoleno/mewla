@@ -131,7 +131,7 @@ type TurnSnapshot struct {
 	ProcessIdentity string
 	// TranscriptBinding is the provider-native transcript identity recorded at
 	// admission (Pi owned session flag/path). It is restored on rediscovery so
-	// provider evidence survives daemon restart; the tmux option is only an
+	// provider evidence survives daemon restart; the Session label is only an
 	// advisory cache.
 	TranscriptBinding TranscriptBinding
 	// LeaseDeadline is the turn's own expected-next-check time: minted fresh
@@ -260,7 +260,7 @@ type TurnProgressResult struct {
 
 // InputAdmissionState is the durable state of one delegated input
 // transaction. Pending submissions are owned exclusively by the Brain Turn
-// Ledger; the tmux receipt is only a transport replay fence.
+// Ledger; the Session's input receipt is only a transport replay fence.
 type InputAdmissionState string
 
 const (
@@ -364,12 +364,12 @@ type AdmittedTurn struct {
 	// TranscriptBinding is the provider-native transcript identity known at
 	// admission time (currently the Mewla-owned Pi session flag/path from the
 	// launch command). It is persisted with the ledger so provider evidence
-	// survives daemon restart without tmux option state.
+	// survives daemon restart without Session label state.
 	TranscriptBinding TranscriptBinding
 }
 
 // TranscriptBinding is the provider-native transcript identity recorded at
-// admission. The equivalent tmux window option (@mewla_worker_pi_session) is
+// admission. The equivalent pi-session Session label is
 // only an advisory cache for sessions without a ledger record.
 type TranscriptBinding struct {
 	Provider string `json:"provider,omitempty"`

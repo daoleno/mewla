@@ -26,7 +26,6 @@ type fakeSessionInputIO struct {
 	paneCalls           []string
 	postLedgerPaneCalls []string
 	recordingPostLedger bool
-	buffers             map[string]string
 	loadedPayloads      []string
 	queues              [][]string
 	submissions         []string
@@ -106,7 +105,6 @@ func newFakeSessionInputIO() *fakeSessionInputIO {
 			paneID:     "%9",
 			generation: "generation-1",
 		},
-		buffers:     make(map[string]string),
 		ledger:      emptySessionInputReceiptLedger(),
 		writeErrors: make(map[int]error),
 		readErrors:  make(map[int]error),
@@ -132,73 +130,59 @@ func (io *fakeSessionInputIO) pane(socket, target string) sessionInputPane {
 	return io.paneValue
 }
 
-func (io *fakeSessionInputIO) loadBuffer(socket, buffer, payload string) error {
+// submitPaste records the input script the session host backend would run
+// (submitSteps), one string per step: a key's name, "sleep N.NNN", "type:"
+// and the bytes typed, or "paste".
+func (io *fakeSessionInputIO) submitPaste(
+	socket, paneID, payload string,
+	adapter sessionInputProvider,
+	beforeStart func() error,
+) (bool, error) {
 	io.mu.Lock()
 	io.sockets = append(io.sockets, socket)
-	io.mu.Unlock()
-	io.mu.Lock()
-	io.buffers[buffer] = payload
 	io.loadedPayloads = append(io.loadedPayloads, payload)
 	afterLoad := io.afterLoad
 	io.mu.Unlock()
 	if afterLoad != nil {
 		afterLoad()
 	}
-	return nil
-}
-
-func (io *fakeSessionInputIO) deleteBuffer(socket, buffer string) {
-	io.mu.Lock()
-	delete(io.buffers, buffer)
-	io.mu.Unlock()
-}
-
-func (io *fakeSessionInputIO) runQueue(
-	socket string,
-	args []string,
-	beforeStart func() error,
-) (bool, error) {
 	if beforeStart != nil {
 		if err := beforeStart(); err != nil {
 			return false, err
 		}
 	}
+	var queue []string
+	for _, step := range submitSteps(payload, adapter) {
+		switch {
+		case step.Key != "":
+			queue = append(queue, step.Key)
+		case step.SleepMS > 0:
+			queue = append(queue, fmt.Sprintf("sleep %.3f", float64(step.SleepMS)/1000))
+		case len(step.Bytes) > 0:
+			queue = append(queue, "type:"+string(step.Bytes))
+		case step.Paste != "":
+			queue = append(queue, "paste")
+		}
+	}
 	io.mu.Lock()
 	io.queueSockets = append(io.queueSockets, socket)
-	io.mu.Unlock()
-	io.mu.Lock()
 	io.activeQueues++
 	if io.activeQueues > io.maxQueues {
 		io.maxQueues = io.activeQueues
 	}
-	copied := append([]string(nil), args...)
-	io.queues = append(io.queues, copied)
+	io.queues = append(io.queues, queue)
 	io.operations = append(io.operations, "provider_queue")
-	buffer := queueArgumentAfter(args, "-b")
-	submission := io.buffers[buffer]
-	if indexOf(args, "-r") < 0 {
-		// tmux paste-buffer replaces LF with CR unless -r is present. In an
-		// interactive composer those bytes are submit keys, not payload bytes.
-		submission = strings.ReplaceAll(submission, "\n", "\r")
-	}
-	io.submissions = append(io.submissions, submission)
+	io.submissions = append(io.submissions, payload)
 	started, err := io.runStarted, io.runErr
 	if err == nil || started {
 		io.startedQueues++
 	}
 	io.activeQueues--
 	io.mu.Unlock()
-	return started, err
-}
-
-// submitPaste is the tmux paste path over the fake's buffers and queue, so the
-// recorded queues are exactly what the tmux backend would run.
-func (io *fakeSessionInputIO) submitPaste(
-	socket, paneID, payload string,
-	adapter sessionInputProvider,
-	beforeStart func() error,
-) (bool, error) {
-	return submitTmuxPaste(io, socket, paneID, payload, adapter, beforeStart)
+	if err != nil && !started {
+		return false, err
+	}
+	return true, err
 }
 
 func (io *fakeSessionInputIO) receiptLedger(socket, target string) (sessionInputReceiptLedger, error) {
@@ -235,15 +219,6 @@ func cloneSessionInputReceiptLedger(ledger sessionInputReceiptLedger) sessionInp
 		SchemaVersion: ledger.SchemaVersion,
 		Entries:       append([]sessionInputReceiptEntry(nil), ledger.Entries...),
 	}
-}
-
-func queueArgumentAfter(args []string, flag string) string {
-	for index := range args {
-		if args[index] == flag && index+1 < len(args) {
-			return args[index+1]
-		}
-	}
-	return ""
 }
 
 func indexOf(values []string, wanted string) int {
@@ -774,7 +749,7 @@ func TestSessionInputProviderQueueUsesCanonicalSubmitDelay(t *testing.T) {
 			if strings.HasPrefix(test.command, "cursor-agent") {
 				clearIndex := indexOf(io.queues[0], "C-u")
 				prepareIndex := indexOf(io.queues[0], "sleep 0.400")
-				pasteIndex := indexOf(io.queues[0], "paste-buffer")
+				pasteIndex := indexOf(io.queues[0], "paste")
 				if clearIndex < 0 || prepareIndex <= clearIndex || pasteIndex <= prepareIndex {
 					t.Fatalf("Cursor clear/prepare/paste order = %q", io.queues[0])
 				}
@@ -785,15 +760,13 @@ func TestSessionInputProviderQueueUsesCanonicalSubmitDelay(t *testing.T) {
 
 func assertSingleSubmitQueue(t *testing.T, queue []string, submitKey string) {
 	t.Helper()
-	joined := strings.Join(queue, "\x00")
-	for _, required := range []string{"send-keys\x00-t\x00%9\x00C-u", "paste-buffer", "delete-buffer"} {
-		if !strings.Contains(joined, required) {
-			t.Fatalf("queue %q missing %q", queue, required)
-		}
+	paste := indexOf(queue, "paste")
+	if indexOf(queue, "C-u") < 0 || paste < 0 {
+		t.Fatalf("queue %q does not clear the draft and paste", queue)
 	}
 	count := 0
-	for index, value := range queue {
-		if value == submitKey && index > 0 && queue[index-1] == "%9" {
+	for _, value := range queue[paste+1:] {
+		if value == submitKey {
 			count++
 		}
 	}
@@ -847,145 +820,6 @@ func TestSessionInputOwnedPaneRemovalIsDefinitelyNotSubmitted(t *testing.T) {
 	}
 }
 
-func TestSessionInputPaneGenerationIsPaneLifetimeOnly(t *testing.T) {
-	stable := sessionInputPaneGeneration("%1")
-	if stable == "" {
-		t.Fatal("pane generation must be non-empty for a live pane id")
-	}
-	if got := sessionInputPaneGeneration("%1"); got != stable {
-		t.Fatalf("pane generation must be deterministic: %s vs %s", stable, got)
-	}
-	want := fmt.Sprintf("%x", sha256.Sum256([]byte("%1")))
-	if stable != want {
-		t.Fatalf("pane generation must be sha256(pane_id) only: got %s want %s", stable, want)
-	}
-	if sessionInputPaneGeneration("%2") == stable {
-		t.Fatal("pane_id replacement must change generation")
-	}
-	if sessionInputPaneGeneration("") != "" {
-		t.Fatal("empty pane id must not invent a generation")
-	}
-
-	// Direct invariant: launch metadata (pane_pid / pane_start_command) cannot
-	// enter the digest because the generation owner accepts only pane_id.
-	// A pid/start_command-inclusive legacy digest must therefore differ.
-	legacyLaunch := sha256.Sum256([]byte(strings.Join([]string{
-		"%1", "12345", "cursor-agent --force",
-	}, "\x00")))
-	if stable == fmt.Sprintf("%x", legacyLaunch[:]) {
-		t.Fatal("pane-lifetime generation must ignore pane_pid and pane_start_command")
-	}
-
-	// Historical App false positive: session_id / session_created differ across
-	// link-window views for the same pane_id.
-	legacySessionA := sha256.Sum256([]byte(strings.Join([]string{
-		"$1", "100", "@1", "%1",
-	}, "\x00")))
-	legacySessionB := sha256.Sum256([]byte(strings.Join([]string{
-		"$2", "200", "@1", "%1",
-	}, "\x00")))
-	if fmt.Sprintf("%x", legacySessionA[:]) == fmt.Sprintf("%x", legacySessionB[:]) {
-		t.Fatal("precondition: session-inclusive digests must differ across linked views")
-	}
-	if stable == fmt.Sprintf("%x", legacySessionA[:]) {
-		t.Fatal("pane-lifetime generation must not equal session-inclusive digest")
-	}
-}
-
-func TestSessionInputLinkedViewPostMarkerPaneIDRereadAllowsExactOnceSubmit(t *testing.T) {
-	const (
-		sessionTarget = "agent:@1"
-		paneID        = "%42"
-		receipt       = "receipt-linked-post-marker"
-		payload       = "hi from linked view"
-	)
-	generation := sessionInputPaneGeneration(paneID)
-
-	// Baseline session target vs post-marker %pane_id diverge on session fields
-	// that a session-inclusive digest would hash, while sharing pane_id/generation.
-	legacySessionView := sha256.Sum256([]byte(strings.Join([]string{
-		"$1", "100", "@1", paneID,
-	}, "\x00")))
-	legacyLinkedView := sha256.Sum256([]byte(strings.Join([]string{
-		"$2", "200", "@1", paneID,
-	}, "\x00")))
-	if fmt.Sprintf("%x", legacySessionView[:]) == fmt.Sprintf("%x", legacyLinkedView[:]) {
-		t.Fatal("precondition: linked-view session fields must change session-inclusive digest")
-	}
-	if generation == fmt.Sprintf("%x", legacySessionView[:]) ||
-		generation == fmt.Sprintf("%x", legacyLinkedView[:]) {
-		t.Fatal("pane_id-only generation must diverge from session-inclusive digests")
-	}
-
-	io := newFakeSessionInputIO()
-	io.paneValue = sessionInputPane{
-		alive:      true,
-		paneID:     paneID,
-		generation: generation,
-	}
-	linked := sessionInputPane{
-		alive:      true,
-		paneID:     paneID,
-		generation: generation,
-	}
-	io.paneIDView = &linked
-	var afterLedgerHookRan bool
-	io.afterLedgerWrite = func() {
-		afterLedgerHookRan = true
-	}
-
-	owner := newSessionInputOwner(io)
-	identity := testSessionInputIdentity("cursor-agent")
-	result, err := owner.submit(
-		sessionTarget, identity, fixedSessionInputResolver(identity),
-		identity.Command, payload, receipt,
-	)
-	if err != nil || result.Outcome != InputAccepted {
-		t.Fatalf("post-marker linked-view submit = (%+v, %v)", result, err)
-	}
-	if !afterLedgerHookRan {
-		t.Fatal("after-ledger hook never ran; persistReceiptLedger was not exercised")
-	}
-	if len(io.postLedgerPaneCalls) == 0 {
-		t.Fatal("no pane() calls after persistReceiptLedger")
-	}
-	foundPostMarker := false
-	for _, target := range io.postLedgerPaneCalls {
-		if target == paneID {
-			foundPostMarker = true
-			break
-		}
-	}
-	if !foundPostMarker {
-		t.Fatalf("post-ledger pane calls=%v, want pane(%s) after persistReceiptLedger",
-			io.postLedgerPaneCalls, paneID)
-	}
-	foundSessionBaseline := false
-	for _, target := range io.paneCalls {
-		if target == sessionTarget {
-			foundSessionBaseline = true
-			break
-		}
-	}
-	if !foundSessionBaseline {
-		t.Fatalf("pane calls=%v, want baseline pane(%s)", io.paneCalls, sessionTarget)
-	}
-	if len(io.queues) != 1 {
-		t.Fatalf("queues=%d, want exact-once submit", len(io.queues))
-	}
-
-	dup, err := owner.submit(
-		sessionTarget, identity, fixedSessionInputResolver(identity),
-		identity.Command, payload, receipt,
-	)
-	if err != nil || dup.Outcome != InputAccepted || !dup.Duplicate {
-		t.Fatalf("same-receipt duplicate = (%+v, %v), want accepted duplicate", dup, err)
-	}
-	if len(io.queues) != 1 {
-		t.Fatalf("duplicate same receipt replayed provider queue: queues=%d", len(io.queues))
-	}
-}
-
 func TestSessionInputTargetIdentityChangeIsDefinitelyNotSubmitted(t *testing.T) {
 	io := newFakeSessionInputIO()
 	owner := newSessionInputOwner(io)
@@ -1018,7 +852,7 @@ func TestSessionInputChatExplicitlyReplacesManualDraft(t *testing.T) {
 	}
 	queue := io.queues[0]
 	clearIndex := indexOf(queue, "C-u")
-	pasteIndex := indexOf(queue, "paste-buffer")
+	pasteIndex := indexOf(queue, "paste")
 	if clearIndex < 0 || pasteIndex < 0 || clearIndex >= pasteIndex {
 		t.Fatalf("manual draft replacement order = %q", queue)
 	}
@@ -2118,7 +1952,7 @@ func TestSessionInputCursorFollowUpIsNotAcceptedWithoutProviderStart(t *testing.
 
 func TestSessionInputDefiniteQueueNonStartRollsBackAndIsRetryable(t *testing.T) {
 	io := newFakeSessionInputIO()
-	io.runErr = errors.New("tmux queue did not start")
+	io.runErr = errors.New("input queue did not start")
 	io.runStarted = false
 	ledger := newFakeTurnLedger()
 	identity := testSessionInputIdentity("cursor-agent --force")
@@ -2164,7 +1998,7 @@ func TestSessionInputDefiniteQueueNonStartRollsBackAndIsRetryable(t *testing.T) 
 
 func TestSessionInputAbortPersistenceFailureIsAmbiguousWithoutProviderMutation(t *testing.T) {
 	io := newFakeSessionInputIO()
-	io.runErr = errors.New("tmux queue did not start")
+	io.runErr = errors.New("input queue did not start")
 	io.runStarted = false
 	ledger := newFakeTurnLedger()
 	ledger.abortErr = errors.New("abort persistence failed")
@@ -2230,7 +2064,7 @@ func TestSessionInputPostMutationResolveFailureReconcilesAfterRestartWithoutRepl
 	}
 }
 
-func TestSessionInputPreparePersistenceFailureNeverTouchesTmuxOrProvider(t *testing.T) {
+func TestSessionInputPreparePersistenceFailureNeverTouchesSessionOrProvider(t *testing.T) {
 	io := newFakeSessionInputIO()
 	ledger := newFakeTurnLedger()
 	ledger.prepareErr = errors.New("prepare persistence failed")
@@ -2366,7 +2200,7 @@ func TestSessionInputTransportReceiptWithoutCanonicalSubmissionIsAmbiguousAndNot
 	); err != nil {
 		t.Fatal(err)
 	}
-	// The tmux receipt cannot decide canonical ownership without the Brain
+	// The input receipt cannot decide canonical ownership without the Brain
 	// submission row, even if transport recorded Accepted.
 	restarted := newSessionInputOwner(io)
 	restarted.ledger = newFakeTurnLedger()
@@ -2785,7 +2619,7 @@ func TestSessionInputAcceptanceWriteFailureLeavesDurableAmbiguityAcrossRestart(t
 	}
 }
 
-func TestDelegatedAcceptanceDoesNotDependOnTmuxReceiptOutcome(t *testing.T) {
+func TestDelegatedAcceptanceDoesNotDependOnInputReceiptOutcome(t *testing.T) {
 	io := newFakeSessionInputIO()
 	io.writeErrors[2] = errors.New("accepted transport receipt write failed")
 	ledger := newFakeTurnLedger()
@@ -2800,7 +2634,7 @@ func TestDelegatedAcceptanceDoesNotDependOnTmuxReceiptOutcome(t *testing.T) {
 		t.Fatalf("Brain-resolved acceptance = (%+v, %v)", result, err)
 	}
 	if entry, found := io.ledger.entry(turn.ID); !found || entry.Outcome != InputAmbiguous {
-		t.Fatalf("tmux failure precondition = %+v found=%v", entry, found)
+		t.Fatalf("input failure precondition = %+v found=%v", entry, found)
 	}
 	restarted := newLedgerSessionInputOwner(io, ledger)
 	duplicate, err := restarted.submitDelegated(
@@ -2814,7 +2648,7 @@ func TestDelegatedAcceptanceDoesNotDependOnTmuxReceiptOutcome(t *testing.T) {
 
 func TestSessionInputRollbackReadbackFailureRemainsSafeToRetryAfterRestart(t *testing.T) {
 	io := newFakeSessionInputIO()
-	io.runErr = errors.New("tmux queue did not start")
+	io.runErr = errors.New("input queue did not start")
 	io.readErrors[3] = errors.New("rollback readback unavailable")
 	identity := testSessionInputIdentity("claude")
 	resolver := fixedSessionInputResolver(identity)
@@ -3112,7 +2946,7 @@ func TestDelegatedReceiptReplayRequiresConfirmedTransportAcceptance(t *testing.T
 	t.Run("started queue failure retry stays unknown without replay", func(t *testing.T) {
 		io := newFakeSessionInputIO()
 		io.runStarted = true
-		io.runErr = errors.New("tmux queue failed after start")
+		io.runErr = errors.New("input queue failed after start")
 		ledger := newFakeTurnLedger()
 		owner := newLedgerSessionInputOwner(io, ledger)
 		first, err := owner.submitDelegated(

@@ -655,18 +655,6 @@ func (a *controlApp) handleWorkerList() control.Response {
 		}
 	}
 	workers := visibleControlWorkers(a.watcher.Workers())
-	if targets, ok := a.watcher.(interface {
-		TerminalTarget(string) (watcher.TerminalTarget, bool)
-	}); ok {
-		for i := range workers {
-			if target, owned := targets.TerminalTarget(workers[i].ID); owned {
-				workers[i].Terminal = target.Backend
-				if target.Backend == "tmux" {
-					workers[i].TmuxSocket = target.Socket
-				}
-			}
-		}
-	}
 	sort.Slice(workers, func(i, j int) bool {
 		return workers[i].UpdatedAt.After(workers[j].UpdatedAt)
 	})
@@ -926,7 +914,7 @@ func spawnAdmissionConfirmation(pending bool) string {
 
 // keepSpawnAdmissionPending owns only the initial spawn response boundary.
 // Once the non-replayable input owner reports an ambiguous mutation, a live
-// Mewla-owned tmux Session means the canonical pending submission is still the
+// Mewla-owned Session means the canonical pending submission is still the
 // truthful result. Exact turn-scoped progress or the existing provider/liveness
 // reconciliation paths will settle that transaction; this owner must neither
 // report a definitive launch failure nor replay the prompt. Proved absence and
@@ -1272,7 +1260,7 @@ func (a *controlApp) handleWorkerSend(req control.Request) control.Response {
 		return control.ErrorResponse("missing_text", "Text is required.")
 	}
 	if worker != nil && !a.watcher.HasSession(workerID) {
-		return control.ErrorResponse("worker_session_unavailable", "Worker is listed but the tmux target is no longer available. Refresh the worker list and spawn a new session if needed.")
+		return control.ErrorResponse("worker_session_unavailable", "Worker is listed but its Session is no longer available. Refresh the worker list and spawn a new session if needed.")
 	}
 	if open := a.openPrompt(workerID, worker); open != nil {
 		return control.ErrorResponse("prompt_open", fmt.Sprintf("%s is waiting on prompt %s; answer it with: %s", workerID, open.ID, watcher.AnswerCommand(workerID, open)))
@@ -1408,7 +1396,7 @@ func (a *controlApp) handleWorkerCapture(req control.Request) control.Response {
 		return control.ErrorResponse(workerOwnershipErrorCode(ownershipErr), ownershipErr.Error())
 	}
 	if worker := a.watcher.GetWorker(workerID); worker != nil && !a.watcher.HasSession(workerID) {
-		return control.ErrorResponse("worker_session_unavailable", "Worker is listed but the tmux target is no longer available. Refresh the worker list and spawn a new session if needed.")
+		return control.ErrorResponse("worker_session_unavailable", "Worker is listed but its Session is no longer available. Refresh the worker list and spawn a new session if needed.")
 	}
 	text, err := a.watcher.CapturePaneContent(workerID)
 	if err != nil {
@@ -1740,7 +1728,7 @@ func setBrainHostExecutor(service *brain.Service, executorID string, wait time.D
 // opening: input not ready, its process not yet the agent, a receipt from the
 // try before.
 func brainHostStartTransient(err error) bool {
-	if errors.Is(err, watcher.ErrWorkerInputNotReady) || errors.Is(err, watcher.ErrOwnershipProbeUnavailable) || errors.Is(err, watcher.ErrUnownedTmuxTarget) {
+	if errors.Is(err, watcher.ErrWorkerInputNotReady) || errors.Is(err, watcher.ErrOwnershipProbeUnavailable) || errors.Is(err, watcher.ErrUnownedSession) {
 		return true
 	}
 	text := err.Error()
@@ -1918,7 +1906,6 @@ func controlExecutor(executor work.WorkerExecutor) control.Executor {
 		Name:     executor.Name,
 		Provider: executor.Provider,
 		Command:  executor.Command,
-		Runtime:  executor.Runtime,
 		Capabilities: control.ExecutorCapabilities{
 			InteractiveTTY:   executor.Capabilities.InteractiveTTY,
 			StructuredEvents: executor.Capabilities.StructuredEvents,

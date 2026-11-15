@@ -59,7 +59,6 @@ import (
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
-	"github.com/daoleno/mewla/daemon/tmuxsocket"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -254,22 +253,18 @@ func isSetupUserError(err error) bool {
 		errors.Is(err, setup.ErrIncomplete)
 }
 
-// daemonTmuxRuntime returns the user-visible tmux server selected at daemon
-// startup and the daemon-namespaced scratch directory used to contain plain
-// tmux commands launched inside provider panes. An inherited TMUX value binds
-// Mewla to that exact caller server; an empty value selects the Unix user's
-// ordinary default server. The durable daemon identity namespaces only the
-// provider scratch, never a private host server.
-func daemonTmuxRuntime(home, daemonID, tmuxEnv string) (socketPath, scratchDir string, err error) {
+// agentTmuxDir is the private TMUX_TMPDIR of agent Sessions, namespaced by
+// the daemon's identity: a plain tmux an agent runs keeps its server there,
+// away from the person's own tmux (see watcher.SetPrivateTmuxDir).
+func agentTmuxDir(home, daemonID string) (string, error) {
 	daemonID = strings.TrimSpace(daemonID)
 	if daemonID == "" {
-		return "", "", fmt.Errorf("empty daemon identity")
+		return "", fmt.Errorf("empty daemon identity")
 	}
 	if len(daemonID) > 24 {
 		daemonID = daemonID[:24]
 	}
-	return tmuxSocketFromEnvironment(tmuxEnv),
-		filepath.Join(statedir.Default(home), "run", "tmux-scratch", daemonID), nil
+	return filepath.Join(statedir.Default(home), "run", "tmux-scratch", daemonID), nil
 }
 
 // errDaemonOwned: another daemon holds this state directory's lifecycle lock.
@@ -333,7 +328,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("resolve brain root: %w", err)
 	}
 	// The Brain root is shared across --state-dir values. Lock that root too:
-	// a test/secondary daemon on another tmux socket must not replace its host.
+	// a test/secondary daemon on another state dir must not replace its host.
 	brainOwner, acquired, err := control.TryAcquireLifecycleLock(brainRoot)
 	if err != nil {
 		return fmt.Errorf("lock Brain root: %w", err)
@@ -369,29 +364,18 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w := watcher.New(500 * time.Millisecond)
 	w.ConfigureDelegatedResources(authManager.DaemonID())
 	w.SetManagedServicesPath(watcher.ManagedServicesPathForStateDir(authManager.StorageDir()))
-	// Bind every Mewla-owned Brain and delegated Session to the server visible to
-	// the daemon's caller. When launched inside tmux this is the exact inherited
-	// server socket; otherwise empty socket semantics select the user's ordinary
-	// default server. Provider-internal plain tmux remains contained by the
-	// daemon-namespaced scratch directory and the launch-shell TMUX scrub.
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("resolve home for daemon tmux runtime: %w", err)
+		return fmt.Errorf("resolve home: %w", err)
 	}
-	tmuxSocketPath, tmuxScratchDir, err := daemonTmuxRuntime(home, authManager.DaemonID(), os.Getenv("TMUX"))
+	agentTmux, err := agentTmuxDir(home, authManager.DaemonID())
 	if err != nil {
-		return fmt.Errorf("daemon tmux runtime: %w", err)
+		return fmt.Errorf("agent scratch: %w", err)
 	}
-	if err := os.MkdirAll(tmuxScratchDir, 0o700); err != nil {
-		return fmt.Errorf("create daemon tmux scratch directory: %w", err)
+	if err := os.MkdirAll(agentTmux, 0o700); err != nil {
+		return fmt.Errorf("create agent scratch directory: %w", err)
 	}
-	w.SetTmuxServer(tmuxSocketPath, tmuxScratchDir)
-	// Mewla before 0.3 put a `tmux` shim first on PATH in its panes; it
-	// re-entered a `mewla tmux-guard` command that no longer exists. Without
-	// the shim a plain `tmux` in those panes is the real tmux again.
-	if err := os.RemoveAll(filepath.Join(stateDir, "tmux-guard")); err != nil {
-		log.Printf("remove the old tmux shim: %v", err)
-	}
+	w.SetPrivateTmuxDir(agentTmux)
 	configureSessionHost(w, stateDir)
 	w.SetActivityProbe(classifier.DefaultActivityProbe())
 	adapters := agentevents.NewRegistry()
@@ -442,8 +426,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize brain store: %w", err)
 	}
-	// Sessions an earlier Mewla started in tmux move to the session host.
-	go moveSessionsFromTmux(ctx, w, brainStore.SessionConversation)
 	// Brain hears of the Friends playbook only while Friends is on.
 	brainStore.GateSeed("playbooks/friends.md", func() bool {
 		_, on := (&friends.Local{StateDir: authManager.StorageDir()}).Enabled()
@@ -633,7 +615,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	brainService.SetSessionRouteLifecycle(profileOwner)
 
 	pusher := push.New()
-	launcher := work.NewLauncher(work.TmuxRunner{
+	launcher := work.NewLauncher(work.WatcherRunner{
 		Watcher:          w,
 		Env:              progressEnvForStateDir(authManager.StorageDir()),
 		Profiles:         profileOwner,
@@ -1347,7 +1329,7 @@ func runUpdateCommand(args []string, stderr io.Writer) error {
 	if bootGOOS == "darwin" {
 		// The boot daemon runs its own copy inside Mewla.app.
 		if _, ok := bootLaunchdReinstallArgs(); ok {
-			fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Restarting Mewla now to apply it: Mewla.app is replaced and its background service restarts; tmux and Worker sessions keep running.\n", Version, candidate.Version)
+			fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Restarting Mewla now to apply it: Mewla.app is replaced and its background service restarts; Sessions keep running.\n", Version, candidate.Version)
 			_, err := bootLaunchdApplyUpdate(executable, os.Stdout, stderr)
 			return err
 		}
@@ -1661,7 +1643,7 @@ func printWorkerUsage(w io.Writer) {
 	fmt.Fprintln(w, "  mewla worker close -id mewla-worker-review-docs:@1 --force")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Retained services:")
-	fmt.Fprintln(w, "  A service kept running outside tmux (for example a user systemd unit)")
+	fmt.Fprintln(w, "  A service kept running outside a Session (for example a user systemd unit)")
 	fmt.Fprintln(w, "  stays invisible until adopted: mewla service register -unit NAME.service")
 	fmt.Fprintln(w, "  -name \"Display name\" -port PORT. See mewla service --help and docs/sessions.md#services.")
 }
@@ -1779,49 +1761,12 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	return cfg, req, nil
 }
 
-// tmuxSocketFromEnvironment returns the server socket encoded in a TMUX
-// environment value. Empty means ordinary default-server semantics.
-func tmuxSocketFromEnvironment(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return ""
-	}
-	// TMUX is socket,pid,index. Parse from the right because an explicit -S
-	// socket path may itself contain commas; the inherited server binding must
-	// remain byte-for-byte exact.
-	lastComma := strings.LastIndexByte(value, ',')
-	if lastComma < 0 {
-		return value
-	}
-	previousComma := strings.LastIndexByte(value[:lastComma], ',')
-	if previousComma < 0 {
-		return value
-	}
-	return value[:previousComma]
-}
-
-// tmuxClientSocket returns the exact tmux server of the caller's own pane, or
-// "" when the caller is outside tmux and ordinary default-server semantics
-// apply. Pane identity hints and daemon startup share the same parser.
-func tmuxClientSocket() string {
-	return tmuxSocketFromEnvironment(os.Getenv("TMUX"))
-}
-
 func currentWorkerID() string {
 	if workerID := strings.TrimSpace(os.Getenv("MEWLA_WORKER_ID")); workerID != "" {
 		return workerID
 	}
-	pane := strings.TrimSpace(os.Getenv("TMUX_PANE"))
-	if pane == "" {
-		return ""
-	}
-	// -N keeps this read-only query from starting a server when the caller's
-	// server is gone; a missing server yields no worker ID.
-	args := append(tmuxsocket.Args(tmuxClientSocket()), "display-message", "-p", "-t", pane, "#{pane_id}")
-	out, err := exec.Command("tmux", args...).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
+	// The session host names every Session it runs.
+	return strings.TrimSpace(os.Getenv("MEWLA_SESSION_ID"))
 }
 
 func runWorkerSend(args []string, stderr io.Writer) error {
@@ -2571,12 +2516,12 @@ func writeControlResponse(w io.Writer, resp control.Response, asJSON bool) error
 			if executor.Host || (resp.Executor != nil && resp.Executor.ID == executor.ID) {
 				marker = "H "
 			}
-			fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\n", marker, executor.ID, executor.Provider, executor.Runtime, executor.Command)
+			fmt.Fprintf(w, "%s%s\t%s\t%s\n", marker, executor.ID, executor.Provider, executor.Command)
 		}
 		return nil
 	}
 	if resp.Executor != nil {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", resp.Executor.ID, resp.Executor.Provider, resp.Executor.Runtime, resp.Executor.Command)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", resp.Executor.ID, resp.Executor.Provider, resp.Executor.Command)
 		return nil
 	}
 	for _, worker := range resp.Workers {

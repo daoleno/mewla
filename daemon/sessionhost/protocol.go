@@ -128,8 +128,7 @@ type CreateParams struct {
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
-// A Session's labels and data live and die with it, like tmux pane options:
-// they outlast the program's exit and go with remove. An in-place upgrade
+// A Session's labels and data live and die with it: they outlast the program's exit and go with remove. An in-place upgrade
 // (the snapshot) must carry both, or a re-sent input would not find the
 // receipt that says it already landed.
 
@@ -159,7 +158,7 @@ type InputStep struct {
 	// Paste is written as one paste, inside bracketed-paste markers when the
 	// program asked for them, with line feeds kept as they are.
 	Paste string `json:"paste,omitempty"`
-	// Key is one key press in tmux's notation ("Enter", "C-u", "BTab", "Up",
+	// Key is one key press in Mewla's notation ("Enter", "C-u", "BTab", "Up",
 	// "q"), encoded the way a terminal would for the modes the program set.
 	Key string `json:"key,omitempty"`
 	// SleepMS waits before the next step, with the script still holding the
@@ -345,7 +344,7 @@ type Info struct {
 	ExitedAt     time.Time `json:"exited_at,omitzero"`
 	Title        string    `json:"title,omitempty"`
 	Cwd          string    `json:"cwd,omitempty"`
-	// Command names the foreground process, as tmux's pane_current_command.
+	// Command names the foreground process.
 	Command string            `json:"command,omitempty"`
 	Status  []ProgramStatus   `json:"status,omitempty"`
 	Labels  map[string]string `json:"labels,omitempty"`

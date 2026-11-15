@@ -16,12 +16,10 @@ import (
 )
 
 // The host runs in a systemd unit of its own, not in the cgroup of whatever
-// started the daemon (a terminal's scope, a tmux pane's scope, the daemon's
-// service). When the kernel kills one process of a cgroup for lack of memory,
+// started the daemon (a terminal's scope, the daemon's service). When the kernel kills one process of a cgroup for lack of memory,
 // systemd's default OOMPolicy=stop then stops the whole unit and ends every
 // process in it: the host and every Session with it, on 2026-11-10 because
-// one Chrome helper of one agent was killed. With tmux each pane was a unit
-// of its own, so one pane's memory trouble ended one pane.
+// one Chrome helper of one agent was killed.
 //
 // Here the policy is "continue": the kernel's victim dies and nothing else
 // does. Nothing in the unit ends the host except the host.

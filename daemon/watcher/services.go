@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// SessionServiceSnapshot describes TCP services started under tmux sessions.
+// SessionServiceSnapshot describes TCP services started under Sessions.
 type SessionServiceSnapshot struct {
 	GeneratedAt time.Time                 `json:"generated_at"`
 	Interfaces  []SessionServiceInterface `json:"interfaces"`
@@ -31,7 +31,7 @@ type SessionServiceURL struct {
 	Kind    string `json:"kind"`
 }
 
-// SessionService is a listening TCP port owned by a tmux pane process tree
+// SessionService is a listening TCP port owned by a Session's process tree
 // (source "session") or by an explicitly registered persistent user service
 // (source "persistent"). Persistent rows never carry an invented live Worker
 // ID: WorkerID is empty once the creating Session is gone.
@@ -74,7 +74,7 @@ type listeningSocket struct {
 	bind  string
 }
 
-// DiscoverSessionServices scans tmux-owned process trees for listening TCP ports.
+// DiscoverSessionServices scans Session-owned process trees for listening TCP ports.
 func (w *Watcher) DiscoverSessionServices() (SessionServiceSnapshot, error) {
 	panes, err := w.listServicePanes()
 	if err != nil {
@@ -179,7 +179,7 @@ func (w *Watcher) DiscoverSessionServices() (SessionServiceSnapshot, error) {
 	}
 
 	// Persistent Agent-retained services merge into the same authoritative
-	// snapshot. tmux attribution wins: a socket already claimed above is
+	// snapshot. Session attribution wins: a socket already claimed above is
 	// never reported twice.
 	services = append(services, w.discoverPersistentServices(claimed, interfaces)...)
 

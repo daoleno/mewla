@@ -80,7 +80,7 @@ func ResolveLiveHostTranscriptIdentity(worker classifier.Worker, provider string
 }
 
 // LiveClaudeSessionOwner fences a resume even when the process is outside the
-// selected tmux inventory. Stale records cannot claim a recycled process ID.
+// session host inventory. Stale records cannot claim a recycled process ID.
 func LiveClaudeSessionOwner(sessionID, root string) (int, error) {
 	if strings.TrimSpace(sessionID) == "" {
 		return 0, nil

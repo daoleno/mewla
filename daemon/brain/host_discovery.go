@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// hostDiscovery is the read-only decision produced before any route or tmux
-// mutation. Keeping it separate makes liveness uncertainty fail closed at one
+// hostDiscovery is the read-only decision produced before any route or
+// Session mutation. Keeping it separate makes liveness uncertainty fail closed at one
 // boundary and leaves ensureHostWorker responsible for applying the decision.
 type hostDiscovery struct {
 	hostSession   HostSession
@@ -38,12 +38,12 @@ func (s *Service) resolveHostResume(executor work.WorkerExecutor, discovery host
 	hostSession, id := discovery.hostSession, discovery.id
 	command, replaceReason, replaceDetail := discovery.command, discovery.replaceReason, discovery.replaceDetail
 	resumeToken := ""
-	if replaceReason == hostReplaceReasonMissingTmux {
+	if replaceReason == hostReplaceReasonSessionMissing {
 		token, known, resumable := s.hostProviderResumeToken(hostSession, executor)
 		if known {
 			if !resumable {
 				s.recordHostReplacement(HostReplacementEvent{
-					Reason:           hostReplaceReasonMissingTmuxUnrecoverable,
+					Reason:           hostReplaceReasonSessionMissingUnrecoverable,
 					FromID:           id,
 					FromExecutorID:   hostSession.ExecutorID,
 					ResolvedExecutor: executor.ID,
@@ -60,7 +60,7 @@ func (s *Service) resolveHostResume(executor work.WorkerExecutor, discovery host
 			resumeCommand, err := s.hostLaunchCommand(executor, token)
 			if err != nil {
 				s.recordHostReplacement(HostReplacementEvent{
-					Reason:           hostReplaceReasonMissingTmuxUnrecoverable,
+					Reason:           hostReplaceReasonSessionMissingUnrecoverable,
 					FromID:           id,
 					FromExecutorID:   hostSession.ExecutorID,
 					ResolvedExecutor: executor.ID,
@@ -171,9 +171,8 @@ func (s *Service) discoverHostWorker(executor work.WorkerExecutor) (hostDiscover
 	}
 	presence, probeErr := s.watcher.ProbeSession(d.id)
 	if probeErr == nil && presence == watcher.SessionPresencePresent && s.hostSessionExited(d.id) {
-		// The session host keeps a Session whose program ended, where tmux
-		// closed its pane. The Brain is gone as if its pane had closed: close
-		// the ended Session and start the Brain again in its conversation.
+		// The session host keeps a Session whose program ended. The Brain is
+		// gone: close the ended Session and start the Brain again in its conversation.
 		// A program that ended at start is the problem to show, with how it
 		// ended: the same launch would end the same way.
 		_ = s.hostExitedAtStart(d.id, command, executor)
@@ -241,15 +240,8 @@ func (s *Service) discoverHostWorker(executor work.WorkerExecutor) (hostDiscover
 			}
 			return hostDiscovery{hostSession: hostSession, command: recovered.Command, id: recovered.ID, reuse: recovered}, nil
 		}
-		d.replaceReason = hostReplaceReasonMissingTmux
+		d.replaceReason = hostReplaceReasonSessionMissing
 		d.replaceDetail = fmt.Sprintf("probe=absent id=%q", d.id)
-		if left, ok := s.watcher.(interface{ IsLeftInTmux(string) bool }); ok && left.IsLeftInTmux(d.id) {
-			// Moving to the session host left this Brain in tmux, where it
-			// still runs: a fresh Brain takes over with the handoff, and the
-			// old conversation is never resumed beside it.
-			d.replaceReason = hostReplaceReasonLeftInTmux
-			d.replaceDetail = fmt.Sprintf("left_in_tmux id=%q", d.id)
-		}
 		s.recordHostReplacement(HostReplacementEvent{Reason: d.replaceReason, FromID: d.id, FromExecutorID: hostSession.ExecutorID, ResolvedExecutor: executor.ID, Detail: d.replaceDetail})
 	}
 	return d, nil

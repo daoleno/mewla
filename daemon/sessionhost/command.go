@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// commandName shortens a process's argv[0] the way tmux names a window after
-// it (parse_window_name): no leading "exec ", nothing after the first space,
-// the base name, and no leading "-" of a login shell.
+// commandName shortens a process's argv[0] to a name: no leading "exec ",
+// nothing after the first space, the base name, and no leading "-" of a login
+// shell.
 func commandName(argv0 string) string {
 	name := strings.TrimSpace(argv0)
 	name = strings.TrimSpace(strings.TrimPrefix(name, "exec "))

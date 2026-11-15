@@ -151,7 +151,7 @@ func TestModelProfilesWebSocketCRUDActivateAndErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "tmux:@9"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "mh-9"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -170,7 +170,7 @@ func TestModelProfilesWebSocketCRUDActivateAndErrors(t *testing.T) {
 
 	if err := conn.WriteJSON(map[string]any{
 		"type": "set_thread_runtime", "request_id": "act-bad",
-		"worker_id": "tmux:@9", "runtime": map[string]any{
+		"worker_id": "mh-9", "runtime": map[string]any{
 			"connection_id": "missing-connection", "model_id": "up-2",
 		},
 	}); err != nil {
@@ -183,7 +183,7 @@ func TestModelProfilesWebSocketCRUDActivateAndErrors(t *testing.T) {
 
 	if err := conn.WriteJSON(map[string]any{
 		"type": "set_thread_runtime", "request_id": "act-ok",
-		"worker_id": "tmux:@9", "runtime": map[string]any{
+		"worker_id": "mh-9", "runtime": map[string]any{
 			"connection_id": "codex-alt", "model_id": "up-2",
 		},
 	}); err != nil {
@@ -209,7 +209,7 @@ func TestModelProfilesWebSocketCRUDActivateAndErrors(t *testing.T) {
 	}
 
 	if err := conn.WriteJSON(map[string]any{
-		"type": "get_thread_runtime", "request_id": "get-1", "worker_id": "tmux:@9",
+		"type": "get_thread_runtime", "request_id": "get-1", "worker_id": "mh-9",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestSetThreadRuntimeCommitFailureKeepsPreviousRouteSendable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const sessionID = "tmux:@rollback"
+	const sessionID = "mh-rollback"
 	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, sessionID); err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ func TestSetThreadRuntimeDoesNotRestartLiveCodexSession(t *testing.T) {
 	if _, err := owner.UpsertProfile(target, 1, true); err != nil {
 		t.Fatal(err)
 	}
-	const sessionID = "tmux:@live-switch"
+	const sessionID = "mh-live-switch"
 	launch, err := owner.PrepareLaunch(modelprofiles.ExecutorCodex, previous.ID, "codex")
 	if err != nil {
 		t.Fatal(err)
@@ -409,7 +409,7 @@ func TestSessionCreatedWorkerSessionModelProfileCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	workerID := "tmux:@caps"
+	workerID := "mh-caps"
 	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, workerID); err != nil {
 		t.Fatal(err)
 	}
@@ -445,7 +445,7 @@ func TestSessionCreatedWorkerSessionModelProfileCapabilities(t *testing.T) {
 	if embeddedPlan.CodexControlSocket != "" {
 		t.Fatalf("embedded owner must not allocate a socket: %q", embeddedPlan.CodexControlSocket)
 	}
-	const embeddedWorkerID = "tmux:@caps-embedded"
+	const embeddedWorkerID = "mh-caps-embedded"
 	if _, _, _, err := embeddedOwner.CommitLaunch(embeddedPlan.ProvisionalID, embeddedWorkerID); err != nil {
 		t.Fatal(err)
 	}
@@ -548,7 +548,7 @@ func TestActivateSessionRouteAppliedNotDurableReturnsOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "tmux:@9"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "mh-9"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -575,7 +575,7 @@ func TestActivateSessionRouteAppliedNotDurableReturnsOutcome(t *testing.T) {
 	})
 	if err := conn.WriteJSON(map[string]any{
 		"type": "set_thread_runtime", "request_id": "act-warn",
-		"worker_id": "tmux:@9", "runtime": map[string]any{
+		"worker_id": "mh-9", "runtime": map[string]any{
 			"connection_id": "codex-alt", "model_id": "up-2",
 		},
 	}); err != nil {
@@ -608,7 +608,7 @@ func TestActivateSessionRouteAppliedNotDurableReturnsOutcome(t *testing.T) {
 	if activated["persistence_warning"] == nil || activated["persistence_warning"] == "" {
 		t.Fatalf("expected persistence_warning: %#v", activated)
 	}
-	state, ok := owner.Table().Get("tmux:@9")
+	state, ok := owner.Table().Get("mh-9")
 	if !ok || state.Binding.ProfileID != "codex-alt" {
 		t.Fatalf("memory must keep applied binding: %#v", state)
 	}
@@ -806,7 +806,7 @@ func TestWSActivateLaunchedSurvivesHistoryTrimAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "tmux:@trim"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "mh-trim"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -860,13 +860,13 @@ func TestWSActivateLaunchedSurvivesHistoryTrimAndRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 		rev++
-		_, ok := owner.Table().Get("tmux:@trim")
+		_, ok := owner.Table().Get("mh-trim")
 		if !ok {
 			t.Fatal("missing")
 		}
 		if err := conn.WriteJSON(map[string]any{
 			"type": "set_thread_runtime", "request_id": "act-" + itoaWS(i),
-			"worker_id": "tmux:@trim", "runtime": map[string]any{
+			"worker_id": "mh-trim", "runtime": map[string]any{
 				"connection_id": p.ID, "model_id": p.Model,
 			},
 		}); err != nil {
@@ -906,7 +906,7 @@ func TestWSActivateLaunchedSurvivesHistoryTrimAndRestart(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = conn2.Close() })
 	if err := conn2.WriteJSON(map[string]any{
-		"type": "get_thread_runtime", "request_id": "get-restart", "worker_id": "tmux:@trim",
+		"type": "get_thread_runtime", "request_id": "get-restart", "worker_id": "mh-trim",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -928,7 +928,7 @@ func TestWSActivateLaunchedSurvivesHistoryTrimAndRestart(t *testing.T) {
 	if launched["connection_id"] != "p0" || launched["model_id"] != "up-0" {
 		t.Fatalf("restart launched %#v", launched)
 	}
-	restored, ok := owner2.Table().Get("tmux:@trim")
+	restored, ok := owner2.Table().Get("mh-trim")
 	if !ok || len(restored.History) > modelprofiles.MaxRouteHistoryEvents {
 		t.Fatalf("history len=%d ok=%v", len(restored.History), ok)
 	}
@@ -1003,7 +1003,7 @@ func TestKillWorkerRouteAwareTeardown(t *testing.T) {
 	owner := startProfileOwner(t)
 	srv := New(nil, watcher.New(time.Second), nil, nil, nil, nil, nil)
 	srv.SetModelProfiles(owner)
-	workerID := "tmux:@kill"
+	workerID := "mh-kill"
 
 	// kill success + release success
 	commitTestRoute(t, owner, workerID)
@@ -1128,7 +1128,7 @@ func TestKillWorkerWebSocketSurfacesTeardownError(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := startProfileOwner(t)
-	commitTestRoute(t, owner, "tmux:@ws-kill")
+	commitTestRoute(t, owner, "mh-ws-kill")
 	srv := New(authManager, watcher.New(time.Second), nil, nil, nil, nil, nil)
 	srv.SetModelProfiles(owner)
 	srv.killSessionOverride = func(string) error { return errors.New("injected kill failure") }
@@ -1145,7 +1145,7 @@ func TestKillWorkerWebSocketSurfacesTeardownError(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	if err := conn.WriteJSON(map[string]any{"type": "kill_worker", "request_id": "kill-live", "worker_id": "tmux:@ws-kill"}); err != nil {
+	if err := conn.WriteJSON(map[string]any{"type": "kill_worker", "request_id": "kill-live", "worker_id": "mh-ws-kill"}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(3 * time.Second)
@@ -1168,7 +1168,7 @@ func TestKillWorkerWebSocketSurfacesTeardownError(t *testing.T) {
 		if payload["code"] != "kill_failed" || !strings.Contains(fmt.Sprint(payload["message"]), "injected kill failure") {
 			t.Fatalf("payload=%#v", payload)
 		}
-		if _, ok := owner.SessionSnapshot("tmux:@ws-kill"); !ok {
+		if _, ok := owner.SessionSnapshot("mh-ws-kill"); !ok {
 			t.Fatal("WS still-live must preserve route")
 		}
 		return

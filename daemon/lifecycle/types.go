@@ -548,7 +548,7 @@ type ReviewHandler struct {
 
 // AdmissionState is the canonical pre-provider-mutation transaction owned by
 // the Work aggregate. Transport receipts are evidence only; no projection or
-// tmux option may authorize a Turn.
+// Session label may authorize a Turn.
 type AdmissionState struct {
 	TurnToken          TurnToken        `json:"turn_token"`
 	SessionID          string           `json:"session_id"`

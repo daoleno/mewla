@@ -10,9 +10,8 @@
 # The daemon carries the session host's terminal engine (build tag ghosttyvt):
 # libghostty-vt is built from its signed, pinned release with the pinned Zig and
 # linked statically against musl with `zig cc`, the same way
-# scripts/build-daemon-linux.sh builds the Linux release binaries. The image
-# needs no tmux. Unlike a release binary it never updates itself; rebuild the
-# image instead.
+# scripts/build-daemon-linux.sh builds the Linux release binaries. Unlike a
+# release binary it never updates itself; rebuild the image instead.
 
 FROM golang:1.26-alpine AS builder
 RUN apk add --no-cache bash curl python3 tar xz

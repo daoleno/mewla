@@ -407,7 +407,7 @@ func isClaudeInputReady(content string) bool {
 	return !claudeBlockedOverlayRe.MatchString(content[start:])
 }
 
-func tmuxSubmitDelay(command string) time.Duration {
+func submitDelay(command string) time.Duration {
 	if isCodexCommand(command) {
 		// Codex turns large bracketed pastes into an asynchronous composer
 		// attachment. Enter before the attachment is committed is ignored and
@@ -431,7 +431,7 @@ func tmuxSubmitDelay(command string) time.Duration {
 	return 120 * time.Millisecond
 }
 
-func tmuxPrepareDelay(command string) time.Duration {
+func prepareDelay(command string) time.Duration {
 	if isCursorAgentCommand(command) {
 		// Cursor applies composer edits asynchronously. Give its clear action
 		// one render boundary before atomically pasting the new payload.

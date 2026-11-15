@@ -183,7 +183,7 @@ func TestWorkerExecutorInfersProviderRuntimeAndCapabilities(t *testing.T) {
 	if !ok {
 		t.Fatal("codex executor missing")
 	}
-	if codex.Provider != "codex" || codex.Runtime != WorkerRuntimeTmux {
+	if codex.Provider != "codex" || !codex.Capabilities.InteractiveTTY {
 		t.Fatalf("codex executor = %+v", codex)
 	}
 	if !codex.Capabilities.NativeThreads ||

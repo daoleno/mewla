@@ -1455,7 +1455,7 @@ func TestControlAppAmbiguousSpawnWithVanishedOwnedSessionStillReturnsFailure(t *
 
 func TestControlAppPreSubmitLaunchFailureRemainsDefinitive(t *testing.T) {
 	fw := newFakeControlWatcher()
-	fw.createErr = errors.New("injected tmux launch failure")
+	fw.createErr = errors.New("injected Session launch failure")
 	store := newControlBrainStore(t)
 	app := &controlApp{
 		watcher: fw, brainStore: store,

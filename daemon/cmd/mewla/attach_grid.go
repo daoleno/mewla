@@ -261,12 +261,10 @@ type gridState struct {
 	screens map[string]gridScreen
 	infos   map[string]sessionhost.Info
 	sel     string
-	// outside counts live Sessions the grid cannot tile (still in tmux).
-	outside int
 }
 
-func newGridState(outside int) *gridState {
-	return &gridState{screens: map[string]gridScreen{}, infos: map[string]sessionhost.Info{}, outside: outside}
+func newGridState() *gridState {
+	return &gridState{screens: map[string]gridScreen{}, infos: map[string]sessionhost.Info{}}
 }
 
 // update takes the host's current Sessions: new ones join, ended ones leave,
@@ -373,9 +371,6 @@ func gridStatus(g *gridState, layout gridLayout, width int) string {
 	var parts []string
 	if hidden := len(g.entries) - layout.Shown; hidden > 0 {
 		parts = append(parts, fmt.Sprintf("newest %d of %d shown, %d more need a bigger terminal", layout.Shown, len(g.entries), hidden))
-	}
-	if g.outside > 0 {
-		parts = append(parts, fmt.Sprintf("%d in tmux not tiled", g.outside))
 	}
 	parts = append(parts, "arrows/Tab move · Enter/1-9/click open · in a Session Ctrl-] back · q/Ctrl-\\ leave")
 	return cutTo(strings.Join(parts, " · "), width, false)
@@ -611,8 +606,8 @@ func runGridView(ctx context.Context, host gridHost, state *gridState, typed <-c
 // runGrid tiles the live host Sessions and lets the person open them one at a
 // time: Ctrl-] in an opened Session returns to the grid, Ctrl-\ leaves, and a
 // Session that ends returns to the grid too. It reports why it ended.
-func runGrid(ctx context.Context, client *sessionhost.Client, outside int, typed <-chan []byte, out io.Writer, size func() (int, int), resized <-chan os.Signal, style termStyle) (string, error) {
-	state := newGridState(outside)
+func runGrid(ctx context.Context, client *sessionhost.Client, typed <-chan []byte, out io.Writer, size func() (int, int), resized <-chan os.Signal, style termStyle) (string, error) {
+	state := newGridState()
 	for {
 		id, err := runGridView(ctx, client, state, typed, out, size, resized, style, gridPoll)
 		io.WriteString(out, leaveAttach)

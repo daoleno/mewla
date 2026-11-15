@@ -1,4 +1,4 @@
-//go:build linux
+//go:build ghosttyvt && cgo && linux
 
 package watcher
 
@@ -8,13 +8,14 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
-func TestRealWorkerCloseCleansDetachedDescendantsWithoutSupervisor(t *testing.T) {
-	h := newSharedTmuxHarness(t, false)
+func TestHostRealWorkerCloseCleansDetachedDescendantsWithoutSupervisor(t *testing.T) {
+	h := newHostHarness(t)
 	manager := newTestPortableResourceManager(t, "cleanupfixture")
 	h.w.resources = manager
 	cwd, err := os.Getwd()
@@ -29,7 +30,7 @@ func TestRealWorkerCloseCleansDetachedDescendantsWithoutSupervisor(t *testing.T)
 	}
 	t.Cleanup(func() { _ = h.w.KillSession(target) })
 	var pid int
-	waitForHarness(t, "detached owned tool", func() bool {
+	waitUntil(t, 10*time.Second, "detached owned tool", func() bool {
 		raw, err := os.ReadFile(marker)
 		if err != nil {
 			return false

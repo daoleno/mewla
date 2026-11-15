@@ -73,15 +73,15 @@ func TestStartupCleanupRefusalIsReportedAsFinalAndNeverKills(t *testing.T) {
 }
 
 func TestOnlyCleanupRefusalsIgnoresMixedAndUnrelatedFailures(t *testing.T) {
-	refusal := &cleanupRefusal{sessionID: "a", err: watcher.ErrUnownedTmuxTarget}
-	transient := errors.New("tmux server unreachable")
+	refusal := &cleanupRefusal{sessionID: "a", err: watcher.ErrUnownedSession}
+	transient := errors.New("session host unreachable")
 	if !OnlyCleanupRefusals(errors.Join(refusal, errors.Join(refusal))) {
 		t.Fatal("nested refusals are final")
 	}
 	if OnlyCleanupRefusals(errors.Join(refusal, transient)) {
 		t.Fatal("a transient failure next to a refusal must still be retried")
 	}
-	if OnlyCleanupRefusals(transient) || OnlyCleanupRefusals(watcher.ErrUnownedTmuxTarget) {
+	if OnlyCleanupRefusals(transient) || OnlyCleanupRefusals(watcher.ErrUnownedSession) {
 		t.Fatal("only errors the cleanup marked as refused are final")
 	}
 	if !OnlyCleanupRefusals(nil) {

@@ -1,3 +1,5 @@
+//go:build ghosttyvt && cgo && (linux || darwin)
+
 package watcher
 
 import (
@@ -14,11 +16,11 @@ import (
 // and SendInputWhenReady boundary against the installed Pi binary. It submits
 // one inert probe prompt only when explicitly enabled; the owned pane is then
 // torn down. Opt-in keeps ordinary unit runs provider-free.
-func TestRealPiStartupReadinessAdmission(t *testing.T) {
+func TestHostRealPiStartupReadinessAdmission(t *testing.T) {
 	if os.Getenv("MEWLA_TEST_REAL_PI_ADMISSION") != "1" {
 		t.Skip("set MEWLA_TEST_REAL_PI_ADMISSION=1 for installed Pi startup evidence")
 	}
-	h := newSharedTmuxHarness(t, false)
+	h := newHostHarness(t)
 	cwd := t.TempDir()
 	sessionPath := filepath.Join(cwd, "pi-session.jsonl")
 	command := "pi --session " + shellquote.Word(sessionPath) + " --no-extensions"

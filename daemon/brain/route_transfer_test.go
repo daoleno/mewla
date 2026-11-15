@@ -142,7 +142,7 @@ func (f *fakeRouteLifecycle) AbortLaunch(provisionalID string) (modelprofiles.Pe
 	return modelprofiles.PersistResult{Applied: true, Durable: true}, nil
 }
 
-func TestMissingTmuxTransferPersistFailureKillsAndKeepsOldResumable(t *testing.T) {
+func TestMissingSessionTransferPersistFailureKillsAndKeepsOldResumable(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +195,7 @@ func TestMissingTmuxTransferPersistFailureKillsAndKeepsOldResumable(t *testing.T
 	}
 }
 
-func TestMissingTmuxTransferAppliedNondurableFailsClosedNoSuccess(t *testing.T) {
+func TestMissingSessionTransferAppliedNondurableFailsClosedNoSuccess(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -247,7 +247,7 @@ func TestMissingTmuxTransferAppliedNondurableFailsClosedNoSuccess(t *testing.T) 
 		t.Fatalf("host binding mutated:\nbefore=%s\nafter=%s", before, after)
 	}
 	audit, _ := os.ReadFile(store.HostReplacementsPath())
-	if strings.Contains(string(audit), hostReplaceReasonMissingTmuxResumeLaunched) {
+	if strings.Contains(string(audit), hostReplaceReasonSessionMissingResumeLaunched) {
 		t.Fatalf("must not audit resume success: %s", audit)
 	}
 }
@@ -780,10 +780,10 @@ func TestResumeRouteTransferAppliedNondurableCompensatesKillsSpawn(t *testing.T)
 		t.Fatalf("host binding mutated:\nbefore=%s\nafter=%s", before, after)
 	}
 	audit, _ := os.ReadFile(store.HostReplacementsPath())
-	if strings.Contains(string(audit), hostReplaceReasonMissingTmuxResumeLaunched) {
+	if strings.Contains(string(audit), hostReplaceReasonSessionMissingResumeLaunched) {
 		t.Fatalf("must not audit resume success: %s", audit)
 	}
-	if !strings.Contains(string(audit), hostReplaceReasonMissingTmuxUnrecoverable) {
+	if !strings.Contains(string(audit), hostReplaceReasonSessionMissingUnrecoverable) {
 		t.Fatalf("want unrecoverable audit after nondurable transfer: %s", audit)
 	}
 }
@@ -842,7 +842,7 @@ func TestResumeRouteTransferAppliedNondurableCompensationFailurePreservesLive(t 
 		t.Fatalf("host binding mutated:\nbefore=%s\nafter=%s", before, after)
 	}
 	audit, _ := os.ReadFile(store.HostReplacementsPath())
-	if strings.Contains(string(audit), hostReplaceReasonMissingTmuxResumeLaunched) {
+	if strings.Contains(string(audit), hostReplaceReasonSessionMissingResumeLaunched) {
 		t.Fatalf("must not audit resume success: %s", audit)
 	}
 }
