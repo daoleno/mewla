@@ -78,9 +78,11 @@ for Codex. Then run it once in a new PowerShell window to sign in and finish
 its first-run questions. Claude Code's installer does not add
 `%USERPROFILE%\.local\bin` to your `PATH`; Mewla finds `claude.exe` there
 anyway, also when you install it after Mewla, and in your own terminal you can run it as
-`& "$env:USERPROFILE\.local\bin\claude.exe"`. If an agent's first-run
-questions are still open when a Session starts it, the Session shows
-**Blocked** until you answer them in its terminal.
+`& "$env:USERPROFILE\.local\bin\claude.exe"`. A Claude Code that never ran
+opens on a theme picker and a security note; Mewla answers both for Brain and
+for Sessions it delivers a message to (the highlighted theme; `/theme` changes
+it). Any other first-run question (how to sign in, say) shows **Blocked** until
+you answer it.
 
 Mewla starts once at login, but each new Session gets your environment as it
 is now, as a new PowerShell window does: an agent installed, a `PATH` entry or

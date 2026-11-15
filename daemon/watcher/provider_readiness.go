@@ -8,6 +8,65 @@ import (
 
 const piProjectTrustSessionKey = "__mewla_pi_trust_session__"
 
+// claudeFirstRunRepeat is how long a first-run screen that was answered may
+// stay before it is answered again: the screen is still drawn for a moment
+// after its Enter.
+const claudeFirstRunRepeat = 3 * time.Second
+
+// claudeFirstRunScreen names which of the two screens a Claude Code that never
+// ran on this computer shows before anything else is on screen, "" for any
+// other. Neither decides anything: the theme picker (Enter keeps the
+// highlighted theme; /theme changes it later) and the security note ("Press
+// Enter to continue"). A Brain or a Worker on a new person's Claude waited
+// there unseen (Windows 11, Claude 2.1.325). The login choice that may follow
+// is not one of them: it stays the person's.
+func claudeFirstRunScreen(command, content string) string {
+	if !isClaudeCommand(command) {
+		return ""
+	}
+	tail := lastNonEmptyLines(content, 24)
+	has := func(prefix string) bool {
+		for _, line := range tail {
+			if strings.HasPrefix(line, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+	if has("Choose the text style that looks best with your terminal") && has("To change this later, run /theme") {
+		return "theme"
+	}
+	if has("Security notes:") && len(tail) > 0 && strings.HasPrefix(tail[0], "Press Enter to continue") {
+		return "security"
+	}
+	return ""
+}
+
+// claudeFirstRun answers each first-run screen once, again only when it is
+// still there claudeFirstRunRepeat later.
+type claudeFirstRun map[string]time.Time
+
+func (answered claudeFirstRun) due(screen string, now time.Time) bool {
+	if screen == "" {
+		return false
+	}
+	at, ok := answered[screen]
+	return !ok || now.Sub(at) >= claudeFirstRunRepeat
+}
+
+// lastNonEmptyLines is the screen's last n non-blank lines, trimmed, last
+// first.
+func lastNonEmptyLines(content string, n int) []string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	var tail []string
+	for i := len(lines) - 1; i >= 0 && len(tail) < n; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			tail = append(tail, line)
+		}
+	}
+	return tail
+}
+
 // advanceStartupTrustPromptOnce answers a startup trust picker that Mewla's own
 // launch of a Worker could not answer on its command line: Pi's (session-only)
 // and Cursor's. Codex's is not here. Delegated Codex launches carry their folder
