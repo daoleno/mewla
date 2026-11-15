@@ -177,44 +177,30 @@ func TestWorkerPromptAnsweredFromChat(t *testing.T) {
 		record(t, "worker-prompt-answered-from-chat", "fail", "spawn: "+oneLine(response))
 		t.Fatal(response)
 	}
+	// The card's prompt is what the Worker's updates carry to Chat.
 	var workerID string
 	var prompt map[string]any
-	deadline := time.Now().Add(4 * time.Minute)
-	for prompt == nil && time.Now().Before(deadline) {
-		out, _ := e.cli(30*time.Second, "worker", "list", "@state", "--json")
-		if index := strings.Index(out, "{"); index >= 0 {
-			var reply struct {
-				Workers []map[string]any `json:"workers"`
-			}
-			if json.Unmarshal([]byte(out[index:]), &reply) == nil {
-				for _, w := range reply.Workers {
-					if p, ok := w["prompt"].(map[string]any); ok && strings.HasPrefix(str(w["name"]), "SweepAsk") && len(asSlice(p["questions"])) > 0 {
-						prompt, workerID = p, str(w["id"])
-					}
-				}
-			}
-		}
-		if prompt == nil {
-			time.Sleep(3 * time.Second)
-		}
-	}
-	if prompt == nil {
-		record(t, "worker-prompt-answered-from-chat", "fail", "the Worker's question never showed on its card:\n"+e.logTail(10))
+	_, found := c.waitFor(4*time.Minute, func(m map[string]any) bool {
+		workerID, prompt = choicePrompt(m, "SweepAsk")
+		return prompt != nil
+	})
+	if !found || prompt == nil {
+		record(t, "worker-prompt-answered-from-chat", "fail", "the Worker's question never reached Chat:\n"+e.logTail(10))
 		t.Fatal("no prompt")
 	}
-	blue := 0.0
-	for _, option := range asSlice(asSlice(prompt["questions"])[0].(map[string]any)["options"]) {
+	blue := -1
+	for index, option := range asSlice(asSlice(prompt["questions"])[0].(map[string]any)["options"]) {
 		o, _ := option.(map[string]any)
 		if strings.Contains(strings.ToLower(str(o["label"])), "blue") {
-			blue, _ = o["number"].(float64)
+			blue = index
 		}
 	}
 	requestID := "answer-" + uuid.NewString()[:6]
 	c.send(map[string]any{"type": "answer_prompt", "request_id": requestID, "worker_id": workerID,
-		"prompt_answer": map[string]any{"prompt_id": str(prompt["id"]), "answers": []any{map[string]any{"selected": []int{int(blue)}}}}})
+		"prompt_answer": map[string]any{"prompt_id": str(prompt["id"]), "answers": []any{map[string]any{"selected": []int{blue}}}}})
 	answer, _ := c.waitFor(30*time.Second, func(m map[string]any) bool { return str(m["request_id"]) == requestID })
 	color := ""
-	deadline = time.Now().Add(3 * time.Minute)
+	deadline := time.Now().Add(3 * time.Minute)
 	for color == "" && time.Now().Before(deadline) {
 		raw, _ := os.ReadFile(filepath.Join(project, "color.txt"))
 		color = strings.TrimSpace(string(raw))
@@ -230,6 +216,29 @@ func TestWorkerPromptAnsweredFromChat(t *testing.T) {
 		t.Fatal(detail + "\n" + e.logTail(10))
 	}
 	_, _ = e.cli(time.Minute, "worker", "close", "@state", "-id", workerID, "--force")
+}
+
+// choicePrompt finds, anywhere in a message, a Worker named name with a
+// choice prompt open (one with questions).
+func choicePrompt(value any, name string) (string, map[string]any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if prompt, ok := typed["prompt"].(map[string]any); ok && strings.HasPrefix(str(typed["name"]), name) && len(asSlice(prompt["questions"])) > 0 {
+			return str(typed["id"]), prompt
+		}
+		for _, child := range typed {
+			if id, prompt := choicePrompt(child, name); prompt != nil {
+				return id, prompt
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if id, prompt := choicePrompt(child, name); prompt != nil {
+				return id, prompt
+			}
+		}
+	}
+	return "", nil
 }
 
 func asSlice(value any) []any {
