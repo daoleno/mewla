@@ -65,7 +65,7 @@ func TestDevicesCLIListsTrustedDevicesThroughOfflineOwner(t *testing.T) {
 			io.Discard,
 		)
 	})
-	if !strings.Contains(output, "phone-list\tListed phone\t") {
+	if !strings.Contains(output, "phone-list\tListed phone\t") || !strings.HasSuffix(output, "\tunknown\n") {
 		t.Fatalf("device list output=%q", output)
 	}
 	jsonOutput := captureDeviceCommandStdout(t, func() error {
@@ -933,4 +933,20 @@ func captureDeviceCommandStdout(t *testing.T, run func() error) string {
 		t.Fatal(readErr)
 	}
 	return string(output)
+}
+
+func TestDeviceAppLabelSaysWhichAppADeviceRuns(t *testing.T) {
+	for _, c := range []struct {
+		device auth.DeviceInfo
+		want   string
+	}{
+		{auth.DeviceInfo{ClientApp: auth.ClientApp{AppVersion: "0.4.6", AppPlatform: "android"}}, "0.4.6 android"},
+		{auth.DeviceInfo{ClientApp: auth.ClientApp{AppLegacy: true}}, "unknown (pre-0.4)"},
+		{auth.DeviceInfo{}, "unknown"},
+		{auth.DeviceInfo{Kind: auth.DeviceKindComputer}, "-"},
+	} {
+		if got := deviceAppLabel(c.device); got != c.want {
+			t.Errorf("%+v: got %q, want %q", c.device, got, c.want)
+		}
+	}
 }

@@ -42,7 +42,7 @@ mewla pair --details          # the same code as paste links for phone and every
 mewla address list [--json]   # every address phones and browsers can use
 mewla address add <https-url> # an HTTPS tunnel or proxy in front of this computer
 mewla address remove <address>
-mewla devices list [--json]
+mewla devices list [--json]   # id, name, last seen, the app it last connected with ("0.4.6 android"; unknown (pre-0.4) for the Expo app)
 mewla devices pending         # browsers waiting for approval
 mewla devices approve <shown-number>   # the number the waiting browser shows
 mewla devices deny <shown-number>

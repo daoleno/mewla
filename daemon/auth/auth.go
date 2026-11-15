@@ -56,6 +56,22 @@ type TrustedDevice struct {
 	Kind         string    `json:"kind,omitempty"`
 	AddedAt      time.Time `json:"added_at"`
 	LastSeenAt   time.Time `json:"last_seen_at"`
+	ClientApp
+}
+
+// ClientApp is what a device's app said about itself the last time it opened
+// the app connection (mewla-connect). Empty for a device that has not
+// connected since the daemon began keeping it.
+type ClientApp struct {
+	// AppVersion is the version the app reported ("0.4.6"); empty when it
+	// reported none.
+	AppVersion string `json:"app_version,omitempty"`
+	// AppPlatform is "android", "ios", "web" or "desktop".
+	AppPlatform string `json:"app_platform,omitempty"`
+	// AppLegacy is set when the app signed in the Expo app's way, with an
+	// Authorization header instead of the mewla.auth. subprotocol every app
+	// since 0.4.0 uses: an app before 0.4.
+	AppLegacy bool `json:"app_legacy,omitempty"`
 }
 
 type DeviceInfo struct {
@@ -64,6 +80,7 @@ type DeviceInfo struct {
 	Kind       string    `json:"kind,omitempty"`
 	AddedAt    time.Time `json:"added_at"`
 	LastSeenAt time.Time `json:"last_seen_at"`
+	ClientApp
 }
 
 type PairingToken struct {
@@ -208,6 +225,7 @@ func (m *Manager) ListDevices() []DeviceInfo {
 				Kind:       device.Kind,
 				AddedAt:    device.AddedAt,
 				LastSeenAt: device.LastSeenAt,
+				ClientApp:  device.ClientApp,
 			})
 		}
 	}
@@ -215,6 +233,20 @@ func (m *Manager) ListDevices() []DeviceInfo {
 		return devices[left].ID < devices[right].ID
 	})
 	return devices
+}
+
+// RecordClientApp keeps what a paired device's app said about itself as it
+// connected, replacing what it said before. A device that is no longer paired
+// is left alone.
+func (m *Manager) RecordClientApp(deviceID string, app ClientApp) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	device, ok := m.devices[deviceID]
+	if !ok || device == nil || device.ClientApp == app {
+		return nil
+	}
+	device.ClientApp = app
+	return m.saveDevicesLocked()
 }
 
 // SubscribeRevocations registers a synchronous runtime owner for successful
