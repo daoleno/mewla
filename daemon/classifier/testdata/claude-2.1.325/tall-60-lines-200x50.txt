@@ -1,0 +1,50 @@
+│ echo tall-line-20 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-21 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-22 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-23 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-24 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-25 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-26 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-27 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-28 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-29 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-30 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-31 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-32 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-33 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-34 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-35 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-36 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-37 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-38 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-39 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-40 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-41 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-42 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-43 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-44 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-45 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-46 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-47 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-48 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-49 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-50 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-51 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-52 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-53 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-54 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-55 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-56 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-57 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-58 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-59 >> /tmp/tall-probe/work/out.txt
+ │ echo tall-line-60 >> /tmp/tall-probe/work/out.txt
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Permission rule Bash requires confirmation for this command.
+ /permissions to update rules
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+
+ Esc to cancel · Tab to amend

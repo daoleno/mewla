@@ -28,7 +28,7 @@ func runWorkerAnswer(args []string, stderr io.Writer) error {
 	var answers string
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
 	fs.StringVar(&req.WorkerID, "id", "", "Worker session id")
-	fs.StringVar(&req.PromptID, "prompt", "", "prompt id from the needs_input event or `mewla worker status`")
+	fs.StringVar(&req.PromptID, "prompt", "", "prompt id from the needs_input event or `mewla worker status`, or an approval id from `mewla worker approvals`")
 	fs.IntVar(&req.PromptChoice, "choice", 0, "number of the option to pick in a permission, plan, startup or approval menu")
 	fs.StringVar(&answers, "answers", "", `answers to a question prompt: a JSON array with one {"selected":[<1-based option numbers>],"other":"text"} per question`)
 	fs.BoolVar(&req.Force, "force", false, "answer a non-delegated external session")
@@ -170,14 +170,18 @@ func (a *controlApp) handleWorkerAnswer(req control.Request) control.Response {
 }
 
 // heldApprovalFor finds the decision a permission hook holds for the Worker
-// that the prompt id names. A sub-agent's dialog is not drawn in the pane, so
-// this is the only place such a prompt exists.
+// that the prompt id names: the prompt id its needs_input carried, or the
+// approval's own id as `mewla worker approvals` lists it. A sub-agent's dialog
+// is not drawn in the pane, and a dialog taller than the pane has no id on
+// screen (its head scrolled away), so for those this is the only place the
+// prompt exists. The hook holds the exact request; answering it sends no key.
 func (a *controlApp) heldApprovalFor(workerID, promptID string) (string, bool) {
-	if a.agentEvents == nil {
+	promptID = strings.TrimSpace(promptID)
+	if a.agentEvents == nil || promptID == "" {
 		return "", false
 	}
 	for _, pending := range a.agentEvents.approvals(workerID, false) {
-		if approvalPromptID(pending.ID) == promptID {
+		if pending.ID == promptID || approvalPromptID(pending.ID) == promptID {
 			return pending.ID, true
 		}
 	}

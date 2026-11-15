@@ -20,6 +20,7 @@ func runWorkerApprovals(args []string, stderr io.Writer) error {
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla worker approvals [-id <worker>]")
 		fmt.Fprintln(stderr, "Lists the decisions agents are waiting on, with the options each one offers.")
+		fmt.Fprintln(stderr, "Answer one with `mewla worker answer -id <worker> -prompt <its id> -choice <option number> -basis \"<brief sentence>\"`.")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

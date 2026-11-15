@@ -45,7 +45,8 @@ import (
 //     which has no scrollback behind it (measured on Claude 2.1.318 at 40 and
 //     24 rows). That dialog has no start on screen and gets no id
 //     (ActivitySignal.Unidentified says why); its exact request is the
-//     PermissionRequest hook's, which Brain answers with `worker approve`.
+//     PermissionRequest hook's, which Brain answers by its approval id
+//     (`worker answer -prompt <approval id>`, or `worker approve`).
 //     Codex on its alternate screen (CaptureInfo.Alternate): the capture is the
 //     TUI's own screen, with no scrollback behind it to evict, and Codex cuts a
 //     long request to fit ("[… 63 lines] ^a view all", refused here) instead of

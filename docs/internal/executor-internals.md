@@ -187,8 +187,11 @@ pane is on its alternate screen and the pane's own `@mewla_origin` option.
   instead of `answer_with`, `worker status` shows `prompt_id` (or `prompt_unidentified`), and
   `worker answer` refuses with the same reason. Its exact request is the
   `PermissionRequest` hook's: while the hook holds the decision the pane gate stays
-  silent and Brain answers the hook's prompt id (`worker approvals`, `worker
-  approve`).
+  silent and Brain answers the hook's prompt id, or the approval id `worker
+  approvals` lists (`worker answer -prompt <either>`, or `worker approve`). The
+  hook is told the decision; no key is sent, so nothing on the screen has to be
+  matched (proved 11-15 on Claude 2.1.325: a 60-line Bash command in a 200x50
+  Session, answered by approval id, ran).
 - Codex 0.166.0's TUI runs on the alternate screen (measured: `alternate_on=1`, no
   scrollback, the origin marker printed on the main screen is not in the capture).
   There the capture is the TUI's own screen with nothing to evict, and Codex cuts a

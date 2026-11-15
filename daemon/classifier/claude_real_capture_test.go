@@ -166,9 +166,17 @@ func TestRealClaudeDialogWithoutItsStartHasNoID(t *testing.T) {
 // A request taller than the pane scrolls its head off the alternate screen (no
 // history behind it). Whatever is left cannot be told from another request
 // with the same tail, so it is reported with no id and the reason, never hashed.
+// The 2.1.325 capture is a delegated Worker's 60-line Bash command in a 200x50
+// Mewla Session (session host, `mewla worker capture`, which trims the screen's
+// ends; scratch path replaced by /tmp/tall-probe/work): Brain answers it by
+// the approval the PermissionRequest hook holds (worker_answer_test.go).
 func TestRealClaudeRequestTallerThanThePaneHasNoID(t *testing.T) {
-	for _, name := range []string{"tall-60-lines-40x40.txt", "tall-60-lines-100x24.txt"} {
-		signal := claudeOnRealCapture(realClaudeCapture(t, name))
+	for _, name := range []string{"claude-2.1.318/tall-60-lines-40x40.txt", "claude-2.1.318/tall-60-lines-100x24.txt", "claude-2.1.325/tall-60-lines-200x50.txt"} {
+		raw, err := os.ReadFile("testdata/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		signal := claudeOnRealCapture(string(raw))
 		if signal.State != StateBlocked || signal.Prompt != nil {
 			t.Fatalf("%s: %+v", name, signal)
 		}

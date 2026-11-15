@@ -360,7 +360,7 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	details := PromptEventDetails(id, activity.Prompt)
 	if activity.Prompt == nil {
 		details["prompt_unidentified"] = unidentifiedReason(activity)
-		details["next"] = unidentifiedNext
+		details["next"] = unidentifiedNext(id)
 	}
 	details["pane"] = strings.TrimSpace(id)
 	raw, err := json.Marshal(details)
@@ -399,10 +399,12 @@ func PromptEventDetails(sessionID string, prompt *classifier.Prompt) map[string]
 	return details
 }
 
-// unidentifiedNext is what Brain reads when a dialog is open and no id can be
-// had for it. There is nothing to pass to `worker answer -prompt`: the
-// progress event id of the event is not a prompt id.
-const unidentifiedNext = "No prompt id exists for this dialog, so `mewla worker answer` cannot target it and no key is sent for it. If a permission hook holds the decision, `mewla worker approvals` lists it with the exact request and `mewla worker approve` answers it. Otherwise ask the user to answer it in the app, or have the Worker stop and run a shorter command."
+// unidentifiedNext is what Brain reads when a dialog is open and the screen
+// gives it no id. The progress event id of the event is not a prompt id; the
+// approval a permission hook holds for it is, and answering that sends no key.
+func unidentifiedNext(sessionID string) string {
+	return fmt.Sprintf("The screen gives this dialog no prompt id, so no key is sent for it. If a permission hook holds the decision, `mewla worker approvals -id %[1]s` lists it with the exact request, and `mewla worker answer -id %[1]s -prompt <its approval id> -choice <option number> -basis \"<the sentence of the brief that authorizes it>\"` answers it through the hook. Otherwise ask the user to answer it in the app, or have the Worker stop and run a shorter command.", strings.TrimSpace(sessionID))
+}
 
 const permissionPolicy = "Choose Allow only for what the Work's brief already authorizes, and quote that sentence as -basis. Use -escalate for anything the brief does not cover (other people's data, money, accounts or credentials, outside messages, irreversible deletion): the user then gets a card. Choose Deny to refuse it, with -basis saying why. If you do not answer, the user is asked."
 
