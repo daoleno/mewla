@@ -158,6 +158,8 @@ type Bridge struct {
 	run string
 	// relisted are open windows a reconnected agent host listed again.
 	relisted map[string]bool
+	// hostGrace is agentHostGrace; tests shorten it.
+	hostGrace time.Duration
 	// releases let go of each open agent window's hold on the display.
 	releases map[string]func()
 	// slots are the places on the agent display the open windows have, so
@@ -205,7 +207,7 @@ func (h *bridgeHost) send(m hostMessage) error {
 func NewBridge(dir string) *Bridge {
 	var run [4]byte
 	_, _ = rand.Read(run[:])
-	return &Bridge{dir: dir, run: hex.EncodeToString(run[:]), waiting: map[string]chan hostMessage{}, releases: map[string]func(){}, open: map[string]string{}}
+	return &Bridge{dir: dir, run: hex.EncodeToString(run[:]), hostGrace: agentHostGrace, waiting: map[string]chan hostMessage{}, releases: map[string]func(){}, open: map[string]string{}}
 }
 
 // CloseWindow asks the extension to close an agent window by its connection id.
@@ -318,10 +320,20 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 	}
 	old := *slot
 	*slot = host
+	// The agent browser keeps its windows while its extension reconnects (its
+	// host restarted, or Mewla did): they stay listed for a moment, and go if
+	// it does not list them again. A host that takes over from one not yet
+	// seen gone starts that moment as well.
+	var gone []string
+	if agent && old != nil {
+		gone = b.orphanOpenLocked()
+	}
+	grace := b.hostGrace
 	b.mu.Unlock()
 	if old != nil {
 		old.conn.Close() // a newer Chrome profile or window took over
 	}
+	b.dropUnlistedLater(gone, grace)
 	defer func() {
 		b.mu.Lock()
 		current := *slot == host
@@ -330,18 +342,11 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 		}
 		var gone []string
 		if agent && current {
-			// The agent browser keeps its windows while its extension
-			// reconnects (its host restarted, or Mewla did): they stay listed
-			// for a moment, and go if it does not list them again.
-			for id := range b.open {
-				gone = append(gone, id)
-				delete(b.relisted, id)
-			}
+			gone = b.orphanOpenLocked()
 		}
+		grace := b.hostGrace
 		b.mu.Unlock()
-		if len(gone) > 0 {
-			time.AfterFunc(agentHostGrace, func() { b.dropUnlisted(gone) })
-		}
+		b.dropUnlistedLater(gone, grace)
 		b.failAll("Chrome closed the Mewla extension")
 	}()
 	dec := json.NewDecoder(r)
@@ -393,7 +398,7 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 
 // agentHostGrace is how long the agent browser's windows stay listed after its
 // extension went away, for it to come back and list them again.
-var agentHostGrace = 20 * time.Second
+const agentHostGrace = 20 * time.Second
 
 // dropUnlisted takes off the list the windows of a gone agent host that no
 // host listed again since.
@@ -412,6 +417,24 @@ func (b *Bridge) dropUnlisted(ids []string) {
 		for _, id := range gone {
 			b.Agent.Closed(id)
 		}
+	}
+}
+
+// orphanOpenLocked is every open agent window, none of them listed again yet.
+func (b *Bridge) orphanOpenLocked() []string {
+	var ids []string
+	for id := range b.open {
+		ids = append(ids, id)
+		delete(b.relisted, id)
+	}
+	return ids
+}
+
+// dropUnlistedLater takes ids off the list after the grace unless a host
+// listed them again by then.
+func (b *Bridge) dropUnlistedLater(ids []string, grace time.Duration) {
+	if len(ids) > 0 {
+		time.AfterFunc(grace, func() { b.dropUnlisted(ids) })
 	}
 }
 
