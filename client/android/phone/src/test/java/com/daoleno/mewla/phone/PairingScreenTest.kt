@@ -82,6 +82,26 @@ class PairingScreenTest {
     }
 
     @Test
+    fun theCodeBoxIsPostedEvenWhileTheScreenIsRead() {
+        // The regression: with the reader running no box was posted, and an unreadable dialog left nothing to type into.
+        assertEquals(PairingScreen.Box.Quiet, PairingScreen.boxAtStart(walked = true, codeGiven = false))
+        assertEquals(PairingScreen.Box.Alert, PairingScreen.boxAtStart(walked = false, codeGiven = false))
+        assertEquals(PairingScreen.Box.Quiet, PairingScreen.boxAtStart(walked = false, codeGiven = true))
+    }
+
+    @Test
+    fun theBoxPopsUpForEachDialogTheWalkWaitsOnWithoutItsCode() {
+        // A dialog it could not read (or whose window it does not recognise): pop up once, as the wait starts.
+        assertTrue(PairingScreen.boxAlerts(waitingOnDialog = true, wasWaiting = false, codeRead = false))
+        assertFalse(PairingScreen.boxAlerts(waitingOnDialog = true, wasWaiting = true, codeRead = false))
+        // The dialog closed and a new one came up: again.
+        assertFalse(PairingScreen.boxAlerts(waitingOnDialog = false, wasWaiting = true, codeRead = false))
+        assertTrue(PairingScreen.boxAlerts(waitingOnDialog = true, wasWaiting = false, codeRead = false))
+        // The code was read: pairing goes on by itself, nothing to pop up.
+        assertFalse(PairingScreen.boxAlerts(waitingOnDialog = true, wasWaiting = false, codeRead = true))
+    }
+
+    @Test
     fun dialogsAreToldFromPagesByTheirWindowClass() {
         assertTrue(PairingScreen.isDialog("android.app.AlertDialog"))
         assertTrue(PairingScreen.isDialog("androidx.appcompat.app.AlertDialog"))

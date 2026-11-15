@@ -78,6 +78,24 @@ object PairingScreen {
         }
     }
 
+    /** How the code box shows when it is posted: in the shade only, or popped up over the screen. */
+    enum class Box { Quiet, Alert }
+
+    /**
+     * The box is posted whenever pairing starts, read or not (with the reader running it used not to
+     * be, and a dialog it could not read left nothing to type into). Walked, it waits quietly until
+     * the pairing dialog is up; unwalked, it is the way in and pops up at once.
+     */
+    fun boxAtStart(walked: Boolean, codeGiven: Boolean): Box = if (walked || codeGiven) Box.Quiet else Box.Alert
+
+    /**
+     * Pops the box up when the walk starts waiting on a pairing dialog (one it recognises, or the
+     * screen after its tap on Pair device with pairing code) and has no code from it: each new
+     * dialog brings a new code, and the person needs the box then.
+     */
+    fun boxAlerts(waitingOnDialog: Boolean, wasWaiting: Boolean, codeRead: Boolean): Boolean =
+        waitingOnDialog && !wasWaiting && !codeRead
+
     /** A window-state change from Settings opens a dialog (its class names one) or a page (anything else). */
     fun isDialog(className: String?): Boolean = className?.contains("Dialog", ignoreCase = true) == true ||
         className?.contains("BottomSheet", ignoreCase = true) == true
