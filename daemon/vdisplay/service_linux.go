@@ -5,12 +5,16 @@ package vdisplay
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
 	"image/draw"
 	"image/jpeg"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/jezek/xgb"
 )
 
@@ -57,6 +62,9 @@ type Service struct {
 	// evictable says whether a Worker's turn has ended, so its display may be
 	// given to another agent when every one is taken (see makeRoom).
 	evictable func(worker string) bool
+	// detached is set once this daemon let go of the screen for the next one
+	// (Detach): nothing is closed, forgotten or saved after it.
+	detached bool
 	// closedIdle are the Workers whose monitor Mewla closed, with when and why,
 	// for their next result to say.
 	closedIdle map[string]closedNote
@@ -92,6 +100,7 @@ type workerDisplay struct {
 	windows  int         // browser windows on the monitor
 	viewers  int         // the person's open views of it
 	told     bool        // the agent has heard that its window is the person's to see and take over
+	restored time.Time   // taken back from a daemon before this one; its windows have not said so yet
 	seen     time.Time   // when the person last closed a view of it
 	person   int         // viewers that hold the display
 	halted   bool        // the person stopped this Worker
@@ -191,13 +200,19 @@ func (s *Service) SweepIdle(now time.Time) {
 	s.mu.Lock()
 	after := s.idleAfter
 	var idle []*workerDisplay
-	if after > 0 {
-		for _, w := range s.displays {
-			idle = append(idle, w)
-		}
+	for _, w := range s.displays {
+		idle = append(idle, w)
 	}
 	s.mu.Unlock()
 	for _, w := range idle {
+		w.mu.Lock()
+		stale := !w.restored.IsZero() && w.windows == 0 && w.liveApps() == 0 && now.Sub(w.restored) >= restoreGrace
+		w.mu.Unlock()
+		if stale {
+			// Taken back after a restart, but no window of its Worker said so.
+			s.Forget(w.worker)
+			continue
+		}
 		w.mu.Lock()
 		since := w.used
 		for _, t := range []time.Time{w.last, w.seen} {
@@ -205,7 +220,7 @@ func (s *Service) SweepIdle(now time.Time) {
 				since = t
 			}
 		}
-		unused := w.acting == 0 && w.person == 0 && w.viewers == 0 && now.Sub(since) >= after
+		unused := after > 0 && w.acting == 0 && w.person == 0 && w.viewers == 0 && now.Sub(since) >= after
 		w.mu.Unlock()
 		if !unused {
 			continue
@@ -445,6 +460,9 @@ func (s *Service) Windows(worker string, n int) {
 	}
 	w.mu.Lock()
 	w.windows = n
+	if n > 0 {
+		w.restored = time.Time{}
+	}
 	idle := w.windows == 0 && w.liveApps() == 0
 	w.mu.Unlock()
 	if idle {
@@ -550,6 +568,7 @@ func (s *Service) create(ctx context.Context, worker string) (*workerDisplay, er
 		s.mu.Unlock()
 		return nil, err
 	}
+	s.persist()
 	return w, nil
 }
 
@@ -583,6 +602,7 @@ func (s *Service) screen(ctx context.Context) (*sharedScreen, error) {
 	s.mu.Lock()
 	s.shared = scr
 	s.mu.Unlock()
+	s.persist()
 	return scr, nil
 }
 
@@ -626,6 +646,7 @@ func (s *Service) dropScreen(scr *sharedScreen) {
 	scr.closeQuery()
 	scr.client.Close()
 	scr.display.Stop()
+	s.persist()
 }
 
 // relayout makes the screen's monitors the parking monitor and one for each
@@ -1000,6 +1021,10 @@ func (s *Service) List() []Info {
 // programs end. The screen stays while any Worker has a monitor.
 func (s *Service) Forget(worker string) {
 	s.mu.Lock()
+	if s.detached {
+		s.mu.Unlock()
+		return
+	}
 	w := s.displays[worker]
 	delete(s.displays, worker)
 	s.mu.Unlock()
@@ -1023,6 +1048,7 @@ func (s *Service) Forget(worker string) {
 	if scr == w.screen && scr.display.Alive() {
 		_ = s.relayout(scr) // the monitor is gone from the layout
 	}
+	s.persist()
 }
 
 // Close ends the screen and everything on it.
@@ -1042,6 +1068,7 @@ func (s *Service) Close() {
 		scr.client.Close()
 		scr.display.Stop()
 	}
+	s.persist()
 	s.rootMu.Lock()
 	if s.ownsRoot {
 		_ = os.RemoveAll(s.root)
@@ -1074,4 +1101,169 @@ func (scr *sharedScreen) closeQuery() {
 		scr.query.Close()
 		scr.query = nil
 	}
+}
+
+// restoreGrace is how long a monitor taken back after a restart waits for its
+// Worker's browser window to report again before it is let go.
+const restoreGrace = 2 * time.Minute
+
+// savedScreen is the agent screen as the daemon keeps it on disk, so the next
+// daemon can take the screen back after a restart (Adopt).
+type savedScreen struct {
+	Number   int            `json:"number"`
+	Cookie   string         `json:"cookie"`
+	Monitors []savedMonitor `json:"monitors"`
+}
+
+type savedMonitor struct {
+	Worker string `json:"worker"`
+	Slot   int    `json:"slot"`
+}
+
+func (s *Service) statePath() string {
+	s.rootMu.Lock()
+	defer s.rootMu.Unlock()
+	if s.root == "" {
+		return ""
+	}
+	return filepath.Join(s.root, "state.json")
+}
+
+// persist saves the screen and its monitors; with no screen it removes them.
+func (s *Service) persist() {
+	path := s.statePath()
+	if path == "" {
+		return
+	}
+	s.mu.Lock()
+	if s.detached {
+		s.mu.Unlock()
+		return
+	}
+	scr := s.shared
+	var saved savedScreen
+	if scr != nil {
+		saved = savedScreen{Number: scr.display.Number, Cookie: scr.display.Cookie()}
+		for _, w := range s.displays {
+			if w.screen == scr {
+				saved.Monitors = append(saved.Monitors, savedMonitor{Worker: w.worker, Slot: w.slot})
+			}
+		}
+	}
+	s.mu.Unlock()
+	if scr == nil {
+		_ = os.Remove(path)
+		return
+	}
+	sort.Slice(saved.Monitors, func(i, j int) bool { return saved.Monitors[i].Slot < saved.Monitors[j].Slot })
+	raw, err := json.Marshal(saved)
+	if err != nil {
+		return
+	}
+	if err := atomicfile.Write(path, raw, 0o600); err != nil {
+		log.Printf("display: couldn't save the agent screen: %v", err)
+	}
+}
+
+// Adopt takes back the agent screen a daemon before this one left running
+// (Detach), with every Worker's monitor where it was; a monitor whose Worker's
+// window does not report again within restoreGrace is let go. It returns how
+// many monitors it took back.
+func (s *Service) Adopt() int {
+	path := s.statePath()
+	if path == "" {
+		return 0
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	var saved savedScreen
+	if json.Unmarshal(raw, &saved) != nil || saved.Number == 0 {
+		_ = os.Remove(path)
+		return 0
+	}
+	s.starting.Lock()
+	defer s.starting.Unlock()
+	s.mu.Lock()
+	busy := s.shared != nil
+	s.mu.Unlock()
+	if busy {
+		return 0
+	}
+	root, _ := s.rootDir()
+	d, err := Adopt(filepath.Join(root, "screen"), saved.Number, saved.Cookie, MonitorWidth, MonitorHeight)
+	if err != nil {
+		log.Printf("display: the agent screen a daemon before this one left is not there any more: %v", err)
+		_ = os.Remove(path)
+		return 0
+	}
+	c, err := d.Client()
+	if err != nil {
+		log.Printf("display: couldn't see the agent screen a daemon before this one left: %v", err)
+		d.Stop()
+		_ = os.Remove(path)
+		return 0
+	}
+	scr := &sharedScreen{display: d, client: c}
+	scr.mover = startMover(d, s.monitorOfProcess)
+	now := time.Now()
+	s.mu.Lock()
+	s.shared = scr
+	for _, m := range saved.Monitors {
+		if m.Worker == "" || m.Slot < 1 || m.Slot > maxDisplays {
+			continue
+		}
+		s.displays[m.Worker] = &workerDisplay{worker: m.Worker, screen: scr, slot: m.Slot, rect: image.Rect(m.Slot*MonitorWidth, 0, (m.Slot+1)*MonitorWidth, MonitorHeight), used: now, restored: now}
+	}
+	n := len(s.displays)
+	s.mu.Unlock()
+	if err := s.relayout(scr); err != nil {
+		log.Printf("display: couldn't lay out the agent screen taken back: %v", err)
+	}
+	log.Printf("display: took back the agent screen :%d with %d monitor(s) after a restart", d.Number, n)
+	return n
+}
+
+// Detach lets go of the agent screen without closing anything, for the next
+// daemon to take back (Adopt): the screen and the browser on it keep running
+// in their keepers. Agents' desktop apps end with this daemon.
+func (s *Service) Detach() {
+	s.mu.Lock()
+	s.detached = true
+	if s.idleStop != nil {
+		close(s.idleStop)
+		s.idleStop = nil
+	}
+	scr := s.shared
+	s.shared = nil
+	s.mu.Unlock()
+	if scr != nil {
+		scr.mover.stop()
+		scr.closeQuery()
+		scr.client.Close()
+		scr.display.Detach()
+	}
+}
+
+// StableRoot is the agent screen's directory for a state directory: the same
+// across restarts, private, and short enough for the sockets in it.
+func StableRoot(stateDir string) (string, error) {
+	base := os.Getenv("XDG_RUNTIME_DIR")
+	if info, err := os.Stat(base); err != nil || !info.IsDir() {
+		base = os.TempDir()
+	}
+	sum := sha256.Sum256([]byte(stateDir))
+	dir := filepath.Join(base, "mewla-vd-"+hex.EncodeToString(sum[:6]))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("%s is not a directory", dir)
+	}
+	return dir, os.Chmod(dir, 0o700)
 }

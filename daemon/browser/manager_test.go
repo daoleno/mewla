@@ -15,10 +15,11 @@ import (
 	"time"
 )
 
-type fakeHost struct{ alive atomic.Bool }
+type fakeHost struct{ alive, detached atomic.Bool }
 
-func (h *fakeHost) Alive() bool  { return h.alive.Load() }
+func (h *fakeHost) Alive() bool  { return h.alive.Load() && !h.detached.Load() }
 func (h *fakeHost) Close() error { h.alive.Store(false); return nil }
+func (h *fakeHost) Detach()      { h.detached.Store(true) }
 
 type fakeBackend struct {
 	mu      sync.Mutex
@@ -26,6 +27,19 @@ type fakeBackend struct {
 	started chan struct{}
 	err     error
 	hosts   []*fakeHost
+	// left is a browser a daemon before this one left running.
+	left *fakeHost
+}
+
+func (b *fakeBackend) Adopt(context.Context, string) (Host, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.left == nil {
+		return nil, nil
+	}
+	h := b.left
+	b.left = nil
+	return h, nil
 }
 
 func (b *fakeBackend) Capability(context.Context) Capability { return Capability{Available: true} }
@@ -296,5 +310,43 @@ func TestSettingsSayWhenThisSystemHasNoVirtualScreen(t *testing.T) {
 		if system && strings.Contains(string(raw), "virtual_screen_unsupported") {
 			t.Fatalf("a Linux answer gained a field: %s", raw)
 		}
+	}
+}
+
+// A daemon that stops lets go of the browser without closing it or its
+// windows; the next takes it back, and it is not stopped as unused while its
+// windows report again.
+func TestARestartLetsGoOfTheBrowserAndTheNextTakesItBack(t *testing.T) {
+	b, s := &fakeBackend{}, &fakeScreens{}
+	m := newManager(t, b, s)
+	m.virtual.Store(true)
+	var asked []string
+	m.SetWindowCloser(func(key string) { asked = append(asked, key) })
+	if err := m.EnsureHost(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_ = m.Opened("a", "ka")
+	host := b.hosts[0]
+	m.Detach()
+	// What the bridge does as this daemon's connections end is nothing now.
+	m.Closed("ka")
+	m.Forget("a")
+	m.stopIdleHost()
+	if !host.alive.Load() || !host.detached.Load() || len(asked) != 0 || s.count("a") != 1 {
+		t.Fatalf("after Detach: alive %v detached %v closer asked %v windows %d", host.alive.Load(), host.detached.Load(), asked, s.count("a"))
+	}
+
+	next := newManager(t, &fakeBackend{left: host}, s)
+	next.virtual.Store(true)
+	host.detached.Store(false)
+	if !next.AdoptHost(context.Background()) {
+		t.Fatal("the next daemon did not take the browser back")
+	}
+	next.stopIdleHost()
+	if !host.Alive() {
+		t.Fatal("the browser taken back was stopped before its windows could report")
+	}
+	if err := next.EnsureHost(context.Background()); err != nil || len(next.backend.(*fakeBackend).hosts) != 0 {
+		t.Fatalf("a window after the restart started another browser: %v", err)
 	}
 }

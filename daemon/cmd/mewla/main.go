@@ -42,6 +42,7 @@ import (
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/friends"
 	"github.com/daoleno/mewla/daemon/iphone"
+	"github.com/daoleno/mewla/daemon/keeper"
 	"github.com/daoleno/mewla/daemon/launchsh"
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/logfile"
@@ -101,6 +102,14 @@ func directClaudePID(sessionID string) (int, bool) {
 }
 
 func main() {
+	if os.Getenv(keeper.SpecEnv) != "" {
+		// A keeper the daemon started for the agent screen or the agent
+		// browser (package keeper): nothing else of mewla runs in it.
+		if err := keeper.Main(); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	// MEWLA_STATE_ROOT relocates all state for a throwaway daemon; see statedir.
 	statedir.InitFromEnv()
 	args := os.Args[1:]
@@ -798,15 +807,25 @@ func runDaemon(args []string, stderr io.Writer) error {
 	// The agent screen: one display for the computer with a monitor for each
 	// agent (Linux, with Virtual screen on). Desktop apps open on an agent's monitor, and so
 	// does its browser window.
-	displayService := vdisplay.NewService("")
-	defer displayService.Close()
+	// The screen and the agent browser run in keepers that outlive this daemon:
+	// it lets go of them when it stops and the next one takes them back, so a
+	// restart or an update keeps what agents left open for the person.
+	displayRoot, err := vdisplay.StableRoot(authManager.StorageDir())
+	if err != nil {
+		log.Printf("display: no lasting directory for the agent screen: %v", err)
+		displayRoot = ""
+	}
+	displayService := vdisplay.NewService(displayRoot)
+	defer displayService.Detach()
+	displayService.Adopt()
 	srv.SetDisplays(displayService)
 	controlHandler.displays = displayService
 	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend(agentUse.PrepareAgentBrowser, displayService), displayService)
 	if err != nil {
 		return fmt.Errorf("initialize Browser: %w", err)
 	}
-	defer browserManager.Close()
+	defer browserManager.Detach()
+	go browserManager.AdoptHost(ctx)
 	// With the virtual screen on, agents' windows are in the agent browser on
 	// it, with the same extension and the same tools as the person's Chrome.
 	agentUse.SetVirtualScreen(func() (bool, string) {

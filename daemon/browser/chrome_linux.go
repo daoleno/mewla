@@ -5,23 +5,23 @@ package browser
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/keeper"
 	"github.com/daoleno/mewla/daemon/vdisplay"
-	"github.com/fsnotify/fsnotify"
-	"golang.org/x/sys/unix"
 )
 
 // LinuxBackend runs the agent browser's Chrome on the agent screen (see
@@ -166,181 +166,118 @@ func credentialStore(ctx context.Context, root string) (string, error) {
 	return store, nil
 }
 
-type child struct {
-	cmd    *exec.Cmd
-	done   chan struct{}
-	stderr *tailBuffer
-}
-
-// tailBuffer keeps the last few KiB a process wrote, so a launch that failed
-// can say why instead of only that it did.
-type tailBuffer struct {
-	mu  sync.Mutex
-	buf []byte
-}
-
-const tailLimit = 2048
-
-func (t *tailBuffer) Write(p []byte) (int, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.buf = append(t.buf, p...)
-	if len(t.buf) > tailLimit {
-		t.buf = append([]byte(nil), t.buf[len(t.buf)-tailLimit:]...)
-	}
-	return len(p), nil
-}
-
-// reason is the last lines the process said, as one short string.
-func (p *child) reason() string {
-	if p == nil || p.stderr == nil {
-		return ""
-	}
-	p.stderr.mu.Lock()
-	text := strings.TrimSpace(strings.ToValidUTF8(string(p.stderr.buf), ""))
-	p.stderr.mu.Unlock()
-	lines := strings.Split(text, "\n")
-	if len(lines) > 4 {
-		lines = lines[len(lines)-4:]
-	}
-	text = strings.Join(lines, " | ")
-	if len(text) > 600 {
-		text = text[len(text)-600:]
-	}
-	return text
-}
-
-// launchFailure names the step that failed and why: what the process said, or
-// how the wait ended.
-func launchFailure(step string, cause error, p *child) error {
-	detail := p.reason()
-	if detail == "" {
-		detail = cause.Error()
-	} else if p != nil && !p.alive() {
-		detail = fmt.Sprintf("exited (%v): %s", p.cmd.ProcessState, detail)
-	}
-	return fmt.Errorf("%s: %s", step, detail)
-}
-
-func spawn(env []string, name string, args ...string) (*child, error) {
-	return spawnWith(env, nil, name, args...)
-}
-
-// spawnWith starts a process that also gets extra files as its descriptors 3, 4, ….
-func spawnWith(env []string, extra []*os.File, name string, args ...string) (*child, error) {
-	cmd := exec.Command(name, args...)
-	cmd.Env = env
-	cmd.ExtraFiles = extra
-	tail := &tailBuffer{}
-	cmd.Stderr = tail
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	p := &child{cmd: cmd, done: make(chan struct{}), stderr: tail}
-	go func() { _ = cmd.Wait(); close(p.done) }()
-	return p, nil
-}
-func (p *child) alive() bool {
-	if p == nil {
-		return false
-	}
-	select {
-	case <-p.done:
-		return false
-	default:
-		return true
-	}
-}
-func (p *child) stop() {
-	if !p.alive() {
-		return
-	}
-	_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM)
-	select {
-	case <-p.done:
-	case <-time.After(3 * time.Second):
-		_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
-		<-p.done
-	}
-}
-
-// linuxHost is the computer's one Chrome on the agent profile, with a private
+// ownerEnv marks every process of the agent browser with the keeper that runs
+// it, so a later daemon can tell what a crash left behind (reapStrays).
 const ownerEnv = "MEWLA_BROWSER_OWNER"
 
 // tempPrefix starts the private run directory of every runtime.
 const tempPrefix = "zb-"
 
-func waitForFile(ctx context.Context, d time.Duration, dir string, creator *child, ready func() bool) error {
-	watcher, err := fsnotify.NewWatcher()
-	var events <-chan fsnotify.Event
-	var watchErrors <-chan error
-	var tick <-chan time.Time
-	if err == nil {
-		defer watcher.Close()
-		err = watcher.Add(dir)
-	}
-	if err == nil {
-		events, watchErrors = watcher.Events, watcher.Errors
-	} else {
-		// No inotify (limits exhausted): poll, and say so once per launch.
-		log.Printf("browser: cannot watch %s for the launch (%v); polling every 50ms", dir, err)
-		t := time.NewTicker(50 * time.Millisecond)
-		defer t.Stop()
-		tick = t.C
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	var exited <-chan struct{}
-	if creator != nil {
-		exited = creator.done
-	}
-	// The watch is in place before the first check, so a file created between
-	// the two is not missed.
-	for !ready() {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-			return context.DeadlineExceeded
-		case <-exited:
-			if ready() {
-				return nil
-			}
-			return errors.New("the process exited before it was ready")
-		case <-events:
-		case <-watchErrors:
-			// An overflowed queue only means events were missed; ready() looks.
-		case <-tick:
-		}
-	}
-	return nil
-}
-
-// waitForExit waits for a process to end, up to d.
-func waitForExit(ctx context.Context, d time.Duration, p *child) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-p.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return context.DeadlineExceeded
-	}
-}
-
 // linuxHost is the computer's one Chrome on the agent profile, running on the
 // agent screen. The extension opens an agent's windows in it and places each
 // on its agent's monitor; nothing here touches a window.
+//
+// Chrome runs in a keeper (package keeper), which holds its debugging pipe and
+// relays it here, so a restart of Mewla keeps the browser and every agent's
+// window in it: the next daemon attaches to the same keeper (Adopt).
 type linuxHost struct {
 	mu     sync.Mutex
-	rundir string
-	chrome *child
-	lock   *os.File
+	socket string
+	pid    int
 	closed bool
 	pipe   *pipeCDP
+}
+
+// keepLinger is how long the agent browser outlives a daemon that does not
+// come back; a restart attaches again well within it.
+const keepLinger = 10 * time.Minute
+
+// keeperSocket is where the agent browser's keeper listens: in the profile's
+// directory, or a short private one when that path is too long for a socket.
+func keeperSocket(root string) (string, error) {
+	path := filepath.Join(root, "keeper.sock")
+	if len(path) <= 100 {
+		return path, nil
+	}
+	sum := sha256.Sum256([]byte(root))
+	dir := filepath.Join("/tmp", fmt.Sprintf("mewla-%d", os.Getuid()))
+	if err := privateDir(dir); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "b"+hex.EncodeToString(sum[:8])+".sock"), nil
+}
+
+// attachHost joins the keeper at socket and checks Chrome answers there.
+func attachHost(ctx context.Context, socket string) (*linuxHost, error) {
+	conn, err := keeper.Attach(socket)
+	if err != nil {
+		return nil, err
+	}
+	h := &linuxHost{socket: socket, pid: conn.Pid, pipe: newPipeCDP(conn, conn)}
+	check, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if _, err := h.pipe.call(check, "Browser.getVersion", nil); err != nil {
+		h.pipe.close()
+		return nil, err
+	}
+	return h, nil
+}
+
+// Adopt is the agent browser a daemon before this one left running on the
+// profile in root, or nil when there is none.
+func (b *LinuxBackend) Adopt(ctx context.Context, root string) (Host, error) {
+	socket, err := keeperSocket(root)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(socket); err != nil {
+		return nil, nil
+	}
+	h, err := attachHost(ctx, socket)
+	if err != nil {
+		log.Printf("browser: the agent browser a daemon before this one left does not answer (%v); stopping it", err)
+		_ = keeper.Stop(socket)
+		return nil, nil
+	}
+	// It must be on the agent screen this daemon shows: one left on a screen
+	// that was not taken back would put agents' windows where nobody sees them.
+	if b.Screens == nil {
+		h.Detach()
+		return nil, nil
+	}
+	number, _, err := b.Screens.DisplayEnv(ctx)
+	if err != nil {
+		h.Detach()
+		return nil, err
+	}
+	if on := displayOf(h.pid); on != fmt.Sprintf(":%d", number) {
+		log.Printf("browser: the agent browser a daemon before this one left is on display %q, not the agent screen :%d; stopping it", on, number)
+		h.Detach()
+		_ = keeper.Stop(socket)
+		return nil, nil
+	}
+	// Its extension reconnects through the native host registered in the
+	// profile: that names this daemon's mewla, which an update may have moved.
+	if b.Prepare != nil {
+		if _, err := b.Prepare(filepath.Join(root, "profile")); err != nil {
+			log.Printf("browser: couldn't register Mewla's native host again for the agent browser: %v", err)
+		}
+	}
+	return h, nil
+}
+
+// displayOf is the X display a process runs on, from its environment.
+func displayOf(pid int) string {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
+	if err != nil {
+		return ""
+	}
+	for _, kv := range strings.Split(string(raw), "\x00") {
+		if v, ok := strings.CutPrefix(kv, "DISPLAY="); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
@@ -350,42 +287,38 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 	if b.Screens == nil {
 		return nil, errors.New("The agent screen is not available")
 	}
-	reapStrays()
 	if err := privateDir(root); err != nil {
 		return nil, err
 	}
+	// The browser a daemon before this one left, when it still answers.
+	if h, err := b.Adopt(ctx, root); err != nil || h != nil {
+		return h, err
+	}
+	reapStrays()
 	profile := filepath.Join(root, "profile")
 	if err := privateDir(profile); err != nil {
 		return nil, err
 	}
-	lock, err := os.OpenFile(filepath.Join(root, "runtime.lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	socket, err := keeperSocket(root)
 	if err != nil {
 		return nil, err
 	}
-	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		lock.Close()
-		return nil, errors.New("The agent browser profile already has a runtime owner")
-	}
 	store, err := credentialStore(ctx, root)
 	if err != nil {
-		lock.Close()
 		return nil, err
 	}
 	number, xauth, err := b.Screens.DisplayEnv(ctx)
 	if err != nil {
-		lock.Close()
 		return nil, fmt.Errorf("The agent screen could not start: %w", err)
 	}
 	dir, err := os.MkdirTemp("", tempPrefix)
 	if err != nil {
-		lock.Close()
 		return nil, err
 	}
-	h := &linuxHost{rundir: dir, lock: lock}
 	success := false
 	defer func() {
 		if !success {
-			_ = h.Close()
+			_ = os.RemoveAll(dir)
 		}
 	}()
 	for _, n := range []string{"run", "config", "data", "cache"} {
@@ -411,9 +344,9 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 		}
 		env = append(env, v)
 	}
-	// ownerEnv marks every process of this runtime with the daemon that started
-	// it, so a later daemon can tell what a crash left behind.
-	env = append(env, "DBUS_SESSION_BUS_ADDRESS="+bus, ownerEnv+"="+strconv.Itoa(os.Getpid()), "XDG_SESSION_TYPE=x11", "XDG_RUNTIME_DIR="+filepath.Join(dir, "run"), "XDG_CONFIG_HOME="+filepath.Join(dir, "config"), "XDG_DATA_HOME="+filepath.Join(dir, "data"), "XDG_CACHE_HOME="+filepath.Join(dir, "cache"), fmt.Sprintf("DISPLAY=:%d", number), "XAUTHORITY="+xauth)
+	// ownerEnv marks every process of this runtime with its keeper (set by the
+	// keeper), so a later daemon can tell what a crash left behind.
+	env = append(env, "DBUS_SESSION_BUS_ADDRESS="+bus, "XDG_SESSION_TYPE=x11", "XDG_RUNTIME_DIR="+filepath.Join(dir, "run"), "XDG_CONFIG_HOME="+filepath.Join(dir, "config"), "XDG_DATA_HOME="+filepath.Join(dir, "data"), "XDG_CACHE_HOME="+filepath.Join(dir, "cache"), fmt.Sprintf("DISPLAY=:%d", number), "XAUTHORITY="+xauth)
 	// The private profile lock is also enforced by Chrome. Never delete its SingletonLock.
 	extension := ""
 	if b.Prepare != nil {
@@ -423,44 +356,46 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 	}
 	// Chrome 137 and later ignore --load-extension. An extension can still be
 	// loaded over the debugging pipe, which is also what lets nobody but this
-	// daemon do it: the pipe's other end is ours, and Chrome ends if it closes.
-	toChromeR, toChromeW, err := os.Pipe()
-	if err != nil {
-		return nil, err
-	}
-	fromChromeR, fromChromeW, err := os.Pipe()
-	if err != nil {
-		toChromeR.Close()
-		toChromeW.Close()
-		return nil, err
-	}
+	// daemon do it: the pipe's other end is the keeper's, relayed only to the
+	// daemon over a socket only this user can open, and Chrome ends if it closes.
 	// Despite Chrome's historical flag name, libsecret is the standard Secret
 	// Service client, also supported by installed KDE ksecretd/KWallet. The
 	// windows of different agents are on different monitors, but a window
 	// that is covered or off screen must not be slowed down for it.
-	h.chrome, err = spawnWith(env, []*os.File{toChromeR, fromChromeW}, b.chrome(), "--user-data-dir="+profile, "--remote-debugging-pipe", "--enable-unsafe-extension-debugging", "--silent-debugger-extension-api", "--ozone-platform=x11", "--password-store="+store, "--no-first-run", "--no-default-browser-check", "--no-startup-window", "--disable-features=OutdatedBuildDetector", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling")
-	toChromeR.Close()
-	fromChromeW.Close()
+	logPath := filepath.Join(root, "keeper.log")
+	_ = os.Remove(logPath)
+	err = keeper.Spawn(keeper.Spec{
+		Socket: socket, Linger: keepLinger, CDP: true, Env: env, OwnerEnv: ownerEnv,
+		Lock: filepath.Join(root, "runtime.lock"), Log: logPath, Cleanup: []string{dir},
+		Argv: []string{b.chrome(), "--user-data-dir=" + profile, "--remote-debugging-pipe", "--enable-unsafe-extension-debugging", "--silent-debugger-extension-api", "--ozone-platform=x11", "--password-store=" + store, "--no-first-run", "--no-default-browser-check", "--no-startup-window", "--disable-features=OutdatedBuildDetector", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"},
+	})
 	if err != nil {
-		toChromeW.Close()
-		fromChromeR.Close()
-		return nil, err
+		if strings.Contains(err.Error(), "held by another runtime") {
+			return nil, errors.New("The agent browser profile already has a runtime owner")
+		}
+		return nil, fmt.Errorf("Managed Chrome could not start: %w", err)
 	}
-	h.pipe = newPipeCDP(toChromeW, fromChromeR)
-	if _, err = h.pipe.call(ctx, "Browser.getVersion", nil); err != nil {
-		return nil, launchFailure("Managed Chrome could not start", err, h.chrome)
+	h, err := attachHost(ctx, socket)
+	if err != nil {
+		_ = keeper.Stop(socket)
+		return nil, fmt.Errorf("Managed Chrome could not start: %v: %s", err, keeper.Tail(logPath))
 	}
+	defer func() {
+		if !success {
+			_ = h.Close()
+		}
+	}()
 	if extension != "" {
 		raw, err := h.pipe.call(ctx, "Extensions.loadUnpacked", map[string]any{"path": extension})
 		if err != nil {
-			return nil, launchFailure("Mewla's extension could not be loaded into the agent browser", err, h.chrome)
+			return nil, fmt.Errorf("Mewla's extension could not be loaded into the agent browser: %v: %s", err, keeper.Tail(logPath))
 		}
 		var loaded struct {
 			ID string `json:"id"`
 		}
 		_ = json.Unmarshal(raw, &loaded)
 		if loaded.ID == "" {
-			return nil, launchFailure("Mewla's extension could not be loaded into the agent browser", errors.New("Chrome returned no extension ID"), h.chrome)
+			return nil, errors.New("Mewla's extension could not be loaded into the agent browser: Chrome returned no extension ID")
 		}
 	}
 	success = true
@@ -470,9 +405,11 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 func (h *linuxHost) Alive() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return !h.closed && h.chrome.alive()
+	return !h.closed && !h.pipe.isEnded()
 }
 
+// Close stops the browser: its keeper asks Chrome to quit, so it flushes the
+// persistent profile (the agents' sign-ins), then ends what is left.
 func (h *linuxHost) Close() error {
 	h.mu.Lock()
 	if h.closed {
@@ -481,33 +418,25 @@ func (h *linuxHost) Close() error {
 	}
 	h.closed = true
 	h.mu.Unlock()
-	// Ask Chrome to quit, so it flushes its persistent profile (the agents'
-	// sign-ins) before anything is terminated: SIGTERM to the whole process
-	// group can kill the cookie writer too early.
-	if h.chrome.alive() && h.pipe != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		_, _ = h.pipe.call(ctx, "Browser.close", nil)
-		_ = waitForExit(ctx, 6*time.Second, h.chrome)
-		cancel()
-	}
-	h.chrome.stop()
-	if h.pipe != nil {
-		h.pipe.close()
-	}
-	if h.lock != nil {
-		_ = unix.Flock(int(h.lock.Fd()), unix.LOCK_UN)
-		_ = h.lock.Close()
-	}
-	if h.rundir != "" {
-		_ = os.RemoveAll(h.rundir)
-	}
-	return nil
+	err := keeper.Stop(h.socket)
+	h.pipe.close()
+	return err
+}
+
+// Detach lets go of the browser and leaves it running in its keeper, for the
+// next daemon to adopt.
+func (h *linuxHost) Detach() {
+	h.mu.Lock()
+	h.closed = true
+	h.mu.Unlock()
+	h.pipe.close()
 }
 
 // pipeCDP speaks to Chrome over its debugging pipe: NUL-delimited JSON, ours
 // to read for as long as Chrome runs (it would block on a full pipe).
 type pipeCDP struct {
-	out, in *os.File
+	out     io.WriteCloser
+	in      io.ReadCloser
 	mu      sync.Mutex
 	next    int
 	pending map[int]chan pipeReply
@@ -519,7 +448,7 @@ type pipeReply struct {
 	err    error
 }
 
-func newPipeCDP(out, in *os.File) *pipeCDP {
+func newPipeCDP(out io.WriteCloser, in io.ReadCloser) *pipeCDP {
 	p := &pipeCDP{out: out, in: in, pending: map[int]chan pipeReply{}}
 	go p.read()
 	return p
@@ -602,6 +531,12 @@ func (p *pipeCDP) call(ctx context.Context, method string, params any) (json.Raw
 	case <-time.After(30 * time.Second):
 		return nil, errors.New("Chrome did not answer")
 	}
+}
+
+func (p *pipeCDP) isEnded() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.ended
 }
 
 func (p *pipeCDP) close() {

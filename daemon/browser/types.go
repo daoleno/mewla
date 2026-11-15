@@ -42,11 +42,18 @@ type Response struct {
 // the agent screen with Mewla's extension loaded.
 type Host interface {
 	Alive() bool
+	// Close stops the browser.
 	Close() error
+	// Detach lets go of the browser and leaves it running, for the next
+	// daemon to adopt.
+	Detach()
 }
 
 type Backend interface {
 	Capability(context.Context) Capability
 	// Start brings the browser up on the profile directory and waits for it.
 	Start(ctx context.Context, profile string) (Host, error)
+	// Adopt is the browser a daemon before this one left running on the
+	// profile directory, or nil when there is none.
+	Adopt(ctx context.Context, profile string) (Host, error)
 }

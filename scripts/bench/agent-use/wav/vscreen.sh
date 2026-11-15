@@ -79,11 +79,19 @@ stop)
   KIDS=""; for d in $DAEMONS; do KIDS="$KIDS $(tree "$d")"; done
   # The Chrome of this daemon's agent profile, and the programs the Workers' tools started.
   STRAYS=$(pgrep -f -- "$V/state" || true)
+  # The keepers the agent screen and browser run in outlive the daemon (that is what keeps them over a restart): each
+  # stops its Xvnc or Chrome when it is terminated.
+  KEEPERS=$(pgrep -fx -- "$V/mewla" || true)
   "$TMUXBIN" -S "$V/tmux.sock" kill-server 2>/dev/null || true
   for p in $DAEMONS; do kill "$p" 2>/dev/null || true; done
   sleep 3
+  for p in $KEEPERS; do kill "$p" 2>/dev/null || true; done
   for p in $KIDS $STRAYS; do kill "$p" 2>/dev/null || true; done
-  sleep 1
+  sleep 3
+  # The agent screen's directory is outside DIR (vdisplay.StableRoot: the daemon runs with no XDG_RUNTIME_DIR, so under
+  # /tmp), named for the state directory; a next start in DIR must not take back this run's screen.
+  SCREENDIR=/tmp/mewla-vd-$(printf '%s' "$V/state" | sha256sum | cut -c1-12)
+  rm -rf "$SCREENDIR"
   rm -rf "$V"
   ;;
 restart)

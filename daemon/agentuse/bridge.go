@@ -3,6 +3,7 @@ package agentuse
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -45,6 +46,23 @@ type hostMessage struct {
 	WindowID  int             `json:"windowId,omitempty"`
 	Sessions  []string        `json:"sessions,omitempty"`
 	Extension json.RawMessage `json:"-"`
+	// Worker is the Worker a connect is for; the extension keeps it with the
+	// window and says it again when it reconnects.
+	Worker string `json:"worker,omitempty"`
+	// Windows, in a hello, are the agents' windows the extension has open: the
+	// agent browser keeps them while Mewla restarts, and the new daemon lists
+	// them again.
+	Windows []openWindow `json:"windows,omitempty"`
+	// Agent, in a role message, tells the extension it is the agent browser's,
+	// whose windows outlive a daemon that goes away for a restart.
+	Agent bool `json:"agent,omitempty"`
+}
+
+// openWindow is an agent's window the extension has open.
+type openWindow struct {
+	ID       string `json:"id"`
+	Worker   string `json:"worker,omitempty"`
+	WindowID int    `json:"windowId,omitempty"`
 }
 
 // WindowBounds is where the agent's window goes, in the global points of the
@@ -135,6 +153,11 @@ type Bridge struct {
 	// open are the agent browser's windows, by connection id, with the Worker.
 	open   map[string]string
 	nextID int
+	// run makes this daemon's connection ids its own: an agent browser a
+	// daemon before it left running still has windows under that one's ids.
+	run string
+	// relisted are open windows a reconnected agent host listed again.
+	relisted map[string]bool
 	// releases let go of each open agent window's hold on the display.
 	releases map[string]func()
 	// slots are the places on the agent display the open windows have, so
@@ -180,7 +203,9 @@ func (h *bridgeHost) send(m hostMessage) error {
 }
 
 func NewBridge(dir string) *Bridge {
-	return &Bridge{dir: dir, waiting: map[string]chan hostMessage{}, releases: map[string]func(){}, open: map[string]string{}}
+	var run [4]byte
+	_, _ = rand.Read(run[:])
+	return &Bridge{dir: dir, run: hex.EncodeToString(run[:]), waiting: map[string]chan hostMessage{}, releases: map[string]func(){}, open: map[string]string{}}
 }
 
 // CloseWindow asks the extension to close an agent window by its connection id.
@@ -299,21 +324,23 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 	}
 	defer func() {
 		b.mu.Lock()
-		if *slot == host {
+		current := *slot == host
+		if current {
 			*slot = nil
 		}
 		var gone []string
-		if agent {
+		if agent && current {
+			// The agent browser keeps its windows while its extension
+			// reconnects (its host restarted, or Mewla did): they stay listed
+			// for a moment, and go if it does not list them again.
 			for id := range b.open {
 				gone = append(gone, id)
+				delete(b.relisted, id)
 			}
-			b.open = map[string]string{}
 		}
 		b.mu.Unlock()
-		if agent && b.Agent != nil && b.Agent.Closed != nil {
-			for _, id := range gone {
-				b.Agent.Closed(id)
-			}
+		if len(gone) > 0 {
+			time.AfterFunc(agentHostGrace, func() { b.dropUnlisted(gone) })
 		}
 		b.failAll("Chrome closed the Mewla extension")
 	}()
@@ -329,6 +356,10 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 			host.version = m.Version
 			b.mu.Unlock()
 			if m.Type == "hello" {
+				if agent {
+					_ = host.send(hostMessage{Type: "role", Agent: true})
+					b.takeBack(host, m.Windows)
+				}
 				b.askToReload(host, m.Version)
 			}
 		case "connected", "error", "closed":
@@ -356,6 +387,59 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 				default:
 				}
 			}
+		}
+	}
+}
+
+// agentHostGrace is how long the agent browser's windows stay listed after its
+// extension went away, for it to come back and list them again.
+var agentHostGrace = 20 * time.Second
+
+// dropUnlisted takes off the list the windows of a gone agent host that no
+// host listed again since.
+func (b *Bridge) dropUnlisted(ids []string) {
+	b.mu.Lock()
+	var gone []string
+	for _, id := range ids {
+		if _, open := b.open[id]; open && !b.relisted[id] {
+			delete(b.open, id)
+			gone = append(gone, id)
+		}
+		delete(b.relisted, id)
+	}
+	b.mu.Unlock()
+	if b.Agent != nil && b.Agent.Closed != nil {
+		for _, id := range gone {
+			b.Agent.Closed(id)
+		}
+	}
+}
+
+// takeBack lists again the windows the agent browser kept open while Mewla
+// restarted, so they are in Screen under their Workers as before.
+func (b *Bridge) takeBack(host *bridgeHost, windows []openWindow) {
+	for _, w := range windows {
+		if w.ID == "" {
+			continue
+		}
+		b.mu.Lock()
+		_, known := b.open[w.ID]
+		if !known {
+			b.open[w.ID] = w.Worker
+		}
+		if b.relisted == nil {
+			b.relisted = map[string]bool{}
+		}
+		b.relisted[w.ID] = true
+		b.mu.Unlock()
+		if known || b.Agent == nil || b.Agent.Opened == nil {
+			continue
+		}
+		if err := b.Agent.Opened(w.Worker, w.ID); err != nil {
+			b.mu.Lock()
+			delete(b.open, w.ID)
+			b.mu.Unlock()
+			_ = host.send(hostMessage{Type: "disconnect", ID: w.ID})
 		}
 	}
 }
@@ -524,7 +608,7 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 		return ErrNoExtensionHost
 	}
 	b.nextID++
-	id := fmt.Sprintf("c%d", b.nextID)
+	id := fmt.Sprintf("c%s-%d", b.run, b.nextID)
 	ch := make(chan hostMessage, 1)
 	b.waiting[id] = ch
 	b.mu.Unlock()
@@ -565,7 +649,7 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 			}
 		}
 	}
-	if err := host.send(hostMessage{Type: "connect", ID: id, RelayURL: relayURL, Client: client, Label: label, Bounds: bounds}); err != nil {
+	if err := host.send(hostMessage{Type: "connect", ID: id, RelayURL: relayURL, Client: client, Label: label, Bounds: bounds, Worker: worker}); err != nil {
 		b.release(id)
 		return fmt.Errorf("couldn't reach the extension: %w", err)
 	}
