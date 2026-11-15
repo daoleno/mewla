@@ -40,6 +40,10 @@ func WaitForServer(ctx context.Context, socket string, timeout time.Duration) er
 // against it: `codex --remote` makes one attempt to connect and exits 1 when
 // the app-server is not listening yet, which on Windows it often was not.
 func WaitMain(args []string, stderr io.Writer) int {
+	if len(args) == 1 && (args[0] == "-h" || args[0] == "-help" || args[0] == "--help") {
+		fmt.Fprintln(stderr, "Usage: mewla codex-server-wait SOCKET")
+		return 0
+	}
 	if len(args) != 1 || args[0] == "" {
 		fmt.Fprintln(stderr, "usage: mewla codex-server-wait SOCKET")
 		return 2

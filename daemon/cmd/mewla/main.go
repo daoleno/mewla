@@ -110,7 +110,7 @@ func main() {
 		_ = os.Unsetenv(agentuse.OpenShimEnv)
 		args = append([]string{"agent-use", "open", "--state-dir", stateDir, "--"}, args...)
 	}
-	if err := run(args, os.Stderr); err != nil {
+	if err := runCLI(args, os.Stdout, os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
@@ -1573,8 +1573,10 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	return writeControlResponse(os.Stdout, resp, cfg.json)
 }
 
+// isHelpArg is a request for a command group's usage: what the flag package
+// takes as one (-h, -help, --help), or the word help.
 func isHelpArg(value string) bool {
-	return value == "-h" || value == "--help" || value == "help"
+	return value == "-h" || value == "-help" || value == "--help" || value == "help"
 }
 
 func printWorkerUsage(w io.Writer) {
