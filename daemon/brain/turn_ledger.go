@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -1598,7 +1599,16 @@ func (s *Store) prepareDelegatedSignalTurnOnce(database *presentationDatabase, f
 	}
 	if admission.Status == lifecycle.AdmissionPrepared || admission.Status == lifecycle.AdmissionAmbiguous {
 		next, err := s.fsm.AcceptAdmissionBySignal(state.ID, admission.TurnToken, admission.SessionID)
-		if err != nil {
+		var moved *lifecycle.SteerTargetMovedError
+		switch {
+		case errors.As(err, &moved):
+			// A report the Worker made on its exact prompt is never refused
+			// with a bare "stale fence": name the turn that runs instead.
+			return s.rejectDelegatedTurn(fact, string(moved.Active), false,
+				fmt.Sprintf("was steered into turn %s, but turn %s took over this Session first", moved.Steered, moved.Active))
+		case errors.Is(err, lifecycle.ErrStaleInput):
+			return s.rejectDelegatedTurn(fact, "", false, "could not be admitted: "+err.Error())
+		case err != nil:
 			return err
 		}
 		state, admission = next, next.AdmissionByToken(admission.TurnToken)
@@ -1706,10 +1716,16 @@ func (s *Store) ApplyDelegatedTurnProgress(fact watcher.TurnFact) (watcher.TurnP
 	case errors.Is(err, errNoDelegatedSignalContract):
 		return watcher.TurnProgressResult{}, nil
 	case errors.As(err, &rejection):
+		s.recordRefusedReport(fact, rejection.message)
 		return watcher.TurnProgressResult{Owned: true, Rejection: rejection.message, CurrentTurnID: rejection.currentTurn}, nil
 	case errors.Is(err, errDelegatedTurnMismatch):
 		return watcher.TurnProgressResult{Owned: true}, nil
+	case errors.Is(err, lifecycle.ErrTerminal):
+		message := fmt.Sprintf("progress report refused: turn %s belongs to Work that is already closed, so nothing was recorded; state the ask in your final reply and wait for Brain's next prompt.", fact.TurnID)
+		s.recordRefusedReport(fact, message)
+		return watcher.TurnProgressResult{Owned: true, Rejection: message}, nil
 	case err != nil:
+		s.recordRefusedReport(fact, err.Error())
 		return watcher.TurnProgressResult{}, err
 	default:
 		return watcher.TurnProgressResult{
@@ -2209,4 +2225,65 @@ func (s *Store) answerBlockedTurn(sessionID, answerTurnID string) error {
 		SourceID: "answered:" + answerTurnID, Summary: "Answered; continuing", At: s.nowUTC(),
 	})
 	return err
+}
+
+// workerReportRefusedKind is the Work Event a refused delegated progress report
+// leaves, so a Worker's report (above all an ask for the owner) is never lost
+// between the Worker's CLI and Brain.
+const workerReportRefusedKind = "worker_report_refused"
+
+// recordRefusedReport appends the refused report to the Work its Session runs:
+// what the Worker said and why it was not recorded. An ask (user_input,
+// blocked) is actionable, so Brain reviews it even with no live turn; a retry
+// of the same report is one Event.
+func (s *Store) recordRefusedReport(fact watcher.TurnFact, reason string) {
+	// The watcher logs the refusal and puts it on the Worker; this records it
+	// on the Work.
+	workID := s.workForSessionSignal(fact.SessionID, fact.TurnID)
+	if workID == "" {
+		return
+	}
+	digest := sha256.Sum256([]byte(fact.Kind + "\x00" + fact.Attention + "\x00" + fact.Summary))
+	summary := strings.TrimSpace(fact.Summary)
+	if summary == "" {
+		summary = "(no summary)"
+	}
+	ask := fact.Attention == "user_input" || fact.Attention == "blocked" || fact.Kind == "failed"
+	if _, _, err := s.AppendWorkEvent(WorkEvent{
+		WorkID:     workID,
+		Kind:       workerReportRefusedKind,
+		DedupeKey:  "report-refused:" + fact.SessionID + ":" + fact.TurnID + ":" + hex.EncodeToString(digest[:8]),
+		SourceName: fact.SessionID,
+		Summary:    fmt.Sprintf("The Worker's report was not recorded: %s Worker said: %s", reason, summary),
+		Attention:  fact.Attention,
+		EventKind:  fact.EventKind,
+		Actionable: ask,
+	}); err != nil {
+		log.Printf("worker progress refused worker=%s turn=%s: recording it on Work %s failed: %v", fact.SessionID, fact.TurnID, workID, err)
+	}
+}
+
+// workForSessionSignal is the Work a delegated report belongs to: the Work
+// holding that exact prompt, else the Work of the newest prompt sent to the
+// Session.
+func (s *Store) workForSessionSignal(sessionID, turnID string) string {
+	if s == nil || s.fsm == nil {
+		return ""
+	}
+	var workID string
+	var latestSeq uint64
+	for _, candidate := range s.fsm.ListViews() {
+		for _, a := range candidate.Admissions {
+			if a == nil || a.SessionID != sessionID || a.ClaimToken != "" {
+				continue
+			}
+			if string(a.TurnToken) == turnID {
+				return string(candidate.ID)
+			}
+			if workID == "" || a.PreparedSeq > latestSeq {
+				workID, latestSeq = string(candidate.ID), a.PreparedSeq
+			}
+		}
+	}
+	return workID
 }

@@ -70,3 +70,43 @@ func TestRedirectedWorkerProgressReturnsTheNoticeToTheWorker(t *testing.T) {
 		t.Fatalf("redirected report = (%v, %q, %v), want the notice", worker, got, err)
 	}
 }
+
+// TestRefusedWorkerProgressIsVisibleOnTheWorker: a refused report used to reach
+// only the Worker's own shell (ZeroGAccountsPlans 11-15: seven minutes of
+// "stale fence or turn token" while it asked for the owner). The refusal and
+// what the Worker said are on the Worker and in the event stream every client
+// reads, and an accepted report clears them.
+func TestRefusedWorkerProgressIsVisibleOnTheWorker(t *testing.T) {
+	const reason = "progress report refused: turn turn:one was superseded by a newer prompt."
+	w, id := progressTestWatcher(TurnProgressResult{Owned: true, Rejection: reason})
+	if _, err := w.UpdateWorkerProgress(id, classifier.WorkerProgress{
+		TurnID: "turn:one", Status: "running", Phase: "working", Attention: "user_input", Summary: "GitHub login open on my Screen",
+	}); err == nil {
+		t.Fatal("report was not refused")
+	}
+	select {
+	case event := <-w.Events():
+		if event.Type != "worker_metadata_change" || event.Worker == nil || event.Worker.ProgressRefused != reason ||
+			event.Worker.ProgressRefusedSummary != "GitHub login open on my Screen" || event.Worker.ProgressRefusedAt == nil {
+			t.Fatalf("refusal event = %+v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("a refused report published nothing")
+	}
+	if worker := w.GetWorker(id); worker == nil || worker.ProgressRefused != reason {
+		t.Fatalf("Worker does not carry the refusal: %+v", worker)
+	}
+
+	w.turnLedger = &scriptedProgressLedger{fakeTurnLedger: newFakeTurnLedger(), result: TurnProgressResult{
+		Owned: true, Matched: true,
+		Turn:  TurnSnapshot{SessionID: progressTestSession, TurnID: "turn:two", Status: TurnRunning, SignalProtocol: true},
+	}}
+	if _, err := w.UpdateWorkerProgress(id, classifier.WorkerProgress{
+		TurnID: "turn:two", Status: "running", Phase: "working", Attention: "none", Summary: "on it",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if worker := w.GetWorker(id); worker == nil || worker.ProgressRefused != "" || worker.ProgressRefusedAt != nil {
+		t.Fatalf("an accepted report left the refusal: %+v", worker)
+	}
+}

@@ -7,6 +7,7 @@ package lifecycle
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -702,10 +703,11 @@ func (s *State) ActiveAdmission() *AdmissionState {
 // Errors returned by command validation. ErrStaleInput is deliberately
 // idempotent-flavored: callers treat it as "already handled".
 var (
-	ErrUnknownWork      = errors.New("lifecycle: unknown work")
-	ErrWorkExists       = errors.New("lifecycle: work already exists")
-	ErrTerminal         = errors.New("lifecycle: work is terminal")
-	ErrStaleInput       = errors.New("lifecycle: stale fence or turn token")
+	ErrUnknownWork = errors.New("lifecycle: unknown work")
+	ErrWorkExists  = errors.New("lifecycle: work already exists")
+	ErrTerminal    = errors.New("lifecycle: work is terminal")
+	ErrStaleInput  = errors.New("lifecycle: stale fence or turn token")
+
 	ErrAttemptActive    = errors.New("lifecycle: Work already has an active Attempt")
 	ErrRevisionConflict = errors.New("lifecycle: revision conflict")
 	ErrNotWaiting       = errors.New("lifecycle: work is not waiting on that wake")
@@ -713,3 +715,17 @@ var (
 	ErrReviewLease      = errors.New("lifecycle: review lease mismatch")
 	ErrInvalidCommand   = errors.New("lifecycle: invalid command")
 )
+
+// SteerTargetMovedError is a steered prompt whose target turn is no longer the
+// active Attempt because another prompt took the Work over. It is a stale
+// input (errors.Is ErrStaleInput) that names the turn now running.
+type SteerTargetMovedError struct {
+	Steered TurnToken
+	Active  TurnToken
+}
+
+func (e *SteerTargetMovedError) Error() string {
+	return fmt.Sprintf("lifecycle: steered turn %s is no longer active; turn %s is", e.Steered, e.Active)
+}
+
+func (e *SteerTargetMovedError) Is(target error) bool { return target == ErrStaleInput }

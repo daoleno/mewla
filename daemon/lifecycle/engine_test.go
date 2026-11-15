@@ -470,6 +470,50 @@ func TestSignalSteerPromotesExactPromptToken(t *testing.T) {
 	}
 }
 
+// TestSignalSteerAfterPredecessorEndedIsAFollowUp: the steered turn reported
+// done before the steered prompt was admitted (ZeroGAccountsPlans 11-15). The
+// prompt still reached the agent, so either its provider evidence or its own
+// exact signal admits it as the ended turn's follow-up instead of refusing it
+// as stale forever.
+func TestSignalSteerAfterPredecessorEndedIsAFollowUp(t *testing.T) {
+	for _, via := range []string{"signal", "provider"} {
+		t.Run(via, func(t *testing.T) {
+			e, _ := newTestEngine(t)
+			id := WorkID("w-steer-ended-" + via)
+			define(t, e, id, PolicyUntilDone)
+			old := admit(t, e, id, "turn:old", "session-1")
+			if _, _, err := e.PrepareAdmission(id, PrepareAdmissionInput{
+				SessionID: "session-1", TurnToken: "turn:steered", Receipt: "turn:steered",
+				PayloadSHA256: "digest-steered", ProcessIdentity: "process-1", PaneGeneration: "pane-1",
+				Mode: AdmissionConditionalSteer, ExistingTurnToken: "turn:old", BaselineActivityID: "activity-1",
+				SignalProtocol: true, AttemptedAt: time.Now().UTC(),
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.ReportTurnDone(id, attemptID("session-1", "turn:old", old.Attempt.Generation), DoneInput{OK: true, Summary: "done"}); err != nil {
+				t.Fatal(err)
+			}
+			var st *State
+			var err error
+			if via == "signal" {
+				st, err = e.AcceptAdmissionBySignal(id, "turn:steered", "session-1")
+			} else {
+				st, err = e.AcceptAdmission(id, "turn:steered", AcceptAdmissionInput{
+					SessionID: "session-1", Receipt: "turn:steered", PayloadSHA256: "digest-steered",
+					ActivityID: "activity-2", AdmissionStream: "events", AdmissionID: "a-2",
+					AdmissionSHA256: "digest-steered", AdmissionAt: time.Now().UTC(),
+				})
+			}
+			if err != nil {
+				t.Fatalf("steer after ended predecessor: %v", err)
+			}
+			if st.Attempt == nil || st.Attempt.TurnToken != "turn:steered" || st.Attempt.FollowUpOf != "turn:old" || st.Review != nil {
+				t.Fatalf("steered prompt is not the follow-up attempt: attempt=%+v review=%+v", st.Attempt, st.Review)
+			}
+		})
+	}
+}
+
 // 6. Next Attempt admission follows the settled predecessor.
 func TestNextAttemptAdmission(t *testing.T) {
 	e, _ := newTestEngine(t)

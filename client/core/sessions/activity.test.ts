@@ -32,6 +32,12 @@ describe("a Session's line says what it is doing in words", () => {
     expect(sessionActivity(worker({ status: "blocked", prompt: { id: "p", kind: "permission", request: "\n rm -rf build\n", options: [] } as never }))).toBe("rm -rf build");
     expect(sessionActivity(worker({ status: "blocked", needs_attention: true, summary: FOOTER[0]! }))).toBe("Waiting for you");
   });
+
+  test("a report the computer refused says so, with its reason, over the last report", () => {
+    const refused = "progress report refused: turn t2 was superseded by a newer prompt.";
+    expect(sessionActivity(worker({ status: "running", phase: "working", summary: "on it", progress_refused: refused, delegated: true })))
+      .toBe("Report not recorded: turn t2 was superseded by a newer prompt.");
+  });
 });
 
 describe("elapsed time, one form everywhere (SPEC §11 Elapsed time)", () => {

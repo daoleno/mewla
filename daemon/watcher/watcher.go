@@ -1124,7 +1124,37 @@ func (w *Watcher) UpdateWorkerProgress(id string, progress classifier.WorkerProg
 func (w *Watcher) ReportWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, string, error) {
 	notice := ""
 	worker, err := w.updateWorkerProgress(id, progress, &notice)
+	if err != nil {
+		w.noteProgressRefused(id, progress, err)
+	}
 	return worker, notice, err
+}
+
+// noteProgressRefused makes a refused progress report visible: a daemon log
+// line with what the Worker reported, and the reason on the Worker so its card
+// shows it. Before this a refused report reached only the Worker's own shell,
+// and a Worker asking for the owner went unseen for minutes.
+func (w *Watcher) noteProgressRefused(id string, progress classifier.WorkerProgress, cause error) {
+	id = strings.TrimSpace(id)
+	log.Printf("worker progress refused worker=%s turn=%s status=%s attention=%s summary=%q: %v",
+		id, progress.TurnID, progress.Status, progress.Attention, progress.Summary, cause)
+	now := time.Now().UTC()
+	w.eventMu.Lock()
+	defer w.eventMu.Unlock()
+	w.mu.Lock()
+	worker, ok := w.workers[id]
+	if !ok {
+		w.mu.Unlock()
+		return
+	}
+	worker.ProgressRefused = cause.Error()
+	worker.ProgressRefusedSummary = strings.TrimSpace(progress.Summary)
+	worker.ProgressRefusedAt = &now
+	w.nextEpoch++
+	w.workerEpoch[id] = w.nextEpoch
+	snapshot := cloneWorker(worker)
+	w.mu.Unlock()
+	w.publish(SessionEvent{Type: "worker_metadata_change", WorkerID: id, Worker: snapshot})
 }
 
 func (w *Watcher) updateWorkerProgress(id string, progress classifier.WorkerProgress, notice *string) (*classifier.Worker, error) {
@@ -1214,6 +1244,7 @@ func (w *Watcher) updateWorkerProgress(id string, progress classifier.WorkerProg
 	oldState := worker.State
 	w.nextEpoch++
 	w.workerEpoch[id] = w.nextEpoch
+	worker.ProgressRefused, worker.ProgressRefusedSummary, worker.ProgressRefusedAt = "", "", nil
 	classifier.ApplyProgress(worker, progress, now)
 	if hasPendingSubmission && (!hasCurrentTurn || TurnTerminal(turn.Status)) {
 		// Pending is canonical transaction state, not a Turn. It suppresses raw
@@ -2796,6 +2827,10 @@ func cloneWorker(worker *classifier.Worker) *classifier.Worker {
 	if worker.RunningSince != nil {
 		at := *worker.RunningSince
 		cp.RunningSince = &at
+	}
+	if worker.ProgressRefusedAt != nil {
+		at := *worker.ProgressRefusedAt
+		cp.ProgressRefusedAt = &at
 	}
 	return &cp
 }
