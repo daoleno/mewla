@@ -290,7 +290,7 @@ the screen or the agent's files:
 | Agent | Followed through | Messages and Stop |
 | --- | --- | --- |
 | Claude Code | Its hooks, set when Mewla starts it | Typed into the Terminal; the hook confirms delivery |
-| Codex | An app-server beside the Terminal, set when Mewla starts it; the conversation is read from the thread Codex announced, and the Status sheet asks the same app-server (account, usage limits, model, approvals, sandbox, token use) | Sent to Codex directly |
+| Codex | An app-server beside the Terminal, set when Mewla starts it (Codex in the Terminal starts once the app-server is listening); the conversation is read from the thread Codex announced, and the Status sheet asks the same app-server (account, usage limits, model, approvals, sandbox, token use) | Sent to Codex directly |
 | OpenCode | OpenCode's background service: one event stream for all Workers, the session id chosen at launch | Sent to the service directly; a message to a session OpenCode has not created yet (its first) is typed |
 | Pi | A small extension Mewla loads into each Pi it starts (`pi -e`), which reports Pi's turns over a local socket; the session file is chosen at launch | Handed to Pi by the extension; Stop aborts the running turn |
 | Cursor | The chat is created before Cursor starts and resumed, so its transcript is known from the first moment; turns are read from the transcript and the screen | Typed into the Terminal |
