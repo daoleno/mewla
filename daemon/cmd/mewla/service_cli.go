@@ -34,7 +34,7 @@ func printServiceUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: mewla service <list|register|unregister> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  list        List Agent-visible services (tmux sessions + registered persistent units)")
+	fmt.Fprintln(w, "  list        List Agent-visible services (Sessions + registered persistent units)")
 	fmt.Fprintln(w, "  register    Adopt one persistent user systemd unit without restarting it")
 	fmt.Fprintln(w, "  unregister  Remove one persistent service registration (never stops the unit)")
 	fmt.Fprintln(w, "")

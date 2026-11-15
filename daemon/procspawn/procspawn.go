@@ -136,7 +136,7 @@ func Handler() http.Handler {
 	})
 }
 
-// Label names a tmux spawn by its subcommand, skipping any leading flags.
+// Label names a spawn by its subcommand, skipping any leading flags.
 func Label(program string, args []string) string {
 	for _, arg := range args {
 		if len(arg) > 0 && arg[0] != '-' {

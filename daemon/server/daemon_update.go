@@ -20,10 +20,6 @@ type DaemonUpdateStatus struct {
 	// Error is why the last update did not take; the previous version kept
 	// running.
 	Error string `json:"error,omitempty"`
-	// SessionsInTmux counts the Sessions an earlier Mewla started in tmux
-	// that could not move to the session host: they still run there, no
-	// longer Mewla's.
-	SessionsInTmux int `json:"sessions_in_tmux,omitempty"`
 }
 
 // DaemonUpdater is the computer's self-update.
@@ -73,9 +69,6 @@ func (s *Server) handleDaemonUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := s.daemonUpdater.Status()
-	if s.watcher != nil {
-		status.SessionsInTmux = s.watcher.LeftInTmux()
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(status)

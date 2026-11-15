@@ -97,14 +97,11 @@ func newZeroViewCodexTitleFixture(t *testing.T) *zeroViewCodexTitleFixture {
 		t.Fatal(err)
 	}
 
-	tmuxPath := filepath.Join(binDir, "tmux")
-	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' '%1'\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	w := watcher.New(time.Second)
+	w.SetPollSources(watcher.PollSources{StartSession: func(watcher.PollStart) (string, error) { return "%1", nil }})
 	workerID, err := w.CreateSession("", watcher.CreateSessionOptions{
 		Detached: true,
 		Cwd:      cwd,
@@ -116,7 +113,7 @@ func newZeroViewCodexTitleFixture(t *testing.T) *zeroViewCodexTitleFixture {
 	}
 	worker := w.GetWorker(workerID)
 	if worker == nil {
-		t.Fatal("fake tmux session was not registered")
+		t.Fatal("the started Session was not registered")
 	}
 
 	rolloutPath := filepath.Join(home, ".codex", "sessions", "rollout.jsonl")

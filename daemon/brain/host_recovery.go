@@ -158,8 +158,8 @@ func hostSignInStep(executorID string) string {
 }
 
 // hostSessionExited reports a host Session whose program has ended. The
-// session host keeps such a Session, with its last screen, where tmux closed
-// the pane, so it is still observed; the Brain in it is gone all the same.
+// session host keeps such a Session, with its last screen, so it is still
+// observed; the Brain in it is gone all the same.
 func (s *Service) hostSessionExited(id string) bool {
 	exited, ok := s.watcher.(interface{ SessionExited(string) bool })
 	return ok && strings.TrimSpace(id) != "" && exited.SessionExited(id)

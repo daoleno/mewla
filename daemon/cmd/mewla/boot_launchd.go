@@ -28,7 +28,7 @@ import (
 // is held, the daemon reports (control socket daemon_status) it runs the
 // installed binary, and /health serves the state's identity. As on Linux, the boot CLI never kills a process it did not start.
 //
-// AbandonProcessGroup keeps the user's tmux server and Worker sessions alive
+// AbandonProcessGroup keeps the session host and its Sessions alive
 // when launchd stops or restarts the daemon, like KillMode=process.
 //
 // The job runs a copy of the binary inside ~/Applications/Mewla.app, so
@@ -517,7 +517,7 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 	fmt.Fprintf(out, "Address: %s\n", config.Addr)
 	fmt.Fprintf(out, "Working directory: %s\n", config.WorkDir)
 	fmt.Fprintf(out, "Log: %s\n", bootLaunchdLogPath(config))
-	fmt.Fprintln(out, "Starts when you log in to this Mac. tmux and Worker sessions are never stopped here.")
+	fmt.Fprintln(out, "Starts when you log in to this Mac. Sessions are never stopped here.")
 	fmt.Fprintln(out, "Stop/rollback: mewla boot uninstall")
 	return nil
 }

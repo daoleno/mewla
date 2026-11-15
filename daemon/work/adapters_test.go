@@ -10,9 +10,9 @@ import (
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
-func TestTmuxRunnerSendWhenReadyAlwaysUsesBoundedHandoff(t *testing.T) {
+func TestWatcherRunnerSendWhenReadyAlwaysUsesBoundedHandoff(t *testing.T) {
 	fw := &fakeDelegatedWatcher{}
-	runner := TmuxRunner{Watcher: fw}
+	runner := WatcherRunner{Watcher: fw}
 
 	if err := runner.SendWhenReady("opencode:@1", "opencode", "task\n"); err != nil {
 		t.Fatal(err)
@@ -30,13 +30,13 @@ func TestTmuxRunnerSendWhenReadyAlwaysUsesBoundedHandoff(t *testing.T) {
 	}
 }
 
-func TestTmuxRunnerSendWhenReadyBoundedHandoffFailsClosedWithoutReplay(t *testing.T) {
+func TestWatcherRunnerSendWhenReadyBoundedHandoffFailsClosedWithoutReplay(t *testing.T) {
 	fw := &fakeDelegatedWatcher{
 		budgetedErrs: []error{
 			errors.New("Session input outcome is unknown and will not be replayed: provider admission not observed"),
 		},
 	}
-	runner := TmuxRunner{Watcher: fw, InputReadyBudget: DefaultScheduledInputReadyBudget}
+	runner := WatcherRunner{Watcher: fw, InputReadyBudget: DefaultScheduledInputReadyBudget}
 	err := runner.SendWhenReady("opencode:@1", "opencode", "task\n")
 	if err == nil || !strings.Contains(err.Error(), "will not be replayed") {
 		t.Fatalf("error = %v, want fail-closed ambiguous admission", err)
@@ -46,8 +46,8 @@ func TestTmuxRunnerSendWhenReadyBoundedHandoffFailsClosedWithoutReplay(t *testin
 	}
 }
 
-func TestTmuxRunnerRequiresOwnedWatcherLifecycle(t *testing.T) {
-	runner := TmuxRunner{}
+func TestWatcherRunnerRequiresOwnedWatcherLifecycle(t *testing.T) {
+	runner := WatcherRunner{}
 	if _, err := runner.Spawn("codex", "/repo", "codex"); err == nil || !strings.Contains(err.Error(), "delegated watcher is required") {
 		t.Fatalf("Spawn error = %v", err)
 	}
@@ -147,7 +147,7 @@ func (f *fakeProfileOwner) ReleaseSession(sessionID string) (modelprofiles.Persi
 	return modelprofiles.PersistResult{Applied: true, Durable: true}, nil
 }
 
-func TestTmuxRunnerSpawnPrepareCommitExecutorDefault(t *testing.T) {
+func TestWatcherRunnerSpawnPrepareCommitExecutorDefault(t *testing.T) {
 	fw := &fakeDelegatedWatcher{nextID: "codex-cal:@1"}
 	profiles := &fakeProfileOwner{
 		preparePlan: modelprofiles.SessionLaunchPlan{
@@ -159,7 +159,7 @@ func TestTmuxRunnerSpawnPrepareCommitExecutorDefault(t *testing.T) {
 		},
 		commitOK: true,
 	}
-	runner := TmuxRunner{Watcher: fw, Env: map[string]string{"MEWLA": "1"}, Profiles: profiles}
+	runner := WatcherRunner{Watcher: fw, Env: map[string]string{"MEWLA": "1"}, Profiles: profiles}
 	id, err := runner.Spawn("codex", "/repo", "codex")
 	if err != nil {
 		t.Fatal(err)
@@ -181,8 +181,8 @@ func TestTmuxRunnerSpawnPrepareCommitExecutorDefault(t *testing.T) {
 	}
 }
 
-func TestTmuxRunnerSpawnCreateFailureAbortsProvisional(t *testing.T) {
-	fw := &fakeDelegatedWatcher{createErr: errors.New("tmux down")}
+func TestWatcherRunnerSpawnCreateFailureAbortsProvisional(t *testing.T) {
+	fw := &fakeDelegatedWatcher{createErr: errors.New("session host down")}
 	profiles := &fakeProfileOwner{
 		preparePlan: modelprofiles.SessionLaunchPlan{
 			Applied:       true,
@@ -192,7 +192,7 @@ func TestTmuxRunnerSpawnCreateFailureAbortsProvisional(t *testing.T) {
 		},
 		commitOK: true,
 	}
-	runner := TmuxRunner{Watcher: fw, Profiles: profiles}
+	runner := WatcherRunner{Watcher: fw, Profiles: profiles}
 	if _, err := runner.Spawn("codex", "/repo", "codex"); err == nil {
 		t.Fatal("expected create failure")
 	}
@@ -204,10 +204,10 @@ func TestTmuxRunnerSpawnCreateFailureAbortsProvisional(t *testing.T) {
 	}
 }
 
-func TestTmuxRunnerAbortReleasesCommittedRoute(t *testing.T) {
+func TestWatcherRunnerAbortReleasesCommittedRoute(t *testing.T) {
 	fw := &fakeDelegatedWatcher{sessions: map[string]bool{"codex-cal:@9": true}}
 	profiles := &fakeProfileOwner{}
-	runner := TmuxRunner{Watcher: fw, Profiles: profiles}
+	runner := WatcherRunner{Watcher: fw, Profiles: profiles}
 	if err := runner.Abort("codex-cal:@9"); err != nil {
 		t.Fatal(err)
 	}
@@ -219,12 +219,12 @@ func TestTmuxRunnerAbortReleasesCommittedRoute(t *testing.T) {
 	}
 }
 
-func TestTmuxRunnerRawCustomBypass(t *testing.T) {
+func TestWatcherRunnerRawCustomBypass(t *testing.T) {
 	fw := &fakeDelegatedWatcher{nextID: "custom:@1"}
 	profiles := &fakeProfileOwner{
 		preparePlan: modelprofiles.SessionLaunchPlan{Bypass: true, Command: "my-custom-agent"},
 	}
-	runner := TmuxRunner{Watcher: fw, Profiles: profiles}
+	runner := WatcherRunner{Watcher: fw, Profiles: profiles}
 	id, err := runner.Spawn("custom", "/repo", "my-custom-agent")
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestTmuxRunnerRawCustomBypass(t *testing.T) {
 	}
 }
 
-func TestTmuxRunnerCommitPersistFailureCleansUp(t *testing.T) {
+func TestWatcherRunnerCommitPersistFailureCleansUp(t *testing.T) {
 	fw := &fakeDelegatedWatcher{nextID: "codex-cal:@2"}
 	profiles := &fakeProfileOwner{
 		preparePlan: modelprofiles.SessionLaunchPlan{
@@ -251,7 +251,7 @@ func TestTmuxRunnerCommitPersistFailureCleansUp(t *testing.T) {
 		},
 		commitErr: errors.New("persist failed"),
 	}
-	runner := TmuxRunner{Watcher: fw, Profiles: profiles}
+	runner := WatcherRunner{Watcher: fw, Profiles: profiles}
 	if _, err := runner.Spawn("codex", "/repo", "codex"); err == nil {
 		t.Fatal("expected commit failure")
 	}
@@ -263,7 +263,7 @@ func TestTmuxRunnerCommitPersistFailureCleansUp(t *testing.T) {
 	}
 }
 
-func TestTmuxRunnerAliasUsesCanonicalClientHint(t *testing.T) {
+func TestWatcherRunnerAliasUsesCanonicalClientHint(t *testing.T) {
 	fw := &fakeDelegatedWatcher{nextID: "alias:@1"}
 	profiles := &fakeProfileOwner{
 		preparePlan: modelprofiles.SessionLaunchPlan{
@@ -272,7 +272,7 @@ func TestTmuxRunnerAliasUsesCanonicalClientHint(t *testing.T) {
 		},
 		commitOK: true,
 	}
-	runner := TmuxRunner{Watcher: fw, Profiles: profiles}
+	runner := WatcherRunner{Watcher: fw, Profiles: profiles}
 	// Configured alias identity stays the session name; PrepareLaunch gets codex.
 	if _, err := runner.Spawn("primary", "/repo", "codex --dangerously-bypass-approvals-and-sandbox"); err != nil {
 		t.Fatal(err)
@@ -292,7 +292,7 @@ func TestTmuxRunnerAliasUsesCanonicalClientHint(t *testing.T) {
 		commitOK: true,
 	}
 	fw2 := &fakeDelegatedWatcher{nextID: "claude-alias:@1"}
-	runner2 := TmuxRunner{Watcher: fw2, Profiles: profilesClaude}
+	runner2 := WatcherRunner{Watcher: fw2, Profiles: profilesClaude}
 	if _, err := runner2.Spawn("work-claude", "/repo", "claude --permission-mode bypassPermissions"); err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +301,7 @@ func TestTmuxRunnerAliasUsesCanonicalClientHint(t *testing.T) {
 	}
 }
 
-func TestTmuxRunnerPrepareNotDurableFailsClosedBeforeCreate(t *testing.T) {
+func TestWatcherRunnerPrepareNotDurableFailsClosedBeforeCreate(t *testing.T) {
 	fw := &fakeDelegatedWatcher{nextID: "must-not-create"}
 	profiles := &fakeProfileOwner{
 		preparePlan: modelprofiles.SessionLaunchPlan{
@@ -312,7 +312,7 @@ func TestTmuxRunnerPrepareNotDurableFailsClosedBeforeCreate(t *testing.T) {
 		},
 		prepareErr: modelprofiles.ErrPersistDirSync,
 	}
-	runner := TmuxRunner{Watcher: fw, Profiles: profiles}
+	runner := WatcherRunner{Watcher: fw, Profiles: profiles}
 	_, err := runner.Spawn("codex", "/repo", "codex")
 	if err == nil || !errors.Is(err, modelprofiles.ErrPersistDirSync) {
 		t.Fatalf("err=%v", err)
@@ -331,7 +331,7 @@ func TestTmuxRunnerPrepareNotDurableFailsClosedBeforeCreate(t *testing.T) {
 	}
 }
 
-func TestTmuxRunnerCommitNotDurableFailsClosedWithTeardown(t *testing.T) {
+func TestWatcherRunnerCommitNotDurableFailsClosedWithTeardown(t *testing.T) {
 	fw := &fakeDelegatedWatcher{nextID: "codex-cal:@undurable"}
 	profiles := &fakeProfileOwner{
 		preparePlan: modelprofiles.SessionLaunchPlan{
@@ -342,7 +342,7 @@ func TestTmuxRunnerCommitNotDurableFailsClosedWithTeardown(t *testing.T) {
 		commitNotDurable: true,
 		commitErr:        modelprofiles.ErrPersistDirSync,
 	}
-	runner := TmuxRunner{Watcher: fw, Profiles: profiles}
+	runner := WatcherRunner{Watcher: fw, Profiles: profiles}
 	id, err := runner.Spawn("codex", "/repo", "codex")
 	if id != "" || err == nil {
 		t.Fatalf("id=%q err=%v", id, err)
@@ -378,7 +378,7 @@ created: 2026-07-17T00:00:00Z
 		commitOK:         true,
 		commitNotDurable: true,
 	}
-	launcher := NewLauncher(TmuxRunner{Watcher: fw2, Profiles: profiles2}, NewExecutorConfig(map[string]Executor{
+	launcher := NewLauncher(WatcherRunner{Watcher: fw2, Profiles: profiles2}, NewExecutorConfig(map[string]Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 	if _, err := launcher.StartDedicated(item, "/repo", "codex"); err == nil || !strings.Contains(err.Error(), "not durable") {

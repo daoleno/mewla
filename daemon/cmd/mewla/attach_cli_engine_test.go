@@ -420,7 +420,7 @@ func TestGridShowsOpensAndReturns(t *testing.T) {
 	out := &lockedBuffer{}
 	result := make(chan string, 1)
 	go func() {
-		outcome, err := runGrid(context.Background(), client, 0, typing, out, func() (int, int) { return 100, 30 }, nil, termStyle{})
+		outcome, err := runGrid(context.Background(), client, typing, out, func() (int, int) { return 100, 30 }, nil, termStyle{})
 		if err != nil {
 			outcome = "error: " + err.Error()
 		}

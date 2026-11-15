@@ -420,8 +420,8 @@ func TestRunScheduledActionPersistsFreshDelegatedLaunch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmux := &scheduledActionLaunchRunner{}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launches := &scheduledActionLaunchRunner{}
+	launcher := work.NewLauncher(launches, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude --configured"},
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
@@ -448,14 +448,14 @@ func TestRunScheduledActionPersistsFreshDelegatedLaunch(t *testing.T) {
 	if !result.Launched || result.WorkID != run.ID || result.WorkerSession != "claude-scheduled" {
 		t.Fatalf("action result = %#v", result)
 	}
-	if len(tmux.spawnRoles) != 1 || tmux.spawnRoles[0] != "claude" || tmux.spawnCwds[0] != "/calendar-cwd" || tmux.spawnCommands[0] != "claude --configured --permission-mode bypassPermissions" {
-		t.Fatalf("spawn = roles %#v, cwds %#v, commands %#v", tmux.spawnRoles, tmux.spawnCwds, tmux.spawnCommands)
+	if len(launches.spawnRoles) != 1 || launches.spawnRoles[0] != "claude" || launches.spawnCwds[0] != "/calendar-cwd" || launches.spawnCommands[0] != "claude --configured --permission-mode bypassPermissions" {
+		t.Fatalf("spawn = roles %#v, cwds %#v, commands %#v", launches.spawnRoles, launches.spawnCwds, launches.spawnCommands)
 	}
-	if len(tmux.sendReadyCalls) != 1 {
-		t.Fatalf("ready sends = %#v", tmux.sendReadyCalls)
+	if len(launches.sendReadyCalls) != 1 {
+		t.Fatalf("ready sends = %#v", launches.sendReadyCalls)
 	}
-	if len(tmux.abortCalls) != 0 {
-		t.Fatalf("aborts = %#v, want none after successful launch", tmux.abortCalls)
+	if len(launches.abortCalls) != 0 {
+		t.Fatalf("aborts = %#v, want none after successful launch", launches.abortCalls)
 	}
 	written, ok := store.GetByID(run.ID)
 	if !ok || written.Frontmatter.Started == nil || written.Frontmatter.WorkerSession != "claude-scheduled" {
@@ -488,8 +488,8 @@ func TestUnsupportedScheduledExecutorFailsOccurrenceBeforeAnyPromptCanRun(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmux := &scheduledActionLaunchRunner{}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launches := &scheduledActionLaunchRunner{}
+	launcher := work.NewLauncher(launches, work.NewExecutorConfig(map[string]work.Executor{
 		"my-agent": {Name: "my-agent", Command: "my-agent --interactive", Kind: "custom"},
 	}))
 	runner := &WorkRunner{
@@ -514,9 +514,9 @@ func TestUnsupportedScheduledExecutorFailsOccurrenceBeforeAnyPromptCanRun(t *tes
 	if finished.SourceThreadID != "thread-1" || scheduler.isLaunching(item.ID) {
 		t.Fatalf("delivery or launch lifecycle changed: item=%#v launching=%v", finished, scheduler.isLaunching(item.ID))
 	}
-	if len(tmux.spawnCommands) != 0 || len(tmux.sendReadyCalls) != 0 || len(tmux.abortCalls) != 0 {
+	if len(launches.spawnCommands) != 0 || len(launches.sendReadyCalls) != 0 || len(launches.abortCalls) != 0 {
 		t.Fatalf("unsupported executor reached an approval-capable process: spawn=%#v send=%#v abort=%#v",
-			tmux.spawnCommands, tmux.sendReadyCalls, tmux.abortCalls)
+			launches.spawnCommands, launches.sendReadyCalls, launches.abortCalls)
 	}
 }
 
@@ -546,8 +546,8 @@ func TestSchedulerHandoffTimeoutFailsOccurrenceOnceBoundedly(t *testing.T) {
 		t.Fatal(err)
 	}
 	notReady := errors.New("Session input was definitely not submitted: agent input not ready for \"opencode\"")
-	tmux := &scheduledActionLaunchRunner{sendReadyErr: notReady}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launches := &scheduledActionLaunchRunner{sendReadyErr: notReady}
+	launcher := work.NewLauncher(launches, work.NewExecutorConfig(map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
@@ -572,9 +572,9 @@ func TestSchedulerHandoffTimeoutFailsOccurrenceOnceBoundedly(t *testing.T) {
 	if finished.Runs[0].WorkID != "" || finished.Runs[0].WorkerSession != "" {
 		t.Fatalf("unsubmitted handoff was recorded as launched: %#v", finished.Runs[0])
 	}
-	if len(tmux.spawnCommands) != 1 || len(tmux.sendReadyCalls) != 1 || len(tmux.abortCalls) != 1 {
+	if len(launches.spawnCommands) != 1 || len(launches.sendReadyCalls) != 1 || len(launches.abortCalls) != 1 {
 		t.Fatalf("handoff lifecycle = spawn %#v send %#v abort %#v, want one of each",
-			tmux.spawnCommands, tmux.sendReadyCalls, tmux.abortCalls)
+			launches.spawnCommands, launches.sendReadyCalls, launches.abortCalls)
 	}
 	// The failed occurrence must not poison the series: the recurrence advances
 	// and the source thread stays frozen on the item.
@@ -631,8 +631,8 @@ func TestSchedulerHandoffAmbiguousFailsOccurrenceWithoutReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	ambiguous := errors.New("Session input outcome is unknown and will not be replayed: provider admission not observed")
-	tmux := &scheduledActionLaunchRunner{sendReadyErr: ambiguous}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launches := &scheduledActionLaunchRunner{sendReadyErr: ambiguous}
+	launcher := work.NewLauncher(launches, work.NewExecutorConfig(map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
@@ -651,9 +651,9 @@ func TestSchedulerHandoffAmbiguousFailsOccurrenceWithoutReplay(t *testing.T) {
 		!strings.Contains(finished.Runs[0].FailureReason, "will not be replayed") {
 		t.Fatalf("ambiguous handoff failure = %#v", finished.Runs[0])
 	}
-	if len(tmux.sendReadyCalls) != 1 || len(tmux.abortCalls) != 1 {
+	if len(launches.sendReadyCalls) != 1 || len(launches.abortCalls) != 1 {
 		t.Fatalf("ambiguous admission was replayed: send %#v abort %#v",
-			tmux.sendReadyCalls, tmux.abortCalls)
+			launches.sendReadyCalls, launches.abortCalls)
 	}
 	if failedResults := calendarStore.ScheduledResults("thread-1", 0); len(failedResults) != 1 ||
 		failedResults[0].Status != StatusFailed ||
@@ -683,8 +683,8 @@ func TestSchedulerDelayedReadinessHandoffLaunchesOnceAndRoutsResult(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmux := &scheduledActionLaunchRunner{newID: "opencode-scheduled"}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launches := &scheduledActionLaunchRunner{newID: "opencode-scheduled"}
+	launcher := work.NewLauncher(launches, work.NewExecutorConfig(map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
@@ -707,8 +707,8 @@ func TestSchedulerDelayedReadinessHandoffLaunchesOnceAndRoutsResult(t *testing.T
 		launched.Runs[0].WorkerSession != "opencode-scheduled" {
 		t.Fatalf("handoff launch = %#v", launched.Runs[0])
 	}
-	if len(tmux.sendReadyCalls) != 1 || len(tmux.abortCalls) != 0 {
-		t.Fatalf("handoff lifecycle = send %#v abort %#v", tmux.sendReadyCalls, tmux.abortCalls)
+	if len(launches.sendReadyCalls) != 1 || len(launches.abortCalls) != 0 {
+		t.Fatalf("handoff lifecycle = send %#v abort %#v", launches.sendReadyCalls, launches.abortCalls)
 	}
 
 	// The agent completes the visible Work with a terminal deliverable; the

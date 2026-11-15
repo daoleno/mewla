@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-// WorkerState represents the classified state of a tmux-managed Worker.
+// WorkerState represents the classified state of a Worker's Session.
 type WorkerState string
 
 const (
@@ -23,7 +23,7 @@ const (
 type Worker struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// Window is the tmux window name alone; Name adds the pane target to it.
+	// Window is the Session's name alone; Name adds the Session id to it.
 	// Notifications name the Worker by it.
 	Window  string `json:"-"`
 	Project string `json:"project,omitempty"`
@@ -138,13 +138,13 @@ var nonFatalDiagnosticStartPatterns = []*regexp.Regexp{
 
 var timestampedLogLineRe = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\b`)
 
-// Classify determines pane-derived state from tmux output and liveness.
+// Classify determines screen-derived state from Session output and liveness.
 //
 // It never returns Running. Pane liveness and recent output churn only prove the
 // session is alive; active-turn Running comes from lifecycle progress leases or
 // provider activity adapters via ResolveSessionStatus.
 //
-//	tmux pane alive? ──no──→ check last lines ──failed patterns?──→ FAILED
+//	Session alive?  ──no──→ check last lines ──failed patterns?──→ FAILED
 //	                                           └──otherwise──→ DONE
 //	        │yes
 //	        ▼

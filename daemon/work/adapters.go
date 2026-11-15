@@ -20,7 +20,7 @@ type ProfileLaunchOwner interface {
 	ReleaseSession(sessionID string) (modelprofiles.PersistResult, error)
 }
 
-// DelegatedSessionOwner is the tmux lifecycle surface Calendar Work requires.
+// DelegatedSessionOwner is the Session lifecycle surface Calendar Work requires.
 // *watcher.Watcher implements it in production.
 type DelegatedSessionOwner interface {
 	CreateSession(preferredTarget string, opts watcher.CreateSessionOptions) (string, error)
@@ -35,8 +35,8 @@ type DelegatedSessionOwner interface {
 // the per-attempt readiness window remains the adapter-specific one.
 const DefaultScheduledInputReadyBudget = 90 * time.Second
 
-// TmuxRunner adapts Watcher's owned tmux lifecycle to SessionRunner. Calendar
-// Work must use this path instead of opening raw tmux sessions, otherwise it
+// WatcherRunner adapts Watcher's owned Session lifecycle to SessionRunner.
+// Calendar Work must use this path instead of starting raw processes, otherwise it
 // bypasses delegated ownership markers, resource limits, and orphan cleanup.
 // When Profiles is set, configured Codex/Claude launches resolve the executor
 // default (or ProfileID override) through the same Prepare/Create/Commit
@@ -54,7 +54,7 @@ const DefaultScheduledInputReadyBudget = 90 * time.Second
 // ordinary success. Commit durability failure intentionally tears down the
 // live Session before returning, so Launcher does not observe a successful
 // Spawn that later Abort-kills an applied route.
-type TmuxRunner struct {
+type WatcherRunner struct {
 	Watcher   DelegatedSessionOwner
 	Env       map[string]string
 	Profiles  ProfileLaunchOwner
@@ -64,9 +64,8 @@ type TmuxRunner struct {
 	InputReadyBudget time.Duration
 }
 
-// Spawn creates a detached tmux session and returns the watcher-compatible
-// session identifier "%pane_id".
-func (r TmuxRunner) Spawn(role, cwd, command string) (string, error) {
+// Spawn starts a detached Session and returns its id.
+func (r WatcherRunner) Spawn(role, cwd, command string) (string, error) {
 	if r.Watcher == nil {
 		return "", fmt.Errorf("delegated watcher is required")
 	}
@@ -147,7 +146,7 @@ func (r TmuxRunner) Spawn(role, cwd, command string) (string, error) {
 // initial prompt. The bounded handoff retries safe definitely-not-submitted
 // readiness timeouts within the same occurrence and fails closed on ambiguous
 // admission or a lost spawned identity.
-func (r TmuxRunner) SendWhenReady(workerID, command, text string) error {
+func (r WatcherRunner) SendWhenReady(workerID, command, text string) error {
 	if r.Watcher == nil {
 		return fmt.Errorf("delegated watcher is required")
 	}
@@ -161,7 +160,7 @@ func (r TmuxRunner) SendWhenReady(workerID, command, text string) error {
 // Abort terminates the one fresh window created for a failed Calendar launch
 // and releases any committed Model Profile route only after kill proves the
 // Session is gone (or was already missing).
-func (r TmuxRunner) Abort(workerID string) error {
+func (r WatcherRunner) Abort(workerID string) error {
 	if r.Watcher == nil {
 		return fmt.Errorf("delegated watcher is required")
 	}
@@ -176,7 +175,7 @@ func (r TmuxRunner) Abort(workerID string) error {
 	return r.Watcher.KillSession(workerID)
 }
 
-func (r TmuxRunner) sessionLivenessProbe(sessionID string) (modelprofiles.SessionLiveness, error) {
+func (r WatcherRunner) sessionLivenessProbe(sessionID string) (modelprofiles.SessionLiveness, error) {
 	if r.Watcher == nil {
 		return modelprofiles.SessionLivenessUnknown, fmt.Errorf("watcher unavailable")
 	}

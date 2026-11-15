@@ -127,7 +127,7 @@ func daemonViewWarnings(here doctor.ExecutorsCheck, daemon *doctor.ExecutorsChec
 func printDoctorUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: mewla doctor [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Diagnose whether this machine can run Mewla (tmux, state dir, listen port, executors).")
+	fmt.Fprintln(w, "Diagnose whether this machine can run Mewla (state dir, listen port, executors, agents).")
 	fmt.Fprintln(w, "Never installs packages or prints credentials. Exit status is nonzero when not ready.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")

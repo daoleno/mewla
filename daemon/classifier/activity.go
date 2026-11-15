@@ -35,22 +35,21 @@ type ActivityInput struct {
 	Capture *CaptureInfo
 }
 
-// CaptureInfo is what the capture of a pane proves about its text.
+// CaptureInfo is what the capture of a Session proves about its text.
 type CaptureInfo struct {
 	// Exact: the capture keeps the spaces a program wrote at the end of a line
-	// and joins lines the terminal wrapped (tmux capture-pane -J), so a line's
+	// and joins lines the terminal wrapped, so a line's
 	// text is what was displayed, trailing blanks included. It cannot show what
 	// the program did before drawing: a tab, a trimmed or re-wrapped line.
 	Exact bool
-	// Origin is the marker line Mewla made the pane print as its first output
-	// when it launched it (OriginMarkerLine of the nonce stored in the pane's
-	// own @mewla_origin option); empty for a pane Mewla did not launch or one
-	// launched before the marker existed. tmux evicts the oldest lines first,
-	// so a line that is still in the capture proves that every line written
-	// after it is too: the dialog's first lines cannot have been cut off if
-	// the marker is above them. How much history the pane holds says nothing
-	// about this (tmux trims in batches, so a pane below its limit may have
-	// lost lines).
+	// Origin is the marker line Mewla made the Session print as its first
+	// output when it launched it (OriginMarkerLine of the nonce stored in the
+	// Session's own origin label); empty for a Session Mewla did not launch.
+	// Scrollback evicts the oldest lines first, so a line that is still in the
+	// capture proves that every line written after it is too: the dialog's
+	// first lines cannot have been cut off if the marker is above them. How
+	// much history the Session holds says nothing about this (history can be
+	// trimmed in batches, so a Session below its limit may have lost lines).
 	Origin string
 	// Alternate: the pane was on its alternate screen, so the capture is the
 	// terminal program's own screen and there is no scrollback behind it to

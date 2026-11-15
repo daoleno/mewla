@@ -26,6 +26,8 @@ go test -tags ghosttyvt -count=1 "$@" ./ghosttyvt/... ./sessionhost/...
 # watcher does not use the engine and runs in the untagged suite.
 go test -tags ghosttyvt -count=1 -run 'TestHost|TestSessionHost' "$@" ./watcher/
 go test -tags ghosttyvt -count=1 -run 'TestHostTerminal' "$@" ./terminal/
+# Control-socket flows that run real Sessions (cmd/mewla TestHost*).
+go test -tags ghosttyvt -count=1 -run 'TestHost' "$@" ./cmd/mewla/
 # The app's terminal cell packer (client/native/terminal/TerminalVt.cpp, Android's and iOS's) on the
 # same library: concealed text stays hidden (scripts/tests/terminal_vt_conceal.cpp), soft-wrapped rows
 # are flagged and pastes framed per bracketed-paste mode (terminal_vt_select.cpp), and the render

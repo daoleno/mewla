@@ -112,17 +112,16 @@ func TestBuildWindowCommandForShellWrapsCommandInInteractiveLoginShell(t *testin
 	}
 }
 
-// TestWorkerProgressEnvNamesTheSession runs the injected prefix: a session
-// host Session is named by the MEWLA_SESSION_ID the host sets, a tmux pane by
-// TMUX_PANE, also when the tmux backend blanks MEWLA_SESSION_ID.
+// TestWorkerProgressEnvNamesTheSession runs the injected prefix: a Session is
+// named by the MEWLA_SESSION_ID the session host sets, never by a TMUX_PANE
+// inherited from the person's own tmux.
 func TestWorkerProgressEnvNamesTheSession(t *testing.T) {
 	for _, tc := range []struct {
 		env  []string
 		want string
 	}{
-		{[]string{"MEWLA_SESSION_ID=mh-0123456789abcdef01234567", "TMUX_PANE="}, "mh-0123456789abcdef01234567"},
-		{[]string{"TMUX_PANE=%42"}, "%42"},
-		{[]string{"MEWLA_SESSION_ID=", "TMUX_PANE=%42"}, "%42"},
+		{[]string{"MEWLA_SESSION_ID=mh-0123456789abcdef01234567", "TMUX_PANE=%42"}, "mh-0123456789abcdef01234567"},
+		{[]string{"TMUX_PANE=%42"}, ""},
 	} {
 		cmd := exec.Command("/bin/sh", "-c", workerProgressEnvScript()+`; printf %s "$MEWLA_WORKER_ID"`)
 		cmd.Env = append([]string{"PATH=/usr/bin:/bin"}, tc.env...)
@@ -138,7 +137,7 @@ func TestBuildWindowCommandForShellInjectsWorkerProgressEnv(t *testing.T) {
 	for _, want := range []string{
 		"MEWLA_WORKER_ID",
 		"MEWLA_WORKER_PROGRESS_CMD",
-		`MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"`,
+		`MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-}"`,
 		"codex --dangerously-bypass-approvals-and-sandbox",
 	} {
 		if !strings.Contains(got, want) {
@@ -269,8 +268,8 @@ func TestWorkerProgressEnvScriptAssignsSingleToken(t *testing.T) {
 	}
 }
 
-func TestTmuxWindowEnvironmentPreservesUsefulEnvAndSkipsTmuxManagedKeys(t *testing.T) {
-	got := tmuxPaneEnvironment([]string{
+func TestSessionEnvironmentPreservesUsefulEnvAndSkipsTerminalKeys(t *testing.T) {
+	got := sessionEnvironment([]string{
 		"OPENAI_API_KEY=test-key",
 		"PATH=/usr/local/bin:/usr/bin",
 		"TMUX=/tmp/tmux-1000/default,123,0",
@@ -290,7 +289,7 @@ func TestTmuxWindowEnvironmentPreservesUsefulEnvAndSkipsTmuxManagedKeys(t *testi
 		"SSH_AUTH_SOCK=/run/user/1000/ssh-agent.sock",
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("tmuxPaneEnvironment() = %v, want %v", got, want)
+		t.Fatalf("sessionEnvironment() = %v, want %v", got, want)
 	}
 }
 
@@ -338,32 +337,6 @@ func TestDetectAgentProcessRecognizesCursorAgent(t *testing.T) {
 	}, now)
 	if gotCommand != "cursor-agent" || gotPID != 101 || !gotStarted.Equal(now.Add(-30*time.Second)) {
 		t.Fatalf("detectAgentProcess = %q %s %d", gotCommand, gotStarted, gotPID)
-	}
-}
-
-func TestNewTmuxSessionNameUsesWorkerPrefix(t *testing.T) {
-	got := newTmuxSessionName(createdSessionName(CreateSessionOptions{Name: "Brain Codex"}))
-	if !strings.HasPrefix(got, "mewla-worker-brain-codex-") {
-		t.Fatalf("newTmuxSessionName() = %q", got)
-	}
-}
-
-func TestBuildNewSessionArgsCreatesDetachedSession(t *testing.T) {
-	got := buildNewSessionArgs("mewla-worker-codex-123", "/repo/mewla", "brain-codex", "exec '/bin/zsh' -i -l -c 'codex'")
-	wantPrefix := []string{
-		"new-session",
-		"-d",
-		"-P",
-		"-F",
-		"#{pane_id}",
-		"-s",
-		"mewla-worker-codex-123",
-	}
-	if len(got) < len(wantPrefix) || !reflect.DeepEqual(got[:len(wantPrefix)], wantPrefix) {
-		t.Fatalf("buildNewSessionArgs() = %v", got)
-	}
-	if got[len(got)-1] != "exec '/bin/zsh' -i -l -c 'codex'" {
-		t.Fatalf("last arg = %q", got[len(got)-1])
 	}
 }
 
@@ -461,13 +434,13 @@ func TestRegisterCreatedSessionDoesNotInferDelegatedFromName(t *testing.T) {
 	}
 }
 
-func TestAllowedTmuxKeyIncludesCodexPickerShortcuts(t *testing.T) {
+func TestAllowedSessionKeyIncludesCodexPickerShortcuts(t *testing.T) {
 	for _, key := range []string{"1", "2", "3", "9", "y", "p", "A", "Enter", "Escape"} {
-		if !allowedTmuxKey(key) {
+		if !allowedSessionKey(key) {
 			t.Fatalf("expected key %q to be allowed", key)
 		}
 	}
-	if allowedTmuxKey("0") {
+	if allowedSessionKey("0") {
 		t.Fatal("did not expect 0 to be allowed")
 	}
 }
@@ -956,24 +929,24 @@ func TestRebindDelegatedTurnProjectionDoesNotOverwriteNewerLifecycleProgress(t *
 	}
 }
 
-func TestSplitTmuxInputTreatsTrailingNewlineAsSubmit(t *testing.T) {
-	body, submit := splitTmuxInput("/status\n")
+func TestSplitDraftInputTreatsTrailingNewlineAsSubmit(t *testing.T) {
+	body, submit := splitDraftInput("/status\n")
 	if body != "/status" || !submit {
-		t.Fatalf("splitTmuxInput() = (%q, %v), want /status submit", body, submit)
+		t.Fatalf("splitDraftInput() = (%q, %v), want /status submit", body, submit)
 	}
 }
 
-func TestSplitTmuxInputPreservesInternalNewlines(t *testing.T) {
-	body, submit := splitTmuxInput("line one\nline two\n")
+func TestSplitDraftInputPreservesInternalNewlines(t *testing.T) {
+	body, submit := splitDraftInput("line one\nline two\n")
 	if body != "line one\nline two" || !submit {
-		t.Fatalf("splitTmuxInput() = (%q, %v), want multiline body submit", body, submit)
+		t.Fatalf("splitDraftInput() = (%q, %v), want multiline body submit", body, submit)
 	}
 }
 
-func TestSplitTmuxInputCanSendTextWithoutSubmit(t *testing.T) {
-	body, submit := splitTmuxInput("draft")
+func TestSplitDraftInputCanSendTextWithoutSubmit(t *testing.T) {
+	body, submit := splitDraftInput("draft")
 	if body != "draft" || submit {
-		t.Fatalf("splitTmuxInput() = (%q, %v), want draft without submit", body, submit)
+		t.Fatalf("splitDraftInput() = (%q, %v), want draft without submit", body, submit)
 	}
 }
 
@@ -1413,16 +1386,16 @@ func TestProviderCommandDetectionDirectAndEnvWrapped(t *testing.T) {
 }
 
 func TestCursorAgentUsesLongerSubmitDelay(t *testing.T) {
-	if got := tmuxSubmitDelay("cursor-agent --force --sandbox disabled"); got < 350*time.Millisecond {
+	if got := submitDelay("cursor-agent --force --sandbox disabled"); got < 350*time.Millisecond {
 		t.Fatalf("Cursor Agent submit delay = %s, want at least 350ms", got)
 	}
-	if got := tmuxSubmitDelay("codex"); got != 2*time.Second {
+	if got := submitDelay("codex"); got != 2*time.Second {
 		t.Fatalf("Codex submit delay = %s", got)
 	}
-	if got := tmuxSubmitDelay("grok"); got < 250*time.Millisecond {
+	if got := submitDelay("grok"); got < 250*time.Millisecond {
 		t.Fatalf("Grok submit delay = %s, want at least 250ms", got)
 	}
-	if got := tmuxSubmitDelay("claude"); got < 200*time.Millisecond {
+	if got := submitDelay("claude"); got < 200*time.Millisecond {
 		t.Fatalf("Claude submit delay = %s, want at least 200ms", got)
 	}
 }

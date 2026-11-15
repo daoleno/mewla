@@ -325,7 +325,7 @@ func TestBDD_018_StartupReconciliationAbsentCompletedIsIdempotent(t *testing.T) 
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		complete, err := service.ReconcileSignalSystemStartup(live, 8)
-		if err == nil || !errors.Is(err, watcher.ErrUnownedTmuxTarget) {
+		if err == nil || !errors.Is(err, watcher.ErrUnownedSession) {
 			t.Fatalf("attempt %d err=%v, want visible unowned", attempt+1, err)
 		}
 		if !complete {
@@ -347,7 +347,7 @@ type startupCleanupWatcher struct {
 
 func (w *startupCleanupWatcher) KillCompletedSession(sessionID, turnID string) error {
 	if w.unowned[sessionID] {
-		return watcher.ErrUnownedTmuxTarget
+		return watcher.ErrUnownedSession
 	}
 	return w.fakeWatcher.KillCompletedSession(sessionID, turnID)
 }

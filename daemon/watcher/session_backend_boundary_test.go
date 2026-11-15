@@ -12,26 +12,6 @@ import (
 	"testing"
 )
 
-// tmuxBackendStorageIdentifiers are the tmux backend's storage and identity
-// helpers: pane options hold Session labels and the input receipt ledger, and
-// a pane id is the tmux Session id. Only the backend may name them.
-var tmuxBackendStorageIdentifiers = map[string]bool{
-	"isPaneID":                   true,
-	"tmuxPaneUserOption":         true,
-	"setTmuxPaneUserOption":      true,
-	"markCreatedSession":         true,
-	"sessionInputReceiptOption":  true,
-	"sessionInputPaneGeneration": true,
-	"ownershipOption":            true,
-	"originOption":               true,
-	"tmuxBoolOption":             true,
-	"tmuxDelegatedResource":      true,
-}
-
-// tmuxBackendOptionPrefixes are the pane option names the tmux backend stores
-// Session labels and receipts in.
-var tmuxBackendOptionPrefixes = []string{"@mewla_", "mewla_worker_", "mewla_session_input_", "mewla_origin"}
-
 // hostBackendStorageIdentifiers are the session host backend's label and data
 // keys and its id scheme. Only that backend may name them.
 var hostBackendStorageIdentifiers = map[string]bool{
@@ -52,12 +32,11 @@ var hostBackendStorageIdentifiers = map[string]bool{
 const sessionHostImport = "github.com/daoleno/mewla/daemon/sessionhost"
 
 // TestSessionBackendBoundary keeps Session labels, input receipts and Session
-// ids inside the backend that owns them. No production code outside
-// watcher/tmux_*.go names a tmux pane option or a tmux identity helper, and
-// no watcher code outside watcher/host_*.go imports the session host or names
-// its label, data or id helpers. When a backend is deleted its storage goes
-// with its files and nothing else changes. Tests that drive a backend through
-// a fake are part of that backend's coverage and are not checked.
+// ids inside the backend that owns them: no watcher code outside
+// watcher/host_*.go imports the session host or names its label, data or id
+// helpers. Tests that drive a backend through a fake are part of that
+// backend's coverage and are not checked. It also keeps Mewla from running
+// tmux: no production code names a "tmux" program.
 func TestSessionBackendBoundary(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {
@@ -66,7 +45,7 @@ func TestSessionBackendBoundary(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
 		t.Fatalf("daemon module root %s: %v", root, err)
 	}
-	tmuxHits, hostHits := 0, 0
+	hostHits := 0
 	var violations []string
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -87,7 +66,6 @@ func TestSessionBackendBoundary(t *testing.T) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		inTmux := strings.HasPrefix(rel, "watcher/tmux_")
 		inHost := strings.HasPrefix(rel, "watcher/host_")
 		fset := token.NewFileSet()
 		file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
@@ -105,9 +83,6 @@ func TestSessionBackendBoundary(t *testing.T) {
 				}
 				return false
 			case *ast.Ident:
-				if tmuxBackendStorageIdentifiers[n.Name] && inWatcher {
-					what = "identifier " + n.Name
-				}
 				if hostBackendStorageIdentifiers[n.Name] && inWatcher {
 					what, host = "identifier "+n.Name, true
 				}
@@ -119,11 +94,8 @@ func TestSessionBackendBoundary(t *testing.T) {
 				if err != nil {
 					value = n.Value
 				}
-				for _, prefix := range tmuxBackendOptionPrefixes {
-					if strings.Contains(value, prefix) {
-						what = "pane option " + strconv.Quote(value)
-						break
-					}
+				if value == "tmux" {
+					what = "the program " + strconv.Quote(value)
 				}
 			}
 			if what == "" {
@@ -132,12 +104,10 @@ func TestSessionBackendBoundary(t *testing.T) {
 			switch {
 			case host && inHost:
 				hostHits++
-			case !host && inTmux:
-				tmuxHits++
 			case host:
 				violations = append(violations, fset.Position(node.Pos()).String()+": "+what+" is session host backend storage; reach it through sessionBackend")
 			default:
-				violations = append(violations, fset.Position(node.Pos()).String()+": "+what+" is tmux backend storage; reach it through sessionBackend")
+				violations = append(violations, fset.Position(node.Pos()).String()+": "+what+": Mewla never runs tmux")
 			}
 			return true
 		})
@@ -146,10 +116,7 @@ func TestSessionBackendBoundary(t *testing.T) {
 	if walkErr != nil {
 		t.Fatal(walkErr)
 	}
-	// The scan must see each backend's own storage, or it proves nothing.
-	if tmuxHits == 0 {
-		t.Fatal("scan found no tmux backend storage in watcher/tmux_*.go")
-	}
+	// The scan must see the backend's own storage, or it proves nothing.
 	if hostHits == 0 {
 		t.Fatal("scan found no session host backend storage in watcher/host_*.go")
 	}

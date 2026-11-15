@@ -1,47 +1,31 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/sessionhost"
-	"github.com/daoleno/mewla/daemon/tmuxsocket"
 )
 
 // attachEntry is one Session `mewla attach` can show: one the session host
-// runs, or one an earlier Mewla left in tmux. The person never has to care
-// which; Tmux is set only for the second kind.
+// runs.
 type attachEntry struct {
 	ID      string
 	Name    string // the Worker's name, "Brain", or "Shell"
 	Agent   string // claude, codex, ... or the foreground command
 	State   string // working, idle, needs input, running, exited
 	Cwd     string
-	Created time.Time // zero when the backend does not say
+	Created time.Time
 	Live    bool
 	Brain   bool
 	Hidden  bool
-	Tmux    *attachTmux
-}
-
-// attachTmux is where a Session still in tmux lives: its server (empty is the
-// user's default one), the tmux session that holds its pane, and the pane.
-type attachTmux struct {
-	Socket  string
-	Session string
-	Pane    string
 }
 
 // listed reports whether the picker and name lookups see the entry: a live
@@ -125,94 +109,12 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// tmuxPane is a pane of one tmux server and the tmux session that holds it.
-type tmuxPane struct {
-	Session string
-}
-
-// tmuxAttachEntries adds the daemon's Sessions that still run in tmux. panes
-// asks a tmux server which of its panes exist; a Session whose pane is gone is
-// not live and is left out. hostIDs are the ids the session host has, which
-// always win.
-func tmuxAttachEntries(workers []control.Worker, hostIDs map[string]bool, panes func(socket string) map[string]tmuxPane) []attachEntry {
-	if runtime.GOOS == "windows" {
-		return nil
-	}
-	var out []attachEntry
-	known := map[string]map[string]tmuxPane{}
-	for _, worker := range workers {
-		if worker.Terminal == "host" || hostIDs[worker.ID] || !strings.HasPrefix(worker.ID, "%") {
-			continue
-		}
-		list, seen := known[worker.TmuxSocket]
-		if !seen {
-			list = panes(worker.TmuxSocket)
-			known[worker.TmuxSocket] = list
-		}
-		pane, ok := list[worker.ID]
-		if !ok {
-			continue
-		}
-		entry := attachEntry{
-			ID:    worker.ID,
-			Name:  bareWorkerName(worker.Name),
-			Agent: worker.ExecutorID,
-			State: "running",
-			Cwd:   worker.Cwd,
-			Live:  true,
-			Tmux:  &attachTmux{Socket: worker.TmuxSocket, Session: pane.Session, Pane: worker.ID},
-		}
-		if worker.PromptID != "" {
-			entry.State = "needs input"
-		}
-		if entry.Name == "" {
-			entry.Name = "Shell"
-		}
-		out = append(out, entry)
-	}
-	return out
-}
-
-// listTmuxPanes asks one tmux server for its panes; a missing tmux or server
-// has none.
-func listTmuxPanes(socket string) map[string]tmuxPane {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	args := append(tmuxsocket.ClientArgs(socket), "list-panes", "-a", "-F", "#{pane_id} #{session_id}")
-	raw, err := exec.CommandContext(ctx, "tmux", args...).Output()
-	if err != nil {
-		return nil
-	}
-	return parseTmuxPanes(string(raw))
-}
-
-func parseTmuxPanes(raw string) map[string]tmuxPane {
-	panes := map[string]tmuxPane{}
-	for _, line := range strings.Split(raw, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 2 {
-			panes[fields[0]] = tmuxPane{Session: fields[1]}
-		}
-	}
-	return panes
-}
-
-// sortAttachEntries puts the newest Session first. Sessions with no known age
-// (still in tmux) follow, highest pane number first.
+// sortAttachEntries puts the newest Session first.
 func sortAttachEntries(entries []attachEntry) {
-	number := func(id string) int {
-		n, _ := strconv.Atoi(strings.TrimPrefix(id, "%"))
-		return n
-	}
 	sort.SliceStable(entries, func(i, j int) bool {
 		a, b := entries[i], entries[j]
-		switch {
-		case !a.Created.IsZero() && !b.Created.IsZero() && !a.Created.Equal(b.Created):
+		if !a.Created.Equal(b.Created) {
 			return a.Created.After(b.Created)
-		case a.Created.IsZero() != b.Created.IsZero():
-			return !a.Created.IsZero()
-		case a.Created.IsZero() && number(a.ID) != number(b.ID):
-			return number(a.ID) > number(b.ID)
 		}
 		return a.ID < b.ID
 	})

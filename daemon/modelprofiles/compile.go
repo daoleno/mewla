@@ -159,7 +159,7 @@ func compileCodex(baseCommand, explicitModel string, profile Profile, loopbackRo
 // per-session log so the pane stays TUI-only.
 //
 // Lifecycle: `set +m` disables shell job control so the app server stays in
-// the pane's process group; when the TUI exits or the tmux Session is killed,
+// the Session's process group; when the TUI exits or the Session is killed,
 // the pty hangup reaches the whole group and the app server dies with the
 // pane — it can never be orphaned. The app-server PID is recorded next to the
 // socket so the daemon can kill it during Session teardown and sweep stale

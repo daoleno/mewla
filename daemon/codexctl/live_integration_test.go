@@ -105,8 +105,8 @@ func TestLiveNativeThreadSettings(t *testing.T) {
 	waitSocket(t, socketPath)
 
 	sess := fmt.Sprintf("mewla-codex-live-ctl-%d", time.Now().UnixNano())
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
+	t.Cleanup(func() { _ = liveTmux("kill-server").Run() })
+	cmd := liveTmux("new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "CODEX_HOME="+codexHome,
 		"-e", "HOME="+artRoot,
 		"-e", "OPENAI_API_KEY=mewla-loopback-placeholder-not-a-secret",
@@ -330,9 +330,9 @@ func waitCodexTUIReady(t *testing.T, sess, model string) {
 			return
 		}
 		if strings.Contains(pane, "Yes, continue") || strings.Contains(pane, "trust the contents") {
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "1").Run()
+			_ = liveTmux("send-keys", "-t", sess, "1").Run()
 			time.Sleep(150 * time.Millisecond)
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 			time.Sleep(time.Second)
 			continue
 		}
@@ -343,7 +343,7 @@ func waitCodexTUIReady(t *testing.T, sess, model string) {
 
 func panePID(t *testing.T, sess string) int {
 	t.Helper()
-	out, err := exec.Command("tmux", "list-panes", "-t", sess, "-F", "#{pane_pid}").Output()
+	out, err := liveTmux("list-panes", "-t", sess, "-F", "#{pane_pid}").Output()
 	if err != nil {
 		t.Fatalf("list-panes: %v", err)
 	}
@@ -353,18 +353,18 @@ func panePID(t *testing.T, sess string) int {
 
 func sendTmuxLine(t *testing.T, sess, line string) {
 	t.Helper()
-	if err := exec.Command("tmux", "send-keys", "-t", sess, "-l", "--", line).Run(); err != nil {
+	if err := liveTmux("send-keys", "-t", sess, "-l", "--", line).Run(); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(200 * time.Millisecond)
-	if err := exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run(); err != nil {
+	if err := liveTmux("send-keys", "-t", sess, "Enter").Run(); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func capturePane(t *testing.T, sess string) string {
 	t.Helper()
-	out, err := exec.Command("tmux", "capture-pane", "-t", sess, "-p", "-S", "-120").Output()
+	out, err := liveTmux("capture-pane", "-t", sess, "-p", "-S", "-120").Output()
 	if err != nil {
 		return ""
 	}
@@ -446,7 +446,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 		" 2>&1 & echo $! > " + shellQuoteWord(pidPath) + "; exec " + shellQuoteWord(codexPath) +
 		" --remote unix://" + socketPath + " --model gpt-5 --config 'model_provider=\"openai\"'"
 	sess := fmt.Sprintf("mewla-codex-live-lifecycle-%d", time.Now().UnixNano())
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
+	t.Cleanup(func() { _ = liveTmux("kill-server").Run() })
 	// The watcher passes the wrapper as a shell command string; source a script
 	// so the test shell (non-interactive) cannot interfere. The wrapper's own
 	// `set +m` guarantees one process group in any shell.
@@ -455,7 +455,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	launch := func() error {
-		cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
+		cmd := liveTmux("new-session", "-d", "-s", sess, "-c", cwd,
 			"-e", "CODEX_HOME="+codexHome,
 			"-e", "HOME="+artRoot,
 			"-e", "OPENAI_API_KEY=mewla-loopback-placeholder-not-a-secret",
@@ -473,7 +473,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 	if err := waitSocketErr(socketPath, 15*time.Second); err != nil {
 		// The app-server's sqlite state init is occasionally flaky on a fresh
 		// scratch home; retry the launch once from clean dirs before failing.
-		_ = exec.Command("tmux", "kill-session", "-t", sess).Run()
+		_ = liveTmux("kill-session", "-t", sess).Run()
 		time.Sleep(500 * time.Millisecond)
 		_ = os.RemoveAll(artRoot)
 		for _, dir := range []string{filepath.Join(artRoot, "codex-home"), filepath.Join(artRoot, "cwd"), filepath.Join(artRoot, "ctl")} {
@@ -515,7 +515,7 @@ func TestLiveControlWrapperLifecycle(t *testing.T) {
 	}
 
 	// Killing the tmux Session must not orphan the app-server or the TUI.
-	_ = exec.Command("tmux", "kill-session", "-t", sess).Run()
+	_ = liveTmux("kill-session", "-t", sess).Run()
 	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
 		if !processAliveLive(appServerPID) {

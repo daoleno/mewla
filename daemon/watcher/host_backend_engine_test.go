@@ -77,8 +77,7 @@ func waitUntil(t *testing.T, timeout time.Duration, what string, cond func() boo
 func hostWatcher(t *testing.T, h *inProcessHost) *Watcher {
 	t.Helper()
 	w := New(50 * time.Millisecond)
-	// tmux on a socket nothing listens on: only the host runs Sessions here.
-	w.SetTmuxServer(filepath.Join(t.TempDir(), "no-tmux"), t.TempDir())
+	w.SetPrivateTmuxDir(t.TempDir())
 	w.SetSessionHost(SessionHostConfig{
 		SocketPath: h.socket,
 		Executable: "/nonexistent/mewla",
@@ -86,6 +85,18 @@ func hostWatcher(t *testing.T, h *inProcessHost) *Watcher {
 		Version:    "watcher-test",
 	})
 	return w
+}
+
+// hostHarness is a watcher on its own in-process session host, with a
+// scratch root for the test.
+type hostHarness struct {
+	w    *Watcher
+	root string
+}
+
+func newHostHarness(t *testing.T) *hostHarness {
+	t.Helper()
+	return &hostHarness{w: hostWatcher(t, startInProcessHost(t)), root: t.TempDir()}
 }
 
 // createHostSession starts a Session the way CreateSession does, through the
@@ -103,9 +114,6 @@ func createHostSession(t *testing.T, w *Watcher, spec backendCreateSpec) string 
 	at, err := w.sessions().place("", false, spec.name)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if at.backend != backendHost {
-		t.Fatalf("placed on %q, want the host", at.backend)
 	}
 	id, err := w.sessions().create(at, spec)
 	if err != nil {
@@ -142,7 +150,7 @@ func TestHostBackendRunsASession(t *testing.T) {
 	if !hostSessionIDPattern.MatchString(id) || !w.sessions().validID(id) {
 		t.Fatalf("host Session id %q", id)
 	}
-	if target, ok := w.TerminalTarget(id); !ok || target != (TerminalTarget{Backend: "host", Socket: h.socket}) {
+	if target, ok := w.TerminalTarget(id); !ok || target != (TerminalTarget{Socket: h.socket}) {
 		t.Fatalf("terminal of a host Session = %+v, %v", target, ok)
 	}
 	pane, listed := hostPaneOf(t, w, id)
@@ -192,7 +200,7 @@ func TestHostBackendRunsASession(t *testing.T) {
 	if _, listed := hostPaneOf(t, w, id); listed {
 		t.Fatal("killed Session still listed")
 	}
-	if gone, err := w.sessions().resolveAbsence(id, true); err != nil || !gone {
+	if gone, err := w.sessions().resolveAbsence(id); err != nil || !gone {
 		t.Fatalf("resolveAbsence after kill = %v, %v", gone, err)
 	}
 	if err := w.sessions().kill(id); err != nil {
@@ -289,18 +297,13 @@ func TestHostInventoryNeverReadsACrashAsTheEnd(t *testing.T) {
 	if panes, err := w.sessions().listOwned(); err == nil {
 		t.Fatalf("listOwned with the host gone = %+v, nil error", panes)
 	}
-	if _, err := w.sessions().resolveAbsence(id, true); !errors.Is(err, ErrOwnershipProbeUnavailable) {
+	if _, err := w.sessions().resolveAbsence(id); !errors.Is(err, ErrOwnershipProbeUnavailable) {
 		t.Fatalf("resolveAbsence after the host vanished = %v", err)
 	}
-	// A vanished host stays unknown whatever tmux saw: it is this process having
-	// reached a host that counts.
-	if _, err := w.sessions().resolveAbsence(id, false); !errors.Is(err, ErrOwnershipProbeUnavailable) {
-		t.Fatalf("resolveAbsence after the host vanished, tmux never seen = %v", err)
-	}
 	// A fresh process that never reached the host (a restart, a reboot): the
-	// Session is gone with it, also when tmux answered.
+	// Session is gone with it.
 	fresh := hostWatcher(t, h)
-	if gone, err := fresh.sessions().resolveAbsence(id, true); err != nil || !gone {
+	if gone, err := fresh.sessions().resolveAbsence(id); err != nil || !gone {
 		t.Fatalf("resolveAbsence in a process that never saw a host = %v, %v", gone, err)
 	}
 }

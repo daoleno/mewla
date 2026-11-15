@@ -105,8 +105,8 @@ func TestDeepSeekCodexSamePIDResponses(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte(cfg), 0o600)
 
 	sess := fmt.Sprintf("mewla-deepseek-samepid-%d", time.Now().UnixNano())
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
+	t.Cleanup(func() { _ = liveTmux("kill-server").Run() })
+	cmd := liveTmux("new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "CODEX_HOME="+codexHome,
 		"-e", "HOME="+artRoot,
 		"-e", "OPENAI_API_KEY="+modelprofiles.LoopbackAuthPlaceholder,

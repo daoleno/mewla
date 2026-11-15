@@ -68,7 +68,7 @@ func TestUnfinishedTeardownIsNotMarkedAndRetries(t *testing.T) {
 	store, service, fw := newRefusingService(t, t.TempDir(), "%3", "%4", "%5")
 	fw.refuse["%3"] = fmt.Errorf("Session %%3 is %w", watcher.ErrNotOwnedDelegatedWorker)
 	fw.refuse["%4"] = completedGenerationErr("%4")
-	fw.refuse["%5"] = fmt.Errorf("tmux server unreachable")
+	fw.refuse["%5"] = fmt.Errorf("session host unreachable")
 	for _, id := range []string{"%3", "%4", "%5"} {
 		completeWorkOn(t, store, service, fw, id)
 	}
@@ -105,7 +105,7 @@ func TestGenerationChangedEndsStartupRetryButTransientDoesNot(t *testing.T) {
 		t.Fatalf("generation changed must be final: complete=%v err=%v", complete, err)
 	}
 
-	fw.refuse["%12"] = fmt.Errorf("tmux server unreachable")
+	fw.refuse["%12"] = fmt.Errorf("session host unreachable")
 	completeWorkOn(t, store, service, fw, "%12")
 	_, err = service.ReconcileSignalSystemStartup(nil, 8)
 	if err == nil || OnlyCleanupRefusals(err) {

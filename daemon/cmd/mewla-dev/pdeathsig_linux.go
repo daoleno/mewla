@@ -9,7 +9,7 @@ import "syscall"
 // process-scoped supervisor stop), the kernel sends the child SIGTERM so it
 // exits and releases the single-owner state lock instead of surviving as an
 // orphan. The child is still stopped explicitly and gracefully during normal
-// rebuild/exit, and the external tmux server is never part of this binding.
+// rebuild/exit, and the session host is never part of this binding.
 func parentDeathSignal() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{Pdeathsig: syscall.SIGTERM}
 }

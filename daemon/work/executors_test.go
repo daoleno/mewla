@@ -109,3 +109,40 @@ command = "claude --permission-mode acceptEdits"
 		t.Fatalf("a person's own mode was rewritten: %q", got)
 	}
 }
+
+// An executors.toml from before the session host names a runtime for its
+// executors. It loads as before and is rewritten without the key; the rest of
+// the file, comments included, stays as the person wrote it.
+func TestLoadExecutorsDropsRetiredRuntime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "executors.toml")
+	old := "# my agents\n[[executors]]\nname = \"claude\"\ncommand = \"/opt/claude\"\nruntime = \"tmux\"\n\n[[executors]]\nname = \"codex\"\n  runtime = 'tmux' # old\ncommand = \"/opt/codex\"\n"
+	if err := os.WriteFile(path, []byte(old), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadExecutors(path)
+	if err != nil {
+		t.Fatalf("LoadExecutors: %v", err)
+	}
+	if cfg.ByName["claude"].Command != "/opt/claude" || cfg.ByName["codex"].Command != "/opt/codex" {
+		t.Fatalf("executors = %+v", cfg.ByName)
+	}
+	if len(cfg.DeprecatedKeys) != 0 {
+		t.Fatalf("deprecated keys = %v", cfg.DeprecatedKeys)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "# my agents\n[[executors]]\nname = \"claude\"\ncommand = \"/opt/claude\"\n\n[[executors]]\nname = \"codex\"\ncommand = \"/opt/codex\"\n"
+	if string(raw) != want {
+		t.Fatalf("rewritten file:\n%s\nwant:\n%s", raw, want)
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o640 {
+		t.Fatalf("mode = %v, %v", info, err)
+	}
+	// A second load finds nothing to rewrite.
+	if _, err := LoadExecutors(path); err != nil {
+		t.Fatal(err)
+	}
+}

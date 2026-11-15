@@ -3,8 +3,6 @@ package watcher
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,26 +10,14 @@ import (
 )
 
 func TestPollUnavailableInventoryRetainsLiveOwnership(t *testing.T) {
-	for _, phase := range []string{"inventory", "presence", "ownership"} {
-		t.Run(phase, func(t *testing.T) {
-			script := `cmd=
-for arg in "$@"; do
- case "$arg" in list-panes|show-options) cmd=$arg ;; esac
- case "$arg" in *window_name*) cmd=inventory ;; esac
-done
-`
-			switch phase {
-			case "inventory":
-				script += `echo 'no server running on fixture' >&2; exit 1`
-			case "presence":
-				script += `if [ "$cmd" = inventory ]; then printf '%%1\tfixture\t/repo\tcodex\t1\t0\t1\t\t\n'; exit 0; fi
-echo 'no server running on fixture' >&2; exit 1`
-			case "ownership":
-				script += `if [ "$cmd" = inventory ]; then printf '%%1\tfixture\t/repo\tcodex\t1\t0\t1\t\t\n'; exit 0; fi
-if [ "$cmd" = list-panes ]; then printf '%%1\n'; exit 0; fi
-echo 'no server running on fixture' >&2; exit 1`
-			}
-			t.Setenv("PATH", writeFakeTmux(t, script))
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"unreadable", errFakeUnreachable},
+		{"host gone", ErrSessionHostGone},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			w, ledger := missingWorkerFixture(t)
 			worker := w.workers["missing:@1"]
 			delete(w.workers, "missing:@1")
@@ -47,7 +33,7 @@ echo 'no server running on fixture' >&2; exit 1`
 				turn.SessionID = "%1"
 				ledger.turns["%1"] = turn
 			}
-			w.listPanes = w.listTmuxPanes
+			w.listPanes = func() ([]sessionPane, error) { return nil, tc.err }
 			w.poll()
 			if w.GetWorker("%1") == nil {
 				t.Fatal("unavailable observation discarded owned live Session")
@@ -60,14 +46,11 @@ echo 'no server running on fixture' >&2; exit 1`
 			}
 			// A later successful inventory is still authoritative: retaining
 			// Unknown must not cache an identity forever after real removal.
-			// The server is now really gone: nothing listens on its socket.
-			t.Setenv("PATH", writeFakeTmux(t, `exit 1`))
 			w.listPanes = func() ([]sessionPane, error) { return nil, nil }
 			w.poll()
 			if w.GetWorker("%1") != nil || len(ledger.applied) != 1 || !ledger.applied[0].ProcessDead {
 				t.Fatal("confirmed absence did not converge after the observation gap")
 			}
-
 		})
 	}
 }
@@ -140,34 +123,26 @@ func TestWaitForSnapshotCompletesOnlyAfterFullPollAndCancels(t *testing.T) {
 	}
 }
 
-// A computer with no tmux server running (after a reboot, or tmux never used)
+// A computer with no session host running (after a reboot, or never used)
 // has an empty first inventory. Treating it as unavailable left the Watcher
 // never ready, so Brain's host, which starts after the first inventory, never
 // started and the Brain tab stayed on "Waking up".
-func TestFirstInventoryWithNoTmuxServerIsReadyAndEmpty(t *testing.T) {
-	t.Setenv("TMUX", "")
-	t.Setenv("TMUX_TMPDIR", t.TempDir())
-	t.Setenv("PATH", writeFakeTmux(t, `echo 'no server running on fixture' >&2; exit 1`))
-	noServer := filepath.Join(t.TempDir(), "no-server")
+func TestFirstInventoryWithNoSessionHostIsReadyAndEmpty(t *testing.T) {
 	w := New(time.Second)
-	w.tmuxSocketPath = noServer
-	w.listPanes = w.listTmuxPanes
 	if w.SnapshotReady() {
 		t.Fatal("ready before any poll")
 	}
 	w.poll()
 	if !w.SnapshotReady() {
-		t.Fatal("first inventory with no tmux server never became ready")
+		t.Fatal("first inventory with no session host never became ready")
 	}
 	if err := w.WaitForSnapshot(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
-	// Once an inventory has completed, a vanished server is Unknown again:
-	// only the first observation may read "no server" as "no Sessions".
+	// Once an inventory has completed, a vanished host is Unknown again:
+	// only the first observation may read "no host" as "no Sessions".
 	w2 := New(time.Second)
-	w2.tmuxSocketPath = noServer
-	w2.listPanes = w2.listTmuxPanes
 	w2.workers["%1"] = &classifier.Worker{ID: "%1"}
 	w2.poll()
 	if w2.SnapshotReady() {
@@ -175,31 +150,21 @@ func TestFirstInventoryWithNoTmuxServerIsReadyAndEmpty(t *testing.T) {
 	}
 }
 
-// After a reboot the tmux server is gone and a Session recorded by the earlier
-// run cannot be probed on a server. A process that never saw a server and finds
-// the socket unreachable proves the recorded Session is gone, so Brain's host
-// can be replaced; once a server has been seen, a vanished one stays Unknown.
-func TestAbsenceAfterRebootButNotAfterAServerWasSeen(t *testing.T) {
-	t.Setenv("TMUX", "")
-	t.Setenv("TMUX_TMPDIR", t.TempDir())
-	t.Setenv("PATH", writeFakeTmux(t, `echo 'no server running on fixture' >&2; exit 1`))
+// After a reboot the session host is gone and a Session recorded by the
+// earlier run cannot be asked about. A process that never reached a host
+// proves the recorded Session is gone, so Brain's host can be replaced; once a
+// host has been reached, a vanished one stays Unknown.
+func TestAbsenceAfterRebootButNotAfterAHostWasReached(t *testing.T) {
 	w := New(time.Second)
-	// A unix socket path is limited to ~108 bytes; a long test temp dir would
-	// make the dial fail for the wrong reason.
-	shortDir, err := os.MkdirTemp("/tmp", "mw")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(shortDir) })
-	w.tmuxSocketPath = filepath.Join(shortDir, "s")
-
-	absent, err := w.ResolveDelegatedAbsence("%1")
+	absent, err := w.ResolveDelegatedAbsence("mh-000000000000000000000001")
 	if err != nil || !absent {
-		t.Fatalf("never saw a server: absent=%v err=%v, want absent", absent, err)
+		t.Fatalf("never reached a host: absent=%v err=%v, want absent", absent, err)
 	}
-
-	w.sawTmuxServer.Store(true)
-	if _, err := w.ResolveDelegatedAbsence("%1"); !errors.Is(err, ErrOwnershipProbeUnavailable) {
-		t.Fatalf("server seen then gone: err=%v, want Unknown (ErrOwnershipProbeUnavailable)", err)
+	host := w.host()
+	host.mu.Lock()
+	host.reached = true
+	host.mu.Unlock()
+	if _, err := w.ResolveDelegatedAbsence("mh-000000000000000000000001"); !errors.Is(err, ErrOwnershipProbeUnavailable) {
+		t.Fatalf("host reached then gone: err=%v, want Unknown (ErrOwnershipProbeUnavailable)", err)
 	}
 }

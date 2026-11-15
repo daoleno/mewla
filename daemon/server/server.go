@@ -367,7 +367,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		auth:               authManager,
 		watcher:            w,
 		hostTerminal:       hostTerminal,
-		terminal:           terminal.NewManager(&terminal.TmuxBackend{}, hostTerminal),
+		terminal:           terminal.NewManager(hostTerminal),
 		stats:              sc,
 		work:               workStore,
 		execs:              execs,
@@ -432,7 +432,6 @@ type clientMessage struct {
 	Command              string                  `json:"command"`
 	Name                 string                  `json:"name"`
 	StartedAt            json.RawMessage         `json:"started_at"`
-	Backend              string                  `json:"backend"`
 	SessionID            string                  `json:"session_id"`
 	Text                 string                  `json:"text"`
 	SnoozeUntil          *time.Time              `json:"snooze_until,omitempty"`
@@ -1213,7 +1212,7 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSessionFileMetadata(conn, raw)
 	case "session_file_text":
 		s.handleSessionFileText(conn, raw)
-	case "terminal_history", "terminal_open", "terminal_input", "terminal_resize", "terminal_scroll", "terminal_scroll_cancel", "terminal_focus_pane", "terminal_close":
+	case "terminal_history", "terminal_open", "terminal_input", "terminal_resize", "terminal_close":
 		s.handleTerminalMessage(conn, raw)
 	case "get_stats":
 		if resp := s.stats.Stats(); resp != nil {
@@ -1771,25 +1770,20 @@ func (s *Server) handleRepositoryMessage(conn *websocket.Conn, raw clientMessage
 func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) {
 	switch raw.Type {
 	case "terminal_history":
-		// A cursor asks for the scrollback after it. A Session without
-		// numbered scrollback (tmux) answers with its snapshot instead.
-		if raw.Since != nil {
-			delta, ok, err := s.terminal.HistoryFrom(clientID(conn), raw.SessionID, *raw.Since)
-			if err != nil {
-				s.sendErrorWithRequestID(conn, raw.RequestID, "terminal_history_failed", err.Error())
-				return
-			}
-			if ok {
-				s.sendJSON(conn, map[string]any{"type": "terminal_history", "request_id": raw.RequestID, "session_id": raw.SessionID, "history": delta})
-				return
-			}
+		// The cursor asks for the scrollback after it.
+		if raw.Since == nil {
+			s.sendErrorWithRequestID(conn, raw.RequestID, "terminal_history_failed", "terminal_history needs a cursor (since)")
+			return
 		}
-		history, err := s.terminal.History(clientID(conn), raw.SessionID)
+		delta, ok, err := s.terminal.HistoryFrom(clientID(conn), raw.SessionID, *raw.Since)
+		if err == nil && !ok {
+			err = fmt.Errorf("session has no scrollback")
+		}
 		if err != nil {
 			s.sendErrorWithRequestID(conn, raw.RequestID, "terminal_history_failed", err.Error())
 			return
 		}
-		s.sendJSON(conn, map[string]any{"type": "terminal_history", "request_id": raw.RequestID, "session_id": raw.SessionID, "history": history})
+		s.sendJSON(conn, map[string]any{"type": "terminal_history", "request_id": raw.RequestID, "session_id": raw.SessionID, "history": delta})
 
 	case "terminal_snapshot":
 		text, err := s.watcher.CapturePaneContent(raw.TargetID)
@@ -1808,7 +1802,7 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
 			return
 		}
-		_, err = s.terminal.Open(clientID(conn), target.Backend, targetID, terminal.OpenOptions{Cols: raw.Cols, Rows: raw.Rows, Socket: target.Socket}, func(v any) { s.sendJSONWhenRoom(conn, v) })
+		_, err = s.terminal.Open(clientID(conn), terminal.HostBackendName, targetID, terminal.OpenOptions{Cols: raw.Cols, Rows: raw.Rows, Socket: target.Socket}, func(v any) { s.sendJSONWhenRoom(conn, v) })
 		if err != nil {
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
 		}
@@ -1825,18 +1819,6 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 	case "terminal_resize":
 		if err := s.terminal.Resize(clientID(conn), raw.SessionID, raw.Cols, raw.Rows); err != nil {
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "session_id": raw.SessionID, "code": "resize_failed", "message": err.Error()})
-		}
-	case "terminal_scroll":
-		if err := s.terminal.Scroll(clientID(conn), raw.SessionID, raw.Lines); err != nil {
-			s.sendJSON(conn, map[string]any{"type": "terminal_error", "session_id": raw.SessionID, "code": "scroll_failed", "message": err.Error()})
-		}
-	case "terminal_scroll_cancel":
-		if err := s.terminal.ScrollCancel(clientID(conn), raw.SessionID); err != nil {
-			s.sendJSON(conn, map[string]any{"type": "terminal_error", "session_id": raw.SessionID, "code": "scroll_cancel_failed", "message": err.Error()})
-		}
-	case "terminal_focus_pane":
-		if err := s.terminal.FocusPane(clientID(conn), raw.SessionID, raw.Col, raw.Row); err != nil {
-			s.sendJSON(conn, map[string]any{"type": "terminal_error", "session_id": raw.SessionID, "code": "focus_pane_failed", "message": err.Error()})
 		}
 	case "terminal_close":
 		if err := s.terminal.Close(clientID(conn), raw.SessionID); err != nil {
@@ -3900,7 +3882,7 @@ func (s *Server) runBrainSessionReconcile(ctx context.Context) {
 				case refused:
 					// Every Session left is one Mewla does not own. Retrying
 					// every tick would only repeat the same refusal (and its
-					// tmux probes) forever, so report it once and stop.
+					// ownership probes) forever, so report it once and stop.
 					log.Printf("brain signal-system startup reconciliation finished; left alone: %v", err)
 				case err != nil:
 					log.Printf("brain signal-system startup reconciliation failed: %v", err)

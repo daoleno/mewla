@@ -63,7 +63,7 @@ type scrollbackProvider interface {
 }
 
 // HistoryFrom answers terminal_history for a viewer that holds the rows up to
-// cursor. Sessions without a numbered scrollback (tmux) do not offer it.
+// cursor. Sessions without a numbered scrollback do not offer it.
 func (m *Manager) HistoryFrom(ownerID, sessionID string, cursor HistoryCursor) (HistoryDelta, bool, error) {
 	ms, err := m.withSession(ownerID, sessionID)
 	if err != nil {

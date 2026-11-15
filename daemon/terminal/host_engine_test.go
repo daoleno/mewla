@@ -119,25 +119,14 @@ func TestHostTerminalView(t *testing.T) {
 	settle()
 	matchHost(t, viewer, client, id)
 
-	// The App scrolls History; scrolling and pane focus are no-ops.
-	history, err := manager.History("owner", view.ID())
-	if err != nil {
-		t.Fatal(err)
+	// The App scrolls the history it reads.
+	history, ok, err := manager.HistoryFrom("owner", view.ID(), HistoryCursor{})
+	if err != nil || !ok {
+		t.Fatalf("history: ok=%v err=%v", ok, err)
 	}
-	rows := strings.Split(strings.TrimSuffix(history.ANSI, "\n"), "\n")
-	if history.PaneID != id || history.Cols != 70 || history.Alternate || history.Total < 20 ||
-		len(rows) != history.Total || !strings.Contains(rows[0], "line 0") ||
-		len(history.Panes) != 1 || history.Panes[0] != (PaneScrollMode{ID: id, Cols: 70, Rows: 20}) {
-		t.Fatalf("history = %+v (%d rows)", history, len(rows))
-	}
-	for _, call := range []func() error{
-		func() error { return manager.Scroll("owner", view.ID(), -5) },
-		func() error { return manager.ScrollCancel("owner", view.ID()) },
-		func() error { return manager.FocusPane("owner", view.ID(), 3, 3) },
-	} {
-		if err := call(); err != nil {
-			t.Fatalf("a no-op failed: %v", err)
-		}
+	if history.PaneID != id || history.Cols != 70 || history.Rows != 20 || history.Alternate ||
+		len(history.Lines) < 20 || !strings.Contains(history.Lines[0], "line 0") {
+		t.Fatalf("history = %+v", history)
 	}
 
 	if err := manager.Input("owner", view.ID(), "\r"); err != nil {
@@ -155,7 +144,7 @@ func TestHostTerminalView(t *testing.T) {
 // The App opens a view at the grid it measured, and its grid can settle a
 // row smaller before the replay lands: the replay scrolls the viewer by a row
 // and the cursor lands a row below the text. The resize that follows draws
-// the view again at the settled size, as tmux redraws a client.
+// the view again at the settled size.
 func TestHostTerminalViewRedrawsOnResize(t *testing.T) {
 	socket, client := startTestHost(t)
 	dir := t.TempDir()

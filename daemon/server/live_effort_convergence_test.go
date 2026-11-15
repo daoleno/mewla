@@ -115,7 +115,7 @@ func TestLiveSameModelEffortConvergence(t *testing.T) {
 	if launch.CodexControlSocket == "" {
 		t.Fatal("live-control launch must allocate a socket")
 	}
-	const sessionID = "tmux:@live-effort"
+	const sessionID = "mh-live-effort"
 	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, sessionID); err != nil {
 		t.Fatal(err)
 	}
@@ -215,8 +215,8 @@ func TestLiveSameModelEffortConvergence(t *testing.T) {
 	}
 
 	sess := fmt.Sprintf("mewla-codex-live-effort-%d", time.Now().UnixNano())
-	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", sess).Run() })
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", cwd,
+	t.Cleanup(func() { _ = liveTmux("kill-server").Run() })
+	cmd := liveTmux("new-session", "-d", "-s", sess, "-c", cwd,
 		"-e", "CODEX_HOME="+codexHome,
 		"-e", "HOME="+artRoot,
 		"-e", "OPENAI_API_KEY=mewla-loopback-placeholder-not-a-secret",
@@ -467,9 +467,9 @@ func waitCodexTUIReadyLive(t *testing.T, sess, model string) {
 			return
 		}
 		if strings.Contains(pane, "Yes, continue") || strings.Contains(pane, "trust the contents") {
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "1").Run()
+			_ = liveTmux("send-keys", "-t", sess, "1").Run()
 			time.Sleep(150 * time.Millisecond)
-			_ = exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run()
+			_ = liveTmux("send-keys", "-t", sess, "Enter").Run()
 			time.Sleep(time.Second)
 			continue
 		}
@@ -480,7 +480,7 @@ func waitCodexTUIReadyLive(t *testing.T, sess, model string) {
 
 func panePIDLive(t *testing.T, sess string) int {
 	t.Helper()
-	out, err := exec.Command("tmux", "list-panes", "-t", sess, "-F", "#{pane_pid}").Output()
+	out, err := liveTmux("list-panes", "-t", sess, "-F", "#{pane_pid}").Output()
 	if err != nil {
 		t.Fatalf("list-panes: %v", err)
 	}
@@ -490,18 +490,18 @@ func panePIDLive(t *testing.T, sess string) int {
 
 func sendTmuxLineLive(t *testing.T, sess, line string) {
 	t.Helper()
-	if err := exec.Command("tmux", "send-keys", "-t", sess, "-l", "--", line).Run(); err != nil {
+	if err := liveTmux("send-keys", "-t", sess, "-l", "--", line).Run(); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(200 * time.Millisecond)
-	if err := exec.Command("tmux", "send-keys", "-t", sess, "Enter").Run(); err != nil {
+	if err := liveTmux("send-keys", "-t", sess, "Enter").Run(); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func capturePaneLive(t *testing.T, sess string) string {
 	t.Helper()
-	out, err := exec.Command("tmux", "capture-pane", "-t", sess, "-p", "-S", "-120").Output()
+	out, err := liveTmux("capture-pane", "-t", sess, "-p", "-S", "-120").Output()
 	if err != nil {
 		return "(tmux capture error: " + err.Error() + ")"
 	}

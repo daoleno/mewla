@@ -51,9 +51,9 @@ func switchFixture(t *testing.T) (*Service, *fakeWatcher, *Store, string) {
 			Command: "grok --no-alt-screen --permission-mode bypassPermissions", Hidden: true},
 	}}
 	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
-		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok", Runtime: work.WorkerRuntimeTmux},
-		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
-		"ghost": {Name: "ghost", Command: "ghost-agent", Kind: "grok", Runtime: work.WorkerRuntimeTmux},
+		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok"},
+		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
+		"ghost": {Name: "ghost", Command: "ghost-agent", Kind: "grok"},
 	}))
 	return service, fw, store, oldHostID
 }
@@ -170,7 +170,7 @@ func TestSwitchingHostIsNotReportedAsFailedWhileStarting(t *testing.T) {
 		t.Fatalf("a Host that is starting was reported: %#v", snapshot.HostProblem)
 	}
 
-	fw.createErr = errors.New("tmux refused the new session")
+	fw.createErr = errors.New("the session host refused the new Session")
 	if _, err := service.ReconcileHostContinuity(); err == nil {
 		t.Fatal("expected the launch failure")
 	}
@@ -178,7 +178,7 @@ func TestSwitchingHostIsNotReportedAsFailedWhileStarting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.HostProblem == nil || snapshot.HostProblem.Code != "start_failed" || !strings.Contains(snapshot.HostProblem.Detail, "tmux refused the new session") {
+	if snapshot.HostProblem == nil || snapshot.HostProblem.Code != "start_failed" || !strings.Contains(snapshot.HostProblem.Detail, "the session host refused the new Session") {
 		t.Fatalf("a real launch failure was not reported with its reason: %#v", snapshot.HostProblem)
 	}
 

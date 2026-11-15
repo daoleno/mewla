@@ -360,7 +360,7 @@ type blockingTerminalBackend struct {
 }
 
 func (b *blockingTerminalBackend) Name() string {
-	return "blocking"
+	return terminal.HostBackendName
 }
 
 func (b *blockingTerminalBackend) Open(
@@ -516,7 +516,7 @@ func TestRevokeClaimsPendingTerminalStartExactlyOnce(t *testing.T) {
 	)
 	server.terminal.SetCleanupSubmitter(server.terminalCleanup.Submit)
 	server.terminalTarget = func(string) (watcher.TerminalTarget, error) {
-		return watcher.TerminalTarget{Backend: "blocking"}, nil
+		return watcher.TerminalTarget{Socket: "blocking"}, nil
 	}
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
@@ -533,7 +533,6 @@ func TestRevokeClaimsPendingTerminalStartExactlyOnce(t *testing.T) {
 	ownerID := clientID(ownedConn)
 	if err := conn.WriteJSON(clientMessage{
 		Type:     "terminal_open",
-		Backend:  "blocking",
 		TargetID: "target",
 	}); err != nil {
 		t.Fatal(err)
@@ -664,7 +663,7 @@ func TestRunWithReadyCleanupDrainJoinsRacingDetach(t *testing.T) {
 	ownedConn, _ := waitForAuthenticatedWebSocketOwner(t, server, deviceID)
 	if _, err := server.terminal.Open(
 		clientID(ownedConn),
-		"blocking",
+		terminal.HostBackendName,
 		"target",
 		terminal.OpenOptions{},
 		func(any) {},
@@ -853,7 +852,7 @@ func testRunWithReadyJoinsCleanupBeforeFailedSessionDisappears(
 	go func() {
 		_, err := server.terminal.Open(
 			ownerID,
-			"blocking",
+			terminal.HostBackendName,
 			"target",
 			terminal.OpenOptions{},
 			func(any) {},
@@ -974,7 +973,7 @@ func TestRevokeAndShutdownDetachBlockedTerminalCleanupExactlyOnce(
 			ownerID := clientID(ownedConn)
 			if _, err := server.terminal.Open(
 				ownerID,
-				"blocking",
+				terminal.HostBackendName,
 				"target",
 				terminal.OpenOptions{},
 				func(any) {},
@@ -1094,7 +1093,7 @@ func TestClientDetachRaceClaimsEveryOwnershipKindExactlyOnce(t *testing.T) {
 	ownerID := clientID(ownedConn)
 	if _, err := server.terminal.Open(
 		ownerID,
-		"blocking",
+		terminal.HostBackendName,
 		"target",
 		terminal.OpenOptions{},
 		func(any) {},

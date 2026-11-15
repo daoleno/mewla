@@ -41,7 +41,7 @@ type TurnRecord struct {
 	Hints                  []watcher.TurnHint       `json:"hints,omitempty"`
 	// TranscriptBinding is the provider-native transcript identity recorded
 	// at admission (Pi owned session flag/path), restored on rediscovery;
-	// the equivalent tmux option is only an advisory cache.
+	// the equivalent Session label is only an advisory cache.
 	TranscriptBinding watcher.TranscriptBinding `json:"transcript_binding,omitempty"`
 	// SignalProtocol is true only when this Turn's random identity was carried
 	// in its delegated prompt. It is an authority marker, not another identity.
@@ -368,7 +368,7 @@ func (s *Store) InputAdmission(sessionID, proposedTurnID string) (watcher.InputA
 // PendingInputAdmissions returns every unresolved submission for a Session in
 // deterministic preparation order (AcceptedAt, then ProposedTurnID). It lets
 // the normal provider poll resolve each post-mutation crash transaction from
-// its own exact evidence without replaying input or consulting tmux for
+// its own exact evidence without replaying input or consulting the Session for
 // canonical ownership. Several distinct pending transactions may coexist for
 // one Session; the caller resolves each only when its exact identity matches.
 func (s *Store) PendingInputAdmissions(sessionID string) ([]watcher.InputAdmission, error) {
@@ -475,7 +475,7 @@ func (s *Store) AbortUnmarkedInputAdmission(candidate watcher.InputAdmission) er
 
 // MarkInputAdmissionAmbiguous records that the target-bound mutation queue
 // started but provider acceptance is not yet proven. This is canonical
-// non-replayable state, not a tmux receipt convention.
+// non-replayable state, not a Session receipt convention.
 func (s *Store) MarkInputAdmissionAmbiguous(sessionID, proposedTurnID, reason string) error {
 	st, _, err := s.fsmAdmission(strings.TrimSpace(sessionID), strings.TrimSpace(proposedTurnID))
 	if err != nil {
@@ -2163,7 +2163,7 @@ var ErrNoActiveTurn = errors.New("no canonical turn for session")
 
 // ReconcileAbsentPreparedAdmissions is used by explicit spawn/close and inventory
 // reconciliation. Discovery alone is never proof: the supplied probe must read
-// the authoritative selected tmux server and fail closed on unavailable servers.
+// the authoritative session host and fail closed when it is unavailable.
 func (s *Store) ReconcileAbsentPreparedAdmissions(workID string, absent func(string) (bool, error)) (int, error) {
 	count := 0
 	for _, st := range s.fsm.ListViews() {

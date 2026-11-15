@@ -1405,7 +1405,7 @@ func TestServiceSnapshotCreatesHiddenHostSession(t *testing.T) {
 	if snapshot.HostWorker == nil || snapshot.HostWorker.ID != fw.created[0].id {
 		t.Fatalf("host agent = %#v", snapshot.HostWorker)
 	}
-	if snapshot.HostExecutor == nil || snapshot.HostExecutor.Provider != "codex" || snapshot.HostExecutor.Runtime != work.WorkerRuntimeTmux {
+	if snapshot.HostExecutor == nil || snapshot.HostExecutor.Provider != "codex" {
 		t.Fatalf("host executor = %#v", snapshot.HostExecutor)
 	}
 	if len(snapshot.Executors) == 0 || !snapshot.Executors[0].Host {
@@ -1557,8 +1557,8 @@ func TestServiceSnapshotReusesGrokHostEvenWhenClassifiedBlocked(t *testing.T) {
 	}
 }
 
-// Host replacement on re-entry is driven by a missing tmux target, not by status.
-func TestServiceSnapshotReplacesHostWhenTmuxSessionMissing(t *testing.T) {
+// Host replacement on re-entry is driven by a missing Session, not by status.
+func TestServiceSnapshotReplacesHostWhenSessionMissing(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -1581,7 +1581,7 @@ func TestServiceSnapshotReplacesHostWhenTmuxSessionMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(fw.created) != 1 {
-		t.Fatalf("expected replacement host when tmux target missing, got %#v", fw.created)
+		t.Fatalf("expected replacement host when Session missing, got %#v", fw.created)
 	}
 	if snapshot.HostWorker == nil || snapshot.HostWorker.ID == oldID {
 		t.Fatalf("host agent = %#v", snapshot.HostWorker)
@@ -1597,18 +1597,18 @@ func TestServiceSnapshotReplacesHostWhenTmuxSessionMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(audit), hostReplaceReasonMissingTmux) {
-		t.Fatalf("expected missing_tmux audit, got %s", audit)
+	if !strings.Contains(string(audit), hostReplaceReasonSessionMissing) {
+		t.Fatalf("expected session_missing audit, got %s", audit)
 	}
 	if !strings.Contains(string(audit), oldID) {
 		t.Fatalf("audit should name previous host, got %s", audit)
 	}
 }
 
-// missing_tmux with a bound provider session must native-resume (not blank),
-// atomically persist the resume token, and audit resume_launched (tmux launch
+// session_missing with a bound provider session must native-resume (not blank),
+// atomically persist the resume token, and audit resume_launched (Session launch
 // only — not provider acceptance).
-func TestServiceSnapshotResumesProviderSessionWhenTmuxMissing(t *testing.T) {
+func TestServiceSnapshotResumesProviderSessionWhenSessionMissing(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -1653,7 +1653,7 @@ func TestServiceSnapshotResumesProviderSessionWhenTmuxMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(audit), hostReplaceReasonMissingTmuxResumeLaunched) {
+	if !strings.Contains(string(audit), hostReplaceReasonSessionMissingResumeLaunched) {
 		t.Fatalf("expected resume_launched audit, got %s", audit)
 	}
 }
@@ -1693,7 +1693,7 @@ func TestServiceSnapshotResumesCodexFromTranscriptPathOnly(t *testing.T) {
 
 // EnsureHostSnapshot never calls NewChat/SetChatState; chat_state bytes stay
 // identical. thread_ids is cumulative NewChat history only.
-func TestServiceSnapshotMissingTmuxResumePreservesChatThreadIdentity(t *testing.T) {
+func TestServiceSnapshotMissingSessionResumePreservesChatThreadIdentity(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -1758,7 +1758,7 @@ func TestServiceSnapshotMissingTmuxResumePreservesChatThreadIdentity(t *testing.
 	}
 }
 
-func TestServiceMissingTmuxFailClosedTable(t *testing.T) {
+func TestServiceMissingSessionFailClosedTable(t *testing.T) {
 	tests := []struct {
 		name       string
 		executorID string
@@ -1772,7 +1772,7 @@ func TestServiceMissingTmuxFailClosedTable(t *testing.T) {
 		{name: "unsupported", executorID: "custom", command: "my-custom-agent", kind: "custom", providerID: "custom-1"},
 		{name: "opencode non-ses", executorID: "opencode", command: "opencode", kind: "opencode", providerID: "not-a-ses"},
 		{name: "claude path-only", executorID: "claude", command: "claude", kind: "claude", path: "/tmp/claude.jsonl"},
-		{name: "create fails", executorID: "codex", command: "codex", kind: "codex", providerID: "019fd717-589c-7a11-9966-917f43dc336a", createErr: fmt.Errorf("tmux unavailable")},
+		{name: "create fails", executorID: "codex", command: "codex", kind: "codex", providerID: "019fd717-589c-7a11-9966-917f43dc336a", createErr: fmt.Errorf("session host unavailable")},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1815,7 +1815,7 @@ func TestServiceMissingTmuxFailClosedTable(t *testing.T) {
 				t.Fatalf("binding mutated: before=%+v after=%+v", before, after)
 			}
 			audit, _ := os.ReadFile(store.HostReplacementsPath())
-			if !strings.Contains(string(audit), hostReplaceReasonMissingTmuxUnrecoverable) {
+			if !strings.Contains(string(audit), hostReplaceReasonSessionMissingUnrecoverable) {
 				t.Fatalf("audit=%s", audit)
 			}
 		})
@@ -1857,7 +1857,7 @@ func TestServiceSnapshotDoesNotRebindUnrelatedHostAsContinuity(t *testing.T) {
 	}
 	audit, _ := os.ReadFile(store.HostReplacementsPath())
 	if strings.Contains(string(audit), hostReplaceReasonRecoveredAlive) ||
-		!strings.Contains(string(audit), hostReplaceReasonMissingTmuxResumeLaunched) {
+		!strings.Contains(string(audit), hostReplaceReasonSessionMissingResumeLaunched) {
 		t.Fatalf("audit=%s", audit)
 	}
 }
@@ -1982,13 +1982,13 @@ func TestServiceSnapshotResumeBindFailureKillsNewHostKeepsOld(t *testing.T) {
 		t.Fatalf("old binding mutated:\nbefore=%s\nafter=%s", before, afterBytes)
 	}
 	audit, _ := os.ReadFile(store.HostReplacementsPath())
-	if strings.Contains(string(audit), hostReplaceReasonMissingTmuxResumeLaunched) {
+	if strings.Contains(string(audit), hostReplaceReasonSessionMissingResumeLaunched) {
 		t.Fatalf("must not audit resume_launched after bind failure: %s", audit)
 	}
 }
 
 // ProjectionSnapshot must never create/resume/rebind even when the recorded
-// host is absent from tmux (continuity stays on explicit lifecycle paths).
+// host is absent from the session host (continuity stays on explicit lifecycle paths).
 func TestProjectionSnapshotAbsentHostDoesNotMutate(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
@@ -2032,7 +2032,7 @@ func TestProjectionSnapshotAbsentHostDoesNotMutate(t *testing.T) {
 	}
 }
 
-// Unknown recorded-host ProbeSession must not enter missing_tmux create/kill/transfer.
+// Unknown recorded-host ProbeSession must not enter session_missing create/kill/transfer.
 func TestServiceSnapshotProbeUnknownPreservesBindingCreatesZero(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
@@ -2051,7 +2051,7 @@ func TestServiceSnapshotProbeUnknownPreservesBindingCreatesZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fw := &fakeWatcher{probeErr: fmt.Errorf("injected tmux probe transport failure")}
+	fw := &fakeWatcher{probeErr: fmt.Errorf("injected session host probe failure")}
 	routes := &fakeRouteLifecycle{}
 	service := NewService(store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
@@ -2079,7 +2079,7 @@ func TestServiceSnapshotProbeUnknownPreservesBindingCreatesZero(t *testing.T) {
 		t.Fatalf("host/provider binding mutated:\nbefore=%s\nafter=%s", beforeHost, afterHost)
 	}
 	audit, _ := os.ReadFile(store.HostReplacementsPath())
-	if strings.Contains(string(audit), hostReplaceReasonMissingTmux) ||
+	if strings.Contains(string(audit), hostReplaceReasonSessionMissing) ||
 		strings.Contains(string(audit), hostReplaceReasonRecoveredAlive) {
 		t.Fatalf("must not audit recovery/spawn on probe unknown: %s", audit)
 	}
@@ -2731,8 +2731,8 @@ func TestServiceSetHostExecutorHandsOffExistingThread(t *testing.T) {
 		},
 	}
 	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
-		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok", Runtime: work.WorkerRuntimeTmux},
-		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
+		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok"},
+		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 	registryRaw, err := os.ReadFile(store.ChatStatePath())
 	if err != nil {
@@ -2828,7 +2828,7 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 		},
 	}
 	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
-		"codex": {Name: "codex", Command: "codex", Kind: "codex", Runtime: work.WorkerRuntimeTmux},
+		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 
 	report, err := service.Housekeeping()
@@ -2916,7 +2916,7 @@ func TestServiceNewChatReplacesHostAndStartsFreshThread(t *testing.T) {
 		},
 	}
 	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
-		"claude": {Name: "claude", Command: "claude", Kind: "claude", Runtime: work.WorkerRuntimeTmux},
+		"claude": {Name: "claude", Command: "claude", Kind: "claude"},
 	}))
 
 	snapshot, err := service.NewChat()

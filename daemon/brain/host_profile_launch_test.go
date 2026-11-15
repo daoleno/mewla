@@ -159,7 +159,7 @@ func TestExecutorMismatchReplacementPrepareCommit(t *testing.T) {
 	}
 }
 
-func TestMissingTmuxResumeUsesImmutableBindingNotDefaultPrepare(t *testing.T) {
+func TestMissingSessionResumeUsesImmutableBindingNotDefaultPrepare(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestMissingTmuxResumeUsesImmutableBindingNotDefaultPrepare(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(routes.prepareCalls) != 0 {
-		t.Fatalf("missing-tmux resume must not PrepareLaunch default: %#v", routes.prepareCalls)
+		t.Fatalf("missing-Session resume must not PrepareLaunch default: %#v", routes.prepareCalls)
 	}
 	if len(routes.resumeCalls) != 1 || routes.resumeCalls[0] != oldID {
 		t.Fatalf("resumeCalls=%#v", routes.resumeCalls)
@@ -213,11 +213,11 @@ func TestMissingTmuxResumeUsesImmutableBindingNotDefaultPrepare(t *testing.T) {
 	}
 }
 
-// TestMissingTmuxResumeWithoutBindingPreparesDefault covers the dropped-route
+// TestMissingSessionResumeWithoutBindingPreparesDefault covers the dropped-route
 // case (for example a route released before the daemon upgrade): the thread's
 // binding no longer exists, so the resume falls through to PrepareLaunch with
 // the current executor default and gets a fresh route — never a dead one.
-func TestMissingTmuxResumeWithoutBindingPreparesDefault(t *testing.T) {
+func TestMissingSessionResumeWithoutBindingPreparesDefault(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +272,7 @@ func TestBrainHostCreateFailureAbortsProvisional(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fw := &fakeWatcher{createErr: errors.New("tmux down")}
+	fw := &fakeWatcher{createErr: errors.New("session host down")}
 	routes := &fakeRouteLifecycle{
 		preparePlan: &modelprofiles.SessionLaunchPlan{
 			Applied:       true,

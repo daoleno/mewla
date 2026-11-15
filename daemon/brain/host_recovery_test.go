@@ -55,7 +55,7 @@ func TestAnOpenButNeverReadyHostIsReportedAndRetried(t *testing.T) {
 		t.Fatalf("problem not cleared: %+v", snapshot.HostProblem)
 	}
 	// Another kind of failure never reads as "not ready".
-	service.noteHostActivation(errors.New("tmux unavailable"))
+	service.noteHostActivation(errors.New("session host unavailable"))
 	if service.hostActivationStuck() {
 		t.Fatal("unrelated error marked the host not ready")
 	}

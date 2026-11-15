@@ -279,14 +279,14 @@ func TestOwnerPrepareLaunchCompileAndCommit(t *testing.T) {
 	if strings.Contains(string(raw), "secret-value") {
 		t.Fatal("secret leaked into wire")
 	}
-	state, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "tmux:@1")
+	state, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "mh-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Binding.SessionID != "tmux:@1" || state.Binding.RouteID == "" {
+	if state.Binding.SessionID != "mh-1" || state.Binding.RouteID == "" {
 		t.Fatalf("state=%#v", state)
 	}
-	snap, ok := owner.SessionSnapshot("tmux:@1")
+	snap, ok := owner.SessionSnapshot("mh-1")
 	if !ok || snap.Current == nil || snap.Current.ConnectionID != profile.ID {
 		t.Fatalf("snapshot=%#v ok=%v", snap, ok)
 	}

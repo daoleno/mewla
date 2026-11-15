@@ -358,9 +358,9 @@ func TestDiscoverPersistentAcceptsCgroupChildPID(t *testing.T) {
 	}
 }
 
-// A socket tmux already represents must not reappear as a bogus persistent
+// A socket a Session already represents must not reappear as a bogus persistent
 // inactive duplicate: it is omitted, not lied about.
-func TestDiscoverPersistentOmitsClaimedTmuxSocket(t *testing.T) {
+func TestDiscoverPersistentOmitsClaimedSessionSocket(t *testing.T) {
 	requireLinuxManagedServices(t)
 	path := filepath.Join(t.TempDir(), "managed-services.json")
 	w := testManagedWatcher(t, path)
@@ -383,9 +383,9 @@ func TestDiscoverPersistentOmitsClaimedTmuxSocket(t *testing.T) {
 	}
 }
 
-// Merged authoritative snapshot: one tmux row wins, no persistent duplicate,
+// Merged authoritative snapshot: one Session row wins, no persistent duplicate,
 // no inactive ghost.
-func TestMergedSnapshotKeepsSingleTmuxRow(t *testing.T) {
+func TestMergedSnapshotKeepsSingleSessionRow(t *testing.T) {
 	requireLinuxManagedServices(t)
 	path := filepath.Join(t.TempDir(), "managed-services.json")
 	w := testManagedWatcher(t, path)
@@ -416,7 +416,7 @@ func TestMergedSnapshotKeepsSingleTmuxRow(t *testing.T) {
 	}
 	row := snapshot.Services[0]
 	if row.Source != ServiceSourceSession || row.WorkerID != "main:@1" || row.Port != 3000 {
-		t.Fatalf("merged row = %+v, want the tmux session row", row)
+		t.Fatalf("merged row = %+v, want the Session row", row)
 	}
 }
 

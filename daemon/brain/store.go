@@ -300,7 +300,7 @@ func (s *Store) SetHostSession(id, executorID string) error {
 	return writeHostSessionFile(s.HostSessionPath(), host)
 }
 
-// ReplaceHostSessionBinding atomically writes a new host tmux target together
+// ReplaceHostSessionBinding atomically writes a new host Session together
 // with its provider binding in one JSON write. On failure the previous file is
 // unchanged (writeAtomic rename).
 func (s *Store) ReplaceHostSessionBinding(id, executorID, providerSessionID, transcriptPath, providerDataRoot string) error {

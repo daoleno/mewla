@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -150,8 +149,6 @@ func configureSessionHost(w *watcher.Watcher, stateDir string) {
 		StateDir:   stateDir,
 		LogPath:    filepath.Join(stateDir, "session-host", "host.log"),
 		Version:    hostVersion(),
-		// Windows has no tmux: there the host is the only inventory.
-		HostOnly: runtime.GOOS == "windows",
 	})
 }
 

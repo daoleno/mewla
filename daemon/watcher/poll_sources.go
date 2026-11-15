@@ -2,7 +2,7 @@ package watcher
 
 import "time"
 
-// PollPane is the wire shape of one tmux pane inventory entry for the
+// PollPane is the wire shape of one Session inventory entry for the
 // test-only poll source seam.
 type PollPane struct {
 	Target           string
@@ -28,17 +28,55 @@ type PollProcess struct {
 	Args      string
 }
 
-// PollSources injects the polling loop's external reads (tmux pane
-// inventory, pane capture, process snapshot, pane generation). Production
+// PollSources injects the polling loop's external reads (Session
+// inventory, screen capture, process snapshot, pane generation). Production
 // callers never install it; it exists so end-to-end tests can drive the real
-// poll loop against a real canonical ledger without tmux.
+// poll loop against a real canonical ledger without a session host.
 type PollSources struct {
 	ListPanes         func() ([]PollPane, error)
 	CapturePane       func(target string) (content string, alive bool, deadStatus int)
 	SnapshotProcesses func() map[int]PollProcess
 	// PaneGeneration returns the pane generation for a target; nil keeps
-	// the real tmux read. Test-only.
+	// the real read. Test-only.
 	PaneGeneration func(target string) string
+	// StartSession replaces the session host's start of a new Session: it
+	// gets what the Session would run and returns its id. Test-only.
+	StartSession func(PollStart) (string, error)
+}
+
+// PollStart is what CreateSession hands StartSession.
+type PollStart struct {
+	Name    string
+	Cwd     string
+	Command string
+	Env     []string
+}
+
+// startHookBackend starts Sessions through PollSources.StartSession and asks
+// the backend it wraps everything else.
+type startHookBackend struct {
+	sessionBackend
+	start func(PollStart) (string, error)
+}
+
+func (b startHookBackend) place(string, bool, string) (backendPlacement, error) {
+	return backendPlacement{}, nil
+}
+
+func (b startHookBackend) create(_ backendPlacement, spec backendCreateSpec) (string, error) {
+	return b.start(PollStart{Name: spec.name, Cwd: spec.cwd, Command: spec.command, Env: spec.env})
+}
+
+// creator is the backend CreateSession starts a Session with.
+func (w *Watcher) creator() sessionBackend {
+	backend := w.sessions()
+	w.mu.RLock()
+	sources := w.pollSources
+	w.mu.RUnlock()
+	if sources != nil && sources.StartSession != nil {
+		return startHookBackend{sessionBackend: backend, start: sources.StartSession}
+	}
+	return backend
 }
 
 // SetPollSources installs test-only poll sources and returns a restore

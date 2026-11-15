@@ -7,21 +7,18 @@ import (
 
 func TestResolveDelegatedAbsenceUsesAuthoritativeInventory(t *testing.T) {
 	for _, tc := range []struct {
-		name, script  string
+		name          string
+		state         fakeSessionState
 		gone, unknown bool
 	}{
-		{"unreachable", `echo 'failed to connect to server' >&2; exit 1`, false, true},
-		{"absent", `if [ "$1" = list-panes ]; then echo '%7'; exit 0; fi; exit 1`, true, false},
-		{"owned", `if [ "$1" = list-panes ]; then echo '%1'; else echo 1; fi`, false, false},
-		{"foreign", `if [ "$1" = list-panes ]; then echo '%1'; else echo 0; fi`, true, false},
-		{"ownership unavailable", `if [ "$1" = list-panes ]; then echo '%1'; exit 0; fi; echo 'no server running on fixture' >&2; exit 1`, false, true},
+		{"unreachable", fakeUnreachable, false, true},
+		{"absent", fakeAbsent, true, false},
+		{"owned", fakeOwned, false, false},
+		{"foreign", fakeUnowned, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("PATH", writeFakeTmux(t, tc.script))
 			w := New(0)
-			// A server that was seen and is now unreachable is Unknown. (One
-			// this process never saw is the reboot case: startup_inventory_test.go.)
-			w.sawTmuxServer.Store(true)
+			useFakeSessionBackend(w, newFakeSessionBackend()).set("%1", tc.state)
 			gone, err := w.ResolveDelegatedAbsence("%1")
 			if tc.unknown {
 				if !errors.Is(err, ErrOwnershipProbeUnavailable) {

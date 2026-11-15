@@ -75,7 +75,6 @@ func writeExecutorsConfig(req configWriteRequest) (configWriteResult, error) {
 			Name:    selected.ID,
 			Command: command,
 			Kind:    kind,
-			Runtime: existing.Runtime,
 			// A separate sign-in survives setup being run again.
 			ConfigDir: existing.ConfigDir,
 		}
@@ -138,9 +137,6 @@ func renderExecutorsTOML(file executorFile) ([]byte, error) {
 		b.WriteString("command = \"" + escapeTOMLString(executor.Command) + "\"\n")
 		if kind := strings.TrimSpace(executor.Kind); kind != "" {
 			b.WriteString("kind = \"" + escapeTOMLString(kind) + "\"\n")
-		}
-		if runtime := strings.TrimSpace(executor.Runtime); runtime != "" {
-			b.WriteString("runtime = \"" + escapeTOMLString(runtime) + "\"\n")
 		}
 		if dir := strings.TrimSpace(executor.ConfigDir); dir != "" {
 			b.WriteString("config_dir = \"" + escapeTOMLString(dir) + "\"\n")

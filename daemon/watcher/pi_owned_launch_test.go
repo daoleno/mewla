@@ -2,7 +2,6 @@ package watcher
 
 import (
 	"encoding/base64"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -402,15 +401,15 @@ func TestPollDiscoveredPiWithoutLaunchCommandKeepsDetectedIdentity(t *testing.T)
 	}
 }
 
-// TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption
-// reproduces the daemon restart path at window re-discovery: the tmux window
+// TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromSessionLabel
+// reproduces the daemon restart path at window re-discovery: the Session
 // survives with the durable Pi ownership binding recorded at session create
 // (@mewla_worker_pi_session), while the pi process rewrites its argv to bare
 // "pi". The fresh watcher (no in-memory launch record) must restore the owned
 // --session path from the binding and keep it across later polls, so a
 // reopen/reconnect subscription binds the exact durable transcript instead of
 // degrading to transcript_not_found.
-func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *testing.T) {
+func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromSessionLabel(t *testing.T) {
 	owned := filepath.Join(t.TempDir(), "My Mewla", "owned file.jsonl")
 	binding := EncodePiSessionBinding("--session", owned)
 	w := New(time.Second)
@@ -451,8 +450,8 @@ func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *tes
 
 // TestPiSessionBindingRoundTripsHostilePaths pins the delimiter-safe encoding
 // contract: owned paths containing tabs, newlines, double quotes, backslashes,
-// and shell metacharacters must round-trip exactly through the encoded tmux
-// option value, and the encoded value itself must be a single delimiter-safe
+// and shell metacharacters must round-trip exactly through the encoded Session
+// label value, and the encoded value itself must be a single delimiter-safe
 // token that cannot corrupt the tab-separated list-panes projection. The
 // canonical reconstructed command must also survive the watcher flag parser.
 // An embedded apostrophe still round-trips exactly through the encoding; the
@@ -593,31 +592,12 @@ func TestPollPiSessionBindingClearedOnProviderSwitch(t *testing.T) {
 	}
 }
 
-// TestMarkCreatedSessionPersistsOnlyValidPiBinding pins the write-side
+// TestCreatedSessionLabelsRecordOnlyValidPiBinding pins the write-side
 // contract: only a validated Pi launch with an owned absolute --session path
-// writes a @mewla_worker_pi_session option; non-Pi commands (even secret-bearing)
-// and Pi commands without an owned binding write nothing, so the raw launch
-// command never reaches tmux.
-func TestMarkCreatedSessionPersistsOnlyValidPiBinding(t *testing.T) {
-	binDir := t.TempDir()
-	tmuxPath := filepath.Join(binDir, "tmux")
-	script := "#!/bin/sh\n[ \"$1\" = -u ] && shift\n" +
-		"printf '%s\\n' \"$*\" >> \"$TMUX_OPTION_LOG\"\n" +
-		"exit 0\n"
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	logPath := filepath.Join(t.TempDir(), "options.log")
-	t.Setenv("TMUX_OPTION_LOG", logPath)
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	readOptions := func() []string {
-		data, err := os.ReadFile(logPath)
-		if err != nil {
-			return nil
-		}
-		return strings.Split(strings.TrimSpace(string(data)), "\n")
-	}
-
+// records a pi-session label; non-Pi commands (even secret-bearing) and Pi
+// commands without an owned binding record nothing, so the raw launch command
+// never reaches the session host.
+func TestCreatedSessionLabelsRecordOnlyValidPiBinding(t *testing.T) {
 	owned := "/repo/.mewla/provider-sessions/pi/owned.jsonl"
 	cases := []struct {
 		name    string
@@ -653,69 +633,13 @@ func TestMarkCreatedSessionPersistsOnlyValidPiBinding(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := os.Remove(logPath); err != nil && !os.IsNotExist(err) {
-				t.Fatal(err)
+			labels := createdSessionLabels(CreateSessionOptions{Command: tc.command})
+			if labels.piSession != tc.want {
+				t.Fatalf("pi-session label = %q, want %q", labels.piSession, tc.want)
 			}
-			if err := markCreatedSession("", "%9", createdSessionLabels(CreateSessionOptions{Command: tc.command})); err != nil {
-				t.Fatal(err)
-			}
-			found := false
-			for _, option := range readOptions() {
-				if strings.Contains(option, "@mewla_worker_pi_session") {
-					found = true
-					if tc.want == "" {
-						t.Fatalf("unexpected binding option written: %s", option)
-					}
-					if !strings.Contains(option, tc.want) {
-						t.Fatalf("binding option = %s, want value %s", option, tc.want)
-					}
-				}
-			}
-			if tc.want != "" && !found {
-				t.Fatalf("expected @mewla_worker_pi_session option for %q", tc.command)
-			}
-			for _, option := range readOptions() {
-				if strings.Contains(option, tc.command) {
-					t.Fatalf("raw launch command leaked into tmux options: %s", option)
-				}
+			if tc.command != "" && strings.Contains(labels.piSession, tc.command) {
+				t.Fatalf("raw launch command leaked into the label: %s", labels.piSession)
 			}
 		})
-	}
-}
-
-// TestListTmuxWindowsParsesPiSessionBinding pins the wire format of the
-// durable Pi binding: list-panes must carry the encoded binding as its own
-// field so rediscovery can restore owned Pi bindings after a daemon restart.
-func TestListTmuxWindowsParsesPiSessionBinding(t *testing.T) {
-	binDir := t.TempDir()
-	binding := EncodePiSessionBinding("--session", filepath.Join(t.TempDir(), "My Mewla", "owned file.jsonl"))
-	line := "%1\tpi\t/repo/mewla\tpi\t900\t\t\t\t" + binding + "\tfixture"
-	tmuxPath := filepath.Join(binDir, "tmux")
-	script := "#!/bin/sh\n[ \"$1\" = -u ] && shift\n" +
-		"if [ \"$1\" = \"list-panes\" ]; then\n" +
-		"  cat <<'EOF'\n" +
-		line + "\n" +
-		"EOF\n" +
-		"  exit 0\n" +
-		"fi\n" +
-		"exit 1\n"
-	if err := os.WriteFile(tmuxPath, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	windows, err := listTmuxPanesOn("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(windows) != 1 {
-		t.Fatalf("windows = %#v, want 1", windows)
-	}
-	win := windows[0]
-	if win.target != "%1" || win.command != "pi" || win.panePID != 900 {
-		t.Fatalf("parsed window = %#v", win)
-	}
-	if win.piSessionBinding != binding {
-		t.Fatalf("pi session binding = %q, want %q", win.piSessionBinding, binding)
 	}
 }

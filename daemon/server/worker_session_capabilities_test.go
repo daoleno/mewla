@@ -131,10 +131,10 @@ func TestWorkerSessionWireModelProfileCapabilitiesFromRouteTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "tmux:@routed"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "mh-routed"); err != nil {
 		t.Fatal(err)
 	}
-	routed := srv.workerSessionWire(&classifier.Worker{ID: "tmux:@routed", Name: "zsh notes", Command: "zsh"})
+	routed := srv.workerSessionWire(&classifier.Worker{ID: "mh-routed", Name: "zsh notes", Command: "zsh"})
 	// This owner has no live-control dir: the routed Codex session is a
 	// pre-feature embedded session — managed but NOT active-switchable (a
 	// switch could never reach the native thread without a restart).
@@ -159,10 +159,10 @@ func TestWorkerSessionWireModelProfileCapabilitiesFromRouteTable(t *testing.T) {
 	if livePlan.CodexControlSocket == "" {
 		t.Fatal("live-control owner must allocate a socket")
 	}
-	if _, _, _, err := liveOwner.CommitLaunch(livePlan.ProvisionalID, "tmux:@live-routed"); err != nil {
+	if _, _, _, err := liveOwner.CommitLaunch(livePlan.ProvisionalID, "mh-live-routed"); err != nil {
 		t.Fatal(err)
 	}
-	liveRouted := liveSrv.workerSessionWire(&classifier.Worker{ID: "tmux:@live-routed", Name: "zsh notes", Command: "zsh"})
+	liveRouted := liveSrv.workerSessionWire(&classifier.Worker{ID: "mh-live-routed", Name: "zsh notes", Command: "zsh"})
 	if !liveRouted.Capabilities.ModelProfileManaged || !liveRouted.Capabilities.ModelProfileActiveSwitch {
 		t.Fatalf("live-control routed capabilities %#v", liveRouted.Capabilities)
 	}
@@ -185,10 +185,10 @@ func TestWorkerSessionWireModelProfileCapabilitiesFromRouteTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(nativePlan.ProvisionalID, "tmux:@native"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(nativePlan.ProvisionalID, "mh-native"); err != nil {
 		t.Fatal(err)
 	}
-	native := srv.workerSessionWire(&classifier.Worker{ID: "tmux:@native", Name: "Codex", Command: "codex"})
+	native := srv.workerSessionWire(&classifier.Worker{ID: "mh-native", Name: "Codex", Command: "codex"})
 	if !native.Capabilities.ModelProfileManaged || native.Capabilities.ModelProfileActiveSwitch {
 		t.Fatalf("native managed=true switch=false: %#v", native.Capabilities)
 	}
@@ -209,19 +209,19 @@ func TestWorkerSessionWireModelProfileCapabilitiesFromRouteTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(anthropicPlan.ProvisionalID, "tmux:@anthropic"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(anthropicPlan.ProvisionalID, "mh-anthropic"); err != nil {
 		t.Fatal(err)
 	}
-	anthropic := srv.workerSessionWire(&classifier.Worker{ID: "tmux:@anthropic", Name: "notes", Command: "zsh"})
+	anthropic := srv.workerSessionWire(&classifier.Worker{ID: "mh-anthropic", Name: "notes", Command: "zsh"})
 	if !anthropic.Capabilities.ModelProfileManaged || anthropic.Capabilities.ModelProfileActiveSwitch {
 		t.Fatalf("anthropic managed=true switch=false: %#v", anthropic.Capabilities)
 	}
 
 	// List projection matches per-session wire.
 	list := srv.workerSessionsWire([]*classifier.Worker{
-		{ID: "tmux:@routed", Command: "zsh"},
-		{ID: "tmux:@native", Command: "codex"},
-		{ID: "tmux:@anthropic", Command: "zsh"},
+		{ID: "mh-routed", Command: "zsh"},
+		{ID: "mh-native", Command: "codex"},
+		{ID: "mh-anthropic", Command: "zsh"},
 		{ID: "shell:@1", Command: "codex"},
 	})
 	if len(list) != 4 {
@@ -258,17 +258,17 @@ func TestWorkerSessionWireModelProfileCapabilitiesFromRouteTable(t *testing.T) {
 	}
 	srv2 := &Server{}
 	srv2.SetModelProfiles(owner2)
-	restarted := srv2.workerSessionWire(&classifier.Worker{ID: "tmux:@routed", Command: "zsh"})
+	restarted := srv2.workerSessionWire(&classifier.Worker{ID: "mh-routed", Command: "zsh"})
 	// The embedded (socket-less) binding survives restart as managed-only —
 	// never advertising a switch that could not reach the native thread.
 	if !restarted.Capabilities.ModelProfileManaged || restarted.Capabilities.ModelProfileActiveSwitch {
 		t.Fatalf("restart routed (embedded) must be managed-only: %#v", restarted.Capabilities)
 	}
-	restartNative := srv2.workerSessionWire(&classifier.Worker{ID: "tmux:@native", Command: "codex"})
+	restartNative := srv2.workerSessionWire(&classifier.Worker{ID: "mh-native", Command: "codex"})
 	if !restartNative.Capabilities.ModelProfileManaged || restartNative.Capabilities.ModelProfileActiveSwitch {
 		t.Fatalf("restart native %#v", restartNative.Capabilities)
 	}
-	restartAnthropic := srv2.workerSessionWire(&classifier.Worker{ID: "tmux:@anthropic", Command: "zsh"})
+	restartAnthropic := srv2.workerSessionWire(&classifier.Worker{ID: "mh-anthropic", Command: "zsh"})
 	if !restartAnthropic.Capabilities.ModelProfileManaged || restartAnthropic.Capabilities.ModelProfileActiveSwitch {
 		t.Fatalf("restart anthropic %#v", restartAnthropic.Capabilities)
 	}

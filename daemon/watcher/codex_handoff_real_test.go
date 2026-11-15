@@ -1,3 +1,5 @@
+//go:build ghosttyvt && cgo && (linux || darwin)
+
 package watcher
 
 import (
@@ -9,7 +11,7 @@ import (
 	"time"
 )
 
-func TestRealCodexIsolatedHandoff(t *testing.T) {
+func TestHostRealCodexIsolatedHandoff(t *testing.T) {
 	if os.Getenv("MEWLA_TEST_CODEX_HANDOFF") != "1" {
 		t.Skip("set MEWLA_TEST_CODEX_HANDOFF=1 to send one short prompt to installed Codex")
 	}
@@ -52,7 +54,7 @@ func TestRealCodexIsolatedHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := newSharedTmuxHarness(t, false)
+	h := newHostHarness(t)
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -69,16 +71,25 @@ func TestRealCodexIsolatedHandoff(t *testing.T) {
 	t.Cleanup(func() { _ = h.w.KillSession(target) })
 	prompt := "Do not use tools, run commands, edit files, or delegate. Reply with only the concatenation of MEWLA_HANDOFF_ and VERIFIED."
 	if err := h.w.SendInputWhenReadyBudgeted(target, command, prompt+"\n", 30*time.Second); err != nil {
-		t.Fatalf("handoff failed: %v; pane: %s", err, captureHarnessPane(t, h.selected, target))
+		t.Fatalf("handoff failed: %v; pane: %s", err, hostScreen(h.w, target))
 	}
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
-		pane := captureHarnessPane(t, h.selected, target)
+		pane := hostScreen(h.w, target)
 		if strings.Contains(pane, "MEWLA_HANDOFF_VERIFIED") {
 			t.Logf("production CreateSession + readiness/input queue received Codex reply on %s: MEWLA_HANDOFF_VERIFIED", target)
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("no Codex reply: %s", captureHarnessPane(t, h.selected, target))
+	t.Fatalf("no Codex reply: %s", hostScreen(h.w, target))
+}
+
+// hostScreen is the Session's recent screen, or why it cannot be read.
+func hostScreen(w *Watcher, id string) string {
+	screen, err := w.sessions().captureRecent(id)
+	if err != nil {
+		return err.Error()
+	}
+	return screen
 }

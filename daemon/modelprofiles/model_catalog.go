@@ -423,8 +423,8 @@ type CodexTruncationPolicyConfig struct {
 // that has no serde default: supported_in_api, priority, base_instructions,
 // support_verbosity, truncation_policy, supports_parallel_tool_calls,
 // experimental_supported_tools, and supported_reasoning_levels. Omitting any
-// of them makes codex exit at config load ("missing field ..."), which kills
-// the host tmux session and drives the brain host replacement loop.
+// of them makes codex exit at config load ("missing field ..."), which ends
+// the Brain's Session and drives the brain host replacement loop.
 // context_window is the one capability claim resolved evidence-based
 // (installed Codex catalog cache, then daemon-owned pinned catalog) and
 // omitted for unknown models so the native CLI applies its own fallback — it

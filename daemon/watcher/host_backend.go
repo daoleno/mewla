@@ -29,26 +29,15 @@ type SessionHostConfig struct {
 	LogPath    string
 	// Version names this daemon in the host's log.
 	Version string
-	// HostOnly says this computer has no tmux (Windows): every Session is
-	// the host's, and tmux is never listed.
-	HostOnly bool
 }
 
-// SetSessionHost runs new Sessions in the session host. Sessions still in
-// tmux from before are inventoried until they move to the host (MoveToHost)
-// or are left in tmux (LeaveInTmux).
+// SetSessionHost runs Sessions in the session host. Call it once before Run
+// or CreateSession.
 func (w *Watcher) SetSessionHost(cfg SessionHostConfig) {
 	if w == nil || cfg.SocketPath == "" {
 		return
 	}
-	backend := &compositeBackend{w: w, tmux: &tmuxBackend{w: w}, host: &hostBackend{w: w, cfg: cfg, moved: map[string]bool{}}}
-	backend.loadLeftInTmux()
-	// Before anything asks about a Session: a restarted daemon's first
-	// questions (its route sweep, Brain's host check) come before its first
-	// inventory.
-	if err := backend.host.learnMoved(); err != nil {
-		log.Printf("watcher: the session host has not said which Sessions moved from tmux: %v", err)
-	}
+	backend := &hostBackend{w: w, cfg: cfg}
 	w.mu.Lock()
 	w.backend = backend
 	w.listPanes = backend.listOwned
@@ -79,23 +68,23 @@ const (
 	hostLabelPiSession     = "pi-session"
 	hostLabelResourceUnit  = "resource-unit"
 	hostLabelResourceOwner = "resource-owner"
-	// hostLabelMovedFrom marks a Session that moved from tmux and kept its
-	// pane id.
-	hostLabelMovedFrom    = "moved-from"
-	hostDataInputReceipts = "input-receipts"
-	hostSessionGroup      = "mewla"
-	hostDefaultCols       = 200
-	hostDefaultRows       = 50
-	hostCallTimeout       = 10 * time.Second
+	hostDataInputReceipts  = "input-receipts"
+	hostSessionGroup       = "mewla"
+	hostDefaultCols        = 200
+	hostDefaultRows        = 50
+	hostCallTimeout        = 10 * time.Second
 )
 
-// errSessionHostGone says the host is not running: no socket, or nothing
-// listening on it.
-var errSessionHostGone = errors.New("session host is not running")
+// ErrSessionHostGone says the host is not running: no socket, or nothing
+// listening on it. Nothing is running at all.
+var ErrSessionHostGone = errors.New("session host is not running")
+
+// errNoSessionHost: this watcher was never given a session host.
+var errNoSessionHost = errors.New("Mewla has no session host")
 
 // hostBackend runs Sessions in the session host. A Session's labels and input
 // receipts live in the host with it (labels at create, receipts as data), so
-// they last exactly as long as the Session, as tmux pane options do.
+// they last exactly as long as the Session.
 type hostBackend struct {
 	w   *Watcher
 	cfg SessionHostConfig
@@ -108,17 +97,10 @@ type hostBackend struct {
 	// host is unknown (its socket can be gone for a moment while it lives, as when
 	// logind empties XDG_RUNTIME_DIR, see sessionhost keepSocket).
 	reached bool
-
-	// moved holds the ids of Sessions that moved from tmux: they keep their
-	// %pane id, so the id pattern alone does not name them. movedKnown says
-	// the host has said which they are (see learnMoved).
-	movedMu    sync.RWMutex
-	moved      map[string]bool
-	movedKnown bool
 }
 
 // conn returns a client. With start false it only dials a host that is
-// already there, and creates nothing; errSessionHostGone means none is.
+// already there, and creates nothing; ErrSessionHostGone means none is.
 func (b *hostBackend) conn(start bool) (*sessionhost.Client, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -131,16 +113,22 @@ func (b *hostBackend) conn(start bool) (*sessionhost.Client, error) {
 			return b.client, nil
 		}
 	}
+	if b.cfg.SocketPath == "" {
+		if !start {
+			return nil, ErrSessionHostGone
+		}
+		return nil, errNoSessionHost
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), hostCallTimeout)
 	defer cancel()
 	if !start {
 		if _, err := os.Lstat(b.cfg.SocketPath); errors.Is(err, os.ErrNotExist) {
-			return nil, errSessionHostGone
+			return nil, ErrSessionHostGone
 		}
 		client, err := sessionhost.Dial(ctx, b.cfg.SocketPath, b.cfg.Version)
 		if err != nil {
 			if sessionhost.IsAbsent(err) {
-				return nil, errSessionHostGone
+				return nil, ErrSessionHostGone
 			}
 			return nil, err
 		}
@@ -180,55 +168,7 @@ func hostCtx() (context.Context, context.CancelFunc) {
 }
 
 func (b *hostBackend) validID(id string) bool {
-	if hostSessionIDPattern.MatchString(id) {
-		return true
-	}
-	b.movedMu.RLock()
-	defer b.movedMu.RUnlock()
-	return b.moved[id]
-}
-
-// noteMoved records which listed Sessions came from tmux.
-func (b *hostBackend) noteMoved(infos []sessionhost.Info) {
-	b.movedMu.Lock()
-	defer b.movedMu.Unlock()
-	for _, info := range infos {
-		if info.Labels[hostLabelMovedFrom] == "tmux" {
-			b.moved[info.ID] = true
-		}
-	}
-	b.movedKnown = true
-}
-
-// learnMovedFor learns, for an id that is not a host id, whether the host
-// runs it under the pane id it kept from tmux.
-func (b *hostBackend) learnMovedFor(id string) error {
-	if hostSessionIDPattern.MatchString(id) {
-		return nil
-	}
-	return b.learnMoved()
-}
-
-// learnMoved asks the host which of its Sessions moved from tmux, until it
-// has answered once. The answer lives in the host, not in this process: a
-// restarted daemon knows a moved %id is the host's only after asking. A host
-// that is not running holds none. An error leaves it unknown.
-func (b *hostBackend) learnMoved() error {
-	b.movedMu.RLock()
-	known := b.movedKnown
-	b.movedMu.RUnlock()
-	if known {
-		return nil
-	}
-	infos, err := b.list()
-	if errors.Is(err, errSessionHostGone) {
-		infos, err = nil, nil
-	}
-	if err != nil {
-		return err
-	}
-	b.noteMoved(infos)
-	return nil
+	return hostSessionIDPattern.MatchString(id)
 }
 
 // ready starts the host if needed and checks it can start Sessions by
@@ -259,25 +199,8 @@ func (b *hostBackend) ready() error {
 	return nil
 }
 
-// adoptFromTmux starts a Session that moved from tmux under the id it had
-// there, with its labels and input receipts.
-func (b *hostBackend) adoptFromTmux(id string, spec backendCreateSpec, ledger sessionInputReceiptLedger) error {
-	if err := b.createAs(id, spec, map[string]string{hostLabelMovedFrom: "tmux"}); err != nil {
-		return err
-	}
-	b.movedMu.Lock()
-	b.moved[id] = true
-	b.movedMu.Unlock()
-	if len(ledger.Entries) > 0 {
-		if err := b.inputIO().writeReceiptLedger(hostInputServer, id, ledger); err != nil {
-			log.Printf("watcher: %s moved to the session host without its input receipts: %v", id, err)
-		}
-	}
-	return nil
-}
-
 func (b *hostBackend) terminal(string) TerminalTarget {
-	return TerminalTarget{Backend: "host", Socket: b.cfg.SocketPath}
+	return TerminalTarget{Socket: b.cfg.SocketPath}
 }
 
 func (b *hostBackend) observedGeneration(id string) string {
@@ -303,7 +226,6 @@ func (b *hostBackend) listOwned() ([]sessionPane, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.noteMoved(infos)
 	panes := make([]sessionPane, 0, len(infos))
 	for _, info := range infos {
 		if !b.validID(info.ID) {
@@ -345,7 +267,7 @@ func hostPane(info sessionhost.Info) sessionPane {
 
 func (b *hostBackend) listServices() ([]servicePane, error) {
 	infos, err := b.list()
-	if errors.Is(err, errSessionHostGone) {
+	if errors.Is(err, ErrSessionHostGone) {
 		return nil, nil
 	}
 	if err != nil {
@@ -373,7 +295,7 @@ func (b *hostBackend) listServices() ([]servicePane, error) {
 // is not running.
 func (b *hostBackend) info(id string) (info sessionhost.Info, present bool, err error) {
 	client, err := b.conn(false)
-	if errors.Is(err, errSessionHostGone) {
+	if errors.Is(err, ErrSessionHostGone) {
 		return sessionhost.Info{}, false, nil
 	}
 	if err != nil {
@@ -401,12 +323,12 @@ func (b *hostBackend) probeOwnership(id string) (bool, bool, error) {
 	return present, present, nil
 }
 
-// resolveAbsence asks the host. sawInventory is the watcher's tmux inventory; what
-// counts here is whether this process ever reached a host (a tmux server answering
-// says nothing about the host).
-func (b *hostBackend) resolveAbsence(id string, sawInventory bool) (bool, error) {
+// resolveAbsence asks the host. What counts is whether this process ever
+// reached a host: until it has, a host that is not running proves a Session an
+// earlier run recorded is gone.
+func (b *hostBackend) resolveAbsence(id string) (bool, error) {
 	client, err := b.conn(false)
-	if errors.Is(err, errSessionHostGone) {
+	if errors.Is(err, ErrSessionHostGone) {
 		if !b.hasReached() {
 			// No host has run since this process started: a Session an earlier
 			// run recorded is gone with the host that held it.
@@ -592,7 +514,7 @@ func (b *hostBackend) place(near string, detached bool, name string) (backendPla
 			return backendPlacement{}, fmt.Errorf("preferred Session %q is missing", near)
 		}
 	}
-	return backendPlacement{group: hostSessionGroup, backend: backendHost}, nil
+	return backendPlacement{group: hostSessionGroup}, nil
 }
 
 func (b *hostBackend) create(at backendPlacement, spec backendCreateSpec) (string, error) {
@@ -651,8 +573,7 @@ func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[stri
 	// The host adds MEWLA_SESSION_ID, which the Worker id comes from. An
 	// agent never runs without the daemon's private TMUX_TMPDIR: a plain
 	// `tmux` in it (`tmux kill-server` too) must never reach the person's own
-	// server, and an agent from tmux brings the TMUX_TMPDIR it had there. A
-	// person's own shell keeps their environment and their tmux.
+	// server. A person's own shell keeps their environment and their tmux.
 	env := spec.env
 	if spec.agent {
 		tmuxDir, err := b.w.privateTmuxDir()
@@ -665,9 +586,8 @@ func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[stri
 	}
 	ctx, cancel := hostCtx()
 	defer cancel()
-	// The Session's first output is its origin marker, as in a tmux pane; the
-	// command runs under /bin/sh -c as tmux runs a pane command (`mewla sh
-	// -c` on Windows, see hostLaunchArgv).
+	// The Session's first output is its origin marker; the command runs
+	// under /bin/sh -c (`mewla sh -c` on Windows, see hostLaunchArgv).
 	_, err = client.Create(ctx, sessionhost.CreateParams{
 		ID:     id,
 		Argv:   hostLaunchArgv(originMarkerCommand(nonce) + spec.command),
@@ -686,7 +606,7 @@ func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[stri
 // kill removes the Session; one the host no longer has is not an error.
 func (b *hostBackend) kill(id string) error {
 	client, err := b.conn(false)
-	if errors.Is(err, errSessionHostGone) {
+	if errors.Is(err, ErrSessionHostGone) {
 		return nil
 	}
 	if err != nil {
@@ -721,10 +641,9 @@ func (io hostInputIO) pane(_ string, sessionID string) sessionInputPane {
 	return sessionInputPane{alive: true, paneID: sessionID, generation: io.b.observedGeneration(sessionID)}
 }
 
-// submitPaste clears the draft (every line of it), pastes the payload as one paste and submits
-// it with the adapter's timing, all in one input script the host runs with
-// nothing else in between, as the tmux command queue does.
-func (io hostInputIO) submitPaste(_ string, paneID, payload string, adapter sessionInputProvider, beforeStart func() error) (bool, error) {
+// submitSteps is the input script of one submission: clear the draft, wait
+// what the provider needs, paste the payload and submit it.
+func submitSteps(payload string, adapter sessionInputProvider) []sessionhost.InputStep {
 	var steps []sessionhost.InputStep
 	for _, key := range draftClearKeys() {
 		steps = append(steps, sessionhost.InputStep{Key: key})
@@ -739,7 +658,14 @@ func (io hostInputIO) submitPaste(_ string, paneID, payload string, adapter sess
 	if adapter.settle > 0 {
 		steps = append(steps, sessionhost.InputStep{SleepMS: int(adapter.settle / time.Millisecond)})
 	}
-	steps = append(steps, sessionhost.InputStep{Key: adapter.submitKey})
+	return append(steps, sessionhost.InputStep{Key: adapter.submitKey})
+}
+
+// submitPaste clears the draft (every line of it), pastes the payload as one paste and submits
+// it with the adapter's timing, all in one input script the host runs with
+// nothing else in between.
+func (io hostInputIO) submitPaste(_ string, paneID, payload string, adapter sessionInputProvider, beforeStart func() error) (bool, error) {
+	steps := submitSteps(payload, adapter)
 	if _, err := io.b.conn(false); err != nil {
 		return false, fmt.Errorf("start session host input: %w", err)
 	}

@@ -31,13 +31,13 @@ func recorder(code int, calls *[]started) Starter {
 
 // A Worker's launch as the watcher builds it: origin marker, then the login
 // shell wrapper around the progress set-up and the agent.
-const workerLaunch = `printf '\033[8m%s\033[0m\n' 'mewla-origin 0123abcd'; exec '/bin/sh' -i -l -c 'MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD='\''C:\Users\ana b\mewla.exe'\''; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX; if [ -n "${MEWLA_TMUX_GUARD_DIR:-}" ]; then PATH="$MEWLA_TMUX_GUARD_DIR:$PATH"; export PATH; fi; claude --session-id 501f --settings '\''{"env":{"A":"b c"}}'\'' --allowedTools mcp__x'`
+const workerLaunch = `printf '\033[8m%s\033[0m\n' 'mewla-origin 0123abcd'; exec '/bin/sh' -i -l -c 'MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-}"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD='\''C:\Users\ana b\mewla.exe'\''; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; claude --session-id 501f --settings '\''{"env":{"A":"b c"}}'\'' --allowedTools mcp__x'`
 
 func TestRunsAWorkerLaunchWithoutASystemShell(t *testing.T) {
 	var calls []started
 	var out bytes.Buffer
 	code, err := Run(context.Background(), workerLaunch, Options{
-		Env:    []string{`PATH=C:\Windows\system32`, "TMUX=x", "MEWLA_SESSION_ID=mh-0001"},
+		Env:    []string{`PATH=C:\Windows\system32`, "MEWLA_SESSION_ID=mh-0001"},
 		Dir:    t.TempDir(),
 		Stdout: &out, Stderr: &out,
 		Start: recorder(0, &calls),
@@ -58,9 +58,6 @@ func TestRunsAWorkerLaunchWithoutASystemShell(t *testing.T) {
 	}
 	if got.env["MEWLA_WORKER_ID"] != "mh-0001" || got.env["MEWLA_WORKER_PROGRESS_CMD"] != `C:\Users\ana b\mewla.exe` {
 		t.Fatalf("progress environment = %q / %q", got.env["MEWLA_WORKER_ID"], got.env["MEWLA_WORKER_PROGRESS_CMD"])
-	}
-	if _, ok := got.env["TMUX"]; ok {
-		t.Fatal("TMUX was not unset")
 	}
 	if got.env["PATH"] != `C:\Windows\system32` {
 		t.Fatalf("PATH = %q", got.env["PATH"])

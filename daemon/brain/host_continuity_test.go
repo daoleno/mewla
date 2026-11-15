@@ -30,7 +30,7 @@ func TestHostNegativeProbeRequiresReachableConfirmation(t *testing.T) {
 		confirmErr error
 	}{
 		{"negative then positive", nil},
-		{"negative then transport unknown", errors.New("tmux server unavailable")},
+		{"negative then transport unknown", errors.New("session host unavailable")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store, err := NewStore(t.TempDir())
