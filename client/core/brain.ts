@@ -27,7 +27,6 @@ export type BrainExecutorRef = {
   name: string;
   provider?: string;
   command?: string;
-  runtime?: string;
   capabilities?: { interactive_tty?: boolean; structured_events?: boolean };
   host?: boolean;
 };

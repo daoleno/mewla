@@ -43,7 +43,7 @@ import kotlin.math.roundToInt
  * reported). Above the live screen it draws the history the page hands it (`history`, styled rows
  * rendered by a second VT) and a drag scrolls through it pixel by pixel, with fling; with no history
  * (or on the alternate screen) the drag is reported, fling included (the page makes it wheel presses or
- * cursor keys for the program, or moves tmux's copy mode). A tap
+ * cursor keys for the program). A tap
  * reports the cell and the text under it (the page opens links and raises the keyboard); a long press
  * selects the word under the finger, with handles to stretch it over any rows, history included,
  * and offers Copy, Paste and Select all. Text a program copies (OSC 52) is reported.

@@ -472,7 +472,6 @@ export function providerLabel(value?: string): string {
     case "cursor": return "Cursor Agent";
     case "grok": return "Grok";
     case "claude": return "Claude Code";
-    case "tmux": return "tmux";
     default: return value?.trim() || "Custom";
   }
 }

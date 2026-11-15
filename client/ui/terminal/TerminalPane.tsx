@@ -97,8 +97,6 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   const keyboard = signal(false);
   /** The view's own history viewport is above the live screen. */
   const scrolledBack = signal(false);
-  /** tmux copy mode on the computer (`terminal_scroll_state`). */
-  const copyMode = signal(false);
   const problem = signal("");
   const exited = signal<number | null | undefined>(undefined);
   const historyNotice = signal("");
@@ -124,12 +122,10 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       wait.resolve();
       for (let i = pending.length - 1; i >= 0; i--) if (pending[i][0] === "write") pending.splice(i, 1);
       problem.set("");
-      copyMode.set(false);
       command("reset", {});
     },
     output: (data) => command("write", { data }),
     sessionSize: (cols, rows) => command("sessionSize", { cols, rows }),
-    scrollState: (s) => copyMode.set(!s.atBottom),
     history: (render) => {
       command("history", render);
       nav.historyChanged(render);
@@ -198,12 +194,8 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   };
   cleanup(release);
 
-  /** Back to the live screen: the view's history and tmux copy mode. */
-  const toBottom = () => {
-    command("scrollToBottom", {});
-    if (copyMode()) session.scrollToBottom();
-    copyMode.set(false);
-  };
+  /** Back to the live screen. */
+  const toBottom = () => command("scrollToBottom", {});
   const closeSearch = () => {
     searching.set(false);
     nav.clearSearch();
@@ -243,17 +235,16 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
 
   // A tap: a link opens; on the live screen of a program that takes mouse reports (Claude Code's
   // fullscreen view, any mouse TUI), a click there, which raises no keyboard (the key bar has its key);
-  // elsewhere on the live screen, the keyboard and the pane under the finger. A long press selects (the view's).
+  // elsewhere on the live screen, the keyboard. A long press selects (the view's).
   const tap = (col: number, row: number, text: string, index: number) => {
     const link = index >= 0 ? linkAction(text, index) : null;
-    const action = tapAction({ link, row, live: !scrolledBack() && !copyMode(), clickable: session.clickable });
+    const action = tapAction({ link, row, live: !scrolledBack(), clickable: session.clickable });
     if (link?.kind === "url") return void openUrl(link.url).catch(() => {});
     if (link?.kind === "path") return props.onOpenPath?.(link.path, { ...(link.line !== undefined ? { line: link.line } : {}), ...(link.column !== undefined ? { column: link.column } : {}) });
     if (action === "none") return;
     if (action === "click" && session.click(col, row)) return;
-    if (scrolledBack() || copyMode()) toBottom();
+    if (scrolledBack()) toBottom();
     focusKeyboard();
-    session.focusPane(col, row);
   };
 
   // The view's grid goes to the Session. One reported before this device's text size is read is held:
@@ -333,7 +324,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
             <StateView {...states.away(current()?.name, undefined, wait.retry)} />
           </View>
         </If>
-        <If when={wait.dim()} else={<If when={problem() || exited() !== undefined} else={<If when={(scrolledBack() || copyMode()) && historyNotice() && !searching()}><Button testID="terminal-history-notice" disabled={historyNotice() !== HISTORY_FAILED} onPress={() => session.retryHistory()}
+        <If when={wait.dim()} else={<If when={problem() || exited() !== undefined} else={<If when={scrolledBack() && historyNotice() && !searching()}><Button testID="terminal-history-notice" disabled={historyNotice() !== HISTORY_FAILED} onPress={() => session.retryHistory()}
             class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
             <Text class="text-sm text-muted-foreground">{historyNotice()}</Text>
           </Button></If>}><View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
@@ -341,7 +332,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
           </View></If>}><View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
             <Text testID="terminal-reconnecting" class="text-sm text-muted-foreground">Reconnecting…</Text>
           </View></If>
-        <If when={(scrolledBack() || copyMode()) && rendererFailure() === null}><TerminalJumpControls onSearch={() => searching.set(true)} onPrompt={(direction) => nav.jumpPrompt(direction)}
+        <If when={scrolledBack() && rendererFailure() === null}><TerminalJumpControls onSearch={() => searching.set(true)} onPrompt={(direction) => nav.jumpPrompt(direction)}
             onBottom={() => {
               closeSearch();
               toBottom();

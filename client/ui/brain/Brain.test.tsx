@@ -5,10 +5,10 @@ import { answering, pressUntil, pressWhenEnabled, typeUntil } from "../testing/f
 // ⋯ menu and its pages, the can't-start notice, the thread states, and what the composer hosts.
 const HARNESS = "./testing/Harness.tsx";
 
-const claude = { id: "claude", name: "claude", provider: "claude", runtime: "tmux", capabilities: { interactive_tty: true, structured_events: true } };
-const codex = { id: "codex", name: "codex", provider: "codex", runtime: "tmux", capabilities: { interactive_tty: true, structured_events: true } };
-const agent = { id: "agent", name: "agent", provider: "cursor", runtime: "tmux", capabilities: { interactive_tty: true, structured_events: true } };
-const grok = { id: "grok", name: "grok", provider: "grok", runtime: "tmux", capabilities: { interactive_tty: true, structured_events: true } };
+const claude = { id: "claude", name: "claude", provider: "claude", capabilities: { interactive_tty: true, structured_events: true } };
+const codex = { id: "codex", name: "codex", provider: "codex", capabilities: { interactive_tty: true, structured_events: true } };
+const agent = { id: "agent", name: "agent", provider: "cursor", capabilities: { interactive_tty: true, structured_events: true } };
+const grok = { id: "grok", name: "grok", provider: "grok", capabilities: { interactive_tty: true, structured_events: true } };
 const switchable = { structured_events: true, model_profile_managed: true, model_profile_active_switch: true };
 const hostWorker = { id: "brain-host", name: "Brain", status: "running", provider: "claude", cwd: "/home/me/brain", command: "claude", process_id: 42, started_at: 1_700_000_000_000, capabilities: switchable };
 const brain = {

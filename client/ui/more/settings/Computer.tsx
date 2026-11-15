@@ -11,7 +11,7 @@ import {
   type AgentUseStatus,
   type DaemonUpdateStatus,
 } from "../../../core/settings/computer";
-import { computerProblems, computerProblemsMayChange, computerTmuxProblem, computerUpdateProblem, type ComputerAction, type ComputerProblem } from "../../../core/settings/computerModel";
+import { computerProblems, computerProblemsMayChange, computerUpdateProblem, type ComputerAction, type ComputerProblem } from "../../../core/settings/computerModel";
 import { effectiveMinComputerVersion } from "../../../core/update/version";
 import manifest from "../../nsh.json";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
@@ -220,7 +220,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
   const problems = (): ComputerProblem[] => {
     const s = server();
     const own = reachable()
-      ? [computerUpdateProblem(update(), effectiveMinComputerVersion(MIN_COMPUTER_VERSION, manifest.version)), computerTmuxProblem(update()), ...computerProblems(agentUse())]
+      ? [computerUpdateProblem(update(), effectiveMinComputerVersion(MIN_COMPUTER_VERSION, manifest.version)), ...computerProblems(agentUse())]
       : [];
     const apart = s ? apartNames(s).map((other) => ({ key: `apart:${other}`, text: `Can't reach ${other}. Give one of them a Tailscale or HTTPS address.` })) : [];
     return [...own.filter((p): p is ComputerProblem => Boolean(p)), ...apart];

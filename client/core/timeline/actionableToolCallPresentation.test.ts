@@ -13,7 +13,7 @@ import {
 } from "./activityModel";
 
 const absoluteWatcher = "/home/daoleno/workspace/mewla/daemon/watcher/watcher.go";
-const absoluteTmux = "/home/daoleno/workspace/mewla/daemon/terminal/tmux.go";
+const absoluteHost = "/home/daoleno/workspace/mewla/daemon/terminal/host.go";
 
 function title(input: ToolCallPresentationInput) {
   return collapsedToolLabel(input).title;
@@ -84,12 +84,12 @@ describe("actionable collapsed tool-call projection", () => {
       title({
         toolName: "Edit",
         files: [
-          absoluteTmux,
+          absoluteHost,
           "/home/daoleno/workspace/mewla/daemon/terminal/io.go",
         ],
         status: "done",
       }),
-    ).toBe("Edit daemon/terminal/tmux.go + 1");
+    ).toBe("Edit daemon/terminal/host.go + 1");
   });
 
   test("tests, builds, searches, and generic commands expose bounded honest intent", () => {
@@ -393,10 +393,10 @@ describe("actionable collapsed tool-call projection", () => {
         seq: 1,
         kind: "patch",
         status: "done",
-        files: [absoluteTmux],
+        files: [absoluteHost],
         file_changes: [
           {
-            path: absoluteTmux,
+            path: absoluteHost,
             operation: "update",
             additions: 42,
             deletions: 16,
@@ -408,17 +408,17 @@ describe("actionable collapsed tool-call projection", () => {
         seq: 2,
         kind: "tool",
         tool_name: "Edit",
-        input: JSON.stringify({ file_path: absoluteTmux }),
-        files: [absoluteTmux],
+        input: JSON.stringify({ file_path: absoluteHost }),
+        files: [absoluteHost],
         status: "done",
       },
     ]);
 
-    expect(canonical?.title).toBe("Edit daemon/terminal/tmux.go");
+    expect(canonical?.title).toBe("Edit daemon/terminal/host.go");
     expect(canonical?.detail).toBe("+42 −16");
-    expect(canonical?.files).toEqual([absoluteTmux]);
-    expect(providerTool?.title).toBe("Edit daemon/terminal/tmux.go");
+    expect(canonical?.files).toEqual([absoluteHost]);
+    expect(providerTool?.title).toBe("Edit daemon/terminal/host.go");
     expect(providerTool?.detail).toBe("Done");
-    expect(providerTool?.files).toEqual([absoluteTmux]);
+    expect(providerTool?.files).toEqual([absoluteHost]);
   });
 });

@@ -201,7 +201,7 @@ describe("Provider DTO parse", () => {
 
   test("parses session selection without secrets", () => {
     const selection = parseThreadRuntimeSelection({
-      session_id: "tmux:@1",
+      session_id: "mh-1",
       client: "codex",
       connection_id: "c1",
       connection_name: "DeepSeek",
@@ -215,7 +215,7 @@ describe("Provider DTO parse", () => {
 
   test("session selection parses the Reasoning Effort projection", () => {
     const selection = parseThreadRuntimeSelection({
-      session_id: "tmux:@1",
+      session_id: "mh-1",
       client: "codex",
       connection_id: "c1",
       connection_name: "Gateway",

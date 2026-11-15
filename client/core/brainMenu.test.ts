@@ -49,7 +49,7 @@ describe("Switch executor", () => {
 
   test("one line per agent: its product name, no runtime; a second line only to tell rows apart or ask for a sign-in", () => {
     const states = snapshot.executor_states!;
-    expect(brainExecutorLabel({ id: "codex", name: "codex", provider: "codex", runtime: "tmux" })).toBe("Codex");
+    expect(brainExecutorLabel({ id: "codex", name: "codex", provider: "codex" })).toBe("Codex");
     expect(brainExecutorLabel({ id: "agent", name: "agent", provider: "cursor" })).toBe("Cursor Agent");
     expect(brainExecutorLabel({ id: "oc", name: "", provider: "opencode" })).toBe("OpenCode");
     expect(brainExecutorLabel({ id: "work", name: "Work Codex", provider: "codex" })).toBe("Work Codex");

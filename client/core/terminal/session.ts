@@ -3,8 +3,6 @@ import { TerminalHistoryFeed, type HistoryRender, type TerminalHistoryModel } fr
 import { clickBytes, paneForDrag, wheelBytes, wheelKind } from "./wheel";
 import { ClaudeWheel, LinePlanner, WheelGate, type GateClock } from "./wheelGate";
 
-export type TerminalScrollState = { atBottom: boolean; inCopyMode: boolean; position: number };
-
 /**
  * What the page knows of the Session: `program` is the agent running in it ("claude", "codex", …), which
  * says what one wheel press does there (Claude Code accelerates them: core/terminal/wheelGate.ts).
@@ -21,8 +19,6 @@ export interface TerminalHandlers {
    * into its area, until its person acts here and the size is the view's again. Older computers never say.
    */
   sessionSize(cols: number, rows: number): void;
-  /** tmux copy mode on the computer (`terminal_scroll_state`); a session host Session never sends it. */
-  scrollState(state: TerminalScrollState): void;
   /** The history above the screen changed: what the view does with the rows it holds. */
   history(render: HistoryRender): void;
   /** A line about the history ("Loading history…", a failure), "" for none. */
@@ -43,7 +39,7 @@ const openQueues = new WeakMap<Transport, Promise<void>>();
 const OPEN_TIMEOUT_MS = 15_000;
 
 /**
- * One terminal attached to a Session's tmux pane over the current connection:
+ * One terminal attached to a Session over the current connection:
  * opens once the transport is connected and the view knows its size, opens
  * again after every reconnect (the daemon closes attachments with the socket),
  * and closes on `close()`. Never throws into the caller.
@@ -99,8 +95,6 @@ export class TerminalSession {
         if (this.told && (this.told.cols !== cols || this.told.rows !== rows)) this.feed.output();
         this.told = { cols, rows };
       }),
-      transport.on("terminal_scroll_state", (frame) =>
-        mine(frame) && handlers.scrollState({ atBottom: frame.at_bottom !== false, inCopyMode: frame.in_copy_mode === true, position: Number(frame.scroll_position) || 0 })),
       transport.on("terminal_exit", (frame) => {
         if (!mine(frame)) return;
         this.sessionId = null;
@@ -166,14 +160,15 @@ export class TerminalSession {
 
   /**
    * A drag the view did not take (it holds no history, or the program is on the alternate screen), `lines` > 0
-   * back in time: what the program scrolls with (core/terminal/wheel.ts), paced by the wheel gate, else tmux
-   * copy mode. `lines` 0 is a finger coming down: travel still waiting (a fling's tail) is dropped.
+   * back in time: what the program scrolls with (core/terminal/wheel.ts), paced by the wheel gate; nothing
+   * when the program takes neither. `lines` 0 is a finger coming down: travel still waiting (a fling's tail)
+   * is dropped.
    */
   drag(lines: number): void {
     if (lines === 0) return this.wheel.stop();
     const pane = paneForDrag(this.history.panes);
     const kind = wheelKind(pane);
-    if (kind === "none") return this.scroll(lines);
+    if (kind === "none") return;
     this.wheel.use(kind === "mouse" && this.options.program?.() === "claude" ? this.claude : this.lines);
     this.wheel.add(lines);
   }
@@ -203,19 +198,6 @@ export class TerminalSession {
 
   private sendScrollInput(data: string): void {
     if (this.sessionId) this.send({ type: "terminal_input", session_id: this.sessionId, data, scroll: true });
-  }
-
-  /** History drag: `lines` > 0 is back in time. The computer's tmux copy mode counts the other way (negative is toward history). */
-  scroll(lines: number): void {
-    if (this.sessionId && lines) this.send({ type: "terminal_scroll", session_id: this.sessionId, lines: -lines });
-  }
-
-  scrollToBottom(): void {
-    if (this.sessionId) this.send({ type: "terminal_scroll_cancel", session_id: this.sessionId });
-  }
-
-  focusPane(col: number, row: number): void {
-    if (this.sessionId) this.send({ type: "terminal_focus_pane", session_id: this.sessionId, col, row });
   }
 
   /** Try again after the attachment failed to open ("Couldn't attach"): opens it now, if it is not open or opening. */
@@ -280,18 +262,13 @@ export class TerminalSession {
         this.feed.attach(id);
         const cols = Number(frame.cols), rows = Number(frame.rows);
         if (this.size && (cols !== this.size.cols || rows !== this.size.rows)) this.send({ type: "terminal_resize", session_id: id, ...this.size });
-        // tmux redraws for a focused client, and passes the FocusIn on only to a pane that asked
-        // for focus events. Any other backend (the session host) would type it into the program as
-        // "[I", so it goes to tmux only: the daemon names the backend it opened (older ones did not).
-        const backend = typeof frame.backend === "string" && frame.backend ? frame.backend : "tmux";
-        if (backend === "tmux") this.send({ type: "terminal_input", session_id: id, data: "\u001b[I" });
       }));
       const stopFailed = this.transport.on("terminal_error", (frame) => {
         if (frame.session_id) return;
         done(() => this.handlers.error(String(frame.message ?? "The terminal could not open.")));
       });
       const timer = setTimeout(() => done(() => this.handlers.error("The terminal did not open.")), OPEN_TIMEOUT_MS);
-      if (!this.send({ type: "terminal_open", target_id: this.targetId, backend: "tmux", ...this.size })) done(() => {});
+      if (!this.send({ type: "terminal_open", target_id: this.targetId, ...this.size })) done(() => {});
     });
   }
 

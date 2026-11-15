@@ -481,7 +481,7 @@ describe("a Session", () => {
 
   test("Brain's terminal says what its host runs, with a Session's controls: the view button goes back to Brain's chat", async () => {
     // The computer names host_worker's provider only once it sees the host's pane: until then, the executor Brain hosts on.
-    const executor = { id: "claude", name: "claude", provider: "claude", runtime: "tmux", capabilities: { interactive_tty: true, structured_events: true } };
+    const executor = { id: "claude", name: "claude", provider: "claude", capabilities: { interactive_tty: true, structured_events: true } };
     const brain = { chat_thread_id: "t1", host_executor: executor, host_worker: { id: "brain-host", name: "Brain", status: "running", cwd: "/home/me/brain", command: "claude" } };
     const tree = { type: "brain_workspace_tree", workspace_tree: { workspace: "/home/me/brain", path: "", entries: [{ name: "current.md", path: "current.md", kind: "file" }] } };
     const app = await open(APP, { host: phoneHost({ brain, conversations: { "brain-host": [] }, replies: { brain_workspace_tree: tree } }, WEB), storage: paired, platform: "web", width: 390, height: 844 });

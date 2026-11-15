@@ -7,7 +7,7 @@ export type CreateSessionOptions = {
   cwd?: string;
   command?: string;
   name?: string;
-  /** The Session a "New Terminal" is opened from: the new window joins its tmux session. */
+  /** The Session a "New Terminal" is opened from: the new Session starts in its folder. */
   targetId?: string;
   /** The Provider connection and model the new Session launches with (New Terminal carries its Provider's). */
   connectionId?: string;
