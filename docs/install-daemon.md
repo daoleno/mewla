@@ -289,6 +289,11 @@ mewla boot status
 mewla boot uninstall
 ```
 
+On Windows each person who uses the computer gets their own Mewla: the task is
+called "Mewla (your user name)". When another person's Mewla already listens on
+127.0.0.1:9876, yours starts on the next free port, and `mewla boot install`
+prints the address it uses.
+
 On Linux and macOS, the first `mewla` asks `Start Mewla automatically when
 this computer starts?` after the connect choice and runs `mewla boot install`
 (with `-lan` if you chose the same Wi-Fi) when you press Enter. Without systemd
