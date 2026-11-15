@@ -31,6 +31,7 @@ import type { GitPage } from "./routes";
 import { BranchSheet, CommitSheet } from "./sheets";
 import { copyText, gitReview, say, type GitReview } from "./state";
 import { showAlert } from "../../shell/alert";
+import { bottomBarInset } from "../../shell/below";
 
 /** The page for a Git route, on the computer that was current when it opened. */
 export function GitPageView(props: { route: GitPage; nav: PageNav }) {
@@ -212,7 +213,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
       <Current review={review} class="flex-1 bg-background">{() => (
         <View class="flex-1 flex-row bg-background">
           <View testID="git-list" class={wide() ? "w-[380px] border-r border-border" : "flex-1"}>
-            <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-6 pt-2" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() + 8 } : undefined} refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}
+            <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pt-2" contentStyle={{ paddingTop: capsuleScrollTop() ? capsuleScrollTop() + 8 : undefined, paddingBottom: 24 + bottomBarInset() }} refreshing={review.loading() && !!snapshot()} onRefresh={() => { void review.refresh(); review.reloadHistory(); }}
               onScroll={(e) => titleAway.set(e.offset.y > CAPSULE.titleAway)} scrollEventThrottle={64}>
               <View class="w-full max-w-[720px] self-center">
                 <DisplayTitle title={title()} />

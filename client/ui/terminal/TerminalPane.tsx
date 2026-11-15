@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, safeArea, Scroll, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, Scroll, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
 import { Button } from "nsh/base";
 import { BackHandler } from "nsh/mobile";
 import { TerminalNavigator } from "../../core/terminal/navigation";
@@ -8,7 +8,7 @@ import { linkAction, NO_SEARCH, tapAction } from "../../core/terminal/text";
 import type { Transport } from "../../core/transport";
 import { Icon, type IconName } from "../icons/Icon";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
-import { belowSections } from "../shell/Shell";
+import { belowSections, bottomBarInset } from "../shell/below";
 import { keyBarPadding, terminalGroupPadding, terminalTight } from "../../core/terminal/keyboardRoom";
 import { keyboardLift } from "../../core/shell/belowStack";
 import { TerminalSurface, type TerminalTheme } from "./contract";
@@ -351,7 +351,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
         style={{
           marginBottom: lift(),
           // Clear of the system's navigation bar (three buttons or the gesture handle), as the chat composer is.
-          paddingBottom: keyBarPadding(tight()).bottom + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
+          paddingBottom: keyBarPadding(tight()).bottom + (keyboardFrame().height > 0 ? 0 : bottomBarInset()),
         }}>
         {/* The key bar (SPEC 11): 44-high surface keys, radius 12, mono 13/600, 6 apart, scrolling sideways. */}
         {/* A press that turns into a sideways scroll may never get its press-up: the scroll ends a held key's repeat. */}

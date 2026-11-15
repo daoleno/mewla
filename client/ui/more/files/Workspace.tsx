@@ -3,6 +3,7 @@ import type { JSX } from "nsh";
 import { Button, TextView } from "nsh/base";
 import { listDetail } from "../../shell/layout";
 import { capsuleScrollTop, NavPage } from "../../shell/NavPage";
+import { bottomBarInset } from "../../shell/below";
 import { getBrainWorkspaceFile, getBrainWorkspaceTree, getSessionFileMetadata } from "../../../core/files/requests";
 import {
   bindSessionFileRequestToGeneration,
@@ -118,7 +119,7 @@ function WorkspaceFolder(props: { trail: string[]; name: string; hostSession?: S
   if (!tree()) void read();
 
   return (
-    <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() + 8 } : undefined} refreshing={busy() && !!tree()} onRefresh={() => void read()}
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background" contentClass="px-4 pt-2" contentStyle={{ paddingTop: capsuleScrollTop() ? capsuleScrollTop() + 8 : undefined, paddingBottom: 40 + bottomBarInset() }} refreshing={busy() && !!tree()} onRefresh={() => void read()}
       onScroll={(e) => props.onTitleAway(e.offset.y > 56)} scrollEventThrottle={64}>
       <View class="w-full max-w-[680px] self-center">
         {/* Read with the tree: the workspace's own folder comes with its first answer. */}

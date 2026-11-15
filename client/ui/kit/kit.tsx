@@ -16,6 +16,7 @@ import { BusyPlace, Delayed, delayed, Spinner } from "./wait";
 
 export { Spinner };
 import { showAlert } from "../shell/alert";
+import { bottomBarInset } from "../shell/below";
 
 /**
  * The building blocks of the pages: a page with the system header, groups of rows
@@ -60,8 +61,8 @@ export function Page(props: {
   const capsuled = mobile && platform.idiom === "phone";
   const away = capsuled ? CAPSULE.titleAway : DISPLAY_TITLE_AWAY;
   const scroll = (
-    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pb-10 pt-2"
-      contentStyle={capsuled ? { paddingTop: capsulePageInset(safeArea().top) + 8 } : undefined} refreshing={props.refreshing} onRefresh={props.onRefresh}
+    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pt-2"
+      contentStyle={{ paddingTop: capsuled ? capsulePageInset(safeArea().top) + 8 : undefined, paddingBottom: 40 + bottomBarInset() }} refreshing={props.refreshing} onRefresh={props.onRefresh}
       onScroll={display ? (e) => titleAway.set(e.offset.y > away) : undefined} scrollEventThrottle={display ? 64 : undefined}>
       <View class="w-full self-center" style={{ maxWidth: width() }}>
         {display ? (props.hero ?? <DisplayTitle eyebrow={props.eyebrow} title={props.displayTitle ?? props.title} />) : null}

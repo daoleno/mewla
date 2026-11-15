@@ -25,6 +25,7 @@ import { haptic } from "../shell/haptics";
 import { Caption, DISPLAY_TITLE_AWAY } from "../kit/kit";
 import { AttachmentTray } from "../more/files/Attachments";
 import { showAlert } from "../shell/alert";
+import { bottomBarInset } from "../shell/below";
 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
 export interface WorkLinks {
@@ -343,7 +344,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   return (
     <NavPage title={titleAway() ? title() : ""} testID="work-detail" capsuleUnder>
       <View class="flex-1 bg-background">
-        <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-2" contentStyle={capsuleScrollTop() ? { paddingTop: capsuleScrollTop() + 8 } : undefined}
+        <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pt-2" contentStyle={{ paddingTop: capsuleScrollTop() ? capsuleScrollTop() + 8 : undefined, paddingBottom: 32 + (docked() ? 0 : bottomBarInset()) }}
           onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
           <If when={!slip() && closed()} else={<If when={!slip()} else={<View>
               <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />
