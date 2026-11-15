@@ -193,12 +193,26 @@ func LookPath(name string) (string, error) {
 	}
 	home, _ := os.UserHomeDir()
 	for _, dir := range ExtraPathDirs(home) {
-		candidate := filepath.Join(dir, name)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
-			return candidate, nil
+		// exec.LookPath on a path tries Windows' program extensions (claude
+		// is claude.exe there) and checks the executable bits elsewhere.
+		if path, err := exec.LookPath(filepath.Join(dir, name)); err == nil {
+			return path, nil
 		}
 	}
 	return "", exec.ErrNotFound
+}
+
+// AddInstallerDirsToPath appends each of ExtraPathDirs that exists now to
+// this process's PATH. An installer that leaves PATH alone (Claude Code's
+// native one creates ~/.local/bin) may run after the daemon started, so this
+// is repeated, not only done at start.
+func AddInstallerDirsToPath() {
+	home, _ := os.UserHomeDir()
+	for _, dir := range ExtraPathDirs(home) {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			AddToPath(dir)
+		}
+	}
 }
 
 // AddToPath appends dir to this process's PATH when missing, so the daemon,
