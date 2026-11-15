@@ -34,6 +34,23 @@ func (a *controlApp) liveWorker(id string) bool {
 	return live
 }
 
+// workerOpen says whether id is a Worker whose Session is still open, whatever its turn. What it left
+// for the person (a sign-in page in its browser window, an app on its display) stays until then: a
+// Worker that ended its turn waiting for the person is the usual case, not one to clear away.
+func (a *controlApp) workerOpen(id string) bool {
+	if a.watcher == nil {
+		return true
+	}
+	return a.watcher.GetWorker(id) != nil && a.watcher.HasSession(id)
+}
+
+// bindAgentScreenLifetime gives a Worker's display and its browser windows the Worker's lifetime
+// (workerOpen), not its turn's (liveWorker, which only says whether it may act).
+func bindAgentScreenLifetime(displays interface{ SetAlive(func(string) bool) }, browsers interface{ SetWorkerLive(func(string) bool) }, a *controlApp) {
+	displays.SetAlive(a.workerOpen)
+	browsers.SetWorkerLive(a.workerOpen)
+}
+
 // handlePhoneControl performs one phone action for a live Worker. The daemon does it: the phone's
 // connection is the daemon's, not the agent's process.
 func (a *controlApp) handlePhoneControl(req control.Request) control.Response {

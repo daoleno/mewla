@@ -8,6 +8,15 @@ const json = (body: unknown): StubResponse => ({ status: 200, headers: { "conten
 const session = (id: string, patch: Record<string, unknown> = {}) => ({ id, name: "", status: "running", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now(), ...patch });
 const display = (id: string, patch: Record<string, unknown> = {}) => ({ id, width: 1280, height: 800, control: "agent", apps: 1, idle_s: 2, ...patch });
 const linux = { supported: false, platform: "linux", name: "Desk", ready: false };
+/** Brain's thread with one Work, whose card holds its one Worker's row. */
+const workThread = (id: string, name: string) => ({
+  brain: { chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-15T07:00:00.000Z" },
+    current_work: [{ work_id: "w1", revision: 1, title: "Sign in", status: "running", unread_result: false, attempt_session_id: id,
+      worker_sessions: [{ session_id: id, name, provider: "claude", state: "done", summary: "The page is open for you", live: true, joined_at: "2026-11-15T14:43:00Z", updated_at: "2026-11-15T14:52:00Z" }] }] },
+  conversations: { "brain-host": [{ id: "wr1", seq: 1, timestamp: "2026-11-15T14:52:00.000Z", kind: "status", source: "work_result", status: "session.done", title: "Sign in", body: "The page is open for you.",
+    work_id: "w1", work_session_id: id, session_name: name, unread: false, work_review_state: "resolved", work_session_state: "finalized", work_result_current: true }] },
+  worker_sessions: [session(id, { name, status: "done", delegated: true })],
+});
 
 /** The whole app, its computer answering Screen's and the displays' requests. */
 async function app(daemon: Record<string, unknown>, network: Record<string, StubResponse>, platform: "android" | "ios" = "android", extra: Parameters<typeof open>[1] = {}) {
@@ -68,14 +77,38 @@ describe("the floating screen: agents' displays and the Mac", () => {
     await shown.waitUntil(() => !shown.shows("id:screen-float"));
   }, 25_000);
 
-  test("nothing floats, and nothing is asked, while no Worker runs", async () => {
+  test("nothing floats while no Worker runs: the displays are read once (a page left for the person), the Mac's screen not at all", async () => {
     const shown = await app({ worker_sessions: [session("%1", { name: "Writer", status: "done" })] }, {
       [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
       [`GET ${BASE}/screen`]: json(linux),
     });
     await shown.wait(1_500);
     expect(shown.shows("id:screen-float")).toBe(false);
-    expect(shown.requests().some((r) => r.url === `${BASE}/display`)).toBe(false);
+    expect(shown.requests().filter((r) => r.url === `${BASE}/display`).length).toBe(1);
+    expect(shown.requests().some((r) => r.url === `${BASE}/screen`)).toBe(false);
+  }, 25_000);
+
+  test("a Worker whose turn ended with its sign-in page open: its Work card's Screen opens Screen at its display, named after it", async () => {
+    const id = "mh-signin";
+    const shown = await app(workThread(id, "ZeroGAccounts"), {
+      [`GET ${BASE}/display`]: json({ displays: [display(id, { apps: 0, browser: 1, idle_s: 600 })], available: true }),
+      [`GET ${BASE}/screen`]: json({ ...linux, agent_displays: true }),
+    });
+    await shown.waitFor("id:work-card-screen", { timeout: 10_000 });
+    expect(shown.shows("id:screen-float")).toBe(false);
+    await shown.press("id:work-card-screen");
+    await shown.waitFor(`id:display-${id}`, { timeout: 10_000 });
+    expect(shown.texts()).toContain("ZeroGAccounts");
+  }, 25_000);
+
+  test("a display with nothing left on it gives the Work card no Screen", async () => {
+    const id = "mh-empty";
+    const shown = await app(workThread(id, "Tidy"), {
+      [`GET ${BASE}/display`]: json({ displays: [display(id, { apps: 0 })], available: true }),
+    });
+    await shown.waitFor("id:work-card-one", { timeout: 10_000 });
+    await shown.wait(800);
+    expect(shown.shows("id:work-card-screen")).toBe(false);
   }, 25_000);
 
   test("a running Worker's own news (its activity, its output) does not ask the computer again", async () => {

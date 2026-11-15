@@ -31,12 +31,16 @@ type Result struct {
 // Info describes one agent's display for the list in Screen.
 type Info struct {
 	// ID is the Worker the display belongs to.
-	ID      string `json:"id"`
+	ID string `json:"id"`
+	// Name is the Worker's name, when the daemon knows it.
+	Name    string `json:"name,omitempty"`
 	Width   int    `json:"width"`
 	Height  int    `json:"height"`
 	Control string `json:"control"` // agent or person
 	Stopped bool   `json:"stopped,omitempty"`
 	Apps    int    `json:"apps"`
+	// Browser is how many of the agent's browser windows are on the display.
+	Browser int `json:"browser,omitempty"`
 	// IdleS is the seconds since the agent last used the display (0 while it acts).
 	IdleS int `json:"idle_s"`
 }

@@ -150,7 +150,7 @@ export function AgentDisplays(props: { server: StoredServer; nav: PageNav; focus
                   <View onLayout={({ bounds }) => { tops.set(display.id, bounds.origin.y); focusCard(); }}>
                     <DisplayCard
                       display={() => displays()?.find((d) => d.id === display.id) ?? display}
-                      name={() => workers().find((w) => w.id === display.id)?.name || ""}
+                      name={() => workers().find((w) => w.id === display.id)?.name || displays()?.find((d) => d.id === display.id)?.name || ""}
                       session={sessionFor(display.id)}
                       onStop={() => run(() => haltDisplay(props.server, display.id))}
                       onResume={() => run(() => resumeDisplay(props.server, display.id))}

@@ -799,7 +799,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	// agent (Linux, with Virtual screen on). Desktop apps open on an agent's monitor, and so
 	// does its browser window.
 	displayService := vdisplay.NewService("")
-	displayService.SetAlive(controlHandler.liveWorker)
 	defer displayService.Close()
 	srv.SetDisplays(displayService)
 	controlHandler.displays = displayService
@@ -836,8 +835,26 @@ func runDaemon(args []string, stderr io.Writer) error {
 	browserManager.SetSwitchHook(func() { go agentUse.Refresh() })
 	srv.SetBrowser(browserManager)
 	// A Worker's window goes with its session, not with its last answer.
-	browserManager.SetWorkerLive(func(id string) bool {
-		return w.GetWorker(id) != nil && w.HasSession(id)
+	bindAgentScreenLifetime(displayService, browserManager, controlHandler)
+	workerName := func(id string) string {
+		if worker := w.GetWorker(id); worker != nil {
+			return worker.Name
+		}
+		return ""
+	}
+	displayService.SetNames(workerName)
+	// A display (and the browser window on it) nobody has used for an hour
+	// closes, and the person is told; the Worker hears it with its next result.
+	displayService.SetIdleClose(vdisplay.IdleClose, func(worker, name string, idle time.Duration) {
+		browserManager.Forget(worker)
+		who := strings.TrimSpace(name)
+		if who == "" {
+			who = "An agent"
+		}
+		log.Printf("display: closed the display and browser window of %s (%s): nobody used them for %s", who, worker, idle.Round(time.Minute))
+		if err := pusher.NotifyWorkerNote(worker, "Screen", who+"'s browser window closed: nobody used it for an hour."); err != nil && !errors.Is(err, push.ErrNoRegistration) {
+			log.Printf("display: couldn't tell the person: %v", err)
+		}
 	})
 	screenService := screen.NewPlatformService(authManager.StorageDir(), displayService)
 	go screenService.Run(ctx)

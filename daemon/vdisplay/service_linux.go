@@ -46,7 +46,17 @@ type Service struct {
 	rootMu   sync.Mutex
 	root     string // made on first use: a short private directory, since socket paths are short
 	alive    func(worker string) bool
+	names    func(worker string) string
 	ownsRoot bool
+
+	// idleAfter closes a monitor nobody has used for that long (see SweepIdle);
+	// idleClosed is told first, to close the Worker's browser windows and say so.
+	idleAfter  time.Duration
+	idleClosed func(worker, name string, idle time.Duration)
+	idleStop   chan struct{}
+	// closedIdle are the Workers whose monitor SweepIdle closed, and when, for
+	// their next result to say.
+	closedIdle map[string]time.Time
 
 	starting sync.Mutex // the screen starts, and its layout changes, one at a time
 	inputMu  sync.Mutex // one input action at a time: the pointer and the keyboard focus are the screen's, not a monitor's
@@ -77,6 +87,9 @@ type workerDisplay struct {
 	mu       sync.Mutex
 	apps     []*App
 	windows  int         // browser windows on the monitor
+	viewers  int         // the person's open views of it
+	told     bool        // the agent has heard that its window is the person's to see and take over
+	seen     time.Time   // when the person last closed a view of it
 	person   int         // viewers that hold the display
 	halted   bool        // the person stopped this Worker
 	acting   int         // agent actions or tool calls that are running
@@ -93,12 +106,92 @@ type workerDisplay struct {
 // directory made when the first display starts (a Unix socket's path may be
 // at most about 100 bytes, which a state directory can exceed).
 func NewService(root string) *Service {
-	return &Service{root: root, displays: map[string]*workerDisplay{}}
+	return &Service{root: root, displays: map[string]*workerDisplay{}, closedIdle: map[string]time.Time{}}
 }
 
-// SetAlive tells the service which Workers still run; a display whose Worker
-// has ended is closed.
+// SetAlive tells the service which Workers are still open; a display whose
+// Worker has closed is closed. A Worker that only ended its turn keeps its
+// display: what it left there (a sign-in page) is often waiting for the person.
 func (s *Service) SetAlive(alive func(worker string) bool) { s.alive = alive }
+
+// SetNames tells the service the Workers' names, for Screen's list.
+func (s *Service) SetNames(names func(worker string) string) { s.names = names }
+
+// IdleClose is how long a monitor may go unused (by the agent, or by the
+// person, who also keeps it by having it open in Screen) before it closes.
+const IdleClose = time.Hour
+
+// SetIdleClose closes, from now on, every monitor nobody has used for after:
+// closed is told first, to close the Worker's browser windows and tell the
+// person; the Worker hears it with its next result.
+func (s *Service) SetIdleClose(after time.Duration, closed func(worker, name string, idle time.Duration)) {
+	s.mu.Lock()
+	s.idleAfter, s.idleClosed = after, closed
+	start := s.idleStop == nil
+	if start {
+		s.idleStop = make(chan struct{})
+	}
+	stop := s.idleStop
+	s.mu.Unlock()
+	if !start {
+		return
+	}
+	every := min(after/4, time.Minute)
+	go func() {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case now := <-t.C:
+				s.SweepIdle(now)
+			}
+		}
+	}()
+}
+
+// SweepIdle closes the monitors nobody has used for the idle time: no agent
+// action, no input from the person, and no view of it open.
+func (s *Service) SweepIdle(now time.Time) {
+	s.mu.Lock()
+	after, closed := s.idleAfter, s.idleClosed
+	var idle []*workerDisplay
+	if after > 0 {
+		for _, w := range s.displays {
+			idle = append(idle, w)
+		}
+	}
+	s.mu.Unlock()
+	for _, w := range idle {
+		w.mu.Lock()
+		since := w.used
+		for _, t := range []time.Time{w.last, w.seen} {
+			if t.After(since) {
+				since = t
+			}
+		}
+		unused := w.acting == 0 && w.person == 0 && w.viewers == 0 && now.Sub(since) >= after
+		w.mu.Unlock()
+		if !unused {
+			continue
+		}
+		if closed != nil {
+			closed(w.worker, s.nameOf(w.worker), now.Sub(since))
+		}
+		s.Forget(w.worker)
+		s.mu.Lock()
+		s.closedIdle[w.worker] = now
+		s.mu.Unlock()
+	}
+}
+
+func (s *Service) nameOf(worker string) string {
+	if s.names == nil {
+		return ""
+	}
+	return s.names(worker)
+}
 
 // Act runs one agent action on the Worker's monitor.
 func (s *Service) Act(ctx context.Context, worker string, in Action) (Result, error) {
@@ -192,16 +285,34 @@ func (s *Service) Begin(worker string) error {
 func (s *Service) End(worker string) []string {
 	s.mu.Lock()
 	w := s.displays[worker]
+	closedAt, wasClosed := s.closedIdle[worker]
+	delete(s.closedIdle, worker)
+	after := s.idleAfter
 	s.mu.Unlock()
+	var out []string
+	if wasClosed {
+		out = append(out, fmt.Sprintf("Mewla closed your browser window and display at %s: nobody had used them for %s. Open the page again if it is still needed.", closedAt.Format("15:04"), roundSpan(after)))
+	}
 	if w == nil {
-		return nil
+		return out
 	}
 	w.end()
 	if text := w.notes(time.Now()); text != "" {
-		return []string{text}
+		out = append(out, text)
 	}
-	return nil
+	w.mu.Lock()
+	tell := w.windows > 0 && !w.told
+	w.told = w.told || tell
+	w.mu.Unlock()
+	if tell {
+		out = append(out, WindowNote)
+	}
+	return out
 }
+
+// WindowNote is what an agent hears once its browser window is open: who sees
+// it, and how long it lasts.
+const WindowNote = "The person sees this browser window in Mewla's Screen, under your name, and can take it over there. It stays open after your turn ends: until your Session closes, the person closes it, or nobody uses it for an hour. To hand the person a page (a sign-in, a code, a captcha, a payment), leave it open and tell them; your Work card in Mewla has a Screen button that opens it."
 
 func settleFor(action string) time.Duration {
 	switch action {
@@ -658,6 +769,9 @@ func (s *Service) View(worker string) (*Viewer, error) {
 		return nil, err
 	}
 	conn, monitorRelay, closeView := NewMonitorView(w.screen.client, func() image.Rectangle { return w.rect })
+	w.mu.Lock()
+	w.viewers++
+	w.mu.Unlock()
 	holding := false // guarded by w.mu
 	hold := func(on bool) {
 		w.mu.Lock()
@@ -701,6 +815,11 @@ func (s *Service) View(worker string) (*Viewer, error) {
 			once.Do(func() {
 				closeView()
 				hold(false)
+				w.mu.Lock()
+				w.viewers--
+				// Watching counts as using it: the idle time starts when the view closes.
+				w.seen = time.Now()
+				w.mu.Unlock()
 			})
 		},
 	}, nil
@@ -746,7 +865,7 @@ func (s *Service) List() []Info {
 			continue
 		}
 		w.mu.Lock()
-		info := Info{ID: w.worker, Control: "agent", Stopped: w.halted, Width: w.rect.Dx(), Height: w.rect.Dy(), Apps: w.liveApps()}
+		info := Info{ID: w.worker, Name: s.nameOf(w.worker), Control: "agent", Stopped: w.halted, Width: w.rect.Dx(), Height: w.rect.Dy(), Apps: w.liveApps(), Browser: w.windows}
 		if w.person > 0 {
 			info.Control = "person"
 		}
@@ -792,6 +911,10 @@ func (s *Service) Forget(worker string) {
 // Close ends the screen and everything on it.
 func (s *Service) Close() {
 	s.mu.Lock()
+	if s.idleStop != nil {
+		close(s.idleStop)
+		s.idleStop = nil
+	}
 	scr := s.shared
 	s.shared = nil
 	s.displays = map[string]*workerDisplay{}

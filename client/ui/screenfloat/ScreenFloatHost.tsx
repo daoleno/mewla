@@ -12,7 +12,7 @@ import {
   type FloatPage,
   type ScreenSource,
 } from "../../core/screen/float";
-import { haltDisplay, listDisplays, screenRequest, ScreenRequestError, type AgentDisplay, type ScreenAgent } from "../../core/screen/screen";
+import { haltDisplay, listDisplays, screenRequest, ScreenRequestError, type ScreenAgent } from "../../core/screen/screen";
 import { floatedScreenAgents } from "../../core/screen/screenPageModel";
 import { isWorkerActivelyRunning } from "../../core/sessions/workerStatusPresentation";
 import type { StoredServer } from "../../core/storedServerContract";
@@ -23,9 +23,12 @@ import { PhoneLiveView } from "../phone/contract";
 import { phoneAvailable, phoneControl, phoneStatus } from "../phone/state";
 import { current, workers } from "../session";
 import { ScreenFloat, type FloatMenuItem } from "./ScreenFloat";
+import { agentDisplays } from "./agentDisplays";
 
 /** How often the current computer is asked which agents use a screen, while one might. */
 const POLL_MS = 3_000;
+/** How often, while nothing runs, while a display an agent left (a sign-in page for the person) is still open. */
+const LEFT_OPEN_POLL_MS = 15_000;
 /** Frames the phone's small window asks for, and the width in steps so a resize does not ask again at every move. */
 const PHONE_FPS = 4;
 const FRAME_STEP = 120;
@@ -53,7 +56,8 @@ export interface ScreenFloatHostProps {
  * app's ScreenFloatHost.
  */
 export function ScreenFloatHost(props: ScreenFloatHostProps) {
-  const displays = signal<AgentDisplay[]>([]);
+  const displays = agentDisplays;
+  displays.set([]);
   const mac = signal<ScreenAgent[]>([]);
   const picked = signal<string | null>(null);
   /** The display the person holds from the window: it stays up while held. */
@@ -63,32 +67,45 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
   // A display that was up stays up between the agent's actions while its Worker runs.
   let shown = new Set<string>();
   let missing = { server: "", display: false, mac: false };
+  /** What last made the reads below start now: a display staying open only changes how often they repeat. */
+  let lastWake = "";
 
   // A computed: only whether something runs. A Session's own news (its activity, its output, several a second
   // while Workers run) must not run the reads below again: each one signs two requests on the JS thread, and
   // Brain's thread stuttered under them (owner 11-13).
   const running = computed(() => workers().some((worker) => isWorkerActivelyRunning(worker.status)));
   const mayUse = () => running() || holding() !== null;
+  // A display outlives its agent's turn (a page left for the person); while one is open it is read now and then.
+  const leftOpen = computed(() => displays().length > 0);
 
-  // A new computer, or nothing that could use a screen: nothing to show until the next read.
+  // A new computer: nothing to show until the next read. Nothing that could use a screen: no Mac agents.
   let reset = "";
+  let resetServer = "";
   effect(() => {
-    const key = `${current()?.id ?? ""}:${mayUse()}`;
+    const server = current()?.id ?? "";
+    const key = `${server}:${mayUse()}`;
     untracked(() => {
       if (key === reset) return;
       reset = key;
-      displays.set([]);
       mac.set([]);
+      if (server !== resetServer) displays.set([]);
+      resetServer = server;
     });
   });
 
-  // Asks while something could be using a screen and the app is in front; never asks an endpoint the computer has said it lacks.
+  // Asks while something could be using a screen and the app is in front: often while an agent runs, now and then while
+  // a display it left is open, and once otherwise (coming to the front, a new computer), so a page left for the person
+  // shows on its Work card. Never asks an endpoint the computer has said it lacks.
   effect(() => {
     const server = current();
     const active = lifecycle() === "active";
     const enabled = mayUse();
+    const lingering = leftOpen();
     tick();
-    if (!server || !enabled || !active) return;
+    if (!server || !active) {
+      lastWake = ""; // coming back to the front reads again
+      return;
+    }
     let stopped = false;
     if (missing.server !== server.id) missing = { server: server.id, display: false, mac: false };
     const read = async () => {
@@ -106,7 +123,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
                 return null;
               },
             ),
-        gone.mac
+        gone.mac || !enabled
           ? null
           : screenRequest(server).then(
               (result) => {
@@ -120,11 +137,14 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
       if (shownNow) displays.set(shownNow);
       if (status) mac.set(floatedScreenAgents(status));
     };
-    void read();
-    const timer = setInterval(() => void read(), POLL_MS);
+    const wake = `${server.id}:${enabled}:${tick()}`;
+    if (wake !== lastWake) void read();
+    lastWake = wake;
+    const every = enabled ? POLL_MS : lingering ? LEFT_OPEN_POLL_MS : 0;
+    const timer = every ? setInterval(() => void read(), every) : undefined;
     return () => {
       stopped = true;
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
     };
   });
 
