@@ -30,6 +30,7 @@ var (
 	setupURLRe       = regexp.MustCompile(`^https://\S+$`)
 	codexDeviceRe    = regexp.MustCompile(`^[A-Z0-9]{4}-[A-Z0-9]{4,6}$`)
 	codexSetupRowRe  = regexp.MustCompile(`^\s*(>)?\s*(\d)\.\s+(\S.*)$`)
+	codexTrustRowRe  = regexp.MustCompile(`^\s*([›>])?\s*(\d)\.\s+(\S.*)$`)
 )
 
 // setupLines is the pane from Claude's latest banner (Codex: its latest
@@ -317,6 +318,9 @@ func claudeContinuePrompt(lines []string) (Prompt, bool) {
 // conversation: the choice of how to sign in, and the page and one-time code
 // to sign in with on another device.
 func codexSetupPrompt(pane string) (Prompt, bool) {
+	if prompt, ok := codexTrustPrompt(pane); ok {
+		return prompt, true
+	}
 	lines := setupLines(pane)
 	welcome := -1
 	for index := len(lines) - 1; index >= 0; index-- {
@@ -434,5 +438,64 @@ func codexLoginPrompt(lines []string) (Prompt, bool) {
 		Request:    paragraph(lines, 0, first),
 		Options:    options,
 		Unnumbered: true,
+	}, true
+}
+
+// codexTrustPrompt: "Trust this folder?" for a folder Codex was not told to
+// trust (a Session started as plain `codex`; Mewla's own launches pass the
+// trust), under "Folder access" and the folder. A digit picks a row and goes on.
+func codexTrustPrompt(pane string) (Prompt, bool) {
+	lines := setupLines(pane)
+	footer := lastLineStarting(lines, "enter continue", 1)
+	if footer < 0 {
+		return Prompt{}, false
+	}
+	question := -1
+	for index := footer - 1; index >= 0; index-- {
+		if strings.HasPrefix(strings.TrimSpace(lines[index]), "Trust this folder?") {
+			question = index
+			break
+		}
+	}
+	if question < 0 {
+		return Prompt{}, false
+	}
+	from := question
+	if heading := lastLineStarting(lines[:question], "Folder access", 3); heading >= 0 {
+		from = heading
+	}
+	var options []PromptOption
+	first, selected := -1, false
+	for index := question + 1; index < footer; index++ {
+		match := codexTrustRowRe.FindStringSubmatch(lines[index])
+		if match == nil {
+			if len(options) > 0 && strings.TrimSpace(lines[index]) != "" {
+				return Prompt{}, false
+			}
+			continue
+		}
+		if int(match[2][0]-'0') != len(options)+1 {
+			return Prompt{}, false
+		}
+		if first < 0 {
+			first = index
+		}
+		options = append(options, PromptOption{Number: len(options) + 1, Label: collapse(match[3]), Selected: match[1] != ""})
+		selected = selected || match[1] != ""
+	}
+	if len(options) < 2 || !selected {
+		return Prompt{}, false
+	}
+	parts := []string{"codex-trust", paragraph(lines, from, question)}
+	for _, option := range options {
+		parts = append(parts, option.Label)
+	}
+	return Prompt{
+		ID:       PromptID(PromptStartup, parts...),
+		Kind:     PromptStartup,
+		Provider: "codex",
+		Title:    "Trust this folder?",
+		Request:  paragraph(lines, from, first),
+		Options:  options,
 	}, true
 }

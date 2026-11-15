@@ -105,6 +105,23 @@ func TestClaudeFailedSignInIsAPromptAnsweredWithItsKeys(t *testing.T) {
 	}
 }
 
+// A Session started as plain `codex` in a folder Codex was not told to trust
+// opens on "Trust this folder?": a card with its two rows, answered by digit
+// (Codex 0.167 picks the row and goes on).
+func TestCodexFolderTrustIsAPrompt(t *testing.T) {
+	trust := setupSignal(t, "codex", "codex-0.167.0/folder-trust-linux-100x40.txt")
+	prompt := trust.Prompt
+	if trust.State != StateBlocked || prompt == nil || prompt.Kind != PromptStartup || prompt.Unnumbered || prompt.Title != "Trust this folder?" {
+		t.Fatalf("trust: %+v", trust)
+	}
+	if got := strings.Join(labels(prompt.Options), "|"); got != "Trust and continue|Back to Agent Command Center" || !prompt.Options[0].Selected {
+		t.Fatalf("trust options: %+v", prompt.Options)
+	}
+	if !strings.HasPrefix(prompt.Request, "Folder access /home/ana/app Trust this folder? Codex can read") {
+		t.Fatalf("trust request: %q", prompt.Request)
+	}
+}
+
 func TestCodexSignInScreensArePrompts(t *testing.T) {
 	login := setupSignal(t, "codex", "codex-0.169.0/login-windows-200x50.txt")
 	prompt := login.Prompt
