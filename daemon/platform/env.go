@@ -4,19 +4,22 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/hostdeps"
 )
 
 // RefreshEnvironment brings this process's environment up to date with the
 // person's, as a new terminal would see it. On Windows the daemon is started
 // once at login, so a variable set afterwards (setx, System Properties, an
 // installer adding itself to PATH) would otherwise never reach a Session or
-// an agent lookup until the person logs in again. Unix shells read their rc
-// files for each Session, so there it does nothing. It reads the user's
-// environment at most once a second.
+// an agent lookup until the person logs in again; Unix shells read their rc
+// files for each Session. Everywhere, an installer folder created since the
+// daemon started (Claude Code's ~/.local/bin, which its installer leaves off
+// PATH) joins PATH, so the agent in it is found without a restart. It does
+// this at most once a second.
 func RefreshEnvironment() {
 	refreshMu.Lock()
 	defer refreshMu.Unlock()
@@ -24,13 +27,12 @@ func RefreshEnvironment() {
 		return
 	}
 	lastRefresh = time.Now()
-	fresh, err := userEnvironment()
-	if err != nil || len(fresh) == 0 {
-		return
+	if fresh, err := userEnvironment(); err == nil && len(fresh) > 0 {
+		for key, value := range environmentUpdates(os.Environ(), fresh) {
+			_ = os.Setenv(key, value)
+		}
 	}
-	for key, value := range environmentUpdates(os.Environ(), fresh) {
-		_ = os.Setenv(key, value)
-	}
+	hostdeps.AddInstallerDirsToPath()
 }
 
 var (
@@ -98,12 +100,8 @@ func mergePathList(fresh, current string) string {
 
 // KeepEnvironmentCurrent refreshes the environment every interval until ctx
 // ends, so the daemon's own agent lookups (which agents are installed, which
-// one Brain uses) see an agent installed after it started. It returns at once
-// where RefreshEnvironment has nothing to do.
+// one Brain uses) see an agent installed after it started.
 func KeepEnvironmentCurrent(ctx context.Context, interval time.Duration) {
-	if runtime.GOOS != "windows" {
-		return
-	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {

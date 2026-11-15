@@ -3,8 +3,39 @@ package hostdeps
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"testing"
 )
+
+// writeFakeProgram puts a program LookPath can find in dir: name.exe on
+// Windows, an executable script elsewhere. It returns its path.
+func writeFakeProgram(t *testing.T, dir, name string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// useHome points the home folder at a new empty one and searches no system
+// installer folder, so only what a test creates is found.
+func useHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PATH", t.TempDir())
+	t.Cleanup(SetSystemPathDirs())
+	return home
+}
 
 const ubuntu = "NAME=\"Ubuntu\"\nPRETTY_NAME=\"Ubuntu 24.04.1 LTS\"\nID=ubuntu\nID_LIKE=debian\n"
 
@@ -43,11 +74,12 @@ func TestAgentsUseOfficialInstallersOnMacAndLinux(t *testing.T) {
 }
 
 func TestAddToPathAppendsOnce(t *testing.T) {
-	t.Setenv("PATH", "/usr/bin:/bin")
+	sep := string(os.PathListSeparator)
+	t.Setenv("PATH", "/usr/bin"+sep+"/bin")
 	if !AddToPath("/home/u/.local/bin") || AddToPath("/home/u/.local/bin") || AddToPath("/bin") {
 		t.Fatal("AddToPath added an existing entry or skipped a new one")
 	}
-	if got := os.Getenv("PATH"); got != "/usr/bin:/bin:/home/u/.local/bin" {
+	if got := os.Getenv("PATH"); got != "/usr/bin"+sep+"/bin"+sep+"/home/u/.local/bin" {
 		t.Fatalf("PATH = %q, want the new dir last", got)
 	}
 }
@@ -72,22 +104,41 @@ func TestAgentsFollowAgentOrder(t *testing.T) {
 }
 
 func TestSystemPathDirsAreSearchedAfterPATHAndCanBeReplaced(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("PATH", t.TempDir())
+	useHome(t)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "mewla-fake-agent"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	program := writeFakeProgram(t, dir, "mewla-fake-agent")
 	if _, err := LookPath("mewla-fake-agent"); err == nil {
 		t.Fatal("found a tool in no search directory")
 	}
 	restore := SetSystemPathDirs(dir)
-	if path, err := LookPath("mewla-fake-agent"); err != nil || path != filepath.Join(dir, "mewla-fake-agent") {
+	if path, err := LookPath("mewla-fake-agent"); err != nil || path != program {
 		t.Fatalf("a system installer directory is searched: %q %v", path, err)
 	}
 	restore()
 	if _, err := LookPath("mewla-fake-agent"); err == nil {
 		t.Fatal("the replaced directories were not put back")
+	}
+}
+
+func TestLookPathFindsAnAgentInTheNativeInstallersFolder(t *testing.T) {
+	home := useHome(t)
+	program := writeFakeProgram(t, filepath.Join(home, ".local", "bin"), "mewla-fake-agent")
+	if path, err := LookPath("mewla-fake-agent"); err != nil || path != program {
+		t.Fatalf("LookPath = %q, %v; want %q (claude.exe on Windows)", path, err, program)
+	}
+}
+
+func TestAddInstallerDirsToPathAddsAFolderCreatedLater(t *testing.T) {
+	home := useHome(t)
+	bin := filepath.Join(home, ".local", "bin")
+	AddInstallerDirsToPath()
+	if slices.Contains(filepath.SplitList(os.Getenv("PATH")), bin) {
+		t.Fatal("added a folder that does not exist")
+	}
+	writeFakeProgram(t, bin, "mewla-fake-agent")
+	AddInstallerDirsToPath()
+	AddInstallerDirsToPath()
+	if got := filepath.SplitList(os.Getenv("PATH")); len(got) != 2 || got[1] != bin {
+		t.Fatalf("PATH = %q, want the installer folder added once, last", got)
 	}
 }

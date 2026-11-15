@@ -412,12 +412,7 @@ func prepareToolPath() {
 	if executable, err := os.Executable(); err == nil && !strings.Contains(executable, ".app/Contents/") {
 		addToolDirToPath(executable)
 	}
-	home, _ := os.UserHomeDir()
-	for _, dir := range hostdeps.ExtraPathDirs(home) {
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			hostdeps.AddToPath(dir)
-		}
-	}
+	hostdeps.AddInstallerDirsToPath()
 }
 
 // quickDepsCheck runs on every start that skips the first-run conversation:
