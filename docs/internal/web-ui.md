@@ -85,7 +85,8 @@ comes back.
 | Mewla Relay (pinned TLS) | Unsupported; browsers cannot pin the daemon certificate |
 | Push notifications               | Unsupported                                             |
 | File upload from the device      | Unsupported                                             |
-| In-app Browser and PDF preview   | Unsupported                                             |
+| In-app Browser                   | Unsupported                                             |
+| PDF preview                      | Opens in a browser tab of its own (the browser's viewer) |
 
 The browser stores its device key in local storage for the page origin. That is
 weaker than the platform keychain the mobile apps use, so only pair browser

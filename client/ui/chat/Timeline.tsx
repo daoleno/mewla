@@ -27,6 +27,7 @@ import { Caption } from "../kit/kit";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
 import { brainFiles, openChatLink, openChatPath } from "./links";
+import { linkFilePaths } from "../../core/files/chatPaths";
 
 
 /**
@@ -237,6 +238,17 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
   const computerMessage = as("computer-message") as () => ComputerMessageTimelineItem;
   const answered = as("answered") as () => AnsweredTimelineItem;
   const work = as("brain-work-event") as () => BrainWorkEventTimelineItem;
+  // The files a reply names (a home path in code or text) as links, which preview them (`onLink`). Made
+  // again only when the text changes: a streaming reply's next words.
+  let lastBody = "";
+  let lastLinked = "";
+  const linked = (body: string) => {
+    if (body !== lastBody) {
+      lastBody = body;
+      lastLinked = linkFilePaths(body);
+    }
+    return lastLinked;
+  };
   return (
     <View class="py-1">
       <If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
@@ -244,7 +256,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
               with the system's handles and menu (Copy, Select all, Share). */}
           <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
-            <TextView markdown={reply().body ?? ""} options={{ streaming: Boolean(reply().streaming) }} selectable class={`text-message ${SELECTION}`}
+            <TextView markdown={linked(reply().body ?? "")} options={{ streaming: Boolean(reply().streaming) }} selectable class={`text-message ${SELECTION}`}
               renderCodeBlock={renderCode}
               classes={TABLE}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}

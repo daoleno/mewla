@@ -7,6 +7,7 @@ import { clock } from "../calendar/clock";
 import { calendarItems } from "../calendar/state";
 import { workFiles, workFilesModel } from "./state";
 import { brainFiles, openChatLink } from "../chat/links";
+import { linkFilePaths } from "../../core/files/chatPaths";
 import { showAlert } from "../shell/alert";
 
 const AUTOSAVE_MS = 600;
@@ -139,7 +140,7 @@ export function WorkFilePage(props: { id: string; onClose: () => void; openCalen
                 <If when={origin()}><Button testID="work-file-calendar-link" onPress={() => props.openCalendarItem(origin()!.itemId, origin()!.runId)} class="self-start">
                     <Text class="text-base text-primary">{originLabel(origin()!, calendarItems(), clock(), { title: shown()!.title, at: shown()!.frontmatter.created }) ?? "Calendar"}</Text>
                   </Button></If>
-                <If when={editingBody()} else={<TextView testID="work-file-preview" markdown={readableBody(text())} onLinkPress={(event) => openChatLink(event.url, files)} />}><Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} onBlur={() => void save()} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" /></If>
+                <If when={editingBody()} else={<TextView testID="work-file-preview" markdown={linkFilePaths(readableBody(text()))} onLinkPress={(event) => openChatLink(event.url, files)} />}><Input testID="work-file-body" multiline value={text()} onChange={({ value }) => edited(value)} onBlur={() => void save()} class="min-h-64 rounded-xl border border-border bg-card p-3 text-base" /></If>
               </View>
             </Scroll>
             <View class="flex-row items-center justify-between border-t border-border px-4 py-3">

@@ -219,6 +219,14 @@ func openSessionFile(cwd, reference string) (*resolvedSessionFile, error) {
 	}
 
 	referencePath := filepath.FromSlash(reference)
+	// "~/…" (a path an agent names in a reply) is the home of the account the daemon runs as, not a folder of the cwd.
+	if rest, ok := strings.CutPrefix(reference, "~/"); ok {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("resolve home folder: %w", err)
+		}
+		referencePath = filepath.Join(home, filepath.FromSlash(rest))
+	}
 	candidatePath := referencePath
 	if !filepath.IsAbs(referencePath) {
 		// canonicalCWD names the exact live directory inode. Keep the reference
@@ -421,7 +429,7 @@ func containsBinaryMarker(value []byte) bool {
 
 func isSessionTextExtension(extension string) bool {
 	switch extension {
-	case ".c", ".cc", ".conf", ".cpp", ".css", ".csv", ".env", ".go", ".graphql", ".h", ".hpp", ".html", ".ini", ".java", ".js", ".json", ".jsx", ".kt", ".kts", ".log", ".lua", ".m", ".mm", ".php", ".plist", ".properties", ".py", ".rb", ".rs", ".sh", ".sql", ".swift", ".toml", ".ts", ".tsx", ".txt", ".xml", ".yaml", ".yml", ".zsh":
+	case ".c", ".cc", ".conf", ".cpp", ".css", ".csv", ".env", ".go", ".graphql", ".h", ".hpp", ".htm", ".html", ".ini", ".java", ".js", ".json", ".jsx", ".kt", ".kts", ".log", ".lua", ".m", ".mm", ".php", ".plist", ".properties", ".py", ".rb", ".rs", ".sh", ".sql", ".swift", ".toml", ".ts", ".tsx", ".txt", ".xml", ".yaml", ".yml", ".zsh":
 		return true
 	default:
 		return false

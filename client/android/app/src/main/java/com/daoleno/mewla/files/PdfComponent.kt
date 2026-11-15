@@ -9,10 +9,16 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.util.LruCache
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.View.MeasureSpec
 import android.view.ViewGroup
 import android.widget.AbsListView
 import android.widget.BaseAdapter
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.ListView
 import com.longbridge.nsh.NshComponent
@@ -25,11 +31,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 private const val PDF_LIMIT_BYTES = 50L * 1024 * 1024
+private const val MAX_ZOOM = 3f
+private const val DOUBLE_TAP_ZOOM = 2f
+// A page is drawn at most this many pixels: past it a zoomed page is the drawing scaled up.
+private const val MAX_PAGE_PIXELS = 12_000_000L
 
 /**
  * `mewla.pdf` (client/ui/more/files/host.ts): a PDF's pages in a scrolling list, drawn by
- * PdfRenderer a page at a time as they scroll in. An http(s) `source` is fetched with
- * `headers` into the cache first and deleted with the view; a file:// one is read in place.
+ * PdfRenderer a page at a time as they scroll in. Pinch or double tap zooms (up to 3×): the
+ * pages are drawn again at the zoomed width, which scrolls sideways. An http(s) `source` is
+ * fetched with `headers` into the cache first and deleted with the view; a file:// one is read in place.
  */
 class PdfComponent(context: Context, private val events: NshComponentContext) : NshComponent {
   private val main = Handler(Looper.getMainLooper())
@@ -38,6 +49,7 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
     dividerHeight = 0
     setBackgroundColor(Color.TRANSPARENT)
   }
+  private val frame = ZoomFrame(context, list)
   private var source: String? = null
   private var headers: Map<String, String> = emptyMap()
   // The size the file was inspected at (-1: unknown); a stream of any other size is a changed file.
@@ -48,13 +60,20 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
   private var descriptor: ParcelFileDescriptor? = null
   private var renderer: PdfRenderer? = null
   private var fetch: Fetch? = null
-  private val pages = object : LruCache<Int, Bitmap>(6) {
-    override fun entryRemoved(evicted: Boolean, key: Int, old: Bitmap, new: Bitmap?) {
-      if (evicted) old.recycle()
+  // Bounded by bytes: a zoomed page is several times a page at the list's width. A dropped page is left to
+  // the collector, never recycled here: a row may still draw it until the list binds it again.
+  private val pages = object : LruCache<Int, Bitmap>((Runtime.getRuntime().maxMemory() / 6).toInt().coerceAtLeast(32 shl 20)) {
+    override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount
+  }
+
+  init {
+    frame.onZoom = {
+      pages.evictAll()
+      (list.adapter as? BaseAdapter)?.notifyDataSetChanged()
     }
   }
 
-  override fun view(): View = list
+  override fun view(): View = frame
 
   override fun setProp(name: String, value: Any?) {
     when (name) {
@@ -106,6 +125,7 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
       descriptor = fd
       val pdf = PdfRenderer(fd)
       renderer = pdf
+      frame.reset()
       list.adapter = Pages(pdf)
       events.emit("load", mapOf("pageCount" to pdf.pageCount))
     } catch (error: Exception) {
@@ -156,9 +176,11 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
       return image
     }
 
-    private fun render(index: Int, width: Int): Bitmap? = runCatching {
+    private fun render(index: Int, rowWidth: Int): Bitmap? = runCatching {
       pdf.openPage(index).use { page ->
-        val height = (width.toLong() * page.height / page.width.coerceAtLeast(1)).toInt().coerceIn(1, 8192)
+        val aspect = page.height.toDouble() / page.width.coerceAtLeast(1)
+        val width = minOf(rowWidth.toDouble(), Math.sqrt(MAX_PAGE_PIXELS / aspect)).toInt().coerceAtLeast(1)
+        val height = (width * aspect).toInt().coerceIn(1, 8192)
         Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
           it.eraseColor(Color.WHITE)
           page.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -216,5 +238,113 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
       cancelled.set(true)
       connection?.disconnect()
     }
+  }
+}
+
+/**
+ * The list at the zoomed width, scrolling sideways when wider than the view. A pinch scales the list
+ * live about its focus and, at its end, lays it out again at the new width (`onZoom` redraws the pages),
+ * keeping the point under the fingers where it was. A double tap zooms to 2× there, or back to 1×.
+ */
+private class ZoomFrame(context: Context, private val list: ListView) : HorizontalScrollView(context) {
+  var onZoom: () -> Unit = {}
+  private var zoom = 1f
+  private var live = 1f
+  private var focusX = 0f
+  private var focusY = 0f
+  // From a pinch's start to its last finger up, the list hears nothing (it had a cancel).
+  private var pinching = false
+
+  init {
+    isFillViewport = false
+    isHorizontalScrollBarEnabled = true
+    overScrollMode = View.OVER_SCROLL_NEVER
+    addView(list, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+  }
+
+  private val scaler = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+    override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+      live = zoom
+      return true
+    }
+
+    override fun onScale(detector: ScaleGestureDetector): Boolean {
+      live = (live * detector.scaleFactor).coerceIn(1f, MAX_ZOOM)
+      focusX = detector.focusX
+      focusY = detector.focusY
+      list.pivotX = scrollX + focusX
+      list.pivotY = focusY
+      list.scaleX = live / zoom
+      list.scaleY = live / zoom
+      return true
+    }
+
+    override fun onScaleEnd(detector: ScaleGestureDetector) {
+      commit(live, focusX, focusY)
+    }
+  })
+
+  private val taps = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+    override fun onDoubleTap(e: MotionEvent): Boolean {
+      commit(if (zoom > 1.01f) 1f else DOUBLE_TAP_ZOOM, e.x, e.y)
+      return true
+    }
+  })
+
+  fun reset() {
+    zoom = 1f
+    list.scaleX = 1f
+    list.scaleY = 1f
+    requestLayout()
+    scrollTo(0, 0)
+  }
+
+  // The list is the view's width times the zoom, exactly (a scroll view measures its child unbounded).
+  override fun measureChildWithMargins(child: View, parentWidthMeasureSpec: Int, widthUsed: Int, parentHeightMeasureSpec: Int, heightUsed: Int) {
+    val viewport = MeasureSpec.getSize(parentWidthMeasureSpec) - paddingLeft - paddingRight
+    val height = getChildMeasureSpec(parentHeightMeasureSpec, paddingTop + paddingBottom + heightUsed, child.layoutParams.height)
+    child.measure(MeasureSpec.makeMeasureSpec((viewport * zoom).toInt().coerceAtLeast(0), MeasureSpec.EXACTLY), height)
+  }
+
+  override fun measureChild(child: View, parentWidthMeasureSpec: Int, parentHeightMeasureSpec: Int) =
+    measureChildWithMargins(child, parentWidthMeasureSpec, 0, parentHeightMeasureSpec, 0)
+
+  /** Zooms to `next` about the view's point (x, y): that point of the page stays under it. */
+  private fun commit(next: Float, x: Float, y: Float) {
+    val ratio = next / zoom
+    list.scaleX = 1f
+    list.scaleY = 1f
+    if (width <= 0 || Math.abs(ratio - 1f) < 0.01f) return
+    val contentX = scrollX + x
+    val position = list.pointToPosition(contentX.toInt(), y.toInt())
+    val row = if (position >= 0) list.getChildAt(position - list.firstVisiblePosition) else null
+    zoom = next
+    requestLayout()
+    onZoom()
+    if (row != null) list.setSelectionFromTop(position, (y - (y - row.top) * ratio).toInt())
+    val left = (contentX * ratio - x).toInt().coerceAtLeast(0)
+    list.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+      override fun onLayoutChange(v: View, left0: Int, top0: Int, right0: Int, bottom0: Int, oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int) {
+        v.removeOnLayoutChangeListener(this)
+        scrollTo(left, 0)
+      }
+    })
+  }
+
+  override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+    if (ev.actionMasked == MotionEvent.ACTION_DOWN) pinching = false
+    scaler.onTouchEvent(ev)
+    taps.onTouchEvent(ev)
+    if (!pinching && (scaler.isInProgress || ev.pointerCount > 1)) {
+      pinching = true
+      val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
+      super.dispatchTouchEvent(cancel)
+      cancel.recycle()
+    }
+    if (pinching) {
+      if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) pinching = false
+      return true
+    }
+    return super.dispatchTouchEvent(ev)
   }
 }

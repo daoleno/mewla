@@ -7,6 +7,7 @@ export function sessionFileKindLabel(metadata: Pick<SessionFileMetadata, "kind" 
   switch (metadata.kind) {
     case "markdown": return "Markdown";
     case "text":
+      if (isHtmlSessionFile(metadata)) return "HTML";
       if (metadata.contentType.includes("json")) return "JSON";
       if (metadata.contentType.includes("yaml")) return "YAML";
       return metadata.name.toLowerCase().endsWith(".log") ? "Log" : "Text";
@@ -18,14 +19,20 @@ export function sessionFileKindLabel(metadata: Pick<SessionFileMetadata, "kind" 
   }
 }
 
+/** An HTML file, which the preview draws as a page (`FilePreview`'s HtmlBody). */
+export function isHtmlSessionFile(metadata: Pick<SessionFileMetadata, "kind" | "contentType" | "name">): boolean {
+  return metadata.kind === "text" && (/^text\/html\b/i.test(metadata.contentType) || /\.html?$/i.test(metadata.name));
+}
+
 export function sessionFileTitle(metadata: SessionFileMetadata | null, reference: string): string {
   return metadata?.name || reference.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) || "File";
 }
 
-/** `relativePath · Kind · size`, or the reference while it opens. */
+/** `relativePath · Kind · size` (the whole path for a file outside the Session's folder), or the reference while it opens. */
 export function sessionFileMetaLine(metadata: SessionFileMetadata | null, reference: string): string {
   if (!metadata) return reference || "Current Session";
-  return [metadata.relativePath, sessionFileKindLabel(metadata), formatSessionFileSize(metadata.size)].filter(Boolean).join(" · ");
+  const where = /^\.\.(?:[\\/]|$)/.test(metadata.relativePath) ? metadata.path : metadata.relativePath;
+  return [where, sessionFileKindLabel(metadata), formatSessionFileSize(metadata.size)].filter(Boolean).join(" · ");
 }
 
 export function sessionFileProblemTitle(input: { stale: boolean; tooLarge: boolean }): string {

@@ -7,6 +7,7 @@ import {
   normalizeSessionFileMetadata,
   normalizeSessionFileText,
   recognizeSessionFileReference,
+  sessionFileStartedAt,
   sessionFileTooLargeMessage,
 } from "./sessionFilePreview";
 
@@ -148,5 +149,19 @@ describe("current-Session file renderer contract", () => {
     expect(sessionFileTooLargeMessage(metadata)).toBe(
       "This 50 MB file exceeds Mewla's 50 MB preview limit. It was not downloaded.",
     );
+  });
+});
+
+describe("a run's start for the file routes", () => {
+  test("Brain's host reports an RFC 3339 time with nanoseconds: milliseconds, cut not rounded", () => {
+    expect(sessionFileStartedAt("2026-11-15T10:46:19.999999999Z")).toBe(Date.UTC(2026, 10, 15, 10, 46, 19, 999));
+    expect(sessionFileStartedAt("2026-11-15T18:46:19.5+08:00")).toBe(Date.UTC(2026, 10, 15, 10, 46, 19, 500));
+  });
+
+  test("numbers in seconds or milliseconds, and nothing usable as zero", () => {
+    expect(sessionFileStartedAt(1_762_840_800_000)).toBe(1_762_840_800_000);
+    expect(sessionFileStartedAt(1_762_840_800)).toBe(1_762_840_800_000);
+    expect(sessionFileStartedAt("soon")).toBe(0);
+    expect(sessionFileStartedAt(undefined)).toBe(0);
   });
 });

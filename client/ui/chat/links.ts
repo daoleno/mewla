@@ -1,5 +1,5 @@
 import { openUrl, untracked } from "nsh";
-import { recognizeSessionFileReference, type SessionFileIdentity } from "../../core/files/sessionFilePreview";
+import { recognizeSessionFileReference, sessionFileStartedAt, type SessionFileIdentity } from "../../core/files/sessionFilePreview";
 import { filePreviewRoute } from "../more/files/routes";
 import { nav } from "../shell/nav";
 import { brain } from "../session";
@@ -24,7 +24,9 @@ const LINK_FAILED = "Could not open the link.";
 /** Brain's own Session's run, which its workspace files are read through. */
 export function brainHostIdentity(): SessionFileIdentity | null {
   const host = untracked(brain)?.host_worker;
-  return host?.id && host.process_id && host.started_at ? { workerId: host.id, processId: host.process_id, startedAt: host.started_at } : null;
+  // Brain reports its host's start as a time; the file routes take it in milliseconds (a string got HTTP 400).
+  const startedAt = sessionFileStartedAt(host?.started_at);
+  return host?.id && host.process_id && startedAt ? { workerId: host.id, processId: host.process_id, startedAt } : null;
 }
 
 /** Brain's files: read through its host Session. */

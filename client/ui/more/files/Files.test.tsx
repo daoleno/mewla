@@ -57,6 +57,21 @@ function preview(metadata: Record<string, unknown>, extra: { handlers?: Record<s
 }
 
 describe("File preview", () => {
+  test("an HTML file shows as a page in a web view, its source still copied as text", async () => {
+    const c = preview(meta({ name: "report.html", path: "/work/report.html", relative_path: "report.html", content_type: "text/html; charset=utf-8", size: 22 }));
+    c.options.host.handlers["app.daemon"] = ({ type, body }: Asked) => {
+      if (type.startsWith("session_file")) c.asked.push({ type, body });
+      if (type === "session_file_metadata") return { reply: "session_file_metadata", metadata: meta({ name: "report.html", path: "/work/report.html", relative_path: "report.html", content_type: "text/html; charset=utf-8", size: 22 }) };
+      return { reply: "session_file_text", text: { content: "<h1>Quarterly</h1>", bytes_read: 22, truncated: false, generation: "g1" } };
+    };
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:file-html");
+    expect(app.shows("id:file-text")).toBe(false);
+    expect(c.asked.map((a) => a.type)).toEqual(["session_file_metadata", "session_file_text"]);
+    await app.press("id:file-copy");
+    await app.waitUntil(() => app.clipboard() === "<h1>Quarterly</h1>");
+  });
+
   test("a text file shows as text, says its preview was cut, and asked the live Session for this generation", async () => {
     const c = preview(meta());
     const app = await open(HARNESS, c.options);
@@ -404,7 +419,7 @@ describe("Files on the web", () => {
     expect(app.texts()).toContain("/state/uploads/big.zip");
   });
 
-  test("a PDF says the browser can't show it, signs nothing, and still downloads through the browser", async () => {
+  test("a PDF opens in a tab of the browser's own viewer from a stream signed at the press, and still downloads", async () => {
     const c = preview(meta({ name: "report.pdf", path: "/work/report.pdf", relative_path: "out/report.pdf", kind: "pdf", content_type: "application/pdf", size: 4096 }), {
       handlers: {
         "files.pickDirectory": { token: "browser", name: "Downloads" },
@@ -413,11 +428,19 @@ describe("Files on the web", () => {
       network: { [`POST ${BASE}/session-file-capability`]: capability() },
     });
     const app = await open(HARNESS, { ...c.options, platform: "web" });
-    await app.waitFor("id:file-pdf-unavailable");
-    expect(app.texts()).toContain("PDF preview is unavailable on Web. Download the file to inspect it.");
+    await app.waitFor("id:file-pdf-tab");
     expect(app.texts()).toContain("out/report.pdf · PDF · 4.0 KB");
     expect(app.shows("id:file-pdf")).toBe(false);
-    expect(app.requests().filter((r) => r.url === `${BASE}/session-file-capability`)).toHaveLength(0);
+    const signed = () => app.requests().filter((r) => r.url === `${BASE}/session-file-capability`);
+    expect(signed()).toHaveLength(0);
+    await app.press("id:file-pdf-tab-action");
+    await app.waitUntil(() => app.openedUrls().length > 0);
+    expect(signed()).toHaveLength(1);
+    const tab = new URL(app.openedUrls()[0]!);
+    expect(`${tab.origin}${tab.pathname}`).toBe(`${BASE}/session-file`);
+    expect(tab.searchParams.get("path")).toBe("/work/report.pdf");
+    expect(tab.searchParams.get("generation")).toBe("g1");
+    expect(tab.searchParams.get("file_cap_get")).toBe("a".repeat(128));
     await app.press("id:file-download");
     await app.waitFor("text:Saved");
     const download = app.host.calls().find((m) => m.name === "files.download")!.data as { directory: string; names: string[] };

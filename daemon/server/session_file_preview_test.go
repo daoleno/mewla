@@ -137,6 +137,37 @@ func TestSessionFilePreviewRejectsMissingAndNonRegularFiles(t *testing.T) {
 	}
 }
 
+// A path Brain names in a reply as "~/…" is the home's, whatever the host Session's cwd (owner 11-15).
+func TestSessionFilePreviewResolvesHomeTildeOutsideTheCWD(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	plan := filepath.Join(home, "worklog", "plan.pdf")
+	if err := os.MkdirAll(filepath.Dir(plan), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(plan, []byte("%PDF-1.7\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cwd := t.TempDir()
+	resolved, err := openSessionFile(cwd, "~/worklog/plan.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resolved.file.Close()
+	want, _ := filepath.EvalSymlinks(plan)
+	if resolved.canonicalPath != want || resolved.kind != "pdf" {
+		t.Fatalf("resolved %q as %q, want %q as pdf", resolved.canonicalPath, resolved.kind, want)
+	}
+	// A folder named "~" in the cwd is not the home.
+	if err := os.MkdirAll(filepath.Join(cwd, "~", "worklog"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openSessionFile(cwd, "~/worklog/missing.pdf"); err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("missing home file err = %v", err)
+	}
+}
+
 func TestSessionFilePreviewClassifiesSupportedAndUnsupportedRenderers(t *testing.T) {
 	for name, want := range map[string]string{
 		"README.md":   "markdown",
@@ -147,6 +178,8 @@ func TestSessionFilePreviewClassifiesSupportedAndUnsupportedRenderers(t *testing
 		"photo.png":   "image",
 		"vector.svg":  "image",
 		"manual.pdf":  "pdf",
+		"page.html":   "text",
+		"page.htm":    "text",
 		"archive.zip": "unsupported",
 	} {
 		data := []byte("plain text")
