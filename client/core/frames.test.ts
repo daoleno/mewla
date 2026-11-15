@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { deflateRawSync, inflateRawSync } from "zlib";
 import type { StoredServer } from "./storedServerContract";
-import { FRAME_DEFLATE_SUBPROTOCOL, TAILLESS_SUBPROTOCOL } from "./frames";
+import { appSubprotocol, FRAME_DEFLATE_SUBPROTOCOL, TAILLESS_SUBPROTOCOL } from "./frames";
 import { FakeSocket, installMemoryPlatform } from "./testing/memoryPlatform";
 import { Transport, type Frame } from "./transport";
 import { AUTH_SUBPROTOCOL_PREFIX } from "./webSocketAuth";
@@ -10,9 +10,10 @@ const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "
 const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
 let sockets: FakeSocket[];
 
-function platformWith(inflate: boolean) {
+function platformWith(inflate: boolean, appVersion?: string) {
   sockets = [];
   installMemoryPlatform({
+    ...(appVersion ? { appVersion } : {}),
     openSocket: (url, protocols) => {
       const socket = new FakeSocket(url, protocols);
       sockets.push(socket);
@@ -68,5 +69,23 @@ describe("without an inflater", () => {
     expect(heard).toHaveLength(1);
     expect(transport.state).toBe("connected");
     transport.close();
+  });
+});
+
+describe("which app this is", () => {
+  afterEach(() => platformWith(false));
+
+  test("the connection names the app's platform and version last, for `mewla devices list`", async () => {
+    platformWith(true, "0.4.6");
+    const { transport, socket } = await connected();
+    expect(socket.protocols.slice(1)).toEqual([FRAME_DEFLATE_SUBPROTOCOL, TAILLESS_SUBPROTOCOL, "mewla.app.test.0.4.6"]);
+    transport.close();
+  });
+
+  test("a version a subprotocol cannot carry is not offered", () => {
+    platformWith(false, "0.4.6 (debug)");
+    expect(appSubprotocol()).toBeNull();
+    platformWith(false);
+    expect(appSubprotocol()).toBeNull();
   });
 });

@@ -34,6 +34,8 @@ export interface LinkTunnels {
 
 export interface Platform {
   os: "ios" | "android" | "web" | "desktop" | "test";
+  /** The app's version (`nsh.json` `version`), which the connection tells the computer (`core/frames.ts`). */
+  appVersion?: string;
   /** The name a computer lists this device under. */
   deviceName(): string;
   randomBytes(length: number): Uint8Array;
