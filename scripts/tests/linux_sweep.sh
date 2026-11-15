@@ -42,7 +42,7 @@ if [[ "${MEWLA_SWEEP_MOUNTS:-}" == 1 ]]; then
     set -e
     mount -t tmpfs -o noexec,nosuid tmpfs "$1/noexec"
     mount --bind "$2" "$1/ro" && mount -o remount,bind,ro "$1/ro"
-    MEWLA_SWEEP_MOUNTS="$1" exec go test ./compatsweep -run TestMounts -count=1 -v -timeout 10m
+    MEWLA_SWEEP_MOUNT_ROOT="$1" exec go test ./compatsweep -run TestMounts -count=1 -v -timeout 10m
   ' sh "$MOUNTS" "$BUILD/ro-src") || status=$?
 fi
 if [[ "${MEWLA_SWEEP_UNIT:-}" == 1 ]]; then
