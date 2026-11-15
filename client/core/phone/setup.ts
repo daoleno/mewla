@@ -27,7 +27,7 @@ export function nextPhoneStep(status: PhoneStatus): PhoneStep | null {
   return phoneSteps(status).find((step) => !step.done) ?? null;
 }
 
-export type PhoneSetupAction = "allow" | "setup" | "wifi" | "wireless" | "start";
+export type PhoneSetupAction = "allow" | "notifications" | "setup" | "wifi" | "wireless" | "start";
 
 export interface PhoneSetupPlan {
   /** What the one big button does now. */
@@ -39,7 +39,7 @@ export interface PhoneSetupPlan {
 }
 
 /**
- * The shortest way through setup: allow Mewla's accessibility service once, then it walks Settings
+ * The shortest way through setup: notifications on (the code box is one), allow Mewla's accessibility service once, then it walks Settings
  * itself and the person only answers what Android reserves for them (the screen lock, the network
  * prompt). A step that stops getting anywhere falls back to its manual row. A note appears only
  * where the person has to do something; progress is the row's spinner.
@@ -52,6 +52,9 @@ export function phoneSetupPlan(status: PhoneStatus, running: boolean): PhoneSetu
   if (next.id === "wifi") return { action: "wifi", label: "Open Wi‑Fi", current: "wifi", note: null };
   // Already paired: never walk the pairing again. The one thing left is the switch the App may not flip itself.
   if (status.paired) return { action: "wireless", label: "Turn on Wireless debugging", current: "wireless", note: status.problem ?? null };
+  // The pairing code box is a notification, the one place to type the code with the pairing dialog
+  // still open: without notifications pairing could end with nothing to do.
+  if (!status.notifications) return { action: "notifications", label: "Allow notifications", current: next.id, note: null };
   if (!status.accessibility) {
     return {
       action: "allow",

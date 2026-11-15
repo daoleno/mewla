@@ -39,6 +39,7 @@ export interface PhoneStatus {
   self_healing: boolean;
   /** The guided setup while it walks Settings, else null. */
   guide: PhoneGuide | null;
+  /** Notifications are allowed and the Pairing code ones are not switched off: the code box can be seen. */
   notifications: boolean;
   state: PhoneState;
   /** The agent's display size; 0 until the display exists. */

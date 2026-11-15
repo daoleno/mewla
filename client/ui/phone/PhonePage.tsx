@@ -8,6 +8,7 @@ import { DisplayTitle, Notice, Row, Section, Spinner } from "../kit/kit";
 import { PhoneLiveView } from "./contract";
 import {
   allowPhoneAccessibility,
+  allowPhoneNotifications,
   floatPhone,
   openPhoneScreen,
   pairPhone,
@@ -110,6 +111,7 @@ function Setup() {
   const primary = () => {
     const action = plan().action;
     if (action === "allow") void allowPhoneAccessibility();
+    else if (action === "notifications") void allowPhoneNotifications();
     else if (action === "setup") void pairPhone();
     else if (action === "wifi" || action === "wireless") openPhoneScreen("wireless");
     else void startPhoneHelper();

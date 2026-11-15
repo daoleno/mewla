@@ -30,6 +30,7 @@ internal object PhoneNotifier {
     const val ACTION_RESUME = "com.daoleno.mewla.phone.RESUME"
     const val ACTION_DONE = "com.daoleno.mewla.phone.DONE"
     const val ACTION_CODE = "com.daoleno.mewla.phone.CODE"
+    const val ACTION_CODE_GONE = "com.daoleno.mewla.phone.CODE_GONE"
     const val KEY_CODE = "pairing_code"
 
     fun canNotify(context: Context): Boolean {
@@ -39,23 +40,30 @@ internal object PhoneNotifier {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
+    /** Each channel on its own: one that is missing is made, one the person has set keeps their choices. */
     private fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_STATUS) != null) return
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_STATUS, "Phone use", NotificationManager.IMPORTANCE_LOW).apply {
-                setShowBadge(false)
-            },
-        )
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_HANDOFF, "Needs you", NotificationManager.IMPORTANCE_HIGH),
-        )
-        manager.createNotificationChannel(
+        fun make(id: String, channel: () -> NotificationChannel) {
+            if (manager.getNotificationChannel(id) == null) manager.createNotificationChannel(channel())
+        }
+        make(CHANNEL_STATUS) {
+            NotificationChannel(CHANNEL_STATUS, "Phone use", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) }
+        }
+        make(CHANNEL_HANDOFF) { NotificationChannel(CHANNEL_HANDOFF, "Needs you", NotificationManager.IMPORTANCE_HIGH) }
+        make(CHANNEL_PAIRING) {
             NotificationChannel(CHANNEL_PAIRING, "Pairing code", NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, null)
                 enableVibration(false)
-            },
-        )
+            }
+        }
+    }
+
+    /** The code box can be seen: notifications are allowed and its channel is not switched off. */
+    fun canShowCodeBox(context: Context): Boolean {
+        if (!canNotify(context)) return false
+        ensureChannels(context)
+        val channel = context.getSystemService(NotificationManager::class.java).getNotificationChannel(CHANNEL_PAIRING)
+        return channel == null || channel.importance != NotificationManager.IMPORTANCE_NONE
     }
 
     private fun smallIcon(context: Context): Int {
@@ -143,8 +151,13 @@ internal object PhoneNotifier {
         NotificationManagerCompat.from(context).cancel(ID_HANDOFF)
     }
 
-    /** The code box for a phone where the accessibility reading is off: type the six digits into the notification. */
-    fun pairingCode(context: Context) {
+    /**
+     * The code box, there for as long as pairing waits for a code, whether or not the screen can be
+     * read: the six digits are typed into the notification (from the shade or the heads-up), so the
+     * pairing dialog stays open under it. [alert] pops it up; otherwise it just sits in the shade.
+     * Swiped away, it comes back while pairing still waits (Android 14 lets an ongoing one be swiped).
+     */
+    fun pairingCode(context: Context, alert: Boolean = true) {
         if (!canNotify(context)) return
         ensureChannels(context)
         val input = RemoteInput.Builder(KEY_CODE).setLabel("Pairing code").build()
@@ -154,7 +167,11 @@ internal object PhoneNotifier {
             .setSmallIcon(smallIcon(context))
             .setContentTitle("Pairing code")
             .setContentText("Type the six digits shown on the screen")
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
+            .setSilent(!alert)
+            .setDeleteIntent(action(context, ACTION_CODE_GONE, 9))
             .addAction(reply)
             .build()
         NotificationManagerCompat.from(context).notify(ID_PAIRING, notification)

@@ -29,6 +29,15 @@ iPhone, agents on a Mac use it through iPhone Mirroring instead: see
    and the system's **Allow wireless debugging on this network?** prompt. Mewla
    ticks **Always allow on this network** and waits for your tap on **Allow**.
    If a step doesn't move, that one row falls back to its manual button.
+
+   While pairing waits, the **Pairing code** notification is there too, and it
+   pops up when the pairing dialog opens. If Mewla can't read the code (some
+   phones draw that dialog their own way), type the six digits into the
+   notification, from the heads-up or the pulled-down shade. Don't switch to
+   Mewla to do it: leaving Settings closes the dialog and its code. A wrong code
+   brings the box back for another try. Mewla leaves the dialog alone while it's
+   open, and if it closes, Mewla opens a new one. Setup asks for notifications
+   first, because the box is a notification.
 5. When every line is ticked the page says **Ready**, and Mewla returns you to
    it. That is the last time: Mewla also grants itself the permission to switch
    Wireless debugging back on, at the first helper start or, if a helper was
@@ -37,8 +46,8 @@ iPhone, agents on a Mac use it through iPhone Mirroring instead: see
    come back by themselves, with Mewla closed.
 
 Without Accessibility the manual path still works: each row opens the right
-place in Settings, and a notification asks for the pairing code (pull it down
-and type the digits shown on the pairing dialog).
+place in Settings, and the same notification takes the pairing code (pull it
+down and type the digits shown on the pairing dialog).
 
 The computer you're connected to is the one agents come from. Pair your phone
 with another computer and switch to it, and Phone use follows. Agents on
