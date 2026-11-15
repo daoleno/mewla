@@ -69,6 +69,23 @@ export type URLResolver = (server: StoredServer) => Promise<string>;
 
 type Listener = (frame: Frame) => void;
 
+export interface ListenOptions {
+  /**
+   * Heard while the app is away too (`Transport.setAway`): what has to work with the app out of sight (a notification
+   * chip's answer, the live notification and widgets, a request settling) and costs little. Every other listener
+   * hears the app's frames once it is back in front.
+   */
+  whileAway?: boolean;
+}
+
+/** One frame waiting in the inbox: parsed, or (held while away, unparsed) its text; `heard` once the away listeners had it. */
+interface Waiting {
+  frame?: Frame;
+  text?: string;
+  bytes: number;
+  heard?: boolean;
+}
+
 /**
  * The one connection to the current computer. It owns reconnecting, the
  * silent-socket watchdog and a send queue: NSH's WebSocket lets at most 8 MiB
@@ -82,7 +99,7 @@ export class Transport {
   private socket: SocketLike | null = null;
   private queue: string[] = [];
   private draining = false;
-  private listeners = new Map<string, Set<Listener>>();
+  private listeners = new Map<string, Map<Listener, boolean>>();
   private stateListeners = new Set<(state: ConnectionState) => void>();
   private wanted = false;
   private attempt = 0;
@@ -99,8 +116,16 @@ export class Transport {
   private comingUntil = 0;
   private nextId = 0;
   /** The frames of this turn, handed over together on the next tick (see FrameBatcher), each with its size. */
-  private inbox: { frame: Frame; bytes: number }[] = [];
+  private inbox: Waiting[] = [];
   private inboxTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The app is out of sight: frames wait in the inbox (`setAway`). */
+  private away = false;
+  /** What the frames waiting while away weigh. */
+  private heldBytes = 0;
+  /** Away, the frames outgrew [AWAY_HOLD_BYTES] and were let go: back in front, the app connects again. */
+  private behind = false;
+  /** The request ids this phone sent that wait for their answer, and when: an answer is handled at once, also while away. */
+  private asked = new Map<string, number>();
 
   constructor(
     readonly server: StoredServer,
@@ -180,11 +205,33 @@ export class Transport {
     void this.open();
   }
 
-  on(type: string, listener: Listener): () => void {
+  on(type: string, listener: Listener, options: ListenOptions = {}): () => void {
     let set = this.listeners.get(type);
-    if (!set) this.listeners.set(type, (set = new Set()));
-    set.add(listener);
+    if (!set) this.listeners.set(type, (set = new Map()));
+    set.set(listener, options.whileAway === true);
     return () => set.delete(listener);
+  }
+
+  /**
+   * The app went out of sight (`true`) or came back in front. While away the app's JS may be frozen by the system at
+   * any moment, and a call it was in the middle of is cut off on thaw (NSH counts the frozen time against its 2 s):
+   * the less runs then, the fewer such cut-offs. So frames wait in the inbox, a big one unparsed, and only what has
+   * to work out of sight runs at once: the answer to a request this phone sent (its first frame, to everyone who
+   * listens for it) and the listeners that asked for it (`whileAway`). Back in front, every other listener hears the
+   * frames in the order they came, a batch a call as always. Past [AWAY_HOLD_BYTES] (some 8 min of a busy computer's
+   * news) the frames are let go instead, and back in front the app connects again for the computer's state as it is.
+   */
+  setAway(away: boolean): void {
+    if (this.away === away) return;
+    this.away = away;
+    if (away) return;
+    this.heldBytes = 0;
+    if (this.behind) {
+      this.behind = false;
+      return this.drop("caught up");
+    }
+    if (frameBatcher) return this.scheduleInbox();
+    for (const waiting of this.inbox.splice(0)) this.handOver(waiting);
   }
 
   onState(listener: (state: ConnectionState) => void): () => void {
@@ -195,6 +242,7 @@ export class Transport {
   /** Sends now or after the frames already waiting; throws only when not connected. */
   send(frame: Frame): void {
     if (this.state !== "connected" || !this.socket) throw new Error("Daemon is not connected.");
+    if (typeof frame.request_id === "string") this.noteAsked(frame.request_id);
     this.queue.push(JSON.stringify(frame));
     this.drain();
   }
@@ -214,7 +262,7 @@ export class Transport {
       for (const errorType of options.errors ?? ["error"]) {
         stops.push(this.on(errorType, (frame) => mine(frame) && finish(() => reject(requestError(frame, `${type} failed`)))));
       }
-      stops.push(this.on("disconnected", () => finish(() => reject(new Error("Daemon is not connected.")))));
+      stops.push(this.on("disconnected", () => finish(() => reject(new Error("Daemon is not connected."))), { whileAway: true }));
       const timer = setTimeout(() => finish(() => reject(new Error(`${type} timed out`))), options.timeoutMs ?? 15_000);
       if (options.signal) {
         const abort = () => finish(() => reject(new Error(`${type} cancelled`)));
@@ -304,11 +352,18 @@ export class Transport {
       this.lastFrameAt = Date.now();
       let frame: Frame;
       let bytes = 0;
+      let received = "";
       try {
         const text = frameText(event.data);
         if (text === null) return;
         bytes = text.length;
+        // Away, a big frame (a snapshot, a page) waits unread unless a request of this phone's may be answered by it.
+        if (this.away && bytes >= BIG_FRAME_BYTES && !this.awaitingAnswers()) {
+          this.comingUntil = 0;
+          return this.hold({ text, bytes });
+        }
         frame = JSON.parse(text);
+        received = text;
       } catch {
         return;
       }
@@ -318,7 +373,7 @@ export class Transport {
         return;
       }
       this.comingUntil = 0;
-      this.receive(frame, bytes);
+      this.receive(frame, bytes, received);
     };
     const end = (why: string) => {
       if (ended) return;
@@ -455,7 +510,18 @@ export class Transport {
     }
   }
 
-  private receive(frame: Frame, bytes = 0): void {
+  /** `text`: what the frame came as, kept instead of the frame while it waits out of sight (less memory). */
+  private receive(frame: Frame, bytes = 0, text?: string): void {
+    // The first frame answering a request of this phone's is its answer; what follows under the same id (a
+    // subscription's stream) is the computer's news.
+    const answer = typeof frame.request_id === "string" && this.asked.delete(frame.request_id);
+    if (this.away) {
+      // An answer is handled now: what waits on it (a send, a notification's answer, a request) must not time out
+      // out of sight. Ahead of the frames waiting: those are the computer's news, read back in front.
+      if (answer) return this.emit(frame);
+      this.emit(frame, "away");
+      return this.hold(text ? { text, bytes, heard: true } : { frame, bytes, heard: true });
+    }
     const batcher = frameBatcher;
     if (!batcher) return this.emit(frame);
     this.inbox.push({ frame, bytes });
@@ -464,27 +530,66 @@ export class Transport {
 
   private scheduleInbox(): void {
     const batcher = frameBatcher;
-    if (this.inboxTimer || !batcher || this.inbox.length === 0) return;
+    if (this.inboxTimer || !batcher || this.inbox.length === 0 || this.away) return;
     this.inboxTimer = setTimeout(() => {
       this.inboxTimer = null;
-      const batch = this.inbox.splice(0, takeBatch(this.inbox)).map((entry) => entry.frame);
+      // Gone out of sight since this tick was armed: the frames wait for the app to be back.
+      if (this.away) return;
+      const batch = this.inbox.splice(0, takeBatch(this.inbox));
       // The rest on a tick of its own (a call of its own, with NSH's 2 s of its own), armed before this batch is
       // handed over: a batch NSH cuts off costs only itself.
       this.scheduleInbox();
       // One listener's failure costs neither the others nor the frames after it (`emit`).
-      batcher(() => batch.forEach((frame) => this.emit(frame)));
+      batcher(() => batch.forEach((waiting) => this.handOver(waiting)));
     }, 0);
   }
 
-  /** Hands a frame to its listeners; one that throws does not cost the others. */
-  private emit(frame: Frame): void {
-    this.listeners.get(frame.type)?.forEach((listener) => {
+  /** A frame waits for the app to be back, while the waiting ones weigh less than [AWAY_HOLD_BYTES]; then all are let go. */
+  private hold(waiting: Waiting): void {
+    if (this.behind) return;
+    this.heldBytes += waiting.bytes;
+    if (this.heldBytes <= AWAY_HOLD_BYTES) return void this.inbox.push(waiting);
+    this.behind = true;
+    this.inbox = [];
+  }
+
+  /** A waiting frame to its listeners: read now if it waited unread; the away listeners only if they did not hear it. */
+  private handOver(waiting: Waiting): void {
+    let frame = waiting.frame;
+    if (!frame) {
+      try {
+        frame = JSON.parse(waiting.text ?? "") as Frame;
+      } catch {
+        return;
+      }
+      if (!frame || typeof frame.type !== "string") return;
+    }
+    this.emit(frame, waiting.heard ? "rest" : "all");
+  }
+
+  /** Hands a frame to its listeners (all, or those heard while away, or the rest); one that throws does not cost the others. */
+  private emit(frame: Frame, which: "all" | "away" | "rest" = "all"): void {
+    this.listeners.get(frame.type)?.forEach((whileAway, listener) => {
+      if ((which === "away" && !whileAway) || (which === "rest" && whileAway)) return;
       try {
         listener(frame);
       } catch (error) {
         console.error(error);
       }
     });
+  }
+
+  /** A request id this phone sent, waiting for its answer: one comes within minutes, or not at all. */
+  private noteAsked(requestId: string): void {
+    const now = Date.now();
+    for (const [id, at] of this.asked) if (now - at > ASKED_FOR_MS) this.asked.delete(id);
+    this.asked.set(requestId, now);
+  }
+
+  private awaitingAnswers(): boolean {
+    const now = Date.now();
+    for (const at of this.asked.values()) if (now - at <= ASKED_FOR_MS) return true;
+    return false;
   }
 }
 
@@ -496,12 +601,32 @@ export class Transport {
  */
 export const BIG_FRAME_BYTES = 32 * 1024;
 
-/** How many of the inbox's first frames go in one batch: the small ones up to the next big one, or one big one. */
+/**
+ * The most the frames waiting while the app is away may weigh (`Transport.setAway`): a busy computer sends some 16 KB a
+ * second (the owner's, 11-15), so some 8 min of its news; past that, coming back connects again instead.
+ */
+export const AWAY_HOLD_BYTES = 8 * 1024 * 1024;
+
+/**
+ * The most the small frames handed over in one call may weigh: a burst (36 Session updates) is one call, as before;
+ * the frames that waited while the app was away are many calls, each well inside NSH's 2 s on a slow phone.
+ */
+const BATCH_BYTES = 256 * 1024;
+
+/** How long a request's answers are looked for (`Transport.setAway`): longer than any request waits. */
+const ASKED_FOR_MS = 2 * 60_000;
+
+/** How many of the inbox's first frames go in one batch: the small ones up to the next big one (at most [BATCH_BYTES] of them), or one big one. */
 function takeBatch(inbox: readonly { bytes: number }[]): number {
   if (inbox.length === 0) return 0;
   if (inbox[0]!.bytes >= BIG_FRAME_BYTES) return 1;
-  const big = inbox.findIndex((entry) => entry.bytes >= BIG_FRAME_BYTES);
-  return big < 0 ? inbox.length : big;
+  let weight = 0;
+  for (let index = 0; index < inbox.length; index += 1) {
+    const bytes = inbox[index]!.bytes;
+    if (bytes >= BIG_FRAME_BYTES || (index > 0 && weight + bytes > BATCH_BYTES)) return index;
+    weight += bytes;
+  }
+  return inbox.length;
 }
 
 /** How long an announced message of `bytes` may take on the slowest link allowed for. */

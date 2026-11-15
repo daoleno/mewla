@@ -57,7 +57,7 @@ export function sendInput(transport: Transport, input: SendInput): StructuredCom
         mine(frame) &&
         settle({ kind: "failed", failure: { requestId, code: String(frame.code ?? "input_failed"), message: String(frame.message ?? "") } })),
     );
-    stops.push(transport.on("disconnected", () => settle({ kind: "connection_closed" })));
+    stops.push(transport.on("disconnected", () => settle({ kind: "connection_closed" }), { whileAway: true }));
     try {
       transport.send({
         type: "send_input",

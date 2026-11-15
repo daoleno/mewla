@@ -1,11 +1,11 @@
-import type { Frame, RequestOptions } from "../transport";
+import type { Frame, ListenOptions, RequestOptions } from "../transport";
 import { alertPlan, remainingSnoozeMinutes, type ArmedAlert, type NativeAlertAction } from "./alerts";
 import type { CalendarItem } from "./model";
 
 /** The part of the Transport the Calendar uses (a test gives a fake). */
 export interface CalendarTransport {
   readonly state: string;
-  on(type: string, listener: (frame: Frame) => void): () => void;
+  on(type: string, listener: (frame: Frame) => void, options?: ListenOptions): () => void;
   send(frame: Frame): void;
   request<T = Frame>(type: string, body: Record<string, unknown>, options: RequestOptions): Promise<T>;
 }
@@ -60,7 +60,7 @@ export class CalendarModel {
     this.stops.push(
       // Each connection starts with the computer's calendar_items_snapshot (asking again only sent it twice);
       // what was done on alerts while the app was closed still goes to the computer.
-      transport.on("connected", () => void this.replayNativeActions()),
+      transport.on("connected", () => void this.replayNativeActions(), { whileAway: true }),
       transport.on("calendar_items_snapshot", (frame) => {
         const list = frame.calendar_items;
         if (!Array.isArray(list)) return;
