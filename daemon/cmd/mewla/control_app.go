@@ -1659,7 +1659,12 @@ func (a *controlApp) handleBrainSetExecutor(req control.Request) control.Respons
 		return control.ErrorResponse("invalid_executor", fmt.Sprintf("Brain host executor %q is not configured.", executorID))
 	}
 	if a.watcher != nil {
-		service := brain.NewService(a.brainStore, a.watcher, a.execs)
+		// The daemon's own Brain service: how a start failed is kept there,
+		// and Chat shows it from there.
+		service := a.brainService
+		if service == nil {
+			service = brain.NewService(a.brainStore, a.watcher, a.execs)
+		}
 		if err := setBrainHostExecutor(service, executor.ID, brainUseStartWait); err != nil {
 			return control.ErrorResponse("set_executor_failed", err.Error())
 		}
@@ -1672,33 +1677,45 @@ func (a *controlApp) handleBrainSetExecutor(req control.Request) control.Respons
 }
 
 // brainUseStartWait is how long `mewla brain use` waits for the new Host to
-// answer: an agent takes seconds to open (up to a minute for a slow one),
-// and a Host still opening is not a failure.
-var brainUseStartWait = 60 * time.Second
+// answer, inside the CLI's 30-second control timeout: an agent takes seconds
+// to open, and a Host still opening is not a failure.
+var brainUseStartWait = 25 * time.Second
 
 // setBrainHostExecutor moves Brain to executorID and waits for its Host to
-// take its first message. An agent that ended at start fails at once, with
-// how it ended; one still opening when the wait ends is left to open, as a
-// client's choice is.
+// take its first message. An agent that ended at start fails, with how it
+// ended; one still opening when the wait ends keeps opening in the daemon,
+// as it does when a client chooses it.
 func setBrainHostExecutor(service *brain.Service, executorID string, wait time.Duration) error {
-	_, err := service.SetHostExecutor(executorID)
-	deadline := time.Now().Add(wait)
-	for err != nil && !brain.HostExitedAtStart(err) && brainHostStartTransient(err) && time.Now().Before(deadline) {
-		time.Sleep(2 * time.Second)
-		_, err = service.EnsureHostSnapshot()
-	}
-	if err != nil && !brain.HostExitedAtStart(err) && brainHostStartTransient(err) {
-		log.Printf("brain use %s: the agent has not answered yet: %v", executorID, err)
+	done := make(chan error, 1)
+	go func() {
+		deadline := time.Now().Add(wait)
+		_, err := service.SetHostExecutor(executorID)
+		for err != nil && !brain.HostExitedAtStart(err) && brainHostStartTransient(err) && time.Now().Add(2*time.Second).Before(deadline) {
+			time.Sleep(2 * time.Second)
+			// The daemon's own path: it reuses the Host just started and, if
+			// its program ended, reports how instead of starting another.
+			_, err = service.ReconcileHostContinuity()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil && !brain.HostExitedAtStart(err) && brainHostStartTransient(err) {
+			log.Printf("brain use %s: the agent has not answered yet: %v", executorID, err)
+			return nil
+		}
+		return err
+	case <-time.After(wait):
+		log.Printf("brain use %s: the agent is still opening after %s", executorID, wait)
 		return nil
 	}
-	return err
 }
 
 // brainHostStartTransient is an error a Host gives while its agent is still
 // opening: input not ready, its process not yet the agent, a receipt from the
 // try before.
 func brainHostStartTransient(err error) bool {
-	if errors.Is(err, watcher.ErrWorkerInputNotReady) || errors.Is(err, watcher.ErrOwnershipProbeUnavailable) {
+	if errors.Is(err, watcher.ErrWorkerInputNotReady) || errors.Is(err, watcher.ErrOwnershipProbeUnavailable) || errors.Is(err, watcher.ErrUnownedTmuxTarget) {
 		return true
 	}
 	text := err.Error()

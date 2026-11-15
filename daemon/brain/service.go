@@ -3111,6 +3111,14 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	}
 	s.hostMu.Lock()
 	defer s.hostMu.Unlock()
+	if automatic {
+		// A Host whose program just ended at start is not started again at
+		// once: its cause stays the problem a client shows, not a new Host
+		// every few seconds.
+		if err := s.hostExitWait(executor.ID); err != nil {
+			return WorkerRef{}, err
+		}
+	}
 	discovery, err := s.discoverHostWorker(executor)
 	if err != nil {
 		return WorkerRef{}, err
@@ -3127,9 +3135,7 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 		return hostBootstrapRef(s, discovery), nil
 	}
 	if automatic {
-		// A Host whose program just ended at start is not started again at
-		// once: its cause stays the problem a client shows, not a new Host
-		// every few seconds.
+		// Discovery may just have found the Host's program ended at start.
 		if err := s.hostExitWait(executor.ID); err != nil {
 			return WorkerRef{}, err
 		}
