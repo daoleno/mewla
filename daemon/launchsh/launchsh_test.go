@@ -3,7 +3,10 @@ package launchsh
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -77,5 +80,29 @@ func TestExitStatusIsTheProgramsAndShellsNestOnlyWithC(t *testing.T) {
 	}
 	if code, _ := Run(context.Background(), `exit 3`, Options{Stdout: io.Discard, Stderr: io.Discard, Start: recorder(0, &calls)}); code != 3 {
 		t.Fatalf("exit 3 = %d", code)
+	}
+}
+
+// A program that cannot start is named once in what the Session prints (the
+// line Brain's start failure quotes in Chat): "mewla sh: grok: executable file
+// not found", not "grok: grok: ...".
+func TestAProgramThatCannotStartIsNamedOnce(t *testing.T) {
+	notFound := func(_ context.Context, argv, _ []string, _ string, _ io.Reader, _, _ io.Writer) (int, error) {
+		return 0, fmt.Errorf("%s: %w", argv[0], exec.ErrNotFound)
+	}
+	var out bytes.Buffer
+	if code, _ := Run(context.Background(), `exec grok --x`, Options{Stdout: &out, Stderr: &out, Start: notFound}); code != 127 {
+		t.Fatalf("code = %d", code)
+	}
+	if got := strings.TrimSpace(out.String()); got != "mewla sh: grok: "+exec.ErrNotFound.Error() {
+		t.Fatalf("printed %q", got)
+	}
+	out.Reset()
+	refused := func(context.Context, []string, []string, string, io.Reader, io.Writer, io.Writer) (int, error) {
+		return 0, errors.New("access is denied")
+	}
+	Run(context.Background(), `agent`, Options{Stdout: &out, Stderr: &out, Start: refused})
+	if got := strings.TrimSpace(out.String()); got != "mewla sh: agent: access is denied" {
+		t.Fatalf("printed %q", got)
 	}
 }
