@@ -22,6 +22,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
 
@@ -160,7 +161,7 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  -binary <path>      mewla or mewla-dev executable to run (default: this executable)")
 	fmt.Fprintln(w, "  -state-dir <path>   daemon state directory (default: ~/.mewla)")
 	fmt.Fprintln(w, "  -addr <host:port>   daemon listen address (default: 127.0.0.1:9876)")
-	fmt.Fprintln(w, "  -work-dir <path>    daemon working directory (default: current directory)")
+	fmt.Fprintln(w, "  -work-dir <path>    daemon working directory (default: current directory; your home folder instead of the Windows folder)")
 	fmt.Fprintln(w, "  -path-env <dirs>    executable search PATH stored in the unit (default: current PATH)")
 	fmt.Fprintln(w, "  -lan                bind 0.0.0.0:9876 like `mewla --lan`")
 	fmt.Fprintln(w, "  -dry-run            print the unit or LaunchAgent without writing or enabling")
@@ -240,7 +241,7 @@ func resolveBootConfig(config bootConfig) (bootConfig, error) {
 	}
 
 	if strings.TrimSpace(config.WorkDir) == "" {
-		config.WorkDir = cwd
+		config.WorkDir = platform.DefaultWorkDir(cwd)
 	}
 	if config.WorkDir, err = bootAbsolutePath(config.WorkDir, cwd, "working directory"); err != nil {
 		return config, err

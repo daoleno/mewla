@@ -23,6 +23,7 @@ import (
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/google/uuid"
 )
@@ -3975,7 +3976,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 	}
 	if cwd == "" {
 		if workingDir, err := os.Getwd(); err == nil {
-			cwd = workingDir
+			cwd = platform.DefaultWorkDir(workingDir)
 		}
 	}
 	manager := w.resourceManager()
@@ -4183,6 +4184,9 @@ func buildWindowCommand(opts CreateSessionOptions) (string, error) {
 }
 
 func workerLaunchEnvironment(opts CreateSessionOptions) []string {
+	// On Windows a Session starts with the person's environment as it is now,
+	// as a new terminal does, not as it was when the daemon started at login.
+	platform.RefreshEnvironment()
 	baseEnv := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
