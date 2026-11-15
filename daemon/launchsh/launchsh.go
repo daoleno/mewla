@@ -75,7 +75,11 @@ func run(ctx context.Context, script string, env expand.Environ, dir string, opt
 				}
 				code, err := opts.Start(ctx, args, exported(hc.Env), hc.Dir, hc.Stdin, hc.Stdout, hc.Stderr)
 				if err != nil {
-					fmt.Fprintf(hc.Stderr, "mewla sh: %s: %v\n", args[0], err)
+					if strings.Contains(err.Error(), args[0]) {
+						fmt.Fprintf(hc.Stderr, "mewla sh: %v\n", err)
+					} else {
+						fmt.Fprintf(hc.Stderr, "mewla sh: %s: %v\n", args[0], err)
+					}
 					return interp.ExitStatus(127)
 				}
 				return interp.ExitStatus(uint8(code))
