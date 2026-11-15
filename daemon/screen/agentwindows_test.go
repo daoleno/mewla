@@ -375,6 +375,44 @@ func TestHoldAndStopGovernAWorkersBrowserCalls(t *testing.T) {
 	}
 }
 
+// A Stop outlives the window it was given on: the Worker's next window does not
+// lift it, nor does having no window at all; resuming, or its Session closing,
+// does.
+func TestAStopOutlivesTheWorkersWindow(t *testing.T) {
+	a, _, _ := newTestWindows(t)
+	open := true
+	a.SetAlive(func(string) bool { return open })
+	a.Opened("c1-1", "mh-signin", testCell)
+	if err := a.Halt("mh-signin"); err != nil {
+		t.Fatal(err)
+	}
+	a.Closed("c1-1")
+	if err := a.Begin("mh-signin"); !errors.Is(err, errWindowHalted) {
+		t.Fatalf("a stopped Worker with no window was let through: %v", err)
+	}
+	a.Opened("c1-2", "mh-signin", testCell)
+	if list := a.List(); len(list) != 1 || !list[0].Stopped {
+		t.Fatalf("a new window lifted the Stop: %+v", list)
+	}
+	if err := a.Begin("mh-signin"); !errors.Is(err, errWindowHalted) {
+		t.Fatalf("a stopped Worker's new window was let through: %v", err)
+	}
+	if err := a.Resume("mh-signin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Begin("mh-signin"); err != nil {
+		t.Fatalf("resumed: %v", err)
+	}
+	a.End("mh-signin")
+	_ = a.Halt("mh-signin")
+	a.Closed("c1-2")
+	open = false
+	a.List()
+	if a.halted["mh-signin"] {
+		t.Fatal("a closed Worker's Stop was kept")
+	}
+}
+
 // The person's view is exactly the window's place on the agent display, at the
 // capture's own scale, and their click and keys reach the window there: a
 // click at the view's (10, 20) lands at that point of the window, keys go once
@@ -419,21 +457,16 @@ func TestTheWindowViewCropsToItsPlaceAndAimsInputAtIt(t *testing.T) {
 	if viewer.lastRect != testCell {
 		t.Fatalf("input was aimed at %v, not the window's place", viewer.lastRect)
 	}
-	// The click made it the key window: keys need no other focus.
+	// Each press is aimed at the window again first (the person's own window of
+	// the same app may have become its key window meanwhile); releases follow.
 	_ = v.Key('h', true)
 	_ = v.Key('h', false)
 	_ = v.Key('i', true)
-	if len(fake.keys) != 2 || len(viewer.focused) != 0 {
+	if len(fake.keys) != 2 || len(viewer.focused) != 2 || viewer.focused[0] != 77 || viewer.focused[1] != 77 {
 		t.Fatalf("keys %v focused %v", fake.keys, viewer.focused)
 	}
-	// A fresh view with no click first focuses the window before its first key.
-	v2 := &windowView{inner: session, bounds: bounds, rect: v.rect, gone: owner.gone, viewer: viewer}
-	_, _ = v2.Frame(context.Background(), 0)
-	_ = v2.Key('x', true)
-	_ = v2.Key('y', true)
-	if len(viewer.focused) != 1 || viewer.focused[0] != 77 {
-		t.Fatalf("focused %v", viewer.focused)
-	}
+	_ = v.Key('x', true)
+	_ = v.Key('y', true)
 	// A wheel notch scrolls there; a press that moved is a drag.
 	_ = v.Pointer(30, 40, 16)
 	_ = v.Pointer(30, 40, 0)

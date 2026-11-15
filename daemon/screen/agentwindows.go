@@ -33,6 +33,10 @@ type AgentWindows struct {
 	mu      sync.Mutex
 	windows map[string]*agentWindow // by the bridge's connection id
 	owners  map[string]*windowOwner // by Worker, while it has a window
+	// halted are the Workers the person stopped: a Stop outlives the window
+	// (a new one does not lift it) and lasts until resumed, held and let go,
+	// or the Worker's Session closes.
+	halted map[string]bool
 	seq     uint64
 	alive   func(worker string) bool
 	names   func(worker string) string
@@ -84,7 +88,6 @@ type windowOwner struct {
 	viewers  int
 	person   int // views that hold the agent off
 	acting   int // browser calls that are running
-	halted   bool
 	told     bool // the agent heard that the person sees its window
 	during   bool // the person's input landed while a call ran
 	input    vdisplay.Input
@@ -105,7 +108,7 @@ var (
 
 // newAgentWindows makes the registry for a backend with an agent display.
 func newAgentWindows(viewer agentDisplayViewer) *AgentWindows {
-	return &AgentWindows{viewer: viewer, windows: map[string]*agentWindow{}, owners: map[string]*windowOwner{}, closed: map[string]windowsClosed{}, now: time.Now}
+	return &AgentWindows{viewer: viewer, windows: map[string]*agentWindow{}, owners: map[string]*windowOwner{}, halted: map[string]bool{}, closed: map[string]windowsClosed{}, now: time.Now}
 }
 
 // AgentWindows is the registry of agents' browser windows on this computer's
@@ -239,6 +242,12 @@ func (a *AgentWindows) sweepGone() {
 	for worker := range a.owners {
 		workers = append(workers, worker)
 	}
+	var stopped []string
+	for worker := range a.halted {
+		if a.owners[worker] == nil {
+			stopped = append(stopped, worker)
+		}
+	}
 	a.mu.Unlock()
 	if alive == nil {
 		return
@@ -246,6 +255,16 @@ func (a *AgentWindows) sweepGone() {
 	for _, worker := range workers {
 		if !alive(worker) {
 			a.Forget(worker)
+			a.mu.Lock()
+			delete(a.halted, worker)
+			a.mu.Unlock()
+		}
+	}
+	for _, worker := range stopped {
+		if !alive(worker) {
+			a.mu.Lock()
+			delete(a.halted, worker)
+			a.mu.Unlock()
 		}
 	}
 }
@@ -263,7 +282,7 @@ func (a *AgentWindows) List() []vdisplay.Info {
 			continue
 		}
 		rect := list[0].rect
-		info := vdisplay.Info{ID: worker, Control: "agent", Stopped: owner.halted, Width: rect.Dx(), Height: rect.Dy(), Browser: len(list)}
+		info := vdisplay.Info{ID: worker, Control: "agent", Stopped: a.halted[worker], Width: rect.Dx(), Height: rect.Dy(), Browser: len(list)}
 		if a.names != nil {
 			info.Name = a.names(worker)
 		}
@@ -291,14 +310,14 @@ func (a *AgentWindows) InUse(worker string) bool {
 func (a *AgentWindows) Begin(worker string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.halted[worker] {
+		return errWindowHalted
+	}
 	owner := a.owners[worker]
 	if owner == nil {
 		return nil
 	}
-	switch {
-	case owner.halted:
-		return errWindowHalted
-	case owner.person > 0:
+	if owner.person > 0 {
 		return errWindowHeld
 	}
 	owner.acting++
@@ -381,11 +400,14 @@ func (a *AgentWindows) Resume(worker string) error { return a.setHalted(worker, 
 func (a *AgentWindows) setHalted(worker string, on bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	owner := a.owners[worker]
-	if owner == nil {
+	if !on {
+		delete(a.halted, worker)
+		return nil
+	}
+	if a.owners[worker] == nil {
 		return errNoWindow
 	}
-	owner.halted = on
+	a.halted[worker] = true
 	return nil
 }
 
@@ -514,7 +536,7 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 				owner.held = a.now()
 			}
 			owner.person++
-			owner.halted = false // holding lifts a Stop, as on Linux
+			delete(a.halted, worker) // holding lifts a Stop, as on Linux
 			return
 		}
 		owner.person--
@@ -586,7 +608,6 @@ type windowView struct {
 	lastAt  time.Time   // the last click
 	lastPt  image.Point
 	clicks  int
-	focused uint32 // the window keys were last sent to
 }
 
 const (
@@ -731,13 +752,12 @@ func (v *windowView) Pointer(x, y int, buttons uint8) error {
 	}
 	v.lastAt, v.lastPt = now, down
 	count := v.clicks
-	v.focused = window.ID // a click makes the window its app's key window
 	v.mu.Unlock()
 	return clicker.ClickTo(pid, window, origin.X+down.X, origin.Y+down.Y, button, count)
 }
 
 // Key sends the person's key to the window: it is made its app's key window
-// first, so a key never lands in another of the app's windows.
+// before each press, so a key never lands in another of the app's windows.
 func (v *windowView) Key(keysym uint32, down bool) error {
 	keyer, ok := v.inner.(appKeyer)
 	if !ok {
@@ -747,16 +767,13 @@ func (v *windowView) Key(keysym uint32, down bool) error {
 	if err != nil {
 		return nil
 	}
-	v.mu.Lock()
-	focus := v.focused != window.ID
-	v.mu.Unlock()
-	if focus {
+	// Every press is aimed again: another of the app's windows (the person's)
+	// may have become its key window since the last one. A release follows its
+	// press; a key that cannot be aimed at the window is not sent.
+	if down {
 		if err := v.viewer.FocusWindow(pid, window); err != nil {
-			return nil // a key that cannot be aimed at the window is not sent
+			return nil
 		}
-		v.mu.Lock()
-		v.focused = window.ID
-		v.mu.Unlock()
 	}
 	return keyer.KeyTo(pid, keysym, down)
 }
