@@ -221,11 +221,13 @@ export function startNotifications(): void {
       sendLiveAnswer(transport);
       void syncLive(transport, server);
     };
+    // Out of sight too (Transport `whileAway`): a notification's answer goes out, and the live notification and
+    // widgets keep up, with the app in the background.
     const stops = [
-      transport.on("connected", connected),
+      transport.on("connected", connected, { whileAway: true }),
       transport.on("live_state", (frame) => {
         if (frame.live) void host.call("live.apply", { state: JSON.stringify(frame.live) }).catch(() => {});
-      }),
+      }, { whileAway: true }),
       onStrongAlertsChange(() => void register(transport, server)),
     ];
     if (transport.state === "connected") connected();

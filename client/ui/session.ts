@@ -167,6 +167,7 @@ export function switchTo(server: StoredServer | null): void {
   if (!server) return;
   void setCurrentServerId(server.id);
   const next = new Transport(server);
+  next.setAway(away);
   transport = next;
   for (const use of transportUsers) {
     const cleanup = use(next, server);
@@ -180,11 +181,12 @@ export function switchTo(server: StoredServer | null): void {
       problem.set(next.problem);
     }),
     // Each connection starts with the computer's brain_snapshot; asking again only sent it twice.
-    next.on("connected", () => outbox.onConnected(server.id)),
+    // A message written before the app went out of sight still goes out then (`whileAway`).
+    next.on("connected", () => outbox.onConnected(server.id), { whileAway: true }),
     next.on("disconnected", () => {
       outbox.onDisconnected(server.id);
       stopWakePoll();
-    }),
+    }, { whileAway: true }),
     next.on("brain_snapshot", (frame) => {
       const snapshot = frame.brain as BrainSnapshot | undefined;
       if (snapshot && typeof snapshot === "object") applyBrainSnapshot(server, next, snapshot);
@@ -320,4 +322,16 @@ export async function addPairedServer(server: Parameters<typeof saveServer>[0]):
 
 export function resumeConnection(): void {
   transport?.resume();
+}
+
+let away = false;
+
+/**
+ * The app went out of sight or came back (App.tsx): the computer's frames wait until it is back, but for what has to
+ * work out of sight (core/transport.ts `setAway`). A system that freezes the app in the background cuts off whatever
+ * call it froze, so the less runs then, the fewer calls it can catch.
+ */
+export function setConnectionAway(value: boolean): void {
+  away = value;
+  transport?.setAway(value);
 }

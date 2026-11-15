@@ -202,7 +202,20 @@ to its state on the next tick inside one `batch`, so what reads them (the
 tray, the Session list) is worked out once a turn, not once a message. A
 message of 32 KiB or more (a thread's snapshot or page, the Session list, the
 Work items) is a batch of its own on a tick of its own: NSH gives each call
-into JS 2 s, and an open's messages in one call passed it on a phone.
+into JS 2 s, and an open's messages in one call passed it on a phone. A batch
+of small messages weighs at most 256 KiB.
+
+NSH measures those 2 s on a clock that keeps running while the system keeps
+the app frozen in the background, so a call caught by a freeze is cut off on
+thaw. Out of sight the app therefore handles only what has to work there: the
+first answer to a request it sent (a message's send, a notification's answer),
+the live notification and widgets (`live_state`), and on a connection the
+outbox and push registration. Every other message waits, a big one unparsed,
+and is handed over in order once the app is back in front. Past 8 MiB of
+waiting messages (some 8 minutes of a busy computer) they are let go, and back
+in front the app connects again for current snapshots. A crash report the app
+makes says whether it was in front and for how long (or how long since), and
+so does the one-line summary the computer logs (`app_crash`).
 
 Connect snapshots stay small as history grows: `calendar_items_snapshot`,
 `calendar_item_changed` and Calendar mutation replies omit run history

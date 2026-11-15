@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { getOrCreateLocalDeviceIdentity } from "./auth";
 import type { StoredServer } from "./storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "./testing/memoryPlatform";
-import { BIG_FRAME_BYTES, setFrameBatcher, Transport, transportTiming } from "./transport";
+import { AWAY_HOLD_BYTES, BIG_FRAME_BYTES, setFrameBatcher, Transport, transportTiming } from "./transport";
 import { AUTH_SUBPROTOCOL_PREFIX } from "./webSocketAuth";
 
 const server = {
@@ -362,6 +362,161 @@ describe("Transport", () => {
       transport.drop("send timed out");
       await wait();
       await socketsReach(2);
+      transport.close();
+    });
+  });
+
+  // The system may freeze an app in the background at any moment, and NSH cuts off on thaw the call it froze (the
+  // frozen time counts against its 2 s): out of sight, frames wait, but for what has to work there.
+  describe("out of sight", () => {
+    test("frames wait for the app to be back, then reach every listener in order; away listeners hear them at once, once", async () => {
+      const batches: number[] = [];
+      setFrameBatcher((deliver) => {
+        const before = seen.length;
+        deliver();
+        batches.push(seen.length - before);
+      });
+      const seen: string[] = [];
+      const { transport, socket } = await connected();
+      transport.on("worker_session_updated", (frame) => seen.push(`list ${frame.seq}`));
+      transport.on("live_state", (frame) => seen.push(`live ${frame.seq}`), { whileAway: true });
+      transport.on("worker_session_updated", (frame) => seen.push(`away ${frame.seq}`), { whileAway: true });
+      transport.setAway(true);
+      socket.receive({ type: "worker_session_updated", seq: 1 });
+      socket.receive({ type: "live_state", seq: 2 });
+      socket.receive({ type: "worker_session_updated", seq: 3 });
+      await wait(10);
+      expect(seen).toEqual(["away 1", "live 2", "away 3"]);
+      transport.setAway(false);
+      await wait(10);
+      expect(seen).toEqual(["away 1", "live 2", "away 3", "list 1", "list 3"]);
+      transport.close();
+    });
+
+    test("a tick armed just before the app left hands nothing over", async () => {
+      setFrameBatcher((deliver) => deliver());
+      const { transport, socket } = await connected();
+      const seen: number[] = [];
+      transport.on("worker_session_updated", (frame) => seen.push(frame.seq as number));
+      socket.receive({ type: "worker_session_updated", seq: 1 });
+      transport.setAway(true);
+      await wait(10);
+      expect(seen).toEqual([]);
+      transport.setAway(false);
+      await wait(10);
+      expect(seen).toEqual([1]);
+      transport.close();
+    });
+
+    test("an answer to the phone's own request is handled at once, ahead of the frames waiting", async () => {
+      setFrameBatcher((deliver) => deliver());
+      const { transport, socket } = await connected();
+      const seen: string[] = [];
+      transport.on("worker_session_updated", () => seen.push("update"));
+      transport.setAway(true);
+      const reply = transport.request<{ n: number }>("get_stats", {}, { reply: "stats" });
+      const id = JSON.parse(socket.sent.at(-1)!).request_id;
+      socket.receive({ type: "worker_session_updated", seq: 1 });
+      socket.receive({ type: "stats", request_id: id, n: 7, pad: "x".repeat(BIG_FRAME_BYTES) });
+      expect((await reply).n).toBe(7);
+      expect(seen).toEqual([]);
+      // What follows under the same id (a subscription's stream) is news: it waits.
+      socket.receive({ type: "worker_session_updated", request_id: id, seq: 2 });
+      expect(seen).toEqual([]);
+      // Someone else's request id is the computer's news: it waits.
+      socket.receive({ type: "stats", request_id: "not-mine", n: 8 });
+      let others = 0;
+      transport.on("stats", () => others++);
+      await wait(10);
+      expect(others).toBe(0);
+      transport.setAway(false);
+      await wait(10);
+      expect(seen).toEqual(["update", "update"]);
+      expect(others).toBe(1);
+      transport.close();
+    });
+
+    test("a big frame waits unread: even an away listener hears it only back in front, once", async () => {
+      setFrameBatcher((deliver) => deliver());
+      const { transport, socket } = await connected();
+      const heard: number[] = [];
+      transport.on("codex_conversation_snapshot", (frame) => heard.push((frame.page as string).length), { whileAway: true });
+      transport.setAway(true);
+      socket.receive({ type: "codex_conversation_snapshot", page: "x".repeat(BIG_FRAME_BYTES) });
+      await wait(10);
+      expect(heard).toEqual([]);
+      transport.setAway(false);
+      await wait(10);
+      expect(heard).toEqual([BIG_FRAME_BYTES]);
+      transport.close();
+    });
+
+    test("a drop out of sight: what waits on the connection hears it at once; the rest back in front, after the frames before it", async () => {
+      setFrameBatcher((deliver) => deliver());
+      const { transport, socket } = await connected();
+      const seen: string[] = [];
+      transport.on("worker_session_updated", () => seen.push("update"));
+      transport.on("disconnected", () => seen.push("disconnected"));
+      transport.setAway(true);
+      const pending = transport.request("get_stats", {}, { reply: "stats" });
+      socket.receive({ type: "worker_session_updated", seq: 1 });
+      socket.close(1006, "gone");
+      await expect(pending).rejects.toThrow("not connected");
+      expect(seen).toEqual([]);
+      transport.setAway(false);
+      await wait(10);
+      expect(seen).toEqual(["update", "disconnected"]);
+      transport.close();
+    });
+
+    test("past what may wait, the frames are let go and the app connects again back in front", async () => {
+      setFrameBatcher((deliver) => deliver());
+      const { transport, socket } = await connected();
+      const seen: number[] = [];
+      transport.on("codex_conversation_snapshot", (frame) => seen.push(frame.seq as number));
+      transport.setAway(true);
+      const page = "x".repeat(1024 * 1024);
+      for (let seq = 1; seq <= Math.ceil(AWAY_HOLD_BYTES / page.length) + 1; seq++) socket.receive({ type: "codex_conversation_snapshot", seq, page });
+      expect(sockets).toHaveLength(1);
+      transport.setAway(false);
+      await socketsReach(2);
+      await wait(10);
+      expect(seen).toEqual([]);
+      transport.close();
+    });
+
+    test("the frames that waited come back a bounded batch a call", async () => {
+      const batches: number[] = [];
+      let count = 0;
+      setFrameBatcher((deliver) => {
+        const before = count;
+        deliver();
+        batches.push(count - before);
+      });
+      const { transport, socket } = await connected();
+      transport.on("worker_session_updated", () => count++);
+      batches.length = 0;
+      transport.setAway(true);
+      const pad = "x".repeat(7 * 1024);
+      for (let seq = 1; seq <= 120; seq++) socket.receive({ type: "worker_session_updated", seq, pad });
+      transport.setAway(false);
+      await wait(30);
+      expect(count).toBe(120);
+      expect(batches.length).toBeGreaterThan(2);
+      expect(Math.max(...batches)).toBeLessThanOrEqual(40);
+      transport.close();
+    });
+
+    test("without a batcher too, frames wait and come back in order", async () => {
+      const { transport, socket } = await connected();
+      const seen: number[] = [];
+      transport.on("worker_session_updated", (frame) => seen.push(frame.seq as number));
+      transport.setAway(true);
+      socket.receive({ type: "worker_session_updated", seq: 1 });
+      socket.receive({ type: "worker_session_updated", seq: 2 });
+      expect(seen).toEqual([]);
+      transport.setAway(false);
+      expect(seen).toEqual([1, 2]);
       transport.close();
     });
   });

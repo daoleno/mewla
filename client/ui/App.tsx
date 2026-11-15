@@ -5,7 +5,7 @@ import { keepReadingPlaces, loadReadingPlaces } from "../core/timeline/readingPl
 import { nshPlatform } from "./platform";
 import { justPaired, linkPairing, pairFromText, pairingStatus } from "./pairing";
 import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
-import { current, loadSession, ready, resumeConnection } from "./session";
+import { current, loadSession, ready, resumeConnection, setConnectionAway } from "./session";
 import { FirstRun, openPhonePage, openSettingsLink, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
@@ -67,7 +67,9 @@ export function startApp(): void {
   // Coming back to the app skips the reconnect backoff.
   // Leaving it keeps where chats were read to: the system may make the app anew before it comes back.
   effect(() => {
-    if (lifecycle() === "active") resumeConnection();
+    const active = lifecycle() === "active";
+    setConnectionAway(!active);
+    if (active) resumeConnection();
     else keepReadingPlaces();
   });
 
