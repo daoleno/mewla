@@ -4,7 +4,7 @@
 # spawn) answers and closes there. Windows PowerShell 5.1 and PowerShell 7.
 #
 # Run it as the Windows user whose Mewla is running, against that daemon:
-#   powershell -ExecutionPolicy Bypass -File windows_agent_sweep.ps1 [-StateDir C:\Users\me\.mewla] [-Workers]
+#   powershell -ExecutionPolicy Bypass -File windows_agent_sweep.ps1 [-StateDir C:\Users\me\.mewla] [-Workers] [-Only readonly,cjk]
 # It prints one line per scenario (PASS / FAIL / SKIP and why) and writes the
 # same as JSON to -Out. Everything it creates is under -Root, removed at the
 # end; Workers it spawns are closed. Brain's own chat (web or phone) is not
@@ -16,6 +16,7 @@ param(
   [string]$Out = "",
   [string[]]$Agents = @("claude", "codex"),
   [switch]$Workers,
+  [string[]]$Only = @(),
   [int]$ReplySeconds = 150
 )
 
@@ -141,9 +142,12 @@ function Worker-Id($text) {
 }
 if ($Workers) {
   $cases = @("spaces", "cjk", "percent", "readonly", "programfiles", "long-200", "long-270", "unc", "other-drive", "onedrive") | Where-Object { $folders.Contains($_) }
+  # -Only runs only the named folders' Workers (and no "missing" folder).
+  if ($Only.Count -gt 0) { $cases = @($cases | Where-Object { $Only -contains $_ }) }
   foreach ($agent in $Agents) {
     if (-not ($installs | Where-Object { $_.agent -eq $agent })) { continue }
-    foreach ($name in @($cases) + @("missing")) {
+    $names = if ($Only.Count -gt 0) { @($cases) } else { @($cases) + @("missing") }
+    foreach ($name in $names) {
       $dir = if ($name -eq "missing") { $missing } else { $folders[$name] }
       $token = "pong-" + [guid]::NewGuid().ToString("N").Substring(0, 6)
       $promptFile = Join-Path $env:TEMP ("sweep-prompt-" + $token + ".md")
