@@ -106,9 +106,12 @@ type Service struct {
 	dispatchMu sync.Mutex
 
 	// judge decides undisposed Work (settle.go); nil leaves such Work as is.
-	judge    WorkJudge
-	settle   settler
-	progress progressJudge
+	judge WorkJudge
+	// openScreen says whether a Worker Session still has something open on its
+	// display (a page it left for the person); see settleCandidates.
+	openScreen func(sessionID string) bool
+	settle     settler
+	progress   progressJudge
 	// inFlightHostInputs protects only the live Prepare -> provider mutation ->
 	// Admit/Abort critical section. It is deliberately process-local: durable
 	// BrainInputAdmission + watcher receipt state remain the restart authority.
