@@ -100,13 +100,14 @@ func restartStateDir(t *testing.T) (string, string) {
 	return stateDir, daemonID
 }
 
-func windowsTaskRunner(daemon *fakeDaemon, version string) *fakeBootRunner {
+func windowsTaskRunner(t *testing.T, daemon *fakeDaemon, version string) *fakeBootRunner {
+	withTaskUser(t)
 	runner := &fakeBootRunner{
 		responses: map[string]string{
-			"schtasks /query /tn Mewla /xml": "<Task><Description>Starts Mewla when you log in. " + bootTaskMarker + ".</Description></Task>",
+			"schtasks /query /tn Mewla (ana) /xml": "<Task><Description>Starts Mewla when you log in. " + bootTaskMarker + ".</Description></Task>",
 		},
 		handlers: map[string]func(){
-			"schtasks /run /tn Mewla": func() { daemon.start(version) },
+			"schtasks /run /tn Mewla (ana)": func() { daemon.start(version) },
 		},
 	}
 	return runner
@@ -115,7 +116,7 @@ func windowsTaskRunner(daemon *fakeDaemon, version string) *fakeBootRunner {
 func TestUpdateRestartsTheOldDaemonThroughTheLogonTask(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
 	daemon := &fakeDaemon{daemonID: daemonID, pid: 4242, version: "0.4.5", running: true}
-	runner := windowsTaskRunner(daemon, "0.4.6")
+	runner := windowsTaskRunner(t, daemon, "0.4.6")
 	rt := daemon.runtime(t, "windows", runner, `C:\Users\p\AppData\Local\Programs\Mewla\mewla.exe`)
 	// Windows names a running executable by where it is now: the update
 	// moved it aside.
@@ -130,8 +131,8 @@ func TestUpdateRestartsTheOldDaemonThroughTheLogonTask(t *testing.T) {
 	if len(daemon.killed) != 1 || daemon.killed[0] != 4242 {
 		t.Fatalf("killed %v, want the old daemon 4242", daemon.killed)
 	}
-	if runner.count("schtasks /run /tn Mewla") != 1 || daemon.version != "0.4.6" {
-		t.Fatalf("task runs %d, daemon version %s", runner.count("schtasks /run /tn Mewla"), daemon.version)
+	if runner.count("schtasks /run /tn Mewla (ana)") != 1 || daemon.version != "0.4.6" {
+		t.Fatalf("task runs %d, daemon version %s", runner.count("schtasks /run /tn Mewla (ana)"), daemon.version)
 	}
 	if strings.Contains(out.String(), "Stop and start") ||
 		!strings.Contains(out.String(), "Restarting Mewla now") ||
@@ -143,7 +144,7 @@ func TestUpdateRestartsTheOldDaemonThroughTheLogonTask(t *testing.T) {
 func TestRestartRunsTheLogonTaskAgainWhileItsLastInstanceEnds(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
 	daemon := &fakeDaemon{daemonID: daemonID, pid: 10, version: "0.4.5", running: true, ignoreRuns: 2}
-	runner := windowsTaskRunner(daemon, "0.4.6")
+	runner := windowsTaskRunner(t, daemon, "0.4.6")
 	rt := daemon.runtime(t, "windows", runner, `C:\Mewla\mewla.exe`)
 
 	found, ok := rt.inspect(stateDir)
@@ -153,7 +154,7 @@ func TestRestartRunsTheLogonTaskAgainWhileItsLastInstanceEnds(t *testing.T) {
 	if err := rt.restart(stateDir, found, "0.4.6"); err != nil {
 		t.Fatal(err)
 	}
-	if got := runner.count("schtasks /run /tn Mewla"); got != 3 {
+	if got := runner.count("schtasks /run /tn Mewla (ana)"); got != 3 {
 		t.Fatalf("task runs %d, want 3 (two dropped)", got)
 	}
 }
@@ -161,7 +162,7 @@ func TestRestartRunsTheLogonTaskAgainWhileItsLastInstanceEnds(t *testing.T) {
 func TestRestartLeavesADaemonStartedByHandAndSaysWhatToRun(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
 	daemon := &fakeDaemon{daemonID: daemonID, pid: 77, version: "0.4.5", running: true}
-	runner := &fakeBootRunner{responses: map[string]string{}, failures: map[string]bool{"schtasks /query /tn Mewla /xml": true}}
+	runner := &fakeBootRunner{responses: map[string]string{}, failures: map[string]bool{"schtasks /query /tn Mewla (ana) /xml": true}}
 	rt := daemon.runtime(t, "windows", runner, `C:\Mewla\mewla.exe`)
 
 	var out bytes.Buffer
@@ -191,7 +192,7 @@ func TestRestartLeavesADaemonStartedByHandAndSaysWhatToRun(t *testing.T) {
 func TestRestartLeavesADaemonStartedInATerminalBesideTheTask(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
 	daemon := &fakeDaemon{daemonID: daemonID, pid: 88, version: "0.4.5", running: true}
-	runner := windowsTaskRunner(daemon, "0.4.6")
+	runner := windowsTaskRunner(t, daemon, "0.4.6")
 	rt := daemon.runtime(t, "windows", runner, `C:\Mewla\mewla.exe`)
 	rt.parentImage = func(int) (string, error) { return "powershell.exe", nil }
 
@@ -199,8 +200,8 @@ func TestRestartLeavesADaemonStartedInATerminalBesideTheTask(t *testing.T) {
 	if err := restartAfterUpdate(rt, stateDir, "0.4.5", "0.4.6", &out); err != nil {
 		t.Fatal(err)
 	}
-	if len(daemon.killed) != 0 || runner.count("schtasks /run /tn Mewla") != 0 {
-		t.Fatalf("killed %v, task runs %d", daemon.killed, runner.count("schtasks /run /tn Mewla"))
+	if len(daemon.killed) != 0 || runner.count("schtasks /run /tn Mewla (ana)") != 0 {
+		t.Fatalf("killed %v, task runs %d", daemon.killed, runner.count("schtasks /run /tn Mewla (ana)"))
 	}
 	if !strings.Contains(out.String(), "Stop-Process -Id 88") {
 		t.Fatalf("output %q", out.String())
@@ -251,7 +252,7 @@ func TestRestartUsesTheSystemdUnitOnlyWhenItRunsTheDaemon(t *testing.T) {
 func TestOnlyThisInstallationsDaemonIsRestarted(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
 	daemon := &fakeDaemon{daemonID: daemonID, pid: 9, version: "0.4.5", running: true}
-	runner := windowsTaskRunner(daemon, "0.4.6")
+	runner := windowsTaskRunner(t, daemon, "0.4.6")
 	rt := daemon.runtime(t, "linux", runner, "/home/p/.local/bin/mewla")
 	// The owner's development daemon runs another executable.
 	rt.image = func(int) (string, error) { return "/home/p/workspace/mewla/daemon/tmp/mewla-dev", nil }
@@ -295,7 +296,7 @@ func TestOlderDaemonRestartsBeforeACommandButNotInsideASession(t *testing.T) {
 
 	stateDir, daemonID := restartStateDir(t)
 	daemon := &fakeDaemon{daemonID: daemonID, pid: 30, version: "0.4.6", running: true}
-	runner := windowsTaskRunner(daemon, "0.4.7")
+	runner := windowsTaskRunner(t, daemon, "0.4.7")
 	rt := daemon.runtime(t, "windows", runner, `C:\Mewla\mewla.exe`)
 
 	t.Setenv("MEWLA_WORKER_ID", "w1")

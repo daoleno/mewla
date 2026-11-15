@@ -231,8 +231,8 @@ func (rt daemonRuntime) restart(stateDir string, daemon runningDaemon, want stri
 func (rt daemonRuntime) supervised(daemon runningDaemon) bool {
 	switch rt.goos {
 	case "windows":
-		definition, registered := bootTaskQuery(rt.runner)
-		if !registered || !strings.Contains(definition, bootTaskMarker) {
+		task, err := bootTaskFind(rt.runner)
+		if err != nil || !task.Registered || !strings.Contains(task.XML, bootTaskMarker) {
 			return false
 		}
 		// The task runs the daemon under a headless console host; one
@@ -262,10 +262,14 @@ func (rt daemonRuntime) restartWindows(stateDir string, daemon runningDaemon, wa
 	// The task ignores a new run while its previous instance (the console
 	// host that ran the daemon) is still ending, so it is asked again until
 	// the daemon answers.
+	task, err := bootTaskFind(rt.runner)
+	if err != nil {
+		return err
+	}
 	deadline := time.Now().Add(rt.wait)
 	startedDirect := false
 	for {
-		if output, err := rt.runner.run("schtasks", "/run", "/tn", bootTaskName); err != nil {
+		if output, err := rt.runner.run("schtasks", "/run", "/tn", task.Name); err != nil {
 			return fmt.Errorf("schtasks /run: %v: %s", err, strings.TrimSpace(string(output)))
 		}
 		if rt.waitFor(func() bool { return rt.answersAs(stateDir, daemon.Addr, want) }, rt.runWait) {
