@@ -284,6 +284,17 @@ The rules that keep you in charge:
   screen while it is thinking; they return at once when you take over, when
   its Worker is closed or its Work ends, or when its next action is
   `bring_forward`.
+- **Agents' browser windows.** An agent that only uses the browser
+  (`mewla_chrome`) gets a window of its own in your Chrome, on the agent
+  display, off your screen. Screen lists it at once under the agent's name,
+  before your Mac's own screen (one tap away at the top of the list, and back
+  from **⋯**), the same way a Linux computer lists its agents' displays: a live
+  view of just that window, typing and clicks that reach that window only
+  (never another of your Chrome windows, and without the pointer), **Hold the
+  agent** and **Let the agent go on**, and Stop. A page it leaves open for you
+  (a sign-in) stays after its turn; its Work card in Brain's thread has a
+  **Screen** button that opens Screen at that window. It goes when its Worker
+  closes, when you close it, or after an hour nobody used it, and you are told.
 - **Closing a window behind others.** An app's Close menu item (cmd+w) is off
   while the app is behind other windows. The agent then presses the close
   button of the app's key window instead, without bringing anything forward.
