@@ -104,7 +104,7 @@ describe("a tap on the terminal", () => {
     expect(tapAction({ link: url, row: 3, live: true, clickable: true })).toBe("link");
     expect(tapAction({ link: url, row: -4, live: false, clickable: false })).toBe("link");
   });
-  test("on the live screen of a program that reads the mouse it clicks; history and copy mode never click", () => {
+  test("on the live screen of a program that reads the mouse it clicks; history never clicks", () => {
     expect(tapAction({ link: null, row: 3, live: true, clickable: true })).toBe("click");
     expect(tapAction({ link: null, row: 3, live: false, clickable: true })).toBe("focus");
     expect(tapAction({ link: null, row: 3, live: true, clickable: false })).toBe("focus");
