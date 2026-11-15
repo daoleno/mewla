@@ -174,6 +174,9 @@ func (s *Service) discoverHostWorker(executor work.WorkerExecutor) (hostDiscover
 		// The session host keeps a Session whose program ended, where tmux
 		// closed its pane. The Brain is gone as if its pane had closed: close
 		// the ended Session and start the Brain again in its conversation.
+		// A program that ended at start is the problem to show, with how it
+		// ended: the same launch would end the same way.
+		_ = s.hostExitedAtStart(d.id, command, executor)
 		if err := s.watcher.KillSession(d.id); err != nil {
 			return hostDiscovery{}, fmt.Errorf("close the ended Brain Session %s: %w", d.id, err)
 		}
@@ -193,7 +196,7 @@ func (s *Service) discoverHostWorker(executor work.WorkerExecutor) (hostDiscover
 	switch {
 	case probeErr != nil || presence == watcher.SessionPresenceUnknown:
 		if probeErr == nil {
-			probeErr = fmt.Errorf("tmux probe returned unknown for %q", d.id)
+			probeErr = fmt.Errorf("Session probe returned unknown for %q", d.id)
 		}
 		return hostDiscovery{}, fmt.Errorf("brain host recorded session liveness unknown: %w", probeErr)
 	case presence == watcher.SessionPresencePresent:

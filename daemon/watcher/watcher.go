@@ -741,7 +741,7 @@ func (w *Watcher) resolveOwnedTarget(sessionID string) (OwnedGeneration, error) 
 	}
 	paneGeneration := strings.TrimSpace(w.currentPaneGeneration(sessionID))
 	if paneGeneration == "" {
-		return OwnedGeneration{}, fmt.Errorf("%w: tmux pane generation is temporarily unavailable for %s", ErrOwnershipProbeUnavailable, sessionID)
+		return OwnedGeneration{}, fmt.Errorf("%w: Session generation is temporarily unavailable for %s", ErrOwnershipProbeUnavailable, sessionID)
 	}
 	return ownedGenerationForTarget(sessionID, identity, paneGeneration), nil
 }
@@ -785,7 +785,7 @@ func (w *Watcher) deprojectOwnershipLoss(sessionID string) error {
 func (w *Watcher) resolveTargetProcessIdentity(target string) (targetProcessIdentity, error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
-		return targetProcessIdentity{}, fmt.Errorf("empty tmux target")
+		return targetProcessIdentity{}, fmt.Errorf("empty Session id")
 	}
 	panePID, err := w.sessions().processRoot(target)
 	if err != nil {
@@ -797,12 +797,12 @@ func (w *Watcher) resolveTargetProcessIdentity(target string) (targetProcessIden
 	}
 	paneProcess, ok := processes[panePID]
 	if !ok || paneProcess.startedAt.IsZero() {
-		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s pid %d has no process start in the ps snapshot", target, panePID)
+		return targetProcessIdentity{}, fmt.Errorf("Session %s pid %d has no process start in the process table", target, panePID)
 	}
 	authority, ok := resolveForegroundTargetProcess(panePID, processes)
 	authority.command = strings.TrimSpace(authority.command)
 	if !ok || authority.command == "" {
-		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s foreground process is indeterminate: %s", target, describeForegroundGroup(panePID, processes))
+		return targetProcessIdentity{}, fmt.Errorf("Session %s foreground process is indeterminate: %s", target, describeForegroundGroup(panePID, processes))
 	}
 	identity := targetProcessIdentity{
 		Command:         authority.command,
@@ -814,7 +814,7 @@ func (w *Watcher) resolveTargetProcessIdentity(target string) (targetProcessIden
 		ProcessStart:    authority.provider.startedAt.UnixNano(),
 	}
 	if !identity.valid() {
-		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s process identity is incomplete: %s", target, describeForegroundGroup(panePID, processes))
+		return targetProcessIdentity{}, fmt.Errorf("Session %s process identity is incomplete: %s", target, describeForegroundGroup(panePID, processes))
 	}
 	return identity, nil
 }
@@ -1393,7 +1393,7 @@ var ErrOwnershipProbeUnavailable = errors.New("delegated Session ownership probe
 // ErrUnownedTmuxTarget means a target exists on the shared host server but
 // lacks Mewla's durable ownership marker. Mutating it would cross the lifecycle
 // boundary into an ambient user session.
-var ErrUnownedTmuxTarget = errors.New("tmux target is not owned by Mewla")
+var ErrUnownedTmuxTarget = errors.New("Session is not owned by Mewla")
 
 // ErrNotOwnedDelegatedWorker means a completed Session's pane is present but
 // is no longer a delegated Worker (for example the agent exited and a shell is
@@ -1442,6 +1442,38 @@ func (w *Watcher) SessionExited(id string) bool {
 	}
 	info, present, err := c.host.info(strings.TrimSpace(id))
 	return err == nil && present && !info.Alive
+}
+
+// SessionExit is how a session host Session's program ended: its exit code
+// (or the signal), how long it ran and the last lines it printed.
+type SessionExit struct {
+	Code   *int
+	Signal string
+	Ran    time.Duration
+	Tail   string
+}
+
+// SessionExitReport describes a session host Session whose program has
+// ended, while the host still keeps it. ok is false for a live Session, a
+// tmux pane or a Session the host no longer has.
+func (w *Watcher) SessionExitReport(id string) (SessionExit, bool) {
+	id = strings.TrimSpace(id)
+	c := w.composite()
+	if c == nil || !c.host.validID(id) {
+		return SessionExit{}, false
+	}
+	info, present, err := c.host.info(id)
+	if err != nil || !present || info.Alive {
+		return SessionExit{}, false
+	}
+	exit := SessionExit{Code: info.ExitCode, Signal: info.ExitSignal}
+	if !info.CreatedAt.IsZero() && !info.ExitedAt.IsZero() {
+		exit.Ran = info.ExitedAt.Sub(info.CreatedAt)
+	}
+	if text, err := c.host.captureRecent(id); err == nil {
+		exit.Tail = text
+	}
+	return exit, true
 }
 
 // ResolveDelegatedAbsence proves that a previously-owned delegated target is
@@ -3012,7 +3044,7 @@ func (w *Watcher) SendInputWithReceiptWhenReadyResult(
 	}
 	paneGeneration := strings.TrimSpace(w.currentPaneGeneration(sessionID))
 	if paneGeneration == "" {
-		err := definitelyNotSubmitted("", fmt.Errorf("tmux pane generation is temporarily unavailable for %s", sessionID))
+		err := definitelyNotSubmitted("", fmt.Errorf("Session generation is temporarily unavailable for %s", sessionID))
 		return InputResult{Outcome: InputNotSubmitted}, OwnedGeneration{}, err
 	}
 	owned := ownedGenerationForTarget(sessionID, identity, paneGeneration)

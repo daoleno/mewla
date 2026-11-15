@@ -334,7 +334,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
           requests={() => (routedBrainThread() ? 0 : requestsHere().length)} reveal={revealRequests} />
       )}</Each>
       <If when={shows() === "waking"}><Notice title="Brain is starting…" /></If>
-      <If when={shows() === "host_down"}><Notice title="Brain can't start" /></If>
+      <If when={shows() === "host_down"}><Notice title="Brain can't start" detail={brain()?.host_problem?.detail} /></If>
       {/* A start before the computer answers: connecting is a wait (the placeholder), Offline only at `link.away`. */}
       <If when={shows() === "offline"}>
         <ThreadWait testID="brain-offline" waiting={() => true} empty={() => <View />} reload={() => {}}

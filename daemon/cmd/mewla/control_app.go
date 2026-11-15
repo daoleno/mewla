@@ -1660,7 +1660,7 @@ func (a *controlApp) handleBrainSetExecutor(req control.Request) control.Respons
 	}
 	if a.watcher != nil {
 		service := brain.NewService(a.brainStore, a.watcher, a.execs)
-		if _, err := service.SetHostExecutor(executor.ID); err != nil {
+		if err := setBrainHostExecutor(service, executor.ID, brainUseStartWait); err != nil {
 			return control.ErrorResponse("set_executor_failed", err.Error())
 		}
 	} else {
@@ -1669,6 +1669,45 @@ func (a *controlApp) handleBrainSetExecutor(req control.Request) control.Respons
 		}
 	}
 	return a.handleBrainExecutors()
+}
+
+// brainUseStartWait is how long `mewla brain use` waits for the new Host to
+// answer: an agent takes seconds to open (up to a minute for a slow one),
+// and a Host still opening is not a failure.
+var brainUseStartWait = 60 * time.Second
+
+// setBrainHostExecutor moves Brain to executorID and waits for its Host to
+// take its first message. An agent that ended at start fails at once, with
+// how it ended; one still opening when the wait ends is left to open, as a
+// client's choice is.
+func setBrainHostExecutor(service *brain.Service, executorID string, wait time.Duration) error {
+	_, err := service.SetHostExecutor(executorID)
+	deadline := time.Now().Add(wait)
+	for err != nil && !brain.HostExitedAtStart(err) && brainHostStartTransient(err) && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Second)
+		_, err = service.EnsureHostSnapshot()
+	}
+	if err != nil && !brain.HostExitedAtStart(err) && brainHostStartTransient(err) {
+		log.Printf("brain use %s: the agent has not answered yet: %v", executorID, err)
+		return nil
+	}
+	return err
+}
+
+// brainHostStartTransient is an error a Host gives while its agent is still
+// opening: input not ready, its process not yet the agent, a receipt from the
+// try before.
+func brainHostStartTransient(err error) bool {
+	if errors.Is(err, watcher.ErrWorkerInputNotReady) || errors.Is(err, watcher.ErrOwnershipProbeUnavailable) {
+		return true
+	}
+	text := err.Error()
+	for _, transient := range []string{"target provider process identity changed", "receipt already belongs to different input", "target provider could not be proven", "agent input not ready"} {
+		if strings.Contains(text, transient) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *controlApp) brainExecutorSnapshot() (*control.Executor, []control.Executor, control.Response) {

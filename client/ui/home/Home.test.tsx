@@ -29,3 +29,15 @@ describe("home's header", () => {
     expect(app.texts()).toContain("Desk");
   }, 20_000);
 });
+
+describe("Brain can't start", () => {
+  // A Windows user's Brain ended at start and Chat said only "Brain can't start": the
+  // computer's reason (how the agent ended, what it printed) is in Chat itself.
+  test("Chat shows the computer's reason under the title", async () => {
+    const detail = "Brain could not start on claude: claude exited less than a second after it started (exit code 127). It printed: mewla sh: claude: argument 4 holds a character.";
+    const brain = { host_worker: null, host_problem: { code: "start_failed", executor: "claude", detail } };
+    const app = await open(APP, { platform: "android", storage: paired, network: expoTokenService, host: phoneHost({ brain }) });
+    await app.waitFor("text:Brain can't start", { timeout: 10_000 });
+    expect(app.texts()).toContain(detail);
+  }, 20_000);
+});
