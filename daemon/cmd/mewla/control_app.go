@@ -783,6 +783,15 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 	admissionPending := false
 	if prompt != "" {
 		_, sendErr := a.submitWorkerHandoff(workerID, createOpts.Command, prompt, ownedWork.ID, true)
+		if reporter, ok := a.watcher.(interface {
+			SessionExitReport(string) (watcher.SessionExit, bool)
+		}); ok && errors.Is(sendErr, watcher.ErrSessionEnded) {
+			// The agent ended before its brief: how it ended is the reason.
+			if exit, ok := reporter.SessionExitReport(workerID); ok {
+				sendErr = fmt.Errorf("%w: %s", sendErr, exit.Describe(createOpts.Command))
+				log.Printf("worker spawn %s: %s", workerID, exit.Describe(createOpts.Command))
+			}
+		}
 		if sendErr != nil && !a.keepSpawnAdmissionPending(workerID, sendErr) {
 			if errors.Is(sendErr, brain.ErrWorkAttemptConflict) {
 				var cleanup modelprofiles.LaunchCleanupResult

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -1473,6 +1474,65 @@ type SessionExit struct {
 	Signal string
 	Ran    time.Duration
 	Tail   string
+}
+
+// Describe says, for a person, how program ended: how soon, its exit code
+// or signal, and the last lines it printed.
+func (e SessionExit) Describe(program string) string {
+	name := strings.TrimSpace(program)
+	if fields := strings.Fields(name); len(fields) > 0 {
+		name = fields[0]
+	}
+	if name == "" {
+		name = "The agent"
+	}
+	ran := "less than a second"
+	if e.Ran >= time.Second {
+		ran = e.Ran.Round(time.Second).String()
+	}
+	text := fmt.Sprintf("%s exited %s after it started (%s)", name, ran, e.Status())
+	if tail := e.TailLine(6, 600); tail != "" {
+		text += ". It printed: " + tail
+	} else {
+		text += " without printing anything"
+	}
+	return text + "."
+}
+
+// Status is the exit code or signal, in words.
+func (e SessionExit) Status() string {
+	switch {
+	case e.Signal != "":
+		return "signal " + e.Signal
+	case e.Code != nil:
+		return fmt.Sprintf("exit code %d", *e.Code)
+	}
+	return "exit status unknown"
+}
+
+// TailLine is the last lines the program printed, Mewla's launch marker left
+// out, on one line and clipped to max bytes.
+func (e SessionExit) TailLine(lines, max int) string {
+	var kept []string
+	for _, line := range strings.Split(e.Tail, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.Contains(line, "mewla-origin ") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(kept) > lines {
+		kept = kept[len(kept)-lines:]
+	}
+	text := strings.Join(kept, " / ")
+	if len(text) > max {
+		cut := len(text) - max
+		for cut < len(text) && !utf8.RuneStart(text[cut]) {
+			cut++
+		}
+		text = "…" + text[cut:]
+	}
+	return text
 }
 
 // SessionExitReport describes a session host Session whose program has
@@ -4032,6 +4092,9 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		if workingDir, err := os.Getwd(); err == nil {
 			cwd = platform.DefaultWorkDir(workingDir)
 		}
+	}
+	if err := platform.CheckWorkDir(cwd); err != nil {
+		return "", err
 	}
 	manager := w.resourceManager()
 	resourceCommitted := false

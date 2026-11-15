@@ -48,8 +48,8 @@ func (s *Service) noteHostExitedAtStart(executor work.WorkerExecutor, command st
 	if exit.Ran <= 0 || exit.Ran > hostExitedAtStartWithin {
 		return false
 	}
-	detail := describeHostExit(executorProgram(executor), command, exit)
-	log.Printf("brain host exited at start (%s): ran=%s exit=%s command=%q last output: %q", executor.ID, exit.Ran.Round(time.Millisecond), hostExitStatus(exit), command, hostExitTail(exit.Tail, 12, 1200))
+	detail := exit.Describe(executorProgram(executor))
+	log.Printf("brain host exited at start (%s): ran=%s exit=%s command=%q last output: %q", executor.ID, exit.Ran.Round(time.Millisecond), exit.Status(), command, exit.TailLine(12, 1200))
 	s.hostProblemMu.Lock()
 	defer s.hostProblemMu.Unlock()
 	s.hostStartFailure = &hostStartFailure{Executor: executor.ID, Detail: detail, ExitedAt: time.Now()}
@@ -69,7 +69,7 @@ func (s *Service) hostExitedAtStart(id, command string, executor work.WorkerExec
 	if !ok || !s.noteHostExitedAtStart(executor, command, exit) {
 		return nil
 	}
-	return errHostExitedAtStart{detail: describeHostExit(executorProgram(executor), command, exit)}
+	return errHostExitedAtStart{detail: exit.Describe(executorProgram(executor))}
 }
 
 // hostExitWait is the error that keeps an automatic Host start from running
@@ -82,65 +82,6 @@ func (s *Service) hostExitWait(executorID string) error {
 		return nil
 	}
 	return errHostExitedAtStart{detail: failure.Detail}
-}
-
-func describeHostExit(program, command string, exit watcher.SessionExit) string {
-	name := strings.TrimSpace(program)
-	if fields := strings.Fields(name); len(fields) > 0 {
-		name = fields[0]
-	}
-	if name == "" {
-		name = "The agent"
-	}
-	text := fmt.Sprintf("%s exited %s after it started (%s)", name, roundRan(exit.Ran), hostExitStatus(exit))
-	if tail := hostExitTail(exit.Tail, 6, 600); tail != "" {
-		text += ". It printed: " + tail
-	} else {
-		text += " without printing anything"
-	}
-	return text + "."
-}
-
-func hostExitStatus(exit watcher.SessionExit) string {
-	switch {
-	case exit.Signal != "":
-		return "signal " + exit.Signal
-	case exit.Code != nil:
-		return fmt.Sprintf("exit code %d", *exit.Code)
-	}
-	return "exit status unknown"
-}
-
-func roundRan(d time.Duration) string {
-	if d < time.Second {
-		return "less than a second"
-	}
-	return d.Round(time.Second).String()
-}
-
-// hostExitTail is the last lines of a Session's screen, the Mewla launch
-// marker left out, joined on one line and clipped to max bytes.
-func hostExitTail(screen string, lines, max int) string {
-	var kept []string
-	for _, line := range strings.Split(screen, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.Contains(line, "mewla-origin ") {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	if len(kept) > lines {
-		kept = kept[len(kept)-lines:]
-	}
-	text := strings.Join(kept, " / ")
-	if len(text) > max {
-		cut := len(text) - max
-		for cut < len(text) && !utf8.RuneStart(text[cut]) {
-			cut++
-		}
-		text = "…" + text[cut:]
-	}
-	return text
 }
 
 // resolveHostChoice is the part of choosing a Host executor that can be
