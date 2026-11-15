@@ -148,7 +148,7 @@ func (s *macSession) swipeTo(pid int, window AppWindow, x, y, dx, dy int, how Sw
 		if !windowLocal {
 			return g, g
 		}
-		return g, fpoint{float64(px-window.Bounds.Min.X) * s.input.scale, float64(py-window.Bounds.Min.Y) * s.input.scale}
+		return g, fpoint{gx - float64(window.Bounds.Min.X), gy - float64(window.Bounds.Min.Y)}
 	}
 	// Ten moves over about a third of a second, as a finger does.
 	const moves = 10

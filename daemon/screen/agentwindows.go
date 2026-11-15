@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"log"
 	"net"
 	"sort"
 	"strings"
@@ -41,6 +42,10 @@ type AgentWindows struct {
 	alive  func(worker string) bool
 	names  func(worker string) string
 	closer func(key string)
+	// page sends the person's input to a window's page through its browser
+	// (the extension); without it, or for an older one, input goes in the
+	// background through the window server, which Chrome may not take.
+	page func(key string, in PageInput) error
 
 	idleAfter  time.Duration
 	idleClosed func(worker, name, why string)
@@ -157,6 +162,24 @@ func (a *AgentWindows) SetCloser(closer func(key string)) {
 	a.mu.Lock()
 	a.closer = closer
 	a.mu.Unlock()
+}
+
+// SetPageInput is how the person's input reaches a window's page: the bridge
+// hands it to the extension.
+func (a *AgentWindows) SetPageInput(send func(key string, in PageInput) error) {
+	a.mu.Lock()
+	a.page = send
+	a.mu.Unlock()
+}
+
+// keyOf is the Worker's newest window, which its view shows.
+func (a *AgentWindows) keyOf(worker string) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if list := a.windowsOfLocked(worker); len(list) > 0 {
+		return list[0].key
+	}
+	return ""
 }
 
 // Opened lists a Worker's window, open at rect (global points) on the agent
@@ -523,6 +546,18 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 		gone:   owner.gone,
 		viewer: a.viewer,
 	}
+	a.mu.Lock()
+	send := a.page
+	a.mu.Unlock()
+	if send != nil {
+		view.page = func(in PageInput) error {
+			key := a.keyOf(worker)
+			if key == "" {
+				return errWindowClosed
+			}
+			return send(key, in)
+		}
+	}
 	conn, server := net.Pipe()
 	go func() {
 		defer server.Close()
@@ -603,6 +638,8 @@ type windowView struct {
 	rect   func() (image.Rectangle, bool)
 	gone   <-chan struct{}
 	viewer agentDisplayViewer
+	// page sends input to the window's page through its browser, when it can.
+	page func(PageInput) error
 
 	mu      sync.Mutex
 	place   image.Rectangle // where the window really is, looked up now and then
@@ -616,6 +653,22 @@ type windowView struct {
 	lastAt  time.Time   // the last click
 	lastPt  image.Point
 	clicks  int
+	mods    int             // the DevTools modifiers the person holds
+	noted   map[string]bool // what this view has logged once
+}
+
+// note logs a delivery problem once per view.
+func (v *windowView) note(format string, args ...any) {
+	v.mu.Lock()
+	if v.noted == nil {
+		v.noted = map[string]bool{}
+	}
+	seen := v.noted[format]
+	v.noted[format] = true
+	v.mu.Unlock()
+	if !seen {
+		log.Printf("screen: agent window view: "+format, args...)
+	}
 }
 
 const (
@@ -674,6 +727,32 @@ func (v *windowView) Frame(ctx context.Context, after uint64) (Frame, error) {
 	return Frame{Seq: f.Seq, Image: v.img, At: f.At}, nil
 }
 
+// toPage sends events to the window's page through its browser; false when
+// there is no such way or it failed, for the caller to go the other way.
+func (v *windowView) toPage(events ...PageInput) bool {
+	if v.page == nil {
+		return false
+	}
+	for _, in := range events {
+		if err := v.page(in); err != nil {
+			v.note("input to the page went the other way: %v", err)
+			return false
+		}
+	}
+	return true
+}
+
+// points is a view pixel in points from the window's top left.
+func (v *windowView) points(p image.Point) (float64, float64) {
+	v.mu.Lock()
+	scale := v.scale
+	v.mu.Unlock()
+	if scale <= 0 {
+		scale = 1
+	}
+	return float64(p.X) / scale, float64(p.Y) / scale
+}
+
 // windowPart is what the view shows of the display: the window itself, where
 // it really is, or its place when it cannot be found there. It is looked up
 // at most once a second.
@@ -703,6 +782,7 @@ func (v *windowView) target() (pid int, window AppWindow, origin image.Point, er
 	}
 	pid, window, ok = v.viewer.AgentWindowAt(rect)
 	if !ok {
+		v.note("no browser window lies at %v on the agent display; the person's input there is dropped", rect)
 		return 0, AppWindow{}, image.Point{}, errors.New("no browser window lies there")
 	}
 	v.mu.Lock()
@@ -738,6 +818,9 @@ func (v *windowView) Pointer(x, y int, buttons uint8) error {
 		case pressed&64 != 0:
 			dx = 1
 		}
+		if x, y := v.points(at); v.toPage(pageWheel(x, y, dx, dy)) {
+			return nil
+		}
 		scroller, ok := v.inner.(appScroller)
 		if !ok {
 			return nil
@@ -758,11 +841,31 @@ func (v *windowView) Pointer(x, y int, buttons uint8) error {
 	case released&2 != 0:
 		button = 1
 	}
+	dragged := abs(at.X-down.X) > clickSlop || abs(at.Y-down.Y) > clickSlop
+	v.mu.Lock()
+	now := time.Now()
+	if !dragged && now.Sub(v.lastAt) <= doubleClickWithin && abs(down.X-v.lastPt.X) <= clickSlop && abs(down.Y-v.lastPt.Y) <= clickSlop {
+		v.clicks = min(v.clicks+1, 3)
+	} else {
+		v.clicks = 1
+	}
+	v.lastAt, v.lastPt = now, down
+	count := v.clicks
+	v.mu.Unlock()
+	dx, dy := v.points(down)
+	if dragged && button == 0 {
+		ux, uy := v.points(at)
+		if v.toPage(pageDrag(dx, dy, ux-dx, uy-dy)...) {
+			return nil
+		}
+	} else if v.toPage(pageClick(dx, dy, button, count)...) {
+		return nil
+	}
 	pid, window, origin, err := v.target()
 	if err != nil {
 		return nil
 	}
-	if abs(at.X-down.X) > clickSlop || abs(at.Y-down.Y) > clickSlop {
+	if dragged {
 		if dragger, ok := v.inner.(appDragger); ok && button == 0 {
 			return dragger.DragTo(pid, window, origin.X+down.X, origin.Y+down.Y, at.X-down.X, at.Y-down.Y)
 		}
@@ -771,22 +874,23 @@ func (v *windowView) Pointer(x, y int, buttons uint8) error {
 	if !ok {
 		return nil
 	}
-	v.mu.Lock()
-	now := time.Now()
-	if now.Sub(v.lastAt) <= doubleClickWithin && abs(down.X-v.lastPt.X) <= clickSlop && abs(down.Y-v.lastPt.Y) <= clickSlop {
-		v.clicks = min(v.clicks+1, 3)
-	} else {
-		v.clicks = 1
+	if err := clicker.ClickTo(pid, window, origin.X+down.X, origin.Y+down.Y, button, count); err != nil {
+		v.note("a click did not reach the window: %v", err)
 	}
-	v.lastAt, v.lastPt = now, down
-	count := v.clicks
-	v.mu.Unlock()
-	return clicker.ClickTo(pid, window, origin.X+down.X, origin.Y+down.Y, button, count)
+	return nil
 }
 
 // Key sends the person's key to the window: it is made its app's key window
 // before each press, so a key never lands in another of the app's windows.
 func (v *windowView) Key(keysym uint32, down bool) error {
+	if v.page != nil {
+		v.mu.Lock()
+		in, known := pageKey(keysym, down, &v.mods)
+		v.mu.Unlock()
+		if !known || v.toPage(in) {
+			return nil
+		}
+	}
 	keyer, ok := v.inner.(appKeyer)
 	if !ok {
 		return nil
@@ -800,10 +904,14 @@ func (v *windowView) Key(keysym uint32, down bool) error {
 	// press; a key that cannot be aimed at the window is not sent.
 	if down {
 		if err := v.viewer.FocusWindow(pid, window); err != nil {
+			v.note("a key was not sent: the window could not be made its app's key window: %v", err)
 			return nil
 		}
 	}
-	return keyer.KeyTo(pid, keysym, down)
+	if err := keyer.KeyTo(pid, keysym, down); err != nil {
+		v.note("a key did not reach the window: %v", err)
+	}
+	return nil
 }
 
 func (v *windowView) Close() error { return nil }

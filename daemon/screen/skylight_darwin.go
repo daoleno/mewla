@@ -189,8 +189,10 @@ func (s *macSession) clickTo(pid int, window AppWindow, x, y, button, count int,
 		time.Sleep(50 * time.Millisecond)
 	}
 	px, py := s.input.point(image.Pt(x, y))
-	lx := float64(x-window.Bounds.Min.X) * s.input.scale
-	ly := float64(y-window.Bounds.Min.Y) * s.input.scale
+	// The point in the window, from the global point: a session of another
+	// display than the main one (the agent display) starts elsewhere.
+	lx := px - float64(window.Bounds.Min.X)
+	ly := py - float64(window.Bounds.Min.Y)
 	local := windowLocalStamp(productVersion())
 	if style.flipStamp {
 		local = !local

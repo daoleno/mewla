@@ -56,6 +56,48 @@ type hostMessage struct {
 	// Agent, in a role message, tells the extension it is the agent browser's,
 	// whose windows outlive a daemon that goes away for a restart.
 	Agent bool `json:"agent,omitempty"`
+	// Input, in an input message, is the person's input to the window's page.
+	Input *PageInput `json:"input,omitempty"`
+}
+
+// PageInput is one input event from the person, in Screen, to an agent
+// window's page: a Chrome DevTools Input command (Input.dispatchMouseEvent,
+// Input.dispatchKeyEvent). The extension sends it through the debugger the
+// window's tab is attached with, so it reaches that tab only, wherever the
+// window is and whichever app is in front. A mouse event's x and y are points
+// from the window's top left; the extension makes them the page's.
+type PageInput struct {
+	Method string         `json:"method"`
+	Params map[string]any `json:"params"`
+}
+
+// pageInputVersion is the first extension version that takes PageInput.
+const pageInputVersion = "0.3.2"
+
+// ErrNoPageInput means the extension in Chrome predates PageInput.
+var ErrNoPageInput = errors.New("the Mewla extension in Chrome is too old to take input from Screen")
+
+// PageInput sends the person's input to the page of the agent window with
+// connection id, in the person's Chrome.
+func (b *Bridge) PageInput(id string, in PageInput) error {
+	switch in.Method {
+	case "Input.dispatchMouseEvent", "Input.dispatchKeyEvent":
+	default:
+		return fmt.Errorf("%s is not input", in.Method)
+	}
+	b.mu.Lock()
+	host := b.host
+	b.mu.Unlock()
+	if host == nil {
+		return ErrNoExtensionHost
+	}
+	b.mu.Lock()
+	version := host.version
+	b.mu.Unlock()
+	if versionOlder(version, pageInputVersion) {
+		return ErrNoPageInput
+	}
+	return host.send(hostMessage{Type: "input", ID: id, Input: &in})
 }
 
 // openWindow is an agent's window the extension has open.

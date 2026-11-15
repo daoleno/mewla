@@ -98,6 +98,8 @@ let backoff = 1000;
 // This is the agent browser's extension: its windows outlive the daemon.
 let agentBrowser = false;
 const AGENT_KEEP_MS = 10 * 60_000;
+// What the person's input from Screen may be (AgentWindow.input).
+const INPUT_METHODS = new Set(['Input.dispatchMouseEvent', 'Input.dispatchKeyEvent']);
 let keepTimer;
 
 function tell(message) {
@@ -214,6 +216,34 @@ class AgentWindow {
     }
   }
 
+  /**
+   * The person's input from Mewla's Screen, to this window's page: a DevTools Input command sent through the
+   * debugger its tab is attached with, so it reaches that tab only, wherever the window is and whichever app is in
+   * front. A mouse event comes in points from the window's top left and goes to the page at the same place.
+   */
+  async input({ method, params } = {}) {
+    if (!INPUT_METHODS.has(method) || this.windowId === undefined || !this.connection)
+      return;
+    const [tab] = await chrome.tabs.query({ windowId: this.windowId, active: true }).catch(() => []);
+    if (!tab || !this.connection.attachedTabs.has(tab.id))
+      return;
+    const target = { tabId: tab.id };
+    const event = { ...params };
+    if (method === 'Input.dispatchMouseEvent') {
+      // What lies above and beside the page in the window: its tabs, toolbar and any infobar.
+      const offset = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', {
+        expression: '[window.outerWidth - window.innerWidth, window.outerHeight - window.innerHeight]',
+        returnByValue: true,
+      }).catch(() => undefined);
+      const [left, top] = offset?.result?.value ?? [0, 0];
+      event.x = Number(event.x) - left;
+      event.y = Number(event.y) - top;
+      if (event.y < 0 || event.x < 0)
+        return; // on the window's own controls, not the page
+    }
+    await chrome.debugger.sendCommand(target, method, event).catch(error => debugLog('input', error));
+  }
+
   async close(reason, quiet) {
     if (this.closed)
       return;
@@ -262,6 +292,9 @@ async function onHostMessage(message) {
       return;
     case 'disconnect':
       await sessions.get(message.id)?.close('The daemon asked to disconnect');
+      return;
+    case 'input':
+      await sessions.get(message.id)?.input(message.input);
       return;
     case 'ping':
       tell({ type: 'pong', sessions: [...sessions.keys()], version: chrome.runtime.getManifest().version });
