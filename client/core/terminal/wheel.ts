@@ -10,9 +10,6 @@ import type { PaneScrollMode } from "./history";
  * - it did not, and has the wheel send cursor keys (DEC mode 1007, Codex's transcript; a host that
  *   reports it): one Up or Down per line, so a pager like `less` follows the finger;
  * - otherwise it has nothing to scroll with, and the drag is not sent anywhere.
- *
- * The old app (tmux) did the first, at most three presses a report, and none of the second; the session
- * host's Sessions have no copy mode.
  */
 /** The most one report sends (a fling is many reports; a stalled socket must not queue a flood). */
 const MAX_LINES = 30;

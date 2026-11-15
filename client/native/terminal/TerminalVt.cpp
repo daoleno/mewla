@@ -16,7 +16,7 @@
 
 // The core's scrollback is a byte budget, rounded up to whole pages: 10000 bytes
 // keeps one page. Nothing reads it: the view renders the viewport, and history is
-// tmux's copy mode on the computer (the same depth as the Android bridge).
+// the computer's, which the page hands the view (the same depth as the Android bridge).
 static constexpr size_t kScrollbackMaxBytes = 10000;
 
 struct MewlaVt {

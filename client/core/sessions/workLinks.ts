@@ -5,9 +5,8 @@ import type { WorkItem } from "../work/workItems";
 const SESSION_START_WINDOW_MS = 10 * 60 * 1000;
 
 /**
- * Whether a Session is the one a Calendar run's Work started. Pane ids restart
- * when tmux does, so a later, unrelated Session can carry a finished run's id;
- * it started well after that Work was written. (Expo: calendarWorkOwnsSession.)
+ * Whether a Session is the one a Calendar run's Work started: it started
+ * within the window after that Work was written, not well after it. (Expo: calendarWorkOwnsSession.)
  */
 export function calendarWorkOwnsSession(work: { frontmatter?: { created?: string } }, sessionStartedAt: number | undefined): boolean {
   const created = Date.parse(work.frontmatter?.created ?? "");

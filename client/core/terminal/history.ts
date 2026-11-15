@@ -19,16 +19,6 @@ export type PaneScrollMode = {
   mouse_format?: string;
 };
 
-/** A tmux Session's answer: one bounded snapshot of the active pane's history, newest last. */
-export type HistorySnapshot = {
-  pane_id: string;
-  cols: number;
-  total: number;
-  alternate: boolean;
-  ansi: string;
-  panes?: PaneScrollMode[];
-};
-
 /**
  * A session host Session's answer to a cursor: the rows after it. `reset`
  * voids what the viewer holds. Rows are numbered from the first the daemon saw
@@ -83,62 +73,6 @@ export function isHistoryDelta(history: unknown): history is HistoryDelta {
 const isCount = (value: unknown, max = Number.MAX_SAFE_INTEGER): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= max;
 
-/** The snapshot's rows, after checking its shape and bounds; none on the alternate screen. */
-export function snapshotRows(snapshot: HistorySnapshot): string[] {
-  if (!snapshot || typeof snapshot.pane_id !== "string" || !snapshot.pane_id || snapshot.pane_id.length > 128 ||
-      typeof snapshot.alternate !== "boolean" || typeof snapshot.ansi !== "string" ||
-      snapshot.ansi.length > HISTORY_MAX_BYTES || !isCount(snapshot.cols, 1000) || snapshot.cols < 1 ||
-      !isCount(snapshot.total)) {
-    throw new Error("Invalid terminal history snapshot.");
-  }
-  if (snapshot.alternate || !snapshot.ansi) return [];
-  const rows = snapshot.ansi.replace(/\n$/, "").split("\n");
-  if (rows.length > HISTORY_MAX_ROWS) throw new Error("Terminal history is too large.");
-  return standAloneRows(rows);
-}
-
-const SGR = /\x1b\[([0-9;:]*)m/g;
-
-/** The SGR sequences in force after `row`, given those in force before it (`pen`, "" for none). */
-function penAfter(pen: string, row: string): string {
-  for (const match of row.matchAll(SGR)) {
-    const tokens = match[1] === "" ? ["0"] : match[1].split(";");
-    const kept: string[] = [];
-    for (let i = 0; i < tokens.length; i++) {
-      const main = tokens[i].split(":")[0];
-      if (main === "" || main === "0") {
-        // A reset: what came before it, in this sequence or the rows above, is gone.
-        pen = "";
-        kept.length = 0;
-      } else if ((main === "38" || main === "48" || main === "58") && !tokens[i].includes(":")) {
-        // An extended color with ;-separated parts: its parts (the 0 in 38;5;0 is a color, not a reset).
-        const parts = tokens[i + 1] === "5" ? 3 : tokens[i + 1] === "2" ? 5 : 1;
-        kept.push(tokens.slice(i, i + parts).join(";"));
-        i += parts - 1;
-      } else {
-        kept.push(tokens[i]);
-      }
-    }
-    if (kept.length) pen += "\x1b[" + kept.join(";") + "m";
-  }
-  return pen;
-}
-
-/**
- * Rows that each start from what is in force where they begin. tmux captures a style once and the
- * rows after it lean on it; a view draws any page of history rows on its own (lazily, as they come
- * into sight), so a row that leans on the rows above it starts with a reset and that style. A
- * session host's rows stand alone already (daemon/ghosttyvt, Styled).
- */
-export function standAloneRows(rows: readonly string[]): string[] {
-  let pen = "";
-  return rows.map((row) => {
-    const out = pen ? "\x1b[0m" + pen + row : row;
-    pen = penAfter(pen, row);
-    return out;
-  });
-}
-
 /** Checks a delta's shape and bounds before the view allocates for it. */
 export function validateHistoryDelta(delta: HistoryDelta): HistoryDelta {
   const bad = () => new Error("Invalid terminal history delta.");
@@ -161,38 +95,16 @@ export function validateHistoryDelta(delta: HistoryDelta): HistoryDelta {
 }
 
 /**
- * Longest suffix of `previous` that is a prefix of `next`, in linear time
- * (KMP): what a new tmux snapshot keeps of the one held, so only the rows
- * after it are new and the rows before it scrolled out of the capture.
- */
-export function retainedOverlap(previous: readonly string[], next: readonly string[]): number {
-  if (!previous.length || !next.length) return 0;
-  const prefix = new Array<number>(next.length).fill(0);
-  for (let i = 1, j = 0; i < next.length; i++) {
-    while (j && next[i] !== next[j]) j = prefix[j - 1];
-    if (next[i] === next[j]) j++;
-    prefix[i] = j;
-  }
-  let matched = 0;
-  for (const row of previous) {
-    while (matched && (matched === next.length || row !== next[matched])) matched = prefix[matched - 1];
-    if (row === next[matched]) matched++;
-  }
-  return matched;
-}
-
-/**
  * What the App holds of a Session's scrollback and how it brings it up to
- * date (Expo: terminalHistoryModel.ts). A session host Session sends only the
- * rows it is missing; a tmux Session sends snapshots, and the overlap with
- * what is held tells what is new. Both end as the same instruction for the
- * view: void, drop from the front, append. It also keeps each row's plain
- * text, which search and the prompt jumps read.
+ * date (Expo: terminalHistoryModel.ts). The session host sends only the rows
+ * it is missing; each answer ends as one instruction for the view: void, drop
+ * from the front, append. It also keeps each row's plain text, which search
+ * and the prompt jumps read.
  */
 export class TerminalHistoryModel {
   paneId = "";
   cols = 0;
-  /** Number of lines[0] in the host's numbering; unused for snapshots. */
+  /** Number of lines[0] in the host's numbering. */
   first = 0;
   epoch = 0;
   next = 0;
@@ -279,30 +191,6 @@ export class TerminalHistoryModel {
     return unchanged ? null : render;
   }
 
-  /** The view's instruction for a tmux snapshot, or null when it holds that snapshot already. */
-  applySnapshot(snapshot: HistorySnapshot): HistoryRender | null {
-    const rows = snapshotRows(snapshot);
-    const panes = Array.isArray(snapshot.panes) ? snapshot.panes : [];
-    const samePane = !this.numbered && this.paneId === snapshot.pane_id && this.cols === snapshot.cols;
-    if (samePane && this.alternate === snapshot.alternate && rows.length === this.lines.length && rows.every((row, i) => row === this.lines[i])) {
-      this.panes = panes;
-      return null;
-    }
-    const overlap = samePane ? retainedOverlap(this.lines, rows) : 0;
-    const reset = !samePane || (this.lines.length > 0 && overlap === 0);
-    const render: HistoryRender = reset
-      ? { reset: true, removed: 0, rows: rows.slice(), cols: snapshot.cols, alternate: snapshot.alternate }
-      : { reset: false, removed: this.lines.length - overlap, rows: rows.slice(overlap), cols: snapshot.cols, alternate: snapshot.alternate };
-    this.text = reset ? rows.map(rowText) : this.text.slice(render.removed).concat(render.rows.map(rowText));
-    this.numbered = false;
-    this.lines = rows;
-    this.flags = rows.map(() => 0);
-    this.paneId = snapshot.pane_id;
-    this.cols = snapshot.cols;
-    this.alternate = snapshot.alternate;
-    this.panes = panes;
-    return render;
-  }
 }
 
 export interface HistoryHandlers {
@@ -313,10 +201,8 @@ export interface HistoryHandlers {
 }
 
 export const historyTiming = {
-  /** A session host Session sends only the rows after the cursor, so a short wait after output is cheap. */
+  /** The session host sends only the rows after the cursor, so a short wait after output is cheap. */
   deltaMs: 250,
-  /** A tmux Session sends its whole snapshot. */
-  snapshotMs: 750,
   timeoutMs: 10_000,
 };
 
@@ -326,9 +212,8 @@ export const HISTORY_FAILED = "History could not load. Tap to retry.";
 /**
  * Keeps one attachment's history current (Expo: useTerminalHistory.ts):
  * `terminal_history` after the attachment opens and again a moment after
- * output, one request at a time. Every request names a cursor; a tmux
- * Session answers it with its snapshot. Answers for an attachment that has
- * since changed are dropped.
+ * output, one request at a time. Every request names a cursor. Answers for an
+ * attachment that has since changed are dropped.
  */
 export class TerminalHistoryFeed {
   readonly model = new TerminalHistoryModel();
@@ -379,7 +264,7 @@ export class TerminalHistoryFeed {
 
   private schedule(): void {
     if (!this.session || this.running || this.timer || !this.pending) return;
-    this.timer = setTimeout(() => void this.run(), this.model.numbered ? historyTiming.deltaMs : historyTiming.snapshotMs);
+    this.timer = setTimeout(() => void this.run(), historyTiming.deltaMs);
   }
 
   private async run(): Promise<void> {
@@ -394,21 +279,16 @@ export class TerminalHistoryFeed {
       const frame = await this.transport.request<Frame>("terminal_history", { session_id: session, since: this.model.cursor() },
         { reply: "terminal_history", timeoutMs: historyTiming.timeoutMs });
       if (!current()) return;
-      if (frame.session_id !== session || !frame.history) throw new Error("Invalid terminal history response.");
-      if (isHistoryDelta(frame.history)) {
-        const result = this.model.applyDelta(validateHistoryDelta(frame.history));
-        if (result === "resync") {
-          // It did not follow what is held: ask again from nothing.
-          this.model.clear();
-          this.handlers.rows({ reset: true, removed: 0, rows: [], cols: 0, alternate: false });
-          this.pending = true;
-          return;
-        }
-        if (result) this.handlers.rows(result);
-      } else {
-        const result = this.model.applySnapshot(frame.history as HistorySnapshot);
-        if (result) this.handlers.rows(result);
+      if (frame.session_id !== session || !isHistoryDelta(frame.history)) throw new Error("Invalid terminal history response.");
+      const result = this.model.applyDelta(validateHistoryDelta(frame.history));
+      if (result === "resync") {
+        // It did not follow what is held: ask again from nothing.
+        this.model.clear();
+        this.handlers.rows({ reset: true, removed: 0, rows: [], cols: 0, alternate: false });
+        this.pending = true;
+        return;
       }
+      if (result) this.handlers.rows(result);
       this.notice("");
     } catch {
       if (current() && this.transport.state === "connected") this.notice(HISTORY_FAILED);

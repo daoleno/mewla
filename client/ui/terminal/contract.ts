@@ -54,7 +54,7 @@ export type TerminalEvents = {
   /**
    * A drag the view did not take, `lines` > 0 back in time (a fling goes on as more of them): it
    * holds no history, or the program is on the alternate screen. The page makes it wheel presses or
-   * cursor keys for the program (core/terminal/wheel.ts), or drives tmux copy mode with it.
+   * cursor keys for the program (core/terminal/wheel.ts), or nothing when it takes neither.
    */
   scroll: { lines: number };
   /** Where the history viewport stands: `top` is the history row at the top (the history's length at the bottom). */

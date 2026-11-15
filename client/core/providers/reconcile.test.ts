@@ -59,7 +59,7 @@ describe("ProviderRequestOwner", () => {
 
   test("runtime switch is exclusive and ambiguous lock requires same-session refresh", () => {
     const owner = new ProviderRequestOwner();
-    owner.rebind("server-a", "tmux:@1");
+    owner.rebind("server-a", "mh-1");
     const first = owner.admitRuntimeSwitch();
     expect(first.ok).toBe(true);
     expect(owner.admitRuntimeSwitch().ok).toBe(false);

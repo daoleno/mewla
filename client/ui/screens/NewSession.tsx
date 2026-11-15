@@ -20,7 +20,7 @@ import { wide } from "../shell/layout";
 
 /** Open from the Sessions list (its + and its empty state). */
 export const newSessionOpen = signal(false);
-/** Set by a Session's "New Terminal": the new window joins that Session's tmux session, and its folder by default. */
+/** Set by a Session's "New Terminal": the new Session starts in that Session's folder by default. */
 export const newSessionTarget = signal("");
 
 type Entry = { name: string; path: string };
