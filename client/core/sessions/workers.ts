@@ -63,6 +63,8 @@ export interface Worker {
   event_kind?: string;
   details_json?: string;
   needs_attention?: boolean;
+  /** Why Mewla refused its last `mewla worker progress` report, until one is accepted: its report did not land. */
+  progress_refused?: string;
   last_output_lines: string[];
   started_at?: number;
   updated_at?: number;
@@ -132,6 +134,7 @@ export type RawWorker = {
   event_kind?: string;
   details_json?: string;
   needs_attention?: boolean;
+  progress_refused?: string;
   last_output_lines?: string[];
   started_at?: string | number | Date;
   updated_at?: string | number | Date;
@@ -433,6 +436,7 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       left.event_kind === right.event_kind &&
       left.details_json === right.details_json &&
       left.needs_attention === right.needs_attention &&
+      left.progress_refused === right.progress_refused &&
       stringArraysEqual(left.last_output_lines, right.last_output_lines) &&
       left.started_at === right.started_at &&
       left.updated_at === right.updated_at &&
@@ -499,6 +503,7 @@ function normalizeWorker(
     // addressed to Brain, which decides and asks the person only through its Work's question (owner 2026-10-26,
     // 11-13): it raises no card, tray row, count or dot here. A prompt or an approval on its terminal still does.
     needs_attention: agent.needs_attention === true && agent.delegated !== true,
+    progress_refused: typeof agent.progress_refused === 'string' && agent.progress_refused.trim() ? agent.progress_refused.trim() : undefined,
     last_output_lines: Array.isArray(agent.last_output_lines) ? agent.last_output_lines : [],
     started_at: normalizeTimestamp(agent.started_at),
     updated_at: normalizeTimestamp(agent.updated_at),

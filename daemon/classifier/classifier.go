@@ -47,9 +47,15 @@ type Worker struct {
 	// PromptUnidentified says why a blocked Worker's dialog has no Prompt (and
 	// so no id to answer): the dialog is open, but the screen cannot support an
 	// exact identity. It is empty whenever Prompt is set.
-	PromptUnidentified string     `json:"prompt_unidentified,omitempty"`
-	NeedsAttention     bool       `json:"needs_attention,omitempty"`
-	LastProgressAt     *time.Time `json:"last_progress_at,omitempty"`
+	PromptUnidentified string `json:"prompt_unidentified,omitempty"`
+	NeedsAttention     bool   `json:"needs_attention,omitempty"`
+	// ProgressRefused is why Mewla refused the Worker's last progress report
+	// (its words are in ProgressRefusedSummary), until a report is accepted:
+	// a Worker whose reports do not land must not look silently fine.
+	ProgressRefused        string     `json:"progress_refused,omitempty"`
+	ProgressRefusedSummary string     `json:"progress_refused_summary,omitempty"`
+	ProgressRefusedAt      *time.Time `json:"progress_refused_at,omitempty"`
+	LastProgressAt         *time.Time `json:"last_progress_at,omitempty"`
 	// RunningSince is when a Session whose own terminal says it is working
 	// (not a delegated Worker's ledger turn) began this run, as the daemon
 	// first saw it; absent otherwise.

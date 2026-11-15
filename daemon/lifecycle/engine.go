@@ -379,7 +379,10 @@ func (e *Engine) AcceptAdmission(id WorkID, token TurnToken, in AcceptAdmissionI
 			return nil, fmt.Errorf("%w: provider evidence does not match prepared admission", ErrInvalidCommand)
 		}
 		resultToken := token
-		if a.Mode == AdmissionConditionalSteer {
+		// A signal-protocol steer whose predecessor already ended is the
+		// prompt's own follow-up turn (see AcceptAdmissionBySignal).
+		steer := a.Mode == AdmissionConditionalSteer && (st.Attempt != nil || !a.SignalProtocol)
+		if steer {
 			if st.Attempt == nil || st.Attempt.SessionID != a.SessionID || st.Attempt.TurnToken != a.ExistingTurnToken ||
 				in.ActivityID != a.BaselineActivityID {
 				return nil, ErrStaleInput
@@ -400,7 +403,7 @@ func (e *Engine) AcceptAdmission(id WorkID, token TurnToken, in AcceptAdmissionI
 		if a.ClaimToken != "" || newerWorkerSubmission(st, a) {
 			return events, nil
 		}
-		if a.Mode == AdmissionConditionalSteer && !a.SignalProtocol {
+		if steer && !a.SignalProtocol {
 			events = append(events, Event{
 				WorkID: id, Kind: KTurnHeartbeat, TurnToken: st.Attempt.TurnToken, Fence: st.Attempt.Generation,
 				SourceID: "admission-steer:" + string(token), At: now,
@@ -408,7 +411,7 @@ func (e *Engine) AcceptAdmission(id WorkID, token TurnToken, in AcceptAdmissionI
 			})
 			return events, nil
 		}
-		if a.Mode == AdmissionConditionalSteer {
+		if steer {
 			predecessor, predecessorFence := st.Attempt.TurnToken, st.Attempt.Generation
 			events = append(events,
 				Event{WorkID: id, Kind: KTurnRelinquished, TurnToken: predecessor, Fence: predecessorFence,
@@ -454,10 +457,13 @@ func (e *Engine) AcceptAdmissionBySignal(id WorkID, token TurnToken, sessionID s
 		if a.Status == AdmissionAborted || a.Status == AdmissionRetired {
 			return nil, fmt.Errorf("%w: %s admission cannot be accepted", ErrInvalidCommand, a.Status)
 		}
-		if a.Mode == AdmissionConditionalSteer {
-			if st.Attempt == nil || st.Attempt.SessionID != sessionID || st.Attempt.TurnToken != a.ExistingTurnToken {
-				return nil, ErrStaleInput
-			}
+		// A steer whose predecessor ended before the steered prompt signalled
+		// (the agent finished that turn and then read the prompt) has nothing
+		// left to steer: the exact signal proves the prompt landed, so it is a
+		// follow-up of the ended turn, admitted as a fresh prompt would be.
+		steer := a.Mode == AdmissionConditionalSteer && st.Attempt != nil
+		if steer && (st.Attempt.SessionID != sessionID || st.Attempt.TurnToken != a.ExistingTurnToken) {
+			return nil, &SteerTargetMovedError{Steered: a.ExistingTurnToken, Active: st.Attempt.TurnToken}
 		}
 		events := []Event{{WorkID: id, Kind: KAdmissionAccepted, TurnToken: token,
 			SourceID: "admission-signal:" + string(token), At: now,
@@ -465,7 +471,7 @@ func (e *Engine) AcceptAdmissionBySignal(id WorkID, token TurnToken, sessionID s
 		if newerWorkerSubmission(st, a) {
 			return events, nil
 		}
-		if a.Mode == AdmissionConditionalSteer {
+		if steer {
 			predecessor, predecessorFence := st.Attempt.TurnToken, st.Attempt.Generation
 			events = append(events,
 				Event{WorkID: id, Kind: KTurnRelinquished, TurnToken: predecessor, Fence: predecessorFence,
