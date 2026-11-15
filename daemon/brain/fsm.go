@@ -313,7 +313,7 @@ func canonicalReviewEvent(database presentationDatabase, workID string, st *life
 		break
 	}
 	if lossReview && !ownEvidence && strings.TrimSpace(st.LastSummary) == "lease_expired_escalation" {
-		projected.Summary = "The Worker did not check in before its lease ran out and its provider is idle, so the turn was released as lost. It may still be waiting on a background task: look at the Session before replanning."
+		projected.Summary = "The Worker did not check in before its lease ran out and showed no sign of work, so the turn was released as lost. It may still be waiting on a background task: look at the Session before replanning."
 	}
 	return projected
 }

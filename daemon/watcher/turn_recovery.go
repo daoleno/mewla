@@ -302,6 +302,18 @@ func (w *Watcher) WorkerWaitingOnBackgroundWork(sessionID string) bool {
 	return paneShowsBackgroundWork(content)
 }
 
+// WorkerShowsAgentWorking reports whether the Session's own screen shows its
+// agent working now (Claude's spinner with the turn's running time, or the
+// interrupt hint in its footer). A turn whose agent is visibly at work is not
+// lost, whatever its check-in lease says.
+func (w *Watcher) WorkerShowsAgentWorking(sessionID string) bool {
+	content, err := w.CapturePaneContent(sessionID)
+	if err != nil {
+		return false
+	}
+	return classifier.AgentWorkingOnScreen(content)
+}
+
 // paneTail returns the last non-empty pane lines above the provider's own
 // prompt chrome, compacted for an escalation summary.
 func paneTail(pane string, lines int) string {
@@ -550,6 +562,12 @@ func stalledDelegatedTurn(item probedPollWorker) (delegatedStall, bool) {
 		return delegatedStall{}, false
 	}
 	if provider.Error == nil && paneShowsBackgroundWork(item.content) {
+		return delegatedStall{}, false
+	}
+	// A provider record that says the turn settled while the agent's own
+	// screen shows it working (a turn the record no longer follows, such as
+	// one the daemon met mid-way after a restart) is not a stall.
+	if classifier.AgentWorkingOnScreen(item.content) {
 		return delegatedStall{}, false
 	}
 	stall := delegatedStall{settledAt: provider.SettledAt}

@@ -104,7 +104,8 @@ A few clear-cut problems are flagged immediately, without a model:
 - **Repeated daemon error.** The daemon reported the same problem (same kind
   and subject) at least five times within ten minutes in the last week.
 - **Worker stalled or lost repeatedly.** One piece of Work lost or stalled its
-  Worker at least twice in the last week.
+  Worker at least twice in the last week. A turn's stall evidence and its loss
+  count once.
 - **Phone notifications are not being delivered.** The last three pushes that
   reached the push service all failed, at the send or in the delivery
   receipt (for example a missing push credential). A computer with no phone

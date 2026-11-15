@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -2165,8 +2166,11 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 		// exact provider-native running Activity keeps this Turn/Work owned even
 		// when the Agent missed its expected progress check; stale Attention must
 		// not make a demonstrably live Session uncontrollable.
+		var probed watcher.ProviderActivityObservation
+		probedOK := false
 		if s.watcher != nil {
 			observation, found, probeErr := s.watcher.ProbeProviderEvidence(item.AttemptSessionID)
+			probed, probedOK = observation, probeErr == nil && found
 			if probeErr == nil && found {
 				switch strings.TrimSpace(observation.Status) {
 				case "running":
@@ -2212,8 +2216,23 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 			}
 			continue
 		}
-		if worker.State != classifier.StateRunning && worker.State != classifier.StateUnknown {
+		// The Session's own screen showing its agent at work (Claude's spinner
+		// with the turn's running time, the interrupt hint) keeps the turn even
+		// when the provider's record cannot be tied to it: a prompt queued into
+		// a running turn and a daemon that restarted mid-turn leave it so.
+		if screen, ok := s.watcher.(workingScreenWatcher); ok && item.AttemptDelegated && turn.SignalProtocol &&
+			!worker.Hidden && screen.WorkerShowsAgentWorking(item.AttemptSessionID) {
+			if _, _, ownerErr := s.store.reassertTurnOwnership(item.ID, item.AttemptSessionID, turn.TurnID,
+				"the Session's screen shows its agent working"); ownerErr != nil {
+				log.Printf("brain working Work ownership renewal failed for %s: %v", item.ID, ownerErr)
+			}
 			continue
+		}
+		// Nothing shows the Worker at work. Just before the lifecycle sweep
+		// below releases the turn as lost, what was looked at goes with it.
+		// (The turn's lease is its lifecycle Attempt's: see Store.Turn.)
+		if !now.Before(turn.LeaseDeadline.Add(lifecycle.LostGrace)) {
+			s.recordSilence(item, turn, turn.LeaseDeadline, probed, probedOK)
 		}
 	}
 	// Lease expiry, claim expiry, and durable due retries run once for the
@@ -2223,6 +2242,40 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 		log.Printf("brain Work supervisor sweep failed: %v", sweepErr)
 	}
 	_, _ = s.ReconcileHostLane()
+}
+
+// workingScreenWatcher is the optional watcher capability the sweep uses to
+// see a Worker at work on its own screen.
+type workingScreenWatcher interface {
+	WorkerShowsAgentWorking(sessionID string) bool
+}
+
+// recordSilence writes, once per turn, what the sweep saw when a Worker's turn
+// is about to be released as lost: the provider's own record, its screen and
+// its background work. The loss Brain is shown carries this summary.
+func (s *Service) recordSilence(item Work, turn watcher.TurnSnapshot, deadline time.Time, provider watcher.ProviderActivityObservation, read bool) {
+	record := "its provider's record could not be read"
+	if read {
+		status := firstNonEmpty(strings.TrimSpace(provider.Status), "no turn")
+		record = "its provider's record says " + status
+		if !provider.ProgressAt.IsZero() {
+			record += ", last active at " + provider.ProgressAt.UTC().Format("15:04 UTC")
+		}
+	}
+	summary := "No sign of work since its check-in ran out at " + deadline.UTC().Format("15:04 UTC") + ": " + record +
+		", its screen does not show the agent working, and no background shell, agent or monitor runs. The turn is released as lost; look at the Session before replanning."
+	details, err := json.Marshal(turnStallDetails{SessionID: item.AttemptSessionID, TurnID: turn.TurnID, Reason: "silent"})
+	if err != nil {
+		return
+	}
+	if _, err := s.store.appendWorkAuditEvent(WorkEvent{
+		WorkID: item.ID, Kind: workEventKindStalled,
+		DedupeKey:  "session:" + item.AttemptSessionID + ":turn:" + turn.TurnID + ":" + workEventKindStalled,
+		PayloadRef: turn.TurnID, SourceName: item.AttemptSessionID,
+		Summary: summary, DetailsJSON: string(details), CreatedAt: s.nowUTC(),
+	}); err != nil {
+		log.Printf("brain loss evidence for %s: %v", item.ID, err)
+	}
 }
 
 // backgroundWaitWatcher is the optional watcher capability the sweep uses to
@@ -2240,6 +2293,13 @@ func providerObservationOwnsTurn(turn watcher.TurnSnapshot, observation watcher.
 	if turn.HasAdmission && !admission.Empty() && admission.Stream == turn.Admission.Stream &&
 		admission.ID != "" && admission.Cursor >= turn.Admission.Cursor &&
 		(strings.TrimSpace(turn.Admission.SHA256) == "" || turn.Admission.SHA256 == admission.SHA256) {
+		return true
+	}
+	// The provider's latest input is this turn's own prompt (its digest): it
+	// was queued into a turn already running, so no activity of its own starts
+	// for it, and a restart may have left the turn's records named another way.
+	if digest := strings.TrimSpace(firstNonEmpty(turn.PayloadSHA256, turn.Admission.SHA256)); digest != "" &&
+		(strings.TrimSpace(observation.InputUnwrappedSHA256) == digest || strings.TrimSpace(observation.InputSHA256) == digest) {
 		return true
 	}
 	return !turn.HasAdmission && strings.TrimSpace(turn.ActivityID) == "" && activityID != "" &&

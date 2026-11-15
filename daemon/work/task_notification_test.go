@@ -513,3 +513,39 @@ func TestClaudeDelegatedBriefIsMarkedDelegated(t *testing.T) {
 		}
 	}
 }
+
+// Claude Code 2.1.325 keeps Mewla's typed intent in a delegated prompt it
+// absorbs mid-turn: "Execute: " and the paste as typed ("\n\n" before the
+// envelope, still no "\n" after). The digest is the brief's own, so a turn
+// queued into a running one is still known as Mewla's after a restart.
+func TestClaudeMidTurnDelegatedPromptKeepsTheBriefsDigest(t *testing.T) {
+	session := "0b52c2f4-508b-4168-8e53-6c6ed062b651"
+	brief := "Brain: the staging platform account is ours.\n\nGo on with the image workbench."
+	prompt := "Execute: \n\n<pasted_content id=\"73e1\">\n" + brief + "\n</pasted_content id=\"73e1\">"
+	conversation := parseClaudeFixture(t, map[string]any{
+		"type": "attachment", "uuid": "q1", "timestamp": "2026-11-15T14:07:01.558Z", "sessionId": session,
+		"attachment": map[string]any{
+			"type": "queued_command", "prompt": prompt, "commandMode": "prompt",
+			"origin": map[string]any{"kind": "human"}, "humanTurn": true,
+		},
+	})
+	if len(conversation.Events) != 1 {
+		t.Fatalf("events = %#v", conversation.Events)
+	}
+	if want := fmt.Sprintf("%x", sha256.Sum256([]byte(brief))); conversation.Events[0].AdmissionUnwrappedSHA256 != want {
+		t.Fatalf("unwrapped digest = %q, want the brief's %q", conversation.Events[0].AdmissionUnwrappedSHA256, want)
+	}
+	for _, other := range []string{
+		"Execute: <pasted_content id=\"73e1\">\nbody\n</pasted_content id=\"73e1\">",
+		"Execute: \n\n<pasted_content id=\"73e1\">\nbody\n</pasted_content id=\"aaaa\">",
+		"Do it: \n\n<pasted_content id=\"73e1\">\nbody\n</pasted_content id=\"73e1\">",
+	} {
+		got := parseClaudeFixture(t, map[string]any{
+			"type": "attachment", "uuid": "q2", "timestamp": "2026-11-15T14:07:02Z", "sessionId": session,
+			"attachment": map[string]any{"type": "queued_command", "prompt": other, "commandMode": "prompt", "origin": map[string]any{"kind": "human"}},
+		}).Events[0].AdmissionUnwrappedSHA256
+		if got != "" {
+			t.Fatalf("%q must stay raw, got %q", other, got)
+		}
+	}
+}
