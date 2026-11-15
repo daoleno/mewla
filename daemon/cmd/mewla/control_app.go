@@ -773,6 +773,7 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 			}
 		}
 	}
+	launchedAt := time.Now()
 	if workerID == "" {
 		workerID, err = a.watcher.CreateSession("", createOpts)
 		if err != nil {
@@ -783,13 +784,12 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 	admissionPending := false
 	if prompt != "" {
 		_, sendErr := a.submitWorkerHandoff(workerID, createOpts.Command, prompt, ownedWork.ID, true)
-		if reporter, ok := a.watcher.(interface {
-			SessionExitReport(string) (watcher.SessionExit, bool)
-		}); ok && errors.Is(sendErr, watcher.ErrSessionEnded) {
-			// The agent ended before its brief: how it ended is the reason.
-			if exit, ok := reporter.SessionExitReport(workerID); ok {
-				sendErr = fmt.Errorf("%w: %s", sendErr, exit.Describe(createOpts.Command))
-				log.Printf("worker spawn %s: %s", workerID, exit.Describe(createOpts.Command))
+		if sendErr != nil {
+			// The prompt could not land because the agent is gone: say why.
+			if exit, exited := a.spawnedAgentExit(workerID, launchedAt); exited {
+				launchErr := spawnExitError(workerID, createOpts.Command, exit)
+				a.recordSpawnWorkFailure(ownedWork, launchErr, autoCreatedWork)
+				return control.ErrorResponse("agent_exited", launchErr.Error())
 			}
 		}
 		if sendErr != nil && !a.keepSpawnAdmissionPending(workerID, sendErr) {
@@ -840,6 +840,11 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 	}
 
 	// A successful paste is not proof that the provider survived startup.
+	if exit, exited := a.spawnedAgentExit(workerID, launchedAt); exited {
+		launchErr := spawnExitError(workerID, createOpts.Command, exit)
+		a.recordSpawnWorkFailure(ownedWork, launchErr, false)
+		return control.ErrorResponse("agent_exited", launchErr.Error())
+	}
 	presence, probeErr := a.watcher.ProbeSession(workerID)
 	if probeErr != nil || presence != watcher.SessionPresencePresent {
 		launchErr := errors.Join(fmt.Errorf("provider Session disappeared before spawn completed"), probeErr)
