@@ -3,6 +3,8 @@
 package platform
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
 	"syscall"
 )
@@ -33,4 +35,16 @@ func ProcessAlive(pid int) bool {
 	}
 	err := syscall.Kill(pid, 0)
 	return err == nil || err == syscall.EPERM
+}
+
+// ProcessImagePath is the executable pid runs. On Linux a file replaced since
+// the process started reads "<path> (deleted)"; without /proc (macOS) it is
+// an error.
+func ProcessImagePath(pid int) (string, error) {
+	return os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+}
+
+// ParentImage is Windows only: Unix has no parent image to check.
+func ParentImage(pid int) (string, error) {
+	return "", fmt.Errorf("parent image of %d: not on this system", pid)
 }

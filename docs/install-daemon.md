@@ -68,7 +68,8 @@ It finds the newest stable release the same way, verifies
 runs [`mewla boot install`](#keep-it-running): Mewla starts now and each time
 you log in. Nothing needs administrator rights. Running it again installs over
 the existing copy, even while Mewla is running, but the running Mewla keeps its
-old version until it restarts; to update, use `mewla update`.
+old version until it restarts; the next `mewla` command you type restarts it.
+To update, use `mewla update`.
 
 Install an agent the same way, in PowerShell, with its own installer:
 `irm https://claude.ai/install.ps1 | iex` for Claude Code,
@@ -221,11 +222,18 @@ mewla update          # verify and install it
 does, from GitHub's `releases/latest` redirect, so it needs no GitHub API call
 and API rate limits don't apply. Betas are not offered; install one with
 `MEWLA_VERSION`. It checks the release's signed manifest and the archive
-checksum before it replaces the binary. Run by hand it does not restart a
-running daemon; stop and start `mewla` when convenient. On macOS with the
-service installed, it also replaces `Mewla.app` and restarts the service,
-keeping your address, directories and `PATH`. Your Sessions and agents keep
-running: they live in the session host, not in the daemon.
+checksum before it replaces the binary, then restarts the running Mewla onto
+it: through the logon task on Windows, the systemd user service on Linux, and
+on macOS by replacing `Mewla.app` and restarting its service, keeping your
+address, directories and `PATH`. Your Sessions and agents keep running: they
+live in the session host, not in the daemon.
+
+A Mewla you started by hand in a terminal is not stopped for you; `mewla
+update` says so, with its PID. Press Ctrl+C in its window and run `mewla`
+again. If Mewla is still on an older version for any other reason (installed
+over, or updated by an older `mewla update`), the next command you type
+(`mewla`, `mewla web`, `mewla pair` and the others that talk to it) restarts it
+first. `mewla restart` restarts it at any time.
 
 ### Automatic updates
 

@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -99,6 +101,13 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
+// slowAuthRequests are the quick auth requests the CLI waits on with a short
+// timeout (mewla pair, web, devices); one slower than slowAuthRequest is
+// logged so a CLI timeout can be explained from the daemon log.
+var slowAuthRequests = map[string]bool{"pair": true, "device_list": true, "device_revoke": true}
+
+const slowAuthRequest = 500 * time.Millisecond
+
 func (s *Server) handleConn(conn net.Conn) {
 	defer conn.Close()
 
@@ -108,7 +117,13 @@ func (s *Server) handleConn(conn net.Conn) {
 		_ = json.NewEncoder(conn).Encode(ErrorResponse("invalid_request", err.Error()))
 		return
 	}
+	started := time.Now()
 	resp := s.Handler.HandleControlRequest(req)
+	if slowAuthRequests[req.Type] {
+		if took := time.Since(started); took > slowAuthRequest {
+			log.Printf("control: %s took %s", req.Type, took.Round(time.Millisecond))
+		}
+	}
 	if !resp.OK && resp.Error == nil {
 		resp.Error = &Error{Code: "request_failed", Message: "Request failed."}
 	}

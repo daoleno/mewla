@@ -446,6 +446,20 @@ func NoticeLine(current, latest string) string {
 	return fmt.Sprintf("Mewla %s is available; run: mewla update", latest)
 }
 
+// Older reports whether version a is an earlier release than b. Either one
+// unparseable is not older.
+func Older(a, b string) bool {
+	left, err := parseSemVersion(strings.TrimPrefix(strings.TrimSpace(a), "v"))
+	if err != nil {
+		return false
+	}
+	right, err := parseSemVersion(strings.TrimPrefix(strings.TrimSpace(b), "v"))
+	if err != nil {
+		return false
+	}
+	return compareSemVersion(left, right) < 0
+}
+
 type semVersion struct {
 	major, minor, patch uint64
 	prerelease          []string

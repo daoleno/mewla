@@ -122,6 +122,30 @@ func ProcessImageName(pid int) (string, error) {
 	return windows.UTF16ToString(buf[:size]), nil
 }
 
+// ProcessImagePath is ProcessImageName. A running executable moved aside by
+// an update still reads as the path it started from.
+func ProcessImagePath(pid int) (string, error) { return ProcessImageName(pid) }
+
+// ParentImage is the executable file name of pid's parent ("conhost.exe").
+func ParentImage(pid int) (string, error) {
+	list, err := ProcessList()
+	if err != nil {
+		return "", err
+	}
+	parent := 0
+	for _, entry := range list {
+		if entry.PID == pid {
+			parent = entry.PPID
+		}
+	}
+	for _, entry := range list {
+		if parent != 0 && entry.PID == parent {
+			return entry.Image, nil
+		}
+	}
+	return "", fmt.Errorf("no parent process of %d", pid)
+}
+
 // ProcessEntry is one process in a ProcessList.
 type ProcessEntry struct {
 	PID, PPID int

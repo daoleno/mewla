@@ -19,7 +19,8 @@ mewla doctor [--json]         # is this machine ready? platform, state, port, ag
 mewla deps                    # offer this system's official agent CLI install, then sign-in (Linux, macOS)
 mewla setup                   # guided setup on top of doctor: pick Brain's agent
 mewla setup remote            # over SSH: sign in with a code, run in the background, pair a phone
-mewla update [--check]        # verify and install the latest release
+mewla update [--check]        # verify and install the latest release, then restart Mewla onto it
+mewla restart                 # restart Mewla running in the background; Sessions keep running
 mewla version [--json]        # version, commit and platform
 mewla boot install|status|uninstall   # start at login: systemd user service (Linux), LaunchAgent (macOS), scheduled task (Windows)
 ```
