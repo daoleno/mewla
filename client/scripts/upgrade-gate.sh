@@ -41,6 +41,7 @@ devices() { env -i HOME="$state/home" PATH="$PATH" "$MEWLA" devices list -json -
 
 log "emulator ABIs: $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
 mkdir -p "$state/home" "$state/bin"
+# The released daemon it upgrades from may still run Sessions in tmux: a private tmux server (-S).
 # A daemon of its own: own state, own tmux server, nothing from this shell, and an inert Brain host:
 # a cursor-agent that answers nothing, so Brain starts (the Expo app shows its composer) and never replies.
 printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-gate; exit 0; }\nexec sleep 86400\n' > "$state/bin/cursor-agent"

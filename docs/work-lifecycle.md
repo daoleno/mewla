@@ -5,7 +5,7 @@ Mewla's durable coordination model has one `Work` aggregate with at most one
 the `lc_work` and `lc_event` tables of `state/brain.db` (see
 [the state store](internal/state-store.md)); a command's new Events, the Work
 row they reduce into and the next sequence number commit in one transaction.
-Provider, tmux, PID, transcript, and UI state are evidence or projections,
+Provider, Session, PID, transcript, and UI state are evidence or projections,
 never lifecycle truth.
 
 Normal startup reads the database and nothing else; it never falls back to an
@@ -475,7 +475,7 @@ Session links. This development release does not provide old-format migration.
 Use fresh state for the new release; do not point it at an active old deployment.
 Existing data can be archived separately without importing it into the new state.
 
-Live process environments, tmux ownership markers, process ownership leases, provider
+Live process environments, Session ownership labels, process ownership leases, provider
 transcripts and active Brain instruction overlays are not upgraded by source edits.
 Plan an authorized maintenance handoff: finish and review active Work normally,
 preserve native resume identities/transcripts and configuration, then stop the
@@ -549,10 +549,10 @@ Work; older ambiguous outcomes do not prevent reopening the store.
 
 `prepared` is an active fence, including the interval after a delegated paste
 and before its exact admission signal. The transport records
-`admission.transport_started` before starting the tmux mutation; this is not
+`admission.transport_started` before writing to the Session; this is not
 provider acceptance. A historical preparation without that marker cannot by
-itself prove non-delivery. When an authoritative inventory of the selected tmux
-server proves the exact Session gone, an ordinary delegated preparation can
+itself prove non-delivery. When an authoritative inventory of the session
+host proves the exact Session gone, an ordinary delegated preparation can
 transition to `retired`. Retirement preserves outcome uncertainty, releases the
 preparation fence, and permanently rejects late provider/control admission.
 It checks the exact receipt, digest, process, pane generation, and preparation
@@ -612,12 +612,11 @@ replacement. Unrelated conversation history remains intact. A failed presentatio
 commit does not publish cards; a failed card replacement is retryable on restart.
 This work remains synchronous so clients never use partially repaired stores.
 
-A watcher inventory is authoritative only when every required tmux observation
-succeeds on the daemon's selected host socket. An unavailable server during the
+A watcher inventory is authoritative only when every required observation
+succeeds on the daemon's session host socket. An unavailable host during the
 inventory or an ownership probe is Unknown: retain remembered Sessions and their
 resources, and do not publish removal or end-of-identity evidence. A later
-successful inventory can confirm actual absence. The providers' private tmux
-scratch server is not the host discovery authority.
+successful inventory can confirm actual absence.
 
 Native activity and canonical Attempt ownership can diverge after loss or release.
 Historical Turn rows remain evidence and are available by exact identity. They

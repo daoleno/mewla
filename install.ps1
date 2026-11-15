@@ -2,7 +2,7 @@
 #
 #   irm https://mewla.ai/install.ps1 | iex
 #
-# Per user: no administrator, no WSL, no tmux. It installs mewla.exe into
+# Per user: no administrator, no WSL. It installs mewla.exe into
 # %LOCALAPPDATA%\Programs\Mewla, adds that folder to your user PATH and starts
 # Mewla now and whenever you log in (a scheduled task for your user only).
 #
