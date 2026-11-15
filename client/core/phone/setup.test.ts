@@ -113,6 +113,14 @@ describe("phone setup plan", () => {
     expect(phoneSetupPlan({ ...fresh, restricted: true }, false).note).toContain("Allow restricted settings");
   });
 
+  test("without notifications there is nowhere to type the pairing code: setup asks for them first", () => {
+    const off = { ...fresh, accessibility: true, notifications: false };
+    expect(phoneSetupPlan(off, false)).toMatchObject({ action: "notifications", label: "Allow notifications", current: "developer" });
+    expect(phoneSetupPlan({ ...off, developer_options: true, wireless_debugging: true }, false)).toMatchObject({ action: "notifications", current: "pair" });
+    // Once paired the box is never needed again.
+    expect(phoneSetupPlan({ ...off, developer_options: true, wireless_debugging: true, paired: true }, false).action).toBe("start");
+  });
+
   test("with it on, one Set up walks everything; the row's spinner is the progress, not a sentence", () => {
     const on = { ...fresh, accessibility: true };
     expect(phoneSetupPlan(on, false)).toMatchObject({ action: "setup", label: "Set up", current: "developer" });

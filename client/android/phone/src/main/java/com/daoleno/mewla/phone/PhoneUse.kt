@@ -15,7 +15,6 @@ import android.provider.Settings
 import android.util.Rational
 import com.daoleno.mewla.phone.link.LinkTarget
 import expo.modules.mewlaphone.PairingAccessibilityService
-import expo.modules.mewlaphone.SettingsReading
 import org.json.JSONObject
 
 /**
@@ -50,12 +49,9 @@ object PhoneUse {
     /** The app is in front: a link waiting out its backoff tries now. */
     fun foreground() = PhoneController.retryLinkNow()
 
-    /** Pairs with this phone's own Wireless debugging; the code is read off the screen when null. Blocks for minutes. */
+    /** Pairs with this phone's own Wireless debugging; the code is read off the screen or typed into the notification when null. Blocks for minutes. */
     fun pair(context: Context, code: String?): Boolean {
-        // Without the accessibility reading the person types the digits into a notification.
-        if (code == null && !SettingsReading.serviceRunning) PhoneNotifier.pairingCode(context)
         val ok = PhoneController.pair(code)
-        PhoneNotifier.clearPairingCode(context)
         if (ok) runCatching { PhoneController.ensureHelper() }
         PhoneController.publish()
         return ok

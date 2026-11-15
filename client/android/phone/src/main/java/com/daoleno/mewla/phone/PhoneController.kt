@@ -310,7 +310,7 @@ object PhoneController {
             .put("restricted", accessibilityRestricted())
             .put("self_healing", selfHealing)
             .put("guide", guide())
-            .put("notifications", PhoneNotifier.canNotify(app))
+            .put("notifications", PhoneNotifier.canShowCodeBox(app))
             .put("state", state())
             .put("w", pictureSize()?.get(0) ?: 0)
             .put("h", pictureSize()?.get(1) ?: 0)
@@ -439,11 +439,18 @@ object PhoneController {
     @Volatile private var pairing = false
     @Volatile private var typedCode: String? = null
 
+    /** A pairing is running and waits for a code: a typed one reaches it. */
+    val pairingNow: Boolean get() = pairing
+
     /**
      * Pairs with this phone's own adbd. The code is [code] (typed into the notification) or, when
      * null, read off the Wireless debugging screen by the accessibility service, which also taps
      * through those screens while this runs; the port is what adbd announces over mDNS or what
      * that same screen shows. A typed code reaches a pairing already waiting for one.
+     *
+     * The code box is up for the whole time, read or not: it pops up whenever a pairing dialog
+     * comes up (and at once when nobody walks), and a wrong code puts it back instead of
+     * ending the pairing, so the person always has the next thing to do.
      */
     fun pair(code: String?): Boolean {
         if (code != null) {
@@ -454,25 +461,35 @@ object PhoneController {
         pairing = true
         SettingsReading.pairing = null
         SettingsReading.needs = null
+        SettingsReading.dialogUp = false
         SettingsReading.guiding = code == null && SettingsReading.serviceRunning
         if (SettingsReading.guiding) SettingsReading.service?.beginGuide()
         promptGuard.personAsked()
+        // Walked, the box waits quietly in the shade until the dialog is up; unwalked, it is the way in.
+        PhoneNotifier.pairingCode(app, alert = !SettingsReading.guiding && code == null)
+        // Each pairing dialog that comes up pops the box up again (a closed one took its code with it).
+        var dialogSeen = false
         try {
             // A guided walk may start from nothing (Build number, a lock screen, the system's prompt), so it gets longer.
             val deadline = System.currentTimeMillis() + if (SettingsReading.guiding) 8 * 60_000 else 3 * 60_000
             val tls = AndroidAdb.tls(AndroidAdb.identity(app))
             var lastFailure: Exception? = null
             while (System.currentTimeMillis() < deadline) {
+                val dialogUp = SettingsReading.dialogUp
+                if (dialogUp && !dialogSeen) PhoneNotifier.pairingCode(app, alert = true)
+                dialogSeen = dialogUp
                 val reading = SettingsReading.pairing?.takeIf { System.currentTimeMillis() - it.at < 2 * 60_000 }
-                val digits = typedCode ?: reading?.code
+                val typed = typedCode
+                val digits = typed ?: reading?.code
                 if (digits == null) {
                     Thread.sleep(400)
                     continue
                 }
                 val ports = LinkedHashSet<Int>()
-                reading?.let { ports += it.port }
+                reading?.port?.let { ports += it }
                 ports += runBlocking { finder.findPorts(AdbServiceTypes.PAIRING, 2_500) }
-                for (port in ports) {
+                var wrong = false
+                attempt@ for (port in ports) {
                     for (host in listOfNotNull("127.0.0.1", reading?.host)) {
                         try {
                             AdbPairing(tls).pair(host, port, digits)
@@ -483,15 +500,21 @@ object PhoneController {
                             return true
                         } catch (e: AdbPairingException) {
                             lastFailure = e
-                            // A wrong typed code will not become right by trying again.
-                            if (e.reason == AdbPairingException.Reason.WRONG_CODE && typedCode != null) {
-                                typedCode = null
-                                return false
+                            if (e.reason == AdbPairingException.Reason.WRONG_CODE) {
+                                wrong = true
+                                break@attempt
                             }
                         } catch (e: Exception) {
                             lastFailure = e
                         }
                     }
+                }
+                if (wrong) {
+                    // A wrong code will not become right by trying again: drop it and ask for the next one.
+                    Log.i(TAG, "pairing code refused (${if (typed != null) "typed" else "read"})")
+                    if (typed != null) { if (typedCode == typed) typedCode = null } else SettingsReading.pairing = null
+                    PhoneNotifier.pairingCode(app, alert = true)
+                    continue
                 }
                 if (ports.isEmpty()) Thread.sleep(800)
             }
@@ -508,6 +531,7 @@ object PhoneController {
             SettingsReading.step = null
             SettingsReading.needs = null
             SettingsReading.service?.endGuide()
+            PhoneNotifier.clearPairingCode(app)
         }
     }
 

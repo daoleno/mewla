@@ -176,6 +176,23 @@ describe("Phone use, setup", () => {
     await app.waitFor("text:Tap Allow on the system prompt");
   }, 20_000);
 
+  test("without notifications (the code box is one) setup asks for them, then opens Mewla's notification settings", async () => {
+    const { options } = start({ ...fresh, accessibility: true, notifications: false }, { answers: { "push.requestPermission": false, "push.openSettings": null } });
+    const app = await open(HARNESS, options);
+    await app.waitFor("text:Allow notifications");
+    await app.press("id:phone-setup-primary");
+    await app.waitUntil(() => calls(app, "push.openSettings").length === 1);
+    expect(calls(app, "phone.pair")).toEqual([]);
+  }, 20_000);
+
+  test("notifications allowed but the Pairing code ones switched off: Mewla's notification settings open", async () => {
+    const { options } = start({ ...fresh, accessibility: true, notifications: false }, { answers: { "push.requestPermission": true, "push.openSettings": null } });
+    const app = await open(HARNESS, options);
+    await app.waitFor("text:Allow notifications");
+    await app.press("id:phone-setup-primary");
+    await app.waitUntil(() => calls(app, "push.openSettings").length === 1);
+  }, 20_000);
+
   test("a row that is not done does its step: Developer options opens About phone", async () => {
     const { options } = start({ ...fresh, accessibility: true });
     const app = await open(HARNESS, options);

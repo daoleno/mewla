@@ -19,16 +19,21 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.TextView
+import com.daoleno.mewla.phone.PairingScreen
 import com.daoleno.mewla.phone.SettingsLabels
 
 /** What the Wireless debugging screens show, as last read, and how far the guide has got. */
 object SettingsReading {
-    class Pairing(val code: String, val port: Int, val host: String, val at: Long)
+    /** A code read off the pairing dialog; the address only when the dialog shows one (mDNS finds the port otherwise). */
+    class Pairing(val code: String, val port: Int?, val host: String?, val at: Long)
     class Connect(val port: Int, val host: String, val at: Long)
 
     @Volatile var pairing: Pairing? = null
     @Volatile var connect: Connect? = null
     @Volatile var serviceRunning = false
+
+    /** A Settings dialog is in front (the pairing dialog on the pair step): the walk leaves it alone. */
+    @Volatile var dialogUp = false
 
     /** While true the service walks Settings by itself (see [PairingAccessibilityService]). */
     @Volatile var guiding = false
@@ -58,6 +63,11 @@ class PairingAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var lastActionAt = 0L
     private var lastLaunchAt = 0L
+    /** When the walk last tapped Pair device with pairing code, in uptime milliseconds; null before. */
+    private var pairTapAt: Long? = null
+    private var lastHoldLog = ""
+    /** The window of the Settings dialog last opened, or -1: the dialog is up while it is the active window. */
+    private var dialogWindow = -1
     private var banner: TextView? = null
     private var labels: SettingsLabels? = null
 
@@ -90,6 +100,8 @@ class PairingAccessibilityService : AccessibilityService() {
     /** Starts the walk (the controller has set [SettingsReading.guiding]). */
     fun beginGuide() {
         labels = SettingsLabels(this)
+        pairTapAt = null
+        dialogWindow = -1
         SettingsReading.progressAt = SystemClock.uptimeMillis()
         handler.removeCallbacks(poll)
         handler.post(poll)
@@ -107,20 +119,30 @@ class PairingAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // A window coming up in Settings is a dialog or a page; the walk must not touch a dialog.
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.packageName?.toString() == SettingsLabels.SETTINGS) {
+            val dialog = PairingScreen.isDialog(event.className?.toString())
+            if (dialog != SettingsReading.dialogUp) Log.d(TAG, "settings window ${event.className} dialog=$dialog")
+            dialogWindow = if (dialog) event.windowId else -1
+            SettingsReading.dialogUp = dialog
+        }
         val root = rootInActiveWindow ?: return
         if (root.packageName?.toString() != SettingsLabels.SETTINGS) return
-        val texts = ArrayList<String>()
-        collect(root, texts)
-        readPairing(texts)
+        val nodes = ArrayList<PairingScreen.Node>()
+        collectNodes(root, nodes)
+        readPairing(nodes)
     }
 
-    private fun readPairing(texts: List<String>) {
-        val code = texts.firstOrNull { CODE.matches(it) }
-        val address = texts.firstNotNullOfOrNull { ADDRESS.find(it) } ?: return
-        val host = address.groupValues[1]
-        val port = address.groupValues[2].toIntOrNull() ?: return
-        if (code != null) SettingsReading.pairing = SettingsReading.Pairing(code, port, host, System.currentTimeMillis())
-        else SettingsReading.connect = SettingsReading.Connect(port, host, System.currentTimeMillis())
+    private fun readPairing(nodes: List<PairingScreen.Node>) {
+        val now = System.currentTimeMillis()
+        val code = PairingScreen.readCode(nodes)
+        val address = PairingScreen.readAddress(nodes)
+        if (code != null) {
+            if (SettingsReading.pairing?.code != code) Log.i(TAG, "pairing code read${if (address == null) " (no address on screen)" else ""}")
+            SettingsReading.pairing = SettingsReading.Pairing(code, address?.second, address?.first, now)
+        } else if (address != null) {
+            SettingsReading.connect = SettingsReading.Connect(address.second, address.first, now)
+        }
     }
 
     // ---- the walk ----------------------------------------------------------------------------
@@ -159,18 +181,48 @@ class PairingAccessibilityService : AccessibilityService() {
             }
             return
         }
-        if (pkg != SettingsLabels.SETTINGS || root == null) {
+        val front = when {
+            pkg == SettingsLabels.SETTINGS -> PairingScreen.Front.Settings
+            pkg == SettingsLabels.SYSTEMUI -> PairingScreen.Front.SystemUi
+            else -> PairingScreen.Front.Other
+        }
+        if (front != PairingScreen.Front.Settings || root == null) {
             Log.d(TAG, "guide $wanted: front=$pkg")
             SettingsReading.needs = null
             hideBanner()
-            // Somewhere else (Mewla, the launcher): bring the right Settings screen up.
+            // The shade, a heads-up or the lock screen is the person's (maybe typing the code, the dialog open
+            // underneath; leaving Settings would close it): wait. Somewhere else (Mewla, the launcher): bring
+            // the right Settings screen up.
+            if (front == PairingScreen.Front.SystemUi) return
+            dialogWindow = -1
+            SettingsReading.dialogUp = false
             if (now - lastLaunchAt > LAUNCH_MS) open(wanted)
             return
         }
-        // Settings is in front: the walk is on it, and says so.
+        // Settings is in front: the walk is on it, and says so. A dialog closes without a window event of
+        // its own, so it counts as up only while its window is still the active one.
         SettingsReading.needs = null
+        SettingsReading.dialogUp = dialogWindow != -1 && root.windowId == dialogWindow
+        val nodes = ArrayList<PairingScreen.Node>()
+        collectNodes(root, nodes)
+        val codeOnScreen = PairingScreen.readCode(nodes) != null
+        if (wanted == "pair") {
+            val move = PairingScreen.pairStep(
+                front = front,
+                dialogUp = SettingsReading.dialogUp,
+                codeOnScreen = codeOnScreen,
+                pairRowVisible = findLabel(root, l.pairWithCode) != null,
+                msSincePairTap = pairTapAt?.let { now - it },
+            )
+            if (move == PairingScreen.Move.Hold) {
+                // The pairing dialog: no banner over it, no tap, no scroll, no Settings opened again.
+                hideBanner()
+                holdLog(nodes, codeOnScreen)
+                return
+            }
+        }
         showBanner(wanted)
-        if (texts.any { CODE.matches(it) }) { Log.d(TAG, "guide $wanted: code on screen"); return } // the pairing dialog is up: the code is read, nothing to tap
+        if (codeOnScreen) { Log.d(TAG, "guide $wanted: code on screen"); return }
         if (hasPasswordField(root)) {
             Log.d(TAG, "guide $wanted: password field")
             SettingsReading.needs = "lock"
@@ -223,7 +275,11 @@ class PairingAccessibilityService : AccessibilityService() {
     }
 
     private fun pair(root: AccessibilityNodeInfo, texts: List<String>, l: SettingsLabels, now: Long): Boolean {
-        findLabel(root, l.pairWithCode)?.let { return click(it) }
+        findLabel(root, l.pairWithCode)?.let { row ->
+            val tapped = click(row)
+            if (tapped) pairTapAt = now
+            return tapped
+        }
         // Still in Developer options: the row that leads to the Wireless debugging page.
         findLabel(root, l.wirelessRow)?.let { return click(it) }
         if (scrollForward(root)) return true
@@ -324,6 +380,26 @@ class PairingAccessibilityService : AccessibilityService() {
         return false
     }
 
+    /**
+     * What the walk holds over, once per screen: the classes and view ids, never the texts (a code is
+     * a secret), so the next phone that cannot be read says what its dialog is made of.
+     */
+    private fun holdLog(nodes: List<PairingScreen.Node>, codeOnScreen: Boolean) {
+        val ids = nodes.mapNotNull { it.viewId?.substringAfter(":id/") }.distinct().take(20).joinToString(",")
+        val line = "dialog=${SettingsReading.dialogUp} code=$codeOnScreen ids=$ids"
+        if (line == lastHoldLog) return
+        lastHoldLog = line
+        Log.i(TAG, "guide pair: holding over the pairing dialog ($line)")
+    }
+
+    private fun collectNodes(node: AccessibilityNodeInfo, out: MutableList<PairingScreen.Node>) {
+        out += PairingScreen.Node(node.text?.toString(), node.contentDescription?.toString(), node.viewIdResourceName)
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectNodes(child, out)
+        }
+    }
+
     private fun collect(node: AccessibilityNodeInfo, out: MutableList<String>) {
         node.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { out += it }
         for (i in 0 until node.childCount) {
@@ -337,7 +413,5 @@ class PairingAccessibilityService : AccessibilityService() {
         const val POLL_MS = 600L
         const val ACTION_MS = 450L
         const val LAUNCH_MS = 6_000L
-        val CODE = Regex("^\\d{6}$")
-        val ADDRESS = Regex("((?:\\d{1,3}\\.){3}\\d{1,3}):(\\d{2,5})")
     }
 }

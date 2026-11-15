@@ -203,6 +203,16 @@ export function openPhoneScreen(screen: "developer" | "wireless" | "accessibilit
   void host.call("phone.open", { screen }).catch(() => {});
 }
 
+/**
+ * The system's prompt for notifications; Mewla's notification settings once that prompt was refused,
+ * or when notifications are allowed but the Pairing code ones are switched off.
+ */
+export async function allowPhoneNotifications(): Promise<void> {
+  const granted = await host.call<boolean>("push.requestPermission", undefined, { timeout: 0 }).catch(() => false);
+  await readPhone();
+  if (!granted || phoneStatus()?.notifications === false) await host.call("push.openSettings").catch(() => undefined);
+}
+
 /** Silent when the secure-settings grant exists; otherwise the system's page for Mewla's service. */
 export async function allowPhoneAccessibility(): Promise<void> {
   const enabled = await host.call<boolean>("phone.enableAccessibility").catch(() => false);
