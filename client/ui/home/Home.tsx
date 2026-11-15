@@ -9,7 +9,7 @@ import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
 import { bringRequestBack, durableAnswered, RequestStack, requestsInView, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
-import { derived } from "../kit/derived";
+import { preparedRows } from "../kit/derived";
 import { ThreadWait } from "../chat/ThreadWait";
 import { brainHostIdentity } from "../chat/links";
 import { chatImage } from "../chat/assets";
@@ -114,12 +114,12 @@ const workHandlers: WorkCardHandlers = {
 };
 // A past thread is read-only: its Work cards and messages offer no actions. Derived, not computed: an update whose
 // projection a slow phone cut off (NSH's 2 s budget) must not stop the thread for the rest of the app's life.
-const items = derived(() => timeline(brainThread(), {
+const items = preparedRows(() => brainThread().conversation?.events ?? [], () => timeline(brainThread(), {
   onPendingAction: routedBrainThread() ? undefined : (id, action) => untracked(brainChat)?.actOnFailed(id, action),
   onWorkEvent: routedBrainThread() ? undefined : openWorkEvent,
   openSessionIds: new Set(workers().map((w) => w.id)),
   currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
-}));
+}), []);
 const durableHere = durableAnswered(items);
 const sealedHere = threadSealed({ brain: true }, durableHere);
 

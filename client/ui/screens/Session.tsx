@@ -54,7 +54,7 @@ import { openChatLink, openChatPath, type ChatFiles } from "../chat/links";
 import { Icon } from "../icons/Icon";
 import { ThreadWait } from "../chat/ThreadWait";
 import { StateView } from "../kit/wait";
-import { derived } from "../kit/derived";
+import { derived, preparedRows } from "../kit/derived";
 import { brain, connection, current, currentTransport, outbox, problem as connectionProblem, resumeConnection, workers, workersHydrated } from "../session";
 import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
@@ -137,7 +137,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
 
   const timeline = createChatTimeline("session");
   // Derived, not computed: an update whose projection a slow phone cut off must not stop the thread (kit/derived.ts).
-  const items = derived(() => timeline(thread(), { onPendingAction: (id, action) => chat.actOnFailed(id, action) }));
+  const items = preparedRows(() => thread().conversation?.events ?? [], () => timeline(thread(), { onPendingAction: (id, action) => chat.actOnFailed(id, action) }), []);
   const durableHere = durableAnswered(items);
   const activity = computed(() => thread().conversation?.activity);
   // The "Working" line only while the agent works on a turn: not over an open request, not once it ended (§11).

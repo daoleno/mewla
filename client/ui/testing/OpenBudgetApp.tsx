@@ -13,3 +13,19 @@ setFrameBatcher((deliver) => {
   calls.push({ ms: Date.now() - started });
 });
 host.on("app.callsReport", () => host.post("app.calls", calls.map((call) => call.ms)));
+
+// Every call, whatever started it (a frame, a timer, a slice of a thread's rows): a beat every 10 ms notes how late it
+// ran, which is how long the call before it kept the engine. `app.gapsReport` posts `app.gaps`, the longest first.
+const BEAT_MS = 10;
+const gaps: number[] = [];
+let beat = Date.now();
+setInterval(() => {
+  const now = Date.now();
+  gaps.push(now - beat - BEAT_MS);
+  beat = now;
+}, BEAT_MS);
+host.on("app.gapsReport", () => host.post("app.gaps", [...gaps].sort((a, b) => b - a).slice(0, 10)));
+host.on("app.gapsReset", () => {
+  gaps.length = 0;
+  beat = Date.now();
+});

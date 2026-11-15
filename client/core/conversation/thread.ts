@@ -1077,21 +1077,23 @@ function cleanCodexConversationEventForChat(
 // "AGENTS.md instructions for <cwd>" header, a document that opens with the
 // standard contributor-guide heading, or its environment/skills/permissions
 // wrappers identify it; no project-specific phrase is matched.
+// Read on every field of every new event: normalizing and lowercasing all of a 3 KB output to look at its first words
+// and a few markers was a third of a delta's cost (4000 events: 1.3 s in the app's engine). The start is normalized
+// alone, and the markers are found on the text as it is, whitespace runs and case as the normalized text would have them.
+const INSTRUCTION_CONTEXT_MARKERS = /agents\.md\s+instructions\s+for\s+(?=\S)|<environment_context>|<skills_instructions>|<permissions\s+instructions>/i;
+const INSTRUCTION_CONTEXT_STARTS = ["# repository guidelines", "repository guidelines ", "## project structure & module organization"];
+const INSTRUCTION_CONTEXT_START_CHARS = 200;
+
 function looksLikeCodexInstructionContext(value: string) {
-  const text = normalizeInstructionContextText(value);
-  if (!text) {
+  const raw = value.trimStart();
+  if (!raw) {
     return false;
   }
-  const lower = text.toLowerCase();
-  return (
-    lower.startsWith("# repository guidelines") ||
-    lower.startsWith("repository guidelines ") ||
-    lower.startsWith("## project structure & module organization") ||
-    lower.includes("agents.md instructions for ") ||
-    lower.includes("<environment_context>") ||
-    lower.includes("<skills_instructions>") ||
-    lower.includes("<permissions instructions>")
-  );
+  let start = normalizeInstructionContextText(raw.slice(0, INSTRUCTION_CONTEXT_START_CHARS));
+  // Whitespace runs can leave the normalized start shorter than the longest prefix: then all of it is normalized.
+  if (raw.length > INSTRUCTION_CONTEXT_START_CHARS && start.length < 64) start = normalizeInstructionContextText(raw);
+  const lower = start.toLowerCase();
+  return INSTRUCTION_CONTEXT_STARTS.some((prefix) => lower.startsWith(prefix)) || INSTRUCTION_CONTEXT_MARKERS.test(raw);
 }
 
 function normalizeInstructionContextText(value: string) {
@@ -1154,7 +1156,12 @@ function stripGoalInternalContext(value: string) {
     .trim();
 }
 
+// What the line-by-line pass below changes: a carriage return, whitespace before a line's end, three line breaks in a
+// row. Text with none of them (most of it) is only trimmed, without splitting every field of every event into lines.
+const DISPLAY_TEXT_UNTIDY = /\r|[^\S\n]\n|\n{3,}/;
+
 function normalizeDisplayText(value: string) {
+  if (!DISPLAY_TEXT_UNTIDY.test(value)) return value.trim();
   return value
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
