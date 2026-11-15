@@ -29,6 +29,7 @@ type fakeWindowViewer struct {
 	none     bool
 	focused  []uint32
 	viewErr  error
+	place    image.Rectangle
 	lastRect image.Rectangle
 }
 
@@ -60,6 +61,12 @@ func (f *fakeWindowViewer) AgentWindowAt(rect image.Rectangle) (int, AppWindow, 
 		return 0, AppWindow{}, false
 	}
 	return f.pid, f.window, true
+}
+
+func (f *fakeWindowViewer) WindowPlace(rect image.Rectangle) (image.Rectangle, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.place, !f.place.Empty()
 }
 
 func (f *fakeWindowViewer) FocusWindow(pid int, window AppWindow) error {
@@ -555,5 +562,43 @@ func TestOnlyABrowserWindowOnTheAgentDisplayIsAimedAt(t *testing.T) {
 	}
 	if _, _, ok := agentWindowAt([]windowInfo{person}, testAgentDisplay, testCell, chromium); ok {
 		t.Fatal("picked the person's window on their own screen")
+	}
+}
+
+// The view shows the window where it really is: macOS keeps a window below
+// the agent display's menu bar, so the window placed in the top quarter sits
+// lower than its place, and the view follows it (no menu bar, no cut-off
+// bottom); clicks land where the window shows.
+func TestTheViewFollowsTheWindowBelowTheMenuBar(t *testing.T) {
+	a, viewer, _ := newTestWindows(t)
+	a.Opened("c1-1", "mh-signin", testCell)
+	viewer.place = testCell.Add(image.Pt(0, 25))
+	session, bounds, release, _ := viewer.ViewAgentDisplay(context.Background(), "test")
+	defer release()
+	v := &windowView{inner: session, bounds: bounds, rect: func() (image.Rectangle, bool) { return a.rectOf("mh-signin") }, gone: a.owners["mh-signin"].gone, viewer: viewer}
+	f, err := v.Frame(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.crop != image.Rect(1600, 50, 3200, 1050) || f.Image.Rect.Dx() != 1600 || f.Image.Rect.Dy() != 1000 {
+		t.Fatalf("crop %v frame %v, want the window 25 points lower", v.crop, f.Image.Rect)
+	}
+	_ = v.Pointer(10, 20, 1)
+	_ = v.Pointer(10, 20, 0)
+	if c := viewer.session.clicks; len(c) != 1 || c[0] != "4242,77,1610,70,0,1" {
+		t.Fatalf("clicks %v", c)
+	}
+}
+
+func TestWindowPlaceIsTheWindowOfThePlacesSize(t *testing.T) {
+	chromium := func(pid int) bool { return pid == 10 }
+	lowered := windowInfo{PID: 10, ID: 2, OnScreen: true, Bounds: testCell.Add(image.Pt(0, 25))}
+	popup := windowInfo{PID: 10, ID: 3, OnScreen: true, Bounds: image.Rect(2412, 50, 3012, 450)}
+	other := windowInfo{PID: 20, ID: 4, OnScreen: true, Bounds: testCell}
+	if got, ok := windowPlace([]windowInfo{popup, other, lowered}, testAgentDisplay, testCell, chromium); !ok || got != lowered.Bounds {
+		t.Fatalf("place %v %v, want the lowered window", got, ok)
+	}
+	if _, ok := windowPlace([]windowInfo{popup, other}, testAgentDisplay, testCell, chromium); ok {
+		t.Fatal("a popup or another app's window was taken for the place")
 	}
 }

@@ -52,6 +52,23 @@ func (b *macBackend) AgentWindowAt(rect image.Rectangle) (int, AppWindow, bool) 
 	return agentWindowAt(onScreen, display, rect, func(pid int) bool { return appBundle(pid).chromium })
 }
 
+// WindowPlace is where the browser window placed at rect really is.
+func (b *macBackend) WindowPlace(rect image.Rectangle) (image.Rectangle, bool) {
+	d := &b.agentDisp
+	d.mu.Lock()
+	display := d.bounds
+	present := d.vd != nil
+	d.mu.Unlock()
+	if !present {
+		return image.Rectangle{}, false
+	}
+	onScreen, err := windowInfos(cgWindowListOnScreenOnly | cgWindowListExcludeDesktop)
+	if err != nil {
+		return image.Rectangle{}, false
+	}
+	return windowPlace(onScreen, display, rect, func(pid int) bool { return appBundle(pid).chromium })
+}
+
 // FocusWindow makes window its app's key window without raising it.
 func (b *macBackend) FocusWindow(pid int, window AppWindow) error {
 	k := loadSkyLight()

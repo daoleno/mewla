@@ -83,6 +83,9 @@ func (agentDisplayBackend) AgentWindowAt(image.Rectangle) (int, screen.AppWindow
 	return 0, screen.AppWindow{}, false
 }
 func (agentDisplayBackend) FocusWindow(int, screen.AppWindow) error { return nil }
+func (agentDisplayBackend) WindowPlace(image.Rectangle) (image.Rectangle, bool) {
+	return image.Rectangle{}, false
+}
 
 func browserRequest(worker, action string) control.Request {
 	return control.Request{Type: "browser", WorkerID: worker, BrowserRequest: &browser.Request{Action: action}}
