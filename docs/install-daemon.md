@@ -89,6 +89,13 @@ Session runs PowerShell 7 (`pwsh`) when it is installed, from the Microsoft
 Store too, and Windows PowerShell otherwise. Installed from an Administrator PowerShell, which starts in
 `C:\Windows\System32`, Sessions still start in your home folder.
 
+An agent installed with npm or pnpm (`npm i -g @anthropic-ai/claude-code`
+puts a `claude.cmd` in `%APPDATA%\npm`) works like the official installer's:
+Mewla starts the program the `.cmd` names, so Brain's and Workers' launch
+options reach it as written. Another kind of `.cmd` or `.bat` runs through
+`cmd.exe`, which cannot be given an argument holding `%` or `"`; such a
+launch stops with an error that names the file.
+
 Windows is in beta. Tell us how it went, good or bad:
 [open an issue](https://github.com/daoleno/mewla/issues/new?title=Windows%3A%20&body=Windows%20version%3A%0A%0Amewla%20version%3A%0A%0Amewla%20doctor%3A%0A%0AWhat%20happened%3A%0A) with your Windows version and the
 output of `mewla version` and `mewla doctor`.

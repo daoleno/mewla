@@ -72,17 +72,56 @@ func ResolveProgram(argv []string, path string) (application, commandLine string
 	resolved := append([]string{program}, argv[1:]...)
 	switch strings.ToLower(filepath.Ext(program)) {
 	case ".cmd", ".bat":
+		// npm's and pnpm's shims name the program they run: start it
+		// directly, so arguments reach it exactly as given.
+		if direct, ok := shimTarget(program, path); ok {
+			resolved = append(direct, argv[1:]...)
+			return resolved[0], QuoteArgs(resolved), nil
+		}
 		comspec := os.Getenv("ComSpec")
 		if comspec == "" {
 			comspec = filepath.Join(os.Getenv("SystemRoot"), "System32", "cmd.exe")
 		}
 		line, err := shimCommandLine(resolved)
 		if err != nil {
-			return "", "", err
+			return "", "", fmt.Errorf("%s: %w", program, err)
 		}
 		return comspec, quoteArg(comspec) + ` /d /s /c "` + line + `"`, nil
 	}
 	return program, QuoteArgs(resolved), nil
+}
+
+// shimTarget is the program, and for a JavaScript bin the script, that an
+// npm or pnpm .cmd shim runs (see ReadCmdShim).
+func shimTarget(shimPath, path string) ([]string, bool) {
+	info, err := os.Stat(shimPath)
+	if err != nil || info.Size() > 64<<10 {
+		return nil, false
+	}
+	content, err := os.ReadFile(shimPath)
+	if err != nil {
+		return nil, false
+	}
+	exists := func(p string) bool {
+		info, err := os.Stat(p)
+		return err == nil && runnableFile(info.Mode())
+	}
+	shim, ok := ReadCmdShim(filepath.Dir(shimPath), string(content), exists)
+	if !ok {
+		return nil, false
+	}
+	if shim.Program != "" {
+		return []string{filepath.Clean(shim.Program)}, true
+	}
+	node := shim.NodeBeside
+	if node == "" {
+		found, err := LookPathIn("node", path, os.Getenv("PATHEXT"))
+		if err != nil || !strings.EqualFold(filepath.Ext(found), ".exe") {
+			return nil, false
+		}
+		node = found
+	}
+	return []string{filepath.Clean(node), filepath.Clean(shim.Script)}, true
 }
 
 // shimCommandLine quotes every argument for cmd.exe. cmd.exe expands %VAR%
