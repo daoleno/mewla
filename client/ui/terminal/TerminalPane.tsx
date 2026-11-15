@@ -216,10 +216,14 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   // Coming back takes the Session's size back for this grid, if another viewer took it meanwhile.
   effect(() => {
     if (props.active()) {
-      untracked(() => session.claim());
+      untracked(() => {
+        session.setShown(true);
+        session.claim();
+      });
       return;
     }
     untracked(() => {
+      session.setShown(false);
       if (!keyboard()) return;
       command("blur", {});
       keyboard.set(false);

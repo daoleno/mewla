@@ -99,6 +99,34 @@ describe("TerminalSession", () => {
     transport.close();
   });
 
+  test("out of sight (the chat in front of it) the view's grid never becomes the Session's size", async () => {
+    const { transport, socket, term } = await attachedTerminal();
+    term.setShown(false);
+    // A hidden web view measures 2x2: Claude's trust menu was drawn two columns wide behind the chat (11-16).
+    term.resize(2, 2);
+    expect(frames(socket, "terminal_resize")).toHaveLength(0);
+    term.setShown(true);
+    term.claim();
+    expect(frames(socket, "terminal_resize")).toEqual([{ type: "terminal_resize", session_id: "t1", cols: 80, rows: 24 }]);
+    term.resize(90, 30);
+    expect(frames(socket, "terminal_resize").at(-1)).toMatchObject({ cols: 90, rows: 30 });
+    term.close();
+    transport.close();
+    // A view that never was in sight opens with the grid it has once it is.
+    const second = await connected();
+    const other = own(second);
+    const late = new TerminalSession(second, "w1", recorder().handlers);
+    late.setShown(false);
+    late.resize(40, 20);
+    await wait();
+    expect(frames(other, "terminal_open")).toHaveLength(0);
+    late.setShown(true);
+    await until(() => frames(other, "terminal_open").length > 0);
+    expect(frames(other, "terminal_open")[0]).toMatchObject({ cols: 40, rows: 20 });
+    late.close();
+    second.close();
+  });
+
   test("shown again, the terminal claims its grid as the Session's size (unchanged) without asking for the history again", async () => {
     const { transport, socket, term } = await attachedTerminal();
     await until(() => historyRequests(socket).length > 0);

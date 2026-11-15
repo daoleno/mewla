@@ -51,6 +51,10 @@ const OPEN_TIMEOUT_MS = 15_000;
 export class TerminalSession {
   private sessionId: string | null = null;
   private size: { cols: number; rows: number } | null = null;
+  /** The view is out of sight (the chat in front of it, another page). */
+  private hidden = false;
+  /** The grid the view measured out of sight: the one it opens with if it never had another. */
+  private hiddenGrid: { cols: number; rows: number } | null = null;
   private opening = false;
   /** The Session's size the computer told last (`terminal_size`). */
   private told: { cols: number; rows: number } | null = null;
@@ -118,9 +122,26 @@ export class TerminalSession {
     );
   }
 
+  /**
+   * The view is in front of the person, or not. Out of sight it measures no screen (a hidden web view reports a
+   * 2x2 grid), and that grid must not become the Session's size: Claude Code drew its folder-trust menu two columns
+   * wide behind the chat, and the menu could no longer be read or answered (Windows 11, 11-16).
+   */
+  setShown(shown: boolean): void {
+    this.hidden = !shown;
+    if (!shown) return;
+    const held = this.hiddenGrid;
+    this.hiddenGrid = null;
+    if (!this.size && held) this.resize(held.cols, held.rows);
+  }
+
   /** The view's grid; the first one opens the attachment, later ones resize it. */
   resize(cols: number, rows: number): void {
     if (cols < 2 || rows < 2) return;
+    if (this.hidden) {
+      this.hiddenGrid = { cols, rows };
+      return;
+    }
     const changed = !this.size || this.size.cols !== cols || this.size.rows !== rows;
     this.size = { cols, rows };
     if (this.sessionId && changed) {
