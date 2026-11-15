@@ -4,7 +4,9 @@ Everything the app does goes through the daemon, and most of it can be done or
 inspected from the computer with `mewla`. Commands that talk to a running
 daemon reach it through its local control socket; nothing here needs the
 network. Most accept `--json` for scripts. `mewla <command> --help` prints the
-flags for that command.
+flags for that command, and a command group named alone (`mewla worker`) its
+subcommands. Help goes to standard output and exits 0; errors go to standard
+error.
 
 ## Run the daemon
 

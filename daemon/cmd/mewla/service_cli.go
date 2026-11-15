@@ -152,8 +152,9 @@ func serviceDisplayName(service watcher.SessionService) string {
 }
 
 func runServiceTunnel(args []string, stderr io.Writer) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: mewla service tunnel <start|status|stop> -id ID -generation GENERATION")
+	if len(args) == 0 || isHelpArg(args[0]) {
+		fmt.Fprintln(stderr, "Usage: mewla service tunnel <start|status|stop> -id ID -generation GENERATION")
+		return flag.ErrHelp
 	}
 	action := args[0]
 	if action != "start" && action != "stop" && action != "status" {
