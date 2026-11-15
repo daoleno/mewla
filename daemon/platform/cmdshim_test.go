@@ -1,34 +1,33 @@
 package platform
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
-// The shims as npm 11 and pnpm 10 write them, CRLF and all (npm's for
-// @anthropic-ai/claude-code 2.1.325 copied from a Windows 11 install).
-const (
-	npmExeShim = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n" +
-		`"%dp0%\node_modules\@anthropic-ai\claude-code\bin\claude.exe"   %*` + "\r\n"
-	npmNodeShim = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\n" +
-		"IF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\n" +
-		`endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\node_modules\@openai\codex\bin\codex.js" %*` + "\r\n"
-	pnpmNodeShim = "@SETLOCAL\r\n@IF NOT DEFINED NODE_PATH (\r\n  @SET \"NODE_PATH=C:\\pnpm\\global\\5\\node_modules\"\r\n) ELSE (\r\n  @SET \"NODE_PATH=%NODE_PATH%;C:\\pnpm\\global\\5\\node_modules\"\r\n)\r\n" +
-		"@IF EXIST \"%~dp0\\node.exe\" (\r\n  \"%~dp0\\node.exe\"  \"%~dp0\\..\\global\\5\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n) ELSE (\r\n  @SET PATHEXT=%PATHEXT:;.JS;=;%\r\n  node  \"%~dp0\\..\\global\\5\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n)\r\n"
-)
+// pnpm 10's shim for a JavaScript bin (npm 11's own, as installed by
+// `npm i -g` on Windows 11, are in testdata/npm-11).
+const pnpmNodeShim = "@SETLOCAL\r\n@IF NOT DEFINED NODE_PATH (\r\n  @SET \"NODE_PATH=C:\\pnpm\\global\\5\\node_modules\"\r\n) ELSE (\r\n  @SET \"NODE_PATH=%NODE_PATH%;C:\\pnpm\\global\\5\\node_modules\"\r\n)\r\n" +
+	"@IF EXIST \"%~dp0\\node.exe\" (\r\n  \"%~dp0\\node.exe\"  \"%~dp0\\..\\global\\5\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n) ELSE (\r\n  @SET PATHEXT=%PATHEXT:;.JS;=;%\r\n  node  \"%~dp0\\..\\global\\5\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n)\r\n"
+
+func readShim(t *testing.T, name string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "npm-11", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
 
 func existing(paths ...string) func(string) bool {
-	return func(p string) bool {
-		for _, want := range paths {
-			if p == want {
-				return true
-			}
-		}
-		return false
-	}
+	return func(p string) bool { return slices.Contains(paths, p) }
 }
 
 func TestReadCmdShimFindsWhatNpmAndPnpmShimsRun(t *testing.T) {
+	npmExeShim, npmNodeShim := readShim(t, "claude.cmd"), readShim(t, "codex.cmd")
 	npm := `C:\Users\u\AppData\Roaming\npm`
 	claude := npm + `\node_modules\@anthropic-ai\claude-code\bin\claude.exe`
 	if shim, ok := ReadCmdShim(npm+`\`, npmExeShim, existing(claude)); !ok || shim != (CmdShim{Program: claude}) {
@@ -52,6 +51,7 @@ func TestReadCmdShimFindsWhatNpmAndPnpmShimsRun(t *testing.T) {
 // argument checks: a shim that does more than run one program, or names one
 // that is not there, is not read as one.
 func TestReadCmdShimRefusesAnythingElse(t *testing.T) {
+	npmExeShim := readShim(t, "claude.cmd")
 	npm := `C:\npm`
 	claude := npm + `\node_modules\@anthropic-ai\claude-code\bin\claude.exe`
 	for name, content := range map[string]string{
