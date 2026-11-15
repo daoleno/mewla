@@ -46,3 +46,17 @@ func TestClaudeCursorLineWithoutAMenuFooterIsNotAPrompt(t *testing.T) {
 		t.Fatalf("became a prompt: %+v", signal)
 	}
 }
+
+// Claude Code 2.1.325's first run, in a Mewla Session on Windows 11 (captured
+// with `mewla worker capture`): the theme picker has no "Enter to confirm"
+// footer. Read as idle, the chat said "Ready" while a message waited on it.
+func TestClaudeFirstRunThemePickerBlocksTheSession(t *testing.T) {
+	raw, err := os.ReadFile("testdata/claude-2.1.325/first-run-theme-windows.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo, PaneContent: string(raw)})
+	if signal.State != StateBlocked || signal.Source != "claude_pane_first_run" {
+		t.Fatalf("the first-run theme picker is not blocked on the person: %+v", signal)
+	}
+}

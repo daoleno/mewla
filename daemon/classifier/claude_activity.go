@@ -94,6 +94,20 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		}
 	}
 
+	// Claude's first run opens on its theme picker, which has no "Enter to
+	// confirm" footer, then a security note. A Claude never started at a
+	// terminal (on Windows its installer does not even put it on PATH) shows
+	// them in its first Session, where a message waits on them: the Session is
+	// blocked on the person, not idle.
+	if claudeTailHasPrefix(claudePromptTail(pane, 20), "Choose the text style that looks best with your terminal") {
+		return ActivitySignal{
+			State:    StateBlocked,
+			Summary:  "Finish Claude Code's first-run setup in the terminal",
+			Source:   "claude_pane_first_run",
+			Provider: a.Name(),
+		}
+	}
+
 	// Claude's footer says "esc to interrupt" for as long as it works, as
 	// Codex's working line does. Only the last lines of the pane count: the
 	// phrase in the conversation above proves nothing. A hidden Session (Brain's
