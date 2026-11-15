@@ -8,6 +8,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +156,46 @@ func TestFirstMessageIsDeliveredAndBroadcast(t *testing.T) {
 	back := c.next(byRequest("r-2"))
 	if back["outcome"] != "not_sent" || back["text"] != "Fix it" || back["message"] == "" {
 		t.Fatalf("back = %#v", back)
+	}
+}
+
+// A Claude Session the person creates in a folder they picked starts without
+// Claude's folder trust dialog: it opens on "No, exit", where Chat could
+// not see it and a message's Enter quit Claude (a Windows user's new
+// Sessions looked dead until they answered it in Terminal).
+func TestCreateSessionTrustsTheChosenFolderForClaude(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	chosen := filepath.Join(t.TempDir(), "new project")
+	if err := os.Mkdir(chosen, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	c := newFirstMessageClient(t)
+	c.send(map[string]any{"type": "create_session", "request_id": "r-claude", "cwd": chosen, "command": "claude"})
+	c.next(byRequest("r-claude"))
+	c.send(map[string]any{"type": "create_session", "request_id": "r-home", "cwd": home, "command": "claude"})
+	c.next(byRequest("r-home"))
+
+	raw, err := os.ReadFile(filepath.Join(home, ".claude.json"))
+	if err != nil {
+		t.Fatalf("no trust written: %v", err)
+	}
+	var config struct {
+		Projects map[string]struct {
+			Trust bool `json:"hasTrustDialogAccepted"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	if !config.Projects[filepath.ToSlash(chosen)].Trust && !config.Projects[chosen].Trust {
+		t.Fatalf("chosen folder not trusted: %s", raw)
+	}
+	for dir := range config.Projects {
+		if dir == home || dir == filepath.ToSlash(home) {
+			t.Fatalf("home folder trusted: %s", raw)
+		}
 	}
 }

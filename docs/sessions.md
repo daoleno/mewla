@@ -317,7 +317,12 @@ the Worker's own command line, so Mewla leaves your Codex config alone. Claude C
 has no per-launch way to do that, so for Claude Workers Mewla sets that one
 folder's `hasTrustDialogAccepted` in Claude's own config, which is the key
 Claude itself names for it. A Claude Brain host gets the same for the Brain
-workspace, so a first launch on a new machine does not wait at the dialog.
+workspace, so a first launch on a new machine does not wait at the dialog. A
+Claude Session you create in a folder you pick gets it for that folder: picking
+the folder in Mewla is your answer, and the dialog would otherwise wait where
+Chat cannot show it (it opens on "No, exit"). Your home folder and a drive root
+are never trusted this way. On Windows the key goes into the `.claude.json` in
+your user folder (`%USERPROFILE%`), where Claude reads it.
 
 Cursor and Grok can only be hooked through the user's own global
 configuration, and Mewla never writes to it. They stay on the transcript and the
