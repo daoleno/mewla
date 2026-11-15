@@ -44,3 +44,31 @@ func TestStartsProgramsAndShimsFromTheScriptsPath(t *testing.T) {
 		t.Fatalf("a missing program = %d; %q", code, out.String())
 	}
 }
+
+// A Shell Session's login shell is PowerShell 7 when it is installed (here a
+// copy of cmd.exe named pwsh.exe stands in for it), Windows PowerShell
+// otherwise.
+func TestLoginShellPrefersPowerShell7(t *testing.T) {
+	dir := t.TempDir()
+	cmdExe, err := os.ReadFile(filepath.Join(os.Getenv("SystemRoot"), "System32", "cmd.exe"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pwsh.exe"), cmdExe, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{}
+	for _, entry := range os.Environ() {
+		if key, _, _ := strings.Cut(entry, "="); !strings.EqualFold(key, "PATH") {
+			env = append(env, entry)
+		}
+	}
+	env = append(env, "PATH="+dir+";"+os.Getenv("PATH"))
+	var out bytes.Buffer
+	code, err := Run(context.Background(), `exec '/bin/sh' -i -l`, Options{Env: env, Dir: dir, Stdin: strings.NewReader(""), Stdout: &out, Stderr: &out})
+	// The stand-in prints cmd's copyright line; PowerShell with -NoLogo prints
+	// only its prompt.
+	if err != nil || code != 0 || !strings.Contains(out.String(), "Microsoft Corporation") || strings.HasPrefix(out.String(), "PS ") {
+		t.Fatalf("login shell with pwsh on PATH = %d, %v; %q (want the pwsh.exe stand-in)", code, err, out.String())
+	}
+}

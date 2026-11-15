@@ -4,8 +4,6 @@ package launchsh
 
 import (
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/daoleno/mewla/daemon/platform"
@@ -13,23 +11,28 @@ import (
 
 // command finds argv[0] on the script's PATH and builds its command line:
 // an .exe gets Go's quoting, a .cmd shim (npm's) runs through cmd.exe with
-// the arguments platform.ResolveProgram allows. A login shell asked for by
-// itself (`/bin/sh -i -l`, a Shell Session) is the user's Windows shell,
-// PowerShell, unless that name is on PATH (Git Bash).
+// the arguments platform.ResolveProgram allows. The login shell a Shell
+// Session asks for (`/bin/sh -i -l`) is PowerShell on Windows, even with Git
+// Bash on PATH: PowerShell 7 (pwsh) when it is installed, else the Windows
+// PowerShell every Windows has. A program named by itself, `bash` included,
+// is that program.
 func command(argv, env []string) (*exec.Cmd, error) {
 	path := envValue(env, "PATH")
-	app, line, err := platform.ResolveProgram(argv, path)
-	if err != nil && posixShell(argv[0]) {
-		argv = []string{"powershell.exe", "-NoLogo"}
-		app, line, err = platform.ResolveProgram(argv, path)
+	if argv[0] == "/bin/sh" {
+		argv = windowsShell(path)
 	}
+	app, line, err := platform.ResolveProgram(argv, path)
 	if err != nil {
 		return nil, err
 	}
 	return &exec.Cmd{Path: app, Args: argv, SysProcAttr: &syscall.SysProcAttr{CmdLine: line}}, nil
 }
 
-func posixShell(program string) bool {
-	name := strings.TrimSuffix(strings.ToLower(filepath.Base(filepath.ToSlash(program))), ".exe")
-	return name == "sh" || name == "bash" || name == "zsh"
+// windowsShell is the person's interactive shell: pwsh when found on PATH,
+// powershell.exe otherwise.
+func windowsShell(path string) []string {
+	if _, _, err := platform.ResolveProgram([]string{"pwsh.exe"}, path); err == nil {
+		return []string{"pwsh.exe", "-NoLogo"}
+	}
+	return []string{"powershell.exe", "-NoLogo"}
 }
