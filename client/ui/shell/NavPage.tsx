@@ -10,6 +10,7 @@ import { tray } from "../tray/state";
 import { Icon } from "../kit/Icon";
 import { animateSwitch, Capsule, CapsulePage } from "./Capsule";
 import { stackWidth, wide } from "./layout";
+import { bottomBarInset } from "./below";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
 export const PageStack = context<{ canGoBack: () => boolean; back: () => void }>({ canGoBack: () => false, back: () => {} });
@@ -102,7 +103,8 @@ export function NavPage(props: AppNavPageProps) {
     return (
       <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
         <CapsulePage>
-          <If when={under} else={<View class="flex-1" style={{ paddingTop: capsulePageInset(safeArea().top) }}>{own.children}</View>}>{own.children}</If>
+          {/* Below the capsule, and above the system's bottom bar: the page's foot (a PDF's last page, a list's end) never hides under it. */}
+          <If when={under} else={<View class="flex-1" style={{ paddingTop: capsulePageInset(safeArea().top), paddingBottom: bottomBarInset() }}>{own.children}</View>}>{own.children}</If>
           <PageCapsule title={() => props.title ?? ""} controls={controls} right={() => own.headerRight} />
         </CapsulePage>
       </BaseNavPage>

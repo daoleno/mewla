@@ -24,6 +24,13 @@ describe("files a reply names become links (owner 11-15)", () => {
     expect(linkFilePaths(`Read ${PDF}.`)).toBe(`Read [${PDF}](<${PDF}>).`);
   });
 
+  test("two paths with only Chinese between them are two links (Brain 11-15)", () => {
+    expect(destinations(linkFilePaths("见/home/me/a.pdf和/home/me/b.pdf。"))).toEqual(["/home/me/a.pdf", "/home/me/b.pdf"]);
+    expect(destinations(linkFilePaths("~/x/报告.md与~/y/图.png"))).toEqual(["~/x/报告.md", "~/y/图.png"]);
+    // A CJK folder or file name inside a path stays one path.
+    expect(destinations(linkFilePaths("在 /home/me/文档/季度报告.pdf里"))).toEqual(["/home/me/文档/季度报告.pdf"]);
+  });
+
   test("CJK names, spaces in a code span, line suffixes, macOS and Windows homes", () => {
     expect(destinations(linkFilePaths("报告在 /home/me/文档/季度报告.md 里"))).toEqual(["/home/me/文档/季度报告.md"]);
     expect(destinations(linkFilePaths("`/Users/me/My Files/shot 1.png`"))).toEqual(["/Users/me/My Files/shot 1.png"]);

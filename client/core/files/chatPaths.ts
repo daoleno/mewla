@@ -196,12 +196,21 @@ function linkBare(text: string): string {
   return copied ? out + text.slice(copied) : text;
 }
 
-/** The longest start of `run` that is a file path ending in a name with an extension. */
+/** Chinese, Japanese or Korean text: written with no space after a path, it ends the path at its extension. */
+const CJK = /[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/;
+
+/**
+ * The start of `run` that is a file path ending in a name with an extension: the longest, or the first that CJK
+ * text follows (`/a.pdf和/b.pdf` is two paths).
+ */
 function fileEnd(run: string): string | null {
   const trimmed = run.replace(TRAILING, "");
   let best = -1;
   BARE_EXTENSION.lastIndex = 0;
-  for (let m = BARE_EXTENSION.exec(trimmed); m; m = BARE_EXTENSION.exec(trimmed)) best = m.index + m[0].length;
+  for (let m = BARE_EXTENSION.exec(trimmed); m; m = BARE_EXTENSION.exec(trimmed)) {
+    best = m.index + m[0].length;
+    if (CJK.test(trimmed[best] ?? "")) break;
+  }
   if (best < 0) return null;
   const path = trimmed.slice(0, best);
   return namedHomeFile(path);

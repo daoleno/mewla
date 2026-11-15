@@ -36,15 +36,9 @@ import { sessionRowModel } from "../../core/sessions/listRow";
 import { workLinkOf } from "../sessions/workLinks";
 import { goHome, isTop, nav, openPage, openSession, pageNav, trayOpen } from "./nav";
 import type { Route } from "./routes";
-import { belowStack } from "../../core/shell/belowStack";
+import { belowSections, paneBottom } from "./below";
 
-/** The stack pane's bottom as last laid out; none before its first layout. */
-const paneBottom = signal<number | null>(null);
-/**
- * What lies below the stack (the system bar): the keyboard covers it before it reaches a page. Read from the
- * window and the pane as they are now (core/shell/belowStack.ts): a rotation changes both, in either order.
- */
-export const belowSections = computed(() => belowStack(windowSize().height, paneBottom()));
+export { belowSections } from "./below";
 
 // A computer switch: sheets close first (they listen to the switch themselves), then the stack
 // returns to the new computer's home (SPEC §3.8).

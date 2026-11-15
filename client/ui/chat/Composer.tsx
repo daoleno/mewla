@@ -1,11 +1,11 @@
-import { cleanup, effect, keyboardFrame, keymap, platform, safeArea, signal, Text, untracked, View, type InputRef } from "nsh";
+import { cleanup, effect, keyboardFrame, keymap, platform, signal, Text, untracked, View, type InputRef } from "nsh";
 import { Button, Input } from "nsh/base";
 import { Icon } from "../icons/Icon";
 import type { Draft } from "../../core/conversation/draft";
 import { appendToDraft } from "../../core/conversation/draftText";
 import { composerKeyIntent } from "../../core/web/shortcuts";
 import { registerComposer } from "../shell/desktop/keys";
-import { belowSections } from "../shell/Shell";
+import { belowSections, bottomBarInset } from "../shell/below";
 import { keyboardLift } from "../../core/shell/belowStack";
 
 /** The composers that show a chat's draft now, by its cache key: text written from elsewhere goes into them. */
@@ -197,7 +197,7 @@ export function Composer(props: {
       // Above the keyboard when it is up; else clear of the gesture bar (Android draws edge to edge), which lies under the stack.
       style={{
         marginBottom: props.active && !props.active() ? 0 : keyboardLift(keyboardFrame().height, belowSections()),
-        paddingBottom: 10 + (keyboardFrame().height > 0 ? 0 : Math.max(0, safeArea().bottom - belowSections())),
+        paddingBottom: 10 + (keyboardFrame().height > 0 ? 0 : bottomBarInset()),
       }}>
       {props.children as never}
       {/* One surface pill, 52 high and growing to 128: attach inside at the left, Send inside at the right. */}
