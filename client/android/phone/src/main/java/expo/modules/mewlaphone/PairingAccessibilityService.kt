@@ -35,6 +35,9 @@ object SettingsReading {
     /** A Settings dialog is in front (the pairing dialog on the pair step): the walk leaves it alone. */
     @Volatile var dialogUp = false
 
+    /** The walk waits on the pairing dialog (recognised, or after its tap) without a code read from it. */
+    @Volatile var waitingWithoutCode = false
+
     /** While true the service walks Settings by itself (see [PairingAccessibilityService]). */
     @Volatile var guiding = false
 
@@ -196,6 +199,7 @@ class PairingAccessibilityService : AccessibilityService() {
             if (front == PairingScreen.Front.SystemUi) return
             dialogWindow = -1
             SettingsReading.dialogUp = false
+            SettingsReading.waitingWithoutCode = false
             if (now - lastLaunchAt > LAUNCH_MS) open(wanted)
             return
         }
@@ -214,6 +218,7 @@ class PairingAccessibilityService : AccessibilityService() {
                 pairRowVisible = findLabel(root, l.pairWithCode) != null,
                 msSincePairTap = pairTapAt?.let { now - it },
             )
+            SettingsReading.waitingWithoutCode = move == PairingScreen.Move.Hold && !codeOnScreen
             if (move == PairingScreen.Move.Hold) {
                 // The pairing dialog: no banner over it, no tap, no scroll, no Settings opened again.
                 hideBanner()

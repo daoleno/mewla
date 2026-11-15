@@ -19,16 +19,16 @@ class PhoneActionReceiver : BroadcastReceiver() {
                 if (code == null) {
                     // Not six digits: the box again, for another go.
                     PhoneNotifier.pairingCode(context)
-                } else if (PhoneController.pairingNow) {
-                    // Handed to the pairing that waits. The box is put back first (it stops the reply's spinner and is
-                    // ready should the code be wrong); pairing clears it when it ends.
-                    PhoneNotifier.pairingCode(context, alert = false)
-                    PhoneController.pair(code)
                 } else {
-                    // No pairing waits (the person opened the dialog after one ended): this code starts one.
-                    // The foreground service keeps the process while it runs, so no broadcast is held open.
+                    // Handed to the pairing that waits, or (the person opened the dialog after one ended) starting
+                    // one. The box is put back first: it stops the reply's spinner, is ready should the code be
+                    // wrong, and pairing clears it when it ends. Off the main thread either way (pairing ending
+                    // just now makes this call the 3-minute one); the foreground service keeps the process.
+                    val handOff = PhoneController.pairingNow
+                    if (handOff) PhoneNotifier.pairingCode(context, alert = false)
                     Thread({
-                        if (PhoneController.pair(code)) runCatching { PhoneController.ensureHelper() }
+                        // A hand-off returns at once; the pairing it joins starts the helper when it ends.
+                        if (PhoneController.pair(code) && !handOff) runCatching { PhoneController.ensureHelper() }
                         PhoneController.publish()
                     }, "mewla-phone-pair").start()
                 }

@@ -448,8 +448,8 @@ object PhoneController {
      * through those screens while this runs; the port is what adbd announces over mDNS or what
      * that same screen shows. A typed code reaches a pairing already waiting for one.
      *
-     * The code box is up for the whole time, read or not: it pops up whenever a pairing dialog
-     * comes up (and at once when nobody walks), and a wrong code puts it back instead of
+     * The code box is up for the whole time, read or not: it pops up whenever the walk waits on a
+     * pairing dialog it has no code from (and at once when nobody walks), and a wrong code puts it back instead of
      * ending the pairing, so the person always has the next thing to do.
      */
     fun pair(code: String?): Boolean {
@@ -462,22 +462,24 @@ object PhoneController {
         SettingsReading.pairing = null
         SettingsReading.needs = null
         SettingsReading.dialogUp = false
+        SettingsReading.waitingWithoutCode = false
         SettingsReading.guiding = code == null && SettingsReading.serviceRunning
         if (SettingsReading.guiding) SettingsReading.service?.beginGuide()
         promptGuard.personAsked()
-        // Walked, the box waits quietly in the shade until the dialog is up; unwalked, it is the way in.
-        PhoneNotifier.pairingCode(app, alert = !SettingsReading.guiding && code == null)
-        // Each pairing dialog that comes up pops the box up again (a closed one took its code with it).
-        var dialogSeen = false
+        val box = PairingScreen.boxAtStart(walked = SettingsReading.guiding, codeGiven = code != null)
+        PhoneNotifier.pairingCode(app, alert = box == PairingScreen.Box.Alert)
+        var waited = false
         try {
             // A guided walk may start from nothing (Build number, a lock screen, the system's prompt), so it gets longer.
             val deadline = System.currentTimeMillis() + if (SettingsReading.guiding) 8 * 60_000 else 3 * 60_000
             val tls = AndroidAdb.tls(AndroidAdb.identity(app))
             var lastFailure: Exception? = null
             while (System.currentTimeMillis() < deadline) {
-                val dialogUp = SettingsReading.dialogUp
-                if (dialogUp && !dialogSeen) PhoneNotifier.pairingCode(app, alert = true)
-                dialogSeen = dialogUp
+                // Each pairing dialog the walk waits on without its code pops the box up (a closed one took its code with it).
+                val waiting = SettingsReading.dialogUp || SettingsReading.waitingWithoutCode
+                val codeRead = SettingsReading.pairing?.let { System.currentTimeMillis() - it.at < 10_000 } == true
+                if (PairingScreen.boxAlerts(waiting, waited, codeRead)) PhoneNotifier.pairingCode(app, alert = true)
+                waited = waiting
                 val reading = SettingsReading.pairing?.takeIf { System.currentTimeMillis() - it.at < 2 * 60_000 }
                 val typed = typedCode
                 val digits = typed ?: reading?.code
