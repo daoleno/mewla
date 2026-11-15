@@ -311,7 +311,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	defer stopSignals()
 	logStopSignal(ctx)
 	// Windows starts the daemon once at login: keep its environment the
-	// person's, so an agent installed or a variable set later is seen.
+	// person's, so an agent installed or a variable set later is seen. A
+	// service-started daemon elsewhere gets the login shell's PATH before
+	// Brain looks for its agent.
+	platform.RefreshEnvironment()
 	go platform.KeepEnvironmentCurrent(ctx, 15*time.Second)
 	ctx, restartDaemon := context.WithCancelCause(ctx)
 	defer restartDaemon(nil)

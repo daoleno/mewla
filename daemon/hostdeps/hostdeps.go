@@ -183,6 +183,13 @@ func ExtraPathDirs(home string) []string {
 	return append(dirs, systemPathDirs...)
 }
 
+// userPathDirs are the directories the person's own shell would find agents
+// in: what their login shell puts on PATH, then the usual per-user Node
+// install directories (see login_path_unix.go).
+func userPathDirs(home string) []string {
+	return append(LoginShellPathDirs(), nodeInstallDirs(home)...)
+}
+
 // LookPath finds name on PATH, then in ExtraPathDirs, so a tool installed a
 // moment ago is found before the shell is restarted.
 func LookPath(name string) (string, error) {
@@ -192,7 +199,7 @@ func LookPath(name string) (string, error) {
 		return "", err
 	}
 	home, _ := os.UserHomeDir()
-	for _, dir := range ExtraPathDirs(home) {
+	for _, dir := range append(ExtraPathDirs(home), userPathDirs(home)...) {
 		// exec.LookPath on a path tries Windows' program extensions (claude
 		// is claude.exe there) and checks the executable bits elsewhere.
 		if path, err := exec.LookPath(filepath.Join(dir, name)); err == nil {
@@ -208,7 +215,7 @@ func LookPath(name string) (string, error) {
 // is repeated, not only done at start.
 func AddInstallerDirsToPath() {
 	home, _ := os.UserHomeDir()
-	for _, dir := range ExtraPathDirs(home) {
+	for _, dir := range append(ExtraPathDirs(home), userPathDirs(home)...) {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
 			AddToPath(dir)
 		}
