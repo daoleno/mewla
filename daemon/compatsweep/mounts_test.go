@@ -13,14 +13,14 @@ import (
 // TestMounts: TMPDIR on a noexec tmpfs, so on another filesystem than HOME
 // (on disk), and a Worker folder on a read-only mount. (HOME itself on tmpfs
 // is refused for Worker folders on purpose: memory-backed storage.) Needs
-// MEWLA_SWEEP_MOUNTS naming a directory holding noexec/ (tmpfs, noexec) and
+// MEWLA_SWEEP_MOUNT_ROOT naming a directory holding noexec/ (tmpfs, noexec) and
 // ro/ (a read-only bind mount with project/ in it);
 // scripts/tests/linux_sweep.sh mounts them in a user namespace, no root
 // needed.
 func TestMounts(t *testing.T) {
-	root := os.Getenv("MEWLA_SWEEP_MOUNTS")
+	root := os.Getenv("MEWLA_SWEEP_MOUNT_ROOT")
 	if root == "" {
-		t.Skip("set MEWLA_SWEEP_MOUNTS (scripts/tests/linux_sweep.sh does, with MEWLA_SWEEP_MOUNTS=1)")
+		t.Skip("scripts/tests/linux_sweep.sh runs it with MEWLA_SWEEP_MOUNTS=1")
 	}
 	tmp, err := os.MkdirTemp(filepath.Join(root, "noexec"), "tmp")
 	if err != nil {
