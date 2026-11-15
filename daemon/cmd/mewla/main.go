@@ -298,6 +298,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 	)
 	defer stopSignals()
 	logStopSignal(ctx)
+	// Windows starts the daemon once at login: keep its environment the
+	// person's, so an agent installed or a variable set later is seen.
+	go platform.KeepEnvironmentCurrent(ctx, 15*time.Second)
 	ctx, restartDaemon := context.WithCancelCause(ctx)
 	defer restartDaemon(nil)
 
@@ -2815,7 +2818,7 @@ Set up and maintain
   doctor    Check this computer is ready for Mewla
   deps      Offer to install an agent CLI with this system's official commands
   setup     Guided first-run setup (uses doctor)
-  boot      Start Mewla when you log in (systemd user unit)
+  boot      Start Mewla when you log in
   host      Run or inspect the session host that keeps agent terminals running
   attach    Pick a live Session, or name one, and show it here; --all tiles them all (Ctrl-\ detaches)
   update    Verify and install the latest Mewla release
