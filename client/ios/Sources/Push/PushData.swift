@@ -1,8 +1,8 @@
 import Foundation
 
-/// The routing data of a notification, remote or local. Expo's service, and expo-notifications for
-/// the local ones the Expo app scheduled, put the push's `data` under `body`; a notification this
-/// app schedules, or a push sent without Expo, carries the keys at the top level.
+/// The routing data of a notification, remote or local. Expo's service puts the push's `data`
+/// under `body`; a notification this app schedules, or a push sent without Expo, carries the keys
+/// at the top level.
 enum PushData {
   static func of(_ userInfo: [AnyHashable: Any]) -> [String: String] {
     if let body = userInfo["body"] as? [String: Any] { return strings(body) }

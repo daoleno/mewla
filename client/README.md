@@ -56,12 +56,12 @@ app its messages passes 100 ms. What a thread or a Session list shows is made on
 
 | Call / event / component | |
 |---|---|
-| `secure.get` / `secure.set` / `secure.remove` `{key, value}` | The device key and other secrets, in the store and format the Expo app used (Android: expo-secure-store's `SecureStore` prefs and Keystore key; iOS: Keychain service `app:no-auth`). A stored item that can't be read is an error, never `null`. |
-| `app.legacyStorage` → entries or `null`, `app.legacyStorageCopied` | The Expo app's AsyncStorage `mewla*` entries, once; `core/legacyStorage.ts` copies them into `Storage` before anything reads it. |
+| `secure.get` / `secure.set` / `secure.remove` `{key, value}` | The device key and other secrets, Android: in the store and format the Expo app used (expo-secure-store's `SecureStore` prefs and Keystore key); iOS: Keychain service `app:no-auth`. A stored item that can't be read is an error, never `null`. |
+| `app.legacyStorage` → entries or `null`, `app.legacyStorageCopied` | Android (and the web host): the Expo app's AsyncStorage `mewla*` entries, once; `core/legacyStorage.ts` copies them into `Storage` before anything reads it. iOS has no upgrade from the Expo app to make and no such call. |
 | `links.open` `{url}` (event) | A `mewla://` link the system opened the app with; held until the app listens. |
 | `mewla.qrScanner` `{active}` → `scan {value}`, `unavailable {reason}` | The camera's QR reader. |
 | `host.params.deviceName` | The name a computer lists this phone under. |
-| `push.permission` / `push.requestPermission` / `push.deviceToken`, `push.opened {data}` (event) | Notifications allowed, the system prompt, the FCM / APNs token with the Expo installation id kept where expo-notifications kept it (Android: its uuid file; iOS: its Keychain item), so the Expo token survives the upgrade. A tapped notification, cold start included, is `push.opened`. |
+| `push.permission` / `push.requestPermission` / `push.deviceToken`, `push.opened {data}` (event) | Notifications allowed, the system prompt, the FCM / APNs token with the Expo installation id kept where expo-notifications kept it (Android: its uuid file, so the Expo token survives the upgrade; iOS: its Keychain item). A tapped notification, cold start included, is `push.opened`. |
 | `live.*` | The live notification (Android) / Live Activity (iOS) and the home-screen widgets of the current computer. iOS: the Expo app's WidgetKit extension (`ios/LiveExtension`, same bundle id, widget kind and activity type), its App Group files, and content-available `mewla_live` pushes applied in the background. |
 | `calendar.alerts*`, `calendar.zones`, `calendar.pickDate` / `pickTime` | The phone's own calendar alerts (Android: exact alarms and the lock-screen alert; iOS: local notifications on a calendar trigger pinned to the item's zone), the zone table QuickJS lacks, the system date and time pickers. |
 
@@ -73,6 +73,5 @@ version code and iOS build number are `major·1 000 000 + minor·10 000 + patch�
 upgrade gate (`client.yml`, manual dispatch) installs the released Expo APK on an emulator, pairs it with a fresh
 daemon and types a draft, installs the release-signed NSH app over it, and passes only if the daemon still lists
 that one device and sees it sign in again and the draft is in the new storage
-(`client/scripts/upgrade-gate.sh`). On iOS, `ios/Tests/UpgradeTests.swift` reads Keychain items and AsyncStorage
-files written in the Expo app's formats; that the App Store build keeps the same Keychain access group is
-proven only by a TestFlight upgrade.
+(`client/scripts/upgrade-gate.sh`). iOS carries no upgrade from the Expo app (owner, 2026-11-15: no one used
+it); only its identity (bundle id, build numbers above 140) stays.

@@ -140,7 +140,7 @@ jobs:
           xcrun simctl boot "$SIM" || true
           xcrun simctl bootstatus "$SIM" -b
       # TerminalTests saves the terminal it drew as out/terminal.png.
-      - name: Unit tests (the Expo app's Keychain and AsyncStorage, the terminal)
+      - name: Unit tests (the host and the terminal)
         working-directory: client/ios
         env:
           TEST_RUNNER_MEWLA_TEST_OUT: ${{ github.workspace }}/client/ios/out

@@ -102,6 +102,14 @@ describe("the in-place upgrade from the Expo app", () => {
     await again.waitFor("id:onboarding");
     expect(offered).toBe(1);
   });
+
+  test("an iPhone has no Expo app to take over: it never asks for its entries", async () => {
+    let asked = 0;
+    const ios = { handlers: { ...host.handlers, "app.legacyStorage": () => (asked++, null), "app.legacyStorageCopied": () => void asked++ } };
+    const app = await open("./App.tsx", { host: ios, platform: "ios" });
+    await app.waitFor("id:onboarding");
+    expect(asked).toBe(0);
+  });
 });
 
 describe("Dark", () => {

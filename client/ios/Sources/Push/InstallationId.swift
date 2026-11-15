@@ -1,21 +1,14 @@
 import Foundation
 import Security
 
-/// The id Expo's push service knows this install by (the `deviceId` of the Expo token exchange),
-/// read where expo-notifications kept it (ServerRegistrationModule.swift) so the upgraded app keeps
-/// its Expo token: a Keychain generic password of service = the bundle id, account and generic =
-/// "EXDeviceInstallationUUIDKey"; before that, the same key in UserDefaults, moved into the
-/// Keychain on first read. A fresh install makes one and keeps it the same way.
+/// The id Expo's push service knows this install by (the `deviceId` of the Expo token exchange):
+/// a Keychain generic password of service = the bundle id, account and generic =
+/// "EXDeviceInstallationUUIDKey", as expo-notifications keeps it. Made on first use.
 enum InstallationId {
   static let key = "EXDeviceInstallationUUIDKey"
 
   static func get() throws -> String {
     if let stored = try read() { return stored }
-    if let legacy = UserDefaults.standard.string(forKey: key) {
-      try write(legacy)
-      UserDefaults.standard.removeObject(forKey: key)
-      return legacy
-    }
     let id = UUID().uuidString
     try write(id)
     return id

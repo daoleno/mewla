@@ -36,7 +36,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
   private let app = NshAppView()
   private let secure = SecureStore()
-  private let legacy = LegacyStorage()
 
   func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
     guard let scene = scene as? UIWindowScene else { return }
@@ -49,8 +48,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     app.handle("secure.get") { [secure] data in try secure.get(Self.field(data, "key")) }
     app.handle("secure.set") { [secure] data in try secure.set(Self.field(data, "key"), Self.field(data, "value")); return nil }
     app.handle("secure.remove") { [secure] data in try secure.remove(Self.field(data, "key")); return nil }
-    app.handle("app.legacyStorage") { [legacy] _ in legacy.entries() }
-    app.handle("app.legacyStorageCopied") { [legacy] _ in legacy.copied(); return nil }
     PushHost.register(app)
     LiveHost.register(app)
     CalendarHost.register(app)

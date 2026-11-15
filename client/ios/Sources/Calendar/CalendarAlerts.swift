@@ -66,7 +66,7 @@ enum CalendarAlerts {
     return UNNotificationRequest(identifier: alert.key, content: content, trigger: trigger)
   }
 
-  /// A calendar notification of this feature, this app's or one the Expo app scheduled (data under `body`).
+  /// A calendar notification of this feature.
   static func isCalendar(_ userInfo: [AnyHashable: Any], item: String? = nil) -> Bool {
     let data = PushData.of(userInfo)
     guard data["screen"] == "calendar" else { return false }
