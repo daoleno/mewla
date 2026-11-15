@@ -85,8 +85,8 @@ Mewla starts once at login, but each new Session gets your environment as it
 is now, as a new PowerShell window does: an agent installed, a `PATH` entry or
 a variable such as `HTTPS_PROXY` set with `setx` or System Properties after
 Mewla started reaches the next Session without logging in again. A Shell
-Session runs PowerShell 7 (`pwsh`) when it is installed and Windows PowerShell
-otherwise. Installed from an Administrator PowerShell, which starts in
+Session runs PowerShell 7 (`pwsh`) when it is installed, from the Microsoft
+Store too, and Windows PowerShell otherwise. Installed from an Administrator PowerShell, which starts in
 `C:\Windows\System32`, Sessions still start in your home folder.
 
 Windows is in beta. Tell us how it went, good or bad:

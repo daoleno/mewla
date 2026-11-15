@@ -5,7 +5,9 @@ package platform
 import (
 	"bytes"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -156,4 +158,22 @@ func TestResolveProgramRunsShimsThroughCmd(t *testing.T) {
 func filepathBase(path string) string {
 	i := strings.LastIndex(path, `\`)
 	return path[i+1:]
+}
+
+func TestLookPathInFindsAStoreAppAlias(t *testing.T) {
+	dir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Microsoft", "WindowsApps")
+	entries, _ := os.ReadDir(dir)
+	for _, entry := range entries {
+		info, err := os.Stat(filepath.Join(dir, entry.Name()))
+		if err != nil || info.Mode().Type() != fs.ModeIrregular || !strings.EqualFold(filepath.Ext(entry.Name()), ".exe") {
+			continue
+		}
+		name := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		got, err := LookPathIn(name, dir, ".exe")
+		if err != nil || !strings.EqualFold(got, filepath.Join(dir, entry.Name())) {
+			t.Fatalf("LookPathIn(%s) = %q, %v; want the Store alias", name, got, err)
+		}
+		return
+	}
+	t.Skip("no Store app execution alias here")
 }

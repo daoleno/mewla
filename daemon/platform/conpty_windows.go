@@ -108,7 +108,7 @@ func LookPathIn(program, path, pathext string) (string, error) {
 		return exec.LookPath(program)
 	}
 	if strings.ContainsAny(program, `\/`) {
-		if info, err := os.Stat(program); err == nil && info.Mode().IsRegular() {
+		if info, err := os.Stat(program); err == nil && runnableFile(info.Mode()) {
 			return program, nil
 		}
 		return "", fmt.Errorf("%s: %w", program, exec.ErrNotFound)
@@ -135,7 +135,7 @@ func LookPathIn(program, path, pathext string) (string, error) {
 		}
 		for _, name := range candidates {
 			full := filepath.Join(dir, name)
-			if info, err := os.Stat(full); err == nil && info.Mode().IsRegular() {
+			if info, err := os.Stat(full); err == nil && runnableFile(info.Mode()) {
 				return full, nil
 			}
 		}
