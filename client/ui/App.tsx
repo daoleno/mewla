@@ -14,10 +14,11 @@ import { startAppUpdate } from "./update/update";
 // Registers the monospaced face theme.json's `font-mono` names, before the first frame.
 import "./kit/monoFont";
 
-// The first start after the in-place upgrade takes over what the Expo app kept (computers,
-// drafts, preferences); the device key stays where it was, in the host's secure store.
+// The first start after the in-place upgrade from the Expo app (Android; the web host reads the
+// Expo web app's) takes over what it kept: computers, drafts, preferences. The device key stays
+// where it was, in the host's secure store. iOS has no upgrade to make (owner, 2026-11-15).
 async function start(): Promise<void> {
-  if (host.available()) {
+  if (host.available() && platform.os !== "ios") {
     await copyLegacyStorage(
       {
         entries: async () => (await host.call("app.legacyStorage")) as Record<string, string> | null,

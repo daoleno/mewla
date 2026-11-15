@@ -51,14 +51,6 @@ final class InstallationIdTests: XCTestCase {
     XCTAssertEqual(try InstallationId.get(), "6F1C2B9A-0D3E-4B7A-9E21-5C8D4F3A2B10")
   }
 
-  func testAnIdFromUserDefaultsMovesIntoTheKeychain() throws {
-    UserDefaults.standard.set("LEGACY-INSTALLATION-ID", forKey: "EXDeviceInstallationUUIDKey")
-    XCTAssertEqual(try InstallationId.get(), "LEGACY-INSTALLATION-ID")
-    XCTAssertNil(UserDefaults.standard.string(forKey: "EXDeviceInstallationUUIDKey"))
-    XCTAssertEqual(stored()?.id, "LEGACY-INSTALLATION-ID")
-    XCTAssertEqual(try InstallationId.get(), "LEGACY-INSTALLATION-ID")
-  }
-
   func testAFreshInstallMakesOneAndKeepsItAsExpoWould() throws {
     let id = try InstallationId.get()
     XCTAssertNotNil(UUID(uuidString: id))

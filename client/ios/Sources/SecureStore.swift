@@ -1,26 +1,20 @@
 import Foundation
 import Security
 
-/// The device key and the other secrets, kept exactly where the Expo app kept them
-/// (expo-secure-store: generic passwords of service `app:no-auth`, the key as account),
-/// so the upgrade reads the same device identity and nobody pairs again. Nothing is copied.
+/// The device key and the other secrets: Keychain generic passwords of service `app:no-auth`,
+/// the key as account.
 struct SecureStore {
   private static let service = "app:no-auth"
-  /// Items written by expo-secure-store before it split services by authentication.
-  private static let legacyService = "app"
 
   func get(_ key: String) throws -> String? {
-    for service in [Self.service, Self.legacyService] {
-      var query = Self.query(key, service)
-      query[kSecMatchLimit as String] = kSecMatchLimitOne
-      query[kSecReturnData as String] = true
-      var item: CFTypeRef?
-      let status = SecItemCopyMatching(query as CFDictionary, &item)
-      if status == errSecItemNotFound { continue }
-      guard status == errSecSuccess, let data = item as? Data else { throw Self.failure(status, key) }
-      return String(data: data, encoding: .utf8)
-    }
-    return nil
+    var query = Self.query(key, Self.service)
+    query[kSecMatchLimit as String] = kSecMatchLimitOne
+    query[kSecReturnData as String] = true
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    if status == errSecItemNotFound { return nil }
+    guard status == errSecSuccess, let data = item as? Data else { throw Self.failure(status, key) }
+    return String(data: data, encoding: .utf8)
   }
 
   func set(_ key: String, _ value: String) throws {
@@ -37,10 +31,8 @@ struct SecureStore {
   }
 
   func remove(_ key: String) throws {
-    for service in [Self.service, Self.legacyService] {
-      let status = SecItemDelete(Self.query(key, service) as CFDictionary)
-      guard status == errSecSuccess || status == errSecItemNotFound else { throw Self.failure(status, key) }
-    }
+    let status = SecItemDelete(Self.query(key, Self.service) as CFDictionary)
+    guard status == errSecSuccess || status == errSecItemNotFound else { throw Self.failure(status, key) }
   }
 
   private static func query(_ key: String, _ service: String) -> [String: Any] {
