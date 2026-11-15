@@ -11,99 +11,12 @@
 import type {
   ProviderClient,
   ProviderConnection,
-  ProviderModel,
 } from "./types";
 
 export type ProvidersEditorState =
   | { kind: "create"; client: ProviderClient }
   | { kind: "edit"; connection: ProviderConnection; retry?: boolean }
   | null;
-
-/**
- * Open model-sync picker: the discovery result for exactly one connection,
- * rendered as compact support chips. Selected chips are the models the
- * gateway exposes (the client-owned enable allowlist); tapping toggles
- * support. Persisted only after a successful `set_provider_models` write.
- */
-export type ModelSyncPickerState = {
-  purpose: "support";
-  client: ProviderClient;
-  connection: ProviderConnection;
-  models: ProviderModel[];
-};
-
-export type ProviderSaveOutcome =
-  | { status: "saved" }
-  | { status: "create_failed" }
-  | { status: "credential_failed"; connection: ProviderConnection };
-
-/**
- * Editor transitions after a save attempt settles. A confirmed save closes the
- * overlay; a failed create keeps the same bound target open untouched; a
- * credential write that failed after the connection was created rebinds the
- * overlay to that connection so the next Save retries the same unified edit
- * and cannot create a duplicate.
- */
-export function providerEditorAfterSave(
-  current: ProvidersEditorState,
-  outcome: ProviderSaveOutcome,
-): ProvidersEditorState {
-  switch (outcome.status) {
-    case "saved":
-      return null;
-    case "create_failed":
-      return current;
-    case "credential_failed":
-      return {
-        kind: "edit",
-        connection: outcome.connection,
-        retry: true,
-      };
-  }
-}
-
-/**
- * Stable identity of the editor target. Used to decide when the local form
- * fields must be reset: only a fresh open or a switch to a different target
- * warrants a reset — never a create → edit retry on the same connection.
- */
-export function providerEditorSessionKey(
-  editor: ProvidersEditorState,
-): string {
-  if (!editor) return "";
-  switch (editor.kind) {
-    case "create":
-      return `create:${editor.client}`;
-    case "edit":
-      return `edit:${editor.connection.id}`;
-  }
-}
-
-/**
- * Reset policy: a fresh open starts clean; closing does not reset (the close
- * handler clears fields); switching between same-kind targets resets; a
- * create → edit transition preserves every entered field for retry.
- */
-export function providerEditorShouldResetFields(
-  previousSession: string,
-  nextSession: string,
-): boolean {
-  if (nextSession === "") return false;
-  if (previousSession === "") return true;
-  if (
-    previousSession.startsWith("edit:") &&
-    nextSession.startsWith("edit:")
-  ) {
-    return previousSession !== nextSession;
-  }
-  if (
-    previousSession.startsWith("create:") &&
-    nextSession.startsWith("create:")
-  ) {
-    return previousSession !== nextSession;
-  }
-  return false;
-}
 
 export type ProviderEditorFieldState = {
   mutating: boolean;

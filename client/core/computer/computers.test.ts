@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decodeComputers, otherComputerState, othersNeedYou, peerOf, relayDiagnosis, whenWords } from "./computers";
+import { decodeComputers, otherComputerState, peerOf, relayDiagnosis, whenWords } from "./computers";
 
 const when = (at: number) => `@${new Date(at).toISOString().slice(11, 16)}`;
 const B = "b6f5682c98812680dae5124894273ee93adcf22de968007d33df9f05a212dc3a";
@@ -48,12 +48,6 @@ describe("the computers message", () => {
     expect(otherComputerState({ check: { state: "online" }, when }).word).toBe("Online");
     expect(otherComputerState({ check: { state: "offline" }, when }).dim).toBe(true);
     expect(otherComputerState({ when }).word).toBe("");
-  });
-
-  test("the cat's dot from other computers: an online one with requests; offline is unknown", () => {
-    expect(othersNeedYou(decodeComputers(frame))).toBe(true);
-    expect(othersNeedYou(decodeComputers({ ...frame, computers: [frame.computers[1]] }))).toBe(false);
-    expect(othersNeedYou(null)).toBe(false);
   });
 
   test("the relay diagnosis is the newest failure with when its stretch began; none while connected", () => {

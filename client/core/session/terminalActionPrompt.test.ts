@@ -4,7 +4,6 @@ import type { WorkerPrompt } from "../sessions/workers";
 import {
   bumpServerConnectionGeneration,
   isWorkerSessionListFreshForConnection,
-  liveActionPromptScopeKey,
   stampWorkerSessionListGeneration,
   type TransportConnectionState,
 } from "../sessions/workerSessionListTransport";
@@ -120,12 +119,7 @@ function projectPrompt(
   }
   return buildTerminalActionPrompt({
     prompt: agent.prompt,
-    scopeKey: liveActionPromptScopeKey({
-      workerId: agent.id,
-      processId: agent.processId,
-      startedAt: agent.startedAt,
-      connectionGeneration: slice.connectionGenerationByServer[serverId] ?? 0,
-    }),
+    scopeKey: [agent.id, agent.processId ?? "", agent.startedAt ?? "", slice.connectionGenerationByServer[serverId] ?? 0].join(":"),
   });
 }
 
@@ -196,11 +190,11 @@ describe("buildTerminalActionPrompt from the daemon's prompt", () => {
   test("scopes the card id to the live process/session generation", () => {
     const first = buildTerminalActionPrompt({
       prompt: plan,
-      scopeKey: liveActionPromptScopeKey({ workerId: "agent-a", processId: 11, startedAt: 100, connectionGeneration: 1 }),
+      scopeKey: "agent-a:11:100:1",
     });
     const second = buildTerminalActionPrompt({
       prompt: plan,
-      scopeKey: liveActionPromptScopeKey({ workerId: "agent-a", processId: 22, startedAt: 200, connectionGeneration: 2 }),
+      scopeKey: "agent-a:22:200:2",
     });
     expect(first?.id).toBe("agent-a:11:100:1|plan-1");
     expect(second?.id.startsWith("agent-a:22:200:2|")).toBe(true);

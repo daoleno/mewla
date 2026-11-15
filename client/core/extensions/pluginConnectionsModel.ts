@@ -1,4 +1,4 @@
-import type { ConnectPhase, PendingConnection } from "./pluginOnboarding";
+import type { ConnectPhase } from "./pluginOnboarding";
 import { accountStatus, type AccessState, type ConnectionRequest, type ConnectionTool, type PluginAccount, type PluginIntegration } from "./connections";
 
 export type ConnectionTone = "success" | "warning" | "danger" | "neutral" | "accent";
@@ -98,11 +98,6 @@ export function serviceState(plugin: PluginIntegration, accounts: readonly Plugi
   const rank = (account: PluginAccount) => ({ danger: 0, warning: 1, neutral: 2, accent: 3, success: 4 })[accountTone(account)];
   const worst = [...(on.length ? on : accounts)].sort((a, b) => rank(a) - rank(b))[0]!;
   return { kind: "status", label: accountStatus(worst), tone: accountTone(worst) };
-}
-
-/** True when a service has accounts and every one of them is turned off. */
-export function serviceOff(accounts: readonly PluginAccount[]): boolean {
-  return accounts.length > 0 && accounts.every((account) => !account.enabled);
 }
 
 /** The plugin-level switch: off hides every tool from Brain and Workers and keeps the sign-in and tool choices. */
@@ -285,33 +280,6 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
     return { title: "Last call failed", detail: `Check that ${serviceName} and its tools still answer.`, action: "refresh", actionLabel: "Check again", tone: "danger" };
   }
   return null;
-}
-
-export type ConnectStepState = "done" | "active" | "pending" | "failed";
-
-export interface ConnectStep {
-  key: "authorize" | "verify";
-  label: string;
-  state: ConnectStepState;
-}
-
-/** Progress of one authorization attempt, from the browser to the server. */
-export function connectSteps(phase: ConnectPhase, flow: PendingConnection | null): ConnectStep[] {
-  const returned = Boolean(flow?.callback);
-  const verifying = phase === "verifying" || returned;
-  const failed = phase === "failed";
-  return [
-    {
-      key: "authorize",
-      label: flow?.flow.user_code ? "Enter the code in your browser" : "Authorize in your browser",
-      state: phase === "connected" || verifying ? "done" : failed ? "failed" : phase === "opening" || phase === "waiting" ? "active" : "pending",
-    },
-    {
-      key: "verify",
-      label: "Verify on this server",
-      state: phase === "connected" ? "done" : failed && returned ? "failed" : verifying ? "active" : "pending",
-    },
-  ];
 }
 
 export function isConnecting(phase: ConnectPhase): boolean {

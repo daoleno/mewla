@@ -20,6 +20,3 @@ export type Route =
   | { name: "workDetail"; workId: string }
   | CalendarRoute
   | MorePage;
-
-export type RouteName = Route["name"];
-

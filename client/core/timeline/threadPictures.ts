@@ -1,5 +1,5 @@
 import type { ActivityTimelineItem } from "./activityTypes";
-import { isImageAttachment } from "./imageSource";
+import { isImageAttachment } from "../files/imageSource";
 import type { DisplayAttachment, MessageTimelineItem, TimelineItem } from "./types";
 
 /** A picture of a thread, as the viewer steps through them (SPEC §1.7). */

@@ -43,16 +43,6 @@ export type ScreenViewerMessage =
       height: number;
     };
 
-export interface ScreenViewerHostProps {
-  onMessage(raw: string): void;
-  backgroundColor: string;
-  accessibilityLabel: string;
-}
-
-export interface ScreenViewerHostHandle {
-  post(batch: ScreenHostMessage[]): void;
-}
-
 const VIEWER_TYPES = new Set(["ready", "send", "closed", "connected", "disconnected", "name", "zoom", "haptic", "stats"]);
 
 /** Parses a viewer message; anything unexpected is dropped. */

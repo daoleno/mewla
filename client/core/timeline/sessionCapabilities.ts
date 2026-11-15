@@ -24,21 +24,6 @@ export function normalizeWorkerSessionCapabilities(
   };
 }
 
-export function sessionSupportsModelProfileAction(
-  capabilities?: WorkerSessionCapabilities | null,
-): boolean {
-  return capabilities?.model_profile_managed === true;
-}
-
-export function sessionIsManagedReadOnlyProfile(
-  capabilities?: WorkerSessionCapabilities | null,
-): boolean {
-  return (
-    capabilities?.model_profile_managed === true &&
-    capabilities.model_profile_active_switch !== true
-  );
-}
-
 export function sessionAllowsModelProfileActivation(
   capabilities?: WorkerSessionCapabilities | null,
 ): boolean {
@@ -46,20 +31,4 @@ export function sessionAllowsModelProfileActivation(
     capabilities?.model_profile_managed === true &&
     capabilities.model_profile_active_switch === true
   );
-}
-
-export function capabilityProviderDisagreementMessage(input: {
-  managed: boolean;
-  activeSwitch: boolean;
-  selectionFound: boolean;
-  hotSwitchable: boolean;
-}): string | null {
-  if (!input.managed) return null;
-  if (!input.selectionFound) {
-    return "The daemon advertised a managed Model, but no Thread runtime was found. Refresh before relying on this Session.";
-  }
-  if (input.activeSwitch && !input.hotSwitchable) {
-    return "The daemon advertised Model switching, but this Session is read-only. Refresh before activating.";
-  }
-  return null;
 }

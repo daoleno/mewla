@@ -65,8 +65,6 @@ export type ProviderModel = {
   known?: boolean;
 };
 
-export type ProviderModelEntry = ProviderModel;
-
 export type ProvidersSnapshot = {
   revision: number;
   connections: ProviderConnection[];
@@ -84,8 +82,6 @@ export type GatewayStatus = {
   model_count: number;
 };
 
-export type ProviderCatalogProjection = ProvidersSnapshot;
-
 export type ProviderConnectionInput = {
   id?: string;
   name?: string;
@@ -95,18 +91,6 @@ export type ProviderConnectionInput = {
   /** Optional exact catalog identity for advanced/manual catalog seeding. */
   model_id?: string;
   advanced?: boolean;
-};
-
-export type ProviderConnectionSelectionInput = {
-  client: ProviderClient | string;
-  connectionId: string;
-  revision: number;
-};
-
-export type ProviderSwitchInput = {
-  client: ProviderClient | string;
-  connectionId: string;
-  revision: number;
 };
 
 export type ThreadRuntimeSelection = {
@@ -138,22 +122,10 @@ export type ProviderModelsResult = {
   persistenceDurable?: boolean;
 };
 
-export type ProviderCredentialResult = {
-  connection_id: string;
-  credential_ready: boolean;
-  persistence: import("./persistence").MutationPersistence;
-};
-
 export type ProviderConnectionTestResult = {
   client: ProviderClient;
   modelCount: number;
   latencyMs: number;
-};
-
-export type TestProviderConnectionInput = {
-  client: ProviderClient;
-  baseUrl: string;
-  apiKey: string;
 };
 
 export type ProvidersMutationResult = {
@@ -173,15 +145,6 @@ export type ThreadRuntimeMutationResult = {
   runtime: ThreadRuntimeSelection;
   persistence: import("./persistence").MutationPersistence;
 };
-export type ProviderModelsDiscoveryResult = ProviderModelsResult;
-
-export type UpsertProviderConnectionInput = {
-  connection: ProviderConnectionInput;
-  revision: number;
-  operation?: "create" | "update";
-};
-
-export type SetProviderConnectionInput = ProviderConnectionSelectionInput;
 
 export type CreateSessionResult = {
   workerId: string;
@@ -206,21 +169,4 @@ export function isSupportedProviderClient(
 ): value is ProviderClient {
   const client = normalizeProviderClient(value);
   return client === "codex" || client === "claude";
-}
-
-export function providerClientLabel(client: string): string {
-  switch (normalizeProviderClient(client)) {
-    case "codex":
-      return "Codex";
-    case "claude":
-      return "Claude Code";
-    default:
-      return normalizeProviderId(client) || "Unknown";
-  }
-}
-
-export function newProviderRequestId(): string {
-  return `provider_${Date.now().toString(36)}_${Math.random()
-    .toString(36)
-    .slice(2, 10)}`;
 }

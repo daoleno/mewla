@@ -8,7 +8,8 @@ import { FakeDaemon } from "../../more/testing/fakeDaemon";
 import { CodexSkillsSheet } from "../CodexSkillsSheet";
 import { CodexStatusSheet } from "../CodexStatusSheet";
 import { ModelSheet } from "../ModelSheet";
-import { ComposerPlusButton, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu, type ComposerSendRoute } from "../SlashMenu";
+import type { ComposerSendRoute } from "../../../core/session/composerSlash";
+import { ComposerPlusButton, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../SlashMenu";
 
 /**
  * One Session sheet (or the slash menu) on its own, for `nsh test`: the test plays the

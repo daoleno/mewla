@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../conversation/conversation";
 import { reconcileConversationDeltaEvents } from "../conversation/reconciliation";
-import { projectTimelineRenderItems } from "./grouping";
 import { makeComplexTimelineEvents, lastAssistantEventId } from "./fixtures";
 import { projectTimeline } from "./projectTimeline";
 
@@ -39,26 +38,14 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
     for (let iteration = 0; iteration < 10; iteration += 1) {
       const started = nowMs();
       const timeline = projectTimeline(fixture, null);
-      const render = projectTimelineRenderItems(
-        timeline.items,
-        { showDateDividers: true },
-        null,
-      );
       initialDurations.push(nowMs() - started);
-      expect(render.items.length).toBeGreaterThan(0);
+      expect(timeline.items.length).toBeGreaterThan(0);
     }
 
     let events = fixture;
     let timeline = projectTimeline(events, null);
-    let render = projectTimelineRenderItems(
-      timeline.items,
-      { showDateDividers: true },
-      null,
-    );
     const streamEventId = lastAssistantEventId(events);
     const streamDurations: number[] = [];
-    let streamChangedSourceMax = 0;
-    let streamRenderChurnMax = 0;
     for (let iteration = 0; iteration < STREAM_ITERATIONS; iteration += 1) {
       const current = events.find((event) => event.id === streamEventId)!;
       const upsert: CodexConversationEvent = {
@@ -69,21 +56,8 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
       const started = nowMs();
       events = reconcileConversationDeltaEvents(events, [upsert]);
       timeline = projectTimeline(events, timeline.cache);
-      render = projectTimelineRenderItems(
-        timeline.items,
-        { showDateDividers: true },
-        render.cache,
-      );
       streamDurations.push(nowMs() - started);
-      streamChangedSourceMax = Math.max(
-        streamChangedSourceMax,
-        render.changedSourceCount,
-      );
-      streamRenderChurnMax = Math.max(
-        streamRenderChurnMax,
-        render.stableRenderChurn,
-      );
-      expect(render.items.length).toBeGreaterThan(0);
+      expect(timeline.items.length).toBeGreaterThan(0);
     }
 
     const appendDurations: number[] = [];
@@ -102,14 +76,9 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
       const nextEvents = events.concat(appended);
       const started = nowMs();
       timeline = projectTimeline(nextEvents, timeline.cache);
-      render = projectTimelineRenderItems(
-        timeline.items,
-        { showDateDividers: true },
-        render.cache,
-      );
       appendDurations.push(nowMs() - started);
       events = nextEvents;
-      expect(render.mode).toBe("append");
+      expect(timeline.items.length).toBeGreaterThan(0);
     }
 
     const prependDurations: number[] = [];
@@ -134,14 +103,9 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
       const nextEvents = older.concat(events);
       const started = nowMs();
       timeline = projectTimeline(nextEvents, timeline.cache);
-      render = projectTimelineRenderItems(
-        timeline.items,
-        { showDateDividers: true },
-        render.cache,
-      );
       prependDurations.push(nowMs() - started);
       events = nextEvents;
-      expect(render.mode).toBe("prepend");
+      expect(timeline.items.length).toBeGreaterThan(0);
     }
 
     output.push({
@@ -152,8 +116,6 @@ benchmark("Interface 1k/5k/10k production-owner performance", () => {
         append: summarize(appendDurations),
         prependPage20: summarize(prependDurations),
       },
-      streamChangedSourceMax,
-      streamRenderChurnMax,
       blankWindowObservedInPureDataHarness: false,
       blankWindowMeasurement: "device onViewableItemsChanged collector",
     });

@@ -1,6 +1,6 @@
 import { cleanup, computed, effect, signal, Storage, untracked } from "nsh";
 import {
-  decodeComputers, otherComputerState, othersNeedYou, peerOf, relayDiagnosis, whenWords,
+  decodeComputers, otherComputerState, peerOf, relayDiagnosis, whenWords,
   type ComputerConnection, type ComputersView, type OtherComputerState,
 } from "../../core/computer/computers";
 import type { StoredServer } from "../../core/servers";
@@ -73,9 +73,6 @@ export function when(at: number): string {
 export function otherState(server: StoredServer): OtherComputerState {
   return otherComputerState({ check: checks()[server.id], peer: peerOf(computersView(), server), when });
 }
-
-/** Another paired computer has requests open (the cat's dot, SPEC §1.3). */
-export const otherRequests = computed(() => othersNeedYou(computersView()));
 
 /** The current computer's own dated word on its relay ("Relay unreachable · 13:40"), for a relay-paired phone. */
 export const currentRelayDiagnosis = computed((): string | null => {

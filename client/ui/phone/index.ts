@@ -2,4 +2,4 @@
 // the floating control over every page, and what its Settings row says.
 export { isPhoneLink } from "../../core/phone/link";
 export { PhonePage } from "./PhonePage";
-export { phoneAvailable, phoneStateWord, phoneStatus, startPhoneUse } from "./state";
+export { phoneAvailable, phoneStateWord } from "./state";

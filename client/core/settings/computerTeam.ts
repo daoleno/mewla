@@ -185,11 +185,6 @@ async function joinAll(servers: readonly StoredServer[], deps: TeamDeps): Promis
   }
 }
 
-/** Whether computers are being introduced now. */
-export function joiningComputers(): boolean {
-  return running !== null;
-}
-
 /** Runs `listener` after every introduction round. */
 export function onComputersJoined(listener: () => void): () => void {
   listeners.add(listener);

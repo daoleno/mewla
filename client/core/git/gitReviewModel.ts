@@ -56,20 +56,6 @@ export function gitReviewOrder(groups: GitReviewGroups): GitReviewEntry[] {
   return [...groups.staged, ...groups.changes];
 }
 
-/** The neighbour of an entry in reading order, or null at either end. */
-export function adjacentGitReviewEntry(
-  order: readonly GitReviewEntry[],
-  key: string,
-  direction: "next" | "previous",
-): GitReviewEntry | null {
-  const index = order.findIndex((entry) => entry.key === key);
-  if (index === -1) return null;
-  // A new folder has no diff to read: the reader steps over it.
-  const step = direction === "next" ? 1 : -1;
-  for (let at = index + step; at >= 0 && at < order.length; at += step) if (!order[at].file.directory) return order[at];
-  return null;
-}
-
 export function sumGitReviewEntries(entries: readonly GitReviewEntry[]) {
   let additions = 0;
   let deletions = 0;
@@ -79,13 +65,6 @@ export function sumGitReviewEntries(entries: readonly GitReviewEntry[]) {
     deletions += entry.deletions;
   }
   return { additions, deletions };
-}
-
-/** `+416 −10 · 14 files`: the one summary of everything that changed. */
-export function gitReviewSummary(snapshot: GitDiffStatusSnapshot | null): string {
-  if (!snapshot?.available || snapshot.clean) return "";
-  const files = `${snapshot.file_count} ${snapshot.file_count === 1 ? "file" : "files"}`;
-  return `+${snapshot.additions} −${snapshot.deletions} · ${files}`;
 }
 
 /** `↑2 ↓1`, or an empty string when level with the upstream. */

@@ -63,20 +63,6 @@ export function parseOptionalMutationPersistence(
   return hasAny ? parseRequiredMutationPersistence(record) : undefined;
 }
 
-export function parseOptionalListPersistence(
-  payload: unknown,
-): MutationPersistence {
-  return (
-    parseOptionalMutationPersistence(payload) ?? {
-      applied: true,
-      durable: true,
-      outcome: "applied",
-    }
-  );
-}
-
-export const ambiguousPersistenceError = ambiguousProviderMutation;
-
 export function classifyMutationPersistence(
   persistence: MutationPersistence,
 ): PersistenceClassification {

@@ -114,10 +114,6 @@ export type PendingUserMessageInput = Omit<
   | "claimedElsewhereEventIds"
 >;
 
-export type PendingUserMessageAttempt = {
-  requestId: string;
-};
-
 /** The outcome of one send attempt, correlated by its request id. */
 export type PendingUserMessageSettlement = PendingDeliverySettlement & {
   requestId: string;
@@ -204,10 +200,6 @@ export function forgetInterfaceConversationsOutsideServer(serverId: string) {
   for (const key of Array.from(conversationCache.keys())) {
     if (!key.startsWith(`${serverId}:`)) conversationCache.delete(key);
   }
-}
-
-export function clearInterfaceConversationCache() {
-  conversationCache.clear();
 }
 
 export function initialInterfaceChatThreadState(
@@ -1261,4 +1253,3 @@ function maxUserEventSeq(conversation: CodexConversation | null) {
   });
   return maxSeq;
 }
-

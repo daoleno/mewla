@@ -360,16 +360,6 @@ export function reconcileServerWorkers(
   return next;
 }
 
-export function countWorkersByServer(
-  agents: readonly Pick<Worker, 'serverId'>[],
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const agent of agents) {
-    counts[agent.serverId] = (counts[agent.serverId] ?? 0) + 1;
-  }
-  return counts;
-}
-
 function markServerHydrated(
   hydratedServers: WorkerSessionsState['hydratedServers'],
   serverId: string,

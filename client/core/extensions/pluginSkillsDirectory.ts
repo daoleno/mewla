@@ -4,7 +4,7 @@ import type {
 } from "./pluginsManagement";
 import type { LogicalPlugin } from "./pluginsScreenModel";
 import type { InstalledSkill } from "./skillsManagement";
-import { pathBasename } from "./pathDisplay";
+import { pathBasename } from "../timeline/pathDisplay";
 
 /**
  * Directory of Skills provided by one installed Plugin.

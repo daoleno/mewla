@@ -153,10 +153,6 @@ export function isTotalTokensKnown(item: { totalTokensKnown?: boolean }): boolea
   return item.totalTokensKnown !== false;
 }
 
-export function isTokenBreakdownKnown(item: { tokenBreakdownKnown?: boolean }): boolean {
-  return item.tokenBreakdownKnown !== false;
-}
-
 export function normalizeStatsPayload(payload: StatsPayload | null | undefined): StatsView | null {
   if (!payload || !payload.ranges || typeof payload.ranges !== "object" || Array.isArray(payload.ranges)) return null;
   const ranges: Record<string, RangeData> = {};

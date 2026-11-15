@@ -1,4 +1,4 @@
-import type { SessionFileBinaryRequest, SessionFileMetadata } from "./sessionFilePreview";
+import type { SessionFileMetadata } from "./sessionFilePreview";
 
 // The host (files.download) picks the folder, takes the first free name of
 // sessionFileDownloadNameCandidates, streams into it and deletes only the file
@@ -157,23 +157,6 @@ export function sessionFileCanDownload(
   if (!metadata.path.trim() || !metadata.generation.trim()) return false;
   if (!Number.isFinite(metadata.size) || metadata.size < 0) return false;
   return metadata.size <= SESSION_FILE_BINARY_LIMIT_BYTES;
-}
-
-export function sessionFileDownloadRequest(
-  identity: {
-    workerId: string;
-    processId: number;
-    startedAt: number;
-  },
-  metadata: SessionFileMetadata,
-): SessionFileBinaryRequest {
-  return {
-    workerId: identity.workerId,
-    processId: identity.processId,
-    startedAt: identity.startedAt,
-    path: metadata.path,
-    generation: metadata.generation,
-  };
 }
 
 /** User/picker/abort cancellation only — never HTTP failure text. */

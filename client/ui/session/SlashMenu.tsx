@@ -14,8 +14,6 @@ export {
   routeComposerSend,
   slashMenuState,
   type ComposerAlert,
-  type ComposerSendRoute,
-  type ComposerSlashContext,
 } from "../../core/session/composerSlash";
 
 function commandIcon(name: string): IconName {

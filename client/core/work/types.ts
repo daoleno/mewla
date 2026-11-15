@@ -150,10 +150,4 @@ export type BrainObjective = {
   back: number;
 };
 
-export type BrainWorkBacklog = {
-  total: number;
-  queued_attention: number;
-  historical_results: number;
-};
-
 export type { BrainWorkerRef } from "../brain";

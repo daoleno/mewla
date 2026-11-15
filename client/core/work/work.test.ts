@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Frame, RequestOptions } from "../transport";
-import { markWorkRead, objectiveLine, workAction, workOfSnapshot } from "./brainWork";
+import { markWorkRead, workAction, workOfSnapshot } from "./brainWork";
 import { readableBody, WorkItemConflict, WorkItems, workItemStatus } from "./workItems";
 
 class FakeTransport {
@@ -34,7 +34,7 @@ describe("Brain's Work in the snapshot", () => {
     });
     expect(work.current.map((w) => w.work_id)).toEqual(["w1"]);
     expect(work.open.map((w) => w.work_id)).toEqual(["o1"]);
-    expect(objectiveLine(work.objective)).toBe("Ship the beta · 5 of 5 back");
+    expect(work.objective).toMatchObject({ title: "Ship the beta", total: 5, back: 5 });
     expect(workOfSnapshot(null)).toEqual({ current: [], open: [], objective: null });
   });
 

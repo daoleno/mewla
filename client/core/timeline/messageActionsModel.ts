@@ -49,8 +49,3 @@ export interface MessageEdit {
    */
   rewound?: boolean;
 }
-
-/** An edit goes out whenever it says something. */
-export function editIsSendable(_edit: MessageEdit, draft: string): boolean {
-  return draft.trim().length > 0;
-}

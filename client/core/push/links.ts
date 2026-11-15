@@ -28,13 +28,6 @@ export function pushLink(data: unknown): string | null {
   }
 }
 
-/** A calendar alert (pushed or the phone's own): while the app is open, the in-app card shows it instead. */
-export function isCalendarAlert(data: unknown): boolean {
-  if (!data || typeof data !== "object") return false;
-  const fields = data as Record<string, unknown>;
-  return fields.screen === "calendar" && typeof fields.alert_key === "string";
-}
-
 export interface ParsedLink {
   /** `brain`, `sessions`, `calendar`, `live`, `more`, … */
   section: string;

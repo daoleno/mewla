@@ -150,14 +150,6 @@ export function presentPendingUserMessageLifecycle(
   };
 }
 
-/** True while the message waits to be delivered or echoed; false once it failed. */
-export function showsPendingSendStatusMark(args: {
-  pending?: boolean;
-  lifecycle?: PendingUserMessageLifecycle;
-}): boolean {
-  return Boolean(args.pending) && (args.lifecycle ?? "pending") !== "failed";
-}
-
 export type ReconcileUserEvent = {
   id: string;
   seq?: number;

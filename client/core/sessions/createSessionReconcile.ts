@@ -2,13 +2,13 @@
 import {
   ProviderError,
   providerMutationRequiresRefresh,
-} from "./providerErrors";
+} from "../providers/errors";
 import {
   classifyMutationPersistence,
   durabilityWarningMessage,
   type MutationPersistence,
-} from "./providerPersistence";
-import type { CreateSessionResult } from "./providerTypes";
+} from "../providers/persistence";
+import type { CreateSessionResult } from "../providers/types";
 
 export type CreateSessionReconciliation =
   | {

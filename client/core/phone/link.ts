@@ -7,13 +7,6 @@ import type { StoredServer } from "../storedServerContract";
  * no JavaScript once the app is swiped away, and Phone use must survive that and a reboot. The app
  * only says which computer it follows. The frames mirror daemon/phone/protocol.go.
  */
-export const PHONE_PROTOCOL_VERSION = 1;
-
-/** The daemon's /phone/device close codes: another phone took Phone use, this protocol is unknown, a bad frame. */
-export const PHONE_CLOSE = { replaced: 4001, unsupported: 4002, protocol: 4003 } as const;
-
-/** How long the link waits before trying the computer again (link/PhoneFrames.kt LinkBackoff). */
-export const PHONE_LINK_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
 
 /** What the host's link is told to follow (`phone.follow`). */
 export interface PhoneLinkTarget {

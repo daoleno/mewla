@@ -120,16 +120,6 @@ export function gitSelectedLines(
   });
 }
 
-export function gitHunkChangeCounts(hunk: GitPatchHunk): { additions: number; deletions: number } {
-  let additions = 0;
-  let deletions = 0;
-  for (const line of hunk.lines) {
-    if (line.kind === "+") additions += 1;
-    else if (line.kind === "-") deletions += 1;
-  }
-  return { additions, deletions };
-}
-
 /**
  * A commit's patch cut into one patch per file, in the order git printed
  * them. `files` is the daemon's list for the same commit: when it has as many

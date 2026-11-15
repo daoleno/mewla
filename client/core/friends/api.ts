@@ -124,7 +124,6 @@ export interface FriendsStatus {
 }
 
 export const FRIENDS_POST_LIMIT = 500;
-export const FRIENDS_MAX_IMAGES = 4;
 export const FRIENDS_COMMENT_LIMIT = 280;
 
 /** "now", "12m", "3h", "yesterday", "5d", then a short date. */

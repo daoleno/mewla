@@ -11,13 +11,11 @@ import {
   canDisconnect,
   connectLabel,
   connectsWithForm,
-  connectSteps,
   enabledRequest,
   isConnecting,
   networkLabel,
   pluginCatalogRows,
   reconnectsWithWrites,
-  serviceOff,
   toolPolicyRequest,
   toolSections,
   toolsSwitch,
@@ -30,7 +28,6 @@ const plugin = (id: string, name: string): PluginIntegration => ({ id, name, ava
 const account = (patch: Partial<PluginAccount>): PluginAccount => ({
   id: "a1", integration: "github", name: "octo", identity: "octo", enabled: true, status: "connected", history: [], ...patch,
 });
-const flow = { id: "f1", integration: "github", status: "waiting" as const, expires: "2999-01-01T00:00:00Z" };
 
 describe("Plugins list rows", () => {
   const catalog = [plugin("github", "GitHub"), plugin("slack", "Slack"), plugin("linear", "Linear"), plugin("mcp", "MCP server")];
@@ -69,10 +66,7 @@ describe("Plugins list rows", () => {
     ], reviewed);
     const row = (id: string) => rows.services.find((item) => item.plugin.id === id)!;
     expect(row("github").state).toMatchObject({ kind: "status", label: "Connected", tone: "success" });
-    expect(serviceOff(row("github").accounts)).toBe(false);
     expect(row("linear").state).toEqual({ kind: "status", label: "Off", tone: "neutral" });
-    expect(serviceOff(row("linear").accounts)).toBe(true);
-    expect(serviceOff([])).toBe(false);
   });
 });
 
@@ -127,19 +121,7 @@ describe("account status and capability boundaries", () => {
 });
 
 describe("authorization progress", () => {
-  test("browser step is active while waiting; a native return moves to verification", () => {
-    expect(connectSteps("waiting", { serverId: "s", flow }).map((step) => step.state)).toEqual(["active", "pending"]);
-    expect(connectSteps("verifying", { serverId: "s", flow, callback: "mewla://plugins?state=x" }).map((step) => step.state)).toEqual(["done", "active"]);
-    expect(connectSteps("connected", null).map((step) => step.state)).toEqual(["done", "done"]);
-  });
-
-  test("a failure marks the step that failed, never a later success", () => {
-    expect(connectSteps("failed", { serverId: "s", flow }).map((step) => step.state)).toEqual(["failed", "pending"]);
-    expect(connectSteps("failed", { serverId: "s", flow, callback: "mewla://plugins?state=x" }).map((step) => step.state)).toEqual(["done", "failed"]);
-  });
-
-  test("device codes name the code step", () => {
-    expect(connectSteps("waiting", { serverId: "s", flow: { ...flow, user_code: "ABCD-1234" } })[0]!.label).toContain("code");
+  test("waiting is connecting; a failure is not", () => {
     expect(isConnecting("waiting")).toBe(true);
     expect(isConnecting("failed")).toBe(false);
   });

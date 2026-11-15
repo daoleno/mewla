@@ -29,13 +29,6 @@ export const WORKER_SESSION_FEED_TYPES = [
   "worker_session_heartbeat",
 ] as const;
 
-export function isWorkerSessionFeedType(type: unknown): boolean {
-  return (
-    typeof type === "string" &&
-    (WORKER_SESSION_FEED_TYPES as readonly string[]).includes(type)
-  );
-}
-
 export class WorkerSessionFeed {
   private last: number | null = null;
   private resyncing = false;

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, brainCanNow, pluginReturnError, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
+import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, pluginReturnError, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
 const pending: PendingConnection = { serverId: "server-a", flow: { id: "flow-a", integration: "linear", status: "waiting", expires: new Date(Date.now() + 60000).toISOString(), authorization_url: "https://mcp.linear.app/authorize?state=secret-state" } };
 test("native return is bound to exact URI and original state", () => {
   expect(matchesPluginReturn("mewla://plugins?state=secret-state&code=one", pending.flow)).toBe(true);
@@ -44,8 +44,4 @@ test("bare Plugins callbacks are recognised only on the mewla scheme", () => {
   expect(isPluginCallbackUrl("mewla://plugins")).toBe(true);
   expect(isPluginCallbackUrl("other://plugins")).toBe(false);
   expect(isPluginCallbackUrl("mewla://plugins?state=abc")).toBe(false);
-});
-test("once connected, one line says what Brain can now do", () => {
-  expect(brainCanNow(pluginJobs.github?.read, "GitHub")).toBe("Brain can now read repositories, issues and pull requests.");
-  expect(brainCanNow(undefined, "GitHub")).toBe("Brain can read and search GitHub.");
 });

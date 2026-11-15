@@ -114,11 +114,6 @@ export function otherComputerState(input: { check?: ComputerCheck; peer?: Paired
   return { word: "", needsYou: false, dim: false };
 }
 
-/** Another paired computer has something open for the person (offline is unknown: no dot). */
-export function othersNeedYou(view: ComputersView | null): boolean {
-  return Boolean(view?.computers.some((peer) => peer.online && (peer.openRequests ?? 0) > 0));
-}
-
 /**
  * The current computer's own word on why it cannot be reached through Mewla's relay, with when that
  * began: "Relay unreachable · 13:40". None while its relay connection is up, or when it said no cause.

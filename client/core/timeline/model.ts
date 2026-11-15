@@ -42,7 +42,7 @@ import type { DisplayAttachment } from "./types";
 import { delegatedTask } from "./delegatedBrief";
 import type { TimelineItem } from "./types";
 import { compareConversationEvents } from "../conversation/reconciliation";
-import { isImageAttachment } from "./imageSource";
+import { isImageAttachment } from "../files/imageSource";
 import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
 import { computerMessageTimelineItem } from "./computerMessageCardModel";
 import { pathBasename } from "./pathDisplay";

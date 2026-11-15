@@ -7,7 +7,6 @@ import {
   consumerRowMeta,
   consumersWide,
   consumerStatus,
-  memoryPressureMeterLabel,
   memoryPressureMicro,
   memoryUsedBytes,
   pressedResources,
@@ -15,9 +14,7 @@ import {
   primaryDisk,
   processCopyChoices,
   processesByMemory,
-  psiChartLabel,
   psiPeak,
-  psiResourceChartLabel,
   tileBasis,
   usesMemoryPressure,
 } from "./presentation";
@@ -52,15 +49,11 @@ describe("memory and pressure", () => {
     const t = telemetry({ psi: { cpu: { some: { avg10: 2, avg60: 0, avg300: 0 } }, memory: { some: { avg10: 5, avg60: 0, avg300: 0 } }, io: { some: { avg10: 5, avg60: 0, avg300: 0 } } } });
     expect(psiPeak(t)).toEqual({ key: "memory", value: 5 });
     expect(psiPeak(telemetry({}))).toBeUndefined();
-    expect(psiChartLabel("memory")).toBe("PSI Mem some history, scale 0–100%");
-    expect(psiChartLabel(undefined)).toBe("PSI unavailable some history, scale 0–100%");
-    expect(psiResourceChartLabel("io")).toBe("I/O PSI some history, scale 0–100%");
   });
 
   test("a Mac reports a memory pressure level: the meter says it, the micro line has free memory, load and cores", () => {
     const mac = telemetry({ memory_pressure: { level: "warn", free_percent: 41.6 }, cpu: { load1: 2.14, per_core_percent: [1, 2, 3, 4] } });
     expect(usesMemoryPressure(mac)).toBe(true);
-    expect(memoryPressureMeterLabel("warn")).toBe("Memory pressure Warning");
     expect(memoryPressureMicro(mac)).toBe("42% free · Load 2.1 · 4 cores");
     expect(memoryPressureMicro(telemetry({ memory_pressure: { level: "normal" }, cpu: { load1: 1 } }))).toBe("—");
     const linux = telemetry({ memory_pressure: { level: "warn" }, psi: { cpu: { some: { avg10: 1, avg60: 0, avg300: 0 } } } });

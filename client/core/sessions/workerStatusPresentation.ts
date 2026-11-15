@@ -1,10 +1,6 @@
 /** From the Expo app's services/workerStatusPresentation.ts. */
 import type { WorkerStatus } from './workers';
 
-/** Icon names; the UI owns the icon set. */
-export type WorkerStatusIndicatorIcon =
-  'check-circle-fill' | 'close-circle-fill' | 'pause-circle' | 'help';
-
 /** True only for durable active-turn Running from the daemon contract. */
 export function isWorkerActivelyRunning(status: WorkerStatus): boolean {
   return status === 'running';
@@ -25,23 +21,6 @@ export function workerStatusLabel(status: WorkerStatus): string {
       return 'Idle';
     default:
       return 'Idle';
-  }
-}
-
-export function workerStatusIndicatorIcon(
-  status: WorkerStatus,
-): WorkerStatusIndicatorIcon | null {
-  switch (status) {
-    case 'running':
-      return null;
-    case 'done':
-      return 'check-circle-fill';
-    case 'failed':
-      return 'close-circle-fill';
-    case 'blocked':
-      return 'pause-circle';
-    case 'unknown':
-      return 'help';
   }
 }
 

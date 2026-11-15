@@ -8,7 +8,7 @@ import {
   normalizeProviderClient,
   type ProviderClient,
   type ProvidersSnapshot,
-} from "../sessions/providerTypes";
+} from "../providers/types";
 
 /**
  * The client the launch command targets, when it is a managed Provider client.

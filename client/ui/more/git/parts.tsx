@@ -104,11 +104,6 @@ export function FlashLine() {
   );
 }
 
-/** A labelled block inside a page: what a state card is in the old sheet. */
-export function Block(props: { children?: JSX.Element; class?: string }) {
-  return <View class={`mt-4 overflow-hidden rounded-(--radius-group) bg-card ${props.class ?? ""}`}>{props.children}</View>;
-}
-
 /**
  * A page's content while its review's computer is current. After a switch the
  * page shows none of the last computer's repository.

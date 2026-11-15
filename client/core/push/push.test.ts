@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { memoryStore } from "../testing/memoryPlatform";
-import { isCalendarAlert, parseLink, pushLink } from "./links";
+import { parseLink, pushLink } from "./links";
 import { liveAnswerOf, liveAnswerRequestId, widgetBaseUrl } from "./live";
 import { askForReminders, ensurePermission, expoPushToken, PERMISSION_ASKED_KEY, registerPushMessage, reminderPermission, type PushHost } from "./registration";
 import { NotificationReporter } from "./report";
@@ -23,10 +23,6 @@ describe("a tapped push opens", () => {
   test("nothing for a push it does not know", () => {
     expect(pushLink({ screen: "unknown" })).toBeNull();
     expect(pushLink(null)).toBeNull();
-  });
-  test("a calendar alert is left to the in-app card while the app is open", () => {
-    expect(isCalendarAlert({ screen: "calendar", alert_key: "item@1" })).toBe(true);
-    expect(isCalendarAlert({ screen: "calendar" })).toBe(false);
   });
   test("links parse into section, path and decoded params", () => {
     expect(parseLink("mewla://brain/work/w%201?serverId=s1")).toEqual({ section: "brain", path: ["work", "w 1"], params: { serverId: "s1" } });

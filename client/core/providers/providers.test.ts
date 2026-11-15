@@ -1,28 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import {
-  parseProviderCredentialResult,
   parseProviderConnectionTestResult,
   parseProviderModel,
   parseProvidersSnapshot,
   parseThreadRuntimeSelection,
-  connectionsForSession,
-  modelChoicesForSession,
-  curatedConnectionInput,
+} from "./parse";
+import {
   advancedConnectionInput,
   createdConnectionFromMutation,
-  ProviderRequestOwner,
-  blockCreateAfterAmbiguity,
-  isCreateBlockedByAmbiguity,
-  shouldUnlockCreateAfterAmbiguity,
-  clientForConnection,
   enabledModelIds,
-  launchSelectionFromSnapshot,
-  modelSupportChoices,
   modelSupportToggleTurnsOff,
-  providerClientForCommand,
   toggleModelSupport,
-  type ProvidersSnapshot,
-} from "./index";
+} from "./presentation";
+import { ProviderRequestOwner } from "./reconcile";
+import type { ProvidersSnapshot } from "./types";
 
 function providerSnapshot(
   overrides?: Partial<ProvidersSnapshot>,
@@ -148,17 +139,6 @@ describe("Provider DTO parse", () => {
     expect(catalog?.revision).toBe(3);
     expect(catalog?.connections[0]?.name).toBe("DeepSeek");
     expect(catalog?.connections[0]?.base_url).toBeUndefined();
-    expect(
-      connectionsForSession(catalog!, {
-        session_id: "tmux:@1",
-        client: "codex",
-        connection_id: "c1",
-        connection_name: "DeepSeek",
-        model_id: "deepseek-chat",
-        credential_ready: true,
-        hot_switchable: true,
-      }),
-    ).toHaveLength(1);
   });
 
   test("preserves an explicit direct-login connection-only default", () => {
@@ -219,7 +199,7 @@ describe("Provider DTO parse", () => {
     expect(parseProvidersSnapshot(raw)).toBeNull();
   });
 
-  test("parses session selection and credential result without secrets", () => {
+  test("parses session selection without secrets", () => {
     const selection = parseThreadRuntimeSelection({
       session_id: "tmux:@1",
       client: "codex",
@@ -231,18 +211,6 @@ describe("Provider DTO parse", () => {
     });
     expect(selection?.connection_id).toBe("c1");
     expect(selection?.reasoning_efforts).toBeUndefined();
-
-    const cred = parseProviderCredentialResult(
-      {
-        connection_id: "c1",
-        credential_ready: true,
-        persistence_outcome: "applied",
-        persistence_durable: true,
-      },
-      "c1",
-    );
-    expect(cred?.credential_ready).toBe(true);
-    expect((cred as any).credential).toBeUndefined();
   });
 
   test("session selection parses the Reasoning Effort projection", () => {
@@ -285,21 +253,6 @@ describe("Provider DTO parse", () => {
     expect(known?.known).toBe(true);
   });
 
-  test("credential result parser never retains secret fields", () => {
-    expect(() =>
-      parseProviderCredentialResult(
-        {
-          connection_id: "c1",
-          credential_ready: true,
-          persistence_outcome: "applied",
-          persistence_durable: true,
-          credential: "sk-leak",
-        },
-        "c1",
-      ),
-    ).toThrow(/credential/i);
-  });
-
   test("parses a secret-free connection test result", () => {
     expect(
       parseProviderConnectionTestResult(
@@ -335,11 +288,6 @@ describe("Provider DTO parse", () => {
 
 describe("Provider Settings and Plus presentation policy", () => {
   test("custom endpoints are explicitly scoped to one client", () => {
-    const snapshot = providerSnapshot();
-    expect(curatedConnectionInput(snapshot.presets[0]!, "codex")).toEqual({
-      preset_id: "deepseek",
-      client: "codex",
-    });
     const gateway = advancedConnectionInput({
       name: "Internal",
       client: "codex",
@@ -403,54 +351,6 @@ describe("Provider Settings and Plus presentation policy", () => {
     expect(() =>
       createdConnectionFromMutation(before, ambiguous, "deepseek"),
     ).toThrow(/uniquely identify/i);
-  });
-
-  test("Plus choices filter by Session client, availability, and credential readiness", () => {
-    const snapshot = providerSnapshot();
-    const codexSelection = {
-      session_id: "agent-a",
-      client: "codex",
-      connection_id: "c1",
-      connection_name: "DeepSeek",
-      model_id: "deepseek-chat",
-      credential_ready: true,
-      hot_switchable: true,
-    };
-    expect(
-      connectionsForSession(snapshot, codexSelection).map((item) => item.id),
-    ).toEqual(["c1"]);
-    expect(
-      modelChoicesForSession(snapshot, codexSelection).map((choice) => ({
-        connection: choice.connection.id,
-        model: choice.model.id,
-        current: choice.current,
-        disabled: choice.disabled,
-      })),
-    ).toEqual([
-      {
-        connection: "c1",
-        model: "deepseek-chat",
-        current: true,
-        disabled: false,
-      },
-    ]);
-
-    const claudeSelection = {
-      ...codexSelection,
-      client: "claude",
-      connection_id: "c2",
-      connection_name: "Claude Gateway",
-      model_id: "claude-custom",
-      credential_ready: false,
-    };
-    expect(modelChoicesForSession(snapshot, claudeSelection)).toMatchObject([
-      {
-        connection: { id: "c2" },
-        model: { id: "claude-custom" },
-        current: true,
-        disabled: true,
-      },
-    ]);
   });
 });
 
@@ -516,83 +416,9 @@ describe("Provider stale, reconnect, and ambiguity admission", () => {
     expect(sessionOwner.acceptSession(sessionRefresh.token)).toBe(true);
     expect(sessionOwner.admitRuntimeSwitch()).toMatchObject({ ok: true });
   });
-
-  test("ambiguous ordinary create remains blocked across reconnect until a fresh list", () => {
-    const blocked = blockCreateAfterAmbiguity(
-      {},
-      {
-        serverId: "server-a",
-        connectionGeneration: 3,
-        listReceipt: 10,
-      },
-    );
-    expect(
-      isCreateBlockedByAmbiguity({
-        blocks: blocked,
-        serverId: "server-a",
-        connectionGeneration: 4,
-        listReceipt: 10,
-        listFreshForConnection: false,
-      }),
-    ).toBe(true);
-    expect(
-      shouldUnlockCreateAfterAmbiguity({
-        block: blocked["server-a"],
-        connectionGeneration: 4,
-        listReceipt: 11,
-        listFreshForConnection: true,
-      }),
-    ).toBe(true);
-  });
 });
 
 describe("Model sync and default binding policy", () => {
-  test("connection client is the single scoped client or null", () => {
-    expect(
-      clientForConnection({
-        id: "c1",
-        name: "cf.api.fan",
-        preset_id: "custom",
-        clients: ["codex"],
-        credential_ready: true,
-        advanced: true,
-        base_url: "https://cf.api.fan/v1",
-      }),
-    ).toBe("codex");
-    expect(clientForConnection(null)).toBeNull();
-    expect(
-      clientForConnection({
-        id: "bad",
-        name: "bad",
-        preset_id: "custom",
-        clients: ["unknown-client"],
-        credential_ready: true,
-        advanced: true,
-      }),
-    ).toBeNull();
-  });
-
-  test("support chips mark the gateway's exposed models", () => {
-    const snapshot = providerSnapshot();
-    const connection = snapshot.connections[0]!;
-    const choices = modelSupportChoices(snapshot, connection, [
-      { id: "gpt-5.6-sol", available: true, source: "discovered" },
-      { id: "gpt-5.4-mini", available: true, source: "discovered" },
-      { id: "retired-model", available: false, source: "lkg" },
-    ]);
-    expect(choices.map((choice) => choice.model.id)).toEqual([
-      "gpt-5.6-sol",
-      "gpt-5.4-mini",
-      "retired-model",
-    ]);
-    // Selected means the gateway exposes the model; unselected models are
-    // still listed (disabled chips) so the client can re-enable them.
-    expect(choices[0]!.current).toBe(true);
-    expect(choices[1]!.current).toBe(true);
-    expect(choices[2]!.current).toBe(false);
-    expect(choices.every((choice) => choice.connection.id === "c1")).toBe(true);
-  });
-
   test("support toggle flips one model and keeps catalog order", () => {
     const snapshot = providerSnapshot({
       models: {
@@ -623,34 +449,6 @@ describe("Model sync and default binding policy", () => {
     expect(reenabled).toEqual(["gpt-5.6-sol"]);
   });
 
-  test("access switches follow the live catalog, not the discovery the sheet opened with", () => {
-    // The sheet keeps the discovery result it opened with. After a write the
-    // catalog changes; a switch that kept showing the old state let one tap
-    // silently turn a model off while it still looked on.
-    const opened = [
-      { id: "claude-opus-5-5", available: true, source: "discovered" },
-      { id: "claude-sonnet-5-5", available: true, source: "discovered" },
-    ];
-    const snapshot = providerSnapshot({
-      models: {
-        c2: [
-          { id: "claude-opus-5-5", available: false, source: "discovered" },
-          { id: "claude-sonnet-5-5", available: true, source: "discovered" },
-        ],
-      },
-    });
-    const connection = snapshot.connections[1]!;
-    expect(
-      modelSupportChoices(snapshot, connection, opened).map((c) => c.current),
-    ).toEqual([false, true]);
-    // A model the catalog does not list yet keeps its discovered state.
-    expect(
-      modelSupportChoices(providerSnapshot(), connection, opened).map(
-        (c) => c.current,
-      ),
-    ).toEqual([true, true]);
-  });
-
   test("only turning a model off needs a confirmation", () => {
     const snapshot = providerSnapshot({
       models: {
@@ -664,32 +462,4 @@ describe("Model sync and default binding policy", () => {
     expect(modelSupportToggleTurnsOff(snapshot, "c2", "claude-opus-4-8")).toBe(false);
     expect(modelSupportToggleTurnsOff(null, "c2", "claude-opus-5-5")).toBe(false);
   });
-
-  test("launch selection carries the client's connection without a model seed", () => {
-    const snapshot = providerSnapshot({
-      defaults: { codex: { connection_id: "c1" } },
-    });
-    expect(providerClientForCommand("codex")).toBe("codex");
-    expect(providerClientForCommand("cd /x && codex exec")).toBe("codex");
-    expect(providerClientForCommand("claude -p hi")).toBe("claude");
-    expect(providerClientForCommand("sh")).toBeNull();
-    expect(launchSelectionFromSnapshot(snapshot, "codex")).toEqual({
-      connectionId: "c1",
-      modelId: "",
-    });
-    expect(launchSelectionFromSnapshot(snapshot, "claude")).toBeNull();
-    expect(
-      launchSelectionFromSnapshot(
-        {
-          ...snapshot,
-          defaults: { claude: { connection_id: "c1" } },
-        },
-        "claude",
-      ),
-    ).toEqual({ connectionId: "c1", modelId: "" });
-    expect(
-      launchSelectionFromSnapshot({ ...snapshot, defaults: {} }, "codex"),
-    ).toBeNull();
-  });
 });
-

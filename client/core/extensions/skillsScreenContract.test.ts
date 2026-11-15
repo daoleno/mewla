@@ -3,7 +3,6 @@ import {
   buildSkillFileTree,
   defaultSkillFile,
   filterLogicalSkills,
-  filterInstalledSkills,
   groupLogicalSkills,
   skillMarkdownBody,
   skillRenderer,
@@ -42,19 +41,6 @@ const skill = (
 });
 
 describe("local Skills screen model", () => {
-  test("search and filters only installed local rows", () => {
-    const rows = [skill("alpha"), skill("beta", false)];
-    expect(
-      filterInstalledSkills(rows, "beta", "all", "all").map(
-        (item) => item.name,
-      ),
-    ).toEqual(["beta"]);
-    expect(
-      filterInstalledSkills(rows, "", "enabled", "all").map(
-        (item) => item.name,
-      ),
-    ).toEqual(["alpha"]);
-  });
   test("groups same-name copies without inventing priority or conflicts", () => {
     const codex = skill("imagegen", true, {
       id: "a".repeat(24),

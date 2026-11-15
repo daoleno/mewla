@@ -3,7 +3,7 @@ import type { BrainWorkerRef } from "../brain";
 import type { StoredInterfaceRenderMode, StoredInterfaceRenderModes } from "../sessions/deviceState";
 import type { AgentKind } from "../sessions/workerPresentation";
 import { normalizePrompt, type Worker, type WorkerCapabilities } from "../sessions/workers";
-import { normalizeWorkerSessionCapabilities, sessionAllowsModelProfileActivation } from "../timeline/sessionCapabilities";
+import { normalizeWorkerSessionCapabilities } from "../timeline/sessionCapabilities";
 
 /** What the route that opened a Session knew about it, before the list has it. */
 export interface TerminalRouteSessionHint {
@@ -183,25 +183,6 @@ export function resolveTerminalRouteWorker({
     last_output_lines: [],
     started_at: routeSessionHint.startedAt,
     updated_at: routeSessionHint.startedAt || now,
-  };
-}
-
-/**
- * Model menu visibility follows the same truth as the Composer control: the
- * action exists only when this Session's capability advertises the
- * daemon-acknowledged live switch. Managed read-only and unmanaged Sessions
- * keep the action hidden — never a dead control.
- */
-export function routeWorkerProviderModelActionState(
-  capabilities: WorkerCapabilities | null | undefined,
-): {
-  actionVisible: boolean;
-  activationEnabled: boolean;
-} {
-  const activeSwitch = sessionAllowsModelProfileActivation(capabilities);
-  return {
-    actionVisible: activeSwitch,
-    activationEnabled: activeSwitch,
   };
 }
 

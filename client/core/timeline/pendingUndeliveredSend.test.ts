@@ -5,7 +5,6 @@ import {
   UNCERTAIN_SEND_ERROR,
   UNDELIVERED_SEND_ERROR,
   presentPendingUserMessageLifecycle,
-  showsPendingSendStatusMark,
   type PendingDeliverySettlement,
 } from "../conversation/pendingUserMessages";
 import { projectTimeline } from "./projectTimeline";
@@ -227,12 +226,6 @@ describe("a send the computer never admitted", () => {
     // No prose anywhere in the row.
     expect(JSON.stringify(row)).not.toContain("Not delivered");
     expect(JSON.stringify(row)).not.toContain("Retry");
-    expect(
-      showsPendingSendStatusMark({
-        pending: true,
-        lifecycle: current.pendingUserMessages[0]?.lifecycle,
-      }),
-    ).toBe(false);
     if (row?.type !== "message") throw new Error("expected a message row");
     row.onRetryPending?.();
     row.onDiscardPending?.();
@@ -357,10 +350,6 @@ describe("what the person sees while a message waits", () => {
       onRetryPending: undefined,
       onDiscardPending: undefined,
     });
-    // The clock stays: nothing to tap yet.
-    expect(
-      showsPendingSendStatusMark({ pending: true, lifecycle: "uncertain" }),
-    ).toBe(true);
 
     current = snapshot(current, [
       BRAIN_ASK,

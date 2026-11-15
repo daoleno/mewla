@@ -2,7 +2,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   workerReducer,
-  countWorkersByServer,
   initialWorkerState,
   reconcileServerWorkers,
   normalizeApprovals,
@@ -64,7 +63,7 @@ describe("reconcileServerWorkers", () => {
 });
 
 describe("authoritative agent counts", () => {
-  test("derives counts through snapshots, upserts, removals, and server cleanup", () => {
+  test("tracks hydrated servers through snapshots, upserts, removals, and server cleanup", () => {
     let state = workerReducer(initialWorkerState, {
       type: "UPSERT_SERVER_WORKERS",
       serverId: "server",
@@ -72,7 +71,6 @@ describe("authoritative agent counts", () => {
       serverUrl: "https://server.test",
       workers: [agent("a"), agent("b")],
     });
-    expect(countWorkersByServer(all(state))).toEqual({ server: 2 });
 
     state = workerReducer(state, {
       type: "UPSERT_WORKER",
@@ -81,14 +79,12 @@ describe("authoritative agent counts", () => {
       serverUrl: "https://server.test",
       worker: agent("c"),
     });
-    expect(countWorkersByServer(all(state))).toEqual({ server: 3 });
 
     state = workerReducer(state, {
       type: "REMOVE_WORKER",
       serverId: "server",
       worker_id: "b",
     });
-    expect(countWorkersByServer(all(state))).toEqual({ server: 2 });
 
     state = workerReducer(state, {
       type: "UPSERT_SERVER_WORKERS",
@@ -98,10 +94,8 @@ describe("authoritative agent counts", () => {
       workers: [],
     });
     expect(state.hydratedServers.empty).toBe(true);
-    expect(countWorkersByServer(all(state))).toEqual({ server: 2 });
 
     state = workerReducer(state, { type: "REMOVE_SERVER", serverId: "server" });
-    expect(countWorkersByServer(all(state))).toEqual({});
     expect(state.hydratedServers.empty).toBe(true);
 
     state = workerReducer(state, { type: "REMOVE_SERVER", serverId: "empty" });

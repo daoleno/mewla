@@ -8,12 +8,6 @@ export type ActivityDay = {
   day: DayCell | null;
 };
 
-export function parseDateOnly(dateStr: string): Date | null {
-  const parts = dateStr.split('-').map((part) => Number(part));
-  if (parts.length < 3 || parts.some((part) => !Number.isFinite(part))) return null;
-  return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0, 0);
-}
-
 export function dateOnlyString(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');

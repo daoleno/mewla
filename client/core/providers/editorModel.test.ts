@@ -1,12 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
-  providerEditorAfterSave,
   providerEditorCanSave,
   providerEditorInitialBaseUrl,
   providerEditorInitialName,
   providerEditorRequiresBaseUrl,
-  providerEditorSessionKey,
-  providerEditorShouldResetFields,
   type ProvidersEditorState,
 } from "./editorModel";
 import {
@@ -109,21 +106,6 @@ describe("unified Add/Edit Provider editor", () => {
     ).toBe(false);
   });
 
-  test("client identity is part of the editor target", () => {
-    expect(providerEditorSessionKey({ kind: "create", client: "codex" })).toBe(
-      "create:codex",
-    );
-    expect(providerEditorSessionKey({ kind: "create", client: "claude" })).toBe(
-      "create:claude",
-    );
-    expect(
-      providerEditorShouldResetFields("create:codex", "create:claude"),
-    ).toBe(true);
-    expect(
-      providerEditorSessionKey({ kind: "edit", connection: connection() }),
-    ).toBe("edit:conn-a");
-  });
-
   test("edit prefills name and Base URL but never the API key", () => {
     const edit: ProvidersEditorState = {
       kind: "edit",
@@ -160,32 +142,6 @@ describe("unified Add/Edit Provider editor", () => {
         name: "OpenAI",
       }),
     ).toBe(true);
-  });
-
-  test("partial create success retries the same unified edit", () => {
-    const created = connection("conn-created");
-    const before: ProvidersEditorState = {
-      kind: "create",
-      client: "codex",
-    };
-    expect(
-      providerEditorAfterSave(before, {
-        status: "credential_failed",
-        connection: created,
-      }),
-    ).toEqual({ kind: "edit", connection: created, retry: true });
-    expect(
-      providerEditorShouldResetFields("create:codex", "edit:conn-created"),
-    ).toBe(false);
-  });
-
-  test("successful save closes the editor", () => {
-    expect(
-      providerEditorAfterSave(
-        { kind: "create", client: "codex" },
-        { status: "saved" },
-      ),
-    ).toBeNull();
   });
 });
 

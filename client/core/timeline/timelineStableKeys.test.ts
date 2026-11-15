@@ -1,10 +1,6 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../conversation/conversation";
-import {
-  buildTimelineRenderItems,
-  stabilizeTimelineRenderItems,
-} from "./grouping";
 import { buildTimeline } from "./model";
 
 function assistant(body: string): CodexConversationEvent {
@@ -42,15 +38,6 @@ describe("timeline identity", () => {
     expect(complete[0]?.id).toBe(partial[0]?.id);
   });
 
-  test("render decoration does not replace logical message keys", () => {
-    const items = buildTimeline([assistant("complete response")]);
-    const rendered = buildTimelineRenderItems([...items].reverse(), {
-      showDateDividers: false,
-    });
-
-    expect(rendered.map((item) => item.id)).toEqual(["assistant-message-7"]);
-  });
-
   test("provider echo keeps canonical content while carrying its causal turn alias", () => {
     const providerEcho = {
       id: "provider-user-9",
@@ -74,49 +61,10 @@ describe("timeline identity", () => {
   test("same-logical-Tool streaming upserts retain the mounted row key", () => {
     const running = buildTimeline([tool("first match", "running")]);
     const done = buildTimeline([tool("first match\nsecond match", "done")]);
-    const renderedRunning = buildTimelineRenderItems([...running].reverse(), {
-      showDateDividers: false,
-    });
-    const renderedDone = buildTimelineRenderItems([...done].reverse(), {
-      showDateDividers: false,
-    });
 
     expect(running[0]?.type).toBe("activity");
     expect(done[0]?.type).toBe("activity");
-    expect(renderedRunning[0]?.id).toBe("tool-call-7");
-    expect(renderedDone[0]?.id).toBe(renderedRunning[0]?.id);
-  });
-
-  test("pending-only insertion preserves grouping-equivalent history identity", () => {
-    const history = buildTimeline([
-      assistant("first Markdown response"),
-      {
-        ...assistant("second Markdown response"),
-        id: "assistant-message-8",
-        seq: 8,
-      },
-    ]);
-    const first = buildTimelineRenderItems([...history].reverse(), {
-      showDateDividers: false,
-    });
-    const pending = {
-      type: "message" as const,
-      id: "pending-current",
-      role: "user" as const,
-      body: "new question",
-      attachments: [],
-      pending: true,
-    };
-    const next = buildTimelineRenderItems(
-      [pending, ...history.slice().reverse()],
-      { showDateDividers: false },
-    );
-    const stable = stabilizeTimelineRenderItems(first, next);
-
-    for (const id of ["assistant-message-7", "assistant-message-8"]) {
-      expect(stable.find((item) => item.id === id)).toBe(
-        first.find((item) => item.id === id),
-      );
-    }
+    expect(running[0]?.id).toBe("tool-call-7");
+    expect(done[0]?.id).toBe(running[0]?.id);
   });
 });

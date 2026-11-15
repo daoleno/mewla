@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CalendarItem } from "../calendar/model";
 import { testClock } from "../calendar/testClock";
-import { brainCurrentWorkLifecycle, brainWorkCalendarOrigins, brainWorkGroup, brainWorkSummaryLine, brainWorkSurface } from "./surface";
+import { brainCurrentWorkLifecycle, brainWorkCalendarOrigins, brainWorkGroup, brainWorkSurface } from "./surface";
 import type { BrainCurrentWork, BrainWorkerRef } from "./types";
 
 const clock = testClock("2026-10-27T14:00:00Z", "Asia/Shanghai");
@@ -130,14 +130,6 @@ test("a bare wake reference is not shown as the summary", () => {
   expect(surface.slips[0].summary).toBeUndefined();
 });
 
-describe("brainWorkSummaryLine", () => {
-  test("reads like the mock and drops empty groups", () => {
-    expect(brainWorkSummaryLine({ needs: 1, running: 3, back: 0, waiting: 0, queued: 0 })).toBe("1 needs you · 3 running");
-    expect(brainWorkSummaryLine({ needs: 2, running: 0, back: 1, waiting: 4, queued: 0 })).toBe("2 need you · 1 back · 4 waiting");
-    expect(brainWorkSummaryLine({ needs: 0, running: 0, back: 0, waiting: 0, queued: 0 })).toBeNull();
-  });
-});
-
 describe("open Work on the rail", () => {
   test("Work no Worker has yet is Queued; Work waiting on something is Waiting", () => {
     const surface = brainWorkSurface([], [], Date.now(), [
@@ -152,7 +144,6 @@ describe("open Work on the rail", () => {
     ]);
     expect(surface.slips[0].summary).toBe("the registrar's approval email");
     expect(surface.counts.queued).toBe(1);
-    expect(brainWorkSummaryLine(surface.counts)).toBe("1 waiting · 1 queued");
   });
 
   test("a Work in current_work is listed once", () => {

@@ -56,17 +56,3 @@ export function isWorkerSessionListFreshForConnection(input: {
     input.workerSessionListGeneration === input.connectionGeneration
   );
 }
-
-export function liveActionPromptScopeKey(input: {
-  workerId: string;
-  processId?: number;
-  startedAt?: number;
-  connectionGeneration: number;
-}): string {
-  return [
-    input.workerId,
-    input.processId ?? "",
-    input.startedAt ?? "",
-    input.connectionGeneration,
-  ].join(":");
-}

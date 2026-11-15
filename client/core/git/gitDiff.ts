@@ -28,24 +28,6 @@ export interface GitDiffFileInfo {
   working_deletions?: number;
 }
 
-export type GitDiffScope = "all" | "working" | "staged";
-
-export function filterGitDiffFiles(files: GitDiffFileInfo[], scope: GitDiffScope) {
-  return files.filter(
-    (file) =>
-      scope === "all" ||
-      (scope === "staged" ? file.staged : file.unstaged || file.untracked),
-  );
-}
-
-export function gitDiffCounts(file: GitDiffFileInfo, scope: GitDiffScope) {
-  return scope === "staged"
-    ? [file.staged_additions ?? 0, file.staged_deletions ?? 0]
-    : scope === "working"
-      ? [file.working_additions ?? 0, file.working_deletions ?? 0]
-      : [file.additions ?? 0, file.deletions ?? 0];
-}
-
 export interface GitDiffStatusSnapshot {
   available: boolean;
   reason?: GitDiffUnavailableReason | string;
@@ -117,36 +99,6 @@ export interface GitRepoFileContentPayload {
   repo_root: string;
   path: string;
   snapshot: GitDiffContentSnapshot;
-}
-
-export function buildGitDiffChipLabel(
-  snapshot: GitDiffStatusSnapshot | null,
-  loading: boolean,
-): string {
-  if (loading && !snapshot) {
-    return "Checking repo…";
-  }
-  if (!snapshot?.available) {
-    return "Git diff";
-  }
-  if (snapshot.clean) {
-    return snapshot.branch || "Git";
-  }
-
-  const fileLabel =
-    snapshot.file_count === 1 ? "1 file" : `${snapshot.file_count} files`;
-  if (snapshot.additions > 0 || snapshot.deletions > 0) {
-    return `${fileLabel}  +${snapshot.additions}  -${snapshot.deletions}`;
-  }
-  return fileLabel;
-}
-
-export function describeGitDiffScope(file: GitDiffFileInfo): string {
-  if (file.untracked) return "Untracked";
-  if (file.staged && file.unstaged) return "Staged + unstaged";
-  if (file.staged) return "Staged";
-  if (file.unstaged) return "Unstaged";
-  return "Changed";
 }
 
 export interface GitBranchInfo {

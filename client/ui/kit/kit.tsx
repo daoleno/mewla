@@ -1,5 +1,5 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
-import { announce, Canvas, Clipboard, effect, platform, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
+import { announce, Clipboard, effect, platform, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
 import { CAPSULE, capsulePageInset } from "../../core/shell/capsule";
 import { Button, Input, Switch } from "nsh/base";
@@ -139,17 +139,6 @@ export function SectionLabel(props: { title: string; icon?: IconName; count?: nu
   }
   return (
     <View testID={props.testID} role="button" accessible accessibilityLabel={props.accessibilityLabel} accessibilityState={{ expanded: !props.folded }} onPress={props.onPress} class="active:opacity-70">{body}</View>
-  );
-}
-
-/** A square tile (SPEC §15): a glyph or a short mark on the canvas, radius 11 (36 pt) or 8 (28 pt). */
-export function Tile(props: { size?: 28 | 36 | 64; icon?: IconName; mark?: string; children?: JSX.Element; testID?: string }) {
-  const size = () => props.size ?? 36;
-  const radius = () => (size() === 64 ? 18 : size() === 36 ? 11 : 8);
-  return (
-    <View testID={props.testID} class="items-center justify-center bg-background" style={{ width: size(), height: size(), borderRadius: radius() }}>
-      {props.children ?? (<If when={props.icon} else={<If when={props.mark}>{(mark) => <Text class="font-mono text-caption font-semibold">{mark()}</Text>}</If>}>{(icon) => <Icon name={icon()} size={size() === 64 ? 32 : size() === 36 ? 20 : 16} tone="ink" />}</If>)}
-    </View>
   );
 }
 
@@ -474,62 +463,6 @@ export function Notice(props: {
   );
 }
 
-export type Status = "ready" | "running" | "warning" | "failed" | "blocked" | "neutral" | "needs";
-
-/** A state's glyph and word: the shape tells the state, so it reads in ink and soft alone (red only for needs you). */
-export function StatusMark(props: { status: Status; label?: string }) {
-  const tone = (): ColorName => (props.status === "neutral" ? "soft" : props.status === "needs" ? "seal" : props.status);
-  return (
-    <View class="flex-row items-center gap-1.5">
-      <Canvas
-        style={{ width: 13, height: 13 }}
-        accessibilityElementsHidden
-        draw={(cx) => {
-          const ink = color(tone());
-          cx.strokeStyle = ink;
-          cx.fillStyle = ink;
-          cx.lineWidth = 1.5;
-          cx.beginPath();
-          if (props.status === "ready") {
-            cx.arc(6.5, 6.5, 6, 0, Math.PI * 2);
-            cx.fill();
-            cx.strokeStyle = color("surface");
-            cx.beginPath();
-            cx.moveTo(3.8, 6.7);
-            cx.lineTo(5.7, 8.5);
-            cx.lineTo(9.2, 4.6);
-            cx.stroke();
-          } else if (props.status === "warning") {
-            cx.moveTo(6.5, 1.2);
-            cx.lineTo(12, 11.5);
-            cx.lineTo(1, 11.5);
-            cx.closePath();
-            cx.stroke();
-          } else if (props.status === "failed") {
-            cx.rect(1.2, 1.2, 10.6, 10.6);
-            cx.moveTo(4, 4);
-            cx.lineTo(9, 9);
-            cx.moveTo(9, 4);
-            cx.lineTo(4, 9);
-            cx.stroke();
-          } else if (props.status === "blocked" || props.status === "neutral") {
-            cx.setLineDash([2, 2]);
-            cx.arc(6.5, 6.5, 5.5, 0, Math.PI * 2);
-            cx.stroke();
-          } else if (props.status === "running") {
-            cx.arc(6.5, 6.5, 5.5, 0, Math.PI * 1.4);
-            cx.stroke();
-          } else {
-            cx.arc(6.5, 6.5, 5, 0, Math.PI * 2);
-            cx.fill();
-          }
-        }}
-      />
-      <If when={props.label}>{(label) => <Text class="text-sub text-muted-foreground">{label()}</Text>}</If>
-    </View>
-  );
-}
-
 /** A quiet label on a row (not the red request tag): caption 600, soft, on a canvas pill. */
 export function Tag(props: { label: string }) {
   return (
@@ -610,15 +543,6 @@ export function Field(props: {
         {props.trailing ?? null}
       </View>
     </View>
-  );
-}
-
-/** A page the new app has not built yet: it says so, so nothing goes missing silently. */
-export function NotBuiltYet(props: { title: string }) {
-  return (
-    <Page title={props.title} testID="not-built-yet">
-      <EmptyState title="Not built yet" detail={`${props.title} comes in a later build of this preview.`} />
-    </Page>
   );
 }
 

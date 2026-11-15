@@ -33,22 +33,8 @@ export type TimelineProjectionSample = {
   stableRowChurn?: number;
 };
 
-export type TimelineRenderProjectionSample = {
-  mode: "full" | "stable" | "update" | "append" | "prepend";
-  durationMs: number;
-  sourceItemCount: number;
-  renderItemCount: number;
-  changedSourceCount: number;
-  stableRenderReuse: number;
-  stableRenderChurn: number;
-};
-
 export function isTimelineProjectionPerfEnabled() {
   return false;
 }
 
 export function recordTimelineProjectionSample(_sample: TimelineProjectionSample) {}
-
-export function recordTimelineRenderProjectionSample(
-  _sample: TimelineRenderProjectionSample,
-) {}
