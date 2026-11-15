@@ -41,7 +41,9 @@ export function hasActionableCard({
 }: Pick<BlockedTerminalInput, "prompt" | "approvals">): boolean {
   return (
     buildTerminalActionPrompt({ prompt, approvals }) !== null ||
-    choiceFromPrompt(prompt) !== null
+    choiceFromPrompt(prompt) !== null ||
+    // A sign-in screen's card: its page, and its code or field.
+    (prompt?.kind === "signin" && Boolean(prompt.link))
   );
 }
 

@@ -94,12 +94,21 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		}
 	}
 
-	// Claude's first run opens on its theme picker, which has no "Enter to
-	// confirm" footer, then a security note. A Claude never started at a
-	// terminal (on Windows its installer does not even put it on PATH) shows
-	// them in its first Session, where a message waits on them: the Session is
-	// blocked on the person, not idle.
-	if claudeTailHasPrefix(claudePromptTail(pane, 20), "Choose the text style that looks best with your terminal") {
+	// Claude's first run (its theme picker, the login choice, the sign-in
+	// link, the security notes) has no "Enter to confirm" footer. A Claude
+	// never started at a terminal (on Windows its installer does not even put
+	// it on PATH) shows them in its first Session: the Session is blocked on
+	// the person, and each screen is a prompt Chat answers.
+	if prompt, ok := claudeSetupPrompt(pane); ok {
+		return ActivitySignal{
+			State:    StateBlocked,
+			Summary:  prompt.Title,
+			Source:   "claude_pane_first_run",
+			Provider: a.Name(),
+			Prompt:   &prompt,
+		}
+	}
+	if claudeTailHasPrefix(claudePromptTail(pane, 20), claudeThemeHeading) {
 		return ActivitySignal{
 			State:    StateBlocked,
 			Summary:  "Finish Claude Code's first-run setup in the terminal",

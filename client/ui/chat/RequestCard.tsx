@@ -1,4 +1,4 @@
-import { computed, signal, Text, untracked, View } from "nsh";
+import { computed, openUrl, signal, Text, untracked, View } from "nsh";
 import type { Signal, ViewRef } from "nsh";
 import { clock } from "../calendar/clock";
 import { sealedOfAnswered } from "../../core/timeline/answered";
@@ -297,6 +297,75 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
   );
 }
 
+/**
+ * An agent's sign-in screen (Claude Code, Codex never signed in on this computer): its page, which the person opens
+ * where they are; the one-time code to enter there (Codex), or the field for the code the page gives (Claude); and
+ * its keys (Cancel). The code typed here is a credential: it goes to the computer once and is sealed as "Code sent".
+ */
+function SignInBody(props: { card: Card; connected: () => boolean; onDone: (verb: string, answer: string) => void; onGone: () => void }) {
+  const body = props.card.body as Extract<Card["body"], { kind: "signin" }>;
+  const code = signal("");
+  const sending = signal("");
+  const failed = signal(false);
+  const send = async (id: string, answer: { number?: number; text?: string }, sealed: [string, string]) => {
+    const transport = currentTransport();
+    if (sending() || !transport) return;
+    sending.set(id);
+    failed.set(false);
+    try {
+      await answerPrompt(transport, body.workerId, body.promptId, answer);
+      haptic.impact("light");
+      props.onDone(...sealed);
+    } catch (error) {
+      if (isPromptGoneError(error)) return props.onGone();
+      failed.set(true);
+    } finally {
+      sending.set("");
+    }
+  };
+  return (
+    <View class="gap-3">
+      <Button testID="signin-open" onPress={() => void openUrl(body.link).catch(() => {})}
+        class="h-[48px] flex-row items-center justify-center gap-2 rounded-(--radius-control) bg-seal px-4 active:opacity-70">
+        <Icon name="open-external" size={18} tone="onSeal" />
+        <Text class="text-body font-semibold text-seal-foreground line-clamp-1">Open sign-in page</Text>
+      </Button>
+      <If when={body.code}>
+        <View class="gap-1">
+          <Text class="text-caption text-muted-foreground">One-time code</Text>
+          <View selectable><Text testID="signin-code" class="font-mono text-title font-semibold">{body.code}</Text></View>
+        </View>
+      </If>
+      <If when={body.input}>
+        <View class="gap-2">
+          <Input testID="signin-input" value={code()} placeholder={body.input} autoCorrect={false} autoCapitalize="none"
+            onChange={({ value }) => code.set(value)}
+            class="min-h-[44px] rounded-(--radius-control) bg-muted px-3 text-body" />
+          <Button testID="signin-send" disabled={!code().trim() || Boolean(sending()) || !props.connected()}
+            onPress={() => void send("text", { text: code().trim() }, ["Answered", "Code sent"])}
+            class={`h-[48px] items-center justify-center rounded-(--radius-control) bg-primary px-4 active:opacity-70 ${sending() === "text" ? "" : "disabled:opacity-40"}`}>
+            <BusyLabel busy={sending() === "text"} label="Send" tone="canvas" testID="request-ring"><Text class="text-body font-semibold text-primary-foreground">Send</Text></BusyLabel>
+          </Button>
+        </View>
+      </If>
+      <If when={body.options.length > 0}>
+        <View class="-mx-4">
+          {body.options.map((option) => (
+            <Button testID={`prompt-option-${option.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void send(option.id, { number: option.number }, ["You chose", option.label])}
+              class={`min-h-[54px] flex-row items-center gap-3 border-t border-border px-4 py-2 active:bg-accent ${sending() === option.id ? "" : "disabled:opacity-40"}`}>
+              <OptionWords label={option.label} />
+              <View class="size-[22px] items-center justify-center">
+                <If when={sending() === option.id} else={<View class="size-[22px] rounded-full border-2 border-faint" />}><Spinner size={RING.button} label={option.label} /></If>
+              </View>
+            </Button>
+          ))}
+        </View>
+      </If>
+      <If when={failed()} else={<If when={!props.connected()}><Text testID="request-offline" class="text-sub text-muted-foreground">{`${current()?.name || "Your computer"} is offline`}</Text></If>}><Text testID="request-failed" class="text-sub">{`Didn't reach ${current()?.name || "your computer"}`}</Text></If>
+    </View>
+  );
+}
+
 /** One open request: the card the person answers here. */
 function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; openLabel: string; notice: RequestNotice; anchor?: (node: ViewRef) => void; onLater: () => void }) {
   const card = props.card;
@@ -314,7 +383,7 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
   return (
     <View testID="request-card" ref={props.anchor} class="gap-3 rounded-(--radius-group) bg-card p-4">
       <TopLine card={() => card} onSource={props.onSource} />
-      <If when={card.body.kind === "choice" ? card.body : undefined} else={<If when={card.body.kind === "action"} else={<View class="gap-3">
+      <If when={card.body.kind === "choice" ? card.body : undefined} else={<If when={card.body.kind === "action"} else={<If when={card.body.kind === "signin"} else={<View class="gap-3">
           {/* What it waits for, whole, then one quiet button: in Brain's thread "Open", the Session (its chat when it
               has one, owner 11-13 19:4x); in the Session's own chat, its terminal, the last resort. */}
           <View selectable><Text testID="request-detail" class="text-body font-semibold">{(card.body as { detail: string }).detail}</Text></View>
@@ -322,7 +391,7 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
             class="h-[48px] items-center justify-center self-start rounded-(--radius-control) bg-muted px-4 active:opacity-70">
             <Text class="text-body font-semibold">{props.openLabel}</Text>
           </Button>
-        </View>}><ActionBody card={card} connected={props.connected} onGone={gone}
+        </View>}><SignInBody card={card} connected={props.connected} onGone={gone} onDone={(verb, answer) => sealRequest(sealedOf(card, verb, answer))} /></If>}><ActionBody card={card} connected={props.connected} onGone={gone}
           onDone={(option) => {
             const words = sealAction(card, option.label, Boolean(option.destructive));
             sealRequest(sealedOf(card, words.verb, words.answer, words.mono));

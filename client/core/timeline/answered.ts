@@ -79,7 +79,7 @@ export function answeredBy(record: AnsweredRequest): string {
  * A terminal prompt's record: its `asked` is the screen run together (a Tip line, the tool's summary,
  * the command, "Do you want to proceed?"), never shown as the answer; its title ("Bash command") is.
  */
-const SCREEN_PROMPTS = new Set(["permission", "plan", "startup"]);
+const SCREEN_PROMPTS = new Set(["permission", "plan", "startup", "signin"]);
 
 export function sealedOfAnswered(record: AnsweredRequest, at: (ms: number) => string): SealedRequest {
   const answered = Date.parse(record.answered_at);

@@ -211,6 +211,10 @@ func PromptAnswerRecord(sessionID string, prompt classifier.Prompt, answer Promp
 			record.Answer = option.Label
 		}
 	}
+	if prompt.Input != "" && answer.Number == 0 {
+		// The code itself is a credential and is not kept.
+		record.Answer = "Code sent"
+	}
 	if prompt.Kind == classifier.PromptPermission || prompt.Kind == classifier.PromptApproval || prompt.Kind == classifier.PromptPlan {
 		record.Outcome = menuOutcome(record.Answer)
 	}

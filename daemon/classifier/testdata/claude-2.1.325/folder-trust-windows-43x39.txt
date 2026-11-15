@@ -1,0 +1,183 @@
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌   1  function g
+  reet() {
+  2 -  console.         -log("Hello
+    -, World!")
+    -;
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌   1  function
+greet() {
+  2 -  console         -.log("Hel
+    -lo, World         -!");
+  1  functio          n greet
+     () {          2 -  conso         -le.l
+og(
+    -"Hello,         - World!
+    -");           2 +  conso         +le.l
+og(
+    +"Hello,         + Claude
+    -g("Hel         -lo, Wo
+    -rld!")         -;            2 +  cons
+
+    +ole.lo
+    +g("Hel         +lo, Cl
+    +aude!"         +);
+  3  }
+    -ello         -, Wo
+    -rld!         -");        2 +  co
+    +nsol         +e.lo
+    +g("H         +ello
+    +, Cl         +aude
+    +!");       3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax
+ theme:         -el
+    -lo         -,
+    -Wo         -rl
+    -d!         -")
+    -;        2 +
+    +co         +ns
+    +ol
+    +e.
+    +lo
+    +g(
+    +"H
+    +el
+    +lo
+    +,
+    +Cl
+    +au
+    +de
+    +!"
+    +);
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌
+  Syntax
+ theme:
+ Monokai      -l
+    -l        -o
+    -,        -
+    -W        -o
+    -r        -l
+    -d
+    -!
+    -"
+    -)
+    -;
+  2 +
+    +
+    +c
+    +o
+    +n
+    +s
+    +o
+    +l
+    +e
+    +.
+    +l
+    +o
+    +g
+    +(
+    +"
+    +H
+    +e
+    +l
+    +l
+    +o
+    +,
+    +
+    +C
+    +l
+    +a
+    +u
+    +d
+    +e
+    +!
+    +"
+    +)
+    +;
+  3  }
+ ╌╌╌╌╌╌╌╌
+  Syntax
+ theme:
+ Monokai
+ Extended
+ (ctrl+t  3  }
+ ╌╌╌╌╌╌
+ Syntax
+ theme:  Monok
+ ai Ext
+ ended
+ (ctrl+
+ t to
+    +     +
+    +     +
+  3    ╌╌╌╌
+  Syn
+ tax
+ them
+ e:
+ Mono
+ kai
+ Exte
+ nded
+ (ct
+ rl+t
+ to
+ disa
+
+  3
+ ╌╌
+
+ Sy
+ nt
+ ax
+
+ th
+ em
+ e:
+ M
+ on
+ ok
+ ai
+
+ Ex
+ te
+ nd
+ ed
+ (
+ ct
+ rl
+ +t
+
+ to
+
+ di
+
+  2
+
+Welcome to Claude Code v2.1.325
+
+ Security notes:
+
+ 1. Claude can make mistakes.
+
+───────────────────────────────────────────
+ Accessing workspace:
+
+ C:\Users\mtwo
+
+ Quick safety check: Is this a project you
+ created or one you trust? (Like your own
+ code, a well-known open source project,
+ or work from your team). If not, take a
+ moment to review what's in this folder
+ first.
+
+ Claude Code'll be able to read, edit, and
+ execute files here.
+
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel

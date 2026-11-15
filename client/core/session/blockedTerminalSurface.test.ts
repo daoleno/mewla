@@ -67,6 +67,12 @@ describe("resolveBlockedTerminal", () => {
     expect(hasActionableCard({})).toBe(false);
   });
 
+  test("an agent's sign-in is a card (its page and its code field): the chat stays", () => {
+    const signIn: WorkerPrompt = { id: "s-1", kind: "signin", provider: "claude", title: "Sign in to Claude Code", link: "https://claude.com/x", input: "Code from the sign-in page" };
+    expect(hasActionableCard({ prompt: signIn })).toBe(true);
+    expect(resolveBlockedTerminal(input({ prompt: signIn })).forceTerminal).toBe(false);
+  });
+
   test("a Session that is not blocked is unchanged", () => {
     for (const status of ["running", "done", "failed", "unknown", undefined] as const) {
       expect(resolveBlockedTerminal(input({ status })).forceTerminal).toBe(false);

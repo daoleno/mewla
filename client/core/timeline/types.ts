@@ -95,7 +95,7 @@ export type BrainWorkEventTimelineItem = {
 export type { BrainCurrentWork } from "../work/types";
 
 // store/workers.tsx
-export type WorkerPromptKind = 'permission' | 'plan' | 'choice' | 'startup' | 'approval';
+export type WorkerPromptKind = 'permission' | 'plan' | 'choice' | 'startup' | 'approval' | 'signin';
 
 /** One row of a prompt's numbered menu; `number` is the digit that picks it. */
 export interface WorkerPromptOption {
@@ -132,4 +132,10 @@ export interface WorkerPrompt {
   /** A Claude permission's tool ("Bash", "Read") and its one line (the command, else the file), when the daemon can name the call (WIRE §7). */
   tool?: string;
   summary?: string;
+  /** A sign-in screen's page to open (`signin`). */
+  link?: string;
+  /** A one-time code to enter on `link`'s page (Codex). */
+  code?: string;
+  /** What a sign-in screen takes as text, answered with `text` (Claude: the code `link`'s page shows). */
+  input?: string;
 }

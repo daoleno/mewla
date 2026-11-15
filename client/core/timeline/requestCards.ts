@@ -6,7 +6,7 @@
  */
 import type { ConversationChoice } from "../conversation/conversation";
 import { buildApprovalPrompt, buildMenuPrompt, type TerminalActionPrompt } from "../session/terminalActionPrompt";
-import { promptLines } from "../sessions/activity";
+import { isTrustPrompt, promptLines } from "../sessions/activity";
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerPrompt } from "../sessions/workers";
 import type { TrayRequest } from "../tray/model";
@@ -21,7 +21,9 @@ export type RequestCardBody =
   /** An approval, or a menu the terminal shows: Deny and Approve, or the menu's rows. */
   | { kind: "action"; prompt: TerminalActionPrompt; workerId: string }
   /** Blocked on something the computer could not read: its only action is the terminal (SPEC §2.7). */
-  | { kind: "attention"; workerId: string; detail: string };
+  | { kind: "attention"; workerId: string; detail: string }
+  /** An agent's sign-in: its page, the code to enter there or the field for the code the page gives, and its keys (Cancel). */
+  | { kind: "signin"; workerId: string; promptId: string; link: string; code?: string; input?: string; options: TerminalActionPrompt["options"] };
 
 export interface RequestCard {
   /** The tray request's key: the row and the card are one object. */
@@ -74,11 +76,10 @@ export interface RequestCardsInput {
 /** The thread a card list is for: Brain's, or one Session's. */
 export type RequestThread = { brain: true } | { brain?: false; workerId: string };
 
-const TRUST = /\btrust\b/i;
-
 function promptLabel(prompt: WorkerPrompt, brain: boolean): string {
+  if (prompt.kind === "signin") return "Sign in";
   if (brain) return "Brain asks";
-  if (prompt.kind === "startup" && TRUST.test(`${prompt.title} ${prompt.request ?? ""}`)) return "Trust this folder?";
+  if (isTrustPrompt(prompt)) return "Trust this folder?";
   if (prompt.kind === "approval" || prompt.kind === "permission") return "Approve";
   return "Needs you";
 }
@@ -112,6 +113,10 @@ function cardOf(request: TrayRequest, input: RequestCardsInput): RequestCard | n
       // A question whose options only the transcript holds, read without it: the terminal answers it.
       if (!choice) return { ...base, ...source, label, body: { kind: "attention", workerId, detail: request.title } };
       return { ...base, ...source, label, body: { kind: "choice", choice, route: { via: "prompt", workerId, promptId: prompt.id } } };
+    }
+    if (prompt.kind === "signin" && prompt.link) {
+      const options = (prompt.options ?? []).map((option) => ({ id: String(option.number), label: option.label, number: option.number }));
+      return { ...base, ...source, label, body: { kind: "signin", workerId, promptId: prompt.id, link: prompt.link, code: prompt.code, input: prompt.input, options } };
     }
     const menu = buildMenuPrompt(prompt, workerId);
     if (!menu) return { ...base, ...source, label, body: { kind: "attention", workerId, detail: request.title } };

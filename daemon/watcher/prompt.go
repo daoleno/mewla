@@ -415,6 +415,8 @@ func answerWith(sessionID string, prompt *classifier.Prompt) string {
 		return fmt.Sprintf(`mewla worker answer -id %s -prompt %s -answers '<one {"selected":[<option number>],"other":"<text>"} per question, as a JSON array>'`, sessionID, prompt.ID)
 	case classifier.PromptPermission:
 		return fmt.Sprintf(`mewla worker answer -id %s -prompt %s -choice <option number> -basis "<the sentence of the brief that authorizes it>"  (or -escalate -basis "<why>" to hand it to the user)`, sessionID, prompt.ID)
+	case classifier.PromptSignIn:
+		return "Signing in is the user's: it needs their account. Ask the user to answer it in the app."
 	default:
 		return fmt.Sprintf("mewla worker answer -id %s -prompt %s -choice <option number>", sessionID, prompt.ID)
 	}
@@ -589,14 +591,21 @@ func (w *Watcher) answerPrompt(pane claudeChoicePane, sessionID, promptID string
 	if prompt.Kind == classifier.PromptChoice {
 		return refusePrompt("a question is answered with its answers, not one option")
 	}
-	valid := false
-	for _, option := range prompt.Options {
-		valid = valid || option.Number == number
+	var chosen *classifier.PromptOption
+	for index := range prompt.Options {
+		if prompt.Options[index].Number == number {
+			chosen = &prompt.Options[index]
+		}
 	}
-	if !valid || number < 1 || number > 9 {
+	if chosen == nil || number < 1 || number > 9 {
 		return refusePrompt("the prompt has no option %d", number)
 	}
-	if prompt.Unnumbered {
+	if chosen.Key != "" {
+		// The screen names the key ("Press Enter to continue", "Esc to cancel").
+		if err := pane.sendKey(chosen.Key); err != nil {
+			return err
+		}
+	} else if prompt.Unnumbered {
 		// A menu without numbers ignores a typed one: move its cursor, then Enter.
 		if err := w.moveMenuCursor(pane, sessionID, *prompt, number); err != nil {
 			return err
@@ -619,6 +628,63 @@ func (w *Watcher) answerPrompt(pane claudeChoicePane, sessionID, promptID string
 		}
 		if !time.Now().Before(deadline) {
 			return refusePrompt("the prompt did not take option %d", number)
+		}
+	}
+}
+
+// promptTextMax bounds an answer typed into a prompt (a sign-in code).
+const promptTextMax = 4096
+
+// AnswerPromptText answers a prompt that takes text (a sign-in screen's code)
+// with text, then Enter. The text is a credential: it is never logged.
+func (w *Watcher) AnswerPromptText(sessionID, promptID, text string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || strings.TrimSpace(promptID) == "" {
+		return refusePrompt("name the Session and the prompt")
+	}
+	identity, known := w.targetForSession(sessionID)
+	if !known {
+		return refusePrompt("target provider could not be proven; no key was sent")
+	}
+	pane := &sessionClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
+	return w.sessionInputOwner().serialized(sessionID, func() error {
+		return w.answerPromptText(pane, sessionID, promptID, text)
+	})
+}
+
+func (w *Watcher) answerPromptText(pane claudeChoicePane, sessionID, promptID, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" || len(text) > promptTextMax || strings.IndexFunc(text, func(r rune) bool { return r < ' ' || r == 0x7f }) >= 0 {
+		return refusePrompt("the answer must be one line of text")
+	}
+	prompt, err := w.currentPrompt(pane, sessionID)
+	if err != nil {
+		return err
+	}
+	if prompt == nil || prompt.ID != promptID {
+		return fmt.Errorf("%w: %w", ErrPromptGone, ErrClaudeChoiceRefused)
+	}
+	if prompt.Input == "" {
+		return refusePrompt("this prompt is answered with an option, not text")
+	}
+	if err := pane.sendText(text); err != nil {
+		return err
+	}
+	if err := pane.sendKey("Enter"); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(claudeChoiceStepTimeout)
+	for {
+		time.Sleep(claudeChoicePollInterval)
+		after, err := w.currentPrompt(pane, sessionID)
+		if err != nil {
+			return err
+		}
+		if after == nil || after.ID != promptID {
+			return nil
+		}
+		if !time.Now().Before(deadline) {
+			return refusePrompt("the prompt did not take the text")
 		}
 	}
 }

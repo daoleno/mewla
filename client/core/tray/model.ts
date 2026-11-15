@@ -215,7 +215,7 @@ function approvalOneTap(workerId: string, approval: WorkerApproval): OneTap | un
 }
 
 function promptOneTap(workerId: string, prompt: WorkerPrompt): OneTap | undefined {
-  if (prompt.kind === "choice" || prompt.kind === "plan") return undefined;
+  if (prompt.kind === "choice" || prompt.kind === "plan" || prompt.kind === "signin") return undefined;
   const options = prompt.options ?? [];
   if (options.length !== 2) return undefined;
   const yes = options.find((option) => !NEGATIVE.test(option.label.trim()));

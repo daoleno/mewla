@@ -25,6 +25,10 @@ const (
 	PromptStartup PromptKind = "startup"
 	// PromptApproval is a Codex approval menu.
 	PromptApproval PromptKind = "approval"
+	// PromptSignIn is an agent's sign-in screen: a Link to open and either an
+	// Input to fill (Claude's code from its sign-in page) or a Code to enter
+	// on that page (Codex's one-time code).
+	PromptSignIn PromptKind = "signin"
 )
 
 // Prompt is the one structured shape of a blocking agent prompt. The pane
@@ -66,6 +70,14 @@ type Prompt struct {
 	// 2.1.322): Options are numbered by position, and an answer moves the
 	// cursor to its row and presses Enter, since a typed number does nothing.
 	Unnumbered bool `json:"unnumbered,omitempty"`
+	// Link is the page a sign-in prompt asks the person to open.
+	Link string `json:"link,omitempty"`
+	// Code is a one-time code a sign-in prompt asks the person to enter on
+	// the Link's page.
+	Code string `json:"code,omitempty"`
+	// Input names the text a sign-in prompt takes (it is answered with that
+	// text, not an option): the code the Link's page shows.
+	Input string `json:"input,omitempty"`
 }
 
 // PromptOption is one row of a numbered menu. Number is the digit the
@@ -75,6 +87,9 @@ type PromptOption struct {
 	Label       string `json:"label"`
 	Description string `json:"description,omitempty"`
 	Selected    bool   `json:"selected,omitempty"`
+	// Key answers the option instead of its digit or cursor row: the screen
+	// says "Press Enter to continue" or "Esc to cancel".
+	Key string `json:"key,omitempty"`
 }
 
 // PromptQuestion is one question of a choice prompt.

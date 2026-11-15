@@ -367,3 +367,38 @@ describe("a real question, as the owner meets it (owner 2026-11-13, shot 11)", (
     expect(app.texts()).toContain("git push origin main");
   }, 20_000);
 });
+
+// A Claude Code or Codex never signed in on this computer stopped at its sign-in in the terminal, where nobody sits
+// (Windows 11, 11-16): the sign-in is a card in the Session's chat, answered from the phone.
+describe("an agent's sign-in", () => {
+  const claudeSignIn = { id: "s-1", kind: "signin", provider: "claude", title: "Sign in to Claude Code", link: "https://claude.com/cai/oauth/authorize?code=true", input: "Code from the sign-in page" };
+  const codexSignIn = { id: "s-2", kind: "signin", provider: "codex", title: "Sign in to Codex", link: "https://auth.openai.com/codex/device", code: "ABCD-1234Z", options: [{ number: 1, label: "Cancel" }] };
+
+  test("Claude's: open its page, paste the code it gives; the code goes once and is sealed as \"Code sent\"", async () => {
+    const host = phoneHost({ brain, worker_sessions: [session("mine", { prompt: claudeSignIn })], conversations: { mine: { available: true, events: [] } }, replies: { answer_prompt: { type: "prompt_answered" } } });
+    const app = await open(APP, { platform: "android", storage: paired, host });
+    await app.host.send("links.open", { url: "mewla://sessions/mine" });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    expect(app.texts()).toContain("Sign in");
+    expect(app.texts()).toContain("Open sign-in page");
+    expect(app.enabled("id:signin-send")).toBe(false);
+    await app.type("id:signin-input", "abc#state-1");
+    await app.press("id:signin-send");
+    await app.waitFor("id:request-sealed");
+    expect(framesOf(app.host.posts(), "answer_prompt").at(-1)).toMatchObject({ worker_id: "mine", prompt_answer: { prompt_id: "s-1", text: "abc#state-1" } });
+    expect(app.texts()).toContain("Code sent");
+    expect(app.texts().some((text) => text.includes("abc#state-1"))).toBe(false);
+  }, 20_000);
+
+  test("Codex's: its page and one-time code; Cancel is its Esc", async () => {
+    const host = phoneHost({ brain, worker_sessions: [session("cx", { command: "codex", provider: "codex", prompt: codexSignIn })], replies: { answer_prompt: { type: "prompt_answered" } } });
+    const app = await open(APP, { platform: "android", storage: paired, host });
+    await app.host.send("links.open", { url: "mewla://sessions/cx" });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    expect(app.texts()).toContain("ABCD-1234Z");
+    expect(app.shows("id:signin-input")).toBe(false);
+    await app.press("id:prompt-option-1");
+    await app.waitFor("id:request-sealed");
+    expect(framesOf(app.host.posts(), "answer_prompt").at(-1)).toMatchObject({ worker_id: "cx", prompt_answer: { prompt_id: "s-2", number: 1 } });
+  }, 20_000);
+});

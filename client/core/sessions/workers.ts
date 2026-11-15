@@ -546,7 +546,7 @@ export function normalizeApprovals(raw: unknown): WorkerApproval[] | undefined {
   return approvals.length > 0 ? approvals : undefined;
 }
 
-const PROMPT_KINDS: readonly WorkerPromptKind[] = ['permission', 'plan', 'choice', 'startup', 'approval'];
+const PROMPT_KINDS: readonly WorkerPromptKind[] = ['permission', 'plan', 'choice', 'startup', 'approval', 'signin'];
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
@@ -616,6 +616,18 @@ export function normalizePrompt(raw: unknown): WorkerPrompt | undefined {
     return prompt;
   }
   const options = normalizePromptOptions(entry.options);
+  if (kind === 'signin') {
+    // A sign-in screen: its page, and the code to enter there or the text it takes.
+    const link = optionalString(entry.link);
+    if (!link || !/^https:\/\//.test(link)) return undefined;
+    prompt.link = link;
+    const code = optionalString(entry.code);
+    const input = optionalString(entry.input);
+    if (code) prompt.code = code;
+    if (input) prompt.input = input;
+    if (options.length > 0) prompt.options = options;
+    return prompt;
+  }
   if (options.length === 0) {
     return undefined;
   }

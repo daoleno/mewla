@@ -4,8 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/daoleno/mewla/daemon/answered"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -19,6 +23,7 @@ type fakePanePrompts struct {
 	pressErr   error
 	drove      []watcher.ClaudeChoiceAnswer
 	driveErr   error
+	typed      []string
 }
 
 func (f *fakePanePrompts) CurrentPrompt(string) (*classifier.Prompt, error) {
@@ -27,6 +32,11 @@ func (f *fakePanePrompts) CurrentPrompt(string) (*classifier.Prompt, error) {
 
 func (f *fakePanePrompts) AnswerPrompt(_, _ string, number int) error {
 	f.pressed = append(f.pressed, number)
+	return f.pressErr
+}
+
+func (f *fakePanePrompts) AnswerPromptText(_, _ string, text string) error {
+	f.typed = append(f.typed, text)
 	return f.pressErr
 }
 
@@ -219,5 +229,24 @@ func TestAnswerPromptThroughApproval(t *testing.T) {
 				t.Fatalf("handled=%v err=%v decided=%v", handled, err, tc.approvals.decided)
 			}
 		})
+	}
+}
+
+// A sign-in prompt is answered with the code its page showed: it goes to the
+// pane as text, and the record of the answer never holds it.
+func TestASignInPromptIsAnsweredWithTextThatIsNeverRecorded(t *testing.T) {
+	loads := func() (work.CodexConversation, error) { return work.CodexConversation{}, nil }
+	signIn := &classifier.Prompt{ID: "sign1", Kind: classifier.PromptSignIn, Title: "Sign in to Claude Code", Link: "https://claude.com/x", Input: "Code from the sign-in page"}
+	pane := &fakePanePrompts{current: signIn}
+	if _, err := AnswerPanePrompt(pane, "w1", PromptAnswer{PromptID: "sign1"}, nil, loads); err == nil || len(pane.typed) != 0 {
+		t.Fatalf("an empty answer: %v, typed %v", err, pane.typed)
+	}
+	answer := PromptAnswer{PromptID: "sign1", Text: "secret-code#state"}
+	if _, err := AnswerPanePrompt(pane, "w1", answer, nil, loads); err != nil || len(pane.typed) != 1 || pane.typed[0] != "secret-code#state" || len(pane.pressed) != 0 {
+		t.Fatalf("answer: %v, typed %v, pressed %v", err, pane.typed, pane.pressed)
+	}
+	record := PromptAnswerRecord("w1", *signIn, answer, nil, answered.Answerer{}, nil, time.Now())
+	if record.Answer != "Code sent" || strings.Contains(fmt.Sprintf("%+v", record), "secret-code") {
+		t.Fatalf("record %+v", record)
 	}
 }
