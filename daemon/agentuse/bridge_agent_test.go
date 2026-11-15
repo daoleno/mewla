@@ -127,11 +127,11 @@ func contains(s, sub string) bool              { return strings.Contains(s, sub)
 // be one of those. A window a reconnected host does not name again goes off
 // the list after the grace; one it names stays.
 func TestTheAgentBrowsersWindowsAreListedAgainAfterARestart(t *testing.T) {
-	old := agentHostGrace
-	agentHostGrace = 200 * time.Millisecond
-	t.Cleanup(func() { agentHostGrace = old })
 	first := NewBridge(t.TempDir())
 	b, dir := startBridge(t)
+	b.mu.Lock()
+	b.hostGrace = 200 * time.Millisecond
+	b.mu.Unlock()
 	if first.run == b.run {
 		t.Fatal("two daemons' bridges name their windows alike")
 	}
