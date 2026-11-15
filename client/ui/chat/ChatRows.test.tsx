@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired, phoneHost } from "../testing/fixtures";
+import { framesOf, paired, phoneHost } from "../testing/fixtures";
 import { MONO_FAMILY } from "../kit/monoFont";
 import theme from "../theme.json";
 
@@ -33,6 +33,45 @@ describe("links in Brain's reply", () => {
     expect(app.openedUrls()).toEqual([]);
     await app.back();
     await app.waitFor("id:home-header");
+  }, 20_000);
+});
+
+describe("files Brain names in a reply (owner 11-15)", () => {
+  const PDF = "/home/me/worklog/0g-pay/0G-Pay-Unifra-Plan-zh.pdf";
+  const asked = (app: Awaited<ReturnType<typeof brainWith>>) => framesOf(app.host.posts(), "session_file_metadata");
+
+  test("a path in inline code opens in the preview, read through Brain's own Session", async () => {
+    // Brain's host start comes as the daemon writes a time (RFC 3339, nanoseconds); the file routes take milliseconds.
+    const host = { ...host_worker, started_at: "2025-11-11T06:00:00.123456789Z" };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain: { ...brain, host_worker: host }, conversations: { "brain-host": [reply("a1", 1, `计划书：\`${PDF}\``)] } }) });
+    // `text:` reads a leading "/" as a pattern: the link's own text, matched whole.
+    await app.waitFor("text:/^\\/home\\/me\\/worklog\\/0g-pay\\/0G-Pay-Unifra-Plan-zh\\.pdf$/", { timeout: 10_000 });
+    await app.wait(300);
+    await app.press("text:/^\\/home\\/me\\/worklog\\/0g-pay\\/0G-Pay-Unifra-Plan-zh\\.pdf$/");
+    await app.waitFor("id:file-preview", { timeout: 10_000 });
+    await app.waitUntil(() => asked(app).length > 0);
+    expect(asked(app)[0]).toMatchObject({ worker_id: "brain-host", process_id: 4242, started_at: Date.UTC(2025, 10, 11, 6, 0, 0, 123), path: PDF });
+    expect(app.openedUrls()).toEqual([]);
+  }, 20_000);
+
+  test("Brain's host start written in the computer's own zone (+08:00) is the same milliseconds", async () => {
+    const host = { ...host_worker, started_at: "2025-11-11T14:00:00.987654321+08:00" };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain: { ...brain, host_worker: host }, conversations: { "brain-host": [reply("a1", 1, "见 /home/me/out/a.md")] } }) });
+    await app.waitFor("text:/^\\/home\\/me\\/out\\/a\\.md$/", { timeout: 10_000 });
+    await app.wait(300);
+    await app.press("text:/^\\/home\\/me\\/out\\/a\\.md$/");
+    await app.waitUntil(() => asked(app).length > 0);
+    expect(asked(app)[0]).toMatchObject({ started_at: Date.UTC(2025, 10, 11, 6, 0, 0, 987), path: "/home/me/out/a.md" });
+  }, 20_000);
+
+  test("a path in the text opens too; a code block's path stays code", async () => {
+    const app = await brainWith([reply("a1", 1, "图在/home/me/out/shot.png。\n\n```sh\nopen /home/me/out/other.png\n```\n")]);
+    await app.waitFor("text:/^\\/home\\/me\\/out\\/shot\\.png$/", { timeout: 10_000 });
+    await app.wait(300);
+    await app.press("text:/^\\/home\\/me\\/out\\/shot\\.png$/");
+    await app.waitFor("id:file-preview", { timeout: 10_000 });
+    await app.waitUntil(() => asked(app).length > 0);
+    expect(asked(app)[0]).toMatchObject({ path: "/home/me/out/shot.png" });
   }, 20_000);
 });
 

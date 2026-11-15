@@ -29,6 +29,9 @@ describe("file preview words", () => {
   test("the header names the file, where it is, what it is and how big", () => {
     expect(sessionFileMetaLine(metadata(), "out/report.pdf")).toBe("out/report.pdf · PDF · 2.0 KB");
     expect(sessionFileMetaLine(null, "")).toBe("Current Session");
+    expect(sessionFileMetaLine(metadata({ kind: "text", name: "report.html", contentType: "text/html; charset=utf-8", relativePath: "report.html" }), "")).toBe("report.html · HTML · 2.0 KB");
+    // A file Brain named outside its workspace reads as its path, not a climb of "../".
+    expect(sessionFileMetaLine(metadata({ path: "/home/me/out/report.pdf", relativePath: "../../out/report.pdf" }), "")).toBe("/home/me/out/report.pdf · PDF · 2.0 KB");
     expect(sessionFileTitle(null, "src/app/main.go")).toBe("main.go");
     expect(sessionFileTitle(null, "")).toBe("File");
     expect(sessionFileKindLabel(metadata({ kind: "text", contentType: "application/json" }))).toBe("JSON");

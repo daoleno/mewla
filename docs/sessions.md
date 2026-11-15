@@ -185,8 +185,13 @@ and **Delete**.
 ### Files and links in a reply
 
 Tap a file path in a reply, a tool row or a changed-files list to preview it
-without leaving the chat: Markdown and text as text, images you can zoom,
-PDFs, video (mp4, m4v, mov, webm) and audio (mp3, m4a, wav, ogg, opus, flac).
+without leaving the chat: Markdown rendered, text and code as text, HTML as a
+page (in a view of its own that reaches nothing else of the app's), images you
+can zoom, PDFs page by page (pinch or double tap to zoom on the phone; in a
+browser the PDF opens in a tab of its own), video (mp4, m4v, mov, webm) and
+audio (mp3, m4a, wav, ogg, opus, flac). A full path to a file in your home
+folder, such as `~/notes/plan.md`, is a link wherever a reply names it, in
+code or in the text; a path in a code block is not.
 Playback streams from the computer, so a long recording starts at once and
 seeking does not download the whole file. Every file has **Download**; text
 files (Markdown, code, txt, JSON) also have **Copy**, which copies the whole

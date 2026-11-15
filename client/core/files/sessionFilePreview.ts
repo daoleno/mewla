@@ -34,6 +34,19 @@ export interface SessionFileBinaryRequest extends SessionFileRequest {
   generation: string;
 }
 
+/**
+ * A run's start as the file routes take it, in milliseconds: Brain's host Session reports it as an RFC 3339
+ * time (with nanoseconds), a Session list as a number. Zero when it is neither: the run is unknown.
+ */
+export function sessionFileStartedAt(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) && value > 0 ? (value > 10_000_000_000 ? Math.floor(value) : Math.floor(value * 1000)) : 0;
+  if (typeof value !== "string") return 0;
+  // Past milliseconds the digits are cut, not rounded, as the daemon compares them; a parser may refuse more than three.
+  const text = value.trim().replace(/(\.\d{3})\d+/, "$1");
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 export function bindSessionFileRequestToGeneration(
   request: SessionFileRequest,
   metadata: SessionFileMetadata,

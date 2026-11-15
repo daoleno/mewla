@@ -6,6 +6,7 @@ import { isSvgImage } from "../../../core/files/imageSource";
 import { dirnameOf, resolveMarkdownLink } from "../../../core/files/markdownLinks";
 import { loadSvgPreview, svgPreviewHtml, type SvgPreview } from "../../../core/files/svgPreview";
 import {
+  isHtmlSessionFile,
   sessionFileDownloadLabel,
   sessionFileDownloadStatus,
   sessionFileMetaLine,
@@ -103,6 +104,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
         if (mine !== epoch) return;
         text.set(read);
       } else if (renderer !== "unsupported" && !(renderer === "pdf" && !PDF_PAGES)) {
+        // A browser's PDF is signed when the person opens it (`openPdfTab`): a stream lapses in two minutes.
         const signed = await buildSessionFileBinarySource(d.server, bindSessionFileRequestToGeneration(request(), found));
         if (mine !== epoch) return;
         source.set(signed);
@@ -214,6 +216,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
     if (!found) return <EmptyState title="Could not open file" detail="The file is unavailable." />;
     const renderer = classifySessionFileRenderer(found.kind);
     const read = text();
+    if (renderer === "text" && read && isHtmlSessionFile(found)) return <HtmlBody text={read} />;
     if (renderer === "markdown" && read) return <MarkdownBody text={read} onLink={(href) => openLink(href, found)} />;
     if (renderer === "text" && read) return <TextBody text={read} />;
     const signed = source();
@@ -223,12 +226,25 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
       }
       return <ImageBody source={signed} name={found.name} onFail={() => failInPlace(SESSION_FILE_STREAM_FAILED, true)} />;
     }
-    if (renderer === "pdf" && !PDF_PAGES) return <EmptyState testID="file-pdf-unavailable" icon="document" detail="PDF preview is unavailable on Web. Download the file to inspect it." />;
+    if (renderer === "pdf" && !PDF_PAGES) return <EmptyState testID="file-pdf-tab" icon="document" title={found.name} action="Open PDF" onAction={() => openPdfTab(found)} />;
     if (renderer === "pdf" && signed) return <PdfBody source={signed} expectedBytes={found.size} onFail={(message) => failInPlace(message, /changed|exceeded its inspected/i.test(message))} />;
     if ((renderer === "video" || renderer === "audio") && signed) {
       return <MediaPlayer testID="file-media" kind={renderer} source={signed} resolve={() => sign(found)} onFail={failInPlace} />;
     }
     return <EmptyState testID="file-unsupported" icon="document" title="Preview not supported" detail={sessionFileCanDownload(found) ? "Download it to open it in another app." : undefined} />;
+  }
+
+  /**
+   * A browser has no PDF view of ours: the PDF opens in a tab of its own, in the browser's viewer, from a stream
+   * signed at the press (a browser lets a page open a tab for some seconds after a press, which the signing fits in).
+   */
+  function openPdfTab(found: SessionFileMetadata): void {
+    void sign(found)
+      .then((signed) => openUrl(signed.uri))
+      .then((result) => {
+        if (!result.opened) failInPlace("The browser blocked the new tab. Allow pop-ups for Mewla and try again.", false);
+      })
+      .catch((error: unknown) => failInPlace(failureText(error, SESSION_FILE_STREAM_FAILED), isStaleSessionFileError(error)));
   }
 
   /** A failure after the file showed: the preview says so and offers Refresh, marked changed when it is. */
@@ -253,6 +269,18 @@ function MarkdownBody(props: { text: SessionFileTextPreview; onLink: (href: stri
       <TextView testID="file-markdown" markdown={props.text.content} selectable onLinkPress={(event) => props.onLink(event.url)} />
       <If when={note}>{(note) => <Text testID="file-truncated" class="pt-2 text-caption text-muted-foreground">{note()}</Text>}</If>
     </Scroll>
+  );
+}
+
+/** An HTML file, drawn as a page in a web view of its own: nothing of the app's is reachable from it. */
+function HtmlBody(props: { text: SessionFileTextPreview }) {
+  const note = sessionFileTruncationNote(props.text);
+  return (
+    // A page without a background of its own is drawn on white, as a browser draws it, in the dark appearance too.
+    <View class="flex-1 bg-white">
+      <WebView testID="file-html" class="flex-1" html={props.text.content} baseUrl={viewerBaseUrl} incognito accessibilityLabel="HTML preview" />
+      <If when={note}>{(note) => <View class="px-4 py-2"><Text testID="file-truncated" class="text-caption text-muted-foreground">{note()}</Text></View>}</If>
+    </View>
   );
 }
 
@@ -339,7 +367,7 @@ function SvgBody(props: { source: SessionFileBinarySource; onFail: (message: str
   );
 }
 
-/** `mewla.pdf` is the phones' (PdfRenderer, PDFKit); a browser has no such view, and the daemon's page frames nothing, as in v0.3.1 web. */
+/** `mewla.pdf` is the phones' (PdfRenderer, PDFKit); a browser has no such view and the daemon's page frames nothing: there it opens in a tab. */
 const PDF_PAGES = platform.os !== "web";
 
 /** The PDF's pages; the host refuses a file whose size is not the one inspected (it changed). */
