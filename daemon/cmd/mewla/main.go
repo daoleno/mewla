@@ -2976,10 +2976,11 @@ func runDevicesCommand(args []string, stderr io.Writer) error {
 			}
 			fmt.Fprintf(
 				os.Stdout,
-				"%s\t%s\t%s\n",
+				"%s\t%s\t%s\t%s\n",
 				device.ID,
 				name,
 				device.LastSeenAt.Format(time.RFC3339),
+				deviceAppLabel(device),
 			)
 		}
 		return nil
@@ -3149,6 +3150,22 @@ func writeDeviceRevokeResult(
 }
 
 const deviceControlRequestTimeout = time.Second
+
+// deviceAppLabel is the app a device last connected with, as `mewla devices
+// list` shows it: "0.4.6 android", or unknown for an app that did not say
+// (pre-0.4 when it signed in the Expo app's way). A computer runs no app.
+func deviceAppLabel(device auth.DeviceInfo) string {
+	switch {
+	case device.Kind == auth.DeviceKindComputer:
+		return "-"
+	case device.AppVersion != "":
+		return strings.TrimSpace(device.AppVersion + " " + device.AppPlatform)
+	case device.AppLegacy:
+		return "unknown (pre-0.4)"
+	default:
+		return "unknown"
+	}
+}
 
 func listDevices(stateDir string) ([]auth.DeviceInfo, error) {
 	retry := time.NewTicker(25 * time.Millisecond)

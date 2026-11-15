@@ -648,6 +648,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := s.auth.RecordClientApp(device.ID, clientAppFromRequest(r)); err != nil {
+		log.Printf("websocket: could not keep the app version of device=%s: %v", device.ID, err)
+	}
 
 	conn, err := upgrader.Upgrade(w, r, websocketAuthResponseHeader(r))
 	if err != nil {
