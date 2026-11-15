@@ -141,6 +141,13 @@ func run(args []string, stderr io.Writer) error {
 				os.Exit(code)
 			}
 			return nil
+		case "codex-server-wait":
+			// Hidden: a Codex launch waits for its app-server before the
+			// TUI connects; see codexadapter.WaitMain.
+			if code := codexadapter.WaitMain(args[1:], stderr); code != 0 {
+				os.Exit(code)
+			}
+			return nil
 		case "serve":
 			return runDaemonUpdating(args[1:], stderr)
 		case "pair":
@@ -477,7 +484,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err := platform.MkdirPrivate(codexControlDir); err != nil {
 		log.Printf("WARN agent events: cannot create %s, Codex Workers will be followed from their transcript: %v", codexControlDir, err)
 	} else {
-		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir, Inline: true, ConfigPath: modelprofiles.DefaultCodexConfigPath()})
+		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir, Inline: true, ConfigPath: modelprofiles.DefaultCodexConfigPath(), Mewla: watcher.ExecutablePath()})
 		codexFollow = newCodexEvents(ctx, eventHub)
 		w.ObserveSessions(codexFollow.Observe)
 	}

@@ -162,6 +162,8 @@ jobs:
         run: go test -count=1 -run 'TestCodexWorkspace|TestCodexRecordedCWDs|TestQueryCodexThreadsUsesMinimalSourceSchema|TestIdleCodexPolls|TestCodexSelectionIsRevisited|TestCodexResumedInAnotherFolder' ./work
       - name: Test a Codex Brain's chat binding on Windows
         run: go test -count=1 -run '^TestCodexBrainBindsItsConversationFromCodexsRecords$' ./brain
+      - name: Test a Codex launch waiting for its app-server on Windows
+        run: go test -count=1 -run 'TestAWrappedCodexLaunch|TestPrepareLaunchWaitsForTheAppServer|TestWaitMain' ./agentevents/codex
       - name: Build mewla.exe
         run: go build -o "$env:RUNNER_TEMP\mewla.exe" ./cmd/mewla
       - name: Test install.ps1 offline (Windows PowerShell 5.1)

@@ -19,6 +19,10 @@ type Adapter struct {
 	// config at ConfigPath chose the screen.
 	Inline     bool
 	ConfigPath string
+	// Mewla is the mewla program. A wrapped launch runs its
+	// `codex-server-wait` before the TUI, so the TUI never connects to an
+	// app-server that is not listening yet. Empty leaves the wait out.
+	Mewla string
 }
 
 // Descriptor declares Codex's capabilities: the app-server is a typed
@@ -57,8 +61,13 @@ func (a Adapter) PrepareLaunch(command string) (agentevents.Launch, error) {
 	// (mewla_chrome, mewla_computer) are forwarded too.
 	server := program + " app-server --listen unix://" + shellquote.Word(socket) + codextrust.Forwarded(rest) + forwardedMCP(rest)
 	log, pid := ControlLogPath(socket), ControlPidPath(socket)
-	wrapped := server + " > " + shellquote.Word(log) + " 2>&1 & echo $! > " + shellquote.Word(pid) +
-		"; exec " + program + " --remote unix://" + shellquote.Word(socket)
+	wrapped := server + " > " + shellquote.Word(log) + " 2>&1 & echo $! > " + shellquote.Word(pid) + "; "
+	// `codex --remote` tries to connect once and exits 1 if the app-server
+	// is not listening yet, so the TUI starts only once it is.
+	if a.Mewla != "" {
+		wrapped += shellquote.Word(a.Mewla) + " codex-server-wait " + shellquote.Word(socket) + "; "
+	}
+	wrapped += "exec " + program + " --remote unix://" + shellquote.Word(socket)
 	// Keep the server in the pane's process group. Windows launches through
 	// `mewla sh`, which has no job control and no -m option.
 	if runtime.GOOS != "windows" {
