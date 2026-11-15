@@ -26,16 +26,17 @@ enum CrashLog {
       let at = (try? FileManager.default.attributesOfItem(atPath: signalFile.path)[.modificationDate] as? Date) ?? Date()
       write("native", String(decoding: data, as: UTF8.self), at: at, header: false)
     }
+    Front.watch()
     NSSetUncaughtExceptionHandler { exception in
       let body = "Uncaught \(exception.name.rawValue): \(exception.reason ?? "")\n\n" + exception.callStackSymbols.joined(separator: "\n")
-      CrashLog.write("native", body)
+      CrashLog.write("native", body, live: true)
     }
     armSignals(path: signalFile.path, header: header(kind: "native", at: Date()))
     if #available(iOS 14.0, *) { MXMetricManager.shared.add(Diagnostics.shared) }
   }
 
   /// An error the app's JS reported (NshAppView.onError in a release build).
-  static func js(_ message: String) { write("js", message) }
+  static func js(_ message: String) { write("js", message, live: true) }
 
   @MainActor
   static func register(_ app: NshAppView) {
@@ -63,8 +64,9 @@ enum CrashLog {
     }
   }
 
-  static func write(_ kind: String, _ body: String, at: Date = Date(), header withHeader: Bool = true) {
-    var text = (withHeader ? header(kind: kind, at: at) : "") + body
+  /// `live`: it happened in this process, now, so whether the app was in front then is known.
+  static func write(_ kind: String, _ body: String, at: Date = Date(), header withHeader: Bool = true, live: Bool = false) {
+    var text = (withHeader ? header(kind: kind, at: at, live: live) : "") + body
     if text.utf8.count > limit { text = String(text.prefix(limit)) + "\n…" }
     let ms = Int64(at.timeIntervalSince1970 * 1000)
     let name = "\(ms)-\(kind)-\(Int.random(in: 0..<1_000_000)).txt"
@@ -74,7 +76,7 @@ enum CrashLog {
     for file in files.dropFirst(keep) { try? FileManager.default.removeItem(at: file) }
   }
 
-  private static func header(kind: String, at: Date) -> String {
+  private static func header(kind: String, at: Date, live: Bool = false) -> String {
     let info = Bundle.main.infoDictionary ?? [:]
     let version = info["CFBundleShortVersionString"] as? String ?? "?"
     let build = info["CFBundleVersion"] as? String ?? "?"
@@ -88,7 +90,41 @@ enum CrashLog {
     #endif
     let time = ISO8601DateFormatter().string(from: at)
     return "Mewla \(version) (\(build), \(flavor)) \(Bundle.main.bundleIdentifier ?? "")\n"
-      + "\(machine), iOS \(UIDevice.current.systemVersion)\n\(kind) at \(time)\n\n"
+      + "\(machine), iOS \(UIDevice.current.systemVersion)\n\(kind) at \(time)\n" + (live ? Front.line() + "\n" : "") + "\n"
+  }
+
+  /// Whether the app was in front, and for how long it had been (or how long since it was last): what tells a call
+  /// NSH cut off because the system suspended the app from one that ran too long (core/crash.ts reads it).
+  enum Front {
+    private static let lock = NSLock()
+    private static var inFront = false
+    private static var everInFront = false
+    private static var changedAt = now()
+
+    /// Seconds on a clock that keeps counting while the phone sleeps (CLOCK_MONOTONIC on Darwin).
+    private static func now() -> Double { Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1e9 }
+
+    static func watch() {
+      let center = NotificationCenter.default
+      _ = center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in Front.set(true) }
+      _ = center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: nil) { _ in Front.set(false) }
+    }
+
+    private static func set(_ front: Bool) {
+      lock.lock()
+      defer { lock.unlock() }
+      inFront = front
+      if front { everInFront = true }
+      changedAt = now()
+    }
+
+    static func line() -> String {
+      lock.lock()
+      defer { lock.unlock() }
+      let seconds = Int(now() - changedAt)
+      if inFront { return "In front for \(seconds) s" }
+      return everInFront ? "In the background for \(seconds) s" : "In the background for \(seconds) s, not in front since it started"
+    }
   }
 
   /// MetricKit hands over the system's crash reports (symbolicated frames' binary offsets), a day late at worst.

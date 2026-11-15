@@ -44,6 +44,18 @@ describe("crash reports", () => {
     expect(crashSummary(long).length).toBe(300);
   });
 
+  test("the summary says whether the app was in front, and for how long: a cut-off of a frozen call shows as one", () => {
+    const at = (line: string): CrashReport => ({
+      id: "1-js-1.txt", kind: "js", at: 1,
+      text: `Mewla 0.4.6 (40600, release) com.daoleno.mewla\nOnePlus PYR110, Android 16 (API 36), arm64-v8a\njs at 2026-11-16T01:00:00Z\n${line}\n\nthe script was interrupted: a call into JS exceeded its budget of 2000 ms\nError: interrupted\n    at z (native)`,
+    });
+    expect(crashSummary(at("In the background for 37 s"))).toStartWith("js 0.4.6 (40600, release) [background 37s] the script was interrupted");
+    expect(crashSummary(at("In front for 1 s"))).toContain("[front 1s] the script");
+    expect(crashSummary(at("In the background for 5 s, not in front since it started"))).toContain("[background 5s, never front]");
+    // Reports of the last run (a native crash, an ANR) and older hosts carry no such line.
+    expect(crashSummary(javaCrash)).not.toContain("[");
+  });
+
   test("goes to the computer as the daemon's client_diagnostic", () => {
     expect(crashDiagnostic(javaCrash)).toEqual({ type: "client_diagnostic", name: "app_crash", request_id: javaCrash.id, body: crashSummary(javaCrash) });
   });

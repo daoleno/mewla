@@ -81,15 +81,26 @@ export function crashKindLabel(kind: CrashKind): string {
 
 const SUMMARY_LIMIT = 300;
 
-/** The line the computer logs: kind, version, the error and the first frame that names it. */
+/** The line the computer logs: kind, version, where the app was (front), the error and the first frame that names it. */
 export function crashSummary(report: CrashReport): string {
   const [header, ...rest] = report.text.split(/\n\s*\n/);
   const version = /^Mewla [^\n]*?\)/.exec(header ?? "")?.[0]?.replace(/^Mewla /, "") ?? "";
   const body = rest.join("\n\n").split("\n").map((line) => line.trim()).filter(Boolean);
   const message = body.find((line) => !/^Uncaught exception on thread/.test(line)) ?? body[0] ?? "";
   const frame = body.find((line) => line !== message && /^(at |#\d|\d+\s+\S+\s+0x|[\w$.]+@|.*\.(kt|java|swift|tsx?):\d)/.test(line)) ?? "";
-  const summary = [report.kind, version, message, frame ? `@ ${frame}` : ""].filter(Boolean).join(" ");
+  const summary = [report.kind, version, frontOf(header ?? ""), message, frame ? `@ ${frame}` : ""].filter(Boolean).join(" ");
   return summary.length > SUMMARY_LIMIT ? `${summary.slice(0, SUMMARY_LIMIT - 1)}…` : summary;
+}
+
+/**
+ * Where the app was when it happened, as the host's header says it (CrashLog.kt / CrashLog.swift): "[front 12s]",
+ * "[background 37s]", "[background 37s, never front]". NSH counts the time the system keeps the app frozen against
+ * the call it froze, so a 2 s cut-off in the background, or in the first seconds back in front, is a freeze's.
+ */
+function frontOf(header: string): string {
+  const line = /^In (front|the background) for (\d+) s(, not in front since it started)?$/m.exec(header);
+  if (!line) return "";
+  return `[${line[1] === "front" ? "front" : "background"} ${line[2]}s${line[3] ? ", never front" : ""}]`;
 }
 
 /** The frame the daemon's `client_diagnostic` handler logs. */
