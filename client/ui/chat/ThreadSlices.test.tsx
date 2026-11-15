@@ -9,9 +9,18 @@ import { paired, phoneHost } from "../testing/fixtures";
  * Here the update draws, no call is cut off, and none but the frame's own keeps the engine past the budget below. The
  * frame's own call reads and files the 4000 events (12 MB in one frame; the daemon pages a thread, 40 events a frame
  * after the first): it is bounded apart, about 0.8 s on a dev box.
+ *
+ * The budgets are in units of this engine's speed at the time, not milliseconds: a CI runner twice as slow made the
+ * frame's call 1.6 s on a commit whose dev-box call is 0.8 s (11-15, red three times on unrelated commits).
+ * `app.calibrate` times fixed text work on the same 4000 events that calls no app code; on a dev box, idle or busy, the
+ * frame's call is 9 to 11 of those and every other call at most about one. Rows made in 400 ms slices fail it (395 ms
+ * against 246), rows made in one call are cut off at 2 s. The millisecond floors only loosen a budget on a box fast
+ * enough to make the calibration tiny.
  */
-const BUDGET_MS = 150;
-const FRAME_BUDGET_MS = 1300;
+const BUDGET_READS = 3;
+const FRAME_BUDGET_READS = 16;
+const BUDGET_FLOOR_MS = 150;
+const FRAME_BUDGET_FLOOR_MS = 1300;
 const host = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-11T07:00:00.000Z" };
 const brain = { chat_thread_id: "t-now", host_worker: host };
 const ts = (i: number) => new Date(Date.UTC(2026, 10, 11, 7, 0, 0) + i * 1000).toISOString();
@@ -22,12 +31,15 @@ const update = Array.from({ length: 4000 }, (_, i) => ({
 }));
 
 describe("a thread update of 4000 tool events", () => {
-  test(`draws, and no call but the frame's own keeps the engine past ${BUDGET_MS} ms`, async () => {
+  test(`draws, and no call but the frame's own keeps the engine past ${BUDGET_READS} calibration runs`, async () => {
     const app = await open("../testing/OpenBudgetApp.tsx", {
       platform: "android", storage: paired,
-      host: phoneHost({ brain, conversations: { "brain-host": [say(0, "Message 0."), say(1, "Message 1.")] } }, { "app.calls": () => undefined, "app.gaps": () => undefined }),
+      host: phoneHost({ brain, conversations: { "brain-host": [say(0, "Message 0."), say(1, "Message 1.")] } }, { "app.calls": () => undefined, "app.gaps": () => undefined, "app.calibration": () => undefined }),
     });
     await app.waitFor("text:Message 1.", { timeout: 10_000 });
+    await app.host.send("app.calibrate", { events: update });
+    const runs = (app.host.posts().filter((post) => post.name === "app.calibration").at(-1)?.data as number[]) ?? [];
+    const calibration = Math.max(1, [...runs].sort((a, b) => a - b)[Math.floor(runs.length / 2)] ?? 0);
     await app.host.send("app.gapsReset");
     await app.host.send("app.conversation", { worker: "brain-host", upserts: [...update, say(5001, "The answer, after them.")] });
     await app.waitFor("text:The answer, after them.", { timeout: 30_000 });
@@ -40,9 +52,10 @@ describe("a thread update of 4000 tool events", () => {
     const others = [...gaps];
     const own = others.findIndex((gap) => Math.abs(gap - frame) <= 20);
     if (own >= 0) others.splice(own, 1);
-    console.log(`thread slices: the frame's call ${frame} ms, the longest others ${others.slice(0, 5).join(", ")} ms`);
-    expect(frame).toBeLessThan(FRAME_BUDGET_MS);
+    console.log(`thread slices: calibration ${calibration} ms (${runs.join(", ")}); the frame's call ${frame} ms = ${(frame / calibration).toFixed(2)}x, the longest others ${others.slice(0, 5).join(", ")} ms = ${((others[0] ?? 0) / calibration).toFixed(3)}x`);
+    expect(runs.length).toBe(3);
+    expect(frame).toBeLessThan(Math.max(FRAME_BUDGET_FLOOR_MS, FRAME_BUDGET_READS * calibration));
     expect(others.length).toBeGreaterThan(0);
-    expect(others[0]!).toBeLessThan(BUDGET_MS);
+    expect(others[0]!).toBeLessThan(Math.max(BUDGET_FLOOR_MS, BUDGET_READS * calibration));
   }, 60_000);
 });

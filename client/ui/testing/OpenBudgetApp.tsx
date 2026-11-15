@@ -29,3 +29,22 @@ host.on("app.gapsReset", () => {
   gaps.length = 0;
   beat = Date.now();
 });
+
+// How fast this engine runs JS right now, for budgets that hold on a slow or busy runner as on a dev box:
+// `app.calibrate` with the events a test sends does fixed text work on them that calls no app code (so a slower app
+// cannot raise its own budget): each event's fields copied, its output split into lines, each line trimmed, tested
+// and rejoined. It runs `runs` times and posts `app.calibration`, each run's milliseconds.
+host.on<{ events: Record<string, unknown>[]; runs?: number }>("app.calibrate", ({ events, runs = 3 }) => {
+  const times: number[] = [];
+  let kept = 0;
+  for (let run = 0; run < runs; run++) {
+    const started = Date.now();
+    for (const event of events) {
+      const copy: Record<string, unknown> = { ...event };
+      const lines = String(copy.output ?? "").split("\n").map((line) => line.trim()).filter((line) => /\S/.test(line));
+      kept += lines.join("\n").length;
+    }
+    times.push(Date.now() - started);
+  }
+  host.post("app.calibration", kept > 0 ? times : []);
+});
