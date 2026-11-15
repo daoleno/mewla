@@ -38,6 +38,17 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	// its footer at the bottom of the capture. That holds whatever a banner-like
 	// or composer-like line inside its command did to the window above.
 	whole := strings.ReplaceAll(in.PaneContent, "\r\n", "\n")
+	// Before its first conversation Codex asks how to sign in, then shows the
+	// page and code to sign in with: the person's, answered from Chat.
+	if prompt, ok := codexSetupPrompt(whole); ok {
+		return ActivitySignal{
+			State:    StateBlocked,
+			Summary:  prompt.Title,
+			Source:   "codex_pane_sign_in",
+			Provider: a.Name(),
+			Prompt:   &prompt,
+		}
+	}
 	if codexApprovalPromptRe.MatchString(approvalPane) || CodexApprovalDialogOpen(whole) {
 		signal := ActivitySignal{
 			State:    StateBlocked,

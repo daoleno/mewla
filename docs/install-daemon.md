@@ -81,8 +81,10 @@ anyway, also when you install it after Mewla, and in your own terminal you can r
 `& "$env:USERPROFILE\.local\bin\claude.exe"`. A Claude Code that never ran
 opens on a theme picker and a security note; Mewla answers both for Brain and
 for Sessions it delivers a message to (the highlighted theme; `/theme` changes
-it). Any other first-run question (how to sign in, say) shows **Blocked** until
-you answer it.
+it). Its other first-run screens show in the Session's Chat as a card you
+answer there, on the phone too: how to sign in (the card opens the sign-in page
+and takes the code it gives you), Codex's sign-in, and whether you trust a
+folder.
 
 Mewla starts once at login, but each new Session gets your environment as it
 is now, as a new PowerShell window does: an agent installed, a `PATH` entry or

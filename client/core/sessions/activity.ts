@@ -66,6 +66,7 @@ export function promptLines(text: string): string[] {
 
 /** What a terminal prompt asks: the open question, else the call's line (`summary`), else the request's first line past tips, else its title. */
 export function promptTitle(prompt: WorkerPrompt): string {
+  if (prompt.kind === "signin") return prompt.title || "Sign in";
   if (prompt.kind === "choice") return prompt.questions?.find((q) => !q.answered)?.question || prompt.title || "A question";
   // The call the prompt is for, as the daemon names it (WIRE §7): "curl -sI https://example.org", "/etc/hostname".
   if (prompt.summary) return prompt.summary;
@@ -95,8 +96,19 @@ export function toolWords(tool: string | undefined, summary: string | undefined)
  * What a request asks, short, for the line under its source (SPEC §11 Tray row, Needs you): the request's summary,
  * a call in its tool row's words, a folder trust as "Trust this folder?", else the question or its first line.
  */
+/**
+ * A folder-trust prompt: Claude's "Yes, I trust this folder", Codex's "Do you trust the contents of this directory?".
+ * The word alone is not one: Claude's security notes say "only use it with code you trust".
+ */
+export function isTrustPrompt(prompt: WorkerPrompt): boolean {
+  if (prompt.kind !== "startup") return false;
+  const asks = /\btrust (?:this|the) (?:folder|files|contents|directory|workspace)\b/i;
+  return asks.test(`${prompt.title} ${prompt.request ?? ""}`) || (prompt.options ?? []).some((option) => asks.test(option.label));
+}
+
 export function promptAsk(prompt: WorkerPrompt): string {
-  if (prompt.kind === "startup" && /\btrust\b/i.test(`${prompt.title} ${prompt.request ?? ""}`)) return "Trust this folder?";
+  if (prompt.kind === "signin") return prompt.title || "Sign in";
+  if (isTrustPrompt(prompt)) return "Trust this folder?";
   if ((prompt.kind === "permission" || prompt.kind === "approval") && prompt.tool) return toolWords(prompt.tool, prompt.summary);
   return promptTitle(prompt);
 }

@@ -18,17 +18,21 @@ import (
 // prompt the answer was composed for; the answer is refused, and no key sent,
 // when the pane no longer shows it. A menu prompt (permission, plan, startup,
 // approval) takes Number, the digit of the option. A choice prompt takes
-// Answers, one per question, with zero-based option indexes.
+// Answers, one per question, with zero-based option indexes. A sign-in prompt
+// with an Input takes Text (the code its page shows), which is a credential:
+// it is never logged or recorded.
 type PromptAnswer struct {
 	PromptID string            `json:"prompt_id"`
 	Number   int               `json:"number,omitempty"`
 	Answers  []ChoiceSelection `json:"answers,omitempty"`
+	Text     string            `json:"text,omitempty"`
 }
 
 // PanePrompts is the part of the watcher that answers pane prompts.
 type PanePrompts interface {
 	CurrentPrompt(sessionID string) (*classifier.Prompt, error)
 	AnswerPrompt(sessionID, promptID string, number int) error
+	AnswerPromptText(sessionID, promptID, text string) error
 	AnswerClaudeChoice(sessionID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
 }
 
@@ -71,6 +75,12 @@ func AnswerPanePrompt(pane PanePrompts, workerID string, answer PromptAnswer, ho
 			return nil, watcher.ErrClaudeChoiceGone
 		}
 		return driveChoiceAnswer(workerID, answerChoiceRequest{CallID: pending.CallID, Answers: answer.Answers}, load, pane.AnswerClaudeChoice)
+	}
+	if prompt.Input != "" && answer.Number == 0 {
+		if strings.TrimSpace(answer.Text) == "" {
+			return nil, fmt.Errorf("%w: this prompt is answered with text", watcher.ErrClaudeChoiceRefused)
+		}
+		return nil, pane.AnswerPromptText(workerID, answer.PromptID, answer.Text)
 	}
 	if hook != nil {
 		handled, err := hook(*prompt, answer.Number)

@@ -32,6 +32,10 @@ func (p *promptWatcher) AnswerPrompt(_, promptID string, number int) error {
 	return nil
 }
 
+func (p *promptWatcher) AnswerPromptText(string, string, string) error {
+	return errors.New("not driven in this test")
+}
+
 func (p *promptWatcher) AnswerClaudeChoice(string, []watcher.ClaudeChoiceQuestion, []watcher.ClaudeChoiceAnswer) error {
 	return errors.New("not driven in this test")
 }

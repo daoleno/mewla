@@ -57,6 +57,11 @@ describe("request cards", () => {
     const trust = { id: "t", kind: "startup" as const, provider: "claude", title: "Do you trust the files in this folder?", options: [{ number: 1, label: "Yes, proceed" }, { number: 2, label: "No, exit" }] };
     const cards = requestCardsOf(cardsInput({ workers: [worker("s", { prompt: trust }), worker("x", { needs_attention: true, summary: "Waiting on login" })] }), { workerId: "s" });
     expect(cards[0]!.label).toBe("Trust this folder?");
+    // Claude's security notes say "only use it with code you trust": a note, not a folder's trust.
+    const notes = { id: "n", kind: "startup" as const, provider: "claude", title: "Security notes", request: "Security notes: 1. Claude can make mistakes. 2. Due to prompt injection risks, only use it with code you trust", options: [{ number: 1, label: "Continue", selected: true }] };
+    expect(requestCardsOf(cardsInput({ workers: [worker("s", { prompt: notes })] }), { workerId: "s" })[0]!.label).toBe("Needs you");
+    const windowsTrust = { id: "w", kind: "startup" as const, provider: "claude", title: "Waiting for your choice", request: "Accessing workspace: C:\\Users\\mtwo", options: [{ number: 1, label: "No, exit", selected: true }, { number: 2, label: "Yes, I trust this folder" }] };
+    expect(requestCardsOf(cardsInput({ workers: [worker("s", { prompt: windowsTrust })] }), { workerId: "s" })[0]!.label).toBe("Trust this folder?");
     const blocked = requestCardsOf(cardsInput({ workers: [worker("x", { needs_attention: true, summary: "Waiting on login" })] }), { workerId: "x" });
     expect(blocked[0]).toMatchObject({ label: "Needs you", body: { kind: "attention", detail: "Waiting on login" } });
   });

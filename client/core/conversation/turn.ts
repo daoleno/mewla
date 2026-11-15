@@ -23,7 +23,7 @@ export async function answerChoice(transport: Transport, workerId: string, callI
  * question (AskUserQuestion read off the screen) by its answers. Rejects with
  * `code: "answer_prompt_gone"` once the prompt has passed.
  */
-export async function answerPrompt(transport: Transport, workerId: string, promptId: string, answer: { number?: number; answers?: ChoiceAnswer[] }): Promise<void> {
+export async function answerPrompt(transport: Transport, workerId: string, promptId: string, answer: { number?: number; answers?: ChoiceAnswer[]; text?: string }): Promise<void> {
   await transport.request(
     "answer_prompt",
     {
@@ -32,6 +32,8 @@ export async function answerPrompt(transport: Transport, workerId: string, promp
         prompt_id: promptId,
         ...(answer.number !== undefined ? { number: answer.number } : {}),
         ...(answer.answers ? { answers: answer.answers.map((a) => ({ selected: a.selected, other: a.other })) } : {}),
+        // A sign-in screen's code: a credential, sent once and kept nowhere here.
+        ...(answer.text !== undefined ? { text: answer.text } : {}),
       },
     },
     { reply: "prompt_answered", timeoutMs: 30_000 },
