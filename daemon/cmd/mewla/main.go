@@ -843,19 +843,24 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return ""
 	}
 	displayService.SetNames(workerName)
-	// A display (and the browser window on it) nobody has used for an hour
-	// closes, and the person is told; the Worker hears it with its next result.
-	displayService.SetIdleClose(vdisplay.IdleClose, func(worker, name string, idle time.Duration) {
+	// A display (and the browser window on it) Mewla closes, because nobody
+	// used it for an hour or another agent needed it, is told to the person;
+	// the Worker hears it with its next result.
+	displayService.SetIdleClose(vdisplay.IdleClose, func(worker, name, why string) {
 		browserManager.Forget(worker)
 		who := strings.TrimSpace(name)
 		if who == "" {
 			who = "An agent"
 		}
-		log.Printf("display: closed the display and browser window of %s (%s): nobody used them for %s", who, worker, idle.Round(time.Minute))
-		if err := pusher.NotifyWorkerNote(worker, "Screen", who+"'s browser window closed: nobody used it for an hour."); err != nil && !errors.Is(err, push.ErrNoRegistration) {
+		log.Printf("display: closed the display and browser window of %s (%s): %s", who, worker, why)
+		if err := pusher.NotifyWorkerNote(worker, "Screen", who+"'s browser window closed: "+why+"."); err != nil && !errors.Is(err, push.ErrNoRegistration) {
 			log.Printf("display: couldn't tell the person: %v", err)
 		}
 	})
+	// When every display is taken, one whose Worker's turn ended may be given to another agent.
+	displayService.SetEvictable(func(id string) bool { return controlHandler.workerOpen(id) && !controlHandler.liveWorker(id) })
+	// A Work whose Worker left a page or app open on its display is not closed by the judge (and its Session with it).
+	brainService.SetOpenScreens(displayService.InUse)
 	screenService := screen.NewPlatformService(authManager.StorageDir(), displayService)
 	go screenService.Run(ctx)
 	if daemonSupervised() {

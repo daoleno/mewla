@@ -52,11 +52,14 @@ type Service struct {
 	// idleAfter closes a monitor nobody has used for that long (see SweepIdle);
 	// idleClosed is told first, to close the Worker's browser windows and say so.
 	idleAfter  time.Duration
-	idleClosed func(worker, name string, idle time.Duration)
+	idleClosed func(worker, name, why string)
 	idleStop   chan struct{}
-	// closedIdle are the Workers whose monitor SweepIdle closed, and when, for
-	// their next result to say.
-	closedIdle map[string]time.Time
+	// evictable says whether a Worker's turn has ended, so its display may be
+	// given to another agent when every one is taken (see makeRoom).
+	evictable func(worker string) bool
+	// closedIdle are the Workers whose monitor Mewla closed, with when and why,
+	// for their next result to say.
+	closedIdle map[string]closedNote
 
 	starting sync.Mutex // the screen starts, and its layout changes, one at a time
 	inputMu  sync.Mutex // one input action at a time: the pointer and the keyboard focus are the screen's, not a monitor's
@@ -106,7 +109,41 @@ type workerDisplay struct {
 // directory made when the first display starts (a Unix socket's path may be
 // at most about 100 bytes, which a state directory can exceed).
 func NewService(root string) *Service {
-	return &Service{root: root, displays: map[string]*workerDisplay{}, closedIdle: map[string]time.Time{}}
+	return &Service{root: root, displays: map[string]*workerDisplay{}, closedIdle: map[string]closedNote{}}
+}
+
+// closedNote is a monitor Mewla closed, for its Worker's next result.
+type closedNote struct {
+	at  time.Time
+	why string
+}
+
+// Why a monitor was closed, as the person and the agent are told.
+const (
+	whyIdle    = "nobody used it for an hour"
+	whyEvicted = "another agent needed its display"
+)
+
+// EvictQuiet is how long the person must have left a display alone (no input,
+// no view open) before it may be given to another agent.
+const EvictQuiet = 10 * time.Minute
+
+// SetEvictable tells the service which Workers' turns have ended: when every
+// display is taken, the one of those idle longest goes to the agent that asks.
+func (s *Service) SetEvictable(f func(worker string) bool) { s.evictable = f }
+
+// InUse says whether the Worker's display has something on it (a browser
+// window or a running app). It only reads what the service holds.
+func (s *Service) InUse(worker string) bool {
+	s.mu.Lock()
+	w := s.displays[worker]
+	s.mu.Unlock()
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.windows > 0 || w.liveApps() > 0
 }
 
 // SetAlive tells the service which Workers are still open; a display whose
@@ -117,10 +154,11 @@ func (s *Service) SetAlive(alive func(worker string) bool) { s.alive = alive }
 // SetNames tells the service the Workers' names, for Screen's list.
 func (s *Service) SetNames(names func(worker string) string) { s.names = names }
 
-// SetIdleClose closes, from now on, every monitor nobody has used for after:
-// closed is told first, to close the Worker's browser windows and tell the
-// person; the Worker hears it with its next result.
-func (s *Service) SetIdleClose(after time.Duration, closed func(worker, name string, idle time.Duration)) {
+// SetIdleClose closes, from now on, every monitor nobody has used for after.
+// closed is told first, whenever Mewla closes a monitor (idle, or given to
+// another agent), with why in words, to close the Worker's browser windows and
+// tell the person; the Worker hears it with its next result.
+func (s *Service) SetIdleClose(after time.Duration, closed func(worker, name, why string)) {
 	s.mu.Lock()
 	s.idleAfter, s.idleClosed = after, closed
 	start := s.idleStop == nil
@@ -151,7 +189,7 @@ func (s *Service) SetIdleClose(after time.Duration, closed func(worker, name str
 // action, no input from the person, and no view of it open.
 func (s *Service) SweepIdle(now time.Time) {
 	s.mu.Lock()
-	after, closed := s.idleAfter, s.idleClosed
+	after := s.idleAfter
 	var idle []*workerDisplay
 	if after > 0 {
 		for _, w := range s.displays {
@@ -172,15 +210,71 @@ func (s *Service) SweepIdle(now time.Time) {
 		if !unused {
 			continue
 		}
-		if closed != nil {
-			closed(w.worker, s.nameOf(w.worker), now.Sub(since))
-		}
-		s.Forget(w.worker)
-		s.mu.Lock()
-		s.closedIdle[w.worker] = now
-		s.mu.Unlock()
+		s.closeFor(w.worker, now, whyIdle)
 	}
 }
+
+// closeFor closes a Worker's monitor and what is on it, telling the person
+// (the closed hook) and, with its next result, the Worker.
+func (s *Service) closeFor(worker string, now time.Time, why string) {
+	s.mu.Lock()
+	closed := s.idleClosed
+	s.mu.Unlock()
+	if closed != nil {
+		closed(worker, s.nameOf(worker), why)
+	}
+	s.Forget(worker)
+	s.mu.Lock()
+	s.closedIdle[worker] = closedNote{at: now, why: why}
+	s.mu.Unlock()
+}
+
+// makeRoom gives a display to an agent that asks when every one is taken: the
+// one idle longest whose Worker's turn has ended, which nobody is acting on,
+// holding or watching, and which the person has left alone for EvictQuiet. It
+// says whether one was freed. The caller does not hold s.starting.
+func (s *Service) makeRoom(now time.Time) bool {
+	s.mu.Lock()
+	full := len(s.displays) >= maxDisplays
+	evictable := s.evictable
+	all := make([]*workerDisplay, 0, len(s.displays))
+	for _, w := range s.displays {
+		all = append(all, w)
+	}
+	s.mu.Unlock()
+	if !full {
+		return true
+	}
+	if evictable == nil {
+		return false
+	}
+	var victim string
+	var oldest time.Time
+	for _, w := range all {
+		w.mu.Lock()
+		since := w.used
+		person := w.last
+		if w.seen.After(person) {
+			person = w.seen
+		}
+		if person.After(since) {
+			since = person
+		}
+		ok := w.acting == 0 && w.person == 0 && w.viewers == 0 && now.Sub(person) >= EvictQuiet
+		w.mu.Unlock()
+		if ok && evictable(w.worker) && (victim == "" || since.Before(oldest)) {
+			victim, oldest = w.worker, since
+		}
+	}
+	if victim == "" {
+		return false
+	}
+	s.closeFor(victim, now, whyEvicted)
+	return true
+}
+
+// errAllInUse is what an agent hears when every display is in active use.
+var errAllInUse = fmt.Errorf("All %d agent displays on this computer are in use: their agents are working, or the person is watching or using them. Tell the person, and try again once one of those agents is done.", maxDisplays)
 
 func (s *Service) nameOf(worker string) string {
 	if s.names == nil {
@@ -272,7 +366,12 @@ func (w *workerDisplay) snapshot() (*image.RGBA, error) {
 func (s *Service) Begin(worker string) error {
 	w := s.live(worker)
 	if w == nil {
-		return nil // no window yet: the Worker's first tool call opens one
+		// No window yet: the Worker's first tool call opens one, on a display
+		// it gets now; with none to be had it hears why instead of a timeout.
+		if !s.makeRoom(time.Now()) {
+			return errAllInUse
+		}
+		return nil
 	}
 	return w.begin()
 }
@@ -287,7 +386,11 @@ func (s *Service) End(worker string) []string {
 	s.mu.Unlock()
 	var out []string
 	if wasClosed {
-		out = append(out, fmt.Sprintf("Mewla closed your browser window and display at %s: nobody had used them for %s. Open the page again if it is still needed.", closedAt.Format("15:04"), roundSpan(after)))
+		why := closedAt.why
+		if why == whyIdle {
+			why = "nobody had used them for " + roundSpan(after)
+		}
+		out = append(out, fmt.Sprintf("Mewla closed your browser window and display at %s: %s. Open the page again if it is still needed.", closedAt.at.Format("15:04"), why))
 	}
 	if w == nil {
 		return out
@@ -393,6 +496,24 @@ func (s *Service) get(ctx context.Context, worker string, create bool) (*workerD
 	if !create {
 		return nil, errNoScreen
 	}
+	w, err := s.create(ctx, worker)
+	if errors.Is(err, errFull) {
+		// Freed outside s.starting: closing a display takes it too.
+		if !s.makeRoom(time.Now()) {
+			return nil, errAllInUse
+		}
+		w, err = s.create(ctx, worker)
+		if errors.Is(err, errFull) {
+			return nil, errAllInUse
+		}
+	}
+	return w, err
+}
+
+var errFull = errors.New("every display is taken")
+
+// create makes the Worker's monitor, or says errFull.
+func (s *Service) create(ctx context.Context, worker string) (*workerDisplay, error) {
 	// One monitor is made at a time, so two opens from one Worker can't make two.
 	s.starting.Lock()
 	defer s.starting.Unlock()
@@ -417,7 +538,7 @@ func (s *Service) get(ctx context.Context, worker string, create bool) (*workerD
 		}
 	}
 	if slot == 0 {
-		return nil, fmt.Errorf("this computer already runs %d displays for agents", maxDisplays)
+		return nil, errFull
 	}
 	w := &workerDisplay{worker: worker, screen: scr, slot: slot, rect: image.Rect(slot*MonitorWidth, 0, (slot+1)*MonitorWidth, MonitorHeight), used: time.Now()}
 	s.mu.Lock()

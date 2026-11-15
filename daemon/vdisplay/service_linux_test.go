@@ -4,6 +4,7 @@ package vdisplay
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"io"
 	"os"
@@ -277,7 +278,7 @@ func TestIdleDisplayCloses(t *testing.T) {
 	s := newService(t)
 	s.SetNames(func(string) string { return "SignIn" })
 	var closed []string
-	s.SetIdleClose(time.Hour, func(worker, name string, _ time.Duration) { closed = append(closed, worker+"/"+name) })
+	s.SetIdleClose(time.Hour, func(worker, name, _ string) { closed = append(closed, worker+"/"+name) })
 	if _, err := s.Monitor(context.Background(), "w1"); err != nil {
 		t.Fatal(err)
 	}
@@ -306,5 +307,58 @@ func TestIdleDisplayCloses(t *testing.T) {
 	}
 	if notes := s.End("w1"); len(notes) != 1 || !strings.Contains(notes[0], "nobody had used them for 60 minutes") {
 		t.Fatalf("the Worker was not told: %q", notes)
+	}
+}
+
+// Every display taken: the one idle longest whose Worker's turn ended, and
+// which the person left alone, goes to the agent that asks; the person and its
+// Worker are told why. With none like that, the agent hears it in words.
+func TestFullScreenEvicts(t *testing.T) {
+	s := newService(t)
+	ctx := context.Background()
+	done := map[string]bool{}
+	s.SetEvictable(func(w string) bool { return done[w] })
+	var closed []string
+	s.SetIdleClose(time.Hour, func(worker, _, why string) { closed = append(closed, worker+": "+why) })
+	for i := 1; i <= maxDisplays; i++ {
+		w := fmt.Sprintf("w%d", i)
+		if _, err := s.Monitor(ctx, w); err != nil {
+			t.Fatal(err)
+		}
+		s.Windows(w, 1)
+	}
+	// Every Worker still working: nothing is taken from anyone.
+	if _, err := s.Monitor(ctx, "late"); err == nil || !strings.Contains(err.Error(), "are in use") {
+		t.Fatalf("a full screen of working agents gave a display: %v", err)
+	}
+	if err := s.Begin("late"); err == nil || !strings.Contains(err.Error(), "Tell the person") {
+		t.Fatalf("the browser call was not refused in words: %v", err)
+	}
+	// Two Workers are done; the one the person touched a moment ago is kept.
+	done["w2"], done["w3"] = true, true
+	quiet := time.Now().Add(-2 * EvictQuiet)
+	for _, id := range []string{"w2", "w3"} {
+		w := s.displays[id]
+		w.mu.Lock()
+		w.used, w.last = quiet, quiet
+		w.mu.Unlock()
+	}
+	s.displays["w3"].mu.Lock()
+	s.displays["w3"].last = time.Now()
+	s.displays["w3"].mu.Unlock()
+	if err := s.Begin("late"); err != nil {
+		t.Fatalf("a done Worker's display was not freed for the next agent: %v", err)
+	}
+	if _, err := s.Monitor(ctx, "late"); err != nil {
+		t.Fatal(err)
+	}
+	if len(closed) != 1 || closed[0] != "w2: "+whyEvicted {
+		t.Fatalf("closed = %v", closed)
+	}
+	if !s.InUse("w3") || s.InUse("w2") {
+		t.Fatal("the wrong display was given away")
+	}
+	if notes := s.End("w2"); len(notes) != 1 || !strings.Contains(notes[0], whyEvicted) {
+		t.Fatalf("the Worker whose display was given away was not told: %q", notes)
 	}
 }

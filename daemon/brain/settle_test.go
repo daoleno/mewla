@@ -261,3 +261,30 @@ func TestWorkerSendAfterARuntimeCloseReopensTheWork(t *testing.T) {
 		t.Fatal("a send reopened a user-closed Work")
 	}
 }
+
+// A Worker that left a page open on its display for the person (a sign-in)
+// keeps its Work from the judge, however it reported its turn: closing the
+// Work would close its Session and the page with it.
+func TestAnOpenPageOnAWorkersDisplayKeepsTheWorkFromTheJudge(t *testing.T) {
+	judge := &fakeJudge{verdict: JudgeVerdict{Outcome: VerdictDone}}
+	store, service, item := endedHandlingFixture(t, judge)
+	var asked []string
+	open := true
+	service.SetOpenScreens(func(session string) bool {
+		asked = append(asked, session)
+		return open && session == "worker"
+	})
+	runSettle(t, service)
+	if got, _ := store.Work(item.ID); got.Status == WorkDone || closedByRuntime(t, store, item.ID) || len(judge.briefs) != 0 {
+		t.Fatalf("a Work whose Worker has a page open was judged or closed: %+v asked=%v", got, asked)
+	}
+	if !strings.Contains(strings.Join(asked, ","), "worker") {
+		t.Fatalf("the Work's Worker Session was not asked about: %v", asked)
+	}
+	// The person closed the page (or it went idle): the judge decides again.
+	open = false
+	runSettle(t, service)
+	if got, _ := store.Work(item.ID); got.Status != WorkDone {
+		t.Fatalf("with no page open the done verdict did not apply: %+v", got)
+	}
+}

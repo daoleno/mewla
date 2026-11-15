@@ -350,7 +350,15 @@ look for it. The window and the agent's monitor go when its Worker closes, when
 you close the window (Chrome's own tab or window close), or when nobody has
 used them for an hour: no action by the agent, nothing from you, and no view of
 it open in Screen. Mewla then tells you in a notification, and the agent hears
-it with its next tool result.
+it with its next tool result. While a page or app is open on a Worker's
+display, Mewla does not close that Worker's Work as finished, so the page stays
+however the Worker reported its turn.
+
+A computer has six agent displays. When all six are taken and another agent
+needs one, the display of a Worker that is done, that nobody is watching and
+that you have not touched for ten minutes goes to it (the one idle longest),
+and you are told the same way. When every display is in active use, the agent
+is told so in words and says so in Chat.
 
 - **The view is the computer.** It opens live and is the input surface: on a
   desktop or in the web app, the mouse (click, double click, right click, drag),

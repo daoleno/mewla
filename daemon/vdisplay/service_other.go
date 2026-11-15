@@ -17,16 +17,18 @@ type Service struct{}
 // NewService returns the stub.
 func NewService(string) *Service { return &Service{} }
 
-func (*Service) Act(context.Context, string, Action) (Result, error)             { return Result{}, errUnsupported }
-func (*Service) View(string) (*Viewer, error)                                    { return nil, errUnsupported }
-func (*Service) Halt(string) error                                               { return errUnsupported }
-func (*Service) Resume(string) error                                             { return errUnsupported }
-func (*Service) List() []Info                                                    { return nil }
-func (*Service) SetAlive(func(string) bool)                                      {}
-func (*Service) SetNames(func(string) string)                                    {}
-func (*Service) SetIdleClose(time.Duration, func(string, string, time.Duration)) {}
-func (*Service) Forget(string)                                                   {}
-func (*Service) Close()                                                          {}
+func (*Service) Act(context.Context, string, Action) (Result, error)      { return Result{}, errUnsupported }
+func (*Service) View(string) (*Viewer, error)                             { return nil, errUnsupported }
+func (*Service) Halt(string) error                                        { return errUnsupported }
+func (*Service) Resume(string) error                                      { return errUnsupported }
+func (*Service) List() []Info                                             { return nil }
+func (*Service) SetAlive(func(string) bool)                               {}
+func (*Service) SetNames(func(string) string)                             {}
+func (*Service) SetIdleClose(time.Duration, func(string, string, string)) {}
+func (*Service) SetEvictable(func(string) bool)                           {}
+func (*Service) InUse(string) bool                                        { return false }
+func (*Service) Forget(string)                                            {}
+func (*Service) Close()                                                   {}
 
 func (*Service) Begin(string) error                              { return nil }
 func (*Service) End(string) []string                             { return nil }

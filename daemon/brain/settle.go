@@ -20,7 +20,8 @@ import (
 //
 //   - Facts are decided in code: a Worker is running, a prompt is in flight,
 //     Brain is reading the result right now, a question awaits the user, a
-//     wait awaits a future input. While any holds, the Work is never touched.
+//     wait awaits a future input, a Worker of the Work has a page or app open
+//     on its display. While any holds, the Work is never touched.
 //   - Judgments are decided by a model that is given the context: when none
 //     of those holds, is the Work finished, superseded, or still waiting on
 //     something only the conversation reveals? The runtime applies the verdict
@@ -74,6 +75,36 @@ func (s *Service) HostExecutor() work.WorkerExecutor { return s.hostExecutor() }
 // SetWorkJudge installs the model that judges undisposed Work. Without one
 // nothing is settled by the runtime.
 func (s *Service) SetWorkJudge(judge WorkJudge) { s.judge = judge }
+
+// SetOpenScreens tells the judge's fact check which Worker Sessions still have
+// a browser window or an app open on their display: a sign-in page a Worker
+// left for the person is a live fact, so its Work stays open (and its Session
+// with the page) however the Worker reported its turn.
+func (s *Service) SetOpenScreens(open func(sessionID string) bool) { s.openScreen = open }
+
+// screenOpenOn says whether one of the Work's Worker Sessions has its display in use.
+func (s *Service) screenOpenOn(item Work) bool {
+	if s.openScreen == nil {
+		return false
+	}
+	sessions := map[string]bool{}
+	if item.AttemptSessionID != "" {
+		sessions[item.AttemptSessionID] = true
+	}
+	if records, err := s.store.workWorkerRecords(); err == nil {
+		for _, record := range records {
+			if record.WorkID == item.ID && record.SessionID != "" {
+				sessions[record.SessionID] = true
+			}
+		}
+	}
+	for id := range sessions {
+		if s.openScreen(id) {
+			return true
+		}
+	}
+	return false
+}
 
 // settleCandidate is the fact check: nothing live remains on the Work.
 func settleCandidate(item Work, st *lifecycle.State, now time.Time) bool {
@@ -135,7 +166,7 @@ func (s *Service) settleCandidates() ([]settleItem, error) {
 			log.Printf("brain release orphan admission %s: %v", item.ID, err)
 			continue
 		}
-		if settleCandidate(item, st, now) {
+		if settleCandidate(item, st, now) && !s.screenOpenOn(item) {
 			candidates = append(candidates, settleItem{work: item, revision: st.Revision})
 		}
 	}
