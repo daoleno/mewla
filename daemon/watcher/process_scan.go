@@ -443,6 +443,12 @@ func workerCommandFromProcess(proc processInfo) string {
 		// process exists. Bind only the actual child (or an exec-replaced pane).
 		return ""
 	}
+	// Mewla's own commands name agents as option values (an agent runs
+	// `mewla worker spawn -executor codex`); a mewla process is an agent only
+	// as dsh-session.
+	if lowerComm == "mewla" && !strings.Contains(lowerArgs, " dsh-session ") {
+		return ""
+	}
 
 	if lowerComm == "claude" || lowerComm == "claude-code" || lowerComm == "cc" {
 		if claudeBundledToolRun(proc.args) {
