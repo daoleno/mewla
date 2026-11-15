@@ -130,6 +130,9 @@ func main() {
 }
 
 func run(args []string, stderr io.Writer) error {
+	if len(args) == 0 || daemonCommands[args[0]] || onlyStateDirArgs(args) {
+		ensureCurrentDaemon(defaultDaemonRuntime(), commandStateDirResolved(args), stdioIsTerminal(), stderr)
+	}
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "dsh-session":
@@ -162,6 +165,8 @@ func run(args []string, stderr io.Writer) error {
 			return runSetupCommand(args[1:], stderr)
 		case "update":
 			return runUpdateCommand(args[1:], stderr)
+		case "restart":
+			return runRestartCommand(args[1:], stderr)
 		case "version":
 			return runVersionCommand(args[1:], stderr)
 		case "resources":
@@ -1302,9 +1307,14 @@ func runUpdateCommand(args []string, stderr io.Writer) error {
 			_, err := bootLaunchdApplyUpdate(executable, os.Stdout, stderr)
 			return err
 		}
+		fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Quit Mewla and open it again to use it.\n", Version, candidate.Version)
+		return nil
 	}
-	fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Stop and start mewla to use it.\n", Version, candidate.Version)
-	return nil
+	stateDir, err := auth.ResolveStorageDir("")
+	if err != nil {
+		return err
+	}
+	return restartAfterUpdate(defaultDaemonRuntime(), stateDir, Version, candidate.Version, os.Stdout)
 }
 
 func startUpdateNotice(stderr io.Writer, stateDir string) {
@@ -2564,7 +2574,7 @@ func controlResponseError(resp control.Response) error {
 func requestPairingToken(stateDir string) (*control.PairingInfo, error) {
 	retry := time.NewTicker(25 * time.Millisecond)
 	defer retry.Stop()
-	deadline := time.NewTimer(2 * time.Second)
+	deadline := time.NewTimer(authOwnerWait())
 	defer deadline.Stop()
 	ownerResult, err := withAuthRuntimeOwnerWait(
 		stateDir,
@@ -2831,6 +2841,7 @@ Set up and maintain
   host      Run or inspect the session host that keeps agent terminals running
   attach    Pick a live Session, or name one, and show it here; --all tiles them all (Ctrl-\ detaches)
   update    Verify and install the latest Mewla release
+  restart   Restart Mewla running in the background; Sessions keep running
   version   Print the Mewla version, commit and platform
 
 Agents and tools
@@ -3161,7 +3172,15 @@ func writeDeviceRevokeResult(
 	return nil
 }
 
-const deviceControlRequestTimeout = time.Second
+// deviceControlRequestTimeout is how long one auth request to the running
+// daemon gets. Pairing and revoking write a file durably (fsync, rename),
+// which on Windows can take well over a second while an antivirus scans a
+// freshly written file.
+var deviceControlRequestTimeout = 5 * time.Second
+
+// authOwnerWait is how long an auth CLI command waits for the daemon in all:
+// one full request, and two seconds for a daemon still starting.
+func authOwnerWait() time.Duration { return deviceControlRequestTimeout + 2*time.Second }
 
 // deviceAppLabel is the app a device last connected with, as `mewla devices
 // list` shows it: "0.4.6 android", or unknown for an app that did not say
@@ -3182,7 +3201,7 @@ func deviceAppLabel(device auth.DeviceInfo) string {
 func listDevices(stateDir string) ([]auth.DeviceInfo, error) {
 	retry := time.NewTicker(25 * time.Millisecond)
 	defer retry.Stop()
-	deadline := time.NewTimer(2 * time.Second)
+	deadline := time.NewTimer(authOwnerWait())
 	defer deadline.Stop()
 	ownerResult, err := withAuthRuntimeOwnerWait(
 		stateDir,
@@ -3219,7 +3238,7 @@ func revokeDevice(
 ) (deviceRevokeResult, error) {
 	retry := time.NewTicker(25 * time.Millisecond)
 	defer retry.Stop()
-	deadline := time.NewTimer(2 * time.Second)
+	deadline := time.NewTimer(authOwnerWait())
 	defer deadline.Stop()
 	return revokeDeviceWithRuntimeOwnerWait(
 		stateDir,
@@ -3375,9 +3394,19 @@ func withAuthRuntimeOwnerWait(
 		case <-retry:
 			continue
 		case <-deadline:
-			return authRuntimeOwnerResult{
+			result := authRuntimeOwnerResult{
 				EarlierRequestMayHaveArrived: earlierRequestMayHaveArrived,
-			}, fmt.Errorf(
+			}
+			if errors.Is(lastCallErr, os.ErrDeadlineExceeded) {
+				return result, fmt.Errorf(
+					"%s did not answer within %s; %s. Restart it with: mewla restart (%w)",
+					runningMewlaName(resolvedStateDir),
+					deviceControlRequestTimeout,
+					unknownOutcome,
+					lastCallErr,
+				)
+			}
+			return result, fmt.Errorf(
 				"daemon runtime owner is active but its control socket is unavailable; %s: %w",
 				unknownOutcome,
 				lastCallErr,
