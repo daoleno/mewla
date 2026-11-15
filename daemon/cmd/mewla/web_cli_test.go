@@ -224,6 +224,19 @@ func TestWebIsTheCommandAndOpenIsNot(t *testing.T) {
 	}
 }
 
+func TestDesktopSessionOpensTheBrowserOnWindows(t *testing.T) {
+	for _, name := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		t.Setenv(name, "")
+	}
+	if ok, reason := desktopSessionOn("windows"); !ok {
+		t.Fatalf("desktopSessionOn(windows) = %v, %q", ok, reason)
+	}
+	t.Setenv("SSH_CONNECTION", "10.0.0.2 50000 10.0.0.1 22")
+	if ok, reason := desktopSessionOn("windows"); ok || reason != "over SSH" {
+		t.Fatalf("desktopSessionOn(windows) over SSH = %v, %q", ok, reason)
+	}
+}
+
 func TestDesktopSessionTreatsSSHAsHeadless(t *testing.T) {
 	t.Setenv("DISPLAY", ":0")
 	t.Setenv("SSH_CONNECTION", "10.0.0.2 50000 10.0.0.1 22")

@@ -240,13 +240,17 @@ func printWeb(w io.Writer, view webView) {
 // this terminal, and why not otherwise. Over SSH it would open on the remote
 // screen, if any.
 func desktopSession() (bool, string) {
+	return desktopSessionOn(runtime.GOOS)
+}
+
+func desktopSessionOn(goos string) (bool, string) {
 	for _, name := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
 		if os.Getenv(name) != "" {
 			return false, "over SSH"
 		}
 	}
-	switch runtime.GOOS {
-	case "darwin":
+	switch goos {
+	case "darwin", "windows":
 		return true, ""
 	case "linux":
 		if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
@@ -254,7 +258,7 @@ func desktopSession() (bool, string) {
 		}
 		return true, ""
 	}
-	return false, "opening a browser is not supported on " + runtime.GOOS
+	return false, "opening a browser is not supported on " + goos
 }
 
 func webCommand(stateDir string) string {
