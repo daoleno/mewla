@@ -11,32 +11,31 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 )
 
-type codexLookupSnapshot struct{ selections, subprocesses, headers, hits int64 }
+type codexLookupSnapshot struct{ selections, queries, subprocesses, headers, hits int64 }
 
 func readCodexLookupCost() codexLookupSnapshot {
 	return codexLookupSnapshot{
-		codexLookupCost.Selections.Load(), codexLookupCost.Subprocesses.Load(),
+		codexLookupCost.Selections.Load(), codexLookupCost.Queries.Load(), codexLookupCost.Subprocesses.Load(),
 		codexLookupCost.HeaderParses.Load(), codexLookupCost.SelectionHits.Load(),
 	}
 }
 
 func (a codexLookupSnapshot) since(b codexLookupSnapshot) codexLookupSnapshot {
-	return codexLookupSnapshot{a.selections - b.selections, a.subprocesses - b.subprocesses, a.headers - b.headers, a.hits - b.hits}
+	return codexLookupSnapshot{a.selections - b.selections, a.queries - b.queries, a.subprocesses - b.subprocesses, a.headers - b.headers, a.hits - b.hits}
 }
 
+// lookups is the database reads and processes a lookup cost.
+func (a codexLookupSnapshot) lookups() int64 { return a.queries + a.subprocesses }
+
 type codexIdleFixture struct {
-	sqlite3, dbPath, rollout, cwd string
-	worker                        classifier.Worker
+	dbPath, rollout, cwd string
+	worker               classifier.Worker
 }
 
 func newCodexIdleFixture(t *testing.T, now time.Time) codexIdleFixture {
 	t.Helper()
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		t.Skip("sqlite3 unavailable")
-	}
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	useHome(t, home)
 	cwd := filepath.Join(t.TempDir(), "repo")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
@@ -53,18 +52,19 @@ func newCodexIdleFixture(t *testing.T, now time.Time) codexIdleFixture {
 		t.Fatal(err)
 	}
 	dbPath := filepath.Join(home, ".codex", "state_5.sqlite")
-	runSQLite(t, sqlite3, dbPath, `CREATE TABLE threads (id TEXT, rollout_path TEXT, created_at INTEGER, updated_at INTEGER, cwd TEXT, archived INTEGER, created_at_ms INTEGER, updated_at_ms INTEGER);
+	runSQLite(t, dbPath, `CREATE TABLE threads (id TEXT, rollout_path TEXT, created_at INTEGER, updated_at INTEGER, cwd TEXT, archived INTEGER, created_at_ms INTEGER, updated_at_ms INTEGER);
 INSERT INTO threads VALUES ('thread-1', `+sqlString(rollout)+`, `+itoa64(now.Unix())+`, `+itoa64(now.Unix())+`, `+sqlString(cwd)+`, 0, `+itoa64(now.UnixMilli())+`, `+itoa64(now.UnixMilli())+`);`)
 	return codexIdleFixture{
-		sqlite3: sqlite3, dbPath: dbPath, rollout: rollout, cwd: cwd,
+		dbPath: dbPath, rollout: rollout, cwd: cwd,
 		worker: classifier.Worker{ID: "brain:@1", Name: "Brain", Cwd: cwd, Command: "codex", ProcessID: os.Getpid(), StartedAt: now.Add(-time.Minute), Hidden: true},
 	}
 }
 
 func itoa64(v int64) string { return strconv.FormatInt(v, 10) }
 
-// An idle Codex pane is polled twice a second. Each poll used to fork sqlite3,
-// ps and lsof and parse rollout headers; now it costs a few stat calls.
+// An idle Codex pane is polled twice a second. Each poll used to query Codex's
+// database, fork ps and lsof and parse rollout headers; now it costs a few
+// stat calls.
 func TestIdleCodexPollsReuseTheSelectionInsteadOfSpawning(t *testing.T) {
 	now := time.Now()
 	f := newCodexIdleFixture(t, now)
@@ -78,8 +78,8 @@ func TestIdleCodexPollsReuseTheSelectionInsteadOfSpawning(t *testing.T) {
 		}
 	}
 	uncached := readCodexLookupCost().since(before)
-	if uncached.selections != polls || uncached.subprocesses < 2*polls {
-		t.Fatalf("baseline %+v: expected %d selections and at least %d spawns", uncached, polls, 2*polls)
+	if uncached.selections != polls || uncached.queries < polls {
+		t.Fatalf("baseline %+v: expected %d selections and at least %d database reads", uncached, polls, polls)
 	}
 
 	reader := NewProviderConversationReader()
@@ -94,10 +94,10 @@ func TestIdleCodexPollsReuseTheSelectionInsteadOfSpawning(t *testing.T) {
 	if idle.selections != 1 || idle.hits != polls-1 {
 		t.Fatalf("idle polls %+v: want one selection and %d reuses", idle, polls-1)
 	}
-	if one := uncached.subprocesses / polls; idle.subprocesses > one || idle.headers != 0 {
-		t.Fatalf("idle polls spawned %d (one selection spawns %d) and parsed %d headers", idle.subprocesses, one, idle.headers)
+	if one := uncached.lookups() / polls; idle.lookups() > one || idle.headers != 0 {
+		t.Fatalf("idle polls cost %d reads and spawns (one selection costs %d) and parsed %d headers", idle.lookups(), one, idle.headers)
 	}
-	t.Logf("%d idle polls: %d spawns (was %d), %d header parses", polls, idle.subprocesses, uncached.subprocesses, idle.headers)
+	t.Logf("%d idle polls: %d reads and spawns (was %d), %d header parses", polls, idle.lookups(), uncached.lookups(), idle.headers)
 }
 
 func TestCodexSelectionIsRevisitedWhenStateChangesAgesOrVanishes(t *testing.T) {
@@ -121,7 +121,7 @@ func TestCodexSelectionIsRevisitedWhenStateChangesAgesOrVanishes(t *testing.T) {
 
 	// Codex records a new thread: the database changes, so the choice is remade.
 	later := now.Add(2 * time.Second)
-	runSQLite(t, f.sqlite3, f.dbPath, `INSERT INTO threads VALUES ('thread-2', '/nonexistent/rollout.jsonl', 1, 1, `+sqlString(f.cwd)+`, 0, 1, 1);`)
+	runSQLite(t, f.dbPath, `INSERT INTO threads VALUES ('thread-2', '/nonexistent/rollout.jsonl', 1, 1, `+sqlString(f.cwd)+`, 0, 1, 1);`)
 	if _, cost := load(later); cost.selections != 1 {
 		t.Fatalf("a database change was not noticed: %+v", cost)
 	}
@@ -175,7 +175,7 @@ func TestABoundWorkersRolloutIsUsedWithoutAnyLookup(t *testing.T) {
 	if err != nil || !ok || candidate.Path != other || candidate.Meta.ID != "thread-2" {
 		t.Fatalf("candidate = %+v, %v, %v (the database's thread is %s)", candidate, ok, err, fx.rollout)
 	}
-	if cost := readCodexLookupCost().since(before); cost.selections != 0 || cost.subprocesses != 0 {
+	if cost := readCodexLookupCost().since(before); cost.selections != 0 || cost.lookups() != 0 {
 		t.Fatalf("a bound Worker ran the discovery: %+v", cost)
 	}
 
@@ -212,13 +212,13 @@ func TestBoundCodexIdentityNamesTheRolloutWithoutSearching(t *testing.T) {
 		}
 		return ""
 	}
-	before := codexLookupCost.Subprocesses.Load()
+	before := readCodexLookupCost()
 	identity, found, err := ResolveLiveHostTranscriptIdentity(classifier.Worker{ID: "%3"}, WorkerProviderCodex)
 	if err != nil || !found || identity.Path != rollout || identity.SessionID != "0199aaaa-bbbb-cccc-dddd-eeeeeeeeeeee" {
 		t.Fatalf("identity = %+v found=%v err=%v", identity, found, err)
 	}
-	if codexLookupCost.Subprocesses.Load() != before {
-		t.Fatal("a bound Worker's identity must not start a subprocess")
+	if readCodexLookupCost().since(before).lookups() != 0 {
+		t.Fatal("a bound Worker's identity must not read Codex's database or start a subprocess")
 	}
 	// A rollout that is not on disk yet names nothing: the search decides.
 	CodexBoundRollout = func(string) string { return filepath.Join(t.TempDir(), "missing.jsonl") }

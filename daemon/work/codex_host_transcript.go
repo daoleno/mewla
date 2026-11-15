@@ -1,9 +1,7 @@
 package work
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -272,15 +270,7 @@ func lookupCodexThreadByIDInRoot(sessionID, dataRoot string) (codexThreadRow, bo
 	if err != nil || !ok {
 		return codexThreadRow{}, false, err
 	}
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		return codexThreadRow{}, false, nil
-	}
-	query := fmt.Sprintf(
-		`SELECT id, rollout_path, created_at, coalesce(created_at_ms, 0) AS created_at_ms FROM threads WHERE id = %s LIMIT 1`,
-		sqlString(sessionID),
-	)
-	rows, err := queryCodexThreadRows(sqlite3, dbPath, query)
+	rows, err := queryCodexThreadByID(dbPath, sessionID)
 	if err != nil {
 		return codexThreadRow{}, false, err
 	}

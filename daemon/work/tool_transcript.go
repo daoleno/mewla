@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -29,11 +28,13 @@ const (
 )
 
 // codexLookupCost counts what selecting a Codex transcript costs, so a test
-// can show an idle poll costs none of it. Each run forks sqlite3, and either
-// walks /proc or forks ps and lsof; each header read opens and parses a file.
+// can show an idle poll costs none of it. Each run queries Codex's state
+// database, and either walks /proc or forks ps and lsof; each header read
+// opens and parses a file.
 var codexLookupCost struct {
 	Selections    atomic.Int64 // full findCodexTranscript runs
-	Subprocesses  atomic.Int64 // sqlite3, ps and lsof spawned
+	Queries       atomic.Int64 // reads of Codex's state database
+	Subprocesses  atomic.Int64 // ps and lsof spawned
 	HeaderParses  atomic.Int64 // rollout headers opened and parsed
 	SelectionHits atomic.Int64 // polls answered from the cached selection
 }
@@ -103,15 +104,11 @@ func findCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscri
 	if _, err := os.Stat(dbPath); err != nil {
 		return codexTranscriptCandidate{}, false, nil
 	}
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		return codexTranscriptCandidate{}, false, nil
-	}
 	openRolloutPaths := openCodexRolloutPathsForProcess(worker.ProcessID)
 
 	// `codex resume <id>` names its thread, which keeps the folder it was
 	// started in: resumed from another folder, no folder query finds it.
-	resumed, hasResumed, err := codexResumedThread(sqlite3, dbPath, worker.Command)
+	resumed, hasResumed, err := codexResumedThread(dbPath, worker.Command)
 	if err != nil {
 		return codexTranscriptCandidate{}, false, err
 	}
@@ -121,7 +118,7 @@ func findCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscri
 		candidates = append(candidates, resumed)
 	}
 	for _, candidateCWD := range transcriptCWDCandidates(cwd) {
-		rows, err := queryCodexThreads(sqlite3, dbPath, candidateCWD)
+		rows, err := queryCodexThreads(dbPath, candidateCWD)
 		if err != nil {
 			return codexTranscriptCandidate{}, false, err
 		}
@@ -468,14 +465,13 @@ func candidateCreatedAt(row codexThreadRow) time.Time {
 
 // codexResumedThread is the rollout of the thread a `codex resume <id>`
 // command names, wherever that thread was started.
-func codexResumedThread(sqlite3, dbPath, command string) (codexTranscriptCandidate, bool, error) {
+func codexResumedThread(dbPath, command string) (codexTranscriptCandidate, bool, error) {
 	id, present, err := ProviderResumeToken(WorkerProviderCodex, command)
 	id = strings.TrimSpace(id)
 	if err != nil || !present || id == "" {
 		return codexTranscriptCandidate{}, false, nil
 	}
-	query := fmt.Sprintf(`SELECT id, rollout_path, created_at, coalesce(created_at_ms, 0) AS created_at_ms FROM threads WHERE id = %s LIMIT 1`, sqlString(id))
-	rows, err := queryCodexThreadRows(sqlite3, dbPath, query)
+	rows, err := queryCodexThreadByID(dbPath, id)
 	if err != nil || len(rows) == 0 {
 		return codexTranscriptCandidate{}, false, err
 	}
@@ -494,25 +490,22 @@ func codexResumedThread(sqlite3, dbPath, command string) (codexTranscriptCandida
 	return codexTranscriptCandidate{Row: rows[0], Meta: meta, Path: path, Updated: info.ModTime()}, true, nil
 }
 
-func queryCodexThreads(sqlite3, dbPath, cwd string) ([]codexThreadRow, error) {
-	query := fmt.Sprintf(`SELECT id, rollout_path, created_at, coalesce(created_at_ms, 0) AS created_at_ms FROM threads WHERE archived = 0 AND cwd = %s ORDER BY coalesce(updated_at_ms, updated_at * 1000) DESC LIMIT 48`, sqlString(cwd))
-	return queryCodexThreadRows(sqlite3, dbPath, query)
+// queryCodexThreads is the latest interactive threads Codex recorded in cwd,
+// under any spelling of it Codex uses.
+func queryCodexThreads(dbPath, cwd string) ([]codexThreadRow, error) {
+	spellings := codexRecordedCWDs(cwd)
+	args := make([]any, len(spellings))
+	for index, spelling := range spellings {
+		args[index] = spelling
+	}
+	query := `SELECT id, rollout_path, created_at, coalesce(created_at_ms, 0) AS created_at_ms FROM threads WHERE archived = 0 AND cwd IN (?` +
+		strings.Repeat(", ?", len(spellings)-1) + `) ORDER BY coalesce(updated_at_ms, updated_at * 1000) DESC LIMIT 48`
+	return queryCodexThreadRows(dbPath, query, args...)
 }
 
-func queryCodexThreadRows(sqlite3, dbPath, query string) ([]codexThreadRow, error) {
-	codexLookupCost.Subprocesses.Add(1)
-	out, err := procspawn.Command("sqlite3 codex state", sqlite3, "-readonly", "-json", dbPath, query).CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("query codex threads: %w%s", err, stderrSuffix(string(out)))
-	}
-	if len(bytes.TrimSpace(out)) == 0 {
-		return nil, nil
-	}
-	var rows []codexThreadRow
-	if err := json.Unmarshal(out, &rows); err != nil {
-		return nil, err
-	}
-	return rows, nil
+// queryCodexThreadByID is the row of one thread, wherever it ran.
+func queryCodexThreadByID(dbPath, id string) ([]codexThreadRow, error) {
+	return queryCodexThreadRows(dbPath, `SELECT id, rollout_path, created_at, coalesce(created_at_ms, 0) AS created_at_ms FROM threads WHERE id = ? LIMIT 1`, id)
 }
 
 type codexMeta struct {

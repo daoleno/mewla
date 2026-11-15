@@ -2,7 +2,6 @@ package work
 
 import (
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -32,14 +31,10 @@ func CodexWorkspaceTranscript(workspace string, since time.Time) (CodexTranscrip
 	if _, err := os.Stat(dbPath); err != nil {
 		return CodexTranscriptIdentity{}, false
 	}
-	sqlite3, err := exec.LookPath("sqlite3")
-	if err != nil {
-		return CodexTranscriptIdentity{}, false
-	}
 	var found CodexTranscriptIdentity
 	var latest time.Time
 	for _, cwd := range transcriptCWDCandidates(workspace) {
-		rows, err := queryCodexThreads(sqlite3, dbPath, cwd)
+		rows, err := queryCodexThreads(dbPath, cwd)
 		if err != nil {
 			return CodexTranscriptIdentity{}, false
 		}
