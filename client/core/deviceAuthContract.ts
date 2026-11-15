@@ -1,4 +1,4 @@
-import nacl from "./vendor/nacl";
+import { ed25519Sign, ed25519Verify } from "./ed25519";
 import { bytesToHex, hexToBytes, normalizeFixedHex } from "./protocolCrypto";
 
 // Cross-language device authorization contract. The canonical purpose literals
@@ -62,25 +62,14 @@ export function buildServerAssertionPayload(
   );
 }
 
-/**
- * The signing key of a seed, made once: deriving it is a scalar multiplication, as long as the signature
- * itself, and it ran on every signed request (a phone signs one per Files, Git or Screen read; ~40 ms each
- * in the app's interpreter on an emulator). One device has one seed, so one is kept.
- */
-let derived: { seed: string; secretKey: Uint8Array } | null = null;
-function secretKeyOf(seed: string): Uint8Array {
-  if (derived?.seed !== seed) derived = { seed, secretKey: nacl.sign.keyPair.fromSeed(hexToBytes(seed)).secretKey };
-  return derived.secretKey;
-}
-
-export function signDeviceAuthorization(input: {
+export async function signDeviceAuthorization(input: {
   purpose: string;
   daemonId: string;
   deviceId: string;
   seedHex: string;
   timestamp: string;
   nonceHex: string;
-}): string {
+}): Promise<string> {
   const seed = normalizeFixedHex(input.seedHex, 64);
   const nonceHex = normalizeFixedHex(input.nonceHex, 32);
   const daemonId = normalizeDaemonId(input.daemonId);
@@ -89,14 +78,11 @@ export function signDeviceAuthorization(input: {
   if (!seed || !nonceHex || !daemonId || !deviceId || !timestamp) {
     throw new Error("Invalid device authorization input.");
   }
-  const signature = nacl.sign.detached(
-    buildSignaturePayload(input.purpose, daemonId, deviceId, timestamp, nonceHex),
-    secretKeyOf(seed),
-  );
+  const signature = await ed25519Sign(hexToBytes(seed), buildSignaturePayload(input.purpose, daemonId, deviceId, timestamp, nonceHex));
   return `${DEVICE_AUTH_HEADER_PREFIX}v1:${deviceId}:${daemonId}:${timestamp}:${nonceHex}:${bytesToHex(signature)}`;
 }
 
-export function verifyDaemonAssertion(input: DaemonAssertionInput): boolean {
+export async function verifyDaemonAssertion(input: DaemonAssertionInput): Promise<boolean> {
   const daemonId = normalizeDaemonId(input.daemonId);
   const daemonPublicKey = normalizePublicKeyHex(input.daemonPublicKey);
   const nonceHex = normalizeFixedHex(input.nonceHex, 32);
@@ -115,7 +101,7 @@ export function verifyDaemonAssertion(input: DaemonAssertionInput): boolean {
   }
 
   try {
-    return nacl.sign.detached.verify(
+    return await ed25519Verify(
       buildServerAssertionPayload(input.purpose, daemonId, timestamp, nonceHex),
       hexToBytes(signatureHex),
       hexToBytes(daemonPublicKey),

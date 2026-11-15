@@ -82,7 +82,7 @@ export async function checkComputer(server: StoredServer): Promise<ComputerCheck
     if (response.status === 401) return { state: "unpaired" };
     if (!response.ok) return { state: "offline" };
     const body = (await response.json()) as { name?: unknown; assertion_timestamp?: string; assertion_nonce?: string; assertion_signature?: string };
-    const genuine = verifyDaemonAssertion({
+    const genuine = await verifyDaemonAssertion({
       purpose: "mewla-probe",
       daemonId: server.daemonId,
       daemonPublicKey: server.daemonPublicKey,

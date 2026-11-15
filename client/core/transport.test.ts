@@ -33,10 +33,21 @@ afterEach(() => {
   setFrameBatcher(null);
 });
 
+/** Until the Transport has opened `count` sockets: a retry signs in on the platform (core/ed25519.ts), a turn after its timer. */
+async function socketsReach(count: number): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (sockets.length < count && Date.now() < deadline) await wait(1);
+  expect(sockets).toHaveLength(count);
+}
+
 async function connected(): Promise<{ transport: Transport; socket: FakeSocket }> {
   const transport = new Transport(server);
+  const before = sockets.length;
   transport.connect();
-  await wait();
+  // The sign-in is signed by the platform (core/ed25519.ts), on a later turn.
+  const deadline = Date.now() + 2_000;
+  while (sockets.length === before && Date.now() < deadline) await wait(1);
+  if (sockets.length === before) throw new Error("the Transport opened no socket within 2 s");
   const socket = sockets.at(-1)!;
   socket.open();
   // With a batcher, "connected" reaches the listeners on the next tick, behind the frames before it.
@@ -90,13 +101,11 @@ describe("Transport", () => {
     await expect(pending).rejects.toThrow("not connected");
     expect(transport.state).toBe("waiting");
     expect(transport.problem).toBe("network lost");
-    await wait(15);
-    expect(sockets).toHaveLength(2);
+    await socketsReach(2);
     sockets[1].close(1006, "still down");
     await wait(12);
     expect(sockets).toHaveLength(2); // second wait is twice as long
-    await wait(15);
-    expect(sockets).toHaveLength(3);
+    await socketsReach(3);
     sockets[2].open();
     expect(transport.state).toBe("connected");
     transport.close();
@@ -119,8 +128,7 @@ describe("Transport", () => {
     await expect(pending).rejects.toThrow("not connected");
     expect(socket.readyState).toBe(3);
     expect(transport.problem).toBe("no answer for 180 s");
-    await wait(15);
-    expect(sockets).toHaveLength(2);
+    await socketsReach(2);
     transport.close();
   });
 
@@ -227,8 +235,7 @@ describe("Transport", () => {
         throw new Error("interrupted");
       });
       socket.close(1006, "gone");
-      await wait(30);
-      expect(sockets).toHaveLength(2);
+      await socketsReach(2);
       sockets[1]!.open();
       expect(transport.state).toBe("connected");
       transport.close();
@@ -285,8 +292,7 @@ describe("Transport", () => {
         if (state === "waiting") throw new Error("interrupted");
       });
       socket.close(1006, "gone");
-      await wait(30);
-      expect(sockets).toHaveLength(2);
+      await socketsReach(2);
       transport.close();
     });
   });
@@ -324,7 +330,7 @@ describe("Transport", () => {
       transport.resume();
       await wait();
       expect(socket.readyState).toBe(3);
-      expect(sockets).toHaveLength(2);
+      await socketsReach(2);
       transport.close();
     });
 
@@ -345,7 +351,7 @@ describe("Transport", () => {
       (transport as unknown as { socket: unknown }).socket = null;
       transport.resume();
       await wait();
-      expect(sockets).toHaveLength(2);
+      await socketsReach(2);
       transport.close();
     });
 
@@ -355,7 +361,7 @@ describe("Transport", () => {
       (transport as unknown as { socket: unknown }).socket = null;
       transport.drop("send timed out");
       await wait();
-      expect(sockets).toHaveLength(2);
+      await socketsReach(2);
       transport.close();
     });
   });

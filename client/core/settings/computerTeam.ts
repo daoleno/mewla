@@ -71,7 +71,7 @@ export async function connectComputers(from: StoredServer, to: StoredServer): Pr
   const inviteResponse = await signedFetch(to, "POST", "/computers/invite", "mewla-computer-admin:invite:POST:/computers/invite");
   if (!inviteResponse.ok) throw await answerError(to, inviteResponse);
   const invite = (await inviteResponse.json()) as { invite?: string; assertion_timestamp?: string; assertion_nonce?: string; assertion_signature?: string };
-  const signed = verifyDaemonAssertion({
+  const signed = await verifyDaemonAssertion({
     purpose: "mewla-computer-invite",
     daemonId: to.daemonId,
     daemonPublicKey: to.daemonPublicKey,
