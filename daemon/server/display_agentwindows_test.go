@@ -38,6 +38,10 @@ func (b *macAgentDisplayBackend) AgentWindowAt(rect image.Rectangle) (int, scree
 
 func (b *macAgentDisplayBackend) FocusWindow(int, screen.AppWindow) error { return nil }
 
+func (b *macAgentDisplayBackend) WindowPlace(image.Rectangle) (image.Rectangle, bool) {
+	return image.Rectangle{}, false
+}
+
 type windowCaptureSession struct {
 	mu     sync.Mutex
 	clicks []image.Point
@@ -149,7 +153,7 @@ func TestMacAgentWindowsAreServedAsDisplays(t *testing.T) {
 	_ = conn.WriteMessage(websocket.BinaryMessage, []byte("RFB 003.008\n"))
 	readBinary() // security types
 	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{1})
-	readBinary() // security result
+	readBinary()                                              // security result
 	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{1}) // ClientInit
 	init := readBinary()
 	if len(init) < 4 || binary.BigEndian.Uint16(init) != 800 || binary.BigEndian.Uint16(init[2:]) != 500 {

@@ -37,10 +37,10 @@ type AgentWindows struct {
 	// (a new one does not lift it) and lasts until resumed, held and let go,
 	// or the Worker's Session closes.
 	halted map[string]bool
-	seq     uint64
-	alive   func(worker string) bool
-	names   func(worker string) string
-	closer  func(key string)
+	seq    uint64
+	alive  func(worker string) bool
+	names  func(worker string) string
+	closer func(key string)
 
 	idleAfter  time.Duration
 	idleClosed func(worker, name, why string)
@@ -65,6 +65,11 @@ type agentDisplayViewer interface {
 	// FocusWindow makes window its app's key window without raising it or
 	// touching the app the person is in, so keys sent to the app reach it.
 	FocusWindow(pid int, window AppWindow) error
+	// WindowPlace is where the browser window given rect really is: macOS
+	// keeps a window below a display's menu bar, so one placed at the top of
+	// the display sits lower than asked. False when none of rect's size lies
+	// on it.
+	WindowPlace(rect image.Rectangle) (image.Rectangle, bool)
 }
 
 // appScroller is a session that can scroll in one app's window behind others.
@@ -86,8 +91,8 @@ type windowOwner struct {
 	held     time.Time
 	handback time.Time
 	viewers  int
-	person   int // views that hold the agent off
-	acting   int // browser calls that are running
+	person   int  // views that hold the agent off
+	acting   int  // browser calls that are running
 	told     bool // the agent heard that the person sees its window
 	during   bool // the person's input landed while a call ran
 	input    vdisplay.Input
@@ -600,6 +605,9 @@ type windowView struct {
 	viewer agentDisplayViewer
 
 	mu      sync.Mutex
+	place   image.Rectangle // where the window really is, looked up now and then
+	placeOf image.Rectangle // the place it was looked up for
+	placeAt time.Time
 	img     *image.RGBA
 	crop    image.Rectangle // the last frame's part, in display pixels
 	scale   float64         // display pixels per point
@@ -648,7 +656,7 @@ func (v *windowView) Frame(ctx context.Context, after uint64) (Frame, error) {
 	if v.bounds.Dx() > 0 {
 		scale = float64(f.Image.Rect.Dx()) / float64(v.bounds.Dx())
 	}
-	part := rect.Sub(v.bounds.Min)
+	part := v.windowPart(rect).Sub(v.bounds.Min)
 	crop := image.Rect(int(float64(part.Min.X)*scale), int(float64(part.Min.Y)*scale), int(float64(part.Max.X)*scale), int(float64(part.Max.Y)*scale)).Intersect(f.Image.Rect)
 	if crop.Empty() {
 		return Frame{}, errors.New("the window isn't on the agent display")
@@ -664,6 +672,26 @@ func (v *windowView) Frame(ctx context.Context, after uint64) (Frame, error) {
 	}
 	v.crop, v.scale = crop, scale
 	return Frame{Seq: f.Seq, Image: v.img, At: f.At}, nil
+}
+
+// windowPart is what the view shows of the display: the window itself, where
+// it really is, or its place when it cannot be found there. It is looked up
+// at most once a second.
+func (v *windowView) windowPart(rect image.Rectangle) image.Rectangle {
+	v.mu.Lock()
+	if v.placeOf == rect && time.Since(v.placeAt) < time.Second {
+		defer v.mu.Unlock()
+		return v.place
+	}
+	v.mu.Unlock()
+	place := rect
+	if found, ok := v.viewer.WindowPlace(rect); ok {
+		place = found
+	}
+	v.mu.Lock()
+	v.place, v.placeOf, v.placeAt = place, rect, time.Now()
+	v.mu.Unlock()
+	return place
 }
 
 // target is the window under the view and its app, and where the view's
@@ -779,6 +807,28 @@ func (v *windowView) Key(keysym uint32, down bool) error {
 }
 
 func (v *windowView) Close() error { return nil }
+
+// windowPlace is where the browser window placed at rect really is: a
+// Chromium window wholly on the agent display, of rect's size (within a few
+// points), overlapping it the most. A smaller window over it (a popup) is not
+// it.
+func windowPlace(onScreen []windowInfo, display, rect image.Rectangle, chromium func(pid int) bool) (image.Rectangle, bool) {
+	var best image.Rectangle
+	most := 0
+	for _, w := range onScreen {
+		if w.Layer != 0 || !w.OnScreen || w.PID <= 0 || !w.Bounds.In(display) {
+			continue
+		}
+		if abs(w.Bounds.Dx()-rect.Dx()) > 4 || abs(w.Bounds.Dy()-rect.Dy()) > 4 {
+			continue
+		}
+		overlap := w.Bounds.Intersect(rect)
+		if area := overlap.Dx() * overlap.Dy(); area > most && chromium(w.PID) {
+			best, most = w.Bounds, area
+		}
+	}
+	return best, most > 0
+}
 
 // agentWindowAt picks, from the windows on the screen (front to back), the
 // front app window lying on rect that is wholly on the agent display and
