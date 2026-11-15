@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -634,5 +635,66 @@ func TestAgentDisplayHooksKeyTheHoldAndTellTheWindow(t *testing.T) {
 	want := []string{"hold browser:c1-1", "opened c1-1 mh-signin {2312 0 800 500}", "closed c1-1", "release browser:c1-1"}
 	if strings.Join(calls, "|") != strings.Join(want, "|") {
 		t.Fatalf("calls %q, want %q", calls, want)
+	}
+}
+
+// The person's input from Screen reaches the agent window's page through the
+// extension: an input message for that window, only DevTools Input commands,
+// and only to an extension that knows them (an older one is said to be).
+func TestPageInputGoesToTheExtensionForThatWindow(t *testing.T) {
+	b, dir := startBridge(t)
+	in := PageInput{Method: "Input.dispatchKeyEvent", Params: map[string]any{"type": "keyDown", "key": "h", "text": "h"}}
+	if err := b.PageInput("c1-1", in); !errors.Is(err, ErrNoExtensionHost) {
+		t.Fatalf("with no extension: %v", err)
+	}
+	for _, c := range []struct {
+		version string
+		ok      bool
+	}{{"0.3.1", false}, {pageInputVersion, true}} {
+		conn, err := DialBridgeHost(dir, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		enc := json.NewEncoder(conn)
+		_ = enc.Encode(hostMessage{Type: "hello", Version: c.version})
+		got := make(chan hostMessage, 8)
+		go func() {
+			dec := json.NewDecoder(conn)
+			for {
+				var m hostMessage
+				if dec.Decode(&m) != nil {
+					return
+				}
+				if m.Type == "input" {
+					got <- m
+				}
+			}
+		}()
+		for i := 0; i < 200 && b.HostVersion() != c.version; i++ {
+			time.Sleep(10 * time.Millisecond)
+		}
+		err = b.PageInput("c1-1", in)
+		if !c.ok {
+			if !errors.Is(err, ErrNoPageInput) {
+				t.Fatalf("extension %s: %v", c.version, err)
+			}
+			conn.Close()
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case m := <-got:
+			if m.ID != "c1-1" || m.Input == nil || m.Input.Method != in.Method || m.Input.Params["text"] != "h" {
+				t.Fatalf("the extension got %+v", m)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("no input message")
+		}
+		if err := b.PageInput("c1-1", PageInput{Method: "Runtime.evaluate"}); err == nil {
+			t.Fatal("a command that is not input was sent")
+		}
+		conn.Close()
 	}
 }

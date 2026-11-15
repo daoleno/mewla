@@ -871,6 +871,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 		bindAgentScreenLifetime(controlHandler, browserManager, displayService, agentWindows)
 		agentWindows.SetNames(workerName)
 		agentWindows.SetCloser(agentUse.Bridge().CloseWindow)
+		// The person's clicks and keys reach the window's page through the
+		// extension's debugger: Chrome does not take the window server's
+		// events into a window behind others.
+		agentWindows.SetPageInput(func(key string, in screen.PageInput) error {
+			return agentUse.Bridge().PageInput(key, agentuse.PageInput{Method: in.Method, Params: in.Params})
+		})
 		agentWindows.SetIdleClose(vdisplay.IdleClose, screenClosed)
 		defer agentWindows.Close()
 		srv.SetDisplays(agentWindows)
