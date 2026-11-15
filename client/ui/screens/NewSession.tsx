@@ -27,6 +27,14 @@ type Entry = { name: string; path: string };
 
 /** "/a/b" → "/a"; the root stays. */
 export function parentDirectoryPath(path: string): string {
+  // A Windows computer names folders C:\Users\ana: its root is the drive.
+  if (/^[A-Za-z]:/.test(path)) {
+    const root = `${path.slice(0, 2)}${path.includes("/") && !path.includes("\\") ? "/" : "\\"}`;
+    const trimmed = path.replace(/[\\/]+$/, "");
+    if (trimmed.length <= 2) return root;
+    const parent = trimmed.replace(/[\\/][^\\/]+$/, "");
+    return parent.length <= 2 ? root : parent;
+  }
   const trimmed = path.replace(/\/+$/, "");
   if (!trimmed || trimmed === "/") return "/";
   return trimmed.replace(/\/[^/]+$/, "") || "/";

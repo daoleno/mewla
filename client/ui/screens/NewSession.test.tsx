@@ -1,5 +1,6 @@
 import { describe, expect, open, test } from "nsh/test";
 import { paired, phoneHost } from "../testing/fixtures";
+import { parentDirectoryPath } from "./NewSession";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -39,4 +40,22 @@ describe("New session fits the window (iPhone Duo, 11-14)", () => {
     expect(app.count("id:new-pinned >> id:new-name")).toBe(1);
     expect(app.count("id:new-scroll >> id:new-command")).toBe(0);
   }, 30_000);
+});
+
+describe("Up a folder", () => {
+  test("on a Windows computer it goes up to the drive and stops there", () => {
+    // Up did nothing on Windows: it only knew '/' (VM 11-16, the picker held at C:\Users\mtwo\cxproj).
+    expect(parentDirectoryPath("C:\\Users\\mtwo\\cxproj")).toBe("C:\\Users\\mtwo");
+    expect(parentDirectoryPath("C:\\Users\\mtwo\\")).toBe("C:\\Users");
+    expect(parentDirectoryPath("C:\\Users")).toBe("C:\\");
+    expect(parentDirectoryPath("C:\\")).toBe("C:\\");
+    expect(parentDirectoryPath("D:/work/app")).toBe("D:/work");
+    expect(parentDirectoryPath("D:/work")).toBe("D:/");
+  });
+
+  test("on Linux and macOS it goes up to /", () => {
+    expect(parentDirectoryPath("/home/ana/app")).toBe("/home/ana");
+    expect(parentDirectoryPath("/home")).toBe("/");
+    expect(parentDirectoryPath("/")).toBe("/");
+  });
 });
