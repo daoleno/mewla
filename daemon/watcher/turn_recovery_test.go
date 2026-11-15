@@ -1,6 +1,8 @@
 package watcher
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -672,5 +674,29 @@ func TestSuperviseDelegatedTurnsAgentReportedStopIgnoresThePromptSuggestion(t *t
 	w.superviseDelegatedTurns([]probedPollWorker{stopped(first.Add(grace+2*time.Minute), true)})
 	if len(ledger.stalls) != 1 || ledger.stalls[0].Reason != "stopped" || len(submits) != 0 {
 		t.Fatalf("stalls=%+v submits=%v, want one stopped escalation", ledger.stalls, submits)
+	}
+}
+
+// A provider record that says the turn settled while the Session's own screen
+// shows Claude at work (a real 2.1.325 capture: "✻ Fermenting… (8m 48s · ↓
+// 35.1k tokens)" over the interrupt hint) is a record that lost the turn, not
+// a stalled Worker: Brain is not told, however long it lasts.
+func TestSuperviseDelegatedTurnsLeavesAWorkerItsScreenShowsWorkingAlone(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "classifier", "testdata", "claude-2.1.325", "screen-working-fermenting.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	settled := time.Date(2026, 11, 15, 14, 30, 0, 0, time.UTC)
+	for minutes := 1; minutes <= 120; minutes += 5 {
+		item := stalledPollItem(settled.Add(time.Duration(minutes)*time.Minute), settled, "a1", nil)
+		item.workerSnap.Command = "claude"
+		item.content = string(raw)
+		w.superviseDelegatedTurns([]probedPollWorker{item})
+	}
+	if len(ledger.stalls) != 0 || len(submits) != 0 {
+		t.Fatalf("a Worker its screen shows at work was reported: stalls=%+v submits=%v", ledger.stalls, submits)
 	}
 }

@@ -1,0 +1,9 @@
+      The render is done.
+      Both files are in the folder.
+
+✻ Worked for 1h 44m 54s · done 12:23
+  new task? /clear to… · ✘ Auto-update failed · Run…
+──────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)

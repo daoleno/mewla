@@ -43,7 +43,13 @@ func ValidateProgress(progress WorkerProgress) (WorkerProgress, error) {
 		return WorkerProgress{}, fmt.Errorf("invalid status %q; valid values are running, done, failed, blocked", progress.Status)
 	}
 	if !validProgressPhase(progress.Phase) {
-		return WorkerProgress{}, fmt.Errorf("invalid phase %q; valid values are starting, reading, planning, working, verifying, reporting", progress.Phase)
+		// A Worker that reports its turn over ("--status done --phase done") has
+		// said the one thing that matters; refusing it for the phase word would
+		// leave the turn without its report and read as lost.
+		if !progressStatusEndsTurn(progress.Status) {
+			return WorkerProgress{}, fmt.Errorf("invalid phase %q; valid values are starting, reading, planning, working, verifying, reporting", progress.Phase)
+		}
+		progress.Phase = "reporting"
 	}
 	if !validProgressAttention(progress.Attention) {
 		return WorkerProgress{}, fmt.Errorf("invalid attention %q; valid values are none, done, blocked, failed, user_input, stale", progress.Attention)
@@ -179,4 +185,10 @@ func validProgressEventKind(value string) bool {
 	default:
 		return false
 	}
+}
+
+// progressStatusEndsTurn is a status that ends the Worker's turn: done,
+// failed, or blocked on the person.
+func progressStatusEndsTurn(status string) bool {
+	return status == "done" || status == "failed" || status == "blocked"
 }

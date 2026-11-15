@@ -14,9 +14,12 @@ import (
 type backgroundWaitFake struct {
 	*fakeWatcher
 	waiting bool
+	// working is the Worker's screen showing its agent at work.
+	working bool
 }
 
 func (f *backgroundWaitFake) WorkerWaitingOnBackgroundWork(string) bool { return f.waiting }
+func (f *backgroundWaitFake) WorkerShowsAgentWorking(string) bool       { return f.working }
 
 type idleWorkerFixture struct {
 	store   *Store
@@ -24,7 +27,9 @@ type idleWorkerFixture struct {
 	fake    *backgroundWaitFake
 	item    Work
 	now     time.Time
-	workers []*classifier.Worker
+	// accepted is when the delegated turn was accepted.
+	accepted time.Time
+	workers  []*classifier.Worker
 }
 
 func (f *idleWorkerFixture) advance(d time.Duration) {
@@ -42,6 +47,7 @@ func newIdleWorkerFixture(t *testing.T, lease int) *idleWorkerFixture {
 		t.Fatal(err)
 	}
 	f := &idleWorkerFixture{store: store, now: time.Now().UTC()}
+	f.accepted = f.now
 	store.now = func() time.Time { return f.now }
 	f.item = createSignalTestWork(t, store, "idle behind a background task", "worker")
 	candidate := delegatedSubmissionCandidate(f.item.ID, "worker", "worker-turn", "task", f.now)
@@ -136,7 +142,7 @@ func TestLeaseLossNeverBorrowsTheProviderDoneHint(t *testing.T) {
 		t.Fatalf("no turn_lost event in %+v", events)
 	}
 	if strings.Contains(lost.Summary, "reported done") || strings.Contains(lost.Summary, "turn binding") ||
-		!strings.Contains(lost.Summary, "did not check in before its lease ran out") {
+		!strings.Contains(lost.Summary, "No sign of work since its check-in ran out") {
 		t.Fatalf("turn_lost carries hint text: %q", lost.Summary)
 	}
 	if !lost.CreatedAt.Equal(st.Review.OpenedAt) {

@@ -1366,8 +1366,22 @@ var claudeQueuedPasteEnvelope = regexp.MustCompile(`(?s)\A<pasted_content id="([
 // a message sent while Claude was busy keeps the submitted text's digest and
 // its Brain admission claims the echo even when display cleaning changes it.
 func claudeQueuedPastedInput(raw string) (string, bool) {
-	return claudeWholePasteEnvelope(claudeQueuedPasteEnvelope, raw)
+	if inner, ok := claudeWholePasteEnvelope(claudeQueuedPasteEnvelope, raw); ok {
+		return inner, true
+	}
+	// Claude Code 2.1.325 keeps the typed intent in a queued prompt: Mewla's
+	// "Execute: " and the paste as it was typed ("\n\n" before the envelope),
+	// still with no "\n" after it.
+	rest, typed := strings.CutPrefix(raw, claudeDelegatedInputPrefix)
+	if !typed {
+		return "", false
+	}
+	return claudeWholePasteEnvelope(claudeQueuedTypedPasteEnvelope, rest)
 }
+
+// claudeQueuedTypedPasteEnvelope is the typed paste of a queued delegated
+// prompt after Mewla's intent prefix (Claude Code 2.1.325).
+var claudeQueuedTypedPasteEnvelope = regexp.MustCompile(`(?s)\A\n\n<pasted_content id="([0-9a-f]{4})">\n(.*)\n</pasted_content id="([0-9a-f]{4})">\z`)
 
 func claudeWholePasteEnvelope(envelope *regexp.Regexp, raw string) (string, bool) {
 	parts := envelope.FindStringSubmatch(raw)

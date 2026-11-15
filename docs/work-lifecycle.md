@@ -108,7 +108,7 @@ Cursor and Grok record no turn error, so they have nothing to classify.
 | Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
 | Persistent error by code or status: login, billing, unknown model, invalid or oversized request, 4xx |
 | An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) | One stall escalation after 30 s (`provider_error`); never resumed |
-| Stopped with no error and no terminal report, the pane idle at its prompt or the agent's own hook saying its turn ended | One stall escalation after 90 s (`stopped`, "Worker's turn ended without a progress report; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents |
+| Stopped with no error and no terminal report, the pane idle at its prompt or the agent's own hook saying its turn ended | One stall escalation after 90 s (`stopped`, "Worker's turn ended without a progress report; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents or the screen shows the agent working |
 | Stopped with no error and no terminal report, the pane not recognized as idle | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease |
 
 A Turn that carries its identity in the prompt (a signal Turn) is settled only by
@@ -150,6 +150,30 @@ released as lost (`lease_expired_escalation`, 30 minutes after the lease). When 
 work is gone and the Worker has not reported, the lease runs out and Brain hears
 once. The loss review states that reason and time itself; it never reuses the
 provider's provisional "reported done" row.
+
+A Worker at work is never released as lost. Besides its own check-ins and its
+background work, the sweep renews the lease when:
+
+- the provider's record shows a turn running whose latest input is this Turn's
+  own prompt (its digest). A prompt Brain sends while the agent is busy is queued
+  into the turn already running, so no activity of its own starts for it, and a
+  daemon restart mid-turn leaves the provider's record named differently from the
+  one Mewla kept; the digest ties them together either way;
+- the Session's own screen shows the agent working: Claude's spinner with the
+  turn's running time near the bottom (`✻ Calculating… (1h 34m 36s · thinking
+  with high effort)`), or the interrupt hint in its footer. The stall supervisor
+  above does not report a Worker its screen shows working either.
+
+Real silence still ends as lost. Just before the loss, the sweep records what it
+saw (a `session.stale` row the loss review carries): when the check-in ran out,
+what the provider's record says and when it was last active, that the screen
+does not show the agent working, and that no background work runs. A screen
+stuck on a spinner keeps the Turn until the person or Brain stops it.
+
+A Worker's report that ends its turn (`--status done`, `failed` or `blocked`) is
+taken whatever phase word comes with it; the phase is stored as `reporting`. A
+`--phase done` report used to be refused, and a Worker that hid the command's
+output ended its turn with no report at all.
 
 The brief Mewla submits is a typed `Execute: ` followed by one paste envelope.
 Its submitted digest is the brief's own, so the transcript parser and the hook

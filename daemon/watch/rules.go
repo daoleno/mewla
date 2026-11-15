@@ -156,7 +156,12 @@ func ruleWorkerStalls(store *Store, now time.Time) []Problem {
 	}
 	var out []Problem
 	for workID, signals := range byWork {
-		if workID == "" || len(signals) < stallCount {
+		// One turn's stall, loss and lease rows are one incident.
+		incidents := map[string]bool{}
+		for _, signal := range signals {
+			incidents[firstNonEmpty(signal.Refs["turn"], signal.Refs["event"], signal.Time.String())] = true
+		}
+		if workID == "" || len(incidents) < stallCount {
 			continue
 		}
 		sort.Slice(signals, func(i, j int) bool { return signals[i].Time.Before(signals[j].Time) })
@@ -164,9 +169,9 @@ func ruleWorkerStalls(store *Store, now time.Time) []Problem {
 		title := firstNonEmpty(latest.Refs["work_title"], workID)
 		out = append(out, Problem{
 			ID: problemID(RuleWorkerStalls, workID), ProjectID: latest.ProjectID, Rule: RuleWorkerStalls, Subject: workID,
-			Title:    fmt.Sprintf("Worker stalled or lost %d times: %s", len(signals), title),
+			Title:    fmt.Sprintf("Worker stalled or lost %d times: %s", len(incidents), title),
 			Detail:   fmt.Sprintf("Work %s; latest %s at %s: %s", workID, latest.Kind, latest.Time.Format(time.RFC3339), latest.Excerpt),
-			Count:    len(signals),
+			Count:    len(incidents),
 			Evidence: evidenceIDs(signals), FirstSeen: signals[0].Time, LastSeen: latest.Time,
 		})
 	}
