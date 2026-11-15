@@ -86,7 +86,11 @@ export class FakeDaemon {
     this.subscriptions = this.subscriptions.filter((s) => s.socket !== socket);
   }
 
+  /** While set, what `to` would send is kept here instead (`newsThenDrop`). */
+  private held: Array<[FakeSocket, Frame]> | null = null;
+
   private to(socket: FakeSocket, frame: Frame): void {
+    if (this.held) return void this.held.push([socket, frame]);
     setTimeout(() => socket.onmessage?.({ data: JSON.stringify(frame) }), 1);
   }
 
@@ -147,6 +151,31 @@ export class FakeDaemon {
   drop(): void {
     for (const socket of [...this.sockets]) socket.close(1006, "network changed");
     this.subscriptions = [];
+  }
+
+  /**
+   * A conversation's news, then every connection drops, in one call into the app: a host hands JS what came in
+   * together, the socket's end with it (a phone back from the background gets the frames queued behind the freeze
+   * and the close of a socket the computer already dropped).
+   */
+  newsThenDrop(update: Parameters<FakeDaemon["conversation"]>[0]): void {
+    const held: Array<[FakeSocket, Frame]> = [];
+    this.held = held;
+    try {
+      this.conversation(update);
+    } finally {
+      this.held = null;
+    }
+    setTimeout(() => {
+      const sockets = [...this.sockets];
+      this.subscriptions = [];
+      for (const [socket, frame] of held) socket.onmessage?.({ data: JSON.stringify(frame) });
+      for (const socket of sockets) {
+        socket.readyState = 3;
+        this.closed(socket);
+        socket.onclose?.({ code: 1006, reason: "network changed" });
+      }
+    }, 1);
   }
 
   private broadcast(frame: Frame): void {

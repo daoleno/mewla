@@ -39,6 +39,8 @@ async function connected(): Promise<{ transport: Transport; socket: FakeSocket }
   await wait();
   const socket = sockets.at(-1)!;
   socket.open();
+  // With a batcher, "connected" reaches the listeners on the next tick, behind the frames before it.
+  await wait(1);
   return { transport, socket };
 }
 
@@ -164,6 +166,7 @@ describe("Transport", () => {
       batches.push(inBatch);
     });
     const { transport, socket } = await connected();
+    batches.length = 0;
     const seen: number[] = [];
     transport.on("worker_session_updated", (frame) => {
       seen.push(frame.seq as number);
@@ -186,6 +189,7 @@ describe("Transport", () => {
       batches.push(current);
     });
     const { transport, socket } = await connected();
+    batches.length = 0;
     const note = (frame: Record<string, unknown>) => current.push(String(frame.seq));
     transport.on("worker_session_updated", note);
     transport.on("codex_conversation_delta", note);
@@ -208,7 +212,151 @@ describe("Transport", () => {
     transport.on("disconnected", () => seen.push("disconnected"));
     socket.receive({ type: "worker_session_updated", seq: 1 });
     socket.close(1006, "gone");
+    await wait();
     expect(seen).toEqual(["update", "disconnected"]);
     transport.close();
+  });
+
+  // Owner 11-15: back in Mewla after a while in another app, nothing loaded until they switched computers; the
+  // computer saw no socket from the phone for 9 min. NSH stops a call into JS past 2 s and runs no catch or finally
+  // then, so what the Transport does next must be armed before any listener runs: a plain throw stands in for it here.
+  describe("a listener cut off never costs the reconnect", () => {
+    test("a disconnected listener that throws: it connects again", async () => {
+      const { transport, socket } = await connected();
+      transport.on("disconnected", () => {
+        throw new Error("interrupted");
+      });
+      socket.close(1006, "gone");
+      await wait(30);
+      expect(sockets).toHaveLength(2);
+      sockets[1]!.open();
+      expect(transport.state).toBe("connected");
+      transport.close();
+    });
+
+    test("the retry is armed before the frames and the disconnected listeners hear of the end", async () => {
+      setFrameBatcher((deliver) => deliver());
+      const { transport, socket } = await connected();
+      const seen: string[] = [];
+      transport.on("worker_session_updated", () => seen.push(transport.state));
+      transport.on("disconnected", () => seen.push(transport.state));
+      socket.receive({ type: "worker_session_updated", seq: 1 });
+      socket.close(1006, "gone");
+      await wait();
+      expect(seen).toEqual(["waiting", "waiting"]);
+      transport.close();
+    });
+
+    test("a batch whose listener throws costs only itself: the end and the next connection still arrive, in order", async () => {
+      setFrameBatcher((deliver) => deliver());
+      const { transport, socket } = await connected();
+      const seen: string[] = [];
+      transport.on("codex_conversation_delta", () => {
+        seen.push("delta");
+        throw new Error("interrupted");
+      });
+      transport.on("disconnected", () => seen.push("disconnected"));
+      transport.on("connected", () => seen.push("connected"));
+      socket.receive({ type: "codex_conversation_delta", page: "x".repeat(BIG_FRAME_BYTES) });
+      socket.close(1006, "gone");
+      await wait(30);
+      sockets[1]!.open();
+      await wait();
+      expect(seen).toEqual(["delta", "disconnected", "connected"]);
+      transport.close();
+    });
+
+    test("the attempt is under way before the state listeners hear connecting", async () => {
+      let resolving = 0;
+      const transport = new Transport(server, async (stored) => {
+        resolving++;
+        return stored.url;
+      });
+      const heard: number[] = [];
+      transport.onState((state) => state === "connecting" && heard.push(resolving));
+      transport.connect();
+      expect(heard).toEqual([1]);
+      transport.close();
+    });
+
+    test("a state listener that throws on waiting: the retry still comes", async () => {
+      const { transport, socket } = await connected();
+      transport.onState((state) => {
+        if (state === "waiting") throw new Error("interrupted");
+      });
+      socket.close(1006, "gone");
+      await wait(30);
+      expect(sockets).toHaveLength(2);
+      transport.close();
+    });
+  });
+
+  describe("an attempt that never lands is made again", () => {
+    test("a socket that never opens is closed after the connect limit and dialed again", async () => {
+      transportTiming.connectLimitMs = 30;
+      const transport = new Transport(server);
+      transport.connect();
+      await wait(80);
+      expect(sockets.length).toBeGreaterThanOrEqual(2);
+      expect(sockets[0]!.readyState).toBe(3);
+      transport.close();
+    });
+
+    test("an address that never resolves is given up after the connect limit", async () => {
+      transportTiming.connectLimitMs = 30;
+      let calls = 0;
+      const transport = new Transport(server, (stored) => (++calls === 1 ? new Promise<string>(() => {}) : Promise.resolve(stored.url)));
+      transport.connect();
+      await wait(80);
+      expect(calls).toBeGreaterThanOrEqual(2);
+      expect(sockets.length).toBeGreaterThanOrEqual(1);
+      sockets.at(-1)!.open();
+      expect(transport.state).toBe("connected");
+      transport.close();
+    });
+  });
+
+  describe("back in front", () => {
+    test("a socket silent past what the computer keeps is replaced at once", async () => {
+      Object.assign(transportTiming, { silentLimitMs: 60_000, checkMs: 60_000, peerGivesUpMs: 20, firstRetryMs: 60_000 });
+      const { transport, socket } = await connected();
+      await wait(40);
+      transport.resume();
+      await wait();
+      expect(socket.readyState).toBe(3);
+      expect(sockets).toHaveLength(2);
+      transport.close();
+    });
+
+    test("a socket that carried frames lately is kept", async () => {
+      Object.assign(transportTiming, { silentLimitMs: 60_000, checkMs: 60_000, peerGivesUpMs: 1_000 });
+      const { transport } = await connected();
+      transport.resume();
+      await wait();
+      expect(sockets).toHaveLength(1);
+      expect(transport.state).toBe("connected");
+      transport.close();
+    });
+
+    test("a state nothing backs (connected with no socket, as a cut-off call left it) connects again", async () => {
+      Object.assign(transportTiming, { firstRetryMs: 60_000 });
+      const { transport } = await connected();
+      // What an end cut off halfway left before: the socket gone, the state still connected, no retry armed.
+      (transport as unknown as { socket: unknown }).socket = null;
+      transport.resume();
+      await wait();
+      expect(sockets).toHaveLength(2);
+      transport.close();
+    });
+
+    test("drop also moves a state nothing backs on (the outbox drops a connection whose send timed out)", async () => {
+      Object.assign(transportTiming, { firstRetryMs: 60_000 });
+      const { transport } = await connected();
+      (transport as unknown as { socket: unknown }).socket = null;
+      transport.drop("send timed out");
+      await wait();
+      expect(sockets).toHaveLength(2);
+      transport.close();
+    });
   });
 });

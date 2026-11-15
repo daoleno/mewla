@@ -218,7 +218,11 @@ The MVP does not add application-level resume to protocols that do not already
 have it:
 
 - WebSocket reconnect re-authenticates and the app refreshes canonical current
-  server snapshots.
+  server snapshots. The app's connection (`client/core/transport.ts`) arms its
+  next step (an attempt's 30 s deadline, the retry) before any screen hears of
+  a change, so a screen update that NSH cuts off at 2 s cannot strand it. Back
+  in the foreground, a socket that has been silent longer than the daemon keeps
+  a silent client (60 s) is replaced at once.
 - The Session list is a sequenced feed. The daemon sends the full
   `worker_session_list` once per connection, stamped with the `seq` it is
   current as of, and every later `worker_session_created`, `_updated` or
