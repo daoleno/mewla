@@ -34,6 +34,8 @@ import { AgentDisplays } from "./Displays";
 import { canShowFullSize, modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 import { VirtualScreenSwitch, virtualScreenOn } from "./VirtualScreen";
 
+/** How often Screen on a computer with a screen of its own looks for agents' browser windows (a Mac's agent display). */
+const WINDOWS_POLL_MS = 3_000;
 /** Window height (pt) below which a page header does not fit beside the picture: a phone held sideways. */
 const ROOMY_MIN_HEIGHT = 500;
 
@@ -314,6 +316,23 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     return props.worker ? !!displayOfWorker(list, props.worker) : list.some((d) => (d.browser ?? 0) > 0 || d.apps > 0);
   };
   const displaysPage = () => linuxDisplays() || agentWindows();
+  // On a computer with a screen of its own, an agent's browser window that opens while the page is up shows at once:
+  // its windows are read every few seconds while the page is in front (the list itself reads them while it shows).
+  effect(() => {
+    const target = server();
+    const platform = status()?.platform;
+    if (!target || !platform || platform === "linux" || !inFront() || agentWindows()) return;
+    const timer = setInterval(() => {
+      void listDisplays(target)
+        .then((list) => {
+          if (isCurrent(target.id) && !gone) agentDisplays.set(list.available ? list.displays : []);
+        })
+        .catch(() => {
+          // An older daemon, or a moment away: the next read says.
+        });
+    }, WINDOWS_POLL_MS);
+    return () => clearInterval(timer);
+  });
   // The agents' windows coming close the computer's own viewer (an open one counts as a person at the computer);
   // their going, or the person choosing the computer's screen, opens it.
   let windowsShown = false;
