@@ -1,6 +1,6 @@
 # Changelog
 
-Canonical release notes live under [`docs/releases/`](docs/releases/). This file is a reverse-chronological index and does not duplicate the full notes.
+From v0.4.11 each release's notes are written from its commits when it is published and live on its [GitHub Release](https://github.com/daoleno/mewla/releases). The notes of v0.4.10 and earlier live under [`docs/releases/`](docs/releases/), indexed here.
 
 ## Releases
 

@@ -28,36 +28,16 @@ NEXT_CODE = release_identity.build_code(NEXT_VERSION)
 NEXT_TAG = f"v{NEXT_VERSION}"
 CURRENT_CORE = tuple(int(part) for part in CURRENT_VERSION.split("-", 1)[0].split("."))
 STABLE_TARGET = f"{CURRENT_CORE[0]}.{CURRENT_CORE[1]}.{CURRENT_CORE[2] + 1}"
-INDEXED_NOTE_PATHS = tuple(
-    f"docs/releases/{tag}.md"
-    for tag in prepare_release.CHANGELOG_ENTRY_RE.findall(
-        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    )
-)
-
 FIXTURE_PATHS = (
-    "CHANGELOG.md",
     VERSION_SOURCE,
     IOS_PROJECT,
     "daemon/cmd/mewla/version.go",
     "scripts/verify-release-identity.sh",
     "docs/install-daemon.md",
     "client/core/update/version.ts",
-) + INDEXED_NOTE_PATHS
-CERTIFICATE = prepare_release.extract_certificate(
-    (ROOT / "scripts/verify-release-identity.sh").read_text(encoding="utf-8")
 )
-USER_NOTES = """Pets are easier to find.
-
-## New
-
-- The cat waits on the Work that needs you.
-  Tap it to open that Work.
-
-## Fixed
-
-- Pets no longer shrink after a hop.
-"""
+# The release notes are written at release time; a release only needs its version (and What's New).
+USER_NOTES = ""
 
 
 def git(root: Path, *args: str) -> str:
@@ -134,135 +114,6 @@ class ExplicitReleaseVersionTests(unittest.TestCase):
                     )
 
 
-class ChangelogValidationTests(unittest.TestCase):
-    def test_accepts_older_semver_core_history(self):
-        scratch = os.environ.get("MEWLA_BUILD_TMPDIR") or os.environ.get("TMPDIR")
-        with tempfile.TemporaryDirectory(
-            prefix="mewla-changelog-", dir=Path(scratch) if scratch else None
-        ) as temporary:
-            root = Path(temporary)
-            notes = root / "docs/releases"
-            notes.mkdir(parents=True)
-            for tag in ("v0.1.1-beta.1", "v0.1.0-beta.8"):
-                (notes / f"{tag}.md").write_text(
-                    f"# Mewla {tag}\n", encoding="utf-8"
-                )
-            changelog = (
-                prepare_release.CHANGELOG_PREFIX
-                + "- [v0.1.1-beta.1](docs/releases/v0.1.1-beta.1.md)\n"
-                + "- [v0.1.0-beta.8](docs/releases/v0.1.0-beta.8.md)\n"
-            )
-            prepare_release.validate_changelog(
-                root,
-                changelog,
-                "0.1.1-beta.1",
-                "v0.1.1-beta.2",
-            )
-
-
-    def changelog_root(self, tags):
-        scratch = os.environ.get("MEWLA_BUILD_TMPDIR") or os.environ.get("TMPDIR")
-        temporary = tempfile.TemporaryDirectory(
-            prefix="mewla-changelog-", dir=Path(scratch) if scratch else None
-        )
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
-        (root / "docs/releases").mkdir(parents=True)
-        for tag in tags:
-            (root / "docs/releases" / f"{tag}.md").write_text(
-                f"# Mewla {tag}\n", encoding="utf-8"
-            )
-        changelog = prepare_release.CHANGELOG_PREFIX + "".join(
-            f"- [{tag}](docs/releases/{tag}.md)\n" for tag in tags
-        )
-        return root, changelog
-
-    def test_accepts_a_stable_release_after_its_own_beta(self):
-        root, changelog = self.changelog_root(["v0.2.27-beta.1", "v0.2.26"])
-        prepare_release.validate_changelog(
-            root, changelog, "0.2.27-beta.1", "v0.2.27"
-        )
-
-    def test_rejects_a_tag_that_is_already_listed(self):
-        root, changelog = self.changelog_root(["v0.2.27", "v0.2.26"])
-        with self.assertRaisesRegex(
-            prepare_release.PrepareError, "already contains v0.2.27"
-        ):
-            prepare_release.validate_changelog(root, changelog, "0.2.27", "v0.2.27")
-
-
-class UserNotesTests(unittest.TestCase):
-    def test_splits_summary_and_sections_in_canonical_order(self):
-        summary, sections = prepare_release.parse_user_notes(
-            "Plain summary.\n\n## Fixed\n\n- A fix.\n", "notes.md"
-        )
-        self.assertEqual(summary, "Plain summary.")
-        self.assertEqual(sections, {"Fixed": "- A fix."})
-
-        summary, sections = prepare_release.parse_user_notes(
-            "Summary.\n\n## Fixed\n\n- A fix.\n\n## New\n\n- A change.\n",
-            "notes.md",
-        )
-        self.assertEqual(list(sections), ["New", "Fixed"])
-
-        summary, sections = prepare_release.parse_user_notes(USER_NOTES, "notes.md")
-        self.assertEqual(summary, "Pets are easier to find.")
-        self.assertEqual(
-            sections["New"],
-            "- The cat waits on the Work that needs you.\n  Tap it to open that Work.",
-        )
-
-    def test_rejects_missing_empty_or_malformed_user_notes(self):
-        cases = {
-            "empty": ("", "missing the one-sentence summary"),
-            "no-summary": ("## New\n\n- A change.\n", "missing the one-sentence summary"),
-            "no-sections": ("Only a summary.\n", "missing ## New or ## Fixed"),
-            "empty-section": (
-                "Summary.\n\n## New\n\n## Fixed\n\n- A fix.\n",
-                "## New has no bullets",
-            ),
-            "other-heading": (
-                "Summary.\n\n## Highlights\n\n- A change.\n",
-                "unexpected heading '## Highlights'",
-            ),
-            "commit-style-heading": (
-                "Summary.\n\n## What changed\n\n- Add x (`abc1234`)\n",
-                "unexpected heading '## What changed'",
-            ),
-            "duplicate": (
-                "Summary.\n\n## New\n\n- A.\n\n## New\n\n- B.\n",
-                "duplicate ## New",
-            ),
-            "prose-in-section": (
-                "Summary.\n\n## New\n\nA paragraph.\n",
-                "may contain only '- ' bullets",
-            ),
-            "bullet-in-summary": (
-                "- A change.\n\n## New\n\n- A.\n",
-                "put bullets under ## New or ## Fixed",
-            ),
-            "two-paragraph-summary": (
-                "One.\n\nTwo.\n\n## New\n\n- A.\n",
-                "one short paragraph",
-            ),
-        }
-        for name, (text, error) in cases.items():
-            with self.subTest(name=name):
-                with self.assertRaises(prepare_release.PrepareError) as raised:
-                    prepare_release.parse_user_notes(text, "docs/releases/reviewed/v9.md")
-                message = str(raised.exception)
-                self.assertIn("docs/releases/reviewed/v9.md", message)
-                self.assertIn(error, message)
-                self.assertIn("## New", message)
-
-    def test_reads_the_certificate_from_the_release_verifier(self):
-        self.assertRegex(CERTIFICATE, r"^[0-9A-F]{2}(:[0-9A-F]{2}){31}$")
-        for source in ("", 'EXPECTED_CERT_FP="AB:CD"\n'):
-            with self.subTest(source=source):
-                with self.assertRaises(prepare_release.PrepareError):
-                    prepare_release.extract_certificate(source)
-
-
 class PrepareReleaseIntegrationTests(unittest.TestCase):
     def setUp(self):
         scratch = os.environ.get("MEWLA_BUILD_TMPDIR") or os.environ.get("TMPDIR")
@@ -313,11 +164,6 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             user_notes = {NEXT_TAG: USER_NOTES}
         if whats_new is None:
             whats_new = [tag.removeprefix("v") for tag in user_notes]
-        if user_notes:
-            reviewed = root / "docs/releases/reviewed"
-            reviewed.mkdir(parents=True, exist_ok=True)
-            for tag, text in user_notes.items():
-                (reviewed / f"{tag}.md").write_text(text, encoding="utf-8")
         if whats_new:
             # What's New for each release (release-notes/), with the bundles the app and daemon ship.
             notes = root / release_notes.SOURCE_DIR
@@ -330,9 +176,9 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                     "fixes": ["Pets are easier to find."],
                 }), encoding="utf-8")
             self.assertEqual(release_notes.main(["--repo", str(root)]), 0)
-        if user_notes or whats_new:
+        if whats_new:
             git(root, "add", "--all")
-            git(root, "commit", "-m", "Write user-facing release notes")
+            git(root, "commit", "-m", "Write What's New")
         return root
 
     def run_script(
@@ -362,16 +208,6 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
 
         manifest = json.loads((root / VERSION_SOURCE).read_text(encoding="utf-8"))
         self.assertEqual(manifest["version"], STABLE_TARGET)
-        notes = (root / f"docs/releases/v{STABLE_TARGET}.md").read_text(
-            encoding="utf-8"
-        )
-        self.assertTrue(notes.startswith(f"# Mewla {STABLE_TARGET}\n\n"))
-        self.assertIn(f"mewla-android-arm64-v{STABLE_TARGET}.apk", notes)
-        self.assertIn(f"/compare/{CURRENT_TAG}...v{STABLE_TARGET})", notes)
-        changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-        self.assertLess(
-            changelog.index(f"v{STABLE_TARGET}"), changelog.index(CURRENT_TAG)
-        )
         project = (root / IOS_PROJECT).read_text(encoding="utf-8")
         self.assertIn(f'MARKETING_VERSION: "{STABLE_TARGET}"\n', project)
         self.assertIn(
@@ -413,7 +249,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         self.assertIn(f'MEWLA_TESTFLIGHT_VERSION: "{CURRENT_CORE[0]}.{CURRENT_CORE[1] + 1}.0"\n', project)
         self.assertEqual(project.count("MEWLA_TESTFLIGHT_VERSION:"), 1)
 
-    def test_updates_exact_identity_files_and_writes_user_notes(self):
+    def test_updates_exactly_the_identity_files(self):
         root = self.create_repo()
 
         result = self.run_script(root)
@@ -427,15 +263,12 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         self.assertGreater(NEXT_CODE, CURRENT_CODE)
         self.assertEqual(output["commit_count"], 2)
 
-        next_notes_path = f"docs/releases/{NEXT_TAG}.md"
         expected_paths = sorted(
             (
-                "CHANGELOG.md",
                 VERSION_SOURCE,
                 IOS_PROJECT,
                 "daemon/cmd/mewla/version.go",
                 "docs/install-daemon.md",
-                next_notes_path,
             )
         )
         self.assertEqual(output["changed_paths"], expected_paths)
@@ -443,12 +276,10 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             sorted(git(root, "status", "--short").splitlines()),
             sorted(
                 [
-                    " M CHANGELOG.md",
                     f" M {VERSION_SOURCE}",
                     f" M {IOS_PROJECT}",
                     " M daemon/cmd/mewla/version.go",
                     " M docs/install-daemon.md",
-                    f"?? {next_notes_path}",
                 ]
             ),
         )
@@ -477,109 +308,21 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             f"MEWLA_VERSION={NEXT_TAG}",
             (root / "docs/install-daemon.md").read_text(encoding="utf-8"),
         )
-        changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-        self.assertLess(changelog.index(NEXT_TAG), changelog.index(CURRENT_TAG))
-        self.assertEqual(changelog.count(f"docs/releases/{NEXT_TAG}.md"), 1)
-        self.assertEqual(changelog.count(f"docs/releases/{CURRENT_TAG}.md"), 1)
 
-        notes = (root / next_notes_path).read_text(encoding="utf-8")
-        self.assertEqual(
-            notes.split("## Get it", 1)[0],
-            f"# Mewla {NEXT_VERSION}\n\n" + USER_NOTES + "\n",
-        )
-        for marker in (
-            "- **Already installed?** Run `mewla update`",
-            f"`curl -fsSL {prepare_release.INSTALL_SCRIPT_URL} | sh`",
-            "- **Mac (Apple Silicon):** `mewla-darwin-arm64.tar.gz`",
-            "- **Linux x64:** `mewla-linux-amd64.tar.gz`",
-            "- **Linux ARM:** `mewla-linux-arm64.tar.gz`",
-            "- **Windows x64:** `mewla-windows-amd64.zip`",
-            "irm https://mewla.ai/install.ps1 | iex",
-            f"- **Android:** `mewla-android-arm64-{NEXT_TAG}.apk`",
-            "unknown sources",
-            f"https://github.com/daoleno/mewla/compare/{CURRENT_TAG}...{NEXT_TAG}",
-            '<details markdown="1">\n<summary>Verify downloads</summary>\n\n',
-            "SHA256SUMS",
-            f"```text\n{CERTIFICATE}\n```\n\n</details>\n",
-        ):
-            self.assertIn(marker, notes)
-        for dropped in (
-            "Add reviewed release change",
-            "Write user-facing release notes",
-            "Source tag",
-            "versionCode",
-            "com.daoleno.mewla",
-            "TestFlight",
-            "Obtainium",
-            "As of",
-        ):
-            self.assertNotIn(dropped, notes)
-
-    def test_uses_only_the_target_versions_user_notes(self):
-        root = self.create_repo(
-            user_notes={
-                NEXT_TAG: USER_NOTES,
-                "v99.0.0": "Unrelated future notes.\n\n## New\n\n- Later.\n",
-            }
-        )
-
+    def test_whats_new_is_optional_but_its_copies_must_be_current(self):
+        # Notes for earlier releases only: this one has none of its own.
+        root = self.create_repo(root=self.fixture / "none", whats_new=[CURRENT_VERSION])
         result = self.run_script(root)
         self.assertEqual(result.returncode, 0, result.stderr)
-        notes = (root / f"docs/releases/{NEXT_TAG}.md").read_text(encoding="utf-8")
-        self.assertIn("- Pets no longer shrink after a hop.", notes)
-        self.assertNotIn("Unrelated future notes", notes)
-        self.assertNotIn(
-            f"docs/releases/reviewed/{NEXT_TAG}.md",
-            json.loads(result.stdout)["changed_paths"],
-        )
 
-    def test_fails_closed_without_user_facing_notes(self):
-        cases = {
-            "missing": ({}, f"missing docs/releases/reviewed/{NEXT_TAG}.md"),
-            "empty": ({NEXT_TAG: "\n"}, "missing the one-sentence summary"),
-            "no-bullets": (
-                {NEXT_TAG: "Summary.\n\n## New\n"},
-                "## New has no bullets",
-            ),
-        }
-        for name, (user_notes, error) in cases.items():
-            with self.subTest(name=name):
-                root = self.create_repo(
-                    root=self.fixture / name, user_notes=user_notes
-                )
-                original_base = (root / VERSION_SOURCE).read_bytes()
-
-                result = self.run_script(root)
-
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(error, result.stderr)
-                self.assertIn("## Fixed", result.stderr)
-                self.assertNotIn("Add reviewed release change", result.stderr)
-                self.assertEqual(
-                    (root / VERSION_SOURCE).read_bytes(), original_base
-                )
-                self.assertFalse(
-                    (root / f"docs/releases/{NEXT_TAG}.md").exists()
-                )
-
-    def test_fails_closed_without_whats_new_notes(self):
-        cases = {
-            "missing": ([], f"missing release-notes/{NEXT_VERSION}.json"),
-            "stale": (None, "not current: client/ui/whatsnew/notes.json"),
-        }
-        for name, (whats_new, error) in cases.items():
-            with self.subTest(name=name):
-                root = self.create_repo(root=self.fixture / name, whats_new=whats_new)
-                if name == "stale":
-                    (root / "client/ui/whatsnew/notes.json").write_text("{}\n", encoding="utf-8")
-                    git(root, "commit", "-am", "Stale bundle")
-                original_base = (root / VERSION_SOURCE).read_bytes()
-
-                result = self.run_script(root)
-
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(error, result.stderr)
-                self.assertEqual((root / VERSION_SOURCE).read_bytes(), original_base)
+        root = self.create_repo(root=self.fixture / "stale")
+        (root / "client/ui/whatsnew/notes.json").write_text("{}\n", encoding="utf-8")
+        git(root, "commit", "-am", "Stale bundle")
+        original_base = (root / VERSION_SOURCE).read_bytes()
+        result = self.run_script(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not current: client/ui/whatsnew/notes.json", result.stderr)
+        self.assertEqual((root / VERSION_SOURCE).read_bytes(), original_base)
 
     def test_rejects_a_minimum_computer_version_newer_than_the_release(self):
         root = self.create_repo()
@@ -654,27 +397,12 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         self.assertIn(IOS_PROJECT, result.stderr)
         self.assertFalse((root / f"docs/releases/{NEXT_TAG}.md").exists())
 
-    def test_fails_closed_when_next_output_or_tag_exists(self):
-        for existing in ("notes", "tag"):
-            with self.subTest(existing=existing):
-                root = self.create_repo(root=self.fixture / existing)
-                if existing == "notes":
-                    notes = root / f"docs/releases/{NEXT_TAG}.md"
-                    notes.write_text("existing\n", encoding="utf-8")
-                    git(root, "add", str(notes.relative_to(root)))
-                    git(root, "commit", "-m", "Reserve beta 9 notes")
-                else:
-                    git(
-                        root,
-                        "tag",
-                        "-a",
-                        NEXT_TAG,
-                        "-m",
-                        f"Existing {NEXT_TAG}",
-                    )
-                result = self.run_script(root)
-                self.assertNotEqual(result.returncode, 0)
-            self.assertIn("already exist", result.stderr)
+    def test_fails_closed_when_the_next_tag_exists(self):
+        root = self.create_repo()
+        git(root, "tag", "-a", NEXT_TAG, "-m", f"Existing {NEXT_TAG}")
+        result = self.run_script(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("already exist", result.stderr)
 
 
 class ReleaseWorkflowContractTests(unittest.TestCase):

@@ -57,6 +57,7 @@ try {
 
   # 3. The daemon answers /health with this version.
   $env:MEWLA_BRAIN_HOST_EXECUTOR = 'agent'  # keeps the throwaway Brain from signing in
+  $env:MEWLA_NO_AUTOUPDATE = '1'  # this binary is the one checked: it never updates itself
   $addr = '127.0.0.1:9879'
   [void](Start-Mewla 'daemon' @('-addr', $addr, '-state-dir', (Join-Path $root 'daemon-state')))
   $health = $null

@@ -282,8 +282,9 @@ func TestReleaseBinary(t *testing.T) {
 			t.Fatal(err)
 		}
 		daemon := exec.Command(bin, "-addr", addr, "-state-dir", filepath.Join(dir, "daemon-state"))
-		// An agent host executor keeps the throwaway Brain from signing in.
-		daemon.Env = append(append([]string{}, env...), "MEWLA_BRAIN_HOST_EXECUTOR=agent")
+		// An agent host executor keeps the throwaway Brain from signing in; the smoke checks this
+		// binary, so it never updates itself to the published one.
+		daemon.Env = append(append([]string{}, env...), "MEWLA_BRAIN_HOST_EXECUTOR=agent", "MEWLA_NO_AUTOUPDATE=1")
 		daemon.Dir = dir
 		daemon.Stdout, daemon.Stderr = daemonLog, daemonLog
 		if err := daemon.Start(); err != nil {

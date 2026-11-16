@@ -36,7 +36,6 @@ PROJECT_YML = read("client/ios/project.yml")
 ROOT_PACKAGE = read("package.json")
 
 TAG_PUSH = re.compile(r'push:\s*\n\s*tags:\s*\n\s*- "v\*\.\*\.\*"\s*\n\s*- "v\*\.\*\.\*-beta\.\*"')
-RELEASE_ONLY = "if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'"
 
 
 def between(text, start, end=None):
@@ -52,13 +51,13 @@ def cache_blocks(*sources):
 
 class ReleaseArtifactsWorkflowTests(unittest.TestCase):
     def test_prepares_native_release_inputs_before_compilation(self):
-        self.assertIn("./scripts/build-daemon-linux.sh --out-dir", CI)
+        self.assertIn("./scripts/build-daemon-linux.sh --out-dir", RELEASE)
         self.assertRegex(ANDROID_NATIVE, r"uses: android-actions/setup-android@v3\s+with:\s+packages: platform-tools")
         for source in (RELEASE, NATIVE_CACHE, CLIENT):
             self.assertIn("uses: ./.github/actions/android-native", source)
 
     def test_builds_the_signed_apk_from_the_nsh_client(self):
-        android = between(RELEASE, "  android:\n", "  android-upgrade:")
+        android = between(RELEASE, "  android:\n", "  android-launch:")
         self.assertIn("run: client/scripts/fetch-nsh.sh", android)
         self.assertLess(android.index("run: client/scripts/fetch-nsh.sh"), android.index("./scripts/android-release-apk.sh"))
         self.assertNotIn("bun ", android)
@@ -101,7 +100,7 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         self.assertIn("daemon:", RELEASE)
         self.assertIn("android:", RELEASE)
         gate = between(RELEASE, "  release-ready:\n", "\n  publish:\n    name:")
-        self.assertIn("needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-upgrade, stage]", gate)
+        self.assertIn("needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, stage]", gate)
         self.assertIn("if: always()", gate)
         # Cancelled or skipped is not passed; only a candidate's unsigned stage may be skipped.
         self.assertIn('ok = result == "success" or (job == "stage" and result == "skipped" and mode == "candidate")', gate)
@@ -130,24 +129,40 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         for gone in ("desktop-stage:", "desktop-publish:", "complete-stage:", "android-attach:"):
             self.assertNotIn(gone, RELEASE)
 
-    def test_the_upgrade_from_the_previous_release_runs_in_the_release(self):
-        upgrade = between(RELEASE, "  android-upgrade:\n", "  stage:\n")
-        self.assertIn("needs: validate\n", upgrade)
-        for needle in (
-            'r["draft"] or r["prerelease"] or r["tag_name"] == tag',
-            "sha256sum -c -",
-            'select(.name == "Build and verify signed Android")',
-            "name: mewla-android-apk-${{ needs.validate.outputs.tag }}",
-            "./scripts/verify-apk-release.sh",
-            "script: client/scripts/release-upgrade.sh",
-            "MEWLA_UPGRADE_SAME_VERSION_OK: ${{ needs.validate.outputs.mode == 'candidate' && '1' || '' }}",
-        ):
-            self.assertIn(needle, upgrade)
+    def test_the_release_launches_the_exact_apk_and_runs_no_suite(self):
+        launch = between(RELEASE, "  android-launch:\n", "  stage:\n")
+        self.assertIn("needs: validate\n", launch)
+        for needle in ("ARTIFACT: mewla-android-apk-${{ needs.validate.outputs.tag }}",
+                       "BUILD_JOB: Build and verify signed Android", "script: client/scripts/release-launch.sh"):
+            self.assertIn(needle, launch)
         android_name = re.search(r"\n  android:\n    needs: validate\n    name: ([^\n]+)\n", RELEASE).group(1)
         self.assertEqual(android_name, "Build and verify signed Android")
+        script = read("client/scripts/release-launch.sh")
+        for step in ("versionName", "pidof", "-b crash"):
+            self.assertIn(step, script)
+        # The suites ran on main: the release checks that and runs none itself.
+        self.assertIn('python3 scripts/release-green.py --sha "$(git rev-parse HEAD)"', between(RELEASE, "  validate:\n", "  engine:\n"))
+        self.assertIn("python3 scripts/release-green.py", PREPARATION)
+        for suite in ("release-upgrade.sh", "nsh test", "bun test", "go test ./..."):
+            self.assertNotIn(suite, RELEASE)
+        self.assertNotIn("go test", PREPARATION)
+
+    def test_the_upgrade_from_the_latest_release_runs_on_mains_schedule(self):
+        upgrade = read(".github/workflows/upgrade.yml")
+        for needle in ("schedule:", "script: client/scripts/release-upgrade.sh", "./scripts/android-release-apk.sh",
+                       "sha256sum -c -", 'MEWLA_UPGRADE_SAME_VERSION_OK: "1"', "gh issue create"):
+            self.assertIn(needle, upgrade)
         script = read("client/scripts/release-upgrade.sh")
         for step in ("install -r", "is not an upgrade", "same device", "the draft is not in storage", "qr-camera", "MEWLA_NO_AUTOUPDATE=1"):
             self.assertIn(step, script)
+
+    def test_notes_are_written_at_release_and_released_is_checked(self):
+        publish = between(RELEASE, "  publish:\n", "  released:\n")
+        self.assertIn('python3 scripts/release-body.py --tag "$TAG"', publish)
+        self.assertNotIn("docs/releases/", publish)
+        released = between(RELEASE, "  released:\n", "  ios-testflight:\n")
+        self.assertIn("needs: [validate, publish]", released)
+        self.assertIn('python3 scripts/released.py --tag "$TAG"', released)
 
     def test_the_iphone_build_follows_publication(self):
         ios = between(RELEASE, "  ios-testflight:\n")
@@ -505,9 +520,17 @@ class CIWorkflowTests(unittest.TestCase):
         self.assertIn('"installer:test": "./scripts/tests/install_test.sh"', ROOT_PACKAGE)
         self.assertRegex(CI, r"installer:\s*[\s\S]*?runs-on: ubuntu-latest[\s\S]*?timeout-minutes: 5[\s\S]*?run: bun run installer:test")
 
-    def test_ci_runs_on_main_pushes_release_tags_pull_requests_and_dispatch(self):
-        self.assertRegex(CI, r'push:\s*\n\s*branches: \[main\]\s*\n\s*tags:\s*\n\s*- "v\*\.\*\.\*"\s*\n\s*- "v\*\.\*\.\*-beta\.\*"')
+    def test_ci_is_the_test_track_main_runs_finish_and_releases_do_not_rerun_it(self):
+        self.assertRegex(CI, r'push:\s*\n\s*branches: \[main\]\s*\n(\s*#.*\n)*\s*paths-ignore:')
         self.assertRegex(CI, r"pull_request:\s*\n\s*workflow_dispatch:")
+        self.assertNotIn("tags:", between(CI, "on:\n", "jobs:\n"))
+        self.assertIn("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}", CI)
+        self.assertIn("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}", CLIENT)
+        # Every job has its own timeout: a stuck runner or vendor never holds main's checks for hours.
+        jobs = CI.split("\njobs:\n", 1)[1]
+        for block in re.split(r"\n(?=  [a-z][a-z-]*:\n)", "\n" + jobs):
+            if block.strip():
+                self.assertIn("timeout-minutes:", block, block.strip().splitlines()[0])
 
     def test_the_client_job_runs_core_ui_license_and_viewer_checks_on_every_push(self):
         client = between(CI, "  client:\n", "  client-ui:")
@@ -529,11 +552,10 @@ class CIWorkflowTests(unittest.TestCase):
         self.assertIn(f"name: Client UI tests (${{{{ matrix.shard }}}}/{count})", ui)
         self.assertIn("fail-fast: false", ui)
 
-    def test_daemon_tests_and_vet_run_on_every_push_and_release_targets_are_gated(self):
+    def test_daemon_tests_and_vet_run_on_every_push(self):
         daemon = between(CI, "  daemon:\n", "  daemon-engine:\n")
         self.assertRegex(daemon, r"run: go test \./\.\.\.[\s\S]*run: go vet \./\.\.\.[\s\S]*run: python3 scripts/test-plugin-publisher-flags\.py")
-        self.assertIn(f"name: Build release targets\n        {RELEASE_ONLY}", daemon)
-        self.assertIn(f"name: Install NSH for the web UI\n        {RELEASE_ONLY}", daemon)
+        self.assertIn("run: ./scripts/test-ghosttyvt.sh -race", between(CI, "  daemon-engine:\n", "  daemon-macos:\n"))
 
     def test_the_native_contract_runs_on_every_push_without_native_libraries(self):
         contract = between(CI, "  native-contract:\n", "  release-identity:")

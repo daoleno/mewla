@@ -1,25 +1,27 @@
 name: CI
 
-# Every push and PR runs the fast checks: the daemon (on Linux and on macOS), the NSH client's core and
-# UI, the native terminal contract and the release scripts. The daemon release
-# build, which also builds the web UI the daemon embeds, runs on release tag
-# pushes and manual dispatch. The client's native hosts are built by client.yml
-# (pull requests), native-cache.yml (main) and, signed, by release-artifacts.yml
-# and ios-release.yml (tags).
+# The test track. Every push to main and every PR runs the checks: the daemon (Linux, macOS,
+# Windows), the session host's terminal engine, the NSH client's core and UI, the native terminal
+# contract and the release scripts. A release never runs them again: it ships a main commit this
+# workflow passed (scripts/release-green.py, docs/ci-release.md). The client's native hosts are
+# built by client.yml, and signed by release-artifacts.yml and ios-release.yml.
 on:
   push:
     branches: [main]
-    tags:
-      - "v*.*.*"
-      - "v*.*.*-beta.*"
+    # A change to these alone runs no checks; a release treats such commits as covered by the
+    # last green run before them (scripts/release-green.py reads this list).
+    paths-ignore:
+      - "docs/**"
+      - "site/**"
+      - "*.md"
   pull_request:
   workflow_dispatch:
 
-# A push cancels the previous push's run, but not a manual dispatch: the
-# native jobs of a dispatch take far longer than the gap between pushes.
+# A run on main always finishes: a release needs a green run on its commit, and one cancelled by
+# the next push left none. A PR's run is cancelled by its next push.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   installer:
@@ -39,6 +41,7 @@ jobs:
   daemon:
     name: Daemon (Go)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: daemon
@@ -55,14 +58,6 @@ jobs:
       - name: Verify public publisher build configuration
         working-directory: .
         run: python3 scripts/test-plugin-publisher-flags.py
-      - name: Install NSH for the web UI
-        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
-        working-directory: .
-        run: client/scripts/fetch-nsh.sh
-      - name: Build release targets
-        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
-        working-directory: .
-        run: ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/release-bin"
 
   # The session host's terminal engine (build tag ghosttyvt, libghostty-vt linked) under -race, beside
   # the daemon job rather than after it: it took 1.5 of that job's 5 min (11-16).
@@ -80,6 +75,7 @@ jobs:
           cache-dependency-path: daemon/go.sum
       # A Session's plain `tmux` must reach the daemon's private server, never the person's own.
       - name: Install tmux
+        timeout-minutes: 5
         run: sudo apt-get update && sudo apt-get install -y tmux
       - name: Session host terminal engine libraries
         uses: ./.github/actions/ghostty-desktop
@@ -207,6 +203,7 @@ jobs:
   native-contract:
     name: Native terminal contract
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Verify lock/notice/scripts (no .so required)

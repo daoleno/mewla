@@ -69,12 +69,6 @@ if any(x in v for x in ('/', '\\\\', '..', '\x00')):
   exit 1
 fi
 
-NOTES_SRC="$ROOT/docs/releases/v${VERSION}.md"
-if [[ ! -f "$NOTES_SRC" ]]; then
-  echo "error: tracked release notes missing: docs/releases/v${VERSION}.md" >&2
-  exit 1
-fi
-
 STAGE_DIR="$ROOT/dist-download/v${VERSION}"
 # Resolve and ensure stage is exactly under dist-download/v<version>
 STAGE_PARENT="$(cd "$ROOT/dist-download" 2>/dev/null && pwd || true)"
@@ -318,7 +312,7 @@ identity = {
     "notes": {
         "release_status": "staged",
         "github_release": "publication_is_separate",
-        "release_notes_source": f"docs/releases/v{version}.md",
+        "release_notes_source": "generated_at_release_from_commits",
         "signed_apk": "requires_maintainer_keystore_via_env_not_in_repo",
     },
 }

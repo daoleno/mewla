@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Prepare a Mewla release as one deterministic tracked change."""
+"""Prepare a Mewla release as one deterministic tracked change: the version, nothing else.
+
+The release notes are written at release time from the commits (scripts/release-body.py).
+"""
 
 from __future__ import annotations
 
@@ -29,35 +32,6 @@ RELEASE_VERSION_RE = re.compile(
     r"(?P<patch>0|[1-9][0-9]*)"
     r"(?:-beta\.(?P<beta>[1-9][0-9]*))?$"
 )
-CHANGELOG_ENTRY_RE = re.compile(
-    r"^- \[(v[0-9]+\.[0-9]+\.[0-9]+(?:-beta\.[1-9][0-9]*)?)\]"
-    r"\(docs/releases/\1\.md\)$",
-    re.MULTILINE,
-)
-CHANGELOG_PREFIX = """# Changelog
-
-Canonical release notes live under [`docs/releases/`](docs/releases/). This file is a reverse-chronological index and does not duplicate the full notes.
-
-## Releases
-
-"""
-REPOSITORY_URL = "https://github.com/daoleno/mewla"
-INSTALL_SCRIPT_URL = "https://mewla.ai/install.sh"
-INSTALL_DOCS_URL = "https://mewla.ai/docs/install/"
-USER_NOTE_SECTIONS = ("New", "Fixed")
-USER_NOTES_SHAPE = """<one plain sentence: what this release is about, for a user>
-
-## New
-
-- <user-facing change, in user language>
-
-## Fixed
-
-- <user-facing fix>
-
-Keep at least one of ## New and ## Fixed; drop the one with nothing in it."""
-
-
 class PrepareError(RuntimeError):
     """A fail-closed preparation error."""
 
@@ -224,155 +198,6 @@ def commit_range(root: Path, current_tag: str) -> list[tuple[str, str]]:
     return commits
 
 
-def validate_changelog(
-    root: Path, content: str, current_version: str, next_tag: str
-) -> None:
-    if not content.startswith(CHANGELOG_PREFIX):
-        raise PrepareError("CHANGELOG.md does not match the canonical index header")
-    entries = CHANGELOG_ENTRY_RE.findall(content)
-    current_tag = f"v{current_version}"
-    if not entries or entries[0] != current_tag:
-        raise PrepareError(
-            f"CHANGELOG.md must start with the current release {current_tag}; "
-            f"got {entries[:1]!r}"
-        )
-    if len(entries) != len(set(entries)):
-        raise PrepareError("CHANGELOG.md contains duplicate release entries")
-    if content.count("\n- [") != len(entries):
-        raise PrepareError("CHANGELOG.md contains malformed release entries")
-
-    order = [release_precedence(tag.removeprefix("v")) for tag in entries]
-    if any(left <= right for left, right in zip(order, order[1:])):
-        raise PrepareError(
-            "CHANGELOG.md release entries are not strictly reverse chronological"
-        )
-    # An exact entry, not a substring: v0.2.27 must not collide with the
-    # v0.2.27-beta.1 entry it follows.
-    if next_tag in entries:
-        raise PrepareError(f"CHANGELOG.md already contains {next_tag}")
-    for tag in entries:
-        note = root / "docs" / "releases" / f"{tag}.md"
-        if not note.is_file():
-            raise PrepareError(f"CHANGELOG.md points to missing canonical notes: {note}")
-
-
-def extract_certificate(verifier_source: str) -> str:
-    matches = re.findall(
-        r'^EXPECTED_CERT_FP="([0-9A-F]{2}(?::[0-9A-F]{2}){31})"$',
-        verifier_source,
-        re.MULTILINE,
-    )
-    if len(matches) != 1:
-        raise PrepareError(
-            "scripts/verify-release-identity.sh must contain exactly one "
-            f"EXPECTED_CERT_FP SHA-256 fingerprint; found {len(matches)}"
-        )
-    return matches[0]
-
-
-def parse_user_notes(text: str, relative: str) -> tuple[str, dict[str, str]]:
-    """Split the human-written notes into a summary and New/Fixed bullets."""
-
-    def fail(problem: str) -> PrepareError:
-        return PrepareError(
-            f"{relative}: {problem}. Write it before dispatching the release:\n\n"
-            f"{USER_NOTES_SHAPE}"
-        )
-
-    summary_lines: list[str] = []
-    sections: dict[str, list[str]] = {}
-    current: list[str] | None = None
-    for line in text.strip().splitlines():
-        if line.startswith("#"):
-            heading = line.strip()
-            name = heading.removeprefix("## ")
-            if heading != f"## {name}" or name not in USER_NOTE_SECTIONS:
-                raise fail(f"unexpected heading {heading!r}; use only ## New and ## Fixed")
-            if name in sections:
-                raise fail(f"duplicate ## {name} section")
-            current = sections[name] = []
-        elif current is None:
-            if line.lstrip().startswith(("- ", "* ")):
-                raise fail("put bullets under ## New or ## Fixed, not in the summary")
-            summary_lines.append(line)
-        elif line.strip():
-            continuation = line.startswith("  ") and bool(current)
-            if not (line.startswith("- ") or continuation):
-                raise fail(f"## sections may contain only '- ' bullets; got {line!r}")
-            current.append(line.rstrip())
-
-    summary = "\n".join(summary_lines).strip()
-    if not summary:
-        raise fail("missing the one-sentence summary before ## New / ## Fixed")
-    if "\n\n" in summary:
-        raise fail("the summary must be one short paragraph")
-    for name, bullets in sections.items():
-        if not bullets:
-            raise fail(f"## {name} has no bullets; remove it or add one")
-    if not sections:
-        raise fail("missing ## New or ## Fixed bullets")
-    return summary, {
-        name: "\n".join(sections[name])
-        for name in USER_NOTE_SECTIONS
-        if name in sections
-    }
-
-
-def build_release_notes(
-    *,
-    next_version: str,
-    next_tag: str,
-    current_tag: str,
-    user_notes: str,
-    user_notes_path: str,
-    certificate: str,
-) -> str:
-    summary, sections = parse_user_notes(user_notes, user_notes_path)
-    changes = "".join(
-        f"## {name}\n\n{bullets}\n\n" for name, bullets in sections.items()
-    )
-    return f"""# Mewla {next_version}
-
-{summary}
-
-{changes}## Get it
-
-- **Already installed?** Run `mewla update` on your computer, and install the new APK on Android.
-- **New here?** `curl -fsSL {INSTALL_SCRIPT_URL} | sh` picks the right file for you. See [Install]({INSTALL_DOCS_URL}).
-- **Mac (Apple Silicon):** `mewla-darwin-arm64.tar.gz`.
-- **Linux x64:** `mewla-linux-amd64.tar.gz`
-- **Linux ARM:** `mewla-linux-arm64.tar.gz`
-- **Windows x64:** `mewla-windows-amd64.zip`, or in PowerShell: `irm https://mewla.ai/install.ps1 | iex`
-- **Android:** `mewla-android-arm64-{next_tag}.apk`. Android asks you to allow installs from unknown sources.
-
-All changes: [{current_tag}...{next_tag}]({REPOSITORY_URL}/compare/{current_tag}...{next_tag})
-
-<details markdown="1">
-<summary>Verify downloads</summary>
-
-`mewla update` and the installer check downloads for you. To check one by hand against `SHA256SUMS`:
-
-```sh
-grep 'mewla-linux-amd64.tar.gz$' SHA256SUMS | sha256sum -c -        # Linux
-grep 'mewla-darwin-arm64.tar.gz$' SHA256SUMS | shasum -a 256 -c -   # Mac
-```
-
-On Windows, in PowerShell, compare with the `mewla-windows-amd64.zip` line of `SHA256SUMS`:
-
-```powershell
-(Get-FileHash mewla-windows-amd64.zip -Algorithm SHA256).Hash.ToLower()
-```
-
-Android signing certificate SHA-256:
-
-```text
-{certificate}
-```
-
-</details>
-"""
-
-
 def atomic_write(path: Path, content: str) -> None:
     mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -428,25 +253,15 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
     if run_git(root, "show-ref", "--verify", f"refs/tags/{next_tag}", check=False):
         raise PrepareError(f"next tag already exists: {next_tag}")
 
-    next_notes_relative = f"docs/releases/{next_tag}.md"
-    if (root / next_notes_relative).exists():
-        raise PrepareError(f"next release notes already exist: {next_notes_relative}")
     commits = commit_range(root, current_tag)
 
-    user_notes_relative = f"docs/releases/reviewed/{next_tag}.md"
-    if not (root / user_notes_relative).is_file():
-        raise PrepareError(
-            f"missing {user_notes_relative}. Commit the user-facing notes for "
-            f"{next_tag} before dispatching the release:\n\n{USER_NOTES_SHAPE}"
-        )
-    user_notes = read_text(root, user_notes_relative)
-    parse_user_notes(user_notes, user_notes_relative)
-    # What's New (release-notes/<version>.json) ships in the app and the daemon: the release has
-    # its own file, and the copies they bundle are current (scripts/release-notes.py).
-    if release_notes.main(["--repo", str(root), "--check", "--require", next_version]) != 0:
-        raise PrepareError(
-            f"What's New notes for {next_version} are missing or not current; see the error above"
-        )
+    # What's New (release-notes/<version>.json) is optional: a release without one shows no sheet,
+    # only its line in Brain's chat. The copies the app and the daemon bundle must be current.
+    whats_new = ["--repo", str(root), "--check"]
+    if (root / "release-notes" / f"{next_version}.json").is_file():
+        whats_new += ["--require", next_version]
+    if release_notes.main(whats_new) != 0:
+        raise PrepareError(f"What's New notes for {next_version} are not current; see the error above")
 
     sources = {
         relative: read_text(root, relative)
@@ -454,16 +269,10 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
             VERSION_SOURCE,
             IOS_PROJECT,
             "daemon/cmd/mewla/version.go",
-            "scripts/verify-release-identity.sh",
             "docs/install-daemon.md",
-            "CHANGELOG.md",
         )
     }
-    validate_changelog(root, sources["CHANGELOG.md"], current_version, next_tag)
     validate_min_computer_version(root, next_version)
-    certificate = extract_certificate(
-        sources["scripts/verify-release-identity.sh"]
-    )
 
     updates: dict[str, str] = {}
     updates[VERSION_SOURCE] = replace_literal(
@@ -518,22 +327,6 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         next_tag,
         relative="docs/install-daemon.md",
     )
-    changelog_entry = f"- [{next_tag}](docs/releases/{next_tag}.md)\n"
-    updates["CHANGELOG.md"] = replace_literal(
-        sources["CHANGELOG.md"],
-        CHANGELOG_PREFIX,
-        CHANGELOG_PREFIX + changelog_entry,
-        relative="CHANGELOG.md",
-    )
-    updates[next_notes_relative] = build_release_notes(
-        next_version=next_version,
-        next_tag=next_tag,
-        current_tag=current_tag,
-        user_notes=user_notes,
-        user_notes_path=user_notes_relative,
-        certificate=certificate,
-    )
-
     originals = {
         relative: (root / relative).read_bytes() if (root / relative).exists() else None
         for relative in updates

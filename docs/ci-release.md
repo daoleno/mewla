@@ -4,16 +4,43 @@ Release preparation starts in the manual [`.github/workflows/release-next-beta.y
 
 The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow builds the same pinned `libghostty-vt` C ABI for Android on Linux and as an iOS device/simulator XCFramework on macOS. Ordinary `push` to `main` and pull requests run only fast checks in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Signed iOS archive/export and optional TestFlight upload are isolated in [`ios-release.yml`](../.github/workflows/ios-release.yml); see [iOS CI and release automation](ios-ci-release.md). The Google Play App Bundle and its testing-track upload are isolated in [`android-play.yml`](../.github/workflows/android-play.yml); see [Google Play](#google-play).
 
+## Two tracks: tests on main, releases from a green main
+
+Testing and releasing are separate (adopted 11-16, after [Magpie](https://github.com/yetone/magpie)):
+
+- **Tests run on main.** [`ci.yml`](../.github/workflows/ci.yml) runs every suite on each push to `main` and on pull requests. A run on `main` is never cancelled by the next push (a PR's is). A push that changes only `docs/**`, `site/**` or root `*.md` runs no checks. A red `main` is a bug to fix now, at its cause.
+- **A release never runs a suite.** It ships a `main` commit whose CI run is green, or the version change on top of one. [`scripts/release-green.py`](../scripts/release-green.py) checks that in seconds. It walks back from the commit to the nearest CI run, and accepts the commits in between only if they are docs-only or the bot's `Prepare vX.Y.Z`. A run still going is waited for up to 15 min; a red, cancelled or missing run stops the release.
+- **The release path** is build → sign → launch smoke of the exact artifact → publish → released check:
+  - each daemon runs on its own platform from a fresh home and state, with auto-update off, and answers `/health` with the release's version;
+  - the signed APK installs on a fresh emulator, reports the version, opens and keeps running.
+- **Upgrade tests run on main's schedule.** [`upgrade.yml`](../.github/workflows/upgrade.yml) installs main's signed APK over the latest release's every day. A failure opens an issue; it does not hold an unrelated release.
+- **Release notes are written at release time** from the commits since the previous tag ([`scripts/release-body.py`](../scripts/release-body.py)). Nothing about them is committed, so a release needs no notes commit and no CI round before it. A failed generation falls back to a link to the commits and is reported in the run; it never blocks the release.
+- **Every external wait has its own timeout**: each job, and the apt, emulator, download and CI-run waits inside them.
+
+## Released
+
+A release counts only when all of these hold. [`scripts/released.py`](../scripts/released.py) checks them as the release's last job. Run it again before telling anyone (`python3 scripts/released.py --tag vX.Y.Z`):
+
+1. `vX.Y.Z` is an annotated tag on `main` (an ancestor of `origin/main`).
+2. Its commit passed CI on `main`, or is the version change on top of a commit that did. A run cancelled by the next push is not a pass.
+3. The GitHub release is public and carries all 8 assets, none empty: the four daemon archives, the APK, `SHA256SUMS`, `release-manifest.json` and its `.sig`.
+4. A stable tag is marked Latest and is the highest stable version published, or a higher release has since taken the mark. A beta is a prerelease.
+
+A failed release is reported as failed. It is never silently covered by the next tag.
+
 ## Ordinary CI triggers
 
-| Event | Fast checks (`installer`, `daemon`, `daemon-engine`, `daemon-macos`, `client`, `client-ui`, `windows`, `native-contract`, `release-identity`) | Daemon release binaries |
+
+| Event | Checks (`installer`, `daemon`, `daemon-engine`, `daemon-macos`, `client`, `client-ui`, `windows`, `native-contract`, `release-identity`) | Daemon release binaries |
 | --- | --- | --- |
 | Push to `main` | yes | no |
 | Pull request | yes | no |
-| Release tag push (`vX.Y.Z` / `vX.Y.Z-beta.N`) | yes | yes |
-| Manual `workflow_dispatch` of `ci.yml` | yes | yes |
+| Push to `main` changing only `docs/**`, `site/**` or root `*.md` | no | no |
+| Manual `workflow_dispatch` of `ci.yml` | yes | no |
 
-The client's native hosts are not built by `ci.yml`: [`client.yml`](../.github/workflows/client.yml) builds the Android preview APK and the iOS Simulator app (with its unit tests) on a push to `main` that touches `client/` and on dispatch (a release gate: development device rounds build locally), [`native-cache.yml`](../.github/workflows/native-cache.yml) builds the Android release task graph on `main`, and the release workflows build the signed APK and IPA.
+The release binaries are built only by `release-artifacts.yml`.
+
+The client's native hosts are not built by `ci.yml`: [`client.yml`](../.github/workflows/client.yml) builds the Android preview APK and the iOS Simulator app (with its unit tests) on a push to `main` that touches `client/` and on dispatch (on the test track: a red run is a bug to fix, and no release waits for it), [`native-cache.yml`](../.github/workflows/native-cache.yml) builds the Android release task graph on `main`, and the release workflows build the signed APK and IPA.
 
 The `daemon` fast job runs `go test ./...` (which includes the scripted behavior contracts), `go vet`, and the publisher-config check. Beside it, the `daemon-engine` job tests the session host's terminal engine (`daemon/ghosttyvt`, build tag `ghosttyvt`) with libghostty-vt linked, through `scripts/test-ghosttyvt.sh -race`. That script builds the static library with `scripts/build-libghostty-desktop.sh` from the same signed, pinned release and Zig as the app, into `~/.cache/mewla/ghostty-desktop`, which the [`ghostty-desktop`](../.github/actions/ghostty-desktop/action.yml) action caches. It never writes `daemon/ghostty-libs`: that directory switches `mewla-dev` to the tagged build. Untagged builds (`go test ./...`, `mewla-dev` without `daemon/ghostty-libs`, `build-mewla-local.sh`) compile the engine's stub and stay `CGO_ENABLED=0`. Release binaries carry the engine: the release-shaped `build-daemon-linux.sh` binaries (linux amd64/arm64 static with `zig cc` and musl, with the embedded web UI) build only with the native/packaging checks; see [Daemon builds](internal/daemon-builds.md). The `client` fast job runs the core tests and `nsh check`, and checks that the open-source licenses (`client/ui/more/settings/licenses/licenses.json`) and the Screen viewer bundle (`client/ui/more/screen/viewerSource.ts`) match what their generators write; the web UI build runs only inside the daemon release build, which embeds it. The `client-ui` job runs the UI suite (`nsh test`) on four runners at once: [`client/scripts/ui-test-shard.py`](../client/scripts/ui-test-shard.py) gives each shard its files, every test file `nsh test` would run exactly once, balanced by the seconds each took on CI (`client/scripts/ui-test-seconds.json`; a new file counts as 10 s until the file is refreshed), and runs them one `nsh test <file>` at a time. In one process the suite took 14 min (856 s on 11-14); a shard takes about a quarter of that. Shards are separate runners, not processes side by side, because the tests wait on the clock. `ci.yml` cancels superseded runs for the same ref.
 
@@ -34,32 +61,34 @@ The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta
 | Run each daemon on its own platform: Linux amd64, Linux arm64 (`ubuntu-24.04-arm`), macOS (`daemon/releasesmoke`), Windows (`windows-latest`: version, the host with the engine, `/health`, `install.ps1` from a release-shaped zip, `scripts/tests/release_smoke_windows.ps1`) | yes | — |
 | Build release-grade `libghostty` arm64 | yes | — |
 | Signed arm64 APK of the NSH client (`client/android`, `:app:assembleProductionRelease -Pmewla.channel=github`) | yes | — |
-| Android upgrade from the previous release on an emulator (`android-upgrade`, `client/scripts/release-upgrade.sh`): the newest published stable release's APK pairs with its daemon and keeps a draft; this APK installs over it, opens paired and Connected with the same device key and the draft, and its scanner runs | yes | — |
+| Launch smoke of the signed APK on a fresh emulator (`android-launch`, `client/scripts/release-launch.sh`): it installs, reports the release's version, opens and is still running with nothing in the crash log after 10 s; the emulator boots while the APK builds | yes | — |
 | Verify package / version / ABI / Ghostty native imports / notice / cert fingerprint | yes | — |
 | Stage tree + checksums + signed updater manifest (tags only; a candidate is never signed) | yes | — |
 | Upload workflow artifact | yes | — |
 | `release-ready`: every job above succeeded | yes | — |
 | Publish the complete set once: a stable tag as Latest, a beta tag as a prerelease | **no** | yes |
+| Notes written from the commits (`scripts/release-body.py`) | **no** | yes |
+| `released`: the definition above (`scripts/released.py`) | **no** | yes |
 | Dispatch `ios-release.yml` (Preview to TestFlight, submitted for beta review) | **no** | yes |
 
-The canonical normal flow is one manual **Release reviewed version** dispatch with an explicit `X.Y.Z` or `X.Y.Z-beta.N` version. It checks out current `main` with full tag history, proves the target is newer than the tracked current version and annotated current tag, increments Android and iOS build identities, builds the canonical notes from the committed user-facing notes, updates the root changelog index, and runs the release identity and focused contract tests. Only after every gate passes does it commit exactly those generated paths as `github-actions[bot]`, create the annotated target tag at that commit, prove `origin/main` still equals the starting SHA, and atomically push the new `main` commit and tag. Main drift, malformed identity, missing history, missing or malformed user-facing notes, dirty state, existing output, or any failed test stops before that atomic push.
+The canonical normal flow is one manual **Release reviewed version** dispatch with an explicit `X.Y.Z` or `X.Y.Z-beta.N` version. It checks out current `main` with full tag history and checks that `main` passed CI (`scripts/release-green.py`). It then proves the target is newer than the tracked current version and the annotated current tag, increments the Android and iOS build identities, and runs the release identity verifier and the workflow contract tests. Only after every gate passes does it commit exactly those generated paths as `github-actions[bot]`, create the annotated target tag at that commit, prove `origin/main` still equals the starting SHA, and atomically push the new `main` commit and tag. A red `main`, main drift, malformed identity, missing history, stale What's New copies, dirty state, an existing tag, or a failed check stops before that atomic push.
 
-GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN`, so the workflow explicitly dispatches `release-artifacts.yml` with the exact new tag and `publish=true` after the atomic push. The artifact workflow checks out that immutable tag, proves strict syntax, version equality, annotated-tag identity, exact HEAD resolution, and ancestry on `origin/main`, then reruns the tracked identity verifier. Everything after that is automatic; there is no hold and no manual promotion:
+GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN`, so the workflow explicitly dispatches `release-artifacts.yml` with the exact new tag and `publish=true` after the atomic push. The artifact workflow checks out that immutable tag, proves strict syntax, version equality, annotated-tag identity, exact HEAD resolution, and ancestry on `origin/main`, then reruns the tracked identity verifier and `scripts/release-green.py` on the tagged commit. Everything after that is automatic; there is no hold and no manual promotion:
 
-1. The daemons, the signed APK and the Android upgrade from the previous release run side by side. The upgrade job starts with the run and waits for this run's APK only before its emulator boots.
+1. The daemons, the signed APK and the APK's launch smoke run side by side. The launch job boots its emulator with the run and waits for this run's APK.
 2. Once the daemons have run on their platforms and the APK is verified, a signing job stages the complete set: the four archives, the APK, `SHA256SUMS`, and the signed updater manifest.
 3. `release-ready` passes only if every one of those jobs succeeded. Cancelled or skipped counts as not passed; the one skip allowed is the stage of a build-only candidate, which is never signed.
-4. A write-scoped job then creates the draft, uploads the eight assets, verifies the exact set, and makes it public: a stable tag as Latest, a beta tag as a prerelease. A rerun after publication passes only if the release already carries the same `SHA256SUMS`, and never replaces public bytes.
-5. Then `ios-testflight` dispatches `ios-release.yml` at the tag (`app_identity=preview`, `destination=testflight`, the build number `release_identity.py` derives). That workflow uploads the Preview to TestFlight and submits it for beta review. It then expires the older Preview builds still waiting for beta review, so only the newest one waits ([iOS CI](ios-ci-release.md#signed-release-and-testflight)). A bare tag push no longer starts `ios-release.yml`.
+4. A write-scoped job then writes the notes from the commits since the previous tag, creates the draft, uploads the eight assets, verifies the exact set, and makes it public: a stable tag as Latest, a beta tag as a prerelease. A rerun after publication passes only if the release already carries the same `SHA256SUMS`, and never replaces public bytes.
+5. `released` checks the [definition](#released). Then `ios-testflight` dispatches `ios-release.yml` at the tag (`app_identity=preview`, `destination=testflight`, the build number `release_identity.py` derives). That workflow uploads the Preview to TestFlight and submits it for beta review. It then expires the older Preview builds still waiting for beta review, so only the newest one waits ([iOS CI](ios-ci-release.md#signed-release-and-testflight)). A bare tag push no longer starts `ios-release.yml`.
 
-A red job publishes nothing: no draft, no assets. Fix the cause and **Re-run failed jobs**; GitHub reruns the failed jobs and every job that depends on them, so `release-ready`, publish and the iPhone dispatch follow. A flaky emulator in `android-upgrade` is the expected reason for such a rerun.
+A red job publishes nothing: no draft, no assets. Fix the cause and **Re-run failed jobs**; GitHub reruns the failed jobs and every job that depends on them, so `release-ready`, publish and the iPhone dispatch follow. A flaky emulator in `android-launch` is the expected reason for such a rerun.
 
-Until v0.4.4 the desktop archives were public a few minutes before the APK, the release could be held as a prerelease (`MEWLA_RELEASE_HOLD`) while a Worker replayed the real APK on an emulator, and Brain promoted it by hand before dispatching TestFlight. The replay's upgrade from the previous release is now `android-upgrade`. Its other two checks are gone from releases:
+Until v0.4.4 the desktop archives were public a few minutes before the APK, the release could be held as a prerelease (`MEWLA_RELEASE_HOLD`) while a Worker replayed the real APK on an emulator, and Brain promoted it by hand before dispatching TestFlight. The replay's upgrade from the previous release became `android-upgrade` in v0.4.5, and on 11-16 moved off the release path to [`upgrade.yml`](../.github/workflows/upgrade.yml) on main's schedule. The replay's other two checks are gone from releases:
 
 - **30 computer switches with one computer frozen** were added for the v0.4.0 freeze, NSH's List leaking its `empty` cell. CI covers that cause. `client/core/listEmpty.test.ts` fails the moment an `empty=` comes back. `Sessions.test.tsx` ("a link for the other computer while All Sessions waits…") runs the same switch headless. With one `empty=` put back on NSH 0.5.0 that test hangs, which fails the run, and on the fixed tree it passes in about 2 s. The switches passed every release since (v0.4.1–v0.4.3) without catching anything.
 - **Opening on the owner's dev daemon** needed the owner's machine, which a release must not depend on.
 
-`client.yml`'s upgrade gate (the Expo app to the NSH app, and Preview to Preview) remains a manual check for the client; releases do not wait for it.
+`client.yml`'s upgrade gate (the Expo app to the NSH app, and Preview to Preview) remains a manual check for the client; releases do not wait for it. Nor does a release wait for any proof after it: there is no post-publish Linux, Windows, Mac or Android pass by hand. What CI cannot check yet is listed in the report of the change (Brain worklog `mewla-fast-release-1116`).
 
 ## Repository secrets (names only)
 
@@ -130,11 +159,10 @@ Permissions: validation, build and staging jobs have `contents: read`; only the 
 
 Prerequisites:
 
-1. Current `main` is clean and contains commits after its tracked annotated release tag.
-2. All existing release notes are indexed in root `CHANGELOG.md`; future preparation prepends one link without copying full notes.
-3. The four `ZEN_ANDROID_*` secrets above are configured on the repository.
-4. `ZEN_UPDATE_SIGNING_KEY_BASE64` is configured with the updater manifest key.
-5. `release/plugin-publishers.json` contains the public Client IDs of the approved `daoleno`-owned Mewla GitHub OAuth app with Device Flow enabled and of Mewla's Slack app in the Mewla workspace `T0CA7628ECC`. Run `python3 scripts/plugin-publisher-flags.py --require github --require slack` before preparation; the artifact workflow enforces the same requirement before building. Registration handoff is documented in [Publisher setup](internal/plugins-publisher-setup.md). A null ID is a missing publisher configuration, not a request for publication approval. Never supply a client secret or another application's identity to satisfy this gate.
+1. Current `main` contains commits after its tracked annotated release tag, and CI passed on it (or on the last commit before docs-only ones).
+2. The four `ZEN_ANDROID_*` secrets above are configured on the repository.
+3. `ZEN_UPDATE_SIGNING_KEY_BASE64` is configured with the updater manifest key.
+4. `release/plugin-publishers.json` contains the public Client IDs of the approved `daoleno`-owned Mewla GitHub OAuth app with Device Flow enabled and of Mewla's Slack app in the Mewla workspace `T0CA7628ECC`. Run `python3 scripts/plugin-publisher-flags.py --require github --require slack` before preparation; the artifact workflow enforces the same requirement before building. Registration handoff is documented in [Publisher setup](internal/plugins-publisher-setup.md). A null ID is a missing publisher configuration, not a request for publication approval. Never supply a client secret or another application's identity to satisfy this gate.
 
 The normal maintainer action is to dispatch **Release reviewed version** from the Actions UI or CLI:
 
@@ -146,28 +174,11 @@ gh workflow run release-next-beta.yml \
 
 Review the requested machine-readable version/tag, identity checks, tests, atomic push, and downstream dispatch. The workflow uses only `GITHUB_TOKEN`; it has no PAT, release service, database, external action bot, or second publication engine.
 
-### Write the release notes first
+### Release notes
 
-Before dispatch, commit the user-facing notes at `docs/releases/reviewed/vX.Y.Z.md` (with the beta suffix when applicable). Preparation fails without them, and never falls back to commit subjects. Write for someone deciding whether to update: what changed for them, in their words. Leave out commit hashes, identity data and dated status.
+Nothing to write before a release. The publish job writes the notes from the subjects of the commits since the previous tag, newest first, leaving out merges and `Prepare vX.Y.Z` (`python3 scripts/release-body.py --tag vX.Y.Z` prints them). Then come **Get it** (the update command and one line per download), a compare link, and a collapsed **Verify downloads** block with `SHA256SUMS` usage and the Android certificate fingerprint. Commit subjects are the notes, so write them for someone deciding whether to update. Until v0.4.10 the notes were committed (`docs/releases/vX.Y.Z.md`, indexed in `CHANGELOG.md`), and the notes commit cost a full CI round before every release.
 
-```markdown
-One plain sentence: what this release is about, for a user.
-
-## New
-
-- A user-facing change.
-
-## Fixed
-
-- A user-facing fix.
-```
-
-Keep at least one of `## New` and `## Fixed`, with `- ` bullets only. Preparation adds the version heading, **Get it** (update command and one line per download), a compare link, and a collapsed **Verify downloads** block with `SHA256SUMS` usage and the Android certificate fingerprint. Do not precreate the canonical `docs/releases/vX.Y.Z.md`, which remains a generated, fail-closed output.
-
-Also commit the release's **What's New** at `release-notes/X.Y.Z.json` (`X.Y.Z-beta.N.json` for a beta), the sheet the app shows once after the update, and run `python3 scripts/release-notes.py` to write the copies the app and the daemon ship (`client/ui/whatsnew/notes.json`, `daemon/whatsnew/notes.json`). Preparation fails without the file or with stale copies, and CI's `release-identity` job checks the copies on every push (`--check`). The shape, the rules and how to write a highlight are in [`release-notes/README.md`](../release-notes/README.md). Highlights may be empty: a release of fixes only shows no sheet, only its line in Brain's chat. Brain reviews the highlights before the release.
-
-The generated notes have no iPhone line, because the TestFlight upload runs after the tag. Once the build is in the public `Mewla Preview` group, add `- **iPhone:** [Mewla Preview on TestFlight](https://testflight.apple.com/join/nMQheDCE)` after the Android line in `docs/releases/vX.Y.Z.md`, commit it, and apply the same file to the GitHub Release with `gh release edit vX.Y.Z --notes-file docs/releases/vX.Y.Z.md`.
-
+**What's New** (`release-notes/X.Y.Z.json`, the sheet the app shows once after the update) is optional and is part of the product, not of the release. Commit it with the feature it describes, and run `python3 scripts/release-notes.py` to write the copies the app and the daemon ship (`client/ui/whatsnew/notes.json`, `daemon/whatsnew/notes.json`). CI's `release-identity` job checks the copies on every push (`--check`). A release without its own file shows no sheet, only its line in Brain's chat. The shape and the rules are in [`release-notes/README.md`](../release-notes/README.md).
 
 ### Maintainer fallback: manual annotated tag
 

@@ -16,13 +16,18 @@ name: Release artifacts
 # with Apple's toolchain on a Mac. Each binary is run on its own platform
 # before staging.
 #
-# Automatic, all or nothing: the daemons, the signed APK and the Android upgrade
-# from the previous release (android-upgrade) run side by side; once every one of
-# them and the signing stage passed (release-ready), the complete signed set is
-# published in one step, a stable tag as Latest, a beta tag as a prerelease. A red
-# or cancelled job publishes nothing; "Re-run failed jobs" reruns it and the jobs
-# after it. The published release then dispatches ios-release.yml (Preview to
-# TestFlight, submitted for beta review). There is no hold and no manual promotion.
+# The release track (docs/ci-release.md): build -> sign -> launch smoke of the exact artifact ->
+# publish -> released check. It runs no test suite: validate checks in seconds that the tagged
+# commit passed CI on main (scripts/release-green.py). Each daemon runs on its own platform from a
+# fresh home and state with auto-update off and answers /health with this version (releasesmoke,
+# release_smoke_windows.ps1); the signed APK installs, opens and keeps running on an emulator
+# (android-launch). Once every one of them and the signing stage passed (release-ready), the
+# complete signed set is published in one step, a stable tag as Latest, a beta tag as a prerelease,
+# with notes written from the commits (scripts/release-body.py), and `released` checks the
+# definition (scripts/released.py). A red or cancelled job publishes nothing; "Re-run failed jobs"
+# reruns it and the jobs after it. The published release then dispatches ios-release.yml (Preview
+# to TestFlight, submitted for beta review). Upgrades from the previous release are tested on
+# main's schedule (upgrade.yml), not here.
 # Jobs that hold a signing key never hold a write token, and the reverse.
 #
 # Secrets (GitHub Actions repository secrets only; never commit values). Each
@@ -72,7 +77,11 @@ jobs:
   validate:
     name: Validate immutable reviewed tag
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      # release-green.py reads main's CI runs.
+      actions: read
     outputs:
       version: ${{ steps.meta.outputs.version }}
       # The release tag, or candidate-<sha> for a build-only candidate; it names artifacts.
@@ -140,6 +149,16 @@ jobs:
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
           echo "mode=release" >> "$GITHUB_OUTPUT"
           echo "checkout=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      # The suites ran on main: the tag's commit is one CI passed, or the version change on top of
+      # one (scripts/release-green.py). Seconds when that run is green; it waits only for a run on
+      # main still going, and never runs a suite itself.
+      - name: The tagged commit passed CI on main
+        if: steps.meta.outputs.mode == 'release'
+        timeout-minutes: 16
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-green.py --sha "$(git rev-parse HEAD)" --wait-minutes 15
 
   # The daemons' inputs, built fresh from the signed, pinned sources in this run, each on its own
   # runner and side by side: the session host's terminal engine (libghostty-vt) per target, and the
@@ -519,15 +538,15 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || 90 }}
 
-  # What a person on the previous release gets when they install this one: its APK pairs with its daemon
-  # and keeps a draft, this run's signed APK installs over it, opens paired and Connected with the same
-  # device key and the draft, and its scanner runs in the release build (client/scripts/release-upgrade.sh).
-  # It starts with the run and waits for the APK only before the emulator boots.
-  android-upgrade:
-    name: Upgrade from the previous release on Android
+  # The launch smoke of the exact signed APK: on a fresh emulator it installs, reports the release's
+  # version, opens and keeps running with nothing in the crash log (client/scripts/release-launch.sh).
+  # The emulator boots while the APK builds. The upgrade from the previous release runs on main's
+  # schedule (upgrade.yml), where a failure is a bug to fix, not a held release.
+  android-launch:
+    name: Launch the signed APK on Android
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
@@ -536,99 +555,40 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate.outputs.checkout }}
-          fetch-depth: 0
-      # The newest published stable release other than this one, checked against its own SHA256SUMS.
-      - name: The previous release's APK and daemon
+      - name: The version the APK reports
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.validate.outputs.tag }}
+          MODE: ${{ needs.validate.outputs.mode }}
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          set -euo pipefail
-          OLD="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" | python3 -c '
-          import json, re, sys
-          tag, version = sys.argv[1], tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", sys.argv[2]).groups())
-          found = []
-          for r in json.load(sys.stdin):
-              m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", r["tag_name"])
-              if not m or r["draft"] or r["prerelease"] or r["tag_name"] == tag:
-                  continue
-              key = tuple(map(int, m.groups()))
-              apk = "mewla-android-arm64-" + r["tag_name"] + ".apk"
-              if key < version and any(a["name"] == apk for a in r["assets"]):
-                  found.append((key, r["tag_name"]))
-          if not found:
-              sys.exit("error: no earlier stable release with an APK to upgrade from")
-          print(max(found)[1])' "$TAG" "$VERSION")"
-          echo "upgrading from $OLD"
-          mkdir -p "$RUNNER_TEMP/old"
-          gh release download "$OLD" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/old" \
-            --pattern "mewla-android-arm64-$OLD.apk" --pattern mewla-linux-amd64.tar.gz --pattern SHA256SUMS
-          cd "$RUNNER_TEMP/old"
-          grep -E " (mewla-android-arm64-$OLD.apk|mewla-linux-amd64.tar.gz)$" SHA256SUMS | sha256sum -c -
-          tar -xzf mewla-linux-amd64.tar.gz
-          {
-            echo "OLD_TAG=$OLD"
-            echo "OLD_APK=$RUNNER_TEMP/old/mewla-android-arm64-$OLD.apk"
-            echo "MEWLA=$(find "$RUNNER_TEMP/old" -name mewla -type f -perm -u+x | head -1)"
-          } >> "$GITHUB_ENV"
-      - name: Wait for this run's signed APK
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NAME: mewla-android-apk-${{ needs.validate.outputs.tag }}
-        run: |
-          set -euo pipefail
-          after_success=0
-          for _ in $(seq 1 240); do
-            if [[ -n "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$NAME" --jq '.artifacts[0].id // empty')" ]]; then
-              echo "$NAME is ready"
-              exit 0
-            fi
-            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name == "Build and verify signed Android") | "\(.status) \(.conclusion)"')"
-            case "$state" in
-              "completed success") after_success=$((after_success + 1)); [[ $after_success -lt 6 ]] || { echo "error: the Android build succeeded but kept no APK" >&2; exit 1; } ;;
-              completed*) echo "error: the Android build ended without an APK ($state)" >&2; exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "error: no APK after 40 min" >&2
-          exit 1
-      - name: Download this run's signed APK
-        uses: actions/download-artifact@v4
-        with:
-          name: mewla-android-apk-${{ needs.validate.outputs.tag }}
-          path: ${{ runner.temp }}/new
-      - name: The new APK
-        run: |
-          set -euo pipefail
-          APK="$(find "$RUNNER_TEMP/new" -maxdepth 1 -name '*.apk' -print -quit)"
-          test -n "$APK"
-          ./scripts/verify-apk-release.sh "$APK"
-          echo "NEW_APK=$APK" >> "$GITHUB_ENV"
+          # A candidate's APK carries main's tracked version; its daemons carry candidate_version.
+          [[ "$MODE" == release ]] || VERSION="$(python3 scripts/lib/release_identity.py version)"
+          echo "APK_VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Upgrade on the emulator
+      - name: Boot, wait for the APK, install and launch it
         uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 25
         env:
-          OUT: ${{ runner.temp }}/upgrade
-          # A candidate is built from main's tracked version, which can equal the previous release's.
-          MEWLA_UPGRADE_SAME_VERSION_OK: ${{ needs.validate.outputs.mode == 'candidate' && '1' || '' }}
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: mewla-android-apk-${{ needs.validate.outputs.tag }}
+          BUILD_JOB: Build and verify signed Android
+          VERSION: ${{ env.APK_VERSION }}
+          OUT: ${{ runner.temp }}/launch
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: client/scripts/release-upgrade.sh
+          script: client/scripts/release-launch.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mewla-android-upgrade-${{ needs.validate.outputs.tag }}
-          path: ${{ runner.temp }}/upgrade
+          name: mewla-android-launch-${{ needs.validate.outputs.tag }}
+          path: ${{ runner.temp }}/launch
           retention-days: 30
 
   stage:
@@ -685,7 +645,7 @@ jobs:
   # candidate, which is never signed. Publication needs this job and nothing overrides it.
   release-ready:
     name: Every check passed
-    needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-upgrade, stage]
+    needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, stage]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -720,7 +680,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout exact tag and tracked notes
+      - name: Checkout exact tag
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate.outputs.tag }}
@@ -752,8 +712,13 @@ jobs:
             RELEASE_IS_PRERELEASE=false
             RELEASE_IS_STABLE=true
           fi
-          notes="docs/releases/${TAG}.md"
-          test -s "$notes"
+          # The notes are written now, from the commits since the previous release; a failure
+          # falls back to a link to the changes and is reported, never holding the release.
+          notes="$RUNNER_TEMP/notes.md"
+          if ! python3 scripts/release-body.py --tag "$TAG" > "$notes" || [[ ! -s "$notes" ]]; then
+            echo "::warning::release-body.py failed; the release carries a link to its commits"
+            printf '# Mewla %s\n\n[Changes](https://github.com/%s/commits/%s)\n' "$VERSION" "$GH_REPO" "$TAG" > "$notes"
+          fi
           assets=(
             mewla-linux-amd64.tar.gz
             mewla-linux-arm64.tar.gz
@@ -798,6 +763,28 @@ jobs:
             --latest="$RELEASE_IS_STABLE" \
             --notes-file "$notes"
           gh release view "$TAG" --json isDraft,isPrerelease,url,assets
+
+  # Released means one written thing (docs/ci-release.md#released): the tag on main, its commit
+  # green on main's CI, the public release with every asset, Latest on the highest stable version.
+  released:
+    name: Released
+    needs: [validate, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          fetch-depth: 0
+      - name: The release meets the definition
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: python3 scripts/released.py --tag "$TAG"
 
   # The iPhone build follows the published release: the Preview to TestFlight, submitted for beta
   # review (ios-release.yml), with the build number the release identity derives.
