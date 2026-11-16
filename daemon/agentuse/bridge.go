@@ -219,6 +219,9 @@ type Bridge struct {
 	reloadAsked map[string]bool
 	// bundled is the version of the extension this daemon carries; tests set it.
 	bundled string
+	// listening, when set (tests), is told once the socket accepts connections:
+	// its file exists from bind, before listen, and a client dialling then is refused.
+	listening func()
 }
 
 // AgentBrowser is the agent browser on the virtual screen, as the bridge
@@ -319,6 +322,9 @@ func (b *Bridge) Serve(ctx context.Context) error {
 		ln.Close()
 		_ = os.Remove(path)
 	}()
+	if b.listening != nil {
+		b.listening()
+	}
 	for {
 		conn, err := ln.Accept()
 		if err != nil {

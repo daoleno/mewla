@@ -37,6 +37,10 @@ type ServerOptions struct {
 	engine      *bool
 	allowPeer   func(uid uint32) bool
 	socketCheck time.Duration
+	// listening is called once the socket accepts connections: the file exists
+	// as soon as it is bound, before it listens, and a client that connects in
+	// between is refused.
+	listening func()
 }
 
 // Server is the session host.
@@ -115,6 +119,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 	go s.keepSocket(ctx, &listenerMu, &current)
 
+	if s.opts.listening != nil {
+		s.opts.listening()
+	}
 	s.logf("listening on %s (protocol %d, engine %v %s)", s.opts.SocketPath, ProtocolVersion, s.engine, ghosttyvt.Version())
 	var wg sync.WaitGroup
 	for {
