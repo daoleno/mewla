@@ -75,6 +75,44 @@ describe("files Brain names in a reply (owner 11-15)", () => {
   }, 20_000);
 });
 
+describe("a path relative to Brain's workspace (owner 11-16: Brain's DESIGN-v2.md could not be opened)", () => {
+  const DESIGN = "worklog/freeride-data-search-1115/DESIGN-v2.md";
+  const text = `I rewrote it as v2 (\`${DESIGN}\`), and \`client/core/transport.ts\` is not here.`;
+  const exists = (existing: string[]) => ({ replies: { session_file_exists: { type: "session_file_exists", existing } } });
+
+  test("asked of Brain's own Session, a file there links and opens in the preview", async () => {
+    const app = await brainWith([reply("a1", 1, text)], exists([DESIGN]));
+    await app.waitUntil(() => framesOf(app.host.posts(), "session_file_exists").length > 0, { timeout: 10_000 });
+    expect(framesOf(app.host.posts(), "session_file_exists")[0]).toMatchObject({ worker_id: "brain-host", process_id: 4242, started_at: 1_762_840_800_000, paths: [DESIGN, "client/core/transport.ts"] });
+    await app.wait(300);
+    await app.press(`text:${DESIGN}`);
+    await app.waitFor("id:file-preview", { timeout: 10_000 });
+    await app.waitUntil(() => framesOf(app.host.posts(), "session_file_metadata").length > 0);
+    expect(framesOf(app.host.posts(), "session_file_metadata")[0]).toMatchObject({ worker_id: "brain-host", path: DESIGN });
+  }, 20_000);
+
+  test("a reply drawn before Brain's host run is known asks once it is", async () => {
+    const early = { ...host_worker, process_id: 0 };
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain: { ...brain, host_worker: early }, conversations: { "brain-host": [reply("a1", 1, text)] }, ...exists([DESIGN]) }) });
+    await app.waitFor("id:reply", { timeout: 10_000 });
+    await app.wait(300);
+    expect(framesOf(app.host.posts(), "session_file_exists")).toEqual([]);
+    await app.host.send("app.daemonPush", { type: "brain_snapshot", brain });
+    await app.waitUntil(() => framesOf(app.host.posts(), "session_file_exists").length > 0, { timeout: 10_000 });
+    expect(framesOf(app.host.posts(), "session_file_exists")[0]).toMatchObject({ worker_id: "brain-host", process_id: 4242 });
+  }, 20_000);
+
+  test("a path that is no file there stays text: no dead link", async () => {
+    const app = await brainWith([reply("a1", 1, text)], exists([]));
+    await app.waitUntil(() => framesOf(app.host.posts(), "session_file_exists").length > 0, { timeout: 10_000 });
+    await app.wait(300);
+    await app.press(`text:${DESIGN}`).catch(() => {});
+    await app.wait(300);
+    expect(app.shows("id:file-preview")).toBe(false);
+    expect(framesOf(app.host.posts(), "session_file_metadata")).toEqual([]);
+  }, 20_000);
+});
+
 describe("code in a reply", () => {
   test("a code block has a header with its language and Copy, which copies the code and says so", async () => {
     const app = await brainWith([reply("a1", 1, "Run:\n\n```sh\nmewla update --channel beta\n```\n")]);

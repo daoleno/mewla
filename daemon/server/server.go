@@ -510,7 +510,7 @@ type clientMessage struct {
 	Credential         string                                 `json:"credential"`
 	ProviderConnection *modelprofiles.ProviderConnectionInput `json:"provider_connection"`
 	GitRepoRoot        string                                 `json:"repo_root"`
-	GitPaths           []string                               `json:"paths"`
+	GitPaths           []string                               `json:"paths"` // also session_file_exists' paths
 	GitPatch           string                                 `json:"patch"`
 	GitMessage         string                                 `json:"message"`
 	GitSHA             string                                 `json:"sha"`
@@ -1215,6 +1215,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSessionFileMetadata(conn, raw)
 	case "session_file_text":
 		s.handleSessionFileText(conn, raw)
+	case "session_file_exists":
+		s.handleSessionFileExists(conn, raw)
 	case "terminal_history", "terminal_open", "terminal_input", "terminal_resize", "terminal_close":
 		s.handleTerminalMessage(conn, raw)
 	case "get_stats":

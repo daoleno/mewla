@@ -2,7 +2,7 @@ import { cleanup, Clipboard, colorScheme, computed, effect, ErrorBoundary, List,
 import { delayed } from "../kit/wait";
 import { derived } from "../kit/derived";
 import { motion } from "../../core/motion/tokens";
-import { currentTransport } from "../session";
+import { brain, currentTransport } from "../session";
 import type { CapsuleReading } from "../shell/Capsule";
 import { noteScroll } from "../pets/hold";
 import { elapsedShort } from "../../core/sessions/activity";
@@ -26,8 +26,9 @@ import { INLINE_CODE, SELECTION } from "./TimelineRows";
 import { Caption } from "../kit/kit";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
-import { brainFiles, openChatLink, openChatPath } from "./links";
-import { linkFilePaths } from "../../core/files/chatPaths";
+import { brainFiles, brainHostIdentity, openChatLink, openChatPath } from "./links";
+import { createReplyLinks } from "./chatFileLinks";
+import type { SessionFileIdentity } from "../../core/files/sessionFilePreview";
 
 
 /**
@@ -79,6 +80,8 @@ export type MessageHandlers = {
   onLink?: (url: string) => void;
   /** A file a tool call names, pressed. None: the chat's own (`openChatPath` on Brain's files). */
   onFile?: (path: string) => void;
+  /** The run of the Session whose replies these are, which says which paths they name are files. None: Brain's host. */
+  fileIdentity?: () => SessionFileIdentity | null;
   /** An image a reply shows by its path on the computer, as a data URL. */
   /** A picture by its path on the computer: phone-sized for a row, the original when `full` (the viewer). */
   loadImage?: (path: string, full?: boolean) => Promise<string | null>;
@@ -238,17 +241,9 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
   const computerMessage = as("computer-message") as () => ComputerMessageTimelineItem;
   const answered = as("answered") as () => AnsweredTimelineItem;
   const work = as("brain-work-event") as () => BrainWorkEventTimelineItem;
-  // The files a reply names (a home path in code or text) as links, which preview them (`onLink`). Made
-  // again only when the text changes: a streaming reply's next words.
-  let lastBody = "";
-  let lastLinked = "";
-  const linked = (body: string) => {
-    if (body !== lastBody) {
-      lastBody = body;
-      lastLinked = linkFilePaths(body);
-    }
-    return lastLinked;
-  };
+  // The files a reply names as links, which preview them (`onLink`): a home path at once, any other (`worklog/a.md`)
+  // once the Session's computer said it is a file there. Made again only when the text or that answer changes.
+  const linked = createReplyLinks(() => props.handlers.fileIdentity?.() ?? null);
   return (
     <View class="py-1">
       <If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
@@ -256,7 +251,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
               with the system's handles and menu (Copy, Select all, Share). */}
           <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
-            <TextView markdown={linked(reply().body ?? "")} options={{ streaming: Boolean(reply().streaming) }} selectable class={`text-message ${SELECTION}`}
+            <TextView markdown={linked(reply().body ?? "", Boolean(reply().streaming))} options={{ streaming: Boolean(reply().streaming) }} selectable class={`text-message ${SELECTION}`}
               renderCodeBlock={renderCode}
               classes={TABLE}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
@@ -326,6 +321,8 @@ export function ChatTimeline(props: {
   const files = brainFiles(say);
   if (!given.onLink) handlers.onLink = (url) => openChatLink(url, files);
   if (!given.onFile) handlers.onFile = (path) => openChatPath(path, files);
+  // Tracked: a reply drawn before Brain's host run is known asks once it is.
+  if (!given.fileIdentity) handlers.fileIdentity = () => (brain(), brainHostIdentity());
   // The picture viewer: every picture of the thread, in order; the one shown by its key.
   const viewing = signal<string | null>(null);
   const pictures = derived(() => threadPictures(props.items()), { equals: samePictures });

@@ -1,11 +1,15 @@
 /**
  * Files an agent names in a reply become links (owner 11-15: a PDF Brain named in inline code could not be
- * opened from Chat). A code span that is one home path (`/home/me/plan.pdf`, `~/notes.md`,
- * `C:\Users\me\a.png`) and such a path in the text become Markdown links to that path, which the chat's
- * link handler previews (`ui/chat/links.ts`); code blocks, links and URLs stay as they are.
+ * opened from Chat). A code span that is one file path and such a path in the text become Markdown links to
+ * that path, which the chat's link handler previews (`ui/chat/links.ts`); code blocks, links and URLs stay as
+ * they are.
  *
- * Only paths under a home (`/home/<name>/`, `/Users/<name>/`, `/root/`, `~/`, `<drive>:\Users\<name>\`)
- * that end in a file name with an extension are linked: route-like `/api/v1/x.json` in prose is not a file.
+ * A path under a home (`/home/<name>/`, `/Users/<name>/`, `/root/`, `~/`, `<drive>:\Users\<name>\`) that ends
+ * in a file name with an extension is linked as it is. Any other path (owner 11-16: Brain's
+ * `worklog/…/DESIGN-v2.md` could not be opened) is linked only once the speaking Session's computer said it is
+ * a file there (`existing`, by `fileKey`): relative paths are its cwd's, and route-like `/api/v1/x.json` in
+ * prose names no file. `chatFileCandidates` lists the paths to ask about: in text only paths with a folder,
+ * in a code span a bare `RESULT.md` too.
  */
 
 const HOME_PATH = /^(?:~\/|\/(?:home|Users)\/[^/\s]+\/|\/root\/|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+[\\/])/;
@@ -18,6 +22,19 @@ const BARE_STOP = /[\s`<>|"'()[\]{}*]/;
 /** Punctuation a sentence puts after a path, never its end. */
 const TRAILING = /[.,;:!?。，、；：！？…]+$/;
 const BARE_EXTENSION = /\.[A-Za-z0-9]{1,10}(?::\d+(?::\d+)?)?(?![A-Za-z0-9._-])/g;
+const HOME_HINT = /(?:~\/|\/home\/|\/Users\/|\/root\/|[A-Za-z]:[\\/]Users)/;
+/**
+ * A path the computer is asked about: no space, quote, bracket or glob; not a URL or an elided `…/a.md`; its
+ * extension has a letter (`127.0.0.1:8317` and `v0.3.0` are not files).
+ */
+const OTHER_FILE = /^(?![a-z][a-z0-9+.-]*:\/\/)(?!.*(?:\.\.\.|…))[^\s`<>|"'()[\]{}*?,;=\\]*[^\\/\s.]\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,10}(?::\d+(?::\d+)?|#L\d+(?:C\d+)?)?$/i;
+const LINE_SUFFIX = /(?::\d+(?::\d+)?|#L\d+(?:C\d+)?)$/i;
+/** At most this many paths of one reply are asked about. */
+export const MAX_CHAT_FILE_CANDIDATES = 64;
+const NONE: ReadonlySet<string> = new Set();
+
+/** What decides whether a path the reply names is linked; `null`: it is not a file path at all. */
+type Accept = (path: string, inCode: boolean) => boolean;
 
 /** A code span's whole content, when it is one home file path. */
 export function namedHomeFile(value: string): string | null {
@@ -26,9 +43,43 @@ export function namedHomeFile(value: string): string | null {
   return HOME_PATH.test(path) && NAMED_FILE.test(path) ? path : null;
 }
 
-/** The reply with the home files it names as links; the same string when it names none. */
-export function linkFilePaths(markdown: string): string {
-  if (!markdown || !/(?:~\/|\/home\/|\/Users\/|\/root\/|[A-Za-z]:[\\/]Users)/.test(markdown)) return markdown;
+/** A path as the computer is asked about it: its `:line(:col)` or `#Lline` suffix left off. */
+export function fileKey(path: string): string {
+  return path.replace(LINE_SUFFIX, "");
+}
+
+/** A path that is not a home's, when it could name a file: in text only one with a folder (`a/b.md`, `./x.sh`). */
+function otherFile(path: string, inCode: boolean): string | null {
+  if (!path || path.length > 4096 || HOME_PATH.test(path) || !OTHER_FILE.test(path)) return null;
+  return inCode || path.includes("/") ? path : null;
+}
+
+/**
+ * The reply with the files it names as links: home paths, and the other paths in `existing` (by `fileKey`);
+ * the same string when it names none.
+ */
+export function linkFilePaths(markdown: string, existing: ReadonlySet<string> = NONE): string {
+  if (!markdown) return markdown;
+  if (!existing.size && !HOME_HINT.test(markdown)) return markdown;
+  return walk(markdown, (path, inCode) => (namedHomeFile(path) ? true : Boolean(otherFile(path, inCode)) && existing.has(fileKey(path))));
+}
+
+/**
+ * The paths a reply names that are not a home's (by `fileKey`, each once, at most MAX_CHAT_FILE_CANDIDATES):
+ * what to ask the speaking Session's computer about before they are linked.
+ */
+export function chatFileCandidates(markdown: string): string[] {
+  if (!markdown || (!markdown.includes("/") && !markdown.includes("`"))) return [];
+  const found = new Set<string>();
+  walk(markdown, (path, inCode) => {
+    const other = otherFile(path, inCode);
+    if (other && found.size < MAX_CHAT_FILE_CANDIDATES) found.add(fileKey(other));
+    return false;
+  });
+  return [...found];
+}
+
+function walk(markdown: string, accept: Accept): string {
   const lines = markdown.split("\n");
   let fence: string | null = null;
   let blank = true;
@@ -57,7 +108,7 @@ export function linkFilePaths(markdown: string): string {
     else if (LIST_ITEM.test(line)) inList = true;
     blank = false;
     if (inIndented) continue;
-    const linked = linkLine(line);
+    const linked = linkLine(line, accept);
     if (linked !== line) {
       lines[i] = linked;
       changed = true;
@@ -66,12 +117,12 @@ export function linkFilePaths(markdown: string): string {
   return changed ? lines.join("\n") : markdown;
 }
 
-function linkLine(line: string): string {
+function linkLine(line: string, accept: Accept): string {
   let out = "";
   let text = 0; // start of the plain text not yet copied
   let i = 0;
   const flush = (end: number) => {
-    if (end > text) out += linkBare(line.slice(text, end));
+    if (end > text) out += linkBare(line.slice(text, end), accept);
   };
   while (i < line.length) {
     const c = line[i];
@@ -89,8 +140,8 @@ function linkLine(line: string): string {
       }
       flush(i);
       const span = line.slice(i, close + run);
-      const path = namedHomeFile(stripCodeSpan(line.slice(i + run, close)));
-      out += path ? `[${span}](${destination(path)})` : span;
+      const content = stripCodeSpan(line.slice(i + run, close)).trim();
+      out += content && accept(content, true) ? `[${span}](${destination(content)})` : span;
       i = close + run;
       text = i;
       continue;
@@ -171,22 +222,23 @@ function linkEnd(line: string, start: number): number {
   return 0;
 }
 
-/** Home file paths in running text: after a space, a bracket, a quote or a non-ASCII letter (Chinese has no spaces). */
-function linkBare(text: string): string {
-  if (!/(?:~\/|\/home\/|\/Users\/|\/root\/|[A-Za-z]:[\\/]Users)/.test(text)) return text;
+/** File paths in running text: after a space, a bracket, a quote or a non-ASCII letter (Chinese has no spaces). */
+function linkBare(text: string, accept: Accept): string {
+  if (!text.includes("/") && !text.includes("\\")) return text;
   let out = "";
   let copied = 0;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (c !== "/" && c !== "~" && !/[A-Za-z]/.test(c)) continue;
+    if (!/[A-Za-z0-9_./~]/.test(c)) continue;
     const before = i === 0 ? "" : text[i - 1];
     if (before && (/[A-Za-z0-9_./\\:~@%+=-]/.test(before))) continue;
-    if (!HOME_PATH.test(text.slice(i, i + 300))) continue;
     let end = i;
     while (end < text.length && !BARE_STOP.test(text[end])) end++;
-    const path = fileEnd(text.slice(i, end));
-    if (!path) {
-      i = end;
+    const run = text.slice(i, end);
+    const path = run.includes("/") || HOME_PATH.test(run) ? fileEnd(run) : null;
+    if (!path || !accept(path, false)) {
+      // Past this path only: Chinese after it can be followed by another (`docs/a.md和/home/me/b.pdf`).
+      i = path ? i + path.length - 1 : end;
       continue;
     }
     out += text.slice(copied, i) + `[${path}](${destination(path)})`;
@@ -212,8 +264,7 @@ function fileEnd(run: string): string | null {
     if (CJK.test(trimmed[best] ?? "")) break;
   }
   if (best < 0) return null;
-  const path = trimmed.slice(0, best);
-  return namedHomeFile(path);
+  return trimmed.slice(0, best);
 }
 
 /** A link destination that keeps the path as it is: spaces, backslashes and brackets included. */
