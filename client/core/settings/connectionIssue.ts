@@ -16,7 +16,9 @@ export type ConnectionIssueCode =
   | "path_not_found"
   | "proxy_error"
   | "websocket_upgrade_failed"
-  | "unexpected_http_response";
+  | "unexpected_http_response"
+  /** Paired through Mewla Relay: the relay answered but closed the connection, so the computer is not connected to it. */
+  | "relay_not_connected";
 
 export interface ConnectionIssue {
   code: ConnectionIssueCode;
@@ -24,6 +26,8 @@ export interface ConnectionIssue {
   detail: string;
   hint: string;
   httpStatus?: number;
+  /** The error the phone actually got, word for word, when there is one: shown on the card so nothing is hidden behind the title. */
+  raw?: string;
 }
 
 interface TrustedDaemonPayload {
@@ -35,6 +39,13 @@ interface TrustedDaemonPayload {
 }
 
 const PROBE_TIMEOUT_MS = 4_000;
+
+/** What the computer page's card says under an issue's title: the one thing to do, then the error the phone got, word for word. */
+export function issueCardDetail(found: ConnectionIssue): string {
+  const action = found.hint || found.detail;
+  const raw = found.raw && found.raw !== action ? found.raw : "";
+  return raw ? `${action}\n${raw}` : action;
+}
 
 export interface DiagnoseDeps {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
@@ -133,7 +144,8 @@ export async function diagnoseConnectionIssue(
       probe.status,
     );
   } catch (error) {
-    return networkIssue(error);
+    if (input.server.transportKind === "link") return relayNetworkIssue(error);
+    return withRaw(networkIssue(error), error instanceof Error ? error.message.trim() : "");
   }
 }
 
@@ -279,6 +291,53 @@ function networkIssue(error: unknown): ConnectionIssue {
       : "The network request failed before a WebSocket connection could be established.",
     "Check the hostname, DNS, tunnel, firewall, and whether mewla is running.",
   );
+}
+
+/**
+ * A computer paired through Mewla Relay, whose probe failed before HTTP. The probe goes to the relay's
+ * public name for the computer; the relay hands the TLS stream to the computer itself, and when the computer
+ * is not connected to it the relay closes the connection at once, which a phone reports as a TLS or SSL error
+ * ("An SSL error has occurred…" on iOS, "io: unexpected end of file" in NSH's fetch). That is never a
+ * certificate, hostname or proxy problem the person can fix on the phone; it is the computer being off the relay.
+ */
+function relayNetworkIssue(error: unknown): ConnectionIssue {
+  const raw = error instanceof Error ? error.message.trim() : "";
+  const lower = raw.toLowerCase();
+  if (error instanceof Error && error.name === "AbortError") {
+    return withRaw(issue("network_unreachable", "Can't reach Mewla Relay", "Mewla Relay did not answer before the probe timed out.", "Check this phone's internet connection (Wi-Fi, mobile data or VPN), then try again."), raw);
+  }
+  // The computer answered through the relay with its own certificate (a relay whose names have no public
+  // certificate): it is connected, and the plain probe cannot judge it further.
+  if (lower.includes("certificate")) {
+    return withRaw(
+      issue("network_unreachable", "Connection through Mewla Relay failed", "The computer answered through Mewla Relay, but the connection did not open.", "Try again. If it keeps failing, pair this phone again from mewla on the computer."),
+      raw,
+    );
+  }
+  if (
+    lower.includes("end of file") ||
+    lower.includes("eof") ||
+    lower.includes("ssl") ||
+    lower.includes("tls") ||
+    lower.includes("secure connection") ||
+    lower.includes("connection reset") ||
+    lower.includes("closed")
+  ) {
+    return withRaw(
+      issue(
+        "relay_not_connected",
+        "Not connected to Mewla Relay",
+        "Mewla Relay closed the connection: this computer is not connected to it.",
+        "Check that the computer is on, awake and running mewla. On the computer, mewla doctor shows its Mewla Relay connection and why it failed.",
+      ),
+      raw,
+    );
+  }
+  return withRaw(issue("network_unreachable", "Can't reach Mewla Relay", "The phone could not reach Mewla Relay.", "Check this phone's internet connection (Wi-Fi, mobile data or VPN), then try again."), raw);
+}
+
+function withRaw(found: ConnectionIssue, raw: string): ConnectionIssue {
+  return raw ? { ...found, raw } : found;
 }
 
 function issue(code: ConnectionIssueCode, title: string, detail: string, hint: string, httpStatus?: number): ConnectionIssue {

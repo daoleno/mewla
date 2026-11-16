@@ -12,6 +12,7 @@ import {
   type DaemonUpdateStatus,
 } from "../../../core/settings/computer";
 import { computerProblems, computerProblemsMayChange, computerUpdateProblem, type ComputerAction, type ComputerProblem } from "../../../core/settings/computerModel";
+import { issueCardDetail } from "../../../core/settings/connectionIssue";
 import { effectiveMinComputerVersion } from "../../../core/update/version";
 import manifest from "../../nsh.json";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
@@ -233,7 +234,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
     const word = statusWord(s);
     if (word === "Pair again") return { testID: "computer-pair-again", title: "This computer no longer knows this phone.", detail: undefined, action: "Pair again", onAction: props.onPair };
     const issue = isCurrent() ? currentConnectionIssue() : null;
-    if (issue) return { testID: "computer-issue", title: issue.title, detail: issue.hint || issue.detail, action: "Try again", onAction: reconnect };
+    if (issue) return { testID: "computer-issue", title: issue.title, detail: issueCardDetail(issue), action: "Try again", onAction: reconnect };
     if (word === "Not connected" || word === "Can't connect") return { testID: "computer-connect", title: "Not connected", detail: undefined, action: "Connect", onAction: reconnect };
     return null;
   };
