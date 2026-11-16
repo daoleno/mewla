@@ -155,7 +155,8 @@ is under **Needs fixing**, and the account's card on the service page shows one
 action: **Reconnect** when sign-in expired, **Check now** while the service
 can't be reached, **Check again** after a failed call, or **Retry** when
 removing its credentials did not finish. An account that is off is turned back
-on with its own switch.
+on with its own switch. When a service stops renewing an account's sign-in,
+Chat also says so once, naming the account.
 
 To add a second account, use **Add another Linear account** (named for the
 service) at the bottom of the service's page. It is the same sign-in as

@@ -980,6 +980,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager
+	// A plugin whose service refuses to renew its sign-in says so in Chat.
+	connectionManager.SetSignInLost(func(n connections.SignInLost) {
+		brainService.NotePluginSignInLost(n.AccountID, n.At, n.Title, n.Body)
+	})
 	srv.SetTelegram(telegramManager)
 	controlHandler.telegram = telegramManager
 	srv.SetModelProfiles(profileOwner)

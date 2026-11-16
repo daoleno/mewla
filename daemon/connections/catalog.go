@@ -234,9 +234,12 @@ func registerDrivers() {
 }
 
 // tokenCodec is a service's own token exchange, refresh and revocation.
+// Exchange and refresh both get the client secret the sign-in used ("" for a
+// public client): a refresh authenticates the client exactly as the exchange
+// did.
 type tokenCodec struct {
 	exchange func(m *Manager, ctx context.Context, r *record, secret, code, verifier string) (*oauth2.Token, error)
-	refresh  func(m *Manager, ctx context.Context, r *record, refreshToken string) (*oauth2.Token, error)
+	refresh  func(m *Manager, ctx context.Context, r *record, secret, refreshToken string) (*oauth2.Token, error)
 	revoke   func(m *Manager, ctx context.Context, r *record, accessToken string) error
 }
 

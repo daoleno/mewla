@@ -57,6 +57,7 @@ type Manager struct {
 	webOrigin    func(origin string) bool
 	toolsSeen    map[string]time.Time // when each MCP account's tool list was last read
 	outages      *outages             // remote MCP services that cannot be reached; see outage.go
+	signInLost   func(SignInLost)     // tells Chat a refresh was refused; see SetSignInLost
 	cloud        *cloudRuntime
 	loopbackPort int // the port this daemon serves on; see SetLoopbackPort
 	// tailscaleBrowser creates Tailscale's OAuth client in the person's Chrome;

@@ -532,14 +532,10 @@ func (m *Manager) oauthForm(ctx context.Context, r *record, endpoint string, val
 
 var slackCodec = tokenCodec{
 	exchange: func(m *Manager, ctx context.Context, r *record, secret, code, verifier string) (*oauth2.Token, error) {
-		values := url.Values{"client_id": {r.OAuth.ClientID}, "code": {code}, "redirect_uri": {r.OAuth.RedirectURL}, "code_verifier": {verifier}}
-		if secret != "" {
-			values.Set("client_secret", secret)
-		}
-		return m.slackToken(ctx, r, values)
+		return m.slackToken(ctx, r, slackClientForm(r, secret, url.Values{"code": {code}, "redirect_uri": {r.OAuth.RedirectURL}, "code_verifier": {verifier}}))
 	},
-	refresh: func(m *Manager, ctx context.Context, r *record, refreshToken string) (*oauth2.Token, error) {
-		return m.slackToken(ctx, r, url.Values{"client_id": {r.OAuth.ClientID}, "grant_type": {"refresh_token"}, "refresh_token": {refreshToken}})
+	refresh: func(m *Manager, ctx context.Context, r *record, secret, refreshToken string) (*oauth2.Token, error) {
+		return m.slackToken(ctx, r, slackClientForm(r, secret, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}))
 	},
 	revoke: func(m *Manager, ctx context.Context, r *record, accessToken string) error {
 		if _, err := m.request(ctx, r, lookup(r.Account.Integration).Endpoint, accessToken, "POST", "/auth.revoke", nil); err != nil {
@@ -547,6 +543,19 @@ var slackCodec = tokenCodec{
 		}
 		return nil
 	},
+}
+
+// slackClientForm adds the client's own credentials to one oauth.v2.access
+// grant. The exchange and every refresh build them here, so a client that
+// signed in with its secret also refreshes with it: Slack refuses a rotating
+// token's refresh without the secret (bad_client_secret) unless the token came
+// from a PKCE desktop redirect.
+func slackClientForm(r *record, secret string, grant url.Values) url.Values {
+	grant.Set("client_id", r.OAuth.ClientID)
+	if secret != "" {
+		grant.Set("client_secret", secret)
+	}
+	return grant
 }
 
 func (m *Manager) slackToken(ctx context.Context, r *record, values url.Values) (*oauth2.Token, error) {
