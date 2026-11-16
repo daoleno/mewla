@@ -34,13 +34,12 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := removeStaleSocket(s.Path); err != nil {
 		return err
 	}
-	listener, err := net.Listen("unix", s.Path)
+	listener, err := listenPublished(s.Path)
 	if err != nil {
 		return fmt.Errorf("listen control socket: %w", err)
 	}
 	defer listener.Close()
 	defer os.Remove(s.Path)
-	_ = os.Chmod(s.Path, 0o600)
 
 	var connectionMu sync.Mutex
 	connections := make(map[net.Conn]struct{})
