@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 type taskRunner struct {
@@ -66,6 +68,25 @@ func TestBootTaskRunsTheDaemonHeadlessAtThisUsersLogon(t *testing.T) {
 		if !strings.Contains(text, part) {
 			t.Fatalf("task lacks %q", part)
 		}
+	}
+}
+
+// Installed with nobody at the desktop (over SSH), Mewla is started directly,
+// but as the task starts it: under a headless console host of its own, the
+// parent `mewla update` and `mewla restart` look for before restarting it.
+func TestBootTaskDirectStartIsTheTasksCommand(t *testing.T) {
+	withTaskUser(t)
+	config := taskConfig(t)
+	task, err := bootTaskDefinition(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := bootTaskDirectCommand(config)
+	if cmd.Path != task.Command && filepath.Base(cmd.Path) != filepath.Base(task.Command) {
+		t.Fatalf("direct start runs %s, the task %s", cmd.Path, task.Command)
+	}
+	if got := platform.QuoteArgs(cmd.Args[1:]); got != task.Arguments {
+		t.Fatalf("direct start arguments = %s\nthe task's            %s", got, task.Arguments)
 	}
 }
 

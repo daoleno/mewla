@@ -4,3 +4,9 @@
 // starting at login. Each primitive has one portable signature; the files
 // named _unix.go and _windows.go implement it.
 package platform
+
+import "errors"
+
+// ErrParentGone is ParentImage's error for a process whose parent no longer
+// runs: it was started detached by a process that has ended.
+var ErrParentGone = errors.New("parent process is no longer running")

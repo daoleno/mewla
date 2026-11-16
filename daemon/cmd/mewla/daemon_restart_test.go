@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // fakeDaemon is one daemon process as daemonRuntime sees it: killed, it stops
@@ -208,6 +210,25 @@ func TestRestartLeavesADaemonStartedInATerminalBesideTheTask(t *testing.T) {
 	}
 }
 
+// Started detached (by boot install or a restart over SSH, where the task
+// does not run, or by the installer), the daemon's starter has ended: it is
+// Mewla's, and restarts like one the task started.
+func TestRestartTakesADaemonStartedDetached(t *testing.T) {
+	stateDir, daemonID := restartStateDir(t)
+	daemon := &fakeDaemon{daemonID: daemonID, pid: 89, version: "0.4.7", running: true}
+	runner := windowsTaskRunner(t, daemon, "0.4.8")
+	rt := daemon.runtime(t, "windows", runner, `C:\Mewla\mewla.exe`)
+	rt.parentImage = func(int) (string, error) { return "", fmt.Errorf("parent 7 of 89: %w", platform.ErrParentGone) }
+
+	var out bytes.Buffer
+	if err := restartAfterUpdate(rt, stateDir, "0.4.7", "0.4.8", &out); err != nil {
+		t.Fatal(err)
+	}
+	if daemon.version != "0.4.8" || len(daemon.killed) != 1 || !strings.Contains(out.String(), "Mewla 0.4.8 is running.") {
+		t.Fatalf("daemon %s, killed %v, output %q", daemon.version, daemon.killed, out.String())
+	}
+}
+
 func TestRestartUsesTheSystemdUnitOnlyWhenItRunsTheDaemon(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
 	for _, test := range []struct {
@@ -305,9 +326,14 @@ func TestOlderDaemonRestartsBeforeACommandButNotInsideASession(t *testing.T) {
 		t.Fatal("a Worker's mewla restarted the daemon")
 	}
 	t.Setenv("MEWLA_WORKER_ID", "")
-	ensureCurrentDaemon(rt, stateDir, false, &bytes.Buffer{})
+	// Not in a terminal it is said, not done.
+	var said bytes.Buffer
+	ensureCurrentDaemon(rt, stateDir, false, &said)
 	if len(daemon.killed) != 0 {
 		t.Fatal("a non-interactive mewla restarted the daemon")
+	}
+	if !strings.Contains(said.String(), "Mewla 0.4.6 is still running; this is 0.4.7. Restart it onto 0.4.7: mewla restart") {
+		t.Fatalf("non-interactive mewla said %q", said.String())
 	}
 
 	var out bytes.Buffer

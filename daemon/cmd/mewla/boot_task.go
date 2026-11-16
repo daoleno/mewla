@@ -234,21 +234,27 @@ func bootTaskInstall(config bootConfig, runner bootRunner, out io.Writer) error 
 // is started directly.
 var bootTaskStartWait = 8 * time.Second
 
-// bootTaskStartDirect starts the daemon the task would start, detached from
-// this console and session.
+// bootTaskStartDirect starts the daemon as the task would, detached from this
+// console and session: under a headless console host of its own, exactly the
+// task's command, so `mewla update` and `mewla restart` restart it the same
+// way as one the task started (a daemon is restarted only when its parent is
+// that console host). It gets no standard handles, as from the task: the
+// console host would end at once on any it was given.
 func bootTaskStartDirect(config bootConfig) error {
-	args := []string{"-state-dir", config.StateDir}
+	cmd := bootTaskDirectCommand(config)
+	return platform.StartDetachedBare(cmd.Path, cmd.Args[1:], config.WorkDir)
+}
+
+// bootTaskDirectCommand is the task's command: conhost --headless and the
+// daemon with its state directory and address.
+func bootTaskDirectCommand(config bootConfig) *exec.Cmd {
+	args := []string{"--headless", config.Binary, "-state-dir", config.StateDir}
 	if config.LAN {
 		args = append(args, "-lan")
 	} else {
 		args = append(args, "-addr", config.Addr)
 	}
-	cmd := exec.Command(config.Binary, args...)
-	cmd.Dir = config.WorkDir
-	if err := platform.StartDetached(cmd); err != nil {
-		return err
-	}
-	return cmd.Process.Release()
+	return exec.Command(bootTaskConhost(), args...)
 }
 
 func bootTaskWaitHealthy(config bootConfig, wait time.Duration) error {

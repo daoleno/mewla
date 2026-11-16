@@ -236,3 +236,24 @@ func TestSetUserRegistryDefault(t *testing.T) {
 		}
 	}
 }
+
+// Over SSH the daemon is started as the logon task starts it, under
+// `conhost --headless`. Given standard handles (Go gives a child the null
+// device for each one it lacks), that console host ends at once and the
+// daemon with it; started bare, it hosts its program until the program ends.
+func TestStartDetachedBareKeepsAHeadlessConsoleHostRunning(t *testing.T) {
+	system := filepath.Join(os.Getenv("SystemRoot"), "System32")
+	done := filepath.Join(t.TempDir(), "done")
+	script := "ping -n 3 127.0.0.1 >nul & echo ok>" + done
+	if err := StartDetachedBare(filepath.Join(system, "conhost.exe"), []string{"--headless", filepath.Join(system, "cmd.exe"), "/c", script}, ""); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(done); err == nil {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatal("the program under conhost --headless did not live to finish")
+}

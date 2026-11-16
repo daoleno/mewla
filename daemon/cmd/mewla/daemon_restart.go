@@ -236,8 +236,14 @@ func (rt daemonRuntime) supervised(daemon runningDaemon) bool {
 			return false
 		}
 		// The task runs the daemon under a headless console host; one
-		// started in a terminal has the shell as its parent.
+		// started in a terminal has the shell as its parent, and ends with
+		// that terminal. One whose starter is gone was started detached:
+		// by `mewla boot install` or a restart over SSH, where the task does
+		// not run, or by the installer.
 		parent, err := rt.parentImage(daemon.PID)
+		if errors.Is(err, platform.ErrParentGone) {
+			return true
+		}
 		return err == nil && strings.EqualFold(parent, "conhost.exe")
 	case "linux":
 		if _, active, err := bootUnitActive(rt.runner); err != nil || !active {
@@ -378,15 +384,21 @@ func restartAfterUpdate(rt daemonRuntime, stateDir, from, to string, out io.Writ
 
 // ensureCurrentDaemon runs before a command a person typed that talks to the
 // daemon. A daemon of this installation older than this CLI (left running by
-// an update) is restarted onto it, or the person is told what to run. Inside
-// a Session (an agent running mewla) nothing is restarted: the daemon is what
-// keeps that agent's Session going.
+// an update) is restarted onto it, or the person is told what to run. Not in
+// a terminal (a script, a command over SSH with its output kept) it is only
+// told: nothing restarts under a script. Inside a Session (an agent running
+// mewla) nothing is said or restarted: the daemon is what keeps that agent's
+// Session going.
 func ensureCurrentDaemon(rt daemonRuntime, stateDir string, interactive bool, out io.Writer) {
-	if releaseBuild != "1" || !interactive || insideSession() {
+	if releaseBuild != "1" || insideSession() {
 		return
 	}
 	daemon, ok := rt.inspect(stateDir)
 	if !ok || !selfupdate.Older(daemon.Version, Version) {
+		return
+	}
+	if !interactive && rt.supervised(daemon) {
+		fmt.Fprintf(out, "Mewla %s is still running; this is %s. Restart it onto %s: mewla restart\n", daemon.Version, Version, Version)
 		return
 	}
 	if !rt.supervised(daemon) {
