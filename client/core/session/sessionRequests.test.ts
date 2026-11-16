@@ -18,22 +18,46 @@ import {
 } from "./sessionRequests";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
-const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
 const saved = { ...transportTiming };
 let sockets: FakeSocket[];
+/** Called once the transport opens a socket: the transport signs its connection first, which takes as long as it takes. */
+let socketOpened: (() => void)[];
 
 beforeEach(() => {
   sockets = [];
-  installMemoryPlatform({ openSocket: (url, protocols) => { const s = new FakeSocket(url, protocols); sockets.push(s); return s; } });
+  socketOpened = [];
+  installMemoryPlatform({
+    openSocket: (url, protocols) => {
+      const s = new FakeSocket(url, protocols);
+      sockets.push(s);
+      for (const opened of socketOpened.splice(0)) opened();
+      return s;
+    },
+  });
 });
 afterEach(() => Object.assign(transportTiming, saved));
 
+/** The transport's socket number `index`, once the transport has opened it. */
+function socketAt(index: number): Promise<FakeSocket> {
+  if (sockets.length > index) return Promise.resolve(sockets[index]);
+  return new Promise((resolve) => socketOpened.push(() => void socketAt(index).then(resolve)));
+}
+
+/** A transport the fake computer has accepted: it waits for the transport's own steps, not for a guessed delay. */
 async function connected() {
   const transport = new Transport(server);
+  const index = sockets.length;
+  const isConnected = new Promise<void>((resolve) => {
+    const stop = transport.onState((state) => {
+      if (state !== "connected") return;
+      stop();
+      resolve();
+    });
+  });
   transport.connect();
-  await wait();
-  const socket = sockets.at(-1)!;
+  const socket = await socketAt(index);
   socket.open();
+  await isConnected;
   const last = () => JSON.parse(socket.sent.at(-1)!);
   const answer = (type: string, body: Record<string, unknown>) => socket.receive({ type, request_id: last().request_id, ...body });
   return { transport, socket, last, answer };
