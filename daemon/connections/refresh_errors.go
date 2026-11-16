@@ -32,15 +32,13 @@ func refusalCode(err error) string {
 	return ""
 }
 
-// clientRefused reports a refusal of Mewla's OAuth client itself, not of the
+// clientRefused reports Slack refusing Mewla's client itself, not the
 // person's sign-in: signing in again gets a token that stops renewing the same
-// way.
+// way. A standard OAuth invalid_client is not this: for a registered (DCR)
+// client it usually means the registration is gone, and signing in again
+// registers anew.
 func clientRefused(code string) bool {
-	switch code {
-	case "bad_client_secret", "invalid_client_id", "invalid_client", "unauthorized_client":
-		return true
-	}
-	return false
+	return code == "bad_client_secret" || code == "invalid_client_id"
 }
 
 // refreshWasRefused reports whether a failed refresh was the service's own
