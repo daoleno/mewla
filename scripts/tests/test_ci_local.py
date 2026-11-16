@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,6 +37,14 @@ class CILocalCoversCITests(unittest.TestCase):
         planned = {(s.job, s.name): s.run for s in ci_local.plan("/tmp/runner") if s.run}
         self.assertIn("go test ./...", planned[("daemon", "Test")])
         self.assertIn("licenses/generate.py --check", planned[("client", "Open-source licenses are current")])
+
+    def test_the_macos_daemon_job_runs_only_on_a_mac(self):
+        planned = {(s.job, s.name): s for s in ci_local.plan("/tmp/runner")}
+        if sys.platform == "darwin":
+            self.assertIn("go test ./...", planned[("daemon-macos", "Test")].run)
+            self.assertNotIn("daemon-macos", ci_local.SKIPPED_JOBS)
+        else:
+            self.assertIn("macOS runner", ci_local.SKIPPED_JOBS["daemon-macos"])
 
 
 if __name__ == "__main__":
