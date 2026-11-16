@@ -64,6 +64,29 @@ describe("Computer page", () => {
     expect(app.texts()).toContain("Try again");
   });
 
+  test("a Mewla Relay computer that is off the relay says it isn't online, never a TLS or proxy fix; the phone's error stays on the card", async () => {
+    // The relay closes a connection to a computer it does not have; NSH's fetch reports it so (measured 11-16).
+    const raw = "Network request failed: io: unexpected end of file";
+    const server = {
+      name: "DESKTOP-I57K0FC",
+      url: "https://amber-lake-3845.m.mewla.ai",
+      transportKind: "link",
+      transportPin: "c".repeat(64),
+      linkRouteId: "d".repeat(32),
+    };
+    const s = setup({ page: { name: "settings-computer", id: "s1" }, state: "waiting", server }, none, {
+      network: { "GET https://amber-lake-3845.m.mewla.ai/health": { error: raw } },
+    });
+    const app = await open(HARNESS, s.options);
+    await app.host.send("app.sessionProblem", "closed (1006)");
+    await app.waitFor("text:DESKTOP-I57K0FC isn't online");
+    const card = app.texts().join("\n");
+    expect(card).toContain("mewla doctor");
+    expect(card).toContain(raw);
+    expect(card).not.toMatch(/TLS handshake failed|certificate chain|reverse proxy/);
+    expect(app.texts()).toContain("Try again");
+  });
+
   test("a computer that forgot this phone asks to pair again", async () => {
     const s = setup({ page: { name: "settings-computer", id: "s1" }, state: "waiting" }, none, {
       network: { "GET http://desk.test:9877/auth-check": { status: 401 } },

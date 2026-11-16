@@ -29,22 +29,31 @@ describe("a computer paired through Mewla Relay", () => {
   for (const message of [
     "An SSL error has occurred and a secure connection to the server cannot be made.", // iOS URLSession -1200
     "Network request failed: io: unexpected end of file", // NSH's fetch (rustls), measured against the live relay
+    "发生了SSL错误，无法建立与该服务器的安全连接。", // iOS -1200 in Chinese
     "Connection reset by peer",
   ]) {
     test(`is named not connected to the relay, never a certificate problem: ${message}`, async () => {
       const found = await diagnose(relayComputer, message);
       expect(found.code).toBe("relay_not_connected");
-      expect(found.title).toBe("Not connected to Mewla Relay");
+      expect(found.title).toBe("DESKTOP-I57K0FC isn't online");
       expect(found.hint).toContain("mewla doctor");
+      // A network that resets TLS to the relay looks the same from the phone: the card names it too.
+      expect(found.hint).toContain("another network");
       expect(found.raw).toBe(message);
       expect(`${found.title} ${found.hint}`).not.toMatch(/certificate|reverse proxy|TLS handshake/i);
     });
   }
 
+  test("a computer without a name is This computer", async () => {
+    const found = await diagnose({ ...relayComputer, name: "" }, "Network request failed: io: unexpected end of file");
+    expect(found.title).toBe("This computer isn't online");
+  });
+
   test("a certificate the phone does not trust means the computer answered: not off the relay", async () => {
     const found = await diagnose(relayComputer, "Network request failed: io: invalid peer certificate: UnknownIssuer");
     expect(found.code).toBe("network_unreachable");
     expect(found.title).toBe("Connection through Mewla Relay failed");
+    expect(found.hint).toContain("mewla doctor");
   });
 
   test("no answer in time, or no network, is the phone not reaching the relay", async () => {

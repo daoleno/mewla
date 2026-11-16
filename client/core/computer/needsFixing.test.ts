@@ -51,7 +51,7 @@ describe("needs fixing", () => {
     expect(needsFixing({ ...dated, issue: issue("proxy_error", "Proxy error") })[0]!.title).toBe("Proxy error");
     expect(needsFixing({ ...dated, issue: issue("device_not_paired") })[0]!.title).toBe("Device not paired");
     // The relay closed the phone's connection just now: fresher than the computer's last word.
-    expect(needsFixing({ ...dated, issue: issue("relay_not_connected", "Not connected to Mewla Relay") })[0]!.title).toBe("Not connected to Mewla Relay");
+    expect(needsFixing({ ...dated, issue: issue("relay_not_connected", "DESKTOP isn't online") })[0]!.title).toBe("DESKTOP isn't online");
     // A computer paired by its address: its relay is not how the phone reaches it.
     expect(needsFixing({ ...dated, relay: false })[0]!.title).toBe("Can't connect");
   });
