@@ -495,8 +495,12 @@ export class Transport {
       if (wasConnected) {
         const now = Date.now();
         this.lost = { why, path: this.openedPath, ageMs: now - this.openedAt, away: this.away, at: now, attempts: 0, network: 0 };
-        // A direct path that did not hold for long after a move is not moved onto again soon: no ping-pong.
-        if (this.openedByMove && now - this.openedAt < transportTiming.moveTrustMs) this.backOffMoves();
+        // A direct path that did not hold for long after a move is not moved onto again soon, and less often each
+        // time (no ping-pong); one that held earns moves at the first backoff again.
+        if (this.openedByMove) {
+          if (now - this.openedAt < transportTiming.moveTrustMs) this.backOffMoves();
+          else this.moveBackoffMs = transportTiming.moveBackoffMs;
+        }
       } else if (this.lost) this.lost.attempts++;
       this.clearTimers();
       this.queue = [];
@@ -793,7 +797,8 @@ export class Transport {
     this.openedAt = now;
     this.openedByMove = true;
     this.openedPath = this.moves.current(this.server) ?? moving.path;
-    this.moveBackoffMs = transportTiming.moveBackoffMs;
+    // The backoff starts over only once the direct path held (`end`): a path that keeps dying soon after a move is
+    // moved onto ever more rarely, up to `moveBackoffMaxMs`.
     this.healthyChecks = 0;
     if (this.networkProof) clearTimeout(this.networkProof);
     this.networkProof = null;
