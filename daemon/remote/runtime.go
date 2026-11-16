@@ -410,12 +410,14 @@ type relayReporter struct {
 	logf    func(format string, args ...any)
 	backoff func(attempt int) time.Duration
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
+	mu sync.Mutex
+	// stop ends the current report's retries (a newer report replaced it); its
+	// request in flight, if any, is let finish.
+	stop chan struct{}
 	// done closes when the current report's loop has ended.
 	done chan struct{}
-	// superseded, when set (tests), is told that a report waits for the one it
-	// replaced to end.
+	// superseded, when set (tests), is told that a report waits for the
+	// unfinished one it replaced.
 	superseded func()
 }
 
@@ -428,33 +430,52 @@ func relayReportBackoff(attempt int) time.Duration {
 }
 
 // report is safe on a nil reporter and never blocks. A newer report replaces
-// an unfinished one, which stops; the newer one starts only once it has ended,
-// so a request of the old one (in flight, or one more after its wait) never
-// tells the service the old relay after the new one.
+// an unfinished one: the old one tries no more, but a request of it already
+// sent is not cancelled, since the service may be applying it whatever the
+// client does; the newer report goes once that one has its answer (the
+// service answers after it applied it), so the service is told the newer relay
+// last. That request is bounded by the client's timeout, and only the
+// reporter's own context (the daemon stopping) cancels requests. A request
+// that ends in a transport error or timeout leaves what the service did with it
+// unknown; the newer report still goes after it.
 func (reporter *relayReporter) report(relay string) {
 	if reporter == nil || relay == "" {
 		return
 	}
 	reporter.mu.Lock()
-	if reporter.cancel != nil {
-		reporter.cancel()
+	if reporter.stop != nil {
+		close(reporter.stop)
 	}
 	previous := reporter.done
-	ctx, cancel := context.WithCancel(reporter.ctx)
-	done := make(chan struct{})
-	reporter.cancel, reporter.done = cancel, done
+	stop, done := make(chan struct{}), make(chan struct{})
+	reporter.stop, reporter.done = stop, done
 	superseded := reporter.superseded
 	reporter.mu.Unlock()
+	ctx := reporter.ctx
+	stopped := func() bool {
+		select {
+		case <-stop:
+			return true
+		case <-ctx.Done():
+			return true
+		default:
+			return false
+		}
+	}
 	go func() {
 		defer close(done)
 		if previous != nil {
-			if superseded != nil {
-				superseded()
+			select {
+			case <-previous:
+			default:
+				if superseded != nil {
+					superseded()
+				}
+				<-previous
 			}
-			<-previous
 		}
 		for attempt := 0; ; attempt++ {
-			if ctx.Err() != nil {
+			if stopped() {
 				return
 			}
 			err := reporter.client.ReportRelay(ctx, relay)
@@ -471,6 +492,8 @@ func (reporter *relayReporter) report(relay string) {
 				reporter.logf("Remote access: could not tell the service which relay this computer is on, retrying: %v", err)
 			}
 			select {
+			case <-stop:
+				return
 			case <-ctx.Done():
 				return
 			case <-time.After(reporter.backoff(attempt)):
