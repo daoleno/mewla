@@ -234,3 +234,56 @@ func (h *phoneHandler) HandleControlRequest(req Request) Response {
 	}
 	return Response{OK: true, PhoneResult: &phone.AgentResult{Text: "Screen 1080x2400", Image: h.picture}}
 }
+
+// A client that finds the control socket's file can connect: it appears only once the daemon listens, and private.
+// Bound in place, the file was there from bind, before listen, and a client then was refused (a loaded macOS runner
+// failed TestBootControlSocketIdentifiesTheServingDaemon so).
+func TestTheControlSocketAppearsOnlyOnceItListens(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows binds the control socket in place")
+	}
+	stateDir := shortStateDir(t)
+	socketPath, err := DefaultSocketPath(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 100; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		server := &Server{Path: socketPath, Handler: &testHandler{response: Response{OK: true}}}
+		go func() { done <- server.Run(ctx) }()
+		var info os.FileInfo
+		for {
+			if info, err = os.Stat(socketPath); err == nil {
+				break
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("run %d: the server ended before its socket appeared: %v", i, err)
+			default:
+				runtime.Gosched()
+			}
+		}
+		conn, err := net.Dial("unix", socketPath)
+		if err != nil {
+			cancel()
+			<-done
+			t.Fatalf("run %d: the socket's file was there but it refused: %v", i, err)
+		}
+		conn.Close()
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("run %d: the socket appeared with mode %o", i, perm)
+		}
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatalf("run %d: %v", i, err)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Dir(socketPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		t.Errorf("left behind in the socket's directory: %s", entry.Name())
+	}
+}
