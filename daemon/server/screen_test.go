@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -148,6 +149,11 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 		v.read(int(binary.BigEndian.Uint32(init[20:])))
 		return v
 	}
+	// The pong below answers the ping in the socket's reader; the pointer goes on through the RFB stream to the
+	// backend, so the pong is no sign it has arrived. The backend says when it has (seen late under load on a Mac).
+	pointed := make(chan struct{})
+	var pointedOnce sync.Once
+	fake.AfterPointer = func(int) { pointedOnce.Do(func() { close(pointed) }) }
 	first := open()
 	first.write([]byte{5, 1, 0, 10, 0, 20}) // pointer press at (10, 20)
 	if err := first.conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"ping","t":42}`)); err != nil {
@@ -165,6 +171,11 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 	}
 	if pong.T != 42 {
 		t.Fatalf("pong %+v", pong)
+	}
+	select {
+	case <-pointed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the pointer never reached the backend")
 	}
 	if pointers, _ := fake.Snapshot(); len(pointers) != 1 || pointers[0] != (screen.FakePointer{X: 10, Y: 20, Buttons: 1}) {
 		t.Fatalf("pointer did not reach the backend: %+v", pointers)

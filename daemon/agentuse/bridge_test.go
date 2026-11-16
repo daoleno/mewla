@@ -16,6 +16,25 @@ import (
 	"time"
 )
 
+// serveBridge serves b and returns once it listens: its socket file is there
+// from bind, before listen, and a client dialling in between is refused (seen
+// under a full `go test ./...` on a Mac).
+func serveBridge(t *testing.T, ctx context.Context, b *Bridge) <-chan error {
+	t.Helper()
+	listening := make(chan struct{})
+	b.listening = func() { close(listening) }
+	served := make(chan error, 1)
+	go func() { served <- b.Serve(ctx) }()
+	select {
+	case <-listening:
+	case err := <-served:
+		t.Fatalf("Serve ended before it listened: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the bridge to listen")
+	}
+	return served
+}
+
 func startBridge(t *testing.T) (*Bridge, string) {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "bridge")
@@ -26,13 +45,7 @@ func startBridge(t *testing.T) (*Bridge, string) {
 	b := NewBridge(dir)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go b.Serve(ctx)
-	for i := 0; i < 100; i++ {
-		if _, err := os.Stat(bridgeSocket(dir)); err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	serveBridge(t, ctx, b)
 	return b, dir
 }
 
@@ -359,11 +372,7 @@ func TestTheBridgeListensWhereTheStateDirectoryIsDeep(t *testing.T) {
 	b := NewBridge(dir)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	served := make(chan error, 1)
-	go func() { served <- b.Serve(ctx) }()
-	for i := 0; i < 100 && !fileExists(bridgeSocket(dir)); i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
+	served := serveBridge(t, ctx, b)
 	if got := bridgeSocket(dir); len(got) > maxSocketPath {
 		t.Fatalf("socket path %d bytes: %s", len(got), got)
 	}

@@ -139,6 +139,11 @@ func startHost(t *testing.T, opts ServerOptions) *testHost {
 	if opts.Logf == nil {
 		opts.Logf = func(format string, args ...any) { t.Logf("host: "+format, args...) }
 	}
+	// Ready when the host listens, not when its socket file appears: the file
+	// is there from bind, before listen, and a client dialling then is refused
+	// (seen under a full `go test ./...` on a Mac).
+	listening := make(chan struct{})
+	opts.listening = func() { close(listening) }
 	server := NewServer(opts)
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &testHost{server: server, path: opts.SocketPath, cancel: cancel, done: make(chan struct{})}
@@ -146,11 +151,14 @@ func startHost(t *testing.T, opts ServerOptions) *testHost {
 		h.err = server.Run(ctx)
 		close(h.done)
 	}()
-	waitFor(t, 5*time.Second, "socket", func() bool {
-		_, err := os.Stat(opts.SocketPath)
-		return err == nil
-	})
 	t.Cleanup(h.stop)
+	select {
+	case <-listening:
+	case <-h.done:
+		t.Fatalf("the host ended before it listened: %v", h.err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the host to listen")
+	}
 	return h
 }
 
