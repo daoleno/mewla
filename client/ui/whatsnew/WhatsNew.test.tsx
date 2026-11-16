@@ -1,23 +1,26 @@
 import { describe, expect, open, test } from "nsh/test";
 import { expoTokenService, framesOf, paired, phoneHost } from "../testing/fixtures";
+import manifest from "../nsh.json";
 import notes from "./notes.json";
 import { knowsScene } from "./scenes";
 
 /**
  * What's New (Brain's SPEC 11-16): after an update, the first quiet moment on Brain home shows the sheet once; every
  * update leaves a line in Brain's chat. The fake computer keeps the record as the daemon does (daemon/whatsnew). This
- * app is 0.4.8 (nsh.json); the computer says it runs 0.4.9, so 0.4.9's notes count.
+ * app is at the release's version (nsh.json, APP_VERSION); the computer says it runs 0.4.9, so 0.4.9's notes count.
  */
 
 const APP = "../FakeDaemonApp.tsx";
+/** The app's own version: release preparation moves it, so no test names it. */
+const APP_VERSION: string = manifest.version;
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 const DAEMON_UPDATE = "GET http://127.0.0.1:1/daemon-update";
 const host = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-16T07:00:00.000Z" };
 const brain = { chat_thread_id: "t-now", host_worker: host };
 const at = (minute: number) => Date.UTC(2026, 10, 16, 7, minute);
 const say = (i: number, body: string, minute: number) => ({ id: `m${i}`, seq: i, kind: i % 2 ? "assistant_message" : "user_message", role: i % 2 ? "assistant" : "user", timestamp: new Date(at(minute)).toISOString(), body });
-/** This device ran 0.4.8 before: no fresh install. */
-const ranBefore = { "mewla:whats_new": JSON.stringify({ app: "0.4.8" }) };
+/** This device already ran this app: no fresh install, and no update of its own. */
+const ranBefore = { "mewla:whats_new": JSON.stringify({ app: APP_VERSION }) };
 
 type Kept = { baseline: string; seen?: string[]; updates?: { version: string; at: number }[]; replay?: boolean; releases?: unknown };
 
@@ -125,15 +128,15 @@ describe("What's New: when it shows", () => {
     const app = await open(APP, { ...setup({ record: { baseline: "0.4.6" }, paired: false }), storage: {} });
     await app.wait(3_000);
     expect(app.shows("id:whats-new")).toBe(false);
-    expect(JSON.parse(app.storage()["mewla:whats_new"])).toEqual({ app: "0.4.8", since: "0.4.8" });
+    expect(JSON.parse(app.storage()["mewla:whats_new"])).toEqual({ app: APP_VERSION, since: APP_VERSION });
   }, 30_000);
 
   test("the app's own update is told to the computer once, for its chat line", async () => {
     const record: Kept = { baseline: "0.4.6", seen: [] };
     const app = await open(APP, setup({ record, storage: { "mewla:whats_new": JSON.stringify({ app: "0.4.7" }) } }));
     await app.waitUntil(() => framesOf(app.host.posts(), "whats_new_note").length === 1, { timeout: 15_000 });
-    expect(framesOf(app.host.posts(), "whats_new_note")[0].version).toBe("0.4.8");
-    expect(JSON.parse(app.storage()["mewla:whats_new"]).app).toBe("0.4.8");
+    expect(framesOf(app.host.posts(), "whats_new_note")[0].version).toBe(APP_VERSION);
+    expect(JSON.parse(app.storage()["mewla:whats_new"]).app).toBe(APP_VERSION);
   }, 30_000);
 });
 
