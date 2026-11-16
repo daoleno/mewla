@@ -3,6 +3,7 @@ package brain
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -115,11 +116,12 @@ func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem
 	// Mewla's own view says signed out and the pane really is not ready: the
 	// pane's login shell had no sign-in either, so say so at once instead of
 	// leaving the phone waiting out the grace.
+	screen := s.hostScreenTail()
 	if hostAuth(executor.ID) == HostAuthUnauthenticated {
 		return &HostProblem{
 			Code:            "not_signed_in",
 			Executor:        executor.ID,
-			Detail:          fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID)),
+			Detail:          fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID)) + screen,
 			SuggestExecutor: s.verifiedAlternativeHost(executor.ID),
 		}
 	}
@@ -129,9 +131,48 @@ func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem
 	return &HostProblem{
 		Code:            "not_ready",
 		Executor:        executor.ID,
-		Detail:          fmt.Sprintf("Brain's %s session is open but not ready. It may be waiting for you to sign in: run %s on this computer, finish its first-run steps, and Brain continues by itself.", name, name),
+		Detail:          fmt.Sprintf("Brain's %s session is open but not ready. It may be waiting for you to sign in: run %s on this computer, finish its first-run steps, and Brain continues by itself.", name, name) + screen,
 		SuggestExecutor: s.verifiedAlternativeHost(executor.ID),
 	}
+}
+
+// hostScreenTailLines and hostScreenTailRunes bound the agent's own words a
+// not-ready problem quotes.
+const (
+	hostScreenTailLines = 4
+	hostScreenTailRunes = 320
+)
+
+// hostScreenTail is what the Host's agent itself shows last (its sign-in
+// screen, an error it printed), as " It shows: …", or "" when nothing is known.
+func (s *Service) hostScreenTail() string {
+	if s == nil || s.store == nil || s.watcher == nil {
+		return ""
+	}
+	host, err := s.store.HostSession()
+	if err != nil || strings.TrimSpace(host.ID) == "" {
+		return ""
+	}
+	worker := s.watcher.GetWorker(host.ID)
+	if worker == nil {
+		return ""
+	}
+	var lines []string
+	for i := len(worker.LastLines) - 1; i >= 0 && len(lines) < hostScreenTailLines; i-- {
+		line := strings.Join(strings.Fields(worker.LastLines[i]), " ")
+		if line == "" || strings.Trim(line, "─━-=_│|>›▌ ") == "" {
+			continue
+		}
+		lines = append([]string{line}, lines...)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	text := strings.Join(lines, " / ")
+	if runes := []rune(text); len(runes) > hostScreenTailRunes {
+		text = string(runes[len(runes)-hostScreenTailRunes:])
+	}
+	return " It shows: " + text
 }
 
 // hostHoldsNoConversation reports that the recorded host never held anything a
@@ -163,4 +204,80 @@ func hostSignInStep(executorID string) string {
 func (s *Service) hostSessionExited(id string) bool {
 	exited, ok := s.watcher.(interface{ SessionExited(string) bool })
 	return ok && strings.TrimSpace(id) != "" && exited.SessionExited(id)
+}
+
+// hostRestartNoticeTitle and hostRestartNoticeBody are the Chat row a person
+// sees when Brain's Session was gone and its conversation could not be resumed.
+const (
+	hostRestartNoticeTitle = "Brain restarted"
+	hostRestartNoticeBody  = "The earlier conversation couldn't be resumed. Brain continues from its workspace notes."
+)
+
+// noteHostRestartedFresh tells Chat, once per new Host, that Brain started a
+// new conversation because the one it held could not be resumed.
+func (s *Service) noteHostRestartedFresh(hostID, executorID string) {
+	threadID, err := s.store.ChatThreadID()
+	if err != nil || strings.TrimSpace(threadID) == "" {
+		log.Printf("brain host restarted fresh as %s; no Chat thread for the notice: %v", hostID, err)
+		return
+	}
+	if _, err := s.store.AppendTimelineItem(TimelineItem{
+		ID:         "brain-restarted:" + hostID,
+		ThreadID:   threadID,
+		SessionID:  hostID,
+		ExecutorID: executorID,
+		Role:       "assistant",
+		Kind:       timelineKindHostNotice,
+		Status:     "warning",
+		Title:      hostRestartNoticeTitle,
+		Body:       hostRestartNoticeBody,
+	}); err != nil {
+		log.Printf("brain host restarted fresh as %s; Chat notice failed: %v", hostID, err)
+	}
+}
+
+// noteHostLaunchAuth records the sign-in probe's answer as a Host launches.
+func (s *Service) noteHostLaunchAuth(executorID string) {
+	state := hostAuth(executorID)
+	s.hostProblemMu.Lock()
+	s.hostLaunchAuth = state
+	s.hostProblemMu.Unlock()
+}
+
+// hostSignedInSinceLaunch reports a Host that opened while its agent was
+// signed out, never became ready (it sits at the agent's own sign-in screen,
+// which does not notice a sign-in made elsewhere) and whose agent is no longer
+// signed out. The probe never keeps a Host from launching; it only says when
+// opening it again can help.
+func (s *Service) hostSignedInSinceLaunch(executorID string, continuityErr error) bool {
+	if !errors.Is(continuityErr, watcher.ErrWorkerInputNotReady) {
+		return false
+	}
+	s.hostProblemMu.Lock()
+	launchedSignedOut := s.hostLaunchAuth == HostAuthUnauthenticated
+	s.hostProblemMu.Unlock()
+	return launchedSignedOut && hostAuth(executorID) != HostAuthUnauthenticated
+}
+
+// reopenHostAfterSignIn closes a Host left at a sign-in screen and opens a new
+// one. A Host that holds a conversation is never closed for this.
+func (s *Service) reopenHostAfterSignIn(executor work.WorkerExecutor) error {
+	host, err := s.store.HostSession()
+	if err != nil {
+		return err
+	}
+	id := strings.TrimSpace(host.ID)
+	if id == "" || !s.hostHoldsNoConversation(host) {
+		return watcher.ErrWorkerInputNotReady
+	}
+	log.Printf("brain host: %s was signed out when %s opened and is signed in now; opening Brain again", executor.ID, id)
+	if err := s.teardownHostSession(id); err != nil {
+		return fmt.Errorf("close the Brain Session left at sign-in %s: %w", id, err)
+	}
+	s.hostProblemMu.Lock()
+	s.hostNotReadySince = time.Time{}
+	s.hostLaunchAuth = HostAuthUnknown
+	s.hostProblemMu.Unlock()
+	_, err = s.ensureHostContinuity(executor, true)
+	return err
 }

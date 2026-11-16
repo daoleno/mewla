@@ -1758,7 +1758,10 @@ func TestServiceSnapshotMissingSessionResumePreservesChatThreadIdentity(t *testi
 	}
 }
 
-func TestServiceMissingSessionFailClosedTable(t *testing.T) {
+// A Host whose Session is gone and whose recorded conversation its agent
+// cannot resume starts fresh, and Chat says so once; only a launch that fails
+// leaves the old binding in place.
+func TestServiceMissingSessionUnresumableStartsFresh(t *testing.T) {
 	tests := []struct {
 		name       string
 		executorID string
@@ -1767,7 +1770,6 @@ func TestServiceMissingSessionFailClosedTable(t *testing.T) {
 		providerID string
 		path       string
 		createErr  error
-		wantCreate bool
 	}{
 		{name: "unsupported", executorID: "custom", command: "my-custom-agent", kind: "custom", providerID: "custom-1"},
 		{name: "opencode non-ses", executorID: "opencode", command: "opencode", kind: "opencode", providerID: "not-a-ses"},
@@ -1801,24 +1803,75 @@ func TestServiceMissingSessionFailClosedTable(t *testing.T) {
 			t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", tc.executorID)
 
 			_, err = service.EnsureHostSnapshot()
-			if err == nil {
-				t.Fatal("expected fail-closed error")
+			audit, _ := os.ReadFile(store.HostReplacementsPath())
+			after, readErr := store.HostSession()
+			if readErr != nil {
+				t.Fatal(readErr)
 			}
-			if tc.wantCreate != (len(fw.created) > 0) {
+			if tc.createErr != nil {
+				if err == nil {
+					t.Fatal("a failed launch reported success")
+				}
+				if after.ID != before.ID || after.ProviderSessionID != before.ProviderSessionID || after.TranscriptPath != before.TranscriptPath {
+					t.Fatalf("binding mutated: before=%+v after=%+v", before, after)
+				}
+				if !strings.Contains(string(audit), hostReplaceReasonSessionMissingUnrecoverable) {
+					t.Fatalf("audit=%s", audit)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unresumable Host refused: %v", err)
+			}
+			if len(fw.created) != 1 {
 				t.Fatalf("created %#v", fw.created)
 			}
-			after, err := store.HostSession()
-			if err != nil {
-				t.Fatal(err)
+			if token, found, _ := work.ProviderResumeToken(work.InferWorkerProvider(tc.command, tc.executorID), fw.created[0].opts.Command); found && token == tc.providerID {
+				t.Fatalf("fresh Host resumed the unresumable conversation: %q", fw.created[0].opts.Command)
 			}
-			if after.ID != before.ID || after.ProviderSessionID != before.ProviderSessionID || after.TranscriptPath != before.TranscriptPath {
-				t.Fatalf("binding mutated: before=%+v after=%+v", before, after)
+			if after.ID == before.ID || after.ProviderSessionID != "" {
+				t.Fatalf("Host not replaced: %+v", after)
 			}
-			audit, _ := os.ReadFile(store.HostReplacementsPath())
 			if !strings.Contains(string(audit), hostReplaceReasonSessionMissingUnrecoverable) {
 				t.Fatalf("audit=%s", audit)
 			}
+			assertHostRestartNotice(t, store, after.ID)
 		})
+	}
+}
+
+// assertHostRestartNotice checks the one Chat row that says Brain restarted
+// without its earlier conversation.
+func assertHostRestartNotice(t *testing.T, store *Store, hostID string) {
+	t.Helper()
+	threadID, err := store.ChatThreadID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.ThreadTimeline(threadID, defaultThreadTimelineLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notices := 0
+	for _, item := range items {
+		if item.Kind == timelineKindHostNotice {
+			notices++
+			if item.SessionID != hostID || item.Title != hostRestartNoticeTitle || item.Body != hostRestartNoticeBody {
+				t.Fatalf("notice = %+v", item)
+			}
+		}
+	}
+	if notices != 1 {
+		t.Fatalf("restart notices = %d in %+v", notices, items)
+	}
+	shown := false
+	for _, event := range TimelineItemsToConversationEvents(items) {
+		if event.Source == timelineKindHostNotice {
+			shown = event.Kind == "status" && event.Title == hostRestartNoticeTitle && event.Status == "warning"
+		}
+	}
+	if !shown {
+		t.Fatal("Chat does not show the restart notice")
 	}
 }
 

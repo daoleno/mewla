@@ -70,10 +70,24 @@ func TestHostProblemDetailsNameTheNextStep(t *testing.T) {
 	if problem == nil || problem.Code != "not_installed" || !strings.Contains(problem.Detail, "mewla deps") {
 		t.Fatalf("not installed: %+v", problem)
 	}
+	// Signed out is said only of a host that opened and is not ready.
 	signedOut := hostFixture(t, map[string]bool{"claude": true}, map[string]HostAuthState{"claude": HostAuthUnauthenticated})
-	problem = signedOut.hostProblem(signedOut.hostExecutor())
+	signedOut.noteHostActivation(watcher.ErrWorkerInputNotReady)
+	problem = signedOut.hostNotReadyProblem(signedOut.hostExecutor())
 	if problem == nil || problem.Code != "not_signed_in" || !strings.Contains(problem.Detail, "claude auth login") {
 		t.Fatalf("not signed in: %+v", problem)
+	}
+	// The agent's own screen is quoted: its real words, not Mewla's guess.
+	if err := signedOut.store.SetHostSession("brain-host:@3", "claude"); err != nil {
+		t.Fatal(err)
+	}
+	signedOut.watcher = &fakeWatcher{sessions: map[string]*classifier.Worker{"brain-host:@3": {
+		ID: "brain-host:@3", Hidden: true, Command: "claude",
+		LastLines: []string{"Welcome to Claude Code", "", "Select login method:", "────────", "› 1. Claude account with subscription", "  2. Anthropic Console account", ""},
+	}}}
+	problem = signedOut.hostNotReadyProblem(signedOut.hostExecutor())
+	if problem == nil || !strings.HasSuffix(problem.Detail, " It shows: Welcome to Claude Code / Select login method: / › 1. Claude account with subscription / 2. Anthropic Console account") {
+		t.Fatalf("screen not quoted: %+v", problem)
 	}
 }
 
