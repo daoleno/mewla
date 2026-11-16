@@ -1,4 +1,5 @@
 import { effect, host, locale, platform, Storage, lifecycle } from "nsh";
+import { openedForSomething } from "../whatsnew/state";
 import { parseLink, pushLink } from "../../core/push/links";
 import { liveAnswerOf, liveAnswerRequestId, widgetBaseUrl, type LiveAnswer } from "../../core/push/live";
 import { ensurePermission, expoPushToken, registerPushMessage, type DeviceToken, type PushHost } from "../../core/push/registration";
@@ -141,6 +142,8 @@ let waitingLink: string | null = null;
  * that is paired; another computer's link opens nothing of it), then the page.
  */
 export function openNotificationLink(url: string): void {
+  // The person came for this: What's New waits until they come back to Brain on their own.
+  openedForSomething();
   // A cold start's tap comes before the computers are loaded: it waits for them.
   if (!ready()) {
     waitingLink = url;

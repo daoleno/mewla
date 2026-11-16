@@ -22,6 +22,7 @@ import { workLinks } from "../work/links";
 import { Session } from "../screens/Session";
 import { AllSessions } from "../sessions/AllSessions";
 import { NewSession } from "../screens/NewSession";
+import { WhatsNewSheet } from "../whatsnew/WhatsNewSheet";
 import { ServicesSheet } from "../sessions/ServicesSheet";
 import { EnrollmentApproval } from "../enrollment/Approval";
 import { CalendarAlertCard } from "../calendar/AlertCard";
@@ -152,6 +153,7 @@ function Overlays(props: { bottomInset?: () => number }) {
   return (
     <>
       <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} bottomInset={props.bottomInset} leftInset={() => (wide() ? paneWidth() : 0)} />
+      <WhatsNewSheet />
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? nav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
       <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <EnrollmentApproval />

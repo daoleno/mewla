@@ -260,6 +260,18 @@ again. The previous binary stays next to the installed one as `mewla.prev`.
 A power cut in the middle leaves the old binary in place, and the next start
 puts the databases back.
 
+### What's new after an update
+
+After Mewla changes version, on the computer (an automatic update too) or in
+the app, the first quiet moment on Brain home (nothing typed, nothing open,
+nothing asking for you) brings up a sheet of what is new: one to three pages,
+each the feature in use with **Try it**, which opens it. It shows once: seen on
+the phone, it does not show again on the web, and several missed releases share
+one sheet. A release with fixes only brings no sheet. Every update also leaves a
+line in Brain's chat, **Updated to 0.4.9 · What's new**, which opens its notes;
+**Settings › About › What's new** opens the latest ones any time. A new install
+starts quiet: what came before it is not news.
+
 Development builds, betas and macOS (until it is verified) do not update
 themselves. `MEWLA_NO_AUTOUPDATE=1` turns automatic updates off. Updating from
 a version that predates this (0.2.87 and older) is still the manual

@@ -14,6 +14,8 @@ import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMe
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { withDayDividers } from "../../core/timeline/dayDividers";
+import { type UpdateLineItem, withUpdateLines } from "../../core/timeline/updateLines";
+import { openWhatsNew } from "../whatsnew/state";
 import { FOLDED_TEXT_HEIGHT, messageFolds } from "../../core/timeline/messageFold";
 import { readingPlace, readingPlaceIndex, readingPlaceOf, rememberReadingPlace } from "../../core/timeline/readingPlace";
 import { rowSteps } from "../../core/timeline/rowFeed";
@@ -206,14 +208,15 @@ function FailedRow(props: { error: unknown; reset: () => void; id: () => string 
 }
 
 /** Which view a row is drawn with (`TimelineRow`). */
-function rowKind(item: TimelineItem | DateDividerItem): string {
+function rowKind(item: TimelineItem | DateDividerItem | UpdateLineItem): string {
   if (item.type === "date-divider") return "divider";
+  if (item.type === "update-line") return "update-line";
   if (item.type === "message") return item.delegatedTask ? "brief" : item.role === "user" ? "user" : "reply";
   if (isWorkingRow(item)) return "working";
   return item.type;
 }
 
-export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem; expansion: Expansion; handlers: MessageHandlers }) {
+export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem | UpdateLineItem; expansion: Expansion; handlers: MessageHandlers }) {
   const it = props.item as () => TimelineItem;
   // The reply's width, which its pictures take.
   const textWidth = signal(0);
@@ -246,7 +249,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
   const linked = createReplyLinks(() => props.handlers.fileIdentity?.() ?? null);
   return (
     <View class="py-1">
-      <If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
+      <If when={kind() === "update-line"} else={<><If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
           pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} /></If>}><WorkingRow since={() => props.handlers.workingSince?.()} /></If>}><View class="px-4">
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
               with the system's handles and menu (Copy, Select all, Share). */}
@@ -263,8 +266,19 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
         </View></If>}><View class="px-4"><UserMessage item={reply} handlers={props.handlers} expansion={props.expansion} /></View></If>}><View class="px-4"><DelegatedBrief item={reply} expansion={props.expansion} /></View></If>}><View testID="date-divider" class="py-2">
           {/* The whole row's width, centred, one line: sized to its own word, a release build's measure wrapped "Toda / y". */}
           <Caption plain center text={(it() as unknown as DateDividerItem).label} />
-        </View></If>
+        </View></If></>}><UpdateLine item={props.item as () => UpdateLineItem} /></If>
     </View>
+  );
+}
+
+/** An update's quiet line (core/whatsnew): "Updated to 0.4.9 · What's new"; a tap opens its notes. */
+function UpdateLine(props: { item: () => UpdateLineItem }) {
+  return (
+    <Button testID="update-line" accessibilityLabel={`Updated to ${props.item().version}. What's new`} onPress={() => openWhatsNew(untracked(props.item).version)}
+      class="flex-row items-center justify-center gap-1 self-center px-4 py-2 active:opacity-70">
+      <Text class="text-caption text-muted-foreground">{`Updated to ${props.item().version} ·`}</Text>
+      <Text class="text-caption font-semibold text-foreground">What's new</Text>
+    </Button>
   );
 }
 
@@ -304,6 +318,8 @@ export function ChatTimeline(props: {
    * capsule at rest, and the person's scrolling reported to it. The capsule draws the fade then.
    */
   capsule?: { top: () => number; reading: CapsuleReading };
+  /** Brain's: the lines updates left (core/timeline/updateLines.ts), among the rows by their time. */
+  lines?: () => readonly UpdateLineItem[];
 }) {
   // A note at the foot of the chat for a moment (SPEC §11 Toast): why a link did not open.
   const notice = signal("");
@@ -336,16 +352,16 @@ export function ChatTimeline(props: {
   const away = signal(false);
   // A day's label is the same object while its day and its label are: made anew on every update, each one was a new row.
   const dividers = new Map<string, DateDividerItem>();
-  type Row = TimelineItem | DateDividerItem | FootRow;
+  type Row = TimelineItem | DateDividerItem | UpdateLineItem | FootRow;
   // The thread's rows as they are now (derived: a run cut off keeps the rows it had, and the next change makes them).
   const target = derived((): Row[] => {
-    const all = withDayDividers(props.items()).map((row) => {
+    const all = withUpdateLines(withDayDividers(props.items()).map((row) => {
       if (row.type !== "date-divider") return row;
       const kept = dividers.get(row.id);
       if (kept?.label === row.label) return kept;
       dividers.set(row.id, row);
       return row;
-    });
+    }), props.lines?.() ?? []);
     return props.foot?.shown() ? [...all, FOOT] : all;
   });
   /*
@@ -548,7 +564,7 @@ export function ChatTimeline(props: {
           return (
             <View>
               <If when={foot()} else={<ErrorBoundary fallback={(error: unknown, reset: () => void) => <FailedRow error={error} reset={reset} id={() => (item() as TimelineItem).id} />}>
-                  <TimelineRow item={item as () => TimelineItem | DateDividerItem} expansion={expansion} handlers={handlers} />
+                  <TimelineRow item={item as () => TimelineItem | DateDividerItem | UpdateLineItem} expansion={expansion} handlers={handlers} />
                 </ErrorBoundary>}>{props.foot!.render((node) => anchor.set(node)) as never}</If>
             </View>
           );
