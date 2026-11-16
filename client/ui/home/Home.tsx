@@ -14,7 +14,7 @@ import { ThreadWait } from "../chat/ThreadWait";
 import { brainHostIdentity } from "../chat/links";
 import { chatImage } from "../chat/assets";
 import { stopTurn } from "../../core/conversation/turn";
-import { brainSurface, newBrainChat } from "../../core/brain";
+import { brainSurface, isBrainThreadCacheKey, newBrainChat } from "../../core/brain";
 import { createChatTimeline } from "../../core/conversation/timeline";
 import type { BrainWorkResultEvent } from "../../core/timeline/brainWorkEvent";
 import type { BrainCurrentWork } from "../../core/timeline/types";
@@ -114,12 +114,28 @@ const workHandlers: WorkCardHandlers = {
 };
 // A past thread is read-only: its Work cards and messages offer no actions. Derived, not computed: an update whose
 // projection a slow phone cut off (NSH's 2 s budget) must not stop the thread for the rest of the app's life.
-const items = preparedRows(() => brainThread().conversation?.events ?? [], () => timeline(brainThread(), {
-  onPendingAction: routedBrainThread() ? undefined : (id, action) => untracked(brainChat)?.actOnFailed(id, action),
-  onWorkEvent: routedBrainThread() ? undefined : openWorkEvent,
-  openSessionIds: new Set(workers().map((w) => w.id)),
-  currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
-}), []);
+// The rows keep the chat they were made from: the thread shown changes before its chat does (and the rows lag
+// while a long thread is prepared), and a thread's list takes only its own thread's rows.
+const prepared = preparedRows(() => brainThread().conversation?.events ?? [], () => {
+  const state = brainThread();
+  return {
+    cacheKey: state.cacheKey,
+    rows: timeline(state, {
+      onPendingAction: routedBrainThread() ? undefined : (id, action) => untracked(brainChat)?.actOnFailed(id, action),
+      onWorkEvent: routedBrainThread() ? undefined : openWorkEvent,
+      openSessionIds: new Set(workers().map((w) => w.id)),
+      currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
+    }),
+  };
+}, { cacheKey: "", rows: [] });
+const items = () => prepared().rows;
+type ThreadRows = ReturnType<typeof items>;
+const NO_ROWS: ThreadRows = [];
+/** The rows of one thread: none while the rows shown are another thread's (a list opens on its first rows). */
+const threadRows = (threadId: string): ThreadRows => {
+  const made = prepared();
+  return isBrainThreadCacheKey(made.cacheKey, threadId) ? made.rows : NO_ROWS;
+};
 const durableHere = durableAnswered(items);
 const sealedHere = threadSealed({ brain: true }, durableHere);
 
@@ -312,14 +328,18 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
       {/* One of these at a time, by `shows`; the thread is made again for each thread it names. */}
       <If when={shows() === "unavailable"}><BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} /></If>
       <If when={shows() === "failed"}><BrainChatFailed onOpenTerminal={openTerminal} /></If>
-      <Each of={shows().startsWith("chat:") ? [shows()] : []} key={(thread) => thread}>{(thread) => (
+      <Each of={shows().startsWith("chat:") ? [shows()] : []} key={(thread) => thread}>{(thread) => {
+        const rows = () => threadRows(thread().slice("chat:".length));
+        return (
         // Its reading place is kept by computer and thread: made again (a hot patch to this page, a past thread and
-        // back) it opens where the person had read back to, or at its end.
-        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers} shown={homeShown} sent={brainSends} capsule={props.capsule} scope={brainThreadReadingScope(untracked(current)?.id ?? "", thread().slice("chat:".length))}
+        // back) it opens where the person had read back to, or at its end. It opens on its own thread's rows: the
+        // thread shown changes a moment before its chat does, and opened on the other thread's rows it stayed short
+        // of its end when its own came in (FAILURES: ThreadStability's past thread, CI 11-16).
+        <ChatTimeline testID="brain-chat" items={rows} handlers={props.handlers} shown={homeShown} sent={brainSends} capsule={props.capsule} scope={brainThreadReadingScope(untracked(current)?.id ?? "", thread().slice("chat:".length))}
           empty={() => (
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
             // 15 s; "What should Brain do?" only after a read that succeeded.
-            <ThreadWait waiting={() => chatState() === "loading"} hasRows={() => items().length > 0} empty={() => <Notice title="What should Brain do?" />}
+            <ThreadWait waiting={() => chatState() === "loading"} hasRows={() => rows().length > 0} empty={() => <Notice title="What should Brain do?" />}
               reload={() => brainChat()?.reload()} reconnect={() => currentTransport()?.resume()} computer={() => current()?.name}
               failedAction={{ title: "Open terminal", onPress: () => openTerminal(brain()?.host_worker?.id ?? ""), testID: "brain-chat-open-terminal" }} />
           )}
@@ -332,7 +352,8 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
             ),
           }}
           requests={() => (routedBrainThread() ? 0 : requestsHere().length)} reveal={revealRequests} />
-      )}</Each>
+        );
+      }}</Each>
       <If when={shows() === "waking"}><Notice title="Brain is starting…" /></If>
       <If when={shows() === "host_down"}><Notice title="Brain can't start" detail={brain()?.host_problem?.detail} /></If>
       {/* A start before the computer answers: connecting is a wait (the placeholder), Offline only at `link.away`. */}
