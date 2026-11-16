@@ -41,7 +41,7 @@ describe("What's New: when it shows", () => {
     const app = await open(APP, setup({ record }));
     await app.waitFor("id:whats-new-page-0", { timeout: 15_000 });
     // Three releases were missed: each one's headline, newest first.
-    expect(app.shows("text:Stays connected as you move")).toBe(true);
+    expect(app.shows("text:Diagrams and files, right in Chat")).toBe(true);
     expect(app.count("id:whats-new-dot-2")).toBe(1);
     expect(app.shows("id:whats-new-dot-3")).toBe(false);
     expect(app.shows("text:Mewla 0.4.9")).toBe(true);
@@ -49,8 +49,8 @@ describe("What's New: when it shows", () => {
     await app.waitUntil(() => framesOf(app.host.posts(), "whats_new_seen").length === 1);
     // The sheet settles the three releases: the highlights it had no room for are not offered after it.
     const settled = framesOf(app.host.posts(), "whats_new_seen")[0].ids as string[];
-    expect(settled.slice(0, 3)).toEqual(["0.4.9-follows-the-network", "0.4.8-browser-survives", "0.4.7-agent-questions-in-chat"]);
-    expect(settled.length).toBe(6);
+    expect(settled.slice(0, 3)).toEqual(["0.4.9-diagrams-and-files-in-chat", "0.4.8-browser-survives", "0.4.7-agent-questions-in-chat"]);
+    expect(settled.length).toBe(7);
     // The last page has Done; it closes and does not come back.
     await app.press("id:whats-new-dot-2");
     await app.waitFor("id:whats-new-done");
@@ -84,7 +84,7 @@ describe("What's New: when it shows", () => {
   }, 40_000);
 
   test("seen on another device (the web) is not shown here", async () => {
-    const seen = ["0.4.9-follows-the-network", "0.4.9-updates-in-chat"];
+    const seen = ["0.4.9-diagrams-and-files-in-chat", "0.4.9-back-after-network-switch", "0.4.9-updates-in-chat"];
     const app = await open(APP, setup({ record: { baseline: "0.4.8", seen } }));
     await app.waitFor("id:composer", { timeout: 15_000 });
     await app.wait(3_000);
@@ -98,8 +98,8 @@ describe("What's New: when it shows", () => {
     // No swipe on the web: arrows move the pages.
     await app.press("id:whats-new-next");
     await app.waitFor("id:whats-new-page-1");
-    expect(app.shows("text:Every update, told in Chat")).toBe(true);
-    expect(framesOf(app.host.posts(), "whats_new_seen")[0].ids).toEqual(["0.4.9-follows-the-network", "0.4.9-updates-in-chat"]);
+    expect(app.shows("text:Back in seconds after switching networks")).toBe(true);
+    expect(framesOf(app.host.posts(), "whats_new_seen")[0].ids).toEqual(["0.4.9-diagrams-and-files-in-chat", "0.4.9-back-after-network-switch", "0.4.9-updates-in-chat"]);
   }, 30_000);
 
   test("never over a draft: the sheet waits while Brain's composer holds text", async () => {
@@ -141,7 +141,10 @@ describe("What's New: Try it", () => {
   test("Try it closes the sheet and opens the place", async () => {
     const app = await open(APP, setup({ record: { baseline: "0.4.8" } }));
     await app.waitFor("id:whats-new-try", { timeout: 15_000 });
-    // 0.4.9's first page: the connection, on the computer page.
+    // 0.4.9's second page: the network, on the computer page.
+    await app.press("id:whats-new-dot-1");
+    await app.waitFor("id:whats-new-page-1");
+    await app.wait(500);
     await app.press("id:whats-new-try");
     await app.waitFor("id:computer-page");
     expect(app.shows("id:whats-new")).toBe(false);

@@ -270,6 +270,47 @@ function NetworkHop() {
   );
 }
 
+/** A reply draws its flowchart, and the file it names opens with a tap. */
+function ChatDiagram() {
+  const boxes = [0.08, 0.2, 0.32].map((at) => loop(appear(at, 4)));
+  const arrows = [0.16, 0.28].map((at) => loop(appear(at, 0)));
+  const preview = loop([{ offset: 0, opacity: 0, translateY: 30 }, { offset: 0.6, opacity: 0, translateY: 30 }, { offset: 0.7, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 30 }]);
+  const Box = (props: { label: string; style: Record<string, unknown>; strong?: boolean }) => (
+    <View class={`items-center justify-center rounded-[8px] px-2.5 py-1.5 ${props.strong ? "bg-primary" : "bg-card"}`} style={props.style}>
+      <Text class={`text-[11px] font-semibold ${props.strong ? "text-primary-foreground" : "text-foreground"}`}>{props.label}</Text>
+    </View>
+  );
+  const Arrow = (props: { style: Record<string, unknown> }) => (
+    <View class="flex-row items-center" style={props.style}>
+      <View class="h-[2px] w-[14px] bg-faint" />
+      <Icon name="chevron-right" size={11} tone="faint" />
+    </View>
+  );
+  return (
+    <View class="relative h-[150px] w-[260px] justify-center gap-2.5 overflow-hidden">
+      <View class="flex-row items-center justify-center gap-1 rounded-[14px] bg-muted px-2 py-3">
+        <Box label="Push" style={boxes[0]} />
+        <Arrow style={arrows[0]} />
+        <Box label="Build" style={boxes[1]} />
+        <Arrow style={arrows[1]} />
+        <Box label="Ship" strong style={boxes[2]} />
+      </View>
+      <View class="relative flex-row items-center gap-1 self-start">
+        <Text class="text-[12px] text-foreground">Steps are in</Text>
+        <Text class="text-[12px] font-semibold text-foreground underline">docs/release.md</Text>
+        <Press at={0.5} style={{ right: 30, top: -5 }} />
+      </View>
+      <View class="absolute bottom-0 left-3 right-3 h-[52px] rounded-t-[16px] border border-b-0 border-border bg-muted px-3 pt-2" style={preview}>
+        <View class="flex-row items-center gap-1.5">
+          <Icon name="document-text" size={13} tone="ink" />
+          <Text class="text-[11px] font-semibold text-foreground">release.md</Text>
+        </View>
+        <View class="mt-2 gap-1.5"><Line width={170} /></View>
+      </View>
+    </View>
+  );
+}
+
 /** An update leaves its line in Brain's chat; a tap opens what's new. */
 function UpdateLine(props: { version: string }) {
   const line = loop(appear(0.12, 0));
@@ -300,6 +341,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "browser-survives": BrowserSurvives,
   "network-hop": NetworkHop,
   "update-line": UpdateLine,
+  "chat-diagram": ChatDiagram,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */

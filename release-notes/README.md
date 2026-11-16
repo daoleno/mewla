@@ -9,9 +9,9 @@ Brain, 2026-11-16). A gift, not a changelog: the two or three things a person wi
   "date": "2026-11-16",
   "highlights": [
     {
-      "id": "0.4.9-follows-the-network",
-      "title": "Stays connected as you move",
-      "line": "From Wi-Fi to mobile data and back, Mewla follows without dropping.",
+      "id": "0.4.9-back-after-network-switch",
+      "title": "Back in seconds after switching networks",
+      "line": "Wi-Fi to mobile data and back: Mewla reconnects as soon as the network does.",
       "media": {"scene": "network-hop"},
       "try": {"kind": "open", "target": "computer"}
     }
@@ -28,7 +28,7 @@ Brain, 2026-11-16). A gift, not a changelog: the two or three things a person wi
   no ellipsis. English, in the person's words: what they can now do, never how it was built. A fix the person felt
   or asked for can be a highlight ("Fixed: …").
 - **media.scene**: the loop drawn in `client/ui/whatsnew/scenes.tsx` (`chat-card`, `update-restart`,
-  `agent-windows`, `browser-survives`, `network-hop`, `update-line`). A new feature usually gets a new scene there;
+  `agent-windows`, `browser-survives`, `network-hop`, `update-line`, `chat-diagram`). A new feature usually gets a new scene there;
   `WhatsNew.test.tsx` fails on a name the app does not draw.
 - **try**: `{"kind": "open", "target": …}` with brain, sessions, new-session, screen, calendar, computer or
   settings; or `{"kind": "prompt", "target": "<text>"}`, written into Brain's composer.
