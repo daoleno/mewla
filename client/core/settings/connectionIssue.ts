@@ -144,7 +144,7 @@ export async function diagnoseConnectionIssue(
       probe.status,
     );
   } catch (error) {
-    if (input.server.transportKind === "link") return relayNetworkIssue(error);
+    if (input.server.transportKind === "link") return relayNetworkIssue(error, input.server.name);
     return withRaw(networkIssue(error), error instanceof Error ? error.message.trim() : "");
   }
 }
@@ -297,20 +297,21 @@ function networkIssue(error: unknown): ConnectionIssue {
  * A computer paired through Mewla Relay, whose probe failed before HTTP. The probe goes to the relay's
  * public name for the computer; the relay hands the TLS stream to the computer itself, and when the computer
  * is not connected to it the relay closes the connection at once, which a phone reports as a TLS or SSL error
- * ("An SSL error has occurred…" on iOS, "io: unexpected end of file" in NSH's fetch). That is never a
- * certificate, hostname or proxy problem the person can fix on the phone; it is the computer being off the relay.
+ * ("An SSL error has occurred…" on iOS, "io: unexpected end of file" in NSH's fetch). A network that resets
+ * TLS to the relay looks the same from the phone, so both are named. Never a certificate, hostname or proxy
+ * the person can fix on the phone.
  */
-function relayNetworkIssue(error: unknown): ConnectionIssue {
+function relayNetworkIssue(error: unknown, name: string): ConnectionIssue {
   const raw = error instanceof Error ? error.message.trim() : "";
   const lower = raw.toLowerCase();
   if (error instanceof Error && error.name === "AbortError") {
     return withRaw(issue("network_unreachable", "Can't reach Mewla Relay", "Mewla Relay did not answer before the probe timed out.", "Check this phone's internet connection (Wi-Fi, mobile data or VPN), then try again."), raw);
   }
-  // The computer answered through the relay with its own certificate (a relay whose names have no public
-  // certificate): it is connected, and the plain probe cannot judge it further.
+  // The computer answered through the relay with a certificate the phone does not trust: it is on the relay,
+  // but its public certificate is not issued yet or has lapsed.
   if (lower.includes("certificate")) {
     return withRaw(
-      issue("network_unreachable", "Connection through Mewla Relay failed", "The computer answered through Mewla Relay, but the connection did not open.", "Try again. If it keeps failing, pair this phone again from mewla on the computer."),
+      issue("network_unreachable", "Connection through Mewla Relay failed", "The computer answered through Mewla Relay, but its certificate was not accepted.", "On the computer, mewla doctor shows its remote access certificate."),
       raw,
     );
   }
@@ -326,9 +327,9 @@ function relayNetworkIssue(error: unknown): ConnectionIssue {
     return withRaw(
       issue(
         "relay_not_connected",
-        "Not connected to Mewla Relay",
-        "Mewla Relay closed the connection: this computer is not connected to it.",
-        "Check that the computer is on, awake and running mewla. On the computer, mewla doctor shows its Mewla Relay connection and why it failed.",
+        `${name.trim() || "This computer"} isn't online`,
+        "Mewla Relay can't reach it: the computer is off, asleep or not running Mewla, or this phone's network blocks the relay.",
+        "Turn on or wake the computer and make sure Mewla runs there; mewla doctor on it shows its Mewla Relay connection. If it is running, try another network on this phone.",
       ),
       raw,
     );
