@@ -41,6 +41,32 @@ class BuildCodeTests(unittest.TestCase):
                     release_identity.build_code(version)
 
 
+class TestFlightTrainTests(unittest.TestCase):
+    def test_a_train_is_one_minor(self):
+        for version, train in (("0.4.9", "0.4"), ("0.4.10", "0.4"), ("0.4.10-beta.2", "0.4"), ("0.5.0-beta.1", "0.5"), ("1.0.0", "1.0")):
+            with self.subTest(version=version):
+                self.assertEqual(release_identity.testflight_version(version), train)
+                self.assertEqual(release_identity.identity(version)["testflight_version"], train)
+
+    def test_a_build_number_names_its_release(self):
+        for version in ("0.4.5", "0.4.8", "0.4.9", "0.4.10", "0.4.10-beta.3", "0.5.0-beta.1", "1.2.3", "0.3.2-beta.98"):
+            with self.subTest(version=version):
+                self.assertEqual(release_identity.version_of_code(release_identity.build_code(version)), version)
+        self.assertEqual(release_identity.version_of_code(40999), "0.4.9")
+
+    def test_numbers_the_rule_never_makes_name_nothing(self):
+        # Expo's builds (140 at 0.3.1), suffix 0, non-integers.
+        for code in (140, 9_999, 40900, "40999", None, True):
+            with self.subTest(code=code):
+                self.assertIsNone(release_identity.version_of_code(code))
+
+    def test_builds_of_a_train_grow_with_the_release(self):
+        ordered = ["0.4.9", "0.4.10-beta.1", "0.4.10", "0.4.11"]
+        codes = [release_identity.build_code(v) for v in ordered]
+        self.assertEqual(codes, sorted(codes))
+        self.assertEqual({release_identity.testflight_version(v) for v in ordered}, {"0.4"})
+
+
 class SourcesAgreeTests(unittest.TestCase):
     def test_gradle_computes_the_same_rule(self):
         gradle = (ROOT / "client/android/app/build.gradle.kts").read_text(encoding="utf-8")
@@ -53,6 +79,8 @@ class SourcesAgreeTests(unittest.TestCase):
         project = (ROOT / "client/ios/project.yml").read_text(encoding="utf-8")
         self.assertRegex(project, rf'\n\s+MARKETING_VERSION: "{re.escape(release_identity.marketing_version(version))}"\n')
         self.assertRegex(project, rf'\n\s+CURRENT_PROJECT_VERSION: "{release_identity.build_code(version)}"\n')
+        self.assertRegex(project, rf'\n\s+MEWLA_APP_VERSION: "{re.escape(version)}"\n')
+        self.assertIn("MewlaVersion: $(MEWLA_APP_VERSION)", project)
 
     def test_package_is_the_shipped_identity(self):
         manifest = json.loads((ROOT / release_identity.SOURCE).read_text(encoding="utf-8"))

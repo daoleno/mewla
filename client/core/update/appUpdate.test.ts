@@ -329,20 +329,29 @@ describe("TestFlight availability", () => {
     expect(parseTestFlightManifest(manifest({ public_link: undefined }), bundle).publicLink).toBeUndefined();
   });
 
-  test("decides availability from the marketing version, then the build number", () => {
+  test("decides availability from the build number, which names the release", () => {
     const build = (version: string, buildNumber: number) => ({ version, buildNumber, appId: "1" });
-    const installed = installedBuild("0.2.87", "126")!;
-    expect(isNewerTestFlightBuild(build("0.2.88", 1), installed)).toBe(true);
-    expect(isNewerTestFlightBuild(build("0.2.87", 127), installed)).toBe(true);
-    expect(isNewerTestFlightBuild(build("0.2.87", 126), installed)).toBe(false);
-    expect(isNewerTestFlightBuild(build("0.2.86", 999), installed)).toBe(false);
+    // 0.4.9 is build 40999 under the TestFlight train 0.4; update.info reports the release, not the train.
+    const installed = installedBuild("0.4.9", "40999")!;
+    expect(installed).toEqual({ version: "0.4.9", buildNumber: 40999 });
+    expect(isNewerTestFlightBuild(build("0.4.10", 41099), installed)).toBe(true);
+    expect(isNewerTestFlightBuild(build("0.4.9", 40999), installed)).toBe(false);
+    expect(isNewerTestFlightBuild(build("0.4.8", 40899), installed)).toBe(false);
+    expect(isNewerTestFlightBuild(build("0.5.0", 50001), installed)).toBe(true);
   });
 
-  test("a beta binary compares by its marketing version, so it never announces itself", () => {
-    const installed = installedBuild("0.2.88-beta.1", "130")!;
-    expect(installed).toEqual({ version: "0.2.88", buildNumber: 130 });
-    expect(isNewerTestFlightBuild({ version: "0.2.88", buildNumber: 130, appId: "1" }, installed)).toBe(false);
-    expect(isNewerTestFlightBuild({ version: "0.2.88", buildNumber: 131, appId: "1" }, installed)).toBe(true);
+  test("a beta binary reads as its release and is not announced to itself", () => {
+    const installed = installedBuild("0.4.10-beta.1", "41001")!;
+    expect(installed).toEqual({ version: "0.4.10", buildNumber: 41001 });
+    expect(isNewerTestFlightBuild({ version: "0.4.10", buildNumber: 41001, appId: "1" }, installed)).toBe(false);
+    expect(isNewerTestFlightBuild({ version: "0.4.10", buildNumber: 41099, appId: "1" }, installed)).toBe(true);
+  });
+
+  test("a manifest the new availability job writes still parses on an app from before the train", () => {
+    // scripts/testflight-available-build.py names build 40999 (marketing version 0.4) as release 0.4.9.
+    const text = manifest({ marketing_version: "0.4.9", build_number: 40999 });
+    expect(parseTestFlightManifest(text, bundle)).toMatchObject({ version: "0.4.9", buildNumber: 40999 });
+    expect(() => parseTestFlightManifest(manifest({ marketing_version: "0.4" }), bundle)).toThrow("version");
   });
 
   test("builds without a real version or build number stay silent", () => {

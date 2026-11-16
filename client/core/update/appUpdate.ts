@@ -1,5 +1,5 @@
 import { ED25519_SIGNATURE_BYTES, ed25519Verify } from "../ed25519";
-import { compareVersions, parseVersion } from "./version";
+import { parseVersion } from "./version";
 
 /**
  * Build-time distribution channel. GitHub APK builds update themselves from
@@ -155,23 +155,25 @@ export function parseAndroidUpdateManifest(text: string): AndroidUpdateArtifact 
 
 /** The newest build TestFlight offers testers, as the signed manifest vouches for it. */
 export interface TestFlightBuild {
-  /** Numeric marketing version (CFBundleShortVersionString), e.g. 0.2.88. */
+  /**
+   * The release the build is, X.Y.Z (the manifest's marketing_version, named from the build number by
+   * scripts/lib/release_identity.py). Not CFBundleShortVersionString: a Preview build's is its train, 0.4.
+   */
   version: string;
   buildNumber: number;
   appId: string;
   publicLink?: string;
 }
 
-/** What the running iOS binary is: its numeric marketing version and CFBundleVersion. */
+/** What the running iOS binary is: its release (Info.plist MewlaVersion, without -beta.N) and CFBundleVersion. */
 export interface InstalledBuild {
   version: string;
   buildNumber: number;
 }
 
 /**
- * The running binary's own identity. A beta release such as 0.2.88-beta.1 ships
- * marketing version 0.2.88, so the semver app version is reduced the same way the
- * iOS build does. Null when the build number isn't a plain integer (dev builds).
+ * The running binary's own identity, from `update.info`: the release it is (0.2.88-beta.1 reads as
+ * 0.2.88) and its build number. Null when either isn't real (dev builds).
  */
 export function installedBuild(appVersion: string, buildNumber: unknown): InstalledBuild | null {
   const version = appVersion.trim().replace(/^v/, "").split(/[-+]/, 1)[0];
@@ -180,11 +182,13 @@ export function installedBuild(appVersion: string, buildNumber: unknown): Instal
   return { version, buildNumber: number };
 }
 
-/** Whether TestFlight offers something newer than the running build: version first, then build. */
+/**
+ * Whether TestFlight offers something newer than the running build. The build number decides: every
+ * release has a higher one (scripts/lib/release_identity.py, 40999 is 0.4.9), while a Preview build's
+ * marketing version stays the train's (0.4) for all of them.
+ */
 export function isNewerTestFlightBuild(candidate: TestFlightBuild, installed: InstalledBuild): boolean {
-  const order = compareVersions(candidate.version, installed.version);
-  if (order === null) return false;
-  return order > 0 || (order === 0 && candidate.buildNumber > installed.buildNumber);
+  return candidate.buildNumber > installed.buildNumber;
 }
 
 /**

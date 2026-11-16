@@ -153,13 +153,14 @@ for name, want in (
     ("MEWLA_APP_ID", exp_package),
     ("MARKETING_VERSION", exp_marketing),
     ("CURRENT_PROJECT_VERSION", str(exp_ios_build)),
+    ("MEWLA_APP_VERSION", exp_version),
     ("MEWLA_IOS_DISTRIBUTION", "none"),
 ):
     got = ios_setting(name)
     if got != want:
         errors.append(f"client/ios/project.yml {name}: got {got!r} want {want!r}")
 for needle in ("PRODUCT_BUNDLE_IDENTIFIER: $(MEWLA_APP_ID)\n", "PRODUCT_BUNDLE_IDENTIFIER: $(MEWLA_APP_ID).live\n",
-               "group.$(MEWLA_APP_ID)", "MewlaDistribution: $(MEWLA_IOS_DISTRIBUTION)",
+               "group.$(MEWLA_APP_ID)", "MewlaDistribution: $(MEWLA_IOS_DISTRIBUTION)", "MewlaVersion: $(MEWLA_APP_VERSION)",
                "PROVISIONING_PROFILE_SPECIFIER: $(MEWLA_APP_PROFILE)", "PROVISIONING_PROFILE_SPECIFIER: $(MEWLA_LIVE_PROFILE)"):
     if needle not in project:
         errors.append(f"client/ios/project.yml missing {needle.strip()!r}")
