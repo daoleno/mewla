@@ -48,28 +48,8 @@ jobs:
         with:
           go-version-file: daemon/go.mod
           cache-dependency-path: daemon/go.sum
-      - name: Install runtime test prerequisites
-        run: sudo apt-get update && sudo apt-get install -y tmux rsync
       - name: Test
         run: go test ./...
-      - name: Session host terminal engine libraries
-        uses: ./.github/actions/ghostty-desktop
-      - name: Session host terminal engine (libghostty-vt linked)
-        working-directory: .
-        run: ./scripts/test-ghosttyvt.sh -race
-      - name: Executable behavior contracts (scripted, not real AI)
-        shell: bash
-        run: |
-          set -euo pipefail
-          go test -json -count=1 -timeout 120s ./brain ./cmd/mewla ./watcher -run '^TestBDD_' | tee "$RUNNER_TEMP/mewla-bdd.jsonl"
-      - name: Preserve behavior results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mewla-bdd-${{ github.sha }}
-          path: ${{ runner.temp }}/mewla-bdd.jsonl
-          if-no-files-found: warn
-          retention-days: 7
       - name: Vet
         run: go vet ./...
       - name: Verify public publisher build configuration
@@ -83,6 +63,28 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         working-directory: .
         run: ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/release-bin"
+
+  # The session host's terminal engine (build tag ghosttyvt, libghostty-vt linked) under -race, beside
+  # the daemon job rather than after it: it took 1.5 of that job's 5 min (11-16).
+  daemon-engine:
+    name: Daemon (session host terminal engine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      # A Session's plain `tmux` must reach the daemon's private server, never the person's own.
+      - name: Install tmux
+        run: sudo apt-get update && sudo apt-get install -y tmux
+      - name: Session host terminal engine libraries
+        uses: ./.github/actions/ghostty-desktop
+      - name: Session host terminal engine (libghostty-vt linked)
+        run: ./scripts/test-ghosttyvt.sh -race
 
   # The daemon as it runs on a Mac: every package built for darwin and its tests, which include the
   # Mac's own code (screen, agent display, keychain, Live Activity). Tests that need a person's
