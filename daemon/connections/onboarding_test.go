@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -230,6 +231,48 @@ func TestSlackPublicPKCEAndRotatingRefresh(t *testing.T) {
 	_ = json.Unmarshal([]byte(rawSecret), &saved)
 	if saved.Token.RefreshToken != "refresh-two" {
 		t.Fatal("rotated refresh token was not saved")
+	}
+}
+
+// A Slack client that signs in with its secret refreshes with it too: Slack
+// refuses a rotating web token's refresh without it (bad_client_secret), which
+// ended such accounts 12 hours after sign-in.
+func TestSlackSecretClientRefreshesWithItsSecret(t *testing.T) {
+	m, _ := New(t.TempDir())
+	m.networkOwned = false
+	var forms []url.Values
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		_ = req.ParseForm()
+		forms = append(forms, req.PostForm)
+		body := `{"ok":true,"authed_user":{"access_token":"access-one","refresh_token":"refresh-one","expires_in":43200,"scope":"channels:read"}}`
+		if req.PostForm.Get("grant_type") == "refresh_token" {
+			if req.PostForm.Get("client_secret") != "operator-secret" {
+				body = `{"ok":false,"error":"bad_client_secret"}`
+			} else {
+				body = `{"ok":true,"access_token":"access-two","refresh_token":"refresh-two","expires_in":43200,"scope":"channels:read"}`
+			}
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	r := &record{Account: Account{ID: "slack", Integration: "slack", Endpoint: "https://slack.com/api"}, OAuth: &oauthAccount{ClientID: "operator", TokenURL: "https://slack.com/api/oauth.v2.access", RedirectURL: "https://owned.example/plugins/oauth/callback"}}
+	token, err := slackCodec.exchange(m, context.Background(), r, "operator-secret", "code", "verifier")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token.Expiry = time.Now().Add(-time.Minute)
+	raw, _ := json.Marshal(oauthSecret{Token: token, ClientSecret: "operator-secret"})
+	_ = m.vault.Set("integration:slack", string(raw))
+	access, err := m.accountToken(context.Background(), r)
+	if err != nil || access != "access-two" {
+		t.Fatal("refresh without the client's secret", err)
+	}
+	if len(forms) != 2 {
+		t.Fatalf("token requests = %d, want exchange + refresh", len(forms))
+	}
+	for i, form := range forms {
+		if form.Get("client_id") != "operator" || form.Get("client_secret") != "operator-secret" {
+			t.Fatalf("request %d authenticated the client differently: id %q, secret sent %v", i, form.Get("client_id"), form.Get("client_secret") != "")
+		}
 	}
 }
 
@@ -581,5 +624,42 @@ func TestDynamicRegistrationBrandingFallsBack(t *testing.T) {
 		if last := bodies[len(bodies)-1]; refuses && (last["client_name"] != "Mewla" || last["logo_uri"] != nil || last["client_uri"] != nil || last["policy_uri"] != nil) {
 			t.Fatalf("fallback registration %v", last)
 		}
+	}
+}
+
+// A refused refresh tells Chat once, and names the fix that works: a client
+// refusal (bad_client_secret) is not cured by signing in again.
+func TestRefusedRefreshTellsChatOnce(t *testing.T) {
+	for name, tc := range map[string]struct {
+		code, title string
+	}{
+		"sign-in gone":   {"invalid_refresh_token", "Slack sign-in ended"},
+		"client refused": {"bad_client_secret", "Slack sign-in can't renew"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m, _ := New(t.TempDir())
+			m.networkOwned = false
+			m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"ok":false,"error":"` + tc.code + `"}`))}, nil
+			})}
+			var notices []SignInLost
+			m.SetSignInLost(func(n SignInLost) { notices = append(notices, n) })
+			r := &record{Account: Account{ID: "slack", Integration: "slack", Name: "Team · me", Status: "connected", Endpoint: "https://slack.com/api"}, OAuth: &oauthAccount{ClientID: "public", TokenURL: "https://slack.com/api/oauth.v2.access", RedirectURL: NativeReturnRelay}}
+			m.records["slack"] = r
+			raw, _ := json.Marshal(oauthSecret{Token: &oauth2.Token{AccessToken: "old", RefreshToken: "refresh", Expiry: time.Now().Add(-time.Minute)}})
+			_ = m.vault.Set("integration:slack", string(raw))
+			for i := 0; i < 2; i++ {
+				if _, err := m.accountToken(context.Background(), r); !errors.Is(err, errAuth) {
+					t.Fatalf("refused refresh = %v", err)
+				}
+			}
+			if r.Account.Status != "authorization_required" || len(notices) != 1 {
+				t.Fatalf("status %q, notices %+v", r.Account.Status, notices)
+			}
+			n := notices[0]
+			if n.AccountID != "slack" || n.Title != tc.title || !strings.Contains(n.Body, "“Team · me”") || !strings.Contains(n.Body, "Extensions") {
+				t.Fatalf("notice = %+v", n)
+			}
+		})
 	}
 }

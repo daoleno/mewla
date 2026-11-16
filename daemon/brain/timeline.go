@@ -27,6 +27,9 @@ const (
 	// timelineKindHostNotice is a line Mewla itself writes about Brain's Host
 	// (it restarted without its earlier conversation), shown as a status row.
 	timelineKindHostNotice = "host_notice"
+	// timelineKindPluginNotice is a line Mewla writes when a plugin account
+	// stops working (its service refused to renew the sign-in).
+	timelineKindPluginNotice = "plugin_notice"
 
 	workResultConversationSource = "work_result"
 )
@@ -998,7 +1001,7 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 			WorkDetailsJSON: item.DetailsJSON,
 			WorkWaitFor:     item.WaitFor,
 		}, true
-	case timelineKindHostNotice:
+	case timelineKindHostNotice, timelineKindPluginNotice:
 		return work.CodexConversationEvent{
 			ID:        item.ID,
 			Seq:       seq,
@@ -1008,7 +1011,7 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 			Title:     item.Title,
 			Body:      item.Body,
 			Status:    item.Status,
-			Source:    timelineKindHostNotice,
+			Source:    item.Kind,
 		}, true
 	case timelineKindCalendarResult:
 		return work.CodexConversationEvent{

@@ -623,7 +623,7 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 	}
 	var token *oauth2.Token
 	if codec := codecFor(r); codec != nil {
-		token, err = codec.refresh(m, ctx, r, secret.Token.RefreshToken)
+		token, err = codec.refresh(m, ctx, r, secret.ClientSecret, secret.Token.RefreshToken)
 	} else {
 		token, err = config.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, client), secret.Token).Token()
 	}
@@ -637,8 +637,12 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 			return "", errNetwork
 		}
 		log.Printf("plugins: %s sign-in refresh refused: %s", r.Account.Integration, signInDetail(err))
+		lost := r.Account.Status != "authorization_required"
 		r.Account.Status = "authorization_required"
 		_ = m.save()
+		if lost {
+			m.noteSignInLost(r, refusalCode(err))
+		}
 		return "", errAuth
 	}
 	if token.AccessToken == "" || len(token.AccessToken) > 16384 || len(token.RefreshToken) > 16384 {
