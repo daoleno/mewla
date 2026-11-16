@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -181,4 +182,125 @@ func TestRelayReportStopsWhenSignedOutAndIsSafeWithoutAReporter(t *testing.T) {
 	}
 	var none *relayReporter
 	none.report("hk") // a computer with one relay has no reporter
+}
+
+// relayService is the service's relay endpoint as the real Client reaches it: it keeps the relay it last applied,
+// and holds the first "hk" request after it arrived, before it applies it, until released.
+type relayService struct {
+	mu         sync.Mutex
+	relay      string
+	held       bool
+	hkArrived  chan struct{}
+	release    chan struct{}
+	hkApplied  chan struct{}
+	mainLanded chan struct{}
+}
+
+func (s *relayService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var body struct{ Relay string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.mu.Lock()
+	hold := body.Relay == "hk" && !s.held
+	s.held = s.held || hold
+	s.mu.Unlock()
+	if hold {
+		close(s.hkArrived)
+		<-s.release // the request is on the service, being applied, whatever the client does meanwhile
+	}
+	s.mu.Lock()
+	s.relay = body.Relay
+	s.mu.Unlock()
+	switch {
+	case hold:
+		close(s.hkApplied)
+	case body.Relay == "main":
+		close(s.mainLanded)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// With the real Client: a report of the old relay the service is already applying when a newer connection comes is
+// not abandoned for the newer one; the newer report goes once the service answered the old, so the service keeps the
+// newer relay. (Cancelling the old request ended it at the client only; the service still applied it, last.)
+func TestTheServiceKeepsTheNewerRelayWhenAnOldReportIsBeingApplied(t *testing.T) {
+	manager, err := auth.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &relayService{hkArrived: make(chan struct{}), release: make(chan struct{}), hkApplied: make(chan struct{}), mainLanded: make(chan struct{})}
+	server := httptest.NewServer(service)
+	t.Cleanup(server.Close)
+	// Whatever happens, the held request is let go before the server closes, which waits for it: a failure ends.
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(service.release) }) }
+	t.Cleanup(release)
+	client, err := NewClient(server.URL, "", manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obs := &observedReports{inner: client, hkReturned: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	waiting := make(chan struct{})
+	reporter := &relayReporter{ctx: ctx, client: obs, logf: t.Logf, backoff: func(int) time.Duration { return 0 },
+		superseded: func() { close(waiting) }}
+	reporter.report("hk")
+	<-service.hkArrived
+	reporter.report("main")
+	// The newer report goes ahead as far as it can before the service finishes the old one: if the old request was
+	// given up at the client, the newer one lands now; if not, the newer one waits for it.
+	select {
+	case <-obs.hkReturned:
+		t.Fatalf("the old report ended at the client while the service was still applying it: %v", obs.hkErr)
+	case <-waiting:
+		// A newer report must not cancel the old one's request: the service may be applying it whatever the client
+		// does. (Cancelled in report() itself, its context is already done by the time the newer report waits.)
+		if err := obs.hkContext().Err(); err != nil {
+			t.Fatalf("the newer report cancelled the old one's request in flight: %v", err)
+		}
+	}
+	release()
+	<-service.hkApplied
+	<-service.mainLanded
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if service.relay != "main" {
+		t.Fatalf("the service keeps relay %q, want the newer %q", service.relay, "main")
+	}
+}
+
+// observedReports passes reports to the real Client, keeps the context of the first "hk" call and says when that
+// call returned at the client.
+type observedReports struct {
+	inner      relayReporterClient
+	hkReturned chan struct{}
+	mu         sync.Mutex
+	hkCtx      context.Context
+	hkErr      error
+}
+
+func (o *observedReports) ReportRelay(ctx context.Context, relay string) error {
+	o.mu.Lock()
+	first := relay == "hk" && o.hkCtx == nil
+	if first {
+		o.hkCtx = ctx
+	}
+	o.mu.Unlock()
+	err := o.inner.ReportRelay(ctx, relay)
+	if first {
+		o.mu.Lock()
+		o.hkErr = err
+		o.mu.Unlock()
+		close(o.hkReturned)
+	}
+	return err
+}
+
+func (o *observedReports) hkContext() context.Context {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.hkCtx
 }
