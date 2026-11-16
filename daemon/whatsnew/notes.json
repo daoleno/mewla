@@ -1,0 +1,126 @@
+{
+  "releases": [
+    {
+      "version": "0.4.9",
+      "date": "2026-11-16",
+      "highlights": [
+        {
+          "id": "0.4.9-follows-the-network",
+          "title": "Stays connected as you move",
+          "line": "From Wi-Fi to mobile data and back, Mewla follows without dropping.",
+          "media": {
+            "scene": "network-hop"
+          },
+          "try": {
+            "kind": "open",
+            "target": "computer"
+          }
+        },
+        {
+          "id": "0.4.9-updates-in-chat",
+          "title": "Every update, told in Chat",
+          "line": "A line in Brain's chat marks each update. Tap it to see what's new.",
+          "media": {
+            "scene": "update-line"
+          },
+          "try": {
+            "kind": "open",
+            "target": "brain"
+          }
+        }
+      ],
+      "fixes": [
+        "A Brain thread's chat opens on its own messages, at its end or where you were reading.",
+        "Windows: mewla update restarts a Mewla installed over SSH.",
+        "iPhone and iPad keyboards: Alt+b and Alt+f jump by word in the terminal."
+      ]
+    },
+    {
+      "version": "0.4.8",
+      "date": "2026-11-15",
+      "highlights": [
+        {
+          "id": "0.4.8-browser-survives",
+          "title": "Agent pages survive updates",
+          "line": "Restart or update Mewla: the agent's browser keeps every page open.",
+          "media": {
+            "scene": "browser-survives"
+          },
+          "try": {
+            "kind": "open",
+            "target": "screen"
+          }
+        },
+        {
+          "id": "0.4.8-mac-agent-windows",
+          "title": "Watch agents' windows on a Mac",
+          "line": "Each agent's browser window, live in Screen. Hold it, type, or stop.",
+          "media": {
+            "scene": "agent-windows"
+          },
+          "try": {
+            "kind": "open",
+            "target": "screen"
+          }
+        }
+      ],
+      "fixes": [
+        "A Worker still at work keeps its turn through restarts and long quiet steps.",
+        "Work stays open while its Worker still has a page open for you.",
+        "A full agent screen makes room for the next agent.",
+        "Mewla no longer needs tmux: every Session runs in Mewla's own session host."
+      ]
+    },
+    {
+      "version": "0.4.7",
+      "date": "2026-11-15",
+      "highlights": [
+        {
+          "id": "0.4.7-agent-questions-in-chat",
+          "title": "Answer agent questions in Chat",
+          "line": "Sign-in, folder trust and first-run choices are cards you tap.",
+          "media": {
+            "scene": "chat-card"
+          },
+          "try": {
+            "kind": "open",
+            "target": "new-session"
+          }
+        },
+        {
+          "id": "0.4.7-update-restarts",
+          "title": "Updates finish by themselves",
+          "line": "mewla update restarts Mewla onto the new version. Sessions keep running.",
+          "media": {
+            "scene": "update-restart"
+          },
+          "try": {
+            "kind": "open",
+            "target": "computer"
+          }
+        },
+        {
+          "id": "0.4.7-worker-page-stays",
+          "title": "A Worker's page waits for you",
+          "line": "A page a Worker opens, like a sign-in, stays in Screen under its name.",
+          "media": {
+            "scene": "agent-windows"
+          },
+          "try": {
+            "kind": "open",
+            "target": "screen"
+          }
+        }
+      ],
+      "fixes": [
+        "Windows: Brain runs on a Claude Code installed with npm.",
+        "When Brain, a Session or a Worker cannot start, Chat says why.",
+        "Claude Code or Codex installed for your login shell is found.",
+        "A new Claude Session in a folder you pick starts ready.",
+        "A message sent right after switching Brain arrives on its own.",
+        "Several people on one Windows computer each get their own Mewla.",
+        "Windows: a folder path over the length limit says so, and Up a folder works."
+      ]
+    }
+  ]
+}

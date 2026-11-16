@@ -14,6 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import release_identity  # noqa: E402
+import release_notes  # noqa: E402
 
 
 BETA_VERSION_RE = re.compile(
@@ -440,6 +441,12 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         )
     user_notes = read_text(root, user_notes_relative)
     parse_user_notes(user_notes, user_notes_relative)
+    # What's New (release-notes/<version>.json) ships in the app and the daemon: the release has
+    # its own file, and the copies they bundle are current (scripts/release-notes.py).
+    if release_notes.main(["--repo", str(root), "--check", "--require", next_version]) != 0:
+        raise PrepareError(
+            f"What's New notes for {next_version} are missing or not current; see the error above"
+        )
 
     sources = {
         relative: read_text(root, relative)

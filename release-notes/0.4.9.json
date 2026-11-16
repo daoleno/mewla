@@ -1,0 +1,35 @@
+{
+  "version": "0.4.9",
+  "date": "2026-11-16",
+  "highlights": [
+    {
+      "id": "0.4.9-follows-the-network",
+      "title": "Stays connected as you move",
+      "line": "From Wi-Fi to mobile data and back, Mewla follows without dropping.",
+      "media": {
+        "scene": "network-hop"
+      },
+      "try": {
+        "kind": "open",
+        "target": "computer"
+      }
+    },
+    {
+      "id": "0.4.9-updates-in-chat",
+      "title": "Every update, told in Chat",
+      "line": "A line in Brain's chat marks each update. Tap it to see what's new.",
+      "media": {
+        "scene": "update-line"
+      },
+      "try": {
+        "kind": "open",
+        "target": "brain"
+      }
+    }
+  ],
+  "fixes": [
+    "A Brain thread's chat opens on its own messages, at its end or where you were reading.",
+    "Windows: mewla update restarts a Mewla installed over SSH.",
+    "iPhone and iPad keyboards: Alt+b and Alt+f jump by word in the terminal."
+  ]
+}

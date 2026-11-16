@@ -61,6 +61,7 @@ JOB_PATHS = {
         "scripts/*", "client/ui/nsh.json", "client/ios/project.yml", "client/android/*",
         "client/core/update/version.ts", "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt",
         "native/terminal-vt/*", "package.json", "CHANGELOG.md", "release/*", "docs/*", ".github/*",
+        "release-notes/*", "client/ui/whatsnew/*", "daemon/whatsnew/*",
     ],
 }
 

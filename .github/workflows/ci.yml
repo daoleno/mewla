@@ -216,6 +216,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify package / version / versionCode sources
         run: ./scripts/verify-release-identity.sh
+      - name: What's New notes are current
+        run: python3 scripts/release-notes.py --check
       - name: Test release and verification scripts
         env:
           PYTHONDONTWRITEBYTECODE: "1"
