@@ -338,8 +338,9 @@ against the relay and takes a direct one that proves it is the paired daemon,
 but while a connection is open every caller (HTTP requests, viewers) uses its
 path as it is, without re-measuring it under the connection
 (`client/core/link/pinnedTransport.ts`). Closing a working relay socket as soon
-as a direct address answered, and falling back when the direct socket died,
-cost the owner's phone some 35 dropped sockets an hour at home.
+as a direct address answered (checked every 20 s), and falling back when the
+direct socket died, closed some 18 healthy sockets a day on the owner's phone
+(11-13 to 11-16), each followed by a reconnect.
 
 The Android and iOS hosts report the phone's network changes (`link.network
 {online}`, from the default network callback and `NWPathMonitor`). A reconnect
