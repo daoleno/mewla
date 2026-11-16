@@ -34,6 +34,12 @@ export interface FakeDaemonState {
    * echoed, but the link drops before its answer (a slow phone), so the app sends it again under the same id.
    */
   admitsInput?: { loseFirstAck?: boolean };
+  /**
+   * What's New's record as the daemon keeps it (daemon/whatsnew): `whats_new_get` answers it (with `releases`, the
+   * computer's notes, when given), `whats_new_seen` adds ids and ends a replay, `whats_new_note` adds an update.
+   * Without it the computer is one from before What's New and answers nothing.
+   */
+  whats_new?: { baseline: string; seen?: string[]; updates?: { version: string; at: number }[]; replay?: boolean; releases?: unknown };
 }
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
@@ -359,6 +365,23 @@ export class FakeDaemon {
           }
         }
         return reply("input_sent", {});
+      }
+      case "whats_new_get":
+      case "whats_new_seen":
+      case "whats_new_note": {
+        const record = this.state.whats_new;
+        if (!record) return;
+        record.seen ??= [];
+        record.updates ??= [];
+        if (frame.type === "whats_new_seen") {
+          record.replay = false;
+          for (const id of (frame.ids as string[] | undefined) ?? []) if (!record.seen.includes(id)) record.seen.push(id);
+        }
+        if (frame.type === "whats_new_note" && typeof frame.version === "string" && !record.updates.some((u) => u.version === frame.version)) {
+          record.updates.push({ version: frame.version, at: Date.now() });
+        }
+        const { releases, ...rest } = record;
+        return reply("whats_new", { record: { ...rest, seen: [...record.seen], updates: [...record.updates] }, ...(frame.type === "whats_new_get" && releases ? { releases } : {}) });
       }
       default:
         return;

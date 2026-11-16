@@ -4,6 +4,9 @@ import { switches } from "../session";
 import { dialogFrame } from "../../core/shell/sheet";
 import { wide } from "./layout";
 
+/** How many sheets and dialogs are open now (What's New waits for none). */
+export const sheetsOpen = signal(0);
+
 /**
  * Whether a sheet may show: a switch of computer closes it (what it shows is the last computer's) and tells its
  * owner, and it stays closed until the owner opens it again.
@@ -32,7 +35,13 @@ function guardedOpen(props: { open?: boolean | null; onOpenChange?: (event: { op
     shown = false;
     props.onOpenChange?.({ open: false, reason: "cancel" });
   });
-  return () => Boolean(props.open) && !dismissed();
+  const visible = () => Boolean(props.open) && !dismissed();
+  effect(() => {
+    if (!visible()) return;
+    untracked(() => sheetsOpen.set(sheetsOpen() + 1));
+    return () => untracked(() => sheetsOpen.set(sheetsOpen() - 1));
+  });
+  return visible;
 }
 
 /**

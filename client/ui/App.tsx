@@ -1,4 +1,5 @@
 import { cleanup, colorScheme, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, View } from "nsh";
+import { openedForSomething } from "./whatsnew/state";
 import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
 import { keepReadingPlaces, loadReadingPlaces } from "../core/timeline/readingPlace";
@@ -81,6 +82,7 @@ export function startApp(): void {
   host.on("links.open", (payload) => {
     const url = (payload as { url?: string } | null)?.url;
     if (!url) return;
+    openedForSomething();
     if (readPairingLink(url)) return void pairFromText(url);
     if (isPhoneLink(url)) return void openPhonePage();
     if (openSettingsLink(url)) return;

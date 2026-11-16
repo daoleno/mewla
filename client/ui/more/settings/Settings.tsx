@@ -1,4 +1,5 @@
 import { cleanup, effect, host, openUrl, platform, signal, Storage, setColorScheme, untracked, View, lifecycle } from "nsh";
+import { openWhatsNew } from "../../whatsnew/state";
 import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
@@ -207,6 +208,7 @@ export function Settings(props: { nav: PageNav }) {
 
       <Section title="About">
         <Row lead={tile("info")} title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
+        <Row testID="settings-whats-new" lead={tile("bulb")} title="What's new" chevron onPress={() => openWhatsNew()} />
         <If when={!appUpdateWaiting()}><AboutUpdateRow /></If>
         <Row lead={tile("shield-check")} title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
         <Row lead={tile("help")} title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />

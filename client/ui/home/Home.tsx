@@ -45,6 +45,8 @@ import { AttachmentTray } from "../more/files/Pages";
 import { tray } from "../tray/state";
 import { wide } from "../shell/layout";
 import { createMenuAnchor } from "../kit/Menu";
+import type { UpdateLineItem } from "../../core/timeline/updateLines";
+import { brainComposing, brainNeedsPerson, lines as updateLines } from "../whatsnew/state";
 
 const startingChat = signal(false);
 const notice = signal("");
@@ -137,6 +139,21 @@ const threadRows = (threadId: string): ThreadRows => {
   return isBrainThreadCacheKey(made.cacheKey, threadId) ? made.rows : NO_ROWS;
 };
 const durableHere = durableAnswered(items);
+// What's New waits while a card here needs the person.
+effect(() => brainNeedsPerson.set(requestsHere().length > 0));
+/** The lines updates left (What's New), in Brain's current chat only; one object per line while it is the same. */
+const lineItems = new Map<string, UpdateLineItem>();
+const updateLineRows = computed((): readonly UpdateLineItem[] => {
+  if (routedBrainThread()) return [];
+  return updateLines().map((line) => {
+    const id = `update:${line.version}`;
+    const kept = lineItems.get(id);
+    if (kept && kept.highlights === line.highlights) return kept;
+    const item: UpdateLineItem = { type: "update-line", id, timestamp: new Date(line.at).toISOString(), version: line.version, highlights: line.highlights };
+    lineItems.set(id, item);
+    return item;
+  });
+});
 const sealedHere = threadSealed({ brain: true }, durableHere);
 
 function hostId(): string {
@@ -335,7 +352,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
         // back) it opens where the person had read back to, or at its end. It opens on its own thread's rows: the
         // thread shown changes a moment before its chat does, and opened on the other thread's rows it stayed short
         // of its end when its own came in (FAILURES: ThreadStability's past thread, CI 11-16).
-        <ChatTimeline testID="brain-chat" items={rows} handlers={props.handlers} shown={homeShown} sent={brainSends} capsule={props.capsule} scope={brainThreadReadingScope(untracked(current)?.id ?? "", thread().slice("chat:".length))}
+        <ChatTimeline testID="brain-chat" items={rows} handlers={props.handlers} shown={homeShown} sent={brainSends} capsule={props.capsule} lines={updateLineRows} scope={brainThreadReadingScope(untracked(current)?.id ?? "", thread().slice("chat:".length))}
           empty={() => (
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
             // 15 s; "What should Brain do?" only after a read that succeeded.
@@ -412,6 +429,8 @@ export function browseWorkspace(): void {
 
 export function Home() {
   const text = createComposerText(brainDraft);
+  // What's New waits while Brain's composer holds a draft.
+  effect(() => brainComposing.set(text.text().trim().length > 0));
   // Brain's thread is never rewound: an edited message goes out as a new one.
   const editor = createMessageEdit({ text, brain: true, messageRewind: () => false, send: (value) => brainChat()?.send(value) });
   const handlers = {
