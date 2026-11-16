@@ -746,6 +746,15 @@ func (server *Server) handleConnectorWithRelease(
 			_ = conn.Close()
 		}
 	}()
+	// A rejection frees the handshake slot before its answer is written: the
+	// peer that read why it was refused may connect again at once, and must not
+	// find its own finished handshake still holding the slot (the accept loop
+	// would then close the new connection unread, and the kernel's RST would
+	// discard the answer it was owed).
+	rejectHandshake := func(code, message string) error {
+		releaseHandshake()
+		return writeProtocolError(conn, code, message)
+	}
 	acceptedAt := time.Now()
 	_ = conn.SetDeadline(acceptedAt.Add(server.config.HandshakeTimeout))
 	message, err := linkproto.ReadMessage(conn)
@@ -762,7 +771,7 @@ func (server *Server) handleConnectorWithRelease(
 			reason := rejectionReasonForError(err, rejectionAuth)
 			outcome.reject(reason)
 			server.logRouteRejected(message.RouteID, reason)
-			_ = writeProtocolError(conn, "registration_rejected", err.Error())
+			_ = rejectHandshake("registration_rejected", err.Error())
 			return
 		}
 		session, err := server.registerRoute(conn, message, grant)
@@ -770,7 +779,7 @@ func (server *Server) handleConnectorWithRelease(
 			reason := rejectionReasonForError(err, rejectionProtocol)
 			outcome.reject(reason)
 			server.logRouteRejected(message.RouteID, reason)
-			_ = writeProtocolError(conn, "route_conflict", err.Error())
+			_ = rejectHandshake("route_conflict", err.Error())
 			return
 		}
 		releaseHandshake()
@@ -795,7 +804,7 @@ func (server *Server) handleConnectorWithRelease(
 			reason := rejectionReasonForError(err, rejectionAuth)
 			outcome.reject(reason)
 			server.logAdmissionRejected("request", message.RouteID, reason)
-			_ = writeProtocolError(conn, "admission_rejected", err.Error())
+			_ = rejectHandshake("admission_rejected", err.Error())
 			return
 		}
 		alias, expiresAt, err := server.createAdmission(message)
@@ -803,7 +812,7 @@ func (server *Server) handleConnectorWithRelease(
 			reason := rejectionReasonForError(err, rejectionTicket)
 			outcome.reject(reason)
 			server.logAdmissionRejected("request", message.RouteID, reason)
-			_ = writeProtocolError(conn, "admission_rejected", err.Error())
+			_ = rejectHandshake("admission_rejected", err.Error())
 			return
 		}
 		releaseHandshake()
@@ -822,14 +831,14 @@ func (server *Server) handleConnectorWithRelease(
 			reason := rejectionReasonForError(err, rejectionAuth)
 			outcome.reject(reason)
 			server.logAdmissionRejected("consume", message.RouteID, reason)
-			_ = writeProtocolError(conn, "admission_rejected", err.Error())
+			_ = rejectHandshake("admission_rejected", err.Error())
 			return
 		}
 		if err := server.consumeAdmission(message); err != nil {
 			reason := rejectionReasonForError(err, rejectionTicket)
 			outcome.reject(reason)
 			server.logAdmissionRejected("consume", message.RouteID, reason)
-			_ = writeProtocolError(conn, "admission_rejected", err.Error())
+			_ = rejectHandshake("admission_rejected", err.Error())
 			return
 		}
 		releaseHandshake()
@@ -847,7 +856,7 @@ func (server *Server) handleConnectorWithRelease(
 		pending, err := server.claimPendingStream(message)
 		if err != nil {
 			outcome.reject(rejectionReasonForError(err, rejectionTicket))
-			_ = writeProtocolError(conn, "attach_rejected", err.Error())
+			_ = rejectHandshake("attach_rejected", err.Error())
 			return
 		}
 		releaseHandshake()
@@ -872,7 +881,7 @@ func (server *Server) handleConnectorWithRelease(
 		keep = true
 	default:
 		outcome.reject(rejectionProtocol)
-		_ = writeProtocolError(conn, "unsupported_message", "unsupported Mewla Relay message")
+		_ = rejectHandshake("unsupported_message", "unsupported Mewla Relay message")
 	}
 }
 
