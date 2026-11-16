@@ -390,5 +390,20 @@ class BuildUploadTests(unittest.TestCase):
         self.assertIn("filter%5BcfBundleVersion%5D=5", url)
 
 
+    def test_a_preview_train_marketing_version_goes_through_unchanged(self):
+        # Preview builds carry the train X.Y (release_identity.py testflight_version): 0.4.9 is 0.4 (40999).
+        requests = []
+
+        def open_upload(request, timeout):
+            requests.append(request)
+            return Response(b'{"data":[{"id":"upload-40999","attributes":{"state":"COMPLETE"}}]}')
+
+        client = asc_upload.AppStoreConnectClient("SYNTHETIC", self.key, opener=open_upload)
+        self.assertEqual(asc_upload.exact_build_upload(client, "6821246662", "0.4", "40999")["id"], "upload-40999")
+        self.assertIn("filter%5BcfBundleShortVersionString%5D=0.4&", requests[0].full_url)
+        asc_upload.exact_build(client, "6821246662", "0.4", "40999")
+        self.assertIn("filter%5BpreReleaseVersion.version%5D=0.4&", requests[1].full_url)
+
+
 if __name__ == "__main__":
     unittest.main()
