@@ -1096,6 +1096,10 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleTelegramMessage(conn, raw)
 	case "client_diagnostic":
 		s.handleClientDiagnostic(conn, raw)
+	case "link_ping":
+		// The app asks right after its network changed: an answer is the
+		// socket working on the new network (client/core/transport.ts).
+		s.sendJSON(conn, map[string]any{"type": "link_pong", "request_id": raw.RequestID})
 	case "send_input":
 		s.handleQueuedSessionInput(conn, raw)
 	case "send_key", "send_action":
