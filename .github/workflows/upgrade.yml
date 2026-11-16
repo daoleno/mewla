@@ -1,0 +1,125 @@
+name: Upgrade from the latest release
+
+# What a person on the latest release gets when they install main over it, tested on main's
+# schedule. It used to gate every release (android-upgrade in release-artifacts.yml); now a failure
+# here is a bug to fix now, filed as an issue, and does not hold an unrelated release
+# (docs/ci-release.md).
+#
+# Android: the latest release's APK pairs with its daemon and keeps a draft; main's APK, signed with
+# the release key, installs over it, opens paired and Connected with the same device key and the
+# draft, and its scanner runs (client/scripts/release-upgrade.sh).
+on:
+  schedule:
+    - cron: "40 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: upgrade-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android (latest release → main)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Android SDK, arm64 Ghostty and Gradle home
+        uses: ./.github/actions/android-native
+      - name: Install NSH
+        timeout-minutes: 10
+        run: client/scripts/fetch-nsh.sh
+      - name: The latest release's APK and daemon
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          OLD="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          echo "upgrading from $OLD"
+          mkdir -p "$RUNNER_TEMP/old"
+          gh release download "$OLD" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/old" \
+            --pattern "mewla-android-arm64-$OLD.apk" --pattern mewla-linux-amd64.tar.gz --pattern SHA256SUMS
+          cd "$RUNNER_TEMP/old"
+          grep -E " (mewla-android-arm64-$OLD.apk|mewla-linux-amd64.tar.gz)$" SHA256SUMS | sha256sum -c -
+          tar -xzf mewla-linux-amd64.tar.gz
+          {
+            echo "OLD_APK=$RUNNER_TEMP/old/mewla-android-arm64-$OLD.apk"
+            echo "MEWLA=$(find "$RUNNER_TEMP/old" -name mewla -type f -perm -u+x | head -1)"
+          } >> "$GITHUB_ENV"
+      - name: Materialize the release keystore (temp, mode 0600)
+        env:
+          MEWLA_ANDROID_KEYSTORE_BASE64: ${{ secrets.ZEN_ANDROID_KEYSTORE_BASE64 }}
+          MEWLA_ANDROID_KEYSTORE: ${{ runner.temp }}/mewla-release.p12
+        run: ./scripts/materialize-android-keystore.sh > /dev/null
+      # The same build as a release's APK (scripts/android-release-apk.sh), from main.
+      - name: Build main's signed APK
+        timeout-minutes: 40
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
+          MEWLA_ANDROID_KEYSTORE: ${{ runner.temp }}/mewla-release.p12
+          MEWLA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ZEN_ANDROID_KEYSTORE_PASSWORD }}
+          MEWLA_ANDROID_KEY_ALIAS: ${{ secrets.ZEN_ANDROID_KEY_ALIAS }}
+          MEWLA_ANDROID_KEY_PASSWORD: ${{ secrets.ZEN_ANDROID_KEY_PASSWORD }}
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+        run: |
+          set -euo pipefail
+          ./scripts/android-release-apk.sh
+          echo "NEW_APK=$(ls -t dist-download/android-native/mewla-android-arm64-*.apk | head -1)" >> "$GITHUB_ENV"
+      - name: Shred the keystore
+        if: always()
+        run: |
+          KS="${{ runner.temp }}/mewla-release.p12"
+          [[ -f "$KS" ]] && { shred -u "$KS" 2>/dev/null || rm -f "$KS"; } || true
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Upgrade on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 25
+        env:
+          OUT: ${{ runner.temp }}/upgrade
+          # main's tracked version is the latest release's until the next release moves it.
+          MEWLA_UPGRADE_SAME_VERSION_OK: "1"
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: client/scripts/release-upgrade.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mewla-android-upgrade-${{ github.run_id }}
+          path: ${{ runner.temp }}/upgrade
+          retention-days: 30
+
+  # A red upgrade test is a bug to fix now: say so on one open issue rather than in a run nobody reads.
+  report:
+    name: File the failure
+    needs: android
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Upgrade from the latest release fails"
+          msg="Main ($GITHUB_SHA) does not upgrade cleanly from the latest release: $RUN"
+          n=$(gh issue list --state open --search "\"$title\" in:title" --json number,title -q ".[] | select(.title == \"$title\") | .number" | head -1) || n=""
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$msg"; else gh issue create --title "$title" --body "$msg"; fi

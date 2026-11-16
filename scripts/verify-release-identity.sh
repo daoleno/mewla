@@ -9,7 +9,7 @@
 # The version is client/ui/nsh.json "version"; the Android versionCode and the
 # iOS build number follow from it (scripts/lib/release_identity.py). Every
 # other identity source (the client's Gradle and Xcode projects, the daemon),
-# the tag, the release notes and the stage must agree with them.
+# the tag and the stage must agree with them.
 
 set -euo pipefail
 
@@ -281,7 +281,7 @@ for required in (
     # One publication of the complete signed set, only after every check of the run
     # (builds, platform runs, the Android upgrade, signing) passed.
     'needs: [validate, daemon]',
-    'needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-upgrade, stage]',
+    'needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, stage]',
     'needs: [validate, release-ready]',
     'RELEASE_IS_PRERELEASE=true',
     'RELEASE_IS_PRERELEASE=false',
@@ -290,32 +290,6 @@ for required in (
 ):
     if required not in wf:
         errors.append(f"release-artifacts.yml missing gated release contract: {required}")
-
-notes_path = root / f"docs/releases/v{exp_version}.md"
-if not notes_path.is_file():
-    errors.append(f"missing tracked release notes: {notes_path.relative_to(root)}")
-else:
-    notes = notes_path.read_text(encoding="utf-8")
-    if not notes.startswith(f"# Mewla {exp_version}\n"):
-        errors.append("release notes must start with the version heading")
-    if exp_cert not in notes:
-        errors.append("release notes missing official certificate SHA-256 fingerprint")
-    if not re.search(r"^## (New|Fixed)\n\n- ", notes, re.MULTILINE):
-        errors.append("release notes missing user-facing ## New or ## Fixed bullets")
-    # Windows ships from first_windows on; earlier notes name only the other archives.
-    first_windows = (0, 3, 0)
-    tracked = tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", exp_version).groups())
-    notes_archives = [a for a in DAEMON_ARCHIVES if tracked >= first_windows or not a.endswith(".zip")]
-    for needle in (
-        "## Get it",
-        "mewla update",
-        *notes_archives,
-        f"mewla-android-arm64-v{exp_version}.apk",
-        "unknown sources",
-        "SHA256SUMS",
-    ):
-        if needle not in notes:
-            errors.append(f"release notes missing required topic: {needle!r}")
 
 CLIENT_GHOSTTY_NOTICE = "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt"
 for rel in ("LICENSE", "NOTICE", "TRADEMARKS.md", CLIENT_GHOSTTY_NOTICE):
@@ -441,7 +415,6 @@ if errors:
     raise SystemExit(1)
 
 print(f"ok: identity version={exp_version} package={exp_package} versionCode={exp_vc}")
-print(f"ok: certificate fingerprint present in tracked notes")
 if stage:
     print(f"ok: stage {stage}")
 PY

@@ -1,17 +1,12 @@
 name: Client (NSH)
 
-# The NSH client, which replaced the Expo app in one cutover release (client/README.md).
-# A release gate, not a development step (user, 2026-11-12): it runs on a push to main that
-# touches the client (the merge, which also saves the native caches ci.yml restores) and by
-# hand, never on each push to a branch or PR. Before the cutover merge, run it once by hand on
-# the final commit with the upgrade gate: `gh workflow run client.yml --ref <branch>`. Device
-# rounds during development build locally. A run builds both hosts: the Android preview APK
-# (com.daoleno.mewla.preview, an artifact to sideload; on dispatch signed with the release key so
-# every Preview installs over the last one, client/scripts/preview-signer.sh) and the iOS
-# Simulator app with its upgrade tests. The fast checks (core tests, nsh check,
-# nsh test) run in ci.yml's client job. Releases do not wait for this workflow: release-artifacts.yml
-# upgrades from the previous release itself (android-upgrade). The upgrade gate runs on manual dispatch:
-# the released Expo APK, then the release-signed NSH app installed over it.
+# The NSH client's native hosts, on the test track: a push to main that touches the client builds
+# the Android preview APK and the iOS Simulator app with its unit tests (and saves the caches ci.yml
+# restores); dispatch also signs the Preview with the release key (client/scripts/preview-signer.sh,
+# so every Preview installs over the last one) and can run the Android upgrade gate (the released
+# Expo APK, then the release-signed NSH app). A red run here is a bug to fix now; it does not hold a
+# release, which ships a commit ci.yml passed (docs/ci-release.md). The fast checks (core tests,
+# nsh check, nsh test) run in ci.yml.
 on:
   push:
     branches: [main]
@@ -30,9 +25,10 @@ on:
         type: boolean
         default: false
 
+# A run on main always finishes (a red one is a bug to fix now); a newer dispatch replaces an older one.
 concurrency:
   group: client-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read

@@ -20,7 +20,7 @@ jobs:
   release:
     name: Prepare, tag, and dispatch reviewed release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout current main with complete tag history
         uses: actions/checkout@v4
@@ -41,7 +41,17 @@ jobs:
           }
           echo "sha=$START_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare deterministic release identity and notes
+      # A release ships what main's CI passed and never runs the suites itself: seconds when the
+      # run on this commit (or the last one before docs-only commits) is green; a run still going
+      # is waited for up to 15 min; red stops here (scripts/release-green.py).
+      - name: Main passed CI
+        timeout-minutes: 16
+        env:
+          GH_TOKEN: ${{ github.token }}
+          START_SHA: ${{ steps.start.outputs.sha }}
+        run: python3 scripts/release-green.py --sha "$START_SHA" --wait-minutes 15
+
+      - name: Prepare deterministic release identity
         id: release
         env:
           TARGET_VERSION: ${{ inputs.version }}
