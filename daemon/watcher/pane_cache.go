@@ -15,10 +15,6 @@ const (
 	// paneCaptureRefresh bounds how stale a reused screen can be, in case an
 	// activity stamp is wrong or missing.
 	paneCaptureRefresh = 30 * time.Second
-	// notOwnedRecheck is how long a pane found without Mewla's ownership marker
-	// is believed, so a pane inventoried between its creation and its marking is
-	// not hidden for long. An owned pane stays owned until it is gone.
-	notOwnedRecheck = 2 * time.Second
 	// processTableRefresh bounds how stale the process table can be while no
 	// pane has changed: a pane's process tree changes through its shell, which
 	// prints, so a quiet inventory means a quiet tree. The bound covers what
@@ -32,7 +28,7 @@ const (
 	idlePollInterval = 2 * time.Second
 )
 
-// paneStamp is what list-panes says about a pane's screen.
+// paneStamp is what the session host's listing says about a Session's screen.
 type paneStamp struct {
 	activity int64
 	dead     bool
@@ -55,7 +51,6 @@ type paneScreens struct {
 	mu      sync.Mutex
 	stamps  map[string]paneStamp
 	screens map[string]cachedScreen
-	owner   map[string]ownerVerdict
 	now     func() time.Time
 
 	// inventoryGen moves whenever a listing differs from the one before it.
@@ -66,29 +61,18 @@ type paneScreens struct {
 	tableAt      time.Time
 }
 
-type ownerVerdict struct {
-	owned bool
-	at    time.Time
-}
-
 func newPaneScreens() *paneScreens {
 	return &paneScreens{
 		changedAt: time.Now(),
 		stamps:    map[string]paneStamp{},
 		screens:   map[string]cachedScreen{},
-		owner:     map[string]ownerVerdict{},
 		now:       time.Now,
 	}
 }
 
 // inventory records the stamps of the panes just listed and forgets every pane
 // that is gone.
-func (p *paneScreens) inventory(panes []sessionPane) { p.inventoryOf(panes, nil) }
-
-// inventoryOf is inventory for one backend's listing: it forgets only the
-// panes owns claims (all of them when owns is nil), so backends listed apart
-// do not forget each other's.
-func (p *paneScreens) inventoryOf(panes []sessionPane, owns func(target string) bool) {
+func (p *paneScreens) inventory(panes []sessionPane) {
 	if p == nil {
 		return
 	}
@@ -105,12 +89,11 @@ func (p *paneScreens) inventoryOf(panes []sessionPane, owns func(target string) 
 		p.stamps[pane.target] = stamp
 	}
 	for target := range p.stamps {
-		if !live[target] && (owns == nil || owns(target)) {
+		if !live[target] {
 			p.inventoryGen++
 			p.changedAt = p.now()
 			delete(p.stamps, target)
 			delete(p.screens, target)
-			delete(p.owner, target)
 		}
 	}
 }
@@ -155,41 +138,6 @@ func (p *paneScreens) remember(target, content string, alive bool, deadStatus in
 		return
 	}
 	p.screens[target] = cachedScreen{content: content, alive: alive, deadStatus: deadStatus, stamp: stamp, readAtUnix: startedUnix, readAt: startedAt}
-}
-
-// ownership splits panes into those whose ownership is already believed and
-// those that need asking the session host.
-func (p *paneScreens) ownership(panes []sessionPane) (owned map[string]bool, ask []sessionPane) {
-	if p == nil {
-		return map[string]bool{}, panes
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	now := p.now()
-	owned = make(map[string]bool, len(panes))
-	for _, pane := range panes {
-		verdict, known := p.owner[pane.target]
-		switch {
-		case known && verdict.owned:
-			owned[pane.target] = true
-		case known && now.Sub(verdict.at) < notOwnedRecheck:
-		default:
-			ask = append(ask, pane)
-		}
-	}
-	return owned, ask
-}
-
-func (p *paneScreens) learnOwnership(asked []sessionPane, owned map[string]bool) {
-	if p == nil {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	now := p.now()
-	for _, pane := range asked {
-		p.owner[pane.target] = ownerVerdict{owned: owned[pane.target], at: now}
-	}
 }
 
 // paneRoots are the process ids of the panes in the latest inventory.

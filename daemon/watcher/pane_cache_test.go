@@ -85,33 +85,6 @@ func TestAFailedReadIsNeverReused(t *testing.T) {
 	}
 }
 
-func TestOwnershipIsBelievedForOwnedPanesAndRecheckedForTheRest(t *testing.T) {
-	now := time.Unix(1000, 0)
-	p := screensAt(&now)
-	panes := []sessionPane{{target: "%1"}, {target: "%2"}}
-	p.inventory(panes)
-	owned, ask := p.ownership(panes)
-	if len(owned) != 0 || len(ask) != 2 {
-		t.Fatalf("first look: owned=%v ask=%v", owned, ask)
-	}
-	p.learnOwnership(ask, map[string]bool{"%1": true})
-
-	now = now.Add(time.Second)
-	owned, ask = p.ownership(panes)
-	if !owned["%1"] || len(ask) != 0 {
-		t.Fatalf("within the recheck window: owned=%v ask=%v", owned, ask)
-	}
-	now = now.Add(notOwnedRecheck)
-	owned, ask = p.ownership(panes)
-	if !owned["%1"] || len(ask) != 1 || ask[0].target != "%2" {
-		t.Fatalf("after the recheck window: owned=%v ask=%v", owned, ask)
-	}
-	p.inventory([]sessionPane{{target: "%2"}})
-	if owned, _ := p.ownership([]sessionPane{{target: "%1"}}); owned["%1"] {
-		t.Fatal("a pane that is gone stayed owned")
-	}
-}
-
 func TestProcessTableIsReadOnlyWhenTheInventoryMovesOrAges(t *testing.T) {
 	p := newPaneScreens()
 	now := time.Unix(1000, 0)

@@ -209,21 +209,16 @@ type sessionInputPane struct {
 }
 
 type sessionInputIO interface {
-	// socket resolves the backend server the target lives on, opaque to the
-	// owner. Every operation is server-local: the caller threads the
-	// target's resolved server so a paste or receipt never reaches a
-	// different server's Sessions.
-	socket(sessionID string) string
-	pane(socket, sessionID string) sessionInputPane
+	pane(sessionID string) sessionInputPane
 	// submitPaste clears the target's draft, pastes payload as one exact
 	// paste and submits it with the adapter's timing. beforeStart runs
 	// immediately before the first byte can reach the target; its error
 	// means nothing was sent. started reports whether bytes may have
 	// reached the target, so an error with started is ambiguous and one
 	// without it left the target untouched.
-	submitPaste(socket, paneID, payload string, adapter sessionInputProvider, beforeStart func() error) (started bool, err error)
-	receiptLedger(socket, target string) (sessionInputReceiptLedger, error)
-	writeReceiptLedger(socket, target string, ledger sessionInputReceiptLedger) error
+	submitPaste(paneID, payload string, adapter sessionInputProvider, beforeStart func() error) (started bool, err error)
+	receiptLedger(target string) (sessionInputReceiptLedger, error)
+	writeReceiptLedger(target string, ledger sessionInputReceiptLedger) error
 }
 
 type sessionInputSession struct {
@@ -352,7 +347,6 @@ func (owner *sessionInputOwner) receiptOutcome(
 	result := InputResult{Outcome: InputNotSubmitted, Receipt: strings.TrimSpace(receipt)}
 	found := false
 	err := owner.serialized(sessionID, func() error {
-		socket := owner.ioSocket(sessionID)
 		if result.Receipt == "" || len(result.Receipt) > sessionInputReceiptMaxBytes ||
 			!utf8.ValidString(result.Receipt) {
 			return fmt.Errorf("input receipt is invalid or exceeds %d bytes", sessionInputReceiptMaxBytes)
@@ -360,18 +354,18 @@ func (owner *sessionInputOwner) receiptOutcome(
 		if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 			return err
 		}
-		baseline := owner.io.pane(socket, sessionID)
+		baseline := owner.io.pane(sessionID)
 		if err := validateSessionInputPane(baseline); err != nil {
 			return err
 		}
-		ledger, err := owner.io.receiptLedger(socket, baseline.paneID)
+		ledger, err := owner.io.receiptLedger(baseline.paneID)
 		if err != nil {
 			return fmt.Errorf("read durable input receipt ledger: %w", err)
 		}
 		if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 			return err
 		}
-		current := owner.io.pane(socket, sessionID)
+		current := owner.io.pane(sessionID)
 		if err := validateSessionInputPane(current); err != nil {
 			return err
 		}
@@ -463,7 +457,6 @@ func (owner *sessionInputOwner) submitWithTurn(
 		result.TurnID = strings.TrimSpace(turn.ID)
 	}
 	err := owner.serialized(sessionID, func() error {
-		socket := owner.ioSocket(sessionID)
 		if !utf8.ValidString(payload) {
 			return definitelyNotSubmitted(result.Receipt, fmt.Errorf("input must be valid UTF-8"))
 		}
@@ -474,7 +467,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 		if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 			return definitelyNotSubmitted(result.Receipt, err)
 		}
-		baseline := owner.io.pane(socket, sessionID)
+		baseline := owner.io.pane(sessionID)
 		if err := validateSessionInputPane(baseline); err != nil {
 			return definitelyNotSubmitted(result.Receipt, err)
 		}
@@ -484,7 +477,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 				return definitelyNotSubmitted(result.Receipt, fmt.Errorf("input receipt is invalid or exceeds %d bytes", sessionInputReceiptMaxBytes))
 			}
 			var ledgerErr error
-			ledger, ledgerErr = owner.io.receiptLedger(socket, baseline.paneID)
+			ledger, ledgerErr = owner.io.receiptLedger(baseline.paneID)
 			if ledgerErr != nil {
 				return definitelyNotSubmitted(result.Receipt, fmt.Errorf("read durable input receipt ledger: %w", ledgerErr))
 			}
@@ -569,7 +562,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 		if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 			return definitelyNotSubmitted(result.Receipt, err)
 		}
-		current := owner.io.pane(socket, sessionID)
+		current := owner.io.pane(sessionID)
 		if err := validateSessionInputPane(current); err != nil {
 			return definitelyNotSubmitted(result.Receipt, err)
 		}
@@ -694,7 +687,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 						return definitelyNotSubmitted(result.Receipt, err)
 					}
-					if err := validateSessionInputPane(owner.io.pane(socket, current.paneID)); err != nil {
+					if err := validateSessionInputPane(owner.io.pane(current.paneID)); err != nil {
 						return definitelyNotSubmitted(result.Receipt, err)
 					}
 					if err := repair.AbortUnmarkedInputAdmission(prior); err != nil {
@@ -745,18 +738,18 @@ func (owner *sessionInputOwner) submitWithTurn(
 			var markErr error
 			markedLedger, markErr = ledger.withAmbiguous(result.Receipt, payloadDigest)
 			if markErr == nil {
-				markErr = owner.persistReceiptLedger(socket, current.paneID, markedLedger, result.Receipt, payloadDigest, InputAmbiguous)
+				markErr = owner.persistReceiptLedger(current.paneID, markedLedger, result.Receipt, payloadDigest, InputAmbiguous)
 			}
 			if markErr != nil {
-				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared,
+				return owner.abortBeforeMutation(current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared,
 					fmt.Errorf("persist pre-mutation transport receipt: %w", markErr))
 			}
 			if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
-				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
+				return owner.abortBeforeMutation(current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
 			}
-			afterMarker := owner.io.pane(socket, current.paneID)
+			afterMarker := owner.io.pane(current.paneID)
 			if err := validateSessionInputPane(afterMarker); err != nil {
-				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
+				return owner.abortBeforeMutation(current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
 			}
 		}
 		// An agent with a typed way to take a message takes it there: no paste,
@@ -782,7 +775,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 				if sendErr != nil {
 					var failure *StructuredInputError
 					if errors.As(sendErr, &failure) && failure.NotSent {
-						return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, sendErr)
+						return owner.abortBeforeMutation(current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, sendErr)
 					}
 					if turn != nil {
 						if ambiguityLedger, ok := owner.ledger.(InputAdmissionAmbiguityLedger); ok {
@@ -807,7 +800,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 			// task needs explicit typed intent outside that data wrapper; manual
 			// input keeps its native semantics. The brief remains one exact paste.
 			adapter.delegatedIntent = delegatedTransportSubmit && isClaudeCommand(command)
-			started, queueErr := owner.io.submitPaste(socket, current.paneID, payload, adapter, func() error {
+			started, queueErr := owner.io.submitPaste(current.paneID, payload, adapter, func() error {
 				// This runs immediately before the first byte can reach the
 				// target. The paste is bound to the immutable Session id; the two
 				// identity reads bracket the generation proof so deterministic
@@ -816,7 +809,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 				if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 					return err
 				}
-				boundaryPane := owner.io.pane(socket, current.paneID)
+				boundaryPane := owner.io.pane(current.paneID)
 				if err := validateSessionInputPane(boundaryPane); err != nil {
 					return err
 				}
@@ -845,7 +838,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					result.Outcome = InputAmbiguous
 					return ambiguousSubmission(result.Receipt, queueErr)
 				}
-				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, queueErr)
+				return owner.abortBeforeMutation(current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, queueErr)
 			}
 		}
 		var confirmation delegatedInputConfirmation
@@ -862,7 +855,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					result.Outcome = InputAmbiguous
 					return ambiguousSubmission(result.Receipt, err)
 				}
-				confirmedPane := owner.io.pane(socket, current.paneID)
+				confirmedPane := owner.io.pane(current.paneID)
 				if err := validateSessionInputPane(confirmedPane); err != nil {
 					result.Outcome = InputAmbiguous
 					return ambiguousSubmission(result.Receipt, err)
@@ -901,7 +894,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					result.Outcome = InputAmbiguous
 					return ambiguousSubmission(result.Receipt, err)
 				}
-				confirmedPane := owner.io.pane(socket, current.paneID)
+				confirmedPane := owner.io.pane(current.paneID)
 				if err := validateSessionInputPane(confirmedPane); err != nil {
 					result.Outcome = InputAmbiguous
 					return ambiguousSubmission(result.Receipt, err)
@@ -945,7 +938,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					return ambiguousSubmission(result.Receipt, acceptErr)
 				}
 			} else if acceptErr := owner.persistReceiptLedger(
-				socket, current.paneID, acceptedLedger, result.Receipt, payloadDigest, InputAccepted,
+				current.paneID, acceptedLedger, result.Receipt, payloadDigest, InputAccepted,
 			); acceptErr != nil && turn == nil {
 				result.Outcome = InputAmbiguous
 				return ambiguousSubmission(result.Receipt, fmt.Errorf("submit succeeded but acceptance receipt was not confirmed: %w", acceptErr))
@@ -958,15 +951,6 @@ func (owner *sessionInputOwner) submitWithTurn(
 		result.Outcome = InputOutcomeFromError(err)
 	}
 	return result, err
-}
-
-// ioSocket resolves the target's session host for the Session input IO
-// through the owner's IO implementation.
-func (owner *sessionInputOwner) ioSocket(sessionID string) string {
-	if owner == nil || owner.io == nil {
-		return ""
-	}
-	return owner.io.socket(sessionID)
 }
 
 // ledgerTurn reads the current canonical turn for the session through the
@@ -1014,7 +998,7 @@ func (owner *sessionInputOwner) resolveInputAdmission(resolution InputAdmissionR
 }
 
 func (owner *sessionInputOwner) abortBeforeMutation(
-	socket, target string,
+	target string,
 	original sessionInputReceiptLedger,
 	sessionID string,
 	receipt string,
@@ -1033,7 +1017,7 @@ func (owner *sessionInputOwner) abortBeforeMutation(
 		}
 	}
 	if receipt != "" {
-		if err := owner.writeAndConfirmReceiptLedger(socket, target, original); err != nil {
+		if err := owner.writeAndConfirmReceiptLedger(target, original); err != nil {
 			return definitelyNotSubmitted(receipt, fmt.Errorf("%v; transport receipt rollback was not confirmed: %w", cause, err))
 		}
 	}
@@ -1391,13 +1375,13 @@ func (ledger sessionInputReceiptLedger) withOutcome(
 }
 
 func (owner *sessionInputOwner) writeAndConfirmReceiptLedger(
-	socket, target string,
+	target string,
 	ledger sessionInputReceiptLedger,
 ) error {
-	if err := owner.io.writeReceiptLedger(socket, target, ledger); err != nil {
+	if err := owner.io.writeReceiptLedger(target, ledger); err != nil {
 		return err
 	}
-	confirmed, err := owner.io.receiptLedger(socket, target)
+	confirmed, err := owner.io.receiptLedger(target)
 	if err != nil {
 		return fmt.Errorf("read back Session input receipt ledger: %w", err)
 	}
@@ -1408,13 +1392,13 @@ func (owner *sessionInputOwner) writeAndConfirmReceiptLedger(
 }
 
 func (owner *sessionInputOwner) persistReceiptLedger(
-	socket, target string,
+	target string,
 	ledger sessionInputReceiptLedger,
 	receipt string,
 	payloadHash string,
 	outcome InputOutcome,
 ) error {
-	if err := owner.writeAndConfirmReceiptLedger(socket, target, ledger); err != nil {
+	if err := owner.writeAndConfirmReceiptLedger(target, ledger); err != nil {
 		return err
 	}
 	entry, found := ledger.entry(receipt)

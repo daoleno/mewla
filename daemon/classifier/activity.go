@@ -58,8 +58,8 @@ type CaptureInfo struct {
 	Alternate bool
 }
 
-// OriginMarkerLine is the line a Worker pane prints as its first output; the
-// nonce is private to the pane and kept in its @mewla_origin option.
+// OriginMarkerLine is the line a Worker Session prints as its first output;
+// the nonce is private to the Session.
 func OriginMarkerLine(nonce string) string { return "mewla-origin " + nonce }
 
 // ActivityAdapter is a provider-specific pane/process activity detector.

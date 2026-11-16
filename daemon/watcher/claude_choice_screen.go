@@ -8,7 +8,7 @@ import (
 )
 
 // Claude Code AskUserQuestion TUI (verified against 2.1.296, wide and narrow
-// panes). The pane is plain text after capture-pane -p:
+// screens). The screen as plain text:
 //
 //	←  ☐ Fruit  ☒ Colors  ✔ Submit  →      tab bar (single question: " ☐ Size")
 //	Which colors?                          question text, wrapped by Ink; a long

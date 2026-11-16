@@ -34,8 +34,8 @@ func TestSessionHostLeavesNoTraceUntilUsed(t *testing.T) {
 	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
 		t.Fatalf("services = %v, %v", services, err)
 	}
-	if _, err := w.sessions().place("", false, "x"); err != nil {
-		t.Fatalf("place: %v", err)
+	if err := w.sessions().checkNear(""); err != nil {
+		t.Fatalf("checkNear: %v", err)
 	}
 	host := "mh-0123456789abcdef01234567"
 	if gone, err := w.sessions().resolveAbsence(host); err != nil || !gone {

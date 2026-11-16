@@ -59,11 +59,9 @@ type startHookBackend struct {
 	start func(PollStart) (string, error)
 }
 
-func (b startHookBackend) place(string, bool, string) (backendPlacement, error) {
-	return backendPlacement{}, nil
-}
+func (b startHookBackend) checkNear(string) error { return nil }
 
-func (b startHookBackend) create(_ backendPlacement, spec backendCreateSpec) (string, error) {
+func (b startHookBackend) create(spec backendCreateSpec) (string, error) {
 	return b.start(PollStart{Name: spec.name, Cwd: spec.cwd, Command: spec.command, Env: spec.env})
 }
 
