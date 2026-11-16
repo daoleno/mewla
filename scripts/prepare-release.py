@@ -485,12 +485,26 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         f'CURRENT_PROJECT_VERSION: "{next_code}"\n',
         relative=IOS_PROJECT,
     )
-    updates[IOS_PROJECT] = replace_literal(
+    ios_project = replace_literal(
         ios_project,
         f'MEWLA_APP_VERSION: "{current_version}"\n',
         f'MEWLA_APP_VERSION: "{next_version}"\n',
         relative=IOS_PROJECT,
     )
+    # The TestFlight train stays within a minor; a minor bump opens the next one with this release.
+    try:
+        current_train = release_identity.read_testflight_version(root)
+    except release_identity.IdentityError as exc:
+        raise PrepareError(str(exc)) from exc
+    next_train = release_identity.next_testflight_version(current_train, next_version)
+    if next_train != current_train:
+        ios_project = replace_literal(
+            ios_project,
+            f'MEWLA_TESTFLIGHT_VERSION: "{current_train}"\n',
+            f'MEWLA_TESTFLIGHT_VERSION: "{next_train}"\n',
+            relative=IOS_PROJECT,
+        )
+    updates[IOS_PROJECT] = ios_project
     updates["daemon/cmd/mewla/version.go"] = replace_literal(
         sources["daemon/cmd/mewla/version.go"],
         f'var Version = "{current_version}"',

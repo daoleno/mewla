@@ -59,11 +59,11 @@ class InstallableBuildTests(unittest.TestCase):
         )
 
     def test_a_train_build_names_its_release_by_build_number(self):
-        # The Preview's marketing version is the train (0.4); 40999 is 0.4.9 and 41099 is 0.4.10.
+        # The Preview's marketing version is the train (0.4.9); 40999 is 0.4.9 and 41099 is 0.4.10.
         doc = document(
             build(1, "40599", "0.4.5", "IN_BETA_TESTING"),
-            build(2, "40999", "0.4", "IN_BETA_TESTING"),
-            build(3, "41099", "0.4", "IN_BETA_TESTING"),
+            build(2, "40999", "0.4.9", "IN_BETA_TESTING"),
+            build(3, "41099", "0.4.9", "IN_BETA_TESTING"),
         )
         self.assertEqual(
             tf.select_installable_build(doc), {"marketing_version": "0.4.10", "build_number": 41099}

@@ -151,7 +151,8 @@ class ReviewQueueTests(unittest.TestCase):
         self.assertEqual(client.writes(), [])
 
     def test_a_train_build_waits_behind_the_review_and_is_named_by_its_build_number(self):
-        # 0.4.9 ships under the train 0.4 (scripts/lib/release_identity.py testflight_version).
+        # A train that sorts below live builds (a bare 0.4 under 0.4.8 and 0.4.5) is reported; the pinned
+        # trains (client/ios/project.yml MEWLA_TESTFLIGHT_VERSION) never are, see the next test.
         builds = [build("b40999", "40999", "0.4", "READY_FOR_BETA_SUBMISSION")] + NOW
         client = FakeClient(builds, NOW_REVIEWS)
         result = tf.run(client, APP, GROUP)
@@ -164,10 +165,24 @@ class ReviewQueueTests(unittest.TestCase):
         self.assertIn("- Listed above the newest build in TestFlight (higher marketing version): "
                       "0.4.8 (40899), 0.4.5 (40599)", text)
 
+    def test_the_pinned_0_4_9_train_waits_behind_0_4_8_and_is_listed_newest(self):
+        builds = [build("b40999", "40999", "0.4.9", "READY_FOR_BETA_SUBMISSION")] + NOW
+        result = tf.run(FakeClient(builds, NOW_REVIEWS), APP, GROUP)
+        self.assertEqual(result["waiting"]["build_number"], "40999")
+        self.assertEqual(result["above_train"], [])
+        later = [build("b41099", "41099", "0.4.9", "READY_FOR_BETA_SUBMISSION"),
+                 build("b40999", "40999", "0.4.9", "IN_BETA_TESTING"),
+                 build("b40899", "40899", "0.4.8", "IN_BETA_TESTING"),
+                 build("b40599", "40599", "0.4.5", "IN_BETA_TESTING")]
+        approved = {"b40999": "APPROVED", "b40899": "APPROVED", "b40599": "APPROVED"}
+        result = tf.run(FakeClient(later, approved), APP, GROUP)
+        self.assertEqual((result["submit"]["release"], result["above_train"]), ("0.4.10", []))
+        self.assertIn("0.4.10 (41099, TestFlight 0.4.9)", tf.markdown(result))
+
     def test_the_next_build_of_a_train_is_submitted_once_its_first_is_approved(self):
         builds = [
-            build("b41099", "41099", "0.4", "READY_FOR_BETA_SUBMISSION"),
-            build("b40999", "40999", "0.4", "IN_BETA_TESTING"),
+            build("b41099", "41099", "0.4.9", "READY_FOR_BETA_SUBMISSION"),
+            build("b40999", "40999", "0.4.9", "IN_BETA_TESTING"),
         ]
         client = FakeClient(builds, {"b40999": "APPROVED"})
         result = tf.run(client, APP, GROUP)

@@ -391,18 +391,20 @@ class BuildUploadTests(unittest.TestCase):
 
 
     def test_a_preview_train_marketing_version_goes_through_unchanged(self):
-        # Preview builds carry the train X.Y (release_identity.py testflight_version): 0.4.9 is 0.4 (40999).
+        # Preview builds carry their train (release_identity.py testflight_version), not the release:
+        # 0.4.10 is 0.4.9 (41099). The lookups match on the train and the build number.
         requests = []
 
         def open_upload(request, timeout):
             requests.append(request)
-            return Response(b'{"data":[{"id":"upload-40999","attributes":{"state":"COMPLETE"}}]}')
+            return Response(b'{"data":[{"id":"upload-41099","attributes":{"state":"COMPLETE"}}]}')
 
         client = asc_upload.AppStoreConnectClient("SYNTHETIC", self.key, opener=open_upload)
-        self.assertEqual(asc_upload.exact_build_upload(client, "6821246662", "0.4", "40999")["id"], "upload-40999")
-        self.assertIn("filter%5BcfBundleShortVersionString%5D=0.4&", requests[0].full_url)
-        asc_upload.exact_build(client, "6821246662", "0.4", "40999")
-        self.assertIn("filter%5BpreReleaseVersion.version%5D=0.4&", requests[1].full_url)
+        self.assertEqual(asc_upload.exact_build_upload(client, "6821246662", "0.4.9", "41099")["id"], "upload-41099")
+        self.assertIn("filter%5BcfBundleShortVersionString%5D=0.4.9&", requests[0].full_url)
+        self.assertIn("filter%5BcfBundleVersion%5D=41099", requests[0].full_url)
+        asc_upload.exact_build(client, "6821246662", "0.4.9", "41099")
+        self.assertIn("filter%5BpreReleaseVersion.version%5D=0.4.9&", requests[1].full_url)
 
 
 if __name__ == "__main__":

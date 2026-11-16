@@ -38,7 +38,10 @@ sys.path.insert(0, str(root / "scripts" / "lib"))
 import release_identity
 
 try:
-    tracked = release_identity.identity(release_identity.read_version(root))
+    # The pinned TestFlight train must be able to carry this version (same minor).
+    tracked = release_identity.identity(
+        release_identity.read_version(root), release_identity.read_testflight_version(root)
+    )
 except release_identity.IdentityError as exc:
     sys.exit(f"error: {exc}")
 print(f"{tracked['version']}\t{tracked['version_code']}\t{tracked['ios_build_number']}")
