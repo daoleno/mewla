@@ -487,16 +487,20 @@ func TestGWSConnectFlowEndToEnd(t *testing.T) {
 	}
 }
 
-// gcloudStub is a private executable named gcloud, so the tests never depend on
-// what the host's /bin/true is (a coreutils multicall binary on newer Ubuntu).
-func gcloudStub(t *testing.T) string {
+// cliStub is a private executable named name that prints nothing and succeeds,
+// so the tests never depend on what the host's /bin/true is (a coreutils
+// multicall binary on newer Ubuntu; a Mac has none, only /usr/bin/true).
+func cliStub(t *testing.T, name string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "gcloud")
+	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	return path
 }
+
+// gcloudStub is a private executable named gcloud (see cliStub).
+func gcloudStub(t *testing.T) string { return cliStub(t, "gcloud") }
 
 func TestGWSSetupCreatesTheProjectInTheOnlyGoogleCloudAccount(t *testing.T) {
 	m, _ := testGWSManager(t)

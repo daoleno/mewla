@@ -66,7 +66,7 @@ func TestAWSArchiveRejectsTraversalAndSymlinks(t *testing.T) {
 	}
 }
 func TestAWSExecutableAndUnsupportedInstall(t *testing.T) {
-	if err := validateAWSExecutable(context.Background(), "/bin/true"); err == nil {
+	if err := validateAWSExecutable(context.Background(), cliStub(t, "aws")); err == nil {
 		t.Fatal("empty executable accepted")
 	}
 	a := newAWSInstaller()
