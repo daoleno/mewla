@@ -41,8 +41,7 @@ devices() { env -i HOME="$state/home" PATH="$PATH" "$MEWLA" devices list -json -
 
 log "emulator ABIs: $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
 mkdir -p "$state/home" "$state/bin"
-# The released daemon it upgrades from may still run Sessions in tmux: a private tmux server (-S).
-# A daemon of its own: own state, own tmux server, nothing from this shell, and an inert Brain host:
+# A daemon of its own: own state, nothing from this shell, and an inert Brain host:
 # a cursor-agent that answers nothing, so Brain starts (the Expo app shows its composer) and never replies.
 printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-gate; exit 0; }\nexec sleep 86400\n' > "$state/bin/cursor-agent"
 # No systemd-run: the daemon's session host is then its own child, never a mewla-session-host-* user
@@ -50,10 +49,9 @@ printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-gate; exit 0; }\nexec sl
 # (the emulator lock), and Workers may not stop those units.
 printf '#!/bin/sh\necho "systemd-run is off for the upgrade gate daemon" >&2\nexit 1\n' > "$state/bin/systemd-run"
 chmod +x "$state/bin/cursor-agent" "$state/bin/systemd-run"
-tmux -S "$state/tmux.sock" new-session -d -s gate
 # On loopback (127.0.0.1; the released daemon it runs may predate -loopback-only): the emulator reaches it as 10.0.2.2.
 # MEWLA_NO_AUTOUPDATE: a released daemon older than Latest updated itself two minutes in and restarted under the gate.
-env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent MEWLA_NO_AUTOUPDATE=1 TMUX="$state/tmux.sock,0,0" \
+env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent MEWLA_NO_AUTOUPDATE=1 \
   "$MEWLA" serve -addr "127.0.0.1:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
 daemon=$!
 # The session host outlives its daemon: stop it and its Sessions by the pids it reports.
@@ -65,7 +63,7 @@ print(" ".join(str(s["pid"]) for s in d.get("sessions") or []), (d.get("host") o
 }
 # The trap's last status becomes the script's: a cleanup that trips (the daemon still writing as
 # its state is removed) must not turn a PASS into a failure.
-trap 'host_pids=$(stop_host); kill "$daemon" 2>/dev/null || true; wait "$daemon" 2>/dev/null || true; [[ -n "${host_pids// }" ]] && kill $host_pids 2>/dev/null; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state" 2>/dev/null || true' EXIT
+trap 'host_pids=$(stop_host); kill "$daemon" 2>/dev/null || true; wait "$daemon" 2>/dev/null || true; [[ -n "${host_pids// }" ]] && kill $host_pids 2>/dev/null; rm -rf "$state" 2>/dev/null || true' EXIT
 for _ in $(seq 1 60); do (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && break; sleep 1; done
 link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" 2>&1 | grep -o 'mewla://settings?p=[^ ]*' | head -1)
 [[ -n "$link" ]] || fail "the daemon gave no pairing link"

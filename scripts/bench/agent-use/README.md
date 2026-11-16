@@ -30,7 +30,7 @@ scripts/bench/agent-use/web/run.sh --reps 3 --with-long --sides mewla --wm kwin 
 # the sample is wav/tasks-hard-60.json (wav/wav.py sample --n 60 --seed 1108). Sites come up one at a time, memory-capped, behind
 # wav/proxy.py, which records the HAR the checker reads, so every tool layer is judged the same way.
 scripts/bench/agent-use/wav/run.sh --tasks scripts/bench/agent-use/wav/tasks-hard-60.json --sides mewla,ab,bu,vscreen --keep --no-convert
-# --sides vscreen starts wav/vscreen.sh: an isolated daemon (own state dir, port 9971 and tmux server) with the Virtual screen switch on.
+# --sides vscreen starts wav/vscreen.sh: an isolated daemon (own state dir and port 9971) with the Virtual screen switch on.
 
 # macOS, inside a Mewla Worker on the Mac (one unlock, caffeinate inside the script). Ask the Mac with:
 #   mewla computers send mac -kind request -user-said "<the user's words>" "<what to run: see cdb/run_mac.sh>"

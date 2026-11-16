@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # The agent browser on the virtual screen (Settings -> Labs -> Virtual screen), for the agent-use benchmark and the live
-# proofs, behind an ISOLATED daemon: its own state dir, port and tmux server; the live daemon, its tmux and its Brain are
-# never touched. The Workers get the one browser tool every Worker gets, mewla_chrome (the Mewla extension, here in the
+# proofs, behind an ISOLATED daemon: its own state dir and port; the live daemon and its Brain are never touched. The Workers get the one browser tool every Worker gets, mewla_chrome (the Mewla extension, here in the
 # agent browser's own Chrome on the agent screen, an Xvnc with a monitor per agent).
 #
 #   vscreen.sh start DIR [N]  build mewla, start the daemon with the switch on, spawn N Workers (default 1; stand-in
@@ -19,7 +18,6 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)
 cmd=${1:?start|stop}; V=${2:?DIR}
 PORT=${VS_PORT:-9971}
-TMUXBIN=$(command -v tmux)
 NODEBIN=$(dirname "$(command -v node)")
 case $cmd in
 start)
@@ -42,7 +40,8 @@ STUB
   printf 'delegated_executor = "claude"\n\n[[executors]]\nname = "claude"\ncommand = "claude --model claude-sonnet-5-5"\n' >"$V/home/.mewla/executors.toml"
   echo '{"virtual_screen":true}' >"$V/state/browsers/settings.json"
   ENVI="env -i HOME=$V/home PATH=$V/bin:$NODEBIN:/usr/local/bin:/usr/bin:/bin"
-  "$TMUXBIN" -S "$V/tmux.sock" new-session -d -s vs -x 200 -y 50 "$ENVI TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent TMUX=\"\$TMUX\" $V/mewla serve -addr 127.0.0.1:$PORT -state-dir $V/state > $V/daemon.log 2>&1"
+  setsid $ENVI TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent "$V/mewla" serve -addr "127.0.0.1:$PORT" -state-dir "$V/state" \
+    > "$V/daemon.log" 2>&1 < /dev/null &
   for _ in $(seq 30); do grep -q "listening on" "$V/daemon.log" 2>/dev/null && break; sleep 1; done
   grep -q "listening on" "$V/daemon.log" || { echo "isolated daemon did not start; see $V/daemon.log" >&2; exit 1; }
   # The tool is attached once the daemon says the browser is ready (the browser tools are fetched first when missing).
@@ -82,7 +81,6 @@ stop)
   # The keepers the agent screen and browser run in outlive the daemon (that is what keeps them over a restart): each
   # stops its Xvnc or Chrome when it is terminated.
   KEEPERS=$(pgrep -fx -- "$V/mewla" || true)
-  "$TMUXBIN" -S "$V/tmux.sock" kill-server 2>/dev/null || true
   for p in $DAEMONS; do kill "$p" 2>/dev/null || true; done
   sleep 3
   for p in $KEEPERS; do kill "$p" 2>/dev/null || true; done
