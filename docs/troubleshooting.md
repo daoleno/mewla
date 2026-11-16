@@ -142,6 +142,15 @@ computer's log gets a one-line summary. Include the copied report when you
    from the computer page's **Pair a computer** (tap the cat).
 5. With a custom `-state-dir`, pass the same value to `mewla` and `mewla pair`.
 
+A computer paired through Mewla Relay that the computer page calls **Not
+connected to Mewla Relay** is not connected to the relay at all: it is off,
+asleep, offline or not running `mewla`. The relay then closes the phone's
+connection at once, which a phone reports as an SSL or TLS error; the card
+shows that error under its advice, but no certificate or proxy is at fault.
+Wake the computer, then run `mewla doctor` there: its remote access line says
+whether it is connected to the relay and, if not, why (also in
+`~/.mewla/logs/daemon.log` as `Remote access offline: …`).
+
 ## It paired, but no Sessions appear or agents fail to start
 
 - Install and sign in to at least one agent CLI on the computer, as the same
