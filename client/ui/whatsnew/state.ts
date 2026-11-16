@@ -21,6 +21,7 @@ import {
   type WhatsNewTry,
 } from "../../core/whatsnew/whatsNew";
 import { compareVersions } from "../../core/update/version";
+import { derived } from "../kit/derived";
 import { computerUpdate } from "../computer/state";
 import { inFront } from "../kit/inFront";
 import { justPaired, pairingBusy } from "../pairing";
@@ -127,14 +128,15 @@ function counted(r: WhatsNewRecord): WhatsNewRecord {
 }
 
 /** What would show now, newest first, at most three. */
-export const pending = computed((): WhatsNewPage[] => {
+// Derived, not computed (client/README.md): a run NSH cut off keeps its last value, and the next change makes it again.
+export const pending = derived((): WhatsNewPage[] => {
   const r = record();
   if (!r || !local()) return [];
   return pendingPages(releases(), counted(r), upTo());
 });
 
 /** The lines updates leave in Brain's chat. */
-export const lines = computed((): UpdateLine[] => {
+export const lines = derived((): UpdateLine[] => {
   const r = record();
   return r ? updateLines(r, releases()) : [];
 });
@@ -189,7 +191,7 @@ effect(() => {
 /** Brain's thread shows a card that needs the person (Home sets it). */
 export const brainNeedsPerson = signal(false);
 
-const quiet = computed(() => mayOffer({
+const quiet = derived(() => mayOffer({
   onBrainHome: homeShown() && !trayOpen() && !routedBrainThread(),
   active: inFront(),
   settingUp: !current() || Boolean(justPaired()) || pairingBusy() || connection() !== "connected",

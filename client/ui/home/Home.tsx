@@ -9,7 +9,7 @@ import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
 import { bringRequestBack, durableAnswered, RequestStack, requestsInView, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
-import { preparedRows } from "../kit/derived";
+import { derived, preparedRows } from "../kit/derived";
 import { ThreadWait } from "../chat/ThreadWait";
 import { brainHostIdentity } from "../chat/links";
 import { chatImage } from "../chat/assets";
@@ -143,7 +143,7 @@ const durableHere = durableAnswered(items);
 effect(() => brainNeedsPerson.set(requestsHere().length > 0));
 /** The lines updates left (What's New), in Brain's current chat only; one object per line while it is the same. */
 const lineItems = new Map<string, UpdateLineItem>();
-const updateLineRows = computed((): readonly UpdateLineItem[] => {
+const updateLineRows = derived((): readonly UpdateLineItem[] => {
   if (routedBrainThread()) return [];
   return updateLines().map((line) => {
     const id = `update:${line.version}`;

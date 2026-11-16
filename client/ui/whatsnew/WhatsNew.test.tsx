@@ -19,9 +19,9 @@ const say = (i: number, body: string, minute: number) => ({ id: `m${i}`, seq: i,
 /** This device ran 0.4.8 before: no fresh install. */
 const ranBefore = { "mewla:whats_new": JSON.stringify({ app: "0.4.8" }) };
 
-type Record = { baseline: string; seen?: string[]; updates?: { version: string; at: number }[]; replay?: boolean; releases?: unknown };
+type Kept = { baseline: string; seen?: string[]; updates?: { version: string; at: number }[]; replay?: boolean; releases?: unknown };
 
-function setup(options: { record?: Record; computer?: string; storage?: { [key: string]: string }; platform?: "android" | "web"; paired?: boolean; conversation?: unknown[] } = {}) {
+function setup(options: { record?: Kept; computer?: string; storage?: { [key: string]: string }; platform?: "android" | "web"; paired?: boolean; conversation?: unknown[] } = {}) {
   const daemon = {
     brain,
     conversations: { "brain-host": options.conversation ?? [say(0, "Morning", 1), say(1, "Morning! All quiet.", 2)] },
@@ -37,7 +37,7 @@ function setup(options: { record?: Record; computer?: string; storage?: { [key: 
 
 describe("What's New: when it shows", () => {
   test("after an update a quiet Brain home shows one sheet, newest first, at most three pages, and only once", async () => {
-    const record: Record = { baseline: "0.4.6" };
+    const record: Kept = { baseline: "0.4.6" };
     const app = await open(APP, setup({ record }));
     await app.waitFor("id:whats-new-page-0", { timeout: 15_000 });
     // Three releases were missed: each one's headline, newest first.
@@ -50,7 +50,7 @@ describe("What's New: when it shows", () => {
     // The sheet settles the three releases: the highlights it had no room for are not offered after it.
     const settled = framesOf(app.host.posts(), "whats_new_seen")[0].ids as string[];
     expect(settled.slice(0, 3)).toEqual(["0.4.9-follows-the-network", "0.4.8-browser-survives", "0.4.7-agent-questions-in-chat"]);
-    expect(settled.length).toBe(7);
+    expect(settled.length).toBe(6);
     // The last page has Done; it closes and does not come back.
     await app.press("id:whats-new-dot-2");
     await app.waitFor("id:whats-new-done");
@@ -62,7 +62,7 @@ describe("What's New: when it shows", () => {
 
   test("a release with fixes only shows no sheet, only its line in Brain's chat, which lists the fixes", async () => {
     const release = { version: "0.5.0", date: "2026-11-20", highlights: [], fixes: ["Sessions open faster."] };
-    const record: Record = { baseline: "0.4.9", updates: [{ version: "0.5.0", at: at(3) }], releases: { releases: [release] } };
+    const record: Kept = { baseline: "0.4.9", updates: [{ version: "0.5.0", at: at(3) }], releases: { releases: [release] } };
     const app = await open(APP, setup({ record, computer: "0.5.0" }));
     await app.waitFor("id:update-line", { timeout: 15_000 });
     expect(app.shows("text:Updated to 0.5.0 ·")).toBe(true);
@@ -92,7 +92,7 @@ describe("What's New: when it shows", () => {
   }, 30_000);
 
   test("on the web it is a card, and what the phone saw stays seen", async () => {
-    const record: Record = { baseline: "0.4.8" };
+    const record: Kept = { baseline: "0.4.8" };
     const app = await open(APP, setup({ record, platform: "web" }));
     await app.waitFor("id:whats-new-page-0", { timeout: 15_000 });
     // No swipe on the web: arrows move the pages.
@@ -110,6 +110,17 @@ describe("What's New: when it shows", () => {
     expect(app.shows("id:whats-new")).toBe(false);
   }, 30_000);
 
+  test("never over a card that needs the person: an approval in Brain's thread holds it back", async () => {
+    const approval = { id: "a1", tool: "Bash", summary: "git push origin main", options: [{ id: "allow", label: "Allow", scope: "once" }, { id: "deny", label: "Deny", scope: "deny" }] };
+    const docs = { id: "docs", name: "docs", status: "blocked", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now(), delegated: true, approvals: [approval] };
+    const options = setup({ record: { baseline: "0.4.8" } });
+    const daemon = (options.host.params as { daemon: Record<string, unknown> }).daemon;
+    const app = await open(APP, { ...options, host: { ...options.host, params: { daemon: { ...daemon, worker_sessions: [docs] } } } });
+    await app.waitFor("id:request-card", { timeout: 15_000 });
+    await app.wait(3_000);
+    expect(app.shows("id:whats-new")).toBe(false);
+  }, 30_000);
+
   test("a fresh install shows nothing and keeps its own start: onboarding is first", async () => {
     const app = await open(APP, { ...setup({ record: { baseline: "0.4.6" }, paired: false }), storage: {} });
     await app.wait(3_000);
@@ -118,7 +129,7 @@ describe("What's New: when it shows", () => {
   }, 30_000);
 
   test("the app's own update is told to the computer once, for its chat line", async () => {
-    const record: Record = { baseline: "0.4.6", seen: [] };
+    const record: Kept = { baseline: "0.4.6", seen: [] };
     const app = await open(APP, setup({ record, storage: { "mewla:whats_new": JSON.stringify({ app: "0.4.7" }) } }));
     await app.waitUntil(() => framesOf(app.host.posts(), "whats_new_note").length === 1, { timeout: 15_000 });
     expect(framesOf(app.host.posts(), "whats_new_note")[0].version).toBe("0.4.8");

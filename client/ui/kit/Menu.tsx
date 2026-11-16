@@ -4,6 +4,7 @@ import { Button } from "nsh/base";
 import { wide } from "../shell/layout";
 import { Icon, type IconName } from "./Icon";
 import { showAlert } from "../shell/alert";
+import { sheetsOpen } from "../shell/AppSheet";
 
 /** One action of an action menu (Brain's ⋯, a Session's ⋯, the tray's ⋯, Git ⋯, Screen ⋯). */
 export interface MenuItem {
@@ -47,7 +48,9 @@ let hosts = 0;
 export function showMenu(request: MenuRequest): Promise<string | null> {
   if (untracked(wide) && request.anchor && hosts > 0) {
     untracked(shown)?.resolve(null);
-    return new Promise((resolve) => shown.set({ request, resolve }));
+    // Counted as open while it shows: What's New waits for it.
+    sheetsOpen.set(untracked(sheetsOpen) + 1);
+    return new Promise<string | null>((resolve) => shown.set({ request, resolve })).finally(() => sheetsOpen.set(untracked(sheetsOpen) - 1));
   }
   const actions = request.items
     .filter((item) => !item.disabled)

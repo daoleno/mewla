@@ -50,25 +50,14 @@
             "kind": "open",
             "target": "screen"
           }
-        },
-        {
-          "id": "0.4.8-mac-agent-windows",
-          "title": "Watch agents' windows on a Mac",
-          "line": "Each agent's browser window, live in Screen. Hold it, type, or stop.",
-          "media": {
-            "scene": "agent-windows"
-          },
-          "try": {
-            "kind": "open",
-            "target": "screen"
-          }
         }
       ],
       "fixes": [
         "A Worker still at work keeps its turn through restarts and long quiet steps.",
         "Work stays open while its Worker still has a page open for you.",
         "A full agent screen makes room for the next agent.",
-        "Mewla no longer needs tmux: every Session runs in Mewla's own session host."
+        "Mewla no longer needs tmux: every Session runs in Mewla's own session host.",
+        "On a Mac, Screen shows each agent's browser window live: hold it, type, or stop."
       ]
     },
     {
