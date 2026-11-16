@@ -143,7 +143,7 @@ func TestAutomaticHostContinuityFailsClosed(t *testing.T) {
 	}
 }
 
-// A Brain recorded from the tmux era ("%0"), on codex, with a turn admitted and
+// A Brain recorded under a Session id that no longer exists ("%0"), on codex, with a turn admitted and
 // no native conversation recorded: its Session is gone. It used to be refused
 // on every reconcile forever. Now a fresh Brain starts with the handoff, Chat
 // says once that the earlier conversation was not resumed, and codex's login
