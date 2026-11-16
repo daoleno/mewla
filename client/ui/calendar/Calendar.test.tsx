@@ -188,7 +188,8 @@ describe("the Calendar tab", () => {
     const app = await open(APP, { host: phoneHost({ calendar_items: [] }, slowZones), storage: paired, platform: "android", network: expoTokenService });
     await app.host.send("links.open", { url: "mewla://calendar" });
     await app.waitFor("id:add-item", SLOW);
-    expect(app.texts().some((text) => text.includes("GMT+8"))).toBe(false);
+    // No check that the zone is still unknown here: it comes on a real 1.5 s timer, which a slow start
+    // outruns (CI 11-17), and a pending call would hold the app. What matters is the zone it saves in.
     await app.press("id:add-item");
     await app.waitFor("id:calendar-editor");
     await app.type("id:editor-title", "Water the plants");
