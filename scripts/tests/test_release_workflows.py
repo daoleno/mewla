@@ -25,7 +25,6 @@ NATIVE_LIBS = read(".github/workflows/native-libs.yml")
 POSTPROCESS = read(".github/workflows/ios-testflight-postprocess.yml")
 AVAILABILITY = read(".github/workflows/ios-testflight-available.yml")
 REVIEW = read(".github/workflows/ios-testflight-review.yml")
-EXPIRE = read(".github/workflows/ios-testflight-expire.yml")
 PREPARATION = read(".github/workflows/release-next-beta.yml")
 ANDROID_NATIVE = read(".github/actions/android-native/action.yml")
 IOS_NATIVE = read(".github/actions/ios-native/action.yml")
@@ -296,33 +295,27 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("ZEN_UPDATE_SIGNING_KEY_BASE64", REVIEW)
         self.assertNotRegex(REVIEW, r"\b67\d{8}\b")
 
-    def test_a_submitted_preview_expires_the_older_builds_still_waiting_for_review(self):
-        upload = IOS_RELEASE.index("- name: Upload verified IPA to TestFlight")
-        step = between(IOS_RELEASE, "      - name: Expire older Preview builds still waiting for beta review\n", "      - name: Remove temporary signing material")
-        self.assertLess(upload, IOS_RELEASE.index("- name: Expire older Preview builds still waiting for beta review"))
+    def test_a_preview_upload_joins_the_review_queue_instead_of_restarting_review(self):
+        upload = between(IOS_RELEASE, "      - name: Upload verified IPA to TestFlight\n", "      - name: Submit to Beta App Review or wait behind the build in review\n")
+        self.assertNotIn("--submit-beta-review", upload)
+        step = between(IOS_RELEASE, "      - name: Submit to Beta App Review or wait behind the build in review\n", "      - name: Remove temporary signing material")
         for needle in (
             "if: ${{ env.MEWLA_IOS_DESTINATION == 'testflight' && env.MEWLA_IOS_APP_VARIANT == 'preview' }}",
-            "./.release-automation/scripts/testflight-expire-waiting.py",
+            "./.release-automation/scripts/testflight-review-queue.py",
             '--app-id "$MEWLA_ASC_APP_ID"',
-            '--keep-build-number "$MEWLA_IOS_BUILD_NUMBER"',
+            '--beta-group-name "Mewla Preview"',
         ):
             self.assertIn(needle, step)
-        self.assertIn("scripts/testflight-expire-waiting.py\n", between(IOS_RELEASE, "path: .release-automation", "sparse-checkout-cone-mode"))
-        # The same step on demand, with the Preview key only.
-        for needle in (
-            "workflow_dispatch:",
-            "keep_build_number:",
-            "environment: app-store-connect-preview",
-            "vars.MEWLA_ASC_PREVIEW_APP_ID",
-            "./scripts/testflight-expire-waiting.py",
-            '--keep-build-number "$KEEP_BUILD_NUMBER"',
-            'rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"',
-        ):
-            self.assertIn(needle, EXPIRE)
-        self.assertNotIn("cron:", EXPIRE)
-        self.assertIn("permissions:\n  contents: read", EXPIRE)
-        self.assertNotIn("ZEN_UPDATE_SIGNING_KEY_BASE64", EXPIRE)
-        self.assertNotRegex(EXPIRE, r"\b67\d{8}\b")
+        self.assertNotIn("--dry-run", step)
+        self.assertIn("scripts/testflight-review-queue.py\n", between(IOS_RELEASE, "path: .release-automation", "sparse-checkout-cone-mode"))
+        self.assertNotIn("testflight-expire-waiting", IOS_RELEASE)
+        # The hourly review job submits the newest waiting build once a review ends; dry_run only reads.
+        queue = REVIEW[REVIEW.index("      - name: Submit the newest waiting build once no review is open"):]
+        for needle in ("./scripts/testflight-review-queue.py", '--beta-group-name "Mewla Preview"', "dry_run:",
+                       'if [[ "$DRY_RUN" == "true" ]]; then EXTRA_ARGS=(--dry-run); fi'):
+            self.assertIn(needle, queue if needle != "dry_run:" else REVIEW)
+        self.assertNotIn("--submit-beta-review", POSTPROCESS)
+        self.assertIn("./scripts/testflight-review-queue.py", POSTPROCESS)
 
     def test_postprocess_resumes_against_the_configured_preview_app(self):
         self.assertIn("MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}", POSTPROCESS)
@@ -392,7 +385,7 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
             "HD84J3DJ2B",
             "./.release-automation/scripts/app-store-connect-upload.py",
             '--app-id "$MEWLA_ASC_APP_ID"',
-            'EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Mewla Preview" --submit-beta-review)',
+            'EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Mewla Preview")',
             '"${EXTRA_ARGS[@]}"',
             "mewla-asc-individual-key.p8",
         ):

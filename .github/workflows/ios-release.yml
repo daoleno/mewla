@@ -79,7 +79,7 @@ jobs:
           path: .release-automation
           sparse-checkout: |
             scripts/app-store-connect-upload.py
-            scripts/testflight-expire-waiting.py
+            scripts/testflight-review-queue.py
           sparse-checkout-cone-mode: false
 
       - name: Resolve and validate release invocation
@@ -468,7 +468,7 @@ jobs:
           PY
           EXTRA_ARGS=()
           if [[ "$MEWLA_IOS_APP_VARIANT" == "preview" ]]; then
-            EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Mewla Preview" --submit-beta-review)
+            EXTRA_ARGS=(--reuse-existing-build --beta-group-name "Mewla Preview")
           fi
           ./.release-automation/scripts/app-store-connect-upload.py \
             --ipa "$IOS_IPA" \
@@ -479,21 +479,22 @@ jobs:
             --key-path "$ASC_KEY_PATH" \
             "${EXTRA_ARGS[@]}"
 
-      # Only the newest Preview waits for Beta App Review: once this build is submitted, every older
-      # Preview build still waiting is expired, so an older one can never be approved first and reach
-      # the public link. Approved builds and builds in beta testing are never touched.
-      - name: Expire older Preview builds still waiting for beta review
+      # The upload leaves the build VALID and in "Mewla Preview" but unsubmitted. A build already in
+      # Beta App Review keeps its place: this one waits and the hourly ios-testflight-review.yml
+      # submits the newest waiting build once that review ends. With nothing in review it is
+      # submitted now. Builds superseded before they were ever submitted are expired.
+      - name: Submit to Beta App Review or wait behind the build in review
         if: ${{ env.MEWLA_IOS_DESTINATION == 'testflight' && env.MEWLA_IOS_APP_VARIANT == 'preview' }}
         env:
           ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
           MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
         run: |
           set -euo pipefail
-          ./.release-automation/scripts/testflight-expire-waiting.py \
+          ./.release-automation/scripts/testflight-review-queue.py \
             --app-id "$MEWLA_ASC_APP_ID" \
             --key-id "$MEWLA_ASC_KEY_ID" \
             --key-path "$ASC_KEY_PATH" \
-            --keep-build-number "$MEWLA_IOS_BUILD_NUMBER" \
+            --beta-group-name "Mewla Preview" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Remove temporary signing material

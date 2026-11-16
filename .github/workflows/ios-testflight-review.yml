@@ -4,7 +4,9 @@ name: iOS TestFlight review
 # number, review state, TestFlight's external state and whether it is in the "Mewla Preview" group.
 # Once a build there has passed review, the group's public TestFlight link is turned on when it is
 # off, and the summary prints the link (or, when App Store Connect refuses, what to click).
-# Read-only otherwise: it uploads, submits and distributes nothing.
+# Then the review queue (scripts/testflight-review-queue.py): while a build is in Beta App Review
+# nothing changes; once its review ends, the newest build waiting behind it is submitted, and builds
+# superseded before they were ever submitted are expired. dry_run only reads.
 
 on:
   schedule:
@@ -16,6 +18,11 @@ on:
         required: false
         type: string
         default: "5"
+      dry_run:
+        description: "Only show what the review queue would submit or expire"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ios-testflight-review
@@ -62,6 +69,24 @@ jobs:
             --builds "$BUILDS" \
             --enable-public-link \
             --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Submit the newest waiting build once no review is open
+        env:
+          MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}
+          MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+          ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          EXTRA_ARGS=()
+          if [[ "$DRY_RUN" == "true" ]]; then EXTRA_ARGS=(--dry-run); fi
+          ./scripts/testflight-review-queue.py \
+            --app-id "$MEWLA_ASC_APP_ID" \
+            --key-id "$MEWLA_ASC_KEY_ID" \
+            --key-path "$ASC_KEY_PATH" \
+            --beta-group-name "Mewla Preview" \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            "${EXTRA_ARGS[@]}"
 
       - name: Remove temporary Individual API key
         if: always()
