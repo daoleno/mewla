@@ -156,6 +156,33 @@ describe("folding a turn's finished tool rows", () => {
     expect(runs[0].detail).toBe("AGENTS.md, current.md, memory.md");
   });
 
+  test("a listing before a read names no directory (was \"Read 2 files · AGENTS.md, .\")", () => {
+    const events = [
+      {
+        id: "read",
+        seq: 1,
+        kind: "tool",
+        tool_name: "Read",
+        input: JSON.stringify({ file_path: "/home/me/.mewla/brain/workspace/AGENTS.md" }),
+        body: "# Brain",
+        status: "done",
+        timestamp: "2026-11-16T12:01:00.000Z",
+      },
+      {
+        id: "ls",
+        seq: 2,
+        kind: "command",
+        command: "ls -la && cat current.md",
+        body: "# Current",
+        status: "done",
+        timestamp: "2026-11-16T12:02:00.000Z",
+      },
+    ] as CodexConversationEvent[];
+    const [run] = createToolRunFolder()(buildTimelineFromSortedEvents(events)) as ActivityTimelineItem[];
+    expect(run.title).toBe("Read 2 files");
+    expect(run.detail).toBe("AGENTS.md");
+  });
+
   test("a run never names a directory as a file", () => {
     const out = createToolRunFolder()([
       row("a", "read_files", { files: ["AGENTS.md"] }),
