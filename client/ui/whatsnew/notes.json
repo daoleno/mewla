@@ -5,9 +5,21 @@
       "date": "2026-11-16",
       "highlights": [
         {
-          "id": "0.4.9-follows-the-network",
-          "title": "Stays connected as you move",
-          "line": "From Wi-Fi to mobile data and back, Mewla follows without dropping.",
+          "id": "0.4.9-diagrams-and-files-in-chat",
+          "title": "Diagrams and files, right in Chat",
+          "line": "Flowcharts draw themselves, and every file an agent names opens with a tap.",
+          "media": {
+            "scene": "chat-diagram"
+          },
+          "try": {
+            "kind": "open",
+            "target": "brain"
+          }
+        },
+        {
+          "id": "0.4.9-back-after-network-switch",
+          "title": "Back in seconds after switching networks",
+          "line": "Wi-Fi to mobile data and back: Mewla reconnects as soon as the network does.",
           "media": {
             "scene": "network-hop"
           },
