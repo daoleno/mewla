@@ -159,7 +159,12 @@ make_traversal_archive() {
   printf 'notice\n' > "$package/NOTICE"
   printf 'trademarks\n' > "$package/TRADEMARKS.md"
   printf '#!/bin/sh\nexit 0\n' > "$package/mewla"
-  tar -C "$package" --transform='s|^mewla$|../mewla|' -czf "$ASSETS/$archive_name" LICENSE NOTICE TRADEMARKS.md mewla
+  # The entry named ../mewla: GNU tar renames with --transform, bsdtar (a Mac) with -s.
+  local rename=(-s '|^mewla$|../mewla|')
+  if tar --version 2>/dev/null | grep -q 'GNU tar'; then
+    rename=(--transform='s|^mewla$|../mewla|')
+  fi
+  tar -C "$package" "${rename[@]}" -czf "$ASSETS/$archive_name" LICENSE NOTICE TRADEMARKS.md mewla
   write_sums "$archive_name"
 }
 
@@ -251,7 +256,8 @@ test_fixed_version_and_atomic_replacement() {
   printf 'old binary\n' > "$HOME_DIR/install/mewla"
   run_installer MEWLA_VERSION=v3.4.5 MEWLA_INSTALL_DIR="$HOME_DIR/install"
   "$HOME_DIR/install/mewla" --help >/dev/null || fail "installed fixture does not run"
-  [[ $(stat -c '%a' "$HOME_DIR/install/mewla") == 755 ]] || fail "installed mode is not 0755"
+  # GNU stat (Linux) or BSD stat (a Mac), as install.sh itself reads owners.
+  [[ $(stat -c '%a' "$HOME_DIR/install/mewla" 2>/dev/null || stat -f '%Lp' "$HOME_DIR/install/mewla") == 755 ]] || fail "installed mode is not 0755"
   [[ -z $(find "$HOME_DIR/install" -name '.mewla-install.*' -print -quit) ]] || fail "atomic temp file remained"
   assert_contains "$CASE_DIR/curl.log" "/download/v3.4.5/mewla-linux-amd64.tar.gz"
   assert_not_contains "$CASE_DIR/curl.log" "releases/latest"
@@ -400,7 +406,9 @@ test_next_step_needs_no_tmux() {
     ln -s "$(command -v "$command_name")" "$tool_bin/$command_name"
   done
   ln -s "$FAKE_BIN/curl" "$tool_bin/curl"
-  ln -s "$FAKE_BIN/uname" "$tool_bin/uname" 2>/dev/null || true
+  # The fixture's uname, in place of the host's linked above: on a Mac or an Arm Linux the host's names
+  # another archive than the one this case serves.
+  ln -sf "$FAKE_BIN/uname" "$tool_bin/uname"
   RUN_PATH_OVERRIDE=$tool_bin
   run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" || fail "installer failed without tmux on PATH"
   unset RUN_PATH_OVERRIDE
