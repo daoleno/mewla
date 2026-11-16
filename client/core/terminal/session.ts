@@ -74,6 +74,18 @@ export class TerminalSession {
     const mine = (frame: Frame) => this.sessionId !== null && frame.session_id === this.sessionId;
     this.stops.push(
       transport.on("connected", () => this.open()),
+      // The connection moved onto another socket (Transport's make-before-break): the computer gave the old socket's
+      // attachment up with it, so the terminal attaches again on the new one; an open under way is asked there again.
+      transport.on("moved", () => {
+        if (this.closed || this.exited) return;
+        if (this.opening) {
+          if (this.size) this.send({ type: "terminal_open", target_id: this.targetId, ...this.size });
+          return;
+        }
+        this.sessionId = null;
+        this.wheel.reset();
+        this.open();
+      }),
       transport.on("disconnected", () => {
         this.sessionId = null;
         this.opening = false;

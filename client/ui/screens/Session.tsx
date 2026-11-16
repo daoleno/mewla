@@ -201,6 +201,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   effect(() => {
     if (connection() === "connected") tellActive(props.active() ? props.workerId : "");
   });
+  // The computer keeps it per socket: a connection moved onto a new one (still "connected") tells it again.
+  cleanup(transport.on("moved", () => tellActive(props.active() ? props.workerId : "")));
   cleanup(() => tellActive(""));
 
   // An unknown Session (closed, or a stale link) goes back to the list once the computer has confirmed it.

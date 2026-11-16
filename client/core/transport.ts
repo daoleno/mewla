@@ -1,5 +1,14 @@
 import { buildAuthorizationHeader } from "./auth";
-import { invalidateStoredServerTransport, resolveStoredServerURL, transportFailed, transportOpened, transportPathInfo } from "./link/pinnedTransport";
+import {
+  checkDirectPath,
+  invalidateStoredServerTransport,
+  moveAbandoned,
+  resolveStoredServerURL,
+  transportFailed,
+  transportMoved,
+  transportOpened,
+  transportPathInfo,
+} from "./link/pinnedTransport";
 import { platform, type SocketLike } from "./platform";
 import { frameSubprotocols, frameText } from "./frames";
 import type { StoredServer } from "./storedServerContract";
@@ -44,6 +53,22 @@ export const transportTiming = {
    */
   networkProofMs: 5_000,
   /**
+   * On the relay, how often a direct path (the computer's LAN or Tailscale address) is checked for the connection to
+   * move onto (`Transport`'s make-before-break), and the longest the wait between checks grows to while none answers.
+   */
+  moveCheckMs: 15_000,
+  moveCheckMaxMs: 5 * 60_000,
+  /** How many checks in a row the direct path has to pass before the connection moves onto it (some 30 s healthy). */
+  moveHealthyChecks: 3,
+  /** The new socket of a move has this long to open; it is given up otherwise, the relay's left as it was. */
+  moveOpenLimitMs: 10_000,
+  /** After a move that failed (or a direct socket that died within `moveTrustMs`), the first wait before another. */
+  moveBackoffMs: 60_000,
+  moveBackoffMaxMs: 10 * 60_000,
+  moveTrustMs: 2 * 60_000,
+  /** How long the old socket of a move is kept for the answers it still owes. */
+  retireLimitMs: 30_000,
+  /**
    * The slowest link a big message is allowed for: the computer announces a message of 64 KB or more on the
    * wire (`frame_coming`, its size), and the socket may stay quiet for as long as that size takes at this rate,
    * beyond the silent limit. Nothing of a message reaches JS until all of it is in.
@@ -69,6 +94,25 @@ export function setFrameBatcher(batcher: FrameBatcher | null): void {
 
 /** Resolves the socket URL for a server: the stored address, or a local tunnel the host opens (Mewla Relay). */
 export type URLResolver = (server: StoredServer) => Promise<string>;
+
+/**
+ * What a connection on the relay needs to move onto a direct path (Mewla Relay's `pinnedTransport`): a check that a
+ * direct path answers now, beside the live one, and the move's outcome.
+ */
+export interface PathMoves {
+  /** The path the connection to the computer is on now ("relay", "lan", "tailscale"), or null when it has none. */
+  current(server: StoredServer): string | null;
+  check(server: StoredServer): Promise<{ url: string; path: string } | null>;
+  moved(server: StoredServer): void;
+  abandoned(server: StoredServer): void;
+}
+
+const linkMoves: PathMoves = {
+  current: (server) => transportPathInfo(server.id)?.path ?? null,
+  check: checkDirectPath,
+  moved: transportMoved,
+  abandoned: moveAbandoned,
+};
 
 type Listener = (frame: Frame) => void;
 
@@ -135,10 +179,28 @@ export class Transport {
   private behind = false;
   /** The request ids this phone sent that wait for their answer, and when: an answer is handled at once, also while away. */
   private asked = new Map<string, number>();
+  /** On the relay: the next check for a direct path to move onto (`checkMove`). */
+  private moveTimer: ReturnType<typeof setTimeout> | null = null;
+  private moveWaitMs = transportTiming.moveCheckMs;
+  private moveChecking = false;
+  /** Bumped whenever a move is given up: a move still signing in finds it changed and stops. */
+  private moveEpoch = 0;
+  /** The direct path's checks passed in a row. */
+  private healthyChecks = 0;
+  /** No move is tried before this (a failed one backs off). */
+  private moveBackoffUntil = 0;
+  private moveBackoffMs = transportTiming.moveBackoffMs;
+  /** The new socket of a move, until it opens (`swap`) or is given up (`abandonMove`). */
+  private moving: { socket: SocketLike; timer: ReturnType<typeof setTimeout>; path: string } | null = null;
+  /** The old socket of a move, kept for the answers it owes (`retire`). */
+  private retiring: { socket: SocketLike; owed: Set<string>; timer: ReturnType<typeof setTimeout> } | null = null;
+  /** The live socket came by a move (not a connect): one that dies soon after counts against moving. */
+  private openedByMove = false;
 
   constructor(
     readonly server: StoredServer,
     private readonly resolveURL: URLResolver = resolveStoredServerURL,
+    private readonly moves: PathMoves = linkMoves,
   ) {}
 
   connect(): void {
@@ -192,8 +254,15 @@ export class Transport {
    */
   networkChanged(online: boolean): void {
     if (this.lost) this.lost.network++;
+    // A new network may put the phone beside the computer: the direct path is checked afresh, from the first check.
+    this.healthyChecks = 0;
+    this.moveWaitMs = transportTiming.moveCheckMs;
+    this.abandonMove("network changed");
     if (!this.wanted || !online) return;
-    if (this.socket && this.state === "connected") return this.proveSocket();
+    if (this.socket && this.state === "connected") {
+      this.scheduleMoveCheck();
+      return this.proveSocket();
+    }
     if (this.state === "waiting" || this.stranded()) return this.restart();
     this.retryMs = transportTiming.firstRetryMs;
   }
@@ -249,7 +318,8 @@ export class Transport {
   setAway(away: boolean): void {
     if (this.away === away) return;
     this.away = away;
-    if (away) return;
+    if (away) return this.abandonMove("away");
+    this.scheduleMoveCheck();
     this.heldBytes = 0;
     if (this.behind) {
       this.behind = false;
@@ -315,7 +385,8 @@ export class Transport {
         this.draining = true;
         setTimeout(() => {
           this.draining = false;
-          if (this.socket === socket && socket.readyState === OPEN) this.drain();
+          // The socket may have been moved meanwhile (`swap`): what waits goes out on the current one.
+          if (this.socket?.readyState === OPEN) this.drain();
         }, 1);
         return;
       }
@@ -359,7 +430,6 @@ export class Transport {
     // dial each take up to some 20 s on a slow link that does work.
     if (this.attemptTimer) clearTimeout(this.attemptTimer);
     this.attemptTimer = setTimeout(() => this.giveUp(attempt), transportTiming.connectLimitMs);
-    let ended = false;
     socket.onopen = () => {
       if (attempt !== this.attempt) return socket.close();
       this.clearAttempt();
@@ -368,16 +438,26 @@ export class Transport {
       this.problem = "";
       this.lastFrameAt = Date.now();
       this.openedAt = this.lastFrameAt;
+      this.openedByMove = false;
       // The path this socket is carried on stays its own: no other caller re-measures it while it is open.
       transportOpened(this.server);
-      this.openedPath = transportPathInfo(this.server.id)?.path ?? (this.server.transportKind === "link" ? "link" : "address");
+      this.openedPath = this.moves.current(this.server) ?? (this.server.transportKind === "link" ? "link" : "address");
       this.startWatchdog();
       this.state = "connected";
+      this.healthyChecks = 0;
+      this.moveWaitMs = transportTiming.moveCheckMs;
+      this.scheduleMoveCheck();
       this.reportLost(lastProblem);
       this.tellState();
       // Behind whatever of the last socket is still being handed over, in a call of its own.
       this.receive({ type: "connected" }, BIG_FRAME_BYTES);
     };
+    this.listen(socket, attempt);
+  }
+
+  /** The live socket's frames and end. */
+  private listen(socket: SocketLike, attempt: number): void {
+    let ended = false;
     socket.onmessage = (event) => {
       if (attempt !== this.attempt) return;
       this.lastFrameAt = Date.now();
@@ -415,6 +495,8 @@ export class Transport {
       if (wasConnected) {
         const now = Date.now();
         this.lost = { why, path: this.openedPath, ageMs: now - this.openedAt, away: this.away, at: now, attempts: 0, network: 0 };
+        // A direct path that did not hold for long after a move is not moved onto again soon: no ping-pong.
+        if (this.openedByMove && now - this.openedAt < transportTiming.moveTrustMs) this.backOffMoves();
       } else if (this.lost) this.lost.attempts++;
       this.clearTimers();
       this.queue = [];
@@ -571,10 +653,208 @@ export class Transport {
     if (this.watchdog) clearInterval(this.watchdog);
     if (this.networkProof) clearTimeout(this.networkProof);
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    if (this.moveTimer) clearTimeout(this.moveTimer);
     this.clearAttempt();
     this.watchdog = null;
     this.networkProof = null;
     this.retryTimer = null;
+    this.moveTimer = null;
+    // The live socket is over: a move off it, and the socket it moved from, are over with it.
+    this.abandonMove("ended");
+    this.endRetired();
+  }
+
+  /*
+   * Make-before-break. A connection on the relay checks, beside it, whether the computer answers on a direct path
+   * (`moveCheckMs`, longer apart while none does). After `moveHealthyChecks` in a row it opens a second socket there,
+   * signed in like any other. Once that one is open the Transport moves onto it in one step: the state stays
+   * "connected", nothing is told "disconnected", and what waits to go out goes out on the new socket. The old socket
+   * stays for the answers it owes (requests asked on it), then is closed with a normal close. The computer sends its
+   * snapshots to the new socket as to any; what it keeps per socket (a followed chat, an open terminal, the Session
+   * on screen, the app's state) is told again by those who keep it (the "moved" frame). A move that fails costs only
+   * its own socket and backs off; a lost direct path afterwards is an honest reconnect like any other.
+   */
+  private scheduleMoveCheck(): void {
+    if (this.moveTimer || this.moving || this.moveChecking || this.away) return;
+    if (this.state !== "connected" || !this.socket || this.openedPath !== "relay") return;
+    const wait = Math.max(this.moveWaitMs, this.moveBackoffUntil - Date.now());
+    this.moveTimer = setTimeout(() => {
+      this.moveTimer = null;
+      void this.checkMove();
+    }, wait);
+  }
+
+  private async checkMove(): Promise<void> {
+    const socket = this.socket;
+    if (!socket || this.state !== "connected" || this.openedPath !== "relay" || this.away || this.moving) return;
+    this.moveChecking = true;
+    let found: { url: string; path: string } | null = null;
+    try {
+      found = await this.moves.check(this.server);
+    } catch {
+      found = null;
+    } finally {
+      this.moveChecking = false;
+    }
+    // The socket ended, or the app went away, while it was checked.
+    if (this.socket !== socket || this.state !== "connected" || this.away || this.moving) {
+      if (found) this.moves.abandoned(this.server);
+      return;
+    }
+    if (!found) {
+      this.healthyChecks = 0;
+      this.moveWaitMs = Math.min(this.moveWaitMs * 2, transportTiming.moveCheckMaxMs);
+    } else {
+      this.healthyChecks++;
+      this.moveWaitMs = transportTiming.moveCheckMs;
+      // A big message on its way stays on the socket it comes on: the move waits for the next check.
+      if (this.healthyChecks >= transportTiming.moveHealthyChecks && Date.now() >= this.moveBackoffUntil && Date.now() > this.comingUntil) {
+        return void this.startMove(found);
+      }
+    }
+    this.scheduleMoveCheck();
+  }
+
+  private async startMove(found: { url: string; path: string }): Promise<void> {
+    const attempt = this.attempt;
+    const epoch = this.moveEpoch;
+    const from = this.socket;
+    let socket: SocketLike;
+    this.moveChecking = true;
+    try {
+      const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-connect" });
+      if (epoch !== this.moveEpoch || attempt !== this.attempt || this.socket !== from || this.state !== "connected" || this.away) {
+        return this.moves.abandoned(this.server);
+      }
+      socket = platform().openSocket(found.url, [authSubprotocol(authorization), ...frameSubprotocols()]);
+    } catch {
+      this.moveChecking = false;
+      return this.failMove();
+    } finally {
+      this.moveChecking = false;
+    }
+    const timer = setTimeout(() => this.failMove(), transportTiming.moveOpenLimitMs);
+    this.moving = { socket, timer, path: found.path };
+    socket.onmessage = () => undefined;
+    socket.onopen = () => {
+      if (this.moving?.socket !== socket) return socket.close(1000, "moved");
+      if (attempt !== this.attempt || this.socket !== from || this.state !== "connected") return this.failMove();
+      this.swap(socket, attempt);
+    };
+    socket.onerror = () => this.moving?.socket === socket && this.failMove();
+    socket.onclose = () => this.moving?.socket === socket && this.failMove();
+  }
+
+  /** The move's socket did not open: it is closed, the relay connection is left as it was, and moves back off. */
+  private failMove(): void {
+    this.abandonMove("failed");
+    this.backOffMoves();
+    this.scheduleMoveCheck();
+  }
+
+  private backOffMoves(): void {
+    this.healthyChecks = 0;
+    this.moveBackoffUntil = Date.now() + this.moveBackoffMs;
+    this.moveBackoffMs = Math.min(this.moveBackoffMs * 2, transportTiming.moveBackoffMaxMs);
+  }
+
+  /** Gives up a move under way (its socket, the tunnel found for it); the live socket is not touched. */
+  private abandonMove(why: string): void {
+    this.moveEpoch++;
+    const moving = this.moving;
+    if (!moving) return;
+    this.moving = null;
+    clearTimeout(moving.timer);
+    moving.socket.onopen = moving.socket.onmessage = moving.socket.onerror = moving.socket.onclose = null;
+    try {
+      moving.socket.close(1000, why);
+    } catch {
+      // Closed already.
+    }
+    this.moves.abandoned(this.server);
+  }
+
+  /** The move's socket is open: the Transport is on it from now on, in one step, and the old one retires. */
+  private swap(socket: SocketLike, attempt: number): void {
+    const moving = this.moving!;
+    this.moving = null;
+    clearTimeout(moving.timer);
+    const old = this.socket!;
+    const fromPath = this.openedPath;
+    const overlapFrom = this.openedAt;
+    // Every answer still owed was asked on the old socket: it comes there.
+    this.retire(old, new Set(this.asked.keys()));
+    this.socket = socket;
+    this.listen(socket, attempt);
+    this.moves.moved(this.server);
+    const now = Date.now();
+    this.lastFrameAt = now;
+    this.comingUntil = 0;
+    this.openedAt = now;
+    this.openedByMove = true;
+    this.openedPath = this.moves.current(this.server) ?? moving.path;
+    this.moveBackoffMs = transportTiming.moveBackoffMs;
+    this.healthyChecks = 0;
+    if (this.networkProof) clearTimeout(this.networkProof);
+    this.networkProof = null;
+    try {
+      this.sendQuietly({
+        type: "client_diagnostic",
+        name: "link_move",
+        request_id: `move-${now.toString(36)}`,
+        body: `from=${fromPath} to=${this.openedPath} after=${((now - overlapFrom) / 1000).toFixed(1)}s owed=${this.retiring?.owed.size ?? 0}`,
+      });
+    } catch {
+      // A report is not worth the move.
+    }
+    this.drain();
+    // Those who keep something per socket on the computer tell it again, before the new socket's frames are handed over.
+    this.receive({ type: "moved", path: this.openedPath }, BIG_FRAME_BYTES);
+  }
+
+  /**
+   * The old socket of a move: only the first answer to each request asked on it is handed over (what else comes there,
+   * the new socket brings too), then, or after `retireLimitMs`, it is closed with a normal close. Its end changes nothing.
+   */
+  private retire(socket: SocketLike, owed: Set<string>): void {
+    this.endRetired();
+    const timer = setTimeout(() => this.endRetired(), transportTiming.retireLimitMs);
+    this.retiring = { socket, owed, timer };
+    socket.onmessage = (event) => {
+      const retiring = this.retiring;
+      if (retiring?.socket !== socket) return;
+      let frame: Frame;
+      let bytes = 0;
+      try {
+        const text = frameText(event.data);
+        if (text === null) return;
+        bytes = text.length;
+        frame = JSON.parse(text);
+      } catch {
+        return;
+      }
+      if (!frame || typeof frame.type !== "string" || typeof frame.request_id !== "string" || !retiring.owed.delete(frame.request_id)) return;
+      this.receive(frame, bytes);
+      if (retiring.owed.size === 0) this.endRetired();
+    };
+    socket.onerror = socket.onclose = () => {
+      if (this.retiring?.socket === socket) this.endRetired();
+    };
+    if (owed.size === 0) this.endRetired();
+  }
+
+  private endRetired(): void {
+    const retiring = this.retiring;
+    if (!retiring) return;
+    this.retiring = null;
+    clearTimeout(retiring.timer);
+    const socket = retiring.socket;
+    socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null;
+    try {
+      socket.close(1000, "moved");
+    } catch {
+      // Closed already.
+    }
   }
 
   private setState(state: ConnectionState): void {

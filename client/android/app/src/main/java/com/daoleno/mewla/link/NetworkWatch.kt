@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.longbridge.nsh.NshView
 
 /**
@@ -53,6 +54,8 @@ internal class NetworkWatch(context: Context, private val nsh: NshView) {
       // The default network's own capability updates (signal strength, bandwidth) repeat what was told.
       if (seen == told || (!seen.endsWith(":validated") && told == "$seen:validated")) return@post
       told = seen
+      // One line per change: what a connection's drop report (`link_drop network_changes=`) is read against.
+      Log.i("MewlaNetwork", "link.network online=${seen != "offline"} network=$seen")
       nsh.send("link.network", mapOf("online" to (seen != "offline")))
     }
   }

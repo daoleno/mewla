@@ -21,8 +21,11 @@ async function setup() {
   const transport = new Transport(server);
   let changes = 0;
   const sessions = new WorkerSessions(transport, server, () => changes++);
+  const before = sockets.length;
   transport.connect();
-  await wait();
+  // The sign-in is signed on a later turn (core/ed25519.ts): slower than a fixed wait on a cold run.
+  const deadline = Date.now() + 2_000;
+  while (sockets.length === before && Date.now() < deadline) await wait(1);
   const socket = sockets.at(-1)!;
   socket.open();
   await wait();
@@ -66,6 +69,23 @@ describe("the computer's Sessions", () => {
     await wait();
     expect(sessions.connection).not.toBe("connected");
     expect(sessions.workers.map((w) => w.id)).toEqual(["a"]);
+  });
+
+  test("a connection moved onto a new socket starts a new feed there, the rows kept and still connected", async () => {
+    const { sessions, socket, transport } = await setup();
+    socket.receive({ type: "worker_session_list", seq: 9, worker_sessions: [worker("a")] });
+    (transport as unknown as { receive(frame: object): void }).receive({ type: "moved" });
+    expect(sessions.connection).toBe("connected");
+    expect(sessions.workers.map((w) => w.id)).toEqual(["a"]);
+    // A change before the new socket's list is in that list: dropped, nothing asked.
+    const sentBefore = socket.sent.length;
+    socket.receive({ type: "worker_session_created", seq: 11, worker_session: worker("b") });
+    expect(socket.sent.slice(sentBefore)).toEqual([]);
+    expect(sessions.find("b")).toBeUndefined();
+    socket.receive({ type: "worker_session_list", seq: 11, worker_sessions: [worker("a"), worker("b")] });
+    socket.receive({ type: "worker_session_updated", seq: 12, worker_session: worker("b", { status: "blocked" }) });
+    expect(sessions.workers.map((w) => `${w.id}:${w.status}`)).toEqual(["a:running", "b:blocked"]);
+    transport.close();
   });
 
   test("after stop nothing changes it", async () => {

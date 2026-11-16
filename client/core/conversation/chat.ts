@@ -61,6 +61,8 @@ export class Chat {
     this.state = initialInterfaceChatThreadState(this.cacheKey);
     this.stops.push(transport.on("connected", () => this.follow()));
     this.stops.push(transport.on("disconnected", () => this.stopFollowing()));
+    // The connection moved onto another socket (Transport's make-before-break): the computer follows per socket.
+    this.stops.push(transport.on("moved", () => this.follow()));
     this.stops.push(outbox.subscribe((event) => this.onOutbox(event)));
     this.follow();
     this.showQueued();

@@ -206,6 +206,23 @@ describe("TerminalSession", () => {
     transport.close();
   });
 
+  test("a connection moved onto a new socket (still connected) attaches again there; an open under way is asked again", async () => {
+    const { transport, socket, term, log } = await attachedTerminal();
+    const moved = () => (transport as unknown as { receive(frame: object): void }).receive({ type: "moved" });
+    moved();
+    await until(() => frames(socket, "terminal_open").length === 2);
+    expect(frames(socket, "terminal_open")).toHaveLength(2);
+    // The first answer to the open still under way is the new attachment; a second move meanwhile asks once more.
+    moved();
+    expect(frames(socket, "terminal_open")).toHaveLength(3);
+    socket.receive({ type: "terminal_opened", session_id: "t2", cols: 80, rows: 24 });
+    socket.receive({ type: "terminal_output", session_id: "t1", data: "old" });
+    socket.receive({ type: "terminal_output", session_id: "t2", data: "new" });
+    expect(log).toEqual(["reset", "reset", "out:new"]);
+    term.close();
+    transport.close();
+  });
+
   test("an open the computer refuses says why", async () => {
     const transport = await connected();
     const { log, handlers } = recorder();

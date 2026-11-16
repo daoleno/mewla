@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { getOrCreateLocalDeviceIdentity } from "./auth";
 import type { StoredServer } from "./storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "./testing/memoryPlatform";
-import { AWAY_HOLD_BYTES, BIG_FRAME_BYTES, setFrameBatcher, Transport, transportTiming } from "./transport";
+import { AWAY_HOLD_BYTES, BIG_FRAME_BYTES, type PathMoves, setFrameBatcher, Transport, transportTiming } from "./transport";
 import { AUTH_SUBPROTOCOL_PREFIX } from "./webSocketAuth";
 
 const server = {
@@ -605,5 +605,241 @@ describe("Transport", () => {
       expect(seen).toEqual([1, 2]);
       transport.close();
     });
+  });
+});
+
+describe("a connection on the relay moves onto a direct path (make-before-break)", () => {
+  const DIRECT = "ws://127.0.0.1:7/direct";
+  /** A computer whose direct path answers each check as `answers` says (the last answer repeats), and where the connection is. */
+  function fakeMoves(answers: boolean[]) {
+    const record = { checks: 0, moved: 0, abandoned: 0, path: "relay" };
+    const moves: PathMoves = {
+      current: () => record.path,
+      check: async () => {
+        const ok = answers[Math.min(record.checks, answers.length - 1)];
+        record.checks++;
+        return ok ? { url: DIRECT, path: "lan" } : null;
+      },
+      moved: () => {
+        record.moved++;
+        record.path = "lan";
+      },
+      abandoned: () => void record.abandoned++,
+    };
+    return { moves, record };
+  }
+
+  async function until(condition: () => boolean, what: string): Promise<void> {
+    const deadline = Date.now() + 2_000;
+    while (!condition() && Date.now() < deadline) await wait(1);
+    if (!condition()) throw new Error(`never: ${what}`);
+  }
+
+  /** Connected on the relay, with what the Transport tells its listeners recorded. */
+  async function onRelay(answers: boolean[]) {
+    const { moves, record } = fakeMoves(answers);
+    const transport = new Transport(server, undefined, moves);
+    const states: string[] = [];
+    const heard: string[] = [];
+    transport.onState((state) => states.push(state));
+    for (const type of ["connected", "disconnected", "moved"]) transport.on(type, () => heard.push(type), { whileAway: true });
+    transport.connect();
+    await socketsReach(1);
+    const relay = sockets[0]!;
+    relay.open();
+    await wait(1);
+    return { transport, relay, record, states, heard };
+  }
+
+  /** Waits for the move's socket to the direct path. */
+  async function moveSocket(): Promise<FakeSocket> {
+    await until(() => sockets.length === 2, "a socket to the direct path");
+    const direct = sockets[1]!;
+    expect(direct.url).toBe(DIRECT);
+    // Signed in like any other connection.
+    expect(direct.protocols[0]!.startsWith(AUTH_SUBPROTOCOL_PREFIX)).toBe(true);
+    return direct;
+  }
+
+  function closes(socket: FakeSocket): Array<{ code: number; reason: string }> {
+    const seen: Array<{ code: number; reason: string }> = [];
+    const close = socket.close.bind(socket);
+    socket.close = (code = 1000, reason = "") => {
+      seen.push({ code, reason });
+      close(code, reason);
+    };
+    return seen;
+  }
+
+  beforeEach(() => {
+    Object.assign(transportTiming, { silentLimitMs: 60_000, moveCheckMs: 2, moveCheckMaxMs: 8, moveHealthyChecks: 3, moveOpenLimitMs: 2_000, moveBackoffMs: 60_000, retireLimitMs: 2_000 });
+  });
+
+  test("moves without any disconnect: the state stays connected, nothing hears 'disconnected', the old socket closes normally", async () => {
+    const { transport, relay, record, states, heard } = await onRelay([true]);
+    const relayCloses = closes(relay);
+    const direct = await moveSocket();
+    // Until the new socket is open the relay carries everything.
+    expect(record.checks).toBe(3);
+    transport.send({ type: "ping_before" });
+    expect(relay.sent.map((text) => JSON.parse(text).type)).toContain("ping_before");
+    direct.open();
+    await wait(1);
+    expect(record.moved).toBe(1);
+    expect(states).toEqual(["connecting", "connected"]);
+    expect(heard).toEqual(["connected", "moved"]);
+    expect(transport.state).toBe("connected");
+    // Nothing was owed on the relay: it is closed at once, with a normal close.
+    expect(relayCloses).toEqual([{ code: 1000, reason: "moved" }]);
+    // The move is reported on the new socket, and everything from now on goes out there.
+    const report = direct.sent.map((text) => JSON.parse(text)).find((frame) => frame.name === "link_move");
+    expect(report?.body).toMatch(/^from=relay to=lan after=\d+\.\ds owed=0$/);
+    transport.send({ type: "ping_after" });
+    expect(direct.sent.map((text) => JSON.parse(text).type)).toContain("ping_after");
+    expect(relay.sent.map((text) => JSON.parse(text).type)).not.toContain("ping_after");
+    // The frames of the new socket reach the listeners.
+    const stats: unknown[] = [];
+    transport.on("stats", (frame) => stats.push(frame.n));
+    direct.receive({ type: "stats", n: 1 });
+    expect(stats).toEqual([1]);
+    // No more checks once on the direct path.
+    const checks = record.checks;
+    await wait(20);
+    expect(record.checks).toBe(checks);
+    transport.close();
+  });
+
+  test("a request in flight on the relay is answered there after the move; the relay's other frames are not handed over twice", async () => {
+    const { transport, relay, heard } = await onRelay([true]);
+    const relayCloses = closes(relay);
+    const direct = await moveSocket();
+    const answer = transport.request<{ n: number }>("get_stats", {}, { reply: "stats", timeoutMs: 1_000 });
+    const asked = JSON.parse(relay.sent.at(-1)!);
+    expect(asked.type).toBe("get_stats");
+    direct.open();
+    await wait(1);
+    expect(heard).toEqual(["connected", "moved"]);
+    // The relay still owes the answer: it stays open for it.
+    expect(relayCloses).toEqual([]);
+    const sessions: unknown[] = [];
+    transport.on("worker_session_updated", (frame) => sessions.push(frame.seq));
+    relay.receive({ type: "worker_session_updated", seq: 9 });
+    relay.receive({ type: "stats", request_id: asked.request_id, n: 7 });
+    expect((await answer).n).toBe(7);
+    expect(sessions).toEqual([]);
+    expect(relayCloses).toEqual([{ code: 1000, reason: "moved" }]);
+    expect(direct.sent.map((text) => JSON.parse(text).name)).toContain("link_move");
+    expect(JSON.parse(direct.sent.find((text) => JSON.parse(text).name === "link_move")!).body).toEndWith("owed=1");
+    // The old socket's end changes nothing.
+    relay.onclose?.({ code: 1006, reason: "" });
+    expect(transport.state).toBe("connected");
+    expect(heard).toEqual(["connected", "moved"]);
+    transport.close();
+  });
+
+  test("a move whose socket fails leaves the relay connection untouched and backs off", async () => {
+    const { transport, relay, record, states, heard } = await onRelay([true]);
+    const relayCloses = closes(relay);
+    const direct = await moveSocket();
+    direct.onerror?.({});
+    expect(record.abandoned).toBe(1);
+    expect(record.moved).toBe(0);
+    expect(relayCloses).toEqual([]);
+    expect(relay.readyState).toBe(1);
+    expect(transport.state).toBe("connected");
+    expect(states).toEqual(["connecting", "connected"]);
+    expect(heard).toEqual(["connected"]);
+    transport.send({ type: "still_on_relay" });
+    expect(relay.sent.map((text) => JSON.parse(text).type)).toContain("still_on_relay");
+    const stats: unknown[] = [];
+    transport.on("stats", (frame) => stats.push(frame.n));
+    relay.receive({ type: "stats", n: 3 });
+    expect(stats).toEqual([3]);
+    // Backed off (a minute here): no check, no new socket meanwhile.
+    const checks = record.checks;
+    await wait(30);
+    expect(record.checks).toBe(checks);
+    expect(sockets).toHaveLength(2);
+    transport.close();
+  });
+
+  test("a move whose socket never opens is given up after its limit; the relay is untouched", async () => {
+    transportTiming.moveOpenLimitMs = 10;
+    const { transport, relay, record, heard } = await onRelay([true]);
+    await moveSocket();
+    await until(() => record.abandoned === 1, "the move given up");
+    expect(relay.readyState).toBe(1);
+    expect(transport.state).toBe("connected");
+    expect(heard).toEqual(["connected"]);
+    transport.close();
+  });
+
+  test("moves only after the direct path answered the checks in a row: a failed check starts the count over", async () => {
+    const { transport, record } = await onRelay([true, true, false, true, true, true]);
+    await moveSocket();
+    expect(record.checks).toBe(6);
+    transport.close();
+  });
+
+  test("the relay ending during a move is an honest drop: the move is given up and the connection reconnects", async () => {
+    const { transport, relay, record, heard } = await onRelay([true]);
+    const direct = await moveSocket();
+    relay.close(1006, "");
+    expect(record.abandoned).toBe(1);
+    expect(direct.readyState).toBe(3);
+    expect(transport.state).toBe("waiting");
+    await wait(1);
+    expect(heard).toEqual(["connected", "disconnected"]);
+    // The move's socket opening late changes nothing.
+    direct.onopen?.({});
+    expect(record.moved).toBe(0);
+    transport.close();
+  });
+
+  test("after the move, the direct path dying is a normal reconnect, and another move waits out the backoff", async () => {
+    const { transport, record, heard } = await onRelay([true]);
+    const direct = await moveSocket();
+    direct.open();
+    await wait(1);
+    direct.close(1006, "");
+    expect(transport.state).toBe("waiting");
+    await wait(1);
+    expect(heard).toEqual(["connected", "moved", "disconnected"]);
+    // The next connection is on the relay again (the path the host chose); it does not check before the backoff.
+    record.path = "relay";
+    await socketsReach(3);
+    sockets[2]!.open();
+    await wait(1);
+    const checks = record.checks;
+    await wait(30);
+    expect(record.checks).toBe(checks);
+    transport.close();
+  });
+
+  test("going away gives a move up; a network change starts the count over", async () => {
+    const { transport, relay, record } = await onRelay([true]);
+    await moveSocket();
+    transport.setAway(true);
+    expect(record.abandoned).toBe(1);
+    expect(relay.readyState).toBe(1);
+    transport.setAway(false);
+    transport.networkChanged(true);
+    // Three checks in a row again before the next socket.
+    const checks = record.checks;
+    await until(() => sockets.length === 3, "the next move's socket");
+    expect(record.checks - checks).toBe(3);
+    transport.close();
+  });
+
+  test("a connection that is not on the relay never checks for another path", async () => {
+    const { moves, record } = fakeMoves([true]);
+    record.path = "lan";
+    const transport = new Transport(server, undefined, moves);
+    transport.connect();
+    await socketsReach(1);
+    sockets[0]!.open();
+    await wait(30);
+    expect(record.checks).toBe(0);
+    transport.close();
   });
 });
