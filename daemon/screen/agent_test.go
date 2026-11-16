@@ -537,10 +537,27 @@ func TestASleepingDisplayDoesNotStrandTheAgent(t *testing.T) {
 	}
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 
-	// Lost in the middle of an action: said plainly, and not repeated.
+	// Lost in the middle of an action: said plainly, and not repeated. The display sleeps once the action is under
+	// way: a sleep the capture notices before the action takes the agent only starts a new session, which the part
+	// above covers (seen on a loaded macOS runner, where the wait then ran on the new session and answered nil).
+	waited := make(chan error, 1)
+	go func() {
+		_, err := s.Act(context.Background(), "%7", AgentAction{Action: "wait", Duration: 1})
+		waited <- err
+	}()
+	waitFor(t, func() bool {
+		s.agentMu.Lock()
+		agent := s.agents["%7"]
+		s.agentMu.Unlock()
+		if agent == nil {
+			return false
+		}
+		agent.mu.Lock()
+		defer agent.mu.Unlock()
+		return agent.inflight > 0
+	})
 	backend.SleepDisplay()
-	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "wait", Duration: 1})
-	if !errors.Is(err, ErrDisplayAsleep) {
+	if err := <-waited; !errors.Is(err, ErrDisplayAsleep) {
 		t.Fatalf("lost during an action: %v", err)
 	}
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
