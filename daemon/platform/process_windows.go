@@ -114,6 +114,43 @@ func ExecReplace(path string, argv, env []string) error {
 	return nil
 }
 
+// ExecInPlace is the closest Windows has to execve. path starts as a child
+// in this console with this process's standard handles, argv, env and dir, so
+// its output goes to the same window and Ctrl+C reaches it. This process stays
+// and waits: the shell that started it keeps waiting too (its prompt does not
+// come back under the child's output, and a prompt reading the console would
+// swallow Ctrl+C), and it exits with the child's exit code. Ctrl+C reaches
+// both; stops, which the caller registered for os.Interrupt, keeps it from
+// ending this process, which ends when the child does. It returns only when
+// the child could not be started or waited for.
+func ExecInPlace(path string, argv, env []string, dir string, stops <-chan os.Signal) error {
+	cmd := exec.Command(path)
+	if len(argv) > 0 {
+		cmd.Args = argv
+	}
+	cmd.Env, cmd.Dir = env, dir
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if stops != nil {
+		go func() {
+			for range stops {
+			}
+		}()
+	}
+	err := cmd.Wait()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		os.Exit(exitErr.ExitCode())
+	}
+	if err != nil {
+		return err
+	}
+	os.Exit(0)
+	return nil
+}
+
 // ProcessAlive reports whether pid names a running process.
 func ProcessAlive(pid int) bool {
 	if pid <= 0 {

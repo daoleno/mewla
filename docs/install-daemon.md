@@ -232,9 +232,16 @@ on macOS by replacing `Mewla.app` and restarting its service, keeping your
 address, directories and `PATH`. Your Sessions and agents keep running: they
 live in the session host, not in the daemon.
 
-A Mewla you started by hand in a terminal is not stopped for you; `mewla
-update` says so, with its PID. Press Ctrl+C in its window and run `mewla`
-again. If Mewla is still on an older version for any other reason (installed
+A Mewla you started yourself, in a terminal or detached, restarts itself in
+place: it checks that the new binary runs as the new version, shuts down as it
+does for Ctrl+C, and runs the new binary with the same arguments, environment
+and directory. On Linux and macOS it keeps its PID and its terminal, so its
+output stays in that window and Ctrl+C still stops it. Windows cannot replace
+a running program, so the new version runs in the same console as a child of
+the old process, which waits for it and exits with it. If the restart cannot
+happen, `mewla update` says why; the update stays installed. A Mewla from
+0.4.9 or earlier cannot restart itself, and `mewla update` says so: stop it
+once with Ctrl+C and run `mewla` again. If Mewla is still on an older version for any other reason (installed
 over, or updated by an older `mewla update`), the next command you type
 (`mewla`, `mewla web`, `mewla pair` and the others that talk to it) restarts it
 first. Run outside a terminal (from a script, or over SSH without one), that

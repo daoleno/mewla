@@ -118,6 +118,9 @@ type Request struct {
 	// PromptEscalate hands a blocked action Brain holds to the user instead of
 	// answering it; the reason goes in ApprovalBasis.
 	PromptEscalate bool `json:"prompt_escalate,omitempty"`
+	// Version is the version daemon_upgrade restarts onto: the installed
+	// executable must report it.
+	Version string `json:"version,omitempty"`
 }
 
 // AgentEventRequest carries one agent hook call to the daemon. Payload is the
@@ -212,6 +215,9 @@ type Response struct {
 	Service              *watcher.ManagedServiceDescriptor        `json:"service,omitempty"`
 	MemoryHits           []memorysearch.Hit                       `json:"memory_hits,omitempty"`
 	MemoryMessages       []memorysearch.Message                   `json:"memory_messages,omitempty"`
+	// After runs once the response has been written to the caller (the
+	// daemon restarting only after it said it will).
+	After func() `json:"-"`
 }
 
 // DaemonStatus is a running daemon's identity as the daemon itself reports it
@@ -220,6 +226,9 @@ type Response struct {
 type DaemonStatus struct {
 	PID        int    `json:"pid"`
 	Executable string `json:"executable"`
+	Version    string `json:"version,omitempty"`
+	// Addr is the address the daemon serves HTTP on.
+	Addr string `json:"addr,omitempty"`
 }
 
 type Error struct {

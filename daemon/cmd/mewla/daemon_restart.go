@@ -13,17 +13,20 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 )
 
 // A running daemon keeps the executable it started from. `mewla update`
-// replaces the file, so on Linux and Windows the daemon goes on running the
-// old version until it restarts; a newer CLI talking to it is then the
-// skew a person cannot see. The CLI restarts the daemon through whatever
-// started it (the logon task, the systemd user unit), which ends only the
-// daemon: the session host and every Session and Worker keep running.
-// macOS restarts through Mewla.app instead (bootLaunchdApplyUpdate).
+// replaces the file, so the daemon goes on running the old version until it
+// restarts; a newer CLI talking to it is then the skew a person cannot see.
+// The CLI restarts the daemon through whatever started it (the logon task,
+// the systemd user unit); a daemon nothing supervises (a terminal, a script,
+// started detached by hand) restarts itself in place (daemon_upgrade.go).
+// Either way only the daemon restarts: the session host and every Session and
+// Worker keep running. The macOS LaunchAgent restarts through Mewla.app
+// instead (bootLaunchdApplyUpdate).
 
 // runningDaemon is the daemon that owns a state directory, as the CLI found
 // it.
@@ -50,15 +53,23 @@ type daemonRuntime struct {
 	// parentImage is the file name of the process that started pid.
 	parentImage func(pid int) (string, error)
 	health      func(addr string) (daemonHealth, error)
-	kill        func(pid int) error
-	alive       func(pid int) bool
+	// status is the daemon's own report on the control socket
+	// (daemon_status).
+	status func(stateDir string) (control.DaemonStatus, error)
+	// upgrade asks the daemon to restart itself onto version
+	// (daemon_upgrade).
+	upgrade func(stateDir, version string) error
+	kill    func(pid int) error
+	alive   func(pid int) bool
 	// startDirect starts the daemon the logon task would, for a desktop
 	// session where the task does not run (installed over SSH).
 	startDirect func(config bootConfig) error
 	// wait is how long a restarted daemon gets to answer as the new version;
-	// poll is how often it is asked.
-	wait time.Duration
-	poll time.Duration
+	// poll is how often it is asked. inPlaceWait is wait for a daemon that
+	// restarts itself, which includes its shutdown.
+	wait        time.Duration
+	inPlaceWait time.Duration
+	poll        time.Duration
 	// runWait is how long one run of the logon task gets before it is run
 	// again.
 	runWait time.Duration
@@ -73,10 +84,13 @@ var defaultDaemonRuntime = func() daemonRuntime {
 		image:       platform.ProcessImagePath,
 		parentImage: platform.ParentImage,
 		health:      probeDaemonHealth,
+		status:      bootDaemonStatus,
+		upgrade:     requestInPlaceRestart,
 		kill:        killProcess,
 		alive:       platform.ProcessAlive,
 		startDirect: bootTaskStartDirect,
 		wait:        30 * time.Second,
+		inPlaceWait: 3 * time.Minute,
 		poll:        250 * time.Millisecond,
 		runWait:     3 * time.Second,
 	}
@@ -121,6 +135,10 @@ func sameExecutable(image, self, goos string) bool {
 	switch goos {
 	case "linux":
 		image = strings.TrimSuffix(image, " (deleted)")
+	case "darwin":
+		if resolved, err := filepath.EvalSymlinks(image); err == nil {
+			image = resolved
+		}
 	case "windows":
 		image, self = strings.ToLower(filepath.Clean(image)), strings.ToLower(filepath.Clean(self))
 		return image == self || platform.IsReplacedCopy(image, self)
@@ -166,7 +184,7 @@ func (rt daemonRuntime) daemonAddr(stateDir string) string {
 // installation, a daemon that does not answer as this state directory's
 // owner) is not ours to restart, and ok is false.
 func (rt daemonRuntime) inspect(stateDir string) (runningDaemon, bool) {
-	if rt.goos != "linux" && rt.goos != "windows" {
+	if rt.goos != "linux" && rt.goos != "windows" && rt.goos != "darwin" {
 		return runningDaemon{}, false
 	}
 	pid, err := rt.peerPID(stateDir)
@@ -180,11 +198,29 @@ func (rt daemonRuntime) inspect(stateDir string) (runningDaemon, bool) {
 	if resolved, err := filepath.EvalSymlinks(self); err == nil {
 		self = resolved
 	}
-	image, err := rt.image(pid)
-	if err != nil || !sameExecutable(image, self, rt.goos) {
+	// The daemon says where it serves and what it runs; daemons older than
+	// that are found where `mewla boot install` put them.
+	status, statusErr := rt.status(stateDir)
+	if statusErr == nil && status.PID != pid {
+		return runningDaemon{}, false
+	}
+	var image string
+	if rt.goos == "darwin" {
+		// No /proc: the daemon's own word, checked against the kernel's PID.
+		if statusErr != nil {
+			return runningDaemon{}, false
+		}
+		image = status.Executable
+	} else if image, err = rt.image(pid); err != nil {
+		return runningDaemon{}, false
+	}
+	if !sameExecutable(image, self, rt.goos) {
 		return runningDaemon{}, false
 	}
 	addr := rt.daemonAddr(stateDir)
+	if statusErr == nil && status.Addr != "" {
+		addr = status.Addr
+	}
 	health, err := rt.health(addr)
 	if err != nil {
 		return runningDaemon{}, false
@@ -195,30 +231,12 @@ func (rt daemonRuntime) inspect(stateDir string) (runningDaemon, bool) {
 	return runningDaemon{PID: pid, Version: health.Version, Addr: addr}, true
 }
 
-// errDaemonStartedByHand: the daemon was not started by the logon task or the
-// systemd unit, so the CLI does not stop it; the message says what to run.
-type errDaemonStartedByHand struct {
-	daemon runningDaemon
-	goos   string
-}
-
-func (e *errDaemonStartedByHand) Error() string {
-	version := e.daemon.Version
-	if version == "" {
-		version = "an earlier version"
-	}
-	stop := fmt.Sprintf("kill %d", e.daemon.PID)
-	if e.goos == "windows" {
-		stop = fmt.Sprintf("Stop-Process -Id %d", e.daemon.PID)
-	}
-	return fmt.Sprintf("Mewla %s is running from a terminal (PID %d), so it was not restarted. Stop it with Ctrl+C in its window, or run: %s — then start it again with: mewla", version, e.daemon.PID, stop)
-}
-
-// restart ends the daemon and starts it again through its supervisor, then
-// waits until it answers as version want ("" accepts any version).
+// restart ends the daemon and starts it again through its supervisor, or
+// has it restart itself in place when nothing supervises it, then waits until
+// it answers as version want ("" accepts any version).
 func (rt daemonRuntime) restart(stateDir string, daemon runningDaemon, want string) error {
 	if !rt.supervised(daemon) {
-		return &errDaemonStartedByHand{daemon: daemon, goos: rt.goos}
+		return rt.restartInPlace(stateDir, daemon, want)
 	}
 	if rt.goos == "windows" {
 		return rt.restartWindows(stateDir, daemon, want)
@@ -314,6 +332,72 @@ func (rt daemonRuntime) restartLinux(stateDir string, daemon runningDaemon, want
 	return rt.notBack(stateDir, daemon, want)
 }
 
+// errInPlaceUnsupported: the running daemon predates daemon_upgrade.
+var errInPlaceUnsupported = errors.New("this version of Mewla cannot restart itself; stop it (Ctrl+C in its window) and start it again: mewla")
+
+// requestInPlaceRestart asks the daemon serving stateDir to restart itself
+// onto version (control request daemon_upgrade). An error is the daemon's
+// refusal, with its cause, or why it could not be asked.
+func requestInPlaceRestart(stateDir, version string) error {
+	socket, err := control.DefaultSocketPath(stateDir)
+	if err != nil {
+		return err
+	}
+	// The daemon runs the new executable once before it answers.
+	response, err := control.CallWithTimeout(socket, control.Request{Type: "daemon_upgrade", Version: version}, 30*time.Second)
+	if err != nil {
+		return err
+	}
+	if response.OK {
+		return nil
+	}
+	if response.Error == nil {
+		return errors.New("the request failed")
+	}
+	if response.Error.Code == "unknown_request" {
+		return errInPlaceUnsupported
+	}
+	return errors.New(response.Error.Message)
+}
+
+// restartInPlace has a daemon nothing supervises restart itself onto the
+// installed executable (daemon_upgrade.go). On Linux and macOS it keeps its
+// PID; on Windows the old process waits for the new one in its console.
+func (rt daemonRuntime) restartInPlace(stateDir string, daemon runningDaemon, want string) error {
+	name := fmt.Sprintf("Mewla %s (PID %d)", daemon.Version, daemon.PID)
+	if daemon.Version == "" {
+		name = fmt.Sprintf("Mewla (PID %d)", daemon.PID)
+	}
+	onto := "the installed version"
+	if want != "" {
+		onto = want
+	}
+	if err := rt.upgrade(stateDir, want); err != nil {
+		return fmt.Errorf("%s did not restart onto %s: %w", name, onto, err)
+	}
+	stopped := false
+	answered := rt.waitFor(func() bool {
+		if rt.answersAs(stateDir, daemon.Addr, want) {
+			return true
+		}
+		stopped = !rt.alive(daemon.PID)
+		return stopped
+	}, rt.inPlaceWait)
+	if answered && !stopped {
+		return nil
+	}
+	if cause, err := os.ReadFile(inPlaceRestartFailurePath(stateDir)); err == nil && len(strings.TrimSpace(string(cause))) > 0 {
+		return fmt.Errorf("%s stopped and did not restart onto %s: %s", name, onto, strings.TrimSpace(string(cause)))
+	}
+	if stopped {
+		return fmt.Errorf("%s stopped and did not start again; its window says why", name)
+	}
+	if health, err := rt.health(daemon.Addr); err == nil && health.Version == daemon.Version {
+		return fmt.Errorf("%s is still running %s after %s: it has not finished stopping", name, daemon.Version, rt.inPlaceWait)
+	}
+	return fmt.Errorf("%s did not answer as %s on %s within %s; its window says why", name, onto, daemon.Addr, rt.inPlaceWait)
+}
+
 func (rt daemonRuntime) notBack(stateDir string, daemon runningDaemon, want string) error {
 	what := "Mewla"
 	if want != "" {
@@ -369,11 +453,6 @@ func restartAfterUpdate(rt daemonRuntime, stateDir, from, to string, out io.Writ
 		fmt.Fprintf(out, "Updated Mewla %s → %s.\n", from, to)
 		return nil
 	}
-	if !rt.supervised(daemon) {
-		// The update is installed; only the restart is left to the person.
-		fmt.Fprintf(out, "Updated Mewla %s → %s.\n%s\n", from, to, &errDaemonStartedByHand{daemon: daemon, goos: rt.goos})
-		return nil
-	}
 	fmt.Fprintf(out, "Updated Mewla %s → %s. Restarting Mewla now to use it; Sessions and Workers keep running.\n", from, to)
 	if err := rt.restart(stateDir, daemon, to); err != nil {
 		return err
@@ -397,12 +476,8 @@ func ensureCurrentDaemon(rt daemonRuntime, stateDir string, interactive bool, ou
 	if !ok || !selfupdate.Older(daemon.Version, Version) {
 		return
 	}
-	if !interactive && rt.supervised(daemon) {
+	if !interactive {
 		fmt.Fprintf(out, "Mewla %s is still running; this is %s. Restart it onto %s: mewla restart\n", daemon.Version, Version, Version)
-		return
-	}
-	if !rt.supervised(daemon) {
-		fmt.Fprintf(out, "This is Mewla %s. %s\n", Version, &errDaemonStartedByHand{daemon: daemon, goos: rt.goos})
 		return
 	}
 	fmt.Fprintf(out, "Mewla %s is still running; this is %s. Restarting it to %s; Sessions and Workers keep running.\n", daemon.Version, Version, Version)
@@ -447,7 +522,7 @@ func commandStateDir(args []string) string {
 
 // runRestartCommand is `mewla restart`: the running daemon stops and starts
 // again from the installed executable, through the logon task or systemd
-// unit that started it.
+// unit that started it, or in place when nothing supervises it.
 func runRestartCommand(args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla restart", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -455,7 +530,7 @@ func runRestartCommand(args []string, stderr io.Writer) error {
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla restart [flags]")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Restart Mewla running in the background, onto the installed version.")
+		fmt.Fprintln(stderr, "Restart the running Mewla onto the installed version, in the terminal it runs in.")
 		fmt.Fprintln(stderr, "Sessions and Workers keep running.")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
@@ -466,15 +541,17 @@ func runRestartCommand(args []string, stderr io.Writer) error {
 	if fs.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
-	if bootGOOS == "darwin" {
-		return errors.New("on macOS, quit Mewla from the menu bar and open it again")
-	}
 	resolved, err := auth.ResolveStorageDir(*stateDir)
 	if err != nil {
 		return err
 	}
 	rt := defaultDaemonRuntime()
 	daemon, ok := rt.inspect(resolved)
+	if !ok && bootGOOS == "darwin" {
+		if _, managed := bootLaunchdReinstallArgs(); managed {
+			return errors.New("on macOS, quit Mewla from the menu bar and open it again")
+		}
+	}
 	if !ok {
 		if held, _ := bootStateLockHeld(resolved); !held {
 			return fmt.Errorf("Mewla is not running; start it with: %s", startCommand(*stateDir))

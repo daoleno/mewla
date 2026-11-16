@@ -127,6 +127,10 @@ func (s *Server) handleConn(conn net.Conn) {
 		resp.Error = &Error{Code: "request_failed", Message: "Request failed."}
 	}
 	_ = json.NewEncoder(conn).Encode(resp)
+	if resp.After != nil {
+		_ = conn.Close()
+		resp.After()
+	}
 }
 
 func removeStaleSocket(path string) error {
