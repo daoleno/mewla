@@ -1,5 +1,5 @@
 import type { JSX } from "nsh";
-import { computed, effect, Image, keyboardFrame, List, signal, Text, untracked, Video, View, windowSize, type VideoRef, type ViewRef, lifecycle } from "nsh";
+import { computed, effect, Image, keyboardFrame, List, safeArea, signal, Text, untracked, Video, View, windowSize, type VideoRef, type ViewRef, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { GuardedDialog as Dialog } from "../../shell/AppSheet";
 import { NavPage } from "../../shell/NavPage";
@@ -262,7 +262,7 @@ function PostVideo(props: { media: FriendsMedia; postId: string; owner: string; 
               }}
               onEnd={end}
             />
-            <View class="absolute left-0 right-0 top-0 flex-row items-center justify-between px-3" style={{ paddingTop: "calc(env(safe-area-inset-top) + 8px)" }}>
+            <View class="absolute left-0 right-0 top-0 flex-row items-center justify-between px-3" style={{ paddingTop: safeArea().top + 8 }}>
               <Button testID="friends-video-close" accessibilityLabel="Close" onPress={closeFull} class="size-10 items-center justify-center rounded-full bg-primary/70 active:opacity-70">
                 <Icon name="close" size={18} tone="canvas" />
               </Button>
