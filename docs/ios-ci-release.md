@@ -20,9 +20,9 @@ The `ios` job in [`.github/workflows/client.yml`](../.github/workflows/client.ym
 1. validates the shared Android/iOS native contract, then restores, or builds when the cache misses, and verifies the pinned `native/terminal-vt/libs/ios/GhosttyVt.xcframework` device and Simulator slices through the shared `ios-native` action, whose caches only `native-cache.yml` on `main` saves;
 2. installs NSH and its iOS framework and generates the Xcode project with xcodegen;
 3. builds the unit tests, then boots an iPhone Simulator and runs them on it (the host and the terminal), ad hoc signed;
-4. builds the Release app, installs and launches it on the same Simulator, still booted, and uploads a first-run screenshot.
+4. checks that every pet image the app names is in the app the tests ran in (its client/ui bundle is the same `nsh build --release` in every configuration).
 
-Until 11-14 the Simulator booted twice, once for the tests and again for the Release app. The boot waits for the test build: a runner's first boot is minutes of CPU, and a compile beside it took 8 min instead of about 1. Two jobs on two Macs were slower still.
+The boot waits for the test build: a runner's first boot is minutes of CPU, and a compile beside it took 8 min instead of about 1. Until 11-16 the job also built the Release app and launched it for a first-run screenshot that nothing checked (3.5–9 min); the signed Release app is built by `ios-release.yml` on each release.
 
 This job contains no Apple credentials. The Linux `client` and `client-ui` jobs of `ci.yml` keep core tests, `nsh check` and `nsh test` on every push; none of them is a substitute for this macOS compile/link job.
 

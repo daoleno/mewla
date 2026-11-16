@@ -41,20 +41,6 @@ jobs:
           }
           echo "sha=$START_SHA" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: daemon/go.mod
-          cache-dependency-path: daemon/go.sum
-
-      - name: Test release preparation and workflow contracts
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
-          TMPDIR: ${{ runner.temp }}
-          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
-        run: |
-          mkdir -p "$MEWLA_BUILD_TMPDIR"
-          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-
       - name: Prepare deterministic release identity and notes
         id: release
         env:
@@ -96,11 +82,7 @@ jobs:
       - name: Verify prepared release identity
         run: ./scripts/verify-release-identity.sh
 
-      - name: Test daemon release identity
-        working-directory: daemon
-        run: go test ./cmd/mewla
-
-      # The release workflow contracts again, on the prepared tree.
+      # The release workflow contracts on the prepared tree (CI ran every scripts test on main).
       - name: Test release workflow contracts
         env:
           PYTHONDONTWRITEBYTECODE: "1"

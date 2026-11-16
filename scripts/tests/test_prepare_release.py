@@ -688,24 +688,6 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("inputs:", dispatch)
         self.assertIn("version:", dispatch)
         self.assertIn("required: true", dispatch)
-        self.assertLess(
-            workflow.index("Test release preparation and workflow contracts"),
-            workflow.index("Prepare deterministic release identity and notes"),
-        )
-        release_job_header = workflow.split("steps:", 1)[0]
-        self.assertNotIn("runner.temp", release_job_header)
-        self.assertEqual(
-            workflow.count("MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build"),
-            1,
-        )
-        test_step = workflow.split(
-            "- name: Test release preparation and workflow contracts",
-            1,
-        )[1].split("- name: Prepare deterministic release identity and notes", 1)[0]
-        self.assertLess(
-            test_step.index('mkdir -p "$MEWLA_BUILD_TMPDIR"'),
-            test_step.index("python3 -m unittest discover"),
-        )
         permissions = workflow.split("permissions:", 1)[1].split("jobs:", 1)[0]
         self.assertEqual(
             {
@@ -721,7 +703,6 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             'START_SHA="$(git rev-parse refs/remotes/origin/main)"',
             './scripts/prepare-release.py --version "$TARGET_VERSION"',
             "./scripts/verify-release-identity.sh",
-            "go test ./cmd/mewla",
             'git config user.name "github-actions[bot]"',
             'git add --pathspec-from-file="$RUNNER_TEMP/mewla-release-paths"',
             'git commit -m "Prepare $NEXT_TAG"',

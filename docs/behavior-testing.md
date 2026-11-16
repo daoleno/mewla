@@ -55,8 +55,8 @@ sockets/HTTP listeners with cleanup, not the user's daemon. Do not restart or
 deploy the dev daemon for these gates. Watchers already owned by the user may
 react to source changes; that is not a controlled deployment or live proof.
 
-PR CI runs the deterministic contracts and uploads standard `go test -json`
-JSONL, including `Test`, `Action`, `Package` and elapsed-time fields. Consumers
+CI runs the deterministic contracts as part of `go test ./...`. Consumers of
+`go test -json` output (the `Test`, `Action`, `Package` and elapsed-time fields)
 must use terminal `pass`/`fail`/`skip` test actions and the process exit status,
 not text containing PASS. A skipped BDD-011 is not real-provider success. Keep
 failed runs; never rerun unchanged real calls until green. Deterministic test

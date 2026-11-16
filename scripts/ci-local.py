@@ -49,6 +49,7 @@ EVERYTHING = [".github/workflows/ci.yml", "scripts/ci-local.py", "bunfig.toml"]
 JOB_PATHS = {
     "installer": ["install.sh", "scripts/tests/install_test.sh", "scripts/install*"],
     "daemon": ["daemon/*", "scripts/*plugin-publisher*", "scripts/build-daemon-linux.sh", "scripts/build-web-ui.sh"],
+    "daemon-engine": ["daemon/*", "scripts/test-ghosttyvt.sh", "scripts/build-libghostty-desktop.sh", "scripts/tests/terminal_*.cpp", "client/native/terminal/*", "native/terminal-vt/*"],
     "daemon-macos": ["daemon/*"],
     "client": ["client/*", "bun.lock", "package.json"],
     "client-ui": ["client/*"],

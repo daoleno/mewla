@@ -98,11 +98,9 @@ jobs:
             client/android/app/build/generated/assets/bundleUi.js.map
           retention-days: 90
 
-  # One Simulator boot for the tests and the Release app: Xcode keeps a device it found booted running
-  # after the tests, where it shut down the one it booted itself (the second boot and install took
-  # about 4 of the job's 16 min, 11-14). The boot waits until the test build is done: a runner's first
-  # boot is minutes of CPU, and beside it the compile took 8 min instead of 1. On two Macs side by side
-  # each paid for a cold build and a boot, and the slower took 11 min.
+  # The boot waits until the test build is done: a runner's first boot is minutes of CPU, and beside
+  # it the compile took 8 min instead of 1. A second Release build, installed and launched for a
+  # screenshot nothing checked, took 3.5-9 more min and was dropped (11-16).
   ios:
     name: iOS host (Simulator, upgrade tests)
     if: github.event_name != 'workflow_dispatch' || !inputs.android_only
@@ -151,22 +149,11 @@ jobs:
           mkdir -p out
           xcodebuild test-without-building -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -40
-      - name: Open it on the Simulator
-        working-directory: client/ios
-        run: |
-          set -x
-          xcodebuild build -project Mewla.xcodeproj -scheme Mewla -configuration Release -destination "id=$SIM" -derivedDataPath build/dd \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -5
-          APP=build/dd/Build/Products/Release-iphonesimulator/Mewla.app
-          du -sh "$APP"
-          python3 ../scripts/check-pet-assets.py ios "$APP"
-          mkdir -p out
-          xcrun simctl boot "$SIM" || true
-          xcrun simctl bootstatus "$SIM" -b
-          xcrun simctl install "$SIM" "$APP"
-          xcrun simctl launch "$SIM" com.daoleno.mewla
-          sleep 6
-          xcrun simctl io "$SIM" screenshot out/first-run.png
+      # The app the tests ran in carries the same client/ui bundle as a Release build (the Bundle
+      # client/ui phase runs `nsh build --release` in every configuration); ios-release.yml builds the
+      # signed Release app on each release.
+      - name: Every pet image the app names is in the app
+        run: python3 client/scripts/check-pet-assets.py ios client/ios/build/dd/Build/Products/Debug-iphonesimulator/Mewla.app
       - uses: actions/upload-artifact@v4
         if: always()
         with:

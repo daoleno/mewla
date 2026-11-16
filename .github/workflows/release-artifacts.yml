@@ -164,11 +164,6 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
-      - name: Revalidate tag at build boundary
-        if: needs.validate.outputs.mode == 'release'
-        run: |
-          git fetch --no-tags origin main
-          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
       # The terminal engine's static library and Zig are built and fetched
       # fresh from the signed, pinned sources: release builds restore no cache.
       - name: Build libghostty-vt from the signed release with the pinned Zig
@@ -194,11 +189,6 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
-      - name: Revalidate tag at build boundary
-        if: needs.validate.outputs.mode == 'release'
-        run: |
-          git fetch --no-tags origin main
-          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
       - name: Install NSH for the web UI
         run: client/scripts/fetch-nsh.sh
       # The NSH web package and the browser terminal's VT (libghostty-vt for WebAssembly, built
@@ -234,11 +224,6 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
-      - name: Revalidate tag at build boundary
-        if: needs.validate.outputs.mode == 'release'
-        run: |
-          git fetch --no-tags origin main
-          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
       - uses: actions/setup-go@v5
         with:
           go-version-file: daemon/go.mod
@@ -376,11 +361,6 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
-      - name: Revalidate tag at build boundary
-        if: needs.validate.outputs.mode == 'release'
-        run: |
-          git fetch --no-tags origin main
-          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
       - uses: actions/setup-go@v5
         with:
           go-version-file: daemon/go.mod
@@ -439,13 +419,6 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
-
-      - name: Revalidate tag at build boundary
-        if: needs.validate.outputs.mode == 'release'
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin main
-          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
 
       # Restores only: release tags read the caches native-cache.yml saves on main.
       - name: Android SDK, arm64 Ghostty and Gradle home
@@ -564,11 +537,6 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
-      - name: Revalidate tag at build boundary
-        if: needs.validate.outputs.mode == 'release'
-        run: |
-          git fetch --no-tags origin main
-          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
       # The newest published stable release other than this one, checked against its own SHA256SUMS.
       - name: The previous release's APK and daemon
         env:

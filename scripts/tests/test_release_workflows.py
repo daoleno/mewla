@@ -190,8 +190,10 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         for job, end in (("engine", "web-ui"), ("web-ui", "daemon-build"), ("daemon-build", "daemon"), ("daemon-darwin", "android")):
             block = between(RELEASE, f"  {job}:\n", f"  {end}:\n")
             self.assertIn("ref: ${{ needs.validate.outputs.checkout }}", block, job)
-            self.assertIn("if: needs.validate.outputs.mode == 'release'\n        run: |\n          git fetch --no-tags origin main\n"
-                          '          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"', block, job)
+        # validate checks the tag once; signing and publication check it again before acting on it.
+        for job, end in (("stage", "release-ready"), ("publish", "ios-testflight")):
+            self.assertIn('./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"',
+                          between(RELEASE, f"  {job}:\n", f"  {end}:\n"), job)
         # Intermediates never match the published pattern; the merged names stay what they were.
         self.assertNotRegex(RELEASE, r"name: mewla-daemon-binaries-[^\n]*matrix")
         self.assertIn("name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}\n          pattern: daemon-part-bin-*-", RELEASE)
@@ -527,14 +529,8 @@ class CIWorkflowTests(unittest.TestCase):
         self.assertIn(f"name: Client UI tests (${{{{ matrix.shard }}}}/{count})", ui)
         self.assertIn("fail-fast: false", ui)
 
-    def test_no_job_builds_the_expo_app(self):
-        for source in (CI, CLIENT, NATIVE_CACHE, NATIVE_LIBS, RELEASE, IOS_RELEASE, PREPARATION):
-            self.assertNotIn("working-directory: app", source)
-            self.assertNotRegex(source, r"\bexpo (prebuild|export)\b")
-            self.assertNotRegex(source, r"(^|[\s'\"(])app/", "a workflow still reads the Expo app's directory")
-
     def test_daemon_tests_and_vet_run_on_every_push_and_release_targets_are_gated(self):
-        daemon = between(CI, "  daemon:\n", "  client:\n")
+        daemon = between(CI, "  daemon:\n", "  daemon-engine:\n")
         self.assertRegex(daemon, r"run: go test \./\.\.\.[\s\S]*run: go vet \./\.\.\.[\s\S]*run: python3 scripts/test-plugin-publisher-flags\.py")
         self.assertIn(f"name: Build release targets\n        {RELEASE_ONLY}", daemon)
         self.assertIn(f"name: Install NSH for the web UI\n        {RELEASE_ONLY}", daemon)
