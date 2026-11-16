@@ -46,10 +46,9 @@ func sweepBinary(t *testing.T) string {
 }
 
 // env is one fresh computer for one scenario: its own HOME, state, port,
-// tmux directory and PATH. It never sees the person's daemon, tmux server,
-// systemd units or agent configs: a systemd-run stub keeps the session host a
-// plain child, TMUX_TMPDIR points tmux at an empty directory, and every agent
-// config is a copy.
+// TMPDIR and PATH. It never sees the person's daemon, systemd units or agent
+// configs: a systemd-run stub keeps the session host a plain child, and every
+// agent config is a copy.
 type env struct {
 	t      *testing.T
 	bin    string
@@ -98,7 +97,7 @@ func newEnv(t *testing.T, opts envOptions) *env {
 		e.tmpdir = opts.tmpdir
 	}
 	e.state = filepath.Join(e.home, ".mewla")
-	for _, sub := range []string{e.state, e.tools, filepath.Join(dir, "tmux"), filepath.Join(dir, "tmp")} {
+	for _, sub := range []string{e.state, e.tools, filepath.Join(dir, "tmp")} {
 		if err := os.MkdirAll(sub, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -158,7 +157,6 @@ func (e *env) environ() []string {
 		"TERM=xterm-256color",
 		"SHELL=/bin/sh",
 		"LANG=C.UTF-8",
-		"TMUX_TMPDIR=" + filepath.Join(e.dir, "tmux"),
 		// Its own: Workers refuse a folder under TMPDIR (volatile storage).
 		"TMPDIR=" + e.tmpdir,
 		"MEWLA_NO_AUTOUPDATE=1",

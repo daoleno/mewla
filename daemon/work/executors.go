@@ -2,16 +2,12 @@ package work
 
 import (
 	"errors"
-	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
-
-	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
 // ErrUnknownExecutor is returned when a delegated selection names an executor
@@ -55,48 +51,8 @@ type executorFile struct {
 
 var retiredExecutorKeys = []string{"delegated_executor", "delegated_model", "delegated_reasoning"}
 
-// retiredRuntimeLine is an executor's `runtime = "..."` line. Every Session
-// runs in the session host, so the key names nothing any more.
-var retiredRuntimeLine = regexp.MustCompile(`^[ \t]*runtime[ \t]*=[ \t]*("[^"]*"|'[^']*')[ \t]*(#.*)?\r?$`)
-
-// executorsDefine reports whether any [[executors]] entry defines key.
-func executorsDefine(meta toml.MetaData, key string) bool {
-	for _, k := range meta.Keys() {
-		if len(k) == 2 && k[0] == "executors" && k[1] == key {
-			return true
-		}
-	}
-	return false
-}
-
-// dropRetiredRuntime rewrites executors.toml without its runtime lines,
-// keeping everything else as it was. The file loads the same either way; a
-// rewrite that fails is only logged.
-func dropRetiredRuntime(path string, raw []byte) {
-	lines := strings.SplitAfter(string(raw), "\n")
-	kept := lines[:0]
-	for _, line := range lines {
-		if retiredRuntimeLine.MatchString(strings.TrimSuffix(line, "\n")) {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	rewritten := strings.Join(kept, "")
-	var check executorFile
-	if meta, err := toml.Decode(rewritten, &check); err != nil || executorsDefine(meta, "runtime") {
-		return
-	}
-	perm := os.FileMode(0o600)
-	if info, err := os.Stat(path); err == nil {
-		perm = info.Mode().Perm()
-	}
-	if err := atomicfile.Write(path, []byte(rewritten), perm); err != nil {
-		log.Printf("executors.toml: drop the retired runtime key: %v", err)
-	}
-}
-
-// LoadExecutors reads path, or returns built-in defaults when missing. An
-// executor's retired runtime key is dropped from the file.
+// LoadExecutors reads path, or returns built-in defaults when missing. Keys it
+// does not know are ignored.
 func LoadExecutors(path string) (*ExecutorConfig, error) {
 	cfg := &ExecutorConfig{
 		ByName: map[string]Executor{
@@ -122,9 +78,6 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 	meta, err := toml.Decode(string(raw), &file)
 	if err != nil {
 		return nil, err
-	}
-	if executorsDefine(meta, "runtime") {
-		dropRetiredRuntime(path, raw)
 	}
 	for _, key := range retiredExecutorKeys {
 		if meta.IsDefined(key) {
