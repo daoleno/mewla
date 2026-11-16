@@ -33,6 +33,8 @@ import { delayed, RING, Spinner } from "../kit/wait";
 import { haptic } from "../shell/haptics";
 import { nav } from "../shell/nav";
 import { agentDisplays, displayOfWorker } from "../screenfloat/agentDisplays";
+import { isMermaidLanguage } from "../../core/mermaid/mermaid";
+import { MermaidBlock } from "../mermaid/MermaidBlock";
 
 /**
  * Which rows are open. A list recycles its cells, so a row's own signal would
@@ -98,8 +100,19 @@ export function CodeBlock(props: { code: string; language?: string }) {
   );
 }
 
-/** How a chat's Markdown draws its code blocks: as `CodeBlock`. */
-export const renderCode = (block: { code: string; language?: string }) => <CodeBlock code={block.code} language={block.language} />;
+/** How a chat's Markdown draws its code blocks: as `CodeBlock`, a `mermaid` one as its diagram. */
+export const renderCode = (block: { code: string; language?: string }) => {
+  if (isMermaidLanguage(block.language)) return <MermaidBlock code={block.code} asCode={asChatCode} />;
+  return <CodeBlock code={block.code} language={block.language} />;
+};
+
+const asChatCode = (code: string) => <CodeBlock code={code} language="mermaid" />;
+
+/** `renderCode` for a reply that may still stream: its diagrams are drawn once it stops. */
+export const renderCodeWhile = (streaming: () => boolean) => (block: { code: string; language?: string }) => {
+  if (isMermaidLanguage(block.language)) return <MermaidBlock code={block.code} streaming={streaming} asCode={asChatCode} />;
+  return <CodeBlock code={block.code} language={block.language} />;
+};
 
 const Mono = (props: { text: string }) => <CodeBlock code={props.text} />;
 

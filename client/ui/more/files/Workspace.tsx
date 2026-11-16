@@ -31,6 +31,7 @@ import { formatBytes } from "../../../core/resources/resourceTelemetry";
 import type { PageNav } from "../routes";
 import { ZoomImage } from "./FilePreview";
 import { MediaPlayer } from "./Media";
+import { renderFileCode } from "../../mermaid/fileCode";
 
 // Each folder the workspace showed, per (computer, folder), while the app runs: going back into one reads nothing.
 const trees = new Map<string, BrainWorkspaceTree>();
@@ -246,7 +247,7 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity;
     if (brainWorkspaceMarkdownPath(f.path || props.path)) {
       return (
         <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-10 pt-3">
-          <TextView testID="workspace-markdown" markdown={f.content} selectable onLinkPress={(event) => openLink(event.url)} />
+          <TextView testID="workspace-markdown" markdown={f.content} selectable renderCodeBlock={renderFileCode} onLinkPress={(event) => openLink(event.url)} />
         </Scroll>
       );
     }

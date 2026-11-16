@@ -14,6 +14,7 @@ import { openNotificationLink, startNotifications } from "./push/push";
 import { startAppUpdate } from "./update/update";
 // Registers the monospaced face theme.json's `font-mono` names, before the first frame.
 import "./kit/monoFont";
+import { MermaidEngine } from "./mermaid/engine";
 
 // The first start after the in-place upgrade from the Expo app (Android; the web host reads the
 // Expo web app's) takes over what it kept: computers, drafts, preferences. The device key stays
@@ -121,5 +122,7 @@ mount(() => (
     <If when={ready() && (!current() || justPaired())}><View class="absolute inset-0 bg-background"><FirstRun /></View></If>
     <If when={ready() && current() && !justPaired()}><LinkPairingNote /></If>
     <CrashReportSheet />
+    {/* Mermaid's engine (ui/mermaid/engine.tsx): out of sight, made with the first diagram. */}
+    <MermaidEngine />
   </View>
 ));

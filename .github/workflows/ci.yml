@@ -137,11 +137,13 @@ jobs:
         working-directory: client/ui
       - name: Open-source licenses are current
         run: python3 client/ui/more/settings/licenses/generate.py --check
-      # noVNC (root package.json), which the Screen viewer bundles.
-      - name: Install the Screen viewer's noVNC
+      # noVNC and mermaid (root package.json), which the Screen viewer and the diagram engine bundle.
+      - name: Install the Screen viewer's noVNC and mermaid
         run: bun install --frozen-lockfile
       - name: Screen viewer bundle is current
         run: bun client/ui/more/screen/runtime/generate.mjs --check
+      - name: Mermaid bundle is current
+        run: bun client/ui/mermaid/runtime/generate.mjs --check
 
   # The UI suite (`nsh test` in client/ui) on four runners: in one process it took 14 min on 11-14,
   # mostly tests waiting on the clock. Each shard runs its files with `nsh test <file>`; together

@@ -172,6 +172,15 @@ strikethrough, links and bare URLs, HTML entities such as `&amp;`, images,
 and code blocks with a copy button. A reply that is still arriving never shows
 half-typed syntax: an unfinished `-`, `1.` or `>` waits for its text.
 
+A code block tagged `mermaid` (flowcharts, sequence, state, gantt and the other
+diagrams mermaid draws) shows as its diagram, in light or dark with the app,
+here and in a Markdown file you preview. Tap it, or its expand button, for the
+diagram full screen: fitted first, then **+** and **−** zoom it and you scroll
+to move around. Its **Copy** copies the source. While the reply is still
+arriving the block shows its code, and it is drawn once, when the reply ends. A
+diagram mermaid cannot read stays code, with mermaid's own error under it.
+Diagrams are drawn on the phone (or in the browser), with no network.
+
 **Edit** puts the message back in the composer; with a hardware keyboard (a
 phone's too), ↑ in the empty composer edits your last message and Esc leaves
 the edit. What sending does depends on the agent:
@@ -198,7 +207,12 @@ can zoom, PDFs page by page (pinch or double tap to zoom on the phone; in a
 browser the PDF opens in a tab of its own), video (mp4, m4v, mov, webm) and
 audio (mp3, m4a, wav, ogg, opus, flac). A full path to a file in your home
 folder, such as `~/notes/plan.md`, is a link wherever a reply names it, in
-code or in the text; a path in a code block is not.
+code or in the text; a path in a code block is not. Any other path a reply
+names, such as `worklog/plan-1116/DESIGN.md`, `./out/report.pdf`,
+`src/main.go:42` or `/tmp/shot.png`, becomes a link once the computer says it
+is a file there: a relative path is read from the folder the agent works in
+(Brain's: its workspace). A path that names no file stays text. A computer
+on an older Mewla links only home paths until it is updated.
 Playback streams from the computer, so a long recording starts at once and
 seeking does not download the whole file. Every file has **Download**; text
 files (Markdown, code, txt, JSON) also have **Copy**, which copies the whole
