@@ -287,3 +287,59 @@ func TestTheControlSocketAppearsOnlyOnceItListens(t *testing.T) {
 		t.Errorf("left behind in the socket's directory: %s", entry.Name())
 	}
 }
+
+// Two control servers in one process may share a directory: each comes up on its own path and answers there, however
+// their starts interleave. (A staging name shared by the process let one server unlink the other's socket and rename
+// it into its own path.)
+func TestTwoControlServersInOneDirectoryEachAnswerOnTheirOwnPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows binds the control socket in place")
+	}
+	dir := filepath.Join(shortStateDir(t), "run")
+	for i := 0; i < 50; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		paths := []string{filepath.Join(dir, "a.sock"), filepath.Join(dir, "b.sock")}
+		done := make(chan error, len(paths))
+		start := make(chan struct{})
+		for _, path := range paths {
+			server := &Server{Path: path, Handler: &testHandler{response: Response{OK: true, Text: filepath.Base(path)}}}
+			go func() {
+				<-start // both start together
+				done <- server.Run(ctx)
+			}()
+		}
+		close(start)
+		for _, path := range paths {
+			for {
+				if _, err := os.Stat(path); err == nil {
+					break
+				}
+				select {
+				case err := <-done:
+					cancel()
+					t.Fatalf("run %d: a server ended before %s appeared: %v", i, filepath.Base(path), err)
+				default:
+					runtime.Gosched()
+				}
+			}
+			resp, err := Call(path, Request{Type: "ping"})
+			if err != nil || resp.Text != filepath.Base(path) {
+				cancel()
+				t.Fatalf("run %d: %s answered %q, %v; want its own server", i, filepath.Base(path), resp.Text, err)
+			}
+		}
+		cancel()
+		for range paths {
+			if err := <-done; err != nil {
+				t.Fatalf("run %d: %v", i, err)
+			}
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		t.Errorf("left behind in the directory: %s", entry.Name())
+	}
+}
