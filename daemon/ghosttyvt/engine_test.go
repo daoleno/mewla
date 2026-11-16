@@ -390,6 +390,8 @@ func TestEncodeKey(t *testing.T) {
 		"Enter": "\r", "Escape": "\x1b", "Tab": "\t", "BTab": "\x1b[Z", "Space": " ",
 		"BSpace": "\x7f", "C-c": "\x03", "C-u": "\x15", "Up": "\x1b[A", "Down": "\x1b[B",
 		"Left": "\x1b[D", "Right": "\x1b[C", "q": "q", "Q": "Q", "1": "1", "/": "/", "日": "日",
+		// Alt (Meta) is an escape prefix on every platform, the Mac's Option too.
+		"M-b": "\x1bb", "M-Enter": "\x1b\r",
 	} {
 		if got := encode(spec); got != want {
 			t.Errorf("legacy %s = %q, want %q", spec, got, want)
