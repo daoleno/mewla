@@ -31,6 +31,7 @@ import (
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/whatsnew"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/google/uuid"
 )
@@ -85,6 +86,7 @@ type controlApp struct {
 	phone             *phone.Agent
 	iphone            *phone.Agent
 	agentUse          *agentuse.Service
+	whatsNew          *whatsnew.Store
 	profiles          *modelprofiles.Owner
 	telegram          telegramControlManager
 	threadRuntimeSet  func(string, modelprofiles.ThreadRuntimeChoice) (modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error)
@@ -264,6 +266,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainWorkResolve(req)
 	case "brain_set_executor":
 		return a.handleBrainSetExecutor(req)
+	case "whats_new_replay":
+		return a.handleWhatsNewReplay()
 	case "brain_objective", "brain_objective_set", "brain_objective_clear":
 		return a.handleBrainObjective(req)
 	case "brain_workspace":

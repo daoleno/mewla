@@ -63,6 +63,7 @@ import (
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/whatsnew"
 	"github.com/daoleno/mewla/daemon/work"
 	"golang.org/x/term"
 )
@@ -188,6 +189,8 @@ func run(args []string, stderr io.Writer) error {
 			return runServiceCommand(args[1:], stderr)
 		case "brain":
 			return runBrainCommand(args[1:], stderr)
+		case "dev":
+			return runDevCommand(args[1:], stderr)
 		case "memory":
 			return runMemoryCommand(args[1:], stderr)
 		case "calendar":
@@ -624,6 +627,14 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
 	srv.SetResourceSampler(resourceSampler)
+	// What is news to this person since an update (the app's What's New); an existing install is
+	// one someone already paired with.
+	if whatsNewStore, whatsNewErr := whatsnew.Open(stateDir, Version, len(authManager.ListDevices()) > 0, time.Now()); whatsNewErr != nil {
+		log.Printf("WARN What's New record unavailable: %v", whatsNewErr)
+	} else {
+		srv.SetWhatsNew(whatsNewStore)
+		controlHandler.whatsNew = whatsNewStore
+	}
 	w.SetExecutorResolver(execs.IDForCommand)
 	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))

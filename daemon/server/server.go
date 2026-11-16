@@ -55,6 +55,7 @@ import (
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/terminal"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/whatsnew"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 	"github.com/oklog/ulid/v2"
@@ -148,6 +149,7 @@ type Server struct {
 	outsideAgentsDoor          http.Handler
 	computerName               string
 	agentUse                   *agentuse.Service
+	whatsNew                   *whatsnew.Store
 	daemonUpdater              DaemonUpdater
 	version                    string
 	providerConversationLoader func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
@@ -1250,6 +1252,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleDSHImage(conn, raw)
 	case "get_resource_telemetry":
 		s.handleGetResourceTelemetry(conn, raw)
+	case "whats_new_get", "whats_new_seen", "whats_new_note":
+		s.handleWhatsNew(conn, raw, msg)
 	default:
 		log.Printf("websocket: rejected unknown message type=%q remote=%s request=%s", raw.Type, conn.RemoteAddr(), raw.RequestID)
 		if raw.RequestID != "" {
