@@ -46,7 +46,7 @@ export function MermaidBlock(props: { code: string; streaming?: () => boolean; a
   return (
     <If when={drawn()} else={<View testID="mermaid-code">
         {(props.asCode ?? plainCode)(props.code)}
-        <If when={failure()}><Text testID="mermaid-error" class="px-1 pb-1 font-mono text-[12px] leading-[18px] text-muted-foreground">{failure()}</Text></If>
+        <If when={failure()}><View class="px-1 pb-1"><Text testID="mermaid-error" class="font-mono text-[12px] leading-[18px] text-muted-foreground">{failure()}</Text></View></If>
       </View>}>
       <Diagram code={props.code} drawn={() => drawn()!} mode={mode} />
     </If>
