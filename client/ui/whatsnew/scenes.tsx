@@ -1,4 +1,4 @@
-import { createMotion, Easing, Text, View } from "nsh";
+import { createMotion, Easing, reduceMotion, Text, untracked, View } from "nsh";
 import type { JSX, MotionFrame } from "nsh";
 import { Icon, type IconName } from "../kit/Icon";
 
@@ -14,8 +14,44 @@ import { Icon, type IconName } from "../kit/Icon";
 const LOOP = 3600;
 const EASE = Easing.bezier(0.2, 0.8, 0.2, 1);
 
-function loop(frames: MotionFrame[], duration = LOOP) {
-  return createMotion({ enter: { keyframes: frames, duration, easing: EASE, iterations: "infinite" } }).style;
+/** Where a loop is still under reduced motion: past every passing state, on the telling one. */
+const TELLING = 0.85;
+
+/** Each channel of `frames` at `offset`, straight between the frames around it. */
+function sample(frames: MotionFrame[], offset: number): Record<string, number> {
+  const out: Record<string, number> = {};
+  const channels = new Set(frames.flatMap((frame) => Object.keys(frame).filter((key) => key !== "offset" && key !== "easing")));
+  for (const channel of channels) {
+    const points = frames
+      .map((frame, index) => ({ at: frame.offset ?? index / Math.max(1, frames.length - 1), value: (frame as Record<string, unknown>)[channel] }))
+      .filter((point): point is { at: number; value: number } => typeof point.value === "number");
+    let value = points[0]?.value ?? 0;
+    for (let i = 0; i < points.length; i += 1) {
+      if (points[i].at <= offset) value = points[i].value;
+      else {
+        const before = points[i - 1];
+        if (before) value = before.value + ((points[i].value - before.value) * (offset - before.at)) / (points[i].at - before.at);
+        break;
+      }
+    }
+    out[channel] = value;
+  }
+  return out;
+}
+
+/**
+ * A loop on a view. With reduced motion it stands still on its telling frame: NSH would land it on its last frame,
+ * which for most of these is the blank one before the loop starts again.
+ */
+function loop(frames: MotionFrame[], duration = LOOP): Record<string, unknown> {
+  if (untracked(reduceMotion)) {
+    const v = sample(frames, TELLING);
+    return {
+      opacity: v.opacity ?? 1,
+      transform: [{ translateX: v.translateX ?? 0 }, { translateY: v.translateY ?? 0 }, { scale: v.scale ?? 1 }, { rotate: `${v.rotate ?? 0}deg` }],
+    };
+  }
+  return createMotion({ enter: { keyframes: frames, duration, easing: EASE, iterations: "infinite" } }).style as Record<string, unknown>;
 }
 
 /** In at `from`, held, out just before the loop starts again; at rest it shows. */
@@ -115,7 +151,7 @@ function ChatCard() {
 
 /** Mewla restarts onto the new version; the Sessions never stop. */
 function UpdateRestart(props: { version: string }) {
-  const spin = createMotion({ enter: { keyframes: [{ offset: 0, rotate: 0 }, { offset: 0.5, rotate: 360 }, { offset: 1, rotate: 360 }], duration: LOOP, easing: EASE, iterations: "infinite" } }).style;
+  const spin = loop([{ offset: 0, rotate: 0 }, { offset: 0.5, rotate: 360 }, { offset: 1, rotate: 360 }]);
   const updating = loop(between(0.02, 0.5));
   const done = loop([{ offset: 0, opacity: 1 }, { offset: 0.02, opacity: 0 }, { offset: 0.52, opacity: 0 }, { offset: 0.6, opacity: 1 }, { offset: 1, opacity: 1 }]);
   return (

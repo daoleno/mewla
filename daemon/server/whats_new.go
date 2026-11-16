@@ -34,8 +34,8 @@ func (s *Server) handleWhatsNew(conn *websocket.Conn, raw clientMessage, msg []b
 	var err error
 	switch raw.Type {
 	case "whats_new_seen":
-		if len(body.IDs) > 64 {
-			body.IDs = body.IDs[:64]
+		if len(body.IDs) > 512 {
+			body.IDs = body.IDs[:512]
 		}
 		record, err = s.whatsNew.MarkSeen(body.IDs)
 	case "whats_new_note":
