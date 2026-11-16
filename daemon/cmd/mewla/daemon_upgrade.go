@@ -42,14 +42,16 @@ type startupSnapshot struct {
 	Args       []string
 	Env        []string
 	Dir        string
+	Started    time.Time
 }
 
 var daemonStartup = takeStartupSnapshot()
 
 func takeStartupSnapshot() startupSnapshot {
 	snapshot := startupSnapshot{
-		Args: append([]string(nil), os.Args...),
-		Env:  os.Environ(),
+		Args:    append([]string(nil), os.Args...),
+		Env:     os.Environ(),
+		Started: time.Now(),
 	}
 	if executable, err := os.Executable(); err == nil {
 		if resolved, err := filepath.EvalSymlinks(executable); err == nil {

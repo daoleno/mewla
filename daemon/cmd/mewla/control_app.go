@@ -179,7 +179,7 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		if err != nil {
 			return control.ErrorResponse("daemon_status_unavailable", err.Error())
 		}
-		return control.Response{OK: true, Daemon: &control.DaemonStatus{PID: os.Getpid(), Executable: executable, Version: Version, Addr: a.addr}}
+		return control.Response{OK: true, Daemon: &control.DaemonStatus{PID: os.Getpid(), Executable: executable, Version: Version, Addr: a.addr, Started: daemonStartup.Started}}
 	case "daemon_upgrade":
 		if a.restarter == nil {
 			return control.ErrorResponse("upgrade_unavailable", "Mewla is still starting")
