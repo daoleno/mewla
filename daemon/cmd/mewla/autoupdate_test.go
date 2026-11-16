@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -114,8 +115,17 @@ func TestSelfUpdateOnlyForStampedStableReleaseBuilds(t *testing.T) {
 		t.Fatal("an unstamped (dev or local) build must never update itself")
 	}
 	releaseBuild = "1"
-	if !selfUpdateSupported("0.2.87") {
-		t.Fatal("a stamped stable release build should update itself")
+	// Linux and Windows update themselves; a Mac never does: its daemon runs inside the signed
+	// Mewla.app, and swapping the binary would break the signature and the screen grants with it.
+	switch runtime.GOOS {
+	case "linux", "windows":
+		if !selfUpdateSupported("0.2.87") {
+			t.Fatal("a stamped stable release build should update itself")
+		}
+	default:
+		if selfUpdateSupported("0.2.87") {
+			t.Fatalf("a stamped stable release build on %s must not update itself", runtime.GOOS)
+		}
 	}
 	if selfUpdateSupported("0.2.88-beta.1") {
 		t.Fatal("a beta must never update itself")

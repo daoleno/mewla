@@ -69,7 +69,7 @@ func testCloudManager(t *testing.T) (*Manager, string, string, *[]string) {
 	m.cloud.profileFiles = func() (string, string, error) { return config, creds, nil }
 	calls := []string{}
 	var mu sync.Mutex
-	m.cloud.providers["aws"] = testAWSCLI{path: "/bin/true"}
+	m.cloud.providers["aws"] = testAWSCLI{path: cliStub(t, "aws")}
 	m.cloud.run = func(_ context.Context, _ string, args, env []string) (cloudOutput, error) {
 		mu.Lock()
 		defer mu.Unlock()

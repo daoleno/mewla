@@ -103,15 +103,28 @@ func TestCloudRefreshCannotResurrectDeletedOrOverwritePermissions(t *testing.T) 
 	m.snapshots.checked = map[string]time.Time{}
 	m.cloud.checked = map[string]time.Time{}
 	m.Handle(context.Background(), Request{Action: "list"})
-	<-started
-	<-started
+	// Both profiles' checks are under way before the person deletes one and changes the other. A CLI that
+	// never runs (none found) fails here at once instead of holding the package until its timeout.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(10 * time.Second):
+			t.Fatalf("only %d of the 2 profiles' CLI checks started: the refresh never ran the CLI", i)
+		}
+	}
 	m.mu.Lock()
 	delete(m.records, awsProfileID("deleted"))
 	m.records[awsProfileID("changed")].Account.Enabled = true
 	m.records[awsProfileID("changed")].Grants = map[string]string{}
 	m.mu.Unlock()
 	close(release)
-	m.snapshots.wg.Wait()
+	finished := make(chan struct{})
+	go func() { m.snapshots.wg.Wait(); close(finished) }()
+	select {
+	case <-finished:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background refresh did not finish after its CLI checks were let go")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.records[awsProfileID("deleted")] != nil {

@@ -125,7 +125,7 @@ func testGCPManager(t *testing.T) (*Manager, *[]gcpConfiguration, *[]gcpCredenti
 	configs := []gcpConfiguration{{Name: "keep", Active: true, Properties: map[string]map[string]string{"core": {"account": "same@example.com", "project": "project-a"}}}, {Name: "throwaway", Properties: map[string]map[string]string{"core": {"account": "same@example.com", "project": "project-b"}}}}
 	creds := []gcpCredential{{Account: "same@example.com"}, {Account: "unused@example.com"}}
 	calls := []string{}
-	m.cloud.providers["gcp"] = testGcloudCLI{path: "/bin/true"}
+	m.cloud.providers["gcp"] = testGcloudCLI{path: gcloudStub(t)}
 	m.cloud.run = func(_ context.Context, _ string, args, env []string) (cloudOutput, error) {
 		call := strings.Join(args, " ")
 		calls = append(calls, call)
