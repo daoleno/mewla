@@ -350,7 +350,9 @@ snapshots to the new socket as to any new one. What it keeps per socket (a
 followed chat, an open terminal, the Session on screen, the app's state) is
 told again on the `moved` frame. A move whose socket does not open within 10 s
 costs only that socket and backs off (1 min, doubling to 10 min), as does a
-direct socket that dies within 2 min of a move. Losing the direct path later is
+direct socket that dies within 2 min of a move; only one that held longer
+starts the backoff over, so a path that keeps dying is moved onto ever more
+rarely. Losing the direct path later is
 an ordinary, visible reconnect. Each move is one `client_diagnostic` line
 (`event=link_move`: from, to, time on the old path, answers owed). Before,
 closing a working relay socket as soon as a direct address answered (checked

@@ -816,6 +816,35 @@ describe("a connection on the relay moves onto a direct path (make-before-break)
     transport.close();
   });
 
+  test("a direct path that keeps dying soon after each move is moved onto less often each time (no ping-pong)", async () => {
+    Object.assign(transportTiming, { moveBackoffMs: 60, moveBackoffMaxMs: 10_000, moveTrustMs: 60_000 });
+    const { transport, record } = await onRelay([true]);
+    /** Moves, lets the direct socket die at once, reconnects on the relay; resolves when back on the relay. */
+    const moveAndDie = async (count: number) => {
+      await until(() => sockets.length === count + 1, "a move's socket");
+      const direct = sockets[count]!;
+      direct.open();
+      await wait(1);
+      record.path = "relay";
+      const diedAt = Date.now();
+      direct.close(1006, "");
+      await until(() => sockets.length === count + 2, "the reconnect");
+      sockets[count + 1]!.open();
+      return diedAt;
+    };
+    const firstDeath = await moveAndDie(1);
+    const secondDeath = await moveAndDie(3);
+    const firstWait = secondDeath - firstDeath;
+    // After the second quick death the wait has doubled: no move's socket before twice the first backoff.
+    expect(firstWait).toBeGreaterThanOrEqual(60);
+    await wait(100);
+    expect(sockets).toHaveLength(5);
+    await until(() => sockets.length === 6, "the third move, after the doubled backoff");
+    expect(Date.now() - secondDeath).toBeGreaterThanOrEqual(120);
+    expect(record.moved).toBe(2);
+    transport.close();
+  });
+
   test("going away gives a move up; a network change starts the count over", async () => {
     const { transport, relay, record } = await onRelay([true]);
     await moveSocket();
