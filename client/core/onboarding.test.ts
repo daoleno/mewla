@@ -74,7 +74,7 @@ describe("onboarding steps", () => {
   });
 
   test("Can't reach says what the computer gave, never the transport's own words", () => {
-    for (const word of ["error", "silent", "closed (1006)", "direct-available", ""]) {
+    for (const word of ["error", "silent", "closed (1006)", "network changed", ""]) {
       expect(connectedCopy("waiting", "Desk", word)).toEqual({ title: "Can't reach your computer", lede: "Check that mewla is running on Desk." });
     }
     expect(connectedCopy("waiting", "Desk", "This device was removed").lede).toBe("This device was removed");

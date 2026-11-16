@@ -44,6 +44,8 @@ interface Paths {
 }
 
 const paths = new Map<string, Paths>();
+/** The computers whose current path carries an open connection (`transportOpened` until `transportFailed`). */
+const live = new Set<string>();
 const directSuppressedUntil = new Map<string, number>();
 const resolving = new Map<string, Promise<string>>();
 const directProbes = new Map<string, Promise<Selection | null>>();
@@ -121,6 +123,11 @@ export async function resolveStoredServerURL(server: StoredServer): Promise<stri
     throw new Error("Mewla Relay needs setup. Scan a fresh Mewla Relay QR code; the saved route or transport pin is missing.");
   }
   const entry = pathsFor(server.id);
+  // While a connection is open on a path, every caller uses that path as it is: measuring it again under the
+  // connection could close the tunnel it runs on (a failed re-check of a direct address stopped it), and a working
+  // connection is never moved off its path for a better one. The next connection measures afresh.
+  const carrying = live.has(server.id) ? currentSelection(entry) : undefined;
+  if (carrying) return rewriteSelection(server, carrying);
   const direct = stillListed(server, entry.direct);
   if (direct && fresh(direct)) {
     entry.current = "direct";
@@ -152,10 +159,14 @@ export async function resolveStoredServerURL(server: StoredServer): Promise<stri
 export function serverURLNow(server: StoredServer): string {
   if (server.transportKind !== "link") return server.url;
   const entry = paths.get(server.id);
-  const selection = entry?.current === "direct" ? entry.direct : entry?.current === "relay" ? entry.relay : undefined;
+  const selection = entry ? currentSelection(entry) : undefined;
   if (selection) return rewriteSelection(server, selection);
   void resolveStoredServerURL(server).catch(() => undefined);
   return server.url;
+}
+
+function currentSelection(entry: Paths): Selection | undefined {
+  return entry.current === "direct" ? entry.direct : entry.current === "relay" ? entry.relay : undefined;
 }
 
 async function chooseTransport(server: StoredServer, entry: Paths): Promise<string> {
@@ -363,17 +374,15 @@ function stillListed(server: StoredServer, selection: Selection | undefined): Se
   return directAddressesFor(server).some((address) => selection.remoteURL === directURL(address)) ? selection : undefined;
 }
 
-/** Looks for a direct path while the phone is on the relay. True when one was just verified, so the caller can reconnect onto it. */
-export async function directPathBecameAvailable(server: StoredServer): Promise<boolean> {
-  if (server.transportKind !== "link") return false;
-  const entry = paths.get(server.id);
-  if (entry?.current !== "relay") return false;
-  return (await probeDirect(server, entry)) !== null;
+/** The connection on the current path opened: until it fails, that path is the one every caller uses (`resolveStoredServerURL`). */
+export function transportOpened(server: StoredServer): void {
+  if (server.transportKind === "link" && paths.get(server.id)?.current) live.add(server.id);
 }
 
 /** The live connection failed: a failed direct path is closed and the relay kept ready; a failed relay is closed so it is measured afresh. */
 export async function transportFailed(server: StoredServer): Promise<void> {
   if (server.transportKind !== "link") return;
+  live.delete(server.id);
   const entry = paths.get(server.id);
   if (!entry?.current) return invalidateStoredServerTransport(server);
   const failed = entry.current === "direct" ? entry.direct : entry.relay;
@@ -387,6 +396,7 @@ export async function transportFailed(server: StoredServer): Promise<void> {
 /** Closes every tunnel kept for a computer (forgotten, re-paired, switched away from). */
 export async function invalidateStoredServerTransport(server: StoredServer): Promise<void> {
   if (server.transportKind !== "link") return;
+  live.delete(server.id);
   const entry = paths.get(server.id);
   paths.delete(server.id);
   publishPath(server.id);
@@ -462,6 +472,7 @@ function rewriteURL(remoteURL: string, localOrigin: string): string {
 /** Forgets every path (tests). */
 export function resetLinkTransportForTests(): void {
   paths.clear();
+  live.clear();
   directSuppressedUntil.clear();
   resolving.clear();
   directProbes.clear();

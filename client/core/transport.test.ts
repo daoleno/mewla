@@ -111,6 +111,92 @@ describe("Transport", () => {
     transport.close();
   });
 
+  describe("the phone's network changes (the hosts' link.network)", () => {
+    test("a wait for the next retry ends at once, not after the backoff", async () => {
+      Object.assign(transportTiming, { firstRetryMs: 60_000 });
+      const { transport, socket } = await connected();
+      socket.close(1006, "network lost");
+      expect(transport.state).toBe("waiting");
+      transport.networkChanged(true);
+      await socketsReach(2);
+      sockets[1].open();
+      expect(transport.state).toBe("connected");
+      transport.close();
+    });
+
+    test("an attempt in flight goes on; if it fails, the next follows after the first wait, not the grown backoff", async () => {
+      Object.assign(transportTiming, { firstRetryMs: 10, maxRetryMs: 400 });
+      const { transport, socket } = await connected();
+      socket.close(1006, "network lost");
+      for (const count of [2, 3, 4]) {
+        await socketsReach(count);
+        if (count < 4) sockets[count - 1].close(1006, "unreachable");
+      }
+      // The backoff is at 80 ms now; the network comes back while the fourth attempt is under way.
+      transport.networkChanged(true);
+      expect(sockets).toHaveLength(4);
+      sockets[3].close(1006, "unreachable");
+      await wait(30);
+      expect(sockets).toHaveLength(5);
+      transport.close();
+    });
+
+    test("going offline changes nothing: the ends of the sockets the system took away say so", async () => {
+      Object.assign(transportTiming, { firstRetryMs: 60_000 });
+      const { transport, socket } = await connected();
+      socket.close(1006, "network lost");
+      transport.networkChanged(false);
+      await wait(20);
+      expect(sockets).toHaveLength(1);
+      expect(transport.state).toBe("waiting");
+      transport.close();
+    });
+
+    test("a live socket that answers on the new network is kept", async () => {
+      const { transport, socket } = await connected();
+      Object.assign(transportTiming, { networkProofMs: 20, silentLimitMs: 10_000 });
+      transport.networkChanged(true);
+      const ping = JSON.parse(socket.sent.at(-1)!);
+      expect(ping.type).toBe("link_ping");
+      socket.receive({ type: "link_pong", request_id: ping.request_id });
+      await wait(40);
+      expect(sockets).toHaveLength(1);
+      expect(transport.state).toBe("connected");
+      transport.close();
+    });
+
+    test("a live socket left on the network that went away is replaced within the proof time, not the silent limit", async () => {
+      const { transport, socket } = await connected();
+      Object.assign(transportTiming, { networkProofMs: 20, silentLimitMs: 10_000 });
+      transport.networkChanged(true);
+      await socketsReach(2);
+      expect(socket.readyState).toBe(3);
+      expect(transport.problem).toBe("network changed");
+      transport.close();
+    });
+  });
+
+  test("the next connection tells the computer how the last one ended, on which path and for how long it was down", async () => {
+    const { transport, socket } = await connected();
+    await wait(5);
+    socket.close(1006, "network lost");
+    await socketsReach(2);
+    sockets[1].close(1006, "still down");
+    await socketsReach(3);
+    sockets[2].open();
+    const report = sockets[2].sent.map((text) => JSON.parse(text)).find((frame) => frame.type === "client_diagnostic");
+    expect(report?.name).toBe("link_drop");
+    expect(report?.body).toMatch(/^why=network_lost path=address age=\d+\.\ds down=\d+\.\ds attempts=1 last=still_down away=false network_changes=0$/);
+    // Once: the connection after it has nothing to report until one ends again.
+    sockets[2].close(1000, "");
+    await socketsReach(4);
+    sockets[3].open();
+    expect(sockets[3].sent.map((text) => JSON.parse(text)).filter((frame) => frame.type === "client_diagnostic")).toHaveLength(1);
+    const first = sockets[0].sent.map((text) => JSON.parse(text)).filter((frame) => frame.type === "client_diagnostic");
+    expect(first).toHaveLength(0);
+    transport.close();
+  });
+
   test("close stops for good", async () => {
     const { transport, socket } = await connected();
     transport.close();
