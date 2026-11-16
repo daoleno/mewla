@@ -19,6 +19,17 @@ func StartDetached(cmd *exec.Cmd) error {
 	return cmd.Start()
 }
 
+// StartDetachedBare is StartDetached of path with args, in dir: only
+// Windows gives a child standard handles it did not ask for.
+func StartDetachedBare(path string, args []string, dir string) error {
+	cmd := exec.Command(path, args...)
+	cmd.Dir = dir
+	if err := StartDetached(cmd); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
+}
+
 // StartBackground is StartDetached: only Windows tells the two apart.
 func StartBackground(cmd *exec.Cmd) error { return StartDetached(cmd) }
 

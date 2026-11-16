@@ -25,6 +25,46 @@ const (
 // retried inside the job.
 func StartDetached(cmd *exec.Cmd) error { return startOutsideJob(cmd, detachedFlags) }
 
+// StartDetachedBare starts the program at path as StartDetached does, but
+// gives it no standard handles, as the Task Scheduler starts a task's
+// program. A headless console host (conhost --headless) takes its standard
+// input and output for its pseudo console: handed any (Go hands a child the
+// null device for each one it lacks), it reads the end of that input at once
+// and ends, and the program it hosts ends with it.
+func StartDetachedBare(path string, args []string, dir string) error {
+	app, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(append([]string{path}, args...)))
+	if err != nil {
+		return err
+	}
+	var cwd *uint16
+	if dir != "" {
+		if cwd, err = windows.UTF16PtrFromString(dir); err != nil {
+			return err
+		}
+	}
+	start := func(flags uint32) error {
+		info := windows.StartupInfo{Cb: uint32(unsafe.Sizeof(windows.StartupInfo{}))}
+		var process windows.ProcessInformation
+		if err := windows.CreateProcess(app, line, nil, nil, false, flags, nil, cwd, &info, &process); err != nil {
+			return err
+		}
+		_ = windows.CloseHandle(process.Thread)
+		return windows.CloseHandle(process.Process)
+	}
+	err = start(detachedFlags | breakaway)
+	if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		err = start(detachedFlags)
+	}
+	if err != nil {
+		return fmt.Errorf("start %s: %w", path, err)
+	}
+	return nil
+}
+
 // StartBackground starts cmd outside the caller's job, as StartDetached, but
 // with a console of its own that has no window. Console programs it starts
 // share that console; started from a process with no console at all, each
@@ -126,7 +166,8 @@ func ProcessImageName(pid int) (string, error) {
 // an update still reads as the path it started from.
 func ProcessImagePath(pid int) (string, error) { return ProcessImageName(pid) }
 
-// ParentImage is the executable file name of pid's parent ("conhost.exe").
+// ParentImage is the executable file name of pid's parent ("conhost.exe"),
+// or ErrParentGone when that parent has ended.
 func ParentImage(pid int) (string, error) {
 	list, err := ProcessList()
 	if err != nil {
@@ -143,7 +184,10 @@ func ParentImage(pid int) (string, error) {
 			return entry.Image, nil
 		}
 	}
-	return "", fmt.Errorf("no parent process of %d", pid)
+	if parent == 0 {
+		return "", fmt.Errorf("no process %d", pid)
+	}
+	return "", fmt.Errorf("parent %d of %d: %w", parent, pid, ErrParentGone)
 }
 
 // ProcessEntry is one process in a ProcessList.

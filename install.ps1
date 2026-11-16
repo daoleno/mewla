@@ -92,6 +92,91 @@ Set-StrictMode -Version 2.0
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
   $ProgressPreference = 'SilentlyContinue'
 
+  # This install's mewla.exe processes (one renamed by an update is mewla.exe.old-N).
+  function Get-MewlaProcesses {
+    @(Get-Process -Name mewla -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -like (Join-Path $InstallDir 'mewla.exe*') })
+  }
+
+  # The logon task runs Mewla only in this user's desktop session: installed with nobody at the desktop (over SSH),
+  # `mewla boot install` starts it directly, and Mewla before 0.4.9 not the way the task does (under a console host
+  # of its own), the one way `mewla update` and `mewla restart` recognise and restart. Such a Mewla, started by this
+  # install and by no console host, is started again with the task's own command; one that ran before the install
+  # is left alone. Over SSH a standard user has no CIM (Get-ScheduledTask, Win32_Process), and
+  # what this session starts ends with it, so the process table and the start go through Win32 directly.
+  function Restart-LikeTheTask([int[]]$Before) {
+    $name = 'Mewla (' + ($env:USERNAME.Trim() -replace '[\x00-\x1f\\/:*?"<>|]', '_') + ')'
+    $text = & schtasks.exe /query /tn $name /xml 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0 -or $text -notlike '*Managed by mewla boot install*') { return }
+    $exec = ([xml]$text).Task.Actions.Exec
+    if (-not ('MewlaInstall.Win32' -as [type])) { Add-Type -TypeDefinition $Win32Source }
+    $table = [MewlaInstall.Win32]::Processes()
+    $daemons = @(Get-MewlaProcesses | Where-Object { $Before -notcontains $_.Id } | Where-Object {
+        $self = $null; $by = $null
+        if ($table.TryGetValue([uint32]$_.Id, [ref]$self)) { [void]$table.TryGetValue($self.Parent, [ref]$by) }
+        -not ($by -and @('mewla.exe', 'conhost.exe') -contains $by.Name.ToLowerInvariant())
+      })
+    if ($daemons.Count -ne 1) { return }
+    Stop-Process -Id $daemons[0].Id -Force -ErrorAction SilentlyContinue
+    Wait-Process -Id $daemons[0].Id -Timeout 15 -ErrorAction SilentlyContinue
+    $dir = if ("$($exec.WorkingDirectory)") { "$($exec.WorkingDirectory)" } else { $env:USERPROFILE }
+    [MewlaInstall.Win32]::StartDetached('"' + $exec.Command + '" ' + $exec.Arguments, $dir) | Out-Null
+    $addr = if ("$($exec.Arguments)" -match '-addr\s+"?([^\s"]+)') { $Matches[1] } else { '127.0.0.1:9876' }
+    $addr = $addr -replace '^0\.0\.0\.0:', '127.0.0.1:'
+    for ($i = 0; $i -lt 60; $i++) {
+      try { Invoke-RestMethod -Uri "http://$addr/health" -TimeoutSec 2 | Out-Null; return } catch { Start-Sleep -Milliseconds 500 }
+    }
+    Fail "Mewla did not answer on $addr after starting again; run '$Target'"
+  }
+
+  # The process table (id, parent, executable) and a start outside this session's job, as mewla.exe does it.
+  $Win32Source = @'
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+namespace MewlaInstall {
+  public class Proc { public uint Id; public uint Parent; public string Name; }
+  public static class Win32 {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct Entry { public uint Size, Usage, Id; public IntPtr Heap; public uint Module, Threads, Parent; public int Priority; public uint Flags;
+      [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Exe; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct StartupInfo { public int Size; public string Reserved, Desktop, Title; public int X, Y, XSize, YSize, XChars, YChars, Fill, Flags;
+      public short Show, Reserved2; public IntPtr Reserved3, In, Out, Err; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct ProcessInfo { public IntPtr Process, Thread; public int Id, ThreadId; }
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32FirstW(IntPtr snapshot, ref Entry entry);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr snapshot, ref Entry entry);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool CreateProcessW(string app, StringBuilder line, IntPtr pa, IntPtr ta, bool inherit, uint flags, IntPtr env, string dir, ref StartupInfo si, out ProcessInfo pi);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    public static Dictionary<uint, Proc> Processes() {
+      var all = new Dictionary<uint, Proc>();
+      IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
+      if (snapshot == new IntPtr(-1)) return all;
+      try {
+        var entry = new Entry(); entry.Size = (uint)Marshal.SizeOf(typeof(Entry));
+        for (bool ok = Process32FirstW(snapshot, ref entry); ok; ok = Process32NextW(snapshot, ref entry))
+          all[entry.Id] = new Proc { Id = entry.Id, Parent = entry.Parent, Name = entry.Exe };
+      } finally { CloseHandle(snapshot); }
+      return all;
+    }
+    public static int StartDetached(string line, string dir) {
+      const uint detached = 0x8, group = 0x200, breakaway = 0x1000000;
+      var si = new StartupInfo(); si.Size = Marshal.SizeOf(typeof(StartupInfo));
+      ProcessInfo pi;
+      if (!CreateProcessW(null, new StringBuilder(line), IntPtr.Zero, IntPtr.Zero, false, detached | group | breakaway, IntPtr.Zero, dir, ref si, out pi)
+          && !CreateProcessW(null, new StringBuilder(line), IntPtr.Zero, IntPtr.Zero, false, detached | group, IntPtr.Zero, dir, ref si, out pi))
+        throw new Win32Exception(Marshal.GetLastWin32Error());
+      CloseHandle(pi.Thread); CloseHandle(pi.Process);
+      return pi.Id;
+    }
+  }
+}
+'@
+
   function Get-Official([string]$Url, [string]$OutFile) {
     if (-not $Url.StartsWith("$GitHubWeb/releases/download/")) { Fail "refusing non-official download URL: $Url" }
     try { Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $OutFile }
@@ -202,7 +287,9 @@ Set-StrictMode -Version 2.0
     return
   }
   Say 'Starting Mewla now and whenever you log in...'
+  $Before = @(Get-MewlaProcesses | ForEach-Object { $_.Id })
   if ((Invoke-Native $Target @('boot', 'install')) -ne 0) { Fail "Mewla is installed but did not start; run '$Target boot install' to see why" }
+  Restart-LikeTheTask $Before
   Say ''
   Say 'Next, pair your phone or browser:'
   Say '  mewla pair'

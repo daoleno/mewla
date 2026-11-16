@@ -237,7 +237,8 @@ update` says so, with its PID. Press Ctrl+C in its window and run `mewla`
 again. If Mewla is still on an older version for any other reason (installed
 over, or updated by an older `mewla update`), the next command you type
 (`mewla`, `mewla web`, `mewla pair` and the others that talk to it) restarts it
-first. `mewla restart` restarts it at any time.
+first. Run outside a terminal (from a script, or over SSH without one), that
+command only says so. `mewla restart` restarts it at any time.
 
 ### Automatic updates
 
@@ -316,8 +317,9 @@ Restarting the service never stops your Sessions or agents.
   instead, and macOS asks for the permissions again after each update.
 - **Windows**: a Task Scheduler task named `Mewla` for your user only, which
   starts Mewla when you log in, with no window and no administrator rights.
-  Installed over SSH with nobody logged in at the desktop, Mewla starts now
-  and the task takes over from your next login. Output goes to
+  Installed over SSH with nobody logged in at the desktop, Mewla starts now,
+  the way the task starts it, and the task takes over from your next login;
+  `mewla update` and `mewla restart` restart it over SSH too. Output goes to
   `logs\daemon.log` in the state directory.
 
 Do not run the daemon as root.
