@@ -388,14 +388,13 @@ test_missing_tools() {
   pass "reports missing curl, tar, and SHA-256 tools without network access"
 }
 
-test_next_step_needs_no_tmux() {
+test_next_step_is_the_start_command() {
   new_case next-step-on-path
   make_archive
   mkdir -p "$HOME_DIR/install"
   FAKE_BIN="$FAKE_BIN:$HOME_DIR/install"
   run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install"
   assert_not_contains "$CASE_DIR/output" "fixture deps"
-  assert_not_contains "$CASE_DIR/output" "tmux"
   [[ $(tail -n 1 "$CASE_DIR/output") == "  mewla" ]] || fail "last line is not mewla when the install dir is on PATH"
 
   new_case next-step-off-path
@@ -410,11 +409,10 @@ test_next_step_needs_no_tmux() {
   # another archive than the one this case serves.
   ln -sf "$FAKE_BIN/uname" "$tool_bin/uname"
   RUN_PATH_OVERRIDE=$tool_bin
-  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" || fail "installer failed without tmux on PATH"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" || fail "installer failed with only its own tools on PATH"
   unset RUN_PATH_OVERRIDE
-  assert_not_contains "$CASE_DIR/output" "tmux"
   [[ $(tail -n 1 "$CASE_DIR/output") == "  $HOME_DIR/install/mewla" ]] || fail "last line is not the runnable full path"
-  pass "needs no tmux and ends with the start command"
+  pass "ends with the start command"
 }
 
 test_remote_setup_hands_over_or_falls_back() {
@@ -481,7 +479,7 @@ test_existing_update_preference
 test_install_dir_selection
 test_profile_idempotency_and_no_mutation
 test_missing_tools
-test_next_step_needs_no_tmux
+test_next_step_is_the_start_command
 test_remote_setup_hands_over_or_falls_back
 test_executable_failure_keeps_previous_install
 printf '1..%d\n' "$PASS"

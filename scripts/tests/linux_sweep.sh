@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The Linux compatibility sweep: builds mewla with the terminal engine and runs
 # daemon/compatsweep, every scenario on its own fresh HOME, state directory,
-# port and tmux directory. Results land in <out>/results.jsonl, one line per
+# port and TMPDIR. Results land in <out>/results.jsonl, one line per
 # scenario (pass or fail, with what was seen).
 #
 #   scripts/tests/linux_sweep.sh [out-dir]                 fake agents only
@@ -17,7 +17,7 @@
 #
 # Real-agent scenarios copy this computer's claude/codex sign-ins into the
 # scenario's HOME (never changing ~/.claude or ~/.codex) and spend model calls.
-# Needs go, tmux, sqlite3 and the libghostty-vt cache that
+# Needs go, sqlite3 and the libghostty-vt cache that
 # scripts/build-libghostty-desktop.sh writes.
 set -euo pipefail
 

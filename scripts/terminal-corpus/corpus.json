@@ -20,14 +20,14 @@
   "claude": {
     "cols": 52,
     "rows": 30,
-    "what": "Claude Code 2.1.322: trust prompt, a CJK answer with tool calls, the input box",
-    "source": "record.sh"
+    "what": "Claude Code 2.1.325: the welcome screen, a CJK answer with a tool call, the input box",
+    "source": "record.py"
   },
   "codex": {
     "cols": 52,
     "rows": 30,
     "what": "Codex 0.167.0: trust prompt, braille logo, a CJK answer with tool calls",
-    "source": "record.sh"
+    "source": "record.py"
   },
   "cursor-bar": {
     "cols": 52,
@@ -63,19 +63,19 @@
     "cols": 52,
     "rows": 30,
     "what": "Real git log --graph --decorate and git diff with color",
-    "source": "record.sh"
+    "source": "record.py"
   },
   "htop": {
     "cols": 52,
     "rows": 30,
     "what": "htop 3: meters, header, process list, function-key footer",
-    "source": "record.sh"
+    "source": "record.py"
   },
   "less": {
     "cols": 52,
     "rows": 30,
     "what": "less -R paging a colored git log -p, inverse prompt",
-    "source": "record.sh"
+    "source": "record.py"
   },
   "meters": {
     "cols": 52,
@@ -87,7 +87,7 @@
     "cols": 52,
     "rows": 30,
     "what": "nvim -u NONE: two splits, syntax, cursorline, CJK with soft wrap",
-    "source": "record.sh"
+    "source": "record.py"
   },
   "prompt": {
     "cols": 52,

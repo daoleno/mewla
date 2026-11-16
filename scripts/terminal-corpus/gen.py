@@ -3,7 +3,7 @@
 
 Each screen is raw bytes a program would write, replayable into any terminal
 of the screen's size (cols x rows in corpus.json). Recorded sessions of real
-programs sit beside them (record.sh). Run: python3 -I gen.py <out dir>.
+programs sit beside them (record.py). Run: python3 -I gen.py <out dir>.
 """
 import json
 import os

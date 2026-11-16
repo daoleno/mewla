@@ -599,7 +599,6 @@ jobs:
           cd "$RUNNER_TEMP/old"
           grep -E " (mewla-android-arm64-$OLD.apk|mewla-linux-amd64.tar.gz)$" SHA256SUMS | sha256sum -c -
           tar -xzf mewla-linux-amd64.tar.gz
-          command -v tmux > /dev/null || sudo apt-get install -y -qq tmux
           {
             echo "OLD_TAG=$OLD"
             echo "OLD_APK=$RUNNER_TEMP/old/mewla-android-arm64-$OLD.apk"

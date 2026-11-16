@@ -3,7 +3,7 @@
 
 Build cmd/mewla into MEWLA_BUILD_TMPDIR, then run from the repository:
   python3 scripts/tests/computer-reply-routing.py /absolute/path/to/mewla
-Requires Linux, cc and tmux. All state, sockets and input captures are temporary.
+Requires Linux and cc. All state, sockets and input captures are temporary.
 The fixture completes each synthetic turn before the next input: this tests
 idle Session wake-up without pretending to provide live provider activity.
 """
@@ -61,15 +61,14 @@ class Daemon:
         self.name, self.binary = name, str(binary)
         self.state = root / name
         self.state.mkdir()
-        self.socket = root / (name + ".sock")
         self.processes, self.logs, self.turns = [], [], {}
         self.env = {
             k: v for k, v in os.environ.items()
-            if not k.startswith("MEWLA_") and k not in ("TMUX", "TMUX_PANE")
+            if not k.startswith("MEWLA_")
         }
         self.env.update(
             MEWLA_STATE_ROOT=str(self.state), MEWLA_STATE_DIR=str(self.state),
-            MEWLA_BRAIN_HOST_EXECUTOR="grok", TMUX=str(self.socket) + ",0,0",
+            MEWLA_BRAIN_HOST_EXECUTOR="grok",
             PATH="/usr/bin:/bin", ZDOTDIR=str(root), ROUTING_FIXTURE_DIR=str(self.state),
         )
         (self.state / "executors.toml").write_text(
@@ -81,10 +80,6 @@ class Daemon:
             self.port = listener.getsockname()[1]
 
     def start(self):
-        subprocess.run(
-            ["/usr/bin/tmux", "-S", str(self.socket), "-f", "/dev/null",
-             "new-session", "-d", "-s", "keeper", "/bin/cat"], check=True,
-        )
         self.restart()
 
     def restart(self):
@@ -177,7 +172,6 @@ class Daemon:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-        subprocess.run(["/usr/bin/tmux", "-S", str(self.socket), "kill-server"], capture_output=True)
         for log in self.logs:
             log.close()
 

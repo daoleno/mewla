@@ -207,7 +207,6 @@ jobs:
           cd "$RUNNER_TEMP/old"
           grep -E " (mewla-android-arm64-$OLD.apk|mewla-linux-amd64.tar.gz)$" SHA256SUMS | sha256sum -c -
           tar -xzf mewla-linux-amd64.tar.gz
-          command -v tmux > /dev/null || sudo apt-get install -y -qq tmux
           echo "OLD_APK=$RUNNER_TEMP/old/mewla-android-arm64-$OLD.apk" >> "$GITHUB_ENV"
           echo "MEWLA=$(find "$RUNNER_TEMP/old" -name mewla -type f -perm -u+x | head -1)" >> "$GITHUB_ENV"
       - name: Materialize the release keystore (temp, mode 0600)

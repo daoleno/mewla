@@ -2,7 +2,7 @@
 # End-to-end proof of the daemon's self-update under a real systemd user unit.
 #
 # Every scenario is an isolated daemon: its own HOME (so its own Brain root),
-# state directory, port, tmux server and transient unit named mewla-e2e-*. The
+# state directory, port and transient unit named mewla-e2e-*. The
 # releases come from a local server and are signed with a throwaway test key
 # that the test binaries trust (-X on selfupdate.UpdatePublicKeyPKIX and
 # DefaultReleasesURL); production builds never carry either.
@@ -15,7 +15,7 @@
 #
 # Usage: scripts/tests/autoupdate-e2e.sh [good bad hang powercut]
 # Takes about four minutes (the daemon's first update check is 2 minutes after
-# it starts). Needs systemd --user, tmux, openssl, python3, curl.
+# it starts). Needs systemd --user, openssl, python3, curl.
 
 set -euo pipefail
 
@@ -55,9 +55,6 @@ cleanup() {
     # The SIGKILL above leaves the units in a failed state that would linger.
     systemctl --user reset-failed "${UNITS[@]}" 2>/dev/null
   fi
-  for scenario in "${SCENARIOS[@]}"; do
-    /usr/bin/tmux -S "$S/$scenario/tmux.sock" kill-server 2>/dev/null
-  done
   [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null
   if [[ "${KEEP:-}" != 1 ]]; then rm -rf "$S"; else echo "kept $S"; fi
 }
@@ -133,16 +130,13 @@ start_daemon() { # start_daemon <scenario> <old binary>
   local name="$1" dir="$S/$1"
   mkdir -p "$dir/home" "$dir/bin"
   cp "$2" "$dir/bin/mewla"
-  # The Brain root, the state directory and the tmux server are all private;
-  # TMUX must name the scratch server or the daemon would use the live one.
-  env -i /usr/bin/tmux -S "$dir/tmux.sock" new-session -d -s e2e
+  # The Brain root and the state directory are private.
   HOME="$dir/home" "$dir/bin/mewla" boot install -dry-run -binary "$dir/bin/mewla" \
     -state-dir "$dir/home/.mewla" -addr "127.0.0.1:${PORT[$name]}" -work-dir "$dir" \
     -path-env /usr/local/bin:/usr/bin:/bin > "$dir/unit.rendered"
   local unit; unit="$(unit_name "$name")"
   {
     sed '/^\[Install\]/,$d' "$dir/unit.rendered"
-    echo "Environment=\"TMUX=$dir/tmux.sock\""
     echo "Environment=\"MEWLA_BRAIN_HOST_EXECUTOR=agent\""
     echo "RestartSec=2"
   } | grep -v '^RestartSec=5' > "$dir/$unit"
