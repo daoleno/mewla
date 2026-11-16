@@ -113,6 +113,57 @@ describe("folding a turn's finished tool rows", () => {
     expect(group.tone).toBe("neutral");
   });
 
+  test("Brain's opening reads name the files it read, not a listing's directory or a redirection", () => {
+    // Claude's Read and Bash calls as the daemon sends them (Bash is a command event).
+    const at = (minute: number) => `2026-11-16T12:0${minute}:00.000Z`;
+    const events = [
+      {
+        id: "read",
+        seq: 1,
+        kind: "tool",
+        tool_name: "Read",
+        input: JSON.stringify({ file_path: "/home/me/.mewla/brain/workspace/AGENTS.md" }),
+        body: "# Brain",
+        status: "done",
+        timestamp: at(1),
+      },
+      {
+        id: "cat",
+        seq: 2,
+        kind: "command",
+        command: "cat current.md 2>/dev/null; ls",
+        body: "# Current",
+        status: "done",
+        timestamp: at(2),
+      },
+      {
+        id: "sed",
+        seq: 3,
+        kind: "command",
+        command: "sed -n 1,40p memory.md 2>&1 > /tmp/out && ls -la .",
+        body: "# Memory",
+        status: "done",
+        timestamp: at(3),
+      },
+      { id: "ls", seq: 4, kind: "command", command: "ls -la", body: "AGENTS.md", status: "done", timestamp: at(4) },
+    ] as CodexConversationEvent[];
+    const out = createToolRunFolder()(buildTimelineFromSortedEvents(events));
+    const runs = out.filter(
+      (item): item is ActivityTimelineItem => item.type === "activity",
+    );
+    expect(runs).toHaveLength(1);
+    expect(runs[0].title).toBe("Read 3 files");
+    expect(runs[0].detail).toBe("AGENTS.md, current.md, memory.md");
+  });
+
+  test("a run never names a directory as a file", () => {
+    const out = createToolRunFolder()([
+      row("a", "read_files", { files: ["AGENTS.md"] }),
+      row("b", "read_files", { files: [".", "..", "/repo/docs/"] }),
+    ]);
+    expect((out[0] as ActivityTimelineItem).detail).toBe("AGENTS.md, docs");
+  });
+
   test("a running, blocked, streaming or self-opening row stays visible and splits the run", () => {
     const kept = [
       row("running", "run_command", { tone: "running" }),

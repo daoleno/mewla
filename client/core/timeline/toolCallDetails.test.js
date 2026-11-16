@@ -11,6 +11,25 @@ import { buildTimeline } from "./model";
 import { buildInterfaceTimelineActivityPresentation } from "./activityModel";
 
 describe("toolCallDetails", () => {
+  test("a command's files are its readers' operands, never a redirection, an operator or a listing", () => {
+    const filesOf = (command) =>
+      buildExpandedToolDetails({
+        toolName: "exec",
+        input: `const r = await tools.exec_command(${JSON.stringify({ cmd: command })});`,
+        status: "done",
+        semanticKind: "read_files",
+      }).files;
+    expect(filesOf("ls")).toBeUndefined();
+    expect(filesOf("ls -la docs")).toBeUndefined();
+    expect(filesOf("cat current.md 2>/dev/null | head -80")).toEqual(["current.md"]);
+    expect(filesOf("ls -la && cat memory.md profile.md")).toEqual(["memory.md", "profile.md"]);
+    expect(filesOf("sed -n 's/a\\/b/c/p' notes.md")).toEqual(["notes.md"]);
+    expect(filesOf("sed -n -e 1p a.md b.md")).toEqual(["a.md", "b.md"]);
+    expect(filesOf("cd /w && cat a.md >out.txt 2>&1; cat <<EOF\nx\nEOF")).toEqual(["a.md"]);
+    expect(filesOf('M=/x/m; cat "my file.md" >&2 && head -n 5 ./b.ts')).toEqual(["my file.md", "./b.ts"]);
+    expect(filesOf("mewla work get | head -c 800")).toBeUndefined();
+  });
+
   test("read details prefer file paths over exec_command", () => {
     const details = buildExpandedToolDetails({
       toolName: "exec",

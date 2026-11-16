@@ -332,18 +332,130 @@ function pathsFromRecord(record: Record<string, unknown>): string[] {
   return out;
 }
 
+const FILE_READERS = new Set(["cat", "sed", "nl", "less", "head", "tail"]);
+
+/**
+ * The files a shell command reads: the operands of each cat/sed/head/... in it.
+ * Each simple command is read on its own, so a redirection (`2>/dev/null`), an
+ * operator (`&&`) or the next command's words are never taken for files; a
+ * stage after a pipe reads its input, and a listing (`ls`) reads no file.
+ */
 function pathsFromCommand(command?: string): string[] {
   if (!command?.trim()) return [];
-  const tokens = tokenize(command);
-  const exe = base(tokens[0] || "").toLowerCase();
-  if (["cat", "sed", "nl", "less", "head", "tail"].includes(exe)) {
-    return tokens.slice(1).filter((t) => looksPath(t) && !t.startsWith("-"));
+  const out: string[] = [];
+  for (const { words, piped } of simpleCommands(command)) {
+    if (piped) continue;
+    const start = words.findIndex((word) => !SHELL_ASSIGNMENT_WORD.test(word));
+    if (start < 0) continue;
+    const exe = base(words[start]).toLowerCase();
+    if (!FILE_READERS.has(exe)) continue;
+    const args = words.slice(start + 1);
+    // sed's first operand is its script unless one came with -e/-f.
+    let scriptPending =
+      exe === "sed" &&
+      !args.some((arg) => /^(?:-[a-zA-Z]*[ef]|--expression|--file)/.test(arg));
+    for (const arg of args) {
+      if (arg.startsWith("-")) continue;
+      if (scriptPending) {
+        scriptPending = false;
+        continue;
+      }
+      if (looksPath(arg)) out.push(arg);
+    }
   }
-  if (exe === "ls") {
-    const t = tokens.slice(1).find((x) => !x.startsWith("-"));
-    return [t || "."];
+  return out;
+}
+
+const SHELL_ASSIGNMENT_WORD = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/**
+ * A command line's simple commands, each as its words without redirections:
+ * split at unquoted `;`, `&`, `|` and newlines. `piped` marks a command that
+ * reads the previous one's output.
+ */
+function simpleCommands(value: string): { words: string[]; piped: boolean }[] {
+  const commands: { words: string[]; piped: boolean }[] = [];
+  let words: string[] = [];
+  let word = "";
+  let quoted = false;
+  let quote: "'" | '"' | "" = "";
+  let esc = false;
+  let piped = false;
+  let redirect = false;
+  const endWord = () => {
+    if (word || quoted) {
+      if (redirect) redirect = false;
+      else words.push(word);
+    }
+    word = "";
+    quoted = false;
+  };
+  const endCommand = (nextPiped: boolean) => {
+    endWord();
+    redirect = false;
+    if (words.length) commands.push({ words, piped });
+    words = [];
+    piped = nextPiped;
+  };
+  const chars = Array.from(value);
+  for (let i = 0; i < chars.length; i += 1) {
+    const ch = chars[i];
+    if (esc) {
+      word += ch;
+      esc = false;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = "";
+      else if (ch === "\\" && quote === '"') esc = true;
+      else word += ch;
+      continue;
+    }
+    if (ch === "\\") {
+      esc = true;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      quoted = true;
+      continue;
+    }
+    if (ch === ";" || ch === "\n") {
+      endCommand(false);
+      continue;
+    }
+    if (ch === "|" || ch === "&") {
+      const doubled = chars[i + 1] === ch;
+      // `&>file`: a redirection, not a command break.
+      if (ch === "&" && chars[i + 1] === ">") {
+        word += ch;
+        continue;
+      }
+      if (doubled) i += 1;
+      endCommand(ch === "|" && !doubled);
+      continue;
+    }
+    if (ch === ">" || ch === "<") {
+      // A redirection (`2>/dev/null`, `>&2`, `<<EOF`): its fd and its target are no operands.
+      if (/^(?:\d+|&)?$/.test(word)) word = "";
+      else endWord();
+      while (chars[i + 1] === ">" || chars[i + 1] === "&" || chars[i + 1] === "<") i += 1;
+      // `2>&1`: the target is an fd, not a word.
+      if (chars[i] === "&" && /\d/.test(chars[i + 1] ?? "")) {
+        while (/\d/.test(chars[i + 1] ?? "")) i += 1;
+        continue;
+      }
+      redirect = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      endWord();
+      continue;
+    }
+    word += ch;
   }
-  return [];
+  endCommand(false);
+  return commands;
 }
 
 function queryFromInput(parsed: Record<string, unknown> | null): string {
