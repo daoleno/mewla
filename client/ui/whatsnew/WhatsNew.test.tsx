@@ -156,15 +156,22 @@ describe("What's New: Try it", () => {
   }, 30_000);
 
   test("About's What's new reopens the latest notes any time", async () => {
-    const app = await open(APP, setup({ record: { baseline: "0.4.9" } }));
-    await app.waitFor("id:home-cat", { timeout: 15_000 });
+    // Its own notes, not the latest real ones: those change with every release and may be fixes only.
+    const release = {
+      version: "0.5.0", date: "2026-11-20", fixes: [],
+      highlights: [{ id: "0.5.0-test-page", title: "A test page", line: "Shown again from About.", media: { scene: "chat-diagram" }, try: { kind: "open", target: "brain" } }],
+    };
+    const record: Kept = { baseline: "0.4.9", seen: ["0.5.0-test-page"], updates: [{ version: "0.5.0", at: at(3) }], releases: { releases: [release] } };
+    const app = await open(APP, setup({ record, computer: "0.5.0" }));
+    // The computer's notes and version are in once its update line is.
+    await app.waitFor("id:update-line", { timeout: 15_000 });
     await app.press("id:home-cat");
     await app.waitFor("id:computer-settings");
     await app.press("id:computer-settings");
     await app.waitFor("id:settings-whats-new");
     await app.press("id:settings-whats-new");
-    // The newest notes, whether they bring pages or only fixes.
-    await app.waitFor(`text:Mewla ${(notes as { releases: { version: string }[] }).releases[0].version}`);
+    await app.waitFor("id:whats-new-page-0");
+    expect(app.shows("text:A test page")).toBe(true);
   }, 30_000);
 });
 
