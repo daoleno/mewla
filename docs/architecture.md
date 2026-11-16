@@ -332,15 +332,31 @@ If the connector has failed over to another configured relay, the next mobile
 selection reaches the new route. Manual candidates are not silently mixed into
 Relay failover; the user selects a self-managed record/path explicitly.
 
-A working connection is never closed to move it onto a better path. Each new
-connection races the computer's announced direct addresses (LAN, Tailscale)
-against the relay and takes a direct one that proves it is the paired daemon,
-but while a connection is open every caller (HTTP requests, viewers) uses its
-path as it is, without re-measuring it under the connection
-(`client/core/link/pinnedTransport.ts`). Closing a working relay socket as soon
-as a direct address answered (checked every 20 s), and falling back when the
-direct socket died, closed some 18 healthy sockets a day on the owner's phone
-(11-13 to 11-16), each followed by a reconnect.
+A working connection is never closed to move it onto a better path; it moves
+make-before-break instead (`client/core/transport.ts`). Each new connection
+races the computer's announced direct addresses (LAN, Tailscale) against the
+relay and takes a direct one that proves it is the paired daemon. While a
+connection is open, every caller (HTTP requests, viewers) uses its path as it
+is, without re-measuring it under the connection
+(`client/core/link/pinnedTransport.ts`). A connection on the relay checks a
+direct address beside it every 15 s (up to 5 min apart while none answers,
+from the first check again after a network change). After three checks in a
+row it opens a second socket there, signed in like any other. Once that socket
+is open the Transport moves onto it in one step. The state stays "connected"
+and nothing hears "disconnected". What waits to go out goes on the new socket.
+The old socket hands over only the answers to requests asked on it, then
+closes with a normal close (after 30 s at most). The computer sends its
+snapshots to the new socket as to any new one. What it keeps per socket (a
+followed chat, an open terminal, the Session on screen, the app's state) is
+told again on the `moved` frame. A move whose socket does not open within 10 s
+costs only that socket and backs off (1 min, doubling to 10 min), as does a
+direct socket that dies within 2 min of a move. Losing the direct path later is
+an ordinary, visible reconnect. Each move is one `client_diagnostic` line
+(`event=link_move`: from, to, time on the old path, answers owed). Before,
+closing a working relay socket as soon as a direct address answered (checked
+every 20 s), then falling back when the direct socket died, closed some 18
+healthy sockets a day on the owner's phone (11-13 to 11-16), each followed by a
+reconnect.
 
 The Android and iOS hosts report the phone's network changes (`link.network
 {online}`, from the default network callback and `NWPathMonitor`). A reconnect

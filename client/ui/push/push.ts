@@ -228,6 +228,8 @@ export function startNotifications(): void {
     // widgets keep up, with the app in the background.
     const stops = [
       transport.on("connected", connected, { whileAway: true }),
+      // The computer keeps the app's state per socket: a moved connection's new socket is told it again.
+      transport.on("moved", () => sendAppState(transport), { whileAway: true }),
       transport.on("live_state", (frame) => {
         if (frame.live) void host.call("live.apply", { state: JSON.stringify(frame.live) }).catch(() => {});
       }, { whileAway: true }),

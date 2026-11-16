@@ -9,11 +9,14 @@ import { buildLinkPairingTestLink } from "../testing/linkPairingTestLink";
 import { installMemoryPlatform } from "../testing/memoryPlatform";
 import { learnDirectAddresses, parseDirectAddresses, withDirectAddresses } from "./directAddresses";
 import {
+  checkDirectPath,
   LINK_NEEDS_BUILD_MESSAGE,
   LINK_OFFLINE_MESSAGE,
+  moveAbandoned,
   resetLinkTransportForTests,
   resolveStoredServerURL,
   transportFailed,
+  transportMoved,
   transportOpened,
   transportPathInfo,
 } from "./pinnedTransport";
@@ -263,22 +266,53 @@ describe("a connection open on a path", () => {
     expect(transportPathInfo("srv")?.path).toBe("relay");
   });
 
-  test("on the relay is never moved onto a direct path that became reachable; the next connection takes it", async () => {
-    const { host, server: base } = await lanComputer({ now: true });
+  test("on the relay, a direct path that became reachable is checked beside it and becomes current only when the connection moves", async () => {
+    const answering = { now: true };
+    const { host, server: base } = await lanComputer(answering);
     // A computer of its own: what was learned for another stays learned for this run.
     const server = { ...base, id: "srv-relay" };
     const relay = await resolveStoredServerURL(server);
     expect(transportPathInfo("srv-relay")?.path).toBe("relay");
+    // Nothing to move onto before the connection is open, nor while the computer names no direct address.
+    expect(await checkDirectPath(server)).toBeNull();
     transportOpened(server);
+    expect(await checkDirectPath(server)).toBeNull();
     // The phone joins the computer's Wi-Fi: the computer names its LAN address.
     learnDirectAddresses(server, [{ host: "192.168.1.20", port: 9443 }]);
     setSystemTime(new Date(Date.now() + 5 * 60_000));
+    const found = await checkDirectPath(server);
+    expect(found?.path).toBe("lan");
+    expect(found?.url).toStartWith("ws://127.0.0.1:");
+    // The check left the connection's path as it was: every other caller still gets the relay.
     expect(await resolveStoredServerURL(server)).toBe(relay);
     expect(transportPathInfo("srv-relay")?.path).toBe("relay");
-    expect(host.started.some((line) => line.includes("192.168.1.20"))).toBe(false);
-    await transportFailed(server);
-    await resolveStoredServerURL(server);
+    // The connection moved: the direct path is current, the relay's tunnel stays open for the old socket and as the fallback.
+    transportMoved(server);
     expect(transportPathInfo("srv-relay")?.path).toBe("lan");
+    expect(await resolveStoredServerURL(server)).toBe(found!.url);
+    expect(host.stopped.some((key) => key.startsWith("server:srv-relay:0"))).toBe(false);
+  });
+
+  test("a direct path that stops answering, or a move given up, closes only the tunnel found for it", async () => {
+    const answering = { now: true };
+    const { host, server: base } = await lanComputer(answering);
+    const server = { ...base, id: "srv-abandon" };
+    const relay = await resolveStoredServerURL(server);
+    transportOpened(server);
+    learnDirectAddresses(server, [{ host: "192.168.1.30", port: 9443 }]);
+    expect(await checkDirectPath(server)).not.toBeNull();
+    answering.now = false;
+    expect(await checkDirectPath(server)).toBeNull();
+    expect(host.stopped).toContain("server:srv-abandon:direct:192.168.1.30:9443");
+    answering.now = true;
+    expect(await checkDirectPath(server)).not.toBeNull();
+    expect(host.open.has("server:srv-abandon:direct:192.168.1.30:9443")).toBe(true);
+    moveAbandoned(server);
+    await Promise.resolve();
+    expect(host.open.has("server:srv-abandon:direct:192.168.1.30:9443")).toBe(false);
+    expect(host.stopped.some((key) => key.startsWith("server:srv-abandon:0"))).toBe(false);
+    expect(await resolveStoredServerURL(server)).toBe(relay);
+    expect(transportPathInfo("srv-abandon")?.path).toBe("relay");
   });
 });
 

@@ -54,6 +54,8 @@ export class WorkerSessions {
     for (const type of WORKER_SESSION_FEED_TYPES) this.stops.push(transport.on(type, onFrame));
     this.stops.push(
       transport.on("connected", () => this.feed.reset()),
+      // A moved connection's new socket starts its own feed, its list first, like any new socket.
+      transport.on("moved", () => this.feed.reset()),
       transport.onState((state) => this.apply({ type: "SET_SERVER_CONNECTION_STATE", serverId: server.id, connectionState: connectionOf(state) })),
     );
     this.apply({ type: "SET_SERVER_CONNECTION_STATE", serverId: server.id, connectionState: connectionOf(transport.state) });

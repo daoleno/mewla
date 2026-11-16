@@ -107,6 +107,27 @@ describe("Chat", () => {
     transport.close();
   });
 
+  test("a connection moved onto a new socket follows again there; a message in flight is neither sent twice nor lost", async () => {
+    const { chat, socket, transport } = await open();
+    const first = snapshot(socket, 1, [event("u1", 1, "user_message", "hi", { role: "user" })]);
+    chat.send("Plan my week");
+    await until(() => sent(socket, "send_input").length === 1);
+    (transport as unknown as { receive(frame: object): void }).receive({ type: "moved" });
+    const subscribes = sent(socket, "codex_conversation_subscribe");
+    expect(subscribes).toHaveLength(2);
+    expect(subscribes[1].request_id).not.toBe(first);
+    // What it shows stays while the new socket's snapshot comes.
+    expect(chat.current.conversation?.events.map((e) => e.id)).toEqual(["u1"]);
+    snapshot(socket, 2, [event("u1", 1, "user_message", "hi", { role: "user" })]);
+    const [input] = sent(socket, "send_input");
+    socket.receive({ type: "input_sent", request_id: input.request_id });
+    await wait();
+    expect(sent(socket, "send_input")).toHaveLength(1);
+    expect(chat.current.pendingUserMessages.map((m) => m.lifecycle)).not.toContain("failed");
+    chat.close();
+    transport.close();
+  });
+
   test("a send shows at once, goes out through the outbox under one id, and settles on input_sent", async () => {
     const { chat, socket, transport } = await open();
     snapshot(socket, 1, []);

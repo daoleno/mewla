@@ -46,6 +46,8 @@ interface Paths {
 const paths = new Map<string, Paths>();
 /** The computers whose current path carries an open connection (`transportOpened` until `transportFailed`). */
 const live = new Set<string>();
+/** A direct path verified under a live relay connection, its tunnel open, for that connection to move onto (`checkDirectPath`). */
+const moveCandidates = new Map<string, Selection>();
 const directSuppressedUntil = new Map<string, number>();
 const resolving = new Map<string, Promise<string>>();
 const directProbes = new Map<string, Promise<Selection | null>>();
@@ -124,8 +126,8 @@ export async function resolveStoredServerURL(server: StoredServer): Promise<stri
   }
   const entry = pathsFor(server.id);
   // While a connection is open on a path, every caller uses that path as it is: measuring it again under the
-  // connection could close the tunnel it runs on (a failed re-check of a direct address stopped it), and a working
-  // connection is never moved off its path for a better one. The next connection measures afresh.
+  // connection could close the tunnel it runs on (a failed re-check of a direct address stopped it). A better path is
+  // found by `checkDirectPath` beside it, and the connection moves onto it itself. The next connection measures afresh.
   const carrying = live.has(server.id) ? currentSelection(entry) : undefined;
   if (carrying) return rewriteSelection(server, carrying);
   const direct = stillListed(server, entry.direct);
@@ -374,6 +376,62 @@ function stillListed(server: StoredServer, selection: Selection | undefined): Se
   return directAddressesFor(server).some((address) => selection.remoteURL === directURL(address)) ? selection : undefined;
 }
 
+/**
+ * Under a live connection on the relay: verifies a direct address now (a pinned tunnel and the health challenge, never a
+ * cached answer) without touching the path the connection is carried on, and keeps the verified tunnel open for the
+ * connection to move onto (`Transport`'s make-before-break). The URL to open the new socket at, or null.
+ */
+export async function checkDirectPath(server: StoredServer): Promise<{ url: string; path: TransportPath } | null> {
+  if (server.transportKind !== "link") return null;
+  const entry = paths.get(server.id);
+  if (!entry || entry.current !== "relay" || !live.has(server.id)) return null;
+  const addresses = directAddressesFor(server);
+  const previous = moveCandidates.get(server.id);
+  const winner = addresses.length === 0
+    ? null
+    : await firstVerified(
+        addresses.map((address) => probeAddress(server, address)),
+        (late) => {
+          if (late.tunnelKey !== moveCandidates.get(server.id)?.tunnelKey && late.tunnelKey !== entry.direct?.tunnelKey) void stopTunnel(late.tunnelKey);
+        },
+      );
+  // The connection ended, or moved, while this was checked: what it found is of no use.
+  if (paths.get(server.id) !== entry || entry.current !== "relay" || !live.has(server.id)) {
+    if (winner && winner.tunnelKey !== entry.direct?.tunnelKey) void stopTunnel(winner.tunnelKey);
+    return null;
+  }
+  if (previous && previous.tunnelKey !== winner?.tunnelKey && previous.tunnelKey !== entry.direct?.tunnelKey) void stopTunnel(previous.tunnelKey);
+  if (!winner) {
+    moveCandidates.delete(server.id);
+    return null;
+  }
+  moveCandidates.set(server.id, winner);
+  return { url: rewriteSelection(server, winner), path: winner.path };
+}
+
+/**
+ * The live connection moved onto the direct path `checkDirectPath` found: that path is the current one from now on.
+ * The relay's tunnel stays open, as the fallback and for the old socket's last answers.
+ */
+export function transportMoved(server: StoredServer): void {
+  const entry = paths.get(server.id);
+  const candidate = moveCandidates.get(server.id);
+  moveCandidates.delete(server.id);
+  if (!entry || !candidate) return;
+  entry.direct = candidate;
+  entry.current = "direct";
+  directSuppressedUntil.delete(server.id);
+  live.add(server.id);
+  publishPath(server.id);
+}
+
+/** A move onto the direct path did not happen: its tunnel is closed; the relay connection is left as it is. */
+export function moveAbandoned(server: StoredServer): void {
+  const candidate = moveCandidates.get(server.id);
+  moveCandidates.delete(server.id);
+  if (candidate && candidate.tunnelKey !== paths.get(server.id)?.direct?.tunnelKey) void stopTunnel(candidate.tunnelKey);
+}
+
 /** The connection on the current path opened: until it fails, that path is the one every caller uses (`resolveStoredServerURL`). */
 export function transportOpened(server: StoredServer): void {
   if (server.transportKind === "link" && paths.get(server.id)?.current) live.add(server.id);
@@ -383,6 +441,7 @@ export function transportOpened(server: StoredServer): void {
 export async function transportFailed(server: StoredServer): Promise<void> {
   if (server.transportKind !== "link") return;
   live.delete(server.id);
+  moveAbandoned(server);
   const entry = paths.get(server.id);
   if (!entry?.current) return invalidateStoredServerTransport(server);
   const failed = entry.current === "direct" ? entry.direct : entry.relay;
@@ -397,6 +456,7 @@ export async function transportFailed(server: StoredServer): Promise<void> {
 export async function invalidateStoredServerTransport(server: StoredServer): Promise<void> {
   if (server.transportKind !== "link") return;
   live.delete(server.id);
+  moveAbandoned(server);
   const entry = paths.get(server.id);
   paths.delete(server.id);
   publishPath(server.id);
@@ -473,6 +533,7 @@ function rewriteURL(remoteURL: string, localOrigin: string): string {
 export function resetLinkTransportForTests(): void {
   paths.clear();
   live.clear();
+  moveCandidates.clear();
   directSuppressedUntil.clear();
   resolving.clear();
   directProbes.clear();
