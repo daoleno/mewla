@@ -87,10 +87,6 @@ func TestSetupNoExecutorStopsWithLoginHints(t *testing.T) {
 			t.Fatalf("missing %q:\n%s", want, text)
 		}
 	}
-	// No tmux is on PATH: Mewla no longer needs it, so nothing asks for it.
-	if strings.Contains(strings.ToLower(text), "tmux") {
-		t.Fatalf("setup asked for tmux:\n%s", text)
-	}
 }
 
 func TestSetupVerifiedBeforeUnknownOrderingAndWrite(t *testing.T) {

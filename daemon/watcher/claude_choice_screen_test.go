@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Fixtures are real Claude Code 2.1.296 pane captures (capture-pane -p).
+// Fixtures are real Claude Code 2.1.296 screens, as plain text.
 func readClaudeChoiceFixture(t *testing.T, name string) claudeChoiceScreen {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "claude_choice", name))

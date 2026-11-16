@@ -6,7 +6,7 @@ import (
 )
 
 // Claude Code 2.1.322 asks for folder trust with a menu that has no numbers and
-// opens on "No, exit" (captured with `tmux capture-pane -p` at 50x40, the path
+// opens on "No, exit" (captured at 50x40, the path
 // replaced by /home/u/proj). Unread, the chat said "Ready" and a send's Enter
 // answered "No, exit": the Session ended (FAILURES Round 3 #2).
 func TestClaudeUnnumberedFolderTrustIsAStartupPrompt(t *testing.T) {

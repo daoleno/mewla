@@ -10,19 +10,19 @@ import (
 // column; ucomm= is the executable name. Lines are shaped like a real Mac
 // snapshot (paths sanitized).
 func TestDarwinProcessSnapshotProvesProviderFromUcomm(t *testing.T) {
-	const tmuxServer = "100 1 100 0 Thu Oct 15 14:07:42 2026 tmux tmux new-session -d -s mewla-worker-brain\n"
+	const sessionHost = "100 1 100 0 Thu Oct 15 14:07:42 2026 mewla /Users/u/.local/bin/mewla host serve\n"
 	for _, tc := range []struct {
 		name, lines, want string
 	}{
 		{
 			name: "native codex",
-			lines: tmuxServer +
+			lines: sessionHost +
 				"200 100 200 200 Thu Oct 15 14:07:42 2026 codex /Users/u/.codex/packages/standalone/bin/codex --remote ws://127.0.0.1:1\n",
 			want: "codex",
 		},
 		{
 			name: "claude native installer symlink",
-			lines: tmuxServer +
+			lines: sessionHost +
 				"200 100 200 200 Thu Oct 15 14:07:42 2026 2.1.296 /Users/u/.local/bin/claude --session-id 7d9bb1ec-38cf-4d56-8862-b8fafcaceffc\n" +
 				"300 200 200 200 Thu Oct 15 14:10:39 2026 npm npm exec chrome-devtools-mcp@latest\n",
 			want: "claude --session-id 7d9bb1ec-38cf-4d56-8862-b8fafcaceffc",
@@ -38,7 +38,7 @@ func TestDarwinProcessSnapshotProvesProviderFromUcomm(t *testing.T) {
 	}
 
 	// The old comm= column made codex indeterminate on every Mac.
-	truncated := strings.Replace(tmuxServer+
+	truncated := strings.Replace(sessionHost+
 		"200 100 200 200 Thu Oct 15 14:07:42 2026 codex /Users/u/.codex/packages/standalone/bin/codex --remote ws://127.0.0.1:1\n",
 		" codex /Users", " /Users/u/.codex/ /Users", 1)
 	if _, ok := resolveForegroundTargetProcess(200, parseProcessSnapshot([]byte(truncated), time.UTC)); ok {

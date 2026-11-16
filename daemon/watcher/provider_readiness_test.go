@@ -30,7 +30,7 @@ const claudeResumedPane = "" +
 	"\n" +
 	"  Ran 1 shell command\n" +
 	"\n" +
-	"● The new daemon isn't listening. The gate check only tested the tmux invocation, not the daemon, so it doesn't\n" +
+	"● The new daemon isn't listening. The gate check only tested the shell invocation, not the daemon, so it doesn't\n" +
 	"  count. I'll look at why it didn't start. (esc to interrupt)\n" +
 	"\n" +
 	"  Ran 1 shell command\n" +

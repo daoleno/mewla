@@ -496,7 +496,7 @@ func assertNoRouteOrSecretLeak(t *testing.T, payload map[string]any) {
 
 func assertHostStaysHiddenFromWorkerList(t *testing.T, srv *Server, host *classifier.Worker) {
 	t.Helper()
-	visible := &classifier.Worker{ID: "tmux:@visible", Name: "Visible", Command: "codex", Hidden: false}
+	visible := &classifier.Worker{ID: "mh-visible", Name: "Visible", Command: "codex", Hidden: false}
 	list := visibleWorkerSessions([]*classifier.Worker{host, visible})
 	if len(list) != 1 || list[0].ID != visible.ID {
 		t.Fatalf("visible list = %#v", list)

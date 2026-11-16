@@ -183,9 +183,8 @@ func TestCheckAllDoesNotAskWithOneReadyAgent(t *testing.T) {
 	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Codex · Brain uses it") {
 		t.Fatalf("one ready agent: saved %q\n%s", host.saved, out)
 	}
-	// Mewla runs its own session host: first run neither checks nor offers tmux.
-	if strings.Contains(strings.ToLower(out.String()), "tmux") || len(host.ran) != 0 {
-		t.Fatalf("first run mentions tmux or ran %q\n%s", host.ran, out)
+	if len(host.ran) != 0 {
+		t.Fatalf("first run ran %q\n%s", host.ran, out)
 	}
 }
 

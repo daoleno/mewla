@@ -216,7 +216,7 @@ func TestPollProviderEvidenceLossEmitsUncertainAfterBoundedWindow(t *testing.T) 
 
 // TestLedgerTranscriptBindingRestoresAndBackfills covers Slice 2 transcript
 // binding: the ledger record is the durable truth restored onto the Session
-// command on rediscovery; the tmux option / launch command is only an
+// command on rediscovery; the Session label / launch command is only an
 // advisory cache that backfills a missing binding idempotently.
 func TestLedgerTranscriptBindingRestoresAndBackfills(t *testing.T) {
 	sessionID := "mewla-worker-pi:@1"

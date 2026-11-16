@@ -22,7 +22,7 @@ import (
 )
 
 // Opt-in measurement: the input must be a sanitized fixture, never live state.
-// Copies it before timing. No scheduler, tmux poll, provider process, machine
+// Copies it before timing. No scheduler, Session poll, provider process, machine
 // gateway, notification or transcript capture runs in this component harness.
 func TestPopulatedStartupMeasurement(t *testing.T) {
 	source := os.Getenv("MEWLA_STARTUP_FIXTURE")

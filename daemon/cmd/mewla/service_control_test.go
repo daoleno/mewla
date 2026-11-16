@@ -58,7 +58,7 @@ func TestServiceListReturnsAuthoritativeSnapshot(t *testing.T) {
 		t.Fatalf("service_list response = %+v", resp)
 	}
 	if len(resp.ServiceSnapshot.Services) != 2 {
-		t.Fatalf("service_list services = %#v, want tmux + persistent rows", resp.ServiceSnapshot.Services)
+		t.Fatalf("service_list services = %#v, want Session + persistent rows", resp.ServiceSnapshot.Services)
 	}
 	persistent := resp.ServiceSnapshot.Services[1]
 	if persistent.WorkerID != "" {

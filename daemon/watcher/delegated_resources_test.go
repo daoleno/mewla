@@ -70,7 +70,7 @@ func TestDelegatedResourceUnitIsStrictlyNamespaced(t *testing.T) {
 		t.Fatalf("expected %q to belong to the daemon", unit)
 	}
 	for _, candidate := range []string{
-		"tmux-spawn-01234567.scope",
+		"app-spawn-01234567.scope",
 		"mewla-worker-otherdaemon-0123456789abcdef0123456789abcdef.scope",
 		"mewla-worker-daemonidabcdef-not-a-uuid.scope",
 		"mewla-worker-daemonidabcdef-0123456789abcdef0123456789abcdef.service",

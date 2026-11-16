@@ -77,7 +77,7 @@ func TestPiOwnedDirAutoBindAfterBindingLoss(t *testing.T) {
 	writeOwnedPiRecoveryFixture(t, dir, cwd, created)
 
 	// Pre-fix launch shape: the pane command is bare "pi" (node-based Pi
-	// rewrites its argv), no durable tmux binding, no --session in the
+	// rewrites its argv), no durable Session binding, no --session in the
 	// command. The owned transcript lives only in the Mewla-owned directory.
 	worker := classifier.Worker{
 		ID:        "recovery-agent",

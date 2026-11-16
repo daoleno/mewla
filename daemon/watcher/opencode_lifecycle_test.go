@@ -141,7 +141,7 @@ func TestBrainHostSubmissionStillRequiresProviderEvidence(t *testing.T) {
 }
 
 // TestOpenCodeTransportSubmitThenSignalAndProviderEvidenceSettleTurn verifies
-// the generic delegated contract: an owned tmux paste+submit is accepted
+// the generic delegated contract: an owned paste+submit is accepted
 // immediately without provider transcript byte equality, the prompt-carried
 // signal admits the Turn, and a matching provider terminal settles it exactly
 // once. No byte gate, no replay, no phantom Turn before the signal.

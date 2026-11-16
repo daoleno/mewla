@@ -285,7 +285,7 @@ func TestLauncher_StartDedicatedReportsSpawnAndReadySendFailures(t *testing.T) {
 	item := &Item{Path: "/tmp/scheduled.md"}
 
 	t.Run("spawn", func(t *testing.T) {
-		run := &fakeRunner{spawnErr: errors.New("tmux failed")}
+		run := &fakeRunner{spawnErr: errors.New("session host failed")}
 		if _, err := NewLauncher(run, execs).StartDedicated(item, "/calendar", "claude"); !errors.Is(err, ErrSpawnFailed) {
 			t.Fatalf("error = %v, want ErrSpawnFailed", err)
 		}

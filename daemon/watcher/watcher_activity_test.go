@@ -189,7 +189,7 @@ func TestSessionDiscoveryActivityTimePriority(t *testing.T) {
 	}
 }
 
-// installFakePollSeams points poll at deterministic tmux/process sources.
+// installFakePollSeams points poll at deterministic Session/process sources.
 // contentByTarget maps window target to captured pane text; all panes are
 // reported alive. processes is the fake process table used to derive each
 // Session's StartedAt. It returns a restore function.
@@ -619,8 +619,8 @@ func collectWatcherEvents(w *Watcher) []SessionEvent {
 	}
 }
 
-// Whether a Worker is hidden follows its pane's option both ways: a Worker
-// hidden from tmux leaves the list, and one unhidden comes back, without the
+// Whether a Worker is hidden follows its Session's label both ways: a Worker
+// hidden there leaves the list, and one unhidden comes back, without the
 // daemon restarting.
 func TestPollFollowsAHiddenFlipInBothDirections(t *testing.T) {
 	w := New(time.Second)

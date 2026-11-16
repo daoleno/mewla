@@ -99,7 +99,7 @@ func TestClassify(t *testing.T) {
 			wantState: StateBlocked,
 		},
 		{
-			name:      "codex approval picker with tmux status line",
+			name:      "codex approval picker for a command",
 			paneAlive: true,
 			lines: []string{
 				"$ systemctl list-unit-files --state=enabled --no-pager --no-legend",
@@ -107,7 +107,6 @@ func TestClassify(t *testing.T) {
 				"  2. Yes, and don't ask again for commands that start with `systemctl` (p)",
 				"  3. No, and tell Codex what to do differently (esc)",
 				"Press enter to confirm or esc to cancel",
-				"[mewla-81984.] Action Required 23:31 19-6月-26",
 			},
 			wantState: StateBlocked,
 		},

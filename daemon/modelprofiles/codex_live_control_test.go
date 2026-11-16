@@ -176,10 +176,10 @@ func TestPrepareLaunchAllocatesControlSocketOnlyWithControlDir(t *testing.T) {
 		t.Fatalf("accessor=%q", got)
 	}
 	// The socket survives CommitLaunch (RebindSession preserves binding fields).
-	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "tmux:@live"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(plan.ProvisionalID, "mh-live"); err != nil {
 		t.Fatal(err)
 	}
-	if got := owner.CodexControlSocket("tmux:@live"); got != plan.CodexControlSocket {
+	if got := owner.CodexControlSocket("mh-live"); got != plan.CodexControlSocket {
 		t.Fatalf("post-commit socket=%q", got)
 	}
 }
@@ -240,10 +240,10 @@ func TestPrepareCommitThreadRuntimeCapturesNativeIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, "tmux:@native-id"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, "mh-native-id"); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := owner.PrepareThreadRuntime("tmux:@native-id", ThreadRuntimeChoice{
+	prepared, err := owner.PrepareThreadRuntime("mh-native-id", ThreadRuntimeChoice{
 		ConnectionID: "b",
 		ModelID:      "gpt-5.5",
 		Effect:       "high",
@@ -260,7 +260,7 @@ func TestPrepareCommitThreadRuntimeCapturesNativeIdentity(t *testing.T) {
 		t.Fatalf("previous=%#v (must be the pre-mutation native identity for rollback)", previous)
 	}
 	// Route not published until Commit.
-	if runtime, ok := owner.ThreadRuntime("tmux:@native-id"); !ok || runtime.ModelID != "gpt-5" {
+	if runtime, ok := owner.ThreadRuntime("mh-native-id"); !ok || runtime.ModelID != "gpt-5" {
 		t.Fatalf("prepare must not publish: %#v", runtime)
 	}
 	if _, snap, persist, err := owner.CommitThreadRuntime(prepared); err != nil || !persist.Applied {
@@ -268,7 +268,7 @@ func TestPrepareCommitThreadRuntimeCapturesNativeIdentity(t *testing.T) {
 	} else if snap.Current == nil || snap.Current.ModelID != "gpt-5.5" {
 		t.Fatalf("snapshot=%#v", snap.Current)
 	}
-	if runtime, ok := owner.ThreadRuntime("tmux:@native-id"); !ok || runtime.ModelID != "gpt-5.5" || runtime.ReasoningEffort != "high" {
+	if runtime, ok := owner.ThreadRuntime("mh-native-id"); !ok || runtime.ModelID != "gpt-5.5" || runtime.ReasoningEffort != "high" {
 		t.Fatalf("runtime=%#v", runtime)
 	}
 }
@@ -300,10 +300,10 @@ func TestCommitThreadRuntimeFailsClosedOnGenerationChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, "tmux:@cas"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, "mh-cas"); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := owner.PrepareThreadRuntime("tmux:@cas", ThreadRuntimeChoice{
+	prepared, err := owner.PrepareThreadRuntime("mh-cas", ThreadRuntimeChoice{
 		ConnectionID: "b",
 		ModelID:      "gpt-5.5",
 	})
@@ -311,7 +311,7 @@ func TestCommitThreadRuntimeFailsClosedOnGenerationChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A concurrent mutation advances the generation between Prepare and Commit.
-	if _, _, _, err := owner.SetThreadRuntime("tmux:@cas", ThreadRuntimeChoice{
+	if _, _, _, err := owner.SetThreadRuntime("mh-cas", ThreadRuntimeChoice{
 		ConnectionID: "b",
 		ModelID:      "gpt-5.5",
 		Effect:       "low",
@@ -321,7 +321,7 @@ func TestCommitThreadRuntimeFailsClosedOnGenerationChange(t *testing.T) {
 	if _, _, persist, err := owner.CommitThreadRuntime(prepared); err == nil || persist.Applied {
 		t.Fatalf("stale commit must fail closed: err=%v persist=%#v", err, persist)
 	}
-	runtime, ok := owner.ThreadRuntime("tmux:@cas")
+	runtime, ok := owner.ThreadRuntime("mh-cas")
 	if !ok || runtime.ReasoningEffort != "low" {
 		t.Fatalf("runtime must keep the concurrent mutation: %#v", runtime)
 	}

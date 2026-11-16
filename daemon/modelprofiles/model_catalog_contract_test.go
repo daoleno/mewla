@@ -7,7 +7,7 @@ import (
 
 // The Codex CLI >= 0.147 ModelInfo serde contract requires a fixed set of
 // fields on every model_catalog_json / GET /v1/models entry. Missing fields
-// make codex exit at config load, which kills the host tmux session and
+// make codex exit at config load, which ends the Brain host Session and
 // drives the brain host session_missing replacement loop, so the wire shape is
 // pinned here (mirrors codex-rs protocol/src/openai_models.rs ModelInfo).
 func TestCodexModelCatalogWireContractRequiredFields(t *testing.T) {

@@ -13,7 +13,7 @@ import (
 
 // The live Claude registers the Worker's cwd (the worktree) with the session
 // id; the transcript is where the conversation was born. The registry binding,
-// the host identity and the tmux move all name that one file.
+// the host identity and the move all name that one file.
 func TestClaudeRegistryResumedInAnotherFolderBindsItsConversation(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	configDir := filepath.Join(t.TempDir(), "claude")
