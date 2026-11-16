@@ -45,7 +45,9 @@ class PushHost(private val activity: ComponentActivity, private val nsh: NshView
     nsh.handle("push.deviceToken") { _, reply ->
       if (FirebaseApp.getApps(activity).isEmpty()) return@handle reply.reject("This build has no push service.")
       FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-        val token = task.result.takeIf { task.isSuccessful }
+        // Success first: a failed task's `result` throws, and on this main-thread callback that ended the
+        // app (FCM's AUTHENTICATION_FAILED on a phone whose Play services are not signed in yet).
+        val token = if (task.isSuccessful) task.result else null
         if (token == null) {
           Log.w(TAG, "no FCM token", task.exception)
           reply.reject(task.exception?.message ?: "No push token.")
