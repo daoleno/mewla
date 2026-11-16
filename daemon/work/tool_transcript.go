@@ -3,6 +3,7 @@ package work
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -365,9 +366,28 @@ func lsofOpenCodexRolloutPaths(processIDs []int) []string {
 // process is gone or unreadable, yet still prints the files of the others, so
 // output with an exit error is kept: a descendant that exited between the
 // process listing and this run must not hide the files of its parent.
+//
+// Only file names are wanted: -n and -P skip the host and port lookups of the
+// process's sockets. A run is also bounded by lsofTimeout: on a Mac, one lsof
+// of a just-started Codex once took 60 s, and the Brain chat's first load
+// (and the Brain host probe behind the same lookup) waited for all of it.
+// A run cut off by the bound finds no file, as if lsof had none to report;
+// the rollout is then found by its folder and start like any other.
 func runLsofOpenFiles(ids []string) ([]byte, error) {
-	return procspawn.Command("lsof codex", lsofTool(), "-w", "-p", strings.Join(ids, ","), "-Fn").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), lsofTimeout)
+	defer cancel()
+	cmd := procspawn.CommandContext(ctx, "lsof codex", lsofTool(), "-w", "-n", "-P", "-p", strings.Join(ids, ","), "-Fn")
+	// lsof is killed at the bound; a child still holding its output pipe is not waited for either.
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("lsof did not finish in %s: %w", lsofTimeout, ctx.Err())
+	}
+	return out, err
 }
+
+// lsofTimeout bounds one lsof run; tests shorten it.
+var lsofTimeout = 3 * time.Second
 
 // lsofTool is lsof's path; tests replace it.
 var lsofTool = func() string { return procspawn.SystemTool("lsof") }

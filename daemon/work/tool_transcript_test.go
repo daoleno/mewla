@@ -685,3 +685,62 @@ func TestLsofOpenFilesKeepsOutputWhenLsofExitsNonzero(t *testing.T) {
 		t.Fatalf("paths = %v, want %v", got, want)
 	}
 }
+
+// stallingLsof puts an lsof on the lookup that never answers, as one did for
+// 60 s on a Mac with a just-started Codex, and records the arguments it got.
+func stallingLsof(t *testing.T) (argsFile string) {
+	t.Helper()
+	dir := t.TempDir()
+	argsFile = filepath.Join(dir, "args")
+	script := filepath.Join(dir, "lsof")
+	body := "#!/bin/sh\necho \"$@\" > " + argsFile + "\nexec sleep 30\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	previousTool, previousTimeout := lsofTool, lsofTimeout
+	lsofTool = func() string { return script }
+	lsofTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { lsofTool, lsofTimeout = previousTool, previousTimeout })
+	return argsFile
+}
+
+func TestLsofThatNeverAnswersIsCutOffAndAsksNoNameLookups(t *testing.T) {
+	argsFile := stallingLsof(t)
+	started := time.Now()
+	if paths := lsofOpenCodexRolloutPaths([]int{100, 101}); paths != nil {
+		t.Fatalf("paths = %v from an lsof that printed nothing", paths)
+	}
+	if took := time.Since(started); took > 3*time.Second {
+		t.Fatalf("lookup waited %s for a stalled lsof", took)
+	}
+	args, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, flag := range []string{"-n", "-P", "-w", "-Fn"} {
+		if !strings.Contains(" "+strings.TrimSpace(string(args))+" ", " "+flag+" ") {
+			t.Fatalf("lsof args %q lack %s", args, flag)
+		}
+	}
+}
+
+// The Brain chat's first load after a restart waited 60 s for one lsof run
+// (0.4.10 on a Mac). A stalled lsof now costs the load its bound, and the
+// rollout is still found by its folder and start.
+func TestCodexConversationLoadsWhileLsofStalls(t *testing.T) {
+	now := time.Now()
+	f := newCodexIdleFixture(t, now)
+	stallingLsof(t)
+	previous := CodexBoundRollout
+	CodexBoundRollout = func(string) string { return "" }
+	defer func() { CodexBoundRollout = previous }()
+
+	started := time.Now()
+	conversation, err := NewProviderConversationReader().Load(f.worker, WorkerProviderCodex, now)
+	if took := time.Since(started); took > 3*time.Second {
+		t.Fatalf("the conversation load waited %s for a stalled lsof", took)
+	}
+	if err != nil || !conversation.Available || conversation.Path != f.rollout {
+		t.Fatalf("conversation = available %v path %q err %v, want %s", conversation.Available, conversation.Path, err, f.rollout)
+	}
+}
