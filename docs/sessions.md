@@ -102,6 +102,12 @@ program asks for that (bracketed paste), so a shell or an agent never runs a
 pasted line before you press Return. On a hardware keyboard, Ctrl+Shift+C and
 Ctrl+Shift+V copy and paste on Android.
 
+Alt from the keyboard bar, or Alt held with a letter that types itself, reaches
+the program as Alt (an escape before the key) on iPhone and iPad as on Android,
+so Alt+b and Alt+f move by words in a shell. A character that Option types on
+an iPad or Mac keyboard (Option+l is @ on a German layout) is typed as that
+character.
+
 ### Copy from the Terminal in a browser
 
 Select text with the mouse and press **Cmd+C** on a Mac, or **Ctrl+C** or
