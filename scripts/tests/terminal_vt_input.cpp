@@ -42,6 +42,13 @@ int main()
     key(vt, "Backspace", GHOSTTY_KEY_BACKSPACE, 0, "", 0, "\x7f");
     key(vt, "Ctrl+C", GHOSTTY_KEY_C, GHOSTTY_MODS_CTRL, "", 'c', "\x03");
     key(vt, "Alt+b", GHOSTTY_KEY_B, GHOSTTY_MODS_ALT, "b", 'b', "\x1b" "b");
+    key(vt, "Shift+Alt+b", GHOSTTY_KEY_B, GHOSTTY_MODS_ALT | GHOSTTY_MODS_SHIFT, "B", 'b', "\x1b" "B");
+    key(vt, "Alt from the key bar, no text", GHOSTTY_KEY_B, GHOSTTY_MODS_ALT, "", 'b', "\x1b" "b");
+#ifdef __APPLE__
+    // A character Option composed (Option+l is "@" on a German Mac or iPad layout) is typed, not escaped. Only
+    // Apple keyboards compose with the key reported as Alt; libghostty built elsewhere has no Option to honour.
+    key(vt, "Option+l composes @", GHOSTTY_KEY_L, GHOSTTY_MODS_ALT, "@", 'l', "@");
+#endif
     key(vt, "Up, normal cursor keys", GHOSTTY_KEY_ARROW_UP, 0, "", 0, "\x1b[A");
     key(vt, "Shift+Tab", GHOSTTY_KEY_TAB, GHOSTTY_MODS_SHIFT, "", 0, "\x1b[Z");
     key(vt, "F5", GHOSTTY_KEY_F5, 0, "", 0, "\x1b[15~");

@@ -151,6 +151,10 @@ static int mewla_vt_encode_key(GhosttyTerminal t, int key, uint16_t mods, const 
 		return r;
 	}
 	r |= ghostty_key_encoder_set_from_terminal(e, t);
+	// Alt (Meta) is an escape prefix on every platform: built for macOS, libghostty treats it as the
+	// Option key, which types text (M-b sent "b"), and the call above resets this option.
+	GhosttyOptionAsAlt option_as_alt = GHOSTTY_OPTION_AS_ALT_TRUE;
+	r |= ghostty_key_encoder_set(e, GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT, &option_as_alt);
 	r |= ghostty_key_event_set_action(ev, GHOSTTY_KEY_ACTION_PRESS);
 	r |= ghostty_key_event_set_key(ev, (GhosttyKey)key);
 	r |= ghostty_key_event_set_mods(ev, mods);

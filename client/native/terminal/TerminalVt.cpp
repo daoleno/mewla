@@ -358,6 +358,20 @@ static bool encodeInto(MewlaVt* vt, const uint8_t** out, size_t* outLength, Enco
     return true;
 }
 
+// Whether the key's text is a character other than the key itself (its unshifted codepoint, or that letter in
+// capitals): one the keyboard composed, as Option does on a Mac or iPad. No text, or the key's own, is not.
+static bool composedByOption(const uint8_t* text, size_t textLength, uint32_t unshifted)
+{
+    if (!text || textLength == 0) return false;
+    uint32_t c = 0;
+    size_t need = text[0] < 0x80 ? 1 : (text[0] >> 5) == 0x6 ? 2 : (text[0] >> 4) == 0xe ? 3 : (text[0] >> 3) == 0x1e ? 4 : 0;
+    if (need == 0 || need != textLength) return true; // more than one character, or not UTF-8: not the key's own
+    c = need == 1 ? text[0] : text[0] & (0x7f >> need);
+    for (size_t i = 1; i < need; i++) c = (c << 6) | (text[i] & 0x3f);
+    uint32_t upper = unshifted >= 'a' && unshifted <= 'z' ? unshifted - 'a' + 'A' : unshifted;
+    return c != unshifted && c != upper;
+}
+
 extern "C" bool mewla_vt_key(MewlaVt* vt, int32_t key, uint16_t mods, int32_t action, const uint8_t* text, size_t textLength,
     uint32_t unshifted, const uint8_t** out, size_t* outLength)
 {
@@ -369,6 +383,11 @@ extern "C" bool mewla_vt_key(MewlaVt* vt, int32_t key, uint16_t mods, int32_t ac
     }
     // The program's modes now: cursor and keypad keys, the Kitty keyboard flags, modifyOtherKeys.
     ghostty_key_encoder_set_from_terminal(vt->key_encoder, vt->terminal);
+    // Alt is an escape prefix, as on Linux and Android, unless Option composed a character of its own on a Mac or
+    // iPad keyboard (Option+l is "@" on a German layout): then that character is what the person typed. Built for
+    // Apple platforms, libghostty reads Alt as Option and sent "b" for Alt+b; the call above resets this option.
+    GhosttyOptionAsAlt optionAsAlt = composedByOption(text, textLength, unshifted) ? GHOSTTY_OPTION_AS_ALT_FALSE : GHOSTTY_OPTION_AS_ALT_TRUE;
+    ghostty_key_encoder_set(vt->key_encoder, GHOSTTY_KEY_ENCODER_OPT_MACOS_OPTION_AS_ALT, &optionAsAlt);
     GhosttyKeyEvent event = vt->key_event;
     ghostty_key_event_set_action(event, GhosttyKeyAction(action));
     ghostty_key_event_set_key(event, GhosttyKey(key));
