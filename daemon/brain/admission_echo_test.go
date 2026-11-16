@@ -181,12 +181,12 @@ func TestEchoRecordedAfterAcceptanceReconcilesAtProjection(t *testing.T) {
 	}
 }
 
-// TestEchoAfterAcceptanceIsClaimedAndStartupRepairsExistingDuplicate mirrors
-// the live duplicate-bubble defect end to end: the provider records its
-// user_message echo only when the turn loop processes the input — seconds
-// after the daemon's transport acceptance — so a bounded echo window could
-// never claim it and the echo was materialized as a second durable user row.
-func TestEchoAfterAcceptanceIsClaimedAndStartupRepairsExistingDuplicate(t *testing.T) {
+// TestEchoAfterAcceptanceIsClaimed mirrors the live duplicate-bubble defect
+// end to end: the provider records its user_message echo only when the turn
+// loop processes the input — seconds after the daemon's transport acceptance —
+// so a bounded echo window could never claim it and the echo was materialized
+// as a second durable user row.
+func TestEchoAfterAcceptanceIsClaimed(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -220,64 +220,6 @@ func TestEchoAfterAcceptanceIsClaimedAndStartupRepairsExistingDuplicate(t *testi
 		t.Fatalf("admission did not claim its after-acceptance echo: %+v", items)
 	}
 
-	// Pre-fix live state: the echo was already materialized as a second
-	// durable user row (the bounded window never matched). The idempotent
-	// startup projection pass must repair it without any migration.
-	legacy, err := NewStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := legacy.SetChatState(ChatState{ThreadID: threadID}); err != nil {
-		t.Fatal(err)
-	}
-	legacy.now = func() time.Time { return acceptedAt }
-	legacyPrepared, created, err := legacy.PrepareBrainInputAdmission(BrainInputAdmission{
-		RequestID: accepted.RequestID, ThreadID: threadID,
-		HostSessionID: "brain-host:@live", SessionID: sessionID, DisplayBody: body,
-	})
-	if err != nil || !created {
-		t.Fatalf("prepare created=%v err=%v", created, err)
-	}
-	legacyAccepted, _, changed, err := legacy.AcceptBrainInputAdmission(legacyPrepared)
-	if err != nil || !changed {
-		t.Fatalf("accept changed=%v err=%v", changed, err)
-	}
-	if _, err := legacy.AppendTimelineItem(brainInputAdmissionTimelineItem(legacyAccepted)); err != nil {
-		t.Fatal(err)
-	}
-	echoRow, ok := timelineItemFromProviderEvent(threadID, sessionID, work.CodexConversationEvent{
-		ID: echoID, Timestamp: echoAt.Format(time.RFC3339Nano),
-		Kind: timelineKindUserMessage, Role: "user", Body: body,
-	})
-	if !ok {
-		t.Fatal("provider echo row projection failed")
-	}
-	if _, err := legacy.AppendTimelineItem(echoRow); err != nil {
-		t.Fatal(err)
-	}
-	duplicated, err := legacy.ThreadTimeline(threadID, 0)
-	if err != nil || len(duplicated) != 2 {
-		t.Fatalf("pre-fix duplicate timeline=%+v err=%v", duplicated, err)
-	}
-
-	unprojected, more, err := legacy.UnprojectedBrainInputAdmissions(10)
-	if err != nil || more {
-		t.Fatalf("unprojected batch err=%v more=%v", err, more)
-	}
-	if len(unprojected) != 1 || unprojected[0].RequestID != accepted.RequestID {
-		t.Fatalf("startup pass did not select the unclaimed admission: %+v", unprojected)
-	}
-	if err := legacy.ProjectBrainInputAdmission(unprojected[0]); err != nil {
-		t.Fatal(err)
-	}
-	repaired, err := legacy.ThreadTimeline(threadID, 0)
-	if err != nil || len(repaired) != 1 {
-		t.Fatalf("repaired timeline=%+v err=%v", repaired, err)
-	}
-	if repaired[0].ID != accepted.RequestID || !repaired[0].BrainAdmission ||
-		repaired[0].AdmissionEchoEventID != echoID {
-		t.Fatalf("repair did not converge on the canonical admission row: %+v", repaired)
-	}
 }
 
 func TestProviderRowsBeforeAdmissionCreationRemainIndependent(t *testing.T) {

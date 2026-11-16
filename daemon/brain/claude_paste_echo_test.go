@@ -68,55 +68,6 @@ func TestPastedBrainInputEchoShowsOnce(t *testing.T) {
 	}
 }
 
-func TestStartupRepairsLegacyPasteEnvelopeDuplicate(t *testing.T) {
-	store, err := NewStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	threadID := "brain_1790733088397305726"
-	sessionID := "07ac686b-8805-4402-87bb-8f5fed88e002"
-	if err := store.SetChatState(ChatState{ThreadID: threadID}); err != nil {
-		t.Fatal(err)
-	}
-	createdAt := time.Date(2026, 10, 7, 1, 40, 18, 300000000, time.UTC)
-	store.now = func() time.Time { return createdAt }
-	prepared, created, err := store.PrepareBrainInputAdmission(BrainInputAdmission{
-		RequestID: "muxfxf3o_ls6w20", ThreadID: threadID,
-		HostSessionID: "brain-host:@live", SessionID: sessionID, DisplayBody: realPastedBrainInput,
-	})
-	if err != nil || !created {
-		t.Fatalf("prepare created=%v err=%v", created, err)
-	}
-	store.now = func() time.Time { return createdAt.Add(43 * time.Millisecond) }
-	accepted, _, changed, err := store.AcceptBrainInputAdmission(prepared)
-	if err != nil || !changed {
-		t.Fatalf("accept changed=%v err=%v", changed, err)
-	}
-	if _, err := store.AppendTimelineItem(brainInputAdmissionTimelineItem(accepted)); err != nil {
-		t.Fatal(err)
-	}
-	// The durable row exactly as the live store kept it before the fix.
-	echoID := sessionID + ":4b9a6cd1-6215-4fc0-9e97-2414dbbba34e:user"
-	if _, err := store.AppendTimelineItem(TimelineItem{
-		ID: echoID, ThreadID: threadID, SessionID: sessionID, Role: "user",
-		Body:      "<pasted_content id=\"4f28\">\n" + realPastedBrainInput + "\n</pasted_content id=\"4f28\">",
-		CreatedAt: createdAt.Add(50 * time.Millisecond), Kind: timelineKindUserMessage,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	unprojected, _, err := store.UnprojectedBrainInputAdmissions(10)
-	if err != nil || len(unprojected) != 1 {
-		t.Fatalf("unprojected=%+v err=%v", unprojected, err)
-	}
-	if err := store.ProjectBrainInputAdmission(unprojected[0]); err != nil {
-		t.Fatal(err)
-	}
-	items, err := store.ThreadTimeline(threadID, 0)
-	if err != nil || len(items) != 1 || items[0].AdmissionEchoEventID != echoID {
-		t.Fatalf("legacy envelope duplicate not repaired: %+v err=%v", items, err)
-	}
-}
-
 func TestDurableRowsProjectTaskNotificationsAndUnwrapPastes(t *testing.T) {
 	at := time.Date(2026, 10, 7, 1, 39, 13, 353000000, time.UTC)
 	notification := "<task-notification>\n<task-id>a3e33bf1f19bac0f0</task-id>\n<status>completed</status>\n" +

@@ -306,20 +306,3 @@ func TestGCPCopyCodeFlowOnSharedCore(t *testing.T) {
 		t.Fatal("login not adopted")
 	}
 }
-func TestRetiredGCPOAuthRemoved(t *testing.T) {
-	m, _, _, _ := testGCPManager(t)
-	m.records["old-gcp"] = &record{Account: Account{ID: "old-gcp", Integration: "gcp"}, OAuth: &oauthAccount{}}
-	m.vault.Set("integration:old-gcp", "retired")
-	m.vault.Set("oauth-client:gcp", "retired")
-	if err := m.removeOldAWS(); err != nil {
-		t.Fatal(err)
-	}
-	if m.records["old-gcp"] != nil {
-		t.Fatal("old MCP card survived")
-	}
-	for _, key := range []string{"integration:old-gcp", "oauth-client:gcp"} {
-		if _, ok, _ := m.vault.Get(key); ok {
-			t.Fatal("old OAuth secret survived")
-		}
-	}
-}

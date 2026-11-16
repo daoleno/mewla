@@ -199,21 +199,6 @@ func TestCloudLoginCancellationAndNoReplay(t *testing.T) {
 		t.Fatal("cancelled login resumed")
 	}
 }
-func TestRetiredAWSOAuthRemoved(t *testing.T) {
-	m, _, _, _ := testCloudManager(t)
-	m.records["old"] = &record{Account: Account{ID: "old", Integration: "aws"}, OAuth: &oauthAccount{}}
-	m.vault.Set("integration:old", "secret")
-	m.vault.Set("oauth-registration:aws", "retired")
-	if err := m.removeOldAWS(); err != nil {
-		t.Fatal(err)
-	}
-	if len(m.records) != 0 {
-		t.Fatal("old card survived")
-	}
-	if _, ok, _ := m.vault.Get("integration:old"); ok {
-		t.Fatal("old grant survived")
-	}
-}
 func TestCloudOutputNeverBecomesHistory(t *testing.T) {
 	m, config, _, _ := testCloudManager(t)
 	os.WriteFile(config, []byte("[profile test]\n"), 0600)

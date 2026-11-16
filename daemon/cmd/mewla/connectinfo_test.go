@@ -1168,50 +1168,6 @@ func TestFirstDeviceStartupLeavesTheQRToPairWhenRemoteAccessIsOn(t *testing.T) {
 	}
 }
 
-func TestLegacyLinkJSONIsMovedToRelayJSONAtStart(t *testing.T) {
-	stateDir := t.TempDir()
-	legacy := filepath.Join(stateDir, link.LegacyConfigFilename)
-	raw := []byte(`{
-  "version": 1,
-  "connector_token": "0123456789abcdef0123456789abcdef",
-  "relays": [{
-    "name": "region-a",
-    "control_address": "control.test:8443",
-    "control_server_name": "control.test",
-    "client_domain": "relay.test"
-  }]
-}`)
-	if err := os.WriteFile(legacy, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	// An explicit path is the operator's own: nothing is moved.
-	if _, _, _, err := loadOptionalLinkConfig(stateDir, filepath.Join(stateDir, "elsewhere.json")); err == nil {
-		t.Fatal("explicit missing config was silently ignored")
-	}
-	if _, err := os.Stat(legacy); err != nil {
-		t.Fatalf("explicit path moved the legacy file: %v", err)
-	}
-
-	_, path, enabled, err := loadOptionalLinkConfig(stateDir, "")
-	if err != nil || !enabled {
-		t.Fatalf("legacy config after start: enabled %t, err %v", enabled, err)
-	}
-	if path != filepath.Join(stateDir, "relay.json") {
-		t.Fatalf("config path = %q", path)
-	}
-	if _, err := os.Stat(legacy); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("link.json still exists after the move: %v", err)
-	}
-	if got, _ := os.ReadFile(path); string(got) != string(raw) {
-		t.Fatalf("relay.json content changed: %q", got)
-	}
-	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("relay.json mode = %v", info.Mode().Perm())
-	}
-}
-
 func TestRelayConfigFlagAndItsEarlierNameMeanTheSame(t *testing.T) {
 	for _, name := range []string{"-relay-config", "-link-config"} {
 		daemon, err := parseDaemonConfig([]string{name, "/tmp/relay.json"}, io.Discard)

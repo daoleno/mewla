@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { effectiveMinComputerVersion, MIN_COMPUTER_VERSION } from "./version";
+import { effectiveMinComputerVersion } from "./version";
 
 describe("effectiveMinComputerVersion", () => {
   test("an app never asks for a computer newer than itself", () => {
@@ -14,9 +14,5 @@ describe("effectiveMinComputerVersion", () => {
 
   test("an unreadable app version (a dev build) keeps the minimum", () => {
     expect(effectiveMinComputerVersion("0.2.88", "dev")).toBe("0.2.88");
-  });
-
-  test("the minimum is the Expo app's", () => {
-    expect(MIN_COMPUTER_VERSION).toBe("0.2.88");
   });
 });

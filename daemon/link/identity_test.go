@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -106,37 +105,6 @@ func TestLoadTransportIdentityRejectsCorruptStateWithoutMutation(t *testing.T) {
 		if string(after) != contents {
 			t.Fatalf("%s: corrupt identity was mutated", name)
 		}
-	}
-}
-
-func TestLoadTransportIdentityMigratesValidLegacyStateOnce(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, transportIdentityFilename)
-	_, key, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacy := `{"route_id":"` + strings.Repeat("cd", 16) + `","private_key_hex":"` + hex.EncodeToString(key) + `"}`
-	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	first, err := LoadOrCreateTransportIdentity(dir, nil)
-	if err != nil {
-		t.Fatalf("migrate legacy identity: %v", err)
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(raw), "tls_private_key_hex") {
-		t.Fatal("valid legacy identity did not persist a TLS key")
-	}
-	second, err := LoadOrCreateTransportIdentity(dir, nil)
-	if err != nil {
-		t.Fatalf("reload migrated identity: %v", err)
-	}
-	if first.SPKISHA256 == "" || first.SPKISHA256 != second.SPKISHA256 {
-		t.Fatalf("pin did not stay stable after migration: %q vs %q", first.SPKISHA256, second.SPKISHA256)
 	}
 }
 

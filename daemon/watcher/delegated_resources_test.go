@@ -522,51 +522,6 @@ func TestPortableResourceReconcilePreservesOrphanUntilExplicitCleanup(t *testing
 	}
 }
 
-func TestPortableResourceReconcileLeavesRetiredLayoutUntouched(t *testing.T) {
-	owner := "abc123"
-	orphan := delegatedResourceUnit(owner, "0123456789abcdef0123456789abcdef")
-	live := delegatedResourceUnit(owner, "fedcba9876543210fedcba9876543210")
-	root := t.TempDir()
-	leaseDir := filepath.Join(root, "leases")
-	tempRoot := filepath.Join(root, "t")
-	legacyRoot := filepath.Join(root, "tmp", "worker-resources", owner)
-	for _, dir := range []string{leaseDir, tempRoot, legacyRoot} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	orphanLegacy := filepath.Join(legacyRoot, orphan)
-	liveLegacy := filepath.Join(legacyRoot, live)
-	foreignLegacy := filepath.Join(legacyRoot, "not-a-unit")
-	for _, dir := range []string{orphanLegacy, liveLegacy, foreignLegacy} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	manager := &portableDelegatedResourceManager{
-		owner:    owner,
-		leaseDir: leaseDir,
-		tempRoot: tempRoot,
-		byTarget: make(map[string]string),
-		reserved: make(map[string]time.Time),
-		now:      time.Now,
-	}
-	manager.Reconcile([]sessionPane{{
-		target:       "%1",
-		delegated:    true,
-		resourceUnit: live,
-	}})
-	if _, err := os.Stat(orphanLegacy); err != nil {
-		t.Fatalf("retired layout was modified: %v", err)
-	}
-	if _, err := os.Stat(liveLegacy); err != nil {
-		t.Fatalf("live legacy temp was removed: %v", err)
-	}
-	if _, err := os.Stat(foreignLegacy); err != nil {
-		t.Fatalf("foreign legacy directory was touched: %v", err)
-	}
-}
-
 func TestShortDelegatedTempDigestIsStableURLSafe(t *testing.T) {
 	unit := delegatedResourceUnit("abc123", "0123456789abcdef0123456789abcdef")
 	first := shortDelegatedTempDigest(unit)

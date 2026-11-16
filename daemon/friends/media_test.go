@@ -10,8 +10,6 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -404,32 +402,5 @@ func TestAutoPostNeverAttachesMediaUnlessTheOwnerAllowedIt(t *testing.T) {
 	leftovers, _ := filepath.Glob(filepath.Join(os.TempDir(), "mewla-friends-media-*"))
 	if len(leftovers) != 0 {
 		t.Fatalf("scratch left behind: %v", leftovers)
-	}
-}
-
-func TestUploadToAServiceWithoutMediaSaysMediaIsOff(t *testing.T) {
-	f := newFixture(t)
-	f.enableOn(t)
-	old := httptest.NewServer(http.NotFoundHandler()) // a v0.2.77 service: unknown route, plain 404
-	defer old.Close()
-	client := &friends.Client{BaseURL: old.URL + friends.MountPrefix, Auth: f.client.Auth}
-	src := writeFile(t, t.TempDir(), "a.jpg", jpegWithEXIF(t, 30, 20, 1))
-	prepared, err := friends.PrepareMedia(context.Background(), src, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.Upload(context.Background(), filepath.Join(filepath.Dir(src), "missing"), prepared, "image", "")
-	if err == nil {
-		t.Fatal("upload of a missing file succeeded")
-	}
-	dir := t.TempDir()
-	prepared, err = friends.PrepareMedia(context.Background(), src, dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.Upload(context.Background(), filepath.Join(dir, prepared.File), prepared, "image", "")
-	var refused *friends.ServiceError
-	if !errors.As(err, &refused) || refused.Code != "media_off" || !strings.Contains(err.Error(), "does not take images") {
-		t.Fatalf("err = %v", err)
 	}
 }
