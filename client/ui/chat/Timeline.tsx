@@ -26,7 +26,7 @@ import { PictureViewer } from "./PictureViewer";
 import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
 import { INLINE_CODE, SELECTION } from "./TimelineRows";
 import { Caption } from "../kit/kit";
-import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCode, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
+import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCodeWhile, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
 import { brainFiles, brainHostIdentity, openChatLink, openChatPath } from "./links";
 import { createReplyLinks } from "./chatFileLinks";
@@ -247,6 +247,8 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem 
   // The files a reply names as links, which preview them (`onLink`): a home path at once, any other (`worklog/a.md`)
   // once the Session's computer said it is a file there. Made again only when the text or that answer changes.
   const linked = createReplyLinks(() => props.handlers.fileIdentity?.() ?? null);
+  // Its code blocks; a diagram in it is drawn once it stops streaming.
+  const replyCode = renderCodeWhile(() => Boolean(reply().streaming));
   return (
     <View class="py-1">
       <If when={kind() === "update-line"} else={<><If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
@@ -255,7 +257,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem 
               with the system's handles and menu (Copy, Select all, Share). */}
           <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
             <TextView markdown={linked(reply().body ?? "", Boolean(reply().streaming))} options={{ streaming: Boolean(reply().streaming) }} selectable class={`text-message ${SELECTION}`}
-              renderCodeBlock={renderCode}
+              renderCodeBlock={replyCode}
               classes={TABLE}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}
               renderImage={(image) => {

@@ -26,6 +26,7 @@
     "android:verify-apk-release": "./scripts/verify-apk-release.sh"
   },
   "devDependencies": {
-    "@novnc/novnc": "1.7.0"
+    "@novnc/novnc": "1.7.0",
+    "mermaid": "12.2.0"
   }
 }

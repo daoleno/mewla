@@ -46,6 +46,7 @@ import { cancelDownload, downloadHost, MewlaPdf } from "./host";
 import { MediaPlayer } from "./Media";
 import { filePreviewRoute } from "./routes";
 import { viewerBaseUrl } from "../../viewerBase";
+import { renderFileCode } from "../../mermaid/fileCode";
 
 /** What a picture's or PDF's stream failing means: the file changed, or the stream lapsed. */
 export const SESSION_FILE_STREAM_FAILED = "The file stream changed or could not be loaded. Refresh and try again.";
@@ -266,7 +267,7 @@ function MarkdownBody(props: { text: SessionFileTextPreview; onLink: (href: stri
   const note = sessionFileTruncationNote(props.text);
   return (
     <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-10 pt-3">
-      <TextView testID="file-markdown" markdown={props.text.content} selectable onLinkPress={(event) => props.onLink(event.url)} />
+      <TextView testID="file-markdown" markdown={props.text.content} selectable renderCodeBlock={renderFileCode} onLinkPress={(event) => props.onLink(event.url)} />
       <If when={note}>{(note) => <Text testID="file-truncated" class="pt-2 text-caption text-muted-foreground">{note()}</Text>}</If>
     </Scroll>
   );

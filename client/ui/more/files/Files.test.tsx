@@ -194,6 +194,19 @@ describe("File preview: what each kind shows", () => {
     expect(c.asked.find((a) => a.body.path === "/work/docs/setup.md")?.body).toEqual({ worker_id: "w1", process_id: 42, started_at: 1_700_000_000, path: "/work/docs/setup.md" });
   });
 
+  test("a mermaid block in a Markdown file is drawn as its diagram (owner 11-16); a broken one keeps its code and mermaid's words", async () => {
+    const md = "# Design\n\n```mermaid\nflowchart LR\n  subgraph DP[\"数据平台\"]\n    A[\"源<br/>Space\"]\n  end\n  A --> B\n```\n\n```mermaid\nflowchart LR\nA --> BROKEN[\n```\n\n```sh\necho hi\n```\n";
+    const c = preview(meta({ name: "DESIGN.md", path: "/work/DESIGN.md", relative_path: "DESIGN.md", kind: "markdown", content_type: "text/markdown", size: md.length }));
+    c.options.host.handlers["app.daemon"] = ({ type }: Asked) => type === "session_file_metadata"
+      ? { reply: "session_file_metadata", metadata: meta({ name: "DESIGN.md", path: "/work/DESIGN.md", relative_path: "DESIGN.md", kind: "markdown", content_type: "text/markdown", size: md.length }) }
+      : { reply: "session_file_text", text: { content: md, bytes_read: md.length, truncated: false, generation: "g1" } };
+    const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, params: { ...c.options.host.params, mermaid: {} } } });
+    await app.waitFor("id:file-markdown >> id:mermaid-diagram");
+    await app.waitFor("id:mermaid-error");
+    expect(app.count("id:mermaid-diagram")).toBe(1);
+    expect(app.texts()).toContain("echo hi");
+  });
+
   test("Copy is offered for a cut text only while the whole file can still be read", async () => {
     const c = preview(meta({ size: 60 * 1024 * 1024 }));
     const app = await open(HARNESS, c.options);
