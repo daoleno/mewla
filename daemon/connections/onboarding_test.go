@@ -663,3 +663,25 @@ func TestRefusedRefreshTellsChatOnce(t *testing.T) {
 		})
 	}
 }
+
+// A standard OAuth invalid_client (a registered client the provider dropped)
+// is fixed by signing in again, so Chat says Reconnect.
+func TestRefusedGenericClientSaysReconnect(t *testing.T) {
+	m, _ := New(t.TempDir())
+	m.networkOwned = false
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 401, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":"invalid_client"}`))}, nil
+	})}
+	var notices []SignInLost
+	m.SetSignInLost(func(n SignInLost) { notices = append(notices, n) })
+	r := &record{Account: Account{ID: "notion", Integration: "notion", Name: "Work", Status: "connected", Endpoint: "https://api.notion.com/v1"}, OAuth: &oauthAccount{ClientID: "registered", TokenURL: "https://auth.example/token", AuthStyle: oauth2.AuthStyleInParams}}
+	m.records["notion"] = r
+	raw, _ := json.Marshal(oauthSecret{Token: &oauth2.Token{AccessToken: "old", RefreshToken: "refresh", Expiry: time.Now().Add(-time.Minute)}})
+	_ = m.vault.Set("integration:notion", string(raw))
+	if _, err := m.accountToken(context.Background(), r); !errors.Is(err, errAuth) {
+		t.Fatalf("refused refresh = %v", err)
+	}
+	if len(notices) != 1 || notices[0].Title != "Notion sign-in ended" || !strings.Contains(notices[0].Body, "Reconnect it in Extensions") {
+		t.Fatalf("notices = %+v", notices)
+	}
+}
