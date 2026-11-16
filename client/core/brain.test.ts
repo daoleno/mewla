@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { brainChatState, brainChatUnavailable, brainComposerBlock, brainSurface } from "./brain";
+import { brainChatState, brainChatUnavailable, brainComposerBlock, brainSurface, isBrainThreadCacheKey } from "./brain";
 
 describe("brainSurface", () => {
   const host = { id: "h1", name: "Brain", status: "running" };
@@ -45,5 +45,15 @@ describe("brainChatState (soft-final/SPEC.md §1.3)", () => {
     expect(brainComposerBlock({ surface: "host_down", snapshot: null, chat: "empty" })).toBe("Brain can't start");
     expect(brainComposerBlock({ surface: "offline", snapshot: null, chat: "empty" })).toBeNull();
     expect(brainComposerBlock({ surface: "chat", snapshot: null, chat: "content" })).toBeNull();
+  });
+});
+
+describe("isBrainThreadCacheKey", () => {
+  test("names the chat of exactly that thread", () => {
+    expect(isBrainThreadCacheKey("s1:scope:brain-thread:t-old", "t-old")).toBe(true);
+    expect(isBrainThreadCacheKey("s1:scope:brain-thread:t-now", "t-old")).toBe(false);
+    expect(isBrainThreadCacheKey("s1:scope:brain-thread:t-old2", "t-old")).toBe(false);
+    expect(isBrainThreadCacheKey("s1:agent:brain-host", "t-old")).toBe(false);
+    expect(isBrainThreadCacheKey("", "")).toBe(false);
   });
 });

@@ -67,6 +67,11 @@ export function brainThreadScopeKey(threadId: string): string {
   return `brain-thread:${threadId}`;
 }
 
+/** Whether a chat's cache key (`<server>:scope:<scope>`) is that of this Brain thread. */
+export function isBrainThreadCacheKey(cacheKey: string, threadId: string): boolean {
+  return threadId !== "" && cacheKey.endsWith(`:scope:${brainThreadScopeKey(threadId)}`);
+}
+
 /** Asks for Brain's state; the answer arrives as a `brain_snapshot` like every broadcast. Never throws. */
 export function requestBrainSnapshot(transport: Transport): void {
   try {
