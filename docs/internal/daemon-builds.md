@@ -122,7 +122,7 @@ VERSION="$(python3 scripts/lib/release_identity.py version)"
 
 ## Runtime equivalence
 
-`mewla` is the whole runtime. Running it in a persistent shell or tmux session
+`mewla` is the whole runtime. Running it in a persistent shell
 and running it under systemd are equivalent deployment choices: the same ELF,
 the same arguments, the same `-state-dir`, identity, port and authority. The
 development command `mewla-dev` exists only to rebuild and restart that same
