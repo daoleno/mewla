@@ -1,0 +1,16 @@
+flowchart LR
+  subgraph SRC["来源"]
+    A["Brain 工作区：worklog / notes"]
+    B["Worker 仓库：client / daemon"]
+  end
+  subgraph APP["Mewla"]
+    L["链接识别（chatPaths）"]
+    E["存在性检查（批量）"]
+    P["预览（Markdown 渲染）"]
+  end
+  A -- "相对路径" --> L
+  B -- "file:line" --> L
+  L --> E --> P
+  R["restricted / 未知路径"] -. "保持文字" .-> L
+  P -- "mermaid 代码块" --> D["图（Pele）"]
+  P -- "表格 / 代码" --> T["文本视图"]

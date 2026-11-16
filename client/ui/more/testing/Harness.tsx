@@ -11,10 +11,6 @@ import type { MorePage } from "../routes";
 import { FakeDaemon, testServer } from "./fakeDaemon";
 import { connection, current, problem, servers } from "../../session";
 import type { StoredServer } from "../../../core/storedServerContract";
-import { installTestMermaid } from "../../mermaid/testing";
-
-// `host.params.mermaid`: diagrams drawn without a web view (mermaid/testing.ts).
-installTestMermaid(host.params);
 
 /**
  * A More page on its own, for `nsh test`: the test plays the computer. Its host

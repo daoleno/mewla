@@ -1,39 +1,37 @@
-import { cleanup, Clipboard, colorScheme, computed, effect, safeArea, signal, Text, untracked, View, WebView, type JSX } from "nsh";
+import { cleanup, Clipboard, colorScheme, computed, effect, safeArea, Scroll, signal, Text, untracked, View, WebView, type JSX } from "nsh";
 import { Button, TextView } from "nsh/base";
-import { mermaidSvgDocument, prepareMermaid, type MermaidMode, type MermaidResult } from "../../core/mermaid/mermaid";
+import { drawMermaid, mermaidInlineLayout, mermaidSvgDocument, prepareMermaid, type MermaidDrawing, type MermaidMode, type MermaidPalette } from "../../core/mermaid/mermaid";
 import { Icon } from "../kit/Icon";
 import { GuardedDialog } from "../shell/AppSheet";
 import { viewerBaseUrl } from "../viewerBase";
-import { MERMAID_PALETTES, mermaidRenderer } from "./engine";
+import { MERMAID_PALETTES } from "./palette";
 
-/** The tallest a diagram is drawn in a reply or a file; a taller one is fitted inside and opens whole on a tap. */
+/** The tallest a diagram is shown in a reply or a file; a taller one is cut there and opens whole on a tap. */
 const INLINE_MAX_HEIGHT = 420;
-const INLINE_MIN_HEIGHT = 96;
+/** The card's side padding, either side of the diagram. */
+const SIDE = 16;
 const ZOOMS = [0.5, 0.75, 1, 1.5, 2, 3];
 
 /**
  * A fenced `mermaid` block (core/mermaid/mermaid.ts), drawn as its diagram on the card a code block has, its header
- * the same ("mermaid", Copy) with a button that opens it full screen. Until it is drawn, and while the reply it
- * is in still streams, it is its code; a diagram mermaid cannot read is its code with mermaid's words under it.
+ * the same ("mermaid", Copy) with a button that opens it full screen. Laid out for the card's width, and shown at a
+ * scale its labels stay legible at (wider: it scrolls sideways; taller: it is cut, and opens whole). While the reply
+ * it is in still streams it is its code, drawn once when it ends; a diagram Pele cannot read is its code with Pele's
+ * words under it. Light and dark are the same drawing, coloured by the view.
  */
 export function MermaidBlock(props: { code: string; streaming?: () => boolean; asCode?: (code: string) => JSX.Element }) {
   const mode = (): MermaidMode => (colorScheme() === "dark" ? "dark" : "light");
   const prepared = prepareMermaid(props.code);
-  const result = signal<MermaidResult | null>(null);
-  effect(() => {
-    if (props.streaming?.()) return;
-    if (!prepared.ok) return result.set({ ok: false, error: prepared.error });
-    const shown = mode();
-    const renderer = mermaidRenderer();
-    const kept = renderer.cached(prepared.source, shown);
-    if (kept) return result.set(kept);
-    let live = true;
-    cleanup(() => {
-      live = false;
-    });
-    void renderer.render(prepared.source, shown).then((drawn) => {
-      if (live) result.set(drawn);
-    });
+  // The card's width less its sides, rounded so a pixel's change draws nothing anew. Drawn only once it is known.
+  const room = signal(0);
+  const measured = (width: number) => {
+    const next = Math.max(160, Math.round((width - 2 * SIDE) / 8) * 8);
+    if (width > 0 && next !== untracked(room)) room.set(next);
+  };
+  const result = computed(() => {
+    if (props.streaming?.() || !room()) return null;
+    if (!prepared.ok) return { ok: false as const, error: prepared.error };
+    return drawMermaid(prepared.source, room());
   });
   const drawn = computed(() => {
     const value = result();
@@ -44,12 +42,14 @@ export function MermaidBlock(props: { code: string; streaming?: () => boolean; a
     return value && !value.ok ? value.error : "";
   };
   return (
-    <If when={drawn()} else={<View testID="mermaid-code">
-        {(props.asCode ?? plainCode)(props.code)}
-        <If when={failure()}><View class="px-1 pb-1"><Text testID="mermaid-error" class="font-mono text-[12px] leading-[18px] text-muted-foreground">{failure()}</Text></View></If>
-      </View>}>
-      <Diagram code={props.code} drawn={() => drawn()!} mode={mode} />
-    </If>
+    <View onLayout={({ bounds }) => measured(bounds.size.width)}>
+      <If when={drawn()} else={<View testID="mermaid-code">
+          {(props.asCode ?? plainCode)(props.code)}
+          <If when={failure()}><View class="px-1 pb-1"><Text testID="mermaid-error" class="font-mono text-[12px] leading-[18px] text-muted-foreground">{failure()}</Text></View></If>
+        </View>}>
+        <Diagram code={props.code} source={prepared.ok ? prepared.source : ""} drawn={() => drawn()!} room={room} palette={() => MERMAID_PALETTES[mode()]} />
+      </If>
+    </View>
   );
 }
 
@@ -58,8 +58,7 @@ export function plainCode(code: string, language = "mermaid"): JSX.Element {
   return <TextView document={{ blocks: [{ type: "codeBlock", code, language }] }} selectable />;
 }
 
-function Diagram(props: { code: string; drawn: () => Extract<MermaidResult, { ok: true }>; mode: () => MermaidMode }) {
-  const width = signal(0);
+function Diagram(props: { code: string; source: string; drawn: () => MermaidDrawing; room: () => number; palette: () => MermaidPalette }) {
   const open = signal(false);
   const copied = signal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -71,17 +70,19 @@ function Diagram(props: { code: string; drawn: () => Extract<MermaidResult, { ok
       timer = setTimeout(() => copied.set(false), 1500);
     }).catch(() => {});
   };
-  const background = () => MERMAID_PALETTES[props.mode()].surface;
-  // Fitted to the card's width, no taller than INLINE_MAX_HEIGHT and never drawn larger than mermaid drew it.
-  const height = () => {
-    const { width: w, height: h } = props.drawn();
-    const room = Math.max(0, width() - 32);
-    const fitted = room ? Math.min(h, (room / w) * h) : Math.min(h, INLINE_MAX_HEIGHT);
-    return Math.round(Math.max(INLINE_MIN_HEIGHT, Math.min(INLINE_MAX_HEIGHT, fitted)));
-  };
-  const page = computed(() => mermaidSvgDocument(props.drawn(), background()));
+  // Fitted to the card while its labels stay legible; a wider one at the legible scale scrolls sideways, a taller one
+  // is cut at INLINE_MAX_HEIGHT (core mermaidInlineLayout).
+  const layout = computed(() => mermaidInlineLayout(props.drawn(), props.room(), INLINE_MAX_HEIGHT));
+  const page = computed(() => mermaidSvgDocument(props.drawn(), props.palette(), layout().scale, true));
+  const Frame = () => (
+    <View style={{ width: layout().width, height: layout().frameHeight }}>
+      <WebView testID="mermaid-view" class="flex-1" html={page()} baseUrl={viewerBaseUrl} scrollable={false} incognito accessibilityLabel="Diagram" />
+      {/* Over the web view: a tap opens it, and a drag scrolls the chat (or the frame) rather than the picture. */}
+      <Button testID="mermaid-tap" accessibilityLabel="Open diagram" onPress={() => open.set(true)} class="absolute inset-0" />
+    </View>
+  );
   return (
-    <View testID="mermaid-diagram" class="my-1 overflow-hidden rounded-(--radius-group) bg-card" onLayout={({ bounds }) => width.set(bounds.size.width)}>
+    <View testID="mermaid-diagram" class="my-1 overflow-hidden rounded-(--radius-group) bg-card">
       <View class="h-12 flex-row items-center gap-1 pl-4 pr-1">
         <Text class="min-w-0 flex-1 select-none font-mono text-code text-muted-foreground line-clamp-1">mermaid</Text>
         <Button testID="mermaid-copy" accessibilityLabel={copied() ? "Copied" : "Copy"} onPress={copy} class="size-11 items-center justify-center rounded-full active:bg-accent">
@@ -91,19 +92,25 @@ function Diagram(props: { code: string; drawn: () => Extract<MermaidResult, { ok
           <Icon name="expand" size={18} tone="soft" />
         </Button>
       </View>
-      <View class="mx-4 mb-4" style={{ height: height() }}>
-        <WebView testID="mermaid-view" class="flex-1" html={page()} baseUrl={viewerBaseUrl} scrollable={false} incognito accessibilityLabel="Diagram" />
-        {/* Over the web view: a tap opens it, and a drag scrolls the chat rather than the picture. */}
-        <Button testID="mermaid-tap" accessibilityLabel="Open diagram" onPress={() => open.set(true)} class="absolute inset-0" />
+      <View testID={layout().cropped ? "mermaid-cropped" : "mermaid-whole"} class="mb-4">
+        <If when={layout().scrolls} else={<View testID="mermaid-fitted" class="mx-4 items-center"><Frame /></View>}>
+          <Scroll horizontal testID="mermaid-scroll" class="grow-0" contentClass="px-4" keyboardShouldPersistTaps="handled"><Frame /></Scroll>
+        </If>
       </View>
-      <DiagramViewer open={open} drawn={props.drawn} background={background} />
+      <DiagramViewer open={open} source={props.source} fallback={props.drawn} palette={props.palette} />
     </View>
   );
 }
 
-/** A diagram full screen: fitted at first, then − and + zoom it in steps of its drawn size and it pans by scrolling; Back closes it. */
-function DiagramViewer(props: { open: ReturnType<typeof signal<boolean>>; drawn: () => Extract<MermaidResult, { ok: true }>; background: () => string }) {
+/** A diagram full screen, as written: fitted at first, then − and + zoom it in steps of its drawn size and it pans by scrolling; Back closes it. */
+function DiagramViewer(props: { open: ReturnType<typeof signal<boolean>>; source: string; fallback: () => MermaidDrawing; palette: () => MermaidPalette }) {
   const zoom = signal<number | null>(null);
+  // Full screen it is laid out as written (a `flowchart LR` stays across), drawn only once it is opened.
+  const whole = computed((): MermaidDrawing | null => {
+    if (!props.open()) return null;
+    const drawn = drawMermaid(props.source, null);
+    return drawn.ok ? drawn : props.fallback();
+  });
   effect(() => {
     if (!props.open()) zoom.set(null);
   });
@@ -113,7 +120,7 @@ function DiagramViewer(props: { open: ReturnType<typeof signal<boolean>>; drawn:
     const at = now === null ? ZOOMS.indexOf(by > 0 ? 1 : 0.5) : ZOOMS.indexOf(now) + by;
     zoom.set(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, at))]);
   };
-  const page = computed(() => mermaidSvgDocument(props.drawn(), props.background(), zoom()));
+  const page = computed(() => (whole() ? mermaidSvgDocument(whole()!, props.palette(), zoom()) : ""));
   return (
     <GuardedDialog testID="mermaid-viewer" open={props.open()} onOpenChange={({ open }) => !open && props.open.set(false)}
       presentation="fullScreen" animation="fade" accessibilityLabel="Diagram" class="flex-1 bg-card">

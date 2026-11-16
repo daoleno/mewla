@@ -27,6 +27,6 @@
   },
   "devDependencies": {
     "@novnc/novnc": "1.7.0",
-    "mermaid": "12.2.0"
+    "pele": "1.13.0"
   }
 }

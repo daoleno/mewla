@@ -46,12 +46,12 @@ Removed from the tree (unknown provenance): former `sky-meadow-ambient.webp` and
 | `client/ui/more/screen/viewerSource.ts` | [novnc/noVNC](https://github.com/novnc/noVNC) `1.7.0` (includes pako) | MPL-2.0 (pako: MIT) | The Screen viewer's RFB client, bundled with `client/ui/more/screen/runtime/` by `bun client/ui/more/screen/runtime/generate.mjs` (`--check` reports stale output) from the `@novnc/novnc` package pinned in the root `package.json`. The only change to noVNC source is that script's rewrite of one top-level `await` in `core/util/browser.js`. SHA-256 in `viewerSource.ts`. Opens no connection of its own. |
 | Notice source | same | MPL-2.0, MIT | `client/ui/more/settings/licenses/texts/noVNC-MPL-2.0.txt`. |
 
-## Bundled JavaScript: mermaid
+## Bundled JavaScript: Pele
 
 | Artifact | Upstream | License | Notes |
 | --- | --- | --- | --- |
-| `client/ui/mermaid/mermaidSource.ts` | [mermaid-js/mermaid](https://github.com/mermaid-js/mermaid) `12.2.0` (`dist/mermaid.min.js`, which compiles in d3, dagre-d3-es, cytoscape, elkjs, DOMPurify, KaTeX and others) | MIT (included packages: MIT, ISC, BSD-3-Clause, Apache-2.0, EPL-2.0, MPL-2.0 OR Apache-2.0, Unlicense) | Draws mermaid diagrams in chats and Markdown files, in one web view of the app's that loads nothing. Written by `bun client/ui/mermaid/runtime/generate.mjs` (`--check` reports stale output) from the `mermaid` package pinned in the root `package.json`; its non-ASCII characters are written as `\uXXXX`, nothing else changes. SHA-256 (of the upstream file) in `mermaidSource.ts`. |
-| Notice source | same | as above | `client/ui/more/settings/licenses/texts/mermaid-12.2.0.json`: mermaid's notice and each included package's. |
+| `client/core/mermaid/pele.js` | [obsidianmd/pele](https://github.com/obsidianmd/pele) `1.13.0` (`dist/pele.js`; no dependencies; its parsers follow Mermaid 12.1's grammars) | MIT (one Lucide icon: ISC; Mermaid's grammars: MIT) | Draws mermaid diagrams in chats and Markdown files to SVG, in the app itself (no DOM, no network). Written by `bun client/core/mermaid/vendor-pele.mjs` (`--check` reports stale output) from the `pele` package pinned in the root `package.json`, unchanged but for a header line with its SHA-256. |
+| Notice source | same | as above | `client/ui/more/settings/licenses/texts/pele-MIT.txt` (with Lucide's) and `mermaid-MIT.txt`. |
 
 ## In-app license list
 
@@ -65,7 +65,7 @@ After adding a dependency, add it to `generate.py` and regenerate.
 
 ## npm / Go dependencies
 
-Daemon library licenses are those of their packages (`daemon/go.mod`). The root `package.json` / `bun.lock` hold only noVNC and mermaid, which the Screen viewer and the diagram engine bundle. This document focuses on **bundled code and vendored native binaries**, which are easy to miss in automated SCA.
+Daemon library licenses are those of their packages (`daemon/go.mod`). The root `package.json` / `bun.lock` hold only noVNC and Pele, which the Screen viewer and the diagrams bundle. This document focuses on **bundled code and vendored native binaries**, which are easy to miss in automated SCA.
 
 ## Code derived from other projects
 

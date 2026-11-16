@@ -292,6 +292,8 @@ The iOS Ghostty build carries one workaround for an Xcode and Zig mismatch: Xcod
 
 The generated Screen viewer bundle (`client/ui/more/screen/viewerSource.ts`, noVNC 1.7.0 pinned in the root `package.json`) stays in the repository because the app's WebView loads no remote scripts. The `client` job in `ci.yml` runs `bun client/ui/more/screen/runtime/generate.mjs --check`, which fails when the bundle no longer matches what the pinned noVNC regenerates.
 
+The vendored diagram renderer (`client/core/mermaid/pele.js`, Pele 1.13.0 pinned in the root `package.json`) is checked the same way: the `client` job runs `bun client/core/mermaid/vendor-pele.mjs --check`, which fails when the file no longer matches the pinned package.
+
 Watch:
 
 ```bash

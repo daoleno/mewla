@@ -1,0 +1,14 @@
+flowchart LR
+  subgraph PH["手机（Mewla App：聊天 + 文件预览 + 终端）"]
+    CH["聊天：Brain / Session 回复<br/>Markdown · 代码块 · 表格"]
+    FP["文件预览：md / pdf / 图片 / 视频<br/>复制 · 下载"]
+  end
+  subgraph PC["电脑（mewla daemon，新增）"]
+    WS["WebSocket：/ws<br/>session_file_metadata · session_file_text<br/>session_file_exists（批量）"]
+    FS["文件解析：相对路径按 Session cwd<br/>~/ 按账户家目录"]
+    AG["Agent：Claude Code / Codex<br/>工作目录 = cwd"]
+  end
+  CH -- "点路径 → 预览" --> WS
+  FP -- "签名读取能力" --> WS
+  WS --> FS --> AG
+  AG -- "回复里写路径（worklog/…/DESIGN.md）" --> CH & FP
