@@ -1,0 +1,51 @@
+{
+  "version": "0.4.7",
+  "date": "2026-11-15",
+  "highlights": [
+    {
+      "id": "0.4.7-agent-questions-in-chat",
+      "title": "Answer agent questions in Chat",
+      "line": "Sign-in, folder trust and first-run choices are cards you tap.",
+      "media": {
+        "scene": "chat-card"
+      },
+      "try": {
+        "kind": "open",
+        "target": "new-session"
+      }
+    },
+    {
+      "id": "0.4.7-update-restarts",
+      "title": "Updates finish by themselves",
+      "line": "mewla update restarts Mewla onto the new version. Sessions keep running.",
+      "media": {
+        "scene": "update-restart"
+      },
+      "try": {
+        "kind": "open",
+        "target": "computer"
+      }
+    },
+    {
+      "id": "0.4.7-worker-page-stays",
+      "title": "A Worker's page waits for you",
+      "line": "A page a Worker opens, like a sign-in, stays in Screen under its name.",
+      "media": {
+        "scene": "agent-windows"
+      },
+      "try": {
+        "kind": "open",
+        "target": "screen"
+      }
+    }
+  ],
+  "fixes": [
+    "Windows: Brain runs on a Claude Code installed with npm.",
+    "When Brain, a Session or a Worker cannot start, Chat says why.",
+    "Claude Code or Codex installed for your login shell is found.",
+    "A new Claude Session in a folder you pick starts ready.",
+    "A message sent right after switching Brain arrives on its own.",
+    "Several people on one Windows computer each get their own Mewla.",
+    "Windows: a folder path over the length limit says so, and Up a folder works."
+  ]
+}

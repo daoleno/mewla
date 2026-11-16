@@ -15,6 +15,7 @@ SPEC = importlib.util.spec_from_file_location("prepare_release", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 prepare_release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(prepare_release)
+release_notes = prepare_release.release_notes
 
 VERSION_SOURCE = "client/ui/nsh.json"
 IOS_PROJECT = "client/ios/project.yml"
@@ -280,6 +281,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         with_commit: bool = True,
         root: Path | None = None,
         user_notes: dict[str, str] | None = None,
+        whats_new: list[str] | None = None,
     ) -> Path:
         root = root or self.fixture
         for relative in FIXTURE_PATHS:
@@ -309,12 +311,27 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             git(root, "commit", "-m", "Add reviewed release change")
         if user_notes is None:
             user_notes = {NEXT_TAG: USER_NOTES}
+        if whats_new is None:
+            whats_new = [tag.removeprefix("v") for tag in user_notes]
         if user_notes:
             reviewed = root / "docs/releases/reviewed"
             reviewed.mkdir(parents=True, exist_ok=True)
             for tag, text in user_notes.items():
                 (reviewed / f"{tag}.md").write_text(text, encoding="utf-8")
-            git(root, "add", "docs/releases/reviewed")
+        if whats_new:
+            # What's New for each release (release-notes/), with the bundles the app and daemon ship.
+            notes = root / release_notes.SOURCE_DIR
+            notes.mkdir(parents=True, exist_ok=True)
+            for version in whats_new:
+                (notes / f"{version}.json").write_text(json.dumps({
+                    "version": version,
+                    "date": "2026-11-16",
+                    "highlights": [],
+                    "fixes": ["Pets are easier to find."],
+                }), encoding="utf-8")
+            self.assertEqual(release_notes.main(["--repo", str(root)]), 0)
+        if user_notes or whats_new:
+            git(root, "add", "--all")
             git(root, "commit", "-m", "Write user-facing release notes")
         return root
 
@@ -524,6 +541,25 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                 self.assertFalse(
                     (root / f"docs/releases/{NEXT_TAG}.md").exists()
                 )
+
+    def test_fails_closed_without_whats_new_notes(self):
+        cases = {
+            "missing": ([], f"missing release-notes/{NEXT_VERSION}.json"),
+            "stale": (None, "not current: client/ui/whatsnew/notes.json"),
+        }
+        for name, (whats_new, error) in cases.items():
+            with self.subTest(name=name):
+                root = self.create_repo(root=self.fixture / name, whats_new=whats_new)
+                if name == "stale":
+                    (root / "client/ui/whatsnew/notes.json").write_text("{}\n", encoding="utf-8")
+                    git(root, "commit", "-am", "Stale bundle")
+                original_base = (root / VERSION_SOURCE).read_bytes()
+
+                result = self.run_script(root)
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stderr)
+                self.assertEqual((root / VERSION_SOURCE).read_bytes(), original_base)
 
     def test_rejects_a_minimum_computer_version_newer_than_the_release(self):
         root = self.create_repo()

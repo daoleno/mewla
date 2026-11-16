@@ -164,6 +164,8 @@ One plain sentence: what this release is about, for a user.
 
 Keep at least one of `## New` and `## Fixed`, with `- ` bullets only. Preparation adds the version heading, **Get it** (update command and one line per download), a compare link, and a collapsed **Verify downloads** block with `SHA256SUMS` usage and the Android certificate fingerprint. Do not precreate the canonical `docs/releases/vX.Y.Z.md`, which remains a generated, fail-closed output.
 
+Also commit the release's **What's New** at `release-notes/X.Y.Z.json` (`X.Y.Z-beta.N.json` for a beta), the sheet the app shows once after the update, and run `python3 scripts/release-notes.py` to write the copies the app and the daemon ship (`client/ui/whatsnew/notes.json`, `daemon/whatsnew/notes.json`). Preparation fails without the file or with stale copies, and CI's `release-identity` job checks the copies on every push (`--check`). The shape, the rules and how to write a highlight are in [`release-notes/README.md`](../release-notes/README.md). Highlights may be empty: a release of fixes only shows no sheet, only its line in Brain's chat. Brain reviews the highlights before the release.
+
 The generated notes have no iPhone line, because the TestFlight upload runs after the tag. Once the build is in the public `Mewla Preview` group, add `- **iPhone:** [Mewla Preview on TestFlight](https://testflight.apple.com/join/nMQheDCE)` after the Android line in `docs/releases/vX.Y.Z.md`, commit it, and apply the same file to the GitHub Release with `gh release edit vX.Y.Z --notes-file docs/releases/vX.Y.Z.md`.
 
 
