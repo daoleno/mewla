@@ -699,7 +699,11 @@ function activityFromEvent(
         status,
         exitCode: event.exit_code,
         semanticKind: action.kind,
-        files: presentation.target ? [presentation.target] : event.files,
+        // Only a read's target is a file; a listing's or a search's is a directory.
+        files:
+          presentation.kind === "read" && presentation.target
+            ? [presentation.target]
+            : event.files,
       });
       const output = formatOutputPreview(details.result || event.body || "", {
         maxLines: COMMAND_OUTPUT_PREVIEW_LINES,
@@ -1075,8 +1079,10 @@ function explorationActivityFromEntries(
   const last = entries[entries.length - 1] ?? first;
   const running = entries.some((entry) => entry.running);
   const failed = entries.some((entry) => entry.failed);
+  // The files the lookups read; a listing's or a search's target is a directory.
   const files = uniqueStrings(
     entries
+      .filter((entry) => entry.presentation.kind === "read")
       .map((entry) => entry.presentation.target)
       .filter((value): value is string => Boolean(value)),
   ).slice(0, 12);
@@ -1865,6 +1871,9 @@ function commandTarget(tokens: string[], executable: string) {
   return positional[positional.length - 1];
 }
 
+const REDIRECTION_RE = /^\d*(?:>|<|&>)/;
+const REDIRECTION_ALONE_RE = /^\d*(?:>>?|<<?<?|&>>?)$/;
+
 function commandPositionals(tokens: string[], executable: string) {
   const start = tokens.findIndex(
     (token) => pathBasename(token).toLowerCase() === executable,
@@ -1878,10 +1887,16 @@ function commandPositionals(tokens: string[], executable: string) {
       break;
     }
     if (token?.endsWith(";") && token.length > 1) {
-      if (!token.startsWith("-")) positionals.push(token.slice(0, -1));
+      const word = token.slice(0, -1);
+      if (!word.startsWith("-") && !REDIRECTION_RE.test(word)) positionals.push(word);
       break;
     }
     if (!token || token === "--") {
+      continue;
+    }
+    // A redirection names no operand: "cat a.md 2>/dev/null" reads a.md; "> out" skips its target too.
+    if (REDIRECTION_RE.test(token)) {
+      if (REDIRECTION_ALONE_RE.test(token)) index++;
       continue;
     }
     if (token.startsWith("-")) {

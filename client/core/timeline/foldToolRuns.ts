@@ -128,7 +128,8 @@ function runFileNames(steps: readonly ActivityTimelineItem[]): string | undefine
       : (step.files ?? []);
     for (const path of paths) {
       const name = path.split(/[\\/]/).filter(Boolean).pop();
-      if (name && !names.includes(name)) names.push(name);
+      // "." or ".." names a directory, never a file.
+      if (name && name !== "." && name !== ".." && !names.includes(name)) names.push(name);
     }
   }
   if (!names.length) return undefined;
