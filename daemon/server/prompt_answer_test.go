@@ -168,7 +168,7 @@ func TestPromptAnswerCode(t *testing.T) {
 		{watcher.ErrClaudeChoiceGone, "answer_prompt_gone"},
 		{fmt.Errorf("%w: the prompt has no option 7", watcher.ErrClaudeChoiceRefused), "answer_prompt_refused"},
 		{&ApprovalDecisionError{Code: "approval_with_brain", Message: "Brain is handling this"}, "answer_prompt_refused"},
-		{errors.New("tmux died"), "answer_prompt_failed"},
+		{errors.New("session host died"), "answer_prompt_failed"},
 	}
 	for _, tc := range cases {
 		if code, message := PromptAnswerCode(tc.err); code != tc.code || message == "" {

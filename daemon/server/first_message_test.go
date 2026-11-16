@@ -118,7 +118,7 @@ func TestFirstMessageOutcomes(t *testing.T) {
 		{notSubmitted, firstMessageNotSent},
 		{errors.Join(errors.New("wrapped"), notSubmitted), firstMessageNotSent},
 		{ambiguous, firstMessageUnknown},
-		{errors.New("tmux went away"), firstMessageUnknown},
+		{errors.New("session host went away"), firstMessageUnknown},
 	} {
 		if got := firstMessageOutcome(tc.err); got != tc.want {
 			t.Fatalf("firstMessageOutcome(%v) = %q, want %q", tc.err, got, tc.want)

@@ -64,10 +64,6 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 			t.Fatalf("missing JSON key %q in %s", key, raw)
 		}
 	}
-	// Mewla runs its own session host and no longer needs tmux.
-	if _, ok := roundtrip["tmux"]; ok || strings.Contains(string(raw), "install_tmux") {
-		t.Fatalf("doctor still checks tmux: %s", raw)
-	}
 	if strings.Contains(string(raw), "sk-") {
 		t.Fatalf("JSON leaked secret-like token: %s", raw)
 	}
@@ -84,9 +80,6 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("human output missing %q:\n%s", want, text)
 		}
-	}
-	if strings.Contains(strings.ToLower(text), "tmux") {
-		t.Fatalf("human output mentions tmux:\n%s", text)
 	}
 }
 

@@ -167,7 +167,7 @@ func TestInboundSendInputProjectsAmbiguousOutcomeAsPending(t *testing.T) {
 			gotReceipt = receipt
 			return &watcher.InputSubmissionError{
 				Result: watcher.InputResult{Outcome: watcher.InputAmbiguous},
-				Cause:  errors.New("tmux queue outcome unknown"),
+				Cause:  errors.New("input queue outcome unknown"),
 			}
 		},
 	}

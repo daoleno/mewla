@@ -8,8 +8,7 @@ import (
 )
 
 // Captures of the installed Claude client (2.1.318) with a permission dialog
-// open, taken with `tmux capture-pane -p -J -S -` of its alternate-screen TUI
-// (alternate_on=1, history_size=0: the capture is the screen and nothing else),
+// open, the screen of its alternate-screen TUI and nothing else,
 // scratch path replaced by /tmp/scratch. They carry what a hand-drawn dialog
 // does not:
 //   - the box is drawn as a header, a `╌` separator, the request on rows with a

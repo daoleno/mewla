@@ -281,9 +281,8 @@ func TestPiLiveSubscriptionQuotedOwnedPathBinds(t *testing.T) {
 }
 
 // TestPiLiveSubscriptionColdReplayAutoBindsOwnedTranscript reproduces the
-// real pre-durable-binding scenario at the server boundary: the window was
-// created before the @mewla_worker_pi_session option existed (or the option was
-// lost), the node-based Pi rewrites its argv to bare "pi", and a daemon
+// lost-binding scenario at the server boundary: the pi-session label is
+// lost, the node-based Pi rewrites its argv to bare "pi", and a daemon
 // restart re-discovers the window with no recoverable launch binding. The
 // subscription must auto-bind the exact Mewla-owned transcript for the cwd via
 // the startedAt window and snapshot messages plus reasoning and tool calls

@@ -156,7 +156,7 @@ func bindLiveCodexSession(t *testing.T, owner *modelprofiles.Owner, sessionID st
 
 func TestSetThreadRuntimeLiveNativeFirstThenRouteCommit(t *testing.T) {
 	owner := startLiveProfileOwner(t)
-	const sessionID = "tmux:@live-native-first"
+	const sessionID = "mh-live-native-first"
 	bindLiveCodexSession(t, owner, sessionID)
 	target := modelprofiles.Profile{
 		ID: "provider-b", Name: "Provider B", ExecutorID: modelprofiles.ExecutorCodex,
@@ -236,7 +236,7 @@ func TestSetThreadRuntimeLiveNativeFirstThenRouteCommit(t *testing.T) {
 
 func TestSetThreadRuntimeLiveNativeFailureKeepsOldState(t *testing.T) {
 	owner := startLiveProfileOwner(t)
-	const sessionID = "tmux:@live-native-fail"
+	const sessionID = "mh-live-native-fail"
 	bindLiveCodexSession(t, owner, sessionID)
 	target := modelprofiles.Profile{
 		ID: "provider-b", Name: "Provider B", ExecutorID: modelprofiles.ExecutorCodex,
@@ -272,7 +272,7 @@ func TestSetThreadRuntimeLiveNativeFailureKeepsOldState(t *testing.T) {
 
 func TestSetThreadRuntimeLiveDialFailureKeepsOldState(t *testing.T) {
 	owner := startLiveProfileOwner(t)
-	const sessionID = "tmux:@live-dial-fail"
+	const sessionID = "mh-live-dial-fail"
 	bindLiveCodexSession(t, owner, sessionID)
 	target := modelprofiles.Profile{
 		ID: "provider-b", Name: "Provider B", ExecutorID: modelprofiles.ExecutorCodex,
@@ -303,7 +303,7 @@ func TestSetThreadRuntimeLiveDialFailureKeepsOldState(t *testing.T) {
 
 func TestSetThreadRuntimeLiveRouteCommitFailureRevertsNative(t *testing.T) {
 	owner := startLiveProfileOwner(t)
-	const sessionID = "tmux:@live-commit-fail"
+	const sessionID = "mh-live-commit-fail"
 	bindLiveCodexSession(t, owner, sessionID)
 	target := modelprofiles.Profile{
 		ID: "provider-b", Name: "Provider B", ExecutorID: modelprofiles.ExecutorCodex,
@@ -361,7 +361,7 @@ func TestSetThreadRuntimeLegacyEmbeddedCodexRejectedHonestly(t *testing.T) {
 	// Interface mutation must be rejected — never silently route-only — and
 	// the projection must not advertise hot switching.
 	owner := startProfileOwner(t)
-	const sessionID = "tmux:@embedded"
+	const sessionID = "mh-embedded"
 	profileA := modelprofiles.Profile{
 		ID: "provider-a", Name: "Provider A", ExecutorID: modelprofiles.ExecutorCodex,
 		ProviderID: "a", ProviderLabel: "A", Protocol: modelprofiles.ProtocolOpenAIResponses,
@@ -441,7 +441,7 @@ func TestSetThreadRuntimeLegacyEmbeddedCodexRejectedHonestly(t *testing.T) {
 
 func TestSetThreadRuntimeLiveSessionAdvertisesHotSwitch(t *testing.T) {
 	owner := startLiveProfileOwner(t)
-	const sessionID = "tmux:@hot-switch-advert"
+	const sessionID = "mh-hot-switch-advert"
 	bindLiveCodexSession(t, owner, sessionID)
 	runtime, ok := owner.ThreadRuntime(sessionID)
 	if !ok || !runtime.HotSwitchable {
@@ -496,7 +496,7 @@ func TestTerminalModelSwitchConvergesInterfaceProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, "tmux:@converge"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, "mh-converge"); err != nil {
 		t.Fatal(err)
 	}
 	base, err := modelprofiles.LoopbackCodexBaseURL(owner.ListenAddr(), launch.State.Binding.RouteID)
@@ -531,7 +531,7 @@ func TestTerminalModelSwitchConvergesInterfaceProjection(t *testing.T) {
 	getProjection := func() (model string, effort string) {
 		t.Helper()
 		if err := conn.WriteJSON(map[string]any{
-			"type": "get_thread_runtime", "request_id": "gtr-1", "worker_id": "tmux:@converge",
+			"type": "get_thread_runtime", "request_id": "gtr-1", "worker_id": "mh-converge",
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -568,7 +568,7 @@ func TestTerminalModelSwitchConvergesInterfaceProjection(t *testing.T) {
 	if model, effort := getProjection(); model != "gpt-5.5" || effort != "high" {
 		t.Fatalf("projection after native switch model=%q effort=%q, want gpt-5.5/high", model, effort)
 	}
-	if runtime, ok := owner.ThreadRuntime("tmux:@converge"); !ok || runtime.ModelID != "gpt-5.5" || runtime.ReasoningEffort != "high" {
+	if runtime, ok := owner.ThreadRuntime("mh-converge"); !ok || runtime.ModelID != "gpt-5.5" || runtime.ReasoningEffort != "high" {
 		t.Fatalf("authoritative route after native switch: %#v", runtime)
 	}
 	if len(upstreamBodies) != 1 || !strings.Contains(upstreamBodies[0], `"gpt-5.5"`) {
@@ -583,7 +583,7 @@ func TestTerminalModelSwitchConvergesInterfaceProjection(t *testing.T) {
 	if model, effort := getProjection(); model != "gpt-5.5" || effort != "" {
 		t.Fatalf("projection after native default switch model=%q effort=%q, want gpt-5.5/default", model, effort)
 	}
-	if runtime, ok := owner.ThreadRuntime("tmux:@converge"); !ok || runtime.ModelID != "gpt-5.5" || runtime.ReasoningEffort != "" {
+	if runtime, ok := owner.ThreadRuntime("mh-converge"); !ok || runtime.ModelID != "gpt-5.5" || runtime.ReasoningEffort != "" {
 		t.Fatalf("authoritative route after native default switch: %#v", runtime)
 	}
 	if len(upstreamBodies) != 2 {
@@ -599,7 +599,7 @@ func TestTerminalModelSwitchConvergesInterfaceProjection(t *testing.T) {
 // pid and removes the daemon-owned socket/pid/log artifacts.
 func TestTeardownWorkerSessionCleansCodexControlArtifacts(t *testing.T) {
 	owner := startLiveProfileOwner(t)
-	const sessionID = "tmux:@teardown-cleanup"
+	const sessionID = "mh-teardown-cleanup"
 	bindLiveCodexSession(t, owner, sessionID)
 	socketPath := owner.CodexControlSocket(sessionID)
 	if socketPath == "" {
@@ -707,12 +707,12 @@ func TestTerminalEffortOnlyChangeConvergesInterfaceProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, "tmux:@effort-converge"); err != nil {
+	if _, _, _, err := owner.CommitLaunch(launch.ProvisionalID, "mh-effort-converge"); err != nil {
 		t.Fatal(err)
 	}
 	// Interface sets explicit high first; the native thread then moves to low
 	// (same model, no reserved fragment).
-	if _, persist, err := srv.SetThreadRuntime("tmux:@effort-converge", modelprofiles.ThreadRuntimeChoice{
+	if _, persist, err := srv.SetThreadRuntime("mh-effort-converge", modelprofiles.ThreadRuntimeChoice{
 		ConnectionID: profile.ID, ModelID: "gpt-5.4", Effect: "high",
 	}); err != nil || !persist.Applied {
 		t.Fatalf("interface high err=%v persist=%#v", err, persist)
@@ -752,7 +752,7 @@ func TestTerminalEffortOnlyChangeConvergesInterfaceProjection(t *testing.T) {
 	getProjection := func() (model string, effort string) {
 		t.Helper()
 		if err := conn.WriteJSON(map[string]any{
-			"type": "get_thread_runtime", "request_id": "gtr-effort", "worker_id": "tmux:@effort-converge",
+			"type": "get_thread_runtime", "request_id": "gtr-effort", "worker_id": "mh-effort-converge",
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -784,7 +784,7 @@ func TestTerminalEffortOnlyChangeConvergesInterfaceProjection(t *testing.T) {
 	if model, effort := getProjection(); model != "gpt-5.4" || effort != "low" {
 		t.Fatalf("projection after effort-only change model=%q effort=%q, want gpt-5.4/low", model, effort)
 	}
-	if runtime, ok := owner.ThreadRuntime("tmux:@effort-converge"); !ok || runtime.ReasoningEffort != "low" {
+	if runtime, ok := owner.ThreadRuntime("mh-effort-converge"); !ok || runtime.ReasoningEffort != "low" {
 		t.Fatalf("authoritative route after effort-only change: %#v", runtime)
 	}
 	if len(upstreamBodies) != 1 || !strings.Contains(upstreamBodies[0], `"effort":"low"`) {
@@ -819,7 +819,7 @@ func codexThreadSwitchFixture(t *testing.T, sessionID string, announced string) 
 }
 
 func TestSetThreadRuntimeAppliesToTheThreadCodexAnnounced(t *testing.T) {
-	const sessionID = "tmux:@live-native-announced"
+	const sessionID = "mh-live-native-announced"
 	srv, live, _, target := codexThreadSwitchFixture(t, sessionID, "thread-from-hub")
 	_, persist, err := srv.SetThreadRuntime(sessionID, modelprofiles.ThreadRuntimeChoice{
 		ConnectionID: target.ID, ModelID: target.Model, Effect: "high",
@@ -833,7 +833,7 @@ func TestSetThreadRuntimeAppliesToTheThreadCodexAnnounced(t *testing.T) {
 }
 
 func TestSetThreadRuntimeWaitsForCodexToAnnounceItsThread(t *testing.T) {
-	const sessionID = "tmux:@live-native-silent"
+	const sessionID = "mh-live-native-silent"
 	srv, live, owner, target := codexThreadSwitchFixture(t, sessionID, "")
 	before, _ := owner.ThreadRuntime(sessionID)
 	_, persist, err := srv.SetThreadRuntime(sessionID, modelprofiles.ThreadRuntimeChoice{

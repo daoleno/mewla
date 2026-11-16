@@ -24,7 +24,7 @@ import (
 // and restarts the SAME runtime with the SAME arguments, identity and state
 // ownership. These tests run the real reviewed binaries from an owned source
 // snapshot with an isolated state directory and no worker environment, so they
-// prove parity without touching the developer's live daemon, tmux server,
+// prove parity without touching the developer's live daemon,
 // repository build output or Brain resources.
 //
 // Isolation: the snapshot copies the module into the test's own temporary tree;
@@ -152,13 +152,11 @@ func parityGoBin() string {
 	return ""
 }
 
-func parityEnv(home, tmuxDir string) []string {
+func parityEnv(home string) []string {
 	env := []string{
 		"HOME=" + home,
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/lib/go/bin:" + parityGoBin(),
 		"TMPDIR=" + home,
-		"TMUX=",
-		"TMUX_TMPDIR=" + tmuxDir,
 		"XDG_RUNTIME_DIR=" + home + "/run",
 		"LANG=C.UTF-8",
 	}
@@ -200,34 +198,32 @@ func (o *parityOutput) String() string {
 }
 
 type parityDaemon struct {
-	cmd      *exec.Cmd
-	exited   chan struct{}
-	exitErr  error
-	output   *parityOutput
-	port     int
-	tmuxSock string
+	cmd     *exec.Cmd
+	exited  chan struct{}
+	exitErr error
+	output  *parityOutput
+	port    int
 }
 
 // parityStart always registers cleanup before returning, so no assertion or
 // fatal path can orphan the child.
-func parityStart(t *testing.T, binary, cwd, stateDir, home, tmuxDir string, port int) *parityDaemon {
+func parityStart(t *testing.T, binary, cwd, stateDir, home string, port int) *parityDaemon {
 	t.Helper()
-	return parityStartArgs(t, binary, cwd, home, tmuxDir, port, "-state-dir", stateDir, "-addr", fmt.Sprintf("127.0.0.1:%d", port))
+	return parityStartArgs(t, binary, cwd, home, port, "-state-dir", stateDir, "-addr", fmt.Sprintf("127.0.0.1:%d", port))
 }
 
 // parityStartArgs starts the binary with explicit arguments and the same
 // completion/cleanup contract as parityStart.
-func parityStartArgs(t *testing.T, binary, cwd, home, tmuxDir string, port int, args ...string) *parityDaemon {
+func parityStartArgs(t *testing.T, binary, cwd, home string, port int, args ...string) *parityDaemon {
 	t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = cwd
-	cmd.Env = parityEnv(home, tmuxDir)
+	cmd.Env = parityEnv(home)
 	daemon := &parityDaemon{
-		cmd:      cmd,
-		exited:   make(chan struct{}),
-		output:   &parityOutput{},
-		port:     port,
-		tmuxSock: filepath.Join(tmuxDir, fmt.Sprintf("tmux-%d", os.Getuid()), "default"),
+		cmd:    cmd,
+		exited: make(chan struct{}),
+		output: &parityOutput{},
+		port:   port,
 	}
 	cmd.Stdout, cmd.Stderr = daemon.output, daemon.output
 	if err := cmd.Start(); err != nil {
@@ -239,7 +235,6 @@ func parityStartArgs(t *testing.T, binary, cwd, home, tmuxDir string, port int, 
 	}()
 	t.Cleanup(func() {
 		parityStop(t, daemon)
-		parityCleanupTmux(daemon.tmuxSock)
 	})
 	return daemon
 }
@@ -323,21 +318,6 @@ func parityStop(t *testing.T, daemon *parityDaemon) {
 	<-daemon.exited
 }
 
-// parityCleanupTmux uses `-N` so a missing server is never started just to be
-// killed, and liveness is asserted with the same non-starting query.
-func parityCleanupTmux(tmuxSock string) {
-	_ = exec.Command("tmux", "-S", tmuxSock, "-N", "kill-server").Run()
-	time.Sleep(200 * time.Millisecond)
-}
-
-func parityTmuxDead(sock string) bool {
-	out, err := exec.Command("tmux", "-S", sock, "-N", "display-message", "-p", "#{pid}").CombinedOutput()
-	if err != nil {
-		return true
-	}
-	return strings.TrimSpace(string(out)) == ""
-}
-
 type paritySharedState struct {
 	exists  bool
 	hash    string
@@ -414,15 +394,6 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	tmuxDir := filepath.Join(work, "tmux")
-	if err := os.MkdirAll(tmuxDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	tmuxSock := filepath.Join(tmuxDir, fmt.Sprintf("tmux-%d", os.Getuid()), "default")
-	// No tmux server exists before the first start; the runtime must not need one.
-	if !parityTmuxDead(tmuxSock) {
-		t.Fatal("unexpected isolated tmux server before start")
-	}
 	sharedBefore := paritySharedBuildState(realModule)
 
 	variants := []struct {
@@ -434,7 +405,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 	}
 	identities := map[string]string{}
 	for _, variant := range variants {
-		daemon := parityStart(t, variant.bin, snapshot, stateDir, home, tmuxDir, parityFreePort(t))
+		daemon := parityStart(t, variant.bin, snapshot, stateDir, home, parityFreePort(t))
 		if err := parityStarted(daemon, variant.name == "mewla-dev"); err != nil {
 			t.Fatalf("%s: %v\noutput: %s", variant.name, err, daemon.output.String())
 		}
@@ -449,7 +420,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 		// original owner must stay healthy afterwards.
 		second := exec.Command(variant.bin, "-state-dir", stateDir, "-addr", fmt.Sprintf("127.0.0.1:%d", parityFreePort(t)))
 		second.Dir = snapshot
-		second.Env = parityEnv(home, tmuxDir)
+		second.Env = parityEnv(home)
 		var secondOutput bytes.Buffer
 		second.Stdout, second.Stderr = &secondOutput, &secondOutput
 		if err := second.Start(); err != nil {
@@ -475,7 +446,6 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 		}
 
 		parityStop(t, daemon)
-		parityCleanupTmux(daemon.tmuxSock)
 		// The isolated run must leave the repository's shared DEV build output
 		// untouched (hash and mtime).
 		if !paritySharedBuildState(realModule).equal(sharedBefore) {
@@ -483,7 +453,7 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 		}
 
 		// Identity and state ownership survive a restart of the same entry point.
-		restarted := parityStart(t, variant.bin, snapshot, stateDir, home, tmuxDir, parityFreePort(t))
+		restarted := parityStart(t, variant.bin, snapshot, stateDir, home, parityFreePort(t))
 		if err := parityStarted(restarted, variant.name == "mewla-dev"); err != nil {
 			t.Fatalf("%s restart: %v\noutput: %s", variant.name, err, restarted.output.String())
 		}
@@ -495,7 +465,6 @@ func TestRuntimeParitySameIdentity(t *testing.T) {
 			t.Fatalf("%s identity changed across restart: %s -> %s", variant.name, id, restartedID)
 		}
 		parityStop(t, restarted)
-		parityCleanupTmux(restarted.tmuxSock)
 	}
 
 	if identities["mewla"] == "" || identities["mewla"] != identities["mewla-dev"] {
@@ -523,14 +492,10 @@ func TestRuntimeParityEarlyExitCleanup(t *testing.T) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	tmuxDir := filepath.Join(work, "tmux")
-	if err := os.MkdirAll(tmuxDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
 
 	// Deterministic early exit with no socket and no privilege dependency: an
 	// unknown flag is rejected by flag parsing before any listener is opened.
-	early := parityStartArgs(t, mewla, snapshot, home, tmuxDir, parityFreePort(t),
+	early := parityStartArgs(t, mewla, snapshot, home, parityFreePort(t),
 		"-state-dir", filepath.Join(work, "state-early"), "-addr", "127.0.0.1:0", "-definitely-not-a-flag")
 	if _, err := parityHealth(early, 5*time.Second); err == nil || !strings.Contains(err.Error(), "exited early") {
 		t.Fatalf("expected deterministic early exit, got %v (output %s)", err, early.output.String())
@@ -550,11 +515,10 @@ func TestRuntimeParityEarlyExitCleanup(t *testing.T) {
 		t.Fatalf("start sleeper: %v", err)
 	}
 	timeoutDaemon := &parityDaemon{
-		cmd:      sleeper,
-		exited:   make(chan struct{}),
-		output:   &parityOutput{},
-		port:     parityFreePort(t),
-		tmuxSock: filepath.Join(tmuxDir, fmt.Sprintf("tmux-%d", os.Getuid()), "default"),
+		cmd:    sleeper,
+		exited: make(chan struct{}),
+		output: &parityOutput{},
+		port:   parityFreePort(t),
 	}
 	go func() {
 		timeoutDaemon.exitErr = sleeper.Wait()

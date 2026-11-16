@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestSendActionRejectsRemovedActionsBeforeTouchingTmux(t *testing.T) {
-	// A zero Watcher has no tmux, so reaching past the action switch would panic.
+func TestSendActionRejectsRemovedActionsBeforeTouchingTheSession(t *testing.T) {
+	// A zero Watcher has no session host, so reaching past the action switch would panic.
 	w := &Watcher{}
 	for _, action := range []string{"approve", "reject", "show_diff", "run_tests", "git_status", ""} {
 		err := w.SendAction("%1", action)

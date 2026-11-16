@@ -8,7 +8,7 @@ import (
 )
 
 // Captures of the installed Codex client (0.166.0) showing a real approval:
-// taken with `tmux capture-pane -p -J` of its alternate-screen TUI, scratch path
+// the screen of its alternate-screen TUI, scratch path
 // replaced by /tmp/scratch. They carry the renderer's habits that fixtures drawn
 // by hand do not: painted blanks of arbitrary width after text and on rows that
 // are blank in the UI, an Environment row and a Reason row ahead of the command,

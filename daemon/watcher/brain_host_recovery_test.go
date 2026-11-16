@@ -230,7 +230,7 @@ func TestReviewAuthorizedReuseAcceptedDuplicateReturnsOriginalTurnWithoutReplay(
 
 func TestReviewAuthorizedReuseDefiniteAbortRearmsSameTurn(t *testing.T) {
 	io := newFakeSessionInputIO()
-	io.runErr = errors.New("tmux queue did not start")
+	io.runErr = errors.New("input queue did not start")
 	io.runStarted = false
 	ledger := newFakeTurnLedger()
 	identity := testSessionInputIdentity("codex")

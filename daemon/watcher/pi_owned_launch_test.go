@@ -404,7 +404,7 @@ func TestPollDiscoveredPiWithoutLaunchCommandKeepsDetectedIdentity(t *testing.T)
 // TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromSessionLabel
 // reproduces the daemon restart path at window re-discovery: the Session
 // survives with the durable Pi ownership binding recorded at session create
-// (@mewla_worker_pi_session), while the pi process rewrites its argv to bare
+// (the pi-session label), while the pi process rewrites its argv to bare
 // "pi". The fresh watcher (no in-memory launch record) must restore the owned
 // --session path from the binding and keep it across later polls, so a
 // reopen/reconnect subscription binds the exact durable transcript instead of
@@ -452,7 +452,7 @@ func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromSessionLabel(t *t
 // contract: owned paths containing tabs, newlines, double quotes, backslashes,
 // and shell metacharacters must round-trip exactly through the encoded Session
 // label value, and the encoded value itself must be a single delimiter-safe
-// token that cannot corrupt the tab-separated list-panes projection. The
+// token. The
 // canonical reconstructed command must also survive the watcher flag parser.
 // An embedded apostrophe still round-trips exactly through the encoding; the
 // command parser fails closed on it (documented shell-quoting contract),
@@ -529,7 +529,7 @@ func TestPiSessionBindingFailsClosed(t *testing.T) {
 }
 
 // TestPollPiSessionBindingFailsClosedOnCorruptedOption pins the rediscovery
-// fail-closed rule: a corrupted @mewla_worker_pi_session value must not bind any
+// fail-closed rule: a corrupted pi-session label value must not bind any
 // transcript; the agent keeps only the detected process identity.
 func TestPollPiSessionBindingFailsClosedOnCorruptedOption(t *testing.T) {
 	w := New(time.Second)

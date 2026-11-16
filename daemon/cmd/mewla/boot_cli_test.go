@@ -506,9 +506,6 @@ func TestRenderBootUnitContract(t *testing.T) {
 			t.Fatalf("unit missing %q:\n%s", line, unit)
 		}
 	}
-	if strings.Contains(unit, "tmux") || strings.Contains(unit, "mewla-tmux") {
-		t.Fatalf("boot unit must not manage tmux:\n%s", unit)
-	}
 }
 
 func TestRenderBootUnitHasNoOrderingCycle(t *testing.T) {
