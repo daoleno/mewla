@@ -20,17 +20,24 @@ fail() {
 
 if [[ -z "${APK:-}" ]]; then
   : "${ARTIFACT:?}" "${BUILD_JOB:?}"
+  # The artifacts API, not `gh run download`: this run is still going.
+  api="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+  id=""
+  log "waiting for $ARTIFACT"
   for _ in $(seq 1 240); do
-    [[ -n "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$ARTIFACT" --jq '.artifacts[0].id // empty')" ]] && break
-    state="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
-      --jq ".jobs[] | select(.name == \"$BUILD_JOB\") | \"\(.status) \(.conclusion)\"")"
-    [[ "$state" != completed* || "$state" == "completed success" ]] || { echo "error: $BUILD_JOB ended without an APK ($state)" >&2; exit 1; }
+    id="$(gh api "$api/artifacts?name=$ARTIFACT" --jq '.artifacts[0].id // empty' 2>&1)" || { log "artifacts API: $id"; id=""; }
+    [[ -z "$id" ]] || break
+    state="$(gh api "$api/jobs?per_page=100" --jq ".jobs[] | select(.name == \"$BUILD_JOB\") | \"\(.status) \(.conclusion)\"" 2>&1)" || state=""
+    [[ "$state" != completed* || "$state" == "completed success" ]] || fail "$BUILD_JOB ended without an APK ($state)"
     sleep 10
   done
+  [[ -n "$id" ]] || fail "no $ARTIFACT after 40 min"
   dir="$(mktemp -d)"
-  timeout 600 gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n "$ARTIFACT" -D "$dir"
+  timeout 600 gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$dir/apk.zip" || fail "downloading artifact $id failed"
+  (cd "$dir" && unzip -q apk.zip) || fail "artifact $id is not a zip"
   APK="$(find "$dir" -name '*.apk' -print -quit)"
-  [[ -n "$APK" ]] || { echo "error: $ARTIFACT holds no APK after 40 min" >&2; exit 1; }
+  [[ -n "$APK" ]] || fail "$ARTIFACT holds no APK"
+  log "downloaded $(basename "$APK")"
 fi
 
 adb uninstall "$PKG" > /dev/null 2>&1 || true
