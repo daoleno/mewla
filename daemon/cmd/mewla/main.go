@@ -734,6 +734,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		func() bool { return workersIdle(w.SnapshotReady, w.Workers) },
 		func(h *updateHandover) { restartDaemon(h) })
 	srv.SetDaemonUpdater(updater)
+	controlHandler.addr = cfg.addr
+	controlHandler.restarter = newInPlaceRestarter(authManager.StorageDir(), updater.Updating,
+		func(r *daemonReexec) { restartDaemon(r) })
 	go updater.Run(ctx)
 	srv.SetPhone(phoneManager)
 	go srv.RunFriendsNotifier(ctx)
@@ -1210,6 +1213,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if errors.As(context.Cause(ctx), &handover) {
 		return handover
 	}
+	var reexec *daemonReexec
+	if errors.As(context.Cause(ctx), &reexec) {
+		return reexec
+	}
 	return nil
 }
 
@@ -1379,8 +1386,6 @@ func runUpdateCommand(args []string, stderr io.Writer) error {
 			_, err := bootLaunchdApplyUpdate(executable, os.Stdout, stderr)
 			return err
 		}
-		fmt.Fprintf(os.Stdout, "Updated Mewla %s → %s. Quit Mewla and open it again to use it.\n", Version, candidate.Version)
-		return nil
 	}
 	stateDir, err := auth.ResolveStorageDir("")
 	if err != nil {
@@ -2876,7 +2881,7 @@ Set up and maintain
   host      Run or inspect the session host that keeps agent terminals running
   attach    Pick a live Session, or name one, and show it here; --all tiles them all (Ctrl-\ detaches)
   update    Verify and install the latest Mewla release
-  restart   Restart Mewla running in the background; Sessions keep running
+  restart   Restart the running Mewla onto the installed version; Sessions keep running
   version   Print the Mewla version, commit and platform
 
 Agents and tools

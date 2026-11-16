@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +26,12 @@ type fakeDaemon struct {
 	version  string
 	running  bool
 	killed   []int
+	// upgrades are the versions daemon_upgrade was asked for; refuse is the
+	// daemon's refusal, and exitOnUpgrade makes it stop instead of coming back.
+	upgrades      []string
+	refuse        error
+	exitOnUpgrade bool
+	addr          string
 	// ignoreRuns is how many logon task runs are dropped (the previous
 	// instance is still ending) before one starts the daemon.
 	ignoreRuns int
@@ -54,7 +62,30 @@ func (d *fakeDaemon) runtime(t *testing.T, goos string, runner *fakeBootRunner, 
 			}
 			return d.pid, nil
 		},
-		image:       func(int) (string, error) { return self, nil },
+		image: func(int) (string, error) { return self, nil },
+		status: func(string) (control.DaemonStatus, error) {
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			if !d.running {
+				return control.DaemonStatus{}, control.ErrNotRunning
+			}
+			return control.DaemonStatus{PID: d.pid, Executable: self, Version: d.version, Addr: d.addr}, nil
+		},
+		upgrade: func(_ string, version string) error {
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			d.upgrades = append(d.upgrades, version)
+			if d.refuse != nil {
+				return d.refuse
+			}
+			if d.exitOnUpgrade {
+				d.running = false
+				return nil
+			}
+			// execve: the same PID answers as the new version.
+			d.version = version
+			return nil
+		},
 		parentImage: func(int) (string, error) { return "conhost.exe", nil },
 		health: func(string) (daemonHealth, error) {
 			d.mu.Lock()
@@ -82,9 +113,10 @@ func (d *fakeDaemon) runtime(t *testing.T, goos string, runner *fakeBootRunner, 
 			t.Fatal("started directly")
 			return nil
 		},
-		wait:    2 * time.Second,
-		poll:    5 * time.Millisecond,
-		runWait: 50 * time.Millisecond,
+		wait:        2 * time.Second,
+		inPlaceWait: 2 * time.Second,
+		poll:        5 * time.Millisecond,
+		runWait:     50 * time.Millisecond,
 	}
 }
 
@@ -161,36 +193,38 @@ func TestRestartRunsTheLogonTaskAgainWhileItsLastInstanceEnds(t *testing.T) {
 	}
 }
 
-func TestRestartLeavesADaemonStartedByHandAndSaysWhatToRun(t *testing.T) {
+// The owner's report: a Mewla started in a terminal was left on the old
+// version with instructions to kill it. It restarts itself in place instead.
+func TestUpdateRestartsADaemonStartedInATerminalInPlace(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
-	daemon := &fakeDaemon{daemonID: daemonID, pid: 77, version: "0.4.5", running: true}
-	runner := &fakeBootRunner{responses: map[string]string{}, failures: map[string]bool{"schtasks /query /tn Mewla (ana) /xml": true}}
-	rt := daemon.runtime(t, "windows", runner, `C:\Mewla\mewla.exe`)
+	daemon := &fakeDaemon{daemonID: daemonID, pid: 4054216, version: "0.4.8", running: true}
+	runner := &fakeBootRunner{responses: map[string]string{}, failures: map[string]bool{"systemctl --user is-active mewla.service": true}}
+	rt := daemon.runtime(t, "linux", runner, "/home/p/.local/bin/mewla")
+	rt.image = func(int) (string, error) { return "/home/p/.local/bin/mewla (deleted)", nil }
 
 	var out bytes.Buffer
-	if err := restartAfterUpdate(rt, stateDir, "0.4.5", "0.4.6", &out); err != nil {
-		t.Fatalf("the update is installed; err %v", err)
+	if err := restartAfterUpdate(rt, stateDir, "0.4.8", "0.4.9", &out); err != nil {
+		t.Fatalf("restart after update: %v\n%s", err, out.String())
 	}
-	if len(daemon.killed) != 0 {
-		t.Fatalf("killed %v", daemon.killed)
+	if len(daemon.upgrades) != 1 || daemon.upgrades[0] != "0.4.9" || len(daemon.killed) != 0 {
+		t.Fatalf("upgrades %v, killed %v", daemon.upgrades, daemon.killed)
 	}
-	for _, want := range []string{"Updated Mewla 0.4.5 → 0.4.6.", "Mewla 0.4.5 is running from a terminal", "PID 77", "Stop-Process -Id 77", "start it again with: mewla"} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("output %q lacks %q", out.String(), want)
+	if daemon.pid != 4054216 || daemon.version != "0.4.9" {
+		t.Fatalf("daemon PID %d version %s", daemon.pid, daemon.version)
+	}
+	for _, unwanted := range []string{"kill", "was not restarted", "start it again"} {
+		if strings.Contains(out.String(), unwanted) {
+			t.Fatalf("output %q says %q", out.String(), unwanted)
 		}
 	}
-	if strings.Contains(out.String(), "Restarting") {
-		t.Fatalf("output %q promises a restart", out.String())
-	}
-	err := rt.restart(stateDir, runningDaemon{PID: 77, Version: "0.4.5"}, "0.4.6")
-	var byHand *errDaemonStartedByHand
-	if !errors.As(err, &byHand) || len(daemon.killed) != 0 {
-		t.Fatalf("restart of a daemon started by hand: %v, killed %v", err, daemon.killed)
+	if !strings.Contains(out.String(), "Restarting Mewla now") || !strings.Contains(out.String(), "Mewla 0.4.9 is running.") {
+		t.Fatalf("output %q", out.String())
 	}
 }
 
 // A default Windows install always has the logon task; a daemon started in
-// a terminal on top of it is still the person's, not the task's.
+// a terminal on top of it is still the person's: it restarts in its own
+// console, not through the task.
 func TestRestartLeavesADaemonStartedInATerminalBesideTheTask(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
 	daemon := &fakeDaemon{daemonID: daemonID, pid: 88, version: "0.4.5", running: true}
@@ -205,8 +239,98 @@ func TestRestartLeavesADaemonStartedInATerminalBesideTheTask(t *testing.T) {
 	if len(daemon.killed) != 0 || runner.count("schtasks /run /tn Mewla (ana)") != 0 {
 		t.Fatalf("killed %v, task runs %d", daemon.killed, runner.count("schtasks /run /tn Mewla (ana)"))
 	}
-	if !strings.Contains(out.String(), "Stop-Process -Id 88") {
+	if len(daemon.upgrades) != 1 || daemon.version != "0.4.6" || strings.Contains(out.String(), "Stop-Process") {
+		t.Fatalf("upgrades %v, version %s, output %q", daemon.upgrades, daemon.version, out.String())
+	}
+}
+
+// Each refusal reaches the person with the daemon's own cause, and the
+// update stays installed.
+func TestInPlaceRestartRefusalSaysWhy(t *testing.T) {
+	stateDir, daemonID := restartStateDir(t)
+	daemon := &fakeDaemon{daemonID: daemonID, pid: 77, version: "0.4.5", running: true,
+		refuse: errors.New("/home/p/.local/bin/mewla is Mewla 0.4.5, not 0.4.6")}
+	rt := daemon.runtime(t, "linux", &fakeBootRunner{failures: map[string]bool{"systemctl --user is-active mewla.service": true}}, "/home/p/.local/bin/mewla")
+
+	var out bytes.Buffer
+	err := restartAfterUpdate(rt, stateDir, "0.4.5", "0.4.6", &out)
+	if err == nil || err.Error() != "Mewla 0.4.5 (PID 77) did not restart onto 0.4.6: /home/p/.local/bin/mewla is Mewla 0.4.5, not 0.4.6" {
+		t.Fatalf("err %v", err)
+	}
+	if !strings.Contains(out.String(), "Updated Mewla 0.4.5 → 0.4.6.") || strings.Contains(out.String(), "is running.") {
 		t.Fatalf("output %q", out.String())
+	}
+}
+
+// A daemon that accepted but stopped without coming back: the cause it
+// recorded is what the person reads.
+func TestInPlaceRestartThatDiedReportsTheRecordedCause(t *testing.T) {
+	stateDir, daemonID := restartStateDir(t)
+	daemon := &fakeDaemon{daemonID: daemonID, pid: 77, version: "0.4.5", running: true, exitOnUpgrade: true}
+	rt := daemon.runtime(t, "linux", &fakeBootRunner{failures: map[string]bool{"systemctl --user is-active mewla.service": true}}, "/home/p/.local/bin/mewla")
+	found, ok := rt.inspect(stateDir)
+	if !ok {
+		t.Fatal("daemon not found")
+	}
+
+	err := rt.restart(stateDir, found, "0.4.6")
+	if err == nil || !strings.Contains(err.Error(), "Mewla 0.4.5 (PID 77) stopped and did not start again") {
+		t.Fatalf("without a recorded cause: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(stateDir, "run"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(inPlaceRestartFailurePath(stateDir), []byte("could not start /home/p/.local/bin/mewla: exec format error\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err = rt.restart(stateDir, found, "0.4.6")
+	if err == nil || err.Error() != "Mewla 0.4.5 (PID 77) stopped and did not restart onto 0.4.6: could not start /home/p/.local/bin/mewla: exec format error" {
+		t.Fatalf("with a recorded cause: %v", err)
+	}
+}
+
+// The daemon says where it serves: one started with its own -addr is found
+// there, not at the default address.
+func TestInspectFindsADaemonOnItsOwnAddress(t *testing.T) {
+	stateDir, daemonID := restartStateDir(t)
+	daemon := &fakeDaemon{daemonID: daemonID, pid: 5, version: "0.4.8", running: true, addr: "127.0.0.1:9931"}
+	rt := daemon.runtime(t, "linux", &fakeBootRunner{}, "/home/p/.local/bin/mewla")
+	health := rt.health
+	var asked []string
+	rt.health = func(addr string) (daemonHealth, error) {
+		asked = append(asked, addr)
+		return health(addr)
+	}
+	found, ok := rt.inspect(stateDir)
+	if !ok || found.Addr != "127.0.0.1:9931" || len(asked) != 1 || asked[0] != "127.0.0.1:9931" {
+		t.Fatalf("found %+v (%t), health asked %v", found, ok, asked)
+	}
+}
+
+// macOS has no /proc: a terminal daemon is known by its own daemon_status,
+// for the PID the kernel gives for the control socket.
+func TestInspectOnMacOSUsesTheDaemonsStatus(t *testing.T) {
+	stateDir, daemonID := restartStateDir(t)
+	daemon := &fakeDaemon{daemonID: daemonID, pid: 6, version: "0.4.8", running: true}
+	rt := daemon.runtime(t, "darwin", &fakeBootRunner{}, "/Users/p/.local/bin/mewla")
+	rt.image = func(int) (string, error) { return "", errors.New("no /proc") }
+	if _, ok := rt.inspect(stateDir); !ok {
+		t.Fatal("terminal daemon on macOS not found")
+	}
+	status := rt.status
+	rt.status = func(dir string) (control.DaemonStatus, error) {
+		got, err := status(dir)
+		got.Executable = "/Users/p/Applications/Mewla.app/Contents/MacOS/mewla"
+		return got, err
+	}
+	if _, ok := rt.inspect(stateDir); ok {
+		t.Fatal("Mewla.app's daemon was taken for this executable's")
+	}
+	rt.status = func(string) (control.DaemonStatus, error) {
+		return control.DaemonStatus{PID: 999, Executable: "/Users/p/.local/bin/mewla"}, nil
+	}
+	if _, ok := rt.inspect(stateDir); ok {
+		t.Fatal("a status for another PID than the socket's was believed")
 	}
 }
 
@@ -263,8 +387,8 @@ func TestRestartUsesTheSystemdUnitOnlyWhenItRunsTheDaemon(t *testing.T) {
 			if restarted != test.restart || err != nil {
 				t.Fatalf("restarted %t, want %t (err %v)", restarted, test.restart, err)
 			}
-			if !test.restart && !strings.Contains(out.String(), "kill 500") {
-				t.Fatalf("output %q", out.String())
+			if !test.restart && (len(daemon.upgrades) != 1 || daemon.version != "0.4.6") {
+				t.Fatalf("started by hand: upgrades %v, version %s", daemon.upgrades, daemon.version)
 			}
 		})
 	}

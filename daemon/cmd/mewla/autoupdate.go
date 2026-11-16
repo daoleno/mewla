@@ -210,6 +210,13 @@ func (u *daemonUpdater) latestRelease(ctx context.Context) (*selfupdate.Candidat
 	return candidate, nil
 }
 
+// Updating: an update of the daemon's own is being installed.
+func (u *daemonUpdater) Updating() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.updating
+}
+
 // Install is the App's Update button.
 func (u *daemonUpdater) Install() error {
 	if !u.supported {
@@ -318,6 +325,10 @@ func runDaemonUpdating(args []string, stderr io.Writer) error {
 	var handover *updateHandover
 	if errors.As(err, &handover) {
 		return runUpdateHandover(handover, os.Args[1:])
+	}
+	var reexec *daemonReexec
+	if errors.As(err, &reexec) {
+		return runInPlaceRestart(reexec)
 	}
 	return err
 }

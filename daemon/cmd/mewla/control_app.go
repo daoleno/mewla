@@ -92,6 +92,9 @@ type controlApp struct {
 	threadRuntimeSet  func(string, modelprofiles.ThreadRuntimeChoice) (modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error)
 	stateDir          string
 	watch             *watch.Collector
+	// addr is the address the daemon serves HTTP on (daemon_status).
+	addr      string
+	restarter *inPlaceRestarter
 }
 
 type telegramControlManager interface {
@@ -176,7 +179,12 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		if err != nil {
 			return control.ErrorResponse("daemon_status_unavailable", err.Error())
 		}
-		return control.Response{OK: true, Daemon: &control.DaemonStatus{PID: os.Getpid(), Executable: executable}}
+		return control.Response{OK: true, Daemon: &control.DaemonStatus{PID: os.Getpid(), Executable: executable, Version: Version, Addr: a.addr}}
+	case "daemon_upgrade":
+		if a.restarter == nil {
+			return control.ErrorResponse("upgrade_unavailable", "Mewla is still starting")
+		}
+		return a.restarter.handle(req.Version)
 	case "resource_telemetry":
 		if a.resourceSampler == nil {
 			return control.ErrorResponse("resource_telemetry_unavailable", "Resource sampler not ready")

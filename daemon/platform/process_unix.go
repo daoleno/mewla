@@ -39,6 +39,17 @@ func ExecReplace(path string, argv, env []string) error {
 	return syscall.Exec(path, argv, env)
 }
 
+// ExecInPlace runs path in place of this process, with argv and env, in dir:
+// on Unix that is execve, so the same PID, terminal and process group run the
+// new program. It returns only when the exec failed. stops is used only on
+// Windows.
+func ExecInPlace(path string, argv, env []string, dir string, _ <-chan os.Signal) error {
+	if dir != "" {
+		_ = os.Chdir(dir)
+	}
+	return syscall.Exec(path, argv, env)
+}
+
 // ProcessAlive reports whether pid exists.
 func ProcessAlive(pid int) bool {
 	if pid <= 0 {
