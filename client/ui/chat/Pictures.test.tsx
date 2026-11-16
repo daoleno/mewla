@@ -132,7 +132,7 @@ describe("a picture whose read did not answer", () => {
 
   test("shows the refresh glyph only after its reads again went unanswered (1, 2, 4, 8 s)", async () => {
     let asked = 0;
-    const app = await open("./testing/Picture.tsx", { platform: "android", host: { handlers: { "app.picture": () => {
+    const app = await open("./testing/Picture.tsx", { platform: "android", clock: {}, host: { handlers: { "app.picture": () => {
       asked++;
       throw new Error("codex_asset timed out");
     } } } });

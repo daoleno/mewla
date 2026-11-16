@@ -62,7 +62,7 @@ describe("Extensions keeps what is being typed through the computer's news", () 
         // Each poll says something new about the same sign-in, as the computer's checks do.
         return { flow: { ...setup, message: `Set up the consent screen. (${n})` } };
       });
-      const app = await open(HARNESS, c.options);
+      const app = await open(HARNESS, { ...c.options, clock: {} });
       await app.waitFor(page.name === "extensions" ? "id:connect-gws" : "id:service-connect");
       await app.press(page.name === "extensions" ? "id:connect-gws" : "id:service-connect");
       await app.waitFor("id:sign-in-code");
@@ -77,7 +77,7 @@ describe("Extensions keeps what is being typed through the computer's news", () 
 
   test("a custom service's form", async () => {
     const c = computer({ name: "extensions-service", id: "mcp" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
-    const app = await open(HARNESS, c.options);
+    const app = await open(HARNESS, { ...c.options, clock: {} });
     await app.waitFor("id:custom-endpoint");
     await app.type("id:custom-name", "Docs");
     await app.paste("id:custom-endpoint", { text: "https://docs.example.com/mcp" });
@@ -88,7 +88,7 @@ describe("Extensions keeps what is being typed through the computer's news", () 
 
   test("the search on Extensions", async () => {
     const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
-    const app = await open(HARNESS, c.options);
+    const app = await open(HARNESS, { ...c.options, clock: {} });
     await app.waitFor("id:extensions-search");
     await app.type("id:extensions-search", "goo");
     await news(app);

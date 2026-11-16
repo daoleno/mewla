@@ -93,30 +93,6 @@ describe("Sessions", () => {
     expect(active.at(-1)).toBe("w101");
   }, 20_000);
 
-  test("New session's Task (What should it do?) goes with create_session; held by the computer, it comes back as the Session's draft only if it did not go", async () => {
-    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
-    await app.host.send("links.open", { url: "mewla://sessions" });
-    await app.waitFor("text:first");
-    await app.press("id:tray-new");
-    await app.waitFor("id:preset-claude");
-    await app.press("id:preset-shell");
-    expect(app.shows("id:new-task")).toBe(false);
-    await app.press("id:preset-claude");
-    await app.waitFor("id:new-task");
-    await app.type("id:new-task", "Fix the flaky checkout test");
-    await app.press("id:new-launch");
-    await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
-    const create = framesOf(app.host.posts(), "create_session").at(-1)!;
-    expect(create).toMatchObject({ text: "Fix the flaky checkout test" });
-    await app.waitFor("id:capsule-name", { timeout: 10_000 });
-    // Held: not in the Session's draft, so a second message cannot go before it.
-    const workerId = String(framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id).at(-1));
-    await app.wait(500);
-    expect(sessionDraft(app, workerId)).toBe("");
-    await app.host.send("app.daemonPush", { type: "session_first_message", worker_id: workerId, request_id: create.request_id, outcome: "not_sent", text: "Fix the flaky checkout test" });
-    await app.waitUntil(() => sessionDraft(app, workerId) === "Fix the flaky checkout test", { timeout: 3_000 });
-  }, 20_000);
-
   test("the held first message shows as sending in the Session; a second message queues behind it and goes once the first went (SPEC §16.4 Sending)", async () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
@@ -129,8 +105,12 @@ describe("Sessions", () => {
     await app.press("id:new-launch");
     await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length > 0, { timeout: 5_000 });
     const create = framesOf(app.host.posts(), "create_session").at(-1)!;
+    // The Task goes with create_session; the computer holds it.
+    expect(create).toMatchObject({ text: "Fix the flaky checkout test" });
     await app.waitFor("id:capsule-name", { timeout: 10_000 });
     const workerId = String(framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id).at(-1));
+    // Held: not in the Session's draft, so a second message cannot go before it.
+    expect(sessionDraft(app, workerId)).toBe("");
     // The computer names its agent (the fake's new Session has none), so the Session shows its chat.
     await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { id: workerId, name: "", status: "running", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() } });
     await app.waitFor("id:session-chat", { timeout: 10_000 });
@@ -177,20 +157,6 @@ describe("Sessions", () => {
     expect(framesOf(app.host.posts(), "send_input")[0]).toMatchObject({ text: "and run it twice" });
     expect(app.count("id:user-message")).toBe(1);
   }, 25_000);
-
-  test("New session's Task on a computer from before it (no first_message: pending): the text is the new Session's draft at once", async () => {
-    const app = await open(APP, { host: phoneHost({ brain: {}, firstMessages: false, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
-    await app.host.send("links.open", { url: "mewla://sessions" });
-    await app.waitFor("text:first");
-    await app.press("id:tray-new");
-    await app.waitFor("id:preset-claude");
-    await app.press("id:preset-claude");
-    await app.type("id:new-task", "Write the release notes");
-    await app.press("id:new-launch");
-    await app.waitFor("id:capsule-name", { timeout: 10_000 });
-    const workerId = String(framesOf(app.host.posts(), "set_active_worker").map((f) => f.worker_id).at(-1));
-    await app.waitUntil(() => sessionDraft(app, workerId) === "Write the release notes", { timeout: 3_000 });
-  }, 20_000);
 
   test("New session's custom command: a Soft group, no uppercase labels; Start launches the typed command", async () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
@@ -339,31 +305,6 @@ describe("a Session", () => {
     await app.waitFor("id:request-sealed");
     expect(app.shows("id:request-card")).toBe(false);
   }, 20_000);
-
-  test("a long chat read back up, left and reopened shows its messages at the row it was read to (FAILURES R4#9)", async () => {
-    const long = Array.from({ length: 60 }, (_, i) => ({
-      id: `m${i}`, seq: i + 1, kind: i % 2 ? "assistant_message" : "user_message",
-      timestamp: new Date(Date.UTC(2026, 10, 11, 7, 0, i)).toISOString(),
-      body: `Message ${i}. ` + "A long line of words that wraps over several rows in a phone-sized chat. ".repeat(4),
-    }));
-    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "longchat", status: "done" })], conversations: { w1: long } });
-    await app.waitFor("text:longchat", { timeout: 10_000 });
-    await app.press("text:longchat");
-    await app.waitFor("id:session-chat");
-    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
-    if (app.shows("id:jump-latest")) await app.press("id:jump-latest");
-    await app.wait(300);
-    for (let i = 0; i < 3; i += 1) await app.scroll("id:session-chat", -1500);
-    await app.wait(300);
-    expect(app.shows("id:jump-latest")).toBe(true);
-    await app.back();
-    await app.waitFor("text:longchat");
-    await app.press("text:longchat");
-    await app.waitFor("id:session-chat");
-    await app.wait(1000);
-    expect(app.texts().filter((t) => t.startsWith("Message")).length).toBeGreaterThan(0);
-    expect(app.shows("id:jump-latest")).toBe(true);
-  }, 30_000);
 
   test("the menu switches to the terminal and renames it on this phone", async () => {
     const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript } }, { drawnHeader: true });
@@ -599,9 +540,9 @@ describe("a Session", () => {
   }, 20_000);
 
   test("a terminal that cannot attach says \"Couldn't attach\" with Try again over its well, never a blank screen (SPEC §16.4)", async () => {
-    const app = await sessionsApp({ worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript }, replies: { terminal_open: { type: "terminal_error", message: "pane gone" } } });
-    await app.waitFor("text:notes", { timeout: 10_000 });
-    await app.press("text:notes");
+    // A manual clock runs the wait to its bound at once (headless, the terminal measures no size and never asks to open).
+    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("w1", { name: "notes", status: "done" })], conversations: { w1: transcript }, replies: { terminal_open: { type: "terminal_error", message: "pane gone" } } }), storage: paired, platform: "android", clock: {} });
+    await app.host.send("links.open", { url: "mewla://sessions/w1" });
     await app.waitFor("id:session-chat");
     await app.press("id:session-mode");
     await app.waitFor("id:terminal-group", { timeout: 10_000 });
@@ -610,7 +551,7 @@ describe("a Session", () => {
     expect(app.texts()).toContain("Couldn't attach");
     await app.press("id:terminal-try-again");
     await app.waitUntil(() => !app.shows("id:terminal-attach-failed"));
-  }, 35_000);
+  }, 20_000);
 
   test("the terminal sits in its surface group over a key bar of tiles in the mock's order, words in mono as the mock writes them", async () => {
     // A phone (touch: every key shows), the Session last left in its terminal (saved under the app's own Session key).

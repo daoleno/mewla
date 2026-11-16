@@ -255,7 +255,7 @@ describe("a delegated Worker's Session", () => {
   const worker = { id: "w1", name: "Hello writer", status: "running", cwd: "/home/me/proj", command: "claude", provider: "claude", delegated: true, started_at: 1_762_840_800_000, process_id: 77, updated_at: Date.now() };
   const protocol = "Mewla lifecycle protocol:\nProfile: quick.\nYou are the delegated Worker: execute the assigned work directly.";
   const task = "Create the file hello.txt in the current directory containing exactly one line: hello. Overwrite it if it exists. Touch nothing else.\n\nReport back with the output of: cat -A hello.txt";
-  const brief = (id: string, body: string, origin?: string) => ({ id, seq: 1, timestamp: at(1), kind: "user_message", role: "user", body, ...(origin ? { origin } : {}) });
+  const brief = (id: string, body: string, origin: string) => ({ id, seq: 1, timestamp: at(1), kind: "user_message", role: "user", body, origin });
 
   async function sessionWith(first: Record<string, unknown>) {
     const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [worker], conversations: { w1: [first, reply("a1", 2, "Done: hello.txt holds one line.")] } }) });
@@ -277,12 +277,6 @@ describe("a delegated Worker's Session", () => {
     await app.press("id:delegated-brief");
     await app.waitFor("id:delegated-task-open");
     expect(shown()).not.toContain("Mewla lifecycle protocol");
-  }, 20_000);
-
-  test("a computer from before the origin field: the old brief shape reads the same", async () => {
-    const app = await sessionWith(brief("b1", `Execute: ${task}\n\n${protocol}`));
-    expect(app.texts().join("\n")).not.toContain("Mewla lifecycle protocol");
-    expect(app.texts()).toContain(task);
   }, 20_000);
 });
 

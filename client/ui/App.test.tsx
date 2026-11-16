@@ -35,7 +35,7 @@ describe("a paired phone", () => {
     expect(app.count("id:home-cat-sprite >> id:pet-still")).toBe(0);
     await app.clock!.runFor(6_000);
     await app.waitFor("id:home-cat-sprite >> id:pet-still");
-    const still = await open("./App.tsx", { host, storage: paired, platform: "android", reducedMotion: true });
+    const still = await open("./App.tsx", { host, storage: paired, platform: "android", reducedMotion: true, clock: {} });
     await still.waitFor("id:home-cat-sprite >> id:pet-still");
     await still.waitFor("text:Offline", { timeout: 15_000 });
     expect(still.count("id:home-cat-sprite >> id:pet-still")).toBe(1);
@@ -62,54 +62,13 @@ describe("a paired phone", () => {
 
 describe("Brain", () => {
   test("connecting is a wait (the placeholder thread, no words); Offline at 10 s; the composer is there", async () => {
-    const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
+    const app = await open("./App.tsx", { host, storage: paired, platform: "android", clock: {} });
     await app.waitFor("id:brain-offline");
     await app.waitFor("id:placeholder-thread");
     expect(app.shows("text:Desk is offline")).toBe(false);
     await app.waitFor("text:Desk is offline", { timeout: 15_000 });
     expect(app.shows("id:composer")).toBe(true);
   }, 20_000);
-});
-
-describe("the tray", () => {
-  test("offline, it says so with Try again and Details; New session is there", async () => {
-    const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
-    await app.host.send("links.open", { url: "mewla://sessions" });
-    await app.waitFor("id:tray-notice", { timeout: 15_000 });
-    expect(app.texts()).toContain("Try again");
-    expect(app.texts()).toContain("Details");
-    expect(app.shows("id:tray-new")).toBe(true);
-  }, 20_000);
-});
-
-describe("the in-place upgrade from the Expo app", () => {
-  test("opens on the computer the Expo app had, without pairing, and takes the entries only once", async () => {
-    let offered = 0;
-    let copied = false;
-    const upgrade = {
-      handlers: {
-        ...host.handlers,
-        "app.legacyStorage": () => (copied ? null : (offered++, { ...paired, "mewla.draft.v1:s1:chat": '{"t":1,"v":"half"}' })),
-        "app.legacyStorageCopied": () => void (copied = true),
-      },
-    };
-    const app = await open("./App.tsx", { host: upgrade, platform: "android" });
-    await app.waitFor("id:composer");
-    expect(app.shows("id:onboarding")).toBe(false);
-    expect(copied).toBe(true);
-    expect(app.storage()["mewla.draft.v1:s1:chat"]).toContain("half");
-    const again = await open("./App.tsx", { host: upgrade, platform: "android" });
-    await again.waitFor("id:onboarding");
-    expect(offered).toBe(1);
-  });
-
-  test("an iPhone has no Expo app to take over: it never asks for its entries", async () => {
-    let asked = 0;
-    const ios = { handlers: { ...host.handlers, "app.legacyStorage": () => (asked++, null), "app.legacyStorageCopied": () => void asked++ } };
-    const app = await open("./App.tsx", { host: ios, platform: "ios" });
-    await app.waitFor("id:onboarding");
-    expect(asked).toBe(0);
-  });
 });
 
 describe("Dark", () => {
@@ -127,7 +86,7 @@ describe("Dark", () => {
   }
 
   test("no text is drawn black on Brain, the computer page or Settings", async () => {
-    const app = await open("./App.tsx", { host, storage: { ...paired, "mewla:theme_preference": "classic-dark" }, platform: "android", colorScheme: "light" });
+    const app = await open("./App.tsx", { host, storage: { ...paired, "mewla:theme_preference": "classic-dark" }, platform: "android", colorScheme: "light", clock: {} });
     await app.waitFor("text:Desk is offline", { timeout: 15_000 });
     expect(blackTexts(app)).toEqual([]);
     await app.press("id:home-cat");

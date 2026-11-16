@@ -7,7 +7,7 @@ const offlineHost = () => phoneHost({});
 describe("the connection mark follows you (SPEC §1.3)", () => {
   for (const platform of ["android", "ios", "web"] as const) {
     test(`${platform}: offline, a pushed page's Back carries the dot and says "Back · Offline"; home has none`, async () => {
-      const app = await open("../App.tsx", { host: offlineHost(), storage: paired, platform, network: expoTokenService });
+      const app = await open("../App.tsx", { host: offlineHost(), storage: paired, platform, network: expoTokenService, clock: {} });
       await app.waitFor("text:Offline", { timeout: 15_000 });
       expect(app.shows("id:back-mark")).toBe(false);
       await app.host.send("links.open", { url: "mewla://calendar" });

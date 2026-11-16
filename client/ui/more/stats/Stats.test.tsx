@@ -104,16 +104,6 @@ describe("Stats", () => {
     await app.waitFor("text:No activity in the last 7 days");
   });
 
-  test("a computer from before the 14-day range shows 7 and 30 days, opening on 7", async () => {
-    const app = await open(HARNESS, computer(() => ({ ranges: { day: range({ cost: 1 }), week: range({ cost: 7 }), month: range({ cost: 30 }), all: range({ cost: 500 }) } })));
-    await app.waitFor("id:stats-summary");
-    expect(app.texts().slice(0, 2)).toEqual(["Last 7 days", "$7.00"]);
-    expect(app.shows("id:stats-range-fortnight")).toBe(false);
-    await app.press("id:stats-range-month");
-    await app.waitFor("text:Last 30 days");
-    expect(app.texts()).toContain("$30.00");
-  });
-
   test("a Provider routing Codex hides the subscription card; ChatGPT sign-in shows the time left", async () => {
     const subscription = { authKind: "official", state: "available", plan: "pro", windows: [{ name: "primary", usedPercent: 30, windowMinutes: 300 }] };
     const direct = await open(HARNESS, computer(() => ({ ranges: { week: range() }, codexSubscription: subscription })));

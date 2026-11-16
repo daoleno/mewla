@@ -28,7 +28,7 @@ describe("requests in Brain's thread", () => {
   }, 20_000);
 
   test("answering waits in place, never optimistic: the ring in the pressed button, \"Didn't reach Desk\" at the 8 s bound, the buttons back", async () => {
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session("docs", { delegated: true, approvals: [approval("a1", "git push origin main")] })] }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, worker_sessions: [session("docs", { delegated: true, approvals: [approval("a1", "git push origin main")] })] }) });
     await app.waitFor("id:request-card", { timeout: 10_000 });
     await app.wait(500);
     await app.press("id:prompt-option-allow");

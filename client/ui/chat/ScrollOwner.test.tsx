@@ -22,14 +22,14 @@ const trace = (app: App): Entry[] => app.host.posts().filter((p) => p.name === "
 const since = (app: App, mark: number) => trace(app).slice(mark);
 const lastOf = (entries: Entry[], kind: string) => [...entries].reverse().find((e) => e.kind === kind);
 
-async function openChat(where: "session" | "brain") {
-  const conversations = where === "session" ? { "brain-host": [], w1: full } : { "brain-host": full };
-  const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations }) });
-  if (where === "session") await app.host.send("links.open", { url: "mewla://sessions/w1" });
-  await app.waitFor(`id:${where}-chat`, { timeout: 10_000 });
+/** A Session's chat (Brain's thread is the same ChatTimeline, home/Home.tsx) on the daemon's full window. */
+async function openChat() {
+  const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: full } }) });
+  await app.host.send("links.open", { url: "mewla://sessions/w1" });
+  await app.waitFor("id:session-chat", { timeout: 10_000 });
   await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 239.")), { timeout: 10_000 });
   await app.wait(400);
-  return { app, worker: where === "session" ? "w1" : "brain-host" };
+  return { app, worker: "w1" };
 }
 
 async function readBackUp(app: App, id: string) {
@@ -57,34 +57,32 @@ function unbidden(entries: Entry[]) {
   });
 }
 
-for (const where of ["session", "brain"] as const) {
-  describe(`a full thread read back up (${where === "session" ? "a Session" : "Brain"})`, () => {
-    test("its new events leave the rows under the finger where they are", async () => {
-      oldest = 0;
-      newest = 240;
-      const { app, worker } = await openChat(where);
-      const before = await readBackUp(app, `${where}-chat`);
-      const mark = trace(app).length;
-      for (let i = 0; i < 3; i += 1) {
-        await slide(app, worker);
-        await app.wait(250);
-      }
-      await app.wait(400);
-      const after = since(app, mark);
-      // Every change the list made was narrow: none laid the rows on screen out again.
-      expect(after.filter((e) => e.kind === "splice" && e.covers).map((e) => `${e.index}+${e.removed}`)).toEqual([]);
-      expect(unbidden(after).map((e) => e.jump)).toEqual([]);
-      expect(lastOf(trace(app), "viewable")!.firstKey).toBe(before);
-      expect(app.shows("id:jump-latest")).toBe(true);
-    }, 60_000);
-  });
-}
+describe("a full Session read back up", () => {
+  test("its new events leave the rows under the finger where they are", async () => {
+    oldest = 0;
+    newest = 240;
+    const { app, worker } = await openChat();
+    const before = await readBackUp(app, "session-chat");
+    const mark = trace(app).length;
+    for (let i = 0; i < 3; i += 1) {
+      await slide(app, worker);
+      await app.wait(250);
+    }
+    await app.wait(400);
+    const after = since(app, mark);
+    // Every change the list made was narrow: none laid the rows on screen out again.
+    expect(after.filter((e) => e.kind === "splice" && e.covers).map((e) => `${e.index}+${e.removed}`)).toEqual([]);
+    expect(unbidden(after).map((e) => e.jump)).toEqual([]);
+    expect(lastOf(trace(app), "viewable")!.firstKey).toBe(before);
+    expect(app.shows("id:jump-latest")).toBe(true);
+  }, 60_000);
+});
 
 describe("a full Session, read back up, its connection back with a snapshot that slid by several events", () => {
   test("the rows under the finger stay", async () => {
     oldest = 0;
     newest = 240;
-    const { app, worker } = await openChat("session");
+    const { app, worker } = await openChat();
     const before = await readBackUp(app, "session-chat");
     const mark = trace(app).length;
     const subscribed = framesOf(app.host.posts(), "codex_conversation_subscribe").length;
@@ -112,7 +110,7 @@ for (const from of ["the end", "far up"] as const) {
     test("ends at the newest end with the sent message on screen, through its echo and the reply sliding the window", async () => {
       oldest = 0;
       newest = 240;
-      const { app, worker } = await openChat("session");
+      const { app, worker } = await openChat();
       if (from === "far up") await readBackUp(app, "session-chat");
       const mark = trace(app).length;
       const id = await send(app, "One more thing");

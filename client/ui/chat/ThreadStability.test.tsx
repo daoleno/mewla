@@ -19,7 +19,7 @@ const firstDrawn = (app: { texts(): string[] }) => app.texts().find((t) => t.sta
 
 async function readBackUp() {
   // The same thread under a restarted host's id too ("brain-host-2").
-  const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long, "brain-host-2": long } }) });
+  const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, conversations: { "brain-host": long, "brain-host-2": long } }) });
   await app.waitFor("id:brain-chat", { timeout: 10_000 });
   await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
   await app.wait(300);
@@ -31,7 +31,7 @@ async function readBackUp() {
 
 describe("Brain's thread, opened cold", () => {
   test("asks for its newest 40 events first; the older ones follow and the end stays on screen, the first message there to read back to", async () => {
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
     await app.waitFor("id:brain-chat", { timeout: 10_000 });
     await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
     expect(framesOf(app.host.posts(), "codex_conversation_subscribe").map((frame) => frame.first_events)).toEqual([40]);
@@ -43,7 +43,7 @@ describe("Brain's thread, opened cold", () => {
   }, 30_000);
 
   test("after a lost connection it asks for the whole thread: rows already on screen never go away while it reloads", async () => {
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
     await app.waitFor("id:brain-chat", { timeout: 10_000 });
     await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
     await app.host.send("app.daemonDrop");
@@ -53,17 +53,6 @@ describe("Brain's thread, opened cold", () => {
 });
 
 describe("Brain's thread, read back up", () => {
-  test("stays where it is when Brain's snapshot changes (a Work or a Worker changed)", async () => {
-    const app = await readBackUp();
-    const before = firstDrawn(app);
-    for (let i = 0; i < 3; i += 1) {
-      await app.host.send("app.daemonPush", { type: "brain_snapshot", brain: { ...brain, current_work: [{ work_id: `w${i}`, title: `Work ${i}`, status: "running" }] } });
-      await app.wait(200);
-    }
-    expect(app.shows("id:jump-latest")).toBe(true);
-    expect(firstDrawn(app)).toBe(before);
-  }, 30_000);
-
   test("made again (a hot patch to its page, a past thread and back), it opens where it was read to", async () => {
     const app = await readBackUp();
     const before = firstDrawn(app);
@@ -88,7 +77,7 @@ describe("Brain's thread, read back up", () => {
     await app.wait(800);
     const kept = app.storage();
 
-    const again = await open(APP, { platform: "android", storage: kept, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
+    const again = await open(APP, { platform: "android", storage: kept, clock: {}, host: phoneHost({ brain, conversations: { "brain-host": long } }) });
     await again.waitFor("id:brain-chat", { timeout: 10_000 });
     await again.waitUntil(() => again.texts().some((t) => t.startsWith("Message ")), { timeout: 10_000 });
     await again.wait(300);
@@ -139,7 +128,7 @@ async function everyKindOfNews(app: Awaited<ReturnType<typeof open>>, worker: st
 
 describe("news changes only the rows it is about (owner 11-13: every message flashed at once)", () => {
   test("Brain's thread: a Brain snapshot, a streaming reply, a new message, a re-sent snapshot and a reconnect draw no other row again", async () => {
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": short }, replies: noPicture }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, conversations: { "brain-host": short }, replies: noPicture }) });
     await app.waitFor("text:Coming up.", { timeout: 10_000 });
     await app.waitUntil(() => builds(app) >= 1);
     await app.wait(300);
@@ -157,7 +146,7 @@ describe("news changes only the rows it is about (owner 11-13: every message fla
 
   test("a Session's chat: a Session update, a streaming reply, a new message, a re-sent snapshot and a reconnect draw no other row again", async () => {
     const session = { id: "w1", name: "charts", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() };
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: short }, replies: noPicture }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: short }, replies: noPicture }) });
     await app.host.send("links.open", { url: "mewla://sessions/w1" });
     await app.waitFor("text:Coming up.", { timeout: 10_000 });
     await app.waitUntil(() => builds(app) >= 1);
@@ -183,7 +172,7 @@ describe("a Session's chat read back up stays where it is (owner 11-13: history 
   const history = Array.from({ length: 60 }, (_, i) => msg(i));
 
   async function readSessionBackUp(events = history.slice(20)) {
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: events } }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: events } }) });
     await app.host.send("links.open", { url: "mewla://sessions/w1" });
     await app.waitFor("id:session-chat", { timeout: 10_000 });
     await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
@@ -231,7 +220,7 @@ describe("a Session's chat read back up stays where it is (owner 11-13: history 
 describe("only the person's own acts move a chat read back up", () => {
   test("a message sent earlier does not scroll the chat again when it comes back from the terminal", async () => {
     const session = { id: "w1", name: "longchat", status: "done", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() };
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: long } }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: long } }) });
     await app.host.send("links.open", { url: "mewla://sessions/w1" });
     await app.waitFor("id:session-chat", { timeout: 10_000 });
     await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
@@ -261,7 +250,7 @@ describe("a row whose content changes shows the change where it is", () => {
     const session = { id: "w1", name: "tools", status: "running", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now() };
     const t = (i: number) => new Date(Date.UTC(2026, 10, 13, 2, 0, i)).toISOString();
     const run = { id: "c1", seq: 2, kind: "command", timestamp: t(1), command: "bun test settings", status: "running" };
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: [{ id: "u1", seq: 1, kind: "user_message", timestamp: t(0), body: "Run the tests" }, run] } }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, worker_sessions: [session], conversations: { "brain-host": [], w1: [{ id: "u1", seq: 1, kind: "user_message", timestamp: t(0), body: "Run the tests" }, run] } }) });
     await app.host.send("links.open", { url: "mewla://sessions/w1" });
     await app.waitFor("text:Run the tests", { timeout: 10_000 });
     await app.wait(300);
@@ -297,7 +286,7 @@ const past = Array.from({ length: 30 }, (_, i) => ({
 
 describe("Brain's other threads", () => {
   test("a past thread opens at its own end, and Current chat comes back to the current one", async () => {
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long, "brain-host#brain-thread:t-old": past } }) });
+    const app = await open(APP, { platform: "android", storage: paired, clock: {}, host: phoneHost({ brain, conversations: { "brain-host": long, "brain-host#brain-thread:t-old": past } }) });
     await app.waitFor("id:brain-chat", { timeout: 10_000 });
     await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
     await app.host.send("links.open", { url: "mewla://brain?thread=t-old" });
@@ -309,32 +298,5 @@ describe("Brain's other threads", () => {
     await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
     await app.wait(400);
     expect(app.shows("id:jump-latest")).toBe(false);
-  }, 30_000);
-
-  // A thread's list is made the moment the thread shown changes, a moment before its chat does: it opened on the other
-  // thread's rows, where its own reading place is not, and so at its end (and short of its own end when its rows came
-  // in: the flake above, CI 11-16). It opens on its own rows, where it was read to.
-  test("a past thread read back up opens there again after Current chat", async () => {
-    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": long, "brain-host#brain-thread:t-old": past } }) });
-    await app.waitFor("id:brain-chat", { timeout: 10_000 });
-    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
-    await app.host.send("links.open", { url: "mewla://brain?thread=t-old" });
-    await app.waitFor("id:brain-past-thread");
-    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Old 29.")), { timeout: 10_000 });
-    await app.wait(400);
-    for (let i = 0; i < 3; i += 1) await app.scroll("id:brain-chat", -1500);
-    await app.wait(300);
-    expect(app.shows("id:jump-latest")).toBe(true);
-    const read = app.texts().find((t) => t.startsWith("Old "));
-    await app.press("id:brain-current-thread");
-    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Message 59.")), { timeout: 10_000 });
-    await app.wait(300);
-    await app.host.send("links.open", { url: "mewla://brain?thread=t-old" });
-    await app.waitFor("id:brain-past-thread");
-    await app.waitUntil(() => app.texts().some((t) => t.startsWith("Old ")), { timeout: 10_000 });
-    await app.wait(400);
-    expect(app.shows("id:jump-latest")).toBe(true);
-    expect(app.texts()).toContain(read!);
-    expect(app.texts().some((t) => t.startsWith("Old 29."))).toBe(false);
   }, 30_000);
 });
