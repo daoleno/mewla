@@ -114,13 +114,11 @@ Select text with the mouse and press **Cmd+C** on a Mac, or **Ctrl+C** or
 **Ctrl+Shift+C** on Windows and Linux; the text goes to your computer's
 clipboard. With nothing selected, Ctrl+C still interrupts the program (on a
 Mac it always does), and right after a Ctrl+C copy the next Ctrl+C interrupts
-again. A program that uses the mouse, such as `tmux`
-with `mouse on`, `vim` or an agent's interface, keeps plain drags for itself:
-hold **Shift** (**Option** on a Mac) while you drag to select instead. What
-`tmux` copies when you select with it, and what a program copies with the
-terminal's clipboard code (OSC 52), reaches the browser's clipboard too, on
-`localhost` or an HTTPS address; programs inside `tmux` need `set -g
-set-clipboard on` for that. Mewla never lets a program read your clipboard.
+again. A program that uses the mouse, such as `vim` or an agent's interface,
+keeps plain drags for itself: hold **Shift** (**Option** on a Mac) while you
+drag to select instead. What a program copies with the terminal's clipboard
+code (OSC 52) reaches the browser's clipboard too, on `localhost` or an HTTPS
+address. Mewla never lets a program read your clipboard.
 
 ### When an agent is waiting for you
 
@@ -350,13 +348,6 @@ your user folder (`%USERPROFILE%`), where Claude reads it.
 Cursor and Grok can only be hooked through the user's own global
 configuration, and Mewla never writes to it. They stay on the transcript and the
 screen, and so does anything an agent offers only through such a file.
-
-## `tmux` inside a Session
-
-Sessions run in the session host, not in `tmux`, so a `tmux` command an agent
-runs, `tmux kill-server` included, cannot end them. Worker and Brain Sessions
-point `TMUX_TMPDIR` at their own scratch directory, so a plain `tmux` there
-starts a server of its own.
 
 ## What the daemon costs while idle
 
