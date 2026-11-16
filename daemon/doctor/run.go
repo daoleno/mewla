@@ -785,11 +785,11 @@ func (e env) probeAuth(binaryPath, provider, configDir string) AuthState {
 	switch provider {
 	case work.WorkerProviderCodex:
 		out, err := run(ctx, binaryPath, "login", "status")
-		return parseCodexAuth(out, err)
+		return unlessOtherCredentials(parseCodexAuth(out, err), provider, configDir)
 	case work.WorkerProviderClaude:
 		// Claude prints its JSON status and exits 1 when logged out.
 		out, _ := run(ctx, binaryPath, "auth", "status", "--json")
-		return parseClaudeAuth(out)
+		return unlessOtherCredentials(parseClaudeAuth(out), provider, configDir)
 	case work.WorkerProviderCursor:
 		out, _ := run(ctx, binaryPath, "status", "--format", "json")
 		return parseCursorAuth(out)
@@ -804,6 +804,15 @@ func (e env) probeAuth(binaryPath, provider, configDir string) AuthState {
 	default:
 		return AuthUnknown
 	}
+}
+
+// unlessOtherCredentials turns a "signed out" verdict into AuthUnknown when
+// the agent can run on credentials its login status does not see.
+func unlessOtherCredentials(state AuthState, provider, configDir string) AuthState {
+	if state == AuthUnauthenticated && otherCredentials(provider, configDir) {
+		return AuthUnknown
+	}
+	return state
 }
 
 // Auth probes read each CLI's structured answer where it has one: Claude,

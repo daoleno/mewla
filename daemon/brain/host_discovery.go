@@ -33,30 +33,30 @@ type hostLaunchPreparation struct {
 	resumeBindingFound bool
 }
 
-// resolveHostResume proves a native resume command before route or Session mutation.
+// resolveHostResume picks the native resume command for a Host whose Session is
+// gone, before route or Session mutation. A conversation Mewla cannot resume
+// (none recorded, or one its agent cannot resume) is not a reason to leave
+// Brain without a Host: the Brain starts fresh with its workspace handoff and
+// Chat says the earlier conversation was not resumed.
 func (s *Service) resolveHostResume(executor work.WorkerExecutor, discovery hostDiscovery) (hostDiscovery, error) {
 	hostSession, id := discovery.hostSession, discovery.id
 	command, replaceReason, replaceDetail := discovery.command, discovery.replaceReason, discovery.replaceDetail
 	resumeToken := ""
 	if replaceReason == hostReplaceReasonSessionMissing {
 		token, known, resumable := s.hostProviderResumeToken(hostSession, executor)
-		if known {
-			if !resumable {
-				s.recordHostReplacement(HostReplacementEvent{
-					Reason:           hostReplaceReasonSessionMissingUnrecoverable,
-					FromID:           id,
-					FromExecutorID:   hostSession.ExecutorID,
-					ResolvedExecutor: executor.ID,
-					Detail: fmt.Sprintf(
-						"has_session=false id=%q provider_session=%q executor=%q: no native resume shape",
-						id, token, executor.ID,
-					),
-				})
-				return discovery, fmt.Errorf(
-					"brain host refusing blank replacement: recorded provider session %q cannot be natively resumed for executor %q",
-					token, executor.ID,
-				)
-			}
+		switch {
+		case known && !resumable:
+			s.recordHostReplacement(HostReplacementEvent{
+				Reason:           hostReplaceReasonSessionMissingUnrecoverable,
+				FromID:           id,
+				FromExecutorID:   hostSession.ExecutorID,
+				ResolvedExecutor: executor.ID,
+				Detail: fmt.Sprintf(
+					"has_session=false id=%q provider_session=%q executor=%q: no native resume shape; starting fresh",
+					id, token, executor.ID,
+				),
+			})
+		case known:
 			resumeCommand, err := s.hostLaunchCommand(executor, token)
 			if err != nil {
 				s.recordHostReplacement(HostReplacementEvent{
@@ -65,14 +65,11 @@ func (s *Service) resolveHostResume(executor work.WorkerExecutor, discovery host
 					FromExecutorID:   hostSession.ExecutorID,
 					ResolvedExecutor: executor.ID,
 					Detail: fmt.Sprintf(
-						"has_session=false id=%q provider_session=%q: %v",
+						"has_session=false id=%q provider_session=%q: %v; starting fresh",
 						id, token, err,
 					),
 				})
-				return discovery, fmt.Errorf(
-					"brain host refusing blank replacement: recorded provider session %q cannot be natively resumed for executor %q: %w",
-					token, executor.ID, err,
-				)
+				break
 			}
 			command = resumeCommand
 			resumeToken = token

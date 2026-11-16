@@ -24,6 +24,9 @@ const (
 	timelineKindUpdate           = work.ConversationKindUpdate
 	timelineKindWorkCard         = "work_card"
 	timelineKindCalendarResult   = "calendar_result"
+	// timelineKindHostNotice is a line Mewla itself writes about Brain's Host
+	// (it restarted without its earlier conversation), shown as a status row.
+	timelineKindHostNotice = "host_notice"
 
 	workResultConversationSource = "work_result"
 )
@@ -994,6 +997,18 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 			WorkEventKind:   item.WorkerEventKind,
 			WorkDetailsJSON: item.DetailsJSON,
 			WorkWaitFor:     item.WaitFor,
+		}, true
+	case timelineKindHostNotice:
+		return work.CodexConversationEvent{
+			ID:        item.ID,
+			Seq:       seq,
+			Timestamp: item.CreatedAt.Format(time.RFC3339Nano),
+			Kind:      "status",
+			Role:      "assistant",
+			Title:     item.Title,
+			Body:      item.Body,
+			Status:    item.Status,
+			Source:    timelineKindHostNotice,
 		}, true
 	case timelineKindCalendarResult:
 		return work.CodexConversationEvent{

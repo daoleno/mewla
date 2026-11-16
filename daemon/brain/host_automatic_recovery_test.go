@@ -110,7 +110,6 @@ func TestAutomaticHostContinuityFailsClosed(t *testing.T) {
 		probeErr error
 		hadTurn  bool
 	}{
-		{"missing native identity after a turn was admitted", "", nil, true},
 		{"unknown Session liveness", "saved-thread", errors.New("socket unreachable"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -141,6 +140,113 @@ func TestAutomaticHostContinuityFailsClosed(t *testing.T) {
 				t.Fatal("uncertain recovery mutated host")
 			}
 		})
+	}
+}
+
+// A Brain recorded from the tmux era ("%0"), on codex, with a turn admitted and
+// no native conversation recorded: its Session is gone. It used to be refused
+// on every reconcile forever. Now a fresh Brain starts with the handoff, Chat
+// says once that the earlier conversation was not resumed, and codex's login
+// status (signed out: it may run on an API key) keeps nothing from launching.
+func TestAutomaticHostContinuityStartsFreshForALegacyHost(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceHostSessionBinding("%0", "codex", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	item := createSignalTestWork(t, store, "host had a turn", "%0")
+	bootstrapAdmittedTurnFixture(t, store, item.ID, watcher.AdmittedTurn{SessionID: "%0", TurnID: "t1", AcceptedAt: time.Now().UTC()})
+	previous := hostLookPath
+	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	t.Cleanup(func() { hostLookPath = previous })
+	SetHostAuthProbe(func(string) HostAuthState { return HostAuthUnauthenticated })
+	t.Cleanup(func() { SetHostAuthProbe(nil) })
+	fw := &fakeWatcher{}
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	if changed, err := service.ReconcileHostContinuity(); err != nil || !changed {
+		t.Fatalf("legacy Host not replaced: %v %v", changed, err)
+	}
+	if len(fw.created) != 1 || strings.Contains(fw.created[0].opts.Command, "resume") {
+		t.Fatalf("created %#v: want one fresh Brain", fw.created)
+	}
+	if len(fw.sentCalls) != 1 || !strings.Contains(fw.sentCalls[0].text, "Recover active work from current.md") {
+		t.Fatalf("fresh Brain was not handed the workspace: %#v", fw.sentCalls)
+	}
+	host, _ := store.HostSession()
+	if host.ID == "%0" || host.ID != fw.created[0].id && !strings.HasPrefix(host.ID, "mewla-worker-brain") {
+		t.Fatalf("host = %+v", host)
+	}
+	for i := 0; i < 3; i++ {
+		if changed, err := service.ReconcileHostContinuity(); err != nil || changed {
+			t.Fatalf("stable reconcile %d: %v %v", i, changed, err)
+		}
+	}
+	if len(fw.created) != 1 {
+		t.Fatalf("duplicate Brain: %#v", fw.created)
+	}
+	assertHostRestartNotice(t, store, host.ID)
+	if problem := service.projectHostProblem(WorkerRef{}, service.hostExecutor()); problem != nil && problem.Code == "not_signed_in" {
+		t.Fatalf("no-host problem trusts the login status: %+v", problem)
+	}
+}
+
+// A Host that opened while its agent was signed out sits at the agent's own
+// sign-in screen, which never notices a sign-in made in another terminal. Once
+// the agent is no longer signed out the Host opens again by itself; while it
+// stays signed out it is left alone.
+func TestHostAtSignInScreenOpensAgainAfterSignIn(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetHostExecutorID("codex"); err != nil {
+		t.Fatal(err)
+	}
+	previous := hostLookPath
+	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	t.Cleanup(func() { hostLookPath = previous })
+	auth := HostAuthUnauthenticated
+	SetHostAuthProbe(func(string) HostAuthState { return auth })
+	t.Cleanup(func() { SetHostAuthProbe(nil) })
+	fw := &fakeWatcher{sendErr: watcher.ErrWorkerInputNotReady}
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	if _, err := service.ReconcileHostContinuity(); !errors.Is(err, watcher.ErrWorkerInputNotReady) {
+		t.Fatalf("first launch: %v", err)
+	}
+	if len(fw.created) != 1 {
+		t.Fatalf("created %#v", fw.created)
+	}
+	first := fw.created[0].id
+	for i := 0; i < 2; i++ {
+		_, _ = service.ReconcileHostContinuity()
+	}
+	if len(fw.created) != 1 || len(fw.killed) != 0 {
+		t.Fatalf("still signed out, yet reopened: created %#v killed %#v", fw.created, fw.killed)
+	}
+	auth = HostAuthAuthenticated
+	if changed, _ := service.ReconcileHostContinuity(); !changed {
+		t.Fatal("signed in, yet the Host at the sign-in screen stayed")
+	}
+	if len(fw.created) != 2 || len(fw.killed) != 1 || fw.killed[0] != first {
+		t.Fatalf("created %#v killed %#v: want the sign-in screen closed and one new Brain", fw.created, fw.killed)
+	}
+	if host, _ := store.HostSession(); host.ID != fw.created[1].id || host.ExecutorID != "codex" {
+		t.Fatalf("host after reopening = %+v", host)
+	}
+	if store.HostExecutorExplicit() != "codex" {
+		t.Fatal("reopening dropped the person's choice of agent")
+	}
+	if items, _ := store.ThreadTimeline(mustChatThread(t, store), defaultThreadTimelineLimit); len(items) != 0 {
+		t.Fatalf("a Host that held no conversation wrote %+v", items)
+	}
+	// The new Host opened signed in: it is never reopened for sign-in again,
+	// however long it takes to become ready.
+	_, _ = service.ReconcileHostContinuity()
+	fw.sendErr = nil
+	if _, err := service.ReconcileHostContinuity(); err != nil || len(fw.created) != 2 || len(fw.killed) != 1 {
+		t.Fatalf("stable after reopening: %v created %d killed %d", err, len(fw.created), len(fw.killed))
 	}
 }
 
@@ -245,4 +351,13 @@ func TestAutomaticHostContinuityAmbiguousActivationDoesNotDisableLaterRecovery(t
 	if host.ProviderSessionID != "saved-thread" || len(fw.created) != 1 || len(fw.sentCalls) != 1 {
 		t.Fatalf("incorrect recovery: %+v launches=%d sends=%d", host, len(fw.created), len(fw.sentCalls))
 	}
+}
+
+func mustChatThread(t *testing.T, store *Store) string {
+	t.Helper()
+	id, err := store.ChatThreadID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

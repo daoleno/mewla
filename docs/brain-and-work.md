@@ -367,18 +367,25 @@ the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, preferring one
 log names it and the `mewla brain use` command that changes it.
 
 When Brain has no running host, the state control reads "Can't start". The
-tray says why: the agent is not installed, is not signed in, did not start, or
-is open but never became ready (a sign-in or first-run prompt waiting in its
-terminal). It offers **Use** and an agent's name (**Use Codex**) for an installed agent
+tray says why: the agent is not installed, did not start, or is open but never
+became ready (a sign-in or first-run prompt waiting in its terminal; when its
+own sign-in check also says signed out, the tray says to sign in). It offers **Use** and an agent's name (**Use Codex**) for an installed agent
 that is signed in,
 and **Switch executor** when the computer has another agent installed; with
 none installed, `mewla deps` is the next step. Nothing needs a restart: Mewla
 checks again every few seconds, starts Brain's host as soon as the agent is
-installed or signed in, and starts it again after a reboot (a host that never
-held a conversation restarts by itself; one holding a conversation Mewla cannot
-resume is never replaced blind). Brain's pane starts in your login shell, so an
-agent Mewla sees as signed out still starts: it may be signed in through that
-shell. If it is not, it shows as open but not ready.
+installed, and opens it again once the agent is signed in (an agent's own
+sign-in screen does not notice a sign-in made in another terminal). Mewla never
+holds Brain back because an agent's sign-in check says signed out: Codex on an
+API key or its own model provider, or a sign-in that lives in your login shell,
+reads as signed out there and runs. If it really cannot run, it shows as open
+but not ready.
+
+When Brain's Session is gone (a reboot, a crash, an upgrade), Brain starts again
+in its conversation when its agent can resume it. When it cannot (no
+conversation was recorded, or the agent cannot resume it), Brain starts a new
+conversation from its workspace notes and Chat shows **Brain restarted** once:
+the earlier conversation couldn't be resumed.
 
 When the agent ends right after it starts, Chat and the tray show how it ended:
 its exit code and the last lines it printed. Mewla then waits two minutes before

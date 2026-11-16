@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 func workerSession(id, command string) map[string]*classifier.Worker {
@@ -48,23 +49,30 @@ func TestDefaultPickedHostMovesToAVerifiedAgent(t *testing.T) {
 			t.Fatal("a move by Mewla was recorded as a person's choice")
 		}
 	})
-	t.Run("signed out moves at once", func(t *testing.T) {
+	// Login status alone is no verdict: codex on an API key or its own
+	// provider says "not logged in" and runs. Brain stays where it is.
+	t.Run("signed out by login status alone stays", func(t *testing.T) {
 		service := healFixture(t, map[string]bool{"claude": true, "codex": true},
 			map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthUnauthenticated})
 		if err := service.store.SetHostSession("brain-host:@9", "codex"); err != nil {
 			t.Fatal(err)
 		}
-		if !service.healImplicitHost() || hostExecutorOnDisk(t, service) != "claude" {
-			t.Fatalf("executor = %q, want claude", hostExecutorOnDisk(t, service))
+		if service.healImplicitHost() || hostExecutorOnDisk(t, service) != "codex" {
+			t.Fatalf("executor = %q, want codex", hostExecutorOnDisk(t, service))
+		}
+		service.watcher = &fakeWatcher{sessions: workerSession("brain-host:@9", "codex")}
+		if service.healImplicitHost() || hostExecutorOnDisk(t, service) != "codex" {
+			t.Fatalf("running host moved: executor = %q, want codex", hostExecutorOnDisk(t, service))
 		}
 	})
-	t.Run("running host at a sign-in prompt moves", func(t *testing.T) {
+	t.Run("running host stuck at a sign-in prompt moves", func(t *testing.T) {
 		service := healFixture(t, map[string]bool{"claude": true, "codex": true},
 			map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthUnauthenticated})
 		if err := service.store.SetHostSession("brain-host:@9", "codex"); err != nil {
 			t.Fatal(err)
 		}
 		service.watcher = &fakeWatcher{sessions: workerSession("brain-host:@9", "codex")}
+		service.noteHostActivation(watcher.ErrWorkerInputNotReady)
 		if !service.healImplicitHost() || hostExecutorOnDisk(t, service) != "claude" {
 			t.Fatalf("executor = %q, want claude", hostExecutorOnDisk(t, service))
 		}

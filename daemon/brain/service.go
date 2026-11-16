@@ -82,6 +82,9 @@ type Service struct {
 	hostProblemSince time.Time
 	// hostNotReadySince is when the host pane first stayed unready for input.
 	hostNotReadySince time.Time
+	// hostLaunchAuth is what the sign-in probe said when the current Host was
+	// launched: a Host opened at a sign-in screen is opened again once that changes.
+	hostLaunchAuth HostAuthState
 	// hostChangedAt is when the person last chose another Host executor. The
 	// "did not start" grace counts from it, not only from daemon start: a
 	// long-running daemon that is switching Hosts must not call the new one
@@ -3158,6 +3161,9 @@ func (s *Service) ReconcileHostContinuity() (bool, error) {
 	}
 	hostExecutor := s.hostExecutor()
 	_, continuityErr := s.ensureHostContinuity(hostExecutor, true)
+	if s.hostSignedInSinceLaunch(hostExecutor.ID, continuityErr) {
+		continuityErr = s.reopenHostAfterSignIn(hostExecutor)
+	}
 	s.noteHostActivation(continuityErr)
 	s.noteHostStartResult(hostExecutor, continuityErr)
 	// Capture identity even if activation failed or its receipt is ambiguous.
@@ -3209,9 +3215,9 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	}
 	command, replaceDetail = discovery.command, discovery.replaceDetail
 	resumeToken := discovery.resumeToken
-	if automatic && replaceReason == hostReplaceReasonSessionMissing && resumeToken == "" && !s.hostHoldsNoConversation(hostSession) {
-		return WorkerRef{}, fmt.Errorf("brain host %q has no proven native session identity; refusing automatic blank replacement", id)
-	}
+	// A Host whose Session is gone and whose conversation cannot be resumed
+	// starts fresh with the workspace handoff; Chat says so once.
+	lostConversation := replaceReason == hostReplaceReasonSessionMissing && resumeToken == "" && !s.hostHoldsNoConversation(hostSession)
 	// No Session for an agent that cannot run: a missing CLI or one verified
 	// signed out leaves only a Session whose program ended.
 	if err := s.hostRunnable(executor); err != nil {
@@ -3368,6 +3374,10 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 			Detail:           replaceDetail,
 		})
 	}
+	if lostConversation {
+		s.noteHostRestartedFresh(workerID, executor.ID)
+	}
+	s.noteHostLaunchAuth(executor.ID)
 	if err := s.ensureHostActivation(workerID, command, executor, true, resumeToken == ""); err != nil {
 		// A program that ended at start fails its activation with whatever
 		// the input path noticed first; how it ended is the error to report.
@@ -4086,8 +4096,10 @@ func (s *Service) projectHostProblem(host WorkerRef, executor work.WorkerExecuto
 }
 
 // hostProblem names why there is no Brain host. A command that is not
-// installed or an agent verified signed out is certain and reported at once;
-// a host that simply has not appeared is reported once it is overdue.
+// installed is certain and reported at once; a host that simply has not
+// appeared is reported once it is overdue. The sign-in probe is not a reason:
+// an agent can run on an API key or its own provider while its login status
+// says signed out, so only what the launched agent does counts.
 func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
 	command := strings.TrimSpace(executor.Command)
 	if command == "" {
@@ -4106,9 +4118,6 @@ func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
 	case hostUnsupported(executor.ID) != "":
 		problem.Code = "unsupported"
 		problem.Detail = fmt.Sprintf("Brain is set to run on %s. %s Brain starts by itself afterwards.", name, hostUnsupported(executor.ID))
-	case hostAuth(executor.ID) == HostAuthUnauthenticated:
-		problem.Code = "not_signed_in"
-		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID))
 	case s.currentHostStartFailure(executor.ID) != nil:
 		problem.Code = "start_failed"
 		problem.Detail = fmt.Sprintf("Brain could not start on %s: %s", name, s.currentHostStartFailure(executor.ID).Detail)
@@ -4235,9 +4244,6 @@ func (s *Service) healImplicitHost() bool {
 		if !since.IsZero() && time.Since(since) >= hostHealGrace {
 			target, reason = problem.SuggestExecutor, problem.Code
 		}
-	case problem == nil && hostAuth(executor.ID) == HostAuthUnauthenticated:
-		// The host runs, but its agent sits at a sign-in prompt.
-		target, reason = s.verifiedAlternativeHost(executor.ID), string(HostAuthUnauthenticated)
 	}
 	if target == "" || target == executor.ID {
 		return false

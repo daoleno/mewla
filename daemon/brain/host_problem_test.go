@@ -90,14 +90,16 @@ func TestHostProblemNamesWhyBrainHasNoHost(t *testing.T) {
 			t.Fatalf("problem = %+v", problem)
 		}
 	})
-	t.Run("signed out", func(t *testing.T) {
+	// Login status is no reason Brain has no host: an agent on an API key says
+	// "not logged in" and runs. What is reported is that it did not start.
+	t.Run("signed out by login status", func(t *testing.T) {
 		service := hostFixture(t, map[string]bool{"claude": true, "codex": true},
 			map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthUnauthenticated})
 		if err := service.store.SetHostSession("brain-host:@1", "codex"); err != nil {
 			t.Fatal(err)
 		}
 		problem := service.hostProblem(service.hostExecutor())
-		if problem == nil || problem.Code != "not_signed_in" || problem.SuggestExecutor != "claude" {
+		if problem == nil || problem.Code != "not_started" || problem.SuggestExecutor != "claude" {
 			t.Fatalf("problem = %+v", problem)
 		}
 	})
@@ -114,7 +116,9 @@ func TestHostProblemNamesWhyBrainHasNoHost(t *testing.T) {
 		}
 	})
 	t.Run("a host still starting is no problem", func(t *testing.T) {
+		previous := processStartedAt
 		processStartedAt = time.Now()
+		t.Cleanup(func() { processStartedAt = previous })
 		service := hostFixture(t, map[string]bool{"claude": true}, map[string]HostAuthState{"claude": HostAuthUnknown})
 		if problem := service.hostProblem(service.hostExecutor()); problem != nil {
 			t.Fatalf("problem = %+v within the start grace", problem)
@@ -200,7 +204,7 @@ func TestHostProblemListsTheOtherInstalledAgents(t *testing.T) {
 	}
 	// The host itself is never its own alternative.
 	problem = project(t, map[string]bool{"claude": true, "codex": true}, map[string]HostAuthState{"claude": HostAuthUnauthenticated}, "claude")
-	if problem == nil || problem.Code != "not_signed_in" || strings.Join(problem.InstalledExecutors, ",") != "codex" {
+	if problem == nil || problem.Code != "not_started" || strings.Join(problem.InstalledExecutors, ",") != "codex" {
 		t.Fatalf("host signed out: %+v", problem)
 	}
 }
