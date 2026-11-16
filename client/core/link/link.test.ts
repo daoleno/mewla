@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import nacl from "../vendor/nacl";
 import { bytesToHex } from "../protocolCrypto";
 import { buildServerAssertionPayload } from "../deviceAuthContract";
@@ -14,6 +14,7 @@ import {
   resetLinkTransportForTests,
   resolveStoredServerURL,
   transportFailed,
+  transportOpened,
   transportPathInfo,
 } from "./pinnedTransport";
 
@@ -93,6 +94,7 @@ function linkServer(extra: Partial<StoredServer> = {}): StoredServer {
 }
 
 beforeEach(() => resetLinkTransportForTests());
+afterEach(() => setSystemTime());
 
 describe("pairing with a Mewla Relay code", () => {
   test("pairs through a pinned tunnel to the code's admission and keeps the route, pin and stable address", async () => {
@@ -224,6 +226,59 @@ describe("reaching a computer on Mewla Relay", () => {
     await resolveStoredServerURL(server);
     expect(transportPathInfo("srv")?.path).toBe("relay");
     expect(host.stopped).toContain("server:srv:direct:192.168.1.20:9443");
+  });
+});
+
+describe("a connection open on a path", () => {
+  /** A computer whose LAN address answers its health challenge while `answering` says so. */
+  async function lanComputer(answering: { now: boolean }) {
+    const host = fakeTunnels();
+    installMemoryPlatform({
+      linkTunnels: host.tunnels,
+      fetch: async (url) => {
+        if (!answering.now) throw new Error("connection reset");
+        const challenge = new URL(url).searchParams.get("challenge")!;
+        return Response.json(await signed("mewla-health-challenge", challenge));
+      },
+    });
+    return { host, server: linkServer({ daemonId: await daemonId() }) };
+  }
+
+  test("keeps it for every caller: a failed re-check never closes the tunnel the connection runs on", async () => {
+    const answering = { now: true };
+    const { host, server } = await lanComputer(answering);
+    learnDirectAddresses(server, [{ host: "192.168.1.20", port: 9443 }]);
+    const url = await resolveStoredServerURL(server);
+    expect(transportPathInfo("srv")?.path).toBe("lan");
+    transportOpened(server);
+    // Long past the selection's freshness, a screen's request comes while the health check would fail.
+    setSystemTime(new Date(Date.now() + 5 * 60_000));
+    answering.now = false;
+    expect(await resolveStoredServerURL(server)).toBe(url);
+    expect(host.stopped).not.toContain("server:srv:direct:192.168.1.20:9443");
+    // Once the connection on it fails, the next one measures afresh.
+    await transportFailed(server);
+    expect(host.stopped).toContain("server:srv:direct:192.168.1.20:9443");
+    await resolveStoredServerURL(server);
+    expect(transportPathInfo("srv")?.path).toBe("relay");
+  });
+
+  test("on the relay is never moved onto a direct path that became reachable; the next connection takes it", async () => {
+    const { host, server: base } = await lanComputer({ now: true });
+    // A computer of its own: what was learned for another stays learned for this run.
+    const server = { ...base, id: "srv-relay" };
+    const relay = await resolveStoredServerURL(server);
+    expect(transportPathInfo("srv-relay")?.path).toBe("relay");
+    transportOpened(server);
+    // The phone joins the computer's Wi-Fi: the computer names its LAN address.
+    learnDirectAddresses(server, [{ host: "192.168.1.20", port: 9443 }]);
+    setSystemTime(new Date(Date.now() + 5 * 60_000));
+    expect(await resolveStoredServerURL(server)).toBe(relay);
+    expect(transportPathInfo("srv-relay")?.path).toBe("relay");
+    expect(host.started.some((line) => line.includes("192.168.1.20"))).toBe(false);
+    await transportFailed(server);
+    await resolveStoredServerURL(server);
+    expect(transportPathInfo("srv-relay")?.path).toBe("lan");
   });
 });
 

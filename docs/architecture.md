@@ -332,6 +332,24 @@ If the connector has failed over to another configured relay, the next mobile
 selection reaches the new route. Manual candidates are not silently mixed into
 Relay failover; the user selects a self-managed record/path explicitly.
 
+A working connection is never closed to move it onto a better path. Each new
+connection races the computer's announced direct addresses (LAN, Tailscale)
+against the relay and takes a direct one that proves it is the paired daemon,
+but while a connection is open every caller (HTTP requests, viewers) uses its
+path as it is, without re-measuring it under the connection
+(`client/core/link/pinnedTransport.ts`). Closing a working relay socket as soon
+as a direct address answered, and falling back when the direct socket died,
+cost the owner's phone some 35 dropped sockets an hour at home.
+
+The Android and iOS hosts report the phone's network changes (`link.network
+{online}`, from the default network callback and `NWPathMonitor`). A reconnect
+waiting out its backoff goes at once when a network is back, and a live socket
+answers a `link_ping` within 5 s or is replaced, instead of after 25 s of
+silence. Each new connection reports how the previous one ended in one
+`client_diagnostic` line (`event=link_drop`: why, path, age, time down,
+attempts, network changes), so the daemon log says which drops were the
+network's, the app's or the connection's own.
+
 Route presence is in memory. A relay restart deliberately disconnects routes;
 connectors re-register. A single-region MVP therefore runs one relay process
 (or one active replica). Horizontal scale requires a later minimal route-owner

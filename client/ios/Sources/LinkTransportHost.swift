@@ -13,9 +13,11 @@ import Security
 ///   closed and replaced.
 /// - `link.stop {key}`, `link.stopAll`: close tunnels.
 /// - `link.events {key}` → `[String]`: what the tunnel saw, hop by hop, for a pairing that did not finish.
+/// - the event `link.network {online}`: the phone's network changed (`LinkNetworkWatch`).
 enum LinkTransportHost {
   @MainActor
   static func register(_ app: NshAppView) {
+    LinkNetworkWatch.shared.start(app)
     app.handle("link.start") { data -> Any? in
       let input = (data as? [String: Any]) ?? [:]
       let key = input["key"] as? String ?? ""
@@ -78,6 +80,37 @@ enum LinkTransportHost {
     guard mode == "measure" || mode == "on-demand" else {
       throw LinkTransportError.invalidInput("Mewla Relay tunnel mode is invalid.")
     }
+  }
+}
+
+/// Tells the app when the phone's network changes (`link.network {online}`), as the Android host's NetworkWatch
+/// does: the connection to the computer then reconnects as soon as a network is there again instead of waiting out
+/// its backoff, and a socket left on the network that went away is found out in seconds, not after 25 s of silence
+/// (client/core/transport.ts `networkChanged`). A change is the path becoming usable or not, or going over other
+/// interfaces (Wi-Fi to cellular); the path as it is when the watch starts is not one.
+final class LinkNetworkWatch: @unchecked Sendable {
+  static let shared = LinkNetworkWatch()
+  private let monitor = NWPathMonitor()
+  private let queue = DispatchQueue(label: "dev.mewla.link.network")
+  /// The last path told (on `queue`): its interfaces when usable, "offline" when not; nil before the first.
+  private var told: String?
+  private var started = false
+
+  @MainActor
+  func start(_ app: NshAppView) {
+    guard !started else { return }
+    started = true
+    monitor.pathUpdateHandler = { [weak self, weak app] path in
+      guard let self else { return }
+      let online = path.status == .satisfied
+      let seen = online ? path.availableInterfaces.map { "\($0.type):\($0.name)" }.joined(separator: ",") : "offline"
+      guard seen != self.told else { return }
+      let first = self.told == nil
+      self.told = seen
+      if first { return }
+      Task { @MainActor in app?.send("link.network", ["online": online]) }
+    }
+    monitor.start(queue: queue)
   }
 }
 

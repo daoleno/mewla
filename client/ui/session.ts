@@ -324,6 +324,11 @@ export function resumeConnection(): void {
   transport?.resume();
 }
 
+/** The phone's network changed (App.tsx, the hosts' `link.network`): see core/transport.ts `networkChanged`. */
+export function networkChanged(online: boolean): void {
+  transport?.networkChanged(online);
+}
+
 let away = false;
 
 /**

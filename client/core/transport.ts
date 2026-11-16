@@ -1,5 +1,5 @@
 import { buildAuthorizationHeader } from "./auth";
-import { directPathBecameAvailable, invalidateStoredServerTransport, resolveStoredServerURL, transportFailed } from "./link/pinnedTransport";
+import { invalidateStoredServerTransport, resolveStoredServerURL, transportFailed, transportOpened, transportPathInfo } from "./link/pinnedTransport";
 import { platform, type SocketLike } from "./platform";
 import { frameSubprotocols, frameText } from "./frames";
 import type { StoredServer } from "./storedServerContract";
@@ -38,8 +38,11 @@ export const transportTiming = {
   connectLimitMs: 30_000,
   firstRetryMs: 1_000,
   maxRetryMs: 30_000,
-  /** On Mewla Relay's relay, how often to look for a direct path (a phone that joined the computer's Wi-Fi). */
-  directCheckMs: 20_000,
+  /**
+   * After the phone's network changed under a live socket (`networkChanged`), how long the socket has to carry
+   * something before it is taken for one left on the network that went away.
+   */
+  networkProofMs: 5_000,
   /**
    * The slowest link a big message is allowed for: the computer announces a message of 64 KB or more on the
    * wire (`frame_coming`, its size), and the socket may stay quiet for as long as that size takes at this rate,
@@ -110,8 +113,14 @@ export class Transport {
   /** The state the state listeners were last told. */
   private told: ConnectionState = "idle";
   private watchdog: ReturnType<typeof setInterval> | null = null;
-  private directCheck: ReturnType<typeof setInterval> | null = null;
+  /** The check that the live socket still works on the phone's new network (`networkChanged`). */
+  private networkProof: ReturnType<typeof setTimeout> | null = null;
   private lastFrameAt = 0;
+  /** When the live socket opened, and on which path: what a drop report says (`reportLost`). */
+  private openedAt = 0;
+  private openedPath = "";
+  /** The last live socket's end, until the next one opens and reports it; with what happened in between. */
+  private lost: { why: string; path: string; ageMs: number; away: boolean; at: number; attempts: number; network: number } | null = null;
   /** Until when an announced message may keep the socket quiet (`frame_coming`); 0 with none on its way. */
   private comingUntil = 0;
   private nextId = 0;
@@ -171,6 +180,22 @@ export class Transport {
       return this.restart();
     }
     if (this.state === "waiting" || this.stranded()) this.restart();
+  }
+
+  /**
+   * The phone's network changed (the host's `link.network`): a network became the default one, or came back. Offline
+   * nothing is done: the system ends the sockets it took away, and their ends say so. Online, a wait for the next retry
+   * ends now instead of waiting out the backoff, and the backoff starts over. An attempt in flight goes on (a second
+   * one now would race it for the same tunnel); if it fails, the next one follows after the first retry's wait. A live
+   * socket is asked for an answer (`link_ping`): one that carries nothing within `networkProofMs` was left on the old
+   * network and is replaced now, not after `silentLimitMs` of silence.
+   */
+  networkChanged(online: boolean): void {
+    if (this.lost) this.lost.network++;
+    if (!this.wanted || !online) return;
+    if (this.socket && this.state === "connected") return this.proveSocket();
+    if (this.state === "waiting" || this.stranded()) return this.restart();
+    this.retryMs = transportTiming.firstRetryMs;
   }
 
   /** Replaces a connection that stopped answering: closes the socket as lost, or starts over, and reconnects without waiting. */
@@ -339,10 +364,16 @@ export class Transport {
       if (attempt !== this.attempt) return socket.close();
       this.clearAttempt();
       this.retryMs = transportTiming.firstRetryMs;
+      const lastProblem = this.problem;
       this.problem = "";
       this.lastFrameAt = Date.now();
+      this.openedAt = this.lastFrameAt;
+      // The path this socket is carried on stays its own: no other caller re-measures it while it is open.
+      transportOpened(this.server);
+      this.openedPath = transportPathInfo(this.server.id)?.path ?? (this.server.transportKind === "link" ? "link" : "address");
       this.startWatchdog();
       this.state = "connected";
+      this.reportLost(lastProblem);
       this.tellState();
       // Behind whatever of the last socket is still being handed over, in a call of its own.
       this.receive({ type: "connected" }, BIG_FRAME_BYTES);
@@ -381,11 +412,14 @@ export class Transport {
       if (this.socket === socket) this.socket = null;
       if (attempt !== this.attempt) return;
       const wasConnected = this.state === "connected";
+      if (wasConnected) {
+        const now = Date.now();
+        this.lost = { why, path: this.openedPath, ageMs: now - this.openedAt, away: this.away, at: now, attempts: 0, network: 0 };
+      } else if (this.lost) this.lost.attempts++;
       this.clearTimers();
       this.queue = [];
       this.armRetry(why);
-      // Moving onto a direct path keeps the relay open as the fallback; any other end measures afresh.
-      if (why !== "direct-available") void transportFailed(this.server);
+      void transportFailed(this.server);
       this.tellState();
       // What came in before the end is the computer's state as of then: it is handed over first, on the ticks it
       // was given, and the end after it in a call of its own. Handing it all over here, in the socket's own call,
@@ -408,6 +442,7 @@ export class Transport {
 
   /** An attempt that never opened failed: the retry is armed first, then the tunnel's bookkeeping and the listeners run. */
   private failed(problem: string, measureAfresh: boolean): void {
+    if (this.lost) this.lost.attempts++;
     this.clearAttempt();
     this.armRetry(problem);
     if (measureAfresh) void transportFailed(this.server);
@@ -453,20 +488,71 @@ export class Transport {
       const why = this.silence(now, away);
       if (why) this.kill(why);
     }, transportTiming.checkMs);
-    if (this.server.transportKind !== "link") return;
-    // A phone that joined the computer's network after connecting through the relay moves onto
-    // the direct path with one quick reconnect.
-    let probing = false;
-    this.directCheck = setInterval(() => {
-      if (probing || this.state !== "connected") return;
-      probing = true;
-      void directPathBecameAvailable(this.server)
-        .then((available) => {
-          if (available && this.state === "connected") this.kill("direct-available");
-        })
-        .catch(() => undefined)
-        .finally(() => (probing = false));
-    }, transportTiming.directCheckMs);
+  }
+
+  /**
+   * After a network change under the live socket: asks the computer for an answer, and replaces the socket if nothing
+   * at all came in by `networkProofMs` (a big message announced and still on its way counts as something). A check
+   * that ends late, the app having been away, judges by what the computer keeps instead, as `resume` does.
+   */
+  private proveSocket(): void {
+    if (this.networkProof) return;
+    const socket = this.socket;
+    const sentAt = Date.now();
+    try {
+      this.sendQuietly({ type: "link_ping", request_id: `ping-${sentAt.toString(36)}` });
+    } catch {
+      return;
+    }
+    this.networkProof = setTimeout(() => {
+      this.networkProof = null;
+      if (this.socket !== socket || this.state !== "connected") return;
+      const now = Date.now();
+      if (this.lastFrameAt >= sentAt || now <= this.comingUntil) return;
+      const late = now - sentAt > transportTiming.networkProofMs * 3;
+      const why = late ? this.silence(now, true) : "network changed";
+      if (why) this.kill(why);
+    }, transportTiming.networkProofMs);
+  }
+
+  /**
+   * Tells the computer how the last live socket ended, once the next one is open (`client_diagnostic` `link_drop`, one
+   * line in its log): why this end of it gave up (or the socket's own close), on which path, how long it had lived, how
+   * long the phone was without one, and what happened meanwhile. It is what says which drops were the network's, the
+   * app's or this connection's own.
+   */
+  private reportLost(lastProblem: string): void {
+    const lost = this.lost;
+    this.lost = null;
+    if (!lost) return;
+    const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+    const word = (text: string) => text.replace(/\s+/g, "_").slice(0, 60) || "-";
+    try {
+      this.sendQuietly({
+        type: "client_diagnostic",
+        name: "link_drop",
+        request_id: `drop-${lost.at.toString(36)}`,
+        body: [
+          `why=${word(lost.why)}`,
+          `path=${lost.path}`,
+          `age=${seconds(lost.ageMs)}`,
+          `down=${seconds(Date.now() - lost.at)}`,
+          `attempts=${lost.attempts}`,
+          `last=${word(lastProblem)}`,
+          `away=${lost.away}`,
+          `network_changes=${lost.network}`,
+        ].join(" "),
+      });
+    } catch {
+      // A report is not worth the connection.
+    }
+  }
+
+  /** Sends a frame no answer is waited on (`asked` stays the requests whose answers matter while away). */
+  private sendQuietly(frame: Frame): void {
+    if (this.state !== "connected" || !this.socket) throw new Error("Daemon is not connected.");
+    this.queue.push(JSON.stringify(frame));
+    this.drain();
   }
 
   /** Ends the current socket as lost (not intentional): what is waiting fails, and the retry follows. */
@@ -483,11 +569,11 @@ export class Transport {
 
   private clearTimers(): void {
     if (this.watchdog) clearInterval(this.watchdog);
-    if (this.directCheck) clearInterval(this.directCheck);
+    if (this.networkProof) clearTimeout(this.networkProof);
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.clearAttempt();
     this.watchdog = null;
-    this.directCheck = null;
+    this.networkProof = null;
     this.retryTimer = null;
   }
 

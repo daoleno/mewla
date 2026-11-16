@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
   private lateinit var push: PushHost
   private lateinit var channelHosts: ChannelHosts
   private lateinit var watchdog: JsWatchdog
+  private lateinit var network: com.daoleno.mewla.link.NetworkWatch
 
   override fun onCreate(state: Bundle?) {
     super.onCreate(state)
@@ -33,6 +34,7 @@ class MainActivity : ComponentActivity() {
     watchdog = JsWatchdog(this, nsh)
     ScanHost(this, nsh)
     com.daoleno.mewla.link.LinkTransportHost(nsh)
+    network = com.daoleno.mewla.link.NetworkWatch(this, nsh).also { it.start() }
     nsh.registerComponent("mewla.qrScanner") { events -> QrScanner(this, events) }
     nsh.registerComponent("mewla.terminal") { events -> TerminalComponent(this, events) }
     nsh.handle("secure.get") { data, reply -> answer(reply) { secure.get(key(data)) } }
@@ -96,6 +98,7 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onDestroy() {
+    network.stop()
     channelHosts.onDestroy()
     nsh.destroy()
     super.onDestroy()

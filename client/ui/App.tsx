@@ -5,7 +5,7 @@ import { keepReadingPlaces, loadReadingPlaces } from "../core/timeline/readingPl
 import { nshPlatform } from "./platform";
 import { justPaired, linkPairing, pairFromText, pairingStatus } from "./pairing";
 import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
-import { current, loadSession, ready, resumeConnection, setConnectionAway } from "./session";
+import { current, loadSession, networkChanged, ready, resumeConnection, setConnectionAway } from "./session";
 import { FirstRun, openPhonePage, openSettingsLink, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
@@ -72,6 +72,10 @@ export function startApp(): void {
     if (active) resumeConnection();
     else keepReadingPlaces();
   });
+
+  // The phone's network changed (the Android and iOS hosts' `link.network`): a reconnect waiting out its backoff goes
+  // now, and a live socket proves it still works on the new network instead of going silent for 25 s.
+  host.on("link.network", (payload) => networkChanged((payload as { online?: unknown } | null)?.online !== false));
 
   // Links the system opens in the app: a pairing link pairs, like a scan; the others open their page.
   host.on("links.open", (payload) => {

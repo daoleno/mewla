@@ -52,12 +52,12 @@ export function connectedCopy(connection: string, name: string, problem: string)
 }
 
 /**
- * The transport's own words for an end ("error", "silent", "closed (1006)", "direct-available")
+ * The transport's own words for an end ("error", "silent", "closed (1006)", "network changed")
  * are for logs; only a reason the computer gave when it closed is shown to the person.
  */
 function personProblem(problem: string): string {
   const text = problem.trim();
-  return /^(error|silent|direct-available|closed \(\d+\))$/.test(text) ? "" : text;
+  return /^(error|silent|network changed|closed \(\d+\))$/.test(text) ? "" : text;
 }
 
 // ---- Layout -------------------------------------------------------------------------------
