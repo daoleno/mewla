@@ -83,6 +83,10 @@ type Manager struct {
 // nothing it was keyed on changed.
 const timelineSafetyNet = time.Minute
 
+// outboundGap spaces messages to one chat: Telegram advises at most one per
+// second. A variable so tests need not wait a second per message.
+var outboundGap = time.Second
+
 // versionedBrain is implemented by a Brain owner that can say, cheaply, whether
 // what a thread's conversation shows may have changed.
 type versionedBrain interface {
@@ -627,7 +631,7 @@ func (m *Manager) deliverPending(ctx context.Context, limit int) error {
 		}
 		// Telegram's official FAQ advises no more than one message per second
 		// in a single chat. Edits share the same conservative serialization.
-		timer := time.NewTimer(time.Second)
+		timer := time.NewTimer(outboundGap)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

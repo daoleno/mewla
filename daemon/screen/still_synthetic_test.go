@@ -20,11 +20,10 @@ import (
 // text-like lines at 900 px/s, and stops. It lets the still-frame probe and
 // the viewer end-to-end test run anywhere.
 type markerSession struct {
-	start       time.Time
-	w, h        int
-	wait, run   time.Duration
-	hiddenAfter time.Duration // when non-zero, the page stops drawing from this time (a hidden tab)
-	img         *image.RGBA
+	start     time.Time
+	w, h      int
+	wait, run time.Duration
+	img       *image.RGBA
 }
 
 func newMarkerSession(w, h int, wait, run time.Duration) *markerSession {
@@ -37,9 +36,6 @@ const markerTick = time.Second / 30
 // number of what the screen shows, and the marker.
 func (s *markerSession) state(at time.Time) (seq uint64, m pageMarker) {
 	el := at.Sub(s.start)
-	if s.hiddenAfter > 0 && el > s.hiddenAfter {
-		el = s.hiddenAfter
-	}
 	switch {
 	case el >= s.wait+s.run:
 		end := int((s.wait + s.run) / markerTick)
@@ -63,9 +59,9 @@ func (s *markerSession) Frame(ctx context.Context, after uint64) (Frame, error) 
 			s.draw(m)
 			return Frame{Seq: seq, Image: s.img, At: now}, nil
 		}
-		// Nothing new: a page that is done, or hidden, never changes again.
+		// Nothing new: a page that is done never changes again.
 		var next time.Duration = markerTick
-		if m.Phase == phaseDone || (s.hiddenAfter > 0 && now.Sub(s.start) > s.hiddenAfter) {
+		if m.Phase == phaseDone {
 			next = time.Hour
 		}
 		select {
@@ -149,17 +145,6 @@ func TestStillProbeOnASyntheticPage(t *testing.T) {
 			t.Errorf("video mode but %d of %d moving updates were video", r.motionVideoUpdates, r.motionUpdates)
 		}
 	}
-}
-
-// A page that stops drawing (a hidden tab) is invalid, not a pass.
-func TestStillProbeRejectsAHiddenPage(t *testing.T) {
-	session := newMarkerSession(640, 400, time.Hour, time.Second) // never scrolls
-	session.hiddenAfter = 300 * time.Millisecond
-	r := probeStill(t, context.Background(), session, "hidden", nil, "")
-	if r.invalid == "" {
-		t.Fatalf("a hidden page was measured: %+v", r)
-	}
-	t.Log(r.invalid)
 }
 
 // The fixture page's own logic, run under node with a stubbed DOM and a

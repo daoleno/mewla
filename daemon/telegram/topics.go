@@ -877,7 +877,7 @@ func (m *Manager) deliverTopicOps(ctx context.Context, limit int) error {
 		}
 		// Topic creation/rename is a per-chat message under Telegram's
 		// one-message-per-second guidance; share the conservative schedule.
-		timer := time.NewTimer(time.Second)
+		timer := time.NewTimer(outboundGap)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

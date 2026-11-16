@@ -1051,7 +1051,7 @@ func (a *agentSession) readAppLocked(ctx context.Context, app App, scope appScop
 
 // elementSettle lets an app redraw where it can't be fingerprinted (see
 // settleApp), and after a window is raised for a click.
-const elementSettle = 300 * time.Millisecond
+var elementSettle = 300 * time.Millisecond
 
 // actOnElement does one thing to an element of the latest read, in the
 // background, and answers with the app read again.

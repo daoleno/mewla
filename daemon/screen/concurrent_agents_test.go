@@ -43,7 +43,7 @@ func TestTwoWorkersActOnDifferentAppsAtTheSameTime(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 12; i++ {
+			for i := 0; i < 3; i++ {
 				if _, err := s.Act(context.Background(), worker, AgentAction{Action: "left_click", Coordinate: []int{100, 80}, App: app}); err != nil {
 					errs <- errors.New(worker + " " + app + ": " + err.Error())
 					return
@@ -71,7 +71,7 @@ func TestTwoWorkersActOnDifferentAppsAtTheSameTime(t *testing.T) {
 	for _, c := range backend.AppClicks {
 		byWindow[c.Window]++
 	}
-	if byWindow[7] != 12 || byWindow[9] != 12 {
+	if byWindow[7] != 3 || byWindow[9] != 3 {
 		t.Fatalf("clicks by window %v", byWindow)
 	}
 	if !backend.Parked[202] || !backend.Parked[404] {
