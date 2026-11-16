@@ -89,24 +89,20 @@ function isGenericWorkerTitle(name: string, kind: AgentKind): boolean {
   if (kind === 'grok' && (lower === 'grok' || lower === 'grok cli' || lower === 'xai grok')) return true;
   if (kind === 'pi' && (lower === 'pi' || lower === 'pi coding agent')) return true;
   if (kind === 'opencode' && (lower === 'opencode' || lower === 'open code')) return true;
-  if (
+  return (
     lower === 'zsh' ||
     lower === 'bash' ||
     lower === 'sh' ||
     lower === 'fish' ||
     lower === 'shell' ||
     lower === 'terminal' ||
-    lower === 'tmux' ||
-    lower === '[tmux]' ||
     lower === 'node' ||
     lower === 'bun' ||
     lower === 'python' ||
     lower === 'python3' ||
-    lower.includes('tmux') ||
     lower.startsWith('./') ||
     lower.startsWith('/')
-  ) return true;
-  return /^[\w.-]+:[@%\w.-]+$/.test(lower);
+  );
 }
 
 function sanitizeName(value?: string): string {
