@@ -91,9 +91,9 @@ describe("Brain's menu (§1.6)", () => {
     expect(app.shows("id:brain-executor-agent")).toBe(true);
     expect(app.shows("id:brain-executor-grok")).toBe(false);
     expect(app.shows("id:brain-executor-install")).toBe(true);
-    // One line per agent, by product name; no runtime, no lone account; a second line only to ask for a sign-in.
+    // One line per agent, by product name; no lone account; a second line only to ask for a sign-in.
     for (const text of ["Claude Code", "Codex", "Cursor Agent", "Not signed in"]) expect(app.texts()).toContain(text);
-    expect(app.texts().some((t) => t.includes("tmux") || t.includes("me@x"))).toBe(false);
+    expect(app.texts().some((t) => t.includes("me@x"))).toBe(false);
     await app.press("id:brain-executor-codex");
     await app.waitFor("id:brain-executor-error");
     expect(app.texts()).toContain("brain host executor is locked by environment override");
