@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the checks of .github/workflows/ci.yml that can run on a Linux dev box.
+"""Run the checks of .github/workflows/ci.yml that can run on this dev box (Linux or a Mac).
 
 Run it before pushing to main. The step commands are read from ci.yml, so the
 script cannot drift from CI by itself; scripts/tests/test_ci_local.py fails when
@@ -35,10 +35,13 @@ except ImportError:  # pragma: no cover
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/ci.yml"
 
-# Jobs that need hardware or SDKs a Linux dev box does not have.
+# Jobs that need hardware or SDKs this computer does not have. The macOS daemon job runs on a Mac,
+# as on its runner, and is skipped elsewhere.
 SKIPPED_JOBS = {
     "windows": "needs a Windows runner (Windows PowerShell and the Win32 API)",
 }
+if sys.platform != "darwin":
+    SKIPPED_JOBS["daemon-macos"] = "needs a macOS runner (the daemon's darwin build and its tests)"
 
 # Path globs (git paths, fnmatch with * crossing "/") that make a job relevant.
 # A change to ci.yml or to this script runs everything.
@@ -46,6 +49,7 @@ EVERYTHING = [".github/workflows/ci.yml", "scripts/ci-local.py", "bunfig.toml"]
 JOB_PATHS = {
     "installer": ["install.sh", "scripts/tests/install_test.sh", "scripts/install*"],
     "daemon": ["daemon/*", "scripts/*plugin-publisher*", "scripts/build-daemon-linux.sh", "scripts/build-web-ui.sh"],
+    "daemon-macos": ["daemon/*"],
     "client": ["client/*", "bun.lock", "package.json"],
     "client-ui": ["client/*"],
     "native-contract": [

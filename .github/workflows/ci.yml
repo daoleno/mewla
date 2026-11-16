@@ -1,6 +1,6 @@
 name: CI
 
-# Every push and PR runs the fast checks: the daemon, the NSH client's core and
+# Every push and PR runs the fast checks: the daemon (on Linux and on macOS), the NSH client's core and
 # UI, the native terminal contract and the release scripts. The daemon release
 # build, which also builds the web UI the daemon embeds, runs on release tag
 # pushes and manual dispatch. The client's native hosts are built by client.yml
@@ -83,6 +83,37 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
         working-directory: .
         run: ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/release-bin"
+
+  # The daemon as it runs on a Mac: every package built for darwin and its tests, which include the
+  # Mac's own code (screen, agent display, keychain, Live Activity). Tests that need a person's
+  # screen, permissions or apps skip themselves unless asked for (MEWLA_ACCEPT and the like).
+  daemon-macos:
+    name: Daemon (Go, macOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: daemon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Install runtime test prerequisites
+        run: command -v tmux >/dev/null || brew install tmux
+      # A short temporary directory on its real path: tests put Unix sockets in t.TempDir(), whose
+      # paths under the Mac's /var/folders TMPDIR pass its 104-byte socket limit, and /tmp is a
+      # symlink that tests comparing resolved paths see through. Linux runners have /tmp.
+      - name: Test
+        run: |
+          dir="$(mktemp -d /private/tmp/mg.XXXXXX)"
+          trap 'rm -rf "$dir"' EXIT
+          TMPDIR="$dir" go test ./...
+      - name: Vet
+        run: go vet ./...
 
   client:
     name: Client (NSH core and typecheck)
