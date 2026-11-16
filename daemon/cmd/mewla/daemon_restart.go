@@ -372,14 +372,30 @@ func (rt daemonRuntime) restartInPlace(stateDir string, daemon runningDaemon, wa
 	if want != "" {
 		onto = want
 	}
+	// Restarted onto the same version, the old daemon answers as want until
+	// it stops: only a new start time (or a new PID, on Windows) or a gap
+	// in its answers shows the restart happened.
+	sameVersion := want == "" || want == daemon.Version
+	before, statusErr := rt.status(stateDir)
 	if err := rt.upgrade(stateDir, want); err != nil {
 		return fmt.Errorf("%s did not restart onto %s: %w", name, onto, err)
 	}
-	stopped := false
-	answered := rt.waitFor(func() bool {
-		if rt.answersAs(stateDir, daemon.Addr, want) {
+	stopped, gap := false, false
+	restarted := func() bool {
+		if !sameVersion {
 			return true
 		}
+		if statusErr == nil && !before.Started.IsZero() {
+			now, err := rt.status(stateDir)
+			return err == nil && (now.PID != before.PID || !now.Started.Equal(before.Started))
+		}
+		return gap
+	}
+	answered := rt.waitFor(func() bool {
+		if rt.answersAs(stateDir, daemon.Addr, want) {
+			return restarted()
+		}
+		gap = true
 		stopped = !rt.alive(daemon.PID)
 		return stopped
 	}, rt.inPlaceWait)

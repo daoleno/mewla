@@ -32,6 +32,13 @@ type fakeDaemon struct {
 	refuse        error
 	exitOnUpgrade bool
 	addr          string
+	// started is when the daemon process image started (daemon_status);
+	// oldAnswers is how many health answers the old image still gives after
+	// accepting a restart before it starts again.
+	started    time.Time
+	oldAnswers int
+	pending    string
+	healthAsks int
 	// ignoreRuns is how many logon task runs are dropped (the previous
 	// instance is still ending) before one starts the daemon.
 	ignoreRuns int
@@ -69,7 +76,7 @@ func (d *fakeDaemon) runtime(t *testing.T, goos string, runner *fakeBootRunner, 
 			if !d.running {
 				return control.DaemonStatus{}, control.ErrNotRunning
 			}
-			return control.DaemonStatus{PID: d.pid, Executable: self, Version: d.version, Addr: d.addr}, nil
+			return control.DaemonStatus{PID: d.pid, Executable: self, Version: d.version, Addr: d.addr, Started: d.started}, nil
 		},
 		upgrade: func(_ string, version string) error {
 			d.mu.Lock()
@@ -82,8 +89,13 @@ func (d *fakeDaemon) runtime(t *testing.T, goos string, runner *fakeBootRunner, 
 				d.running = false
 				return nil
 			}
-			// execve: the same PID answers as the new version.
-			d.version = version
+			// execve: the same PID answers as the new version, once the old
+			// image has finished answering.
+			if d.oldAnswers > 0 {
+				d.pending = version
+				return nil
+			}
+			d.version, d.started = version, d.started.Add(time.Second)
 			return nil
 		},
 		parentImage: func(int) (string, error) { return "conhost.exe", nil },
@@ -92,6 +104,14 @@ func (d *fakeDaemon) runtime(t *testing.T, goos string, runner *fakeBootRunner, 
 			defer d.mu.Unlock()
 			if !d.running {
 				return daemonHealth{}, errors.New("connection refused")
+			}
+			d.healthAsks++
+			if d.pending != "" {
+				if d.oldAnswers > 0 {
+					d.oldAnswers--
+				} else {
+					d.version, d.started, d.pending = d.pending, d.started.Add(time.Second), ""
+				}
 			}
 			return daemonHealth{DaemonID: d.daemonID, Version: d.version}, nil
 		},
@@ -241,6 +261,29 @@ func TestRestartLeavesADaemonStartedInATerminalBesideTheTask(t *testing.T) {
 	}
 	if len(daemon.upgrades) != 1 || daemon.version != "0.4.6" || strings.Contains(out.String(), "Stop-Process") {
 		t.Fatalf("upgrades %v, version %s, output %q", daemon.upgrades, daemon.version, out.String())
+	}
+}
+
+// mewla restart with nothing new: the old daemon answers as the wanted
+// version until it stops, so only its new start time says it restarted.
+func TestInPlaceRestartOntoTheSameVersionWaitsForTheNewStart(t *testing.T) {
+	stateDir, daemonID := restartStateDir(t)
+	started := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	daemon := &fakeDaemon{daemonID: daemonID, pid: 40, version: "0.4.9", running: true, started: started, oldAnswers: 5}
+	rt := daemon.runtime(t, "linux", &fakeBootRunner{failures: map[string]bool{"systemctl --user is-active mewla.service": true}}, "/home/p/.local/bin/mewla")
+	found, ok := rt.inspect(stateDir)
+	if !ok {
+		t.Fatal("daemon not found")
+	}
+	asksBefore := daemon.healthAsks
+	if err := rt.restart(stateDir, found, "0.4.9"); err != nil {
+		t.Fatal(err)
+	}
+	if daemon.started.Equal(started) || daemon.pending != "" {
+		t.Fatalf("returned while the old daemon still answered (started %v, pending %q)", daemon.started, daemon.pending)
+	}
+	if asked := daemon.healthAsks - asksBefore; asked < 6 {
+		t.Fatalf("health asked %d times; the old daemon answered 5", asked)
 	}
 }
 

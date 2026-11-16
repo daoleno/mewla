@@ -229,6 +229,9 @@ type DaemonStatus struct {
 	Version    string `json:"version,omitempty"`
 	// Addr is the address the daemon serves HTTP on.
 	Addr string `json:"addr,omitempty"`
+	// Started is when this process image started: a daemon that restarted
+	// itself in place keeps its PID but not this.
+	Started time.Time `json:"started,omitzero"`
 }
 
 type Error struct {
