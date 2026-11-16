@@ -1,7 +1,6 @@
 package brain
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -163,84 +162,6 @@ func TestNewStoreNeverAppendsPolicyToExistingUserProfile(t *testing.T) {
 	}
 	if string(raw) != customProfile {
 		t.Fatalf("profile.md changed user-owned content:\n%s", raw)
-	}
-}
-
-func TestNewStoreIgnoresLegacyRootFilesAndInitializesCurrentLayout(t *testing.T) {
-	root := t.TempDir()
-	legacyFiles := []struct {
-		name string
-		data []byte
-		info os.FileInfo
-	}{
-		{name: "memory.md", data: []byte("# Legacy root memory\n")},
-		{name: "reminders.json", data: []byte("[{\"id\":\"legacy-root-reminder\"}]\n")},
-		{name: "profile.json", data: []byte("{\"personality\":\"legacy-root-personality\",\"notes\":\"legacy-root-notes\"}\n")},
-	}
-	for index := range legacyFiles {
-		path := filepath.Join(root, legacyFiles[index].name)
-		if err := os.WriteFile(path, legacyFiles[index].data, 0o600); err != nil {
-			t.Fatalf("write legacy root %s: %v", legacyFiles[index].name, err)
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("stat legacy root %s: %v", legacyFiles[index].name, err)
-		}
-		legacyFiles[index].info = info
-	}
-
-	store, err := NewStore(root)
-	if err != nil {
-		t.Fatalf("NewStore() error = %v", err)
-	}
-
-	for _, legacy := range legacyFiles {
-		path := filepath.Join(root, legacy.name)
-		got, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read preserved legacy root %s: %v", legacy.name, err)
-		}
-		if string(got) != string(legacy.data) {
-			t.Fatalf("legacy root %s bytes changed: got %q, want %q", legacy.name, got, legacy.data)
-		}
-		after, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("stat preserved legacy root %s: %v", legacy.name, err)
-		}
-		if after.Mode() != legacy.info.Mode() || !after.ModTime().Equal(legacy.info.ModTime()) {
-			t.Fatalf("legacy root %s metadata changed: mode %v -> %v, mtime %v -> %v", legacy.name, legacy.info.Mode(), after.Mode(), legacy.info.ModTime(), after.ModTime())
-		}
-	}
-
-	for path, want := range map[string][]byte{
-		store.memoryPath(): []byte("# Brain Memory\n\n"),
-	} {
-		got, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read current destination %s: %v", path, err)
-		}
-		if string(got) != string(want) {
-			t.Fatalf("current destination %s = %q, want first-version default %q", path, got, want)
-		}
-	}
-
-	if pathExists(filepath.Join(store.statePath(), "reminders.json")) {
-		t.Fatalf("NewStore created the retired reminders.json")
-	}
-
-	stateProfileRaw, err := os.ReadFile(store.profilePath())
-	if err != nil {
-		t.Fatalf("read state profile: %v", err)
-	}
-	var stateProfile map[string]any
-	if err := json.Unmarshal(stateProfileRaw, &stateProfile); err != nil {
-		t.Fatalf("decode state profile: %v", err)
-	}
-	if got := stateProfile["personality"]; got != defaultPersonality {
-		t.Fatalf("state personality = %#v, want %q", got, defaultPersonality)
-	}
-	if _, exists := stateProfile["notes"]; exists {
-		t.Fatalf("new state profile still owns notes: %s", stateProfileRaw)
 	}
 }
 

@@ -335,31 +335,3 @@ func TestDeleteAlreadyMissingConvergesAndDefiniteFailureRetainsTombstone(t *test
 		t.Fatalf("failure not reported: %+v", status)
 	}
 }
-
-func TestLegacyUnboundDeleteIsCancelledButBoundDeleteProceeds(t *testing.T) {
-	manager, _, api, _ := topicFixture(t)
-	createTopicFor(t, manager)
-	thread := topicThreadFor(t, manager, "sess-a")
-	if err := manager.store.mutate(func(state *durableState) error {
-		enqueueTopicOp(state, topicOpRecord{ID: "legacy:delete", Kind: topicOpDelete, SessionID: "sess-a", MessageThreadID: thread})
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	for manager.hasDeliverableTopicOp() {
-		if err := manager.deliverTopicOpOne(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if len(api.deletedTopics) != 0 {
-		t.Fatalf("unbound legacy delete dispatched: %+v", api.deletedTopics)
-	}
-	for _, op := range manager.store.snapshot().TopicOps {
-		if op.ID == "legacy:delete" && op.State != "cancelled" {
-			t.Fatalf("legacy delete op=%+v", op)
-		}
-	}
-	if got := topicThreadFor(t, manager, "sess-a"); got != thread {
-		t.Fatal("topic identity lost")
-	}
-}

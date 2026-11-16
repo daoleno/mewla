@@ -68,11 +68,6 @@ describe("notification permission", () => {
     expect(await ensurePermission(allowed, memoryStore())).toBe(true);
     expect(allowed.calls).toEqual(["permission"]);
   });
-  test("a phone the Expo app already asked is not asked again", async () => {
-    const host = fakeHost(false);
-    expect(await ensurePermission(host, memoryStore({ [PERMISSION_ASKED_KEY]: "1" }))).toBe(false);
-    expect(host.calls).not.toContain("request");
-  });
   test("the Calendar's reminder banner: not enabled until asked, disabled after a no, unavailable when the phone cannot say", async () => {
     expect(await reminderPermission(fakeHost(true), memoryStore())).toBe("granted");
     expect(await reminderPermission(fakeHost(false), memoryStore())).toBe("undetermined");

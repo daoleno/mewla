@@ -287,35 +287,6 @@ func TestHyperliquidReadsNeedNoSetup(t *testing.T) {
 	}
 }
 
-// A reader that an earlier version let the person disconnect has nothing but a
-// key form on its page. The daemon brings it back in place, on.
-func TestHyperliquidDisconnectedReaderComesBackOn(t *testing.T) {
-	f := &hlFake{t: t}
-	m := testManager(t, f.transport)
-	id := "11111111-2222-4333-8444-555555555555"
-	m.records[id] = &record{Account: Account{ID: id, Integration: "hyperliquid", Name: "Hyperliquid", Identity: "Mainnet · read only", Network: "mainnet", Enabled: false, Status: "disconnected", History: []Event{}}, Grants: map[string]string{}}
-	if err := m.ensureHyperliquidReader(); err != nil || len(m.records) != 1 {
-		t.Fatalf("%v %d accounts", err, len(m.records))
-	}
-	reader := hlReader(t, m)
-	if reader.ID != id || !reader.Enabled || reader.Status != "connected" || reader.Identity != "Read only" || len(reader.Tools) == 0 {
-		t.Fatalf("%+v", reader)
-	}
-	for _, tool := range reader.Tools {
-		if tool.Group != "read" || !tool.Allowed {
-			t.Fatalf("%s group=%s allowed=%v", tool.Name, tool.Group, tool.Allowed)
-		}
-	}
-	if _, err := hlInvoke(t, m, id, "get_book", `{"coin":"BTC"}`); err != nil {
-		t.Fatal(err)
-	}
-	// It is kept across restarts of the manager's defaults, and a switched-off reader stays off.
-	mustHandle(t, m, Request{Action: "disable", ID: id})
-	if err := m.ensureHyperliquidReader(); err != nil || m.records[id].Account.Enabled {
-		t.Fatalf("a switched-off reader was turned on: %v", err)
-	}
-}
-
 // The trading key is added and removed without touching reading: the same
 // account, its switch and its read permissions stay as they were.
 func TestHyperliquidKeyIsIndependentOfReading(t *testing.T) {

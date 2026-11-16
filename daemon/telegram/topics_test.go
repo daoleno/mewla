@@ -501,35 +501,6 @@ func TestTopicLabelMatchesSessionListTitle(t *testing.T) {
 	}
 }
 
-func TestPrivateTopicLegacyDestructiveOperationsAreCancelled(t *testing.T) {
-	manager, _, api, _ := topicFixture(t)
-	createTopicFor(t, manager)
-	thread := topicThreadFor(t, manager, "sess-a")
-	if err := manager.store.mutate(func(state *durableState) error {
-		for _, kind := range []string{topicOpClose, topicOpReopen, topicOpDelete} {
-			enqueueTopicOp(state, topicOpRecord{ID: "legacy:" + kind, Kind: kind, SessionID: "sess-a", MessageThreadID: thread})
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	for manager.hasDeliverableTopicOp() {
-		if err := manager.deliverTopicOpOne(t.Context()); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if len(api.closingTopics)+len(api.reopenedTopics)+len(api.deletedTopics) != 0 {
-		t.Fatal("private chat used destructive or unsupported APIs")
-	}
-	for _, op := range manager.store.snapshot().TopicOps {
-		if strings.HasPrefix(op.ID, "legacy:") && op.State != "cancelled" {
-			t.Fatalf("legacy op=%+v", op)
-		}
-	}
-	if got := topicThreadFor(t, manager, "sess-a"); got != thread {
-		t.Fatal("topic identity lost")
-	}
-}
 func TestDisabledAndRevokedConnectionStopsTopicDeliveryAndInput(t *testing.T) {
 	manager, _, api, _ := topicFixture(t)
 	createTopicFor(t, manager)

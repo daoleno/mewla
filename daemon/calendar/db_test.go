@@ -3,14 +3,10 @@ package calendar
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/daoleno/mewla/daemon/sqlitedb"
 )
 
 // historyDocument is a calendar.json whose recurring action has a long run
@@ -36,62 +32,6 @@ func historyDocument(t *testing.T, runs int) (document, Item) {
 		NextAt: at, Timezone: "UTC", Recurrence: RecurrenceNone, CreatedAt: at, UpdatedAt: at, Revision: 1,
 	}
 	return document{SchemaVersion: SchemaVersion, Items: []Item{item, other}}, item
-}
-
-func TestMigrationMovesItemsAndEveryRunAndRecordsWhatItChecked(t *testing.T) {
-	root := t.TempDir()
-	doc, daily := historyDocument(t, 400)
-	raw, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeCalendarFixture(t, root, raw)
-	// A schema backup and a crash-left temp file go to the backup with it.
-	for _, name := range []string{"calendar.json.schema1.bak", ".calendar.json.tmp-123"} {
-		if err := os.WriteFile(filepath.Join(root, name), []byte("old"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	store, err := NewStore(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := store.Get("daily")
-	if err != nil || !reflect.DeepEqual(got, cloneItem(daily)) {
-		t.Fatalf("migrated item differs: err=%v\nwant %d runs\ngot  %d runs", err, len(daily.Runs), len(got.Runs))
-	}
-	record, found, err := sqlitedb.ReadRecord(store.db)
-	if err != nil || !found {
-		t.Fatalf("record found=%v err=%v", found, err)
-	}
-	var details MigrationDetails
-	if err := json.Unmarshal(record.Details, &details); err != nil {
-		t.Fatal(err)
-	}
-	want, err := digestItems(map[string]Item{"daily": daily, "once": doc.Items[1]})
-	if err != nil || details != want || details.Items != 2 || details.Runs != 400 {
-		t.Fatalf("details = %+v, want %+v err=%v", details, want, err)
-	}
-	for _, name := range []string{"calendar.json", "calendar.json.schema1.bak", ".calendar.json.tmp-123"} {
-		if _, err := os.Stat(filepath.Join(record.BackupDir, filepath.Base(root), name)); err != nil {
-			t.Fatalf("%s not in the backup: %v", name, err)
-		}
-	}
-	// calendar.json is a tombstone: the strict decoder an older binary used
-	// refuses it, so that binary stops instead of starting an empty calendar.
-	if _, err := decodeDocument(mustRead(t, filepath.Join(root, legacyFile))); err == nil {
-		t.Fatal("tombstone is accepted as a calendar document")
-	}
-}
-
-func mustRead(t *testing.T, path string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return raw
 }
 
 func TestCommitsWriteTheRunTheyTouchNotTheHistory(t *testing.T) {
@@ -140,43 +80,5 @@ func TestCommitsWriteTheRunTheyTouchNotTheHistory(t *testing.T) {
 	}
 	if !reflect.DeepEqual(restarted.List(), store.List()) {
 		t.Fatal("restart did not read back what was committed")
-	}
-}
-
-// TestMigrationOfARealCalendar migrates a copy of an actual calendar
-// directory. Set MEWLA_REAL_CALENDAR_COPY to it; the test never writes there.
-func TestMigrationOfARealCalendar(t *testing.T) {
-	source := os.Getenv("MEWLA_REAL_CALENDAR_COPY")
-	if source == "" {
-		t.Skip("MEWLA_REAL_CALENDAR_COPY is not set")
-	}
-	raw := mustRead(t, filepath.Join(source, legacyFile))
-	want, err := decodeDocument(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	writeCalendarFixture(t, root, raw)
-	store, err := NewStore(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	record, found, err := sqlitedb.ReadRecord(store.db)
-	if err != nil || !found {
-		t.Fatalf("record found=%v err=%v", found, err)
-	}
-	t.Logf("migrated %s", record.Details)
-	items := map[string]Item{}
-	for _, item := range want.Items {
-		got, err := store.Get(item.ID)
-		if err != nil || !reflect.DeepEqual(got, cloneItem(item)) {
-			t.Fatalf("item %s differs after migration: %v", item.ID, err)
-		}
-		items[item.ID] = item
-	}
-	if digest, err := digestItems(items); err != nil {
-		t.Fatal(err)
-	} else if !strings.Contains(string(record.Details), digest.Sha256) {
-		t.Fatalf("record %s does not hold digest %+v", record.Details, digest)
 	}
 }

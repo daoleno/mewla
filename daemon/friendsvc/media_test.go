@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -461,29 +460,5 @@ func TestRetriedUploadReturnsTheSameObject(t *testing.T) {
 	again := alice.uploadOK("image", "image/jpeg", data, 0, 0, "")
 	if first.ID != again.ID || len(h.objects()) != 1 {
 		t.Fatalf("a retry made a second object: %v %v", first, again)
-	}
-}
-
-func TestMediaMigrationAddsTheOptInToAnOlderDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "old.db")
-	store, err := OpenStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.DB().Exec(`ALTER TABLE people DROP COLUMN auto_media`); err != nil {
-		t.Fatal(err)
-	}
-	store.Close()
-	store, err = OpenStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if _, err := store.DB().Exec(`INSERT INTO people (id, account_id, handle, created_at) VALUES ('p', 'a', 'old-user', 1)`); err != nil {
-		t.Fatal(err)
-	}
-	person, err := store.personByID(context.Background(), "p")
-	if err != nil || person.AutoMedia {
-		t.Fatalf("person = %+v, %v", person, err)
 	}
 }

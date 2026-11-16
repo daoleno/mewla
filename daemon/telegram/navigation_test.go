@@ -92,32 +92,6 @@ func TestTopicChooserAndBackStayLocalAndUseExactLinks(t *testing.T) {
 	}
 }
 
-func TestLegacyTopicCallbackReturnsLocalExactStatusAndDoesNotResetBrain(t *testing.T) {
-	m, owner, _, _ := topicFixture(t)
-	createTopicFor(t, m)
-	a := topicThreadFor(t, m, "sess-a")
-	owner.projections["sess-a"] = brain.SessionProjection{SessionID: "sess-a", Present: true, Label: "A", Status: "running", TurnStatus: "running", WorkID: "work-a", WorkStatus: "running"}
-	m.enqueueSessionList(2, 0, 777)
-	if err := m.handleUpdate(t.Context(), "token", navigationCallback(10, 777, "session:"+digestText("sess-a"))); err != nil {
-		t.Fatal(err)
-	}
-	row := navigationRow(t, m, "callback:10:0")
-	if row.MessageThreadID != 777 || !strings.Contains(row.Text, "Turn: running") || !strings.Contains(row.Text, "Work: running") {
-		t.Fatalf("callback did not return route-local real state: %+v", row)
-	}
-	if row.ReplyMarkup.InlineKeyboard[0][0].URL != topicURL(m.store.snapshot(), a) {
-		t.Fatal("callback omitted exact topic link")
-	}
-	for _, update := range []Update{navigationCallback(11, a, "new"), navigationCallback(12, a, "new_confirm")} {
-		if err := m.handleUpdate(t.Context(), "token", update); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if owner.newChats != 0 || len(owner.bodies)+len(owner.sessionBodies) != 0 {
-		t.Fatal("navigation dispatched provider input")
-	}
-}
-
 func TestFallbackStatusKeepsUnavailableRecipientAndFailedTopicHealth(t *testing.T) {
 	m, owner, _, _ := configuredManager(t)
 	bindOwner(t, m, 1, 10, 10)

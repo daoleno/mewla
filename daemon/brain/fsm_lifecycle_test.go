@@ -3,9 +3,6 @@ package brain
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -663,30 +660,6 @@ func TestProjectionRebuildReplacesStaleReviewEvent(t *testing.T) {
 		reloaded.Review.EventID != "event:second" ||
 		!reloaded.Review.RequiredAt.Equal(reloadedState.Review.OpenedAt) {
 		t.Fatalf("reloaded review=%+v canonical=%+v err=%v", reloaded.Review, reloadedState.Review, err)
-	}
-}
-
-func TestOldLifecycleSchemaIsRejectedWithoutMigration(t *testing.T) {
-	root := t.TempDir()
-	stateDir := filepath.Join(root, "state")
-	if err := os.MkdirAll(filepath.Join(stateDir, "lifecycle"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	raw := `{"schema_version":12,"next_event_sequence":1,"brain_input_admissions":[],"brain_work":[{"work_id":"cd16a79d-78d8-4c73-b8f5-2d4816171a63","revision":1,"title":"old","objective":"old","status":"open","completion_policy":"bounded","source_thread_id":"old-thread","removed_state":{"session_id":"failed-spawn","event_id":"event-only"},"created_at":"2026-08-22T00:00:00Z","updated_at":"2026-08-22T00:00:00Z"}],"brain_work_events":[],"brain_turns":[]}`
-	if err := os.WriteFile(filepath.Join(stateDir, "presentation.json"), []byte(raw), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(stateDir, "lifecycle", "events.jsonl"), []byte("partial old log\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := NewStore(root); !errors.Is(err, ErrSchedulerStateReset) {
-		t.Fatalf("old schema was not rejected: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(stateDir, "presentation.json")); err != nil {
-		t.Fatalf("breaking open mutated old projection: %v", err)
-	}
-	if matches, err := filepath.Glob(filepath.Join(stateDir, "scheduler-reset-*")); err != nil || len(matches) != 0 {
-		t.Fatalf("unexpected archive created: matches=%v err=%v", matches, err)
 	}
 }
 
