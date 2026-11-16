@@ -80,6 +80,7 @@ jobs:
           sparse-checkout: |
             scripts/app-store-connect-upload.py
             scripts/testflight-review-queue.py
+            scripts/lib/release_identity.py
           sparse-checkout-cone-mode: false
 
       - name: Resolve and validate release invocation
