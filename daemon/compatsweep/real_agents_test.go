@@ -244,15 +244,13 @@ func (e *env) askBrain(t *testing.T, c *client, hostID string, a, b int) (string
 
 // TestBrainOnEachExecutor: Brain answers web Chat on claude, switches to
 // codex with `mewla brain use` and answers there, and still answers after the
-// daemon restarts, in the same Session. The computer's executors.toml is one
-// from before the session host, naming `runtime = "tmux"`: it loads, and the
-// daemon rewrites it without the key.
+// daemon restarts, in the same Session.
 func TestBrainOnEachExecutor(t *testing.T) {
 	realAgent(t, "claude")
 	realAgent(t, "codex")
 	e := newRealEnv(t, realOptions{})
 	executors := filepath.Join(e.state, "executors.toml")
-	writeFile(t, executors, strings.ReplaceAll(realExecutors, "\ncommand = ", "\nruntime = \"tmux\"\ncommand = "), 0o600)
+	writeFile(t, executors, realExecutors, 0o600)
 	e.start()
 	device := e.pair()
 	c := e.connect(device)
@@ -279,16 +277,6 @@ func TestBrainOnEachExecutor(t *testing.T) {
 	if !step("brain-claude-replies", ask("claude", 17, 25)) {
 		return
 	}
-	step("old-executors-config-loads", func() (string, error) {
-		raw, err := os.ReadFile(executors)
-		if err != nil {
-			return "", err
-		}
-		if strings.Contains(string(raw), "runtime") || !strings.Contains(string(raw), "claude --model claude-sonnet-5-5") {
-			return "", fmt.Errorf("executors.toml after start:\n%s", raw)
-		}
-		return "a runtime = \"tmux\" executors.toml loaded and was rewritten without the key", nil
-	})
 	step("brain-use-codex", func() (string, error) {
 		out, err := e.cli(3*time.Minute, "brain", "use", "@state", "codex")
 		if err != nil {

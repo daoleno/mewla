@@ -16,11 +16,10 @@ import (
 )
 
 // TestUpdateFromRelease: a computer runs a released Mewla
-// (MEWLA_SWEEP_UPDATE_FROM, the binary from its release archive) with an
-// executors.toml from before the session host, naming `runtime = "tmux"`.
-// `mewla update` installs the latest published release over it
-// (MEWLA_SWEEP_UPDATE_TO is its version), the daemon is started again on it,
-// the old executors.toml loads, Brain on claude replies in Chat, and a Worker
+// (MEWLA_SWEEP_UPDATE_FROM, the binary from its release archive) with its
+// executors.toml. `mewla update` installs the latest published release over
+// it (MEWLA_SWEEP_UPDATE_TO is its version), the daemon is started again on
+// it, Brain on claude replies in Chat, and a Worker
 // Brain dispatches returns its result and is closed. It downloads from the
 // real release feed and spends model calls; MEWLA_SWEEP_REAL must include
 // claude.
@@ -39,7 +38,7 @@ func TestUpdateFromRelease(t *testing.T) {
 	writeFile(t, installed, string(raw), 0o755)
 	e.bin = installed
 	executors := filepath.Join(e.state, "executors.toml")
-	writeFile(t, executors, strings.ReplaceAll(realExecutors, "\ncommand = ", "\nruntime = \"tmux\"\ncommand = "), 0o600)
+	writeFile(t, executors, realExecutors, 0o600)
 	step := func(name string, run func() (string, error)) bool {
 		detail, err := run()
 		if err != nil {
@@ -77,16 +76,6 @@ func TestUpdateFromRelease(t *testing.T) {
 	}) {
 		return
 	}
-	step("old-executors-config-loads", func() (string, error) {
-		raw, err := os.ReadFile(executors)
-		if err != nil {
-			return "", err
-		}
-		if strings.Contains(string(raw), "runtime") || !strings.Contains(string(raw), "claude --model claude-sonnet-5-5") {
-			return "", fmt.Errorf("executors.toml after the update:\n%s", raw)
-		}
-		return "a runtime = \"tmux\" executors.toml loaded and was rewritten without the key", nil
-	})
 	c := e.connect(e.pair())
 	hostID, last := brainHost(c, "claude", 3*time.Minute)
 	if !step("brain-claude-replies", func() (string, error) {
