@@ -112,11 +112,15 @@ func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem
 	if since.IsZero() {
 		return nil
 	}
+	// Every agent takes a moment to become ready, so nothing is said before
+	// the grace: not even "not signed in", which an agent on an API key or a
+	// login-shell sign-in reads as while it starts and runs.
+	if time.Since(since) < hostNotReadyGrace {
+		return nil
+	}
 	name := executor.ID
-	// Mewla's own view says signed out and the pane really is not ready: the
-	// pane's login shell had no sign-in either, so say so at once instead of
-	// leaving the phone waiting out the grace.
 	screen := s.hostScreenTail()
+	// Mewla's own view says signed out and the pane really is not ready.
 	if hostAuth(executor.ID) == HostAuthUnauthenticated {
 		return &HostProblem{
 			Code:            "not_signed_in",
@@ -124,9 +128,6 @@ func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem
 			Detail:          fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID)) + screen,
 			SuggestExecutor: s.verifiedAlternativeHost(executor.ID),
 		}
-	}
-	if time.Since(since) < hostNotReadyGrace {
-		return nil
 	}
 	return &HostProblem{
 		Code:            "not_ready",
@@ -244,19 +245,30 @@ func (s *Service) noteHostLaunchAuth(executorID string) {
 	s.hostProblemMu.Unlock()
 }
 
-// hostSignedInSinceLaunch reports a Host that opened while its agent was
-// signed out, never became ready (it sits at the agent's own sign-in screen,
-// which does not notice a sign-in made elsewhere) and whose agent is no longer
-// signed out. The probe never keeps a Host from launching; it only says when
-// opening it again can help.
+// hostSignedInSinceLaunch reports a Host that never became ready (it sits at
+// the agent's own sign-in screen, which does not notice a sign-in made
+// elsewhere) and whose agent is no longer signed out, when it opened signed
+// out or before this process (an update or restart adopts the Host without
+// knowing how it opened: it is opened again once, after the not-ready grace).
+// The probe never keeps a Host from launching; it only says when opening it
+// again can help.
 func (s *Service) hostSignedInSinceLaunch(executorID string, continuityErr error) bool {
 	if !errors.Is(continuityErr, watcher.ErrWorkerInputNotReady) {
 		return false
 	}
 	s.hostProblemMu.Lock()
-	launchedSignedOut := s.hostLaunchAuth == HostAuthUnauthenticated
+	launchAuth, since := s.hostLaunchAuth, s.hostNotReadySince
 	s.hostProblemMu.Unlock()
-	return launchedSignedOut && hostAuth(executorID) != HostAuthUnauthenticated
+	if hostAuth(executorID) == HostAuthUnauthenticated {
+		return false
+	}
+	switch launchAuth {
+	case HostAuthUnauthenticated:
+		return true
+	case "":
+		return !since.IsZero() && time.Since(since) >= hostNotReadyGrace
+	}
+	return false
 }
 
 // reopenHostAfterSignIn closes a Host left at a sign-in screen and opens a new

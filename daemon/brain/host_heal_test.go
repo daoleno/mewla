@@ -73,6 +73,10 @@ func TestDefaultPickedHostMovesToAVerifiedAgent(t *testing.T) {
 		}
 		service.watcher = &fakeWatcher{sessions: workerSession("brain-host:@9", "codex")}
 		service.noteHostActivation(watcher.ErrWorkerInputNotReady)
+		if service.healImplicitHost() {
+			t.Fatal("moved while the agent was still starting")
+		}
+		pastNotReadyGrace(service)
 		if !service.healImplicitHost() || hostExecutorOnDisk(t, service) != "claude" {
 			t.Fatalf("executor = %q, want claude", hostExecutorOnDisk(t, service))
 		}

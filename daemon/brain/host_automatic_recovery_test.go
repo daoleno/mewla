@@ -250,6 +250,55 @@ func TestHostAtSignInScreenOpensAgainAfterSignIn(t *testing.T) {
 	}
 }
 
+// An update or restart adopts a Host this process did not open: how it
+// opened is unknown. One that sits unready past the grace while its agent is
+// not signed out (the person signed in before updating) is opened again once;
+// it never churns after that, and a Host holding a conversation is never closed.
+func TestAdoptedHostAtSignInScreenOpensAgainOnce(t *testing.T) {
+	for _, held := range []bool{false, true} {
+		store, err := NewStore(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SetHostExecutorID("codex"); err != nil {
+			t.Fatal(err)
+		}
+		const adopted = "mh-adopted"
+		if err := store.SetHostSession(adopted, "codex"); err != nil {
+			t.Fatal(err)
+		}
+		if held {
+			if err := store.SetHostProviderTranscript("thread-1", "", ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+		previous := hostLookPath
+		hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+		SetHostAuthProbe(func(string) HostAuthState { return HostAuthAuthenticated })
+		fw := &fakeWatcher{
+			sendErr:  watcher.ErrWorkerInputNotReady,
+			sessions: map[string]*classifier.Worker{adopted: {ID: adopted, Name: "Brain", Hidden: true, Command: "codex", Cwd: store.WorkspacePath()}},
+		}
+		service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+		_, _ = service.ReconcileHostContinuity()
+		if len(fw.killed) != 0 || len(fw.created) != 0 {
+			t.Fatalf("held=%v: reopened within the grace: killed %#v created %#v", held, fw.killed, fw.created)
+		}
+		pastNotReadyGrace(service)
+		for i := 0; i < 3; i++ {
+			_, _ = service.ReconcileHostContinuity()
+		}
+		switch {
+		case held && (len(fw.killed) != 0 || len(fw.created) != 0):
+			t.Fatalf("a Host holding a conversation was closed: killed %#v created %#v", fw.killed, fw.created)
+		case !held && (len(fw.killed) != 1 || fw.killed[0] != adopted || len(fw.created) != 1):
+			t.Fatalf("killed %#v created %#v: want the adopted sign-in screen closed and one new Brain", fw.killed, fw.created)
+		}
+		hostLookPath = previous
+		SetHostAuthProbe(nil)
+	}
+}
+
 // exitedSessionWatcher is a watcher whose session host keeps a Session whose
 // program ended.
 type exitedSessionWatcher struct {

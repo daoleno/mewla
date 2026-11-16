@@ -73,6 +73,7 @@ func TestHostProblemDetailsNameTheNextStep(t *testing.T) {
 	// Signed out is said only of a host that opened and is not ready.
 	signedOut := hostFixture(t, map[string]bool{"claude": true}, map[string]HostAuthState{"claude": HostAuthUnauthenticated})
 	signedOut.noteHostActivation(watcher.ErrWorkerInputNotReady)
+	pastNotReadyGrace(signedOut)
 	problem = signedOut.hostNotReadyProblem(signedOut.hostExecutor())
 	if problem == nil || problem.Code != "not_signed_in" || !strings.Contains(problem.Detail, "claude auth login") {
 		t.Fatalf("not signed in: %+v", problem)
@@ -127,12 +128,12 @@ func TestAnUnsupportedAgentIsNotLaunchedAndSaysWhy(t *testing.T) {
 	}
 }
 
-// A signed-out agent still gets its pane (the login shell may hold a sign-in
-// Mewla cannot see). When that pane then sits unready and Mewla's view says
-// signed out, the phone is told at once, not after the grace; a pane that
-// becomes ready never counts as stuck, so a shell-environment sign-in is not
-// reported.
-func TestAnUnreadyPaneOfASignedOutAgentSaysSoAtOnce(t *testing.T) {
+// A signed-out agent still gets its pane (an API key or the login shell may
+// hold a sign-in Mewla cannot see). Every agent is unready for a moment while
+// it starts, so nothing is said within the grace; a pane still unready after
+// it, while Mewla's view says signed out, says how to sign in. A pane that
+// becomes ready never counts as stuck.
+func TestAnUnreadyPaneOfASignedOutAgentSaysSoAfterTheGrace(t *testing.T) {
 	service := hostFixture(t, map[string]bool{"claude": true},
 		map[string]HostAuthState{"claude": HostAuthUnauthenticated})
 	if err := service.store.SetHostSession("brain-host:@1", "claude"); err != nil {
@@ -147,8 +148,13 @@ func TestAnUnreadyPaneOfASignedOutAgentSaysSoAtOnce(t *testing.T) {
 	if snapshot, err := service.Snapshot(); err != nil || snapshot.HostProblem != nil {
 		t.Fatalf("ready pane: %v %+v", err, snapshot.HostProblem)
 	}
-	// It never becomes ready: say how to sign in right away.
+	// Not ready yet while it starts: nothing to say.
 	service.noteHostActivation(notReady)
+	if snapshot, _ := service.Snapshot(); snapshot.HostProblem != nil {
+		t.Fatalf("starting pane reported: %+v", snapshot.HostProblem)
+	}
+	// It never becomes ready: say how to sign in.
+	pastNotReadyGrace(service)
 	snapshot, _ := service.Snapshot()
 	if snapshot.HostProblem == nil || snapshot.HostProblem.Code != "not_signed_in" ||
 		!strings.Contains(snapshot.HostProblem.Detail, "claude auth login") {
@@ -159,4 +165,11 @@ func TestAnUnreadyPaneOfASignedOutAgentSaysSoAtOnce(t *testing.T) {
 	if snapshot, _ = service.Snapshot(); snapshot.HostProblem != nil {
 		t.Fatalf("not cleared: %+v", snapshot.HostProblem)
 	}
+}
+
+// pastNotReadyGrace makes the Host's unready pane older than the grace.
+func pastNotReadyGrace(service *Service) {
+	service.hostProblemMu.Lock()
+	service.hostNotReadySince = time.Now().Add(-hostNotReadyGrace - time.Second)
+	service.hostProblemMu.Unlock()
 }
