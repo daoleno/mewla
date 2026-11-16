@@ -231,42 +231,6 @@ func (w *Watcher) listServicePanes() ([]servicePane, error) {
 	return w.sessions().listServices()
 }
 
-func parseServicePanes(output string) []servicePane {
-	var panes []servicePane
-	seen := map[string]bool{}
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 7)
-		if len(parts) < 6 {
-			continue
-		}
-		target := strings.TrimSpace(parts[0])
-		sessionName := strings.SplitN(target, ":", 2)[0]
-		if target == "" || strings.HasPrefix(sessionName, "mewla-view-") || seen[parts[1]] {
-			continue
-		}
-
-		seen[parts[1]] = true
-		panePID, _ := strconv.Atoi(strings.TrimSpace(parts[5]))
-		pane := servicePane{
-			target:  target,
-			paneID:  strings.TrimSpace(parts[1]),
-			name:    strings.TrimSpace(parts[2]),
-			cwd:     strings.TrimSpace(parts[3]),
-			command: strings.TrimSpace(parts[4]),
-			panePID: panePID,
-		}
-		if len(parts) >= 7 {
-			pane.active = strings.TrimSpace(parts[6]) == "1"
-		}
-		panes = append(panes, pane)
-	}
-	return panes
-}
-
 func panesByProcess(processes map[int]processInfo, panes []servicePane) map[int]servicePane {
 	result := make(map[int]servicePane)
 	if len(processes) == 0 {

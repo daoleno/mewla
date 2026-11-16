@@ -35,8 +35,7 @@ const sessionHostImport = "github.com/daoleno/mewla/daemon/sessionhost"
 // ids inside the backend that owns them: no watcher code outside
 // watcher/host_*.go imports the session host or names its label, data or id
 // helpers. Tests that drive a backend through a fake are part of that
-// backend's coverage and are not checked. It also keeps Mewla from running
-// tmux: no production code names a "tmux" program.
+// backend's coverage and are not checked.
 func TestSessionBackendBoundary(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {
@@ -75,39 +74,24 @@ func TestSessionBackendBoundary(t *testing.T) {
 		inWatcher := file.Name.Name == "watcher"
 		ast.Inspect(file, func(node ast.Node) bool {
 			var what string
-			host := false
 			switch n := node.(type) {
 			case *ast.ImportSpec:
 				if value, err := strconv.Unquote(n.Path.Value); err == nil && value == sessionHostImport && inWatcher {
-					what, host = "import of "+value, true
+					what = "import of " + value
 				}
 				return false
 			case *ast.Ident:
 				if hostBackendStorageIdentifiers[n.Name] && inWatcher {
-					what, host = "identifier "+n.Name, true
-				}
-			case *ast.BasicLit:
-				if n.Kind != token.STRING {
-					return true
-				}
-				value, err := strconv.Unquote(n.Value)
-				if err != nil {
-					value = n.Value
-				}
-				if value == "tmux" {
-					what = "the program " + strconv.Quote(value)
+					what = "identifier " + n.Name
 				}
 			}
 			if what == "" {
 				return true
 			}
-			switch {
-			case host && inHost:
+			if inHost {
 				hostHits++
-			case host:
+			} else {
 				violations = append(violations, fset.Position(node.Pos()).String()+": "+what+" is session host backend storage; reach it through sessionBackend")
-			default:
-				violations = append(violations, fset.Position(node.Pos()).String()+": "+what+": Mewla never runs tmux")
 			}
 			return true
 		})

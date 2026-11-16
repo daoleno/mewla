@@ -15,14 +15,8 @@ import (
 )
 
 type fakeSessionInputIO struct {
-	mu           sync.Mutex
-	sockets      []string
-	queueSockets []string
-	paneValue    sessionInputPane
-	// paneIDView models App Terminal link-window resolution: when set,
-	// pane("%pane_id") returns this value while pane(sessionID) keeps
-	// paneValue. Both must share pane_id/generation; session fields may differ.
-	paneIDView          *sessionInputPane
+	mu                  sync.Mutex
+	paneValue           sessionInputPane
 	paneCalls           []string
 	postLedgerPaneCalls []string
 	recordingPostLedger bool
@@ -111,21 +105,12 @@ func newFakeSessionInputIO() *fakeSessionInputIO {
 	}
 }
 
-func (io *fakeSessionInputIO) socket(sessionID string) string {
-	io.mu.Lock()
-	defer io.mu.Unlock()
-	return ""
-}
-
-func (io *fakeSessionInputIO) pane(socket, target string) sessionInputPane {
+func (io *fakeSessionInputIO) pane(target string) sessionInputPane {
 	io.mu.Lock()
 	defer io.mu.Unlock()
 	io.paneCalls = append(io.paneCalls, target)
 	if io.recordingPostLedger {
 		io.postLedgerPaneCalls = append(io.postLedgerPaneCalls, target)
-	}
-	if strings.HasPrefix(strings.TrimSpace(target), "%") && io.paneIDView != nil {
-		return *io.paneIDView
 	}
 	return io.paneValue
 }
@@ -134,12 +119,11 @@ func (io *fakeSessionInputIO) pane(socket, target string) sessionInputPane {
 // (submitSteps), one string per step: a key's name, "sleep N.NNN", "type:"
 // and the bytes typed, or "paste".
 func (io *fakeSessionInputIO) submitPaste(
-	socket, paneID, payload string,
+	paneID, payload string,
 	adapter sessionInputProvider,
 	beforeStart func() error,
 ) (bool, error) {
 	io.mu.Lock()
-	io.sockets = append(io.sockets, socket)
 	io.loadedPayloads = append(io.loadedPayloads, payload)
 	afterLoad := io.afterLoad
 	io.mu.Unlock()
@@ -165,7 +149,6 @@ func (io *fakeSessionInputIO) submitPaste(
 		}
 	}
 	io.mu.Lock()
-	io.queueSockets = append(io.queueSockets, socket)
 	io.activeQueues++
 	if io.activeQueues > io.maxQueues {
 		io.maxQueues = io.activeQueues
@@ -185,7 +168,7 @@ func (io *fakeSessionInputIO) submitPaste(
 	return true, err
 }
 
-func (io *fakeSessionInputIO) receiptLedger(socket, target string) (sessionInputReceiptLedger, error) {
+func (io *fakeSessionInputIO) receiptLedger(target string) (sessionInputReceiptLedger, error) {
 	io.mu.Lock()
 	defer io.mu.Unlock()
 	io.ledgerReads++
@@ -195,7 +178,7 @@ func (io *fakeSessionInputIO) receiptLedger(socket, target string) (sessionInput
 	return cloneSessionInputReceiptLedger(io.ledger), nil
 }
 
-func (io *fakeSessionInputIO) writeReceiptLedger(socket, _ string, ledger sessionInputReceiptLedger) error {
+func (io *fakeSessionInputIO) writeReceiptLedger(_ string, ledger sessionInputReceiptLedger) error {
 	io.mu.Lock()
 	call := len(io.ledgerWrites) + 1
 	io.ledgerWrites = append(io.ledgerWrites, cloneSessionInputReceiptLedger(ledger))

@@ -111,11 +111,7 @@ func createHostSession(t *testing.T, w *Watcher, spec backendCreateSpec) string 
 	if spec.env == nil {
 		spec.env = []string{"PATH=/usr/bin:/bin", "HOME=" + spec.cwd}
 	}
-	at, err := w.sessions().place("", false, spec.name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := w.sessions().create(at, spec)
+	id, err := w.sessions().create(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +150,7 @@ func TestHostBackendRunsASession(t *testing.T) {
 		t.Fatalf("terminal of a host Session = %+v, %v", target, ok)
 	}
 	pane, listed := hostPaneOf(t, w, id)
-	if !listed || pane.name != "probe" || pane.sessionName != hostSessionGroup || pane.executorID != "claude-main" ||
+	if !listed || pane.name != "probe" || pane.executorID != "claude-main" ||
 		pane.agentControl != "/tmp/agent.sock" || pane.panePID <= 0 || pane.dead {
 		t.Fatalf("listed = %v %+v", listed, pane)
 	}
@@ -239,13 +235,12 @@ func TestHostInputSubmitsAndKeepsReceipts(t *testing.T) {
 		return strings.Contains(screen, "RAW-READY")
 	})
 	io := w.sessions().inputIO()
-	socket := io.socket(id)
-	pane := io.pane(socket, id)
+	pane := io.pane(id)
 	if !pane.alive || pane.paneID != id || pane.generation != w.sessions().observedGeneration(id) || pane.generation == "" {
 		t.Fatalf("input pane = %+v", pane)
 	}
 	checked := false
-	started, err := io.submitPaste(socket, id, payload, sessionInputProvider{submitKey: "Enter"}, func() error {
+	started, err := io.submitPaste(id, payload, sessionInputProvider{submitKey: "Enter"}, func() error {
 		checked = true
 		return nil
 	})
@@ -261,13 +256,13 @@ func TestHostInputSubmitsAndKeepsReceipts(t *testing.T) {
 	}
 
 	// A refused guard sends nothing.
-	if started, err := io.submitPaste(socket, id, "x", sessionInputProvider{submitKey: "Enter"}, func() error {
+	if started, err := io.submitPaste(id, "x", sessionInputProvider{submitKey: "Enter"}, func() error {
 		return errors.New("identity moved")
 	}); started || err == nil {
 		t.Fatalf("submitPaste with a failing guard = %v, %v", started, err)
 	}
 
-	empty, err := io.receiptLedger(socket, id)
+	empty, err := io.receiptLedger(id)
 	if err != nil || len(empty.Entries) != 0 {
 		t.Fatalf("fresh ledger = %+v, %v", empty, err)
 	}
@@ -275,10 +270,10 @@ func TestHostInputSubmitsAndKeepsReceipts(t *testing.T) {
 	ledger := sessionInputReceiptLedger{SchemaVersion: sessionInputReceiptLedgerSchema, Entries: []sessionInputReceiptEntry{{
 		Receipt: "turn:1", PayloadSHA256: hex.EncodeToString(digest[:]), Outcome: InputAccepted,
 	}}}
-	if err := io.writeReceiptLedger(socket, id, ledger); err != nil {
+	if err := io.writeReceiptLedger(id, ledger); err != nil {
 		t.Fatal(err)
 	}
-	read, err := io.receiptLedger(socket, id)
+	read, err := io.receiptLedger(id)
 	if err != nil || len(read.Entries) != 1 || read.Entries[0].Receipt != "turn:1" {
 		t.Fatalf("ledger read back = %+v, %v", read, err)
 	}

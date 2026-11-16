@@ -70,23 +70,18 @@ type sessionBackend interface {
 	// sendBytes types raw bytes.
 	sendBytes(id string, data []byte) error
 
-	// place decides where a new Session goes before anything is prepared for
-	// it, so a bad request fails first.
-	place(near string, detached bool, name string) (backendPlacement, error)
-	// create starts a Session at a placement and returns its id. On failure
-	// nothing is left running.
-	create(at backendPlacement, spec backendCreateSpec) (string, error)
+	// checkNear fails when a new Session is asked to start next to one that
+	// is missing, before anything is prepared for it.
+	checkNear(near string) error
+	// create starts a Session and returns its id. On failure nothing is left
+	// running.
+	create(spec backendCreateSpec) (string, error)
 	// kill ends a Session. A Session that is already gone is not an error.
 	kill(id string) error
 
 	// inputIO is the Session input surface: generation proof, paste
 	// submission and the durable input receipt ledger.
 	inputIO() sessionInputIO
-}
-
-// backendPlacement is a backend's answer to place; only the backend reads it.
-type backendPlacement struct {
-	group string
 }
 
 // backendCreateSpec is everything a backend needs to start a Session.

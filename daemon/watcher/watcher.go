@@ -1752,8 +1752,8 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 			}
 			w.workers[win.target] = worker
 			w.workerOrder = append(w.workerOrder, win.target)
-			// Rediscovered pane: restore the durable Pi ownership binding
-			// (@mewla_worker_pi_session) recorded at session create. After a
+			// Rediscovered Session: restore the durable Pi ownership binding
+			// (the pi-session label) recorded at session create. After a
 			// daemon restart the provider process may rewrite its argv
 			// (node-based Pi), so the Session label is the only recoverable
 			// record of an owned --session path; mergeAgentCommandOwnership
@@ -2715,8 +2715,7 @@ func (w *Watcher) currentPaneGeneration(sessionID string) string {
 	if owner == nil {
 		return ""
 	}
-	socket := owner.ioSocket(sessionID)
-	return owner.io.pane(socket, sessionID).generation
+	return owner.io.pane(sessionID).generation
 }
 
 // sessionActivityAdvanced reports whether a poll apply advanced meaningful
@@ -2918,7 +2917,6 @@ func classifyPaneAndApplyProgressInvalidation(worker *classifier.Worker, alive b
 // labels included.
 type sessionPane struct {
 	target           string // the backend's Session id; opaque outside the backend
-	sessionName      string // display/grouping metadata only
 	name             string // window name (e.g. "claude", "node")
 	cwd              string // owned Session cwd
 	command          string // owned Session command
@@ -4124,8 +4122,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 	// Decided on the command as asked for, before tools and adapters wrap it.
 	agent := sessionRunsAnAgent(opts)
 	backend := w.creator()
-	placement, err := backend.place(preferredTarget, opts.Detached, createdSessionName(opts))
-	if err != nil {
+	if err := backend.checkNear(preferredTarget); err != nil {
 		return "", err
 	}
 
@@ -4215,7 +4212,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 	if err != nil {
 		return "", err
 	}
-	target, err := backend.create(placement, backendCreateSpec{
+	target, err := backend.create(backendCreateSpec{
 		name:    strings.TrimSpace(opts.Name),
 		cwd:     cwd,
 		command: shellCommand,
@@ -4842,10 +4839,8 @@ type piSessionBindingWire struct {
 }
 
 // EncodePiSessionBinding encodes a validated Pi ownership binding into the
-// delimiter-safe durable option value. base64url keeps the value a single
-// token (no tabs, newlines, or quotes), so the tab-separated list-windows
-// projection can never be corrupted by a path. Invalid flags or non-absolute
-// paths return "".
+// value of the pi-session Session label, as one base64url token. Invalid
+// flags or non-absolute paths return "".
 func EncodePiSessionBinding(flag, path string) string {
 	flag = strings.TrimSpace(flag)
 	if flag != "--session" && flag != "--session-dir" {
@@ -4861,7 +4856,7 @@ func EncodePiSessionBinding(flag, path string) string {
 	return base64.RawURLEncoding.EncodeToString(data)
 }
 
-// DecodePiSessionBinding decodes and validates a @mewla_worker_pi_session option
+// DecodePiSessionBinding decodes and validates a pi-session label
 // value. Any malformed, wrong-version, or non-absolute value fails closed
 // (ok=false), so a corrupted option can never bind a transcript.
 func DecodePiSessionBinding(value string) (flag, path string, ok bool) {

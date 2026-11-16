@@ -69,7 +69,6 @@ const (
 	hostLabelResourceUnit  = "resource-unit"
 	hostLabelResourceOwner = "resource-owner"
 	hostDataInputReceipts  = "input-receipts"
-	hostSessionGroup       = "mewla"
 	hostDefaultCols        = 200
 	hostDefaultRows        = 50
 	hostCallTimeout        = 10 * time.Second
@@ -233,7 +232,7 @@ func (b *hostBackend) listOwned() ([]sessionPane, error) {
 		}
 		panes = append(panes, hostPane(info))
 	}
-	b.w.screens.inventoryOf(panes, b.validID)
+	b.w.screens.inventory(panes)
 	return panes, nil
 }
 
@@ -241,7 +240,6 @@ func hostPane(info sessionhost.Info) sessionPane {
 	labels := info.Labels
 	pane := sessionPane{
 		target:           info.ID,
-		sessionName:      hostSessionGroup,
 		name:             labels[hostLabelName],
 		cwd:              info.Cwd,
 		command:          info.Command,
@@ -504,20 +502,19 @@ func (b *hostBackend) sendBytes(id string, data []byte) error {
 	return err
 }
 
-// place has nothing to arrange: host Sessions are not grouped. A Session to
-// place near must exist.
-func (b *hostBackend) place(near string, detached bool, name string) (backendPlacement, error) {
+// checkNear: a Session to start near must exist.
+func (b *hostBackend) checkNear(near string) error {
 	if near != "" && b.validID(near) {
 		if _, present, err := b.info(near); err != nil {
-			return backendPlacement{}, err
+			return err
 		} else if !present {
-			return backendPlacement{}, fmt.Errorf("preferred Session %q is missing", near)
+			return fmt.Errorf("preferred Session %q is missing", near)
 		}
 	}
-	return backendPlacement{group: hostSessionGroup}, nil
+	return nil
 }
 
-func (b *hostBackend) create(at backendPlacement, spec backendCreateSpec) (string, error) {
+func (b *hostBackend) create(spec backendCreateSpec) (string, error) {
 	id, err := newHostSessionID()
 	if err != nil {
 		return "", err
@@ -626,11 +623,7 @@ func (b *hostBackend) inputIO() sessionInputIO { return hostInputIO{b: b} }
 // submission, and the receipt ledger kept as the Session's data.
 type hostInputIO struct{ b *hostBackend }
 
-const hostInputServer = "session-host"
-
-func (io hostInputIO) socket(string) string { return hostInputServer }
-
-func (io hostInputIO) pane(_ string, sessionID string) sessionInputPane {
+func (io hostInputIO) pane(sessionID string) sessionInputPane {
 	if !io.b.validID(sessionID) {
 		return sessionInputPane{}
 	}
@@ -664,7 +657,7 @@ func submitSteps(payload string, adapter sessionInputProvider) []sessionhost.Inp
 // submitPaste clears the draft (every line of it), pastes the payload as one paste and submits
 // it with the adapter's timing, all in one input script the host runs with
 // nothing else in between.
-func (io hostInputIO) submitPaste(_ string, paneID, payload string, adapter sessionInputProvider, beforeStart func() error) (bool, error) {
+func (io hostInputIO) submitPaste(paneID, payload string, adapter sessionInputProvider, beforeStart func() error) (bool, error) {
 	steps := submitSteps(payload, adapter)
 	if _, err := io.b.conn(false); err != nil {
 		return false, fmt.Errorf("start session host input: %w", err)
@@ -684,7 +677,7 @@ func (io hostInputIO) submitPaste(_ string, paneID, payload string, adapter sess
 	return true, nil
 }
 
-func (io hostInputIO) receiptLedger(_ string, target string) (sessionInputReceiptLedger, error) {
+func (io hostInputIO) receiptLedger(target string) (sessionInputReceiptLedger, error) {
 	client, err := io.b.conn(false)
 	if err != nil {
 		return sessionInputReceiptLedger{}, err
@@ -698,7 +691,7 @@ func (io hostInputIO) receiptLedger(_ string, target string) (sessionInputReceip
 	return decodeSessionInputReceiptLedger(data.Value)
 }
 
-func (io hostInputIO) writeReceiptLedger(_ string, target string, ledger sessionInputReceiptLedger) error {
+func (io hostInputIO) writeReceiptLedger(target string, ledger sessionInputReceiptLedger) error {
 	if err := validateSessionInputReceiptLedger(ledger); err != nil {
 		return err
 	}

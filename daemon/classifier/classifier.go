@@ -114,8 +114,8 @@ var readyComposerLineRe = regexp.MustCompile(`^\s*(?:[›❯]\s*|→\s*Add a fol
 // conversation sources (updates.jsonl / chat_history.jsonl) do not carry the
 // ordered options, so Interface must treat the current pane lines as the sole
 // live fact. Match structure, not one English billing string.
-// Optional ›/> prefix is Grok's selection caret; plain capture-pane has no reverse-video.
-// Capture-pane may keep bare glyphs or parenthesize them as (○)/(●)/(O).
+// Optional ›/> prefix is Grok's selection caret; a plain-text screen has no reverse-video.
+// A screen may keep bare glyphs or parenthesize them as (○)/(●)/(O).
 var grokChoiceOptionRe = regexp.MustCompile(`(?i)^\s*[›>]?\s*[1-9]\s*(?:[○●◯◉◎]|\([○●◯◉◎Oo\s]*\))\s+\S`)
 var grokChoiceFooterRe = regexp.MustCompile(`(?i)(?:↑\s*/\s*↓|↑|↓).{0,24}navigate|(?i)\bnavigate\b.{0,40}\benter\b|(?i)\benter\s*:\s*submit\b|(?i)\benter\s+confirm\b`)
 

@@ -362,7 +362,6 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 		details["prompt_unidentified"] = unidentifiedReason(activity)
 		details["next"] = unidentifiedNext(id)
 	}
-	details["pane"] = strings.TrimSpace(id)
 	raw, err := json.Marshal(details)
 	if err != nil {
 		return turn, hasTurn

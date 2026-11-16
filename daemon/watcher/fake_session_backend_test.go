@@ -163,11 +163,9 @@ func (b *fakeSessionBackend) sendBytes(id string, data []byte) error {
 	return b.sendLiteral(id, string(data))
 }
 
-func (b *fakeSessionBackend) place(string, bool, string) (backendPlacement, error) {
-	return backendPlacement{group: "fake"}, nil
-}
+func (b *fakeSessionBackend) checkNear(string) error { return nil }
 
-func (b *fakeSessionBackend) create(_ backendPlacement, spec backendCreateSpec) (string, error) {
+func (b *fakeSessionBackend) create(spec backendCreateSpec) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.created = append(b.created, spec)
