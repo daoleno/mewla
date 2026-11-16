@@ -8,7 +8,7 @@
 #   3. it opens without pairing, shows the computer Connected, signs in with the same device key (the
 #      daemon lists one device, seen again after the upgrade) and holds the draft, in the UI and in storage;
 #   4. its scanner runs in this release build: the camera prompt, then the camera looking for a code.
-# release-artifacts.yml runs it before anything is published. Inputs: OLD_APK, NEW_APK, MEWLA (daemon
+# upgrade.yml runs it on main's schedule, from the latest release. Inputs: OLD_APK, NEW_APK, MEWLA (daemon
 # binary), OUT (evidence directory); MEWLA_UPGRADE_SAME_VERSION_OK=1 accepts an equal versionCode (a
 # build-only candidate). Exit 0 only if all of it holds.
 set -euo pipefail
@@ -19,7 +19,14 @@ DRAFT="release upgrade draft"
 mkdir -p "$OUT"
 state="$(mktemp -d)"
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/upgrade.log"; }
-fail() { log "FAIL: $*"; shot fail; exit 1; }
+fail() { log "FAIL: $*"; shot fail; why; exit 1; }
+# Why the app is gone, if it is: the system's record of its last exits and every log buffer. The pairing
+# link is a credential, so any mewla:// URI is cut out before the file is written.
+why() {
+  adb shell dumpsys activity exit-info "$PKG" > "$OUT/exit-info.txt" 2>&1 || true
+  adb shell dumpsys activity activities > "$OUT/activities.txt" 2>&1 || true
+  adb logcat -d -b all -v threadtime 2>/dev/null | sed -E 's#mewla://[^ "}]*#mewla://<cut>#g; s#([?&]p=)[^ &"}]*#\1<cut>#g' > "$OUT/logcat.txt" || true
+}
 screen() {
   # A failed dump leaves the previous file: remove it first so a stale screen is never read.
   adb shell rm -f /sdcard/ui.xml
@@ -104,6 +111,9 @@ link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir 
 [[ -n "$link" ]] || fail "the daemon gave no pairing link"
 
 log "1. the previous release pairs and keeps a draft"
+# Room for the whole run in every log buffer, from a clean start, for why().
+adb logcat -G 16M > /dev/null 2>&1 || true
+adb logcat -c -b all > /dev/null 2>&1 || true
 adb uninstall "$PKG" > /dev/null 2>&1 || true
 adb install "$OLD_APK" | tail -1 | tee -a "$OUT/upgrade.log"
 old_code=$(version_code)
