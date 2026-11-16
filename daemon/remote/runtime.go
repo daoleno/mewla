@@ -412,6 +412,11 @@ type relayReporter struct {
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
+	// done closes when the current report's loop has ended.
+	done chan struct{}
+	// superseded, when set (tests), is told that a report waits for the one it
+	// replaced to end.
+	superseded func()
 }
 
 type relayReporterClient interface {
@@ -422,7 +427,10 @@ func relayReportBackoff(attempt int) time.Duration {
 	return min(time.Duration(1<<min(attempt, 8))*time.Second, 5*time.Minute)
 }
 
-// report is safe on a nil reporter and never blocks.
+// report is safe on a nil reporter and never blocks. A newer report replaces
+// an unfinished one, which stops; the newer one starts only once it has ended,
+// so a request of the old one (in flight, or one more after its wait) never
+// tells the service the old relay after the new one.
 func (reporter *relayReporter) report(relay string) {
 	if reporter == nil || relay == "" {
 		return
@@ -431,11 +439,24 @@ func (reporter *relayReporter) report(relay string) {
 	if reporter.cancel != nil {
 		reporter.cancel()
 	}
+	previous := reporter.done
 	ctx, cancel := context.WithCancel(reporter.ctx)
-	reporter.cancel = cancel
+	done := make(chan struct{})
+	reporter.cancel, reporter.done = cancel, done
+	superseded := reporter.superseded
 	reporter.mu.Unlock()
 	go func() {
+		defer close(done)
+		if previous != nil {
+			if superseded != nil {
+				superseded()
+			}
+			<-previous
+		}
 		for attempt := 0; ; attempt++ {
+			if ctx.Err() != nil {
+				return
+			}
 			err := reporter.client.ReportRelay(ctx, relay)
 			if err == nil || ctx.Err() != nil {
 				return
