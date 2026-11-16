@@ -102,8 +102,6 @@ jobs:
         with:
           go-version-file: daemon/go.mod
           cache-dependency-path: daemon/go.sum
-      - name: Install runtime test prerequisites
-        run: command -v tmux >/dev/null || brew install tmux
       # A short temporary directory on its real path: tests put Unix sockets in t.TempDir(), whose
       # paths under the Mac's /var/folders TMPDIR pass its 104-byte socket limit, and /tmp is a
       # symlink that tests comparing resolved paths see through. Linux runners have /tmp.
