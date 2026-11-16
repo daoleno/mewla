@@ -83,6 +83,13 @@ class ReviewStateTests(unittest.TestCase):
         self.assertIn(f"**Public link:** {LINK} (turned on by this run)", text)
         self.assertIn("**Newest approved build:** 0.4.1 (40200)", text)
 
+    def test_a_train_build_is_named_by_its_release(self):
+        # The Preview's marketing version is the train 0.4; build 40999 is 0.4.9.
+        client = FakeClient([build("b40999", "40999", "0.4", "BETA_APPROVED")], {"b40999": "APPROVED"}, ["b40999"])
+        _, text = run(client)
+        self.assertIn("| 0.4.9 (40999, TestFlight 0.4) |", text)
+        self.assertIn("**Newest approved build:** 0.4.9 (40999, TestFlight 0.4)", text)
+
     def test_a_link_already_on_is_left_alone_and_printed(self):
         group = {"name": "Mewla Preview", "isInternalGroup": False, "publicLinkEnabled": True, "publicLink": LINK}
         client = FakeClient([build("b40200", "40200", "0.4.1", "IN_BETA_TESTING")], {}, ["b40200"], group=group)

@@ -277,7 +277,36 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
             self.assertIn(needle, AVAILABILITY)
         self.assertNotRegex(AVAILABILITY, r"\b67\d{8}\b")
 
+    def test_preview_builds_carry_the_train_and_the_real_release(self):
+        identity = between(IOS_RELEASE, "      - name: Resolve closed iOS identity contract\n", "      - name: Verify tracked release identity\n")
+        preview = between(identity, "            preview)\n", ";;")
+        production = between(identity, "            production)\n", ";;")
+        self.assertIn('MARKETING="$(python3 scripts/lib/release_identity.py testflight_version)"', preview)
+        self.assertIn('MARKETING="$(python3 scripts/lib/release_identity.py marketing_version)"', production)
+        self.assertIn('echo "MEWLA_APP_VERSION=$(python3 scripts/lib/release_identity.py version)"', identity)
+        self.assertIn("Print :MewlaVersion", IOS_RELEASE)
+        upload = between(IOS_RELEASE, "      - name: Upload verified IPA to TestFlight\n", "      - name: Submit to Beta App Review or wait behind the build in review\n")
+        self.assertIn('--version "$MEWLA_IOS_MARKETING_VERSION"', upload)
+
+    def test_the_testflight_pipeline_runs_on_app_store_connect_events_with_a_daily_sweep(self):
+        self.assertIn('    - cron: "47 3 * * *"', REVIEW)
+        self.assertEqual(REVIEW.count("cron:"), 1)
+        self.assertIn("      asc_event:", REVIEW)
+        self.assertNotIn("schedule:", AVAILABILITY)
+        self.assertIn("  workflow_call:", AVAILABILITY)
+        available = REVIEW[REVIEW.index("  available:\n"):]
+        self.assertIn("uses: ./.github/workflows/ios-testflight-available.yml", available)
+        self.assertIn("needs: review", available)
+        self.assertIn("inputs.dry_run != true", available)
+        worker = read("scripts/asc-webhook/receiver.mjs")
+        wrangler = read("scripts/asc-webhook/wrangler.toml")
+        self.assertIn('GITHUB_WORKFLOW = "ios-testflight-review.yml"', wrangler)
+        self.assertIn('GITHUB_REF = "main"', wrangler)
+        self.assertIn("inputs: { asc_event: eventType }", worker)
+
     def test_testflight_review_reads_with_the_preview_key_and_writes_nothing_to_the_repo(self):
+        # Only the called availability job publishes (contents: write); the review job reads.
+        review_job = REVIEW[:REVIEW.index("  available:\n")]
         for needle in (
             "workflow_dispatch:",
             "cron:",
@@ -289,9 +318,9 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
             '--summary "$GITHUB_STEP_SUMMARY"',
             'rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"',
         ):
-            self.assertIn(needle, REVIEW)
-        self.assertIn("permissions:\n  contents: read", REVIEW)
-        self.assertNotIn("contents: write", REVIEW)
+            self.assertIn(needle, review_job)
+        self.assertIn("permissions:\n  contents: read", review_job)
+        self.assertNotIn("contents: write", review_job)
         self.assertNotIn("ZEN_UPDATE_SIGNING_KEY_BASE64", REVIEW)
         self.assertNotRegex(REVIEW, r"\b67\d{8}\b")
 
@@ -365,15 +394,17 @@ class IOSReleaseWorkflowTests(unittest.TestCase):
             "python3 scripts/lib/release_identity.py ios_bundle_id",
             "python3 scripts/lib/release_identity.py ios_preview_bundle_id",
             'MEWLA_APP_ID="$MEWLA_IOS_BUNDLE_ID"',
-            'MARKETING_VERSION="$MEWLA_IOS_VERSION"',
+            'MARKETING_VERSION="$MEWLA_IOS_MARKETING_VERSION"',
             'CURRENT_PROJECT_VERSION="$MEWLA_IOS_BUILD_NUMBER"',
+            'MEWLA_APP_VERSION="$MEWLA_APP_VERSION"',
             'expected_bundle = os.environ["MEWLA_IOS_BUNDLE_ID"]',
             'os.environ["MEWLA_IOS_BUNDLE_ID"]: sys.argv[3]',
             "${MEWLA_IOS_ARTIFACT_NAME}-v${MEWLA_IOS_VERSION}",
             "MEWLA_IOS_VERSION=$(python3 scripts/lib/release_identity.py marketing_version)",
-            './scripts/verify-ios-artifact.sh ipa "${IPAS[0]}"',
+            'MEWLA_IOS_VERSION="$MEWLA_IOS_MARKETING_VERSION" ./scripts/verify-ios-artifact.sh ipa "${IPAS[0]}"',
             '"display_name": os.environ["MEWLA_IOS_DISPLAY_NAME"]',
-            '"marketing_version": os.environ["MEWLA_IOS_VERSION"]',
+            '"marketing_version": os.environ["MEWLA_IOS_MARKETING_VERSION"]',
+            '"version": os.environ["MEWLA_APP_VERSION"]',
         ):
             self.assertIn(needle, IOS_RELEASE)
         for absent in ("expo prebuild", "pod install", '"marketing_version": base["version"]'):

@@ -393,6 +393,8 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         project = (root / IOS_PROJECT).read_text(encoding="utf-8")
         self.assertIn(f'MARKETING_VERSION: "{STABLE_TARGET}"\n', project)
         self.assertIn(f'CURRENT_PROJECT_VERSION: "{code}"\n', project)
+        # The app reports the release itself (Info.plist MewlaVersion), beta suffix included.
+        self.assertIn(f'MEWLA_APP_VERSION: "{beta}"\n', project)
 
     def test_updates_exact_identity_files_and_writes_user_notes(self):
         root = self.create_repo()
@@ -441,6 +443,7 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             f'MARKETING_VERSION: "{release_identity.marketing_version(NEXT_VERSION)}"\n', project
         )
         self.assertIn(f'CURRENT_PROJECT_VERSION: "{NEXT_CODE}"\n', project)
+        self.assertIn(f'MEWLA_APP_VERSION: "{NEXT_VERSION}"\n', project)
         self.assertIn(
             f'var Version = "{NEXT_VERSION}"',
             (root / "daemon/cmd/mewla/version.go").read_text(encoding="utf-8"),

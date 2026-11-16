@@ -1,0 +1,14 @@
+# The App Store Connect webhook receiver (worker.mjs serves receiver.mjs). Deploy from this directory:
+#   wrangler deploy
+#   wrangler secret put ASC_WEBHOOK_SECRET   # the secret scripts/asc-webhook/register.py gives App Store Connect
+#   wrangler secret put GITHUB_TOKEN         # fine-grained, daoleno/mewla only, Actions: read and write
+# Runbook: docs/ios-ci-release.md, "App Store Connect webhook".
+name = "mewla-asc-webhook"
+main = "worker.mjs"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+GITHUB_REPOSITORY = "daoleno/mewla"
+GITHUB_WORKFLOW = "ios-testflight-review.yml"
+GITHUB_REF = "main"

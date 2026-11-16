@@ -2,15 +2,15 @@ name: iOS TestFlight availability
 
 # Tells installed Preview builds when a newer build is really installable in TestFlight.
 # Upload and VALID processing are not enough: the public "Mewla Preview" group only gets
-# the build after Beta App Review, so this polls App Store Connect for the external
-# IN_BETA_TESTING state and then publishes a signed manifest the app verifies.
+# the build after Beta App Review, so this asks App Store Connect for the external
+# IN_BETA_TESTING state and then publishes a signed manifest the app verifies. It runs as the
+# last job of ios-testflight-review.yml (started by App Store Connect's webhook, plus a daily sweep).
 #
 # Like release-artifacts.yml, the job holding the ASC key, the job holding the update
 # signing key and the job holding the write token are three different jobs.
 
 on:
-  schedule:
-    - cron: "17 * * * *"
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
@@ -123,11 +123,12 @@ jobs:
           }
           if found.get("public_link"):
               manifest["public_link"] = found["public_link"]
+          # The build number names the release (scripts/lib/release_identity.py), so it alone orders builds.
           def rank(item):
               try:
-                  return (tuple(int(p) for p in item["marketing_version"].split(".")), int(item["build_number"]))
-              except (KeyError, ValueError, AttributeError):
-                  return ((-1,), -1)
+                  return int(item["build_number"])
+              except (KeyError, ValueError, TypeError):
+                  return -1
           # Publish only forward: an expired or withdrawn build never rolls the app back.
           changed = rank(manifest) > rank(previous) or (
               rank(manifest) == rank(previous) and manifest != {k: previous.get(k) for k in manifest}

@@ -78,7 +78,8 @@ enum CrashLog {
 
   private static func header(kind: String, at: Date, live: Bool = false) -> String {
     let info = Bundle.main.infoDictionary ?? [:]
-    let version = info["CFBundleShortVersionString"] as? String ?? "?"
+    // The release (MewlaVersion); a TestFlight build's marketing version is only its train (0.4).
+    let version = info["MewlaVersion"] as? String ?? "?"
     let build = info["CFBundleVersion"] as? String ?? "?"
     var system = utsname()
     uname(&system)

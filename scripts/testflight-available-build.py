@@ -4,6 +4,10 @@
 An uploaded, VALID build is not installable: the public group only receives it
 after Beta App Review. The App Store Connect build beta detail says when it is
 in beta testing for external testers, so only that state counts.
+
+Builds are ranked by build number, which names the release (scripts/lib/release_identity.py:
+40999 is 0.4.9): a Preview build's marketing version is only its train (0.4). The result's
+"marketing_version" is that release's X.Y.Z, which is what installed apps compare.
 """
 
 from __future__ import annotations
@@ -22,13 +26,14 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 asc_upload = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(asc_upload)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "lib"))
+import release_identity  # noqa: E402
 
 # ExternalBetaState values seen from App Store Connect for a build that Beta App Review let
 # into the public group: BETA_APPROVED (observed on every reviewed Mewla build) and
 # IN_BETA_TESTING. Anything earlier (READY_FOR_BETA_SUBMISSION, WAITING_FOR_BETA_REVIEW,
 # IN_BETA_REVIEW, BETA_REJECTED, ...) is not installable.
 INSTALLABLE_STATES = frozenset({"BETA_APPROVED", "IN_BETA_TESTING"})
-MARKETING_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 BUILD_NUMBER = re.compile(r"^[1-9]\d*$")
 PUBLIC_LINK = re.compile(r"^https://testflight\.apple\.com/join/[A-Za-z0-9]+$")
 
@@ -36,7 +41,7 @@ PUBLIC_LINK = re.compile(r"^https://testflight\.apple\.com/join/[A-Za-z0-9]+$")
 def select_installable_build(
     document: dict[str, Any], detail_lookup: Callable[[str], str | None] | None = None
 ) -> dict[str, Any] | None:
-    """Pick the highest (marketing version, build number) testers can install.
+    """Pick the highest build number testers can install, with the release it names.
 
     The list response links a build's beta detail only for some builds; for the others
     detail_lookup(build id) asks for it directly, newest first, stopping at the first hit.
@@ -52,22 +57,22 @@ def select_installable_build(
             return {}
         return included.get((ref.get("type"), ref.get("id")), {})
 
-    candidates: list[tuple[tuple[tuple[int, ...], int], dict[str, Any], dict[str, Any]]] = []
+    candidates: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
     for build in document.get("data", []):
         attributes = build.get("attributes", {})
         if attributes.get("expired") is not False or attributes.get("processingState") != "VALID":
             continue
-        marketing = related(build, "preReleaseVersion").get("attributes", {}).get("version")
         number = attributes.get("version")
-        if not (
-            isinstance(marketing, str)
-            and MARKETING_VERSION.match(marketing)
-            and isinstance(number, str)
-            and BUILD_NUMBER.match(number)
-        ):
+        if not (isinstance(number, str) and BUILD_NUMBER.match(number)):
             continue
-        rank = (tuple(int(part) for part in marketing.split(".")), int(number))
-        candidates.append((rank, build, {"marketing_version": marketing, "build_number": int(number)}))
+        # Expo's builds (140 and below) predate the rule and name no release.
+        release = release_identity.version_of_code(int(number))
+        if release is None:
+            continue
+        candidates.append((int(number), build, {
+            "marketing_version": release_identity.marketing_version(release),
+            "build_number": int(number),
+        }))
     for _, build, result in sorted(candidates, key=lambda item: item[0], reverse=True):
         state = related(build, "buildBetaDetail").get("attributes", {}).get("externalBuildState")
         if state is None and detail_lookup is not None:

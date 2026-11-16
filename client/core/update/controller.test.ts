@@ -285,6 +285,17 @@ describe("TestFlight", () => {
     expect(s.opened).toHaveLength(3);
   });
 
+  test("a newer build of the same TestFlight train is announced and an older one is not", async () => {
+    // 0.4.9 (40999) runs; TestFlight shows every 0.4.x build as "0.4", the build number tells them apart.
+    const train = { ...info, version: "0.4.9", build: "40999" };
+    const newer = await started(setup({ platform: "ios", info: train, installer: null, testflight: testflight("0.4.10", 41099) }));
+    expect(newer.state).toMatchObject({ kind: "testflightAvailable", update: { version: "0.4.10", buildNumber: 41099 } });
+    for (const [version, build] of [["0.4.9", 40999], ["0.4.8", 40899]] as const) {
+      const older = await started(setup({ platform: "ios", info: train, installer: null, testflight: testflight(version, build) }));
+      expect(older.state).toEqual({ kind: "current" });
+    }
+  });
+
   test("the running build, or a manifest for another app, is no update", async () => {
     expect((await started(setup({ platform: "ios", info, installer: null, testflight: testflight("0.3.0", 140) }))).state).toEqual({ kind: "current" });
     const other = setup({ platform: "ios", info: { ...info, appId: "com.daoleno.mewla" }, installer: null, testflight: testflight("0.3.1", 1) });

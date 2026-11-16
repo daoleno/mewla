@@ -11,9 +11,19 @@ marketing version. Store build numbers follow from it by one rule:
 so they grow with SemVer precedence (0.3.2-beta.1 = 30201 < 0.3.2 = 30299 <
 0.3.3-beta.1 = 30301) and start above every Expo build (Android versionCode
 142 and iOS build 140 at 0.3.1). The Android versionCode and the iOS
-CFBundleVersion are both this code. client/android/app/build.gradle.kts
-computes the same in Kotlin; the release verifiers compare what a build
-carries with this module, so the two cannot drift unnoticed.
+CFBundleVersion are both this code, and a code names its version back
+(version_of_code). client/android/app/build.gradle.kts computes the same in
+Kotlin; the release verifiers compare what a build carries with this module,
+so the two cannot drift unnoticed.
+
+The Preview (TestFlight) app's marketing version (CFBundleShortVersionString)
+is the train X.Y ("testflight_version"), the same for every release of a
+minor: Beta App Review fully reviews only the first build of a marketing
+version, so later releases of the train reach testers in minutes. TestFlight
+and iOS Settings show "0.4 (40999)"; the build number names the release
+(version_of_code: 40999 is 0.4.9). The app shows its real version from the
+bundled client/ui/nsh.json and Info.plist MewlaVersion (MEWLA_APP_VERSION in
+client/ios/project.yml). The production (App Store) identity keeps X.Y.Z.
 
 Usage:
   scripts/lib/release_identity.py                 # key=value lines (GITHUB_OUTPUT)
@@ -71,6 +81,25 @@ def marketing_version(version: str) -> str:
     return f"{major}.{minor}.{patch}"
 
 
+def version_of_code(code: int) -> str | None:
+    """The version whose build code this is, or None for a number the rule never makes (Expo's)."""
+    if not isinstance(code, int) or isinstance(code, bool) or code < 10_000:
+        return None
+    major, rest = divmod(code, 1_000_000)
+    minor, rest = divmod(rest, 10_000)
+    patch, suffix = divmod(rest, 100)
+    if suffix == 0:
+        return None
+    version = f"{major}.{minor}.{patch}" + ("" if suffix == RELEASE_SUFFIX else f"-beta.{suffix}")
+    return version if build_code(version) == code else None
+
+
+def testflight_version(version: str) -> str:
+    """The Preview app's marketing version: the train X.Y, the same for every release of a minor."""
+    major, minor, _, _ = parse(version)
+    return f"{major}.{minor}"
+
+
 def read_manifest(root: Path = ROOT) -> dict:
     path = root / SOURCE
     try:
@@ -92,7 +121,7 @@ def read_version(root: Path = ROOT) -> str:
 
 def identity(version: str) -> dict[str, object]:
     code = build_code(version)
-    return {
+    values: dict[str, object] = {
         "version": version,
         "marketing_version": marketing_version(version),
         "version_code": code,
@@ -102,6 +131,8 @@ def identity(version: str) -> dict[str, object]:
         "ios_preview_bundle_id": IOS_BUNDLE_IDS["preview"],
         "source": SOURCE,
     }
+    values["testflight_version"] = testflight_version(version)
+    return values
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -112,7 +143,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="print JSON")
     args = parser.parse_args(argv)
     try:
-        values = identity(args.version if args.version is not None else read_version(args.root))
+        version = args.version if args.version is not None else read_version(args.root)
+        values = identity(version)
     except IdentityError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

@@ -150,6 +150,36 @@ class ReviewQueueTests(unittest.TestCase):
         self.assertIsNone(tf.run(client, APP, GROUP)["submit"])
         self.assertEqual(client.writes(), [])
 
+    def test_a_train_build_waits_behind_the_review_and_is_named_by_its_build_number(self):
+        # 0.4.9 ships under the train 0.4 (scripts/lib/release_identity.py testflight_version).
+        builds = [build("b40999", "40999", "0.4", "READY_FOR_BETA_SUBMISSION")] + NOW
+        client = FakeClient(builds, NOW_REVIEWS)
+        result = tf.run(client, APP, GROUP)
+        self.assertEqual(client.writes(), [])
+        self.assertEqual((result["waiting"]["build_number"], result["waiting"]["release"]), ("40999", "0.4.9"))
+        text = tf.markdown(result)
+        self.assertIn("- Waiting: 0.4.9 (40999, TestFlight 0.4), submitted once the review above ends", text)
+        # 0.4.8 and 0.4.5 have a higher marketing version than the train, so TestFlight lists them above it.
+        self.assertEqual(numbers(result["above_train"]), ["40899", "40599"])
+        self.assertIn("- Listed above the newest build in TestFlight (higher marketing version): "
+                      "0.4.8 (40899), 0.4.5 (40599)", text)
+
+    def test_the_next_build_of_a_train_is_submitted_once_its_first_is_approved(self):
+        builds = [
+            build("b41099", "41099", "0.4", "READY_FOR_BETA_SUBMISSION"),
+            build("b40999", "40999", "0.4", "IN_BETA_TESTING"),
+        ]
+        client = FakeClient(builds, {"b40999": "APPROVED"})
+        result = tf.run(client, APP, GROUP)
+        self.assertEqual(client.writes(), [("POST", "/betaAppReviewSubmissions")])
+        self.assertEqual(result["submit"]["release"], "0.4.10")
+        self.assertEqual(result["above_train"], [])
+
+    def test_a_new_train_is_not_outranked(self):
+        builds = [build("b50099", "50099", "0.5", "READY_FOR_BETA_SUBMISSION")] + NOW
+        result = tf.run(FakeClient(builds, {"b40599": "APPROVED", "b40899": "APPROVED"}), APP, GROUP)
+        self.assertEqual(result["above_train"], [])
+
     def test_a_build_not_ready_or_outside_the_group_is_not_submitted(self):
         approved = build("b40599", "40599", "0.4.5", "IN_BETA_TESTING")
         for row, in_group in (

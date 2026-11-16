@@ -169,7 +169,10 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-path
 
       # The closed identities the Expo app shipped (scripts/lib/release_identity.py): the App Store
-      # and TestFlight builds replace those installs in place.
+      # and TestFlight builds replace those installs in place. The Preview's marketing version is the
+      # train X.Y (testflight_version): Beta App Review fully reviews only the first build of a
+      # marketing version, so the next releases of the train reach testers in minutes. Every build
+      # carries the real release in Info.plist MewlaVersion, and the build number names it too.
       - name: Resolve closed iOS identity contract
         run: |
           set -euo pipefail
@@ -177,10 +180,12 @@ jobs:
             production)
               BUNDLE_ID="$(python3 scripts/lib/release_identity.py ios_bundle_id)"
               ARTIFACT_NAME=mewla-ios
+              MARKETING="$(python3 scripts/lib/release_identity.py marketing_version)"
               ;;
             preview)
               BUNDLE_ID="$(python3 scripts/lib/release_identity.py ios_preview_bundle_id)"
               ARTIFACT_NAME=mewla-preview-ios
+              MARKETING="$(python3 scripts/lib/release_identity.py testflight_version)"
               ;;
             *)
               echo "error: MEWLA_IOS_APP_VARIANT must be production or preview" >&2
@@ -198,6 +203,8 @@ jobs:
             echo "MEWLA_IOS_NATIVE_PROJECT_NAME=Mewla"
             echo "MEWLA_IOS_ARTIFACT_NAME=$ARTIFACT_NAME"
             echo "MEWLA_IOS_VERSION=$(python3 scripts/lib/release_identity.py marketing_version)"
+            echo "MEWLA_IOS_MARKETING_VERSION=$MARKETING"
+            echo "MEWLA_APP_VERSION=$(python3 scripts/lib/release_identity.py version)"
           } >> "$GITHUB_ENV"
 
       - name: Verify tracked release identity
@@ -368,8 +375,9 @@ jobs:
             MEWLA_APP_ID="$MEWLA_IOS_BUNDLE_ID" \
             MEWLA_APP_PROFILE="$PROFILE_NAME" \
             MEWLA_LIVE_PROFILE="$LIVE_PROFILE_NAME" \
-            MARKETING_VERSION="$MEWLA_IOS_VERSION" \
+            MARKETING_VERSION="$MEWLA_IOS_MARKETING_VERSION" \
             CURRENT_PROJECT_VERSION="$MEWLA_IOS_BUILD_NUMBER" \
+            MEWLA_APP_VERSION="$MEWLA_APP_VERSION" \
             MEWLA_IOS_DISTRIBUTION="$MEWLA_IOS_DISTRIBUTION" \
             archive
           test -d "$ARCHIVE_PATH"
@@ -377,6 +385,11 @@ jobs:
           DISTRIBUTION="$(/usr/libexec/PlistBuddy -c 'Print :MewlaDistribution' "$ARCHIVED_APP/Info.plist")"
           [[ "$DISTRIBUTION" == "$MEWLA_IOS_DISTRIBUTION" ]] || {
             echo "error: archived MewlaDistribution is $DISTRIBUTION; expected $MEWLA_IOS_DISTRIBUTION" >&2
+            exit 1
+          }
+          ARCHIVED_RELEASE="$(/usr/libexec/PlistBuddy -c 'Print :MewlaVersion' "$ARCHIVED_APP/Info.plist")"
+          [[ "$ARCHIVED_RELEASE" == "$MEWLA_APP_VERSION" ]] || {
+            echo "error: archived MewlaVersion is $ARCHIVED_RELEASE; expected $MEWLA_APP_VERSION" >&2
             exit 1
           }
           xcodebuild \
@@ -396,7 +409,7 @@ jobs:
             echo "error: expected exactly one exported IPA, found ${#IPAS[@]}" >&2
             exit 1
           }
-          ./scripts/verify-ios-artifact.sh ipa "${IPAS[0]}"
+          MEWLA_IOS_VERSION="$MEWLA_IOS_MARKETING_VERSION" ./scripts/verify-ios-artifact.sh ipa "${IPAS[0]}"
           ARTIFACT_DIR="${{ runner.temp }}/ios-release-artifact"
           mkdir -p "$ARTIFACT_DIR"
           IPA="$ARTIFACT_DIR/${MEWLA_IOS_ARTIFACT_NAME}-v${MEWLA_IOS_VERSION}-build${MEWLA_IOS_BUILD_NUMBER}.ipa"
@@ -415,7 +428,8 @@ jobs:
               "app_identity": os.environ["MEWLA_IOS_APP_VARIANT"],
               "display_name": os.environ["MEWLA_IOS_DISPLAY_NAME"],
               "bundle_identifier": os.environ["MEWLA_IOS_BUNDLE_ID"],
-              "marketing_version": os.environ["MEWLA_IOS_VERSION"],
+              "marketing_version": os.environ["MEWLA_IOS_MARKETING_VERSION"],
+              "version": os.environ["MEWLA_APP_VERSION"],
               "build_number": os.environ["MEWLA_IOS_BUILD_NUMBER"],
               "git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "ipa": ipa.name,
@@ -473,7 +487,7 @@ jobs:
           ./.release-automation/scripts/app-store-connect-upload.py \
             --ipa "$IOS_IPA" \
             --app-id "$MEWLA_ASC_APP_ID" \
-            --version "$MEWLA_IOS_VERSION" \
+            --version "$MEWLA_IOS_MARKETING_VERSION" \
             --build-number "$MEWLA_IOS_BUILD_NUMBER" \
             --key-id "$MEWLA_ASC_KEY_ID" \
             --key-path "$ASC_KEY_PATH" \

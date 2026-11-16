@@ -23,6 +23,8 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 asc_upload = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(asc_upload)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "lib"))
+import release_identity  # noqa: E402
 
 # A build Beta App Review let into external testing (buildBetaDetail.externalBuildState), or whose
 # review submission says so (betaAppReviewSubmission.betaReviewState).
@@ -146,6 +148,15 @@ def ensure_public_link(client: Any, group: dict[str, Any], enable: bool) -> dict
     return result
 
 
+def label(row: dict[str, Any]) -> str:
+    """The release the build number names (40999 is 0.4.9), and the train TestFlight shows when it differs."""
+    number = row.get("build_number")
+    release = release_identity.version_of_code(int(number)) if isinstance(number, str) and number.isdigit() else None
+    if release and release != row.get("version"):
+        return f"{release} ({number}, TestFlight {row['version']})"
+    return f"{row['version']} ({number})"
+
+
 def report(group_name: str, rows: list[dict[str, Any]], link: dict[str, Any]) -> dict[str, Any]:
     newest_approved = next((r for r in rows if approved(r)), None)
     return {
@@ -169,14 +180,14 @@ def markdown(result: dict[str, Any]) -> str:
     ]
     for row in result["builds"]:
         lines.append(
-            f"| {row['version']} ({row['build_number']}) | {(row['uploaded'] or '')[:16]} | {row['processing']} "
+            f"| {label(row)} | {(row['uploaded'] or '')[:16]} | {row['processing']} "
             f"| {'yes' if row['expired'] else 'no'} "
             f"| {row['review'] or 'not submitted'} | {row['external'] or '—'} | {'yes' if row['in_group'] else 'no'} |"
         )
     newest = result["newest_approved"]
     lines.append("")
     lines.append(
-        f"**Newest approved build:** {newest['version']} ({newest['build_number']})"
+        f"**Newest approved build:** {label(newest)}"
         + ("" if newest["in_group"] else f" — not in {result['group']}")
         if newest
         else "**Newest approved build:** none yet"

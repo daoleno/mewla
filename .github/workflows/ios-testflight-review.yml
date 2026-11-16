@@ -6,13 +6,23 @@ name: iOS TestFlight review
 # off, and the summary prints the link (or, when App Store Connect refuses, what to click).
 # Then the review queue (scripts/testflight-review-queue.py): while a build is in Beta App Review
 # nothing changes; once its review ends, the newest build waiting behind it is submitted, and builds
-# superseded before they were ever submitted are expired. dry_run only reads.
+# superseded before they were ever submitted are expired. Last, the signed availability manifest
+# (ios-testflight-available.yml) is published once a newer build is in beta testing. dry_run only reads.
+#
+# Event-driven: App Store Connect's webhook (a build finished processing, or its beta state changed)
+# reaches scripts/asc-webhook/receiver.mjs (a Cloudflare Worker), which dispatches this workflow on main. The daily run is only
+# a safety sweep for a missed delivery. Runbook: docs/ios-ci-release.md, "App Store Connect webhook".
 
 on:
   schedule:
-    - cron: "47 * * * *"
+    - cron: "47 3 * * *"
   workflow_dispatch:
     inputs:
+      asc_event:
+        description: "The App Store Connect event that started this run (set by the webhook receiver)"
+        required: false
+        type: string
+        default: ""
       builds:
         description: "How many of the newest builds to list"
         required: false
@@ -39,6 +49,17 @@ jobs:
     environment: app-store-connect-preview
     steps:
       - uses: actions/checkout@v4
+
+      - name: Why this run
+        env:
+          ASC_EVENT: ${{ inputs.asc_event }}
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            schedule) WHY="daily safety sweep" ;;
+            *) [[ -n "$ASC_EVENT" ]] && WHY="App Store Connect webhook: ${ASC_EVENT//[^A-Za-z]/}" || WHY="manual run" ;;
+          esac
+          echo "Started by: $WHY" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Ask App Store Connect
         env:
@@ -91,3 +112,13 @@ jobs:
       - name: Remove temporary Individual API key
         if: always()
         run: rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"
+
+  # The signed manifest that tells installed Preview builds a newer one is installable.
+  available:
+    name: Publish TestFlight availability
+    needs: review
+    if: ${{ !cancelled() && inputs.dry_run != true }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/ios-testflight-available.yml
+    secrets: inherit

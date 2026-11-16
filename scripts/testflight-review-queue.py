@@ -29,6 +29,8 @@ _SPEC = importlib.util.spec_from_file_location(
 )
 asc_upload = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(asc_upload)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "lib"))
+import release_identity  # noqa: E402
 
 # TestFlight's external state (buildBetaDetail.externalBuildState) and the review submission's state
 # (betaAppReviewSubmission.betaReviewState).
@@ -47,6 +49,11 @@ UNSUBMITTED_EXTERNAL = frozenset({READY, "MISSING_EXPORT_COMPLIANCE"})
 def number(row: dict[str, Any]) -> int | None:
     value = row.get("build_number")
     return int(value) if isinstance(value, str) and re.match(r"^[1-9]\d*$", value) else None
+
+
+def marketing(row: dict[str, Any]) -> tuple[int, ...] | None:
+    value = row.get("version")
+    return tuple(int(p) for p in value.split(".")) if isinstance(value, str) and re.match(r"^\d+(\.\d+){0,2}$", value) else None
 
 
 def in_review(row: dict[str, Any]) -> bool:
@@ -87,7 +94,13 @@ def plan(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ceiling = max([number(r) for r in reviewing] + ([number(newest)] if newest else []), default=0)
     expire = [r for r in live
               if floor < number(r) < ceiling and r is not newest and unsubmitted(r)]
+    # TestFlight shows the highest marketing version as the newest. A Preview build's is its train
+    # (0.4), so an older build still live under a higher one (0.4.8) is listed above the train.
+    top = live[0] if live else None
+    above = [r for r in live[1:] if r not in expire and marketing(r) and marketing(top)
+             and marketing(r) > marketing(top)] if top else []
     return {
+        "above_train": above,
         "approved": next((r for r in live if approved(r)), None),
         "in_review": reviewing,
         "submit": submit,
@@ -123,6 +136,7 @@ def app_builds(client: Any, app_id: str, group_id: str) -> list[dict[str, Any]]:
             "id": build["id"],
             "version": related(build, "preReleaseVersion").get("attributes", {}).get("version"),
             "build_number": attributes.get("version"),
+            "release": None,
             "processing": attributes.get("processingState"),
             "expired": attributes.get("expired"),
             "external": related(build, "buildBetaDetail").get("attributes", {}).get("externalBuildState"),
@@ -134,6 +148,8 @@ def app_builds(client: Any, app_id: str, group_id: str) -> list[dict[str, Any]]:
                 detail = client.api_request("GET", f"/builds/{row['id']}/buildBetaDetail").get("data") or {}
                 row["external"] = detail.get("attributes", {}).get("externalBuildState")
             row["review"] = review_state(client, row["id"])
+        if number(row) is not None:
+            row["release"] = release_identity.version_of_code(number(row))
         rows.append(row)
     return rows
 
@@ -203,7 +219,7 @@ def expire(client: Any, row: dict[str, Any]) -> dict[str, Any]:
 def brief(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if row is None:
         return None
-    return {k: row.get(k) for k in ("id", "version", "build_number", "external", "review")}
+    return {k: row.get(k) for k in ("id", "version", "release", "build_number", "external", "review")}
 
 
 def run(client: Any, app_id: str, group_name: str, dry_run: bool = False) -> dict[str, Any]:
@@ -216,6 +232,7 @@ def run(client: Any, app_id: str, group_name: str, dry_run: bool = False) -> dic
         "waiting": brief(decided["waiting"]),
         "submit": None,
         "expire": [],
+        "above_train": [brief(r) for r in decided["above_train"]],
     }
     if decided["submit"] is not None:
         result["submit"] = {**brief(decided["submit"]),
@@ -236,6 +253,10 @@ def failed(result: dict[str, Any]) -> bool:
 
 
 def label(row: dict[str, Any]) -> str:
+    """The release the build number names (40999 is 0.4.9), and the train when it differs."""
+    release = row.get("release")
+    if release and release != row.get("version"):
+        return f"{release} ({row['build_number']}, TestFlight {row['version']})"
     return f"{row['version']} ({row['build_number']})"
 
 
@@ -264,6 +285,9 @@ def markdown(result: dict[str, Any]) -> str:
     if result["expire"]:
         lines.append("- Expire (superseded, never submitted): "
                      + ", ".join(f"{label(r)} {outcome(r, dry, 'expire', 'expired')}" for r in result["expire"]))
+    if result.get("above_train"):
+        lines.append("- Listed above the newest build in TestFlight (higher marketing version): "
+                     + ", ".join(label(r) for r in result["above_train"]))
     return "\n".join(lines) + "\n"
 
 

@@ -479,10 +479,16 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         f'MARKETING_VERSION: "{release_identity.marketing_version(next_version)}"\n',
         relative=IOS_PROJECT,
     )
-    updates[IOS_PROJECT] = replace_literal(
+    ios_project = replace_literal(
         ios_project,
         f'CURRENT_PROJECT_VERSION: "{current_code}"\n',
         f'CURRENT_PROJECT_VERSION: "{next_code}"\n',
+        relative=IOS_PROJECT,
+    )
+    updates[IOS_PROJECT] = replace_literal(
+        ios_project,
+        f'MEWLA_APP_VERSION: "{current_version}"\n',
+        f'MEWLA_APP_VERSION: "{next_version}"\n',
         relative=IOS_PROJECT,
     )
     updates["daemon/cmd/mewla/version.go"] = replace_literal(
