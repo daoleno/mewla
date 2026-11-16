@@ -32,6 +32,8 @@ function setup(options: { record?: Kept; computer?: string; storage?: { [key: st
   };
   return {
     platform: options.platform ?? ("android" as const),
+    // A manual clock: the quiet moment and the waits after it pass at once.
+    clock: {},
     storage: { ...(options.paired === false ? {} : paired), ...ranBefore, ...options.storage },
     network: { ...expoTokenService, [DAEMON_UPDATE]: json({ version: options.computer ?? "0.4.9", supported: true }) },
     host: phoneHost(daemon),
@@ -161,8 +163,8 @@ describe("What's New: Try it", () => {
     await app.press("id:computer-settings");
     await app.waitFor("id:settings-whats-new");
     await app.press("id:settings-whats-new");
-    await app.waitFor("id:whats-new-page-0");
-    expect(app.shows("text:Mewla 0.4.9")).toBe(true);
+    // The newest notes, whether they bring pages or only fixes.
+    await app.waitFor(`text:Mewla ${(notes as { releases: { version: string }[] }).releases[0].version}`);
   }, 30_000);
 });
 

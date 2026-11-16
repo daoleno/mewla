@@ -205,7 +205,7 @@ describe("Screen: agents", () => {
   });
 
   test("an open menu and the agent card's buttons survive the computer being asked again", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: () => json({ ...base, keep_awake: false, agent: codex, agents: [codex] }), [`POST ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }));
+    const app = await open(HARNESS, { ...options({ [`GET ${SCREEN}`]: () => json({ ...base, keep_awake: false, agent: codex, agents: [codex] }), [`POST ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }), clock: {} });
     await app.waitFor("id:screen-agents");
     await app.press("id:screen-options");
     await app.wait(3_500);

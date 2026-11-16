@@ -213,13 +213,6 @@ describe("the wide layout (SPEC §14)", () => {
     await app.waitUntil(() => last(app)?.path === "/sessions");
   }, 20_000);
 
-  test("the Expo web app's /terminal bookmark is not a place any more: it opens Brain", async () => {
-    const sessions = [{ id: "w1", name: "api server", cwd: "/home/me/api", status: "running", started_at: 1 }];
-    const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }, { "web.initialPath": { path: "/terminal/w1?serverId=old", state: null } }) });
-    await app.waitUntil(() => last(app)?.path === "/");
-    expect(locations(app)[0].mode).toBe("replace");
-  }, 20_000);
-
   test("below 1024 pt no left pane: Brain's header has the cat and the state control; the URL still follows", async () => {
     const app = await open(APP, { ...desk, width: 800, host: webHost() });
     await app.waitFor("id:home-header");

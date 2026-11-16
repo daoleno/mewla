@@ -2,9 +2,10 @@
 """Run one shard of the client's UI suite (`nsh test` in client/ui), so CI can spread it over runners.
 
 `nsh test` runs every test file of client/ui one after the other in one process: 60 files and
-681 tests took 14 min on CI's runner (11-14). The tests wait on the clock (10 s offline bounds,
-15 s failures), so the suite is long but not busy; separate runners, not processes side by side
-on one, keep each file's timing what it was.
+681 tests took 14 min on CI's runner (11-14), mostly waiting on real 10 s and 15 s bounds. Since
+11-16 those tests run on NSH's manual clock and the suite takes about 9 min of runner time; the
+tests left on the real clock (a random crash run, NSH's 2 s cut-off) still wait, so shards run on
+separate runners, not as processes side by side on one, to keep each file's timing what it was.
 
   ui-test-shard.py --shard 2/4      run shard 2 of 4: `nsh test <file>` for each of its files
   ui-test-shard.py --list 2/4       print shard 2's files and their expected seconds, run nothing

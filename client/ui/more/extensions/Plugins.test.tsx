@@ -131,7 +131,7 @@ describe("Extensions", () => {
       if (request.action === "connect_status" && gone) return { error: "This sign-in expired. Start again.", code: "plugin_request_failed" };
       return { flow };
     });
-    const app = await open(HARNESS, c.options);
+    const app = await open(HARNESS, { ...c.options, clock: {} });
     await app.waitFor("id:connect-notion");
     await app.press("id:connect-notion");
     await app.waitFor("text:Waiting for Notion");
