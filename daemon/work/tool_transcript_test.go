@@ -688,12 +688,14 @@ func TestLsofOpenFilesKeepsOutputWhenLsofExitsNonzero(t *testing.T) {
 
 // stallingLsof puts an lsof on the lookup that never answers, as one did for
 // 60 s on a Mac with a just-started Codex, and records the arguments it got.
+// A child of it keeps the output open after lsof is killed: a lookup that
+// waited for lsof to be reaped would still wait.
 func stallingLsof(t *testing.T) (argsFile string) {
 	t.Helper()
 	dir := t.TempDir()
 	argsFile = filepath.Join(dir, "args")
 	script := filepath.Join(dir, "lsof")
-	body := "#!/bin/sh\necho \"$@\" > " + argsFile + "\nexec sleep 30\n"
+	body := "#!/bin/sh\necho \"$@\" > " + argsFile + "\nsleep 30 &\nexec sleep 30\n"
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}

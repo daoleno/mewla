@@ -3,7 +3,6 @@ package work
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -371,23 +370,33 @@ func lsofOpenCodexRolloutPaths(processIDs []int) []string {
 // process's sockets. A run is also bounded by lsofTimeout: on a Mac, one lsof
 // of a just-started Codex once took 60 s, and the Brain chat's first load
 // (and the Brain host probe behind the same lookup) waited for all of it.
-// A run cut off by the bound finds no file, as if lsof had none to report;
-// the rollout is then found by its folder and start like any other.
+// At the bound lsof is killed and the caller goes on at once, even if lsof
+// cannot be reaped yet; a run cut off finds no file, as if lsof had none to
+// report: the conversation's rollout is then found by its folder and start,
+// and a Brain host keeps the binding it has.
 func runLsofOpenFiles(ids []string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), lsofTimeout)
-	defer cancel()
-	cmd := procspawn.CommandContext(ctx, "lsof codex", lsofTool(), "-w", "-n", "-P", "-p", strings.Join(ids, ","), "-Fn")
-	// lsof is killed at the bound; a child still holding its output pipe is not waited for either.
-	cmd.WaitDelay = time.Second
-	out, err := cmd.Output()
-	if ctx.Err() != nil {
-		return nil, fmt.Errorf("lsof did not finish in %s: %w", lsofTimeout, ctx.Err())
+	var stdout bytes.Buffer
+	cmd := procspawn.Command("lsof codex", lsofTool(), "-w", "-n", "-P", "-p", strings.Join(ids, ","), "-Fn")
+	cmd.Stdout = &stdout
+	if err := cmd.Start(); err != nil {
+		return nil, err
 	}
-	return out, err
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	timer := time.NewTimer(lsofTimeout)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return stdout.Bytes(), err
+	case <-timer.C:
+		_ = cmd.Process.Kill()
+		// The waiting goroutine reaps lsof whenever it ends; nothing here waits for it.
+		return nil, fmt.Errorf("lsof did not finish in %s", lsofTimeout)
+	}
 }
 
 // lsofTimeout bounds one lsof run; tests shorten it.
-var lsofTimeout = 3 * time.Second
+var lsofTimeout = 2 * time.Second
 
 // lsofTool is lsof's path; tests replace it.
 var lsofTool = func() string { return procspawn.SystemTool("lsof") }
