@@ -7,7 +7,8 @@ terminal, at a fixed size, replayable into any terminal of that size.
     record.py stop <scratch> <name> [what]                         # ends it, adds corpus.json
 
 The program runs on a pseudo-terminal of its own with TERM=xterm-256color and
-COLORTERM=truecolor, so it writes what it would to a phone terminal. <scratch> is a directory
+COLORTERM=truecolor and nothing else of your shell's environment beyond HOME, PATH,
+USER, LANG and SHELL, so it writes what it would to a phone terminal. <scratch> is a directory
 of yours that holds the recorder's pid and key pipe while it runs.
 """
 import fcntl
@@ -35,7 +36,8 @@ def record(scratch: str, name: str, cols: int, rows: int, command: list[str]) ->
     pid_file, keys, size_file = paths(scratch, name)
     pid, fd = pty.fork()
     if pid == 0:
-        env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE", "STY")}
+        # Only what a fresh login gives a program: nothing of the shell that runs the recorder.
+        env = {k: os.environ[k] for k in ("HOME", "PATH", "USER", "LANG", "SHELL") if k in os.environ}
         env.update(TERM="xterm-256color", COLORTERM="truecolor", COLUMNS=str(cols), LINES=str(rows))
         time.sleep(0.5)
         os.execvpe(command[0], command, env)
