@@ -8,10 +8,10 @@ import { installPlatform, platform } from "../core/platform";
 import { FakeDaemon, type FakeDaemonState } from "./testing/fakeDaemon";
 import { setScrollTraceSink } from "../core/timeline/scrollTrace";
 import { onTransport } from "./session";
-import { installTestMermaid } from "./mermaid/testing";
+import { setMermaidRenderSink } from "../core/mermaid/mermaid";
 
-// `host.params.mermaid`: diagrams drawn without a web view (mermaid/testing.ts).
-installTestMermaid(host.params);
+// Each diagram drawn reaches the test as the host post `app.mermaidRender` ({source, maxWidth}).
+setMermaidRenderSink((entry) => host.post("app.mermaidRender", entry));
 
 // A chat list's scroll trace reaches the test as the host post `app.scrollTrace` (`app.host.posts()`).
 setScrollTraceSink((entry) => host.post("app.scrollTrace", entry));

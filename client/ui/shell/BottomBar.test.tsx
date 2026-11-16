@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { capsulePageInset } from "../../core/shell/capsule";
 
 const APP = "./testing/BottomBar.tsx";
 
@@ -13,6 +14,15 @@ describe("a pushed page and the system's bottom bar (Brain 11-15: a PDF's last p
     await app.waitFor("text:pushed");
     await app.waitUntil(() => foot(app) !== undefined);
     expect(foot(app)!.bottom).toBeLessThanOrEqual(844 - 48);
+  });
+
+  // Brain 11-16: a file preview's title looked to sit under Android's status bar (a scratch page's, not this one).
+  test("on a phone its content starts below the status bar and the capsule, never under them", async () => {
+    const app = await open(APP, { platform: "android", width: 390, height: 844, safeArea: { top: 48, right: 0, bottom: 0, left: 0 }, host: { handlers: { "app.footLayout": () => undefined } } });
+    await app.waitFor("text:pushed");
+    await app.waitUntil(() => foot(app) !== undefined);
+    expect(foot(app)!.top).toBe(capsulePageInset(48));
+    expect(foot(app)!.top).toBeGreaterThan(48);
   });
 
   test("with no bar, it reaches the screen's bottom", async () => {

@@ -200,11 +200,24 @@ describe("File preview: what each kind shows", () => {
     c.options.host.handlers["app.daemon"] = ({ type }: Asked) => type === "session_file_metadata"
       ? { reply: "session_file_metadata", metadata: meta({ name: "DESIGN.md", path: "/work/DESIGN.md", relative_path: "DESIGN.md", kind: "markdown", content_type: "text/markdown", size: md.length }) }
       : { reply: "session_file_text", text: { content: md, bytes_read: md.length, truncated: false, generation: "g1" } };
-    const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, params: { ...c.options.host.params, mermaid: {} } } });
+    const app = await open(HARNESS, c.options);
     await app.waitFor("id:file-markdown >> id:mermaid-diagram");
     await app.waitFor("id:mermaid-error");
     expect(app.count("id:mermaid-diagram")).toBe(1);
     expect(app.texts()).toContain("echo hi");
+  });
+
+  test("pushed on a phone, the preview is a capsule page: its title is the capsule's, below the status bar, not a header under it", async () => {
+    const c = preview(meta({ name: "DESIGN-v2.md", path: "/work/DESIGN-v2.md", relative_path: "DESIGN-v2.md", kind: "markdown", content_type: "text/markdown", size: 10 }));
+    c.options.host.handlers["app.daemon"] = ({ type }: Asked) => type === "session_file_metadata"
+      ? { reply: "session_file_metadata", metadata: meta({ name: "DESIGN-v2.md", path: "/work/DESIGN-v2.md", relative_path: "DESIGN-v2.md", kind: "markdown", content_type: "text/markdown", size: 10 }) }
+      : { reply: "session_file_text", text: { content: "# Design", bytes_read: 10, truncated: false, generation: "g1" } };
+    const app = await open(HARNESS, { ...c.options, platform: "android", width: 390, height: 844, safeArea: { top: 48, right: 0, bottom: 0, left: 0 },
+      host: { ...c.options.host, params: { ...c.options.host.params, below: { name: "stats" }, pageStack: true } } });
+    await app.waitFor("id:file-markdown");
+    // NavPage's phone path (shell/BottomBar.test.tsx: content from capsulePageInset(top)), not a system header.
+    expect(app.shows("id:capsule-page")).toBe(true);
+    expect(app.shows("id:page-header")).toBe(false);
   });
 
   test("Copy is offered for a cut text only while the whole file can still be read", async () => {

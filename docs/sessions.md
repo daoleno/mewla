@@ -172,14 +172,20 @@ strikethrough, links and bare URLs, HTML entities such as `&amp;`, images,
 and code blocks with a copy button. A reply that is still arriving never shows
 half-typed syntax: an unfinished `-`, `1.` or `>` waits for its text.
 
-A code block tagged `mermaid` (flowcharts, sequence, state, gantt and the other
-diagrams mermaid draws) shows as its diagram, in light or dark with the app,
-here and in a Markdown file you preview. Tap it, or its expand button, for the
-diagram full screen: fitted first, then **+** and **−** zoom it and you scroll
-to move around. Its **Copy** copies the source. While the reply is still
-arriving the block shows its code, and it is drawn once, when the reply ends. A
-diagram mermaid cannot read stays code, with mermaid's own error under it.
-Diagrams are drawn on the phone (or in the browser), with no network.
+A code block tagged `mermaid` (flowcharts, sequence, state, gantt, class, ER,
+pie, mindmap, timeline and the other Mermaid diagram types) shows as its
+diagram, in light or dark with the app, here and in a Markdown file you
+preview. It is laid out for the width it has: a wide left-to-right flowchart
+turns top-to-bottom on a phone, and one that cannot get narrower scrolls
+sideways at a size you can read rather than shrinking. A tall one shows its
+top. Tap it, or its expand button, for the diagram full screen as written:
+fitted first, then **+** and **−** zoom it and you scroll to move around. Its
+**Copy** copies the source. While the reply is still arriving the block shows
+its code, and it is drawn once, when the reply ends. A diagram that cannot be
+read stays code, with the parser's error under it. Diagrams are drawn by
+[Pele](https://pele.run) in the app itself, with no network. Its layout and
+look differ from Mermaid's own; HTML in labels other than line breaks, bold
+and italic shows as text.
 
 **Edit** puts the message back in the composer; with a hardware keyboard (a
 phone's too), ↑ in the empty composer edits your last message and Esc leaves

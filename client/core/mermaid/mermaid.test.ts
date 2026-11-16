@@ -1,149 +1,140 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
-  createMermaidRenderer,
+  drawMermaid,
   isMermaidLanguage,
-  mermaidEngineDocument,
+  MERMAID_FONT_PX,
+  MERMAID_MIN_LABEL_PX,
+  mermaidCssVariables,
+  mermaidInlineLayout,
   mermaidSvgDocument,
-  mermaidSvgSize,
-  parseMermaidEngineMessage,
   prepareMermaid,
-  type MermaidEngineLink,
+  sanitizeMermaidSvg,
+  setMermaidRenderSink,
+  type MermaidDrawing,
 } from "./mermaid";
 
-const SVG = '<svg id="x" width="640" height="320" viewBox="0 0 640 320" xmlns="http://www.w3.org/2000/svg"><g onclick="alert(1)"><text>图</text></g><script>alert(1)</script></svg>';
+// The shapes Brain's designs have (owner 11-16, DESIGN.md / DESIGN-v2.md): `flowchart LR`, subgraphs, Chinese labels,
+// `<br/>`, long labels. Written for these tests: the real ones are another project's.
+const fixture = (name: string) => readFileSync(join(import.meta.dir, "fixtures", name), "utf8");
+const WIDE = [fixture("wide-lr.mmd"), fixture("wide-graph.mmd")];
+const PHONE = 326;
+const PALETTE = { surface: "#FFFFFF", ink: "#131416", soft: "#62656D", node: "#EDEDEE", border: "#A6A9B0", cluster: "#F7F7F8" };
+
+const drawn = (source: string, width: number | null): MermaidDrawing => {
+  const result = drawMermaid(source, width);
+  if (!result.ok) throw new Error(result.error);
+  return result;
+};
 
 describe("which blocks are diagrams, and what is drawn", () => {
   test("a block tagged mermaid, whatever its case or info string", () => {
     expect(isMermaidLanguage("mermaid")).toBe(true);
     expect(isMermaidLanguage("Mermaid title=x")).toBe(true);
     expect(isMermaidLanguage("mermaidjs")).toBe(false);
-    expect(isMermaidLanguage("sh")).toBe(false);
     expect(isMermaidLanguage(undefined)).toBe(false);
   });
 
-  test("the source keeps Chinese labels, <br/> and subgraphs; config, clicks and other HTML go", () => {
-    const raw = '---\ntitle: x\nconfig:\n  theme: forest\n---\n%%{init: {"securityLevel": "loose"}}%%\nflowchart LR\n  subgraph DP["数据平台<br>RDS"]\n    A["源 Space<b>x</b>"] --> B\n  end\n  click A "javascript:alert(1)"\n  B -- "写派生 Version" --> C<img src=x onerror=alert(1)>\n';
-    const prepared = prepareMermaid(raw);
-    expect(prepared).toEqual({ ok: true, source: 'flowchart LR\n  subgraph DP["数据平台<br/>RDS"]\n    A["源 Spacex"] --> B\n  end\n\n  B -- "写派生 Version" --> C' });
-  });
-
   test("an empty or oversized diagram says why it is not drawn", () => {
-    expect(prepareMermaid("  \n%%{init:{}}%%\n")).toEqual({ ok: false, error: "The diagram is empty." });
-    const big = prepareMermaid(`flowchart TD\n${"A-->B\n".repeat(6000)}`);
-    expect(big.ok).toBe(false);
+    expect(prepareMermaid("  \n ")).toEqual({ ok: false, error: "The diagram is empty." });
+    expect(prepareMermaid(`flowchart TD\n${"A-->B\n".repeat(6000)}`).ok).toBe(false);
   });
 
-  test("the engine's answers: a drawing with its size, cleaned; mermaid's own words for an error", () => {
-    expect(mermaidSvgSize(SVG)).toEqual({ width: 640, height: 320 });
-    const drawn = parseMermaidEngineMessage(JSON.stringify({ type: "result", id: "m1", ok: true, svg: SVG }));
-    expect(drawn?.type).toBe("result");
-    if (drawn?.type !== "result" || !drawn.result.ok) throw new Error("not drawn");
-    expect(drawn.result.svg).not.toContain("<script");
-    expect(drawn.result.svg).not.toContain("onclick");
-    expect(drawn.result).toMatchObject({ width: 640, height: 320 });
-    const error = "Parse error on line 3:\n...B --> \n-----------^\nExpecting 'AMP', got 'EOF'";
-    expect(parseMermaidEngineMessage({ type: "result", id: "m2", ok: false, error })).toEqual({ type: "result", id: "m2", result: { ok: false, error } });
-    expect(parseMermaidEngineMessage({ type: "result", id: "m3", ok: true, svg: "" })).toEqual({ type: "result", id: "m3", result: { ok: false, error: "The diagram could not be drawn." } });
-    expect(parseMermaidEngineMessage("not json")).toBeNull();
-    expect(parseMermaidEngineMessage({ type: "ready" })).toEqual({ type: "ready", ok: true, error: undefined });
-  });
-});
-
-/** A renderer on an engine that answers when the test says. */
-function engine(options: { timeoutMs?: number; engineTimeoutMs?: number } = {}) {
-  const sent: Array<{ id: string; source: string; mode: string; themeVariables: Record<string, unknown> }> = [];
-  let wanted = 0;
-  const renderer = createMermaidRenderer({ themeVariables: (mode) => ({ darkMode: mode === "dark" }), onWanted: () => wanted++, ...options });
-  const link: MermaidEngineLink = { send: (message) => sent.push(JSON.parse(message)) };
-  const answer = (index: number, body: Record<string, unknown>) => renderer.receive(JSON.stringify({ type: "result", id: sent[index].id, ...body }));
-  return { renderer, link, sent, answer, wanted: () => wanted };
-}
-
-describe("drawing, one at a time, kept", () => {
-  test("nothing is drawn until asked; the engine is wanted then and drawings wait for it to be ready", async () => {
-    const t = engine();
-    expect(t.renderer.wanted()).toBe(false);
-    const first = t.renderer.render("flowchart LR\n A-->B", "light");
-    const second = t.renderer.render("sequenceDiagram\n A->>B: hi", "dark");
-    expect(t.wanted()).toBe(1);
-    t.renderer.attach(t.link);
-    expect(t.sent).toEqual([]);
-    t.renderer.receive({ type: "ready", ok: true });
-    expect(t.sent.map((m) => [m.source, m.mode, m.themeVariables.darkMode])).toEqual([["flowchart LR\n A-->B", "light", false]]);
-    t.answer(0, { ok: true, svg: SVG });
-    expect(await first).toMatchObject({ ok: true, width: 640 });
-    expect(t.sent).toHaveLength(2);
-    t.answer(1, { ok: false, error: "Parse error on line 2" });
-    expect(await second).toEqual({ ok: false, error: "Parse error on line 2" });
+  test("the diagram types agents write draw, with Chinese labels and <br/> as written", () => {
+    const cases: Record<string, string> = {
+      flowchart: WIDE[0],
+      graph: "graph TB\n  a-->b & c-->d",
+      sequence: "sequenceDiagram\n  autonumber\n  actor U as 用户\n  U->>+A: 请求\n  Note over U,A: 备注\n  alt ok\n    A-->>-U: 200\n  else fail\n    A--xU: 500\n  end",
+      state: "stateDiagram-v2\n  [*] --> Active\n  state Active {\n    [*] --> Idle\n    Idle --> Busy: job\n  }\n  Active --> [*]",
+      gantt: "gantt\n  title 计划\n  dateFormat YYYY-MM-DD\n  section 第一步\n  搜索主机 :a1, 2026-11-17, 3d\n  MCP 工具 :after a1, 2d",
+      class: "classDiagram\n  class Animal {\n    +String name\n    +eat() void\n  }\n  Animal <|-- Dog",
+      er: "erDiagram\n  USER ||--o{ ORDER : places",
+      pie: 'pie title 占比\n  "A" : 40\n  "B" : 60',
+      mindmap: "mindmap\n  root((中心))\n    A\n    B",
+      timeline: "timeline\n  title 时间线\n  2026 : 立项",
+      config: "---\ntitle: 标题\n---\n%%{init: {'theme':'dark'}}%%\nflowchart LR\n  A[\"<b>粗</b><br/>下一行\"] --> B\n  click A \"https://example.com\"",
+    };
+    for (const [type, source] of Object.entries(cases)) {
+      const result = drawMermaid(source, PHONE);
+      expect(result.ok ? result.svg.includes("<svg") : result.error).toBe(true);
+    }
+    const flow = drawn(WIDE[0], PHONE);
+    expect(flow.svg).toContain("新增");
+    expect(flow.svg).not.toContain("&lt;br");
   });
 
-  test("a drawing (or mermaid's error) is kept: asked again, nothing is sent", async () => {
-    const t = engine();
-    t.renderer.attach(t.link);
-    t.renderer.receive({ type: "ready" });
-    const a = t.renderer.render("graph TD\n A", "light");
-    const again = t.renderer.render("graph TD\n A", "light");
-    expect(again).toBe(a);
-    t.answer(0, { ok: false, error: "bad" });
-    await a;
-    expect(t.renderer.cached("graph TD\n A", "light")).toEqual({ ok: false, error: "bad" });
-    await t.renderer.render("graph TD\n A", "light");
-    expect(t.sent).toHaveLength(1);
-    // The other theme is its own drawing.
-    void t.renderer.render("graph TD\n A", "dark");
-    expect(t.sent).toHaveLength(2);
+  test("a diagram it cannot read keeps the parser's own words", () => {
+    const result = drawMermaid("flowchart LR\n  A -->\n  B[", PHONE);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/^Parse error on line 3:[\s\S]*Expecting/);
   });
 
-  test("an answer for another drawing is ignored; a drawing that takes too long fails and is not kept", async () => {
-    const t = engine({ timeoutMs: 10 });
-    t.renderer.attach(t.link);
-    t.renderer.receive({ type: "ready" });
-    const slow = t.renderer.render("graph TD\n A", "light");
-    t.renderer.receive({ type: "result", id: "elsewhere", ok: true, svg: SVG });
-    expect(await slow).toEqual({ ok: false, error: "Drawing the diagram took too long." });
-    expect(t.renderer.cached("graph TD\n A", "light")).toBeUndefined();
-    void t.renderer.render("graph TD\n A", "light");
-    expect(t.sent).toHaveLength(2);
-  });
-
-  test("an engine that never starts, or says it could not, fails what waits with its words", async () => {
-    const never = engine({ engineTimeoutMs: 10 });
-    expect(await never.renderer.render("graph TD\n A", "light")).toEqual({ ok: false, error: "The diagram engine did not start." });
-    const broken = engine();
-    broken.renderer.attach(broken.link);
-    const waiting = broken.renderer.render("graph TD\n A", "light");
-    broken.renderer.receive({ type: "ready", ok: false, error: "The diagram engine did not load." });
-    expect(await waiting).toEqual({ ok: false, error: "The diagram engine did not load." });
-    expect(await broken.renderer.render("graph TD\n B", "light")).toEqual({ ok: false, error: "The diagram engine did not load." });
-  });
-
-  test("an engine that goes mid-drawing hands it to the next one", async () => {
-    const t = engine();
-    t.renderer.attach(t.link);
-    t.renderer.receive({ type: "ready" });
-    const drawing = t.renderer.render("graph TD\n A", "light");
-    t.renderer.attach(null);
-    t.renderer.attach(t.link);
-    t.renderer.receive({ type: "ready" });
-    expect(t.sent).toHaveLength(2);
-    t.answer(1, { ok: true, svg: SVG });
-    expect((await drawing).ok).toBe(true);
+  test("what is shown runs nothing: no script, handler, foreignObject or script link", () => {
+    expect(sanitizeMermaidSvg('<svg><g onclick="x()"><a href="javascript:alert(1)">t</a></g><script>x()</script><foreignObject><div/></foreignObject></svg>'))
+      .toBe('<svg><g><a>t</a></g></svg>');
+    const evil = drawn('flowchart LR\n  A["<img src=x onerror=alert(1)>"] --> B\n  click A "javascript:alert(1)"', PHONE);
+    expect(evil.svg).not.toMatch(/<img|onerror=|javascript:/i);
   });
 });
 
-describe("the documents", () => {
-  test("the engine's runs mermaid inline and loads nothing", () => {
-    const html = mermaidEngineDocument("window.mermaid={render:function(){}};");
-    expect(html).toContain("script-src 'unsafe-inline'");
-    expect(html).toContain("connect-src 'none'");
-    expect(html).not.toMatch(/<script[^>]+src=/i);
+describe("drawn once, and only when asked", () => {
+  test("each (source, width) is drawn once and kept; another width is its own drawing", () => {
+    const seen: unknown[] = [];
+    setMermaidRenderSink((entry) => seen.push(entry));
+    try {
+      const source = "flowchart LR\n  once --> kept";
+      drawMermaid(source, PHONE);
+      drawMermaid(source, PHONE);
+      expect(seen).toEqual([{ source, maxWidth: PHONE }]);
+      drawMermaid(source, null);
+      expect(seen).toHaveLength(2);
+    } finally {
+      setMermaidRenderSink(null);
+    }
+  });
+});
+
+describe("legible at a phone's width (owner 11-16: a wide flowchart shrank its labels to some 4 px)", () => {
+  test("a wide LR flowchart is laid out again for a phone, and its labels are never shown under MIN_LABEL_PX", () => {
+    for (const source of WIDE) {
+      const asWritten = drawn(source, null);
+      const phone = drawn(source, PHONE);
+      expect(phone.width).toBeLessThan(asWritten.width);
+      const layout = mermaidInlineLayout(phone, PHONE, 420);
+      expect(layout.scale * MERMAID_FONT_PX).toBeGreaterThanOrEqual(MERMAID_MIN_LABEL_PX);
+      // Fitted as it was drawn before, its labels were tiny.
+      expect((PHONE / asWritten.width) * MERMAID_FONT_PX).toBeLessThan(MERMAID_MIN_LABEL_PX);
+    }
   });
 
-  test("a diagram's runs no script; fitted, or at a scale to pan", () => {
-    const shown = mermaidSvgDocument({ svg: "<svg viewBox='0 0 640 320'></svg>", width: 640, height: 320 }, "#FFFFFF");
-    expect(shown).toContain("script-src 'none'");
-    expect(shown).toContain("max-width:640px");
-    expect(mermaidSvgDocument({ svg: "<svg></svg>", width: 640, height: 320 }, "#000000", 1.5)).toContain("width:960px;height:480px");
-    expect(mermaidSvgDocument({ svg: "<svg></svg>", width: 1, height: 1 }, "red;}</style><script>")).toContain("background:transparent");
+  test("fitted while legible; wider scrolls sideways at the legible scale; taller is cut; never larger than drawn", () => {
+    expect(mermaidInlineLayout({ width: 200, height: 100 }, PHONE, 420)).toEqual({ scale: 1, width: 200, height: 100, frameHeight: 100, scrolls: false, cropped: false });
+    const fits = mermaidInlineLayout({ width: 400, height: 200 }, PHONE, 420);
+    expect(fits.scrolls).toBe(false);
+    expect(fits.width).toBeLessThanOrEqual(PHONE);
+    const wide = mermaidInlineLayout({ width: 1500, height: 400 }, PHONE, 420);
+    expect(wide).toMatchObject({ scale: MERMAID_MIN_LABEL_PX / MERMAID_FONT_PX, scrolls: true });
+    expect(wide.width).toBeGreaterThan(PHONE);
+    const tall = mermaidInlineLayout({ width: 300, height: 1200 }, PHONE, 420);
+    expect(tall).toMatchObject({ frameHeight: 420, cropped: true, scrolls: false });
+  });
+});
+
+describe("the view", () => {
+  test("runs no script and is coloured by Pele's CSS variables: light and dark are one drawing", () => {
+    const flow = drawn("flowchart LR\n  A --> B", PHONE);
+    const light = mermaidSvgDocument(flow, PALETTE, 1, true);
+    const dark = mermaidSvgDocument(flow, { ...PALETTE, surface: "#1C1D20", ink: "#F2F3F5" }, 1, true);
+    expect(light).toContain("script-src 'none'");
+    expect(light).toContain("--pele-fg:#131416");
+    expect(dark).toContain("--pele-fg:#F2F3F5");
+    expect(light.replace(/<style>[\s\S]*<\/style>/, "")).toBe(dark.replace(/<style>[\s\S]*<\/style>/, ""));
+    expect(flow.svg).toContain("var(--pele-fg");
+  });
+
+  test("a colour that is not one never reaches the page", () => {
+    expect(mermaidCssVariables({ ...PALETTE, ink: "red;}</style><script>" })).toContain("--pele-fg:#808080");
+    expect(mermaidSvgDocument({ svg: "<svg></svg>", width: 640, height: 320 }, PALETTE, 1.5)).toContain("width:960px!important;height:480px!important");
   });
 });

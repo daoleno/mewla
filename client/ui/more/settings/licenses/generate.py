@@ -22,21 +22,6 @@ def text(name):
 
 APACHE = text("Apache-2.0.txt")
 
-def mermaid():
-    """Mermaid as bundled (ui/mermaid/mermaidSource.ts), with the packages its dist/mermaid.min.js compiles in:
-    texts/mermaid-12.2.0.json, read from that release's node_modules."""
-    data = json.loads((here / "texts" / "mermaid-12.2.0.json").read_text())
-    def keyed(old):
-        body = data["texts"][old]
-        key = hashlib.sha256(body.encode()).hexdigest()[:12]
-        texts[key] = body
-        return key
-    item = dict(data["item"])
-    item.pop("platforms", None)
-    item["text"] = keyed(item["text"])
-    item["includes"] = [{**included, "text": keyed(included["text"])} for included in item["includes"]]
-    item["note"] = "Draws the diagrams of mermaid blocks in chats and Markdown files, offline in the app."
-    return item
 sections = [
     {"title": "Bundled code", "items": [
         {"name": "Native Shell (NSH)", "license": "Apache-2.0", "url": "https://nsh.dev", "text": APACHE,
@@ -57,7 +42,10 @@ sections = [
          "text": text("MapleMono-OFL.txt"), "note": "The terminal's font, with the Nerd Fonts icons Maple patches in, and the app's code, commands and diffs (without the icons); subset by scripts/subset-terminal-font.py."},
         {"name": "noVNC", "version": "1.7.0", "license": "MPL-2.0", "url": "https://github.com/novnc/noVNC", "text": text("noVNC-MPL-2.0.txt"),
          "note": "Draws a computer's screen in Screen. Its source is the published 1.7.0 release, unmodified apart from how it is bundled."},
-        mermaid(),
+        {"name": "Pele", "version": "1.13.0", "license": "MIT", "url": "https://github.com/obsidianmd/pele", "text": text("pele-MIT.txt"),
+         "note": "Draws the diagrams of mermaid blocks in chats and Markdown files, offline in the app. Vendored unchanged as client/core/mermaid/pele.js; its notice includes Lucide's (ISC) for one icon.",
+         "includes": [{"name": "Mermaid (grammars)", "version": "12.1.0", "license": "MIT", "url": "https://github.com/mermaid-js/mermaid", "text": text("mermaid-MIT.txt"),
+                       "note": "Pele's parsers follow Mermaid's grammars and specs."}]},
         {"name": "TweetNaCl.js", "version": "1.0.3", "license": "Unlicense", "url": "https://github.com/dchest/tweetnacl-js", "text": text("Unlicense.txt")},
         # The agent marks in ui/icons/agents (AgentIcon.tsx says where each comes from).
         {"name": "Lobe Icons", "version": "2.21.0", "license": "MIT", "url": "https://github.com/lobehub/lobe-icons", "text": text("lobe-icons-MIT.txt"),
