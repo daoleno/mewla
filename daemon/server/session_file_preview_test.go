@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -1020,4 +1021,46 @@ func sessionFileAuthorizationHeader(t *testing.T, privateKey ed25519.PrivateKey,
 	payload := auth.BuildSignaturePayload(sessionFileAuthPurpose, daemonID, deviceID, timestampText, nonceHex)
 	signature := ed25519.Sign(privateKey, payload)
 	return auth.AuthorizationHeaderPrefix + "v1:" + deviceID + ":" + daemonID + ":" + timestampText + ":" + nonceHex + ":" + hex.EncodeToString(signature)
+}
+
+func TestSessionFileExistsAnswersOnlyRegularFilesAsGiven(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	cwd := t.TempDir()
+	for _, name := range []string{
+		filepath.Join(cwd, "worklog", "task-1116", "DESIGN.md"),
+		filepath.Join(cwd, "README.md"),
+		filepath.Join(home, "notes.md"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte("# x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	absolute := filepath.Join(cwd, "README.md")
+	got := existingSessionFiles(cwd, []string{
+		"worklog/task-1116/DESIGN.md",
+		"./README.md",
+		"worklog/task-1116/../../README.md",
+		"~/notes.md",
+		absolute,
+		"worklog",          // a folder
+		"client/core/a.ts", // not under this cwd
+		"",
+		"bad\x00path.md",
+	})
+	want := []string{"worklog/task-1116/DESIGN.md", "./README.md", "worklog/task-1116/../../README.md", "~/notes.md", absolute}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("existing = %q, want %q", got, want)
+	}
+	many := make([]string, maxSessionFileExistsPaths+5)
+	for i := range many {
+		many[i] = "README.md"
+	}
+	if n := len(existingSessionFiles(cwd, many)); n != maxSessionFileExistsPaths {
+		t.Fatalf("answered %d paths, want the first %d", n, maxSessionFileExistsPaths)
+	}
 }

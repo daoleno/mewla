@@ -2,6 +2,7 @@ import { codedRequest, type Daemon } from "../more/daemon";
 import {
   normalizeSessionFileMetadata,
   normalizeSessionFileText,
+  type SessionFileIdentity,
   type SessionFileMetadata,
   type SessionFileRequest,
   type SessionFileTextPreview,
@@ -58,4 +59,17 @@ export async function getBrainWorkspaceFile(daemon: Daemon, path: string): Promi
     disconnected: DISCONNECTED,
   });
   return normalizeBrainWorkspaceFile(frame.file);
+}
+
+/** Which of `paths` are files for this run of the Session (relative ones in its cwd), answered as given. */
+export async function getExistingSessionFiles(daemon: Daemon, identity: SessionFileIdentity, paths: string[]): Promise<string[]> {
+  const frame = await codedRequest<{ existing?: unknown }>(daemon, "session_file_exists", { worker_id: identity.workerId, process_id: identity.processId, started_at: identity.startedAt, paths }, {
+    reply: "session_file_exists",
+    timeoutMs: 10_000,
+    timeout: "Timed out while looking for the Session's files.",
+    failure: "Failed to look for the Session's files.",
+    disconnected: DISCONNECTED,
+  });
+  const asked = new Set(paths);
+  return Array.isArray(frame.existing) ? frame.existing.filter((path): path is string => typeof path === "string" && asked.has(path)) : [];
 }
