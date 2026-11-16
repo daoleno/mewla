@@ -42,17 +42,36 @@ class BuildCodeTests(unittest.TestCase):
 
 
 class TestFlightTrainTests(unittest.TestCase):
-    def test_a_train_is_one_minor(self):
-        for version, train in (("0.4.9", "0.4"), ("0.4.10", "0.4"), ("0.4.10-beta.2", "0.4"), ("0.5.0-beta.1", "0.5"), ("1.0.0", "1.0")):
+    def test_the_pinned_train_carries_every_release_of_its_minor(self):
+        for version in ("0.4.9", "0.4.10", "0.4.10-beta.2", "0.4.8", "0.4.99"):
             with self.subTest(version=version):
-                self.assertEqual(release_identity.testflight_version(version), train)
-                self.assertEqual(release_identity.identity(version)["testflight_version"], train)
+                self.assertEqual(release_identity.check_testflight_version(version, "0.4.9"), "0.4.9")
+                self.assertEqual(release_identity.identity(version, "0.4.9")["testflight_version"], "0.4.9")
+
+    def test_a_train_is_one_minor_and_a_real_x_y_z(self):
+        for version, train in (("0.5.0", "0.4.9"), ("1.4.9", "0.4.9"), ("0.4.9", "0.4"), ("0.4.9", "0.4.9-beta.1"), ("0.4.9", None)):
+            with self.subTest(version=version, train=train):
+                with self.assertRaises(release_identity.IdentityError):
+                    release_identity.check_testflight_version(version, train)
+
+    def test_the_next_train_opens_on_a_minor_bump_with_that_release(self):
+        self.assertEqual(release_identity.next_testflight_version("0.4.9", "0.4.10"), "0.4.9")
+        self.assertEqual(release_identity.next_testflight_version("0.4.9", "0.5.0-beta.1"), "0.5.0")
+        self.assertEqual(release_identity.next_testflight_version("0.5.0", "0.5.3"), "0.5.0")
+        self.assertEqual(release_identity.next_testflight_version("0.5.0", "1.0.0"), "1.0.0")
+
+    def test_trains_sort_above_every_earlier_one(self):
+        # TestFlight lists the highest marketing version as the newest: 0.4.9 is above the live
+        # 0.4.5 and 0.4.8 (the version-per-release builds), and the next minor's train above it.
+        order = lambda v: tuple(int(p) for p in v.split("."))
+        self.assertGreater(order(release_identity.read_testflight_version(ROOT)), order("0.4.8"))
+        self.assertGreater(order(release_identity.next_testflight_version("0.4.9", "0.5.0-beta.1")), order("0.4.9"))
 
     def test_a_build_number_names_its_release(self):
         for version in ("0.4.5", "0.4.8", "0.4.9", "0.4.10", "0.4.10-beta.3", "0.5.0-beta.1", "1.2.3", "0.3.2-beta.98"):
             with self.subTest(version=version):
                 self.assertEqual(release_identity.version_of_code(release_identity.build_code(version)), version)
-        self.assertEqual(release_identity.version_of_code(40999), "0.4.9")
+        self.assertEqual(release_identity.version_of_code(41099), "0.4.10")
 
     def test_numbers_the_rule_never_makes_name_nothing(self):
         # Expo's builds (140 at 0.3.1), suffix 0, non-integers.
@@ -64,7 +83,19 @@ class TestFlightTrainTests(unittest.TestCase):
         ordered = ["0.4.9", "0.4.10-beta.1", "0.4.10", "0.4.11"]
         codes = [release_identity.build_code(v) for v in ordered]
         self.assertEqual(codes, sorted(codes))
-        self.assertEqual({release_identity.testflight_version(v) for v in ordered}, {"0.4"})
+        self.assertEqual(len(set(codes)), len(codes))
+        self.assertEqual({release_identity.check_testflight_version(v, "0.4.9") for v in ordered}, {"0.4.9"})
+
+    def test_the_cli_reads_the_train_only_when_asked(self):
+        import subprocess, sys
+        script = str(ROOT / "scripts/lib/release_identity.py")
+        out = subprocess.run([sys.executable, script, "testflight_version"], capture_output=True, text=True)
+        self.assertEqual(out.stdout.strip(), release_identity.read_testflight_version(ROOT))
+        # Another minor's build code still works; only its train would not.
+        out = subprocess.run([sys.executable, script, "--version", "0.5.0", "version_code"], capture_output=True, text=True)
+        self.assertEqual(out.stdout.strip(), "50099")
+        out = subprocess.run([sys.executable, script, "--version", "0.5.0", "testflight_version"], capture_output=True, text=True)
+        self.assertNotEqual(out.returncode, 0)
 
 
 class SourcesAgreeTests(unittest.TestCase):
@@ -81,6 +112,7 @@ class SourcesAgreeTests(unittest.TestCase):
         self.assertRegex(project, rf'\n\s+CURRENT_PROJECT_VERSION: "{release_identity.build_code(version)}"\n')
         self.assertRegex(project, rf'\n\s+MEWLA_APP_VERSION: "{re.escape(version)}"\n')
         self.assertIn("MewlaVersion: $(MEWLA_APP_VERSION)", project)
+        release_identity.check_testflight_version(version, release_identity.read_testflight_version(ROOT))
 
     def test_package_is_the_shipped_identity(self):
         manifest = json.loads((ROOT / release_identity.SOURCE).read_text(encoding="utf-8"))

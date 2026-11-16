@@ -157,7 +157,7 @@ export function parseAndroidUpdateManifest(text: string): AndroidUpdateArtifact 
 export interface TestFlightBuild {
   /**
    * The release the build is, X.Y.Z (the manifest's marketing_version, named from the build number by
-   * scripts/lib/release_identity.py). Not CFBundleShortVersionString: a Preview build's is its train, 0.4.
+   * scripts/lib/release_identity.py). Not CFBundleShortVersionString: a Preview build's is its train, 0.4.9 for every 0.4.x.
    */
   version: string;
   buildNumber: number;
@@ -184,8 +184,8 @@ export function installedBuild(appVersion: string, buildNumber: unknown): Instal
 
 /**
  * Whether TestFlight offers something newer than the running build. The build number decides: every
- * release has a higher one (scripts/lib/release_identity.py, 40999 is 0.4.9), while a Preview build's
- * marketing version stays the train's (0.4) for all of them.
+ * release has a higher one (scripts/lib/release_identity.py, 41099 is 0.4.10), while a Preview build's
+ * marketing version stays the train's (0.4.9) for all of them.
  */
 export function isNewerTestFlightBuild(candidate: TestFlightBuild, installed: InstalledBuild): boolean {
   return candidate.buildNumber > installed.buildNumber;

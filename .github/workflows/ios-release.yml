@@ -169,9 +169,10 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-path
 
       # The closed identities the Expo app shipped (scripts/lib/release_identity.py): the App Store
-      # and TestFlight builds replace those installs in place. The Preview's marketing version is the
-      # train X.Y (testflight_version): Beta App Review fully reviews only the first build of a
-      # marketing version, so the next releases of the train reach testers in minutes. Every build
+      # and TestFlight builds replace those installs in place. The Preview's marketing version is its
+      # train (testflight_version, client/ios/project.yml MEWLA_TESTFLIGHT_VERSION, 0.4.9 for 0.4.x): Beta
+      # App Review fully reviews only the first build of a marketing version, so the next releases of the
+      # train reach testers in minutes. Every build
       # carries the real release in Info.plist MewlaVersion, and the build number names it too.
       - name: Resolve closed iOS identity contract
         run: |

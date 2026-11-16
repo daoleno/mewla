@@ -286,7 +286,7 @@ describe("TestFlight", () => {
   });
 
   test("a newer build of the same TestFlight train is announced and an older one is not", async () => {
-    // 0.4.9 (40999) runs; TestFlight shows every 0.4.x build as "0.4", the build number tells them apart.
+    // 0.4.9 (40999) runs; TestFlight shows every 0.4.x build as "0.4.9", the build number tells them apart.
     const train = { ...info, version: "0.4.9", build: "40999" };
     const newer = await started(setup({ platform: "ios", info: train, installer: null, testflight: testflight("0.4.10", 41099) }));
     expect(newer.state).toMatchObject({ kind: "testflightAvailable", update: { version: "0.4.10", buildNumber: 41099 } });

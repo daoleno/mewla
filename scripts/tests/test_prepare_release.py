@@ -396,6 +396,23 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         # The app reports the release itself (Info.plist MewlaVersion), beta suffix included.
         self.assertIn(f'MEWLA_APP_VERSION: "{beta}"\n', project)
 
+    def test_a_patch_keeps_the_testflight_train_and_a_minor_bump_opens_the_next(self):
+        train = release_identity.read_testflight_version(ROOT)
+        root = self.create_repo(user_notes={f"v{STABLE_TARGET}": USER_NOTES})
+        result = self.run_script(root, STABLE_TARGET)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        project = (root / IOS_PROJECT).read_text(encoding="utf-8")
+        self.assertIn(f'MEWLA_TESTFLIGHT_VERSION: "{train}"\n', project)
+
+        minor = f"{CURRENT_CORE[0]}.{CURRENT_CORE[1] + 1}.0-beta.1"
+        root = self.create_repo(root=self.fixture / "minor", user_notes={f"v{minor}": USER_NOTES})
+        result = self.run_script(root, minor)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        project = (root / IOS_PROJECT).read_text(encoding="utf-8")
+        # The minor's first iOS release names its train, above every train before it.
+        self.assertIn(f'MEWLA_TESTFLIGHT_VERSION: "{CURRENT_CORE[0]}.{CURRENT_CORE[1] + 1}.0"\n', project)
+        self.assertEqual(project.count("MEWLA_TESTFLIGHT_VERSION:"), 1)
+
     def test_updates_exact_identity_files_and_writes_user_notes(self):
         root = self.create_repo()
 

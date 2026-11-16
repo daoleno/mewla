@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "The build's marketing version: the train X.Y for Preview (release_identity.py testflight_version)"
+        description: "The build's marketing version: its train for Preview (release_identity.py testflight_version)"
         required: true
         type: string
       build_number:

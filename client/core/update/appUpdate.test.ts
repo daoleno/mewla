@@ -331,7 +331,8 @@ describe("TestFlight availability", () => {
 
   test("decides availability from the build number, which names the release", () => {
     const build = (version: string, buildNumber: number) => ({ version, buildNumber, appId: "1" });
-    // 0.4.9 is build 40999 under the TestFlight train 0.4; update.info reports the release, not the train.
+    // 0.4.9 is build 40999 under the TestFlight train 0.4.9 (0.4.10 is 41099 under it too); update.info
+    // reports the release, not the train.
     const installed = installedBuild("0.4.9", "40999")!;
     expect(installed).toEqual({ version: "0.4.9", buildNumber: 40999 });
     expect(isNewerTestFlightBuild(build("0.4.10", 41099), installed)).toBe(true);
