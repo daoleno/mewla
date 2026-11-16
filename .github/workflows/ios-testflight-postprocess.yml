@@ -42,7 +42,7 @@ jobs:
           test -n "$MEWLA_ASC_KEY_ID"
           test -n "$MEWLA_ASC_API_KEY_BASE64"
 
-      - name: Process, attach public group, and submit Beta App Review
+      - name: Process and attach the public group
         env:
           ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
           MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
@@ -65,8 +65,14 @@ jobs:
             --build-number "$MEWLA_IOS_BUILD_NUMBER" \
             --key-id "$MEWLA_ASC_KEY_ID" \
             --key-path "$ASC_KEY_PATH" \
+            --beta-group-name "Mewla Preview"
+          # Submitted now unless another build is in Beta App Review (scripts/testflight-review-queue.py).
+          ./scripts/testflight-review-queue.py \
+            --app-id "$MEWLA_ASC_APP_ID" \
+            --key-id "$MEWLA_ASC_KEY_ID" \
+            --key-path "$ASC_KEY_PATH" \
             --beta-group-name "Mewla Preview" \
-            --submit-beta-review
+            --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Remove temporary Individual API key
         if: always()
