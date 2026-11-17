@@ -110,6 +110,14 @@ for _ in $(seq 1 60); do (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && bre
 link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" 2>&1 | grep -o 'mewla://settings?p=[^ ]*' | head -1)
 [[ -n "$link" ]] || fail "the daemon gave no pairing link"
 
+# A fresh emulator can have no network for its first seconds after boot: a link opened then cannot reach
+# the daemon, the app says so for 8 s and is back on Welcome. Pair once the system has a validated network.
+net_wait=$SECONDS
+until adb shell dumpsys connectivity 2>/dev/null | grep -q 'VALIDATED' && adb shell ping -c 1 -W 2 10.0.2.2 > /dev/null 2>&1; do
+  ((SECONDS - net_wait < 120)) || fail "the emulator had no validated network after 120 s"
+  sleep 1
+done
+log "network validated after $((SECONDS - net_wait)) s"
 log "1. the previous release pairs and keeps a draft"
 # Room for the whole run in every log buffer, from a clean start, for why().
 adb logcat -G 16M > /dev/null 2>&1 || true
