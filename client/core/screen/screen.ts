@@ -6,6 +6,7 @@ import type { StoredServer } from "../storedServerContract";
 import { authSubprotocol } from "../webSocketAuth";
 import { screenFailureText } from "./screenFailure";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
+import { parseReflow, type StageReflow } from "./stage";
 
 /**
  * Screen: the computer's own screen (Mac, Windows) or an agent's display (Linux),
@@ -202,6 +203,8 @@ export interface ScreenConnectionHandlers {
   locked?(locked: boolean): void;
   /** The daemon's measurements of the stream, about once a second. */
   streamStats?(stats: ScreenStreamStats): void;
+  /** An agent display's browser window was laid out for this view, or put back (the display viewer's `fit`). */
+  reflow?(state: StageReflow): void;
   /** The socket ended; `reason` is the daemon's explanation when it gave one. */
   closed(reason: string | null): void;
 }
@@ -276,6 +279,9 @@ export class ScreenConnection {
         if (stats) this.handlers.streamStats?.(stats);
         // The lock rides on stats too, in case a state message was dropped.
         if (typeof message.locked === "boolean") this.handlers.locked?.(message.locked);
+      } else if (message.type === "reflow") {
+        const state = parseReflow(message as Record<string, unknown>);
+        if (state) this.handlers.reflow?.(state);
       } else if (message.type === "error" && typeof message.error === "string") this.reason = message.error;
     };
     socket.onerror = () => {

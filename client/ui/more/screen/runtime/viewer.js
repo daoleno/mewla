@@ -22,6 +22,10 @@ const DOUBLE_TAP_MS = 380;
 const NOTCH_REMOTE = 120;
 const MIN_NOTCH_LOCAL = 8;
 const MAX_ZOOM = 2; // CSS pixels per remote pixel at most
+// A double tap zooms the view this much past fit (and back).
+const TAP_ZOOM = 2.5;
+// Room kept around the field the keyboard comes up for.
+const KEYBOARD_MARGIN = 48;
 
 const STYLE = `
 .mewla-screen{position:absolute;inset:0;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -29,6 +33,11 @@ const STYLE = `
 .mewla-screen .rfb canvas{position:absolute;left:0;top:0;margin:0!important;transform-origin:0 0}
 .mewla-screen .touch{position:absolute;inset:0;touch-action:none;z-index:2}
 .mewla-screen .cursor{position:absolute;left:0;top:0;width:18px;height:24px;display:none;pointer-events:none;z-index:3;margin:-1px 0 0 -1px}
+.mewla-screen .ring{position:absolute;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:2px solid rgba(255,255,255,.9);box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none;z-index:3;animation:mewla-ring .32s ease-out forwards}
+@keyframes mewla-ring{from{transform:scale(.5);opacity:1}to{transform:scale(1.15);opacity:0}}
+.mewla-screen .menu{position:absolute;display:none;flex-direction:column;gap:2px;padding:6px;border-radius:16px;background:rgba(28,28,30,.96);box-shadow:0 8px 28px rgba(0,0,0,.45);z-index:4;font:500 15px/1.2 -apple-system,system-ui,Roboto,sans-serif}
+.mewla-screen .menu button{all:unset;min-width:148px;min-height:44px;padding:0 14px;border-radius:11px;color:#fff;box-sizing:border-box;display:flex;align-items:center}
+.mewla-screen .menu button:active{background:rgba(255,255,255,.16)}
 `;
 
 /**
@@ -50,6 +59,11 @@ export function mountScreenViewer(container, post) {
   root.appendChild(overlay);
   root.insertAdjacentHTML("beforeend", '<svg class="cursor" viewBox="0 0 18 24"><path d="M1 1v19l5-5 3.5 7 3-1.5L9 13.5h7z" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>');
   const cursorEl = root.lastChild;
+  // A long press offers what a finger can't do in one gesture: a right click, a double click, a drag.
+  const menuEl = doc.createElement("div");
+  menuEl.className = "menu";
+  menuEl.innerHTML = '<button data-act="right">Right click</button><button data-act="double">Double click</button><button data-act="drag">Drag</button>';
+  root.appendChild(menuEl);
   container.appendChild(root);
 
   let rfb = null;
@@ -289,6 +303,48 @@ export function mountScreenViewer(container, post) {
     post({ type: "haptic" });
   }
 
+  function zoomed() {
+    return view.s > view.fit * 1.02;
+  }
+
+  // Where a tap landed, for a moment.
+  function ring(point) {
+    const el = doc.createElement("div");
+    el.className = "ring";
+    el.style.left = `${point.x}px`;
+    el.style.top = `${point.y}px`;
+    root.appendChild(el);
+    setTimeout(() => el.remove(), 360);
+  }
+
+  // The next one-finger drag drags (the long-press menu's Drag).
+  let dragArmed = false;
+  let menuAt = null;
+  function showMenu(local, remote) {
+    menuAt = remote;
+    menuEl.style.display = "flex";
+    const w = menuEl.offsetWidth;
+    const h = menuEl.offsetHeight;
+    menuEl.style.left = `${Math.max(8, Math.min(root.clientWidth - w - 8, local.x - w / 2))}px`;
+    menuEl.style.top = `${local.y - h - 16 >= 8 ? local.y - h - 16 : Math.min(root.clientHeight - h - 8, local.y + 16)}px`;
+  }
+  function hideMenu() {
+    menuEl.style.display = "none";
+    menuAt = null;
+  }
+  menuEl.addEventListener("pointerdown", (e) => e.stopPropagation());
+  menuEl.addEventListener("click", (e) => {
+    const act = e.target?.dataset?.act;
+    const at = menuAt;
+    hideMenu();
+    if (!at || !rfb) return;
+    if (act === "right") click(at.x, at.y, "right");
+    else if (act === "double") {
+      click(at.x, at.y, "left");
+      click(at.x, at.y, "left");
+    } else if (act === "drag") dragArmed = true;
+  });
+
   // A touch beside the picture (the page is taller or wider than it) is not a
   // click on the computer: it would land on the picture's nearest edge.
   function besidePicture(point) {
@@ -305,6 +361,7 @@ export function mountScreenViewer(container, post) {
       held: false,
       remote: mode === "trackpad" ? { ...cursor } : toRemote(p.clientX, p.clientY),
       beside: mode === "touch" && besidePicture(toRemote(p.clientX, p.clientY)),
+      armed: mode === "touch" && dragArmed,
       afterTap: mode === "trackpad" && performance.now() - lastTap.at < DOUBLE_TAP_MS,
     };
     const g = gesture;
@@ -331,8 +388,9 @@ export function mountScreenViewer(container, post) {
       clearTimeout(g.timer);
       if (mode === "trackpad") g.kind = g.held ? "drag" : "move";
       // Touching the picture moves it like any page: a drag scrolls, and a
-      // press held first drags (selecting text, moving a window).
-      else g.kind = g.held ? "drag" : "scroll";
+      // press held first (or Drag from the long-press menu) drags, selecting
+      // text or moving a slider. Zoomed in, a drag moves the view instead.
+      else g.kind = g.held || g.armed ? "drag" : zoomed() ? "pan" : "scroll";
       if ((g.kind === "drag" || g.kind === "scroll") && g.beside) g.kind = "none";
       if (g.kind === "drag") {
         if (mode === "touch") press(g.remote.x, g.remote.y);
@@ -340,7 +398,12 @@ export function mountScreenViewer(container, post) {
       }
     }
     g.last = { x: p.x, y: p.y };
-    if (g.kind === "scroll") {
+    if (g.kind === "pan") {
+      view.tx += dx;
+      view.ty += dy;
+      clampView();
+      applyView();
+    } else if (g.kind === "scroll") {
       // Content follows the finger: the finger going up scrolls the page down.
       scrollBy(g.remote.x, g.remote.y, -dx, -dy);
     } else if (g.kind === "drag" && mode === "touch") {
@@ -364,6 +427,7 @@ export function mountScreenViewer(container, post) {
     const g = gesture;
     gesture = null;
     clearTimeout(g.timer);
+    if (g.armed) dragArmed = false;
     if (g.kind === "scroll") scrollRest = { x: 0, y: 0 };
     if (cancelled) {
       if (g.kind === "drag") release(mode === "touch" ? toRemote(p.clientX, p.clientY).x : cursor.x, mode === "touch" ? toRemote(p.clientX, p.clientY).y : cursor.y);
@@ -376,17 +440,25 @@ export function mountScreenViewer(container, post) {
     }
     if (g.kind !== "pending" || g.beside) return;
     if (g.held) {
-      click(g.remote.x, g.remote.y, "right");
+      if (mode === "touch") showMenu(g.start, g.remote);
+      else click(g.remote.x, g.remote.y, "right");
       return;
     }
-    // A tap. In touch mode a second tap near the first lands on the same
-    // remote point so macOS sees a double-click.
-    let target = mode === "trackpad" ? cursor : g.remote;
     const now = performance.now();
+    // Two quick taps in one place zoom the view in there, or back out to fit (a double click is in the
+    // long-press menu). The first tap has clicked already.
     if (mode === "touch" && now - lastTap.at < DOUBLE_TAP_MS && Math.hypot(lastTap.x - g.start.x, lastTap.y - g.start.y) < 28) {
-      target = lastTap.remote;
+      if (zoomed()) fitView();
+      else {
+        zoomAt(view.fit * TAP_ZOOM, g.start.x, g.start.y);
+        reportZoom();
+      }
+      lastTap = { at: 0, x: 0, y: 0, remote: lastTap.remote };
+      return;
     }
+    const target = mode === "trackpad" ? cursor : g.remote;
     click(target.x, target.y, "left");
+    if (mode === "touch") ring(g.start);
     lastTap = { at: now, x: g.start.x, y: g.start.y, remote: { x: target.x, y: target.y } };
   }
 
@@ -465,6 +537,7 @@ export function mountScreenViewer(container, post) {
 
   overlay.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    if (menuAt) hideMenu();
     if (!rfb) return;
     try { overlay.setPointerCapture(e.pointerId); } catch {}
     if (e.pointerType === "mouse") {
@@ -692,6 +765,9 @@ export function mountScreenViewer(container, post) {
       if (canvas.width === fbW && canvas.height === fbH) return;
       fbW = canvas.width;
       fbH = canvas.height;
+      // A new picture (a window laid out for the phone, or put back): nothing tapped on the old one counts.
+      lastTap = { at: 0, x: 0, y: 0 };
+      beforeKeyboard = null;
       if (!cursor.x && !cursor.y) cursor = { x: fbW / 2, y: fbH / 2 };
       fitView();
     };
@@ -825,10 +901,54 @@ export function mountScreenViewer(container, post) {
     }
   }
 
+  // The view's size, for laying an agent's page out for it: on open and whenever it settles at a new size.
+  let sizeTimer = 0;
+  function reportSize() {
+    clearTimeout(sizeTimer);
+    sizeTimer = setTimeout(() => post({ type: "size", width: root.clientWidth, height: root.clientHeight, dpr: globalThis.devicePixelRatio || 1 }), 120);
+  }
+  reportSize();
+
+  let lastSize = { w: root.clientWidth, h: root.clientHeight };
+  // The scale the view had before the keyboard came up, while it is up; null when it isn't.
+  let beforeKeyboard = null;
   const resizeObserver = new ResizeObserver(() => {
+    reportSize();
+    const w = root.clientWidth;
+    const h = root.clientHeight;
+    const last = lastSize;
+    lastSize = { w, h };
     if (!fbW) return;
     const wasFit = view.s <= view.fit * 1.02;
-    view.fit = Math.min(root.clientWidth / fbW, root.clientHeight / fbH);
+    view.fit = Math.min(w / fbW, h / fbH);
+    if (w === last.w && h < last.h) {
+      // The keyboard came up: the picture keeps its size and the view moves so the field tapped last stays
+      // in sight above it.
+      if (beforeKeyboard === null) beforeKeyboard = { fit: wasFit, height: last.h };
+      const at = lastTap.remote;
+      if (at) {
+        const y = view.ty + at.y * view.s;
+        if (y > h - KEYBOARD_MARGIN) view.ty -= y - (h - KEYBOARD_MARGIN);
+        if (y < KEYBOARD_MARGIN) view.ty += KEYBOARD_MARGIN - y;
+      }
+      clampView();
+      applyView();
+      return;
+    }
+    if (w === last.w && h > last.h && beforeKeyboard) {
+      const back = beforeKeyboard;
+      if (h < back.height) {
+        clampView();
+        applyView();
+        return;
+      }
+      beforeKeyboard = null;
+      if (back.fit) return fitView();
+      clampView();
+      applyView();
+      return;
+    }
+    beforeKeyboard = null;
     if (wasFit) fitView();
     else { clampView(); applyView(); }
   });
@@ -839,6 +959,7 @@ export function mountScreenViewer(container, post) {
     destroy() {
       close(false);
       clearInterval(statsTimer);
+      clearTimeout(sizeTimer);
       resizeObserver.disconnect();
       container.removeChild(root);
     },

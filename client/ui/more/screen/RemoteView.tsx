@@ -1,4 +1,4 @@
-import { effect, host, keyboardFrame, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
+import { cleanup, Clipboard, effect, host, keyboardFrame, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
@@ -7,6 +7,7 @@ import { activeModifiers, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendMo
 import { startLiveDeadline, LIVE_DEADLINE_REASON } from "../../../core/screen/screenLiveDeadline";
 import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type ScreenModifier, type ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
 import type { ScreenStreamStats } from "../../../core/screen/screenStream";
+import { echoLine, echoNextChange, fitMessage, NO_REFLOW, pushEcho, shouldFit, type EchoEntry, type StageReflow, type StageSize } from "../../../core/screen/stage";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { SCREEN_VIEWER_SOURCE } from "./viewerSource";
 import { viewerBaseUrl } from "../../viewerBase";
@@ -30,9 +31,14 @@ export const MAC_MODIFIERS: RemoteModifier[] = [
   { key: "Option", label: "⌥", name: "Option" },
   { key: "Shift", label: "⇧", name: "Shift" },
 ];
-const KEYS: { key: ScreenKey; label: string; name: string }[] = [
-  { key: "Escape", label: "Esc", name: "Escape" },
+/** The keys a phone keyboard lacks, in the bar docked above it: editing first, then the arrows. */
+const EDIT_KEYS: { key: ScreenKey; label: string; name: string }[] = [
+  { key: "BackSpace", label: "⌫", name: "Backspace" },
+  { key: "Return", label: "↵", name: "Return" },
   { key: "Tab", label: "Tab", name: "Tab" },
+  { key: "Escape", label: "Esc", name: "Escape" },
+];
+const KEYS: { key: ScreenKey; label: string; name: string }[] = [
   { key: "Left", label: "←", name: "Left arrow" },
   { key: "Up", label: "↑", name: "Up arrow" },
   { key: "Down", label: "↓", name: "Down arrow" },
@@ -97,6 +103,12 @@ export class RemoteSession {
   readonly stats = signal<ScreenStreamStats | null>(null);
   readonly viewerStats = signal<ViewerStats | null>(null);
   readonly holding = signal(false);
+  /** How an agent display's browser window is shown: laid out for this view while held (reflow sessions). */
+  readonly reflow = signal<StageReflow>(NO_REFLOW, { equals: (a, b) => a.on === b.on && a.host === b.host });
+  /** The view's size as the viewer measured it. */
+  readonly viewSize = signal<StageSize | null>(null);
+  /** The size the window was last laid out for, while held. */
+  private fitted: StageSize | null = null;
   /** The viewer felt a long press (a right-click) or the remote bell rang. No haptic: the app has two (SPEC §16.3). */
   onHaptic: (() => void) | null = null;
   private connection: ScreenConnection | null = null;
@@ -118,6 +130,8 @@ export class RemoteSession {
       align: "top" | "center";
       /** The computer ended the socket; true when the page takes it from here (the watched agent finished) instead of showing it lost. */
       onSocketClosed?: (reason: string | null) => boolean;
+      /** An agent display on Screen's stage: holding it lays its browser window out for this view. */
+      reflow?: boolean;
     },
   ) {
     this.align = options.align;
@@ -156,6 +170,10 @@ export class RemoteSession {
       case "haptic":
         this.onHaptic?.();
         return;
+      case "size":
+        this.viewSize.set({ width: message.width, height: message.height, dpr: message.dpr });
+        this.fitIfNeeded();
+        return;
       default:
         return;
     }
@@ -185,6 +203,7 @@ export class RemoteSession {
         ready: () => {},
         rtt: (ms) => attempt === this.attempt && this.rtt.set(ms),
         locked: (locked) => attempt === this.attempt && this.locked.set(locked),
+        reflow: (state) => attempt === this.attempt && this.reflow.set(state),
         streamStats: (stats) => attempt === this.attempt && this.stats.set(stats),
         closed: (reason) => {
           if (attempt !== this.attempt) return;
@@ -222,18 +241,34 @@ export class RemoteSession {
     const connection = this.connection;
     this.connection = null;
     connection?.close();
-    // A hold rides on the socket: closing it lets the agent go on.
+    // A hold rides on the socket: closing it lets the agent go on (and puts its window back).
     this.holding.set(false);
+    this.reflow.set(NO_REFLOW);
+    this.fitted = null;
     this.rtt.set(null);
     this.chunks = [];
     this.outbox = this.outbox.filter((message) => message.type !== "rfb");
     if (connection) this.post([{ type: "close" }]);
   }
 
-  /** An agent display: the agent waits while the person holds it. */
+  /**
+   * An agent display: the agent waits while the person holds it. On the stage, holding also lays the agent's
+   * browser window out for this view, and letting go puts it back (the daemon does both).
+   */
   hold(on: boolean): void {
     this.connection?.control({ type: "hold", on });
     this.holding.set(on);
+    this.fitted = null;
+    if (on) this.fitIfNeeded();
+    else this.reflow.set(NO_REFLOW);
+  }
+
+  /** While held, lays the window out for the view once, and again when the view turns or grows (never for the keyboard). */
+  private fitIfNeeded(): void {
+    const size = untracked(this.viewSize);
+    if (!this.options.reflow || !this.connection || !untracked(this.holding) || !size || !shouldFit(this.fitted, size)) return;
+    this.fitted = size;
+    this.connection.control(fitMessage(size));
   }
 
   setMode(mode: ScreenPointerMode): void {
@@ -248,7 +283,8 @@ export class RemoteSession {
     this.post([{ type: "align", align }]);
   }
 
-  fit(): void {
+  /** Fits the picture to the view (the view's zoom; the computer doesn't change). */
+  fitView(): void {
     this.post([{ type: "fit" }]);
   }
 
@@ -310,6 +346,27 @@ export class RemoteSession {
 export function RemoteView(props: { session: RemoteSession; label: string; modifiers: RemoteModifier[]; typing: boolean; onTypingChange: (on: boolean) => void; class?: string }) {
   const mods = signal<ModifierState>(NO_MODIFIERS);
   const value = signal(KEYBOARD_SENTINEL);
+  // What the person typed, shown above the key bar: each character for a second, then a dot (it may be a password).
+  const echo = signal<EchoEntry[]>([]);
+  const now = signal(Date.now());
+  let echoTimer: ReturnType<typeof setTimeout> | null = null;
+  const tickEcho = () => {
+    if (echoTimer) clearTimeout(echoTimer);
+    echoTimer = null;
+    const at = Date.now();
+    now.set(at);
+    const next = echoNextChange(untracked(echo), at);
+    if (next !== null) echoTimer = setTimeout(tickEcho, next - at + 10);
+  };
+  const echoed = (edit: { kind: "text"; text: string } | { kind: "backspace"; count: number }) => {
+    echo.set(pushEcho(untracked(echo), edit, Date.now()));
+    tickEcho();
+  };
+  cleanup(() => echoTimer && clearTimeout(echoTimer));
+  // Typing ends: the echo goes with it.
+  effect(() => {
+    if (!props.typing) untracked(() => echo().length && echo.set([]));
+  });
   let input: InputRef | null = null;
   const soft = needsSoftKeyboard();
   html ??= viewerHtml();
@@ -325,11 +382,23 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
     const active = activeModifiers(mods());
     if (edit.kind === "backspace") for (let i = 0; i < edit.count; i++) props.session.key("BackSpace", active);
     else props.session.text(edit.text, active);
+    if (!active.length) echoed(edit);
     mods.set(spendModifiers(mods()));
   };
   const press = (key: ScreenKey) => {
-    props.session.key(key, activeModifiers(mods()));
+    const active = activeModifiers(mods());
+    props.session.key(key, active);
+    if (key === "BackSpace" && !active.length) echoed({ kind: "backspace", count: 1 });
+    if (key === "Return") echo.set([]);
     mods.set(spendModifiers(mods()));
+  };
+  // The phone's clipboard, typed into the remote field (a password manager's copy, a code from a message).
+  const paste = async () => {
+    const text = await Clipboard.readText().catch(() => "");
+    if (!text) return;
+    props.session.text(text, []);
+    echo.set(pushEcho(untracked(echo), { kind: "text", text: "\u2022".repeat(Math.min(Array.from(text).length, 24)) }, 0));
+    tickEcho();
   };
   // Android's Back hides the keyboard without blurring the field: end typing when it goes down.
   let keyboardSeen = false;
@@ -371,7 +440,19 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
           onSubmit={() => press("Return")}
           onBlur={() => props.onTypingChange(false)}
         /></If>
+      <If when={soft && props.typing && echo().length > 0}><View testID="remote-echo" class="h-7 flex-row items-center justify-end bg-black px-3">
+          <Text class="text-sub text-white/80 line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{echoLine(echo(), now())}</Text>
+        </View></If>
       <If when={soft && props.typing}><Scroll horizontal testID="remote-key-bar" class="grow-0 bg-black" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
+          <Button testID="key-paste" accessibilityLabel="Paste from this phone" onPress={() => void paste()} class="h-11 min-w-[44px] items-center justify-center rounded-[10px] bg-white px-3 active:opacity-70">
+            <Text class="text-sub font-semibold text-black">Paste</Text>
+          </Button>
+          {EDIT_KEYS.map((key) => (
+            <Button testID={`key-${key.key}`} accessibilityLabel={key.name} onPress={() => press(key.key)} class="h-11 min-w-[44px] items-center justify-center rounded-[10px] bg-white/15 px-2.5 active:bg-white/30">
+              <Text class="text-sub text-white">{key.label}</Text>
+            </Button>
+          ))}
+          <View class="mx-1 h-5 w-px bg-white/25" />
           {props.modifiers.map((modifier) => {
             const state = () => (mods().locked.includes(modifier.key) ? "locked" : mods().armed.includes(modifier.key) ? "armed" : "off");
             return (

@@ -44,18 +44,27 @@ see [Keep it running](install-daemon.md#keep-it-running).
 
 ## Use it
 
-Screen fills the page, black in both themes. The bar on top has Back, the
-computer and who has the controls (**Watching** or **You have the controls**),
-**Take over** or **Give back**, and **⋯**:
+Screen fills the page, black in both themes, and shows one screen at a time:
+the computer's own, or one agent's (see [Agents' displays](#agents-displays)).
+While an agent uses the screen you see, it has one switch, the same everywhere:
 
+- **Take over** gives you the controls; while you have them the agent waits,
+  and a red frame goes round the picture.
+- **Give back** lets the agent go on (it is told how long you had it). Leaving
+  Screen gives it back by itself.
+- **Stop**, the square button beside it, stops the agent.
+
+On a phone the switch sits under the picture and steps aside while you type; on
+a desktop or a wide window it is in the bar on top. The bar also has Back, the
+screen you see, the keyboard and **⋯**:
+
+- **Fit** shows the whole picture again.
 - **Full size** fills the browser window and sends the keyboard to the
   computer, the browser's own shortcuts too where the browser allows. Hold Esc
   to leave.
 - **Connection** shows how the picture reaches you (below).
-- **Display** chooses which screen you see: a display of the computer, or on
-  Linux an agent's monitor.
 - **Phone** opens [Phone use](phone.md), when it is on.
-- **Stop watching** closes the view.
+- **Disconnect** closes the view.
 
 When Screen can't show the picture, it says why with one button: the computer
 is locked, its screen is off, Screen isn't turned on or allowed yet, or there is
@@ -63,22 +72,25 @@ no display.
 
 | Gesture | On the computer |
 | --- | --- |
-| Tap | Click |
-| Tap twice | Double-click |
-| Press and hold, then lift | Right-click |
+| Tap | Click, with a ring where it landed |
+| Tap twice | Zoom the view in there, or back out (the computer doesn't change) |
+| Press and hold, then lift | A menu: **Right click**, **Double click** or **Drag** (the next drag holds the button) |
 | Press and hold, then drag | Drag with the button held |
+| One-finger drag | Scroll; zoomed in, move around the view instead |
 | Two-finger tap | Right-click |
-| Two-finger swipe | Scroll |
-| Pinch | Zoom the view on your phone (the computer doesn't change) |
-| One-finger drag while zoomed in | Move around the zoomed view |
+| Pinch | Zoom the view on your phone |
 
-With touch, the key bar under the picture has the keyboard, Esc, Tab, Ctrl,
-Cmd, scroll and right click. Tap a modifier once to apply it to the next key,
-tap it twice to hold it, and a third time to release it. Text you type with
-the phone's keyboard, including Chinese and accented letters, arrives as typed,
-whatever input source the computer uses. Keys pressed with a modifier arrive as
-shortcuts. On a desktop or in the web app, the mouse, the wheel and the keyboard
-go straight to the computer, and a paste sends your text there.
+The keyboard button brings up the phone's keyboard, and a bar of the keys it
+lacks docks above it: **Paste** (types what the phone copied, such as a
+password or a code), ⌫, ↵, Tab, Esc, the modifiers and the arrows. Tap a
+modifier once to apply it to the next key, tap it twice to hold it, and a third
+time to release it. A line above the bar shows what you type, each character
+for a second before it turns into a dot. The picture keeps its size when the
+keyboard comes up and moves so the field you tapped stays in sight. Text you
+type, including Chinese and accented letters, arrives as typed, whatever input
+source the computer uses; keys pressed with a modifier arrive as shortcuts. On
+a desktop or in the web app, the mouse, the wheel and the keyboard go straight
+to the computer, and a paste sends your text there.
 
 **⋯ › Connection** shows the way out if there is one (join the computer's Wi-Fi
 or Tailscale, when the computer lists addresses the phone could not reach),
@@ -101,7 +113,8 @@ the picture at 6 updates a second however little there is to send. When that
 doesn't help (too many bytes), it lowers the picture quality while the screen
 moves, down to a floor that is still readable, and sends what changed again at
 full quality once the screen is still. When nothing is late, nothing changes.
-The screen's size never changes.
+The computer's screen never changes size; an agent's browser window does while
+you take it over from a phone (see [below](#agents-displays)).
 
 A connection that does not show a picture within about twenty seconds is
 treated as lost: Screen says **Disconnected** and offers to reconnect, rather
@@ -286,14 +299,14 @@ The rules that keep you in charge:
   `bring_forward`.
 - **Agents' browser windows.** An agent that only uses the browser
   (`mewla_chrome`) gets a window of its own in your Chrome, on the agent
-  display, off your screen. Screen lists it at once under the agent's name,
-  before your Mac's own screen (one tap away at the top of the list, and back
-  from **⋯**), the same way a Linux computer lists its agents' displays: a live
+  display, off your screen. Screen shows it at once under the agent's name,
+  before your Mac's own screen (in the list of agents and in **⋯**, and back
+  from **⋯**), the same way a Linux computer shows its agents' displays: a live
   view of just that window, typing and clicks that reach that window only
-  (never another of your Chrome windows, and without the pointer), **Hold the
-  agent** and **Let the agent go on**, and Stop. A page it leaves open for you
-  (a sign-in) stays after its turn; its Work card in Brain's thread has a
-  **Screen** button that opens Screen at that window. It goes when its Worker
+  (never another of your Chrome windows, and without the pointer), **Take
+  over**, **Give back** and Stop. A page it leaves open for you (a sign-in)
+  stays after its turn; its Work card in Brain's thread has a **Take over**
+  button that opens Screen at that window with the agent held. It goes when its Worker
   closes, when you close it, or after an hour nobody used it, and you are told.
 - **Closing a window behind others.** An app's Close menu item (cmd+w) is off
   while the app is behind other windows. The agent then presses the close
@@ -348,11 +361,27 @@ virtual screen of their own, off your desktop: one screen for the whole
 computer with a monitor for each agent. An agent's browser window and the
 desktop apps it opens are both on its monitor, and nothing else is.
 
-On a Linux computer, **⋯ › Display** in Screen lists the agents using the
-screen, by name, and each one's live view shows only its own monitor (you are
-never sent another agent's). An agent appears there as soon as its browser
-window opens or it opens an app, whichever tool it used; you never open or
-manage a browser yourself. **⋯ › Phone** opens the phone, where Phone use is on.
+### Agents' displays
+
+On a Linux computer, Screen shows one agent's monitor at a time, full size, and
+only that one (you are never sent another agent's). The agent's name at the top
+opens the list of every agent with a display (on a wide window they are tabs);
+a Mac's agent windows are listed the same way, with the Mac's own screen in the
+list and in **⋯**. An agent appears as soon as its browser window opens or it
+opens an app, whichever tool it used; you never open or manage a browser
+yourself. **⋯ › Phone** opens the phone, where Phone use is on.
+
+**Take over from a phone lays the page out for the phone.** When you take over
+an agent's browser window, Mewla makes that Chrome window the shape of your
+phone and zooms its page to your phone's sharpness, as a person zooming a
+desktop window would: the page lays itself out at your phone's width and you
+see it at its real size, with a domain chip at the top naming the page's real
+site. Tap fields, type with your keyboard, paste, and **Give back**: the window,
+its zoom and the agent screen go back as they were, with what you typed, the
+page you reached and any captcha you solved still there. The agent's monitor
+grows taller while you have it and no other agent's changes. A desktop or a
+wide window shows the agent's window as it is. A desktop app is shown as it is
+too; zoom in on it.
 
 A page an agent leaves open for you (a sign-in, a code, a captcha, a payment)
 stays after its turn ends. Its Work card in Brain's thread then has a
@@ -377,9 +406,7 @@ is told so in words and says so in Chat.
   monitor, a paste sends your text there, and **⋯ › Full size** fills the window
   and hands the browser's own shortcuts to the screen where it allows. Chrome
   on the screen is the real Chrome with its own address bar and tabs; use them.
-  On a phone a tap clicks, a drag scrolls, a long press right-clicks (hold, then
-  drag to drag), two fingers zoom and pan the view, and the keyboard key brings
-  up the system keyboard, whose keys go straight to the screen.
+  On a phone the gestures and the key bar are Screen's own ([above](#use-it)).
 - **The agent is told, not paused.** What you do reaches the screen at once
   while the agent keeps going. It is told what you did (clicks, scrolls, how
   much you typed, never what you typed) and decides for itself whether to go on,
@@ -387,7 +414,9 @@ is told so in words and says so in Chat.
   mistake or be typing a password.
 - **Take over** is the one soft switch here: the agent's next action or browser
   call says you hold the screen, and it waits. **Give back** lets it go on, and
-  it hears how long you held it. Leaving Screen gives it back by itself.
+  it hears how long you held it. Leaving Screen, or the app going to the
+  background, gives it back by itself. A Work card whose agent left a page open
+  for you has **Take over**, which opens Screen with the agent already held.
 
 With **Settings › Agents › Virtual screen** on (tap the cat, then **Settings**), a
 Worker (Claude or Codex) works in the agents' browser on the virtual screen
@@ -411,9 +440,9 @@ Desktop apps need no switch. A Worker (Claude or Codex) has the same computer
 tool as on a Mac (`mewla_computer`): `open_app` starts an installed app (by the
 name its menu entry shows, such as KWrite, or its program) on the agent's own
 monitor, `app_state` reads the app's buttons, fields and text through AT-SPI,
-and `element`, `steps`, screenshots, clicks and keys act there. **⋯ › Display**
-lists the agent as soon as it has a monitor, with the same live view and Take
-over. The
+and `element`, `steps`, screenshots, clicks and keys act there. Screen lists
+the agent as soon as it has a monitor, with the same live view and Take over.
+The
 apps join an accessibility bus private to the agent screen, so nothing of your
 desktop's accessibility is used or switched on (it needs `at-spi2-core`; without
 it the agent works from screenshots). Without `Xvnc` the agent has no computer
@@ -444,8 +473,8 @@ Chrome and sign-ins on your desktop instead.
 
 While the agent of the Session or Work you are looking at uses a screen, that
 screen floats over the page as a small live window: its Linux display, the
-Mac's screen, or the phone (see [Phone use](phone.md)). It is one window with
-one set of gestures for all three. On a page that belongs to no Session or Work
+Mac's screen, or the phone (see [Phone use](phone.md)). It is one window for
+all three. On a page that belongs to no Session or Work
 it shows whichever agent uses a screen. It disappears when the agent is done
 with the screen, and on that screen's own page.
 
@@ -457,9 +486,10 @@ with the screen, and on that screen's own page.
   **Double-tap** to go between the default and a large size. The handle in the
   inner corner resizes it, the shape locked. **Open** opens that screen's own
   page: Screen, or Phone use for the phone.
-- **The picture is the input surface**, as in Screen. On a Linux display a tap
-  clicks and the keyboard key types; the agent is told, not paused. The Mac's
-  float is for watching: taking over stays in Screen.
+- **It is for watching.** A tap on the picture opens Screen at that agent;
+  **Take over** in its menu opens Screen with the agent already held (on a
+  Linux display or a Mac's agent window), and **Stop** stops it. The phone's
+  window works the same way with Phone use.
 
 ## Who can use it
 

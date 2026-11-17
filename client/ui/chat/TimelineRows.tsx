@@ -26,7 +26,8 @@ import { serverForComputer, type ComputerMessageTimelineItem } from "../../core/
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import { Icon, type IconName } from "../icons/Icon";
 import { ICON_ASSETS } from "../icons/assets";
-import { connection, current, currentTransport, servers, switchTo } from "../session";
+import { connection, current, currentTransport, servers, switchTo, workers } from "../session";
+import { isWorkerActivelyRunning } from "../../core/sessions/workerStatusPresentation";
 import { workAction } from "../../core/work/brainWork";
 import { brainWorkTitle } from "../../core/work/surface";
 import { delayed, RING, Spinner } from "../kit/wait";
@@ -300,11 +301,16 @@ export function ResultActions(props: { actions: readonly ResultAction[]; disable
  */
 export function WorkerScreenButton(props: { worker: () => string | undefined }) {
   const open = computed(() => !!displayOfWorker(agentDisplays(), props.worker()));
+  // A page the agent left for the person (its turn is over, its window still open): one step takes it over.
+  const left = computed(() => {
+    const worker = workers().find((w) => w.id === props.worker());
+    return open() && !!worker && !isWorkerActivelyRunning(worker.status);
+  });
   return (
-    <If when={open()}><Button testID="work-card-screen" accessibilityLabel="Open its screen" onPress={() => { const worker = props.worker(); if (worker) nav.push({ name: "screen", worker }); }}
+    <If when={open()}><Button testID="work-card-screen" accessibilityLabel={left() ? "Take over its screen" : "Open its screen"} onPress={() => { const worker = props.worker(); if (worker) nav.push(left() ? { name: "screen", worker, takeOver: true } : { name: "screen", worker }); }}
         class="h-[30px] flex-row items-center gap-1 rounded-full bg-background px-3 active:opacity-70">
-        <KitIcon name="desktop" size={16} tone="ink" />
-        <Text class="text-caption font-semibold">Screen</Text>
+        <KitIcon name={left() ? "hand" : "desktop"} size={16} tone="ink" />
+        <Text class="text-caption font-semibold">{left() ? "Take over" : "Screen"}</Text>
       </Button></If>
   );
 }

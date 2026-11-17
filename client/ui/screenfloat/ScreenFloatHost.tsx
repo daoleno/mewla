@@ -34,15 +34,13 @@ const PHONE_FPS = 4;
 const FRAME_STEP = 120;
 const FRAME_MIN = 240;
 const FRAME_MAX = 720;
-/** What the remote view's key bar takes under the picture while the system keyboard is up. */
-const KEY_BAR = 53;
 
 export interface ScreenFloatHostProps {
   /** The page the person is on: whose it is, and whether it is Screen or the Phone page (on screen, not just mounted under a hidden tab). */
   page: () => FloatPage;
   onOpenPhone: () => void;
-  /** Opens Screen (for a display, its Worker's). */
-  onOpenScreen: (worker: string | null) => void;
+  /** Opens Screen (for a display, its Worker's; `takeOver` takes it over as it opens). */
+  onOpenScreen: (worker: string | null, takeOver?: boolean) => void;
   /** What lies under the window's area at the bottom (the tab bar). */
   bottomInset?: () => number;
   /** What lies left of it (the wide layout's left pane). */
@@ -60,8 +58,6 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
   displays.set([]);
   const mac = signal<ScreenAgent[]>([]);
   const picked = signal<string | null>(null);
-  /** The display the person holds from the window: it stays up while held. */
-  const holding = signal<string | null>(null);
   const tick = signal(0);
   const refresh = () => tick.set(tick() + 1);
   // A display that was up stays up between the agent's actions while its Worker runs.
@@ -74,7 +70,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
   // while Workers run) must not run the reads below again: each one signs two requests on the JS thread, and
   // Brain's thread stuttered under them (owner 11-13).
   const running = computed(() => workers().some((worker) => isWorkerActivelyRunning(worker.status)));
-  const mayUse = () => running() || holding() !== null;
+  const mayUse = () => running();
   // A display outlives its agent's turn (a page left for the person); while one is open it is read now and then.
   const leftOpen = computed(() => displays().length > 0);
 
@@ -156,7 +152,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
     for (const display of displays()) {
       const worker = list.find((candidate) => candidate.id === display.id);
       const key = `display:${display.id}`;
-      if (displayShown(display, { running: worker ? isWorkerActivelyRunning(worker.status) : false, shown: shown.has(key), holding: holding() === key })) {
+      if (displayShown(display, { running: worker ? isWorkerActivelyRunning(worker.status) : false, shown: shown.has(key), holding: false })) {
         out.push(displaySource(display, worker?.name));
       }
     }
@@ -195,7 +191,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
         source={live}
         {...shared(first.key)}
         onOpen={() => props.onOpenScreen(first.kind === "display" ? first.owner : null)}
-        onHold={(on) => holding.set(on ? first.key : holding() === first.key ? null : holding())}
+        onTakeOver={() => props.onOpenScreen(first.kind === "display" ? first.owner : null, first.kind === "display")}
         onChanged={refresh}
         bottomInset={props.bottomInset}
         leftInset={props.leftInset}
@@ -270,42 +266,32 @@ function PhoneContent(props: FloatProps) {
 
 interface RemoteContentProps extends FloatProps {
   server: StoredServer;
-  onHold: (on: boolean) => void;
+  /** Opens the screen's stage taken over (a display), or the stage (the Mac's, where Take over is). */
+  onTakeOver: () => void;
   /** The agent's display or control changed here: read the computer again. */
   onChanged: () => void;
   key?: string;
 }
 
 /**
- * A Linux display or the Mac's screen: the same RemoteView as in Screen, the view being the input surface.
- * A display takes the person's clicks and keys (Hold and Stop in the menu); the Mac's is a watch, which
- * never takes the screen from the agent, and Take over stays in Screen.
+ * A Linux display or the Mac's screen, to watch: the same live picture as Screen's stage, too small to use.
+ * A tap opens the stage; Take over in the menu opens it taken over.
  */
 function RemoteContent(props: RemoteContentProps) {
   const first = untracked(props.source);
   const target = screenTarget(first);
   const display = first.kind === "display";
   const session = new RemoteSession(props.server, { watch: target?.watch, worker: target?.worker, route: target?.route, align: "center" });
-  const typing = signal(false);
   session.connect();
   // A phone that leaves the app gives its viewers up; coming back reconnects them.
   effect(() => {
     const active = lifecycle() === "active";
     untracked(() => {
-      if (!active) {
-        session.lose(null);
-        props.onHold(false);
-      } else if (session.phase() === "lost") session.connect();
+      if (!active) session.lose(null);
+      else if (session.phase() === "lost") session.connect();
     });
   });
-  effect(() => {
-    const on = session.holding();
-    untracked(() => props.onHold(on));
-  });
-  cleanup(() => {
-    session.disconnect();
-    props.onHold(false);
-  });
+  cleanup(() => session.disconnect());
 
   const stop = async () => {
     try {
@@ -316,11 +302,9 @@ function RemoteContent(props: RemoteContentProps) {
     }
     props.onChanged();
   };
-  const live = () => session.phase() === "live";
   const menu = (): FloatMenuItem[] => [
-    ...(display && live() ? [session.holding() ? { id: "release", label: "Let the agent go on", run: () => session.hold(false) } : { id: "hold", label: "Hold the agent", run: () => session.hold(true) }] : []),
+    { id: "take-over", label: "Take over", run: props.onTakeOver },
     { id: "stop", label: "Stop", destructive: true, run: () => void stop() },
-    ...(live() ? [{ id: "fit", label: "Fit", run: () => session.fit() }] : []),
     ...(session.phase() === "lost" ? [{ id: "reconnect", label: "Reconnect", run: () => session.connect() }] : []),
   ];
   return (
@@ -332,18 +316,16 @@ function RemoteContent(props: RemoteContentProps) {
       onCycle={props.onCycle}
       onOpen={props.onOpen}
       menu={menu}
-      keyboard={() => (display && live() ? { open: typing(), toggle: () => typing.set(!typing()) } : null)}
-      extraHeight={() => (typing() ? KEY_BAR : 0)}
-      typing={typing}
-      attention={() => session.holding()}
       bottomInset={props.bottomInset}
       leftInset={props.leftInset}
     >
       {(picture) => (
         <View class="flex-1">
-          <View style={{ width: picture().width, height: picture().height + (typing() ? KEY_BAR : 0) }}>
-            <RemoteView session={session} label={`${display ? "Display" : "Screen"} of ${props.source().title}`} modifiers={display ? LINUX_MODIFIERS : MAC_MODIFIERS} typing={typing()} onTypingChange={(on) => typing.set(on)} class="flex-1" />
+          <View style={{ width: picture().width, height: picture().height, pointerEvents: "none" }}>
+            <RemoteView session={session} label={`${display ? "Display" : "Screen"} of ${props.source().title}`} modifiers={display ? LINUX_MODIFIERS : MAC_MODIFIERS} typing={false} onTypingChange={() => {}} class="flex-1" />
           </View>
+          {/* The picture is for watching: a tap opens the stage. */}
+          <Button testID="screen-float-picture" accessibilityLabel={`Open ${props.source().title}`} onPress={props.onOpen} class="absolute inset-x-0 top-0" style={{ height: picture().height }} />
           <If when={session.phase() !== "live"}><View testID="screen-float-cover" class="absolute inset-x-0 top-0 items-center justify-center" style={{ height: picture().height, pointerEvents: session.phase() === "lost" ? "box-none" : "none" }}>
               <If when={session.phase() === "connecting"} else={<Button testID="screen-float-reconnect" accessibilityLabel="Reconnect" onPress={() => session.connect()} class="size-12 items-center justify-center rounded-full bg-secondary">
                   <Icon name="refresh" size={22} />

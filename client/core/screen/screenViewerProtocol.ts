@@ -8,6 +8,7 @@ export type ScreenHostMessage =
   | { type: "text"; text: string; mods: ScreenModifier[] }
   | { type: "key"; key: ScreenKey; mods: ScreenModifier[] }
   | { type: "mode"; mode: ScreenPointerMode }
+  /** Fit the picture to the view (the view's own zoom; the computer doesn't change). */
   | { type: "fit" }
   /** Web: the view goes full size, and the browser's own shortcuts go to the remote. */
   | { type: "fullsize" }
@@ -30,6 +31,8 @@ export type ScreenViewerMessage =
   | { type: "name"; name: string }
   | { type: "zoom"; zoom: number }
   | { type: "haptic" }
+  /** The view's size in CSS points and its pixels per point: on open and whenever it changes. */
+  | { type: "size"; width: number; height: number; dpr: number }
   | {
       type: "stats";
       fps: number;
@@ -43,7 +46,7 @@ export type ScreenViewerMessage =
       height: number;
     };
 
-const VIEWER_TYPES = new Set(["ready", "send", "closed", "connected", "disconnected", "name", "zoom", "haptic", "stats"]);
+const VIEWER_TYPES = new Set(["ready", "send", "closed", "connected", "disconnected", "name", "zoom", "haptic", "stats", "size"]);
 
 /** Parses a viewer message; anything unexpected is dropped. */
 export function parseScreenViewerMessage(raw: string): ScreenViewerMessage | null {
@@ -52,6 +55,7 @@ export function parseScreenViewerMessage(raw: string): ScreenViewerMessage | nul
     const value = JSON.parse(raw);
     if (!value || typeof value.type !== "string" || !VIEWER_TYPES.has(value.type)) return null;
     if (value.type === "send" && (typeof value.data !== "string" || !/^[A-Za-z0-9+/=]*$/.test(value.data))) return null;
+    if (value.type === "size" && ![value.width, value.height, value.dpr].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) return null;
     return value as ScreenViewerMessage;
   } catch {
     return null;
