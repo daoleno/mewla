@@ -4,8 +4,8 @@
   release-body.py --tag vX.Y.Z [--previous vA.B.C] > notes.md
 
 The changes are the subjects of the commits since the previous release tag (merges and release
-preparation commits left out), newest first. A subject that says something no longer happens, or
-starts with Fix, is listed under Fixed; the rest under Changes. Then how to get it and how to verify the downloads,
+preparation commits left out), newest first. A subject that says, before its first colon, that
+something no longer happens, or starts with Fix, is listed under Fixed; the rest under Changes. Then how to get it and how to verify the downloads,
 with the Android certificate fingerprint scripts/verify-release-identity.sh pins. --previous
 defaults to the newest release tag that is an ancestor of --tag. A model may polish the text later
 on its own key; these notes never wait for one.
@@ -25,8 +25,13 @@ INSTALL_SCRIPT_URL = "https://mewla.ai/install.sh"
 INSTALL_DOCS_URL = "https://mewla.ai/docs/install/"
 TAG = re.compile(r"^v\d+\.\d+\.\d+(-beta\.\d+)?$")
 PREPARE = re.compile(r"^Prepare v\d+\.\d+\.\d+(-beta\.\d+)?$")
-# How this repository words a fix: "The app no longer crashes when ...", "Fix ...".
+# How this repository words a fix: "The app no longer crashes when ...: why", "Fix ...". Only the
+# part before the first colon counts: what follows explains, and may quote the words.
 FIX = re.compile(r"\bno longer\b|^fix(es|ed)?\b", re.IGNORECASE)
+
+
+def is_fix(subject: str) -> bool:
+    return bool(FIX.search(subject.split(":", 1)[0]))
 
 
 def git(*args: str) -> str:
@@ -55,8 +60,8 @@ def changes(previous: str, tag: str) -> list[str]:
 
 def body(tag: str, previous: str, subjects: list[str], cert: str) -> str:
     version = tag.removeprefix("v")
-    fixed = [s for s in subjects if FIX.search(s)]
-    changed = [s for s in subjects if not FIX.search(s)]
+    fixed = [s for s in subjects if is_fix(s)]
+    changed = [s for s in subjects if not is_fix(s)]
     sections = "".join(
         f"## {title}\n\n" + "\n".join(f"- {s}" for s in items) + "\n\n"
         for title, items in (("Fixed", fixed), ("Changes", changed))

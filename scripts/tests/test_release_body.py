@@ -34,7 +34,9 @@ class ReleaseBodyTests(unittest.TestCase):
         notes = release_body.body("v9.9.2", "v9.9.1", ["The app no longer crashes when Firebase gives it no push token"], "AA")
         self.assertIn("## Fixed\n\n- The app no longer crashes", notes)
         self.assertNotIn("## Changes", notes)
-        self.assertFalse(release_body.FIX.search("Fixtures for the calendar test"))
+        self.assertFalse(release_body.is_fix("Fixtures for the calendar test"))
+        # v0.4.12: the notes commit itself quoted the words after its colon.
+        self.assertFalse(release_body.is_fix("Release notes list fixes under Fixed: a subject that says something no longer happens"))
 
     def test_release_preparation_commits_are_not_changes(self):
         self.assertTrue(release_body.PREPARE.match("Prepare v0.4.10"))
