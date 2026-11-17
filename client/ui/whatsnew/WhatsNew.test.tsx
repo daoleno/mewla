@@ -68,7 +68,7 @@ describe("What's New: when it shows", () => {
   test("a release with fixes only shows no sheet, only its line in Brain's chat, which lists the fixes", async () => {
     const release = { version: "0.5.0", date: "2026-11-20", highlights: [], fixes: ["Sessions open faster."] };
     // The baseline is past every bundled release, so only this one is news.
-    const record: Kept = { baseline: "0.4.15", updates: [{ version: "0.5.0", at: at(3) }], releases: { releases: [release] } };
+    const record: Kept = { baseline: "0.4.16", updates: [{ version: "0.5.0", at: at(3) }], releases: { releases: [release] } };
     const app = await open(APP, setup({ record, computer: "0.5.0" }));
     await app.waitFor("id:update-line", { timeout: 15_000 });
     expect(app.shows("text:Updated to 0.5.0 ·")).toBe(true);
