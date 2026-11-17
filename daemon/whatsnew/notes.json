@@ -1,11 +1,11 @@
 {
   "releases": [
     {
-      "version": "0.4.15",
+      "version": "0.4.16",
       "date": "2026-11-18",
       "highlights": [
         {
-          "id": "0.4.15-screen-reflow",
+          "id": "0.4.16-screen-reflow",
           "title": "Sign-ins that fit your phone",
           "line": "Take over an agent's page and it fits your phone: tap, type, paste, give back.",
           "media": {
