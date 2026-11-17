@@ -129,6 +129,10 @@ class AgentWindow {
     this._onUpdated = (tabId, changeInfo, tab) => {
       if (this.reflowed && changeInfo.url !== undefined && tab.active && (tab.windowId === this.windowId || this.reflowed.popups.has(tab.windowId)))
         tell({ type: 'page', id: this.id, host: hostOf(changeInfo.url) });
+      // Chrome puts a tab's own zoom back on every navigation (a reload, the next step of a sign-in): laid out
+      // for the phone, the page keeps the phone's zoom.
+      if (this.reflowed && changeInfo.status !== undefined && this._laidOut(tab.windowId))
+        void this._zoom(tabId, this.reflowed.zoom).catch(() => {});
       if (tab.windowId !== this.windowId || this.connection?.attachedTabs.has(tabId))
         return;
       if (changeInfo.url !== undefined && !isNonDebuggableUrl(changeInfo.url))
@@ -152,6 +156,15 @@ class AgentWindow {
     this._onActivated = ({ tabId, windowId }) => {
       if (this.reflowed && windowId === this.windowId)
         void this._zoom(tabId, this.reflowed.zoom).catch(() => {});
+    };
+    // A navigation's zoom reset reaches here before the page paints: the phone's zoom goes back at once.
+    this._onZoomChange = ({ tabId, newZoomFactor }) => {
+      if (!this.reflowed || Math.abs(newZoomFactor - this.reflowed.zoom) <= 0.001)
+        return;
+      void chrome.tabs.get(tabId).then(tab => {
+        if (this.reflowed && this._laidOut(tab.windowId))
+          return this._zoom(tabId, this.reflowed.zoom);
+      }).catch(() => {});
     };
   }
 
@@ -225,6 +238,11 @@ class AgentWindow {
     }
   }
 
+  /** Whether a window is this agent's window or one of its popups while laid out for the phone. */
+  _laidOut(windowId) {
+    return !!this.reflowed && (windowId === this.windowId || this.reflowed.popups.has(windowId));
+  }
+
   async _zoom(tabId, zoom) {
     await chrome.tabs.setZoomSettings(tabId, { mode: 'automatic', scope: 'per-tab' }).catch(() => {});
     // Chrome shows its zoom bubble over the page on every set: a refit at the same scale (a taller view) sets nothing.
@@ -295,6 +313,7 @@ class AgentWindow {
     chrome.tabs.onUpdated.addListener(this._onUpdated);
     chrome.windows.onRemoved.addListener(this._onRemoved);
     chrome.tabs.onActivated.addListener(this._onActivated);
+    chrome.tabs.onZoomChange.addListener(this._onZoomChange);
     try {
       this.connection = await openRelayConnection(relayUrl, this);
     } catch (error) {
@@ -353,6 +372,7 @@ class AgentWindow {
     chrome.tabs.onUpdated.removeListener(this._onUpdated);
     chrome.windows.onRemoved.removeListener(this._onRemoved);
     chrome.tabs.onActivated.removeListener(this._onActivated);
+    chrome.tabs.onZoomChange.removeListener(this._onZoomChange);
     this.connection?.close(reason);
     sessions.delete(this.id);
     agentWindowIds.delete(this.windowId);
