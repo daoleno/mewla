@@ -354,20 +354,12 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 			return nil, fmt.Errorf("Mewla's extension could not be prepared: %w", err)
 		}
 	}
-	// Chrome 137 and later ignore --load-extension. An extension can still be
-	// loaded over the debugging pipe, which is also what lets nobody but this
-	// daemon do it: the pipe's other end is the keeper's, relayed only to the
-	// daemon over a socket only this user can open, and Chrome ends if it closes.
-	// Despite Chrome's historical flag name, libsecret is the standard Secret
-	// Service client, also supported by installed KDE ksecretd/KWallet. The
-	// windows of different agents are on different monitors, but a window
-	// that is covered or off screen must not be slowed down for it.
 	logPath := filepath.Join(root, "keeper.log")
 	_ = os.Remove(logPath)
 	err = keeper.Spawn(keeper.Spec{
 		Socket: socket, Linger: keepLinger, CDP: true, Env: env, OwnerEnv: ownerEnv,
 		Lock: filepath.Join(root, "runtime.lock"), Log: logPath, Cleanup: []string{dir},
-		Argv: []string{b.chrome(), "--user-data-dir=" + profile, "--remote-debugging-pipe", "--enable-unsafe-extension-debugging", "--silent-debugger-extension-api", "--ozone-platform=x11", "--password-store=" + store, "--no-first-run", "--no-default-browser-check", "--no-startup-window", "--disable-features=OutdatedBuildDetector", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"},
+		Argv: chromeArgv(b.chrome(), profile, store),
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "held by another runtime") {
@@ -400,6 +392,29 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 	}
 	success = true
 	return h, nil
+}
+
+// chromeArgv is how the agent browser's Chrome starts on the profile, keeping
+// its sign-ins in store.
+//
+// Chrome 137 and later ignore --load-extension. An extension can still be
+// loaded over the debugging pipe, which is also what lets nobody but this
+// daemon do it: the pipe's other end is the keeper's, relayed only to the
+// daemon over a socket only this user can open, and Chrome ends if it closes.
+//
+// The pipe also marks every page as automated (navigator.webdriver is true),
+// and Google then refuses to sign in ("This browser or app may not be
+// secure") at the first step, so the person could not give the agents their
+// Google sign-in, or any site's "Sign in with Google". The browser is the
+// person's and the agents', not a test harness: AutomationControlled is
+// turned off. Attaching the debugger to a tab does not mark it.
+//
+// Despite Chrome's historical flag name, libsecret is the standard Secret
+// Service client, also supported by installed KDE ksecretd/KWallet. The
+// windows of different agents are on different monitors, but a window that
+// is covered or off screen must not be slowed down for it.
+func chromeArgv(chrome, profile, store string) []string {
+	return []string{chrome, "--user-data-dir=" + profile, "--remote-debugging-pipe", "--enable-unsafe-extension-debugging", "--silent-debugger-extension-api", "--disable-blink-features=AutomationControlled", "--ozone-platform=x11", "--password-store=" + store, "--no-first-run", "--no-default-browser-check", "--no-startup-window", "--disable-features=OutdatedBuildDetector", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling"}
 }
 
 func (h *linuxHost) Alive() bool {
