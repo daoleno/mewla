@@ -28,6 +28,8 @@ func TestReflowSize(t *testing.T) {
 		{800, 1200, 2, 1280, 1920, 1.6, true},
 		// Wider than the monitor at 1x: the monitor's width, 1x.
 		{1600, 900, 1, 1280, 900, 1, true},
+		// A phone that says 1x: zoomed to the narrowest window Chrome makes.
+		{412, 760, 1, 500, 922, 500.0 / 412, true},
 		{200, 800, 2, 0, 0, 0, false},
 		{412, 870, 0, 0, 0, 0, false},
 	} {
