@@ -582,23 +582,33 @@ over HTTPS.
 
 **Back up** the account volume (SQLite database, grant key, certificate
 cache). The database is in WAL mode, so stop the service for a consistent
-copy; computers keep working on their current grant meanwhile:
+copy; computers keep working on their current grant meanwhile. Start the
+running version again by name: a bare `kamal app start` starts the version
+of your checkout's HEAD, which fails while that image is not on the host
+(11-17: about two minutes down until the old container was started by hand).
+The running version is the account container's name after
+`mewla-link-account-`:
 
 ```sh
-kamal app stop
+RUNNING=$(ssh ubuntu@167.114.116.27 "docker ps --filter name=mewla-link-account- --format '{{.Names}}'" | sed 's/^mewla-link-account-//')
+echo "$RUNNING"   # one full commit SHA; stop here if it is empty or two lines
+kamal app stop --version "$RUNNING"
 ssh ubuntu@167.114.116.27 "docker run --rm -v mewla-link-account:/d:ro alpine:3.20 tar -C /d -cf - ." \
   > ~/.config/mewla-remote/backup/account-$(date +%Y%m%d-%H%M%S).tar
-kamal app start
+kamal app start --version "$RUNNING"
 chmod 600 ~/.config/mewla-remote/backup/*.tar
 ```
+
+If `kamal app start` fails anyway, `ssh ubuntu@167.114.116.27 docker start mewla-link-account-$RUNNING`
+brings the same container back.
 
 **Restore** onto an empty or damaged volume:
 
 ```sh
-kamal app stop
+kamal app stop --version "$RUNNING"   # RUNNING as in the backup above
 ssh ubuntu@167.114.116.27 "docker run --rm -i -v mewla-link-account:/d alpine:3.20 \
   sh -c 'find /d -mindepth 1 -delete && tar -C /d -xpf -'" < ~/.config/mewla-remote/backup/account-<stamp>.tar
-kamal app start
+kamal app start --version "$RUNNING"
 ```
 
 If the grant key is lost, generate a new one (first deploy, step 4), replace
