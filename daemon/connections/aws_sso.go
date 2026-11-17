@@ -32,31 +32,52 @@ func (p awsCLI) loginArgsFor(m *Manager, profile string) []string {
 var awsUserCode = regexp.MustCompile(`^[A-Z0-9]{4,8}(-[A-Z0-9]{4,8})?$`)
 
 // deviceCode reads the address and code `aws sso login --use-device-code`
-// prints. The address is AWS's own page with the code filled in.
+// prints: the code on a line of its own after "enter the code", and the
+// address that fills it in (the last AWS address printed; older CLIs carry
+// ?user_code= in it, AWS CLI 2.40 prints a signin.aws request_uri).
 func (awsCLI) deviceCode(output string) (string, string) {
+	code := ""
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		if !strings.Contains(strings.ToLower(line), "enter the code") {
+			continue
+		}
+		for _, next := range lines[i+1:] {
+			if next = strings.TrimSpace(next); next != "" {
+				if awsUserCode.MatchString(next) {
+					code = next
+				}
+				break
+			}
+		}
+	}
+	address := ""
 	for _, s := range cloudURL.FindAllString(output, -1) {
 		u, err := url.Parse(s)
 		if err != nil || u.Scheme != "https" {
 			continue
 		}
 		host := u.Hostname()
-		if !strings.HasSuffix(host, ".amazonaws.com") && !strings.HasSuffix(host, ".awsapps.com") && !strings.HasSuffix(host, ".app.aws") {
+		if !strings.HasSuffix(host, ".amazonaws.com") && !strings.HasSuffix(host, ".awsapps.com") && !strings.HasSuffix(host, ".app.aws") && !strings.HasSuffix(host, ".signin.aws") {
 			continue
 		}
-		// The code sits in the query (device.sso…/?user_code=) or, on the
-		// access portal, in the fragment (…/start/#/device?user_code=).
-		code := u.Query().Get("user_code")
-		if code == "" {
-			if _, query, ok := strings.Cut(u.Fragment, "?"); ok {
-				values, _ := url.ParseQuery(query)
-				code = values.Get("user_code")
-			}
+		inURL := u.Query().Get("user_code")
+		if _, query, ok := strings.Cut(u.Fragment, "?"); ok && inURL == "" {
+			values, _ := url.ParseQuery(query)
+			inURL = values.Get("user_code")
 		}
-		if awsUserCode.MatchString(code) {
-			return s, code
+		if inURL != "" && (!awsUserCode.MatchString(inURL) || code != "" && inURL != code) {
+			continue
 		}
+		if code == "" && inURL != "" {
+			code = inURL
+		}
+		address = s
 	}
-	return "", ""
+	if address == "" || code == "" {
+		return "", ""
+	}
+	return address, code
 }
 
 // awsSSOSessionEnd is the latest an sso-session sign-in can last. The CLI

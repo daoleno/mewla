@@ -19,7 +19,18 @@ func TestAWSDeviceCodeParsing(t *testing.T) {
 	if address, code := p.deviceCode(portal); code != "WXYZ-1234" || !strings.HasPrefix(address, "https://d-1234567890.awsapps.com/start/") {
 		t.Fatalf("portal = %q %q", address, code)
 	}
+	// AWS CLI 2.40.4 against an Identity Center instance without a d- alias
+	// (2026-11-18; request URI and code replaced): no user_code in the address.
+	real := "Browser will not be automatically opened.\nPlease visit the following URL:\n\nhttps://us-east-1.signin.aws/platform/authorize?request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3AAAAAexample&identitystore_id=2488e418-0000-0000-90cc-6215cc6e0438\n\nThen enter the code:\n\nQRST-WXYZ\n\nAlternatively, you may visit the following URL which will autofill the code upon loading:\nhttps://us-east-1.signin.aws/platform/authorize?request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3AAAAAexample&identitystore_id=2488e418-0000-0000-90cc-6215cc6e0438\n"
+	if address, code := p.deviceCode(real); code != "QRST-WXYZ" || !strings.HasPrefix(address, "https://us-east-1.signin.aws/platform/authorize?request_uri=") {
+		t.Fatalf("CLI 2.40 = %q %q", address, code)
+	}
+	// Until the code is printed there is nothing to show.
+	if _, code := p.deviceCode(real[:strings.Index(real, "Then enter")]); code != "" {
+		t.Fatal("address shown without its code")
+	}
 	for _, foreign := range []string{
+		"Then enter the code:\n\nABCD-EFGH\n\nhttps://evil.example/?x=1\n",
 		"https://evil.example/?user_code=ABCD-EFGH",
 		"http://device.sso.us-east-1.amazonaws.com/?user_code=ABCD-EFGH",
 		"https://device.sso.us-east-1.amazonaws.com/?user_code=<script>",
