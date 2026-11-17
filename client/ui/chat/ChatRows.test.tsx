@@ -205,6 +205,17 @@ describe("the person's own message", () => {
     await app.waitFor("id:edit-chip", { state: "gone" });
     expect(app.value("id:composer")).toBe("");
   }, 20_000);
+
+  test("a long file name gives way at its start and keeps its end, so it never widens the bubble (owner 11-17)", async () => {
+    const name = "20261117185847-转写_美元债蒸馏讨论-逐字稿文本-1 (2).md";
+    const app = await brainWith([{ id: "u1", seq: 1, timestamp: at(1), kind: "user_message", role: "user", body: "比如做个交互式的页面",
+      attachments: [{ name, path: `/state/uploads/${name}`, content_type: "text/markdown" }] }, reply("a1", 2, "On it.")]);
+    await app.waitFor("id:user-message-file", { timeout: 10_000 });
+    // The start, which clamps to one line, and the end beside it, which never gives way.
+    expect(app.texts()).toContain("20261117185847-转写_美元债蒸馏讨论-逐字稿文本-1 ");
+    expect(app.texts()).toContain("(2).md");
+    expect(app.count(`label:${name}`)).toBe(1);
+  }, 20_000);
 });
 
 describe("edited files", () => {

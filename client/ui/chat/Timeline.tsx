@@ -26,6 +26,7 @@ import { PictureViewer } from "./PictureViewer";
 import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
 import { INLINE_CODE, SELECTION } from "./TimelineRows";
 import { Caption } from "../kit/kit";
+import { FileName } from "../kit/FileName";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCodeWhile, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
 import { brainFiles, brainHostIdentity, openChatLink, openChatPath } from "./links";
@@ -135,7 +136,7 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
           ))}
         </View></If>
       <If when={it().body || files().length}><View testID="user-message" selectable onPress={tap}
-          class={`rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "opacity-55" : ""}`}>
+          class={`max-w-full rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "opacity-55" : ""}`}>
           <If when={it().body}><View testID={folded() ? "user-message-folded" : "user-message-body"} class="overflow-hidden" style={{ maxHeight: folded() ? FOLDED_TEXT_HEIGHT : undefined }}>
               <Text testID="user-message-text" onPress={tap} onLayout={({ bounds }) => textHeight.set(bounds.size.height)}
                 class={`shrink-0 text-message ${SELECTION}`}>{it().body}</Text>
@@ -145,10 +146,11 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
               class="-mb-2 -mr-2 size-11 items-center justify-center self-end active:opacity-60">
               <Icon name={open() ? "chevron-up" : "chevron-down"} size={18} color="faint" />
             </Button></If>
+          {/* The name gives way before the bubble does: a long one never widens it past the screen (owner 11-17). */}
           {files().map((file) => (
-            <View class="flex-row items-center gap-1.5 pt-1">
+            <View testID="user-message-file" class="min-w-0 flex-row items-center gap-1.5 pt-1">
               <Icon name="document" size={14} />
-              <Text class="text-sub text-muted-foreground line-clamp-1">{file.name}</Text>
+              <FileName name={file.name} class="text-sub text-muted-foreground" />
             </View>
           ))}
         </View></If>

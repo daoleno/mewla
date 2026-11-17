@@ -4,6 +4,7 @@ import type { AttachmentQueueItem } from "../../../core/files/attachmentUploadQu
 import { buildAttachmentUploadPresentation } from "../../../core/files/attachmentUploadPresentation";
 import { isImageAttachment } from "../../../core/files/imageSource";
 import { Icon } from "../../kit/Icon";
+import { FileName } from "../../kit/FileName";
 import { Spinner } from "../../kit/kit";
 import { ZoomImage } from "./FilePreview";
 import { thumbnail } from "./host";
@@ -72,7 +73,7 @@ function Chip(props: { item: AttachmentQueueItem; uploads: AttachmentUploads; on
         </Button></If>
       <If when={uploading && !picture} else={<If when={!picture}><Icon name={item.status === "failed" ? "alert-circle" : "attach"} size={16} tone={item.status === "failed" ? "seal" : "soft"} /></If>}><Spinner size={14} /></If>
       <View class="min-w-0 flex-1">
-        <Text class="text-sub line-clamp-1">{item.asset.name}</Text>
+        <FileName name={item.asset.name} class="text-sub" />
         <Text testID={`attachment-${item.id}-label`} class={item.status === "failed" ? "text-caption text-destructive line-clamp-2" : "text-caption text-muted-foreground line-clamp-1"}>{attachmentLabel(item)}</Text>
       </View>
       <If when={item.status === "failed" && item.asset.selectionRetryable !== false}><Button testID={`attachment-${item.id}-retry`} accessibilityLabel={`Retry upload of ${item.asset.name}`} onPress={() => props.uploads.retry(item.id)} class="active:opacity-60"><Text class="text-sub font-semibold">Retry</Text></Button></If>
