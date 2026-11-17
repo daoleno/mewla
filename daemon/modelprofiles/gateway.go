@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/debuglog"
@@ -86,6 +87,9 @@ type Gateway struct {
 	ws             *wsConnRegistry
 	resolve        GatewayRequestResolver
 	listenFallback bool
+	// requests counts HTTP model requests being answered now (a websocket
+	// stays open across turns, so it is not one).
+	requests atomic.Int64
 }
 
 // GatewayOption configures Gateway construction (tests).
@@ -249,6 +253,14 @@ func (g *Gateway) Close() error {
 	return nil
 }
 
+// InFlight is the number of HTTP model requests the gateway is answering.
+func (g *Gateway) InFlight() int {
+	if g == nil {
+		return 0
+	}
+	return int(g.requests.Load())
+}
+
 // Listening reports whether the gateway listener is bound.
 func (g *Gateway) Listening() bool {
 	if g == nil {
@@ -359,6 +371,10 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	if !endpointOK {
 		writeRouteError(w, http.StatusNotFound, ErrRoutePathMismatch)
 		return
+	}
+	if !isWebSocketUpgrade(req) {
+		g.requests.Add(1)
+		defer g.requests.Add(-1)
 	}
 	// Codex Responses-over-WebSocket: transparently proxy the Upgrade to the
 	// current Provider connection with credentials injected and every frame

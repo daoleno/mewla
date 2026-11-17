@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/brain"
-	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
@@ -30,11 +29,19 @@ import (
 // it finds in a shared state directory.
 var releaseBuild = ""
 
+// An update does not wait for Workers: Sessions live in the session host and
+// keep running while the daemon restarts. It waits only for a quiet point,
+// a moment when a restart cuts nothing the daemon itself carries (a held
+// permission decision, a model reply passing through Mewla, a message being
+// typed into Brain), and installs at the cap even without one.
 const (
-	autoUpdateInterval = 6 * time.Hour
+	autoUpdateInterval = time.Hour
 	autoUpdateFirst    = 2 * time.Minute
-	autoUpdateIdleWait = 5 * time.Minute
-	updateGate         = 60 * time.Second
+	// autoUpdateQuietPoll is how often a staged update looks for a quiet point.
+	autoUpdateQuietPoll = 15 * time.Second
+	// autoUpdateCap bounds the wait for a quiet point after staging.
+	autoUpdateCap = time.Hour
+	updateGate    = 60 * time.Second
 	// A failure that is not the new version's fault (a full disk) is not
 	// tried again automatically for a day.
 	transientRetryAfter = 24 * time.Hour
@@ -65,8 +72,8 @@ type updateHandover struct {
 
 func (h *updateHandover) Error() string { return "updating Mewla to " + h.Version }
 
-// daemonUpdater checks for a newer stable release and installs it when asked
-// or when the computer is idle.
+// daemonUpdater checks for a newer stable release, stages it, and installs it
+// at the first quiet point, at the cap, or at once when the person asks.
 type daemonUpdater struct {
 	version   string
 	supported bool
@@ -76,20 +83,42 @@ type daemonUpdater struct {
 	installed string
 
 	newClient func() (*selfupdate.Client, error)
-	idle      func() bool
+	// host is the session host's version and whether it waits for a restart
+	// (hostUpgrader); nil in tests.
+	host interface {
+		Status() hostStatus
+		RestartNow() error
+	}
+	// quiet names what a restart now would cut ("a permission answer"), ""
+	// when nothing would be.
+	quiet     func() string
 	handover  func(*updateHandover)
+	now       func() time.Time
 	interval  time.Duration
 	first     time.Duration
-	idleWait  time.Duration
+	quietPoll time.Duration
+	cap       time.Duration
 
-	mu       sync.Mutex
-	latest   string
-	checked  time.Time
-	updating bool
-	checkErr error
+	mu         sync.Mutex
+	latest     string
+	checked    time.Time
+	checkErr   error
+	staging    bool
+	staged     *stagedUpdate
+	waitingFor string
+	// updating: the person asked to update, or the handover has begun.
+	updating   bool
+	handedOver bool
 }
 
-func newDaemonUpdater(version, stateDir, addr, daemonID string, idle func() bool, handover func(*updateHandover)) *daemonUpdater {
+// stagedUpdate is a downloaded, verified release beside the installed binary.
+type stagedUpdate struct {
+	Version string
+	Path    string
+	At      time.Time
+}
+
+func newDaemonUpdater(version, stateDir, addr, daemonID string, quiet func() string, handover func(*updateHandover)) *daemonUpdater {
 	installed, _ := os.Executable()
 	if resolved, err := filepath.EvalSymlinks(installed); err == nil {
 		installed = resolved
@@ -99,8 +128,8 @@ func newDaemonUpdater(version, stateDir, addr, daemonID string, idle func() bool
 	platform.SweepReplaced(installed)
 	return &daemonUpdater{
 		version: version, supported: selfUpdateSupported(version) && installDirWritable(installed), stateDir: stateDir, addr: addr, daemonID: daemonID,
-		installed: installed, newClient: selfupdate.NewClient, idle: idle, handover: handover,
-		interval: autoUpdateInterval, first: autoUpdateFirst, idleWait: autoUpdateIdleWait,
+		installed: installed, newClient: selfupdate.NewClient, quiet: quiet, handover: handover, now: time.Now,
+		interval: autoUpdateInterval, first: autoUpdateFirst, quietPoll: autoUpdateQuietPoll, cap: autoUpdateCap,
 	}
 }
 
@@ -114,6 +143,18 @@ func (u *daemonUpdater) Status() server.DaemonUpdateStatus {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	status := server.DaemonUpdateStatus{Version: u.version, Supported: u.supported, Latest: u.latest, Updating: u.updating}
+	if u.staged != nil && u.waitingFor != "" && !u.updating {
+		status.WaitingFor = u.waitingFor
+		by := u.staged.At.Add(u.cap).UTC()
+		status.InstallBy = &by
+	}
+	if u.host != nil {
+		host := u.host.Status()
+		status.HostVersion, status.TerminalsRestart = host.Version, host.Restart
+		if host.Restart {
+			status.LiveTerminals = host.Terminals
+		}
+	}
 	if failure, ok := selfupdate.LastFailure(u.stateDir); ok && u.supported && failure.Version != u.version {
 		if failure.Permanent() {
 			status.Error = fmt.Sprintf("Mewla %s did not start; still on %s", failure.Version, u.version)
@@ -124,8 +165,9 @@ func (u *daemonUpdater) Status() server.DaemonUpdateStatus {
 	return status
 }
 
-// Run checks every few hours and installs a newer release once nothing is
-// working. It returns when ctx ends.
+// Run checks every hour, stages a newer release, and installs it at the first
+// quiet point or once the cap has passed, Workers running or not. It returns
+// when ctx ends or the daemon hands over.
 func (u *daemonUpdater) Run(ctx context.Context) {
 	if !u.supported {
 		return
@@ -138,7 +180,7 @@ func (u *daemonUpdater) Run(ctx context.Context) {
 		case <-time.After(wait):
 		}
 		u.mu.Lock()
-		due := time.Since(u.checked) >= u.interval
+		due := u.now().Sub(u.checked) >= u.interval
 		u.mu.Unlock()
 		if due {
 			if err := u.check(ctx); err != nil {
@@ -148,23 +190,50 @@ func (u *daemonUpdater) Run(ctx context.Context) {
 		u.mu.Lock()
 		pending := u.latest != "" && !u.heldBack()
 		u.mu.Unlock()
-		switch {
-		case !pending:
+		if !pending {
+			u.dropStaged()
 			wait = u.interval
-		case u.idle():
-			switch err := u.install(ctx, true); {
-			case err == nil:
-				return
-			case errors.Is(err, errNotIdle), errors.Is(err, errInProgress):
-				wait = u.idleWait
-			default:
-				log.Printf("update: %v", err)
-				wait = u.interval
-			}
-		default:
-			wait = u.idleWait
+			continue
 		}
+		staged, err := u.stage(ctx)
+		switch {
+		case errors.Is(err, errInProgress):
+			wait = u.quietPoll
+			continue
+		case err != nil:
+			log.Printf("update: %v", err)
+			wait = u.interval
+			continue
+		}
+		if u.installWhenQuiet(staged) {
+			return
+		}
+		wait = u.quietPoll
 	}
+}
+
+// installWhenQuiet hands over to a staged update when nothing would be cut,
+// or when the cap has passed; otherwise it records (and logs, once per
+// change) what the update waits for.
+func (u *daemonUpdater) installWhenQuiet(staged *stagedUpdate) bool {
+	reason := u.quiet()
+	by := staged.At.Add(u.cap)
+	if reason != "" && u.now().Before(by) {
+		u.mu.Lock()
+		changed := u.waitingFor != reason
+		u.waitingFor = reason
+		u.mu.Unlock()
+		if changed {
+			log.Printf("update: Mewla %s is ready and waits for %s; it installs by %s at the latest", staged.Version, reason, by.Local().Format("15:04"))
+		}
+		return false
+	}
+	if reason != "" {
+		log.Printf("update: still waiting for %s after %s; installing Mewla %s now", reason, u.cap, staged.Version)
+	} else {
+		log.Printf("update: nothing in flight; installing Mewla %s now", staged.Version)
+	}
+	return u.handOver(staged) == nil
 }
 
 // heldBack: the newest release failed to install earlier for a reason that
@@ -174,10 +243,7 @@ func (u *daemonUpdater) heldBack() bool {
 	return ok && failure.Version == u.latest && failure.HoldsAutomatic(time.Now())
 }
 
-var (
-	errNotIdle    = errors.New("a Worker started; waiting for it to finish")
-	errInProgress = errors.New("an update is already in progress")
-)
+var errInProgress = errors.New("an update is already in progress")
 
 func (u *daemonUpdater) check(ctx context.Context) error {
 	_, err := u.latestRelease(ctx)
@@ -196,7 +262,7 @@ func (u *daemonUpdater) latestRelease(ctx context.Context) (*selfupdate.Candidat
 	candidate, err := client.Latest(checkCtx, u.version)
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.checked, u.checkErr = time.Now(), err
+	u.checked, u.checkErr = u.now(), err
 	if err != nil {
 		return nil, err
 	}
@@ -217,82 +283,167 @@ func (u *daemonUpdater) Updating() bool {
 	return u.updating
 }
 
-// Install is the App's Update button.
+// Install is the App's Update button: it installs now, without waiting for a
+// quiet point.
 func (u *daemonUpdater) Install() error {
 	if !u.supported {
 		return server.ErrUpdateUnavailable
 	}
+	u.mu.Lock()
+	if u.updating {
+		u.mu.Unlock()
+		return nil
+	}
+	u.updating = true
+	u.mu.Unlock()
 	go func() {
-		if err := u.install(context.Background(), false); err != nil && !errors.Is(err, errInProgress) {
+		if err := u.installNow(context.Background()); err != nil {
+			u.mu.Lock()
+			if !u.handedOver {
+				u.updating = false
+			}
+			u.mu.Unlock()
 			log.Printf("update: %v", err)
 		}
 	}()
 	return nil
 }
 
-// install downloads, verifies and stages the newest release, then ends the
-// daemon so main can hand over to it. Only one runs at a time. On any error
-// nothing has changed. auto is the periodic path, which re-checks that the
-// computer is still idle once the download is staged.
-func (u *daemonUpdater) install(ctx context.Context, auto bool) (err error) {
-	u.mu.Lock()
-	if u.updating {
-		u.mu.Unlock()
-		return errInProgress
+// RestartTerminals is the app's "Restart terminals" tap.
+func (u *daemonUpdater) RestartTerminals() error {
+	if u.host == nil {
+		return server.ErrUpdateUnavailable
 	}
-	u.updating = true
+	return u.host.RestartNow()
+}
+
+// installNow stages (or reuses what is staged) and hands over at once. A
+// download the periodic path has under way is waited for, not repeated.
+func (u *daemonUpdater) installNow(ctx context.Context) error {
+	deadline := u.now().Add(10 * time.Minute)
+	for {
+		staged, err := u.stage(ctx)
+		u.mu.Lock()
+		handedOver := u.handedOver
+		u.mu.Unlock()
+		if errors.Is(err, errInProgress) && !handedOver && u.now().Before(deadline) {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		return u.handOver(staged)
+	}
+}
+
+// stage downloads, verifies and stages the newest release beside the
+// installed binary, once per version: a staged update is reused until it
+// installs or a newer release replaces it. Nothing installed changes.
+func (u *daemonUpdater) stage(ctx context.Context) (*stagedUpdate, error) {
+	u.mu.Lock()
+	if u.staging || u.handedOver {
+		u.mu.Unlock()
+		return nil, errInProgress
+	}
+	if st := u.staged; st != nil && st.Version == u.latest && fileExists(st.Path) {
+		u.mu.Unlock()
+		return st, nil
+	}
+	u.staging = true
 	u.mu.Unlock()
 	defer func() {
-		if err != nil {
-			u.mu.Lock()
-			u.updating = false
-			u.mu.Unlock()
-		}
+		u.mu.Lock()
+		u.staging = false
+		u.mu.Unlock()
 	}()
 	candidate, err := u.latestRelease(ctx)
 	if err != nil {
-		return fmt.Errorf("check for update: %w", err)
+		return nil, fmt.Errorf("check for update: %w", err)
 	}
 	if candidate == nil {
-		return server.ErrUpdateUnavailable
+		return nil, server.ErrUpdateUnavailable
 	}
 	client, err := u.newClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	downloadCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	binary, err := client.DownloadBinary(downloadCtx, *candidate)
 	if err != nil {
-		return fmt.Errorf("download update: %w", err)
+		return nil, fmt.Errorf("download update: %w", err)
 	}
-	staged, err := selfupdate.Stage(u.installed, binary, candidate.Version)
+	path, err := selfupdate.Stage(u.installed, binary, candidate.Version)
 	if err != nil {
-		return fmt.Errorf("stage update: %w", err)
+		return nil, fmt.Errorf("stage update: %w", err)
 	}
-	if auto && !u.idle() {
-		// The download took minutes; something started meanwhile.
-		_ = os.Remove(staged)
-		return errNotIdle
+	staged := &stagedUpdate{Version: candidate.Version, Path: path, At: u.now()}
+	u.mu.Lock()
+	u.staged, u.waitingFor = staged, ""
+	u.mu.Unlock()
+	return staged, nil
+}
+
+// dropStaged removes a staged update nothing offers any more (it was rolled
+// back, or the release was withdrawn).
+func (u *daemonUpdater) dropStaged() {
+	u.mu.Lock()
+	staged := u.staged
+	if u.handedOver || u.staging {
+		staged = nil
+	} else {
+		u.staged, u.waitingFor = nil, ""
 	}
+	u.mu.Unlock()
+	if staged != nil {
+		_ = os.Remove(staged.Path)
+	}
+}
+
+// handOver ends the daemon so main can hand over to the staged binary. Only
+// one runs.
+func (u *daemonUpdater) handOver(staged *stagedUpdate) error {
+	u.mu.Lock()
+	if u.handedOver {
+		u.mu.Unlock()
+		return errInProgress
+	}
+	u.handedOver, u.updating, u.waitingFor = true, true, ""
+	u.mu.Unlock()
 	u.handover(&updateHandover{
-		Installed: u.installed, Staged: staged, Version: candidate.Version,
+		Installed: u.installed, Staged: staged.Path, Version: staged.Version,
 		Addr: u.addr, DaemonID: u.daemonID, StateDir: u.stateDir,
 	})
 	return nil
 }
 
-// workersIdle: the Brain host and every Worker have stopped working.
-func workersIdle(ready func() bool, workers func() []*classifier.Worker) bool {
-	if !ready() {
-		return false
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// updateQuietPoint names what a daemon restart now would cut, "" when
+// nothing would. Running Workers are not on the list: their Sessions live in
+// the session host and keep running. What lives in the daemon is: a
+// permission decision a hook holds open (Brain's or the person's answer would
+// find no question), a model reply streaming through Mewla's gateway or a
+// Session route (cut mid-reply), and a message being typed into Brain (its
+// delivery would become uncertain).
+func updateQuietPoint(heldApprovals, modelRequests, brainInputs func() int) string {
+	switch {
+	case heldApprovals != nil && heldApprovals() > 0:
+		return "a permission answer"
+	case modelRequests != nil && modelRequests() > 0:
+		return "a model reply"
+	case brainInputs != nil && brainInputs() > 0:
+		return "a message to Brain"
 	}
-	for _, worker := range workers() {
-		if worker.State == classifier.StateRunning {
-			return false
-		}
-	}
-	return true
+	return ""
 }
 
 // probeUpdatedDaemon is the health gate: the daemon at addr is the same

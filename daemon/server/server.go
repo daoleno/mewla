@@ -558,6 +558,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/mcp", s.handleMCP)
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
 	mux.HandleFunc("/daemon-update", s.handleDaemonUpdate)
+	mux.HandleFunc("/daemon-update/terminals", s.handleRestartTerminals)
 	mux.HandleFunc("/phone", s.handlePhone)
 	mux.HandleFunc("/iphone", s.handleIPhone)
 	mux.HandleFunc("/phone/device", s.handlePhoneDevice)
