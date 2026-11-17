@@ -1,0 +1,94 @@
+name: Desktop release build caches
+description: >
+  What a release's daemon and web UI builds would otherwise make from scratch: the pinned Zig, the
+  static libghostty-vt for one target, the browser terminal's WebAssembly VT, and one target's Go
+  build cache. Shared by release-artifacts.yml and the warmer so their keys cannot drift. Only
+  native-cache.yml on main saves them (save-caches: 'true'); a tag run reads main's caches, and
+  nothing can read a tag's. Each engine and the wasm carry a manifest of what they were made from:
+  the build scripts use a restored one only when it matches the lock and its own sha256, and build
+  it again otherwise. The Go cache only skips compiling unchanged packages.
+
+inputs:
+  save-caches:
+    description: "'true' only in native-cache.yml on main"
+    required: false
+    default: "false"
+  lib:
+    description: "libghostty-vt desktop target (linux_amd64_musl, linux_arm64_musl, windows_amd64, darwin_arm64), or empty"
+    required: false
+    default: ""
+  go-target:
+    description: "daemon target whose Go build cache to restore (linux-amd64, linux-arm64, windows-amd64; Linux runners), or empty"
+    required: false
+    default: ""
+  web:
+    description: "'true' for the browser terminal's WebAssembly VT"
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # The pinned Zig's tarball only: scripts/lib/zig.sh checks it against the lock's sha256 and
+    # unpacks it on every run. ziglang.org once took 2 min to serve it to a release job.
+    - name: Restore the pinned Zig
+      if: ${{ inputs.save-caches != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: .cache/mewla-tools/*.tar.xz
+        key: zig-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/lib/zig.sh') }}
+    - name: Restore or save the pinned Zig
+      if: ${{ inputs.save-caches == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: .cache/mewla-tools/*.tar.xz
+        key: zig-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/lib/zig.sh') }}
+
+    - name: Restore the terminal engine (${{ inputs.lib }})
+      if: ${{ inputs.lib != '' && inputs.save-caches != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/mewla/ghostty-release/${{ inputs.lib }}
+        key: ghostty-release-v1-${{ inputs.lib }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-desktop.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig.sh') }}
+    - name: Restore or save the terminal engine (${{ inputs.lib }})
+      if: ${{ inputs.lib != '' && inputs.save-caches == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/mewla/ghostty-release/${{ inputs.lib }}
+        key: ghostty-release-v1-${{ inputs.lib }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-desktop.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig.sh') }}
+
+    - name: Restore the browser terminal's VT
+      if: ${{ inputs.web == 'true' && inputs.save-caches != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/mewla/ghostty-web
+        key: ghostty-web-v1-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-web.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig.sh', 'client/native/terminal/TerminalVt.*', 'client/native/terminal/TerminalGlyphs.*') }}
+    - name: Restore or save the browser terminal's VT
+      if: ${{ inputs.web == 'true' && inputs.save-caches == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/mewla/ghostty-web
+        key: ghostty-web-v1-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-web.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig.sh', 'client/native/terminal/TerminalVt.*', 'client/native/terminal/TerminalGlyphs.*') }}
+
+    # One target's compiled packages and zig cc's objects. Keyed on the dependencies, restored by
+    # prefix: a release after a go.sum change still starts from the previous objects.
+    - name: Restore the ${{ inputs.go-target }} Go build cache
+      if: ${{ inputs.go-target != '' && inputs.save-caches != 'true' }}
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/.cache/mewla/zig-cc
+        key: go-release-v1-${{ inputs.go-target }}-${{ hashFiles('daemon/go.sum', 'scripts/build-daemon-linux.sh', 'native/terminal-vt/native.lock.json') }}
+        restore-keys: |
+          go-release-v1-${{ inputs.go-target }}-
+    - name: Restore or save the ${{ inputs.go-target }} Go build cache
+      if: ${{ inputs.go-target != '' && inputs.save-caches == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/.cache/mewla/zig-cc
+        key: go-release-v1-${{ inputs.go-target }}-${{ hashFiles('daemon/go.sum', 'scripts/build-daemon-linux.sh', 'native/terminal-vt/native.lock.json') }}
+        restore-keys: |
+          go-release-v1-${{ inputs.go-target }}-

@@ -92,6 +92,7 @@ grep -q 'System.getenv("MEWLA_ANDROID_KEYSTORE_PASSWORD")' "$GRADLE_APP" || {
   exit 1
 }
 
+SKIP=()
 if [[ $AAB -eq 1 ]]; then
   CHANNEL=play
   TASK=:app:bundleProductionRelease
@@ -100,12 +101,15 @@ else
   CHANNEL=github
   TASK=:app:assembleProductionRelease
   OUTPUT="$ROOT/client/android/app/build/outputs/apk/production/release/app-production-release.apk"
+  # Lint is the test track's: client.yml's assemblePreviewRelease runs lintVital over the same
+  # sources on main. The GitHub APK release does not wait for it again.
+  SKIP=(-x :app:lintVitalProductionRelease)
 fi
 # Never pick up an earlier build's output.
 rm -f "$OUTPUT"
 (
   cd "$ROOT/client/android"
-  ./gradlew --no-daemon --console=plain --build-cache "$TASK" \
+  ./gradlew --no-daemon --console=plain --build-cache "$TASK" "${SKIP[@]}" \
     -Pmewla.channel="$CHANNEL" -Pmewla.abis=arm64-v8a
 )
 if [[ ! -f "$OUTPUT" ]]; then

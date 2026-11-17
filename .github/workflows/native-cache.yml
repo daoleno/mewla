@@ -2,9 +2,9 @@ name: Warm native build caches
 
 # GitHub scopes a cache to the ref that saved it. A release tag can read main's
 # caches, but nothing can read a tag's. This workflow is the only writer of the
-# caches in .github/actions/android-native and .github/actions/ios-native: it
-# runs the same native builds (debug-signed or unsigned, no secrets) on main so
-# the next tag starts warm.
+# caches in .github/actions/android-native, .github/actions/ios-native and
+# .github/actions/desktop-release-cache: it runs the same native builds
+# (debug-signed or unsigned, no secrets) on main so the next tag starts warm.
 on:
   push:
     branches: [main]
@@ -30,6 +30,13 @@ on:
       - scripts/lib/zig-xcode-compat.sh
       - scripts/check-zig-xcode-compat.sh
       - .github/actions/ios-native/**
+      - scripts/build-libghostty-desktop.sh
+      - scripts/build-libghostty-web.sh
+      - scripts/build-daemon-linux.sh
+      - client/native/terminal/TerminalVt.*
+      - client/native/terminal/TerminalGlyphs.*
+      - daemon/go.sum
+      - .github/actions/desktop-release-cache/**
       - .github/workflows/native-cache.yml
   # Unused caches are evicted after 7 days.
   schedule:
@@ -67,6 +74,16 @@ jobs:
       - name: ccache statistics
         if: always()
         run: ccache --show-stats
+      # Saved after this step: dependencies, the build cache and this Gradle's own jars only.
+      - name: Prune the Gradle home before it is saved
+        run: |
+          set -euo pipefail
+          current="$(sed -n 's#^distributionUrl=.*/gradle-\(.*\)-bin\.zip$#\1#p' client/android/gradle/wrapper/gradle-wrapper.properties)"
+          [[ -n "$current" ]]
+          rm -rf ~/.gradle/caches/*/transforms
+          for d in ~/.gradle/caches/[0-9]*; do [[ "$(basename "$d")" == "$current" ]] || rm -rf "$d"; done
+          for d in ~/.gradle/wrapper/dists/gradle-*-bin; do [[ "$(basename "$d")" == "gradle-$current-bin" ]] || rm -rf "$d"; done
+          du -sh ~/.gradle/caches ~/.gradle/wrapper
 
   zig-xcode-workaround:
     name: Zig/Xcode workaround is still needed
@@ -95,3 +112,80 @@ jobs:
         uses: ./.github/actions/ios-native
         with:
           save-caches: "true"
+
+  # What release-artifacts.yml's daemon builds restore: the pinned Zig, each target's libghostty-vt
+  # and Go build cache. The daemon is built as a release builds it, against a stand-in web UI (the
+  # Go packages compile the same; only the embedded files differ).
+  desktop:
+    name: Release daemon inputs (${{ matrix.target }})
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-amd64, lib: linux_amd64_musl }
+          - { target: linux-arm64, lib: linux_arm64_musl }
+          - { target: windows-amd64, lib: windows_amd64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          # Its own Go cache only (below): CI's entry is CI's.
+          cache: false
+      - name: Zig, the terminal engine and the Go cache
+        uses: ./.github/actions/desktop-release-cache
+        with:
+          save-caches: "true"
+          lib: ${{ matrix.lib }}
+          go-target: ${{ matrix.target }}
+      - name: A stand-in web UI
+        run: |
+          set -euo pipefail
+          mkdir -p daemon/webui/dist/terminal
+          echo '<base href="/">' | gzip -9 -n > daemon/webui/dist/index.html.gz
+          printf 'stand-in' | gzip -9 -n > daemon/webui/dist/terminal/mewla-vt.wasm.gz
+      - name: Build the daemon as a release does
+        env:
+          MEWLA_VERSION: 0.0.0-cache
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: |
+          export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/${{ matrix.lib }}"
+          ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/bin" --targets "${{ matrix.target }}" --web-ui prebuilt
+
+  web:
+    name: Browser terminal VT (WebAssembly)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zig and the browser terminal's VT
+        uses: ./.github/actions/desktop-release-cache
+        with:
+          save-caches: "true"
+          web: "true"
+      - name: Build the WebAssembly VT as build-web-ui.sh does
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: ./scripts/build-libghostty-web.sh
+
+  darwin:
+    name: Release macOS terminal engine
+    if: github.ref == 'refs/heads/main'
+    # The image release-artifacts.yml's daemon-darwin job builds on.
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zig and the terminal engine
+        uses: ./.github/actions/desktop-release-cache
+        with:
+          save-caches: "true"
+          lib: darwin_arm64
+      - name: Build libghostty-vt for darwin_arm64 as a release does
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: ./scripts/build-libghostty-desktop.sh --out "$HOME/.cache/mewla/ghostty-release/darwin_arm64" --targets darwin_arm64

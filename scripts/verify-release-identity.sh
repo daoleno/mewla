@@ -279,8 +279,8 @@ if "GH_REPO" not in wf or "github.repository" not in wf:
     errors.append("release-artifacts.yml publish path must set GH_REPO from github.repository")
 for required in (
     # One publication of the complete signed set, only after every check of the run
-    # (builds, platform runs, the Android upgrade, signing) passed.
-    'needs: [validate, daemon]',
+    # (builds, platform runs, the Android launch, signing) passed.
+    'needs: [validate, daemon-build]',
     'needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, stage]',
     'needs: [validate, release-ready]',
     'RELEASE_IS_PRERELEASE=true',
