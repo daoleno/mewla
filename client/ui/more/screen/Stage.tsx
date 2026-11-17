@@ -407,7 +407,7 @@ function StageSwitcher(props: { stage: Stage; serverName: string; ownScreen?: { 
   return (
     <Sheet testID="stage-switcher" open={stage.switcher()} onOpenChange={({ open }) => !open && stage.setSwitcher(false)} closeOnSwipe popupClass="max-h-[80%] rounded-t-(--radius-sheet) bg-sheet pb-8 pt-3 shadow-float" sidePadding={16} backdropClass="bg-scrim">
       <View class="gap-1 px-1">
-        <Text class="px-3 pb-1 text-caption font-semibold text-muted-foreground line-clamp-1">{props.serverName}</Text>
+        <View class="px-3 pb-1"><Text class="text-caption font-semibold text-muted-foreground line-clamp-1">{props.serverName}</Text></View>
         {keyedRows(stage, (agent) => (
           <Button testID={`stage-agent-${agent.id}`} accessibilityLabel={agent.name} selected={stage.current()?.id === agent.id} onPress={() => stage.pick(agent.id)}
             class="min-h-[56px] flex-row items-center gap-3 rounded-2xl px-3 active:bg-accent">
