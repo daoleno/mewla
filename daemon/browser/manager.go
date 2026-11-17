@@ -254,6 +254,26 @@ func (m *Manager) countLocked(worker string) int {
 	return n
 }
 
+// WindowKey is the extension's id for a Worker's window, "" when it has none.
+// A Worker has one window (Opened replaces an older one).
+func (m *Manager) WindowKey(worker string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, w := range m.keys {
+		if w == worker {
+			return k
+		}
+	}
+	return ""
+}
+
+// WorkerOf is the Worker (or window name) the extension's window key is for.
+func (m *Manager) WorkerOf(key string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.keys[key]
+}
+
 // Closed takes a window off the Screen when the extension reports it closed.
 func (m *Manager) Closed(key string) {
 	if m.closed.Load() {

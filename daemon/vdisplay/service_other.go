@@ -47,3 +47,6 @@ func (s *Service) Detach() {}
 
 // StableRoot has no directory to give: only Linux has an agent screen.
 func StableRoot(string) (string, error) { return "", nil }
+
+func (*Service) SetReflower(Reflower)    {}
+func (*Service) PageHost(string, string) {}

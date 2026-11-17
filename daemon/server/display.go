@@ -94,7 +94,10 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 // handleDisplayViewer bridges an authenticated WebSocket to one agent's
 // display, speaking RFB to the viewer as the Mac's Screen does. What the
 // person does is told to the agent. A {"type":"hold","on":true} message holds
-// the agent off until released or the socket closes.
+// the agent off until released or the socket closes. While held, a
+// {"type":"fit","width":w,"height":h,"dpr":d} message lays the agent's browser
+// window out for the person's screen (width 0 puts it back); the socket answers
+// {"type":"reflow","on":bool,"host":"…"} then and whenever that changes.
 func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	device, ok := s.authenticateRequest(w, r, "mewla-display-view")
 	if !ok {
@@ -130,6 +133,27 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer view.Close()
+	if view.Notify != nil {
+		view.Notify(func(state vdisplay.Reflow) {
+			sendJSON(map[string]any{"type": "reflow", "on": state.On, "host": state.Host})
+		})
+	}
+	// Fits run one at a time, off the read loop (a window change takes the
+	// extension a moment); only the newest waiting one runs.
+	fits := make(chan [3]float64, 1)
+	if view.Fit != nil {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case f := <-fits:
+					state := view.Fit(int(f[0]), int(f[1]), f[2])
+					sendJSON(map[string]any{"type": "reflow", "on": state.On, "host": state.Host})
+				}
+			}
+		}()
+	}
 
 	viewerReader, viewerWriter := io.Pipe()
 	defer viewerReader.Close()
@@ -162,6 +186,10 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 					Type string          `json:"type"`
 					T    json.RawMessage `json:"t"`
 					On   bool            `json:"on"`
+					// fit
+					Width  float64 `json:"width"`
+					Height float64 `json:"height"`
+					DPR    float64 `json:"dpr"`
 				}
 				if json.Unmarshal(data, &msg) != nil {
 					break
@@ -172,6 +200,16 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 					_ = write(websocket.TextMessage, raw)
 				case "hold":
 					view.Hold(msg.On)
+				case "fit":
+					if view.Fit == nil {
+						sendJSON(map[string]any{"type": "reflow", "on": false})
+						break
+					}
+					select {
+					case <-fits:
+					default:
+					}
+					fits <- [3]float64{msg.Width, msg.Height, msg.DPR}
 				}
 			}
 		}

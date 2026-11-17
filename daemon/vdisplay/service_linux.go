@@ -75,6 +75,9 @@ type Service struct {
 	mu       sync.Mutex
 	shared   *sharedScreen
 	displays map[string]*workerDisplay
+
+	// reflower lays a Worker's browser window out for the person who holds it (SetReflower).
+	reflower Reflower
 }
 
 // sharedScreen is the one display, its picture client and its window mover.
@@ -112,6 +115,16 @@ type workerDisplay struct {
 	handback time.Time   // when the person last gave it back, not yet told
 	held     time.Time   // when the person began to hold it
 	pointer  image.Point // where the agent last had the pointer, on the monitor
+
+	// While the person holds the display from a screen of another shape, its
+	// browser window is laid out for that screen (Viewer.Fit): reflowed is the
+	// page's area on the screen, reflowHost its host, reflowBottom how far down
+	// the screen the window reaches; notify are the open views' listeners.
+	reflowed     image.Rectangle
+	reflowHost   string
+	reflowBottom int
+	notify       map[int]func(Reflow)
+	nextView     int
 }
 
 // NewService keeps its displays' files under root; empty means a short private
@@ -165,6 +178,13 @@ func (s *Service) SetAlive(alive func(worker string) bool) { s.alive = alive }
 
 // SetNames tells the service the Workers' names, for Screen's list.
 func (s *Service) SetNames(names func(worker string) string) { s.names = names }
+
+// SetReflower lets a held display's browser window be laid out for the person's screen.
+func (s *Service) SetReflower(r Reflower) {
+	s.mu.Lock()
+	s.reflower = r
+	s.mu.Unlock()
+}
 
 // SetIdleClose closes, from now on, every monitor nobody has used for after.
 // closed is told first, whenever Mewla closes a monitor (idle, or given to
@@ -654,16 +674,21 @@ func (s *Service) relayout(scr *sharedScreen) error {
 	s.mu.Lock()
 	last := 0
 	screens := []Screen{{ID: 1, X: 0, W: MonitorWidth, H: MonitorHeight}}
+	var bottoms []int
 	for _, w := range s.displays {
 		if w.screen != scr {
 			continue
 		}
 		screens = append(screens, Screen{ID: uint32(w.slot + 1), X: w.slot * MonitorWidth, W: MonitorWidth, H: MonitorHeight})
 		last = max(last, w.slot)
+		w.mu.Lock()
+		bottoms = append(bottoms, w.reflowBottom)
+		w.mu.Unlock()
 	}
 	s.mu.Unlock()
 	sort.Slice(screens, func(i, j int) bool { return screens[i].X < screens[j].X })
-	return scr.client.SetLayout((last+1)*MonitorWidth, MonitorHeight, screens)
+	// The monitors stay as they are; the screen grows below them while a window is laid out for a phone.
+	return scr.client.SetLayout((last+1)*MonitorWidth, layoutHeight(bottoms), screens)
 }
 
 // live is the Worker's display if it is up; one whose Worker has ended is
@@ -905,18 +930,34 @@ func (s *Service) View(worker string) (*Viewer, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, monitorRelay, closeView := NewMonitorView(w.screen.client, func() image.Rectangle { return w.rect })
-	w.mu.Lock()
-	w.viewers++
-	w.mu.Unlock()
-	holding := false // guarded by w.mu
-	hold := func(on bool) {
+	conn, monitorRelay, closeView := NewMonitorView(w.screen.client, func() image.Rectangle {
 		w.mu.Lock()
 		defer w.mu.Unlock()
+		return viewRect(w.rect, w.reflowed)
+	})
+	w.mu.Lock()
+	w.viewers++
+	w.nextView++
+	id := w.nextView
+	w.mu.Unlock()
+	holding := false // guarded by w.mu
+	var fitMu sync.Mutex
+	hold := func(on bool) {
+		w.mu.Lock()
 		if on == holding {
+			w.mu.Unlock()
 			return
 		}
 		holding = on
+		if !on {
+			w.mu.Unlock()
+			// Letting go puts the window back as the agent left it.
+			fitMu.Lock()
+			s.endReflow(w)
+			fitMu.Unlock()
+			w.mu.Lock()
+		}
+		defer w.mu.Unlock()
 		if on {
 			if w.person == 0 {
 				w.held = time.Now()
@@ -948,11 +989,38 @@ func (s *Service) View(worker string) (*Viewer, error) {
 			})
 		},
 		Hold: hold,
+		Fit: func(width, height int, dpr float64) Reflow {
+			fitMu.Lock()
+			defer fitMu.Unlock()
+			w.mu.Lock()
+			held := holding
+			now := Reflow{On: !w.reflowed.Empty(), Host: w.reflowHost}
+			w.mu.Unlock()
+			if !held {
+				// Only the view that holds the display lays it out (or puts it back): another person's view
+				// of it, on a desktop or in the float, is told how it is.
+				return now
+			}
+			if width <= 0 {
+				s.endReflow(w)
+				return Reflow{}
+			}
+			return s.reflow(w, width, height, dpr)
+		},
+		Notify: func(f func(Reflow)) {
+			w.mu.Lock()
+			if w.notify == nil {
+				w.notify = map[int]func(Reflow){}
+			}
+			w.notify[id] = f
+			w.mu.Unlock()
+		},
 		Close: func() {
 			once.Do(func() {
 				closeView()
 				hold(false)
 				w.mu.Lock()
+				delete(w.notify, id)
 				w.viewers--
 				// Watching counts as using it: the idle time starts when the view closes.
 				w.seen = time.Now()

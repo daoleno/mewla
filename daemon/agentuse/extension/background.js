@@ -106,6 +106,10 @@ function tell(message) {
   try { port?.postMessage(message); } catch (error) { debugLog('host gone', error); }
 }
 
+const hostOf = url => {
+  try { return new URL(url).host; } catch { return ''; }
+};
+
 const options_bounds = bounds => ({
   left: Math.round(bounds.left),
   top: Math.round(bounds.top),
@@ -123,6 +127,8 @@ class AgentWindow {
     this.connection = undefined;
     this.closed = false;
     this._onUpdated = (tabId, changeInfo, tab) => {
+      if (this.reflowed && changeInfo.url !== undefined && tab.active && (tab.windowId === this.windowId || this.reflowed.popups.has(tab.windowId)))
+        tell({ type: 'page', id: this.id, host: hostOf(changeInfo.url) });
       if (tab.windowId !== this.windowId || this.connection?.attachedTabs.has(tabId))
         return;
       if (changeInfo.url !== undefined && !isNonDebuggableUrl(changeInfo.url))
@@ -140,6 +146,12 @@ class AgentWindow {
     this._onRemoved = windowId => {
       if (windowId === this.windowId)
         this.close('The agent window was closed');
+      this.reflowed?.popups.delete(windowId);
+    };
+    // While the window is laid out for the phone, a tab that comes to the front is zoomed the same way.
+    this._onActivated = ({ tabId, windowId }) => {
+      if (this.reflowed && windowId === this.windowId)
+        void this._zoom(tabId, this.reflowed.zoom).catch(() => {});
     };
   }
 
@@ -148,7 +160,82 @@ class AgentWindow {
     const opener = await chrome.tabs.get(tab.openerTabId).catch(() => undefined);
     if (opener?.windowId !== this.windowId || !this.bounds)
       return;
-    await chrome.windows.update(tab.windowId, { ...this.bounds, state: 'normal' }).catch(() => {});
+    await chrome.windows.update(tab.windowId, { ...(this.reflowed?.window ?? this.bounds), state: 'normal' }).catch(() => {});
+    if (this.reflowed) {
+      this.reflowed.popups.add(tab.windowId);
+      await this._zoom(tab.id, this.reflowed.zoom);
+    }
+  }
+
+  /**
+   * Lays the window out for the person's phone while they hold it: the page's content takes `bounds.width` x
+   * `bounds.height` pixels with the window's top left at `bounds.left`, `bounds.top`, and the tab is zoomed by
+   * `zoom`, so the page lays itself out at the phone's width and is drawn at its sharpness. zoom 0 restores the
+   * window's place and the tabs' zoom. Answers with the content's area in the screen's pixels and the page's host.
+   */
+  async reflow({ req, bounds, zoom } = {}) {
+    try {
+      if (!(zoom > 0)) {
+        await this._restore();
+        tell({ type: 'reflowed', id: this.id, req });
+        return;
+      }
+      const [tab] = await chrome.tabs.query({ windowId: this.windowId, active: true });
+      if (!tab)
+        throw new Error('the agent window has no page');
+      const before = await chrome.windows.get(this.windowId);
+      this.reflowed ??= { saved: { left: before.left, top: before.top, width: before.width, height: before.height }, tabs: new Set(), popups: new Set() };
+      this.reflowed.zoom = zoom;
+      await this._zoom(tab.id, zoom);
+      // What the window draws above and beside its page (tabs, toolbar, an infobar) stays at its own size.
+      const chromeTop = Math.max(0, before.height - (tab.height ?? before.height));
+      const chromeSide = Math.max(0, before.width - (tab.width ?? before.width));
+      const window = { left: Math.round(bounds.left), top: Math.round(bounds.top), width: Math.round(bounds.width) + chromeSide, height: Math.round(bounds.height) + chromeTop };
+      await chrome.windows.update(this.windowId, { ...window, state: 'normal' });
+      // The toolbar can change height with the window: measure once more and make the page exactly the size asked.
+      let placed = await chrome.windows.get(this.windowId);
+      let page = await chrome.tabs.get(tab.id);
+      const short = Math.round(bounds.height) - (page.height ?? 0);
+      if (short !== 0 && page.height) {
+        window.height += short;
+        await chrome.windows.update(this.windowId, { height: window.height });
+        placed = await chrome.windows.get(this.windowId);
+        page = await chrome.tabs.get(tab.id);
+      }
+      this.reflowed.window = window;
+      const content = {
+        left: placed.left + (placed.width - (page.width ?? placed.width)),
+        top: placed.top + (placed.height - (page.height ?? placed.height)),
+        width: page.width ?? placed.width,
+        height: page.height ?? placed.height,
+      };
+      tell({ type: 'reflowed', id: this.id, req, bounds: content, host: hostOf(page.url) });
+    } catch (error) {
+      tell({ type: 'reflowed', id: this.id, req, message: String(error?.message || error) });
+    }
+  }
+
+  async _zoom(tabId, zoom) {
+    await chrome.tabs.setZoomSettings(tabId, { mode: 'automatic', scope: 'per-tab' }).catch(() => {});
+    await chrome.tabs.setZoom(tabId, zoom);
+    this.reflowed?.tabs.add(tabId);
+  }
+
+  async _restore() {
+    const reflowed = this.reflowed;
+    if (!reflowed)
+      return;
+    this.reflowed = undefined;
+    // Every tab of the window and its popups, not only the ones zoomed here: one may have come in since.
+    const tabs = new Set(reflowed.tabs);
+    for (const windowId of [this.windowId, ...reflowed.popups])
+      for (const tab of await chrome.tabs.query({ windowId }).catch(() => []))
+        tabs.add(tab.id);
+    for (const tabId of tabs)
+      await chrome.tabs.setZoom(tabId, 0).catch(() => {});
+    for (const windowId of reflowed.popups)
+      await chrome.windows.update(windowId, { ...this.bounds, state: 'normal' }).catch(() => {});
+    await chrome.windows.update(this.windowId, { ...(this.bounds ?? reflowed.saved), state: 'normal' }).catch(() => {});
   }
 
   async open({ relayUrl, bounds, label }) {
@@ -194,6 +281,7 @@ class AgentWindow {
     chrome.tabs.onCreated.addListener(this._onCreated);
     chrome.tabs.onUpdated.addListener(this._onUpdated);
     chrome.windows.onRemoved.addListener(this._onRemoved);
+    chrome.tabs.onActivated.addListener(this._onActivated);
     try {
       this.connection = await openRelayConnection(relayUrl, this);
     } catch (error) {
@@ -251,6 +339,7 @@ class AgentWindow {
     chrome.tabs.onCreated.removeListener(this._onCreated);
     chrome.tabs.onUpdated.removeListener(this._onUpdated);
     chrome.windows.onRemoved.removeListener(this._onRemoved);
+    chrome.tabs.onActivated.removeListener(this._onActivated);
     this.connection?.close(reason);
     sessions.delete(this.id);
     agentWindowIds.delete(this.windowId);
@@ -296,6 +385,14 @@ async function onHostMessage(message) {
     case 'input':
       await sessions.get(message.id)?.input(message.input);
       return;
+    case 'reflow': {
+      const session = sessions.get(message.id);
+      if (session)
+        await session.reflow(message);
+      else
+        tell({ type: 'reflowed', id: message.id, req: message.req, message: 'the agent window is gone' });
+      return;
+    }
     case 'ping':
       tell({ type: 'pong', sessions: [...sessions.keys()], version: chrome.runtime.getManifest().version });
       return;
@@ -346,6 +443,9 @@ function connectHost() {
     const error = chrome.runtime.lastError?.message;
     debugLog('native host disconnected', error);
     port = undefined;
+    // Nobody holds a window for a phone while Mewla is gone: put laid-out windows back for the agents.
+    for (const session of sessions.values())
+      void session._restore().catch(() => {});
     if (agentBrowser) {
       // Mewla is restarting or updating: the agents' windows keep working, for a while.
       keepTimer ??= setTimeout(() => {

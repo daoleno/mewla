@@ -58,6 +58,12 @@ type hostMessage struct {
 	Agent bool `json:"agent,omitempty"`
 	// Input, in an input message, is the person's input to the window's page.
 	Input *PageInput `json:"input,omitempty"`
+	// Req pairs a reflow with its reflowed answer.
+	Req string `json:"req,omitempty"`
+	// Zoom, in a reflow, is the tab's zoom; 0 restores the window.
+	Zoom float64 `json:"zoom,omitempty"`
+	// Host, in a reflowed or page message, is the active tab's host name.
+	Host string `json:"host,omitempty"`
 }
 
 // PageInput is one input event from the person, in Screen, to an agent
@@ -192,11 +198,16 @@ type Bridge struct {
 	// Agent, when set and on, puts agents' windows in the agent browser on the
 	// virtual screen instead of the person's Chrome.
 	Agent *AgentBrowser
+	// PageHost, when set, hears that a reflowed window's page moved to another
+	// host (its connection id, the new host name).
+	PageHost func(id, host string)
 
 	mu        sync.Mutex
 	host      *bridgeHost
 	agentHost *bridgeHost
 	waiting   map[string]chan hostMessage
+	// replies wait for the extension's answers to reflows, by request.
+	replies map[string]chan hostMessage
 	// open are the agent browser's windows, by connection id, with the Worker.
 	open   map[string]string
 	nextID int
@@ -420,6 +431,10 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 				}
 				b.askToReload(host, m.Version)
 			}
+		case "reflowed":
+			b.reflowReply(m)
+		case "page":
+			b.pageHost(m)
 		case "connected", "error", "closed":
 			if m.Type != "connected" {
 				b.release(m.ID)
