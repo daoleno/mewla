@@ -138,6 +138,10 @@ type oauthSpec struct {
 	// Codec names a registered token codec for services that do not follow
 	// the standard token endpoint.
 	Codec string
+	// PublicViaAccount: the published client (Public) redeems and renews its
+	// tokens through the Mewla account service, so connecting with it needs
+	// this computer signed in to a Mewla account.
+	PublicViaAccount bool
 }
 
 // mcpSpec is a service reached over its official remote MCP server. Its tools
@@ -333,7 +337,8 @@ func buildCatalog() []*entry {
 				ReturnOK: func(c OAuthClientConfig) bool {
 					return appReturn(c.RedirectURL) && c.ClientSecret == "" || validCallback(c.RedirectURL) && c.ClientSecret != ""
 				},
-				Static: &staticOAuth{Issuer: "https://slack.com", AuthURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access", AuthMethods: []string{"client_secret_post"}, ScopeParam: "user_scope"},
+				Static:           &staticOAuth{Issuer: "https://slack.com", AuthURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access", AuthMethods: []string{"client_secret_post"}, ScopeParam: "user_scope"},
+				PublicViaAccount: true,
 				Scopes: func(writes bool) []string {
 					scopes := []string{"channels:read", "channels:history", "search:read"}
 					if writes {

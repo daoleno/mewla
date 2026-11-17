@@ -18,6 +18,7 @@ import (
 func expiredOAuthAccount(t *testing.T, integration string, answer func(*http.Request) (*http.Response, error)) (*Manager, *record) {
 	t.Helper()
 	m := testManager(t, answer)
+	signedInSlack(m)
 	r := &record{Account: Account{ID: "acct", Integration: integration, Name: "daoleno", Enabled: true, Status: "connected", AuthMethod: "oauth"}, OAuth: &oauthAccount{ClientID: "client", TokenURL: "https://auth.example/token", AuthURL: "https://auth.example/authorize"}, Grants: map[string]string{}}
 	m.records[r.Account.ID] = r
 	raw, _ := json.Marshal(oauthSecret{Token: &oauth2.Token{AccessToken: "old-access", RefreshToken: "refresh", Expiry: time.Now().Add(-time.Minute)}})
@@ -37,6 +38,10 @@ func answer(status int, body string) func(*http.Request) (*http.Response, error)
 // worked: a refresh that never got an answer marked the account expired.
 // Only the service refusing the refresh does now.
 func TestRefreshWithoutAnAnswerKeepsTheSignIn(t *testing.T) {
+	// The Slack accounts are Mewla's published app ("client").
+	previous := SlackPublicClientID
+	SlackPublicClientID = "client"
+	defer func() { SlackPublicClientID = previous }()
 	for name, c := range map[string]struct {
 		integration string
 		answer      func(*http.Request) (*http.Response, error)
@@ -50,8 +55,21 @@ func TestRefreshWithoutAnAnswerKeepsTheSignIn(t *testing.T) {
 		"slack connection dropped":    {"slack", func(*http.Request) (*http.Response, error) { return nil, errors.New("connection reset") }, false},
 		"slack 502":                   {"slack", answer(502, `upstream`), false},
 		"slack invalid_refresh_token": {"slack", answer(200, `{"ok":false,"error":"invalid_refresh_token"}`), true},
+		// The account service refusing this computer, its limit or Slack out of
+		// reach is not Slack's answer about the sign-in.
+		"slack service signed out":  {"slack", nil, false},
+		"slack service limited":     {"slack", nil, false},
+		"slack computer signed out": {"slack", nil, false},
 	} {
 		m, r := expiredOAuthAccount(t, c.integration, c.answer)
+		switch name {
+		case "slack service signed out":
+			m.accountService.(*fakeAccountService).err = errors.New("remote access is signed out")
+		case "slack service limited":
+			m.accountService.(*fakeAccountService).err = errors.New("rate_limited")
+		case "slack computer signed out":
+			m.accountService.(*fakeAccountService).signedIn = false
+		}
 		_, err := m.accountToken(context.Background(), r)
 		if err == nil {
 			t.Fatalf("%s: refresh succeeded", name)

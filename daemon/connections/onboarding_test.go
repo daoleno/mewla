@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/daoleno/mewla/daemon/slacktoken"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -192,8 +193,12 @@ func TestNativePKCEExchangeAndIdempotentFinish(t *testing.T) {
 }
 
 func TestSlackPublicPKCEAndRotatingRefresh(t *testing.T) {
+	previous := SlackPublicClientID
+	SlackPublicClientID = "owned-public"
+	defer func() { SlackPublicClientID = previous }()
 	m, _ := New(t.TempDir())
 	m.networkOwned = false
+	service := signedInSlack(m)
 	step := 0
 	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		_ = req.ParseForm()
@@ -232,6 +237,11 @@ func TestSlackPublicPKCEAndRotatingRefresh(t *testing.T) {
 	if saved.Token.RefreshToken != "refresh-two" {
 		t.Fatal("rotated refresh token was not saved")
 	}
+	// Mewla's public app has no secret here: both grants went through the
+	// account service, which holds it.
+	if strings.Join(service.calls, " ") != slacktoken.ExchangePath+" "+slacktoken.RefreshPath {
+		t.Fatalf("account service calls = %v", service.calls)
+	}
 }
 
 // A Slack client that signs in with its secret refreshes with it too: Slack
@@ -240,6 +250,7 @@ func TestSlackPublicPKCEAndRotatingRefresh(t *testing.T) {
 func TestSlackSecretClientRefreshesWithItsSecret(t *testing.T) {
 	m, _ := New(t.TempDir())
 	m.networkOwned = false
+	service := signedInSlack(m)
 	var forms []url.Values
 	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		_ = req.ParseForm()
@@ -268,6 +279,9 @@ func TestSlackSecretClientRefreshesWithItsSecret(t *testing.T) {
 	}
 	if len(forms) != 2 {
 		t.Fatalf("token requests = %d, want exchange + refresh", len(forms))
+	}
+	if len(service.calls) != 0 {
+		t.Fatalf("an operator client went through the account service: %v", service.calls)
 	}
 	for i, form := range forms {
 		if form.Get("client_id") != "operator" || form.Get("client_secret") != "operator-secret" {
@@ -630,6 +644,9 @@ func TestDynamicRegistrationBrandingFallsBack(t *testing.T) {
 // A refused refresh tells Chat once, and names the fix that works: a client
 // refusal (bad_client_secret) is not cured by signing in again.
 func TestRefusedRefreshTellsChatOnce(t *testing.T) {
+	previous := SlackPublicClientID
+	SlackPublicClientID = "public"
+	defer func() { SlackPublicClientID = previous }()
 	for name, tc := range map[string]struct {
 		code, title string
 	}{
@@ -642,6 +659,7 @@ func TestRefusedRefreshTellsChatOnce(t *testing.T) {
 			m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"ok":false,"error":"` + tc.code + `"}`))}, nil
 			})}
+			signedInSlack(m)
 			var notices []SignInLost
 			m.SetSignInLost(func(n SignInLost) { notices = append(notices, n) })
 			r := &record{Account: Account{ID: "slack", Integration: "slack", Name: "Team · me", Status: "connected", Endpoint: "https://slack.com/api"}, OAuth: &oauthAccount{ClientID: "public", TokenURL: "https://slack.com/api/oauth.v2.access", RedirectURL: NativeReturnRelay}}

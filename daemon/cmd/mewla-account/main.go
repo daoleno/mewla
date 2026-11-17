@@ -28,6 +28,7 @@ import (
 	"github.com/daoleno/mewla/daemon/friendsvc"
 	"github.com/daoleno/mewla/daemon/pluginreturn"
 	"github.com/daoleno/mewla/daemon/proxyproto"
+	"github.com/daoleno/mewla/daemon/slacktoken"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -66,6 +67,7 @@ func run(args []string) error {
 	var proxyProtocol bool
 	var friendsDB string
 	var media friendsMediaFlags
+	var slackClientID string
 
 	flags := flag.NewFlagSet("mewla-account", flag.ContinueOnError)
 	flags.StringVar(&address, "addr", ":8080", "HTTP listen address")
@@ -92,6 +94,7 @@ func run(args []string) error {
 	flags.StringVar(&tlsCacheDir, "tls-cache", "", "certificate cache directory for -tls-addr (default: acme/ next to -db)")
 	flags.BoolVar(&proxyProtocol, "proxy-protocol", false, "require a PROXY protocol v1 header on -tls-addr connections (only behind the relay's -sni-route-proxy-protocol)")
 	flags.StringVar(&friendsDB, "friends-db", "", "SQLite database of Mewla Friends, mounted under "+friendsvc.PathPrefix+" (off when empty; people are the signed-in Mewla accounts)")
+	flags.StringVar(&slackClientID, "slack-client-id", "", "Mewla's Slack app client id (default $MEWLA_ACCOUNT_SLACK_CLIENT_ID); its secret is $MEWLA_ACCOUNT_SLACK_CLIENT_SECRET. Without both, Slack sign-in answers slack_unavailable and everything else runs")
 	media.register(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -212,6 +215,16 @@ func run(args []string) error {
 	if friends != nil {
 		handler = withFriends(handler, friends)
 	}
+	if slackClientID == "" {
+		slackClientID = strings.TrimSpace(os.Getenv("MEWLA_ACCOUNT_SLACK_CLIENT_ID"))
+	}
+	slack := slacktoken.New(slacktoken.Config{
+		ClientID:     slackClientID,
+		ClientSecret: strings.TrimSpace(os.Getenv("MEWLA_ACCOUNT_SLACK_CLIENT_SECRET")),
+		RedirectURI:  publicURL + pluginreturn.Path,
+		Accounts:     slackAccounts{store},
+	})
+	handler = withSlack(handler, slack.Handler())
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -331,6 +344,27 @@ func (d accountDirectory) AccountForKey(ctx context.Context, key string) (friend
 		created = identity.ProviderCreatedAt
 	}
 	return friendsvc.Account{ID: identity.ID, Login: identity.Login, CreatedAt: created, Disabled: identity.Disabled}, true, nil
+}
+
+// slackAccounts lets a computer signed in to an enabled account use the
+// Slack exchange.
+type slackAccounts struct{ store *account.Store }
+
+func (d slackAccounts) AccountForKey(ctx context.Context, key string) (string, bool, error) {
+	identity, ok, err := d.store.IdentityForKey(ctx, key)
+	if err != nil || !ok || identity.Disabled {
+		return "", false, err
+	}
+	return identity.ID, true, nil
+}
+
+// withSlack serves the Slack token exchange under its prefix and everything
+// else as before.
+func withSlack(base, slack http.Handler) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle(slacktoken.PathPrefix+"/", slack)
+	mux.Handle("/", base)
+	return mux
 }
 
 // withFriends serves Friends under its prefix and everything else as before.

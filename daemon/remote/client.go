@@ -137,6 +137,14 @@ func (client *Client) DeleteAccount(ctx context.Context) error {
 	return err
 }
 
+// SlackToken asks the account service to redeem or renew a Slack token
+// (slacktoken.ExchangePath or RefreshPath) and returns Slack's own JSON.
+func (client *Client) SlackToken(ctx context.Context, path string, body any) (json.RawMessage, error) {
+	var out json.RawMessage
+	_, err := client.do(ctx, http.MethodPost, path, body, &out)
+	return out, err
+}
+
 func (client *Client) do(ctx context.Context, method, path string, body any, out any) (int, error) {
 	var raw []byte
 	if body != nil {
