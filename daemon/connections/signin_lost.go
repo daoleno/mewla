@@ -43,7 +43,9 @@ func signInLostNotice(r *record, code string, at time.Time) SignInLost {
 		// Signing in again works only until the next renewal: the service
 		// refuses Mewla's client, not the person's sign-in.
 		n.Title = service + " sign-in can't renew"
-		n.Body = service + " refused to renew “" + account + "” for Mewla's app (" + code + "). Reconnecting it in Extensions works until its next renewal; Mewla's app needs a fix."
+		// The fix is Mewla's to ship, never a setting in the service: say
+		// so, so nobody goes looking for one.
+		n.Body = service + " refused to renew “" + account + "” for Mewla's app (" + code + "). This is Mewla's to fix, not a setting in " + service + ": update Mewla, then Reconnect it in Extensions if it still says so."
 	}
 	return n
 }

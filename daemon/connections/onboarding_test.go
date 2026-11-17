@@ -678,6 +678,15 @@ func TestRefusedRefreshTellsChatOnce(t *testing.T) {
 			if n.AccountID != "slack" || n.Title != tc.title || !strings.Contains(n.Body, "“Team · me”") || !strings.Contains(n.Body, "Extensions") {
 				t.Fatalf("notice = %+v", n)
 			}
+			if tc.code == "bad_client_secret" && !strings.Contains(n.Body, "update Mewla") {
+				t.Fatalf("a refusal of Mewla's client must point at updating Mewla: %q", n.Body)
+			}
+			// What an agent reads when it uses Slack now names the fix, so it
+			// does not invent one in Slack's settings.
+			_, err := m.Handle(context.Background(), Request{Action: "refresh", ID: "slack"})
+			if !errors.Is(err, errAuth) || !strings.Contains(err.Error(), "mewla update") || !strings.Contains(err.Error(), "Mewla's own Slack app") {
+				t.Fatalf("Slack call after the refusal = %v", err)
+			}
 		})
 	}
 }
