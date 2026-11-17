@@ -378,7 +378,10 @@ func TestForwardSlowUploadDownloadBackpressureAndCancellationConverge(t *testing
 	for _, direction := range []string{"upload", "download"} {
 		t.Run(direction, func(t *testing.T) {
 			server := newTestRelay(t)
-			server.config.IdleTimeout = 30 * time.Millisecond
+			// Far shorter than the transfer (128 KiB at 1 KiB per 2 ms or more), so only progress keeps the
+			// stream alive; far longer than a busy runner's scheduling stall. At 30 ms one 40 ms pause of the
+			// reader closed the stream (macOS CI, 11-17): the relay was right, the budget was not.
+			server.config.IdleTimeout = 150 * time.Millisecond
 			leftRaw, leftPeer := net.Pipe()
 			rightRaw, rightPeer := net.Pipe()
 			leftRelay := &slowWriteConnection{
@@ -416,6 +419,7 @@ func TestForwardSlowUploadDownloadBackpressureAndCancellationConverge(t *testing
 				writeResult <- writeAll(writer, payload)
 			}()
 
+			started := time.Now()
 			received := make([]byte, 0, len(payload))
 			chunk := make([]byte, 16<<10)
 			for len(received) < len(payload) {
@@ -435,6 +439,9 @@ func TestForwardSlowUploadDownloadBackpressureAndCancellationConverge(t *testing
 			}
 			if err := <-writeResult; err != nil {
 				t.Fatalf("slow %s write: %v", direction, err)
+			}
+			if elapsed := time.Since(started); elapsed <= server.config.IdleTimeout {
+				t.Fatalf("slow %s took %v, not longer than the %v idle timeout it must outlast", direction, elapsed, server.config.IdleTimeout)
 			}
 			if !bytes.Equal(received, payload) {
 				t.Fatalf(
