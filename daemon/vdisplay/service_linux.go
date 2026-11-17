@@ -679,15 +679,18 @@ func (s *Service) relayout(scr *sharedScreen) error {
 		if w.screen != scr {
 			continue
 		}
-		screens = append(screens, Screen{ID: uint32(w.slot + 1), X: w.slot * MonitorWidth, W: MonitorWidth, H: MonitorHeight})
-		last = max(last, w.slot)
 		w.mu.Lock()
-		bottoms = append(bottoms, w.reflowBottom)
+		bottom := w.reflowBottom
 		w.mu.Unlock()
+		// A monitor whose window is laid out for a phone is as tall as that window while it is (Chrome keeps a
+		// window at least half on a monitor); every other one keeps its size.
+		screens = append(screens, Screen{ID: uint32(w.slot + 1), X: w.slot * MonitorWidth, W: MonitorWidth, H: layoutHeight([]int{bottom})})
+		last = max(last, w.slot)
+		bottoms = append(bottoms, bottom)
 	}
 	s.mu.Unlock()
 	sort.Slice(screens, func(i, j int) bool { return screens[i].X < screens[j].X })
-	// The monitors stay as they are; the screen grows below them while a window is laid out for a phone.
+	// The screen grows below the monitors while a window is laid out for a phone.
 	return scr.client.SetLayout((last+1)*MonitorWidth, layoutHeight(bottoms), screens)
 }
 
