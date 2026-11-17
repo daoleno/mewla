@@ -109,6 +109,7 @@ func (m *Manager) listMovedTools() {
 func (m *Manager) EnableLocalCloudCLI() {
 	m.cloud = newCloudRuntime(filepath.Join(filepath.Dir(m.path), "cli"))
 	m.cloud.enableUpdates()
+	m.watchAWSSignIns()
 	m.cacheListLocked()
 }
 

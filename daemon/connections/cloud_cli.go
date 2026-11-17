@@ -36,6 +36,8 @@ type cloudAccount struct {
 	Configuration  string     `json:"configuration,omitempty"`
 	Configurations []string   `json:"configurations,omitempty"`
 	Profile        string     `json:"profile"`
+	// Notified keys the last sign-in notice Chat got (see noteAWSSignIns).
+	Notified string `json:"notified,omitempty"`
 }
 type cloudOutput struct {
 	Stdout   string `json:"stdout"`

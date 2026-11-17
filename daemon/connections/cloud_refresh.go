@@ -185,6 +185,9 @@ func (m *Manager) refreshCloudProfiles() {
 			if info != nil {
 				m.cloudInfo[id] = info
 			}
+			if id == "aws" {
+				m.noteAWSSignIns(time.Now())
+			}
 			_ = m.save()
 			m.cacheListLocked()
 			m.mu.Unlock()
