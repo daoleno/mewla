@@ -674,6 +674,14 @@ func isWebSocketUpgrade(req *http.Request) bool {
 	return strings.Contains(strings.ToLower(req.Header.Get("Connection")), "upgrade")
 }
 
+// streamCopyFlush streams an upstream body to the client. It returns the
+// client's write error. An upstream body that breaks before its end aborts the
+// client response instead of returning: once headers are sent, a handler that
+// returns ends a chunked response cleanly, and the client takes the truncated
+// bytes for a whole answer (a cut zstd SSE stream reaches Claude Code as
+// ZstdDecompressionError, a cut plain one as a reply that silently stops).
+// The abort breaks the client connection the way the upstream broke, so the
+// client sees a lost connection and retries.
 func streamCopyFlush(w http.ResponseWriter, src io.Reader) error {
 	flusher, canFlush := w.(http.Flusher)
 	buf := make([]byte, 32*1024)
@@ -691,7 +699,7 @@ func streamCopyFlush(w http.ResponseWriter, src io.Reader) error {
 			if readErr == io.EOF {
 				return nil
 			}
-			return readErr
+			panic(http.ErrAbortHandler)
 		}
 	}
 }
