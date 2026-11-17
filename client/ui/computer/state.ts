@@ -61,7 +61,8 @@ setInterval(() => {
   if (untracked(connection) === "connected") readComputerUpdate();
 }, UPDATE_REREAD_MS);
 
-function readComputerUpdate(): void {
+/** Re-reads the current computer's update, e.g. after it refused a tap on a row that was out of date. */
+export function readComputerUpdate(): void {
   const server = untracked(current);
   if (!server) return;
   void getDaemonUpdate(server).then((next) => current()?.id === server.id && computerUpdate.set(next)).catch(() => {});

@@ -3,7 +3,7 @@ import { chatUpdateRow } from "../../core/update/chatRow";
 import { installDaemonUpdate, restartComputerTerminals } from "../../core/settings/computer";
 import { PillButton } from "../kit/kit";
 import { Icon } from "../kit/Icon";
-import { computerUpdate } from "../computer/state";
+import { computerUpdate, readComputerUpdate } from "../computer/state";
 import { connection, current } from "../session";
 
 /** The row at the foot of Brain's Chat about the current computer's Mewla (core/update/chatRow), while connected. */
@@ -24,6 +24,9 @@ async function act(): Promise<void> {
     computerUpdate.set(row.action === "update" ? { ...next, updating: true } : { ...next, terminals_restart: false });
   } catch (error) {
     failed.set(error instanceof Error && error.message ? error.message : "Couldn't reach the computer.");
+    // The row may be out of date (the terminals already restarted): read
+    // what the computer says now, which clears it.
+    readComputerUpdate();
   } finally {
     busy.set(false);
   }
