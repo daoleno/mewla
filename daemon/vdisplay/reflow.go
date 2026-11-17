@@ -15,6 +15,8 @@ const (
 	maxReflowHeight = 2400
 	// reflowChrome is room left above the page for the window's own tabs and toolbar.
 	reflowChrome = 160
+	// minReflowWidth is the narrowest window Chrome makes: a phone's page is zoomed to at least this wide.
+	minReflowWidth = 500
 )
 
 // reflowSize is the window's page size in pixels and its zoom for a person's
@@ -29,6 +31,7 @@ func reflowSize(width, height int, dpr float64) (w, h int, zoom float64, ok bool
 	zoom = math.Min(zoom, float64(MonitorWidth)/float64(width))
 	zoom = math.Min(zoom, float64(maxReflowHeight-reflowChrome)/float64(height))
 	zoom = math.Max(zoom, 1)
+	zoom = math.Max(zoom, math.Min(float64(minReflowWidth)/float64(width), float64(MonitorWidth)/float64(width)))
 	// A screen wider than the monitor at 1x: lay the page out on the whole monitor instead.
 	w = min(int(math.Round(float64(width)*zoom)), MonitorWidth)
 	h = min(int(math.Round(float64(height)*zoom)), maxReflowHeight-reflowChrome)

@@ -273,7 +273,7 @@ function keyedRows(stage: Stage, row: (agent: StageAgent) => JSX.Element): JSX.E
 /** The page's host while the agent's window is laid out for this view: the real one, whatever the page says. */
 export function DomainChip(props: { host: string }) {
   return (
-    <View testID="stage-domain" accessibilityLabel={`Page on ${props.host}`} class="h-8 min-w-0 shrink flex-row items-center gap-1.5 rounded-full bg-white/15 px-3">
+    <View testID="stage-domain" accessibilityLabel={`Page on ${props.host}`} class="h-8 min-w-0 max-w-[132px] shrink flex-row items-center gap-1.5 rounded-full bg-white/15 px-3">
       <Icon name="lock" size={12} tone="onBlack" />
       <Text class="min-w-0 shrink text-sub font-semibold text-white line-clamp-1">{props.host}</Text>
     </View>
@@ -410,7 +410,7 @@ function StageSwitcher(props: { stage: Stage; serverName: string; ownScreen?: { 
         {keyedRows(stage, (agent) => (
           <Button testID={`stage-agent-${agent.id}`} accessibilityLabel={agent.name} selected={stage.current()?.id === agent.id} onPress={() => stage.pick(agent.id)}
             class="min-h-[56px] flex-row items-center gap-3 rounded-2xl px-3 active:bg-accent">
-            <View class="size-8 items-center justify-center rounded-full bg-muted"><Text class="text-sub font-bold">{Array.from(agent.name.trim())[0]?.toUpperCase() ?? "A"}</Text></View>
+            <View class="size-8 items-center justify-center rounded-full bg-track"><Text class="text-sub font-bold">{Array.from(agent.name.trim())[0]?.toUpperCase() ?? "A"}</Text></View>
             <View class="min-w-0 flex-1">
               <Text class="text-body font-semibold line-clamp-1">{agent.name}</Text>
               <If when={state(agent)}><Text class={`text-caption line-clamp-1 ${state(agent) === "You have it" ? "text-seal" : "text-muted-foreground"}`}>{state(agent)}</Text></If>
@@ -421,7 +421,7 @@ function StageSwitcher(props: { stage: Stage; serverName: string; ownScreen?: { 
         <If when={props.ownScreen}>{(own) => (
           <Button testID="stage-own-screen" accessibilityLabel={`Screen of ${own().title}`} onPress={() => { stage.setSwitcher(false); own().open(); }}
             class="min-h-[56px] flex-row items-center gap-3 rounded-2xl px-3 active:bg-accent">
-            <View class="size-8 items-center justify-center rounded-full bg-muted"><Icon name="desktop" size={16} tone="ink" /></View>
+            <View class="size-8 items-center justify-center rounded-full bg-track"><Icon name="desktop" size={16} tone="ink" /></View>
             <Text class="min-w-0 flex-1 text-body font-semibold line-clamp-1">{own().title}</Text>
           </Button>
         )}</If>
