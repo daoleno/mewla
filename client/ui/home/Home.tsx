@@ -7,7 +7,7 @@ import { isAvailable as mobile } from "nsh/mobile";
 import { NavPage } from "../shell/NavPage";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
 import { createMessageEdit, EditChip, editOnTap } from "../chat/messageEdit";
-import { bringRequestBack, durableAnswered, RequestStack, requestsInView, threadRequests, threadSealed } from "../chat/RequestCard";
+import { bringRequestBack, durableAnswered, RequestStack, requestsInView, threadNewest, threadRequests, threadSealed } from "../chat/RequestCard";
 import { ChatTimeline } from "../chat/Timeline";
 import { derived, preparedRows } from "../kit/derived";
 import { ThreadWait } from "../chat/ThreadWait";
@@ -139,6 +139,7 @@ const threadRows = (threadId: string): ThreadRows => {
   return isBrainThreadCacheKey(made.cacheKey, threadId) ? made.rows : NO_ROWS;
 };
 const durableHere = durableAnswered(items);
+const newestHere = threadNewest(items);
 // What's New waits while a card here needs the person.
 effect(() => brainNeedsPerson.set(requestsHere().length > 0));
 /** The lines updates left (What's New), in Brain's current chat only; one object per line while it is the same. */
@@ -154,7 +155,7 @@ const updateLineRows = derived((): readonly UpdateLineItem[] => {
     return item;
   });
 });
-const sealedHere = threadSealed({ brain: true }, durableHere);
+const sealedHere = threadSealed({ brain: true }, durableHere, newestHere);
 
 function hostId(): string {
   return brain()?.host_worker?.id ?? "";
@@ -363,7 +364,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
           foot={{
             shown: () => !routedBrainThread() && (requestsHere().length > 0 || sealedHere().length > 0),
             render: (anchor) => (
-              <RequestStack anchor={anchor} durable={durableHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
+              <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
                 onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
                 openLabel="Open" onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
             ),

@@ -27,6 +27,7 @@ describe("an answered request", () => {
     expect(answeredKeys(parsed)).toEqual(["prompt:mh-5935:c6cd9885f6ca"]);
     expect(sealedOfAnswered(parsed, () => "15:24")).toEqual({
       key: "prompt:mh-5935:c6cd9885f6ca", verb: "You chose", answer: "Yes", mono: false, title: record.asked, source: "Proof phone · 15:24", brain: false, workerId: "mh-5935",
+      at: Date.parse(record.answered_at), byBrain: false,
     });
   });
 

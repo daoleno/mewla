@@ -60,6 +60,10 @@ export interface SealedRequest {
   /** The threads it shows in: Brain's, and the Session that asked. */
   brain: boolean;
   workerId?: string;
+  /** When the computer recorded the answer (ms); a line sealed here waits for that record. */
+  at?: number;
+  /** Brain answered it: Brain's own step in its thread already says so. */
+  byBrain?: boolean;
 }
 
 export interface RequestCardsInput {
@@ -185,6 +189,29 @@ export function sealAction(card: RequestCard, optionLabel: string, deny: boolean
 /** Whether a sealed line shows in a thread. */
 export function sealedInThread(sealed: SealedRequest, thread: RequestThread): boolean {
   return thread.brain ? sealed.brain : sealed.workerId === thread.workerId;
+}
+
+/**
+ * The answered lines a thread's foot shows (the five newest): what was just answered, until the thread moves on.
+ * The foot is now, not history. A line the thread holds as its own answered row is that row; one Brain answered is
+ * Brain's own step in its thread; and once the thread has a row newer than the answer, the answer is history and the
+ * foot lets it go. Owner 2026-11-17: two "Approved" lines of a delegated Worker's command, which no thread holds as a
+ * row, stayed above Brain's composer for as long as the app ran, with no way to close them.
+ */
+export function footSealed(sealed: readonly SealedRequest[], thread: RequestThread, held?: ReadonlySet<string>, newest?: number): SealedRequest[] {
+  return sealed
+    .filter((s) => sealedInThread(s, thread) && !held?.has(s.key) && !s.byBrain && !(s.at != null && newest != null && newest > s.at))
+    .slice(-5);
+}
+
+/** When a thread's newest row happened (ms): its last rows are its newest, a row placed where it was asked aside. */
+export function newestRowAt(rows: readonly { timestamp?: string }[]): number | undefined {
+  let newest: number | undefined;
+  for (let index = rows.length - 1; index >= 0 && index >= rows.length - 20; index -= 1) {
+    const at = rows[index]!.timestamp ? Date.parse(rows[index]!.timestamp!) : NaN;
+    if (Number.isFinite(at) && (newest == null || at > newest)) newest = at;
+  }
+  return newest;
 }
 
 /**
