@@ -142,6 +142,14 @@ func TestTakeoverLaysTheWindowOutForThePhone(t *testing.T) {
 	if w, h := readDesktopSize(t, v.Conn); w != 1082 || h != 1995 {
 		t.Fatalf("the viewer was told %dx%d", w, h)
 	}
+	// Then it is sent the page, all of it.
+	full := []byte{3, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	binary.BigEndian.PutUint16(full[6:], 1082)
+	binary.BigEndian.PutUint16(full[8:], 1995)
+	_, _ = out.Write(full)
+	if got := readPixels(t, v.Conn); got != 1082*1995 {
+		t.Fatalf("the viewer was sent %d pixels of the page", got)
+	}
 	s.PageHost("w1", "accounts.example.com")
 	if got := <-heard; got.Host != "accounts.example.com" {
 		t.Fatalf("heard %+v after the page moved", got)
@@ -199,4 +207,39 @@ func readDesktopSize(t *testing.T, r io.Reader) (int, int) {
 	}
 	t.Fatal("no DesktopSize")
 	return 0, 0
+}
+
+// readPixels reads one update of Raw rectangles and says how many pixels it had.
+func readPixels(t *testing.T, r io.Reader) int {
+	t.Helper()
+	done := make(chan int, 1)
+	go func() {
+		head := make([]byte, 4)
+		if _, err := io.ReadFull(r, head); err != nil {
+			done <- -1
+			return
+		}
+		n := 0
+		for range int(binary.BigEndian.Uint16(head[2:])) {
+			rect := make([]byte, 12)
+			if _, err := io.ReadFull(r, rect); err != nil {
+				done <- -1
+				return
+			}
+			w, h := int(binary.BigEndian.Uint16(rect[4:])), int(binary.BigEndian.Uint16(rect[6:]))
+			if _, err := io.ReadFull(r, make([]byte, w*h*4)); err != nil {
+				done <- -1
+				return
+			}
+			n += w * h
+		}
+		done <- n
+	}()
+	select {
+	case n := <-done:
+		return n
+	case <-time.After(5 * time.Second):
+		t.Fatal("no update")
+		return 0
+	}
 }
