@@ -144,7 +144,8 @@ export function createStage(opts: { server: () => StoredServer | null; active: (
         session.set(null);
         return;
       }
-      const next = new RemoteSession(server, { route: displayRoute(id), align: "center", reflow: true });
+      // From a phone (not a desktop or a wide window), holding lays the agent's page out for the phone.
+      const next = new RemoteSession(server, { route: displayRoute(id), align: "center", reflow: !wide() && !platform.desktop });
       session.set(next);
       next.connect();
     });
