@@ -86,6 +86,7 @@ func (s *Service) reflow(w *workerDisplay, width, height int, dpr float64) Reflo
 		s.endReflow(w)
 		return Reflow{}
 	}
+	log.Printf("display: laid %s's window out for a %dx%d view at %.3fx: page %v", w.worker, width, height, zoom, content)
 	w.mu.Lock()
 	w.reflowed = content.Intersect(image.Rect(w.rect.Min.X, 0, w.rect.Max.X, maxReflowHeight))
 	w.reflowHost = host

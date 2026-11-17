@@ -227,10 +227,12 @@ func (m *monitorView) flush() error {
 		if _, err := m.out.Write(out[:]); err != nil {
 			return err
 		}
+		// The next update is all of the new picture. The request stays open for it: the viewer's next one may
+		// already have come in while the size went out, and must not be lost.
 		m.mu.Lock()
 		m.size = r.Size()
 		m.shadow = nil
-		m.pending = false
+		m.req, m.incr = image.Rect(0, 0, w, h), false
 		m.mu.Unlock()
 		return nil
 	}
@@ -251,7 +253,8 @@ func (m *monitorView) flush() error {
 	var rects []image.Rectangle
 	for ty := req.Min.Y / cropTile * cropTile; ty < req.Max.Y; ty += cropTile {
 		runStart := -1
-		for tx := req.Min.X / cropTile * cropTile; tx <= req.Max.X; tx += cropTile {
+		// One step past the last tile closes a run that reaches the right edge, wherever that edge falls.
+		for tx := req.Min.X / cropTile * cropTile; ; tx += cropTile {
 			changed := false
 			if tx < req.Max.X {
 				t := image.Rect(tx, ty, tx+cropTile, ty+cropTile).Intersect(req).Intersect(image.Rect(0, 0, w, h))
@@ -263,6 +266,9 @@ func (m *monitorView) flush() error {
 			case !changed && runStart >= 0:
 				rects = append(rects, image.Rect(runStart, ty, tx, ty+cropTile).Intersect(req).Intersect(image.Rect(0, 0, w, h)))
 				runStart = -1
+			}
+			if tx >= req.Max.X {
+				break
 			}
 		}
 	}
