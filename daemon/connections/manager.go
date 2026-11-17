@@ -371,6 +371,8 @@ func (m *Manager) Handle(parent context.Context, q Request) (response Response, 
 		return m.runCloud(ctx, q)
 	case "cloud_rename":
 		return m.renameAWSProfile(ctx, q)
+	case "cloud_session_length":
+		return m.setCloudSessionLength(q)
 	case "cloud_delete":
 		return m.deleteCloudProfile(ctx, q)
 	case "oauth_configure":

@@ -32,6 +32,9 @@ const NativeReturnRelay = pluginreturn.Origin + pluginreturn.Path
 
 type ConnectFlow struct {
 	CodeRequired bool `json:"code_required,omitempty"`
+	// PortalRequired: adding an AWS account needs the organization's access
+	// portal URL (IAM Identity Center) first, or the choice to use aws login.
+	PortalRequired bool `json:"portal_required,omitempty"`
 	// SetupRequired: the CLI needs a one-time client from the person, pasted as the code.
 	SetupRequired    bool      `json:"setup_required,omitempty"`
 	InstallManual    bool      `json:"install_manual,omitempty"`
@@ -69,6 +72,10 @@ type connectFlow struct {
 	allowWrites bool
 	// renewID is the account a "sign in again" started from.
 	renewID string
+	// ssoSession is the AWS sso-session an Identity Center sign-in is for;
+	// ssoAdd: it adds profiles for the accounts it may use.
+	ssoSession string
+	ssoAdd     bool
 	// jobCancel stops a background job the flow runs (Tailscale's browser).
 	jobCancel context.CancelFunc
 	dryRun    bool
@@ -180,7 +187,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 	if !ok {
 		return Response{}, errors.New("This connection expired. Connect again.")
 	}
-	if f.profile != "" {
+	// A cloud CLI sign-in names its profile; adding AWS accounts from Identity
+	// Center names its sso-session (or still waits for its portal).
+	if f.profile != "" || f.ssoAdd {
 		return m.continueCloud(ctx, q, f)
 	}
 	if f.Integration == "tailscale" {

@@ -499,3 +499,69 @@ describe("Needs fixing reads at a glance (owner 11-14)", () => {
     expect(c.asked.some((r) => r.action === "connect_start")).toBe(false);
   });
 });
+
+describe("AWS accounts last as long as the organization allows (owner 11-17: AWS expiring daily)", () => {
+  const awsCatalog = [{ id: "aws", name: "AWS", available: true, setup_url: "", description: "Cloud accounts" }];
+  test("adding an account asks for the organization's access portal and shows the code to approve; aws login is the fallback", async () => {
+    const c = computer({ name: "extensions-service", id: "aws" }, (request) => {
+      if (request.action === "list") return { catalog: awsCatalog, accounts: [] };
+      const input = request.input as Record<string, unknown> | undefined;
+      if (request.action === "connect_start" && input?.sso_start_url) return { flow: { id: "p2", integration: "aws", status: "waiting", user_code: "QRST-WXYZ", authorization_url: "https://us-east-1.signin.aws/platform/authorize?request_uri=x", expires: expires() } };
+      if (request.action === "connect_start" && input?.aws_login) return { flow: { id: "p3", integration: "aws", status: "waiting", code_required: true, authorization_url: "https://us-east-1.signin.aws.amazon.com/v1/authorize?state=s", expires: expires() } };
+      if (request.action === "connect_start") return { flow: { id: "p1", integration: "aws", status: "waiting", portal_required: true, expires: expires() } };
+      if (request.action === "connect_status" && request.flow_id === "p3") return { flow: { id: "p3", integration: "aws", status: "waiting", code_required: true, authorization_url: "https://us-east-1.signin.aws.amazon.com/v1/authorize?state=s", expires: expires() } };
+      if (request.action === "connect_status") return { flow: { id: request.flow_id, integration: "aws", status: "waiting", user_code: "QRST-WXYZ", expires: expires() } };
+      return { flow: { id: request.flow_id, integration: "aws", status: "cancelled", expires: expires() } };
+    });
+    const app = await open(HARNESS, c.options);
+    await pressWhenEnabled(app, "id:service-connect");
+    await app.waitFor("id:aws-portal-card");
+    expect(app.shows("id:aws-portal-region")).toBe(false);
+    await app.type("id:aws-portal-url", "https://d-1234567890.awsapps.com/start");
+    // A d-… portal does not name its Region: it is asked for.
+    await app.waitFor("id:aws-portal-region");
+    await app.type("id:aws-portal-region", "eu-west-1");
+    await pressWhenEnabled(app, "id:aws-portal-continue");
+    await app.waitFor("id:device-code");
+    expect(app.texts()).toContain("QRST-WXYZ");
+    expect(c.asked.find((r) => r.action === "connect_start" && (r.input as Record<string, unknown>)?.sso_start_url)?.input).toEqual({ integration: "aws", sso_start_url: "https://d-1234567890.awsapps.com/start", sso_region: "eu-west-1" });
+    // Nothing is pasted back: the card has no field.
+    expect(app.shows("id:sign-in-code")).toBe(false);
+
+    await app.press("id:close-sign-in");
+    await pressWhenEnabled(app, "id:service-connect");
+    await app.waitFor("id:aws-login-instead");
+    await app.press("id:aws-login-instead");
+    await app.waitFor("id:sign-in-code");
+    expect(c.asked.filter((r) => r.action === "connect_start").at(-1)?.input).toEqual({ integration: "aws", aws_login: true });
+  });
+
+  test("an Identity Center profile shows when its sign-in really ends, and its length is set once from Identity Center's choices", async () => {
+    const at = new Date(Date.now() - 3_600_000).toISOString();
+    const profile = { id: "aws:prod", integration: "aws", name: "prod", profile: "prod", profile_kind: "SSO", profile_status: "valid", profile_signed_in_at: at, identity: "", enabled: true, status: "connected", history: [] };
+    let length = 0;
+    const c = computer({ name: "extensions-service", id: "aws" }, (request) => {
+      if (request.action === "list") return { catalog: awsCatalog, accounts: [length ? { ...profile, profile_session_length_s: length, profile_sign_in_by: new Date(Date.parse(at) + length * 1000).toISOString(), profile_sign_in_limit: "session" } : profile] };
+      if (request.action === "cloud_session_length") {
+        length = request.seconds as number;
+        return { account: { ...profile, profile_session_length_s: length, profile_sign_in_by: new Date(Date.parse(at) + length * 1000).toISOString(), profile_sign_in_limit: "session" } };
+      }
+      return {};
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:session-length-aws:prod");
+    // Not known yet: no end is invented (no "Up to 89d" from the client registration).
+    expect(app.texts().some((text) => /left|Ends in/.test(text))).toBe(false);
+    expect(app.texts()).toContain("Not known");
+    app.onDialog((dialog) => {
+      expect(dialog.title).toBe("As set in IAM Identity Center");
+      expect(dialog.buttons).toContain("90 days");
+      return "90 days";
+    });
+    await answering(app, () => app.press("id:session-length-aws:prod"));
+    await app.waitUntil(() => c.asked.some((r) => r.action === "cloud_session_length"));
+    expect(c.asked.find((r) => r.action === "cloud_session_length")).toEqual({ action: "cloud_session_length", id: "aws:prod", seconds: 7776000 });
+    await app.waitFor("text:90 days");
+    await app.waitUntil(() => app.texts().some((text) => text.includes("Ends in 89d")));
+  });
+});

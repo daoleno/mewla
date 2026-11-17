@@ -68,16 +68,26 @@ func TestAWSLegacySSOTimingOnly(t *testing.T) {
 	if at, _ = awsProfileExpiry(config, fields, nil); at != nil {
 		t.Fatal("modern SSO session without a cache got a session end")
 	}
-	// A refreshable token's own expiry rotates hourly; the client registration
-	// bounds every refresh, so it is the (upper-bound) end.
+	// Neither the hourly access token nor the 90-day client registration is
+	// when the sign-in ends: only its start and the organization's length are.
 	modern := sha1.Sum([]byte("modern"))
-	os.WriteFile(filepath.Join(dir, hex.EncodeToString(modern[:])+".json"), []byte(`{"expiresAt":"2026-11-03T10:00:00Z","refreshToken":"opaque","registrationExpiresAt":"2027-02-01T09:00:00Z"}`), 0600)
-	if at, kind = awsProfileExpiry(config, fields, nil); at == nil || at.Format(time.RFC3339) != "2027-02-01T09:00:00Z" || kind != "maximum" {
-		t.Fatalf("modern SSO end = %v %q", at, kind)
+	os.WriteFile(filepath.Join(dir, hex.EncodeToString(modern[:])+".json"), []byte(`{"accessToken":"a","expiresAt":"2026-11-03T10:00:00Z","refreshToken":"first","registrationExpiresAt":"2027-02-01T09:00:00Z"}`), 0600)
+	if at, _ = awsProfileExpiry(config, fields, &cloudAccount{}); at != nil {
+		t.Fatalf("a token or registration date shown as the sign-in's end: %v", at)
 	}
-	os.WriteFile(filepath.Join(dir, hex.EncodeToString(modern[:])+".json"), []byte(`{"expiresAt":"2026-11-03T10:00:00Z","registrationExpiresAt":"2027-02-01T09:00:00Z"}`), 0600)
-	if at, _ = awsProfileExpiry(config, fields, nil); at == nil || at.Format(time.RFC3339) != "2026-11-03T10:00:00Z" {
-		t.Fatalf("SSO token that cannot refresh ends with it: %v", at)
+	start := time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
+	cli := &cloudAccount{SignInAt: &start, SignInBinding: awsSSOBinding(config, "modern")}
+	if at, _ = awsProfileExpiry(config, fields, cli); at != nil {
+		t.Fatal("an end without the organization's length")
+	}
+	cli.SessionLength = int64(90 * 24 * time.Hour / time.Second)
+	if at, kind = awsProfileExpiry(config, fields, cli); at == nil || !at.Equal(start.Add(90*24*time.Hour)) || kind != "session" {
+		t.Fatalf("sign-in end = %v %q", at, kind)
+	}
+	// Signing in again elsewhere (a terminal) is another sign-in: its start is unknown.
+	os.WriteFile(filepath.Join(dir, hex.EncodeToString(modern[:])+".json"), []byte(`{"accessToken":"a","expiresAt":"2026-11-03T10:00:00Z","refreshToken":"second","registrationExpiresAt":"2027-02-01T09:00:00Z"}`), 0600)
+	if at, _ = awsProfileExpiry(config, fields, cli); at != nil {
+		t.Fatal("another sign-in's start reused")
 	}
 }
 

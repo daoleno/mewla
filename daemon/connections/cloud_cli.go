@@ -38,6 +38,15 @@ type cloudAccount struct {
 	Profile        string     `json:"profile"`
 	// Notified keys the last sign-in notice Chat got (see noteAWSSignIns).
 	Notified string `json:"notified,omitempty"`
+	// An IAM Identity Center profile's sign-in belongs to its sso-session.
+	// SignInAt is when Mewla signed the session in, SignInBinding which sign-in
+	// that was (awsSSOBinding), and SessionLength how long the organization's
+	// sign-ins last, in seconds: learned from one that ended, or set by the
+	// person. Together they say when the sign-in really ends.
+	SSOSession    string     `json:"sso_session,omitempty"`
+	SignInAt      *time.Time `json:"sign_in_at,omitempty"`
+	SignInBinding string     `json:"sign_in_binding,omitempty"`
+	SessionLength int64      `json:"session_length_s,omitempty"`
 }
 type cloudOutput struct {
 	Stdout   string `json:"stdout"`

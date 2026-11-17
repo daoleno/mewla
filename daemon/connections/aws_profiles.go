@@ -165,6 +165,7 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 		}
 		r.Account.ProfileKind = awsProfileKind(fields[name])
 		r.Account.Profile = name
+		r.CLI.SSOSession = fields[name]["sso_session"]
 		r.Account.ProfileSignInBy, r.Account.ProfileSignInLimit = awsProfileExpiry(config, fields[name], r.CLI)
 		if !force && time.Since(m.cloud.checked[name]) < time.Minute {
 			continue
@@ -230,6 +231,7 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 	wg.Wait()
 	for _, c := range checks {
 		r := c.r
+		was := r.Account.ProfileStatus
 		m.cloud.checked[r.CLI.Profile] = time.Now()
 		changed = true
 		var id awsIdentity
@@ -255,12 +257,17 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 			r.Account.ProfileStatus = "invalid"
 			if awsExpired(c.out.Stderr) {
 				r.Account.ProfileStatus = "expired"
+				// A sign-in Mewla started has just ended: now its length is known.
+				if was == "valid" {
+					m.awsSessionEnded(r, time.Now())
+				}
 			}
 			if c.err != nil {
 				r.Account.ProfileStatus = "unavailable"
 			}
 		}
 	}
+	m.shareAWSSSOSignIns(config)
 	for _, name := range names {
 		if r := m.awsProfileRecord(name); r != nil {
 			r.Account.ProfileSignInBy, r.Account.ProfileSignInLimit = awsProfileExpiry(config, fields[name], r.CLI)
@@ -273,7 +280,7 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 }
 func awsExpired(s string) bool {
 	s = strings.ToLower(s)
-	for _, v := range []string{"expired", "reauthenticate", "aws login", "sso login", "invalidgrant"} {
+	for _, v := range []string{"expired", "reauthenticate", "aws login", "sso login", "invalidgrant", "error loading sso token"} {
 		if strings.Contains(s, v) {
 			return true
 		}

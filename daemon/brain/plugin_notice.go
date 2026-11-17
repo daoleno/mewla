@@ -28,6 +28,8 @@ func (s *Service) NotePluginSignInLost(id string, at time.Time, title, body stri
 		Status:     "warning",
 		Title:      title,
 		Body:       body,
+		// The row's Sign in renews this account.
+		PluginAccountID: id,
 	}); err != nil {
 		log.Printf("plugin %s sign-in lost; Chat notice failed: %v", id, err)
 	}

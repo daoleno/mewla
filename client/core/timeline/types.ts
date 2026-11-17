@@ -7,6 +7,7 @@ import type { PendingUserMessageLifecycle } from "../conversation/pendingUserMes
 import type { ActivityTimelineItem } from "./activityTypes";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { ComputerMessageTimelineItem } from "./computerMessageCardModel";
+import type { PluginNoticeTimelineItem } from "./pluginNoticeModel";
 import type { TaskNotificationTimelineItem } from "./taskNotificationCardModel";
 import type { BrainCurrentWork } from "../work/types";
 import type { AnsweredRequest } from "./answered";
@@ -20,6 +21,7 @@ export type TimelineItem =
   | BrainWorkEventTimelineItem
   | TaskNotificationTimelineItem
   | ComputerMessageTimelineItem
+  | PluginNoticeTimelineItem
   | AnsweredTimelineItem;
 
 /** An answered request's sealed line, where it was asked (WIRE §2); `keys` are its card keys. */

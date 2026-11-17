@@ -136,6 +136,8 @@ export interface CodexConversationEvent {
   work_details_json?: string;
   /** A Work result's next steps (WIRE §4). */
   work_actions?: ResultAction[];
+  /** A plugin notice (source plugin_notice): the Extensions account it is about, which its Sign in renews. */
+  plugin_account_id?: string;
   work_wait_for?: string;
   /** Task fields are set only for source "task_notification" status events. */
   task_id?: string;
@@ -400,6 +402,7 @@ function normalizeCodexConversationEvent(
         ? event.work_details_json
         : undefined,
     work_actions: parseResultActions(event.work_actions),
+    plugin_account_id: typeof event.plugin_account_id === "string" && event.plugin_account_id ? event.plugin_account_id : undefined,
     // Normalized again later (a snapshot's reconciliation): the record is then already `answered`.
     answered: event.source === "request_answered" ? parseAnsweredRequest(event.request ?? event.answered) ?? undefined : undefined,
     work_wait_for:

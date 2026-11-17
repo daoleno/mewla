@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,6 +15,12 @@ import (
 func (m *Manager) startCloud(ctx context.Context, in *Input) (Response, error) {
 	if m.cloud == nil {
 		return Response{}, errors.New("Cloud CLI is unavailable")
+	}
+	// Adding an AWS account signs in through the organization's IAM Identity
+	// Center when it has one: a device code, renewed for as long as the
+	// organization allows. aws login (12 h at most) is for accounts without it.
+	if in.Integration == "aws" && in.AccountID == "" && in.Profile == "" && !in.AWSLogin {
+		return m.startAWSSSO(ctx, in)
 	}
 	profile := in.Profile
 	if in.AccountID != "" {
@@ -114,9 +121,9 @@ func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 	}
 	args := p.loginArgs(f.profile)
 	if chooser, ok := p.(interface {
-		loginArgsFor(*Manager, string) []string
+		loginArgsFor(*Manager, *connectFlow) []string
 	}); ok {
-		args = chooser.loginArgsFor(m, f.profile)
+		args = chooser.loginArgsFor(m, f)
 	}
 	login, err := startCloudLogin(binary, args, p.environment())
 	if err != nil {
@@ -196,6 +203,10 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 		}
 		return flowResult(f), nil
 	}
+	if f.PortalRequired {
+		// The card asks for the portal and starts a new sign-in with it.
+		return flowResult(f), nil
+	}
 	if f.SetupRequired {
 		if q.Action == "connect_finish" {
 			if err := p.(interface {
@@ -268,6 +279,17 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 			f.Status = "failed"
 			f.Message = "Cloud CLI did not finish sign-in. Start again."
 			return flowResult(f), nil
+		}
+		if f.ssoAdd {
+			// The accounts this sign-in may use become profiles; the sign-in
+			// connects one of them.
+			profile, _, err := m.addAWSSSOProfiles(ctx, f.ssoSession)
+			if err != nil {
+				f.Status = "failed"
+				f.Message = err.Error()
+				return flowResult(f), nil
+			}
+			f.profile = profile
 		}
 		delete(m.cloud.checked, f.profile)
 		if err := p.syncProfiles(m, ctx, true); err != nil {
@@ -359,6 +381,7 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 		r.Account.Status = "authorization_required"
 		r.Account.ProfileStatus = "expired"
 		if q.Integration == "aws" {
+			m.awsSessionEnded(r, time.Now())
 			m.noteAWSSignIns(time.Now())
 			// The CLI's own line names a login command agents cannot run.
 			out.Stderr = strings.TrimRight(out.Stderr, "\n") + "\nmewla: the AWS sign-in for profile " + r.CLI.Profile + " has ended. Ask the person to sign in again in Mewla: Extensions › AWS › " + r.CLI.Profile + " › Sign in. Chat has the notice.\n"
@@ -425,4 +448,55 @@ func (m *Manager) cloudTarget(q Request) *record {
 		found = r
 	}
 	return found
+}
+
+// startAWSSSO begins adding AWS accounts from an access portal: the one the
+// person named, else the config's own sso-session. With neither, the card asks
+// for the portal first (or the choice of aws login).
+func (m *Manager) startAWSSSO(ctx context.Context, in *Input) (Response, error) {
+	f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: "aws", Status: "waiting", Expires: time.Now().Add(10 * time.Minute)}, ssoAdd: true}
+	if strings.TrimSpace(in.SSOStartURL) != "" {
+		startURL, region, err := awsPortal(in.SSOStartURL, in.SSORegion)
+		if err != nil {
+			return Response{}, err
+		}
+		if f.ssoSession, err = m.ensureAWSSSOSession(startURL, region); err != nil {
+			return Response{}, err
+		}
+	} else {
+		config, _, err := m.cloud.profileFiles()
+		if err != nil {
+			return Response{}, err
+		}
+		raw, err := readOptional(config)
+		if err != nil {
+			return Response{}, errors.New("AWS config could not be read")
+		}
+		names := []string{}
+		for name, fields := range awsSSOSessions(raw) {
+			if fields["sso_start_url"] != "" {
+				names = append(names, name)
+			}
+		}
+		sort.Strings(names)
+		if len(names) == 0 {
+			f.PortalRequired = true
+			m.connectFlows[f.ID] = f
+			return flowResult(f), nil
+		}
+		f.ssoSession = names[0]
+	}
+	m.connectFlows[f.ID] = f
+	if _, err := m.cloud.executable("aws"); err != nil {
+		m.cloudInstallPrompt(f)
+		if m.cloud.updates != nil && !f.InstallManual {
+			m.startManagedCloudInstall(f, false)
+		}
+		return flowResult(f), nil
+	}
+	if err := m.launchCloudLogin(ctx, f); err != nil {
+		delete(m.connectFlows, f.ID)
+		return Response{}, err
+	}
+	return flowResult(f), nil
 }

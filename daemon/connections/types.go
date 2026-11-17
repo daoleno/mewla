@@ -67,14 +67,18 @@ type Account struct {
 	ProfileStatus      string     `json:"profile_status,omitempty"`
 	ProfileSignInBy    *time.Time `json:"profile_sign_in_by,omitempty"`
 	ProfileSignInLimit string     `json:"profile_sign_in_limit,omitempty"`
-	ID                 string     `json:"id"`
-	Integration        string     `json:"integration"`
-	Name               string     `json:"name"`
-	Identity           string     `json:"identity"`
-	Endpoint           string     `json:"endpoint,omitempty"`
-	TrustedNetworks    []string   `json:"trusted_networks,omitempty"`
-	AuthMethod         string     `json:"auth_method,omitempty"`
-	Scopes             []string   `json:"scopes,omitempty"`
+	// An IAM Identity Center profile: when Mewla signed it in, and how long the
+	// organization's sign-ins last in seconds (0 when not known yet).
+	ProfileSignedInAt    *time.Time `json:"profile_signed_in_at,omitempty"`
+	ProfileSessionLength int64      `json:"profile_session_length_s,omitempty"`
+	ID                   string     `json:"id"`
+	Integration          string     `json:"integration"`
+	Name                 string     `json:"name"`
+	Identity             string     `json:"identity"`
+	Endpoint             string     `json:"endpoint,omitempty"`
+	TrustedNetworks      []string   `json:"trusted_networks,omitempty"`
+	AuthMethod           string     `json:"auth_method,omitempty"`
+	Scopes               []string   `json:"scopes,omitempty"`
 	// Hyperliquid: an account is one network ("mainnet" or "testnet"). Address
 	// is the account a trading key trades for, empty on the keyless reader.
 	// Signer is the API wallet's public address when a trading key is saved.
@@ -138,7 +142,13 @@ type Input struct {
 	// WebOrigin is the web UI's own origin. connect_start returns its browser
 	// there instead of to the native app, if the daemon serves the web UI on it.
 	WebOrigin string `json:"web_origin,omitempty"`
-	callback  string // connect_start's return target; never decoded
+	// AWS: the organization's access portal (IAM Identity Center) to add an
+	// account from, and its Region when the URL does not name one. AWSLogin
+	// signs in with aws login instead, for an account without Identity Center.
+	SSOStartURL string `json:"sso_start_url,omitempty"`
+	SSORegion   string `json:"sso_region,omitempty"`
+	AWSLogin    bool   `json:"aws_login,omitempty"`
+	callback    string // connect_start's return target; never decoded
 }
 
 type Request struct {
@@ -162,6 +172,8 @@ type Request struct {
 	// URI names one resource for read_resource; Cursor continues a listing.
 	URI    string `json:"uri,omitempty"`
 	Cursor string `json:"cursor,omitempty"`
+	// Seconds is an AWS Identity Center sign-in's length (cloud_session_length).
+	Seconds int64 `json:"seconds,omitempty"`
 }
 
 type Match struct {

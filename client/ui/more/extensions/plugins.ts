@@ -48,6 +48,17 @@ function showExtensions(): void {
   else openPending = true;
 }
 
+/**
+ * A Chat notice's Sign in: Extensions opens, where the sign-in card is, and the account's own sign-in starts
+ * (an AWS Identity Center device code, a service's sign-in page). False when the current computer has no such account.
+ */
+export async function signInFromChat(accountId: string): Promise<boolean> {
+  const current = flow;
+  if (!current) return false;
+  showExtensions();
+  return current.signInAgain(accountId);
+}
+
 /** A socket is offline for a moment on every start; only an offline that lasts means the computer can't be reached. */
 const OFFLINE_SETTLE_MS = 1_500;
 export const offlineSettled = signal(false);

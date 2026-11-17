@@ -128,7 +128,8 @@ export class ConnectionsFlow {
 
   /** Polls while a sign-in waits on the browser (not while a CLI waits to be installed). */
   private syncPolling(): void {
-    const wants = this.state.phase === "waiting" && !!this.state.flow && !this.state.flow.flow.install_required;
+    // Nothing to ask the computer while it waits for the person: a CLI to install, an AWS access portal to name.
+    const wants = this.state.phase === "waiting" && !!this.state.flow && !this.state.flow.flow.install_required && !this.state.flow.flow.portal_required;
     if (wants && !this.stopPoll) this.stopPoll = this.deps.every(POLL_MS, () => { if (this.deps.active()) void this.check(); });
     else if (!wants && this.stopPoll) { this.stopPoll(); this.stopPoll = null; }
   }
@@ -376,6 +377,37 @@ export class ConnectionsFlow {
     } finally {
       this.starting = false;
     }
+  }
+
+  /**
+   * AWS, after the computer asked for the organization's access portal: adds the accounts the person may use there
+   * (IAM Identity Center, a device code), or, for an account without Identity Center, signs in with aws login.
+   * The computer refuses an address that is not an access portal; the card shows why.
+   */
+  async addAWS(choice: { portal: string; region?: string } | { awsLogin: true }): Promise<void> {
+    const input: NonNullable<ConnectionRequest["input"]> = "portal" in choice
+      ? { integration: "aws", sso_start_url: choice.portal.trim(), ...(choice.region?.trim() ? { sso_region: choice.region.trim() } : {}) }
+      : { integration: "aws", aws_login: true };
+    await this.connect("aws", { input });
+  }
+
+  /** How long the organization's Identity Center sign-ins last (as set in Identity Center), for a profile's whole session. */
+  setSessionLength(account: PluginAccount, seconds: number): void {
+    void this.send({ action: "cloud_session_length", id: account.id, seconds }, `length:${account.id}`);
+  }
+
+  /**
+   * A Chat notice's Sign in: the account's own sign-in, the same as Sign in again on its card. The account list
+   * is read first when it has not come yet. False when this computer has no such account.
+   */
+  async signInAgain(accountId: string): Promise<boolean> {
+    if (!this.state.accounts.some((item) => item.id === accountId)) await this.list();
+    const account = this.state.accounts.find((item) => item.id === accountId);
+    if (!account || !this.alive) return false;
+    const signIn = accountSignInInput(account);
+    if (signIn) await this.connect(account.integration, { input: signIn });
+    else await this.connect(account.integration, { writes: reconnectsWithWrites(account) });
+    return true;
   }
 
   /** GitHub only: the account `gh` is signed in to on the computer, instead of a code. */

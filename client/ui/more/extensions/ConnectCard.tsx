@@ -67,6 +67,8 @@ export function ConnectCard(props: { nav: PageNav }) {
           ),
         };
       }
+      // Adding AWS accounts: the organization's access portal (IAM Identity Center), or aws login for an account without one.
+      if (f?.portal_required && f.status === "waiting") return { key: `portal:${f.id}`, render: () => <AwsPortalEntry onClose={cancel} /> };
       if (f?.installing && f.status === "waiting") return { key: `installing:${f.id}`, render: () => <Card busy title={`Installing ${serviceName} CLI`} onClose={cancel} /> };
       if (f?.code_required && (s.phase === "waiting" || s.phase === "verifying")) {
         // Tailscale and Google Workspace: an OAuth client made in the service's console, pasted here; the computer says how.
@@ -284,5 +286,32 @@ function PasteEntry(props: { kind: "address" | "code"; noun: string; label: stri
         <Action filled testID={props.kind === "address" ? "sign-in-address-continue" : "sign-in-code-continue"} label="Continue" busy={busy()} disabled={!text().trim()} onPress={() => void submit()} />
       </View>
     </View>
+  );
+}
+
+/**
+ * Adding AWS accounts when the computer knows no IAM Identity Center: the organization's access portal, whose
+ * sign-in renews itself for as long as the organization allows; aws login (12 hours at most) for an account
+ * without one. A d-… .awsapps.com portal does not name its Region, so it is asked for.
+ */
+function AwsPortalEntry(props: { onClose: () => void }) {
+  const portal = signal("");
+  const region = signal("");
+  const busy = () => flowState().running !== null;
+  const regionless = () => /\.awsapps\.com/i.test(portal());
+  const go = () => {
+    if (portal().trim()) void plugins()?.addAWS({ portal: portal(), region: regionless() ? region() : undefined });
+  };
+  return (
+    <Card service="aws" testID="aws-portal-card" title="Your AWS access portal" onClose={props.onClose}>
+      <View class="-mx-4 -my-3 gap-2">
+        <Field testID="aws-portal-url" label="Access portal URL" accessibilityLabel="AWS access portal URL" placeholder="https://d-1234567890.awsapps.com/start" keyboardType="url" mono value={portal()} onChange={(value) => portal.set(value)} onSubmit={go} />
+        <If when={regionless()}><Field testID="aws-portal-region" label="Region" accessibilityLabel="AWS access portal Region" placeholder="us-east-1" mono value={region()} onChange={(value) => region.set(value)} onSubmit={go} /></If>
+        <View class="gap-2 px-4 pb-3">
+          <Action filled testID="aws-portal-continue" label="Continue" busy={busy()} disabled={!portal().trim() || busy()} onPress={go} />
+          <View class="items-center"><GhostAction testID="aws-login-instead" icon="person-circle" label="No access portal" accessibilityLabel="Sign in to an AWS account without IAM Identity Center" disabled={busy()} onPress={() => void plugins()?.addAWS({ awsLogin: true })} /></View>
+        </View>
+      </View>
+    </Card>
   );
 }

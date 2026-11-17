@@ -1,13 +1,9 @@
 package connections
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 )
 
 // awsSSOProfile is a profile that signs in through IAM Identity Center. Its
@@ -17,16 +13,23 @@ func awsSSOProfile(fields map[string]string) bool {
 	return fields["sso_session"] != "" || fields["sso_start_url"] != ""
 }
 
-// loginArgsFor picks the sign-in the profile's kind needs. An SSO profile signs
-// in with a device code: the person approves a code on any device and nothing
-// is pasted back; the CLI exits once AWS confirms.
-func (p awsCLI) loginArgsFor(m *Manager, profile string) []string {
+// loginArgsFor picks the sign-in the flow needs. An Identity Center sign-in
+// (adding accounts from a session, or an SSO profile signing in again) uses a
+// device code: the person approves a code on any device and nothing is pasted
+// back; the CLI exits once AWS confirms.
+func (p awsCLI) loginArgsFor(m *Manager, f *connectFlow) []string {
+	if f.ssoAdd {
+		return []string{"sso", "login", "--use-device-code", "--no-browser", "--sso-session", f.ssoSession, "--no-cli-auto-prompt"}
+	}
 	if config, _, err := m.cloud.profileFiles(); err == nil {
-		if raw, err := readOptional(config); err == nil && awsSSOProfile(awsSections(raw, true)[profile]) {
-			return []string{"sso", "login", "--use-device-code", "--no-browser", "--profile", profile, "--no-cli-auto-prompt"}
+		if raw, err := readOptional(config); err == nil {
+			if fields := awsSections(raw, true)[f.profile]; awsSSOProfile(fields) {
+				f.ssoSession = fields["sso_session"]
+				return []string{"sso", "login", "--use-device-code", "--no-browser", "--profile", f.profile, "--no-cli-auto-prompt"}
+			}
 		}
 	}
-	return p.loginArgs(profile)
+	return p.loginArgs(f.profile)
 }
 
 var awsUserCode = regexp.MustCompile(`^[A-Z0-9]{4,8}(-[A-Z0-9]{4,8})?$`)
@@ -78,32 +81,4 @@ func (awsCLI) deviceCode(output string) (string, string) {
 		return "", ""
 	}
 	return address, code
-}
-
-// awsSSOSessionEnd is the latest an sso-session sign-in can last. The CLI
-// renews its token with a refresh token the Identity Center session bounds,
-// and only through a client registration that ends at registrationExpiresAt.
-// Neither the session's own length nor its end is stored locally, so this is
-// an upper bound: Identity Center's session duration (8 hours by default, up
-// to 90 days) can end it sooner.
-func awsSSOSessionEnd(configPath, session string) *time.Time {
-	sum := sha1.Sum([]byte(session))
-	var cache struct {
-		RegistrationExpiresAt string `json:"registrationExpiresAt"`
-		RefreshToken          string `json:"refreshToken"`
-		ExpiresAt             string `json:"expiresAt"`
-	}
-	if !awsCacheJSON(filepath.Join(filepath.Dir(configPath), "sso", "cache", hex.EncodeToString(sum[:])+".json"), &cache) {
-		return nil
-	}
-	at := cache.RegistrationExpiresAt
-	if cache.RefreshToken == "" {
-		// Without a refresh token the access token's end is the session's end.
-		at = cache.ExpiresAt
-	}
-	parsed, err := time.Parse(time.RFC3339, strings.ReplaceAll(at, "UTC", "Z"))
-	if err != nil {
-		return nil
-	}
-	return &parsed
 }

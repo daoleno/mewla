@@ -1,7 +1,8 @@
 import { cleanup, Clipboard, computed, openUrl, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
 import { accountRow, openAccountId } from "../../../core/extensions/accountListModel";
-import { cloudProfileGroups } from "../../../core/extensions/cloudProfilesModel";
+import { AWS_SESSION_LENGTHS, cloudProfileGroups, sessionLengthLabel } from "../../../core/extensions/cloudProfilesModel";
+import { showMenu } from "../../kit/Menu";
 import { type ConnectionRequest, type PluginAccount, type PluginIntegration } from "../../../core/extensions/connections";
 import {
   accessControl,
@@ -275,6 +276,21 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
                 lead={tile("refresh")}
                 title="Sign in again"
                 trailing={<If when={connectingService() === props.plugin.id} else={<RowButton label="Sign in" accessibilityLabel={`Sign in to ${props.plugin.name} again`} disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />}><Spinner size={16} /></If>}
+              /></If>
+            {/* An Identity Center sign-in ends when the organization's length has passed: AWS does not say it, so it is learned or set here once. */}
+            <If when={a.integration === "aws" && a.profile_kind === "SSO"}><Row
+                testID={`session-length-${a.id}`}
+                lead={tile("calendar-blank")}
+                title="Sign-in lasts"
+                value={a.profile_session_length_s ? sessionLengthLabel(a.profile_session_length_s) : "Not known"}
+                trailing={<If when={running() === `length:${a.id}`}><Spinner size={16} /></If>}
+                disabled={busy()}
+                chevron
+                onPress={() => void showMenu({
+                  title: "As set in IAM Identity Center",
+                  testID: "session-length-menu",
+                  items: AWS_SESSION_LENGTHS.map((seconds) => ({ id: String(seconds), label: sessionLengthLabel(seconds), checked: a.profile_session_length_s === seconds })),
+                }).then((choice) => { if (choice) flow().setSessionLength(a, Number(choice)); })}
               /></If>
             <If when={!a.profile ? recovery : null}>{(recovery) => <Row
                 testID={`recover-${a.id}`}

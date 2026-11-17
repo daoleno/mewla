@@ -47,13 +47,13 @@ func TestAWSSignInMatchesProfileKind(t *testing.T) {
 	os.WriteFile(config, []byte("[sso-session work]\nsso_start_url = https://d-1234567890.awsapps.com/start\nsso_region = us-east-1\n[profile sso]\nsso_session = work\nsso_account_id = 123456789012\nsso_role_name = Admin\n[profile legacy]\nsso_start_url = https://d-1234567890.awsapps.com/start\n[profile console]\nlogin_session = arn:aws:iam::123456789012:root\n"), 0600)
 	p := awsCLI{}
 	for _, profile := range []string{"sso", "legacy"} {
-		if got := strings.Join(p.loginArgsFor(m, profile), " "); got != "sso login --use-device-code --no-browser --profile "+profile+" --no-cli-auto-prompt" {
+		if got := strings.Join(p.loginArgsFor(m, &connectFlow{profile: profile}), " "); got != "sso login --use-device-code --no-browser --profile "+profile+" --no-cli-auto-prompt" {
 			t.Fatalf("%s signs in with %q", profile, got)
 		}
 	}
 	// aws login on an SSO profile would rewrite it into a 12 h login session.
 	for _, profile := range []string{"console", "new-profile"} {
-		if got := p.loginArgsFor(m, profile); got[0] != "login" || !strings.Contains(strings.Join(got, " "), "--remote") {
+		if got := p.loginArgsFor(m, &connectFlow{profile: profile}); got[0] != "login" || !strings.Contains(strings.Join(got, " "), "--remote") {
 			t.Fatalf("%s signs in with %v", profile, got)
 		}
 	}
@@ -99,7 +99,7 @@ func TestAWSSignInNoticesOncePerSignIn(t *testing.T) {
 	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
 	verified := now.Add(-time.Hour)
 	end := now.Add(20 * time.Hour)
-	r := &record{CLI: &cloudAccount{Profile: "prod"}, Account: Account{ID: "aws-prod", Integration: "aws", Name: "prod", Profile: "prod", Enabled: true, ProfileKind: "SSO", ProfileStatus: "valid", VerifiedAt: &verified, ProfileSignInBy: &end, ProfileSignInLimit: "maximum"}}
+	r := &record{CLI: &cloudAccount{Profile: "prod", SessionLength: int64(90 * 24 * time.Hour / time.Second)}, Account: Account{ID: "aws-prod", Integration: "aws", Name: "prod", Profile: "prod", Enabled: true, ProfileKind: "SSO", ProfileStatus: "valid", VerifiedAt: &verified, ProfileSignInBy: &end, ProfileSignInLimit: "session"}}
 	m.records = map[string]*record{r.Account.ID: r}
 
 	far := now.Add(30 * 24 * time.Hour)
@@ -110,7 +110,7 @@ func TestAWSSignInNoticesOncePerSignIn(t *testing.T) {
 	r.Account.ProfileSignInBy = &end
 	m.noteAWSSignIns(now)
 	m.noteAWSSignIns(now.Add(time.Hour))
-	if len(notices) != 1 || notices[0].Title != "AWS sign-in ends soon" || !strings.Contains(notices[0].Body, "Extensions › AWS › prod") {
+	if len(notices) != 1 || notices[0].Title != "AWS sign-in ends soon" || !strings.Contains(notices[0].Body, "Tap Sign in") {
 		t.Fatalf("soon notices = %+v", notices)
 	}
 	r.Account.ProfileStatus = "expired"
@@ -226,5 +226,21 @@ func TestAWSCommandForUnknownProfileDiscoversItFirst(t *testing.T) {
 	}
 	if m.awsProfileRecord("fresh") == nil {
 		t.Fatalf("profile added in a terminal was not discovered: %v", *calls)
+	}
+}
+
+// A sign-in that is gone (signed out, or its cache removed) is ended too, not
+// a working profile with an odd error (AWS CLI 2.40.4, 2026-11-18).
+func TestAWSSignedOutProfileIsEnded(t *testing.T) {
+	for _, stderr := range []string{
+		"aws: [ERROR]: Error loading SSO Token: Token for acelabs does not exist",
+		"Error when retrieving token from sso: Token has expired and refresh failed",
+	} {
+		if !awsExpired(stderr) {
+			t.Errorf("not ended: %q", stderr)
+		}
+	}
+	if awsExpired("An error occurred (AccessDenied) when calling the ListBuckets operation") {
+		t.Error("a denied call ended the sign-in")
 	}
 }

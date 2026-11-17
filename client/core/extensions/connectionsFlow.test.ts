@@ -347,3 +347,52 @@ describe("in a browser", () => {
     expect(h.stored.has(pendingConnectionKey("server"))).toBe(true);
   });
 });
+
+describe("AWS accounts from IAM Identity Center", () => {
+  const aws = (overrides: Partial<ConnectFlow> = {}): ConnectFlow => ({ id: "p1", integration: "aws", status: "waiting", expires: expires(), ...overrides });
+  test("without a known portal the card asks for one and nothing polls; the portal starts a device code, aws login is the fallback", async () => {
+    const h = harness((request) => {
+      if (request.action === "connect_start" && request.input?.sso_start_url) return { flow: aws({ id: "p2", user_code: "QRST-WXYZ", authorization_url: "https://us-east-1.signin.aws/platform/authorize?request_uri=x" }) };
+      if (request.action === "connect_start" && request.input?.aws_login) return { flow: aws({ id: "p3", code_required: true, authorization_url: "https://us-east-1.signin.aws.amazon.com/v1/authorize?state=s" }) };
+      if (request.action === "connect_start") return { flow: aws({ portal_required: true }) };
+      return { flow: aws({ id: request.flow_id ?? "", status: "cancelled" }) };
+    });
+    await h.flow.connect("aws");
+    expect(h.flow.state.phase).toBe("waiting");
+    expect(h.flow.state.flow?.flow.portal_required).toBe(true);
+    expect(h.polls).toHaveLength(0);
+    expect(h.opened).toEqual([]);
+
+    await h.flow.addAWS({ portal: " https://d-1234567890.awsapps.com/start ", region: "eu-west-1" });
+    expect(h.asked.find((r) => r.action === "connect_start" && r.input?.sso_start_url)?.input).toEqual({ integration: "aws", sso_start_url: "https://d-1234567890.awsapps.com/start", sso_region: "eu-west-1" });
+    // The portal flow it replaced is cancelled on the computer.
+    expect(h.asked.some((r) => r.action === "connect_cancel" && r.flow_id === "p1")).toBe(true);
+    expect(h.flow.state.flow?.flow.user_code).toBe("QRST-WXYZ");
+    expect(h.flow.state.phase).toBe("waiting");
+    expect(h.polls).toHaveLength(1);
+
+    await h.flow.addAWS({ awsLogin: true });
+    expect(h.asked.filter((r) => r.action === "connect_start").at(-1)?.input).toEqual({ integration: "aws", aws_login: true });
+  });
+
+  test("a Chat notice's Sign in starts that account's own sign-in, reading the accounts first when they have not come", async () => {
+    const account = { id: "aws-cli-1", integration: "aws", name: "prod", profile: "prod", identity: "", enabled: true, status: "authorization_required", history: [] };
+    const h = harness((request) => {
+      if (request.action === "list") return { accounts: [account] };
+      if (request.action === "connect_start") return { flow: aws({ id: "p9", user_code: "ABCD-EFGH", authorization_url: "https://us-east-1.signin.aws/platform/authorize?request_uri=y" }) };
+      return {};
+    });
+    expect(await h.flow.signInAgain("aws-cli-1")).toBe(true);
+    expect(h.asked.map((r) => r.action)).toEqual(["list", "connect_start"]);
+    expect(h.asked[1].input).toEqual({ integration: "aws", account_id: "aws-cli-1" });
+    expect(h.flow.state.flow?.flow.user_code).toBe("ABCD-EFGH");
+    expect(await h.flow.signInAgain("gone")).toBe(false);
+  });
+
+  test("the organization's sign-in length is set for the profile", async () => {
+    const h = harness(() => ({}));
+    h.flow.setSessionLength({ id: "aws-cli-1", integration: "aws", name: "prod", identity: "", enabled: true, status: "connected", history: [] }, 90 * 86400);
+    await Bun.sleep(0);
+    expect(h.asked).toEqual([{ action: "cloud_session_length", id: "aws-cli-1", seconds: 7776000 }]);
+  });
+});
