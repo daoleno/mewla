@@ -141,7 +141,7 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         for step in ("versionName", "pidof", "-b crash"):
             self.assertIn(step, script)
         # The suites ran on main: the release checks that and runs none itself.
-        self.assertIn('python3 scripts/release-green.py --sha "$(git rev-parse HEAD)"', between(RELEASE, "  validate:\n", "  engine:\n"))
+        self.assertIn('python3 scripts/release-green.py --sha "$(git rev-parse HEAD)"', between(RELEASE, "  validate:\n", "  web-ui:\n"))
         self.assertIn("python3 scripts/release-green.py", PREPARATION)
         for suite in ("release-upgrade.sh", "nsh test", "bun test", "go test ./..."):
             self.assertNotIn(suite, RELEASE)
@@ -195,16 +195,43 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         self.assertEqual(RELEASE.count("mewla-windows-amd64.zip"), 1)
         self.assertEqual(len(re.findall(r"go test -count=1 -v \./releasesmoke/", RELEASE)), 3)
 
-    def test_the_daemons_inputs_are_built_fresh_in_this_run_at_the_checked_tag(self):
-        engine = between(RELEASE, "  engine:\n", "  web-ui:\n")
-        for lib, os_ in (("linux_amd64_musl", "ubuntu-latest"), ("linux_arm64_musl", "ubuntu-latest"),
-                         ("windows_amd64", "ubuntu-latest"), ("darwin_arm64", "macos-26")):
-            self.assertIn(f"- {{ lib: {lib}, os: {os_} }}", engine)
-        self.assertIn('./scripts/build-libghostty-desktop.sh --out "$RUNNER_TEMP/ghostty-desktop" --targets "${{ matrix.lib }}"', engine)
-        self.assertIn("run: ./scripts/build-web-ui.sh", between(RELEASE, "  web-ui:\n", "  daemon-build:\n"))
-        for job, end in (("engine", "web-ui"), ("web-ui", "daemon-build"), ("daemon-build", "daemon"), ("daemon-darwin", "android")):
+    def test_the_daemons_inputs_come_from_mains_caches_or_are_built_here(self):
+        cache = read(".github/actions/desktop-release-cache/action.yml")
+        warmer = read(".github/workflows/native-cache.yml")
+        self.assertNotIn("  engine:\n", RELEASE)
+        # Restore-only in a release; main's native-cache.yml is the one writer.
+        for job, end, uses in (
+            ("web-ui", "daemon-build", 'web: "true"'),
+            ("daemon-build", "daemon", "go-target: ${{ matrix.target }}"),
+            ("daemon-darwin", "android", "lib: darwin_arm64"),
+        ):
             block = between(RELEASE, f"  {job}:\n", f"  {end}:\n")
+            self.assertIn("uses: ./.github/actions/desktop-release-cache", block, job)
+            self.assertIn(uses, block, job)
+            self.assertNotIn("save-caches", block, job)
             self.assertIn("ref: ${{ needs.validate.outputs.checkout }}", block, job)
+        self.assertEqual(warmer.count('save-caches: "true"'), 2 + 3)
+        for job in ("desktop", "web", "darwin"):
+            self.assertIn(f"  {job}:\n    name:", warmer)
+        # Keys hash what derives each output, never the app's version or sources.
+        self.assertIn("ghostty-release-v1-${{ inputs.lib }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-desktop.sh'", cache)
+        self.assertIn("ghostty-web-v1-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-web.sh'", cache)
+        self.assertIn("path: .cache/mewla-tools/*.tar.xz", cache)
+        self.assertNotIn("version.go", cache)
+        # A restored engine is used only when its manifest matches: the builds still run the scripts.
+        self.assertIn('export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/${{ matrix.lib }}"', RELEASE)
+        self.assertIn("run: ./scripts/build-web-ui.sh", between(RELEASE, "  web-ui:\n", "  daemon-build:\n"))
+        # The release APK skips the lint the test track runs; the Gradle home is saved without
+        # transforms or other Gradle versions (v1 restored 4 GB of them in 56 s for nothing).
+        self.assertIn("SKIP=(-x :app:lintVitalProductionRelease)", APK_SCRIPT)
+        self.assertIn("assemblePreviewRelease", read(".github/workflows/client.yml"))
+        self.assertIn("rm -rf ~/.gradle/caches/*/transforms", warmer)
+        self.assertNotIn("android-gradle-v1-", read(".github/actions/android-native/action.yml"))
+        # Each platform runs its own binary as soon as it is built.
+        for job, target in (("daemon-linux-arm64", "linux-arm64"), ("daemon-windows", "windows-amd64")):
+            block = between(RELEASE, f"  {job}:\n", "\n  daemon-")
+            self.assertIn("needs: [validate, daemon-build]", block)
+            self.assertIn(f"name: daemon-part-bin-{target}-${{{{ needs.validate.outputs.tag }}}}", block)
         # validate checks the tag once; signing and publication check it again before acting on it.
         for job, end in (("stage", "release-ready"), ("publish", "ios-testflight")):
             self.assertIn('./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"',

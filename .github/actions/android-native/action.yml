@@ -93,7 +93,10 @@ runs:
       run: ./scripts/verify-libghostty.sh --release
 
     # Gradle home, including the local build cache. Keyed on dependencies, not
-    # on the app version, so every release can reuse the warmed entry.
+    # on the app version, so every release can reuse the warmed entry. The
+    # warmer prunes artifact transforms and other Gradle versions before saving
+    # (native-cache.yml): v1 carried 9.6 GB of them, restored in 56 s, and an
+    # APK build without them took the same time.
     - name: Restore Gradle home
       if: ${{ inputs.save-caches != 'true' }}
       uses: actions/cache/restore@v4
@@ -101,9 +104,9 @@ runs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
+        key: android-gradle-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
         restore-keys: |
-          android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-
+          android-gradle-v2-${{ runner.os }}-${{ runner.arch }}-
     - name: Restore or save Gradle home
       if: ${{ inputs.save-caches == 'true' }}
       uses: actions/cache@v4
@@ -111,9 +114,9 @@ runs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
+        key: android-gradle-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
         restore-keys: |
-          android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-
+          android-gradle-v2-${{ runner.os }}-${{ runner.arch }}-
 
     # ccache for the CMake build of the NSH client's terminal bridge. The NDK
     # is reinstalled on every runner, so the compiler is checked by content,
