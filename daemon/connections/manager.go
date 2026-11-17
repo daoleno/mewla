@@ -311,10 +311,15 @@ func (m *Manager) projection(r *record) Account {
 // Handle is shared by the paired native client and the daemon's private local
 // control socket. Credentials only enter at setup; execution can select an ID
 // but cannot override its endpoint, credential, schema, or policy.
-func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
+func (m *Manager) Handle(parent context.Context, q Request) (response Response, err error) {
 	if m == nil {
 		return Response{}, errors.New("plugins are unavailable")
 	}
+	defer func() {
+		if errors.Is(err, errAuth) && m.integrationOf(q.ID) == "slack" {
+			err = slackAuthError{err}
+		}
+	}()
 	raw, _ := json.Marshal(q)
 	if len(raw) > MaxRequestBytes {
 		return Response{}, errors.New("plugin request is too large")
@@ -829,3 +834,25 @@ func (m *Manager) removeOldAWS() error {
 	}
 	return nil
 }
+
+// integrationOf is an account's integration, "" when there is no such
+// account.
+func (m *Manager) integrationOf(id string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r, ok := m.records[id]; ok && r != nil {
+		return r.Account.Integration
+	}
+	return ""
+}
+
+// slackAuthError says what fixes a Slack sign-in that stopped working, so an
+// agent reading the error does not go looking for a Slack app setting: the
+// app is Mewla's, and Mewla's account service renews its sign-in.
+type slackAuthError struct{ err error }
+
+func (e slackAuthError) Error() string {
+	return e.err.Error() + ". Slack runs through Mewla's own Slack app, renewed by Mewla's account service; nothing in Slack's settings changes this. Update Mewla (mewla update), then Reconnect Slack in Extensions if it still fails"
+}
+
+func (e slackAuthError) Unwrap() error { return e.err }
