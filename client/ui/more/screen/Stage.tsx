@@ -237,7 +237,7 @@ export function StageChip(props: { stage: Stage }) {
     <Button testID="stage-chip" accessibilityLabel={several() ? `${name()}, switch agent` : name()} onPress={() => props.stage.setSwitcher(true)}
       class={`h-9 max-w-full min-w-0 flex-row items-center gap-2 rounded-full pl-1.5 pr-3 active:opacity-70 ${held() ? "bg-seal" : "bg-white/15"}`}>
       <Avatar name={name()} held={held()} />
-      <Text class="min-w-0 shrink text-body font-semibold text-white line-clamp-1">{name()}</Text>
+      <Text class="min-w-[64px] shrink text-body font-semibold text-white line-clamp-1">{name()}</Text>
       <If when={!held() && props.stage.current()?.acting}><View class="size-1.5 rounded-full bg-white" /></If>
       <Icon name="chevron-down" size={14} tone="onBlack" />
     </Button>
@@ -247,7 +247,7 @@ export function StageChip(props: { stage: Stage }) {
 /** Every agent as a tab, on a wide window: one tap switches. */
 export function StageTabs(props: { stage: Stage }) {
   return (
-    <Scroll horizontal keyboardShouldPersistTaps="handled" class="min-w-0 flex-1 grow-0" contentClass="flex-row items-center gap-2">
+    <Scroll horizontal keyboardShouldPersistTaps="handled" class="min-w-0 flex-1" contentClass="flex-row items-center gap-2">
       {keyedRows(props.stage, (agent) => {
         const selected = () => props.stage.current()?.id === agent.id;
         const held = () => selected() && props.stage.holding();
@@ -273,7 +273,7 @@ function keyedRows(stage: Stage, row: (agent: StageAgent) => JSX.Element): JSX.E
 /** The page's host while the agent's window is laid out for this view: the real one, whatever the page says. */
 export function DomainChip(props: { host: string }) {
   return (
-    <View testID="stage-domain" accessibilityLabel={`Page on ${props.host}`} class="h-8 min-w-0 max-w-[132px] shrink flex-row items-center gap-1.5 rounded-full bg-white/15 px-3">
+    <View testID="stage-domain" accessibilityLabel={`Page on ${props.host}`} class="h-8 min-w-0 max-w-[132px] shrink-[4] flex-row items-center gap-1.5 rounded-full bg-white/15 px-3">
       <Icon name="lock" size={12} tone="onBlack" />
       <Text class="min-w-0 shrink text-sub font-semibold text-white line-clamp-1">{props.host}</Text>
     </View>
