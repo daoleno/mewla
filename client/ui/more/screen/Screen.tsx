@@ -3,6 +3,7 @@ import type { JSX } from "nsh";
 import { Button, Menu, MenuItem } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
 import { GuardedSheet as Sheet } from "../../shell/AppSheet";
+import { bottomBarInset } from "../../shell/below";
 import { wide } from "../../shell/layout";
 import { NavPage, PageStack } from "../../shell/NavPage";
 import { failureText } from "../../../core/more/daemon";
@@ -621,13 +622,13 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
               {optionsMenu("screen-rail-options")}
             </Scroll></If>
         </View>
-        <If when={watching() && live() && !immersive() && !typing()}><View testID="screen-watch-bar" accessibilityLabel={`Watching ${agentLabel()}`} class="flex-row items-center justify-center gap-3 bg-black px-4 py-3">
+        <If when={watching() && live() && !immersive() && !typing()}><View testID="screen-watch-bar" accessibilityLabel={`Watching ${agentLabel()}`} class="flex-row items-center justify-center gap-3 bg-black px-4 pt-3" style={{ paddingBottom: 12 + bottomBarInset() }}>
             <TakeOverButton testID="watch-take-over" holding={false} disabled={busy()} onTakeOver={takeOver} onGiveBack={giveBack} />
             <Button testID="watch-stop" accessibilityLabel={`Stop ${agentLabel()}`} disabled={busy()} onPress={stopWatched} class="size-12 items-center justify-center rounded-full bg-white/15 active:bg-white/25 disabled:opacity-40">
               <Icon name="stop" size={18} tone="seal" />
             </Button>
           </View></If>
-        <If when={tookOver() !== null && !watching() && live() && !immersive() && !typing()}><View testID="screen-give-back-bar" class="flex-row items-center justify-center bg-black px-4 py-3">
+        <If when={tookOver() !== null && !watching() && live() && !immersive() && !typing()}><View testID="screen-give-back-bar" class="flex-row items-center justify-center bg-black px-4 pt-3" style={{ paddingBottom: 12 + bottomBarInset() }}>
             <TakeOverButton testID="screen-give-back" holding disabled={busy()} onTakeOver={takeOver} onGiveBack={giveBack} />
           </View></If>
       </View>
