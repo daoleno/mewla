@@ -227,7 +227,10 @@ class AgentWindow {
 
   async _zoom(tabId, zoom) {
     await chrome.tabs.setZoomSettings(tabId, { mode: 'automatic', scope: 'per-tab' }).catch(() => {});
-    await chrome.tabs.setZoom(tabId, zoom);
+    // Chrome shows its zoom bubble over the page on every set: a refit at the same scale (a taller view) sets nothing.
+    const current = await chrome.tabs.getZoom(tabId).catch(() => 0);
+    if (Math.abs(current - zoom) > 0.001)
+      await chrome.tabs.setZoom(tabId, zoom);
     this.reflowed?.tabs.add(tabId);
   }
 
