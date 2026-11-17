@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/answered"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
@@ -41,6 +42,11 @@ type PanePrompts interface {
 // handled=false leaves the answer to the pane.
 type PromptHook func(prompt classifier.Prompt, number int) (handled bool, err error)
 
+// PromptKeyed is told that a permission prompt was answered by its key, not
+// through the hook: the decision a permission hook holds for that same call
+// is over, so it leaves the pending lists and nobody (Brain) answers it again.
+type PromptKeyed func(prompt classifier.Prompt)
+
 // PromptGone reports that the prompt an answer named is no longer the one open.
 func PromptGone(err error) bool {
 	return errors.Is(err, watcher.ErrPromptGone) || errors.Is(err, watcher.ErrClaudeChoiceGone)
@@ -49,8 +55,10 @@ func PromptGone(err error) bool {
 // AnswerPanePrompt is the one path an answer to a pane prompt takes, for the
 // app and for `mewla worker answer`. It re-reads the pane, refuses a prompt
 // that is not the named one, and then answers through the hook, the choice
-// driver or the menu key. A choice returns the answers Claude recorded.
-func AnswerPanePrompt(pane PanePrompts, workerID string, answer PromptAnswer, hook PromptHook, load func() (work.CodexConversation, error)) ([]string, error) {
+// driver or the menu key. A permission prompt answered by its key tells
+// keyed, so the decision a hook still holds for it is settled. A choice
+// returns the answers Claude recorded.
+func AnswerPanePrompt(pane PanePrompts, workerID string, answer PromptAnswer, hook PromptHook, keyed PromptKeyed, load func() (work.CodexConversation, error)) ([]string, error) {
 	answer.PromptID = strings.TrimSpace(answer.PromptID)
 	if workerID = strings.TrimSpace(workerID); workerID == "" || answer.PromptID == "" {
 		return nil, fmt.Errorf("%w: name the Worker and the prompt", watcher.ErrClaudeChoiceRefused)
@@ -88,7 +96,13 @@ func AnswerPanePrompt(pane PanePrompts, workerID string, answer PromptAnswer, ho
 			return nil, err
 		}
 	}
-	return nil, pane.AnswerPrompt(workerID, answer.PromptID, answer.Number)
+	if err := pane.AnswerPrompt(workerID, answer.PromptID, answer.Number); err != nil {
+		return nil, err
+	}
+	if keyed != nil && prompt.Kind == classifier.PromptPermission {
+		keyed(*prompt)
+	}
+	return nil, nil
 }
 
 // ApprovalOptionForPrompt maps a permission menu option to the decision a
@@ -148,21 +162,11 @@ func (s *Server) handleAnswerPrompt(conn *websocket.Conn, raw clientMessage) {
 	if s.promptPaneOverride != nil {
 		pane = s.promptPaneOverride
 	}
-	hook := func(prompt classifier.Prompt, number int) (bool, error) {
-		return s.answerPromptThroughApproval(resolved.targetID, prompt, number)
-	}
-	// What was asked, read before the answer takes it off the screen.
-	asked, _ := pane.CurrentPrompt(resolved.targetID)
-	recorded, err := AnswerPanePrompt(pane, resolved.targetID, answer, hook, s.choiceConversationLoader(resolved))
-	if err != nil {
+	if _, err := s.answerAppPrompt(pane, resolved.targetID, answer, s.answeredByConn(conn), s.choiceConversationLoader(resolved)); err != nil {
 		code, message := PromptAnswerCode(err)
 		log.Printf("answer_prompt %s prompt=%s: %s: %v", resolved.targetID, answer.PromptID, code, err)
 		s.sendErrorWithRequestID(conn, raw.RequestID, code, message)
 		return
-	}
-	if asked != nil && asked.ID == strings.TrimSpace(answer.PromptID) {
-		s.recordAnswered(PromptAnswerRecord(resolved.targetID, *asked, answer, recorded, s.answeredByConn(conn),
-			s.PromptAskedAt(resolved.targetID, asked.ID), time.Now()))
 	}
 	s.sendJSON(conn, map[string]any{
 		"type":       "prompt_answered",
@@ -170,6 +174,41 @@ func (s *Server) handleAnswerPrompt(conn *websocket.Conn, raw clientMessage) {
 		"worker_id":  resolved.targetID,
 		"prompt_id":  answer.PromptID,
 	})
+}
+
+// answerAppPrompt answers a live Session's pane prompt for a device and
+// records the answer with by: through the decision a hook holds for it when
+// the app holds exactly that one, else by its key.
+func (s *Server) answerAppPrompt(pane PanePrompts, workerID string, answer PromptAnswer, by answered.Answerer, load func() (work.CodexConversation, error)) ([]string, error) {
+	hook := func(prompt classifier.Prompt, number int) (bool, error) {
+		return s.answerPromptThroughApproval(workerID, prompt, number)
+	}
+	// What was asked, read before the answer takes it off the screen.
+	asked, _ := pane.CurrentPrompt(workerID)
+	recorded, err := AnswerPanePrompt(pane, workerID, answer, hook, s.settleKeyedPermission(workerID), load)
+	if err != nil {
+		return nil, err
+	}
+	if asked != nil && asked.ID == strings.TrimSpace(answer.PromptID) {
+		s.recordAnswered(PromptAnswerRecord(workerID, *asked, answer, recorded, by, s.PromptAskedAt(workerID, asked.ID), time.Now()))
+	}
+	return recorded, nil
+}
+
+// settleKeyedPermission settles the decision a permission hook still holds for
+// a prompt the app answered by its key. A delegated Worker's hook asks Brain,
+// not the app, so the app's answer goes to the screen while the hook keeps
+// waiting; left so, Brain answered the same call again a minute later and it
+// was recorded twice (2026-11-17, two "Approved" lines for one command).
+func (s *Server) settleKeyedPermission(workerID string) PromptKeyed {
+	return func(prompt classifier.Prompt) {
+		s.mu.Lock()
+		approvals := s.agentApprovals
+		s.mu.Unlock()
+		if approvals != nil {
+			approvals.AnsweredInTerminal(workerID, prompt.Tool, prompt.Summary)
+		}
+	}
 }
 
 // answerPromptThroughApproval resolves a permission prompt through the

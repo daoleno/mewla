@@ -80,7 +80,7 @@ func TestAnswerPanePromptMenusAndStalePrompts(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := AnswerPanePrompt(tc.pane, "%1", tc.answer, tc.hook, loads)
+			_, err := AnswerPanePrompt(tc.pane, "%1", tc.answer, tc.hook, nil, loads)
 			if (err != nil) != (tc.wantErr || tc.wantGone) {
 				t.Fatalf("err = %v", err)
 			}
@@ -106,7 +106,7 @@ func TestAnswerPanePromptChoiceUsesTranscriptQuestions(t *testing.T) {
 		return choiceConversation(work.ConversationChoiceAnswered, "Banana", "Red, Teal"), nil
 	}
 	answer := PromptAnswer{PromptID: "choice1", Answers: []ChoiceSelection{{Selected: []int{1}}, {Selected: []int{0}, Other: "Teal"}}}
-	got, err := AnswerPanePrompt(pane, "%1", answer, nil, load)
+	got, err := AnswerPanePrompt(pane, "%1", answer, nil, nil, load)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestAnswerPanePromptChoiceUsesTranscriptQuestions(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			pane := &fakePanePrompts{current: tc.prompt}
-			_, err := AnswerPanePrompt(pane, "%1", tc.answer, nil, func() (work.CodexConversation, error) { return tc.conv, nil })
+			_, err := AnswerPanePrompt(pane, "%1", tc.answer, nil, nil, func() (work.CodexConversation, error) { return tc.conv, nil })
 			if err == nil || PromptGone(err) != tc.wantGone || pane.drove != nil || len(pane.pressed) != 0 {
 				t.Fatalf("err=%v gone=%v drove=%v pressed=%v", err, PromptGone(err), pane.drove, pane.pressed)
 			}
@@ -238,15 +238,70 @@ func TestASignInPromptIsAnsweredWithTextThatIsNeverRecorded(t *testing.T) {
 	loads := func() (work.CodexConversation, error) { return work.CodexConversation{}, nil }
 	signIn := &classifier.Prompt{ID: "sign1", Kind: classifier.PromptSignIn, Title: "Sign in to Claude Code", Link: "https://claude.com/x", Input: "Code from the sign-in page"}
 	pane := &fakePanePrompts{current: signIn}
-	if _, err := AnswerPanePrompt(pane, "w1", PromptAnswer{PromptID: "sign1"}, nil, loads); err == nil || len(pane.typed) != 0 {
+	if _, err := AnswerPanePrompt(pane, "w1", PromptAnswer{PromptID: "sign1"}, nil, nil, loads); err == nil || len(pane.typed) != 0 {
 		t.Fatalf("an empty answer: %v, typed %v", err, pane.typed)
 	}
 	answer := PromptAnswer{PromptID: "sign1", Text: "secret-code#state"}
-	if _, err := AnswerPanePrompt(pane, "w1", answer, nil, loads); err != nil || len(pane.typed) != 1 || pane.typed[0] != "secret-code#state" || len(pane.pressed) != 0 {
+	if _, err := AnswerPanePrompt(pane, "w1", answer, nil, nil, loads); err != nil || len(pane.typed) != 1 || pane.typed[0] != "secret-code#state" || len(pane.pressed) != 0 {
 		t.Fatalf("answer: %v, typed %v, pressed %v", err, pane.typed, pane.pressed)
 	}
 	record := PromptAnswerRecord("w1", *signIn, answer, nil, answered.Answerer{}, nil, time.Now())
 	if record.Answer != "Code sent" || strings.Contains(fmt.Sprintf("%+v", record), "secret-code") {
 		t.Fatalf("record %+v", record)
+	}
+}
+
+// The 2026-11-17 incident (two "Approved" lines for one command): a delegated
+// Worker's permission hook asks Brain, so the app does not hold it, and the
+// person's "Yes" on the dialog goes to the screen as a key. The hook's
+// question is settled with it, so Brain is not left a question already
+// answered, and the call has one record. A hold the app does have answers
+// through the hook and settles nothing; a menu that is not a permission is
+// only a key.
+func TestAnAppAnswerByKeySettlesThePermissionAHookHolds(t *testing.T) {
+	loads := func() (work.CodexConversation, error) { return work.CodexConversation{}, nil }
+	web := answered.Answerer{Kind: answered.ByDevice, DeviceID: "web", DeviceName: "Mewla Web"}
+	newServer := func(approvals *recordingApprovals) (*Server, *answered.Ledger) {
+		ledger, err := answered.Open(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := &Server{}
+		s.answered = ledger
+		s.SetAgentApprovals(approvals)
+		return s, ledger
+	}
+	prompt := permissionPrompt()
+	prompt.Tool, prompt.Summary = "Bash", "git push origin main"
+
+	brainHolds := &recordingApprovals{}
+	s, ledger := newServer(brainHolds)
+	pane := &fakePanePrompts{current: prompt}
+	if _, err := s.answerAppPrompt(pane, "%9", PromptAnswer{PromptID: "perm1", Number: 1}, web, loads); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(pane.pressed, []int{1}) || !reflect.DeepEqual(brainHolds.answeredInTerminal(), []string{"%9|Bash|git push origin main"}) {
+		t.Fatalf("pressed %v, settled %v: the hook still holds a question the screen answered", pane.pressed, brainHolds.answeredInTerminal())
+	}
+	if rows := ledger.List(answered.Filter{SessionID: "%9"}); len(rows) != 1 || rows[0].By.DeviceName != "Mewla Web" || rows[0].Outcome != answered.OutcomeApproved {
+		t.Fatalf("records = %+v", rows)
+	}
+
+	appHolds := &recordingApprovals{pending: []ApprovalWire{{ID: "a1", Options: []ApprovalOptionWire{{ID: "allow"}, {ID: "deny"}}}}}
+	s, _ = newServer(appHolds)
+	pane = &fakePanePrompts{current: prompt}
+	if _, err := s.answerAppPrompt(pane, "%9", PromptAnswer{PromptID: "perm1", Number: 1}, web, loads); err != nil {
+		t.Fatal(err)
+	}
+	if len(pane.pressed) != 0 || !reflect.DeepEqual(appHolds.decided, []string{"a1:allow"}) || len(appHolds.answeredInTerminal()) != 0 {
+		t.Fatalf("through the hook: pressed %v decided %v settled %v", pane.pressed, appHolds.decided, appHolds.answeredInTerminal())
+	}
+
+	plan := &recordingApprovals{}
+	s, _ = newServer(plan)
+	menu := &classifier.Prompt{ID: "plan1", Kind: classifier.PromptPlan, Options: []classifier.PromptOption{{Number: 1, Label: "Yes, proceed"}}}
+	pane = &fakePanePrompts{current: menu}
+	if _, err := s.answerAppPrompt(pane, "%9", PromptAnswer{PromptID: "plan1", Number: 1}, web, loads); err != nil || len(plan.answeredInTerminal()) != 0 {
+		t.Fatalf("a plan menu: err %v settled %v", err, plan.answeredInTerminal())
 	}
 }
