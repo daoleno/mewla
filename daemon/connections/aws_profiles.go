@@ -20,6 +20,9 @@ import (
 
 var awsSectionHeader = regexp.MustCompile(`^\s*\[([^\]]+)\]`)
 
+// awsIdentityProbeTimeout bounds a profile's identity check.
+var awsIdentityProbeTimeout = 15 * time.Second
+
 func validAWSProfile(p string) bool {
 	return p != "" && len(p) <= 128 && !strings.ContainsAny(p, "\x00\r\n[]") && !strings.HasPrefix(p, "-")
 }
@@ -186,7 +189,9 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 				return
 			}
 			defer func() { <-sem }()
-			probe, cancel := context.WithTimeout(ctx, 4*time.Second)
+			// An SSO token renews inside this first call once an hour, which
+			// takes seconds; a shorter limit would kill every renewal.
+			probe, cancel := context.WithTimeout(ctx, awsIdentityProbeTimeout)
 			defer cancel()
 			c.out, c.err = m.cloudCommand(probe, "aws", c.r.CLI.Profile, []string{"sts", "get-caller-identity", "--output", "json", "--region", c.r.Account.Region})
 			var identity awsIdentity

@@ -309,8 +309,15 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 		out, err := m.cloud.run(ctx, binary, q.CLIArgs, m.cloud.providers[q.Integration].environment())
 		return Response{CLIOutput: &out}, err
 	}
-	if err := m.cloud.providers[q.Integration].syncProfiles(m, ctx, false); err != nil {
-		return Response{}, err
+	// A command for a profile Mewla already knows runs at once. Identity checks
+	// of every profile would spend its time (an expired SSO token alone takes
+	// seconds to renew) and run in the background instead.
+	if m.cloudTarget(q) == nil {
+		if err := m.cloud.providers[q.Integration].syncProfiles(m, ctx, false); err != nil {
+			return Response{}, err
+		}
+	} else {
+		m.refreshCloudProfiles()
 	}
 	var r *record
 	for _, candidate := range m.records {
@@ -399,4 +406,23 @@ func markDeviceCode(f *connectFlow, p cloudProvider, output string) bool {
 	f.AuthorizationURL, f.UserCode = address, code
 	f.CodeRequired, f.AddressRequired = false, false
 	return true
+}
+
+// cloudTarget is the enabled profile a command names, or the only enabled one
+// when it names none; nil when that takes discovering profiles first.
+func (m *Manager) cloudTarget(q Request) *record {
+	var found *record
+	for _, r := range m.records {
+		if r.Account.Integration != q.Integration || r.CLI == nil || !r.Account.Enabled {
+			continue
+		}
+		if q.Profile != "" && m.cloud.providers[q.Integration].profileRecord(m, q.Profile) != r {
+			continue
+		}
+		if found != nil {
+			return nil
+		}
+		found = r
+	}
+	return found
 }

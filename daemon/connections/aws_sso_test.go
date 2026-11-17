@@ -173,3 +173,58 @@ func TestAWSExpiredCommandTellsChat(t *testing.T) {
 		t.Fatalf("notices = %+v", notices)
 	}
 }
+
+// A command for a known profile must not wait for every profile's identity
+// check: right after an SSO token expires each check renews it, which takes
+// seconds, and the command ran out of time behind them.
+func TestAWSCommandDoesNotWaitForIdentityChecks(t *testing.T) {
+	m, config, _, _ := testCloudManager(t)
+	os.WriteFile(config, []byte("[profile prod]\nsso_session = work\n[profile other]\nsso_session = work\n"), 0600)
+	mustHandle(t, m, Request{Action: "list"})
+	m.snapshots.wg.Wait()
+	m.awsProfileRecord("prod").Account.Enabled = true
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release); m.Close() })
+	m.cloud.run = func(ctx context.Context, _ string, args, _ []string) (cloudOutput, error) {
+		if args[0] == "sts" {
+			select { // an identity check that is renewing a token
+			case <-release:
+			case <-ctx.Done():
+				return cloudOutput{}, ctx.Err()
+			}
+		}
+		return cloudOutput{Stdout: "ok"}, nil
+	}
+	m.cloud.checked = map[string]time.Time{}
+	done := make(chan Response, 1)
+	go func() {
+		out, err := m.Handle(context.Background(), Request{Action: "cloud_run", Integration: "aws", Profile: "prod", CLIArgs: []string{"s3", "ls"}})
+		if err != nil {
+			t.Error(err)
+		}
+		done <- out
+	}()
+	select {
+	case out := <-done:
+		if out.CLIOutput == nil || out.CLIOutput.Stdout != "ok" {
+			t.Fatalf("command = %+v", out.CLIOutput)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the command waited for identity checks")
+	}
+}
+
+func TestAWSCommandForUnknownProfileDiscoversItFirst(t *testing.T) {
+	m, config, _, calls := testCloudManager(t)
+	os.WriteFile(config, []byte("[profile prod]\nsso_session = work\n"), 0600)
+	mustHandle(t, m, Request{Action: "list"})
+	m.snapshots.wg.Wait()
+	m.awsProfileRecord("prod").Account.Enabled = true
+	os.WriteFile(config, []byte("[profile prod]\nsso_session = work\n[profile fresh]\nsso_session = work\n"), 0600)
+	if _, err := m.Handle(context.Background(), Request{Action: "cloud_run", Integration: "aws", Profile: "fresh", CLIArgs: []string{"s3", "ls"}}); err == nil || !strings.Contains(err.Error(), "Enable a profile") {
+		t.Fatalf("unknown profile = %v", err)
+	}
+	if m.awsProfileRecord("fresh") == nil {
+		t.Fatalf("profile added in a terminal was not discovered: %v", *calls)
+	}
+}
