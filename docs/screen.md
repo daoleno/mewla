@@ -376,7 +376,8 @@ an agent's browser window, Mewla makes that Chrome window the shape of your
 phone and zooms its page to your phone's sharpness, as a person zooming a
 desktop window would: the page lays itself out at your phone's width and you
 see it at its real size, with a domain chip at the top naming the page's real
-site. Tap fields, type with your keyboard, paste, and **Give back**: the window,
+site. The zoom stays as you go from page to page: a link, a reload or the next
+step of a sign-in. Tap fields, type with your keyboard, paste, and **Give back**: the window,
 its zoom and the agent screen go back as they were, with what you typed, the
 page you reached and any captcha you solved still there. The agent's monitor
 grows taller while you have it and no other agent's changes. A desktop or a
