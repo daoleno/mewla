@@ -106,5 +106,7 @@ export function sealedOfAnswered(record: AnsweredRequest, at: (ms: number) => st
     source: [answeredBy(record), when].filter(Boolean).join(" · "),
     brain: Boolean(record.thread_id || record.work_id),
     workerId: record.session_id,
+    at: Number.isFinite(answered) ? answered : undefined,
+    byBrain: record.by.kind === "brain",
   };
 }

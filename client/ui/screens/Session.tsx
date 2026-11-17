@@ -34,7 +34,7 @@ import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { ModelSheet } from "../session/ModelSheet";
 import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
-import { bringSessionRequestsBack, durableAnswered, RequestStack, requestsInView, threadRequests, threadSealed } from "../chat/RequestCard";
+import { bringSessionRequestsBack, durableAnswered, RequestStack, requestsInView, threadNewest, threadRequests, threadSealed } from "../chat/RequestCard";
 import { buildChatComposerPlaceholder } from "../../core/session/chatComposerPresentation";
 import { terminalFallback } from "../../core/session/terminalFallback";
 import { conversationUnavailableReason, interfaceTimelinePhase, isConversationSyncingReason } from "../../core/session/timelinePhase";
@@ -139,6 +139,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   // Derived, not computed: an update whose projection a slow phone cut off must not stop the thread (kit/derived.ts).
   const items = preparedRows(() => thread().conversation?.events ?? [], () => timeline(thread(), { onPendingAction: (id, action) => chat.actOnFailed(id, action) }), []);
   const durableHere = durableAnswered(items);
+  const newestHere = threadNewest(items);
   const activity = computed(() => thread().conversation?.activity);
   // The "Working" line only while the agent works on a turn: not over an open request, not once it ended (§11).
   const shownItems = derived(() => workingLineShown(worker(), activity()?.status === "running") ? items() : items().filter((item) => !isWorkingRow(item)));
@@ -170,7 +171,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   // Opened, the Session shows again what it asks that was put aside; the foot leaves out what is put aside here.
   bringSessionRequestsBack(props.workerId);
   const requestsHere = requestsInView(requests);
-  const sealedHere = threadSealed({ workerId: props.workerId }, () => durableHere());
+  const sealedHere = threadSealed({ workerId: props.workerId }, () => durableHere(), () => newestHere());
   const pickedRequest = signal("");
   // A DSH Session asks through its own channel; one panel per run of it.
   const dshRun = computed(() => {
@@ -695,7 +696,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
                 foot={{
                   shown: () => requestsHere().length > 0 || sealedHere().length > 0,
-                  render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
+                  render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
                 }}
                 requests={() => requestsHere().length} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} attached={() => uploads.ready().length > 0} onSend={sendComposer}

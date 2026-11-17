@@ -159,6 +159,12 @@ A prompt that passed without your answer (answered in the Terminal, replaced
 by another, or timed out) reads **Not answered**. If Mewla cannot send your
 answer, it says so and the card stays, so you can try again.
 
+The line an answered card leaves at the bottom of a chat is only there until
+the chat moves on: once anything newer arrives, the answer is history (the
+Session's own chat keeps it where it was asked). A Worker's request that Brain
+answered leaves no line in Brain's chat, since Brain's own step already says
+so. Nothing there needs closing.
+
 ### Copy and edit a message
 
 Tap one of your messages for **Copy**, **Select Text** and **Edit**. Code blocks

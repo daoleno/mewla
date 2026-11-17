@@ -14,7 +14,7 @@ import {
 import type { CodexConversationEvent } from "../../core/conversation/conversation";
 import type { TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
 import {
-  openCardKey, optionParts, promptParts, requestCardsOf, sealAction, sealedInThread, type RequestCard as Card, type RequestThread, type SealedRequest,
+  footSealed, newestRowAt, openCardKey, optionParts, promptParts, requestCardsOf, sealAction, type RequestCard as Card, type RequestThread, type SealedRequest,
 } from "../../core/timeline/requestCards";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
@@ -71,18 +71,22 @@ export function requestsInView(cards: () => readonly Card[]) {
   return computed(() => cards().filter((card) => !aside().has(card.key)));
 }
 
-/** Requests answered here that this thread shows as quiet lines (the five newest). */
-export function threadSealed(thread: RequestThread, durable?: () => ReadonlySet<string>) {
-  // A line the thread already holds as its own answered row (kept by the computer) is not repeated at the foot.
-  return computed(() => {
-    const held = durable?.();
-    return sealedRequests().filter((s) => sealedInThread(s, thread) && !held?.has(s.key)).slice(-5);
-  });
+/**
+ * What was just answered that this thread's foot shows as quiet lines: not what the thread holds as its own answered
+ * row (kept by the computer), not what Brain answered, and nothing older than the thread's newest row (footSealed).
+ */
+export function threadSealed(thread: RequestThread, durable?: () => ReadonlySet<string>, newest?: () => number | undefined) {
+  return computed(() => footSealed(sealedRequests(), thread, durable?.(), newest?.()));
 }
 
 /** The card keys a thread's own answered rows (WIRE §2) seal. */
 export function durableAnswered(items: () => readonly { type: string }[]) {
   return computed(() => new Set(items().flatMap((item) => (item.type === "answered" ? (item as AnsweredTimelineItem).keys : []))));
+}
+
+/** When a thread's newest row happened: an answer older than it has left the foot for history. */
+export function threadNewest(items: () => readonly { timestamp?: string }[]) {
+  return computed(() => newestRowAt(items()));
 }
 
 /** What the person did with a card, for the thread to say ("That question has already passed."). */
@@ -474,6 +478,8 @@ export function RequestStack(props: {
   notice: RequestNotice;
   /** Keys the thread holds as answered rows: their sealed lines are in the thread, not the foot. */
   durable?: () => ReadonlySet<string>;
+  /** When the thread's newest row happened: an answer before it is history, not the foot's. */
+  newest?: () => number | undefined;
   /** The open card's view: the thread centres it (SPEC §3.1 cold start, a tray row). */
   anchor?: (node: ViewRef) => void;
 }) {
@@ -486,7 +492,7 @@ export function RequestStack(props: {
     putRequestAside(key);
     if (untracked(props.picked) === key) props.picked.set("");
   };
-  const sealed = threadSealed(props.thread, props.durable);
+  const sealed = threadSealed(props.thread, props.durable, props.newest);
   const shown = signal<ReadonlySet<string>>(new Set());
   const toggle = (key: string) => {
     const next = new Set(shown());

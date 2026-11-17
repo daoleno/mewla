@@ -48,7 +48,10 @@ const answeredKeysSeen = signal<ReadonlySet<string>>(new Set());
 const answered = computed(() => new Set([...sealedRequests().map((sealed) => sealed.key), ...answeredKeysSeen()]));
 
 export function sealRequest(sealed: SealedRequest): void {
-  sealedRequests.set([...sealedRequests().filter((s) => s.key !== sealed.key), sealed]);
+  // The computer's record of this answer can come first (its broadcast precedes the answer's reply): it stands, with
+  // when it was answered, so the line still leaves the foot once the thread moves on.
+  if (untracked(sealedRequests).some((s) => s.key === sealed.key && s.at != null)) return;
+  sealedRequests.set([...untracked(sealedRequests).filter((s) => s.key !== sealed.key), sealed]);
 }
 
 /**

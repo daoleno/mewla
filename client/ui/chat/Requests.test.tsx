@@ -123,6 +123,66 @@ describe("requests in Brain's thread", () => {
     await app.waitUntil(() => !app.texts().includes("1 needs you"));
   }, 20_000);
 
+  test("a delegated Worker's request Brain answered leaves no line; the person's own answer leaves the foot once the thread moves on (owner 11-17)", async () => {
+    const app = await open(APP, {
+      platform: "android", storage: paired,
+      host: phoneHost({ brain, worker_sessions: [session("docs", { delegated: true, approvals: [approval("a1", "go test ./relay"), approval("a2", "git push origin main")] })],
+        conversations: { "brain-host": [{ id: "m-before", seq: 1, timestamp: new Date(Date.now() - 3_600_000).toISOString(), kind: "assistant_message", role: "assistant", body: "Docs is on the relay test." }] } }),
+    });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    const record = (id: string, summary: string, by: Record<string, unknown>, answeredAt: string) => ({ type: "request_answered", request: {
+      id: `approval:docs:${id}`, kind: "approval", session_id: "docs", work_id: "w1", tool: "Bash", summary, asked: summary, answer: "Allow", outcome: "approved",
+      by, answered_at: answeredAt, anchor: { approval_id: id },
+    } });
+    // Brain answered it: its own step in its thread says so, and nothing is left at the foot to clear.
+    await app.host.send("app.daemonPush", record("a1", "go test ./relay", { kind: "brain", basis: "the brief" }, new Date().toISOString()));
+    await app.waitUntil(() => !app.texts().includes("go test ./relay"));
+    expect(app.count("id:request-sealed")).toBe(0);
+    // The person's answer on another device seals the card here as one line.
+    const answeredAt = new Date().toISOString();
+    await app.host.send("app.daemonPush", record("a2", "git push origin main", { kind: "device", device_name: "Mewla Web" }, answeredAt));
+    await app.waitFor("id:request-sealed");
+    expect(app.count("id:request-sealed")).toBe(1);
+    expect(app.texts()).toContain("Approved");
+    // Brain's thread moves on: the answer is history, and the line above the composer goes.
+    await app.waitUntil(() => framesOf(app.host.posts(), "codex_conversation_subscribe").some((frame) => frame.worker_id === "brain-host"));
+    const subscription = framesOf(app.host.posts(), "codex_conversation_subscribe").filter((frame) => frame.worker_id === "brain-host").at(-1)!;
+    const later = new Date(Date.parse(answeredAt) + 5_000).toISOString();
+    await app.host.send("app.daemonPush", { type: "codex_conversation_delta", request_id: subscription.request_id, worker_id: "brain-host", revision: 2, base_revision: 1, deletes: [], upserts: [
+      { id: "m-later", seq: 2, timestamp: later, kind: "assistant_message", role: "assistant", body: "The push went through." },
+    ] });
+    await app.waitFor("text:The push went through.", { timeout: 5_000 });
+    await app.waitUntil(() => app.count("id:request-sealed") === 0);
+  }, 20_000);
+
+  test("answered here, the computer's record can come before the answer's reply: the line keeps its time and still leaves once the thread moves on", async () => {
+    const app = await open(APP, {
+      platform: "android", storage: paired,
+      host: phoneHost({ brain, worker_sessions: [session("docs", { delegated: true, approvals: [approval("a1", "git push origin main")] })],
+        conversations: { "brain-host": [{ id: "m-before", seq: 1, timestamp: new Date(Date.now() - 3_600_000).toISOString(), kind: "assistant_message", role: "assistant", body: "Docs is pushing." }] } }),
+    });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    await app.wait(500);
+    await app.press("id:prompt-option-allow");
+    await app.waitUntil(() => framesOf(app.host.posts(), "approval_decision").length > 0);
+    // The daemon broadcasts the record before it replies to the answer (handleApprovalDecision, handleAnswerPrompt).
+    const answeredAt = new Date().toISOString();
+    await app.host.send("app.daemonPush", { type: "request_answered", request: {
+      id: "approval:docs:a1", kind: "approval", session_id: "docs", work_id: "w1", tool: "Bash", summary: "git push origin main", asked: "git push origin main", answer: "Allow",
+      outcome: "approved", by: { kind: "device", device_name: "Phone" }, answered_at: answeredAt, anchor: { approval_id: "a1" },
+    } });
+    const decision = framesOf(app.host.posts(), "approval_decision").at(-1)!;
+    await app.host.send("app.daemonPush", { type: "approval_decided", request_id: decision.request_id, worker_id: "docs", approval_id: "a1" });
+    await app.waitFor("id:request-sealed");
+    expect(app.count("id:request-sealed")).toBe(1);
+    const subscription = framesOf(app.host.posts(), "codex_conversation_subscribe").filter((frame) => frame.worker_id === "brain-host").at(-1)!;
+    await app.host.send("app.daemonPush", { type: "codex_conversation_delta", request_id: subscription.request_id, worker_id: "brain-host", revision: 2, base_revision: 1, deletes: [], upserts: [
+      { id: "m-later", seq: 2, timestamp: new Date(Date.parse(answeredAt) + 5_000).toISOString(), kind: "assistant_message", role: "assistant", body: "Pushed." },
+    ] });
+    await app.waitFor("text:Pushed.", { timeout: 5_000 });
+    await app.waitUntil(() => app.count("id:request-sealed") === 0);
+  }, 20_000);
+
   test("after a restart the thread still says what was answered, by whom, where it was asked", async () => {
     const at = "2026-11-12T07:24:49.000Z";
     const row = { id: "answered:prompt:brain-host:p1", seq: 2, timestamp: "2026-11-12T07:24:26.000Z", kind: "request_answered", source: "request_answered", role: "system",
