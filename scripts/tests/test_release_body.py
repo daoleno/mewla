@@ -14,7 +14,7 @@ class ReleaseBodyTests(unittest.TestCase):
     def test_the_notes_list_the_changes_how_to_get_it_and_how_to_verify(self):
         cert = release_body.certificate()
         notes = release_body.body("v9.9.2", "v9.9.1", ["Brain answers faster", "Fix a crash"], cert)
-        self.assertTrue(notes.startswith("# Mewla 9.9.2\n\n## Changes\n\n- Brain answers faster\n- Fix a crash\n"))
+        self.assertTrue(notes.startswith("# Mewla 9.9.2\n\n## Fixed\n\n- Fix a crash\n\n## Changes\n\n- Brain answers faster\n\n## Get it"))
         for marker in (
             "## Get it",
             "Run `mewla update`",
@@ -29,6 +29,12 @@ class ReleaseBodyTests(unittest.TestCase):
             f"```text\n{cert}\n```",
         ):
             self.assertIn(marker, notes)
+
+    def test_a_subject_that_says_something_no_longer_happens_is_a_fix(self):
+        notes = release_body.body("v9.9.2", "v9.9.1", ["The app no longer crashes when Firebase gives it no push token"], "AA")
+        self.assertIn("## Fixed\n\n- The app no longer crashes", notes)
+        self.assertNotIn("## Changes", notes)
+        self.assertFalse(release_body.FIX.search("Fixtures for the calendar test"))
 
     def test_release_preparation_commits_are_not_changes(self):
         self.assertTrue(release_body.PREPARE.match("Prepare v0.4.10"))
