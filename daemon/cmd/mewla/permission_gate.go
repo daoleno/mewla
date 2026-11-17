@@ -151,9 +151,10 @@ func (s *agentEventService) ask(ctx context.Context, workerID string, a agenteve
 	}
 	decision, answered = s.hub.Ask(ctx, workerID, a, s.now().UTC())
 	if decision.By == agentevents.ByTerminal {
-		// Answered in the Worker's own prompt: nothing is refused, and the
-		// question Brain was told about is over.
-		s.finishQuestion(workerID, a, "answered_in_terminal", "answered in the terminal: "+describeAction(a), "terminal", "")
+		// Answered in the Worker's own prompt on its screen (typed in its
+		// terminal, or a key a device or `mewla worker answer` sent): nothing is
+		// refused, and the question Brain was told about is over.
+		s.finishQuestion(workerID, a, "answered_on_screen", "answered on the Worker's screen: "+describeAction(a), "screen", "")
 		return decision, false, delegated
 	}
 	if !answered && delegated && !s.stopping() {
