@@ -65,6 +65,15 @@ debugging pipe: if the daemon goes, Chrome goes with it. It is also how Chrome i
 asked to quit (`Browser.close`), so the profile flushes. Chrome has no debugging
 port.
 
+The pipe on its own marks every page as automated (`navigator.webdriver` is
+true), and Google then refuses to sign in at the first step ("This browser or app
+may not be secure"), so nobody could give the agents a Google sign-in or a site's
+"Sign in with Google". Chrome is therefore also started with
+`--disable-blink-features=AutomationControlled`. A tab the extension attaches the
+debugger to for an agent is not marked, so signing in inside an agent's window in
+Screen works. The person's own Chrome (a Mac, Windows, or a desktop without the
+virtual screen) starts with no pipe and is never marked.
+
 ## One Chrome, a window per agent
 
 Chrome allows one process per profile (a second one hands its request to the
