@@ -247,38 +247,64 @@ state. Profile discovery, identity and expiry checks refresh in the background
 at most once a minute; open pages receive the results automatically. A quiet
 **Checking…** pill marks rows being refreshed. Other services never wait for these checks.
 
-**Sign in.** Add an account or choose **Sign in again**. Mewla runs its managed official
-AWS CLI's remote sign-in. Open AWS, sign in on any device, and paste the code
-AWS shows into Mewla. This is the same flow on phones and desktop computers.
-The AWS CLI keeps its own session; Mewla keeps no copy of credentials.
+**Add an account.** If your organization uses IAM Identity Center, Mewla adds
+your accounts from it. Mewla uses the access portal already in your AWS config
+(an `sso-session`). If there is none, Mewla asks for your access portal URL. A
+`d-….awsapps.com` portal also needs its Region. Mewla then shows a device code.
+**Copy and open AWS** opens AWS's page with the code filled in, and approving it
+on any device finishes the sign-in. Nothing is pasted back. Mewla then lists the
+accounts and roles you may use and writes a profile for each one you don't have
+yet, named after the account (and the role, where you have several in one
+account). The profile it signs in is turned on;
+the others are listed for you to turn on.
 
-An IAM Identity Center (SSO) profile signs in with a device code instead:
-Mewla shows the code, **Copy and open AWS** opens AWS's page with it filled in,
-and approving it on any device finishes the sign-in. Nothing is pasted back.
-Mewla never runs `aws login` on an SSO profile, which would turn it into a
-12-hour login session.
+For an AWS account without Identity Center, choose **No access portal**. Mewla
+runs its managed official AWS CLI's remote sign-in (`aws login`): open AWS,
+sign in on any device, and paste the code AWS shows into Mewla. The AWS CLI
+keeps its own session; Mewla keeps no copy of credentials.
 
-**How long a sign-in lasts.** `aws login` (console credentials) sessions end
-after at most 12 hours, or sooner if the role's maximum session is shorter.
-AWS cannot extend them; you must sign in again. If your organization has IAM
-Identity Center, use an SSO profile (`sso_session`, `sso_account_id`,
-`sso_role_name`; `aws configure sso` writes one). The CLI renews its role
-credentials by itself for as long as the Identity Center session lasts: 8 hours
-by default, and up to 90 days if an administrator sets the session duration
-under Identity Center **Settings › Authentication**. The permission set's own
-session duration (up to 12 hours) only limits each role credential, which the
-CLI renews without a new sign-in. Roles granted through IAM account access
-manager are not SSO account assignments: `aws sso login` does not cover them,
-so they sign in with `aws login`.
+**Sign in again** on a card uses that profile's own kind of sign-in: a device
+code for an Identity Center profile, `aws login` for a login profile. Mewla
+never runs `aws login` on an Identity Center profile, which would turn it into
+a 12-hour login session.
 
-Each signed-in card shows the latest the sign-in can last: 12 hours after an
-`aws login`, and for an SSO profile the end of the CLI's client registration
-(up to 90 days). Identity Center's session duration can end an SSO sign-in
-sooner. For enabled profiles, Mewla checks in the background every 30 minutes.
-Chat says once when an SSO sign-in ends within a day, and once when any
-sign-in has ended, naming the profile and where to sign in again. A command
-an agent runs on an ended profile returns the CLI's error plus a line naming
-the profile and where the person signs in again.
+**How long a sign-in lasts.** `aws login` sessions end after at most 12 hours,
+or sooner if the role's maximum session is shorter. AWS can't extend them. An
+Identity Center sign-in belongs to its `sso-session`, and every profile naming
+that session shares it. The CLI renews its role credentials by itself until the
+organization's session length has passed since you signed in. That length is
+8 hours by default, and up to 90 days if an administrator sets it under
+Identity Center **Settings › Authentication**. The permission set's own session
+duration (up to 12 hours) only limits each role credential, and the CLI renews
+those without a new sign-in. Roles granted through IAM account access manager
+are not Identity Center account assignments: `aws sso login` doesn't cover
+them, so they sign in with `aws login`.
+
+AWS doesn't tell the CLI when an Identity Center sign-in ends. The CLI cache
+holds only the hourly access token and its client registration, which are not
+when the sign-in ends. So Mewla works it out from two facts:
+
+- **When you signed in.** Mewla records this when it runs the sign-in. A
+  sign-in made in a terminal has no known start until you sign in again in
+  Mewla.
+- **How long your organization's sign-ins last.** On the card, **Sign-in lasts**
+  offers the lengths Identity Center has; set it once to match Identity Center.
+  Mewla also learns it when a sign-in it started ends, and every profile of the
+  session uses the same length.
+
+With both known, the card says when the sign-in ends ("Ends in 89d"). Without
+them it shows no end.
+
+For enabled profiles, Mewla checks every 30 minutes in the background. Chat
+says once, a day ahead, when an Identity Center sign-in that lasts two days or
+more will end. Chat also says once when any sign-in has ended. Each notice has
+**Sign in**, which opens Extensions on that profile's own sign-in: for Identity
+Center, a code to approve on any device. A shorter sign-in (`aws login`'s 12
+hours, an 8-hour Identity Center default) gets only the ended notice, since a
+day's warning would always be showing. A command an agent runs on an ended
+profile returns the CLI's error plus a line naming the profile and where the
+person signs in again.
+
 Mewla installs and updates its own official CLI inside its state directory,
 without sudo or changing your system installation. It checks at most daily,
 updates in the background, and waits for a check before the first command or

@@ -23,6 +23,8 @@ import { AgentIcon } from "../icons/AgentIcon";
 import { Icon as KitIcon } from "../kit/Icon";
 import { clock } from "../calendar/clock";
 import { serverForComputer, type ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
+import type { PluginNoticeTimelineItem } from "../../core/timeline/pluginNoticeModel";
+import { signInFromChat } from "../more/extensions/plugins";
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import { Icon, type IconName } from "../icons/Icon";
 import { ICON_ASSETS } from "../icons/assets";
@@ -231,6 +233,35 @@ export function TaskNotificationCard(props: { item: () => TaskNotificationTimeli
     <Card id={it().id} expansion={props.expansion} icon={iconOf(it().icon, "pulse")} tone={it().tone} kind={it().kindLabel} title={it().title}
       status={it().statusLabel} preview={[it().facts.join(" · "), it().preview].filter(Boolean).join("\n")} body={it().body}
       extra={() => it().details.map((d) => <Text class="text-xs text-muted-foreground">{`${d.label}: ${d.value}`}</Text>)} />
+  );
+}
+
+/**
+ * An Extensions account whose sign-in ended or is about to (an AWS profile, Slack), in Chat: what happened, and
+ * Sign in, which opens Extensions on that account's own sign-in (for AWS Identity Center, a code to approve).
+ */
+export function PluginNoticeCard(props: { item: () => PluginNoticeTimelineItem }) {
+  const it = props.item;
+  const missing = signal(false);
+  const signIn = async () => {
+    haptic.impact();
+    missing.set(!(await signInFromChat(it().accountId)));
+  };
+  return (
+    <View testID="plugin-notice" class="mx-4 my-1 gap-1.5 rounded-xl border border-border bg-card px-3 py-2.5">
+      <View class="flex-row items-center gap-2">
+        <Icon name="warning" color={toneColor("failed")} size={16} />
+        <Text class="flex-1 text-base font-semibold" role="header">{it().title}</Text>
+      </View>
+      <If when={it().body}>{(body) => <View selectable><Text class={`text-sm text-muted-foreground ${SELECTION}`}>{body()}</Text></View>}</If>
+      <View class="flex-row items-center gap-3">
+        <Button testID="plugin-notice-sign-in" accessibilityLabel={`Sign in: ${it().title}`} onPress={() => void signIn()}
+          class="self-start rounded-full border border-border px-3 py-1.5 active:bg-accent">
+          <Text class="text-sm font-semibold text-primary">Sign in</Text>
+        </Button>
+        <If when={missing()}><Text testID="plugin-notice-missing" class="text-sm text-muted-foreground">This computer no longer has that account</Text></If>
+      </View>
+    </View>
   );
 }
 

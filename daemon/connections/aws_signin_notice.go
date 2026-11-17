@@ -42,7 +42,6 @@ func awsSignInNotice(r *record, now time.Time) (SignInLost, string) {
 		name = a.Name
 	}
 	n := SignInLost{AccountID: a.ID, At: now.UTC()}
-	where := "Extensions › AWS › " + name
 	switch a.ProfileStatus {
 	case "expired", "invalid":
 		// A profile that never worked here has nothing to lose.
@@ -51,15 +50,17 @@ func awsSignInNotice(r *record, now time.Time) (SignInLost, string) {
 		}
 		n.Title = "AWS sign-in ended"
 		if a.ProfileKind == "aws login" {
-			n.Body = "“" + name + "” signs in with aws login, which AWS ends after at most 12 hours and cannot extend. Sign in again in " + where + ". For a sign-in that lasts weeks, use an IAM Identity Center (SSO) profile."
+			n.Body = "“" + name + "” signs in with aws login, which AWS ends after at most 12 hours and cannot extend. Tap Sign in for another 12 hours. For a sign-in that lasts weeks, add the account from your organization's IAM Identity Center in Extensions › AWS."
 		} else {
-			n.Body = "AWS ended the sign-in for “" + name + "”, so agents can't use it. Tap Sign in in " + where + " and approve the code on any device."
+			n.Body = "AWS ended the sign-in for “" + name + "”, so agents can't use it. Tap Sign in and approve the code on any device."
 		}
 		return n, "ended:" + a.VerifiedAt.UTC().Format(time.RFC3339)
 	case "valid":
-		// aws login always ends within 12 hours: a day's warning would be
-		// permanent. Its end is said once it happens.
-		if a.ProfileSignInBy == nil || a.ProfileKind == "aws login" {
+		// Only a sign-in whose real end is known (Identity Center, its start
+		// and the organization's length) is warned about. One that lasts under
+		// two days (aws login's 12 h, a default 8 h session) would be warned
+		// about all the time; its end is said once it happens.
+		if a.ProfileSignInBy == nil || a.ProfileSignInLimit != "session" || r.CLI.SessionLength < int64(2*awsSignInWarnAhead/time.Second) {
 			return n, ""
 		}
 		left := a.ProfileSignInBy.Sub(now)
@@ -67,7 +68,7 @@ func awsSignInNotice(r *record, now time.Time) (SignInLost, string) {
 			return n, ""
 		}
 		n.Title = "AWS sign-in ends soon"
-		n.Body = "“" + name + "” stays signed in until " + a.ProfileSignInBy.In(time.Local).Format("Mon 15:04") + " at the latest. Tap Sign in in " + where + " and approve the code on any device, so agents keep access."
+		n.Body = "“" + name + "” stays signed in until " + a.ProfileSignInBy.In(time.Local).Format("Mon 15:04") + ". Tap Sign in and approve the code on any device, so agents keep access."
 		return n, "soon:" + a.ProfileSignInBy.UTC().Format(time.RFC3339)
 	}
 	return n, ""

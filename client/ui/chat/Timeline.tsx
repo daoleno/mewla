@@ -11,6 +11,7 @@ import { Button, TextView } from "nsh/base";
 import { isWorkingRow } from "../../core/conversation/timeline";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
+import type { PluginNoticeTimelineItem } from "../../core/timeline/pluginNoticeModel";
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import type { AnsweredTimelineItem, BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { withDayDividers } from "../../core/timeline/dayDividers";
@@ -27,7 +28,7 @@ import { pictureKey, samePictures, sentPictures, threadPictures } from "../../co
 import { INLINE_CODE, SELECTION } from "./TimelineRows";
 import { Caption } from "../kit/kit";
 import { FileName } from "../kit/FileName";
-import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, renderCodeWhile, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
+import { ActivityRow, ComputerMessageCard, createExpansion, PluginNoticeCard, PlanRow, renderCodeWhile, TaskNotificationCard, WorkCard, type Expansion, type WorkCardHandlers } from "./TimelineRows";
 import { AnsweredRow } from "./RequestCard";
 import { brainFiles, brainHostIdentity, openChatLink, openChatPath } from "./links";
 import { createReplyLinks } from "./chatFileLinks";
@@ -244,6 +245,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem 
   const plan = as("plan") as () => PlanTimelineItem;
   const task = as("task-notification") as () => TaskNotificationTimelineItem;
   const computerMessage = as("computer-message") as () => ComputerMessageTimelineItem;
+  const pluginNotice = as("plugin-notice") as () => PluginNoticeTimelineItem;
   const answered = as("answered") as () => AnsweredTimelineItem;
   const work = as("brain-work-event") as () => BrainWorkEventTimelineItem;
   // The files a reply names as links, which preview them (`onLink`): a home path at once, any other (`worklog/a.md`)
@@ -253,7 +255,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem 
   const replyCode = renderCodeWhile(() => Boolean(reply().streaming));
   return (
     <View class="py-1">
-      <If when={kind() === "update-line"} else={<><If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
+      <If when={kind() === "update-line"} else={<><If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "plugin-notice"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><PluginNoticeCard item={pluginNotice} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
           pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} /></If>}><WorkingRow since={() => props.handlers.workingSince?.()} /></If>}><View class="px-4">
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
               with the system's handles and menu (Copy, Select all, Share). */}

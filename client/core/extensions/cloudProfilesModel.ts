@@ -10,7 +10,30 @@ export function cloudProfileExpiry(a: PluginAccount, now = Date.now()): { label:
   if (delta <= 0) return null;
   const minutes = Math.max(1, Math.ceil(delta / 60000));
   const value = minutes >= 1440 ? `${Math.floor(minutes / 1440)}d` : minutes >= 60 ? `${Math.floor(minutes / 60)}h` : `${minutes}m`;
+  // An Identity Center sign-in's real end (its start and the organization's length): a day ahead is soon.
+  if (a.profile_sign_in_limit === "session") return { label: `Ends in ${value}`, soon: delta <= 86_400_000 };
   return { label: a.profile_sign_in_limit === "maximum" ? `Up to ${value} left` : `Sign in in ${value}`, soon: delta <= 3600000 };
+}
+
+/** The sign-in lengths IAM Identity Center offers (Settings › Authentication › Session duration), in seconds. */
+export const AWS_SESSION_LENGTHS: readonly number[] = [1, 2, 4, 8, 12, 24, 72, 120, 168, 720, 2160].map((hours) => hours * 3600);
+
+/** A sign-in length in words: "8 hours", "1 day", "90 days". */
+export function sessionLengthLabel(seconds: number): string {
+  const hours = Math.round(seconds / 3600);
+  if (hours < 24) return hours === 1 ? "1 hour" : `${hours} hours`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
+/**
+ * An Identity Center profile's sign-in, for its card: when Mewla signed it in and how long the organization's
+ * sign-ins last. Null for any other profile, or one signed in elsewhere (a terminal), whose start is unknown.
+ */
+export function awsSessionFacts(a: PluginAccount): { signedInAt: number; length: string | null } | null {
+  const at = Date.parse(a.profile_signed_in_at || "");
+  if (a.integration !== "aws" || !Number.isFinite(at)) return null;
+  return { signedInAt: at, length: a.profile_session_length_s ? sessionLengthLabel(a.profile_session_length_s) : null };
 }
 
 export function cloudProfileStatus(a: PluginAccount): { label: string; tone: "success" | "warning" | "neutral" } {

@@ -274,6 +274,9 @@ type TimelineItem struct {
 	DetailsJSON     string `json:"details_json,omitempty"`
 	NextAction      string `json:"next_action,omitempty"`
 	WaitFor         string `json:"wait_for,omitempty"`
+	// PluginAccountID names the Extensions account a plugin notice is about,
+	// so its row signs that account in again with one tap.
+	PluginAccountID string `json:"plugin_account_id,omitempty"`
 }
 
 // timelineReadCache is the whole timeline in seq order. It is filled on first
@@ -1012,6 +1015,8 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 			Body:      item.Body,
 			Status:    item.Status,
 			Source:    item.Kind,
+			// A plugin notice names its account; the row's Sign in renews it.
+			PluginAccountID: item.PluginAccountID,
 		}, true
 	case timelineKindCalendarResult:
 		return work.CodexConversationEvent{

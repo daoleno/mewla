@@ -61,13 +61,17 @@ func awsProfileExpiry(configPath string, fields map[string]string, cli *cloudAcc
 		end := cli.LoginAt.Add(12 * time.Hour)
 		return &end, "maximum"
 	}
-	// Modern sso-session tokens refresh; their expiresAt is not session end.
-	// The client registration bounds every refresh, so it is the upper bound.
+	// An sso-session sign-in renews itself until the organization's session
+	// length has passed since the person signed in; AWS keeps neither locally.
+	// Its end is known once Mewla started this very sign-in and the length is
+	// known (learned or set). The access token's expiry renews hourly and the
+	// client registration's is not the sign-in's, so neither is shown.
 	if session := fields["sso_session"]; session != "" {
-		if end := awsSSOSessionEnd(configPath, session); end != nil {
-			return end, "maximum"
+		if cli == nil || cli.SignInAt == nil || cli.SessionLength <= 0 || cli.SignInBinding == "" || cli.SignInBinding != awsSSOBinding(configPath, session) {
+			return nil, ""
 		}
-		return nil, ""
+		end := cli.SignInAt.Add(time.Duration(cli.SessionLength) * time.Second)
+		return &end, "session"
 	}
 	// Legacy nonrefreshable SSO has a usable local reauthentication time.
 	key := fields["sso_start_url"]
@@ -99,6 +103,11 @@ func (awsCLI) loginCompleted(m *Manager, r *record) {
 	}
 	fields := awsSections(raw, true)[r.CLI.Profile]
 	now := time.Now().UTC()
+	if session := fields["sso_session"]; session != "" {
+		// The sign-in is the session's: every profile naming it starts now.
+		m.awsSSOSignedIn(session, now)
+		return
+	}
 	r.CLI.LoginAt = &now
 	r.CLI.LoginSession = awsLoginSession(config, fields)
 	r.Account.ProfileSignInBy, r.Account.ProfileSignInLimit = awsProfileExpiry(config, fields, r.CLI)

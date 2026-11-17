@@ -35,7 +35,8 @@ func TestPluginSignInLostShowsInChatOnce(t *testing.T) {
 	shown := false
 	for _, event := range TimelineItemsToConversationEvents(items) {
 		if event.Source == timelineKindPluginNotice {
-			shown = event.Kind == "status" && event.Title == "Slack sign-in ended" && event.Status == "warning"
+			// The row names its account, so its Sign in renews that account.
+			shown = event.Kind == "status" && event.Title == "Slack sign-in ended" && event.Status == "warning" && event.PluginAccountID == "a14f"
 		}
 	}
 	if !shown {

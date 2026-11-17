@@ -3053,6 +3053,7 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 		writeFingerprintInt(w, *event.ExitCode)
 	}
 	writeFingerprintString(w, event.Status)
+	writeFingerprintString(w, event.PluginAccountID)
 	writeFingerprintBool(w, event.Partial)
 	writeFingerprintBool(w, event.Transient)
 	writeFingerprintStrings(w, event.Files)

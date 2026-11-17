@@ -297,6 +297,8 @@ type CodexConversationEvent struct {
 	WorkWaitFor       string `json:"work_wait_for,omitempty"`
 	// WorkActions are the result's typed next steps (brain/work_result_actions.go).
 	WorkActions []ResultAction `json:"work_actions,omitempty"`
+	// PluginAccountID is the Extensions account a plugin notice is about.
+	PluginAccountID string `json:"plugin_account_id,omitempty"`
 	// Request is set only for Source=request_answered rows: a request (a
 	// prompt, an approval, a question) and how it was answered.
 	Request *answered.Request `json:"request,omitempty"`

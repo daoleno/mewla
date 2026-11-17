@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PluginAccount } from "./connections";
-import { cloudProfileExpiry, cloudProfileGroups, cloudProfileIdentity, cloudProfileName, cloudProfilesSummary, suggestedAWSProfile, validAWSProfileName } from "./cloudProfilesModel";
+import { AWS_SESSION_LENGTHS, awsSessionFacts, cloudProfileExpiry, cloudProfileGroups, sessionLengthLabel, cloudProfileIdentity, cloudProfileName, cloudProfilesSummary, suggestedAWSProfile, validAWSProfileName } from "./cloudProfilesModel";
 test("a new AWS profile is offered a name from its account alias and role, which the CLI accepts", () => {
   const account: PluginAccount = { id: "a", integration: "aws", name: "mewla-temp", profile: "mewla-temp", identity: "", enabled: true, status: "connected", history: [], aws: { account_id: "123456789012", account_name: "ACE Labs Mgmt", who: "Admin" } };
   expect(suggestedAWSProfile(account)).toBe("ace-labs-mgmt-admin");
@@ -66,4 +66,19 @@ test("a Google Workspace account is named by its Google account, with no project
   expect(cloudProfileName(gws)).toBe("person@example.com");
   expect(cloudProfileIdentity(gws)).toBe("");
   expect(cloudProfilesSummary([gws])).toBe("person@example.com");
+});
+
+test("an Identity Center sign-in shows its real end, and only once its start and the organization's length are known", () => {
+  const now = Date.parse("2026-11-18T08:00:00Z");
+  const sso = { ...profile("prod", "valid"), profile_kind: "SSO" };
+  // A start alone is no end: nothing counts down.
+  expect(cloudProfileExpiry({ ...sso, profile_signed_in_at: "2026-11-18T07:00:00Z" }, now)).toBeNull();
+  const ends = { ...sso, profile_signed_in_at: "2026-11-18T07:00:00Z", profile_session_length_s: 90 * 86400, profile_sign_in_by: "2027-02-16T07:00:00Z", profile_sign_in_limit: "session" as const };
+  expect(cloudProfileExpiry(ends, now)).toEqual({ label: "Ends in 89d", soon: false });
+  expect(cloudProfileExpiry({ ...ends, profile_sign_in_by: "2026-11-18T20:00:00Z" }, now)).toEqual({ label: "Ends in 12h", soon: true });
+  expect(awsSessionFacts(ends)).toEqual({ signedInAt: Date.parse("2026-11-18T07:00:00Z"), length: "90 days" });
+  expect(awsSessionFacts({ ...ends, profile_session_length_s: undefined })?.length).toBeNull();
+  // Signed in elsewhere (a terminal): its start is not known, so there is nothing to show.
+  expect(awsSessionFacts(sso)).toBeNull();
+  expect(AWS_SESSION_LENGTHS.map(sessionLengthLabel)).toEqual(["1 hour", "2 hours", "4 hours", "8 hours", "12 hours", "1 day", "3 days", "5 days", "7 days", "30 days", "90 days"]);
 });
