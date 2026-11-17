@@ -41,6 +41,16 @@ export interface DaemonUpdateStatus {
   updating?: boolean;
   /** Why the last update did not take; the previous version kept running. */
   error?: string;
+  /** What a downloaded update waits for before it restarts Mewla ("a permission answer"). */
+  waiting_for?: string;
+  /** When a waiting update installs anyway (RFC 3339). */
+  install_by?: string;
+  /** The session host's version: it outlives Mewla's updates, so it can be older. */
+  host_version?: string;
+  /** The terminals must restart to finish updating; they do on their own once that ends nothing. */
+  terminals_restart?: boolean;
+  /** How many terminals restarting them now would end. */
+  live_terminals?: number;
 }
 
 export type ComputerCheck = { state: "online"; name?: string } | { state: "unpaired" } | { state: "offline" };
@@ -68,6 +78,11 @@ export async function getDaemonUpdate(server: StoredServer): Promise<DaemonUpdat
 /** Updates the computer now: it downloads, verifies, restarts, and keeps the old version if the new one will not start. */
 export function installDaemonUpdate(server: StoredServer): Promise<DaemonUpdateStatus> {
   return signedJSON<DaemonUpdateStatus>(server, "POST", "/daemon-update", "mewla-daemon-update:POST:/daemon-update");
+}
+
+/** Restarts the computer's terminals now (its session host): every terminal ends, Brain comes back in its conversation. */
+export function restartComputerTerminals(server: StoredServer): Promise<DaemonUpdateStatus> {
+  return signedJSON<DaemonUpdateStatus>(server, "POST", "/daemon-update/terminals", "mewla-daemon-update:POST:/daemon-update/terminals");
 }
 
 /**

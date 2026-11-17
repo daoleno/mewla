@@ -52,6 +52,21 @@ function followComputer(): void {
 
 followComputer();
 
+/**
+ * While connected, the update is read again every few minutes: an update that waits on a busy
+ * computer shows in Brain's Chat (update/ChatUpdateRow) without the page being opened.
+ */
+const UPDATE_REREAD_MS = 5 * 60_000;
+setInterval(() => {
+  if (untracked(connection) === "connected") readComputerUpdate();
+}, UPDATE_REREAD_MS);
+
+function readComputerUpdate(): void {
+  const server = untracked(current);
+  if (!server) return;
+  void getDaemonUpdate(server).then((next) => current()?.id === server.id && computerUpdate.set(next)).catch(() => {});
+}
+
 /** The current computer's Needs fixing rows (SPEC §3.6). */
 export const fixRows = computed<FixRow[]>(() => {
   const server = current();

@@ -35,6 +35,7 @@ import { clock } from "../calendar/clock";
 import { Icon } from "../kit/Icon";
 import { HomeCat } from "./Cat";
 import { StateControl } from "../tray/StateControl";
+import { ChatUpdateRow, chatUpdate } from "../update/ChatUpdateRow";
 import { HOME_HEADER_HEIGHT, homeHeaderInset, Tray } from "../tray/Tray";
 import { BrainChatFailed, BrainChatUnavailable, BrainHostSheet, BrainMenu, brainChatState, brainChatUnavailable, brainComposerBlock, createBrainComposer, currentBrain, MentionPanel } from "../brain";
 import { newSessionOpen } from "../screens/NewSession";
@@ -362,11 +363,15 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
               failedAction={{ title: "Open terminal", onPress: () => openTerminal(brain()?.host_worker?.id ?? ""), testID: "brain-chat-open-terminal" }} />
           )}
           foot={{
-            shown: () => !routedBrainThread() && (requestsHere().length > 0 || sealedHere().length > 0),
+            shown: () => !routedBrainThread() && (requestsHere().length > 0 || sealedHere().length > 0 || chatUpdate() !== null),
             render: (anchor) => (
-              <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
-                onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
-                openLabel="Open" onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
+              // An update that waits says so here, above the requests: never silent (11-17).
+              <View class="gap-2">
+                <ChatUpdateRow />
+                <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
+                  onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
+                  openLabel="Open" onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
+              </View>
             ),
           }}
           requests={() => (routedBrainThread() ? 0 : requestsHere().length)} reveal={revealRequests} />
