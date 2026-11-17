@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "0.4.14",
+      "date": "2026-11-17",
+      "highlights": [],
+      "fixes": [
+        "Slack stays connected: it no longer stops working 12 hours after you connect it.",
+        "Google sign-in works in the agents' browser."
+      ]
+    },
+    {
       "version": "0.4.10",
       "date": "2026-11-16",
       "highlights": [],
