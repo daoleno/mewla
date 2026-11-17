@@ -180,6 +180,7 @@ func TestWebConnectOnLoopbackReturnsThroughRelayToTheCallback(t *testing.T) {
 	SlackPublicClientID = "public-slack"
 	defer func() { SlackPublicClientID = previous }()
 	m, _ := New(t.TempDir())
+	signedInSlack(m)
 	const origin = "http://127.0.0.1:9877"
 	m.SetWebOrigins(func(o string) bool { return o == origin })
 	web := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: origin}}).Flow
@@ -218,6 +219,7 @@ func TestWebConnectElsewhereFinishesByPastingTheRelayAddress(t *testing.T) {
 	SlackPublicClientID = "public-slack"
 	defer func() { SlackPublicClientID = previous }()
 	m, _ := New(t.TempDir())
+	signedInSlack(m)
 	m.SetWebOrigins(func(o string) bool { return o == "https://mewla.example" })
 	web := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: "https://mewla.example"}}).Flow
 	authorize, _ := url.Parse(web.AuthorizationURL)
@@ -279,6 +281,7 @@ func TestWebConnectRefusesAppSchemeOnlyReturn(t *testing.T) {
 	SlackPublicClientID = ""
 	defer func() { SlackPublicClientID = previous }()
 	m, _ := New(t.TempDir())
+	signedInSlack(m)
 	raw, _ := json.Marshal(OAuthClientConfig{ClientID: "owned", RedirectURL: NativeCallback})
 	if err := m.vault.Set("oauth-client:slack", string(raw)); err != nil {
 		t.Fatal(err)
@@ -295,6 +298,7 @@ func TestAppConnectReturnsThroughRelay(t *testing.T) {
 	SlackPublicClientID = "public-slack"
 	defer func() { SlackPublicClientID = previous }()
 	m, _ := New(t.TempDir())
+	signedInSlack(m)
 	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
 	native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow
 	authorize, _ := url.Parse(native.AuthorizationURL)
@@ -540,6 +544,7 @@ func TestWebConnectFromLocalhostReturnsToLocalhost(t *testing.T) {
 		}
 	}
 	m, _ := New(t.TempDir())
+	signedInSlack(m)
 	const origin = "http://localhost:9876"
 	m.SetWebOrigins(func(o string) bool { return o == origin })
 	slack := SlackPublicClientID

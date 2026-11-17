@@ -85,7 +85,7 @@ Mewla's own app registration with the provider:
 | Google Workspace | Gmail, Calendar and Drive through Google's own `gws` CLI. Connect asks once for a Google client (below), then signs in with Google; paste the address the browser ends on | One account, shared with the CLI; Mewla installs a checksum-pinned `gws` in one tap |
 | Remote MCP | The service's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
-| Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address. On this computer (`http://localhost` or `http://127.0.0.1`) that page sends the browser straight back to Extensions. From any other web address it shows an address instead: copy it, paste it into the sign-in card in Mewla and choose **Continue** |
+| Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first. Needs this computer signed in to your Mewla account: Mewla's account service redeems and renews Slack's sign-in for it | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address. On this computer (`http://localhost` or `http://127.0.0.1`) that page sends the browser straight back to Extensions. From any other web address it shows an address instead: copy it, paste it into the sign-in card in Mewla and choose **Continue** |
 | Hyperliquid | No sign-in and no setup to read; one API wallet key you paste to let Brain trade | Works everywhere; the key field is on the service's page |
 
 Why Slack's return is not forwarded to every web address: the page at

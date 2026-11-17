@@ -6,9 +6,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"github.com/daoleno/mewla/daemon/slacktoken"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -101,4 +105,23 @@ func selfSignedPEM(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+// The Slack exchange answers under its prefix, unconfigured or not, and every
+// other path still reaches the account service.
+func TestSlackExchangeIsMountedBesideTheAccountService(t *testing.T) {
+	base := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
+	handler := withSlack(base, slacktoken.New(slacktoken.Config{Accounts: slackAccounts{}}).Handler())
+	for path, want := range map[string]int{
+		slacktoken.RefreshPath:  http.StatusUnauthorized, // unsigned
+		slacktoken.ExchangePath: http.StatusUnauthorized,
+		"/v1/machine":           http.StatusTeapot,
+		"/healthz":              http.StatusTeapot,
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`)))
+		if recorder.Code != want {
+			t.Fatalf("%s = %d, want %d", path, recorder.Code, want)
+		}
+	}
 }

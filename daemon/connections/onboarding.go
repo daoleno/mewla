@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/daoleno/mewla/daemon/slacktoken"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -530,12 +531,24 @@ func (m *Manager) oauthForm(ctx context.Context, r *record, endpoint string, val
 	return json.NewDecoder(http.MaxBytesReader(nil, resp.Body, MaxResultBytes)).Decode(out)
 }
 
+// slackCodec redeems and renews Slack tokens. Mewla's published app has no
+// secret on any daemon, and Slack renews a rotating token issued to an https
+// redirect only with it, so that app's sign-ins go through the account
+// service, which holds the secret (daemon/slacktoken). A client an operator
+// configured talks to Slack directly, with its own secret, when it has one,
+// on the exchange and on every refresh.
 var slackCodec = tokenCodec{
 	exchange: func(m *Manager, ctx context.Context, r *record, secret, code, verifier string) (*oauth2.Token, error) {
-		return m.slackToken(ctx, r, slackClientForm(r, secret, url.Values{"code": {code}, "redirect_uri": {r.OAuth.RedirectURL}, "code_verifier": {verifier}}))
+		if mewlasSlackApp(r) {
+			return m.slackViaService(ctx, slacktoken.ExchangePath, slacktoken.Exchange{Code: code, CodeVerifier: verifier, RedirectURI: r.OAuth.RedirectURL}, false)
+		}
+		return m.slackToken(ctx, r, slackClientForm(r, secret, url.Values{"code": {code}, "redirect_uri": {r.OAuth.RedirectURL}, "code_verifier": {verifier}}), false)
 	},
 	refresh: func(m *Manager, ctx context.Context, r *record, secret, refreshToken string) (*oauth2.Token, error) {
-		return m.slackToken(ctx, r, slackClientForm(r, secret, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}))
+		if mewlasSlackApp(r) {
+			return m.slackViaService(ctx, slacktoken.RefreshPath, slacktoken.Refresh{RefreshToken: refreshToken}, true)
+		}
+		return m.slackToken(ctx, r, slackClientForm(r, secret, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}), true)
 	},
 	revoke: func(m *Manager, ctx context.Context, r *record, accessToken string) error {
 		if _, err := m.request(ctx, r, lookup(r.Account.Integration).Endpoint, accessToken, "POST", "/auth.revoke", nil); err != nil {
@@ -545,11 +558,14 @@ var slackCodec = tokenCodec{
 	},
 }
 
-// slackClientForm adds the client's own credentials to one oauth.v2.access
-// grant. The exchange and every refresh build them here, so a client that
-// signed in with its secret also refreshes with it: Slack refuses a rotating
-// token's refresh without the secret (bad_client_secret) unless the token came
-// from a PKCE desktop redirect.
+// mewlasSlackApp reports an account signed in with Mewla's published Slack
+// app, whose secret only the account service holds.
+func mewlasSlackApp(r *record) bool {
+	return SlackPublicClientID != "" && r.OAuth.ClientID == SlackPublicClientID
+}
+
+// slackClientForm adds an operator client's own credentials to one
+// oauth.v2.access grant, the same for the exchange and every refresh.
 func slackClientForm(r *record, secret string, grant url.Values) url.Values {
 	grant.Set("client_id", r.OAuth.ClientID)
 	if secret != "" {
@@ -558,28 +574,59 @@ func slackClientForm(r *record, secret string, grant url.Values) url.Values {
 	return grant
 }
 
-func (m *Manager) slackToken(ctx context.Context, r *record, values url.Values) (*oauth2.Token, error) {
-	type payload struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
-		Scope        string `json:"scope"`
-	}
-	var data struct {
-		payload
-		OK         bool    `json:"ok"`
-		Error      string  `json:"error"`
-		AuthedUser payload `json:"authed_user"`
-	}
+// slackToken posts a grant to Slack itself (an operator client).
+func (m *Manager) slackToken(ctx context.Context, r *record, values url.Values, refresh bool) (*oauth2.Token, error) {
+	var data slackAnswer
 	if err := m.oauthForm(ctx, r, r.OAuth.TokenURL, values, &data); err != nil {
 		return nil, err
 	}
+	return data.token(refresh)
+}
+
+// slackViaService asks the account service, as this signed-in computer, to
+// redeem or renew a token with Mewla's app. Only Slack's own ok:false is a
+// refusal: the service refusing this computer, its limit, or Slack out of
+// reach leave the account as it was.
+func (m *Manager) slackViaService(ctx context.Context, path string, body any, refresh bool) (*oauth2.Token, error) {
+	if m.accountService == nil || !m.accountService.SignedIn() {
+		return nil, refreshUnreachable{errSlackNeedsMewla}
+	}
+	raw, err := m.accountService.SlackToken(ctx, path, body)
+	if err != nil {
+		return nil, refreshUnreachable{err}
+	}
+	var data slackAnswer
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, refreshUnreachable{errors.New("the Mewla account service sent an unreadable answer")}
+	}
+	return data.token(refresh)
+}
+
+var errSlackNeedsMewla = errors.New("Slack sign-in needs this computer signed in to a Mewla account")
+
+type slackPayload struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	Scope        string `json:"scope"`
+}
+
+// slackAnswer is oauth.v2.access's JSON: a refresh answers at the top level,
+// a user-scope exchange under authed_user.
+type slackAnswer struct {
+	slackPayload
+	OK         bool         `json:"ok"`
+	Error      string       `json:"error"`
+	AuthedUser slackPayload `json:"authed_user"`
+}
+
+func (data slackAnswer) token(refresh bool) (*oauth2.Token, error) {
 	if !data.OK {
 		// Slack answered and said no (invalid_refresh_token, token_revoked…).
 		return nil, refreshRefused{oauthCode(data.Error)}
 	}
-	value := data.payload
-	if values.Get("grant_type") != "refresh_token" {
+	value := data.slackPayload
+	if !refresh {
 		value = data.AuthedUser
 	}
 	if value.AccessToken == "" || len(value.AccessToken) > 16384 || len(value.RefreshToken) > 16384 {

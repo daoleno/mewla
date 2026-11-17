@@ -545,6 +545,7 @@ func goldenConnect(t *testing.T, ids []string) map[string]any {
 			if err != nil {
 				t.Fatal(err)
 			}
+			signedInSlack(m) // Mewla's public Slack app needs a Mewla sign-in
 			wire := goldenSignIn(t)
 			m.networkOwned = false
 			m.http = &http.Client{Transport: wire}

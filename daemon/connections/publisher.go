@@ -45,6 +45,12 @@ func (m *Manager) unavailableReason(kind string) string {
 	if !ready {
 		return e.Name + " sign-in is not set up yet."
 	}
+	if e.OAuth.PublicViaAccount && e.OAuth.Public != nil && (m.accountService == nil || !m.accountService.SignedIn()) {
+		if public, ok := e.OAuth.Public(); !ok || public.ClientID != client.ClientID {
+			return ""
+		}
+		return "Sign in to your Mewla account to connect " + e.Name + "."
+	}
 	return ""
 }
 

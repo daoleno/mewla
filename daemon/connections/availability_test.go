@@ -41,7 +41,15 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 		t.Fatal("unavailable connection created state")
 	}
 	GitHubPublicClientID, SlackPublicClientID = "public-github", "public-slack"
-	expected["github"], expected["slack"] = true, true
+	// Mewla's public Slack app renews through the account service, so it
+	// needs this computer signed in to a Mewla account.
+	expected["github"] = true
+	assertAvailability(expected)
+	if reason := m.unavailableReason("slack"); reason != "Sign in to your Mewla account to connect Slack." {
+		t.Fatalf("signed-out Slack: %q", reason)
+	}
+	signedInSlack(m)
+	expected["slack"] = true
 	m.records["existing-github"] = &record{Account: Account{ID: "existing-github", Integration: "github", Enabled: true, Status: "connected"}}
 	assertAvailability(expected)
 	GitHubPublicClientID, SlackPublicClientID = "", ""
