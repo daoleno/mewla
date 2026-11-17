@@ -81,6 +81,8 @@ var awsSensitiveReads = map[string]string{
 	"grafana":             "list-workspace-service-account-tokens",
 	"lambda":              "get-function get-function-configuration",
 	"s3api":               "get-object get-object-torrent",
+	// Returns role credentials for an account access manager entitlement.
+	"account-access-runtime": "get-role-credentials",
 }
 var awsCommandWord = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 

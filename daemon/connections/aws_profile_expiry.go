@@ -62,9 +62,16 @@ func awsProfileExpiry(configPath string, fields map[string]string, cli *cloudAcc
 		return &end, "maximum"
 	}
 	// Modern sso-session tokens refresh; their expiresAt is not session end.
-	// Only legacy nonrefreshable SSO has a usable local reauthentication time.
+	// The client registration bounds every refresh, so it is the upper bound.
+	if session := fields["sso_session"]; session != "" {
+		if end := awsSSOSessionEnd(configPath, session); end != nil {
+			return end, "maximum"
+		}
+		return nil, ""
+	}
+	// Legacy nonrefreshable SSO has a usable local reauthentication time.
 	key := fields["sso_start_url"]
-	if fields["sso_session"] != "" || key == "" {
+	if key == "" {
 		return nil, ""
 	}
 	sum := sha1.Sum([]byte(key))

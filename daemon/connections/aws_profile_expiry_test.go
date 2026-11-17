@@ -66,7 +66,18 @@ func TestAWSLegacySSOTimingOnly(t *testing.T) {
 	}
 	fields["sso_session"] = "modern"
 	if at, _ = awsProfileExpiry(config, fields, nil); at != nil {
-		t.Fatal("modern refreshable SSO token treated as session end")
+		t.Fatal("modern SSO session without a cache got a session end")
+	}
+	// A refreshable token's own expiry rotates hourly; the client registration
+	// bounds every refresh, so it is the (upper-bound) end.
+	modern := sha1.Sum([]byte("modern"))
+	os.WriteFile(filepath.Join(dir, hex.EncodeToString(modern[:])+".json"), []byte(`{"expiresAt":"2026-11-03T10:00:00Z","refreshToken":"opaque","registrationExpiresAt":"2027-02-01T09:00:00Z"}`), 0600)
+	if at, kind = awsProfileExpiry(config, fields, nil); at == nil || at.Format(time.RFC3339) != "2027-02-01T09:00:00Z" || kind != "maximum" {
+		t.Fatalf("modern SSO end = %v %q", at, kind)
+	}
+	os.WriteFile(filepath.Join(dir, hex.EncodeToString(modern[:])+".json"), []byte(`{"expiresAt":"2026-11-03T10:00:00Z","registrationExpiresAt":"2027-02-01T09:00:00Z"}`), 0600)
+	if at, _ = awsProfileExpiry(config, fields, nil); at == nil || at.Format(time.RFC3339) != "2026-11-03T10:00:00Z" {
+		t.Fatalf("SSO token that cannot refresh ends with it: %v", at)
 	}
 }
 

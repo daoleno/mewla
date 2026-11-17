@@ -25,7 +25,7 @@ func TestAWSSecretReadersStayGated(t *testing.T) {
 		{"kms", "decrypt"}, {"sts", "get-session-token"}, {"sts", "get-federation-token"}, {"sts", "assume-role"}, {"iam", "create-access-key"},
 		{"ecr", "get-authorization-token"}, {"ecr-public", "get-authorization-token"}, {"codeartifact", "get-authorization-token"},
 		{"cognito-identity", "get-credentials-for-identity"}, {"redshift", "get-cluster-credentials"}, {"eks", "get-token"},
-		{"cognito-idp", "describe-user-pool-client"}, {"ec2", "get-password-data"}, {"appsync", "list-api-keys"}, {"lambda", "get-function"}, {"s3api", "get-object"},
+		{"cognito-idp", "describe-user-pool-client"}, {"account-access-runtime", "get-role-credentials"}, {"ec2", "get-password-data"}, {"appsync", "list-api-keys"}, {"lambda", "get-function"}, {"s3api", "get-object"},
 		{"billing", "put-credit-sharing-preference"}, {"freetier", "upgrade-account-plan"},
 	} {
 		read, err := (awsCLI{}).classify(args)

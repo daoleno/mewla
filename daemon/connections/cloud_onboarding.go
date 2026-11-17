@@ -112,7 +112,13 @@ func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 			return nil
 		}
 	}
-	login, err := startCloudLogin(binary, p.loginArgs(f.profile), p.environment())
+	args := p.loginArgs(f.profile)
+	if chooser, ok := p.(interface {
+		loginArgsFor(*Manager, string) []string
+	}); ok {
+		args = chooser.loginArgsFor(m, f.profile)
+	}
+	login, err := startCloudLogin(binary, args, p.environment())
 	if err != nil {
 		return err
 	}
@@ -127,6 +133,9 @@ func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 	timer := time.NewTimer(8 * time.Second)
 	defer timer.Stop()
 	for {
+		if markDeviceCode(f, p, login.output.String()) {
+			return nil
+		}
 		if address := p.loginURL(login.output.String()); address != "" {
 			markLoginURL(f, p, address)
 			return nil
@@ -223,12 +232,13 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 		}
 		return flowResult(f), nil
 	}
-	if f.AuthorizationURL == "" {
+	if f.AuthorizationURL == "" && !markDeviceCode(f, p, f.cli.output.String()) {
 		if address := p.loginURL(f.cli.output.String()); address != "" {
 			markLoginURL(f, p, address)
 		}
 	}
-	if q.Action == "connect_finish" && !f.cli.sent {
+	// A device code is approved on the service's page; nothing is pasted back.
+	if q.Action == "connect_finish" && !f.cli.sent && f.UserCode == "" {
 		code := strings.TrimSpace(q.Callback)
 		if !p.validateCode(f.AuthorizationURL, code) {
 			message := "Paste the authorization code shown after sign-in."
@@ -341,6 +351,11 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 	if out.ExitCode != 0 && (awsExpired(out.Stderr) || q.Integration == "gws" && out.ExitCode == 2) {
 		r.Account.Status = "authorization_required"
 		r.Account.ProfileStatus = "expired"
+		if q.Integration == "aws" {
+			m.noteAWSSignIns(time.Now())
+			// The CLI's own line names a login command agents cannot run.
+			out.Stderr = strings.TrimRight(out.Stderr, "\n") + "\nmewla: the AWS sign-in for profile " + r.CLI.Profile + " has ended. Ask the person to sign in again in Mewla: Extensions › AWS › " + r.CLI.Profile + " › Sign in. Chat has the notice.\n"
+		}
 	}
 	// History records the classification, never arguments/output (which may contain secrets).
 	m.event(r, tool, nil)
@@ -368,4 +383,20 @@ func markLoginURL(f *connectFlow, p cloudProvider, address string) {
 		return
 	}
 	f.CodeRequired = true
+}
+
+// markDeviceCode shows a device code a CLI printed (AWS IAM Identity Center).
+// The person approves it on any device; the flow completes when the CLI exits.
+func markDeviceCode(f *connectFlow, p cloudProvider, output string) bool {
+	d, ok := p.(interface{ deviceCode(string) (string, string) })
+	if !ok {
+		return false
+	}
+	address, code := d.deviceCode(output)
+	if code == "" {
+		return false
+	}
+	f.AuthorizationURL, f.UserCode = address, code
+	f.CodeRequired, f.AddressRequired = false, false
+	return true
 }

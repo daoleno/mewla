@@ -251,6 +251,34 @@ at most once a minute; open pages receive the results automatically. A quiet
 AWS CLI's remote sign-in. Open AWS, sign in on any device, and paste the code
 AWS shows into Mewla. This is the same flow on phones and desktop computers.
 The AWS CLI keeps its own session; Mewla keeps no copy of credentials.
+
+An IAM Identity Center (SSO) profile signs in with a device code instead:
+Mewla shows the code, **Copy and open AWS** opens AWS's page with it filled in,
+and approving it on any device finishes the sign-in. Nothing is pasted back.
+Mewla never runs `aws login` on an SSO profile, which would turn it into a
+12-hour login session.
+
+**How long a sign-in lasts.** `aws login` (console credentials) sessions end
+after at most 12 hours, or sooner if the role's maximum session is shorter.
+AWS cannot extend them; you must sign in again. If your organization has IAM
+Identity Center, use an SSO profile (`sso_session`, `sso_account_id`,
+`sso_role_name`; `aws configure sso` writes one). The CLI renews its role
+credentials by itself for as long as the Identity Center session lasts: 8 hours
+by default, and up to 90 days if an administrator sets the session duration
+under Identity Center **Settings › Authentication**. The permission set's own
+session duration (up to 12 hours) only limits each role credential, which the
+CLI renews without a new sign-in. Roles granted through IAM account access
+manager are not SSO account assignments: `aws sso login` does not cover them,
+so they sign in with `aws login`.
+
+Each signed-in card shows the latest the sign-in can last: 12 hours after an
+`aws login`, and for an SSO profile the end of the CLI's client registration
+(up to 90 days). Identity Center's session duration can end an SSO sign-in
+sooner. For enabled profiles, Mewla checks in the background every 30 minutes.
+Chat says once when an SSO sign-in ends within a day, and once when any
+sign-in has ended, naming the profile and where to sign in again. A command
+an agent runs on an ended profile returns the CLI's error plus a line naming
+the profile and where the person signs in again.
 Mewla installs and updates its own official CLI inside its state directory,
 without sudo or changing your system installation. It checks at most daily,
 updates in the background, and waits for a check before the first command or
