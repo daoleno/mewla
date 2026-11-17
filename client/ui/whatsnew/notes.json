@@ -20,7 +20,8 @@
       "fixes": [
         "Screen shows one agent at a time, full size, with one switch: Take over or Give back.",
         "Zoomed in on Screen, one finger moves the view; tap twice to zoom, press and hold for right click, double click or drag.",
-        "The floating screen is for watching: tap it to open Screen."
+        "The floating screen is for watching: tap it to open Screen.",
+        "Typing fast on Screen sends each letter once, and the keys you need stay above the keyboard."
       ]
     },
     {
