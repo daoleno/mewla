@@ -136,10 +136,24 @@ func (h *hostUpgrader) brainBetweenTurns(id string) bool {
 	return false // not observed yet: not known to be idle
 }
 
-// RestartNow is the app's one tap: the person ends every terminal now.
+// errHostCurrent: the terminals already run a host this Mewla keeps, so
+// there is nothing a restart would finish.
+var errHostCurrent = errors.New("the terminals already run this Mewla; nothing to restart")
+
+// RestartNow is the app's one tap: the person ends every terminal now. A tap
+// on a row the app still shows after the host was replaced is refused: it
+// would end the terminals opened since for nothing.
 func (h *hostUpgrader) RestartNow() error {
 	if h == nil || !h.supported {
 		return errors.New("this Mewla does not restart its terminals")
+	}
+	state, err := h.state()
+	if err != nil {
+		return err
+	}
+	if !hostBehind(state.Version) {
+		h.tick()
+		return errHostCurrent
 	}
 	go h.restartHost(true)
 	return nil
@@ -159,8 +173,9 @@ func (h *hostUpgrader) restartHost(now bool) {
 		h.mu.Unlock()
 	}()
 	restarted, err := h.restart(func(state watcher.SessionHostState) bool {
-		// Checked again at the last moment: a Worker may have started.
-		return now || h.lossOf(state) == ""
+		// Checked again at the last moment: a Worker may have started, or
+		// the host may have been replaced already.
+		return hostBehind(state.Version) && (now || h.lossOf(state) == "")
 	})
 	if err != nil {
 		log.Printf("session host: restart onto this version: %v", err)

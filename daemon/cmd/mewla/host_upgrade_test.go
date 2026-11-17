@@ -116,3 +116,16 @@ func TestRestartTerminalsNowEndsEveryTerminal(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// The app's row can outlive the restart it asked for (it reads the status
+// every few minutes): a tap then must not end the terminals opened since.
+func TestRestartTerminalsIsRefusedOnceTheHostIsCurrent(t *testing.T) {
+	h, host, _, _ := newHostUpgraderFixture("0.4.15", "mh-brain", "mh-worker")
+	if err := h.RestartNow(); err != errHostCurrent {
+		t.Fatalf("tap on a current host = %v, want errHostCurrent", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if host.count() != 0 {
+		t.Fatal("a tap on a current host restarted it and ended its terminals")
+	}
+}
