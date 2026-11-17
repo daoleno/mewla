@@ -4,7 +4,8 @@
   release-body.py --tag vX.Y.Z [--previous vA.B.C] > notes.md
 
 The changes are the subjects of the commits since the previous release tag (merges and release
-preparation commits left out), newest first; then how to get it and how to verify the downloads,
+preparation commits left out), newest first. A subject that says something no longer happens, or
+starts with Fix, is listed under Fixed; the rest under Changes. Then how to get it and how to verify the downloads,
 with the Android certificate fingerprint scripts/verify-release-identity.sh pins. --previous
 defaults to the newest release tag that is an ancestor of --tag. A model may polish the text later
 on its own key; these notes never wait for one.
@@ -24,6 +25,8 @@ INSTALL_SCRIPT_URL = "https://mewla.ai/install.sh"
 INSTALL_DOCS_URL = "https://mewla.ai/docs/install/"
 TAG = re.compile(r"^v\d+\.\d+\.\d+(-beta\.\d+)?$")
 PREPARE = re.compile(r"^Prepare v\d+\.\d+\.\d+(-beta\.\d+)?$")
+# How this repository words a fix: "The app no longer crashes when ...", "Fix ...".
+FIX = re.compile(r"\bno longer\b|^fix(es|ed)?\b", re.IGNORECASE)
 
 
 def git(*args: str) -> str:
@@ -52,14 +55,16 @@ def changes(previous: str, tag: str) -> list[str]:
 
 def body(tag: str, previous: str, subjects: list[str], cert: str) -> str:
     version = tag.removeprefix("v")
-    listed = "\n".join(f"- {s}" for s in subjects) or "- Maintenance release."
+    fixed = [s for s in subjects if FIX.search(s)]
+    changed = [s for s in subjects if not FIX.search(s)]
+    sections = "".join(
+        f"## {title}\n\n" + "\n".join(f"- {s}" for s in items) + "\n\n"
+        for title, items in (("Fixed", fixed), ("Changes", changed))
+        if items
+    ) or "## Changes\n\n- Maintenance release.\n\n"
     return f"""# Mewla {version}
 
-## Changes
-
-{listed}
-
-## Get it
+{sections}## Get it
 
 - **Already installed?** Run `mewla update` on your computer, and install the new APK on Android.
 - **New here?** `curl -fsSL {INSTALL_SCRIPT_URL} | sh` picks the right file for you. See [Install]({INSTALL_DOCS_URL}).
