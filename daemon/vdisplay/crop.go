@@ -63,6 +63,23 @@ type monitorView struct {
 	shifts  [3]int // red, green, blue: where the viewer wants each byte
 	zbuf    bytes.Buffer
 	zw      *zlib.Writer
+	// resizable: the viewer takes a new screen size (the DesktopSize
+	// pseudo-encoding); size is the one it was last told.
+	resizable bool
+	size      image.Point
+}
+
+// area is the rectangle the viewer is shown: rect(), or for a viewer that
+// cannot be told a new size, as much of it as fits the size it has.
+func (m *monitorView) area() image.Rectangle {
+	r := m.rect()
+	m.mu.Lock()
+	resizable, size := m.resizable, m.size
+	m.mu.Unlock()
+	if resizable || size == (image.Point{}) {
+		return r
+	}
+	return image.Rectangle{Min: r.Min, Max: r.Min.Add(image.Pt(min(size.X, r.Dx()), min(size.Y, r.Dy())))}
 }
 
 // Write receives each of the viewer's messages whole (Relay's destination).
@@ -70,7 +87,7 @@ func (m *monitorView) Write(msg []byte) (int, error) {
 	if len(msg) == 0 {
 		return 0, nil
 	}
-	r := m.rect()
+	r := m.area()
 	switch {
 	case len(msg) == 1 && !m.started: // ClientInit
 		m.started = true
@@ -94,14 +111,18 @@ func (m *monitorView) Write(msg []byte) (int, error) {
 		m.mu.Unlock()
 	case msg[0] == 2 && len(msg) >= 4: // SetEncodings
 		n := int(binary.BigEndian.Uint16(msg[2:]))
-		zrle := false
+		zrle, resizable := false, false
 		for i := 0; i < n && 4+4*i+4 <= len(msg); i++ {
-			if int32(binary.BigEndian.Uint32(msg[4+4*i:])) == 16 {
+			switch int32(binary.BigEndian.Uint32(msg[4+4*i:])) {
+			case 16:
 				zrle = true
+			case -223: // DesktopSize
+				resizable = true
 			}
 		}
 		m.mu.Lock()
 		m.zrle = zrle
+		m.resizable = resizable
 		m.mu.Unlock()
 	case msg[0] == 3 && len(msg) == 10: // FramebufferUpdateRequest
 		x, y := int(binary.BigEndian.Uint16(msg[2:])), int(binary.BigEndian.Uint16(msg[4:]))
@@ -139,6 +160,9 @@ func clamp(v, lo, hi int) int {
 func (m *monitorView) serverInit(r image.Rectangle) error {
 	name := []byte("Mewla agent display")
 	b := make([]byte, 24+len(name))
+	m.mu.Lock()
+	m.size = r.Size()
+	m.mu.Unlock()
 	binary.BigEndian.PutUint16(b[0:], uint16(r.Dx()))
 	binary.BigEndian.PutUint16(b[2:], uint16(r.Dy()))
 	copy(b[4:], []byte{32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0, 0, 0, 0})
@@ -187,9 +211,29 @@ func (m *monitorView) flush() error {
 	}
 	req, incr, zrle := m.req, m.incr, m.zrle
 	shadow, shifts := m.shadow, m.shifts
+	resizable, size := m.resizable, m.size
 	m.mu.Unlock()
-	r := m.rect()
+	r := m.area()
 	w, h := r.Dx(), r.Dy()
+	if resizable && r.Size() != size {
+		// The view changed shape (a window laid out for the phone, or put back): the viewer is told the new
+		// size, and then everything again.
+		var out [16]byte
+		binary.BigEndian.PutUint16(out[2:], 1)
+		binary.BigEndian.PutUint16(out[8:], uint16(w))
+		binary.BigEndian.PutUint16(out[10:], uint16(h))
+		binary.BigEndian.PutUint32(out[12:], uint32(0xFFFFFF21)) // -223
+		_ = m.out.SetWriteDeadline(time.Now().Add(15 * time.Second))
+		if _, err := m.out.Write(out[:]); err != nil {
+			return err
+		}
+		m.mu.Lock()
+		m.size = r.Size()
+		m.shadow = nil
+		m.pending = false
+		m.mu.Unlock()
+		return nil
+	}
 	pix := m.up.Crop(r)
 	if shifts != [3]int{16, 8, 0} { // the display's own order is blue, green, red
 		for i := 0; i+3 < len(pix); i += 4 {

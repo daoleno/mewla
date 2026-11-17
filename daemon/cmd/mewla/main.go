@@ -866,6 +866,14 @@ func runDaemon(args []string, stderr io.Writer) error {
 		Closed: browserManager.Closed,
 	}
 	browserManager.SetWindowCloser(agentUse.Bridge().CloseWindow)
+	// Taking over an agent's display from a phone lays its window out for the
+	// phone: the extension makes it the phone's shape and zoom.
+	displayService.SetReflower(windowReflower{bridge: agentUse.Bridge(), browser: browserManager})
+	agentUse.Bridge().PageHost = func(key, host string) {
+		if worker := browserManager.WorkerOf(key); worker != "" {
+			displayService.PageHost(worker, host)
+		}
+	}
 	browserManager.SetSwitchHook(func() { go agentUse.Refresh() })
 	srv.SetBrowser(browserManager)
 	workerName := func(id string) string {
