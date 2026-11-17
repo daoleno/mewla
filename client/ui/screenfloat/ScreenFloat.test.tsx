@@ -55,8 +55,11 @@ describe("the floating screen: agents' displays and the Mac", () => {
     });
     await shown.waitFor("id:screen-float", { timeout: 10_000 });
     expect(shown.texts()).toContain("Writer");
+    // The float is for watching: no keyboard of its own.
+    expect(shown.shows("id:screen-float-keyboard")).toBe(false);
     await shown.press("id:screen-float-options");
     await stepUntil(shown, () => offered.length > 0);
+    expect(offered).toContain("Take over");
     expect(offered).toContain("Stop");
     await shown.waitUntil(() => shown.requests().some((r) => r.method === "POST" && r.url === `${BASE}/display`));
     const halt = shown.requests().find((r) => r.method === "POST" && r.url === `${BASE}/display`)!;
@@ -96,6 +99,8 @@ describe("the floating screen: agents' displays and the Mac", () => {
     });
     await shown.waitFor("id:work-card-screen", { timeout: 10_000 });
     expect(shown.shows("id:screen-float")).toBe(false);
+    // Its turn is over and its page is open for the person: the card takes it over in one step.
+    expect(shown.texts()).toContain("Take over");
     await shown.press("id:work-card-screen");
     await shown.waitFor(`id:display-${id}`, { timeout: 10_000 });
     expect(shown.texts()).toContain("ZeroGAccounts");
@@ -112,7 +117,9 @@ describe("the floating screen: agents' displays and the Mac", () => {
     await shown.press("id:work-card-screen");
     await shown.waitFor(`id:display-${id}`, { timeout: 10_000 });
     expect(shown.texts()).toContain("SignIn");
-    expect(shown.shows("id:displays-own-screen")).toBe(true);
+    // The Mac's own screen is one step away, in the stage's menu.
+    await shown.press("id:screen-options");
+    await shown.waitFor("id:displays-own-screen");
   }, 25_000);
 
   test("on a Mac, a running Chrome-only Worker's window floats under its name", async () => {

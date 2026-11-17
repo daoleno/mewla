@@ -1,0 +1,23 @@
+{
+  "version": "0.4.15",
+  "date": "2026-11-18",
+  "highlights": [
+    {
+      "id": "0.4.15-screen-reflow",
+      "title": "Sign-ins that fit your phone",
+      "line": "Take over an agent's page and it fits your phone: tap, type, paste, give back.",
+      "media": {
+        "scene": "screen-reflow"
+      },
+      "try": {
+        "kind": "open",
+        "target": "screen"
+      }
+    }
+  ],
+  "fixes": [
+    "Screen shows one agent at a time, full size, with one switch: Take over or Give back.",
+    "Zoomed in on Screen, one finger moves the view; tap twice to zoom, press and hold for right click, double click or drag.",
+    "The floating screen is for watching: tap it to open Screen."
+  ]
+}

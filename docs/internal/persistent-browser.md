@@ -113,13 +113,13 @@ activates, unlocks or reads a wallet.
 
 ## Screen
 
-**Screen** (Linux) lists the agents currently on the agent screen: a row for each,
-with its monitor's live view and **Hold the agent**, **Let the agent go on** and
-**Stop**. The Phone is a row in the same menu. There is no New browser, Open
-browser or Delete. A browser window and an agent's desktop apps are on the same
-monitor, so they are one row. Showing a row is Watch: taps and typing reach the
+**Screen** (Linux) shows one agent on the agent screen at a time, its monitor's
+live view full size, with **Take over**, **Give back** and **Stop**; the agent's
+name at the top switches to another. The Phone is a row in its menu. There is no
+New browser, Open browser or Delete. A browser window and an agent's desktop apps
+are on the same monitor, so they are one agent. Showing an agent is Watch: taps and typing reach the
 screen without pausing the agent, which is told what happened (clicks, how much
-was typed, never the text) and judges for itself. Hold and Stop are the hard
+was typed, never the text) and judges for itself. Take over and Stop are the hard
 parts. Chrome's own address bar and tabs are on the screen, so there is no
 address bar or tab strip of Mewla's.
 

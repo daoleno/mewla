@@ -1,3 +1,4 @@
+import { withoutSessionId } from "../sessions/listRow";
 import { phoneAgentWorking, phoneOwner } from "../phone/setup";
 import type { PhoneStatus } from "../phone/status";
 import { displayRoute } from "./displayRoute";
@@ -61,14 +62,14 @@ export function displayShown(display: Pick<AgentDisplay, "stopped" | "idle_s">, 
 }
 
 export function displaySource(display: AgentDisplay, name?: string): ScreenSource {
-  return { key: `display:${display.id}`, kind: "display", owner: display.id, title: name || display.id, width: display.width, height: display.height };
+  return { key: `display:${display.id}`, kind: "display", owner: display.id, title: withoutSessionId(name || display.name) || display.id, width: display.width, height: display.height };
 }
 
 /** The Mac's screen does not say how big it is until it connects; a laptop's shape stands in. */
 const MAC_SHAPE = { width: 1440, height: 900 };
 
 export function macSource(agent: ScreenAgent): ScreenSource {
-  return { key: `mac:${agent.worker}`, kind: "mac", owner: agent.worker, title: agent.name || "An agent", ...MAC_SHAPE };
+  return { key: `mac:${agent.worker}`, kind: "mac", owner: agent.worker, title: withoutSessionId(agent.name) || "An agent", ...MAC_SHAPE };
 }
 
 /** The page the person is on, as the window needs it. */
@@ -105,8 +106,8 @@ export interface ScreenTarget {
 }
 
 /** Screen's route for the float's Open: an agent's display opens Screen at that agent's card. */
-export function screenRoute(worker: string | null): { name: "screen"; worker?: string } {
-  return worker ? { name: "screen", worker } : { name: "screen" };
+export function screenRoute(worker: string | null, takeOver = false): { name: "screen"; worker?: string; takeOver?: boolean } {
+  return worker ? (takeOver ? { name: "screen", worker, takeOver } : { name: "screen", worker }) : { name: "screen" };
 }
 
 export function screenTarget(source: Pick<ScreenSource, "kind" | "owner">): ScreenTarget | null {

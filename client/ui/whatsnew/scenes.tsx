@@ -332,6 +332,56 @@ function UpdateLine(props: { version: string }) {
   );
 }
 
+/** Screen's stage: a desktop page too small to use; Take over lays it out for the phone, in the seal's red frame. */
+function ScreenReflow() {
+  const desktop = loop([{ offset: 0, opacity: 1 }, { offset: 0.4, opacity: 1 }, { offset: 0.46, opacity: 0 }, { offset: 1, opacity: 0 }]);
+  const phone = loop([{ offset: 0, opacity: 0 }, { offset: 0.42, opacity: 0, scale: 0.96 }, { offset: 0.5, opacity: 1, scale: 1 }, { offset: 1, opacity: 1, scale: 1 }]);
+  const takeOver = loop([{ offset: 0, opacity: 1 }, { offset: 0.42, opacity: 1 }, { offset: 0.46, opacity: 0 }, { offset: 1, opacity: 0 }]);
+  const giveBack = loop([{ offset: 0, opacity: 0 }, { offset: 0.44, opacity: 0 }, { offset: 0.5, opacity: 1 }, { offset: 1, opacity: 1 }]);
+  return (
+    <View class="h-[176px] w-[132px] overflow-hidden rounded-[18px] bg-black px-2 pb-2 pt-2.5">
+      <View class="h-[18px] flex-row items-center gap-1">
+        <View class="size-[12px] rounded-full bg-white/85" />
+        <View class="h-[6px] w-[36px] rounded-full bg-white/70" />
+        <View class="flex-1" />
+        <View class="h-[12px] flex-row items-center rounded-full bg-white/15 px-1.5" style={giveBack}>
+          <Text class="text-[7px] font-semibold text-white">github.com</Text>
+        </View>
+      </View>
+      <View class="relative mt-1 flex-1">
+        {/* The agent's desktop page, at a third of its size. */}
+        <View class="absolute inset-x-0 top-[34px] h-[62px] rounded-[3px] bg-white p-1.5" style={desktop}>
+          <View class="h-[3px] w-[30px] rounded-full bg-track" />
+          <View class="mt-2 self-center gap-1">
+            <View class="h-[3px] w-[24px] rounded-full bg-foreground opacity-80" />
+            <View class="h-[5px] w-[40px] rounded-[2px] bg-track" />
+            <View class="h-[5px] w-[40px] rounded-[2px] bg-track" />
+            <View class="h-[5px] w-[40px] rounded-[2px] bg-add" />
+          </View>
+        </View>
+        {/* The same page, laid out for the phone. */}
+        <View class="absolute inset-0 gap-1.5 rounded-[4px] border-2 border-seal bg-white px-2 pt-3" style={phone}>
+          <View class="h-[7px] w-[60px] rounded-full bg-foreground opacity-80" />
+          <View class="mt-1 h-[14px] rounded-[4px] border border-border" />
+          <View class="h-[14px] rounded-[4px] border border-border" />
+          <View class="h-[14px] items-center justify-center rounded-[4px] bg-add"><Text class="text-[7px] font-semibold text-white">Sign in</Text></View>
+        </View>
+      </View>
+      <View class="relative mt-1.5 h-[20px] items-center">
+        <View class="absolute h-[20px] flex-row items-center gap-1 rounded-full bg-white px-2.5" style={takeOver}>
+          <Icon name="hand" size={9} tone="ink" />
+          <Text class="text-[8px] font-semibold text-black">Take over</Text>
+        </View>
+        <View class="absolute h-[20px] flex-row items-center gap-1 rounded-full bg-seal px-2.5" style={giveBack}>
+          <Icon name="arrow-forward" size={9} tone="onBlack" />
+          <Text class="text-[8px] font-semibold text-white">Give back</Text>
+        </View>
+        <Press at={0.36} style={{ top: -3 }} />
+      </View>
+    </View>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -342,6 +392,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "network-hop": NetworkHop,
   "update-line": UpdateLine,
   "chat-diagram": ChatDiagram,
+  "screen-reflow": ScreenReflow,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */

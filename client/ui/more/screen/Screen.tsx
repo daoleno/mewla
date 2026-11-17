@@ -30,8 +30,9 @@ import { Icon, type IconName } from "../../kit/Icon";
 import { inFront } from "../../kit/inFront";
 import type { PageNav } from "../routes";
 import { agentDisplays, displayOfWorker } from "../../screenfloat/agentDisplays";
-import { AgentDisplays } from "./Displays";
 import { canShowFullSize, modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
+import { createStage, StageBarEnd, StageBody, StageChip, StageTabs, TakeOverButton } from "./Stage";
+import { withoutSessionId } from "../../../core/sessions/listRow";
 import { VirtualScreenSwitch, virtualScreenOn } from "./VirtualScreen";
 
 /** How often Screen on a computer with a screen of its own looks for agents' browser windows (a Mac's agent display). */
@@ -57,7 +58,7 @@ const ITEM = "min-h-[48px] justify-center rounded-xl px-4 py-2.5 hover:bg-accent
  * closes the viewer; returning to the app looks again, and waits for an agent
  * at work instead of taking over.
  */
-export function ScreenPage(props: { nav: PageNav; worker?: string }) {
+export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: boolean }) {
   // The menu's Phone item says who uses the phone now.
   void readPhone();
   const status = signal<ScreenStatus | null>(null);
@@ -66,6 +67,8 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   const reason = signal("");
   const busy = signal(false);
   const watching = signal<{ worker?: string } | null>(null);
+  /** The person took the screen over from an agent (Give back hands it back): the agent's worker, or "" for every agent. */
+  const tookOver = signal<string | null>(null);
   const session = signal<RemoteSession | null>(null);
   const typing = signal(false);
   const mode = signal<ScreenPointerMode>("touch");
@@ -111,6 +114,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     // A step that finishes after the page was left (Restart Mewla, Stop) opens nothing.
     if (!target || gone) return;
     dropSession();
+    if (how !== "takeOver") tookOver.set(null);
     const token = ++epoch;
     const active = () => token === epoch && isCurrent(target.id);
     slowWatch.reset();
@@ -316,6 +320,9 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
     return props.worker ? !!displayOfWorker(list, props.worker) : list.some((d) => (d.browser ?? 0) > 0 || d.apps > 0);
   };
   const displaysPage = () => linuxDisplays() || agentWindows();
+  // Agents' displays: one stage, one agent at a time.
+  const stage = createStage({ server, active: displaysPage, focus: props.worker, takeOver: props.takeOver });
+  const ownScreenEntry = () => (status()?.platform !== "linux" ? { title: title(), open: () => ownScreen.set(true) } : undefined);
   // On a computer with a screen of its own, an agent's browser window that opens while the page is up shows at once:
   // its windows are read every few seconds while the page is in front (the list itself reads them while it shows).
   effect(() => {
@@ -450,9 +457,18 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
 
   const agentLabel = () => {
     const worker = watching()?.worker;
-    return (worker ? screenAgents(status()).find((a) => a.worker === worker)?.name : undefined) || status()?.agent?.name || "An agent";
+    return withoutSessionId((worker ? screenAgents(status()).find((a) => a.worker === worker)?.name : undefined) || status()?.agent?.name) || "An agent";
   };
-  const takeOver = () => void connect("takeOver");
+  const takeOver = () => {
+    tookOver.set(untracked(watching)?.worker ?? "");
+    void connect("takeOver");
+  };
+  // Give back: the agents go on, and you watch the one you took it from.
+  const giveBack = () => {
+    const worker = untracked(tookOver);
+    tookOver.set(null);
+    void connect("watch", worker || undefined);
+  };
   const stopWatched = () => void stopAgent(watching()?.worker);
   const toggleMode = () => {
     const next = mode() === "touch" ? "trackpad" : "touch";
@@ -491,7 +507,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       {keyed(menuKind, (kind) =>
         <If when={kind === "local"} else={<If when={kind === "watch"} else={<>
             <MenuItem onSelect={toggleMode} class={ITEM}><Text class="text-body">{mode() === "touch" ? "Use as trackpad" : "Touch to click"}</Text></MenuItem>
-            <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-body">Fit screen</Text></MenuItem>
+            <MenuItem onSelect={() => session()?.fitView()} class={ITEM}><Text class="text-body">Fit screen</Text></MenuItem>
             <If when={canShowFullSize()}><MenuItem testID="screen-full-size" onSelect={() => void session()?.fullSize(`Screen of ${untracked(title)}`)} class={ITEM}><Text class="text-body">Full size</Text></MenuItem></If>
             {keepAwakeItem()}
             {phoneItem()}
@@ -499,7 +515,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
               <If when={on} else={<MenuItem testID="screen-menu-reconnect" onSelect={() => void connect()} class={ITEM}><Text class="text-body">Reconnect</Text></MenuItem>}><MenuItem onSelect={() => session()?.lose(null)} class={ITEM}><Text class="text-body">Disconnect</Text></MenuItem></If>,
             )}
           </>}><>
-            <MenuItem onSelect={() => session()?.fit()} class={ITEM}><Text class="text-body">Fit screen</Text></MenuItem>
+            <MenuItem onSelect={() => session()?.fitView()} class={ITEM}><Text class="text-body">Fit screen</Text></MenuItem>
             <MenuItem testID="screen-stop-watching" onSelect={stopWatching} class={ITEM}><Text class="text-body">Stop watching</Text></MenuItem>
           </></If>}><>
             {keepAwakeItem()}
@@ -559,9 +575,8 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
   const body = (key: string): JSX.Element => {
     if (key === "none") return <EmptyState onBlack icon="desktop" title="No current server" action="Open Settings" onAction={() => props.nav.push({ name: "settings" })} />;
     if (key.startsWith("displays:")) {
-      // On a computer with a screen of its own, the way to it heads the list.
-      const own = untracked(status)?.platform !== "linux";
-      return <AgentDisplays server={server()!} nav={props.nav} focus={props.worker} platform={untracked(status)?.platform} ownScreen={own ? { title: untracked(title), open: () => ownScreen.set(true) } : undefined} />;
+      // On a computer with a screen of its own, the switcher also has the way to it.
+      return <StageBody stage={stage} platform={untracked(status)?.platform} serverName={untracked(title)} ownScreen={untracked(ownScreenEntry)} />;
     }
     const p = phase();
     if (p === "checking" && !status()) return <EmptyState onBlack busy />;
@@ -587,6 +602,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
           <View class="flex-1">
             <RemoteView session={current} label={`Screen of ${title()}`} modifiers={modifiersFor(status()?.platform)} typing={typing()} onTypingChange={(on) => typing.set(on)} />
             <If when={current.phase() === "connecting"}><View class="absolute inset-0 items-center justify-center"><Spinner size={28} tone="onBlackSoft" /></View></If>
+            <If when={tookOver() !== null && live() && !watching()}><View testID="screen-held-frame" class="absolute inset-0 border-[3px] border-seal" style={{ pointerEvents: "none" }} /></If>
             <If when={current.phase() === "lost"}><View testID="screen-lost" class="absolute inset-0 items-center justify-center gap-2 bg-black px-8">
                 <Icon name={current.locked() ? "lock" : "cloud-offline"} size={36} tone="onBlack" />
                 <Text class="text-center text-title font-semibold text-white">{current.locked() ? "Computer is locked" : "Disconnected"}</Text>
@@ -600,27 +616,38 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
                   <RailButton icon="hand" label="Take over" disabled={busy()} onPress={takeOver} />
                   <RailButton icon="stop" label={`Stop ${agentLabel()}`} tone="seal" disabled={busy()} onPress={stopWatched} />
                 </></If>
+              <If when={tookOver() !== null && !watching()}><RailButton icon="arrow-forward" label="Give back" tone="seal" disabled={busy()} onPress={giveBack} /></If>
               {keyboardButton()}
               {optionsMenu("screen-rail-options")}
             </Scroll></If>
         </View>
-        <If when={watching() && live() && !immersive()}><View testID="screen-watch-bar" class="min-h-[52px] flex-row items-center gap-2 bg-black px-4 py-1.5">
-            <View class="size-2 rounded-full bg-white" />
-            <Text class="flex-1 text-sub text-white/70 line-clamp-1">{`Watching ${agentLabel()}`}</Text>
-            <SmallButton testID="watch-take-over" title="Take over" icon="hand" filled disabled={busy()} onPress={takeOver} />
-            <SmallButton title="Stop" label={`Stop ${agentLabel()}`} destructive disabled={busy()} onPress={stopWatched} />
+        <If when={watching() && live() && !immersive() && !typing()}><View testID="screen-watch-bar" accessibilityLabel={`Watching ${agentLabel()}`} class="flex-row items-center justify-center gap-3 bg-black px-4 py-3">
+            <TakeOverButton testID="watch-take-over" holding={false} disabled={busy()} onTakeOver={takeOver} onGiveBack={giveBack} />
+            <Button testID="watch-stop" accessibilityLabel={`Stop ${agentLabel()}`} disabled={busy()} onPress={stopWatched} class="size-12 items-center justify-center rounded-full bg-white/15 active:bg-white/25 disabled:opacity-40">
+              <Icon name="stop" size={18} tone="seal" />
+            </Button>
+          </View></If>
+        <If when={tookOver() !== null && !watching() && live() && !immersive() && !typing()}><View testID="screen-give-back-bar" class="flex-row items-center justify-center bg-black px-4 py-3">
+            <TakeOverButton testID="screen-give-back" holding disabled={busy()} onTakeOver={takeOver} onGiveBack={giveBack} />
           </View></If>
       </View>
     );
   };
 
+  // The bar's title: the agent shown (a chip, or tabs on a wide window) on the stage, else the computer.
+  const pageTitle = () => (
+    <View class="min-w-0 flex-1 flex-row items-center">
+      {keyed(headerKind, (kind) =>
+        <If when={kind === "linux"} else={<Text role="header" class="min-w-0 shrink text-title font-bold text-white line-clamp-1">{title()}</Text>}><If when={wide() || platform.desktop} else={<StageChip stage={stage} />}><StageTabs stage={stage} /></If></If>,
+      )}
+    </View>
+  );
+  const titleRow = () => <View class="min-w-0 flex-1 flex-row items-center gap-1">{pageTitle()}{headerRight()}</View>;
   // The top bar's end: the slow note, the connection dot, the keyboard and ⋯, in white on black.
   const headerRight = () => (
     <View class="flex-row items-center gap-1">
       {keyed(headerKind, (kind) =>
-      <If when={kind === "own"} else={<If when={kind === "linux" && platform.os === "android"}><Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" role="button" class="size-11 items-center justify-center rounded-full" style={{ display: phoneOn() ? "flex" : "none", flexDirection: "column" }}><Icon name="more-horizontal" size={20} tone="onBlack" /></View>} popupClass={menuPopup()} backdropClass={MENU_BACKDROP}>
-          {phoneItem()}
-        </Menu></If>}><>
+      <If when={kind === "own"} else={<If when={kind === "linux"}><StageBarEnd stage={stage} platform={status()?.platform} menuItems={phoneItem()} hasMenuItems={phoneOn} ownScreen={ownScreenEntry()} /></If>}><>
           {keyed(noteTitle, (note) => (<If when={note}>{(note) => <Text testID="screen-slow-note" class="text-caption text-white/70">{note()}</Text>}</If>))}
           {indicator()}
           {keyboardButton()}
@@ -638,9 +665,10 @@ export function ScreenPage(props: { nav: PageNav; worker?: string }) {
       headerVisible={!fullBleed()}
       // Black in both themes, like the picture viewer (SPEC §15 Full-screen remote).
       headerClass="bg-black text-white tint-white"
-      header={<If when={!mobile}><BlackHeader title={displaysPage() ? "Screen" : title()} right={headerRight()} /></If>}
+      header={<If when={!mobile}><BlackHeader title={displaysPage() ? "Screen" : title()} titleView={pageTitle()} right={headerRight()} /></If>}
+      // On a phone one row holds the title and the controls, as wide as the bar (as a Session's header does).
+      {...(mobile ? { headerTitle: titleRow() } : {})}
       statusBar={{ hidden: fullBleed(), foreground: "light" }}
-      headerRight={mobile ? headerRight() : undefined}
     >
       <View class="flex-1 bg-black">{((key) => untracked(() => body(key)))(view().key)}</View>
       <ConnectionSheet
@@ -756,14 +784,14 @@ function RailButton(props: { icon: IconName; label: string; tone?: "seal"; disab
 }
 
 /** The desktops' and the web's top bar on black: Back, the computer, the controls (a phone's system header is made black instead). */
-function BlackHeader(props: { title: string; right: JSX.Element }) {
+function BlackHeader(props: { title: string; titleView?: JSX.Element; right: JSX.Element }) {
   const stack = PageStack();
   return (
     <View testID="page-header" class="h-[52px] flex-row items-center gap-2 bg-black px-4">
       <If when={stack.canGoBack()}><Button testID="page-back" accessibilityLabel="Back" onPress={stack.back} class="size-10 items-center justify-center rounded-full hover:bg-white/15">
           <Icon name="chevron-left" size={20} tone="onBlack" />
         </Button></If>
-      <Text role="header" class="min-w-0 flex-1 text-title font-bold text-white line-clamp-1">{props.title}</Text>
+      {props.titleView ?? <Text role="header" class="min-w-0 flex-1 text-title font-bold text-white line-clamp-1">{props.title}</Text>}
       {props.right}
     </View>
   );

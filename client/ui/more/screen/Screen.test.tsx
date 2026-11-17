@@ -50,6 +50,8 @@ const opened = (app: App, url = VIEWER) => app.host.posts().filter((p) => p.name
 const closed = (app: App, url = VIEWER) => app.host.posts().filter((p) => p.name === "app.socketClosed" && (p.data as { url: string }).url.startsWith(url));
 const posted = (app: App, url: string) => app.requests().filter((r) => r.method === "POST" && r.url === url).map((r) => JSON.parse(String(r.body)));
 
+const sent = (app: App) => app.host.posts().filter((p) => p.name === "app.socketSent").map((p) => (p.data as { message: unknown }).message);
+
 async function goLive(app: App) {
   await app.waitUntil(() => opened(app).length > 0);
   await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
@@ -158,7 +160,7 @@ describe("Screen: agents", () => {
     expect((opened(app)[0].data as { url: string }).url).toContain("worker=w2");
     await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
     await app.waitFor("id:screen-watch-bar");
-    expect(app.texts()).toContain("Watching Claude");
+    expect(app.shows("label:Watching Claude")).toBe(true);
     expect(app.shows("label:Show keyboard")).toBe(false);
     // The agent finishes: the computer ends the watch, the page looks again and opens the screen.
     status = { ...base };
@@ -381,33 +383,62 @@ describe("Screen: Linux agent displays", () => {
     expect(app.texts()).toContain("Nothing on screen");
   });
 
-  test("each card has Hold, Fit and Stop; a Stop that fails says so", async () => {
+  test("the stage has one switch: Take over holds the agent (a red frame), Give back lets it go; a Stop that fails says so", async () => {
     const app = await open(HARNESS, options({
       [`GET ${SCREEN}`]: json(linux),
-      [`GET ${DISPLAY}`]: json({ displays: [display("w1")], available: true }),
+      [`GET ${DISPLAY}`]: json({ displays: [display("w1", { name: "Sign in to Acme (mh-17b3337d43f38037916f0e5b)" })], available: true }),
       [`POST ${DISPLAY}`]: { status: 500, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "halt failed" }) },
-    }));
+    }, { platform: "android" }));
     await app.waitFor("id:display-w1");
+    // The Worker's name, never the daemon's Session id.
+    await app.waitFor("text:Sign in to Acme");
+    expect(app.texts().some((t) => t.includes("mh-"))).toBe(false);
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
-    await app.press("label:Options for w1");
-    await app.waitFor("text:Hold the agent");
-    expect(app.texts()).toContain("Fit");
-    await app.press("text:Hold the agent");
-    await app.waitFor("text:You hold the agent");
-    expect(app.host.posts().filter((p) => p.name === "app.socketSent").map((p) => (p.data as { message: unknown }).message)).toContainEqual({ type: "hold", on: true });
-    await app.press("label:Options for w1");
-    await app.press("label:Stop w1");
+    await pressWhenEnabled(app, "id:stage-take-over");
+    await app.waitFor("id:stage-held-frame");
+    expect(sent(app)).toContainEqual({ type: "hold", on: true });
+    expect(app.shows("label:Give back")).toBe(true);
+    await app.press("label:Give back");
+    await app.waitUntil(() => !app.shows("id:stage-held-frame"));
+    expect(sent(app)).toContainEqual({ type: "hold", on: false });
+    await app.press("label:Stop Sign in to Acme");
     await app.waitFor("id:displays-issue");
     expect(app.texts()).toContain("That didn't finish");
     expect(posted(app, DISPLAY)[0]).toEqual({ action: "halt", worker: "w1" });
   });
 
-  test("leaving the page closes every display, which lets a held agent go on", async () => {
+  test("taken over from a phone, the agent's page is laid out for the phone: the view's size goes once, the keyboard never re-lays it, and the real host shows", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1", { browser: 1, apps: 0 })], available: true }) }, { platform: "android" }));
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
+    await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
+    await app.host.send("app.viewer", { type: "size", width: 412, height: 760, dpr: 2.625 });
+    // Watching never lays it out.
+    expect(sent(app).filter((m) => (m as { type?: string }).type === "fit")).toHaveLength(0);
+    await pressWhenEnabled(app, "id:stage-take-over");
+    await app.waitUntil(() => sent(app).some((m) => (m as { type?: string }).type === "fit"));
+    expect(sent(app)).toContainEqual({ type: "fit", width: 412, height: 760, dpr: 2.625 });
+    await app.host.send("app.socketPush", { message: { type: "reflow", on: true, host: "www.github.com" } });
+    await app.waitFor("id:stage-domain");
+    expect(app.texts()).toContain("github.com");
+    // The keyboard comes up: the view gets shorter, and nothing is laid out again.
+    await app.host.send("app.viewer", { type: "size", width: 412, height: 430, dpr: 2.625 });
+    await app.wait(100);
+    expect(sent(app).filter((m) => (m as { type?: string }).type === "fit")).toHaveLength(1);
+    // Turned sideways: laid out again.
+    await app.host.send("app.viewer", { type: "size", width: 760, height: 412, dpr: 2.625 });
+    await app.waitUntil(() => sent(app).filter((m) => (m as { type?: string }).type === "fit").length === 2);
+    await app.press("label:Give back");
+    await app.waitUntil(() => !app.shows("id:stage-domain"));
+  });
+
+  test("leaving the page closes the display, which lets a held agent go on; only the agent shown streams", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1"), display("w2")], available: true }) }, { below: { name: "settings-phone" } }));
-    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 2);
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
+    await app.wait(200);
+    expect(opened(app, DISPLAY_VIEWER)).toHaveLength(1);
     await app.back();
-    await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 2);
+    await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 1);
   });
 
   test("a switch of computer closes every display", async () => {
@@ -426,10 +457,15 @@ describe("Screen: Linux agent displays", () => {
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 2);
   });
 
-  test("the route's worker opens Screen on that agent's display", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1"), display("w2")], available: true }) }, { worker: "w2" }));
+  test("the route's worker opens Screen on that agent's display; the chip switches to another", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1", { name: "Research" }), display("w2", { name: "SignIn" })], available: true }) }, { worker: "w2", platform: "android" }));
     await app.waitFor("id:display-w2");
-    expect(app.shows("id:display-w1")).toBe(true);
+    expect(app.shows("id:display-w1")).toBe(false);
+    await app.press("id:stage-chip");
+    await app.waitFor("id:stage-agent-w1");
+    await app.press("id:stage-agent-w1");
+    await app.waitFor("id:display-w1");
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 2 && closed(app, DISPLAY_VIEWER).length === 1);
   });
 });
 
@@ -445,6 +481,7 @@ describe("Screen: a Mac's agent browser windows", () => {
     expect((opened(app, DISPLAY_VIEWER)[0].data as { url: string }).url).toContain("worker=mh-signin");
     // Nothing of the Mac's own screen opens under the agents' windows.
     expect(opened(app)).toHaveLength(0);
+    await app.press("id:screen-options");
     await app.press("id:displays-own-screen");
     await app.waitUntil(() => opened(app).length === 1);
     await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 1);
@@ -462,21 +499,24 @@ describe("Screen: a Mac's agent browser windows", () => {
   test("opened for a Worker (its Work card's Screen), it is at that Worker's window", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-a", "Research"), window("mh-signin", "SignIn")], available: true }) }, { worker: "mh-signin" }));
     await app.waitFor("id:display-mh-signin");
-    expect(app.shows("id:display-mh-a")).toBe(true);
+    expect(app.shows("id:display-mh-a")).toBe(false);
     expect(opened(app)).toHaveLength(0);
   });
 
-  test("Hold from the window's card holds the agent; its keyboard has the Mac's keys", async () => {
+  test("Take over holds the agent; its keyboard has the Mac's keys, Paste and the editing keys", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true }) }, { platform: "android" }));
     await app.waitFor("id:display-mh-signin");
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.host.send("app.viewer", { type: "connected", width: 800, height: 500 });
-    await app.press("label:Options for SignIn");
-    await app.press("text:Hold the agent");
-    await app.waitFor("text:You hold the agent");
-    expect(app.host.posts().filter((p) => p.name === "app.socketSent").map((p) => (p.data as { message: unknown }).message)).toContainEqual({ type: "hold", on: true });
+    await pressWhenEnabled(app, "id:stage-take-over");
+    await app.waitFor("id:stage-held-frame");
+    expect(sent(app)).toContainEqual({ type: "hold", on: true });
     await app.press("label:Show keyboard");
     await app.waitFor("text:⌘");
+    expect(app.shows("id:key-paste")).toBe(true);
+    expect(app.shows("label:Backspace")).toBe(true);
+    // Typing docks the key bar: the switch steps aside.
+    expect(app.shows("id:stage-bar")).toBe(false);
   });
 
   test("the last window closing hands the page to the Mac's own screen", async () => {
@@ -580,7 +620,7 @@ describe("Screen in a browser", () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [{ id: "w1", width: 1280, height: 800, control: "agent", apps: 1 }], available: true }) }, web));
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
-    await app.waitFor("label:Options for w1");
+    await app.waitFor("id:stage-take-over-bar");
     expect(app.shows("label:Show keyboard")).toBe(false);
     await app.setLifecycle("inactive");
     await app.wait(200);

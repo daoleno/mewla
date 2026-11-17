@@ -64,8 +64,8 @@ export function openPhonePage() {
 }
 
 /** Screen, where an agent's display and the Mac's screen have their full view: the floating screen's Open. */
-export function openScreenPage(worker: string | null) {
-  openPage({ name: "computer" }, screenRoute(worker));
+export function openScreenPage(worker: string | null, takeOver = false) {
+  openPage({ name: "computer" }, screenRoute(worker, takeOver));
 }
 
 /** Goes to a place a URL, the palette or `G` then a letter names. */

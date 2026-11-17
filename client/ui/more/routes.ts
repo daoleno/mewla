@@ -25,7 +25,7 @@ export type MorePage =
   | { name: "stats-day"; day: DayCell }
   | { name: "resources" }
   /** `worker`: open on that agent's display (the floating screen's Expand). */
-  | { name: "screen"; worker?: string }
+  | { name: "screen"; worker?: string; takeOver?: boolean }
   | ExtensionsPage
   | FriendsPage
   | GitPage
