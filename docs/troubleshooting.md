@@ -216,6 +216,20 @@ Brain decides what to do with its Work.
 That service's sign-in needs Mewla's own registration with the provider, which
 has not shipped yet. See [Extensions](extensions.md).
 
+## Slack stopped working
+
+Slack runs through Mewla's own Slack app, and Mewla's account service renews
+its sign-in. There is nothing to change in Slack's app settings (its token
+rotation is Mewla's and stays on). Update Mewla on the computer (**Update now**
+in Brain's Chat, **Update** on the computer page, or `mewla update`), then
+choose **Reconnect** on Slack in Extensions if it still says so.
+
+## A newer Mewla does not install
+
+An update waits for at most an hour, and Brain's Chat says what for. Mewla
+0.4.14 and older install only once no Worker is running: tap **Update now** in
+Brain's Chat or **Update** on the computer page, or run `mewla update`, once.
+
 ## Codex or Claude fail outside Mewla while the daemon is stopped
 
 Mewla points both CLIs at its local gateway, which only runs with the daemon.
