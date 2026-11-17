@@ -9,6 +9,7 @@ import {
   KEYBOARD_SENTINEL,
   typingKeyboardStep,
   keyboardEdit,
+  fieldNeedsReset,
   NO_MODIFIERS,
   nextSlowStreak,
   powerSummary,
@@ -28,18 +29,29 @@ import type { ScreenStatus } from "./screen";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
 
 describe("soft keyboard diffing", () => {
-  test("typed text after the sentinel is sent as text", () => {
-    expect(keyboardEdit(`${KEYBOARD_SENTINEL}hi`)).toEqual({ kind: "text", text: "hi" });
+  const S = KEYBOARD_SENTINEL;
+  test("typed text after what the field held is sent as text", () => {
+    expect(keyboardEdit(S, `${S}hi`)).toEqual({ backspace: 0, text: "hi" });
   });
-  test("deleting into the sentinel is backspace", () => {
-    expect(keyboardEdit(KEYBOARD_SENTINEL.slice(1))).toEqual({ kind: "backspace", count: 1 });
-    expect(keyboardEdit("")).toEqual({ kind: "backspace", count: 2 });
+  test("a key that lands before the field was put back is sent once", () => {
+    expect(keyboardEdit(`${S}x`, `${S}xy`)).toEqual({ backspace: 0, text: "y" });
+  });
+  test("deleting is backspace, into the sentinel too", () => {
+    expect(keyboardEdit(`${S}ab`, `${S}a`)).toEqual({ backspace: 1, text: "" });
+    expect(keyboardEdit(S, S.slice(1))).toEqual({ backspace: 1, text: "" });
+    expect(keyboardEdit(S, "")).toEqual({ backspace: 2, text: "" });
   });
   test("an unchanged field sends nothing", () => {
-    expect(keyboardEdit(KEYBOARD_SENTINEL)).toEqual({ kind: "none" });
+    expect(keyboardEdit(S, S)).toEqual({ backspace: 0, text: "" });
   });
-  test("text typed inside the sentinel keeps only the user's characters", () => {
-    expect(keyboardEdit(` x `)).toEqual({ kind: "text", text: "x" });
+  test("a keyboard replacing a composed word deletes it and types the word; emoji stay whole", () => {
+    expect(keyboardEdit(`${S}ni`, `${S}你`)).toEqual({ backspace: 2, text: "你" });
+    expect(keyboardEdit(`${S}a😀`, `${S}a`)).toEqual({ backspace: 1, text: "" });
+  });
+  test("the field is put back at once only when a backspace would have nothing to delete", () => {
+    expect(fieldNeedsReset(" ")).toBe(true);
+    expect(fieldNeedsReset(S)).toBe(false);
+    expect(fieldNeedsReset(`${S}abc`)).toBe(false);
   });
 });
 

@@ -3,10 +3,12 @@ import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
 import { ScreenConnection, type ScreenRoute } from "../../../core/screen/screen";
-import { activeModifiers, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
+import { activeModifiers, FIELD_RESET_MS, fieldNeedsReset, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
 import { startLiveDeadline, LIVE_DEADLINE_REASON } from "../../../core/screen/screenLiveDeadline";
 import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type ScreenModifier, type ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
 import type { ScreenStreamStats } from "../../../core/screen/screenStream";
+import { keyboardLift } from "../../../core/shell/belowStack";
+import { belowSections } from "../../shell/below";
 import { echoLine, echoNextChange, fitMessage, NO_REFLOW, pushEcho, shouldFit, type EchoEntry, type StageReflow, type StageSize } from "../../../core/screen/stage";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { SCREEN_VIEWER_SOURCE } from "./viewerSource";
@@ -71,7 +73,7 @@ export function viewerHtml(): string {
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
-<style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}</style>
+<style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}</style>
 </head><body><script type="module">${source}</script></body></html>`;
 }
 
@@ -371,18 +373,35 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
   const soft = needsSoftKeyboard();
   html ??= viewerHtml();
 
+  // What the field holds as it last reported it; each change is diffed against that, not against the
+  // sentinel: a key that lands before a reset reaches the field extends what it held (screen [67] kept every
+  // key in the field; resetting on each key sent a fast key twice). The field goes back to the sentinel once
+  // typing pauses, or at once when a backspace would have nothing left to delete.
+  let seen = KEYBOARD_SENTINEL;
+  let resetTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetField = () => {
+    if (resetTimer) clearTimeout(resetTimer);
+    resetTimer = null;
+    seen = KEYBOARD_SENTINEL;
+    value.set(KEYBOARD_SENTINEL);
+  };
+  cleanup(() => resetTimer && clearTimeout(resetTimer));
   const typed = (next: string) => {
-    const edit = keyboardEdit(next);
-    // The field holds `next` now. Setting the sentinel while the signal still held it changed
-    // nothing, so the field kept every key and each change re-sent all of it (screen [67]):
-    // record what it holds, then put the sentinel back before the next key arrives.
+    const edit = keyboardEdit(seen, next);
+    seen = next;
+    // The signal follows the field, so putting the sentinel back is a change the field sees.
     value.set(next);
-    queueMicrotask(() => value.set(KEYBOARD_SENTINEL));
-    if (edit.kind === "none") return;
+    if (resetTimer) clearTimeout(resetTimer);
+    if (fieldNeedsReset(next)) queueMicrotask(resetField);
+    else resetTimer = setTimeout(resetField, FIELD_RESET_MS);
+    if (!edit.backspace && !edit.text) return;
     const active = activeModifiers(mods());
-    if (edit.kind === "backspace") for (let i = 0; i < edit.count; i++) props.session.key("BackSpace", active);
-    else props.session.text(edit.text, active);
-    if (!active.length) echoed(edit);
+    for (let i = 0; i < edit.backspace; i++) props.session.key("BackSpace", active);
+    if (edit.text) props.session.text(edit.text, active);
+    if (!active.length) {
+      if (edit.backspace) echoed({ kind: "backspace", count: edit.backspace });
+      if (edit.text) echoed({ kind: "text", text: edit.text });
+    }
     mods.set(spendModifiers(mods()));
   };
   const press = (key: ScreenKey) => {
@@ -410,8 +429,11 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
     });
   }
 
+  // Android draws edge to edge: the keyboard covers the page, so the key bar is lifted above it (as the terminal's is).
+  const lift = () => (soft && props.typing ? keyboardLift(keyboardFrame().height, belowSections()) : 0);
+
   return (
-    <View class={props.class ?? "flex-1"}>
+    <View class={props.class ?? "flex-1"} style={{ paddingBottom: lift() }}>
       <WebView
         ref={(node: WebViewRef) => props.session.attach(node)}
         testID="remote-view"

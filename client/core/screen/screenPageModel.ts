@@ -9,11 +9,6 @@ import type { ScreenModifier } from "./screenViewerProtocol";
  */
 export const KEYBOARD_SENTINEL = "  ";
 
-export type KeyboardEdit =
-  | { kind: "text"; text: string }
-  | { kind: "backspace"; count: number }
-  | { kind: "none" };
-
 /**
  * Typing on a remote screen while the soft keyboard is up: Android's Back hides the keyboard
  * without blurring the hidden field, so typing (the key bar, the tinted button) stayed on (screen
@@ -26,17 +21,32 @@ export function typingKeyboardStep(seen: boolean, typing: boolean, keyboardUp: b
   return { seen: false, end: seen };
 }
 
-/** Turns one soft-keyboard edit of the sentinel field into keystrokes. */
-export function keyboardEdit(next: string): KeyboardEdit {
-  if (next === KEYBOARD_SENTINEL) return { kind: "none" };
-  if (next.length < KEYBOARD_SENTINEL.length && KEYBOARD_SENTINEL.startsWith(next)) {
-    return { kind: "backspace", count: KEYBOARD_SENTINEL.length - next.length };
-  }
-  if (next.startsWith(KEYBOARD_SENTINEL)) return { kind: "text", text: next.slice(KEYBOARD_SENTINEL.length) };
-  // The cursor moved inside the sentinel or the keyboard replaced it; keep
-  // only what the user typed.
-  const text = next.replace(/ /g, "");
-  return text ? { kind: "text", text } : { kind: "backspace", count: 1 };
+/** One soft-keyboard change of the hidden field, as keystrokes: this many backspaces, then this text. */
+export interface KeyboardEdit {
+  backspace: number;
+  text: string;
+}
+
+/** How long typing pauses before the field is put back to the sentinel. */
+export const FIELD_RESET_MS = 400;
+
+/**
+ * One change of the hidden field, against what it held before (as the field reported it, not as it was
+ * last set): the characters after the common start were deleted, then the new ones typed. A key that
+ * lands before a reset of the field reaches it extends what the field held, so it is never sent twice
+ * (screen: "xyz" came out "xyyz"); a keyboard replacing a composed word deletes it and types the word.
+ */
+export function keyboardEdit(prev: string, next: string): KeyboardEdit {
+  const a = Array.from(prev);
+  const b = Array.from(next);
+  let same = 0;
+  while (same < a.length && same < b.length && a[same] === b[same]) same++;
+  return { backspace: a.length - same, text: b.slice(same).join("") };
+}
+
+/** Whether the field must be put back now: nearly empty, a backspace would have nothing to delete. */
+export function fieldNeedsReset(next: string): boolean {
+  return Array.from(next).length < KEYBOARD_SENTINEL.length;
 }
 
 export interface ModifierState {

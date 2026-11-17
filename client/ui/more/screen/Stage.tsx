@@ -11,6 +11,7 @@ import { EmptyState, Notice, Spinner } from "../../kit/kit";
 import { Icon } from "../../kit/Icon";
 import { inFront } from "../../kit/inFront";
 import { GuardedSheet as Sheet } from "../../shell/AppSheet";
+import { bottomBarInset } from "../../shell/below";
 import { wide } from "../../shell/layout";
 import { canShowFullSize, modifiersFor, needsSoftKeyboard, RemoteSession, RemoteView } from "./RemoteView";
 
@@ -384,7 +385,7 @@ function StagePicture(props: { stage: Stage; platform?: string; notice: () => JS
         {/* While you hold the agent: the seal's red around the stage. */}
         <If when={stage.holding()}><View testID="stage-held-frame" class="absolute inset-0 border-[3px] border-seal" style={{ pointerEvents: "none" }} /></If>
       </View>
-      <If when={!roomy() && !stage.typing() && stage.current()}><View testID="stage-bar" class="flex-row items-center justify-center gap-3 bg-black px-4 py-3">
+      <If when={!roomy() && !stage.typing() && stage.current()}><View testID="stage-bar" class="flex-row items-center justify-center gap-3 bg-black px-4 pt-3" style={{ paddingBottom: 12 + bottomBarInset() }}>
           <TakeOverButton holding={stage.holding()} disabled={!stage.live() || stage.heldElsewhere() || stage.busy()} onTakeOver={stage.takeOver} onGiveBack={stage.giveBack} />
           <If when={stage.current()?.stopped} else={<Button testID="stage-stop" accessibilityLabel={`Stop ${stage.current()?.name ?? "the agent"}`} disabled={stage.busy() || stage.heldElsewhere()} onPress={stage.stop}
               class="size-12 items-center justify-center rounded-full bg-white/15 active:bg-white/25 disabled:opacity-40">
