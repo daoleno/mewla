@@ -191,7 +191,17 @@ class AgentWindow {
       const chromeTop = Math.max(0, before.height - (tab.height ?? before.height));
       const chromeSide = Math.max(0, before.width - (tab.width ?? before.width));
       const window = { left: Math.round(bounds.left), top: Math.round(bounds.top), width: Math.round(bounds.width) + chromeSide, height: Math.round(bounds.height) + chromeTop };
-      await chrome.windows.update(this.windowId, { ...window, state: 'normal' });
+      // The monitor grows for the window just before this; Chrome hears of it a moment later.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await chrome.windows.update(this.windowId, { ...window, state: 'normal' });
+          break;
+        } catch (error) {
+          if (attempt >= 10 || !/visible screen/i.test(String(error?.message)))
+            throw error;
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+      }
       // The toolbar can change height with the window: measure once more and make the page exactly the size asked.
       let placed = await chrome.windows.get(this.windowId);
       let page = await chrome.tabs.get(tab.id);
