@@ -332,6 +332,20 @@ func (t *RouteTable) EndRouteFlight(routeID, token string, markOpaque bool) erro
 	return nil
 }
 
+// TotalInFlight is the number of model requests in flight on every route.
+func (t *RouteTable) TotalInFlight() int {
+	if t == nil {
+		return 0
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	total := 0
+	for _, flights := range t.inFlight {
+		total += len(flights)
+	}
+	return total
+}
+
 // InFlightCount returns the number of in-flight leases for a route (tests).
 func (t *RouteTable) InFlightCount(routeID string) int {
 	if t == nil {

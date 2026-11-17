@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
 )
@@ -80,7 +79,7 @@ type updaterFixture struct {
 	installed  string
 	handovers  chan *updateHandover
 	downloads  *int32
-	idle       *atomic.Bool
+	busy       *atomic.Value // what the computer is busy with; "" when quiet
 	stateDir   string
 	currentVer string
 }
@@ -93,19 +92,19 @@ func newUpdaterFixture(t *testing.T, current, release string, releaseBinary []by
 		t.Fatal(err)
 	}
 	client, downloads := releaseServer(t, release, releaseBinary)
-	idle := &atomic.Bool{}
-	idle.Store(true)
+	busy := &atomic.Value{}
+	busy.Store("")
 	handovers := make(chan *updateHandover, 4)
 	updater := newDaemonUpdater(current, filepath.Join(dir, "state"), "127.0.0.1:0", "daemon-1",
-		idle.Load, func(h *updateHandover) { handovers <- h })
+		func() string { return busy.Load().(string) }, func(h *updateHandover) { handovers <- h })
 	updater.supported = true
 	updater.installed = installed
 	updater.newClient = func() (*selfupdate.Client, error) { return client, nil }
-	updater.first, updater.interval, updater.idleWait = 10*time.Millisecond, time.Hour, 20*time.Millisecond
+	updater.first, updater.interval, updater.quietPoll, updater.cap = 10*time.Millisecond, time.Hour, 20*time.Millisecond, time.Hour
 	if err := os.MkdirAll(updater.stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return updaterFixture{updater: updater, installed: installed, handovers: handovers, downloads: downloads, idle: idle, stateDir: updater.stateDir, currentVer: current}
+	return updaterFixture{updater: updater, installed: installed, handovers: handovers, downloads: downloads, busy: busy, stateDir: updater.stateDir, currentVer: current}
 }
 
 func TestSelfUpdateOnlyForStampedStableReleaseBuilds(t *testing.T) {
@@ -163,9 +162,12 @@ func TestDevBuildNeverChecksOrInstalls(t *testing.T) {
 	}
 }
 
-func TestUpdateWaitsUntilIdleThenStagesWithoutTouchingTheInstalledBinary(t *testing.T) {
+// A staged update waits only for a quiet point (here a permission decision
+// held open), stages once, says what it waits for, and installs the moment it
+// is quiet, without touching the installed binary before the handover.
+func TestAnUpdateWaitsForAQuietPointThenStagesOnceAndHandsOver(t *testing.T) {
 	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
-	f.idle.Store(false)
+	f.busy.Store("a permission answer")
 	before, _ := os.ReadFile(f.installed)
 	done := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -174,13 +176,17 @@ func TestUpdateWaitsUntilIdleThenStagesWithoutTouchingTheInstalledBinary(t *test
 
 	select {
 	case <-f.handovers:
-		t.Fatal("updated while a Worker was running")
+		t.Fatal("restarted while a permission decision was held open")
 	case <-time.After(300 * time.Millisecond):
 	}
-	if status := f.updater.Status(); status.Latest != "0.2.88" || status.Updating {
-		t.Fatalf("while busy, status = %+v, want the release offered but not installing", status)
+	status := f.updater.Status()
+	if status.Latest != "0.2.88" || status.Updating || status.WaitingFor != "a permission answer" || status.InstallBy == nil {
+		t.Fatalf("while waiting, status = %+v, want the release offered, what it waits for and when it installs anyway", status)
 	}
-	f.idle.Store(true)
+	if left := time.Until(*status.InstallBy); left < 50*time.Minute || left > time.Hour {
+		t.Fatalf("install_by is %s away, want the cap", left)
+	}
+	f.busy.Store("")
 	select {
 	case h := <-f.handovers:
 		if h.Version != "0.2.88" || h.Staged != f.installed+selfupdate.StagedSuffix || h.DaemonID != "daemon-1" {
@@ -190,21 +196,65 @@ func TestUpdateWaitsUntilIdleThenStagesWithoutTouchingTheInstalledBinary(t *test
 			t.Fatalf("staged binary missing: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("no handover once idle")
+		t.Fatal("no handover once quiet")
 	}
 	after, _ := os.ReadFile(f.installed)
 	if !bytes.Equal(before, after) {
 		t.Fatal("staging must not change the installed binary")
 	}
 	<-done
-	if status := f.updater.Status(); !status.Updating {
+	if status := f.updater.Status(); !status.Updating || status.WaitingFor != "" {
 		t.Fatalf("status after handover = %+v", status)
+	}
+	if n := atomic.LoadInt32(f.downloads); n != 1 {
+		t.Fatalf("downloads = %d, want the release staged once while it waited", n)
+	}
+}
+
+// The 11-17 starvation: a computer that is never idle never updated. Now a
+// computer that never reaches a quiet point still installs once the cap has
+// passed after staging.
+func TestABusyComputerStillUpdatesWithinTheCap(t *testing.T) {
+	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
+	f.busy.Store("a model reply")
+	f.updater.cap = 200 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := time.Now()
+	go f.updater.Run(ctx)
+	select {
+	case h := <-f.handovers:
+		if h.Version != "0.2.88" {
+			t.Fatalf("handover = %+v", h)
+		}
+		if waited := time.Since(started); waited < 200*time.Millisecond {
+			t.Fatalf("installed after %s, before the cap, while busy", waited)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a busy computer never updated: starvation")
+	}
+}
+
+func TestUpdateQuietPoint(t *testing.T) {
+	n := func(v int) func() int { return func() int { return v } }
+	for _, tc := range []struct {
+		approvals, models, inputs int
+		want                      string
+	}{
+		{0, 0, 0, ""},
+		{1, 3, 1, "a permission answer"},
+		{0, 2, 1, "a model reply"},
+		{0, 0, 1, "a message to Brain"},
+	} {
+		if got := updateQuietPoint(n(tc.approvals), n(tc.models), n(tc.inputs)); got != tc.want {
+			t.Fatalf("quiet point %+v = %q, want %q", tc, got, tc.want)
+		}
 	}
 }
 
 func TestUpdateButtonInstallsNow(t *testing.T) {
 	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
-	f.idle.Store(false) // the button does not wait for idle
+	f.busy.Store("a model reply") // the button does not wait for a quiet point
 	if err := f.updater.Install(); err != nil {
 		t.Fatal(err)
 	}
@@ -220,8 +270,8 @@ func TestUpdateButtonInstallsNow(t *testing.T) {
 
 func TestNothingToInstallWhenCurrent(t *testing.T) {
 	f := newUpdaterFixture(t, "0.2.88", "0.2.88", versionScript("0.2.88"))
-	if err := f.updater.install(context.Background(), false); err != server.ErrUpdateUnavailable {
-		t.Fatalf("install when current = %v", err)
+	if _, err := f.updater.stage(context.Background()); err != server.ErrUpdateUnavailable {
+		t.Fatalf("stage when current = %v", err)
 	}
 	if status := f.updater.Status(); status.Latest != "" {
 		t.Fatalf("status = %+v", status)
@@ -233,8 +283,8 @@ func TestRolledBackVersionIsNotOfferedAgain(t *testing.T) {
 	if err := selfupdate.RecordFailure(f.stateDir, selfupdate.Failure{Version: "0.2.88", Reason: "exited", At: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.updater.install(context.Background(), false); err != server.ErrUpdateUnavailable {
-		t.Fatalf("install of a rolled-back version = %v", err)
+	if _, err := f.updater.stage(context.Background()); err != server.ErrUpdateUnavailable {
+		t.Fatalf("stage of a rolled-back version = %v", err)
 	}
 	status := f.updater.Status()
 	if status.Latest != "" || !strings.Contains(status.Error, "0.2.88") {
@@ -247,7 +297,7 @@ func TestRolledBackVersionIsNotOfferedAgain(t *testing.T) {
 
 func TestBrokenDownloadChangesNothing(t *testing.T) {
 	f := newUpdaterFixture(t, "0.2.87", "0.2.88", []byte("#!/bin/sh\nexit 1\n")) // does not run
-	err := f.updater.install(context.Background(), false)
+	err := f.updater.installNow(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "stage update") {
 		t.Fatalf("install = %v", err)
 	}
@@ -261,20 +311,6 @@ func TestBrokenDownloadChangesNothing(t *testing.T) {
 	}
 	if f.updater.Status().Updating {
 		t.Fatal("a failed install must not stay 'updating'")
-	}
-}
-
-func TestWorkersIdle(t *testing.T) {
-	running := []*classifier.Worker{{State: classifier.StateBlocked}, {State: classifier.StateRunning}}
-	quiet := []*classifier.Worker{{State: classifier.StateBlocked}, {State: classifier.StateDone}}
-	if workersIdle(func() bool { return true }, func() []*classifier.Worker { return running }) {
-		t.Fatal("idle with a running Worker")
-	}
-	if workersIdle(func() bool { return false }, func() []*classifier.Worker { return quiet }) {
-		t.Fatal("idle before the first discovery pass")
-	}
-	if !workersIdle(func() bool { return true }, func() []*classifier.Worker { return quiet }) {
-		t.Fatal("not idle with nothing running")
 	}
 }
 
@@ -300,41 +336,16 @@ func TestProbeUpdatedDaemonNeedsTheSameInstallationOnTheNewVersion(t *testing.T)
 	}
 }
 
-func TestAnIdleMachineThatBecomesBusyDuringTheDownloadIsLeftAlone(t *testing.T) {
-	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
-	// Idle when the loop looks, busy when the staged download is re-checked,
-	// idle again on the next look.
-	var calls atomic.Int32
-	f.updater.idle = func() bool { return calls.Add(1) != 2 }
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go f.updater.Run(ctx)
-	select {
-	case h := <-f.handovers:
-		if calls.Load() < 3 {
-			t.Fatalf("handed over after only %d idle checks; the one after staging was skipped", calls.Load())
-		}
-		if _, err := os.Stat(h.Staged); err != nil {
-			t.Fatalf("staged binary missing for the second attempt: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("never updated once idle again")
-	}
-	if atomic.LoadInt32(f.downloads) != 2 {
-		t.Fatalf("downloads = %d, want the busy attempt and the idle one", atomic.LoadInt32(f.downloads))
-	}
-}
-
 func TestOnlyOneInstallRunsAtATime(t *testing.T) {
 	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
-	if err := f.updater.install(context.Background(), false); err != nil {
+	if err := f.updater.installNow(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	staged := f.installed + selfupdate.StagedSuffix
-	if err := f.updater.install(context.Background(), true); err != errInProgress {
-		t.Fatalf("second install = %v, want errInProgress", err)
+	if _, err := f.updater.stage(context.Background()); err != errInProgress {
+		t.Fatalf("staging after the handover = %v, want errInProgress", err)
 	}
-	if err := f.updater.install(context.Background(), false); err != errInProgress {
+	if err := f.updater.installNow(context.Background()); err != errInProgress {
 		t.Fatalf("button during an install = %v, want errInProgress", err)
 	}
 	if _, err := os.Stat(staged); err != nil {

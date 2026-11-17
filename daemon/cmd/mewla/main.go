@@ -731,8 +731,25 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetAgentUse(agentUse)
 	srv.SetVersion(Version)
 	updater := newDaemonUpdater(Version, authManager.StorageDir(), cfg.addr, authManager.DaemonID(),
-		func() bool { return workersIdle(w.SnapshotReady, w.Workers) },
+		func() string {
+			return updateQuietPoint(
+				func() int { return len(agentEvents.approvals("", false)) },
+				profileOwner.ModelRequestsInFlight,
+				func() int { pending, _ := brainStore.PendingBrainInputAdmissions(); return len(pending) },
+			)
+		},
 		func(h *updateHandover) { restartDaemon(h) })
+	hosts := &hostUpgrader{
+		supported: hostUpgradeSupported(),
+		state:     w.SessionHostState,
+		restart:   w.RestartSessionHost,
+		brainHost: func() string { id, _ := brainStore.HostSessionID(); return id },
+		workers:   w.Workers,
+		quiet:     updater.quiet,
+		poll:      hostUpgradePoll,
+	}
+	updater.host = hosts
+	go hosts.Run(ctx)
 	srv.SetDaemonUpdater(updater)
 	controlHandler.addr = cfg.addr
 	controlHandler.restarter = newInPlaceRestarter(authManager.StorageDir(), updater.Updating,

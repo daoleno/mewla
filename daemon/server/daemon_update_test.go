@@ -17,7 +17,14 @@ import (
 type fakeDaemonUpdater struct {
 	status    DaemonUpdateStatus
 	installed int
+	restarts  int
 	err       error
+}
+
+func (f *fakeDaemonUpdater) RestartTerminals() error {
+	f.restarts++
+	f.status.TerminalsRestart = false
+	return nil
 }
 
 func (f *fakeDaemonUpdater) Status() DaemonUpdateStatus { return f.status }
@@ -35,6 +42,7 @@ func TestDaemonUpdateReportsVersionAndInstallsOnlyForASignedPhone(t *testing.T) 
 	srv := New(manager, nil, nil, nil, nil, nil, nil)
 	srv.SetVersion("0.2.88")
 	srv.SetDaemonUpdater(updater)
+	var doAt func(method, path, purpose string) (int, DaemonUpdateStatus)
 	header := func(purpose string) string {
 		nonce := make([]byte, 16)
 		_, _ = rand.Read(nonce)
@@ -43,7 +51,10 @@ func TestDaemonUpdateReportsVersionAndInstallsOnlyForASignedPhone(t *testing.T) 
 		return auth.AuthorizationHeaderPrefix + "v1:" + deviceID + ":" + manager.DaemonID() + ":" + timestamp + ":" + hex.EncodeToString(nonce) + ":" + hex.EncodeToString(signature)
 	}
 	do := func(method, purpose string) (int, DaemonUpdateStatus) {
-		request := httptest.NewRequest(method, "/daemon-update", nil)
+		return doAt(method, "/daemon-update", purpose)
+	}
+	doAt = func(method, path, purpose string) (int, DaemonUpdateStatus) {
+		request := httptest.NewRequest(method, path, nil)
 		if purpose != "" {
 			request.Header.Set("Authorization", header(purpose))
 		}
@@ -73,6 +84,14 @@ func TestDaemonUpdateReportsVersionAndInstallsOnlyForASignedPhone(t *testing.T) 
 	updater.err = ErrUpdateUnavailable
 	if code, _ := do(http.MethodPost, "mewla-daemon-update:POST:/daemon-update"); code != http.StatusConflict {
 		t.Fatalf("nothing to install: %d", code)
+	}
+	// Restarting the terminals ends every Session: it needs its own signature.
+	updater.status.TerminalsRestart = true
+	if code, _ := doAt(http.MethodPost, "/daemon-update/terminals", "mewla-daemon-update:POST:/daemon-update"); code != http.StatusUnauthorized || updater.restarts != 0 {
+		t.Fatalf("an install signature restarted the terminals: %d (restarts %d)", code, updater.restarts)
+	}
+	if code, status := doAt(http.MethodPost, "/daemon-update/terminals", "mewla-daemon-update:POST:/daemon-update/terminals"); code != http.StatusOK || updater.restarts != 1 || status.TerminalsRestart {
+		t.Fatalf("restart terminals: %d %+v (restarts %d)", code, status, updater.restarts)
 	}
 }
 

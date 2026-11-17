@@ -714,6 +714,16 @@ func (o *Owner) Store() *Store {
 	return o.store
 }
 
+// ModelRequestsInFlight is the number of model requests passing through
+// Mewla right now (the gateway and every Session route): a daemon restart
+// would cut each one mid-reply.
+func (o *Owner) ModelRequestsInFlight() int {
+	if o == nil {
+		return 0
+	}
+	return o.table.TotalInFlight() + o.gateway.InFlight()
+}
+
 // Table returns the RouteTable (tests).
 func (o *Owner) Table() *RouteTable {
 	if o == nil {
