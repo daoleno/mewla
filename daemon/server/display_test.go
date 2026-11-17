@@ -109,6 +109,27 @@ func TestDisplayListStopAndViewer(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 
+	// Held, a fit for a display with no browser window on it is answered: nothing to lay out.
+	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"hold","on":true}`))
+	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"fit","width":412,"height":760,"dpr":2.625}`))
+	for {
+		kind, data, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if kind != websocket.TextMessage || !strings.Contains(string(data), `"reflow"`) {
+			continue
+		}
+		var reflow struct {
+			On bool `json:"on"`
+		}
+		if json.Unmarshal(data, &reflow) != nil || reflow.On {
+			t.Fatalf("reflow = %s", data)
+		}
+		break
+	}
+	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"hold","on":false}`))
+
 	// Stop from the HTTP side holds the agent off.
 	post := func(body string) int {
 		req, _ := http.NewRequest("POST", h.URL+"/display", strings.NewReader(body))
