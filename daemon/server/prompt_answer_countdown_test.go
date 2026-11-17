@@ -30,7 +30,7 @@ func TestAnswerPanePromptSurvivesBlockCountdownAndStillRefusesOtherCommands(t *t
 	told := live(command, "2:00")
 
 	same := &fakePanePrompts{current: live(command, "1:25")}
-	if _, err := AnswerPanePrompt(same, "%729", PromptAnswer{PromptID: told.ID, Number: 1}, nil, loads); err != nil {
+	if _, err := AnswerPanePrompt(same, "%729", PromptAnswer{PromptID: told.ID, Number: 1}, nil, nil, loads); err != nil {
 		t.Fatalf("the same dialog, 35 seconds on, was refused: %v", err)
 	}
 	if len(same.pressed) != 1 || same.pressed[0] != 1 {
@@ -38,7 +38,7 @@ func TestAnswerPanePromptSurvivesBlockCountdownAndStillRefusesOtherCommands(t *t
 	}
 
 	other := &fakePanePrompts{current: live("rm -rf /tmp/proto", "0:49")}
-	if _, err := AnswerPanePrompt(other, "%729", PromptAnswer{PromptID: told.ID, Number: 1}, nil, loads); !PromptGone(err) {
+	if _, err := AnswerPanePrompt(other, "%729", PromptAnswer{PromptID: told.ID, Number: 1}, nil, nil, loads); !PromptGone(err) {
 		t.Fatalf("a different command was answered with the old prompt id: %v", err)
 	}
 	if len(other.pressed) != 0 {
@@ -46,7 +46,7 @@ func TestAnswerPanePromptSurvivesBlockCountdownAndStillRefusesOtherCommands(t *t
 	}
 
 	expired := &fakePanePrompts{}
-	if _, err := AnswerPanePrompt(expired, "%729", PromptAnswer{PromptID: told.ID, Number: 1}, nil, loads); !PromptGone(err) || len(expired.pressed) != 0 {
+	if _, err := AnswerPanePrompt(expired, "%729", PromptAnswer{PromptID: told.ID, Number: 1}, nil, nil, loads); !PromptGone(err) || len(expired.pressed) != 0 {
 		t.Fatalf("an expired dialog was answered: %v %v", err, expired.pressed)
 	}
 }

@@ -52,6 +52,23 @@ them in three places:
 The first explicit answer stands. A terminal answer, which is inferred, gives
 way to the app's or Brain's answer if that is recorded a moment later.
 
+**One request, one record.** A delegated Worker's Claude permission is asked
+twice at once: the dialog on its screen, and the PermissionRequest hook, whose
+decision is routed to Brain and is not in the app's list. When the dialog is
+answered by its key (from a device, or `mewla worker answer` with an option the
+hook has no form for), the decision the hook holds for that same call (matched
+by `tool` and `summary`) is settled with it, as one answered in the terminal
+is: the hook lets go with no decision, Brain's question is over, and Brain
+answering the held approval afterwards is refused as no longer pending.
+Before, the hook kept waiting while the call ran, Brain answered it again, and
+the one call had two records (and, unanswered, it was escalated to the user
+after Brain's wait).
+
+On a device, a record's line at the foot of a thread (the `request_answered`
+broadcast) shows only until the thread has a row newer than `answered_at`, or
+the thread holds the record as its own row. A record Brain answered
+(`by.kind` `brain`) makes no foot line.
+
 ## Running state
 
 **A Session that is working.** A Claude, Codex or Cursor Session you started

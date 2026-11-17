@@ -153,7 +153,15 @@ func (a *controlApp) handleWorkerAnswer(req control.Request) control.Response {
 		return handled, err
 	}
 	asked, _ := pane.CurrentPrompt(workerID)
-	recorded, err := server.AnswerPanePrompt(pane, workerID, answer, hook, a.choiceConversationLoader(worker))
+	// A permission answered by its key (an option the hook has no form for)
+	// settles what the hook still holds for it, so Brain is not asked again.
+	var keyed server.PromptKeyed
+	if a.agentEvents != nil {
+		keyed = func(prompt classifier.Prompt) {
+			appApprovals{service: a.agentEvents}.AnsweredInTerminal(workerID, prompt.Tool, prompt.Summary)
+		}
+	}
+	recorded, err := server.AnswerPanePrompt(pane, workerID, answer, hook, keyed, a.choiceConversationLoader(worker))
 	if err != nil {
 		return promptAnswerError(err)
 	}

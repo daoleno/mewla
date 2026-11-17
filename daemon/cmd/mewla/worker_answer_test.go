@@ -8,7 +8,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/daoleno/mewla/daemon/answered"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -340,5 +342,53 @@ func TestWorkerAnswerByApprovalIDResolvesADialogTallerThanThePane(t *testing.T) 
 	}
 	if len(pane.keys) != 0 || len(fw.pressed) != 0 {
 		t.Fatalf("keys reached the pane: %v %v", pane.keys, fw.pressed)
+	}
+}
+
+// A delegated Worker's permission its hook holds for Brain, answered on the
+// dialog by a key (here "Yes, and don't ask again", which has no hook form),
+// is over: the hook lets go, nothing is left pending, and Brain answering the
+// held approval afterwards is refused, so the call has one record, not two
+// (2026-11-17: the owner's "Yes" and Brain's "Allow" a minute later were two
+// "Approved" lines for one command).
+func TestAPermissionAnsweredByKeyIsNotAnsweredAgainByBrain(t *testing.T) {
+	s, _ := gateService(t, true)
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.answered = ledger
+	done := start(s, askedPush)
+	held := pending(t, s, false, 1)[0]
+	pending(t, s, true, 0)
+
+	prompt := &classifier.Prompt{ID: "perm1", Kind: classifier.PromptPermission, Tool: "Bash", Summary: "git push origin main", Options: []classifier.PromptOption{
+		{Number: 1, Label: "Yes"}, {Number: 2, Label: "Yes, and don't ask again"}, {Number: 3, Label: "No"},
+	}}
+	app, fw := newPromptApp(prompt)
+	app.agentEvents = s
+	resp := app.HandleControlRequest(control.Request{Type: "worker_answer", WorkerID: "%4", PromptID: "perm1", PromptChoice: 2, ApprovalBasis: "the brief allows pushes"})
+	if !resp.OK || !reflect.DeepEqual(fw.pressed, []int{2}) {
+		t.Fatalf("key answer: resp=%+v pressed=%v", resp, fw.pressed)
+	}
+	select {
+	case out := <-done:
+		if !out.OK || out.HookOutput != "" {
+			t.Fatalf("the hook decided a question the screen answered: %+v", out)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the hook kept holding a question the screen answered")
+	}
+	if left := s.approvals("%4", false); len(left) != 0 {
+		t.Fatalf("still pending for Brain: %+v", left)
+	}
+
+	fw.prompt = nil
+	late := app.HandleControlRequest(control.Request{Type: "worker_answer", WorkerID: "%4", PromptID: held.ID, PromptChoice: 1, ApprovalBasis: "the brief allows pushes"})
+	if late.OK {
+		t.Fatalf("Brain answered the same call again: %+v", late)
+	}
+	if rows := ledger.List(answered.Filter{SessionID: "%4"}); len(rows) != 1 || rows[0].Kind != string(classifier.PromptPermission) {
+		t.Fatalf("records = %+v", rows)
 	}
 }
