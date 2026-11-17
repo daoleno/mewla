@@ -249,8 +249,17 @@ command only says so. `mewla restart` restarts it at any time.
 
 ### Automatic updates
 
-A released `mewla` on Linux and Windows checks every six hours and installs a
-newer stable release once no Brain turn or Worker is running. When a newer
+A released `mewla` on Linux and Windows checks every hour, downloads a newer
+stable release, and installs it without waiting for Workers or Brain to finish:
+they keep running in the session host while Mewla restarts. It waits only for a
+moment when the restart cuts nothing Mewla itself carries (a permission
+question an agent is waiting on, a model reply passing through Mewla, a message
+being typed into Brain), and at most an hour. While it waits, Brain's Chat says
+so, **Update to 0.4.15 waiting for a permission answer**, with **Update now**.
+Mewla 0.4.14 and older install only once no Worker is running, so a computer
+that is always busy stays on its version; with an app from 0.4.15 on, Brain's
+Chat shows **Update to … waiting for Workers to finish** with **Update now**, which
+installs it at once. When a newer
 release exists, the cat on home carries a small ink dot and the computer page
 (tap the cat) shows an update row with **Update**, which does the same right
 away; once you have seen that row, the cat's dot goes until the next release.
@@ -278,6 +287,16 @@ one sheet. A release with fixes only brings no sheet. Every update also leaves a
 line in Brain's chat, **Updated to 0.4.9 · What's new**, which opens its notes;
 **Settings › About › What's new** opens the latest ones any time. A new install
 starts quiet: what came before it is not news.
+
+### Terminals after an update
+
+Agents survive an update because their terminals live in the session host,
+which keeps running across every Mewla update and so keeps its own version.
+Most releases leave it alone. When a release needs a newer session host, Mewla
+restarts it on its own the first time that ends nothing: no Worker or terminal
+of yours open, and Brain between turns. Brain comes back in the same
+conversation. Until then Brain's Chat shows **Restart terminals to finish
+updating** with how many terminals it would end, and **Restart** does it now.
 
 Development builds, betas and macOS (until it is verified) do not update
 themselves. `MEWLA_NO_AUTOUPDATE=1` turns automatic updates off. Updating from
