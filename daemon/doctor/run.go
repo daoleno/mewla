@@ -1045,9 +1045,18 @@ func (e env) defaultRunCommand(ctx context.Context, name string, args ...string)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
+	// A CLI whose --version leaves a child holding its output (a wrapper
+	// that starts a server) would keep Wait reading forever after ctx kills
+	// it, and with it every caller: Brain's host checks, and through them the
+	// daemon's shutdown and its update.
+	cmd.WaitDelay = probeWaitDelay
 	err := cmd.Run()
 	return buf.Bytes(), err
 }
+
+// probeWaitDelay bounds how long a finished or killed probe waits for its
+// output to close.
+const probeWaitDelay = 2 * time.Second
 
 func (e env) defaultHTTPGet(ctx context.Context, url string) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
