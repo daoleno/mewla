@@ -164,15 +164,21 @@ An agent may remove cookies and site data only of the sites it works on: pages
 its tabs opened or were given, and cookies it set itself. Mewla's extension
 refuses `Storage.clearCookies` and `Network.clearBrowserCookies` (Playwright's
 `context.clearCookies()` without a filter, which signs the person out of every
-site), and a cookie deletion or `Storage.clearDataFor*` for any other site; the
-refusal names the scoped call to use instead (`clearCookies({ domain })`). This
-is a guard against a well-meaning agent's mistake, not a boundary (see Security
-scope).
+site). It also refuses, for any other site, a cookie deletion and the commands
+that remove a site's stored data (`Storage.clearDataFor*`, storage buckets and
+shared storage, `DOMStorage`, `IndexedDB` and `CacheStorage` deletes; a cache id
+is `<storage key>|<name>`). The refusal names the scoped call to use instead
+(`clearCookies({ domain })`). This is a guard against a well-meaning agent's
+mistake, not a boundary (see Security scope). In extension mode an agent has no
+browser-level target: `browser.newContext()` and a raw CDP session are refused
+by Chrome ("Not allowed"), so a clean first visit means clearing the one site
+under test, not a context of its own.
 
 Whenever Chrome is not running on the profile (after a clean stop, and before a
-fresh start), Mewla reads which sites have cookies in `Default/Cookies` and
-compares them with `signed-in-sites.json` in the profile root. Sites whose
-every cookie went before it expired are named in one Chat notice ("Agents'
+fresh start), Mewla reads the profile's sign-ins from `Default/Cookies` (its
+HttpOnly cookies, by registrable site; local and IP hosts left out) and compares
+them with `signed-in-sites.json` in the profile root. Sites whose every sign-in
+cookie went before it expired are all named in one Chat notice ("Agents'
 browser signed out", timeline kind `browser_notice`) and in the daemon problem
 `browser.signins_lost`, so the person signs in again once instead of each Worker
 finding a site signed out and asking.
