@@ -1453,6 +1453,9 @@ func (a *controlApp) handleWorkerStatus(req control.Request) control.Response {
 		return control.ErrorResponse("missing_worker_id", "Worker id is required.")
 	}
 	worker, ownershipErr := a.resolveOwnedWorker(workerID)
+	if worker == nil && ownershipErr == nil && a.awaitInventory() {
+		worker, ownershipErr = a.resolveOwnedWorker(workerID)
+	}
 	if ownershipErr != nil {
 		// ResolveOwnedGeneration has already durably deprojected a live
 		// canonical turn before this rejection. Re-read the named recoverable
@@ -1507,7 +1510,7 @@ func (a *controlApp) handleWorkerProgress(req control.Request) control.Response 
 	if workerID == "" {
 		return control.ErrorResponse("missing_worker_id", "Worker id is required.")
 	}
-	if worker := a.watcher.GetWorker(workerID); worker == nil {
+	if worker := a.watcher.GetWorker(workerID); worker == nil && (!a.awaitInventory() || a.watcher.GetWorker(workerID) == nil) {
 		return control.ErrorResponse("worker_not_found", "Worker session was not found.")
 	}
 	progress, err := classifier.ValidateProgress(classifier.WorkerProgress{
@@ -2305,4 +2308,27 @@ func (a *controlApp) handleThreadRuntimeSet(req control.Request) control.Respons
 		log.Printf("thread runtime switch applied with uncertain durability: %v", err)
 	}
 	return response
+}
+
+// inventoryWait bounds how long a Worker command waits for the first
+// Session inventory of a daemon that has just started.
+const inventoryWait = 15 * time.Second
+
+type inventoryWaiter interface {
+	SnapshotReady() bool
+	WaitForSnapshot(context.Context) error
+}
+
+// awaitInventory is called when a Worker lookup found nothing. Right after a
+// restart every Worker is "not found" until the daemon's first Session
+// inventory is in, and a Worker's own progress report would be refused: it
+// waits for that inventory and reports whether looking again can help.
+func (a *controlApp) awaitInventory() bool {
+	waiter, ok := a.watcher.(inventoryWaiter)
+	if !ok || waiter.SnapshotReady() {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), inventoryWait)
+	defer cancel()
+	return waiter.WaitForSnapshot(ctx) == nil
 }
