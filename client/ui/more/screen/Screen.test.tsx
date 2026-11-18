@@ -20,7 +20,7 @@ function secureStore() {
 
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-const base = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: true, permissions: [] };
+const base = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: true, permissions: [], video: "webrtc" };
 const codex = { worker: "w1", name: "Codex", since: "2026-11-11T08:00:00Z" };
 const claude = { worker: "w2", name: "Claude", since: "2026-11-11T08:01:00Z" };
 
@@ -120,7 +120,7 @@ describe("Screen: setup", () => {
     const app = await open(HARNESS, options({
       [`GET ${SCREEN}`]: json({ ...base, supported: false, platform: "linux", ready: false }),
       "POST http://desk.test:9877/browser": (request) => json({ virtual_screen: JSON.parse(String(request.body)).enabled === true }),
-      [`GET ${DISPLAY}`]: json({ displays: [], available: true }),
+      [`GET ${DISPLAY}`]: json({ displays: [], available: true, video: "webrtc" }),
     }));
     // `enabled` throws while no view matches: the switch first, then that it takes a press.
     await app.waitFor("id:virtual-screen");
@@ -169,6 +169,14 @@ describe("Screen: agents", () => {
     await app.waitUntil(() => opened(app).length === 2);
     expect((opened(app)[1].data as { url: string }).url).not.toContain("watch=1");
     expect(app.shows("id:screen-lost")).toBe(false);
+  });
+
+  test("an older computer (no video in its status) is told to update before any viewer opens", async () => {
+    const { video: _, ...old } = base;
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(old) }));
+    await app.waitFor(`text:${SCREEN_TOO_OLD}`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(opened(app).length).toBe(0);
   });
 
   test("an older computer (its RFB stream's first bytes) is told to update, once, also while watching", async () => {
@@ -366,19 +374,19 @@ describe("Screen: Linux agent displays", () => {
   const DISPLAY_VIEWER = "ws://desk.test:9877/display/viewer";
 
   test("a Linux computer lists each agent's display, or says nothing is on screen", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true, video: "webrtc" }) }));
     await app.waitFor("text:Nothing on screen");
   });
 
   test("on a phone, the Linux page's options show only when they hold the Phone row (screen [72])", async () => {
-    const network = { [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) };
+    const network = { [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true, video: "webrtc" }) };
     const off = await open(HARNESS, options(network, { platform: "android", phone: { supported: true, enabled: false } }));
     await off.waitFor("text:Nothing on screen");
     expect(off.shows("id:screen-options")).toBe(false);
   });
 
   test("on a phone with phone use on, the Linux page's options hold the Phone row", async () => {
-    const network = { [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) };
+    const network = { [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [], available: true, video: "webrtc" }) };
     const on = await open(HARNESS, options(network, { platform: "android", phone: { supported: true, enabled: true } }));
     await on.waitFor("id:screen-options");
     // The button shows once Phone use is read; a press before its first layout lands nowhere.
@@ -398,7 +406,7 @@ describe("Screen: Linux agent displays", () => {
   test("the stage has one switch: Take over holds the agent (a red frame), Give back lets it go; a Stop that fails says so", async () => {
     const app = await open(HARNESS, options({
       [`GET ${SCREEN}`]: json(linux),
-      [`GET ${DISPLAY}`]: json({ displays: [display("w1", { name: "Sign in to Acme (mh-17b3337d43f38037916f0e5b)" })], available: true }),
+      [`GET ${DISPLAY}`]: json({ displays: [display("w1", { name: "Sign in to Acme (mh-17b3337d43f38037916f0e5b)" })], available: true, video: "webrtc" }),
       [`POST ${DISPLAY}`]: { status: 500, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "halt failed" }) },
     }, { platform: "android" }));
     await app.waitFor("id:display-w1");
@@ -421,7 +429,7 @@ describe("Screen: Linux agent displays", () => {
   });
 
   test("taken over from a phone, the agent's page is laid out for the phone: the view's size goes once, the keyboard never re-lays it, and the real host shows", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1", { browser: 1, apps: 0 })], available: true }) }, { platform: "android" }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1", { browser: 1, apps: 0 })], available: true, video: "webrtc" }) }, { platform: "android" }));
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
     await app.host.send("app.viewer", { type: "size", width: 412, height: 760, dpr: 2.625 });
@@ -445,7 +453,7 @@ describe("Screen: Linux agent displays", () => {
   });
 
   test("leaving the page closes the display, which lets a held agent go on; only the agent shown streams", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1"), display("w2")], available: true }) }, { below: { name: "settings-phone" } }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1"), display("w2")], available: true, video: "webrtc" }) }, { below: { name: "settings-phone" } }));
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.wait(200);
     expect(opened(app, DISPLAY_VIEWER)).toHaveLength(1);
@@ -454,14 +462,14 @@ describe("Screen: Linux agent displays", () => {
   });
 
   test("a switch of computer closes every display", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1")], available: true }), "GET http://laptop.test:9877/screen?video=webrtc": json(base) }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1")], available: true, video: "webrtc" }), "GET http://laptop.test:9877/screen?video=webrtc": json(base) }));
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.host.send("app.daemonSwitch", { id: "s2", name: "Laptop", url: "ws://laptop.test:9877/ws" });
     await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 1);
   });
 
   test("away from the app every display closes; back, they reconnect", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1")], available: true }) }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1")], available: true, video: "webrtc" }) }));
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.setLifecycle("background");
     await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 1);
@@ -470,7 +478,7 @@ describe("Screen: Linux agent displays", () => {
   });
 
   test("the route's worker opens Screen on that agent's display; the chip switches to another", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1", { name: "Research" }), display("w2", { name: "SignIn" })], available: true }) }, { worker: "w2", platform: "android" }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1", { name: "Research" }), display("w2", { name: "SignIn" })], available: true, video: "webrtc" }) }, { worker: "w2", platform: "android" }));
     await app.waitFor("id:display-w2");
     expect(app.shows("id:display-w1")).toBe(false);
     await app.press("id:stage-chip");
@@ -486,7 +494,7 @@ describe("Screen: a Mac's agent browser windows", () => {
   const DISPLAY_VIEWER = "ws://desk.test:9877/display/viewer";
 
   test("a Chrome-only Worker's window is listed first, by name, live; the Mac's own screen is one tap away and back", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true }) }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true, video: "webrtc" }) }));
     await app.waitFor("id:display-mh-signin");
     expect(app.texts()).toContain("SignIn");
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
@@ -509,14 +517,14 @@ describe("Screen: a Mac's agent browser windows", () => {
   });
 
   test("opened for a Worker (its Work card's Screen), it is at that Worker's window", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-a", "Research"), window("mh-signin", "SignIn")], available: true }) }, { worker: "mh-signin" }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-a", "Research"), window("mh-signin", "SignIn")], available: true, video: "webrtc" }) }, { worker: "mh-signin" }));
     await app.waitFor("id:display-mh-signin");
     expect(app.shows("id:display-mh-a")).toBe(false);
     expect(opened(app)).toHaveLength(0);
   });
 
   test("Take over holds the agent; its keyboard has the Mac's keys, Paste and the editing keys", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true }) }, { platform: "android" }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true, video: "webrtc" }) }, { platform: "android" }));
     await app.waitFor("id:display-mh-signin");
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.host.send("app.viewer", { type: "connected", width: 800, height: 500 });
@@ -533,7 +541,7 @@ describe("Screen: a Mac's agent browser windows", () => {
 
   test("the last window closing hands the page to the Mac's own screen", async () => {
     let list = [window("mh-signin", "SignIn")];
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: () => json({ displays: list, available: true }) }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: () => json({ displays: list, available: true, video: "webrtc" }) }));
     await app.waitFor("id:display-mh-signin");
     list = [];
     await app.waitUntil(() => opened(app).length === 1, { timeout: 10_000 });
@@ -542,7 +550,7 @@ describe("Screen: a Mac's agent browser windows", () => {
 
   test("a window that opens while Screen is up shows at once, also before this device may view the Mac", async () => {
     let list: unknown[] = [];
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, approved: false, ready: false }), [`GET ${DISPLAY}`]: () => json({ displays: list, available: true }) }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, approved: false, ready: false }), [`GET ${DISPLAY}`]: () => json({ displays: list, available: true, video: "webrtc" }) }));
     await app.waitFor("id:screen-enable");
     list = [window("mh-signin", "SignIn")];
     await app.waitFor("id:display-mh-signin", { timeout: 6_000 });
@@ -550,7 +558,7 @@ describe("Screen: a Mac's agent browser windows", () => {
   });
 
   test("a Mac without agent windows (or an older Mewla) opens its own screen as before", async () => {
-    const none = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [], available: true }) }));
+    const none = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [], available: true, video: "webrtc" }) }));
     await none.waitUntil(() => opened(none).length === 1);
     const older = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: { status: 404, headers: { "content-type": "text/plain" }, body: "404 page not found" } }));
     await older.waitUntil(() => opened(older).length === 1);
@@ -629,7 +637,7 @@ describe("Screen in a browser", () => {
   });
 
   test("agent displays: no keyboard button on a card; another window's focus keeps them", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [{ id: "w1", width: 1280, height: 800, control: "agent", apps: 1 }], available: true }) }, web));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [{ id: "w1", width: 1280, height: 800, control: "agent", apps: 1 }], available: true, video: "webrtc" }) }, web));
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
     await app.waitFor("id:stage-take-over-bar");
