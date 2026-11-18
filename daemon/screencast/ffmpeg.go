@@ -109,6 +109,14 @@ func findEncoders() (string, []*ffmpegKind, error) {
 	return bin, kinds, nil
 }
 
+// EncoderReady says whether this computer can encode the video with ffmpeg
+// (Linux's encoder): nil, or ErrNoEncoder. Checked again, like a view, at most
+// every probeAgain while it fails.
+func EncoderReady() error {
+	_, _, err := findEncoders()
+	return err
+}
+
 // findEncoder is the best kind that encodes here.
 func findEncoder() (string, *ffmpegKind, error) {
 	bin, kinds, err := findEncoders()

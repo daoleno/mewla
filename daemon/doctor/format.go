@@ -28,6 +28,9 @@ func WriteHuman(w io.Writer, report Report) error {
 	if report.Remote.Status != "" {
 		writeCheck(w, "Remote", report.Remote.Status, report.Remote.Summary)
 	}
+	if report.Screen != nil {
+		writeCheck(w, "Screen", report.Screen.Status, report.Screen.Summary)
+	}
 	if len(report.Addresses) > 0 {
 		fmt.Fprintln(w, "")
 		fmt.Fprintln(w, "Daemon addresses:")

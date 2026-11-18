@@ -101,6 +101,7 @@ func Run(opts Options) (Report, error) {
 	report.Addresses = e.checkAddresses(report.StateDir.Path)
 	report.Remote = e.checkRemote(report.StateDir.Path)
 	report.Network = e.checkNetwork()
+	report.Screen = e.checkScreen()
 
 	report.Checks = []NamedCheck{
 		{ID: "platform", Status: report.Platform.Status, Remediation: report.Platform.Remediation, Summary: report.Platform.Summary},

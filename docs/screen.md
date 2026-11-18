@@ -476,6 +476,12 @@ only your user can open, no network port is used, and an agent's monitor is
 given up when its Worker closes, when nothing is left on it, or after an hour
 nobody used it.
 
+Watching an agent's screen also needs `ffmpeg` with an H.264 encoder (VA-API,
+x264 or OpenH264), which encodes its video; the agents work without it. A
+computer without one says so on Screen, and `mewla doctor` lists what Screen
+is missing (`Xvnc`, `xauth`, `ffmpeg`, an H.264 encoder) on its **Screen**
+line.
+
 The browser has one profile for all agents on the computer, not your everyday
 Chrome: to give it a sign-in, take over an agent's screen, sign in yourself and
 give it back; every agent's window then has it, because they are windows of the

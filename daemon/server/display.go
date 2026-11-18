@@ -68,9 +68,17 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 		capability := s.displays.Capability()
 		if capability != nil {
 			reason = capability.Error()
-		} else if _, agentScreen := s.displays.(*vdisplay.Service); agentScreen && s.browsers != nil {
-			if c := s.browsers.Capability(r.Context()); !c.Available {
-				reason = c.Reason
+		} else if _, agentScreen := s.displays.(*vdisplay.Service); agentScreen {
+			if s.browsers != nil {
+				if c := s.browsers.Capability(r.Context()); !c.Available {
+					reason = c.Reason
+				}
+			}
+			// Agents work without ffmpeg; watching them does not.
+			if reason == "" {
+				if err := s.videoReady(); err != nil {
+					reason = err.Error()
+				}
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": capability == nil, "reason": reason, "video": "webrtc"})
