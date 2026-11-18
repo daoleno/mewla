@@ -146,3 +146,16 @@ export function capsuleExpand(state: CapsuleState): CapsuleState {
 export function capsuleCollapse(state: CapsuleState): CapsuleState {
   return state.collapsed ? state : { ...state, collapsed: true };
 }
+
+/**
+ * With the side rail up (core/shell/rail.ts), Back and the page's controls are in the rail: Brain's capsule keeps the
+ * cat alone and a Session's its mark and name on one line, 44 high. Where their content starts.
+ */
+export function capsuleRailInset(safeTop: number): number {
+  return safeTop + CAPSULE.top + CAPSULE.compactHeight;
+}
+
+/** With the side rail up, a pushed page whose capsule holds nothing at rest: its content starts under the status strip. */
+export function capsuleRailPageInset(safeTop: number): number {
+  return safeTop + CAPSULE.top;
+}

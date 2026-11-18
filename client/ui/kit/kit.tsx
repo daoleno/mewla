@@ -1,10 +1,11 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
 import { announce, Clipboard, effect, platform, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
-import { CAPSULE, capsulePageInset } from "../../core/shell/capsule";
+import { CAPSULE, capsulePageInset, capsuleRailPageInset } from "../../core/shell/capsule";
 import { Button, Input, Switch } from "nsh/base";
 import { PAGE_COLUMN_WIDTH } from "../../core/web/places";
-import { wide } from "../shell/layout";
+import { rail, wide } from "../shell/layout";
+import type { RailAction } from "../shell/railPages";
 import { NavPage } from "../shell/NavPage";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
@@ -39,6 +40,8 @@ export function Page(props: {
   hero?: JSX.Element;
   testID?: string;
   headerRight?: JSX.Element;
+  /** The page's controls for the side rail (`NavPage`'s `rail`): while the rail is up they leave the capsule for it. */
+  rail?: readonly RailAction[];
   refreshing?: boolean;
   onRefresh?: () => void;
   /** The widest the content grows off wide, in points (720; a dashboard takes more). On wide every list page has the 680 column. */
@@ -60,9 +63,12 @@ export function Page(props: {
   // and the title joins Back in the capsule once it has scrolled past 50.
   const capsuled = mobile && platform.idiom === "phone";
   const away = capsuled ? CAPSULE.titleAway : DISPLAY_TITLE_AWAY;
+  // With the side rail up, a display page whose controls are in the rail (or that has none) has an empty capsule at rest.
+  const emptyAtRest = display && (!("headerRight" in props) || "rail" in props);
+  const top = () => (rail() && emptyAtRest ? capsuleRailPageInset(safeArea().top) : capsulePageInset(safeArea().top));
   const scroll = (
     <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pt-2"
-      contentStyle={{ paddingTop: capsuled ? capsulePageInset(safeArea().top) + 8 : undefined, paddingBottom: 40 + bottomBarInset() }} refreshing={props.refreshing} onRefresh={props.onRefresh}
+      contentStyle={{ paddingTop: capsuled ? top() + 8 : undefined, paddingBottom: 40 + bottomBarInset() }} refreshing={props.refreshing} onRefresh={props.onRefresh}
       onScroll={display ? (e) => titleAway.set(e.offset.y > away) : undefined} scrollEventThrottle={display ? 64 : undefined}>
       <View class="w-full self-center" style={{ maxWidth: width() }}>
         {display ? (props.hero ?? <DisplayTitle eyebrow={props.eyebrow} title={props.displayTitle ?? props.title} />) : null}
@@ -73,7 +79,7 @@ export function Page(props: {
   // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
   const withAside = untracked(() => props.aside !== undefined);
   return (
-    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} column="page" frame={false} capsuleUnder capsuleControls={"headerRight" in props}>
+    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} rail={props.rail} column="page" frame={false} capsuleUnder capsuleControls={"headerRight" in props}>
       <View class="flex-1 bg-background">
         <If when={withAside} else={<>{scroll}</>}><View class="flex-1 flex-row">{scroll}{props.aside}</View></If>
         {props.overlay ?? null}
