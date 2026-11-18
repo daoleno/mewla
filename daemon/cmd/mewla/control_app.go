@@ -1486,6 +1486,11 @@ func (a *controlApp) resolveOwnedWorker(workerID string) (*classifier.Worker, er
 	}
 	worker := a.watcher.GetWorker(workerID)
 	if worker == nil {
+		// A Session Mewla closed after its Work was completed is no longer
+		// listed; say that, instead of letting raw input fail on it.
+		if reclaimed, ok := a.watcher.(interface{ SessionReclaimed(string) bool }); ok && reclaimed.SessionReclaimed(workerID) {
+			return nil, fmt.Errorf("%w: %s", watcher.ErrSessionReclaimed, workerID)
+		}
 		return nil, nil
 	}
 	if _, err := a.watcher.ResolveDelegatedControl(workerID); err != nil {
