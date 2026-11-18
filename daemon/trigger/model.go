@@ -282,6 +282,9 @@ type View struct {
 	// it, nil when there is none.
 	LastFiredAt *time.Time `json:"last_fired_at,omitempty"`
 	Handled     *bool      `json:"handled,omitempty"`
+	// PendingChanges is how many changed outputs wait for the next firing
+	// (clients get the count, not the text).
+	PendingChanges int `json:"pending_changes,omitempty"`
 	// Line is the row in words: "Every 10 min · checked 2 min ago · fired
 	// 3 h ago · not handled".
 	Line string `json:"line"`
@@ -290,6 +293,9 @@ type View struct {
 // ViewOf derives the person-facing state at now.
 func ViewOf(t Trigger, now time.Time) View {
 	v := View{Trigger: t, State: StateWatching}
+	if t.Pending != nil {
+		v.PendingChanges = len(t.Pending.Outputs)
+	}
 	switch {
 	case t.Paused:
 		v.State = StatePaused
@@ -309,9 +315,10 @@ func ViewOf(t Trigger, now time.Time) View {
 	switch {
 	case t.Paused && t.PauseReason == PauseRunaway:
 		v.Attention = AttentionRunaway
-	case t.Failing:
+	case t.Failing && !t.Paused:
+		// Paused by the person, a failing check no longer asks for them.
 		v.Attention = AttentionFailing
-	case latest.open() && now.Sub(latest.At) >= NotHandledAfter:
+	case latest != nil && (latest.Lost || (latest.open() && now.Sub(latest.At) >= NotHandledAfter)):
 		v.Attention = AttentionNotHandled
 	}
 	v.Line = line(v, now)

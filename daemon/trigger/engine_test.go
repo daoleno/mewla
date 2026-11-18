@@ -309,6 +309,11 @@ func TestFailingIsReportedOnceThenRecovers(t *testing.T) {
 	if view.State != StateFailing || view.Attention != AttentionFailing || !strings.Contains(view.Line, "failing: exit status 1") {
 		t.Fatalf("view %+v", view)
 	}
+	paused := item
+	paused.Paused = true
+	if view := ViewOf(paused, h.now); view.Attention != AttentionNone {
+		t.Fatalf("paused by the person, still asks: %+v", view.Attention)
+	}
 	h.sink.handleAll()
 	for range 10 {
 		h.result(fail)
@@ -429,8 +434,8 @@ func TestLostEventIsNotHandled(t *testing.T) {
 	h.check("NEW a")
 	h.sink.missing = map[string]bool{h.sink.ids[0]: true}
 	view, _ := h.engine.View(h.id)
-	if !strings.Contains(view.Line, "not handled") {
-		t.Fatalf("line %q", view.Line)
+	if !strings.Contains(view.Line, "not handled") || view.Attention != AttentionNotHandled {
+		t.Fatalf("line %q attention %q", view.Line, view.Attention)
 	}
 	h.check("NEW b")
 	if len(h.sink.wakes()) != 2 {

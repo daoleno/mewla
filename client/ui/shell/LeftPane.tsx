@@ -21,6 +21,7 @@ const REPLACE: TrayOpeners = {
   session: (workerId) => openPage({ name: "session", workerId }),
   work: (workId) => openPage({ name: "workDetail", workId }),
   item: (id) => openPage({ name: "item", id }),
+  trigger: (id) => openPage({ name: "trigger", id }),
   calendar: () => openPage({ name: "calendar" }),
   allSessions: () => openPage({ name: "allSessions" }),
   computer: () => openPage({ name: "computer" }),

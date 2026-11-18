@@ -179,6 +179,19 @@ mewla trigger resume -id <trigger-id>
 mewla trigger delete -id <trigger-id>
 ```
 
+In the app, **Calendar** lists the current computer's Triggers above Today
+(the section is hidden when there are none). Each row says how often it checks
+and what it did last: "Every 10 min · fired 5 min ago · with Brain", "Failing:
+exit status 1: gh: HTTP 502", "Paused". A seal dot marks one that needs you.
+Tap a row to open the Trigger: its check, what Brain is told when it fires, its
+recent firings (newest first, each handled, with Brain or not handled) and
+**Check now**, **Pause** or **Resume**, and **Delete**.
+
+A Trigger that needs you is also under **Needs you** in the tray, with Open:
+its check keeps failing, it paused itself, or a firing has not been handled for
+3 hours. This takes no model call. A Trigger you paused yourself stops asking
+about a failing check.
+
 `-work <work-id>` sends the firings to an existing Work instead of a new one;
 without it the Trigger creates its own Work in `-source-thread` and closes it
 when the Trigger is deleted. `-timeout` sets the check's timeout (shorter than

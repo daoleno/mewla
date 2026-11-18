@@ -19,7 +19,7 @@ import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
 export type TrayConnection = "connected" | "connecting" | "waiting" | "idle";
 
 /** Where a request's card lives, which decides what a tap on its tray row does (§1.1 "Row tap"). */
-export type RequestWhere = "brain" | "session" | "work" | "alert" | "device";
+export type RequestWhere = "brain" | "session" | "work" | "alert" | "device" | "trigger";
 
 /** A one-tap answer: only a plain yes/no approval of one command or permission has one (§1.1 "One-tap case"). */
 export type OneTap =
@@ -30,7 +30,7 @@ export type OneTap =
 export interface TrayRequest {
   /** Stable while the request is open: the thread card and the tray row share it. */
   key: string;
-  kind: "choice" | "prompt" | "approval" | "attention" | "work" | "alert" | "device";
+  kind: "choice" | "prompt" | "approval" | "attention" | "work" | "alert" | "device" | "trigger";
   where: RequestWhere;
   /** The question, or what is asked ("Run git push?"). */
   title: string;
@@ -47,11 +47,13 @@ export interface TrayRequest {
   itemId?: string;
   /** A new device's request to be let in. */
   deviceId?: string;
+  /** A Trigger whose watching stopped or whose firing nobody handled (core/triggers). */
+  triggerId?: string;
   agent?: AgentKind;
   flavor?: TerminalFlavor;
   /** Approve on the row; absent sends the tap to the card ("Answer"). */
   oneTap?: OneTap;
-  /** A failed Session: nothing to answer, its tag is "Open" and opens it (Brain 11-14). */
+  /** A failed Session or a Trigger: nothing to answer, its tag is "Open" and opens it (Brain 11-14). */
   opens?: true;
 }
 
@@ -165,6 +167,8 @@ export interface TrayInput {
   alerts: readonly { id: string; title: string }[];
   /** New devices asking the current computer to let them in (ui/enrollment `deviceRequests`). */
   devices?: readonly { id: string; name: string }[];
+  /** Triggers that need the person (core/triggers `triggersNeedingYou`): failing, paused themselves, not handled. */
+  triggers?: readonly { id: string; title: string; ask: string }[];
   /** Requests answered here that the computer has not cleared yet: sealed everywhere at once (§1.1). */
   answered?: ReadonlySet<string>;
   /** When each Session was last opened here (core/sessions/deviceState `getRecentWorkerOpens`). */
@@ -237,7 +241,7 @@ function titleOf(worker: Worker): string {
  * A request of a Session that works for Brain's delegated Work shows in Brain's thread too, so its
  * row leads there; one of a Session the person started is only in that Session.
  */
-export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "devices" | "answered" | "now">): TrayRequest[] {
+export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "devices" | "triggers" | "answered" | "now">): TrayRequest[] {
   const out: TrayRequest[] = [];
   if (input.brainChoice) {
     out.push({ key: `brain-choice:${input.brainChoice.callId}`, kind: "choice", where: "brain", title: input.brainChoice.question || "Brain asks", ask: input.brainChoice.question || "Brain asks", source: "Brain", workerId: input.brainHost?.id });
@@ -266,6 +270,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
     out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question || slip.title, ask: slip.question || "Needs you", source: slip.title, workId: slip.workId });
   }
   for (const alert of input.alerts) out.push({ key: `alert:${alert.id}`, kind: "alert", where: "alert", title: alert.title, source: "Calendar", itemId: alert.id });
+  for (const trigger of input.triggers ?? []) out.push({ key: `trigger:${trigger.id}:${trigger.ask}`, kind: "trigger", where: "trigger", title: trigger.title, ask: trigger.ask, source: trigger.title, triggerId: trigger.id, opens: true });
   for (const device of input.devices ?? []) out.push({ key: `device:${device.id}`, kind: "device", where: "device", title: "Approve new device", source: device.name, deviceId: device.id });
   const answered = input.answered;
   return answered?.size ? out.filter((request) => !answered.has(request.key)) : out;

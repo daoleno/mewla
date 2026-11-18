@@ -55,7 +55,7 @@ mount(() => (
         route.name === "home" ? <View testID="home-stub" class="flex-1" />
           : route.name === "computer" ? <ComputerPage nav={pageNav} onSwitchExecutor={() => opened.set("brain-host")} />
           : route.name === "pair" ? <View testID="pair-stub" class="flex-1" />
-          : route.name === "session" || route.name === "allSessions" || route.name === "workDetail" || route.name === "calendar" || route.name === "item" || route.name === "run" || route.name === "workFile"
+          : route.name === "session" || route.name === "allSessions" || route.name === "workDetail" || route.name === "calendar" || route.name === "item" || route.name === "trigger" || route.name === "run" || route.name === "workFile"
             ? <View class="flex-1" />
             : <MorePageView route={route} nav={pageNav} onPair={() => nav.push({ name: "pair" })} />}
     </NavStack>

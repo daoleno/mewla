@@ -35,6 +35,7 @@ describe("the selected row", () => {
     expect(paneSelection([{ name: "home" }, { name: "session", workerId: "w1" }])).toBe("session:w1");
     expect(paneSelection([{ name: "home" }, { name: "session", workerId: "w1" }, { name: "git" }])).toBe("session:w1");
     expect(paneSelection([{ name: "home" }, { name: "workDetail", workId: "k1" }])).toBe("work:k1");
+    expect(paneSelection([{ name: "home" }, { name: "trigger", id: "t1" }])).toBe("trigger:t1");
     expect(paneSelection([{ name: "home" }, { name: "item", id: "c1" }])).toBe("item:c1");
     expect(paneSelection([{ name: "home" }, { name: "calendar" }, { name: "item", id: "c1" }])).toBe("calendar");
     expect(paneSelection([{ name: "home" }, { name: "allSessions" }])).toBe("all");

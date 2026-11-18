@@ -1042,6 +1042,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return err
 	})
 	srv.SetCalendar(calendarStore, calendarScheduler)
+	if triggerEngine != nil {
+		srv.SetTriggers(triggerEngine)
+		srv.SetTriggerDelete(func(id string) error {
+			_, _, err := controlHandler.deleteTrigger(id)
+			return err
+		})
+	}
 	controlServer := &control.Server{
 		Path:    controlPath,
 		Handler: controlHandler,
