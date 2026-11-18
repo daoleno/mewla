@@ -2,8 +2,12 @@ package screencast
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,5 +95,53 @@ func TestEncoderKeyFrameOnDemand(t *testing.T) {
 			t.Fatalf("picture %d: key %v, NALs %v", n, key, types)
 		}
 		t.Logf("%s picture %d key=%v %d bytes in %v", enc.Name(), n, key, len(au), time.Since(start))
+	}
+}
+
+// children are this test process's child pids, from every thread's list.
+func children(t *testing.T) []string {
+	t.Helper()
+	files, _ := filepath.Glob("/proc/self/task/*/children")
+	var pids []string
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err == nil {
+			pids = append(pids, strings.Fields(string(b))...)
+		}
+	}
+	return pids
+}
+
+// Every ffmpeg the encoder starts is waited for: the spares a rate change
+// replaces, and the ones still starting when it closes.
+func TestEncoderLeavesNoProcess(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("reads /proc")
+	}
+	if len(children(t)) != 0 {
+		t.Skip("this test process already has children")
+	}
+	enc, err := newFFmpegEncoder(3000)
+	if err != nil {
+		t.Skip(err)
+	}
+	const w, h = 320, 240
+	for n := range 8 {
+		if n%2 == 1 {
+			enc.SetBitrate(1000 + n*500) // a new spare each time, the last one unused
+		}
+		if _, err := enc.Encode(Picture{Pix: testPicture(w, h, n), Width: w, Height: h, Stride: w * 4}, n == 4); err != nil {
+			t.Fatal(err)
+		}
+	}
+	enc.SetBitrate(500)
+	enc.SetBitrate(600)
+	enc.Close()
+	deadline := time.Now().Add(10 * time.Second)
+	for len(children(t)) > 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("ffmpeg processes left behind: %v", children(t))
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
