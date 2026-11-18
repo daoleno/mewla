@@ -977,28 +977,31 @@ func (s *Service) View(worker string) (*Viewer, error) {
 		}
 	}
 	var once sync.Once
+	changed, stopWatch := client.Watch()
+	relay := func(src io.Reader) error {
+		return monitorRelay(src, func(in Input) {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			if holding {
+				return // the agent is held off: it is told how long, not what
+			}
+			w.input = w.input.Add(in)
+			w.last = time.Now()
+			if w.acting > 0 {
+				w.during = true
+			}
+		})
+	}
 	return &Viewer{
-		Conn: conn,
-		Relay: func(src io.Reader) error {
-			return monitorRelay(src, func(in Input) {
-				w.mu.Lock()
-				defer w.mu.Unlock()
-				if holding {
-					return // the agent is held off: it is told how long, not what
-				}
-				w.input = w.input.Add(in)
-				w.last = time.Now()
-				if w.acting > 0 {
-					w.during = true
-				}
-			})
-		},
-		Picture: func() ([]byte, int, int) {
+		Conn:  conn,
+		Relay: relay,
+		// The monitor view sends pictures only when asked: the same relay.
+		Input: relay,
+		Next: Pictures(func() ([]byte, int, int) {
 			r := rect()
 			return client.Crop(r), r.Dx(), r.Dy()
-		},
-		Watch: client.Watch,
-		Hold:  hold,
+		}, changed),
+		Hold: hold,
 		Fit: func(width, height int, dpr float64) Reflow {
 			fitMu.Lock()
 			defer fitMu.Unlock()
@@ -1028,6 +1031,7 @@ func (s *Service) View(worker string) (*Viewer, error) {
 		Close: func() {
 			once.Do(func() {
 				closeView()
+				stopWatch()
 				hold(false)
 				w.mu.Lock()
 				delete(w.notify, id)

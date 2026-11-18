@@ -12,6 +12,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/link"
+	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/screencast"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/gorilla/websocket"
@@ -168,7 +169,7 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	// control messages; otherwise it carries RFB.
 	var cast *screencast.Session
 	castReady := make(chan struct{})
-	if r.URL.Query().Get("video") != "webrtc" || view.Picture == nil {
+	if r.URL.Query().Get("video") != "webrtc" || view.Next == nil || view.Input == nil {
 		close(castReady)
 	}
 
@@ -244,7 +245,7 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		_ = viewerReader.CloseWithError(context.Cause(ctx))
 	}()
 
-	if r.URL.Query().Get("video") == "webrtc" && view.Picture != nil {
+	if r.URL.Query().Get("video") == "webrtc" && view.Next != nil && view.Input != nil {
 		s.castDisplay(ctx, cancel, worker, r, view, sendJSON, &cast, castReady)
 		return
 	}
@@ -288,7 +289,7 @@ func (s *Server) castDisplay(ctx context.Context, cancel context.CancelCauseFunc
 	inputReader, inputWriter := io.Pipe()
 	defer inputWriter.Close()
 	go func() {
-		err := view.Relay(inputReader)
+		err := view.Input(inputReader)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) && ctx.Err() == nil {
 			log.Printf("display: viewer for %s: input ended: %v", worker, err)
 		}
@@ -299,17 +300,9 @@ func (s *Server) castDisplay(ctx context.Context, cancel context.CancelCauseFunc
 		return
 	}
 	path := clientaddr.Path(r)
-	// The relay's TURN, for a viewer with no direct path (mobile data).
-	var ice []webrtc.ICEServer
-	if !s.screenLoopbackOnly {
-		turnCtx, turnCancel := context.WithTimeout(ctx, 3*time.Second)
-		if creds, err := link.TURN(turnCtx); err == nil {
-			ice = screencast.ICEServersFor(creds.URLs, creds.Username, creds.Password)
-		}
-		turnCancel()
-	}
+	source := displaySource{view}
 	session, err := screencast.Start(ctx, screencast.Config{
-		Source: displaySource{view},
+		Source: source,
 		Input: func(msg []byte) error {
 			_, err := inputWriter.Write(msg)
 			return err
@@ -322,8 +315,9 @@ func (s *Server) castDisplay(ctx context.Context, cancel context.CancelCauseFunc
 				screencast.Stats
 			}{"stats", path, st})
 		},
+		NewEncoder:   screen.CastEncoder(),
 		LoopbackOnly: s.screenLoopbackOnly,
-		ICEServers:   ice,
+		ICEServers:   s.screenICE(ctx),
 	})
 	*cast = session
 	close(castReady)
@@ -343,10 +337,28 @@ func (s *Server) castDisplay(ctx context.Context, cancel context.CancelCauseFunc
 	}
 }
 
+// screenICE is the relay's TURN (and STUN) for a viewer with no direct path
+// (mobile data), when this computer is registered with a relay that has it.
+func (s *Server) screenICE(ctx context.Context) []webrtc.ICEServer {
+	if s.screenLoopbackOnly {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	creds, err := link.TURN(ctx)
+	if err != nil {
+		return nil
+	}
+	return screencast.ICEServersFor(creds.URLs, creds.Username, creds.Password)
+}
+
+// displaySource is a display view's pictures for screencast.
 type displaySource struct{ view *vdisplay.Viewer }
 
-func (d displaySource) Picture() ([]byte, int, int)      { return d.view.Picture() }
-func (d displaySource) Watch() (<-chan struct{}, func()) { return d.view.Watch() }
+func (d displaySource) Next(ctx context.Context, after uint64) (screencast.Picture, error) {
+	p, err := d.view.Next(ctx, after)
+	return screencast.Picture{Pix: p.Pix, Width: p.Width, Height: p.Height, Stride: p.Stride, RGB: p.RGB, Seq: p.Seq}, err
+}
 
 type displayViewerStream struct {
 	reader io.Reader

@@ -237,9 +237,9 @@ export class ScreenConnection {
     private route?: ScreenRoute,
   ) {}
 
-  /** The picture comes as pushed video over WebRTC: an agent's display, for now. */
+  /** The picture comes as pushed video over WebRTC. */
   get video(): boolean {
-    return this.route?.purpose === "mewla-display-view";
+    return true;
   }
 
   async connect(): Promise<void> {

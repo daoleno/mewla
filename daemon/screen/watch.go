@@ -23,17 +23,7 @@ func (s *Service) WatchWorker(ctx context.Context, deviceID, worker string, obs 
 	if err := s.allowed(deviceID); err != nil {
 		return nil, err
 	}
-	var agent *agentSession
-	s.agentMu.Lock()
-	for _, candidate := range s.agents {
-		if candidate.ctx.Err() != nil || (worker != "" && candidate.worker != worker) {
-			continue
-		}
-		if agent == nil || candidate.since.Before(agent.since) {
-			agent = candidate
-		}
-	}
-	s.agentMu.Unlock()
+	agent := s.watchedAgent(worker)
 	if agent == nil {
 		return nil, ErrNoAgent
 	}
@@ -43,6 +33,23 @@ func (s *Service) WatchWorker(ctx context.Context, deviceID, worker string, obs 
 		_ = serveRFB(ctx, server, &agentWatch{agent: agent}, computerName(), obs)
 	}()
 	return viewer, nil
+}
+
+// watchedAgent is the agent of worker using the screen; without a worker, the
+// longest-running one. Nil when there is none.
+func (s *Service) watchedAgent(worker string) *agentSession {
+	var agent *agentSession
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	for _, candidate := range s.agents {
+		if candidate.ctx.Err() != nil || (worker != "" && candidate.worker != worker) {
+			continue
+		}
+		if agent == nil || candidate.since.Before(agent.since) {
+			agent = candidate
+		}
+	}
+	return agent
 }
 
 // agentWatch is a Session over an agent's capture: the viewer sees what the

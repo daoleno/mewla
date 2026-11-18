@@ -77,7 +77,7 @@ func findEncoder() (string, *ffmpegKind, error) {
 					continue
 				}
 			}
-			p, err := startFFmpeg(bin, kind, 320, 240, 1000)
+			p, err := startFFmpeg(bin, kind, 320, 240, 1000, false)
 			if err != nil {
 				continue
 			}
@@ -101,6 +101,7 @@ type ffmpegProcess struct {
 	out    *bufio.Reader
 	w, h   int
 	kbps   int
+	rgb    bool
 	nalLen int
 	sps    [][]byte
 	pps    [][]byte
@@ -109,9 +110,13 @@ type ffmpegProcess struct {
 	closeOnce sync.Once
 }
 
-func startFFmpeg(bin string, kind *ffmpegKind, w, h, kbps int) (*ffmpegProcess, error) {
+func startFFmpeg(bin string, kind *ffmpegKind, w, h, kbps int, rgb bool) (*ffmpegProcess, error) {
+	format := "bgr0"
+	if rgb {
+		format = "rgb0"
+	}
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin",
-		"-f", "rawvideo", "-pix_fmt", "bgr0", "-s", fmt.Sprintf("%dx%d", w, h), "-framerate", "30", "-i", "pipe:0"}
+		"-f", "rawvideo", "-pix_fmt", format, "-s", fmt.Sprintf("%dx%d", w, h), "-framerate", "30", "-i", "pipe:0"}
 	args = append(args, kind.args(kbps)...)
 	args = append(args, "-fps_mode", "passthrough", "-an", "-f", "flv", "-flush_packets", "1", "pipe:1")
 	cmd := exec.Command(bin, args...)
@@ -127,7 +132,7 @@ func startFFmpeg(bin string, kind *ffmpegKind, w, h, kbps int) (*ffmpegProcess, 
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	p := &ffmpegProcess{cmd: cmd, in: in, out: bufio.NewReaderSize(out, 256<<10), w: w, h: h, kbps: kbps, nalLen: 4}
+	p := &ffmpegProcess{cmd: cmd, in: in, out: bufio.NewReaderSize(out, 256<<10), w: w, h: h, kbps: kbps, rgb: rgb, nalLen: 4}
 	return p, nil
 }
 
@@ -293,7 +298,6 @@ func (p *ffmpegProcess) annexB(data []byte, key bool) ([]byte, error) {
 type ffmpegEncoder struct {
 	bin  string
 	kind *ffmpegKind
-	Kind string
 
 	cur   *ffmpegProcess
 	spare chan *ffmpegProcess // being started, or ready
@@ -305,16 +309,19 @@ func newFFmpegEncoder(kbps int) (*ffmpegEncoder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ffmpegEncoder{bin: bin, kind: kind, Kind: kind.name, kbps: kbps}, nil
+	return &ffmpegEncoder{bin: bin, kind: kind, kbps: kbps}, nil
 }
 
+// Name is the kind of ffmpeg encoder: vaapi, x264 or openh264.
+func (e *ffmpegEncoder) Name() string { return e.kind.name }
+
 // warm starts a spare process for this size and the current bit rate.
-func (e *ffmpegEncoder) warm(w, h int) {
+func (e *ffmpegEncoder) warm(w, h int, rgb bool) {
 	ch := make(chan *ffmpegProcess, 1)
 	e.spare = ch
 	bin, kind, kbps := e.bin, e.kind, e.kbps
 	go func() {
-		p, err := startFFmpeg(bin, kind, w, h, kbps)
+		p, err := startFFmpeg(bin, kind, w, h, kbps, rgb)
 		if err != nil {
 			p = nil
 		}
@@ -324,12 +331,12 @@ func (e *ffmpegEncoder) warm(w, h int) {
 
 // takeSpare returns a fresh process of this size and bit rate, waiting for the
 // spare when it fits.
-func (e *ffmpegEncoder) takeSpare(w, h int) (*ffmpegProcess, error) {
+func (e *ffmpegEncoder) takeSpare(w, h int, rgb bool) (*ffmpegProcess, error) {
 	if e.spare != nil {
 		select {
 		case p := <-e.spare:
 			e.spare = nil
-			if p != nil && p.w == w && p.h == h && p.kbps == e.kbps {
+			if p != nil && p.w == w && p.h == h && p.kbps == e.kbps && p.rgb == rgb {
 				return p, nil
 			}
 			if p != nil {
@@ -339,14 +346,15 @@ func (e *ffmpegEncoder) takeSpare(w, h int) (*ffmpegProcess, error) {
 			e.spare = nil
 		}
 	}
-	return startFFmpeg(e.bin, e.kind, w, h, e.kbps)
+	return startFFmpeg(e.bin, e.kind, w, h, e.kbps, rgb)
 }
 
-// Encode compresses one picture; key asks for a key frame. The size must be
-// even in both directions.
-func (e *ffmpegEncoder) Encode(pix []byte, w, h int, key bool) ([]byte, error) {
-	if e.cur == nil || e.cur.w != w || e.cur.h != h || key || e.cur.kbps != e.kbps {
-		next, err := e.takeSpare(w, h)
+// Encode compresses one picture; key asks for a key frame.
+func (e *ffmpegEncoder) Encode(p Picture, key bool) ([]byte, error) {
+	p = even(p)
+	w, h := p.Width, p.Height
+	if e.cur == nil || e.cur.w != w || e.cur.h != h || e.cur.rgb != p.RGB || key || e.cur.kbps != e.kbps {
+		next, err := e.takeSpare(w, h, p.RGB)
 		if err != nil {
 			return nil, err
 		}
@@ -354,9 +362,9 @@ func (e *ffmpegEncoder) Encode(pix []byte, w, h int, key bool) ([]byte, error) {
 			e.cur.close()
 		}
 		e.cur = next
-		e.warm(w, h)
+		e.warm(w, h, p.RGB)
 	}
-	au, err := e.cur.encode(pix)
+	au, err := e.cur.encode(p.Pix)
 	if err != nil {
 		e.cur.close()
 		e.cur = nil
@@ -373,7 +381,7 @@ func (e *ffmpegEncoder) SetBitrate(kbps int) {
 	}
 	e.kbps = kbps
 	if e.cur != nil {
-		e.warm(e.cur.w, e.cur.h)
+		e.warm(e.cur.w, e.cur.h, e.cur.rgb)
 	}
 }
 
