@@ -166,62 +166,14 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancelCause(r.Context())
 	defer cancel(nil)
 
-	outbox := make(chan screenMessage, 32)
-	writerDone := make(chan struct{})
-	go func() {
-		defer close(writerDone)
-		for {
-			select {
-			case <-ctx.Done():
-				// Flush what is queued, such as an error that ended the session.
-				for drained := false; !drained; {
-					select {
-					case msg := <-outbox:
-						_ = conn.SetWriteDeadline(time.Now().Add(time.Second))
-						if conn.WriteMessage(msg.kind, msg.data) != nil {
-							drained = true
-						}
-					default:
-						drained = true
-					}
-				}
-				reason := "screen closed"
-				if cause := context.Cause(ctx); errors.Is(cause, screen.ErrScreenReplaced) {
-					reason = cause.Error()
-				}
-				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, reason), time.Now().Add(time.Second))
-				return
-			case msg := <-outbox:
-				_ = conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
-				if err := conn.WriteMessage(msg.kind, msg.data); err != nil {
-					cancel(err)
-					return
-				}
-			}
+	out := startViewerOutbox(ctx, cancel, conn, func(cause error) string {
+		if errors.Is(cause, screen.ErrScreenReplaced) {
+			return cause.Error()
 		}
-	}()
-	defer func() { cancel(nil); <-writerDone }()
-	send := func(kind int, data []byte) bool {
-		select {
-		case outbox <- screenMessage{kind: kind, data: data}:
-			return true
-		case <-ctx.Done():
-			return false
-		}
-	}
-	sendJSON := func(v any) bool {
-		raw, _ := json.Marshal(v)
-		return send(websocket.TextMessage, raw)
-	}
-	// advise sends what a viewer can do without, dropping it when the link
-	// is behind rather than making its caller wait behind queued frames.
-	advise := func(v any) {
-		raw, _ := json.Marshal(v)
-		select {
-		case outbox <- screenMessage{kind: websocket.TextMessage, data: raw}:
-		default:
-		}
-	}
+		return "screen closed"
+	})
+	defer out.wait()
+	sendJSON, advise := out.sendJSON, out.advise
 
 	// watch=1 watches the agent using the screen without taking over: the
 	// viewer sees the agent's capture; what the person does reaches the screen
@@ -281,27 +233,22 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	var session *screencast.Session
 	castReady := make(chan struct{})
 	conn.SetReadLimit(1 << 20)
+	// Revoking the device or turning Screen off ends the view within seconds,
+	// whatever the viewer sends (its input rides the data channels).
+	go s.keepTrusted(ctx, cancel, device.ID, func() error {
+		if !s.screen.Allowed(device.ID) {
+			sendJSON(map[string]string{"type": "error", "error": screen.ErrNotApproved.Error()})
+			return screen.ErrNotApproved
+		}
+		return nil
+	})
 	go func() {
-		trusted := time.Now()
 		for {
 			_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
 			kind, data, err := conn.ReadMessage()
 			if err != nil {
 				cancel(err)
 				return
-			}
-			// Revoking the device or turning Screen off ends control within seconds.
-			if time.Since(trusted) > 2*time.Second {
-				if !s.auth.IsDeviceTrusted(device.ID) {
-					cancel(errors.New("device revoked"))
-					return
-				}
-				if !s.screen.Allowed(device.ID) {
-					sendJSON(map[string]string{"type": "error", "error": screen.ErrNotApproved.Error()})
-					cancel(screen.ErrNotApproved)
-					return
-				}
-				trusted = time.Now()
 			}
 			if kind != websocket.TextMessage {
 				continue // input rides the data channels
@@ -370,15 +317,13 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	case <-session.Done():
 		if ctx.Err() == nil {
 			message := "The connection to the screen was lost"
-			if watch {
+			switch {
+			case errors.Is(session.Err(), screencast.ErrEncoder):
+				message = screencast.ErrEncoder.Error()
+			case watch:
 				message = "The agent is done with the screen"
 			}
 			sendJSON(map[string]string{"type": "error", "error": message})
 		}
 	}
-}
-
-type screenMessage struct {
-	kind int
-	data []byte
 }
