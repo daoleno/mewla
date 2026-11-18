@@ -4,8 +4,10 @@
 #
 # `nsh package --target web` writes content-hashed files; each is stored
 # gzip-only in daemon/webui/dist and the daemon serves the compressed bytes
-# directly. Run before `go build ./cmd/mewla`. Uses the NSH on PATH, else the
-# pinned one in ~/.nsh (client/scripts/fetch-nsh.sh installs it).
+# directly. Run before `go build ./cmd/mewla`. Uses the pinned NSH in $NSH_HOME
+# (default ~/.nsh; client/scripts/fetch-nsh.sh installs it when missing), never
+# another nsh on PATH: the package carries NSH's web runtime, which must be the
+# version the app is built and tested with.
 #
 # Usage:
 #   ./scripts/build-web-ui.sh
@@ -17,11 +19,8 @@ OUT="$ROOT/daemon/webui/dist"
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/web-ui.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
-NSH="$(command -v nsh || true)"
-if [[ -z "$NSH" ]]; then
-  "$ROOT/client/scripts/fetch-nsh.sh" >/dev/null
-  NSH="${NSH_HOME:-$HOME/.nsh}/bin/nsh"
-fi
+"$ROOT/client/scripts/fetch-nsh.sh" >/dev/null
+NSH="${NSH_HOME:-$HOME/.nsh}/bin/nsh"
 
 "$NSH" package --target web -o "$STAGE/package" "$ROOT/client/ui"
 # The package is one folder named after the app.
