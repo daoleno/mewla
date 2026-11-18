@@ -1,8 +1,9 @@
 // Package screen lets paired devices view and control this computer's screen.
 //
 // A platform Backend captures the display and injects input; the daemon
-// serves it as an RFB (VNC) session over the device-authenticated WebSocket,
-// so the phone's viewer is the same on every platform. Each device needs the
+// pushes it as video over WebRTC (package screencast), signalled over the
+// device-authenticated WebSocket, so the phone's viewer is the same on every
+// platform. Each device needs the
 // owner's one-time approval on this computer, and the operating system's own
 // permissions where it has them.
 package screen
@@ -12,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -381,38 +381,6 @@ func (s *Service) allowed(deviceID string) error {
 		return ErrNotApproved
 	}
 	return nil
-}
-
-// Open starts a capture for an allowed device and returns the viewer's end
-// of an in-process RFB session, positioned right before ClientInit: the
-// caller has already done the version and security handshake. The display
-// is held on while the session lasts, unless the computer is locked, and obs
-// (which may be nil) hears the lock and the stream's stages.
-func (s *Service) Open(ctx context.Context, deviceID string, obs *Observer) (net.Conn, error) {
-	if err := s.allowed(deviceID); err != nil {
-		return nil, err
-	}
-	capability := s.backend.Capability(ctx)
-	if !capability.Supported {
-		return nil, ErrUnsupported
-	}
-	if !capability.Ready() {
-		return nil, ErrPermissions
-	}
-	session, err := s.backend.Start(ctx)
-	if err != nil {
-		return nil, err
-	}
-	viewer, server := net.Pipe()
-	hold, release := context.WithCancel(ctx)
-	s.holdWhileViewing(hold, obs)
-	go func() {
-		defer session.Close()
-		defer server.Close()
-		defer release()
-		_ = serveRFBVideo(ctx, server, session, computerName(), obs, defaultVideo)
-	}()
-	return viewer, nil
 }
 
 // Disable is the local kill switch: it blocks every device and forgets their

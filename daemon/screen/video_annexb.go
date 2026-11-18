@@ -33,3 +33,20 @@ func avccToAnnexB(frame []byte, nalLength int, paramSets [][]byte, key bool) []b
 	}
 	return out
 }
+
+// hasNAL reports whether an Annex B stream holds a NAL unit of this type.
+func hasNAL(au []byte, kind byte) bool {
+	for i := 0; i+4 < len(au); i++ {
+		if au[i] == 0 && au[i+1] == 0 && (au[i+2] == 1 || (au[i+2] == 0 && au[i+3] == 1)) {
+			at := i + 3
+			if au[i+2] == 0 {
+				at = i + 4
+			}
+			if at < len(au) && au[at]&0x1f == kind {
+				return true
+			}
+			i = at - 1
+		}
+	}
+	return false
+}

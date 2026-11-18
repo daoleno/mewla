@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
-// Builds the offline Screen viewer (this folder plus noVNC) into
-// ../viewerSource.ts, the WebView document's script as a string constant: the
-// WebView loads no remote scripts. noVNC comes from the repository's installed
-// `@novnc/novnc` (pinned in the root package.json).
+// Builds the offline Screen viewer (this folder plus noVNC's keyboard module,
+// which reads desktop keys as keysyms) into ../viewerSource.ts, the WebView
+// document's script as a string constant: the WebView loads no remote
+// scripts. noVNC comes from the repository's installed `@novnc/novnc` (pinned
+// in the root package.json).
 //
-// noVNC 1.7 probes H.264 support with a top-level await; the probe is rewritten
-// to settle in the background as globalThis.__mewlaH264Ready, which the viewer
-// awaits before it connects so the first SetEncodings knows whether to offer H.264.
+// The keyboard module imports noVNC's browser checks, whose H.264 probe is a
+// top-level await; it is rewritten to settle in the background.
 //
 //   bun client/ui/more/screen/runtime/generate.mjs           # rewrite
 //   bun client/ui/more/screen/runtime/generate.mjs --check   # fail if stale
@@ -22,22 +22,20 @@ const repo = join(here, "../../../../..");
 const anchor = join(repo, "package.json");
 // A worktree without node_modules can name a checkout's copy: MEWLA_NOVNC_DIR=<…/node_modules/@novnc/novnc>.
 const packageDir = process.env.MEWLA_NOVNC_DIR || dirname(createRequire(anchor).resolve("@novnc/novnc/package.json"));
-const { main = "core/rfb.js" } = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
 const { version, license } = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
 
 const TOP_LEVEL_AWAIT = "supportsWebCodecsH264Decode = await _checkWebCodecsH264DecodeSupport();";
 const noTopLevelAwait = {
   name: "novnc-no-top-level-await",
   setup(build) {
-    build.onResolve({ filter: /^@novnc\/novnc$/ }, () => ({ path: join(packageDir, main) }));
-    // The video picture reads the browser's keys with noVNC's own keyboard (its package exports rfb.js only).
+    // noVNC's package exports rfb.js only; the viewer imports its keyboard module directly.
     build.onResolve({ filter: /^@novnc\/novnc\/core\// }, (args) => ({ path: join(packageDir, args.path.slice("@novnc/novnc/".length)) }));
     build.onLoad({ filter: /novnc[\\/]core[\\/]util[\\/]browser\.js$/ }, async (args) => {
       const source = readFileSync(args.path, "utf8");
       if (!source.includes(TOP_LEVEL_AWAIT)) throw new Error("noVNC browser.js changed; update the top-level await patch");
       return {
         loader: "js",
-        contents: source.replace(TOP_LEVEL_AWAIT, "globalThis.__mewlaH264Ready = _checkWebCodecsH264DecodeSupport().then((supported) => { supportsWebCodecsH264Decode = supported; }, () => {});"),
+        contents: source.replace(TOP_LEVEL_AWAIT, "_checkWebCodecsH264DecodeSupport().then((supported) => { supportsWebCodecsH264Decode = supported; }, () => {});"),
       };
     });
   },

@@ -43,11 +43,12 @@ and no screen streaming of Chrome's own.
   action runs at a time, and before an agent's keys the pointer returns to where
   that agent left it, on its own monitor. A person's viewer has its pointer moved
   into its own monitor.
-- **The view.** A viewer is served by `vdisplay`'s own RFB server for one
-  rectangle of the screen (`crop.go`): it is told the screen is the monitor's
-  size, and what it is sent are the monitor's changed tiles (ZRLE, or Raw for a
-  viewer without it). Nothing outside the monitor is ever sent. Clipboard text
-  the person sends goes to the screen's clipboard; none is sent back.
+- **The view.** A viewer gets one rectangle of the screen as pushed video
+  (`Viewer.Next`, the monitor's pixels whenever they change, encoded and sent
+  by `screencast`): the picture is the monitor's size, and nothing outside the
+  monitor is ever sent. The person's pointer is moved into the monitor
+  (`monitor_input_linux.go`). Clipboard text the person sends goes to the
+  screen's clipboard; none is sent back.
 
 ## The extension in the agent browser
 

@@ -7,7 +7,6 @@ import (
 	"image"
 	"io"
 	"log"
-	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -513,7 +512,7 @@ func (a *AgentWindows) Close() {
 }
 
 // View is the person's live view of the Worker's newest window: that part of
-// the agent display, as RFB past the handshake. What they do reaches the window
+// the agent display, as pictures (Next). What they do reaches the window
 // at once and is told to the agent with its next browser call; Hold holds the
 // agent off instead until released or the view closes.
 func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
@@ -558,11 +557,6 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 			return send(key, in)
 		}
 	}
-	conn, server := net.Pipe()
-	go func() {
-		defer server.Close()
-		_ = serveRFB(ctx, server, view, a.nameOf(worker), nil)
-	}()
 	holding := false // guarded by a.mu
 	hold := func(on bool) {
 		a.mu.Lock()
@@ -588,7 +582,6 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 	closeView := func() {
 		once.Do(func() {
 			cancel()
-			_ = conn.Close()
 			_ = session.Close()
 			release()
 			hold(false)
@@ -608,12 +601,6 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 		}
 	}
 	return &vdisplay.Viewer{
-		Conn: conn,
-		Relay: func(src io.Reader) error {
-			return vdisplay.RelayViewer(conn, src, observe)
-		},
-		// Pushed video: pictures straight from the window's view and input
-		// straight to it; the RFB server on conn never starts.
 		Next: func(ctx context.Context, after uint64) (vdisplay.Picture, error) {
 			f, err := view.Frame(ctx, after)
 			if err != nil {
@@ -623,23 +610,11 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 			return vdisplay.Picture{Pix: img.Pix, Width: img.Rect.Dx(), Height: img.Rect.Dy(), Stride: img.Stride, RGB: true, Seq: f.Seq}, nil
 		},
 		Input: func(src io.Reader) error {
-			return vdisplay.RelayViewer(sessionInput{view}, src, observe)
+			return vdisplay.Relay(sessionInput{view}, src, observe)
 		},
 		Hold:  hold,
 		Close: closeView,
 	}, nil
-}
-
-func (a *AgentWindows) nameOf(worker string) string {
-	a.mu.Lock()
-	names := a.names
-	a.mu.Unlock()
-	if names != nil {
-		if name := strings.TrimSpace(names(worker)); name != "" {
-			return name
-		}
-	}
-	return "Agent window"
 }
 
 // windowView is a Session over one part of the agent display: its frames are

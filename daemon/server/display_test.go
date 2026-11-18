@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -12,10 +11,10 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/vdisplay"
-	"github.com/gorilla/websocket"
 )
 
 func TestDisplayListStopAndViewer(t *testing.T) {
+	requireVideo(t)
 	if err := vdisplay.Capability(); err != nil {
 		t.Skip(err)
 	}
@@ -24,6 +23,7 @@ func TestDisplayListStopAndViewer(t *testing.T) {
 	defer service.Close()
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetDisplays(service)
+	s.SetScreenLoopbackOnly(true)
 	h := httptest.NewServer(s.Handler())
 	defer h.Close()
 	defer s.shutdownAuthenticatedClients()
@@ -53,44 +53,12 @@ func TestDisplayListStopAndViewer(t *testing.T) {
 	}
 
 	// A viewer's click reaches the display and is told to the agent as a count.
-	header := http.Header{"Authorization": []string{auth("mewla-display-view")}}
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.URL, "http")+"/display/viewer?worker=w1", header)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	readBinary := func() []byte {
-		for {
-			kind, data, err := conn.ReadMessage()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if kind == websocket.BinaryMessage {
-				return data
-			}
-		}
-	}
-	if v := readBinary(); !bytes.HasPrefix(v, []byte("RFB 003.008")) {
-		t.Fatalf("server hello = %q", v)
-	}
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte("RFB 003.008\n"))
-	readBinary() // security types
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{1})
-	readBinary() // security result
-	for {
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if strings.Contains(string(data), `"ready"`) {
-			break
-		}
-	}
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{1})                        // ClientInit
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{5, 1, 0, 40, 0, 40})       // click
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{4, 1, 0, 0, 0, 0, 0, 'q'}) // one key
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{5, 0, 0, 40, 0, 40})       // release
+	v := dialVideoViewer(t, "ws"+strings.TrimPrefix(h.URL, "http")+"/display/viewer?worker=w1", viewerIdentity(priv, a, device))
+	v.next("ready")
+	v.picture()
+	v.send([]byte{5, 1, 0, 40, 0, 40})       // click
+	v.send([]byte{4, 1, 0, 0, 0, 0, 0, 'q'}) // one key
+	v.send([]byte{5, 0, 0, 40, 0, 40})       // release
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		r, err := service.Act(context.Background(), "w1", vdisplay.Action{Action: "screenshot"})
@@ -110,25 +78,15 @@ func TestDisplayListStopAndViewer(t *testing.T) {
 	}
 
 	// Held, a fit for a display with no browser window on it is answered: nothing to lay out.
-	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"hold","on":true}`))
-	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"fit","width":412,"height":760,"dpr":2.625}`))
-	for {
-		kind, data, err := conn.ReadMessage()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if kind != websocket.TextMessage || !strings.Contains(string(data), `"reflow"`) {
-			continue
-		}
-		var reflow struct {
-			On bool `json:"on"`
-		}
-		if json.Unmarshal(data, &reflow) != nil || reflow.On {
-			t.Fatalf("reflow = %s", data)
-		}
-		break
+	v.sendJSON(map[string]any{"type": "hold", "on": true})
+	v.sendJSON(map[string]any{"type": "fit", "width": 412, "height": 760, "dpr": 2.625})
+	var reflow struct {
+		On bool `json:"on"`
 	}
-	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"hold","on":false}`))
+	if raw := v.next("reflow"); json.Unmarshal(raw, &reflow) != nil || reflow.On {
+		t.Fatalf("reflow = %s", raw)
+	}
+	v.sendJSON(map[string]any{"type": "hold", "on": false})
 
 	// Stop from the HTTP side holds the agent off.
 	post := func(body string) int {

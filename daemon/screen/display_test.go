@@ -2,7 +2,6 @@ package screen
 
 import (
 	"context"
-	"net"
 	"sync"
 	"testing"
 	"time"
@@ -40,14 +39,14 @@ func viewerService(t *testing.T) (*Service, *FakeBackend) {
 	return service, fake
 }
 
-func openHeld(t *testing.T, service *Service, ctx context.Context, obs *Observer) net.Conn {
+func openHeld(t *testing.T, service *Service, ctx context.Context, obs *Observer) *Cast {
 	t.Helper()
-	conn, err := service.Open(ctx, "phone", obs)
+	cast, err := service.OpenCast(ctx, "phone", obs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { conn.Close() })
-	return conn
+	t.Cleanup(cast.Close)
+	return cast
 }
 
 // A connected viewer holds the display on, and disconnecting, the request
@@ -118,7 +117,7 @@ func TestWatchingTheAgentDoesNotHoldTheDisplay(t *testing.T) {
 	if _, err := service.Act(context.Background(), "%7", AgentAction{Action: "screenshot"}); err != nil {
 		t.Fatal(err)
 	}
-	conn, err := service.Watch(context.Background(), "phone", nil)
+	conn, err := service.WatchWorkerCast(context.Background(), "phone", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,8 +179,6 @@ func TestStatusReportsALockedComputer(t *testing.T) {
 		t.Fatal("a locked computer not reported")
 	}
 }
-
-func netPipe() (net.Conn, net.Conn) { return net.Pipe() }
 
 // Telling the viewer may wait on its link; a lock still ends the hold at once.
 func TestALockEndsTheHoldEvenWhenTellingTheViewerBlocks(t *testing.T) {

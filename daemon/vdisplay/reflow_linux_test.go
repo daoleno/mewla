@@ -4,9 +4,7 @@ package vdisplay
 
 import (
 	"context"
-	"encoding/binary"
 	"image"
-	"io"
 	"sync"
 	"testing"
 	"time"
@@ -101,15 +99,8 @@ func TestTakeoverLaysTheWindowOutForThePhone(t *testing.T) {
 		t.Fatal("a display that was not held was laid out")
 	}
 
-	// A viewer that takes DesktopSize.
-	in, out := io.Pipe()
-	go func() { _ = v.Relay(in) }()
-	_, _ = out.Write([]byte{1})
-	enc := []byte{2, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0}
-	binary.BigEndian.PutUint32(enc[8:], uint32(0xFFFFFF21))
-	_, _ = out.Write(enc)
-	head := make([]byte, 24+len("Mewla agent display"))
-	if _, err := io.ReadFull(v.Conn, head); err != nil {
+	first, err := v.Next(ctx, 0)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -136,22 +127,8 @@ func TestTakeoverLaysTheWindowOutForThePhone(t *testing.T) {
 	if _, h := s.shared.client.Size(); h < 80+1995 {
 		t.Fatalf("the screen is %d tall, the window's page reaches %d", h, 80+1995)
 	}
-	// The viewer is told the page's size.
-	req := []byte{3, 1, 0, 0, 0, 0, 0, 0, 0, 0}
-	binary.BigEndian.PutUint16(req[6:], 1082)
-	binary.BigEndian.PutUint16(req[8:], 1995)
-	_, _ = out.Write(req)
-	if w, h := readDesktopSize(t, v.Conn); w != 1082 || h != 1995 {
-		t.Fatalf("the viewer was told %dx%d", w, h)
-	}
-	// Then it is sent the page, all of it.
-	full := []byte{3, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-	binary.BigEndian.PutUint16(full[6:], 1082)
-	binary.BigEndian.PutUint16(full[8:], 1995)
-	_, _ = out.Write(full)
-	if got := readPixels(t, v.Conn); got != 1082*1995 {
-		t.Fatalf("the viewer was sent %d pixels of the page", got)
-	}
+	// The view's pictures are the page, all of it.
+	page := pictureSized(t, v, first.Seq, 1082, 1995)
 	s.PageHost("w1", "accounts.example.com")
 	if got := <-heard; got.Host != "accounts.example.com" {
 		t.Fatalf("heard %+v after the page moved", got)
@@ -176,72 +153,22 @@ func TestTakeoverLaysTheWindowOutForThePhone(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	_, _ = out.Write(req)
-	if w, h := readDesktopSize(t, v.Conn); w != MonitorWidth || h != MonitorHeight {
-		t.Fatalf("the viewer was told %dx%d after letting go", w, h)
-	}
+	pictureSized(t, v, page.Seq, MonitorWidth, MonitorHeight)
 }
 
-// readDesktopSize reads updates until one says the screen's size.
-func readDesktopSize(t *testing.T, r io.Reader) (int, int) {
+// pictureSized waits for the view's picture to be w x h.
+func pictureSized(t *testing.T, v *Viewer, after uint64, w, h int) Picture {
 	t.Helper()
-	for range 50 {
-		head := make([]byte, 4)
-		if _, err := io.ReadFull(r, head); err != nil {
-			t.Fatal(err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for {
+		p, err := v.Next(ctx, after)
+		if err != nil {
+			t.Fatalf("waiting for a %dx%d picture: %v", w, h, err)
 		}
-		if head[0] != 0 {
-			t.Fatalf("message %d", head[0])
+		if p.Width == w && p.Height == h {
+			return p
 		}
-		for range int(binary.BigEndian.Uint16(head[2:])) {
-			rect := make([]byte, 12)
-			if _, err := io.ReadFull(r, rect); err != nil {
-				t.Fatal(err)
-			}
-			w, h := int(binary.BigEndian.Uint16(rect[4:])), int(binary.BigEndian.Uint16(rect[6:]))
-			if int32(binary.BigEndian.Uint32(rect[8:])) == -223 {
-				return w, h
-			}
-			if _, err := io.ReadFull(r, make([]byte, w*h*4)); err != nil { // Raw
-				t.Fatal(err)
-			}
-		}
-	}
-	t.Fatal("no DesktopSize")
-	return 0, 0
-}
-
-// readPixels reads one update of Raw rectangles and says how many pixels it had.
-func readPixels(t *testing.T, r io.Reader) int {
-	t.Helper()
-	done := make(chan int, 1)
-	go func() {
-		head := make([]byte, 4)
-		if _, err := io.ReadFull(r, head); err != nil {
-			done <- -1
-			return
-		}
-		n := 0
-		for range int(binary.BigEndian.Uint16(head[2:])) {
-			rect := make([]byte, 12)
-			if _, err := io.ReadFull(r, rect); err != nil {
-				done <- -1
-				return
-			}
-			w, h := int(binary.BigEndian.Uint16(rect[4:])), int(binary.BigEndian.Uint16(rect[6:]))
-			if _, err := io.ReadFull(r, make([]byte, w*h*4)); err != nil {
-				done <- -1
-				return
-			}
-			n += w * h
-		}
-		done <- n
-	}()
-	select {
-	case n := <-done:
-		return n
-	case <-time.After(5 * time.Second):
-		t.Fatal("no update")
-		return 0
+		after = p.Seq
 	}
 }

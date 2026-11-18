@@ -7,58 +7,36 @@ export type ScreenPath = "relay" | "tailscale" | "lan" | "loopback" | "direct";
 const SCREEN_PATHS: readonly string[] = ["relay", "tailscale", "lan", "loopback", "direct"];
 
 /**
- * What the daemon measured of one second of the stream, stage by stage, in
- * milliseconds (medians) and bytes. Numbers only: nothing from the screen.
+ * What the computer measured of one second of the stream (pushed video over
+ * WebRTC), in milliseconds and bytes. Numbers only: nothing from the screen.
  */
 export interface ScreenStreamStats {
+  /** The media's own route: peer to peer (LAN, Tailscale, Local) or Relay (TURN); null until it is connected. */
   path: ScreenPath | null;
+  /** Pictures sent. */
   updates: number;
   bytes: number;
-  dirtyPct: number;
-  /** How many of the updates were H.264 frames; 0 from a daemon without video. */
-  video: number;
-  captureSeq: number;
-  captureMs: number;
   encodeMs: number;
   encodeMaxMs: number;
-  /** From sending an update to the viewer's fence answer, after it drew. */
-  ackMs: number;
-  ackMaxMs: number;
-  /** The JPEG level in use, 0-9, and the updates allowed unacknowledged. */
-  quality: number;
-  inFlight: number;
-  /** "webrtc" when the picture is pushed video; then `path` is the media's own route. */
-  transport: "rfb" | "webrtc";
-  /** The media path's round trip (WebRTC), 0 when unknown. */
+  /** The media path's round trip, 0 when unknown. */
   rttMs: number;
-  /** The bit rate the stream follows now, kbit/s (WebRTC). */
+  /** The bit rate the stream follows now, kbit/s. */
   targetKbps: number;
 }
 
 const finite = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
-/** Reads the daemon's `stats` message; null when it isn't one. */
+/** Reads the computer's `stats` message; null when it isn't one. */
 export function parseStreamStats(message: Record<string, unknown>): ScreenStreamStats | null {
   if (message.type !== "stats") return null;
-  const transport = message.transport === "webrtc" ? "webrtc" : "rfb";
-  // Pushed video takes its own path (peer to peer, or a TURN relay), which may not be the socket's.
-  const route = transport === "webrtc" ? message.route : message.path;
+  const route = message.route;
   const path = typeof route === "string" && SCREEN_PATHS.includes(route) ? (route as ScreenPath) : null;
   return {
     path,
     updates: finite(message.updates),
     bytes: finite(message.bytes),
-    dirtyPct: finite(message.dirty_pct),
-    video: finite(message.video),
-    captureSeq: finite(message.capture_seq),
-    captureMs: finite(message.capture_ms),
     encodeMs: finite(message.encode_ms),
     encodeMaxMs: finite(message.encode_max_ms),
-    ackMs: finite(message.ack_ms),
-    ackMaxMs: finite(message.ack_max_ms),
-    quality: finite(message.quality),
-    inFlight: finite(message.in_flight),
-    transport,
     rttMs: finite(message.rtt_ms),
     targetKbps: finite(message.kbps),
   };

@@ -25,19 +25,7 @@ func (i Input) Add(o Input) Input {
 	return Input{i.Clicks + o.Clicks, i.Scrolls + o.Scrolls, i.Keys + o.Keys, i.Typed + o.Typed, i.Pastes + o.Pastes}
 }
 
-// RelayViewer passes the viewer's ClientInit on and then relays its messages.
-func RelayViewer(dst io.Writer, src io.Reader, observe func(Input)) error {
-	var init [1]byte
-	if _, err := io.ReadFull(src, init[:]); err != nil {
-		return err
-	}
-	if _, err := dst.Write([]byte{1}); err != nil { // always shared: the agent's own client is connected too
-		return err
-	}
-	return Relay(dst, src, observe)
-}
-
-// Relay copies a viewer's RFB messages (everything after ClientInit) to the
+// Relay copies a viewer's RFB client messages to the
 // display and reports what the person did. Messages it does not know end the
 // copy: it cannot tell where the next one starts, and passing on unseen bytes
 // would let input through uncounted.
@@ -180,34 +168,6 @@ func Relay(dst io.Writer, src io.Reader, observe func(Input)) error {
 			observe(in)
 		}
 	}
-}
-
-// AcceptViewer answers a viewer's RFB handshake as a 3.8 server offering only
-// security None. The viewer is already authenticated by its device signature;
-// the next bytes it sends are ClientInit.
-func AcceptViewer(rw io.ReadWriter) error {
-	if _, err := io.WriteString(rw, "RFB 003.008\n"); err != nil {
-		return err
-	}
-	var version [12]byte
-	if _, err := io.ReadFull(rw, version[:]); err != nil {
-		return err
-	}
-	if string(version[:]) != "RFB 003.008\n" {
-		return fmt.Errorf("viewer asked for unsupported RFB version %q", string(version[:11]))
-	}
-	if _, err := rw.Write([]byte{1, 1}); err != nil {
-		return err
-	}
-	var chosen [1]byte
-	if _, err := io.ReadFull(rw, chosen[:]); err != nil {
-		return err
-	}
-	if chosen[0] != 1 {
-		return fmt.Errorf("viewer chose unsupported security type %d", chosen[0])
-	}
-	_, err := rw.Write([]byte{0, 0, 0, 0})
-	return err
 }
 
 // printable says whether a keysym types a character rather than acting as a

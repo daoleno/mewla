@@ -939,7 +939,6 @@ func (s *Service) View(worker string) (*Viewer, error) {
 		return viewRect(w.rect, w.reflowed)
 	}
 	client := w.screen.client
-	conn, monitorRelay, closeView := NewMonitorView(client, rect)
 	w.mu.Lock()
 	w.viewers++
 	w.nextView++
@@ -978,8 +977,8 @@ func (s *Service) View(worker string) (*Viewer, error) {
 	}
 	var once sync.Once
 	changed, stopWatch := client.Watch()
-	relay := func(src io.Reader) error {
-		return monitorRelay(src, func(in Input) {
+	input := func(src io.Reader) error {
+		return Relay(monitorInput{up: client, rect: rect}, src, func(in Input) {
 			w.mu.Lock()
 			defer w.mu.Unlock()
 			if holding {
@@ -993,10 +992,7 @@ func (s *Service) View(worker string) (*Viewer, error) {
 		})
 	}
 	return &Viewer{
-		Conn:  conn,
-		Relay: relay,
-		// The monitor view sends pictures only when asked: the same relay.
-		Input: relay,
+		Input: input,
 		Next: Pictures(func() ([]byte, int, int) {
 			r := rect()
 			return client.Crop(r), r.Dx(), r.Dy()
@@ -1030,7 +1026,6 @@ func (s *Service) View(worker string) (*Viewer, error) {
 		},
 		Close: func() {
 			once.Do(func() {
-				closeView()
 				stopWatch()
 				hold(false)
 				w.mu.Lock()

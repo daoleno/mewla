@@ -415,13 +415,11 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     const stats = s?.stats() ?? null;
     const target = server();
     return {
-      // Pushed video: the media path's own round trip, when the computer has measured it.
-      rttMs: stats?.transport === "webrtc" && stats.rttMs > 0 ? Math.round(stats.rttMs) : s?.rtt() ?? null,
+      // The media path's own round trip, once the computer has measured it; the socket's until then.
+      rttMs: stats && stats.rttMs > 0 ? Math.round(stats.rttMs) : s?.rtt() ?? null,
       inputMs: viewer?.inputMs ?? null,
       fps: viewer?.fps ?? 0,
       kbps: viewer?.kbps ?? 0,
-      bridgeMs: viewer?.bridgeMs,
-      presentMs: viewer?.presentMs,
       daemon: stats,
       viaPath: null,
       directHint: target ? directHint(target, stats?.path) : null,

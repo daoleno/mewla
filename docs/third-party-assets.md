@@ -43,8 +43,8 @@ Removed from the tree (unknown provenance): former `sky-meadow-ambient.webp` and
 
 | Artifact | Upstream | License | Notes |
 | --- | --- | --- | --- |
-| `client/ui/more/screen/viewerSource.ts` | [novnc/noVNC](https://github.com/novnc/noVNC) `1.7.0` (includes pako) | MPL-2.0 (pako: MIT) | The Screen viewer's RFB client, bundled with `client/ui/more/screen/runtime/` by `bun client/ui/more/screen/runtime/generate.mjs` (`--check` reports stale output) from the `@novnc/novnc` package pinned in the root `package.json`. The only change to noVNC source is that script's rewrite of one top-level `await` in `core/util/browser.js`. SHA-256 in `viewerSource.ts`. Opens no connection of its own. |
-| Notice source | same | MPL-2.0, MIT | `client/ui/more/settings/licenses/texts/noVNC-MPL-2.0.txt`. |
+| `client/ui/more/screen/viewerSource.ts` | [novnc/noVNC](https://github.com/novnc/noVNC) `1.7.0`, its keyboard module only | MPL-2.0 | The Screen viewer's desktop keyboard (browser keys as keysyms), bundled with `client/ui/more/screen/runtime/` by `bun client/ui/more/screen/runtime/generate.mjs` (`--check` reports stale output) from the `@novnc/novnc` package pinned in the root `package.json`. The only change to noVNC source is that script's rewrite of one top-level `await` in `core/util/browser.js`. SHA-256 in `viewerSource.ts`. Opens no connection of its own. |
+| Notice source | same | MPL-2.0 | `client/ui/more/settings/licenses/texts/noVNC-MPL-2.0.txt`. |
 
 ## Bundled JavaScript: Pele
 
