@@ -1731,6 +1731,29 @@ func (w *Watcher) ProbeProviderEvidence(sessionID string) (ProviderActivityObser
 	return observation, providerFactRelevant(observation), nil
 }
 
+// ProbeProviderTranscript returns what a Session's agent recorded in its own
+// transcript (ProviderTranscriptProbe); a probe that reads nothing else
+// answers as ProbeProviderEvidence does.
+func (w *Watcher) ProbeProviderTranscript(sessionID string) (ProviderActivityObservation, bool) {
+	worker := w.GetWorker(strings.TrimSpace(sessionID))
+	if worker == nil {
+		return ProviderActivityObservation{}, false
+	}
+	w.mu.RLock()
+	probe := w.providerActivityProbe
+	w.mu.RUnlock()
+	if probe == nil {
+		return ProviderActivityObservation{}, false
+	}
+	var observation ProviderActivityObservation
+	if transcript, ok := probe.(ProviderTranscriptProbe); ok {
+		observation = transcript.ObserveProviderTranscript(*worker, time.Now().UTC())
+	} else {
+		observation = probe.ObserveProviderActivity(*worker, time.Now().UTC())
+	}
+	return observation, observation.ProbeState == ProbeStateOK
+}
+
 // Run starts the polling loop. Blocks until context is cancelled.
 func (w *Watcher) Run(ctx context.Context) error {
 	defer w.StopServiceTunnels()

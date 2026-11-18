@@ -95,6 +95,7 @@ mewla worker list --json
 mewla worker status -id <session> --json
 mewla worker capture -id <session> --json     # the transcript
 mewla worker send -id <session> --work-id <work> -text "Also update the tests"
+mewla worker send -id <session> -command /compact   # the agent's own command, not a prompt
 mewla worker receipt -id <session> --work-id <work> --turn-id <turn>   # did an input arrive?
 mewla worker answer -id <session> -prompt <id> -choice 1   # any blocking prompt: permission, plan, startup, question; -prompt also takes an approval id
 mewla worker approvals [-id <session>]        # decisions agents wait on (Claude permission hooks, Codex app-server requests)
@@ -140,6 +141,14 @@ grid, Ctrl-\ leaves, and a Session that ends returns to the grid; q or Ctrl-\
 leaves from the grid. Resizing the terminal re-tiles it. Tiles are at least 36
 columns by 7 rows, so when more Sessions are live than fit, the grid shows
 the newest ones and its last line says how many need a bigger terminal.
+
+`send -command` types one of the agent's own slash commands into the Session
+instead of a prompt. Only `/compact` is allowed, optionally with instructions
+on the same line (`-command "/compact keep the open questions"`), for Claude,
+Codex and pi. It admits no Turn and needs no Work, so it also reaches a Worker
+whose Work no longer owns its Session. It is refused while the agent is working
+or a prompt is open. Mewla sends it itself when a Claude Worker stops on
+"Request too large … Run /compact", and continues its Turn once it compacted.
 
 `answer` replies to a prompt a delegated Worker is stopped at: a numbered menu
 (a permission or plan request, a startup question) by `-choice <option number>`,

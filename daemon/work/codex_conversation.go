@@ -44,6 +44,15 @@ type CodexConversation struct {
 	// provider session has advanced to a later native turn. It is never a UI
 	// event surface and is not serialized.
 	ProviderActivities []ProviderActivity `json:"-"`
+	// CompactedAt is when the provider last compacted the conversation (Claude's
+	// compact_boundary record), "" when it never did. Parser-internal, like
+	// ProviderActivities: turn recovery waits on it after sending /compact.
+	CompactedAt string `json:"-"`
+	// CompactFailedAt is when the provider last recorded that a compaction it
+	// was asked for failed (Claude's local_command record for /compact with a
+	// failed outcome), and CompactFailure what it said.
+	CompactFailedAt string `json:"-"`
+	CompactFailure  string `json:"-"`
 }
 
 type ProviderActivityStatus string

@@ -69,6 +69,13 @@ type ProviderActivityObservation struct {
 	// Error is the provider's own structured error record that settled the
 	// current Activity, if any. A transport drop can settle as completed.
 	Error *ProviderActivityError
+	// CompactedAt is when the provider last compacted the conversation (zero
+	// when it never did, or does not record it).
+	CompactedAt time.Time
+	// CompactFailedAt is when a compaction the provider was asked for last
+	// failed, and CompactFailure what it said.
+	CompactFailedAt time.Time
+	CompactFailure  string
 }
 
 // ProviderActivityError mirrors the provider-native error record: category
@@ -89,6 +96,15 @@ type ProviderTerminalActivity struct {
 type ProviderActivityProbe interface {
 	ObserveProviderActivity(worker classifier.Worker, now time.Time) ProviderActivityObservation
 	ForgetProviderActivity(workerID string)
+}
+
+// ProviderTranscriptProbe is a ProviderActivityProbe that can also answer from
+// the agent's own transcript alone, for the facts only the transcript records:
+// an API error's HTTP status and a compaction. (Claude's StopFailure hook says
+// "invalid_request" for a request too large to send, with no status, and no
+// hook reports a compaction.)
+type ProviderTranscriptProbe interface {
+	ObserveProviderTranscript(worker classifier.Worker, now time.Time) ProviderActivityObservation
 }
 
 func delegatedTurnIdentity(identity targetProcessIdentity) string {
