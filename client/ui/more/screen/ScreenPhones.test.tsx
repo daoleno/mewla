@@ -1,7 +1,7 @@
 import { describe, expect, open, test, type StubResponse } from "nsh/test";
 
 const HARNESS = "../testing/Harness.tsx";
-const SCREEN = "http://desk.test:9877/screen";
+const SCREEN = "http://desk.test:9877/screen?video=webrtc";
 const IPHONE = "http://desk.test:9877/iphone";
 
 function secureStore() {

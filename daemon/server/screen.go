@@ -117,7 +117,27 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 	}
 	status := s.screen.Status(r.Context(), device.ID)
 	status.Local = clientaddr.Local(r)
+	if !playsVideo(r) && status.Supported {
+		// It shows "Screen can't start on this Mac" with this reason.
+		status.Supported, status.Ready, status.Reason = false, false, oldAppScreen
+	}
 	_ = json.NewEncoder(w).Encode(status)
+}
+
+// An app that plays pushed video says so with video=webrtc on its Screen
+// requests and viewer sockets. One without it (a release from before the
+// video) knows only the RFB stream this computer no longer serves: it is told, in
+// words it already shows, to update.
+const oldAppScreen = "Update the Mewla app to see this screen"
+
+func playsVideo(r *http.Request) bool { return r.URL.Query().Get("video") == "webrtc" }
+
+// refuseOldApp ends a viewer socket of an app that cannot play the video,
+// with the error and close reason that app shows.
+func refuseOldApp(conn *websocket.Conn) {
+	_ = conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+	_ = conn.WriteJSON(map[string]string{"type": "error", "error": oldAppScreen})
+	_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, oldAppScreen), time.Now().Add(time.Second))
 }
 
 // handleScreenViewer shows this computer's screen (or an agent's use of it)
@@ -138,6 +158,10 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	if !playsVideo(r) {
+		refuseOldApp(conn)
+		return
+	}
 	ctx, cancel := context.WithCancelCause(r.Context())
 	defer cancel(nil)
 
