@@ -107,7 +107,7 @@ Cursor and Grok record no turn error, so they have nothing to classify.
 | Transient error by the provider's own code or HTTP status: dropped connection or stream, timeout, overloaded, 5xx, 429 | Submit one continuation after 30 s, 2 min, 5 min, 10 min and 10 min |
 | Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
 | Persistent error by code or status: login, billing, unknown model, invalid request, 4xx | One stall escalation after 30 s (`provider_error`); never resumed |
-| Claude: a request too large to send (HTTP 413, "Request too large … Run /compact") | After 30 s, Mewla compacts the conversation and continues (see Compaction below); one stall escalation (`compaction_failed`) if that fails |
+| Claude: a request too large to send (HTTP 413, "Request too large … Run /compact") | Once the stall is seen (under a minute after the error), Mewla compacts the conversation and continues (see Compaction below); one stall escalation (`compaction_failed`) if that fails |
 | An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) |
 | Stopped with no error and no terminal report, the pane idle at its prompt or the agent's own hook saying its turn ended | One stall escalation after 90 s (`stopped`, "Worker's turn ended without a progress report; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents or the screen shows the agent working |
 | Stopped with no error and no terminal report, the pane not recognized as idle | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease |
