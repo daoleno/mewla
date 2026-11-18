@@ -143,6 +143,28 @@ describe("a reply", () => {
   }, 20_000);
 });
 
+describe("a hostname in a reply", () => {
+  // A long press copies a hostname whole (it copied only `ogv2` of `ogv2-app.pages.dev`, 11-17): NSH's long press
+  // takes a hostname, URL or path as one word (longbridge/nsh#2209, tested in nsh-core's selection.rs, from NSH
+  // 0.6.0), when the reply keeps it one run of text. nsh/test cannot select text, so this pins the run.
+  test("stays one run of inline code and one link, as the reply wrote them", async () => {
+    const body = "Deployed. The preview is at `demo-app.pages.dev`, and the health check is https://demo-app.pages.dev/api/health.";
+    const app = await brainWith([reply("a1", 1, body)]);
+    const shown = "Deployed. The preview is at demo-app.pages.dev, and the health check is https://demo-app.pages.dev/api/health.";
+    await app.waitFor(`text:${shown}`, { timeout: 10_000 });
+    // One text: no part of it became a link of ours or a view of its own.
+    expect(app.texts()).toContain(shown);
+    // The code span from its first character to its last (the first of each text; the second is in the URL).
+    const code = { fontSize: 15, backgroundColor: "#ffffffff" };
+    for (const part of ["demo-app.pages.dev", "app.pages.dev", "pages.dev", "dev"]) {
+      expect(app.spanStyle(`text:${part} >> nth=0`)).toMatchObject(code);
+    }
+    // The URL is one link, its host and path underlined alike.
+    expect(app.spanStyle("text:https://demo-app.pages.dev/api/health").underline).toBe(true);
+    expect(app.spanStyle("text:pages.dev/api/health").underline).toBe(true);
+  }, 20_000);
+});
+
 describe("inline code", () => {
   test("reads at the body's optical size in the mono face, on the surface chip", async () => {
     const app = await brainWith([reply("a1", 1, "Run `bun test core` first.\n\n- item `zq-b`\n\n# Head `x`")]);
