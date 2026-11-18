@@ -841,6 +841,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	defer displayService.Detach()
 	displayService.Adopt()
 	srv.SetDisplays(displayService)
+	srv.SetScreenLoopbackOnly(cfg.loopbackOnly)
 	controlHandler.displays = displayService
 	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend(agentUse.PrepareAgentBrowser, displayService), displayService)
 	if err != nil {

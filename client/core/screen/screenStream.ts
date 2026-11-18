@@ -27,6 +27,12 @@ export interface ScreenStreamStats {
   /** The JPEG level in use, 0-9, and the updates allowed unacknowledged. */
   quality: number;
   inFlight: number;
+  /** "webrtc" when the picture is pushed video; then `path` is the media's own route. */
+  transport: "rfb" | "webrtc";
+  /** The media path's round trip (WebRTC), 0 when unknown. */
+  rttMs: number;
+  /** The bit rate the stream follows now, kbit/s (WebRTC). */
+  targetKbps: number;
 }
 
 const finite = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
@@ -34,7 +40,10 @@ const finite = (value: unknown): number => (typeof value === "number" && Number.
 /** Reads the daemon's `stats` message; null when it isn't one. */
 export function parseStreamStats(message: Record<string, unknown>): ScreenStreamStats | null {
   if (message.type !== "stats") return null;
-  const path = typeof message.path === "string" && SCREEN_PATHS.includes(message.path) ? (message.path as ScreenPath) : null;
+  const transport = message.transport === "webrtc" ? "webrtc" : "rfb";
+  // Pushed video takes its own path (peer to peer, or a TURN relay), which may not be the socket's.
+  const route = transport === "webrtc" ? message.route : message.path;
+  const path = typeof route === "string" && SCREEN_PATHS.includes(route) ? (route as ScreenPath) : null;
   return {
     path,
     updates: finite(message.updates),
@@ -49,6 +58,9 @@ export function parseStreamStats(message: Record<string, unknown>): ScreenStream
     ackMaxMs: finite(message.ack_max_ms),
     quality: finite(message.quality),
     inFlight: finite(message.in_flight),
+    transport,
+    rttMs: finite(message.rtt_ms),
+    targetKbps: finite(message.kbps),
   };
 }
 

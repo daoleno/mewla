@@ -81,6 +81,11 @@ type Viewer struct {
 	// Conn is the display's RFB stream, past the handshake with no security:
 	// the next bytes in either direction are ClientInit and then updates.
 	Conn net.Conn
+	// Picture is what the view shows now, as B G R X rows, and its size; Watch
+	// is told when it may have changed. Nil where the display has no picture
+	// of its own to give (its view is RFB only).
+	Picture func() ([]byte, int, int)
+	Watch   func() (<-chan struct{}, func())
 	// Relay passes the person's messages to the display and counts them.
 	Relay func(src io.Reader) error
 	// Hold holds the agent off (true) or lets it go on (false). A held view

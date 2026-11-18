@@ -158,6 +158,9 @@ export class RemoteSession {
       case "send":
         this.connection?.send(message.data);
         return;
+      case "signal":
+        this.connection?.control(message.signal);
+        return;
       case "connected":
         this.stopDeadline?.();
         this.stopDeadline = null;
@@ -196,7 +199,8 @@ export class RemoteSession {
     const connection = new ScreenConnection(
       this.server,
       {
-        open: () => attempt === this.attempt && this.post([{ type: "open" }]),
+        open: () => attempt === this.attempt && this.post([{ type: "open", video: this.connection?.video === true }]),
+        signal: (signal) => attempt === this.attempt && this.post([{ type: "signal", signal }]),
         data: (chunk) => {
           if (attempt !== this.attempt) return;
           this.chunks.push(chunk);

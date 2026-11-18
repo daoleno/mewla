@@ -30,6 +30,8 @@ const noTopLevelAwait = {
   name: "novnc-no-top-level-await",
   setup(build) {
     build.onResolve({ filter: /^@novnc\/novnc$/ }, () => ({ path: join(packageDir, main) }));
+    // The video picture reads the browser's keys with noVNC's own keyboard (its package exports rfb.js only).
+    build.onResolve({ filter: /^@novnc\/novnc\/core\// }, (args) => ({ path: join(packageDir, args.path.slice("@novnc/novnc/".length)) }));
     build.onLoad({ filter: /novnc[\\/]core[\\/]util[\\/]browser\.js$/ }, async (args) => {
       const source = readFileSync(args.path, "utf8");
       if (!source.includes(TOP_LEVEL_AWAIT)) throw new Error("noVNC browser.js changed; update the top-level await patch");

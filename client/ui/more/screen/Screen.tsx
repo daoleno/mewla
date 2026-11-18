@@ -415,7 +415,8 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     const stats = s?.stats() ?? null;
     const target = server();
     return {
-      rttMs: s?.rtt() ?? null,
+      // Pushed video: the media path's own round trip, when the computer has measured it.
+      rttMs: stats?.transport === "webrtc" && stats.rttMs > 0 ? Math.round(stats.rttMs) : s?.rtt() ?? null,
       inputMs: viewer?.inputMs ?? null,
       fps: viewer?.fps ?? 0,
       kbps: viewer?.kbps ?? 0,
