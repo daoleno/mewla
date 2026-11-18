@@ -793,6 +793,13 @@ func (w *Watcher) reproveOwnership(sessionID string, turn TurnSnapshot, observed
 	return w.ledgerTurnAuthoritative(sessionID, at)
 }
 
+// SessionReclaimed says whether Mewla closed sessionID after its Work was
+// completed. It only reads the ledger.
+func (w *Watcher) SessionReclaimed(sessionID string) bool {
+	turn, found, err := w.ledgerTurn(strings.TrimSpace(sessionID))
+	return err == nil && found && turn.Reclaimed
+}
+
 func (w *Watcher) ledgerTurn(sessionID string) (TurnSnapshot, bool, error) {
 	if w == nil || w.turnLedger == nil {
 		return TurnSnapshot{}, false, nil
