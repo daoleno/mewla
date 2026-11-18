@@ -256,6 +256,7 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	}()
 	path := clientaddr.Path(r)
 	signOffer, verifyAnswer := s.screenBinding(device.ID)
+	iceServers, relayMaxKbps := s.screenICE(ctx)
 	cast, err = screencast.Start(ctx, screencast.Config{
 		Source: displaySource{view},
 		Input: func(msg []byte) error {
@@ -274,7 +275,8 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		SignOffer:    signOffer,
 		VerifyAnswer: verifyAnswer,
 		LoopbackOnly: s.screenLoopbackOnly,
-		ICEServers:   s.screenICE(ctx),
+		ICEServers:   iceServers,
+		RelayMaxKbps: relayMaxKbps,
 	})
 	close(castReady)
 	if err != nil {
@@ -325,17 +327,17 @@ func (s *Server) screenBinding(deviceID string) (func([]string) (any, error), fu
 
 // screenICE is the relay's TURN (and STUN) for a viewer with no direct path
 // (mobile data), when this computer is registered with a relay that has it.
-func (s *Server) screenICE(ctx context.Context) []webrtc.ICEServer {
+func (s *Server) screenICE(ctx context.Context) (servers []webrtc.ICEServer, relayMaxKbps int) {
 	if s.screenLoopbackOnly {
-		return nil
+		return nil, 0
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	creds, err := link.TURN(ctx)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
-	return screencast.ICEServersFor(creds.URLs, creds.Username, creds.Password)
+	return screencast.ICEServersFor(creds.URLs, creds.Username, creds.Password), creds.MaxKbps
 }
 
 // displaySource is a display view's pictures for screencast.

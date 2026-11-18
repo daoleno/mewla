@@ -332,6 +332,7 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	signOffer, verifyAnswer := s.screenBinding(device.ID)
+	iceServers, relayMaxKbps := s.screenICE(ctx)
 	session, err = screencast.Start(ctx, screencast.Config{
 		Source:     cast,
 		Input:      cast.Input,
@@ -354,7 +355,8 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		SignOffer:    signOffer,
 		VerifyAnswer: verifyAnswer,
 		LoopbackOnly: s.screenLoopbackOnly,
-		ICEServers:   s.screenICE(ctx),
+		ICEServers:   iceServers,
+		RelayMaxKbps: relayMaxKbps,
 	})
 	close(castReady)
 	if err != nil {

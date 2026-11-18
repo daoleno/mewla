@@ -53,6 +53,9 @@ type Config struct {
 	LoopbackOnly bool
 	// ICEServers are STUN and TURN servers to gather through, when any.
 	ICEServers []webrtc.ICEServer
+	// RelayMaxKbps is the most the relay's TURN carries for one allocation
+	// (0: no cap): while the picture goes through it, the video stays under.
+	RelayMaxKbps int
 	// SignOffer and VerifyAnswer bind the DTLS fingerprints to identities:
 	// SignOffer signs the offer's (as this computer; the viewer checks it
 	// with the computer's key from pairing) and VerifyAnswer checks the
@@ -501,6 +504,7 @@ func (s *Session) run() {
 		changedAt time.Time
 		estimator cc.BandwidthEstimator
 		kbps      = startKbps
+		ceiling   = maxKbps
 		rateAt    time.Time
 		st        = statsWindow{start: time.Now()}
 	)
@@ -517,9 +521,15 @@ func (s *Session) run() {
 			s.lastKey = now
 		}
 		s.mu.Unlock()
-		// Follow the link: a lower rate at once, a higher one when it holds.
+		// Follow the link: a lower rate at once, a higher one when it holds;
+		// never over the ceiling (the relay's, when the picture goes through it).
+		if kbps > ceiling {
+			kbps = ceiling
+			rateAt = now
+			s.enc.SetBitrate(kbps)
+		}
 		if estimator != nil {
-			target := max(minKbps, min(maxKbps, estimator.GetTargetBitrate()/1000))
+			target := max(minKbps, min(ceiling, estimator.GetTargetBitrate()/1000))
 			drop := target < kbps*6/10 && now.Sub(rateAt) > 500*time.Millisecond
 			rise := target > kbps*14/10 && now.Sub(rateAt) > 3*time.Second
 			if drop || rise {
@@ -558,13 +568,24 @@ func (s *Session) run() {
 		case e := <-s.bwe:
 			estimator = e
 		case <-statsTick.C:
+			route, rtt := s.route()
+			ceiling = maxKbps
+			if route == "relay" && s.cfg.RelayMaxKbps > 0 {
+				// Headroom for the packets' own headers (RTP, SRTP, UDP, TURN).
+				ceiling = max(minKbps, s.cfg.RelayMaxKbps*85/100)
+			}
+			if kbps > ceiling {
+				kbps = ceiling
+				rateAt = time.Now()
+				s.enc.SetBitrate(kbps)
+			}
 			if s.cfg.Stats != nil {
 				out := st.flush(kbps)
 				out.Encoder = s.enc.Name()
 				if last != nil {
 					out.Width, out.Height = last.Width&^1, last.Height&^1
 				}
-				out.Route, out.RTTMs = s.route()
+				out.Route, out.RTTMs = route, rtt
 				s.cfg.Stats(out)
 			}
 		case <-s.kick:

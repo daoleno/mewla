@@ -69,7 +69,7 @@ type Config struct {
 	Logf func(format string, args ...any)
 	// TURN, when set, issues TURN credentials to registered computers
 	// (turn_request), for Screen's video.
-	TURN *TURNServer
+	TURN *TURNIssuer
 
 	MaxRoutes          int
 	MaxClients         int
@@ -878,6 +878,7 @@ func (server *Server) handleConnectorWithRelease(
 			TURNURLs:     urls,
 			TURNUsername: username,
 			TURNPassword: password,
+			TURNMaxKbps:  server.config.TURN.MaxKbps(),
 			ExpiresAtMS:  expires.UnixMilli(),
 		}); err != nil {
 			outcome.reject(rejectionProtocol)
