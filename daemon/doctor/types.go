@@ -70,6 +70,7 @@ type Report struct {
 	Addresses    []AddressCheck `json:"addresses,omitempty"`
 	Remote       RemoteCheck    `json:"remote"`
 	Network      NetworkCheck   `json:"network"`
+	Screen       *ScreenCheck   `json:"screen,omitempty"`
 	Checks       []NamedCheck   `json:"checks"`
 	Warnings     []string       `json:"warnings,omitempty"`
 	Remediations []Remediation  `json:"remediations"`
@@ -106,6 +107,16 @@ type NetworkCheck struct {
 	Cloudflare     string `json:"cloudflare,omitempty"`
 	Status         Status `json:"status"`
 	Summary        string `json:"summary"`
+}
+
+// ScreenCheck reports, on Linux, what Screen needs to show agents' displays:
+// TigerVNC's Xvnc and xauth for the displays, ffmpeg with an H.264 encoder for
+// their video. Agents work without them; only watching them does not. Other
+// platforms need nothing installed for Screen (no check).
+type ScreenCheck struct {
+	Missing []string `json:"missing,omitempty"`
+	Status  Status   `json:"status"`
+	Summary string   `json:"summary"`
 }
 
 // NamedCheck is a flat summary entry for UI/API consumers.

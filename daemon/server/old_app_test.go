@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/screen"
+	"github.com/daoleno/mewla/daemon/screencast"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/gorilla/websocket"
 )
@@ -96,5 +97,46 @@ func TestAnOldAppIsToldToUpdate(t *testing.T) {
 			t.Fatalf("%s: closed with %v", view.path, err)
 		}
 		conn.Close()
+	}
+}
+
+// A Linux computer without ffmpeg says so on Screen, before a display is
+// opened; its agents keep their displays.
+func TestTheDisplayListSaysFFmpegIsMissing(t *testing.T) {
+	if err := vdisplay.Capability(); err != nil {
+		t.Skip(err)
+	}
+	a, priv, device := sessionFileAuthFixture(t)
+	displays := vdisplay.NewService("")
+	defer displays.Close()
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetDisplays(displays)
+	h := httptest.NewServer(s.Handler())
+	defer h.Close()
+	list := func() (available bool, reason string) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, h.URL+"/display", nil)
+		req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-display"))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var listed struct {
+			Available bool
+			Reason    string
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+			t.Fatal(err)
+		}
+		return listed.Available, listed.Reason
+	}
+	s.videoReady = func() error { return screencast.ErrNoEncoder }
+	if available, reason := list(); !available || reason != screencast.ErrNoEncoder.Error() {
+		t.Fatalf("without ffmpeg: available %v, reason %q", available, reason)
+	}
+	s.videoReady = func() error { return nil }
+	if available, reason := list(); !available || reason != "" {
+		t.Fatalf("with ffmpeg: available %v, reason %q", available, reason)
 	}
 }

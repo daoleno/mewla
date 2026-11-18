@@ -50,6 +50,7 @@ import (
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/screen"
+	"github.com/daoleno/mewla/daemon/screencast"
 	skillmgmt "github.com/daoleno/mewla/daemon/skills"
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
@@ -116,10 +117,13 @@ type notificationRecorder interface {
 
 // Server handles WebSocket connections from the Mewla mobile app.
 type Server struct {
-	browsers                   *browser.Manager
-	displays                   Displays
-	screen                     *screen.Service
-	screenLoopbackOnly         bool
+	browsers           *browser.Manager
+	displays           Displays
+	screen             *screen.Service
+	screenLoopbackOnly bool
+	// videoReady says whether this computer can encode agents' displays as
+	// video (screencast.EncoderReady); tests replace it.
+	videoReady                 func() error
 	phone                      *phone.Manager
 	phonePing                  time.Duration // the phone's ping interval; zero is the default
 	connections                *connections.Manager
@@ -381,6 +385,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		execs:              execs,
 		brain:              brainService,
 		brainHostRecovery:  make(chan struct{}, 1),
+		videoReady:         screencast.EncoderReady,
 		resourceSampler:    watcher.NewResourceSampler(),
 		uploadDir:          uploadDir,
 		workerPushPath:     workerPushPath(authManager),
