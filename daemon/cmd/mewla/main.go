@@ -2279,7 +2279,7 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 	fs.Var(completionPolicyFlag{value: &item.CompletionPolicy}, "completion", "bounded or until_done")
 	fs.StringVar(&item.DoneCriteriaRef, "done-criteria", "", "done-criteria reference")
 	fs.StringVar(&item.NextAction, "next-action", "", "next useful action")
-	fs.StringVar(&item.WaitFor, "wait-for", "", "current wait condition")
+	fs.StringVar(&item.WaitFor, "wait-for", "", "current wait condition (with -status waiting); empty ends the wait")
 	fs.StringVar(&item.ContextRef, "context", "", "Brain Worklog/context reference (relative to the configured Brain workspace)")
 	fs.StringVar(&item.Question, "question", "", "what you ask the user about this Work; shown on its slip (empty clears it)")
 	fs.Var((*stringListFlag)(&item.Choices), "choice", "a one-tap answer to -question, repeatable (up to 4)")

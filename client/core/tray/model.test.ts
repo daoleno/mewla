@@ -78,6 +78,17 @@ describe("tray model", () => {
     expect(m.state.words).toBe("1 needs you");
   });
 
+  test("a Trigger's Work lives on its Trigger row: listed only while Brain handles a firing", () => {
+    const idle = trayModel(input({ openWork: [{ work_id: "tw", title: "Trigger: CI on main", status: "open" }], triggerWorkIds: ["tw"] }));
+    expect(idle.running).toEqual([]);
+    expect(idle.state.words).toBe("All quiet");
+    const handling = trayModel(input({ currentWork: [work("tw", { title: "Trigger: CI on main", status: "running" })], triggerWorkIds: ["tw"] }));
+    expect(handling.running.map((row) => row.title)).toEqual(["Trigger: CI on main"]);
+    // Any other Work is listed as before.
+    const other = trayModel(input({ openWork: [{ work_id: "q", title: "Write the hello", status: "open" }], triggerWorkIds: ["tw"] }));
+    expect(other.running.map((row) => row.title)).toEqual(["Write the hello"]);
+  });
+
   test("All quiet with nothing running", () => {
     const m = trayModel(input());
     expect(m.state).toMatchObject({ kind: "quiet", words: "All quiet", dot: null, ink: false, chevron: true });

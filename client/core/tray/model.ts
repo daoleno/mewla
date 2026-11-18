@@ -169,6 +169,9 @@ export interface TrayInput {
   devices?: readonly { id: string; name: string }[];
   /** Triggers that need the person (core/triggers `triggersNeedingYou`): failing, paused themselves, not handled. */
   triggers?: readonly { id: string; title: string; ask: string }[];
+  /** The Works the computer's Triggers fire into: their Trigger row is where they live, so the tray lists one only
+   *  while Brain is handling a firing (or it asks you something). */
+  triggerWorkIds?: readonly string[];
   /** Requests answered here that the computer has not cleared yet: sealed everywhere at once (§1.1). */
   answered?: ReadonlySet<string>;
   /** When each Session was last opened here (core/sessions/deviceState `getRecentWorkerOpens`). */
@@ -436,7 +439,9 @@ export function trayModel(input: TrayInput): TrayModel {
   // A Session that runs a listed Work is that Work's row; asking you, it is a Needs you row only, and
   // the Work has no row of its own until it is answered.
   const asking = new Set(input.workers.filter(hasRequest).map((worker) => worker.id));
+  const triggerWork = new Set(input.triggerWorkIds ?? []);
   const slips = brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now, input.openWork).slips
+    .filter((slip) => !triggerWork.has(slip.workId) || slip.group === "running" || slip.group === "needs")
     .filter((slip) => slip.group === "needs" || ![slip.sessionId, ...liveWorkerIds(slip.workerSessions)].some((id) => id && asking.has(id)));
   const folded = new Set(slips.flatMap((slip) => [slip.sessionId, ...liveWorkerIds(slip.workerSessions)]).filter((id): id is string => Boolean(id)));
   const opened = (id: string) => input.opened[id] ?? 0;
