@@ -24,8 +24,22 @@ type processInfo struct {
 	args      string
 	// argsUnread marks a user process whose command line could not be read
 	// (Linux shows an empty one while exec is still setting the new program
-	// up). Its arguments are unknown, not empty.
+	// up, macOS ps prints "(comm)", a Windows read can fail while the creator
+	// is still writing the new process's parameters). Its arguments are
+	// unknown, not empty.
 	argsUnread bool
+}
+
+// commandLineUnread says whether a command line read as args (with readErr
+// from the read, where the platform reports one) stands for one that could
+// not be read: an error, nothing, or the "(comm)" / "[comm]" a process table
+// prints in its place.
+func commandLineUnread(comm, args string, readErr error) bool {
+	if readErr != nil {
+		return true
+	}
+	args = strings.TrimSpace(args)
+	return args == "" || (comm != "" && (args == "("+comm+")" || args == "["+comm+"]"))
 }
 
 // snapshotProcesses returns nil when ps failed: a nil map means the process
@@ -158,13 +172,14 @@ func parseProcessSnapshot(out []byte, location *time.Location) map[int]processIn
 		}
 
 		processes[pid] = processInfo{
-			pid:       pid,
-			ppid:      ppid,
-			pgid:      pgid,
-			tpgid:     tpgid,
-			startedAt: startedAt,
-			comm:      fields[9],
-			args:      args,
+			pid:        pid,
+			ppid:       ppid,
+			pgid:       pgid,
+			tpgid:      tpgid,
+			startedAt:  startedAt,
+			comm:       fields[9],
+			args:       args,
+			argsUnread: commandLineUnread(fields[9], args, nil),
 		}
 	}
 	return processes
