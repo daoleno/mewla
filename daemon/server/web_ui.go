@@ -2,13 +2,9 @@ package server
 
 import (
 	"fmt"
-	"io/fs"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -88,33 +84,6 @@ func prefersHTML(accept string) bool {
 	return html > 0 && html >= json
 }
 
-// SetWebUIDir names a directory whose web UI build replaces the embedded one
-// while it holds one (its index.html.gz; files gzip-only, as dist/). The dev
-// daemon serves the NSH client from <state-dir>/web-ui this way, kept current
-// without a rebuild; with no build there, the embedded bundle is served as ever.
-func (s *Server) SetWebUIDir(dir string) { s.webUIDir = dir }
-
-// webUIOverride is the directory's NSH web package when it holds one now.
-// Checked per request, so a build put there (or taken away) is served at once.
-func (s *Server) webUIOverride() (fs.FS, bool) {
-	if s.webUIDir == "" {
-		return nil, false
-	}
-	info, err := os.Stat(filepath.Join(s.webUIDir, "index.html.gz"))
-	present := err == nil && info.Mode().IsRegular()
-	if s.webUIOverrideSeen.Swap(present) != present {
-		if present {
-			log.Printf("web UI: serving the build in %s", s.webUIDir)
-		} else {
-			log.Printf("web UI: serving the embedded build (none in %s)", s.webUIDir)
-		}
-	}
-	if !present {
-		return nil, false
-	}
-	return os.DirFS(s.webUIDir), true
-}
-
 // webUIHandler serves the browser app only where the operator expects it:
 // loopback clients addressing a loopback host, or an explicit web origin.
 // Every daemon API keeps its own device authorization either way.
@@ -143,11 +112,6 @@ func (s *Server) webUIHandler() http.Handler {
 			// origin: its faces and its VT (fetched, as fonts and WebAssembly are) are read
 			// cross-origin. They are public build files, the same for everyone.
 			header.Set("Access-Control-Allow-Origin", "*")
-		}
-		// A build in <state-dir>/web-ui (the dev daemon's) is served instead of the embedded one while it is there.
-		if pkg, ok := s.webUIOverride(); ok {
-			webui.Handler(pkg).ServeHTTP(w, r)
-			return
 		}
 		assets.ServeHTTP(w, r)
 	})

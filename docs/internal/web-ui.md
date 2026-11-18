@@ -100,8 +100,11 @@ reachable by its address: a Session at `/terminal/<id>`, and the app restores
 the place and the current server from the browser history entry
 (`client/ui/shell/webLocation.ts`).
 
-Release and CI daemon builds embed the web build. A source build without it
-serves a short message instead of the app. To embed it locally:
+Release and CI daemon builds embed the web build, and the daemon serves only
+the build it embeds. A source build without it serves a short message instead
+of the app. The build uses the NSH the repository pins (`~/.nsh`, installed by
+`client/scripts/fetch-nsh.sh`), never another `nsh` on PATH, because the package
+carries NSH's web runtime. To embed it locally:
 
 ```bash
 bun install

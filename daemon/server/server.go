@@ -194,8 +194,6 @@ type Server struct {
 	enrollments                *enrollment.Manager
 	enrollmentObserver         func(enrollment.Request)
 	webUIFiles                 fs.FS
-	webUIDir                   string
-	webUIOverrideSeen          atomic.Bool
 	// webPort is the port this daemon listens on (0 until it binds): a
 	// loopback web UI is this daemon's only on it.
 	webPort atomic.Int32
