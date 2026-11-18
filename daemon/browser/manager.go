@@ -92,6 +92,16 @@ func privateDir(path string) error {
 	return os.Chmod(path, 0700)
 }
 
+// SetSignInsLost receives the sites of the agent browser's profile that lost
+// every cookie before it expired, as Chrome stops or before it starts again.
+func (m *Manager) SetSignInsLost(fn func(sites []string, at time.Time)) {
+	if b, ok := m.backend.(interface {
+		SetSignInsLost(func(sites []string, at time.Time))
+	}); ok {
+		b.SetSignInsLost(fn)
+	}
+}
+
 func New(root string, backend Backend, screens Screens) (*Manager, error) {
 	if err := privateDir(root); err != nil {
 		return nil, err

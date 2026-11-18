@@ -30,6 +30,9 @@ const (
 	// timelineKindPluginNotice is a line Mewla writes when a plugin account
 	// stops working (its service refused to renew the sign-in).
 	timelineKindPluginNotice = "plugin_notice"
+	// timelineKindBrowserNotice is a line Mewla writes when the agents'
+	// browser lost the person's sign-ins.
+	timelineKindBrowserNotice = "browser_notice"
 
 	workResultConversationSource = "work_result"
 )
@@ -1004,7 +1007,7 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 			WorkDetailsJSON: item.DetailsJSON,
 			WorkWaitFor:     item.WaitFor,
 		}, true
-	case timelineKindHostNotice, timelineKindPluginNotice:
+	case timelineKindHostNotice, timelineKindPluginNotice, timelineKindBrowserNotice:
 		return work.CodexConversationEvent{
 			ID:        item.ID,
 			Seq:       seq,

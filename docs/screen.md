@@ -462,7 +462,8 @@ The browser has one profile for all agents on the computer, not your everyday
 Chrome: to give it a sign-in, take over an agent's screen, sign in yourself and
 give it back; every agent's window then has it, because they are windows of the
 same Chrome. The profile keeps its sign-ins on that computer, also when the
-browser stops. Chrome stores them in the computer's secure wallet (KWallet or
+browser stops. An agent cannot sign you out of sites it is not working on, and
+if sign-ins are lost anyway Chat names the sites to sign in to again. Chrome stores them in the computer's secure wallet (KWallet or
 another Secret Service) when one is unlocked for the user Mewla runs as; with
 none, the profile uses Chrome's own basic storage, in a folder only that user
 can read. The profile keeps the store it started with, so one that began on the

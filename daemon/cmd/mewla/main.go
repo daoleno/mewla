@@ -1017,6 +1017,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	connectionManager.SetSignInLost(func(n connections.SignInLost) {
 		brainService.NotePluginSignInLost(n.AccountID, n.At, n.Title, n.Body)
 	})
+	// The agents' browser losing the person's sign-ins says so in Chat too.
+	browserManager.SetSignInsLost(brainService.NoteAgentBrowserSignInsLost)
 	srv.SetTelegram(telegramManager)
 	controlHandler.telegram = telegramManager
 	srv.SetModelProfiles(profileOwner)
