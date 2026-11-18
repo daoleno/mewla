@@ -70,6 +70,9 @@ type videoFactory func(width, height, kbps int) (videoEncoder, error)
 // it was before video, to compare.
 var defaultVideo videoFactory
 
+// defaultVideoName names defaultVideo, for the Connection panel.
+var defaultVideoName string
+
 // videoByDefault is whether a viewer that offers H.264 gets video without
 // MEWLA_SCREEN_VIDEO=on. The Mac's encoder has run on a real Mac; it stays
 // false until a phone has shown a real Mac's screen through it end to end.

@@ -142,7 +142,7 @@ func (e *castEncoder) SetBitrate(kbps int) {
 	}
 }
 
-func (e *castEncoder) Name() string { return "hardware" }
+func (e *castEncoder) Name() string { return defaultVideoName }
 
 func (e *castEncoder) Close() {
 	if e.enc != nil {
