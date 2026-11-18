@@ -7,7 +7,9 @@ import { knowsScene } from "./scenes";
 /**
  * What's New (Brain's SPEC 11-16): after an update, the first quiet moment on Brain home shows the sheet once; every
  * update leaves a line in Brain's chat. The fake computer keeps the record as the daemon does (daemon/whatsnew). This
- * app is at the release's version (nsh.json, APP_VERSION); the computer says it runs 0.4.9, so 0.4.9's notes count.
+ * app is at the release's version (nsh.json, APP_VERSION), which release preparation moves, and the bundled notes grow
+ * with every release: so the tests bring their own releases (NEWS), newer than any real one, from the computer, and
+ * count from the app's version on (a baseline at or past it), so no bundled note and no release number is in them.
  */
 
 const APP = "../FakeDaemonApp.tsx";
@@ -22,6 +24,36 @@ const say = (i: number, body: string, minute: number) => ({ id: `m${i}`, seq: i,
 /** This device already ran this app: no fresh install, and no update of its own. */
 const ranBefore = { "mewla:whats_new": JSON.stringify({ app: APP_VERSION }) };
 
+const page = (id: string, title: string, scene: string, target: string) =>
+  ({ id, title, line: `${title}.`, media: { scene }, try: { kind: "open", target } });
+/** Three releases the person missed, newest first: 3, 1 and 3 highlights. */
+const TOP = "99.9.0";
+const NEWS = {
+  releases: [
+    {
+      version: TOP, date: "2026-11-20", fixes: [],
+      highlights: [
+        page("t-diagrams", "Diagrams in Chat", "chat-diagram", "brain"),
+        page("t-network", "Back after a network switch", "network-hop", "computer"),
+        page("t-update-line", "Updates told in Chat", "update-line", "brain"),
+      ],
+    },
+    { version: "99.8.0", date: "2026-11-19", fixes: [], highlights: [page("t-browser", "Pages survive updates", "browser-survives", "screen")] },
+    {
+      version: "99.7.0", date: "2026-11-18", fixes: [],
+      highlights: [
+        page("t-questions", "Questions in Chat", "chat-card", "new-session"),
+        page("t-restarts", "Updates restart", "update-restart", "computer"),
+        page("t-worker-page", "A Worker's page waits", "agent-windows", "screen"),
+      ],
+    },
+  ],
+};
+/** The record of a computer at TOP whose person last saw `baseline` (by default this app's version: all three are news). */
+const news = (baseline = APP_VERSION, seen?: string[]): Kept => ({ baseline, releases: NEWS, ...(seen ? { seen } : {}) });
+/** Only TOP's three highlights are news. */
+const NEWEST_ONLY = "99.8.0";
+
 type Kept = { baseline: string; seen?: string[]; updates?: { version: string; at: number }[]; replay?: boolean; releases?: unknown };
 
 function setup(options: { record?: Kept; computer?: string; storage?: { [key: string]: string }; platform?: "android" | "web"; paired?: boolean; conversation?: unknown[] } = {}) {
@@ -35,26 +67,25 @@ function setup(options: { record?: Kept; computer?: string; storage?: { [key: st
     // A manual clock: the quiet moment and the waits after it pass at once.
     clock: {},
     storage: { ...(options.paired === false ? {} : paired), ...ranBefore, ...options.storage },
-    network: { ...expoTokenService, [DAEMON_UPDATE]: json({ version: options.computer ?? "0.4.9", supported: true }) },
+    network: { ...expoTokenService, [DAEMON_UPDATE]: json({ version: options.computer ?? APP_VERSION, supported: true }) },
     host: phoneHost(daemon),
   };
 }
 
 describe("What's New: when it shows", () => {
   test("after an update a quiet Brain home shows one sheet, newest first, at most three pages, and only once", async () => {
-    const record: Kept = { baseline: "0.4.6" };
-    const app = await open(APP, setup({ record }));
+    const app = await open(APP, setup({ record: news(), computer: TOP }));
     await app.waitFor("id:whats-new-page-0", { timeout: 15_000 });
     // Three releases were missed: each one's headline, newest first.
-    expect(app.shows("text:Diagrams and files, right in Chat")).toBe(true);
+    expect(app.shows("text:Diagrams in Chat")).toBe(true);
     expect(app.count("id:whats-new-dot-2")).toBe(1);
     expect(app.shows("id:whats-new-dot-3")).toBe(false);
-    expect(app.shows("text:Mewla 0.4.9")).toBe(true);
+    expect(app.shows(`text:Mewla ${TOP}`)).toBe(true);
     // Shown is seen, on the computer: the phone and the web share it.
     await app.waitUntil(() => framesOf(app.host.posts(), "whats_new_seen").length === 1);
     // The sheet settles the three releases: the highlights it had no room for are not offered after it.
     const settled = framesOf(app.host.posts(), "whats_new_seen")[0].ids as string[];
-    expect(settled.slice(0, 3)).toEqual(["0.4.9-diagrams-and-files-in-chat", "0.4.8-browser-survives", "0.4.7-agent-questions-in-chat"]);
+    expect(settled.slice(0, 3)).toEqual(["t-diagrams", "t-browser", "t-questions"]);
     expect(settled.length).toBe(7);
     // The last page has Done; it closes and does not come back.
     await app.press("id:whats-new-dot-2");
@@ -66,12 +97,12 @@ describe("What's New: when it shows", () => {
   }, 40_000);
 
   test("a release with fixes only shows no sheet, only its line in Brain's chat, which lists the fixes", async () => {
-    const release = { version: "0.5.0", date: "2026-11-20", highlights: [], fixes: ["Sessions open faster."] };
-    // The baseline is past every bundled release, so only this one is news.
-    const record: Kept = { baseline: "0.4.16", updates: [{ version: "0.5.0", at: at(3) }], releases: { releases: [release] } };
-    const app = await open(APP, setup({ record, computer: "0.5.0" }));
+    const release = { version: TOP, date: "2026-11-20", highlights: [], fixes: ["Sessions open faster."] };
+    // The baseline is this app's version, past every bundled release, so only this one is news.
+    const record: Kept = { baseline: APP_VERSION, updates: [{ version: TOP, at: at(3) }], releases: { releases: [release] } };
+    const app = await open(APP, setup({ record, computer: TOP }));
     await app.waitFor("id:update-line", { timeout: 15_000 });
-    expect(app.shows("text:Updated to 0.5.0 ·")).toBe(true);
+    expect(app.shows(`text:Updated to ${TOP} ·`)).toBe(true);
     await app.wait(2_500);
     expect(app.shows("id:whats-new")).toBe(false);
     await app.press("id:update-line");
@@ -80,7 +111,7 @@ describe("What's New: when it shows", () => {
   }, 40_000);
 
   test("opened from a link, it waits: the person came for that; back on Brain on their own, it shows", async () => {
-    const app = await open(APP, setup({ record: { baseline: "0.4.8" } }));
+    const app = await open(APP, setup({ record: news(NEWEST_ONLY), computer: TOP }));
     await app.waitFor("id:composer", { timeout: 15_000 });
     await app.host.send("links.open", { url: "mewla://calendar?serverId=s1" });
     await app.wait(3_000);
@@ -90,26 +121,25 @@ describe("What's New: when it shows", () => {
   }, 40_000);
 
   test("seen on another device (the web) is not shown here", async () => {
-    const seen = ["0.4.9-diagrams-and-files-in-chat", "0.4.9-back-after-network-switch", "0.4.9-updates-in-chat"];
-    const app = await open(APP, setup({ record: { baseline: "0.4.8", seen } }));
+    const seen = ["t-diagrams", "t-network", "t-update-line"];
+    const app = await open(APP, setup({ record: news(NEWEST_ONLY, seen), computer: TOP }));
     await app.waitFor("id:composer", { timeout: 15_000 });
     await app.wait(3_000);
     expect(app.shows("id:whats-new")).toBe(false);
   }, 30_000);
 
   test("on the web it is a card, and what the phone saw stays seen", async () => {
-    const record: Kept = { baseline: "0.4.8" };
-    const app = await open(APP, setup({ record, platform: "web" }));
+    const app = await open(APP, setup({ record: news(NEWEST_ONLY), computer: TOP, platform: "web" }));
     await app.waitFor("id:whats-new-page-0", { timeout: 15_000 });
     // No swipe on the web: arrows move the pages.
     await app.press("id:whats-new-next");
     await app.waitFor("id:whats-new-page-1");
-    expect(app.shows("text:Back in seconds after switching networks")).toBe(true);
-    expect(framesOf(app.host.posts(), "whats_new_seen")[0].ids).toEqual(["0.4.9-diagrams-and-files-in-chat", "0.4.9-back-after-network-switch", "0.4.9-updates-in-chat"]);
+    expect(app.shows("text:Back after a network switch")).toBe(true);
+    expect(framesOf(app.host.posts(), "whats_new_seen")[0].ids).toEqual(["t-diagrams", "t-network", "t-update-line"]);
   }, 30_000);
 
   test("never over a draft: the sheet waits while Brain's composer holds text", async () => {
-    const app = await open(APP, setup({ record: { baseline: "0.4.8" } }));
+    const app = await open(APP, setup({ record: news(NEWEST_ONLY), computer: TOP }));
     await app.waitFor("id:composer", { timeout: 15_000 });
     await app.type("id:composer", "Draft");
     await app.wait(3_000);
@@ -119,7 +149,7 @@ describe("What's New: when it shows", () => {
   test("never over a card that needs the person: an approval in Brain's thread holds it back", async () => {
     const approval = { id: "a1", tool: "Bash", summary: "git push origin main", options: [{ id: "allow", label: "Allow", scope: "once" }, { id: "deny", label: "Deny", scope: "deny" }] };
     const docs = { id: "docs", name: "docs", status: "blocked", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now(), delegated: true, approvals: [approval] };
-    const options = setup({ record: { baseline: "0.4.8" } });
+    const options = setup({ record: news(NEWEST_ONLY), computer: TOP });
     const daemon = (options.host.params as { daemon: Record<string, unknown> }).daemon;
     const app = await open(APP, { ...options, host: { ...options.host, params: { daemon: { ...daemon, worker_sessions: [docs] } } } });
     await app.waitFor("id:request-card", { timeout: 15_000 });
@@ -145,9 +175,9 @@ describe("What's New: when it shows", () => {
 
 describe("What's New: Try it", () => {
   test("Try it closes the sheet and opens the place", async () => {
-    const app = await open(APP, setup({ record: { baseline: "0.4.8" } }));
+    const app = await open(APP, setup({ record: news(NEWEST_ONLY), computer: TOP }));
     await app.waitFor("id:whats-new-try", { timeout: 15_000 });
-    // 0.4.9's second page: the network, on the computer page.
+    // TOP's second page: the network, on the computer page.
     await app.press("id:whats-new-dot-1");
     await app.waitFor("id:whats-new-page-1");
     await app.wait(500);
@@ -159,11 +189,11 @@ describe("What's New: Try it", () => {
   test("About's What's new reopens the latest notes any time", async () => {
     // Its own notes, not the latest real ones: those change with every release and may be fixes only.
     const release = {
-      version: "0.5.0", date: "2026-11-20", fixes: [],
-      highlights: [{ id: "0.5.0-test-page", title: "A test page", line: "Shown again from About.", media: { scene: "chat-diagram" }, try: { kind: "open", target: "brain" } }],
+      version: TOP, date: "2026-11-20", fixes: [],
+      highlights: [{ id: "t-about-page", title: "A test page", line: "Shown again from About.", media: { scene: "chat-diagram" }, try: { kind: "open", target: "brain" } }],
     };
-    const record: Kept = { baseline: "0.4.9", seen: ["0.5.0-test-page"], updates: [{ version: "0.5.0", at: at(3) }], releases: { releases: [release] } };
-    const app = await open(APP, setup({ record, computer: "0.5.0" }));
+    const record: Kept = { baseline: APP_VERSION, seen: ["t-about-page"], updates: [{ version: TOP, at: at(3) }], releases: { releases: [release] } };
+    const app = await open(APP, setup({ record, computer: TOP }));
     // The computer's notes and version are in once its update line is.
     await app.waitFor("id:update-line", { timeout: 15_000 });
     await app.press("id:home-cat");
