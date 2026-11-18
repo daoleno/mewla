@@ -6,6 +6,17 @@ const PAGE_DIR = join(import.meta.dir, "../../ui/web/terminal");
 type Run = { col: number; cells: number; flags: number; text: string };
 type Line = { runs: Run[]; wrapped: boolean };
 type KeyEvent = { type: string; key: string; code?: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean; getModifierState?(name: string): boolean };
+/** A textarea event as the browser gives it: a key, an `input`, or a composition's. */
+type ImeEvent = KeyEvent & { keyCode?: number; isComposing?: boolean; data?: string; inputType?: string };
+type Keyboard = {
+  composing(): boolean;
+  preedit(): string;
+  keydown(event: ImeEvent): boolean;
+  input(event: ImeEvent): void;
+  compositionstart(event: ImeEvent): void;
+  compositionupdate(event: ImeEvent): void;
+  compositionend(event: ImeEvent): void;
+};
 // The page's own helpers: terminal.js exports them where `module` exists (here), and runs where it does not (the page).
 const page = require(join(PAGE_DIR, "terminal.js")) as {
   keyAction(event: KeyEvent, hasSelection: boolean, mac: boolean): { kind: string; clear: boolean };
@@ -14,6 +25,7 @@ const page = require(join(PAGE_DIR, "terminal.js")) as {
   unshiftedOf(code: string): number;
   modsOf(event: KeyEvent, mac: boolean): number;
   keyText(event: KeyEvent): string;
+  keyboard(encode: (event: ImeEvent) => string, send: (text: string) => void): Keyboard;
   gather(pending: number, px: number, unit: number): { pending: number; lines: number };
   cellsText(line: Line, c0: number, c1: number): string;
   selectionText(lineAt: (i: number) => Line, from: [number, number], to: [number, number], cols: number): string;
@@ -135,6 +147,112 @@ describe("the page's helpers (terminal.js)", () => {
     expect(page.modsOf(key("b", { alt: true }), false)).toBe(4);
     // AltGr (Ctrl+Alt on Windows) types its character.
     expect(page.modsOf({ ...key("@", { ctrl: true, alt: true }), getModifierState: (m: string) => m === "AltGraph" }, false)).toBe(0);
+  });
+
+  describe("the keyboard and the input method: real browsers' event orders, replayed", () => {
+    const ev = (type: string, fields: Partial<ImeEvent> = {}): ImeEvent =>
+      ({ type, key: "", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...fields });
+    const down = (key: string, code: string, keyCode: number, fields: Partial<ImeEvent> = {}) => ev("keydown", { key, code, keyCode, ...fields });
+    /** An IME's key: Chrome and Safari say keyCode 229 (Chrome's key "Process"). */
+    const process = (code: string, isComposing = true) => ev("keydown", { key: "Process", code, keyCode: 229, isComposing });
+    const typed = (data: string) => ev("input", { inputType: "insertText", data });
+    const composed = (data: string) => ev("input", { inputType: "insertCompositionText", data, isComposing: true });
+    const start = () => ev("compositionstart");
+    const update = (data: string) => ev("compositionupdate", { data });
+    const end = (data: string) => ev("compositionend", { data });
+    // libghostty-vt in legacy mode: a key's text, Enter/Escape/Backspace, Ctrl+letter; a modifier alone types nothing.
+    const legacy = (e: ImeEvent): string => {
+      if (e.ctrlKey && /^[a-z]$/i.test(e.key)) return String.fromCharCode(e.key.toLowerCase().charCodeAt(0) - 96);
+      return ({ Enter: "\r", Escape: "\x1b", Backspace: "\x7f" } as Record<string, string>)[e.key] ?? page.keyText(e);
+    };
+    // A program that asked for every key as an escape code (kitty's report-all flag).
+    const reportAll = (e: ImeEvent): string => (e.key.length === 1 ? `\x1b[${e.key.charCodeAt(0)}u` : legacy(e));
+    const replay = (events: ImeEvent[], encode = legacy) => {
+      const sent: string[] = [];
+      const taken: string[] = [];
+      const keys = page.keyboard(encode, (text) => sent.push(text));
+      for (const e of events) {
+        if (e.type === "keydown") {
+          if (keys.keydown(e)) taken.push(e.key);
+        } else (keys as unknown as Record<string, (e: ImeEvent) => void>)[e.type](e);
+      }
+      return { sent, taken, composing: keys.composing() };
+    };
+
+    test("pinyin, committed with Space (Chrome + fcitx, recorded): the committed text once, no pinyin letters", () => {
+      const r = replay([
+        process("KeyN", false), start(), update("嗯"), composed("嗯"),
+        process("KeyI"), update("你"), composed("你"),
+        process("KeyH"), update("你好"), composed("你好"),
+        process("KeyA"), update("你哈"), composed("你哈"),
+        process("KeyO"), update("你好"), composed("你好"),
+        process("Space"), update("你好"), composed("你好"), end("你好"),
+      ]);
+      expect(r).toEqual({ sent: ["你好"], taken: [], composing: false });
+    });
+
+    test("a Chinese input method's punctuation: its ，。、 go, not the key's ,.\\ (fcitx: the key arrives with its own keyCode, the text after)", () => {
+      const r = replay([
+        down(",", "Comma", 188), typed("，"),
+        down(".", "Period", 190), typed("。"),
+        down("\\", "Backslash", 220), typed("、"),
+      ]);
+      expect(r).toEqual({ sent: ["，", "。", "、"], taken: [], composing: false });
+    });
+
+    test("an input method that starts its composition after the key (keydown with the letter's own keyCode): no stray letter", () => {
+      const r = replay([
+        down("n", "KeyN", 78), start(), update("n"), composed("n"),
+        process("KeyI"), update("ni"), composed("ni"),
+        process("Space"), update("你"), composed("你"), end("你"),
+      ]);
+      expect(r.sent).toEqual(["你"]);
+    });
+
+    test("Enter during a composition commits it and is not a second Enter; the next Enter is (Chrome + fcitx, recorded)", () => {
+      const r = replay([
+        process("KeyS", false), start(), update("s"), composed("s"),
+        process("Enter"), update("shi"), composed("shi"), end("shi"),
+        down("Enter", "Enter", 13),
+      ]);
+      expect(r).toEqual({ sent: ["shi", "\r"], taken: ["Enter"], composing: false });
+    });
+
+    test("Safari: compositionend comes before the committing key, which says keyCode 229 and not composing: still no Enter", () => {
+      const r = replay([process("KeyN", false), start(), update("你好"), composed("你好"), end("你好"), process("Enter", false)]);
+      expect(r.sent).toEqual(["你好"]);
+    });
+
+    test("an input method that says 229 for every key in its English mode (Doubao on macOS): the letters it types go", () => {
+      expect(replay([process("KeyA", false), typed("a"), process("KeyB", false), typed("b")]).sent).toEqual(["a", "b"]);
+    });
+
+    test("Escape cancels a composition: nothing goes", () => {
+      expect(replay([process("KeyN", false), start(), update("n"), composed("n"), process("Escape"), update(""), end("")]).sent).toEqual([]);
+    });
+
+    test("no input method: plain keys come with the textarea's input; Enter, Escape, Backspace and Ctrl keys are taken at the key", () => {
+      const r = replay([
+        down("l", "KeyL", 76), typed("l"), down("S", "KeyS", 83, { shiftKey: true }), typed("S"), down(" ", "Space", 32), typed(" "),
+        down("Enter", "Enter", 13), down("Escape", "Escape", 27), down("Backspace", "Backspace", 8),
+        down("c", "KeyC", 67, { ctrlKey: true }), down("Shift", "ShiftLeft", 16), down("CapsLock", "CapsLock", 20),
+      ]);
+      expect(r).toEqual({ sent: ["l", "S", " ", "\r", "\x1b", "\x7f", "\x03"], taken: ["Enter", "Escape", "Backspace", "c"], composing: false });
+    });
+
+    test("a program that asked for every key as an escape code gets it at the key, and the browser's text does not follow", () => {
+      expect(replay([down("a", "KeyA", 65)], reportAll)).toEqual({ sent: ["\x1b[97u"], taken: ["a"], composing: false });
+    });
+
+    test("dead keys and unidentified keys are the browser's; the composition is shown while it lasts", () => {
+      const keys = page.keyboard(legacy, () => {});
+      expect(keys.keydown(down("Dead", "Quote", 222))).toBe(false);
+      expect(keys.keydown(down("Unidentified", "", 252))).toBe(false);
+      keys.compositionstart(start());
+      keys.compositionupdate(update("你"));
+      expect([keys.composing(), keys.preedit()]).toEqual([true, "你"]);
+      expect(keys.keydown(down("Enter", "Enter", 13))).toBe(false);
+    });
   });
 
   test("drag pixels become whole lines and keep the rest", () => {

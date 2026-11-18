@@ -30,7 +30,10 @@ The VT lives in the view. The page passes the computer's output in (`write`,
 composition happens inside the view and only committed text becomes `input`
 (on the web, a hidden textarea at the cursor takes the keyboard and the input
 method, the composition is drawn at the cursor, and keys are encoded by
-libghostty-vt for the program's modes). Selection and copy are the platform's own
+libghostty-vt for the program's modes; a key whose encoding is only the text it
+types is left to the textarea, so its text arrives with the `input` event after
+the input method had it: a Chinese input method's ，。、 and a composition it
+starts after the key go, never the bare key). Selection and copy are the platform's own
 (long press and the system menu on the phones; drag, double-click a word and
 triple-click a line, then the browser's copy, on the web). Text a
 program copies (OSC 52, OSC 1337 Copy, OSC 5522) arrives as `copy`. If the VT
