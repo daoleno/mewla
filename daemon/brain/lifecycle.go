@@ -1474,6 +1474,12 @@ func (s *Store) applyWorkUpdateViaFSMLocked(database *presentationDatabase, inde
 			return Work{}, err
 		}
 	}
+	// An empty wait-for on its own ends the wait: wait_for is the wake's
+	// projection, so clearing the text clears the wake it names.
+	if update.Status == nil && update.Wake == nil && update.WaitFor != nil && strings.TrimSpace(*update.WaitFor) == "" {
+		var noWake *WorkWake
+		update.Wake = &noWake
+	}
 	// Status transitions.
 	if update.Status != nil && !terminalUpdate {
 		switch *update.Status {
@@ -2214,6 +2220,18 @@ func (s *Store) unprojectedBrainInputAdmissions(limit int) ([]BrainInputAdmissio
 }
 
 func (s *Store) AppendWorkEvent(event WorkEvent) (WorkEvent, bool, error) {
+	return s.appendWorkEvent(event, false)
+}
+
+// AppendProducerWorkEvent appends an event from the producer the Work waits
+// on (a Trigger firing on its own Work): unlike a generic append it keeps the
+// event actionable over a parked typed wake, which opening its Review then
+// consumes. A Work owned by a Worker's turn still takes it as history only.
+func (s *Store) AppendProducerWorkEvent(event WorkEvent) (WorkEvent, bool, error) {
+	return s.appendWorkEvent(event, true)
+}
+
+func (s *Store) appendWorkEvent(event WorkEvent, producer bool) (WorkEvent, bool, error) {
 	var err error
 	event, err = normalizeWorkEventForAppend(event, s.nowUTC())
 	if err != nil {
@@ -2237,10 +2255,11 @@ func (s *Store) AppendWorkEvent(event WorkEvent) (WorkEvent, bool, error) {
 			}
 		}
 		item := database.BrainWork[itemIndex]
-		if event.Actionable && (item.Wake != nil || reduceWorkProgressState(database, item).Owned) {
+		if event.Actionable && ((item.Wake != nil && !producer) || reduceWorkProgressState(database, item).Owned) {
 			// Generic append is an audit/attention operation, not a producer or
 			// owner-transition authority. It cannot clear a typed wait or place
-			// ready attention over an existing execution owner.
+			// ready attention over an existing execution owner. A producer may
+			// end the wait it is (but never an execution owner).
 			event.Actionable = false
 		}
 		event, err = appendWorkEventLocked(&database, itemIndex, event, true)

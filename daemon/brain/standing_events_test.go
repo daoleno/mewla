@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/lifecycle"
@@ -127,5 +128,72 @@ func TestDeliverWorkEventReachesTheHost(t *testing.T) {
 	}
 	if texts := hostTexts(); len(texts) != 2 || !strings.Contains(texts[1], third.ID) {
 		t.Fatalf("the Host was not sent the next event: %d", len(texts))
+	}
+}
+
+// A Trigger is the producer its Work waits on: Brain's wait-for parks a typed
+// wake, and a firing ends it and opens its Review (the generic CLI append is
+// still refused). A Work a Worker's turn owns still takes it as history only.
+// An empty wait-for alone ends the wait too.
+func TestTriggerFiringEndsATypedWaitButNotAWorkersTurn(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.SetChatState(ChatState{ThreadID: "trigger-thread"}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(store, &fakeWatcher{}, nil)
+	waitOn := func(title, waitFor string) Work {
+		t.Helper()
+		item, err := store.CreateWork(Work{Title: title, Objective: "standing", SourceThreadID: "trigger-thread", CompletionPolicy: CompletionBounded})
+		if err != nil {
+			t.Fatal(err)
+		}
+		waiting := WorkWaiting
+		item, err = store.UpdateWork(item.ID, WorkUpdate{Status: &waiting, WaitFor: &waitFor})
+		if err != nil || item.Status != WorkWaiting || item.Wake == nil || item.WaitFor != waitFor {
+			t.Fatalf("wait-for did not park a wake: %+v err=%v", item, err)
+		}
+		return item
+	}
+
+	item := waitOn("PRLoopWatcher", "trigger.fired from Trigger 3b5d1da9")
+	if _, err := service.DeliverWorkEvent(WorkEvent{WorkID: item.ID, Kind: "pr.new", DedupeKey: "cli-1"}); !errors.Is(err, ErrWorkEventNotDelivered) || !strings.Contains(err.Error(), "waits on its user_input wake") {
+		t.Fatalf("the CLI's generic append over a typed wait: %v", err)
+	}
+	fired, opened, err := service.RaiseWorkEvent(WorkEvent{WorkID: item.ID, Kind: "trigger.fired", DedupeKey: "fire:2", PayloadRef: "/p/2.txt", Actionable: true})
+	if err != nil || !opened {
+		t.Fatalf("a firing over Brain's wait-for: opened=%v err=%v", opened, err)
+	}
+	st, err := store.FSM().State(lifecycle.WorkID(item.ID))
+	if err != nil || st.Wake != nil || st.Review == nil || st.Review.EventID != fired.ID {
+		t.Fatalf("the firing did not end the wait and open its Review: %+v err=%v", st, err)
+	}
+	if work, _ := store.Work(item.ID); work.WaitFor != "" || work.Wake != nil {
+		t.Fatalf("the Work still shows the wait: %+v", work)
+	}
+
+	owned, err := store.CreateWork(Work{Title: "owned by a Worker", Objective: "delegated", SourceThreadID: "trigger-thread", CompletionPolicy: CompletionBounded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bootstrapAdmittedTurnFixture(t, store, owned.ID, watcher.AdmittedTurn{SessionID: "worker", TurnID: "worker-turn", AcceptedAt: time.Now().UTC()})
+	_, opened, err = service.RaiseWorkEvent(WorkEvent{WorkID: owned.ID, Kind: "trigger.fired", DedupeKey: "fire:1", Actionable: true})
+	if err != nil || opened {
+		t.Fatalf("a firing over a Worker's turn: opened=%v err=%v", opened, err)
+	}
+	if st, _ := store.FSM().State(lifecycle.WorkID(owned.ID)); st.Review != nil || st.Attempt == nil {
+		t.Fatalf("a firing took a Worker's Work: %+v", st)
+	}
+
+	cleared := waitOn("Waiting", "the deploy window")
+	empty := ""
+	after, err := service.BrainUpdateWork(cleared.ID, WorkUpdate{WaitFor: &empty})
+	if err != nil || after.WaitFor != "" || after.Wake != nil || after.Status == WorkWaiting {
+		t.Fatalf("an empty wait-for did not end the wait: %+v err=%v", after, err)
+	}
+	if st, _ := store.FSM().State(lifecycle.WorkID(cleared.ID)); st.Wake != nil {
+		t.Fatalf("the lifecycle kept the wake: %+v", st.Wake)
 	}
 }

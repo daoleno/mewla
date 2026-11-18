@@ -91,13 +91,28 @@ func TestTriggersOverTheWebSocket(t *testing.T) {
 		}
 	}
 	send(map[string]any{"type": "check_trigger", "request_id": "r1", "id": item.ID})
-	updated := readType("trigger_updated")
+	// The reply and the broadcast race: either may come first.
+	seen := map[string]map[string]any{}
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	for seen["trigger_updated"] == nil || seen["trigger_changed"] == nil {
+		_, raw, readErr := conn.ReadMessage()
+		if readErr != nil {
+			t.Fatalf("waiting for the check's reply and broadcast (have %v): %v", seen, readErr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if kind, _ := payload["type"].(string); kind == "trigger_updated" || kind == "trigger_changed" {
+			seen[kind] = payload
+		}
+	}
+	updated := seen["trigger_updated"]
 	view := updated["trigger"].(map[string]any)
 	if updated["request_id"] != "r1" || view["last_fired_at"] == nil || view["pending"] != nil || view["last_output_hash"] != nil {
 		t.Fatalf("check reply %v", updated)
 	}
-	changed := readType("trigger_changed")
-	if changed["trigger"].(map[string]any)["id"] != item.ID {
+	if changed := seen["trigger_changed"]; changed["trigger"].(map[string]any)["id"] != item.ID {
 		t.Fatalf("broadcast %v", changed)
 	}
 	send(map[string]any{"type": "pause_trigger", "request_id": "r2", "id": item.ID})

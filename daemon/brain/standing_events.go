@@ -16,10 +16,12 @@ var ErrWorkEventNotDelivered = errors.New("work event not delivered")
 // machine resource pressure). A generic actionable append alone wakes
 // nobody: without a canonical Review the projection clears it. opened is
 // false when the Work could not take this event as its Review now (another
-// Review is still with Brain, the Work waits on something typed, or a
-// Worker owns it); the producer may raise it again later under a new key.
+// Review is still with Brain, or a Worker owns it); the producer may raise it
+// again later under a new key. The raiser is the producer the Work waits on:
+// its event ends a parked typed wait (Brain's wait-for) instead of being kept
+// as history behind it.
 func (s *Service) RaiseWorkEvent(event WorkEvent) (recorded WorkEvent, opened bool, err error) {
-	recorded, _, opened, err = s.raiseWorkEvent(event)
+	recorded, _, opened, err = s.raiseWorkEvent(event, true)
 	return recorded, opened, err
 }
 
@@ -30,7 +32,7 @@ func (s *Service) RaiseWorkEvent(event WorkEvent) (recorded WorkEvent, opened bo
 // A repeated dedupe key is the same event: delivered again it is a no-op.
 func (s *Service) DeliverWorkEvent(event WorkEvent) (WorkEvent, error) {
 	event.Actionable = true
-	recorded, created, opened, err := s.raiseWorkEvent(event)
+	recorded, created, opened, err := s.raiseWorkEvent(event, false)
 	if err != nil || opened {
 		return recorded, err
 	}
@@ -59,12 +61,16 @@ func (s *Service) undeliveredReason(recorded WorkEvent, created bool) string {
 	}
 }
 
-func (s *Service) raiseWorkEvent(event WorkEvent) (recorded WorkEvent, created, opened bool, err error) {
+func (s *Service) raiseWorkEvent(event WorkEvent, producer bool) (recorded WorkEvent, created, opened bool, err error) {
 	if s == nil || s.store == nil {
 		return WorkEvent{}, false, false, errors.New("brain service is not configured")
 	}
 	actionable := event.Actionable
-	recorded, created, err = s.store.AppendWorkEvent(event)
+	if producer {
+		recorded, created, err = s.store.AppendProducerWorkEvent(event)
+	} else {
+		recorded, created, err = s.store.AppendWorkEvent(event)
+	}
 	if err != nil || !actionable {
 		return recorded, created, false, err
 	}

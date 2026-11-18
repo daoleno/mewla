@@ -133,6 +133,7 @@ export const tray = computed(() => {
     today: today(),
     alerts: openAlerts(calendarItems(), clock().now).map((item) => ({ id: item.id, title: item.title })),
     triggers: triggersNeedingYou(triggers(), clock().now),
+    triggerWorkIds: triggers().map((trigger) => trigger.work_id),
     devices: deviceRequests().map((request) => ({ id: request.id, name: request.deviceName })),
     opened: opened(),
     sort: traySort(),

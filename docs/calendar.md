@@ -190,7 +190,8 @@ recent firings (newest first, each handled, with Brain or not handled) and
 A Trigger that needs you is also under **Needs you** in the tray, with Open:
 its check keeps failing, it paused itself, or a firing has not been handled for
 3 hours. This takes no model call. A Trigger you paused yourself stops asking
-about a failing check.
+about a failing check. A Trigger's Work is listed in the tray only while Brain
+is handling one of its firings; otherwise its Trigger row is where it lives.
 
 `-work <work-id>` sends the firings to an existing Work instead of a new one;
 without it the Trigger creates its own Work in `-source-thread` and closes it
