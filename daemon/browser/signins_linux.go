@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,11 +18,12 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"golang.org/x/net/publicsuffix"
 	_ "modernc.org/sqlite"
 )
 
-// signedInSitesFile keeps, beside the profile, the sites that had cookies the
-// last time Chrome was not running, each with when its last cookie expires.
+// signedInSitesFile keeps, beside the profile, the sites that had a sign-in the
+// last time Chrome was not running, each with when its last one expires.
 const signedInSitesFile = "signed-in-sites.json"
 
 // sessionCookieExpiry stands for a cookie that lasts as long as the browser:
@@ -33,7 +35,11 @@ var sessionCookieExpiry = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
 const chromeEpochUnixMicros = -11644473600 * 1_000_000
 
 // signedInSites reads, from a profile Chrome is not running on, each site
-// with cookies and when the last of them expires.
+// signed in and when its last sign-in cookie expires. A sign-in is an HttpOnly
+// cookie (what sites keep a session in, out of reach of their pages' scripts;
+// analytics and preference cookies are not), and a site is its registrable
+// domain, so accounts.google.com and .google.com are one google.com. Local
+// and IP hosts are a Worker's own apps under test, not the person's sign-ins.
 func signedInSites(profile string) (map[string]time.Time, error) {
 	path := filepath.Join(profile, "Default", "Cookies")
 	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
@@ -47,7 +53,7 @@ func signedInSites(profile string) (map[string]time.Time, error) {
 		return nil, err
 	}
 	defer db.Close()
-	rows, err := db.Query(`SELECT host_key, expires_utc, is_persistent FROM cookies`)
+	rows, err := db.Query(`SELECT host_key, expires_utc, is_persistent FROM cookies WHERE is_httponly != 0`)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +66,7 @@ func signedInSites(profile string) (map[string]time.Time, error) {
 		if err := rows.Scan(&host, &expires, &persistent); err != nil {
 			return nil, err
 		}
-		host = strings.ToLower(strings.TrimPrefix(host, "."))
+		host = siteOf(host)
 		if host == "" {
 			continue
 		}
@@ -73,6 +79,22 @@ func signedInSites(profile string) (map[string]time.Time, error) {
 		}
 	}
 	return sites, rows.Err()
+}
+
+// siteOf is the registrable domain of a cookie's host, or "" for a local or
+// IP host.
+func siteOf(host string) string {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(host), "."), "."))
+	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") || net.ParseIP(strings.Trim(host, "[]")) != nil {
+		return ""
+	}
+	if !strings.Contains(host, ".") {
+		return ""
+	}
+	if site, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
+		return site
+	}
+	return host
 }
 
 // lostSignIns is each site of before that had a cookie still valid at now and
@@ -120,12 +142,5 @@ func checkSignIns(root, profile string, now time.Time) ([]string, error) {
 }
 
 func signInsLostDetail(lost []string) string {
-	const shown = 12
-	names := lost
-	more := ""
-	if len(names) > shown {
-		names = names[:shown]
-		more = fmt.Sprintf(" and %d more", len(lost)-shown)
-	}
-	return fmt.Sprintf("the agents' browser lost every cookie of %d site(s) before they expired, so the person is signed out there: %s%s", len(lost), strings.Join(names, ", "), more)
+	return fmt.Sprintf("the agents' browser lost the sign-in cookies of %d site(s) before they expired, so the person is signed out there: %s", len(lost), strings.Join(lost, ", "))
 }

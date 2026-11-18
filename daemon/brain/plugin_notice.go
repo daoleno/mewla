@@ -64,13 +64,6 @@ func (s *Service) NoteAgentBrowserSignInsLost(sites []string, at time.Time) {
 }
 
 func agentBrowserSignInsLostBody(sites []string) string {
-	const shown = 8
-	names := sites
-	more := ""
-	if len(names) > shown {
-		names = names[:shown]
-		more = " and " + strconv.Itoa(len(sites)-shown) + " more"
-	}
-	return "The agents' browser no longer has your sign-in for " + strings.Join(names, ", ") + more +
+	return "The agents' browser no longer has your sign-in for " + strings.Join(sites, ", ") +
 		". To sign in again, take over an agent's screen in Screen."
 }

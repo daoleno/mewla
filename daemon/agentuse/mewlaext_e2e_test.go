@@ -276,6 +276,23 @@ func TestMewlaExtensionE2E(t *testing.T) {
 		t.Fatalf("the person's sign-in is gone: %+v", kept.Cookies)
 	}
 
+	// A clean context of the agent's own (a first visit with no sign-ins)
+	// is what a signed-out check would want instead of clearing the shared
+	// one: this mode has no browser-level target, so Playwright cannot make
+	// one, nor a raw CDP session of the agent's own.
+	out = mcp.call(t, "browser_run_code_unsafe", map[string]any{"code": `async (page) => {
+	  const tries = {};
+	  try {
+	    const fresh = await page.context().browser().newContext();
+	    await (await fresh.newPage()).goto('about:blank');
+	    await fresh.close();
+	    tries.context = 'ran';
+	  } catch (e) { tries.context = 'failed: ' + e.message.split('\n')[0]; }
+	  try { await page.context().newCDPSession(page); tries.cdp = 'ran'; } catch (e) { tries.cdp = 'failed: ' + e.message.split('\n')[0]; }
+	  return tries;
+	}`})
+	t.Logf("a fresh context and a raw CDP session: %s", out)
+
 	if displayBounds != nil {
 		got := agentWindowBounds(t)
 		t.Logf("agent window at %+v, agent display %+v", got, *displayBounds)

@@ -31,6 +31,32 @@ function cookieHost(cookie) {
   return hostOf(cookie.url);
 }
 
+// storageHost is the site whose stored data a storage command names: its
+// origin or storage key, directly, in a storage id or bucket, or at the front
+// of a cache id (Chrome makes those "<storage key>|<cache name>").
+function storageHost(method, params) {
+  if (method.startsWith('CacheStorage.'))
+    return hostOf(String(params.cacheId ?? '').split('|')[0]);
+  const id = params.storageId ?? params.bucket ?? params.storageBucket ?? {};
+  return hostOf(params.origin ?? params.ownerOrigin ?? params.securityOrigin ?? params.storageKey ?? id.securityOrigin ?? id.storageKey);
+}
+
+// The commands that remove one site's stored data (not its cookies).
+const CLEARS_SITE_STORAGE = new Set([
+  'Storage.clearDataForOrigin',
+  'Storage.clearDataForStorageKey',
+  'Storage.deleteStorageBucket',
+  'Storage.clearSharedStorageEntries',
+  'Storage.deleteSharedStorageEntry',
+  'DOMStorage.clear',
+  'DOMStorage.removeDOMStorageItem',
+  'IndexedDB.deleteDatabase',
+  'IndexedDB.clearObjectStore',
+  'IndexedDB.deleteObjectStoreEntries',
+  'CacheStorage.deleteCache',
+  'CacheStorage.deleteEntry',
+]);
+
 // related says whether a cookie for one host can affect a site on the other:
 // the same host, or one a subdomain of the other.
 function related(a, b) {
@@ -97,13 +123,11 @@ export class SiteDataGuard {
           return `Mewla refused deleting ${host || 'every site'}'s cookies: this agent has not worked on that site. ${refusalHint}`;
         return '';
       }
-      case 'Storage.clearDataForOrigin':
-      case 'Storage.clearDataForStorageKey': {
-        const host = hostOf(method === 'Storage.clearDataForOrigin' ? params.origin : params.storageKey);
-        if (!this._worked(host))
-          return `Mewla refused clearing ${host || 'every site'}'s data: this agent has not worked on that site. ${refusalHint}`;
-        return '';
-      }
+    }
+    if (CLEARS_SITE_STORAGE.has(method)) {
+      const host = storageHost(method, params);
+      if (!this._worked(host))
+        return `Mewla refused clearing ${host || 'a site'}'s data (${method}): this agent has not worked on that site. ${refusalHint}`;
     }
     return '';
   }
