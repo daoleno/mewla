@@ -28,6 +28,7 @@ import (
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/screen"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/trigger"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -80,6 +81,7 @@ type controlApp struct {
 	brainService      *brain.Service
 	calendarStore     *calendar.Store
 	calendarScheduler *calendar.Scheduler
+	triggers          *trigger.Engine
 	screen            *screen.Service
 	displays          *vdisplay.Service
 	agentWindows      *screen.AgentWindows // a Mac's agents' browser windows on the agent display; nil elsewhere
@@ -291,6 +293,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		defer cancel()
 		capability := a.screen.Capability(ctx)
 		return control.Response{OK: true, ScreenCapability: &capability}
+	case "trigger_list", "trigger_get", "trigger_create", "trigger_pause", "trigger_resume", "trigger_check", "trigger_delete":
+		return a.handleTrigger(req)
 	case "calendar_list":
 		if a == nil || a.calendarStore == nil {
 			return control.ErrorResponse("calendar_unavailable", "Calendar is not configured.")

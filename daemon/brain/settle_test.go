@@ -83,6 +83,21 @@ func TestJudgedKeepStaysOpenAndIsNotAskedAgainForTheSameState(t *testing.T) {
 	}
 }
 
+func TestStandingWorkIsNeverJudged(t *testing.T) {
+	judge := &fakeJudge{verdict: JudgeVerdict{Outcome: VerdictDone, Reason: "Looks finished."}}
+	store, service, item := endedHandlingFixture(t, judge)
+	service.SetStandingWork(func(workID string) bool { return workID == item.ID })
+	runSettle(t, service)
+	if got, _ := store.Work(item.ID); got.Status == WorkDone || got.Status == WorkCancelled || len(judge.briefs) != 0 {
+		t.Fatalf("a standing Work was judged: %+v briefs=%d", got, len(judge.briefs))
+	}
+	service.SetStandingWork(nil)
+	runSettle(t, service)
+	if len(judge.briefs) != 1 {
+		t.Fatalf("an ordinary Work was not judged: %d", len(judge.briefs))
+	}
+}
+
 func TestJudgeFailureLeavesTheWorkAlone(t *testing.T) {
 	judge := &fakeJudge{err: errors.New("model unavailable")}
 	store, service, item := endedHandlingFixture(t, judge)

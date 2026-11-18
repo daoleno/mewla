@@ -122,6 +122,68 @@ the time, change the repeat, cancel it. Cancelling turns the feature off, and
 Mewla does not create it again. It has to stay a reminder, and only the daemon
 can create items of this kind.
 
+## Triggers
+
+A Trigger watches something for you and wakes Brain when it changes. Ask in
+chat: "watch the open pull requests on these repositories and review each new
+one", "tell me when the nightly build on main goes red". Brain sets it up and
+says in one line what it watches, how often and what happens when it fires.
+
+A Trigger runs a small check command on an interval (every 10 minutes unless
+you ask otherwise, at least every minute, at most once a day):
+
+- **Nothing happened:** the check prints nothing. Nothing else happens: no
+  model runs and nothing is written anywhere but the Trigger's own "last
+  checked" time.
+- **Something happened:** the check prints the evidence. When that output
+  differs from what the previous check printed, the Trigger fires once: Brain
+  wakes on the Trigger's Work with the output and does what you asked. The same
+  output again is silent; output that goes away and comes back fires again.
+- **More changes while Brain is busy with one:** they are gathered and reach
+  Brain together in the next firing, once the current one is handled. Nothing
+  is dropped.
+
+Triggers belong to the daemon, not to a conversation, so they keep running when
+Brain's Session is replaced, when the daemon restarts and after a reboot. A
+check that comes late after the computer was off is noted ("not checked for
+2 h: Mewla was not running"); missed checks are not replayed.
+
+The watching itself never stops silently:
+
+- **Failing:** a check that keeps failing (3 failed checks in a row over at
+  least 30 minutes) tells Brain once with the error, and again once a day while
+  it keeps failing.
+- **Paused itself:** a Trigger that would wake Brain more than 6 times in an
+  hour pauses and tells Brain; its latest output waits until it is resumed.
+- **Not handled:** a firing Brain has not picked up after 3 hours (Brain was
+  not running, for example) shows as not handled.
+
+Checks run on this computer as you, in the folder Brain chose, with your PATH
+as your shell sets it up (so `gh`, mise shims and `~/.local/bin` are found even
+when the daemon started with a minimal PATH). On Windows a check runs in
+PowerShell 7 when it is installed and in Windows PowerShell otherwise. A check
+gets no input, is stopped after its timeout (1 minute by default), and keeps at
+most 64 KiB of output. Each Trigger keeps its last 50 firings.
+
+From the computer:
+
+```sh
+mewla trigger list --json
+mewla trigger create -title "Open PRs" -every 10m -check './poll.sh' \
+  -cwd /path/to/folder -instruction "Review each new pull request" \
+  -source-thread <brain-thread-id> --json
+mewla trigger get -id <trigger-id> --json
+mewla trigger check -id <trigger-id>    # check now
+mewla trigger pause -id <trigger-id>
+mewla trigger resume -id <trigger-id>
+mewla trigger delete -id <trigger-id>
+```
+
+`-work <work-id>` sends the firings to an existing Work instead of a new one;
+without it the Trigger creates its own Work in `-source-thread` and closes it
+when the Trigger is deleted. `-timeout` sets the check's timeout (shorter than
+the interval).
+
 ## Ask Brain or use the CLI
 
 Brain creates calendar items when you ask for one explicitly ("remind me

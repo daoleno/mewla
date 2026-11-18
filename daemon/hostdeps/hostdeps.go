@@ -209,6 +209,40 @@ func LookPath(name string) (string, error) {
 	return "", exec.ErrNotFound
 }
 
+// UserPATH is the PATH a program the person asked for should run with, built
+// the way a Session's shell sees it and independent of how the daemon was
+// started (launchd and systemd start it with a minimal PATH): what the
+// person's login shell puts on PATH, then current, then the installer and
+// per-user Node directories that exist, each once.
+func UserPATH(current string) string {
+	home, _ := os.UserHomeDir()
+	seen := map[string]bool{}
+	var dirs []string
+	add := func(dir string, mustExist bool) {
+		dir = strings.TrimSpace(dir)
+		if dir == "" || seen[dir] {
+			return
+		}
+		if mustExist {
+			if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+				return
+			}
+		}
+		seen[dir] = true
+		dirs = append(dirs, dir)
+	}
+	for _, dir := range LoginShellPathDirs() {
+		add(dir, false)
+	}
+	for _, dir := range filepath.SplitList(current) {
+		add(dir, false)
+	}
+	for _, dir := range append(ExtraPathDirs(home), nodeInstallDirs(home)...) {
+		add(dir, true)
+	}
+	return strings.Join(dirs, string(os.PathListSeparator))
+}
+
 // AddInstallerDirsToPath appends each of ExtraPathDirs that exists now to
 // this process's PATH. An installer that leaves PATH alone (Claude Code's
 // native one creates ~/.local/bin) may run after the daemon started, so this
