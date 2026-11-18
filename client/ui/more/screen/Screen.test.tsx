@@ -190,6 +190,28 @@ describe("Screen: agents", () => {
     expect(opened(app).length).toBe(1);
   });
 
+  test("Give back leaves the screen to the agent while the page stays open: no view of the person's own, then the agent's when it comes back", async () => {
+    let status: Record<string, unknown> = { ...base, agent: codex, agents: [codex] };
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: () => json(status) }));
+    await app.waitFor("id:take-over");
+    await app.press("id:take-over");
+    await goLive(app);
+    expect(app.shows("id:screen-held-frame")).toBe(true);
+    // The person has it: the agent's calls are refused, and it no longer shows as using the screen.
+    status = { ...base };
+    await app.press("label:Give back");
+    await app.waitFor("id:screen-given-back");
+    expect(app.texts()).toContain("Codex goes on");
+    expect(closed(app)).toHaveLength(1);
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    expect(opened(app)).toHaveLength(1);
+    // The agent's next call takes the screen: the page watches it.
+    status = { ...base, agent: codex, agents: [codex] };
+    await app.waitUntil(() => opened(app).length === 2, { timeout: 4_000 });
+    expect((opened(app)[1].data as { url: string }).url).toContain("watch=1");
+    expect((opened(app)[1].data as { url: string }).url).toContain("worker=w1");
+  });
+
   test("Take over opens the screen", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }));
     await app.waitFor("id:take-over");

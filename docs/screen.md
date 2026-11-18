@@ -54,8 +54,9 @@ While an agent uses the screen you see, it has one switch, the same everywhere:
 
 - **Take over** gives you the controls; while you have them the agent waits,
   and a red frame goes round the picture.
-- **Give back** lets the agent go on (it is told how long you had it). Leaving
-  Screen gives it back by itself.
+- **Give back** lets the agent go on (it is told how long you had it): Screen
+  lets go of the computer's screen at once and shows the agent again as soon as
+  it uses it. Leaving Screen gives it back by itself.
 - **Stop**, the square button beside it, stops the agent.
 
 On a phone the switch sits under the picture and steps aside while you type; on
