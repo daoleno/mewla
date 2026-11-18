@@ -1187,7 +1187,7 @@ func (owner *sessionInputOwner) reconcileSubmissionActivity(
 			// it must not be promoted into an ownership mismatch while that
 			// control signal is still in flight.
 			if turn.SignalProtocol && !TurnTerminal(snapshot.Status) {
-				return steerLiveSignalTurn(decision, snapshot, boundProvider), nil
+				return steerOrFollowSignalTurn(decision, turn, snapshot, boundProvider), nil
 			}
 			return decision, fmt.Errorf("provider completion did not settle the canonical turn")
 		}
@@ -1196,7 +1196,7 @@ func (owner *sessionInputOwner) reconcileSubmissionActivity(
 	case "failed", "interrupted", "cancelled":
 		if snapshot.Status != TurnFailed {
 			if turn.SignalProtocol && !TurnTerminal(snapshot.Status) {
-				return steerLiveSignalTurn(decision, snapshot, boundProvider), nil
+				return steerOrFollowSignalTurn(decision, turn, snapshot, boundProvider), nil
 			}
 			return decision, fmt.Errorf("provider failure did not settle the canonical turn")
 		}
@@ -1205,6 +1205,20 @@ func (owner *sessionInputOwner) reconcileSubmissionActivity(
 	default:
 		return decision, fmt.Errorf("current provider activity has no authoritative lifecycle status")
 	}
+}
+
+// steerOrFollowSignalTurn decides a send to a signal turn whose settled
+// Activity left its row unfinished. Only a turn the ledger still reads as live
+// owns the Work's Attempt and is steered. One it reads as over (lost: the
+// Worker never reported, and the Work released its Attempt) has no Attempt to
+// steer, whatever its own row last said (blocked, waiting for input), so the
+// send is a follow-up that starts a fresh one.
+func steerOrFollowSignalTurn(decision delegatedReuseDecision, turn, snapshot TurnSnapshot, provider ProviderActivityObservation) delegatedReuseDecision {
+	if TurnTerminal(turn.Status) {
+		decision.ExistingTurn = turn
+		return decision
+	}
+	return steerLiveSignalTurn(decision, snapshot, provider)
 }
 
 // steerLiveSignalTurn names the Attempt a send must continue when the provider's
