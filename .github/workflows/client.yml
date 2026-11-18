@@ -126,9 +126,15 @@ jobs:
       - name: Build the unit tests
         working-directory: client/ios
         run: |
-          set -o pipefail
+          # On a failure, the errors (compile and link) before the summary: `tail` alone showed only
+          # "TEST BUILD FAILED" and the failed command, never why.
           xcodebuild build-for-testing -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -5
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= > "$RUNNER_TEMP/ios-build.log" 2>&1 || {
+            grep -E -A3 "error:|Undefined symbols|ld: " "$RUNNER_TEMP/ios-build.log" | head -80
+            tail -5 "$RUNNER_TEMP/ios-build.log"
+            exit 1
+          }
+          tail -5 "$RUNNER_TEMP/ios-build.log"
       - name: Boot the simulator
         run: |
           xcrun simctl boot "$SIM" || true
