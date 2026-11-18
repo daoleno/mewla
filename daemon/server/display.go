@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/auth"
@@ -132,17 +131,9 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancelCause(r.Context())
 	defer cancel(nil)
 
-	var writeMu sync.Mutex
-	write := func(kind int, data []byte) error {
-		writeMu.Lock()
-		defer writeMu.Unlock()
-		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		return conn.WriteMessage(kind, data)
-	}
-	sendJSON := func(v any) {
-		raw, _ := json.Marshal(v)
-		_ = write(websocket.TextMessage, raw)
-	}
+	out := startViewerOutbox(ctx, cancel, conn, func(error) string { return "display closed" })
+	defer out.wait()
+	sendJSON := func(v any) { out.sendJSON(v) }
 	view, err := s.displays.View(worker)
 	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
@@ -178,21 +169,14 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	var cast *screencast.Session
 	castReady := make(chan struct{})
 	conn.SetReadLimit(1 << 20)
+	go s.keepTrusted(ctx, cancel, device.ID, nil)
 	go func() {
-		trusted := time.Now()
 		for {
 			_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
 			kind, data, err := conn.ReadMessage()
 			if err != nil {
 				cancel(err)
 				return
-			}
-			if time.Since(trusted) > 2*time.Second {
-				if !s.auth.IsDeviceTrusted(device.ID) {
-					cancel(errors.New("device revoked"))
-					return
-				}
-				trusted = time.Now()
 			}
 			if kind != websocket.TextMessage {
 				continue // input rides the data channels
@@ -265,7 +249,7 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		},
 		Signal: func(v any) { sendJSON(v) },
 		Stats: func(st screencast.Stats) {
-			sendJSON(struct {
+			out.advise(struct {
 				Type string `json:"type"`
 				Path string `json:"path"`
 				screencast.Stats
@@ -289,7 +273,11 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	case <-ctx.Done():
 	case <-cast.Done():
 		if ctx.Err() == nil {
-			sendJSON(map[string]string{"type": "error", "error": "The connection to the display was lost"})
+			message := "The connection to the display was lost"
+			if errors.Is(cast.Err(), screencast.ErrEncoder) {
+				message = screencast.ErrEncoder.Error()
+			}
+			sendJSON(map[string]string{"type": "error", "error": message})
 		}
 	}
 }
@@ -338,6 +326,30 @@ func (s *Server) screenICE(ctx context.Context) (servers []webrtc.ICEServer, rel
 		return nil, 0
 	}
 	return screencast.ICEServersFor(creds.URLs, creds.Username, creds.Password), creds.MaxKbps
+}
+
+// keepTrusted ends a view (cancel) within 2 s of its device being revoked,
+// or of allowed, when given, saying no.
+func (s *Server) keepTrusted(ctx context.Context, cancel context.CancelCauseFunc, device string, allowed func() error) {
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			if !s.auth.IsDeviceTrusted(device) {
+				cancel(errors.New("device revoked"))
+				return
+			}
+			if allowed != nil {
+				if err := allowed(); err != nil {
+					cancel(err)
+					return
+				}
+			}
+		}
+	}
 }
 
 // displaySource is a display view's pictures for screencast.

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -54,44 +55,67 @@ var ffmpegKinds = []ffmpegKind{
 }
 
 var probe struct {
-	once sync.Once
-	bin  string
-	kind *ffmpegKind
-	err  error
+	mu     sync.Mutex
+	bin    string
+	kinds  []*ffmpegKind // those that encode here, best first
+	err    error
+	failed time.Time
 }
 
-// findEncoder picks the first kind that encodes a test picture here. It runs
-// once per daemon.
-func findEncoder() (string, *ffmpegKind, error) {
-	probe.once.Do(func() {
-		bin, err := exec.LookPath("ffmpeg")
-		if err != nil {
-			probe.err = ErrNoEncoder
-			return
-		}
-		probe.bin = bin
-		for i := range ffmpegKinds {
-			kind := &ffmpegKinds[i]
-			if kind.name == "vaapi" {
-				if _, err := os.Stat("/dev/dri/renderD128"); err != nil {
-					continue
-				}
-			}
-			p, err := startFFmpeg(bin, kind, 320, 240, 1000, false)
-			if err != nil {
+// probeAgain is how long a computer without a working ffmpeg is believed: one
+// installed meanwhile is found on a view after that, without a restart.
+const probeAgain = 30 * time.Second
+
+// findEncoders returns the kinds that encode a test picture here, best first.
+// What works is kept for the daemon's life.
+func findEncoders() (string, []*ffmpegKind, error) {
+	probe.mu.Lock()
+	defer probe.mu.Unlock()
+	if len(probe.kinds) > 0 {
+		return probe.bin, probe.kinds, nil
+	}
+	if probe.err != nil && time.Since(probe.failed) < probeAgain {
+		return "", nil, probe.err
+	}
+	probe.err = ErrNoEncoder
+	probe.failed = time.Now()
+	bin, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return "", nil, probe.err
+	}
+	var kinds []*ffmpegKind
+	for i := range ffmpegKinds {
+		kind := &ffmpegKinds[i]
+		if kind.name == "vaapi" {
+			if _, err := os.Stat("/dev/dri/renderD128"); err != nil {
 				continue
 			}
-			pix := make([]byte, 320*240*4)
-			_, err = p.encode(pix)
-			p.close()
-			if err == nil {
-				probe.kind = kind
-				return
-			}
 		}
-		probe.err = ErrNoEncoder
-	})
-	return probe.bin, probe.kind, probe.err
+		p, err := startFFmpeg(bin, kind, 320, 240, 1000, false)
+		if err != nil {
+			continue
+		}
+		pix := make([]byte, 320*240*4)
+		_, err = p.encode(pix)
+		p.close()
+		if err == nil {
+			kinds = append(kinds, kind)
+		}
+	}
+	if len(kinds) == 0 {
+		return "", nil, probe.err
+	}
+	probe.bin, probe.kinds, probe.err = bin, kinds, nil
+	return bin, kinds, nil
+}
+
+// findEncoder is the best kind that encodes here.
+func findEncoder() (string, *ffmpegKind, error) {
+	bin, kinds, err := findEncoders()
+	if err != nil {
+		return "", nil, err
+	}
+	return bin, kinds[0], nil
 }
 
 // ffmpegProcess is one running encoder of one size and bit rate.
@@ -298,6 +322,9 @@ func (p *ffmpegProcess) annexB(data []byte, key bool) ([]byte, error) {
 type ffmpegEncoder struct {
 	bin  string
 	kind *ffmpegKind
+	// next are the kinds to fall back to, in order, when kind fails (VA-API
+	// at a size or alignment it does not take).
+	next []*ffmpegKind
 
 	cur   *ffmpegProcess
 	spare chan *ffmpegProcess // being started, or ready
@@ -305,12 +332,16 @@ type ffmpegEncoder struct {
 }
 
 func newFFmpegEncoder(kbps int) (*ffmpegEncoder, error) {
-	bin, kind, err := findEncoder()
+	bin, kinds, err := findEncoders()
 	if err != nil {
 		return nil, err
 	}
-	return &ffmpegEncoder{bin: bin, kind: kind, kbps: kbps}, nil
+	return &ffmpegEncoder{bin: bin, kind: kinds[0], next: kinds[1:], kbps: kbps}, nil
 }
+
+// RateCostsKeyFrame: a new bit rate takes a new ffmpeg process, which starts
+// with a key frame.
+func (e *ffmpegEncoder) RateCostsKeyFrame() bool { return true }
 
 // Name is the kind of ffmpeg encoder: vaapi, x264 or openh264.
 func (e *ffmpegEncoder) Name() string { return e.kind.name }
@@ -350,8 +381,24 @@ func (e *ffmpegEncoder) takeSpare(w, h int, rgb bool) (*ffmpegProcess, error) {
 	return startFFmpeg(e.bin, e.kind, w, h, e.kbps, rgb)
 }
 
-// Encode compresses one picture; key asks for a key frame.
+// Encode compresses one picture; key asks for a key frame. A kind that fails
+// gives way to the next for the rest of the view.
 func (e *ffmpegEncoder) Encode(p Picture, key bool) ([]byte, error) {
+	au, err := e.encode(p, key)
+	for err != nil && len(e.next) > 0 {
+		log.Printf("screencast: %s encoder failed at %dx%d (%v); %s from now on", e.kind.name, p.Width, p.Height, err, e.next[0].name)
+		e.kind, e.next = e.next[0], e.next[1:]
+		e.dropSpare()
+		if e.cur != nil {
+			e.cur.close()
+			e.cur = nil
+		}
+		au, err = e.encode(p, true)
+	}
+	return au, err
+}
+
+func (e *ffmpegEncoder) encode(p Picture, key bool) ([]byte, error) {
 	p = even(p)
 	w, h := p.Width, p.Height
 	if e.cur == nil || e.cur.w != w || e.cur.h != h || e.cur.rgb != p.RGB || key || e.cur.kbps != e.kbps {

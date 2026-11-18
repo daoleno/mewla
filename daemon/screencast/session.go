@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"sort"
@@ -31,6 +32,7 @@ import (
 	"github.com/pion/interceptor/pkg/cc"
 	"github.com/pion/interceptor/pkg/gcc"
 	"github.com/pion/rtcp"
+	"github.com/pion/transport/v5"
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
 )
@@ -63,6 +65,9 @@ type Config struct {
 	// answer is used. The DTLS handshake then holds each side to them.
 	SignOffer    func(fingerprints []string) (any, error)
 	VerifyAnswer func(fingerprints []string, authorization string) error
+
+	// net replaces the computer's network (tests: a virtual, lossy one).
+	net transport.Net
 }
 
 // Stats is one second of the stream, in the fields the viewer's Connection
@@ -155,6 +160,9 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 	if err := s.setup(); err != nil {
 		enc.Close()
 		s.cancel(err)
+		if s.pc != nil {
+			_ = s.pc.Close()
+		}
 		return nil, err
 	}
 	go func() {
@@ -169,6 +177,15 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 func (s *Session) Done() <-chan struct{} { return s.ctx.Done() }
 
 func (s *Session) Err() error { return context.Cause(s.ctx) }
+
+// rateCostsKey reports whether enc changes its bit rate only with a key frame.
+func rateCostsKey(enc Encoder) bool {
+	r, ok := enc.(interface{ RateCostsKeyFrame() bool })
+	return ok && r.RateCostsKeyFrame()
+}
+
+// ErrEncoder ends a session whose encoder failed (with every fallback).
+var ErrEncoder = errors.New("The computer could not encode its screen")
 
 // Close ends the session.
 func (s *Session) Close() { s.cancel(errors.New("closed")) }
@@ -220,7 +237,9 @@ func (s *Session) setup() error {
 	// UDP, and TCP to a TURN server for networks that block UDP.
 	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6, webrtc.NetworkTypeTCP4})
 	se.SetICETimeouts(4*time.Second, 10*time.Second, time.Second)
-	if s.cfg.LoopbackOnly {
+	if s.cfg.net != nil {
+		se.SetNet(s.cfg.net)
+	} else if s.cfg.LoopbackOnly {
 		se.SetIncludeLoopbackCandidate(true)
 		se.SetIPFilter(func(ip net.IP) bool { return ip.IsLoopback() })
 	} else {
@@ -515,7 +534,9 @@ func (s *Session) run() {
 	send := func(p *Picture) {
 		now := time.Now()
 		s.mu.Lock()
-		key := s.needKey && now.Sub(s.lastKey) > 300*time.Millisecond
+		// A lost picture is answered with a key frame at most once a second:
+		// on a lossy link more would only add to the loss.
+		key := s.needKey && now.Sub(s.lastKey) > time.Second
 		if key {
 			s.needKey = false
 			s.lastKey = now
@@ -530,12 +551,27 @@ func (s *Session) run() {
 		}
 		if estimator != nil {
 			target := max(minKbps, min(ceiling, estimator.GetTargetBitrate()/1000))
-			drop := target < kbps*6/10 && now.Sub(rateAt) > 500*time.Millisecond
-			rise := target > kbps*14/10 && now.Sub(rateAt) > 3*time.Second
+			// An encoder that changes its rate only with a key frame (ffmpeg)
+			// drops at most every 2 s, and rises only when a key frame is due
+			// anyway or the screen is still: a big key frame in the middle of
+			// motion on a link that just lost packets loses more.
+			restarts := rateCostsKey(s.enc)
+			dropAfter, quiet := 500*time.Millisecond, true
+			if restarts {
+				dropAfter, quiet = 2*time.Second, key || now.Sub(changedAt) > stillFor
+			}
+			drop := target < kbps*6/10 && now.Sub(rateAt) > dropAfter
+			rise := target > kbps*14/10 && now.Sub(rateAt) > 3*time.Second && quiet
 			if drop || rise {
 				kbps = target
 				rateAt = now
 				s.enc.SetBitrate(kbps)
+				if restarts {
+					// Its next picture is a key frame: it answers a lost one too.
+					s.mu.Lock()
+					s.needKey, s.lastKey = false, now
+					s.mu.Unlock()
+				}
 			}
 		}
 		start := time.Now()
@@ -543,7 +579,7 @@ func (s *Session) run() {
 		took := time.Since(start)
 		if err != nil {
 			log.Printf("screencast: encode: %v", err)
-			s.cancel(err)
+			s.cancel(fmt.Errorf("%w: %v", ErrEncoder, err))
 			return
 		}
 		if len(au) == 0 {

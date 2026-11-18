@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -130,6 +131,25 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 	second := open()
 	if err := first.closedWith(); !websocket.IsCloseError(err, websocket.CloseNormalClosure) || !strings.Contains(err.Error(), "took over") {
 		t.Fatalf("first viewer close: %v", err)
+	}
+
+	// The first viewer's deferred release leaves the second in control: its
+	// input lands, and an agent's action is refused.
+	time.Sleep(300 * time.Millisecond)
+	second.send([]byte{5, 0, 0, 30, 0, 40}) // a move to (30, 40)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		pointers, _ := fake.Snapshot()
+		if len(pointers) > 0 && pointers[len(pointers)-1] == (screen.FakePointer{X: 30, Y: 40}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the second viewer's input did not land: %+v", pointers)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := service.Act(context.Background(), "w9", screen.AgentAction{Action: "left_click", Coordinate: []int{1, 1}}); !errors.Is(err, screen.ErrPersonControlling) {
+		t.Fatalf("an agent's action while the second viewer held the screen: %v", err)
 	}
 
 	// The local kill switch ends the open session.

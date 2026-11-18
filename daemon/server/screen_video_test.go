@@ -83,3 +83,30 @@ func TestScreenVideoNeedsTheDevicesSignedAnswer(t *testing.T) {
 	default:
 	}
 }
+
+// A revoked device loses the view within seconds even when it sends nothing
+// on the socket (its input rides the data channels, which carry no trust).
+func TestARevokedSilentViewerIsCutOff(t *testing.T) {
+	requireVideo(t)
+	a, priv, device := sessionFileAuthFixture(t)
+	service := screen.NewServiceWith(t.TempDir(), screen.NewFakeBackend(320, 200))
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetScreen(service)
+	s.SetScreenLoopbackOnly(true)
+	h := httptest.NewServer(s.Handler())
+	defer h.Close()
+	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
+		t.Fatal(err)
+	}
+	v := dialVideoViewer(t, "ws"+strings.TrimPrefix(h.URL, "http")+"/screen/viewer", viewerIdentity(priv, a, device))
+	v.next("ready")
+	v.picture()
+	if _, err := a.RevokeDevice(device); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_ = v.closedWith()
+	if took := time.Since(start); took > 5*time.Second {
+		t.Fatalf("cut off after %v", took)
+	}
+}
