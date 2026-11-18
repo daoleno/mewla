@@ -1,7 +1,7 @@
 {
   "name": "Mewla",
   "id": "com.daoleno.mewla",
-  "version": "0.4.15",
+  "version": "0.4.16",
   "build": 1,
   "appearance": "system",
   "capabilities": {
