@@ -59,6 +59,14 @@ const (
 	TurnControlOwnershipLost TurnControlState = "ownership_lost"
 )
 
+// OwnershipLostSummary is the generic ownership-loss fact summary; a loss
+// whose cause is known says that cause instead.
+const OwnershipLostSummary = "Delegated Session control ownership was lost"
+
+// TurnFactOwnershipReproved is the liveness fact that lifts an ownership-loss
+// gate: the Turn's own process was proven to still be the Session's.
+const TurnFactOwnershipReproved = "ownership_reproved"
+
 // TurnTerminal reports whether the canonical status is terminal for
 // scheduling (immutable Done/Failed, or Unknown awaiting a bound fact).
 func TurnTerminal(status TurnStatus) bool {
@@ -145,7 +153,10 @@ type TurnSnapshot struct {
 	SignalProtocol bool
 	// PayloadSHA256 is the digest of the exact input the turn submitted.
 	PayloadSHA256 string
-	UpdatedAt     time.Time
+	// Reclaimed marks a completed Turn whose Session Mewla tore down after its
+	// Work closed.
+	Reclaimed bool
+	UpdatedAt time.Time
 }
 
 // TurnFact is one provider-neutral observation applied to the canonical turn

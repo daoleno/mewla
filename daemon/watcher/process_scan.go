@@ -22,6 +22,10 @@ type processInfo struct {
 	startedAt time.Time
 	comm      string
 	args      string
+	// argsUnread marks a user process whose command line could not be read
+	// (Linux shows an empty one while exec is still setting the new program
+	// up). Its arguments are unknown, not empty.
+	argsUnread bool
 }
 
 // snapshotProcesses returns nil when ps failed: a nil map means the process
@@ -207,8 +211,10 @@ func resolveForegroundTargetProcess(panePID int, processes map[int]processInfo) 
 		if detected == "" {
 			continue
 		}
-		if process.startedAt.IsZero() ||
+		if process.startedAt.IsZero() || process.argsUnread ||
 			!processDescendsFrom(foregroundPID, process.pid, processes) {
+			// A provider whose command line is not readable yet (just
+			// exec'd) has no provable identity: undecided until it is.
 			return foregroundTargetAuthority{}, false
 		}
 		family := workerProviderFamily(detected)

@@ -28,7 +28,9 @@ func (a *controlApp) computerOrigin(sessionID string) (computers.Origin, error) 
 	if !worker.Delegated {
 		return computers.Origin{}, fmt.Errorf("sending Session is not a delegated Worker")
 	}
-	generation, err := a.watcher.ResolveOwnedGeneration(sessionID)
+	// Naming the sender is a read; the reply's delivery re-proves control at
+	// the mutation boundary.
+	generation, err := a.watcher.ResolveDelegatedControl(sessionID)
 	if err != nil {
 		return computers.Origin{}, err
 	}

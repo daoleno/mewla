@@ -41,6 +41,9 @@ type fakeControlWatcher struct {
 	turnStore         *brain.Store
 	ownershipErr      error
 	ownershipCalls    []string
+	// mutationChecks are the Sessions checked at the mutation boundary
+	// (ResolveOwnedGeneration itself), which may take a live Turn's control.
+	mutationChecks    []string
 	budgetedSubmitErr error
 	budgetedCalls     int
 	delegatedResultID string
@@ -571,6 +574,11 @@ func (w *fakeControlWatcher) ProbeProviderEvidence(string) (watcher.ProviderActi
 }
 
 func (w *fakeControlWatcher) ResolveOwnedGeneration(sessionID string) (watcher.OwnedGeneration, error) {
+	w.mutationChecks = append(w.mutationChecks, sessionID)
+	return w.resolveOwned(sessionID)
+}
+
+func (w *fakeControlWatcher) resolveOwned(sessionID string) (watcher.OwnedGeneration, error) {
 	w.ownershipCalls = append(w.ownershipCalls, sessionID)
 	if w.ownershipErr != nil {
 		if worker := w.workers[sessionID]; worker != nil {
@@ -584,11 +592,11 @@ func (w *fakeControlWatcher) ResolveOwnedGeneration(sessionID string) (watcher.O
 }
 
 func (w *fakeControlWatcher) ResolveBrainHostGeneration(sessionID string) (watcher.OwnedGeneration, error) {
-	return w.ResolveOwnedGeneration(sessionID)
+	return w.resolveOwned(sessionID)
 }
 
 func (w *fakeControlWatcher) ResolveDelegatedControl(sessionID string) (watcher.OwnedGeneration, error) {
-	return w.ResolveOwnedGeneration(sessionID)
+	return w.resolveOwned(sessionID)
 }
 
 func TestControlAppWorkerSpawnCreatesVisibleDetachedSession(t *testing.T) {
