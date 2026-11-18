@@ -89,6 +89,22 @@ The relay enforces:
 - one-time admissions/nonces/tickets and explicit route conflict rejection
 - graceful listener shutdown and connector re-registration after restart
 
+### TURN for Screen
+
+The relay may also issue TURN credentials (`turn_request`, a signed request
+from a registered computer) for Screen's video, served by a TURN process that
+shares a secret file. The media is DTLS-SRTP between device and computer, with
+both certificates bound to the paired keys over the signed socket, so TURN
+sees only encrypted packets, their addresses and sizes. Because any signed-in
+computer can ask, a credential is held to UDP allocations only, to public peers
+or another allocation on the relay (never the relay host's own ports, private
+or shared networks, or metadata), to a few allocations per credential and per
+computer, and to a bit rate per allocation and in all; TCP and TLS connections
+to it are capped and closed when idle. Credentials reach the viewer in the
+signed offer, so on `mewla --lan` plain HTTP they cross the LAN in cleartext.
+`TestTURNOneCredentialReachesLittle` holds these limits. Deploying it is in
+[Mewla Relay operations](mewla-relay.md).
+
 The daemon independently enforces device authorization and route-specific size
 limits. A public Relay operator still needs network DDoS controls, egress alerts,
 per-admission rate policy, token rotation, and regional capacity alarms before

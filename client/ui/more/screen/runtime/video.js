@@ -29,11 +29,18 @@ export function createVideoPicture(doc, handlers) {
   let height = 0;
   let closed = false;
   const pendingIce = [];
+  // Keys, clicks and paste from before the input channel opened, sent in order once it does.
+  const pendingInput = [];
 
   pc.ondatachannel = (event) => {
     const channel = event.channel;
     channel.binaryType = "arraybuffer";
-    if (channel.label === "input") input = channel;
+    if (channel.label === "input") {
+      input = channel;
+      channel.onopen = () => {
+        for (const bytes of pendingInput.splice(0)) sendReliable(bytes);
+      };
+    }
     else if (channel.label === "pointer") pointer = channel;
   };
   pc.ontrack = (event) => {
@@ -101,7 +108,10 @@ export function createVideoPicture(doc, handlers) {
   }
 
   function sendReliable(bytes) {
-    if (!input || input.readyState !== "open") return;
+    if (!input || input.readyState !== "open") {
+      if (!closed && pendingInput.length < 64) pendingInput.push(bytes);
+      return;
+    }
     const out = new Uint8Array(4 + bytes.length);
     new DataView(out.buffer).setUint32(0, ++seq >>> 0);
     out.set(bytes, 4);

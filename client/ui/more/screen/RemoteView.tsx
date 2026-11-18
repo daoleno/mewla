@@ -67,7 +67,7 @@ export function canShowFullSize(): boolean {
 }
 
 
-/** Pixel-only document with no network access: the app relays the RFB bytes. */
+/** The viewer document: it plays the computer's video over WebRTC; the app carries its signalling. */
 export function viewerHtml(): string {
   const source = SCREEN_VIEWER_SOURCE.replace(/<\/(script)/gi, "<\\/$1");
   return `<!doctype html><html><head><meta charset="utf-8">
