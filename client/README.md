@@ -16,7 +16,7 @@ so a phone keeps its pairing and its drafts. The terminal links libghostty-vt fr
 ## Set up
 
 ```sh
-client/scripts/fetch-nsh.sh          # NSH 0.5.1 and its Android AARs into $NSH_HOME (default ~/.nsh, checksums pinned); --ios also fetches the framework
+client/scripts/fetch-nsh.sh          # NSH 0.6.0 and its Android AARs into $NSH_HOME (default ~/.nsh, checksums pinned); --ios also fetches the framework
 cd client && bun test core           # core
 cd client/ui && nsh check && nsh test
 ```
@@ -42,8 +42,8 @@ cd client/ui && nsh check && nsh test
 ## A call into JS has 2 s
 
 NSH cuts off a call into JS that runs past 2 s (`Error: interrupted`). A `computed` whose run is cut off, or
-throws for any other reason, never tells what reads it of a change again while it lives (`ui/kit/derived.test.tsx`
-fails once NSH fixes that). So what a thread's rows are made from is `derived` (`ui/kit/derived.ts`, an effect's
+throws for any other reason, never told what reads it of a change again while it lived, up to NSH 0.5.1 (0.6.0 fixed it,
+longbridge/nsh#2065; `ui/kit/derived.test.tsx` pins the fix). So what a thread's rows are made from is `derived` (`ui/kit/derived.ts`, an effect's
 value: a failed run keeps the last value and the next change makes it again), never `computed`: on 11-14 one slow
 update froze Brain's thread until the app started again (`ui/chat/ThreadCutOff.test.tsx`).
 

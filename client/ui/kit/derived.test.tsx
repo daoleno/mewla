@@ -28,7 +28,7 @@ async function threeChanges(source: { set(value: number): void }) {
 }
 
 describe("a value made from signals, after one run that failed", () => {
-  test("NSH's computed: what reads it never hears of a change again (why derived exists; if this fails, NSH fixed it)", async () => {
+  test("NSH's computed: after a run that failed, the next change reaches what reads it (0.5.x never told it again; fixed in 0.6.0, longbridge/nsh#2065)", async () => {
     const source = signal(0);
     const made = computed(() => {
       if (source() === 1) throw new Error("failed once");
@@ -40,7 +40,7 @@ describe("a value made from signals, after one run that failed", () => {
     });
     await settle();
     await threeChanges(source);
-    expect(seen).toEqual([0]);
+    expect(seen).toEqual([0, 2, 3]);
   });
 
   test("derived: an error keeps the last value, and the next change makes it again", async () => {
