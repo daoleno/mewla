@@ -3,7 +3,7 @@ import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
 import { ScreenConnection, type ScreenRoute } from "../../../core/screen/screen";
-import { activeModifiers, FIELD_RESET_MS, fieldNeedsReset, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
+import { activeModifiers, COMMIT_SETTLE_MS, FIELD_RESET_MS, FieldTyping, fieldNeedsReset, KEYBOARD_SENTINEL, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
 import { startLiveDeadline, LIVE_DEADLINE_REASON } from "../../../core/screen/screenLiveDeadline";
 import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type ScreenModifier, type ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
 import type { ScreenStreamStats } from "../../../core/screen/screenStream";
@@ -345,24 +345,9 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
   // sentinel: a key that lands before a reset reaches the field extends what it held (screen [67] kept every
   // key in the field; resetting on each key sent a fast key twice). The field goes back to the sentinel once
   // typing pauses, or at once when a backspace would have nothing left to delete.
-  let seen = KEYBOARD_SENTINEL;
-  let resetTimer: ReturnType<typeof setTimeout> | null = null;
-  const resetField = () => {
-    if (resetTimer) clearTimeout(resetTimer);
-    resetTimer = null;
-    seen = KEYBOARD_SENTINEL;
-    value.set(KEYBOARD_SENTINEL);
-  };
-  cleanup(() => resetTimer && clearTimeout(resetTimer));
-  const typed = (next: string) => {
-    const edit = keyboardEdit(seen, next);
-    seen = next;
-    // The signal follows the field, so putting the sentinel back is a change the field sees.
-    value.set(next);
-    if (resetTimer) clearTimeout(resetTimer);
-    if (fieldNeedsReset(next)) queueMicrotask(resetField);
-    else resetTimer = setTimeout(resetField, FIELD_RESET_MS);
-    if (!edit.backspace && !edit.text) return;
+  // An input method's composition (pinyin before its characters are chosen) is held by `field` and only
+  // its commit is sent; the field is not put back while one is open.
+  const field = new FieldTyping((edit) => {
     const active = activeModifiers(mods());
     for (let i = 0; i < edit.backspace; i++) props.session.key("BackSpace", active);
     if (edit.text) props.session.text(edit.text, active);
@@ -371,6 +356,48 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
       if (edit.text) echoed({ kind: "text", text: edit.text });
     }
     mods.set(spendModifiers(mods()));
+  });
+  let resetTimer: ReturnType<typeof setTimeout> | null = null;
+  let commitTimer: ReturnType<typeof setTimeout> | null = null;
+  const stopReset = () => {
+    if (resetTimer) clearTimeout(resetTimer);
+    resetTimer = null;
+  };
+  const resetField = () => {
+    stopReset();
+    if (field.composing) return;
+    field.reset();
+    value.set(KEYBOARD_SENTINEL);
+  };
+  cleanup(() => {
+    stopReset();
+    if (commitTimer) clearTimeout(commitTimer);
+  });
+  // The field holds next: the signal follows it (so putting the sentinel back is a change the field
+  // sees), and it goes back to the sentinel once typing pauses.
+  const settle = (next: string) => {
+    value.set(next);
+    stopReset();
+    if (fieldNeedsReset(next)) queueMicrotask(resetField);
+    else resetTimer = setTimeout(resetField, FIELD_RESET_MS);
+  };
+  const typed = (next: string) => {
+    if (field.change(next)) settle(next);
+    else stopReset();
+  };
+  const composed = (on: boolean) => {
+    field.composition(on);
+    if (on) {
+      stopReset();
+      return;
+    }
+    // The commit reaches onChange before the composition ends; a moment's wait also takes one that comes after.
+    if (commitTimer) clearTimeout(commitTimer);
+    commitTimer = setTimeout(() => {
+      commitTimer = null;
+      const next = field.flush();
+      if (next !== null) settle(next);
+    }, COMMIT_SETTLE_MS);
   };
   const press = (key: ScreenKey) => {
     const active = activeModifiers(mods());
@@ -427,6 +454,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
           caret={false}
           keyboardType="default"
           onChange={({ value: next }) => typed(next)}
+          onCompositionChange={({ composing }) => composed(composing)}
           onSubmit={() => press("Return")}
           onBlur={() => props.onTypingChange(false)}
         /></If>

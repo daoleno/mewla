@@ -9,6 +9,7 @@ import {
   KEYBOARD_SENTINEL,
   typingKeyboardStep,
   keyboardEdit,
+  FieldTyping,
   fieldNeedsReset,
   NO_MODIFIERS,
   nextSlowStreak,
@@ -26,6 +27,64 @@ import {
 import { parseScreenViewerMessage } from "./screenViewerProtocol";
 import type { ScreenStatus } from "./screen";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
+
+describe("an input method's composition", () => {
+  const S = KEYBOARD_SENTINEL;
+  const typing = () => {
+    const sent: { backspace: number; text: string }[] = [];
+    return { field: new FieldTyping((edit) => sent.push(edit)), sent };
+  };
+
+  test("Pinyin: nothing while composing, the chosen characters once", () => {
+    const { field, sent } = typing();
+    field.composition(true);
+    for (const shown of ["n", "ni", "ni h", "ni ha", "ni hao"]) expect(field.change(S + shown)).toBe(false);
+    // The commit reaches the field before the composition ends.
+    field.change(`${S}你好`);
+    field.composition(false);
+    expect(field.flush()).toBe(`${S}你好`);
+    expect(sent).toEqual([{ backspace: 0, text: "你好" }]);
+  });
+
+  test("a sentence with a candidate picked part way, then more text", () => {
+    const { field, sent } = typing();
+    field.change(`${S}a`);
+    field.composition(true);
+    for (const shown of ["aw", "aw o", "a我 men", "a我们"]) field.change(S + shown);
+    field.composition(false);
+    field.flush();
+    field.change(`${S}a我们 `);
+    expect(sent).toEqual([{ backspace: 0, text: "a" }, { backspace: 0, text: "我们" }, { backspace: 0, text: " " }]);
+  });
+
+  test("a commit that comes after the composition ends is sent once", () => {
+    const { field, sent } = typing();
+    field.composition(true);
+    field.change(`${S}mewla`);
+    field.composition(false);
+    // The committed change arrives before the settle runs out.
+    expect(field.change(`${S}么`)).toBe(true);
+    expect(field.flush()).toBe(null);
+    expect(sent).toEqual([{ backspace: 0, text: "么" }]);
+  });
+
+  test("a composition given up sends nothing", () => {
+    const { field, sent } = typing();
+    field.composition(true);
+    field.change(`${S}ni`);
+    field.change(S);
+    field.composition(false);
+    field.flush();
+    expect(sent).toEqual([]);
+  });
+
+  test("Latin keys with no composition go at once", () => {
+    const { field, sent } = typing();
+    field.change(`${S}m`);
+    field.change(`${S}me`);
+    expect(sent).toEqual([{ backspace: 0, text: "m" }, { backspace: 0, text: "e" }]);
+  });
+});
 
 describe("soft keyboard diffing", () => {
   const S = KEYBOARD_SENTINEL;
