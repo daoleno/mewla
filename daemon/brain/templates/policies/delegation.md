@@ -23,7 +23,7 @@ Use the screen only for work with no command, file or website route; websites go
 
 ## Continuation
 
-Continue a Worker with mewla worker send -id <session> -text <follow-up> --work-id <work>; that is the whole step, with no separate resolve. Worker reports and provider errors are evidence for deciding to continue, accept, cancel or wait, not acceptance.
+Continue a Worker with mewla worker send -id <session> -text <follow-up> --work-id <work>; that is the whole step, with no separate resolve. Worker reports and provider errors are evidence for deciding to continue, accept, cancel or wait, not acceptance. Mewla compacts and continues a Claude Worker stopped on "Request too large … Run /compact" itself; when that fails (compaction_failed), or a Codex or pi Worker asks for it, mewla worker send -id <session> -command /compact runs the agent's own compaction, then continue it as usual.
 
 When delivery is uncertain, weigh the cost of a duplicate effect against the evidence before checking or sending again.
 
