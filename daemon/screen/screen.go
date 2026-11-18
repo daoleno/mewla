@@ -99,6 +99,10 @@ type Status struct {
 	Permissions []Permission `json:"permissions,omitempty"`
 	// Ready means the device can open a viewer now.
 	Ready bool `json:"ready"`
+	// Video is how the viewer gets the picture: "webrtc" (pushed H.264). An
+	// app looks for it before it opens a viewer; a computer from before the
+	// video sends none.
+	Video string `json:"video,omitempty"`
 	// KeepAwake is the owner's setting; Power.KeepingAwake is what holds now.
 	KeepAwake bool   `json:"keep_awake"`
 	Power     *Power `json:"power,omitempty"`

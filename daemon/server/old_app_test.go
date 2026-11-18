@@ -50,8 +50,21 @@ func TestAnOldAppIsToldToUpdate(t *testing.T) {
 		}
 		return st
 	}
-	if st := status("?video=webrtc"); !st.Supported || !st.Ready || st.Reason != "" {
+	if st := status("?video=webrtc"); !st.Supported || !st.Ready || st.Reason != "" || st.Video != "webrtc" {
 		t.Fatalf("a current app: %+v", st)
+	}
+	// The display list says so too: a current app opens no viewer of a computer that does not.
+	req, _ := http.NewRequest(http.MethodGet, h.URL+"/display", nil)
+	req.Header.Set("Authorization", auth("mewla-display"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var listed struct{ Video string }
+	_ = json.NewDecoder(resp.Body).Decode(&listed)
+	resp.Body.Close()
+	if listed.Video != "webrtc" {
+		t.Fatalf("display list video = %q", listed.Video)
 	}
 	if st := status(""); st.Supported || st.Ready || st.Reason != oldAppScreen {
 		t.Fatalf("an old app: %+v", st)

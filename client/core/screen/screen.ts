@@ -41,6 +41,8 @@ export interface ScreenStatus {
   supported: boolean;
   platform: string;
   reason?: string;
+  /** "webrtc": the computer pushes its screen as video. A computer from before the video sends none. */
+  video?: string;
   /** The computer's own name. */
   name?: string;
   /** Turned off at the computer with `mewla screen disable`. */
@@ -101,7 +103,15 @@ async function readAnswer(response: Response): Promise<{ result: Record<string, 
 }
 
 /** A computer whose Mewla serves Screen as RFB, or not at all: this app plays only pushed video. */
-export const SCREEN_TOO_OLD = "This server's Mewla is too old for Screen. Update it on that computer.";
+export const SCREEN_TOO_OLD = "Update Mewla on this computer to see its screen";
+
+/**
+ * Whether each computer (by id) sends its screen as pushed video, from its last Screen status
+ * or display list (`video: "webrtc"`). A viewer for one that does not is never opened: an
+ * older computer would take control, wake its display and say so, for a picture this app
+ * cannot play.
+ */
+const sendsVideo = new Map<string, boolean>();
 
 /**
  * Says this app plays pushed video, on Screen requests and viewer sockets. A computer
@@ -116,6 +126,7 @@ export async function screenRequest(server: StoredServer, action?: ScreenAction)
   // An older daemon answers 404, or its web UI answers with HTML.
   if (response.status === 404 || (response.ok && !json)) throw new ScreenRequestError(SCREEN_TOO_OLD, response.status);
   if (!response.ok || !result) throw new ScreenRequestError((typeof result?.error === "string" && result.error) || screenFailureText(response.status, body), response.status);
+  sendsVideo.set(server.id, result.video === "webrtc");
   return result as unknown as ScreenStatus;
 }
 
@@ -156,6 +167,7 @@ async function displayRequest(server: StoredServer, body?: object): Promise<Reco
 
 export async function listDisplays(server: StoredServer): Promise<DisplayList> {
   const result = await displayRequest(server);
+  sendsVideo.set(server.id, result.video === "webrtc");
   return {
     displays: Array.isArray(result.displays) ? (result.displays as AgentDisplay[]) : [],
     available: result.available !== false,
@@ -237,6 +249,12 @@ export class ScreenConnection {
   ) {}
 
   async connect(): Promise<void> {
+    if (sendsVideo.get(this.server.id) === false) {
+      this.outdated = true;
+      this.reason = SCREEN_TOO_OLD;
+      this.finish();
+      return;
+    }
     const params: Record<string, string> = { ...(this.route?.params ?? {}), ...PLAYS_VIDEO };
     if (!this.route && this.watch) params.watch = "1";
     if (!this.route && this.watch && this.worker) params.worker = this.worker;

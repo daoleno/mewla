@@ -74,7 +74,7 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 				reason = c.Reason
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": capability == nil, "reason": reason})
+		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": capability == nil, "reason": reason, "video": "webrtc"})
 	case http.MethodPost:
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 		var q struct {

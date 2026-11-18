@@ -117,6 +117,7 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 	}
 	status := s.screen.Status(r.Context(), device.ID)
 	status.Local = clientaddr.Local(r)
+	status.Video = "webrtc"
 	if !playsVideo(r) && status.Supported {
 		// It shows "Screen can't start on this Mac" with this reason.
 		status.Supported, status.Ready, status.Reason = false, false, oldAppScreen
