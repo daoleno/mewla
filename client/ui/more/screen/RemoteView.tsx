@@ -448,6 +448,8 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
           accessibilityLabel="Type on the remote screen"
           class="absolute h-px w-px opacity-0"
           value={value()}
+          // The caret stays at the end: what is typed comes after the sentinel, and a backspace always has it to delete.
+          selectedRange={{ start: value().length }}
           autoCapitalize="none"
           autoCorrect={false}
           autoComplete="off"
