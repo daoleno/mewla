@@ -30,6 +30,9 @@ export interface KeyboardEdit {
 /** How long typing pauses before the field is put back to the sentinel. */
 export const FIELD_RESET_MS = 400;
 
+/** How long after an input method's composition ends its commit may still reach the field. */
+export const COMMIT_SETTLE_MS = 50;
+
 /**
  * One change of the hidden field, against what it held before (as the field reported it, not as it was
  * last set): the characters after the common start were deleted, then the new ones typed. A key that
@@ -42,6 +45,58 @@ export function keyboardEdit(prev: string, next: string): KeyboardEdit {
   let same = 0;
   while (same < a.length && same < b.length && a[same] === b[same]) same++;
   return { backspace: a.length - same, text: b.slice(same).join("") };
+}
+
+/**
+ * The hidden field as the remote screen sees it, with input methods: while one composes (pinyin before
+ * its characters are chosen, a kana run), what it shows in the field is not text yet and nothing is sent;
+ * what it commits is sent once, as one edit against what the field held before the composition. The
+ * keys the input method shows while composing were sent as keys before, then deleted and typed again:
+ * the remote got them all, out of step (screen: Pinyin "mewla" came out as repeated pieces).
+ */
+export class FieldTyping {
+  private seen = KEYBOARD_SENTINEL;
+  private open = false;
+  private held: string | null = null;
+
+  constructor(private readonly send: (edit: KeyboardEdit) => void) {}
+
+  /** A composition is open: changes are held. */
+  get composing(): boolean {
+    return this.open;
+  }
+
+  /** The field changed; false while a composition holds it. */
+  change(next: string): boolean {
+    if (this.open) {
+      this.held = next;
+      return false;
+    }
+    this.held = null;
+    const edit = keyboardEdit(this.seen, next);
+    this.seen = next;
+    if (edit.backspace || edit.text) this.send(edit);
+    return true;
+  }
+
+  /** A composition starts or ends. Its commit is applied by `flush`, after a change that may still come. */
+  composition(on: boolean): void {
+    this.open = on;
+  }
+
+  /** Applies what the field held when the composition ended, unless a change already did; returns it. */
+  flush(): string | null {
+    const next = this.held;
+    if (next === null || this.open) return null;
+    this.change(next);
+    return next;
+  }
+
+  /** The field was put back to the sentinel. */
+  reset(): void {
+    this.seen = KEYBOARD_SENTINEL;
+    this.held = null;
+  }
 }
 
 /** Whether the field must be put back now: nearly empty, a backspace would have nothing to delete. */
