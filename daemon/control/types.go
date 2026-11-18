@@ -23,6 +23,7 @@ import (
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/statedir"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/trigger"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -91,6 +92,7 @@ type Request struct {
 	VerificationNumber   string                                 `json:"verification_number,omitempty"`
 	Approve              *bool                                  `json:"approve,omitempty"`
 	CalendarItem         *calendar.Item                         `json:"calendar_item,omitempty"`
+	Trigger              *trigger.Trigger                       `json:"trigger,omitempty"`
 	BrainWork            *brain.Work                            `json:"brain_work,omitempty"`
 	BrainWorkEvent       *brain.WorkEvent                       `json:"brain_work_event,omitempty"`
 	BrainWorkDisposition *brain.WorkReviewDispositionRequest    `json:"brain_work_disposition,omitempty"`
@@ -192,6 +194,8 @@ type Response struct {
 	Workspace            string                                   `json:"workspace,omitempty"`
 	CalendarItem         *calendar.Item                           `json:"calendar_item,omitempty"`
 	CalendarItems        []calendar.Item                          `json:"calendar_items,omitempty"`
+	Trigger              *trigger.View                            `json:"trigger,omitempty"`
+	Triggers             []trigger.View                           `json:"triggers,omitempty"`
 	Devices              []auth.DeviceInfo                        `json:"devices,omitempty"`
 	Enrollments          []enrollment.Request                     `json:"enrollments,omitempty"`
 	Pairing              *PairingInfo                             `json:"pairing,omitempty"`

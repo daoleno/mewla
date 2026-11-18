@@ -114,8 +114,11 @@ type Service struct {
 	// openScreen says whether a Worker Session still has something open on its
 	// display (a page it left for the person); see settleCandidates.
 	openScreen func(sessionID string) bool
-	settle     settler
-	progress   progressJudge
+	// standing says a Work is a standing event sink (a Trigger's), which
+	// the closure judge never settles.
+	standing func(workID string) bool
+	settle   settler
+	progress progressJudge
 	// inFlightHostInputs protects only the live Prepare -> provider mutation ->
 	// Admit/Abort critical section. It is deliberately process-local: durable
 	// BrainInputAdmission + watcher receipt state remain the restart authority.

@@ -9,11 +9,12 @@ the rows it changed and nothing else; no state is rewritten as a whole file.
 | `~/.mewla/brain/state/brain.db` | lifecycle Works and Events, Brain presentation, the chat timeline |
 | `~/.mewla/calendar/calendar.db` | calendar items and runs |
 | `~/.mewla/telegram/state.db` | Telegram's durable state |
+| `~/.mewla/triggers/triggers.db` | Triggers, one JSON row each (`trg_item`); see [Calendar](calendar-engineering.md#triggers) |
 
-They are three files because three owners open them: the calendar and Telegram
-do not know where Brain's state lives, and their schemas change on their own
-schedules. They share one package, `daemon/sqlitedb`, for opening, transactions,
-schema versions and migration.
+They are separate files because separate owners open them: the calendar,
+Telegram and Triggers do not know where Brain's state lives, and their schemas
+change on their own schedules. They share one package, `daemon/sqlitedb`, for
+opening, transactions, schema versions and migration.
 
 ## Rules every database follows
 

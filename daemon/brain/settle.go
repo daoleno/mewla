@@ -82,6 +82,11 @@ func (s *Service) SetWorkJudge(judge WorkJudge) { s.judge = judge }
 // with the page) however the Worker reported its turn.
 func (s *Service) SetOpenScreens(open func(sessionID string) bool) { s.openScreen = open }
 
+// SetStandingWork names the Works that stand open by design: a Trigger's
+// Work receives its firings for as long as the Trigger exists, so the
+// closure judge never settles it (and never spends a model call on it).
+func (s *Service) SetStandingWork(standing func(workID string) bool) { s.standing = standing }
+
 // screenOpenOn says whether one of the Work's Worker Sessions has its display in use.
 func (s *Service) screenOpenOn(item Work) bool {
 	if s.openScreen == nil {
@@ -156,6 +161,9 @@ func (s *Service) settleCandidates() ([]settleItem, error) {
 	var candidates []settleItem
 	for _, item := range items {
 		if item.Status == WorkDone || item.Status == WorkCancelled {
+			continue
+		}
+		if s.standing != nil && s.standing(item.ID) {
 			continue
 		}
 		st, err := s.store.fsmState(item.ID)

@@ -169,6 +169,10 @@ mewla calendar snooze -id <item> -minutes 15 --json
 mewla calendar done -id <item> --json
 mewla calendar cancel -id <item> -revision <revision> --json
 
+mewla trigger list --json
+mewla trigger create -title "Open PRs" -every 10m -check './poll.sh' -instruction "Review each new PR" -source-thread <thread>
+mewla trigger check|pause|resume|delete -id <trigger>
+
 mewla screen status           # support, permissions, allowed devices, keep-awake
 mewla screen disable          # turn Screen off; every device must be allowed again
 mewla screen enable [-allow-sleep]
@@ -202,6 +206,6 @@ mewla watch project rename --project <id> --name "New name"
 mewla watch project link-linear --project <id> --team KEY --confirm
 ```
 
-Details: [Services](sessions.md#services), [Calendar](calendar.md),
+Details: [Services](sessions.md#services), [Calendar](calendar.md), [Triggers](calendar.md#triggers),
 [Telegram](notifications.md), [Extensions](extensions.md), [Agents outside Mewla](outside-agents.md),
 [Resources](usage-and-resources.md#resources), [Watch](watch.md).

@@ -195,6 +195,8 @@ func run(args []string, stderr io.Writer) error {
 			return runMemoryCommand(args[1:], stderr)
 		case "calendar":
 			return runCalendarCommand(args[1:], stderr)
+		case "trigger":
+			return runTriggerCommand(args[1:], stderr)
 		case "gcloud":
 			return runCloudCommand("gcp", args[1:], stderr)
 		case "aws":
@@ -527,6 +529,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 		brainService:    brainService,
 		calendarStore:   calendarStore,
 		stateDir:        authManager.StorageDir(),
+	}
+	triggerEngine, triggerErr := openTriggers(authManager.StorageDir(), brainStore, brainService)
+	if triggerErr != nil {
+		log.Printf("WARN Triggers unavailable: %v", triggerErr)
+	} else {
+		controlHandler.triggers = triggerEngine
 	}
 
 	profilesPath, err := work.DefaultModelProfilesPath()
@@ -1144,6 +1152,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	if watchCollector != nil {
 		runtimeOwners = append(runtimeOwners, runtimeOwner{name: "Watch", run: watchCollector.Run})
+	}
+	if triggerEngine != nil {
+		runtimeOwners = append(runtimeOwners, runtimeOwner{name: "triggers", run: func(ctx context.Context) error {
+			triggerEngine.Run(ctx)
+			return nil
+		}})
 	}
 
 	linkConfig, linkConfigPath, linkEnabled, err := loadOptionalLinkConfig(
@@ -2578,6 +2592,19 @@ func writeControlResponse(w io.Writer, resp control.Response, asJSON bool) error
 	if resp.WorkerReceipt != nil {
 		receipt := resp.WorkerReceipt
 		fmt.Fprintf(w, "%s\t%s\t%s\towns_attempt=%t\n", receipt.WorkID, receipt.Admission.TurnToken, receipt.Admission.Status, receipt.OwnsAttempt)
+		return nil
+	}
+	if resp.Trigger != nil {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", resp.Trigger.ID, resp.Trigger.State, resp.Trigger.Title, resp.Trigger.Line)
+		if resp.Confirmation != "" {
+			fmt.Fprintln(w, resp.Confirmation)
+		}
+		return nil
+	}
+	if len(resp.Triggers) > 0 {
+		for _, item := range resp.Triggers {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", item.ID, item.State, item.Title, item.Line)
+		}
 		return nil
 	}
 	if resp.BrainWork != nil {
