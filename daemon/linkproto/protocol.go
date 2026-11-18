@@ -30,6 +30,10 @@ const (
 	TypeRenewGrant        = "renew_grant"
 	TypeGrantRenewed      = "grant_renewed"
 	TypeError             = "error"
+	// TypeTURNRequest asks the relay for TURN credentials (a signed request,
+	// as admission is); TypeTURNCredentials answers with them.
+	TypeTURNRequest     = "turn_request"
+	TypeTURNCredentials = "turn_credentials"
 )
 
 type Message struct {
@@ -57,6 +61,12 @@ type Message struct {
 	Alias       string `json:"alias,omitempty"`
 	ExpiresAtMS int64  `json:"expires_at_ms,omitempty"`
 	TTLSeconds  int64  `json:"ttl_seconds,omitempty"`
+
+	// TURN: the relay's TURN addresses (turn:/turns: URLs) and a credential
+	// for them that expires at ExpiresAtMS, on turn_credentials.
+	TURNURLs     []string `json:"turn_urls,omitempty"`
+	TURNUsername string   `json:"turn_username,omitempty"`
+	TURNPassword string   `json:"turn_password,omitempty"`
 
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`

@@ -2,12 +2,14 @@ package screencast
 
 import (
 	"context"
+	"net"
 	"encoding/binary"
 	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/relay"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -44,34 +46,40 @@ func TestSessionVideoAndInput(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	session, viewer, frames, channels, gotInput, inputs, inMu := startViewer(ctx, t, webrtc.Configuration{}, nil)
+	defer session.Close()
+	defer viewer.Close()
+	_ = frames
+	testInput(ctx, t, session, frames, channels, gotInput, inputs, inMu)
+}
 
-	viewer, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+func startViewer(ctx context.Context, t *testing.T, viewerConfig webrtc.Configuration, ice []webrtc.ICEServer) (*Session, *webrtc.PeerConnection, chan int, chan *webrtc.DataChannel, chan struct{}, *[][]byte, *sync.Mutex) {
+	viewer, err := webrtc.NewPeerConnection(viewerConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer viewer.Close()
 
 	toViewer := make(chan Signal, 64)
-	var inputs [][]byte
-	var inMu sync.Mutex
+	inputs := &[][]byte{}
+	inMu := &sync.Mutex{}
 	gotInput := make(chan struct{}, 16)
 	src := &fakeSource{w: 321, h: 241, ch: make(chan struct{}, 1)} // odd: the stream is cropped to even
 	session, err := Start(ctx, Config{
 		Source: src,
 		Input: func(msg []byte) error {
 			inMu.Lock()
-			inputs = append(inputs, append([]byte(nil), msg...))
+			*inputs = append(*inputs, append([]byte(nil), msg...))
 			inMu.Unlock()
 			gotInput <- struct{}{}
 			return nil
 		},
 		Signal:       func(v any) { toViewer <- v.(Signal) },
 		LoopbackOnly: true,
+		ICEServers:   ice,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer session.Close()
 
 	frames := make(chan int, 64)
 	viewer.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
@@ -120,6 +128,12 @@ func TestSessionVideoAndInput(t *testing.T) {
 		}
 	}()
 
+	session.cfg.Source = src
+	return session, viewer, frames, channels, gotInput, inputs, inMu
+}
+
+func testInput(ctx context.Context, t *testing.T, session *Session, frames chan int, channels chan *webrtc.DataChannel, gotInput chan struct{}, inputsPtr *[][]byte, inMu *sync.Mutex) {
+	src := session.cfg.Source.(*fakeSource)
 	// The first picture comes without any change: a key frame once connected.
 	select {
 	case <-frames:
@@ -166,6 +180,7 @@ func TestSessionVideoAndInput(t *testing.T) {
 
 	inMu.Lock()
 	defer inMu.Unlock()
+	inputs := *inputsPtr
 	want := [][]byte{
 		{5, 1, 0, 10, 0, 20},
 		{5, 1, 0, 30, 0, 40},
@@ -182,4 +197,65 @@ func TestSessionVideoAndInput(t *testing.T) {
 			t.Fatalf("input %d: %v, want %v", i, inputs[i], want[i])
 		}
 	}
+}
+
+// With no direct path the picture and input go through the relay's TURN: the
+// viewer may use relay candidates only, over UDP and over TCP (a network that
+// blocks UDP).
+func TestSessionThroughTURN(t *testing.T) {
+	if _, _, err := findEncoder(); err != nil {
+		t.Skip(err)
+	}
+	for _, transport := range []string{"udp", "tcp"} {
+		t.Run(transport, func(t *testing.T) {
+			udp, tcp := freePort(t, "udp"), freePort(t, "tcp")
+			turnServer, err := relay.StartTURN(relay.TURNConfig{
+				PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udp, TCPAddr: tcp,
+				URLs: []string{"turn:" + udp + "?transport=udp", "turn:" + tcp + "?transport=tcp"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer turnServer.Close()
+			urls, user, pass, _, err := turnServer.Credentials("0123456789abcdef0123456789abcdef")
+			if err != nil {
+				t.Fatal(err)
+			}
+			ice := ICEServersFor(urls, user, pass)
+			viewerURL := "turn:" + udp + "?transport=udp"
+			if transport == "tcp" {
+				viewerURL = "turn:" + tcp + "?transport=tcp"
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			session, viewer, frames, channels, gotInput, inputs, inMu := startViewer(ctx, t, webrtc.Configuration{
+				ICETransportPolicy: webrtc.ICETransportPolicyRelay,
+				ICEServers:         []webrtc.ICEServer{{URLs: []string{viewerURL}, Username: user, Credential: pass}},
+			}, ice)
+			defer session.Close()
+			defer viewer.Close()
+			testInput(ctx, t, session, frames, channels, gotInput, inputs, inMu)
+			if route, _ := session.route(); route != "relay" {
+				t.Fatalf("route %q, want relay", route)
+			}
+		})
+	}
+}
+
+func freePort(t *testing.T, network string) string {
+	t.Helper()
+	if network == "udp" {
+		c, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		return c.LocalAddr().String()
+	}
+	l, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().String()
 }

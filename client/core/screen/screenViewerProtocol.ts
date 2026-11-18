@@ -2,7 +2,7 @@
 
 /** WebRTC signalling for the pushed-video picture, as the computer and the viewer page exchange it. */
 export type ScreenSignal =
-  | { type: "rtc"; sdp_type: "offer" | "answer"; sdp: string }
+  | { type: "rtc"; sdp_type: "offer" | "answer"; sdp: string; ice_servers?: { urls: string[]; username?: string; credential?: string }[] }
   | { type: "ice"; candidate: Record<string, unknown> | null };
 
 export type ScreenHostMessage =

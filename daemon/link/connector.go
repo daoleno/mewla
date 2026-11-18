@@ -93,6 +93,19 @@ type Connector struct {
 
 	stateMu sync.RWMutex
 	state   ConnectorState
+	// current is the relay this computer is registered with, while it is.
+	current *RelayCandidate
+
+	turnMu sync.Mutex
+	turn   TURNCredentials
+}
+
+// TURNCredentials are a relay's TURN addresses and a credential for them.
+type TURNCredentials struct {
+	URLs      []string
+	Username  string
+	Password  string
+	ExpiresAt time.Time
 }
 
 type registeredRelay struct {
@@ -152,9 +165,18 @@ func (connector *Connector) Run(ctx context.Context) error {
 		connector.setState("connecting", "", 0, "")
 		selected, err := connector.selectRelay(ctx)
 		if err == nil {
+			candidate := selected.candidate
+			connector.stateMu.Lock()
+			connector.current = &candidate
+			connector.stateMu.Unlock()
+			registered.Store(connector, struct{}{})
 			connector.setState("connected", selected.candidate.Name, selected.rtt, "")
 			startedAt := time.Now()
 			err = connector.runRegisteredRelay(ctx, selected)
+			registered.Delete(connector)
+			connector.stateMu.Lock()
+			connector.current = nil
+			connector.stateMu.Unlock()
 			if ctx.Err() != nil {
 				connector.setState("offline", "", 0, "")
 				return ctx.Err()
@@ -504,6 +526,61 @@ func (connector *Connector) pairingAdmissionHandler(
 		}
 		connector.handler.ServeHTTP(writer, request)
 	})
+}
+
+// registered holds the connectors registered with a relay now (a computer has
+// one for its own relay.json and one for remote access).
+var registered sync.Map
+
+// TURN returns TURN credentials from a relay this computer is registered with
+// now; an error when there is none, or none of them has TURN.
+func TURN(ctx context.Context) (TURNCredentials, error) {
+	err := errors.New("not registered with a relay")
+	var found TURNCredentials
+	registered.Range(func(key, _ any) bool {
+		creds, e := key.(*Connector).TURN(ctx)
+		if e != nil {
+			err = e
+			return true
+		}
+		found, err = creds, nil
+		return false
+	})
+	return found, err
+}
+
+// TURN returns TURN credentials from the relay this computer is registered
+// with, for Screen's video when a viewer has no direct path. They are kept
+// until an hour before they expire. A relay without TURN, or no relay, is an
+// error; Screen then offers direct paths only.
+func (connector *Connector) TURN(ctx context.Context) (TURNCredentials, error) {
+	connector.turnMu.Lock()
+	defer connector.turnMu.Unlock()
+	if time.Until(connector.turn.ExpiresAt) > time.Hour {
+		return connector.turn, nil
+	}
+	connector.stateMu.RLock()
+	current := connector.current
+	connector.stateMu.RUnlock()
+	if current == nil {
+		return TURNCredentials{}, errors.New("not registered with a relay")
+	}
+	message, err := signedRequest(ctx, connector.auth, connector.identity.RouteID, connector.config, linkproto.TypeTURNRequest, 0)
+	if err != nil {
+		return TURNCredentials{}, err
+	}
+	response, err := controlExchange(ctx, connector.config, *current, message)
+	if err != nil {
+		return TURNCredentials{}, err
+	}
+	if response.Type == linkproto.TypeError {
+		return TURNCredentials{}, errors.New(response.Message)
+	}
+	if response.Type != linkproto.TypeTURNCredentials || len(response.TURNURLs) == 0 || response.TURNUsername == "" {
+		return TURNCredentials{}, errors.New("relay returned invalid TURN credentials")
+	}
+	connector.turn = TURNCredentials{URLs: response.TURNURLs, Username: response.TURNUsername, Password: response.TURNPassword, ExpiresAt: time.UnixMilli(response.ExpiresAtMS)}
+	return connector.turn, nil
 }
 
 func (connector *Connector) consumeAdmission(

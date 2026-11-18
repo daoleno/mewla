@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/clientaddr"
+	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/screencast"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/gorilla/websocket"
+	"github.com/pion/webrtc/v4"
 )
 
 var displayUpgrader = websocket.Upgrader{
@@ -297,6 +299,15 @@ func (s *Server) castDisplay(ctx context.Context, cancel context.CancelCauseFunc
 		return
 	}
 	path := clientaddr.Path(r)
+	// The relay's TURN, for a viewer with no direct path (mobile data).
+	var ice []webrtc.ICEServer
+	if !s.screenLoopbackOnly {
+		turnCtx, turnCancel := context.WithTimeout(ctx, 3*time.Second)
+		if creds, err := link.TURN(turnCtx); err == nil {
+			ice = screencast.ICEServersFor(creds.URLs, creds.Username, creds.Password)
+		}
+		turnCancel()
+	}
 	session, err := screencast.Start(ctx, screencast.Config{
 		Source: displaySource{view},
 		Input: func(msg []byte) error {
@@ -312,6 +323,7 @@ func (s *Server) castDisplay(ctx context.Context, cancel context.CancelCauseFunc
 			}{"stats", path, st})
 		},
 		LoopbackOnly: s.screenLoopbackOnly,
+		ICEServers:   ice,
 	})
 	*cast = session
 	close(castReady)

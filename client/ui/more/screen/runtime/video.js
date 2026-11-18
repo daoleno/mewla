@@ -82,6 +82,10 @@ export function createVideoPicture(doc, handlers) {
     if (closed || !message) return;
     try {
       if (message.type === "rtc" && message.sdp_type === "offer") {
+        // The relay's TURN (and STUN), for when there is no direct path.
+        if (Array.isArray(message.ice_servers) && message.ice_servers.length) {
+          try { pc.setConfiguration({ ...pc.getConfiguration(), iceServers: message.ice_servers.map((server) => ({ urls: server.urls, username: server.username, credential: server.credential })) }); } catch {}
+        }
         await pc.setRemoteDescription({ type: "offer", sdp: message.sdp });
         for (const candidate of pendingIce.splice(0)) await pc.addIceCandidate(candidate).catch(() => {});
         const answer = await pc.createAnswer();
