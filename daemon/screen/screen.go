@@ -174,6 +174,9 @@ type Service struct {
 	agentGate  func() bool
 	// stopHook hears of each Worker the person stops (SetStopHook).
 	stopHook func(worker string)
+	// stopTold holds the Workers the person stopped that have not heard so
+	// yet: the next action of each is refused once, saying so (agentMu).
+	stopTold map[string]bool
 	// agentPosted is when an ended agent session last posted input.
 	agentPosted time.Time
 	// elementIDs is the last element id given out: every app read numbers

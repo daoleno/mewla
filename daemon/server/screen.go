@@ -97,7 +97,7 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 			if body.Worker != "" {
 				s.screen.StopAgentFor(body.Worker)
 			} else {
-				s.screen.StopAgent()
+				s.screen.StopAgentsByPerson()
 			}
 		case body.Action == "restart":
 			if err = s.screen.Restart(device.ID); err == nil {
