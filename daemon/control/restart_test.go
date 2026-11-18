@@ -18,7 +18,7 @@ func (answerHandler) HandleControlRequest(Request) Response {
 // A command issued while the daemon restarts waits for the new one (11-19:
 // "Mewla isn't running here" during every dev reload).
 func TestCallWaitsOutARestart(t *testing.T) {
-	path := filepath.Join(t.TempDir(), SocketName)
+	path := filepath.Join(shortStateDir(t), SocketName)
 	if err := MarkRestarting(path, os.Getpid(), time.Now().Add(10*time.Second)); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestStaleRestartMarkerDoesNotDelay(t *testing.T) {
 		"time up":      {pid: os.Getpid(), until: -time.Second},
 	} {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), SocketName)
+			path := filepath.Join(shortStateDir(t), SocketName)
 			if err := MarkRestarting(path, marker.pid, time.Now().Add(marker.until)); err != nil {
 				t.Fatal(err)
 			}
