@@ -2,8 +2,15 @@ package screencast
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/binary"
 	"encoding/json"
+	"math/big"
 	"net"
 	"sync"
 	"testing"
@@ -62,7 +69,16 @@ func TestSessionVideoAndInput(t *testing.T) {
 }
 
 func startViewer(ctx context.Context, t *testing.T, viewerConfig webrtc.Configuration, ice []webrtc.ICEServer, opts ...func(*Config)) (*Session, *webrtc.PeerConnection, chan int, chan *webrtc.DataChannel, chan struct{}, *[][]byte, *sync.Mutex) {
-	viewer, err := webrtc.NewPeerConnection(viewerConfig)
+	return startViewerWith(ctx, t, nil, viewerConfig, ice, opts...)
+}
+
+// startViewerWith is startViewer with the viewer made by api (nil: the default).
+func startViewerWith(ctx context.Context, t *testing.T, api *webrtc.API, viewerConfig webrtc.Configuration, ice []webrtc.ICEServer, opts ...func(*Config)) (*Session, *webrtc.PeerConnection, chan int, chan *webrtc.DataChannel, chan struct{}, *[][]byte, *sync.Mutex) {
+	newPeer := webrtc.NewPeerConnection
+	if api != nil {
+		newPeer = api.NewPeerConnection
+	}
+	viewer, err := newPeer(viewerConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,17 +228,22 @@ func testInput(ctx context.Context, t *testing.T, session *Session, frames chan 
 }
 
 // With no direct path the picture and input go through the relay's TURN: the
-// viewer may use relay candidates only, over UDP and over TCP (a network that
-// blocks UDP).
+// viewer may use relay candidates only, over UDP, over TCP (a network that
+// blocks UDP) and over TLS (one that lets only 443 out: the hosted relay's
+// turns: URL, here with a test certificate the viewer trusts).
 func TestSessionThroughTURN(t *testing.T) {
 	if _, _, err := findEncoder(); err != nil {
 		t.Skip(err)
 	}
-	for _, transport := range []string{"udp", "tcp"} {
+	for _, transport := range []string{"udp", "tcp", "tls"} {
 		t.Run(transport, func(t *testing.T) {
-			udp, tcp := freePort(t, "udp"), freePort(t, "tcp")
+			udp, tcp, tlsAddr := freePort(t, "udp"), freePort(t, "tcp"), freePort(t, "tcp")
 			secret := []byte("0123456789abcdef0123456789abcdef")
-			turnServer, err := relay.StartTURN(relay.TURNConfig{PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udp, TCPAddr: tcp, Secret: secret})
+			cert, roots := testCertificate(t, "turn.relay.test")
+			turnServer, err := relay.StartTURN(relay.TURNConfig{
+				PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udp, TCPAddr: tcp, Secret: secret,
+				TLSAddr: tlsAddr, TLS: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}},
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -237,13 +258,22 @@ func TestSessionThroughTURN(t *testing.T) {
 			}
 			ice := ICEServersFor(urls, user, pass)
 			viewerURL := "turn:" + udp + "?transport=udp"
-			if transport == "tcp" {
+			var api *webrtc.API
+			switch transport {
+			case "tcp":
 				viewerURL = "turn:" + tcp + "?transport=tcp"
+			case "tls":
+				_, port, _ := net.SplitHostPort(tlsAddr)
+				viewerURL = "turns:turn.relay.test:" + port + "?transport=tcp"
+				// The name resolves to this relay, and its certificate is checked as a browser checks it.
+				var se webrtc.SettingEngine
+				se.SetICEProxyDialer(tlsDialer{addr: tlsAddr, config: &tls.Config{ServerName: "turn.relay.test", RootCAs: roots, MinVersion: tls.VersionTLS12}})
+				api = webrtc.NewAPI(webrtc.WithSettingEngine(se))
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			stats := make(chan Stats, 64)
-			session, viewer, frames, channels, gotInput, inputs, inMu := startViewer(ctx, t, webrtc.Configuration{
+			session, viewer, frames, channels, gotInput, inputs, inMu := startViewerWith(ctx, t, api, webrtc.Configuration{
 				ICETransportPolicy: webrtc.ICETransportPolicyRelay,
 				ICEServers:         []webrtc.ICEServer{{URLs: []string{viewerURL}, Username: user, Credential: pass}},
 			}, ice, func(c *Config) {
@@ -275,6 +305,43 @@ func TestSessionThroughTURN(t *testing.T) {
 			}
 		})
 	}
+}
+
+// tlsDialer dials the TURN server over TLS for a viewer whose turns: URL
+// names it (Pion uses the connection as it comes).
+type tlsDialer struct {
+	addr   string
+	config *tls.Config
+}
+
+func (d tlsDialer) Dial(network, _ string) (net.Conn, error) {
+	return tls.Dial(network, d.addr, d.config)
+}
+
+// testCertificate is a self-signed certificate for host and the pool that
+// trusts it.
+func testCertificate(t *testing.T, host string) (tls.Certificate, *x509.CertPool) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: host}, DNSNames: []string{host},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(parsed)
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, roots
 }
 
 func freePort(t *testing.T, network string) string {
