@@ -144,9 +144,17 @@ side signs the fingerprint of its DTLS certificate: the computer with its key
 from pairing, which the app checks, and your device with its own key, which the
 computer checks against the device that opened the view. The encryption is held
 to those two certificates, so nothing in between (the relay, a network) can
-read the picture or your input, or take either side's place. The relay gives
-TURN credentials only to computers registered with it, for 12 hours at a time,
-and its TURN reaches only public addresses.
+read the picture or your input, or take either side's place.
+
+**The relay's TURN.** A computer asks its relay for TURN credentials when an
+allowed device opens a view, and hands them to that view; each lasts 12 hours,
+and the computer asks again once half of that has passed or the relay restarted.
+With one, the relay relays UDP only, to public addresses and to the other side's
+allocation on the same relay: never to the relay's own other ports, private or
+shared networks such as a tailnet's, or cloud metadata. It holds
+each credential to a few allocations, each computer to a few more, and each
+allocation to a bit rate; the computer keeps its video under that rate while
+the picture goes through the relay.
 
 An agent's own use of the screen (`mewla_computer`, screenshots, Watch) never
 goes through any of this.

@@ -67,6 +67,9 @@ type Message struct {
 	TURNURLs     []string `json:"turn_urls,omitempty"`
 	TURNUsername string   `json:"turn_username,omitempty"`
 	TURNPassword string   `json:"turn_password,omitempty"`
+	// TURNMaxKbps is the most the relay carries for one allocation each way
+	// (0: no cap); a computer keeps its video under it while relayed.
+	TURNMaxKbps int `json:"turn_max_kbps,omitempty"`
 
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
