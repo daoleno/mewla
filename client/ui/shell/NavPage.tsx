@@ -130,7 +130,8 @@ export function NavPage(props: AppNavPageProps) {
   if (mobile) {
     // The system's Back can't carry a dot: while the mark shows, the page's own Back stands in for it.
     const [slots, page] = split(props, ["headerLeft", "headerTitle"]);
-    const markedBack = () => (<If when={mark()}><MarkedBack mark={mark()!} back={stack.back} /></If>);
+    // With the side rail up, Back is the rail's: the system header's own Back and the marked one stand down.
+    const markedBack = () => (<If when={mark() && !rail()}><MarkedBack mark={mark()!} back={stack.back} /></If>);
     // Android draws the header's leading item after the title: there Back and the leading item go into
     // the title's place, ahead of the title, so they lead as on iOS. Read by key, the slots are made once.
     const android = platform.os === "android";
@@ -140,7 +141,7 @@ export function NavPage(props: AppNavPageProps) {
     const ownTitle = "headerTitle" in props;
     const ownBack = () => android && Boolean(mark() || (ownTitle && stack.canGoBack()));
     const back = () => (<If when={mark()} else={<If when={ownBack()}><PlainBack back={stack.back} /></If>}>{markedBack()}</If>);
-    const left = () => (<If when={!android}><If when={mark()} else={<>{slots.headerLeft}</>}><View class="flex-row items-center gap-2">{markedBack()}{slots.headerLeft ?? null}</View></If></If>);
+    const left = () => (<If when={!android}><If when={mark() && !rail()} else={<>{slots.headerLeft}</>}><View class="flex-row items-center gap-2">{markedBack()}{slots.headerLeft ?? null}</View></If></If>);
     // A page's own title view is as wide as the bar, not as its content (`nativeHeaderTitleWidth`): its
     // controls stay on screen and its text ends in "…" before them.
     const titleWidth = () => (ownTitle ? nativeHeaderTitleWidth({ stackWidth: stackWidth(), os: platform.os, systemBack: stack.canGoBack() && !ownBack() }) : undefined);
@@ -154,11 +155,11 @@ export function NavPage(props: AppNavPageProps) {
     // right pane of an open iPhone Duo (its pushed pages wear the capsule above).
     if (platform.idiom === "phone") {
       const [own, rest] = split(page, ["rail", "capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar"]);
-      return <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;
+      return <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark() && !rail()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;
     }
     const [own, rest] = split(page, ["rail", "capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar", "children"]);
     return (
-      <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)}>
+      <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark() && !rail()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)}>
         <Column width={width}>{own.children}</Column>
       </BaseNavPage>
     );

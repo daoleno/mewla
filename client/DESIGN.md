@@ -219,9 +219,12 @@ screen on its side, the outer edge of either app in Split View) gets Mewla's but
 on the other. A phone's cutout on its side (about 62, both sides), Android, the web and the inner screen
 upright never have it.
 
-- **What it holds.** Icons only, 44 pt targets, the 22 glyph, English accessibility labels, no text. From under
-  the system's own items at the bar's top (the Island and the status items, which open Control Center;
-  `RAIL.systemTop`) down: the page's controls, moved out of its header, never duplicated: Back (with the
+- **What it holds.** Icons only, 44 pt targets, the 22 glyph, English accessibility labels, no text. The system's
+  own items (the Island and the status items, which open Control Center) sit at the camera's end of the bar:
+  its top on the cover screen upright (174) and the inner screen on its side (124), its foot on the cover
+  screen on its side (82), each measured with the bar on the right. The rail keeps clear of them
+  (`railEnds`); a bar on the left (the other rotation, Split View's left app) keeps both ends clear, since its
+  camera's end is not known. The rail's foot rises above the keyboard while it is up. From the rail's top down: the page's controls, moved out of its header, never duplicated: Back (with the
   connection mark) when there is a page to go back to, Stop while a turn runs on the page shown, then the
   page's actions (a Session's Git, view and ⋯; Brain's ⋯; Git review's ⋯; a file's Refresh, Download, Copy).
   At the bar's foot, the app's places (`RAIL_PLACES`, a table the owner may change): Brain (home, the accent
@@ -231,13 +234,14 @@ upright never have it.
   they are, Brain stays home, and nothing is selected but Brain.
 - **What does not fit** goes, from the end of the order up (the last place first), into one More at the foot,
   whose menu keeps that order (Apple's rule for the bar).
-- **The header keeps the rest.** A page gives the rail its controls (`NavPage`'s `rail`); a page whose
+- **The header keeps the rest.** On a page that keeps the system's header (Screen), the header's Back
+  stands down for the rail's (swipe back stays: NSH's own pop delegate allows it). A page gives the rail its controls (`NavPage`'s `rail`); a page whose
   controls are not icons (a switch, Calendar's Today | Month) keeps them in its capsule. Brain's capsule keeps
   the cat alone (a 44 circle), and on the inner screen beside the pane Brain has no header at all. A Session's
   keeps its mark and name on one line (44, never two lines). A pushed page's capsule has the title once it has
   scrolled away, and nothing (not drawn) at rest, so its content starts 6 under the top.
 - **Not followed yet.** NSH reports neither the bar's edge nor where the system's items end: the edge comes
-  from the safe area and the top from a measured constant, so a Live Activity growing the Island down the bar
+  from the safe area and the system's end from measured constants per screen and posture, so a Live Activity growing the Island down the bar
   can cover the first button.
 
 ### One control per concept

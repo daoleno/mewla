@@ -1,7 +1,7 @@
-import { computed, safeArea, Text, untracked, View, windowSize } from "nsh";
+import { computed, keyboardFrame, safeArea, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
-import { RAIL, RAIL_PLACES, railLayout, railRoom, type RailPlaceId } from "../../core/shell/rail";
+import { RAIL, RAIL_PLACES, railEnds, railLayout, railRoom, type RailPlaceId } from "../../core/shell/rail";
 import { screenRoute } from "../../core/screen/float";
 import { backMark } from "../../core/tray/model";
 import { Icon, type IconName } from "../kit/Icon";
@@ -48,7 +48,9 @@ const places = computed((): Pressable[] =>
   })),
 );
 
-const layout = computed(() => railLayout(pageControls(), places(), railRoom(windowSize().height, safeArea())));
+/** The bar's part that is the rail's: past the system's items, and above the keyboard while it is up. */
+const ends = computed(() => railEnds(windowSize(), safeArea(), rail(), keyboardFrame().height));
+const layout = computed(() => railLayout(pageControls(), places(), railRoom(windowSize().height, ends())));
 
 /** A rail button: 44 pt, the glyph 22, the accent well while it is where the person is. */
 function RailButton(props: { item: Pressable; selected?: boolean; children?: JSX.Element }) {
@@ -120,7 +122,7 @@ export function Rail() {
   const width = () => (rail() === "left" ? safeArea().left : safeArea().right);
   return (
     <><If when={rail()}><View testID="rail" class="absolute bottom-0 top-0 items-center" role="toolbar"
-        style={{ width: width(), left: rail() === "left" ? 0 : undefined, right: rail() === "right" ? 0 : undefined, paddingTop: Math.max(RAIL.systemTop, safeArea().top), paddingBottom: safeArea().bottom + RAIL.foot, pointerEvents: "box-none" }}>
+        style={{ width: width(), left: rail() === "left" ? 0 : undefined, right: rail() === "right" ? 0 : undefined, paddingTop: ends().top, paddingBottom: ends().bottom, pointerEvents: "box-none" }}>
         <View testID="rail-page" class="items-center">{layout().top.map((item) => <Item item={item} />)}</View>
         <View class="flex-1" style={{ minHeight: RAIL.groupGap, pointerEvents: "none" }} />
         <View testID="rail-places" class="items-center">

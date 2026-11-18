@@ -19,13 +19,22 @@ export const RAIL = {
   /** Its glyph. */
   glyph: 22,
   /**
-   * The bar's top the system keeps: the Island and the status items, where a tap opens Control Center. On the Duo
-   * simulator (iOS 27.2, 11-19) iOS reserves the inner screen's top 124 (an occlusion region; its bar layout guide
-   * starts there), and the cover screen's status items end at 151 upright: the larger, with a margin, for both.
-   * NSH reports neither the region nor the guide, so a Live Activity growing the Island down the bar is not
-   * followed.
+   * The bar's end the system keeps: the Island and the status items, where a tap opens Control Center. They sit at
+   * the camera's end of the bar. Measured on the Duo simulator (iOS 27.2, 11-19, LLDB: the active occlusion region
+   * and the bar's layout guide):
+   * - cover screen upright (466×678): the top 174;
+   * - cover screen on its side (678×466): the bottom 82 (the camera's end), the top free from y 2;
+   * - inner screen on its side (951×669): the top 124.
+   * Each with a margin. NSH reports neither the region nor the guide, so a Live Activity growing the Island down the
+   * bar is not followed.
    */
-  systemTop: 156,
+  systemTopUpright: 180,
+  systemTopSide: 128,
+  systemFootCover: 82,
+  /** A window on its side at most this high is the cover screen (466); the inner screen on its side is 669. */
+  coverSideHeight: 500,
+  /** Above the first button where the bar's top is free (the cover screen on its side). */
+  freeTop: 8,
   /** Between the page's group and the places, at least. */
   groupGap: 12,
   /** Below the last button, over the bar's foot (the safe area's bottom adds to it). */
@@ -58,9 +67,29 @@ export const RAIL_PLACES = [
 
 export type RailPlaceId = (typeof RAIL_PLACES)[number]["id"];
 
-/** The bar's height left for Mewla's buttons, in points: the window's height less the system's items at its top and the foot. */
-export function railRoom(height: number, safe: { top: number; bottom: number }): number {
-  return Math.max(0, height - Math.max(RAIL.systemTop, safe.top) - safe.bottom - RAIL.foot);
+/** Where the rail's buttons may start (`top`) and must end (`bottom`, from the window's foot), in points. */
+export type RailEnds = { top: number; bottom: number };
+
+/**
+ * The rail's ends: past the system's items at the camera's end of the bar (`RAIL.systemTop*`, `systemFootCover`),
+ * the safe area, and the keyboard while it is up (the rail's foot rises above it, and what no longer fits goes into
+ * More). Only the bar on the right was measured (every posture's own rotation); a bar on the left (the other
+ * rotation, or the left app in Split View) keeps the system's reserve clear at both ends, since its camera's end is
+ * not known.
+ */
+export function railEnds(window: { width: number; height: number }, safe: { top: number; bottom: number }, edge: RailEdge | null, keyboard = 0): RailEnds {
+  const side = window.width > window.height;
+  const cover = side && window.height <= RAIL.coverSideHeight;
+  const reserve = cover ? RAIL.systemFootCover + RAIL.freeTop : side ? RAIL.systemTopSide : RAIL.systemTopUpright;
+  const measured = edge === "right";
+  const top = Math.max(safe.top, measured && cover ? RAIL.freeTop : reserve);
+  const foot = Math.max(safe.bottom, cover ? RAIL.systemFootCover : measured ? 0 : reserve, keyboard);
+  return { top, bottom: foot + RAIL.foot };
+}
+
+/** The bar's height left for Mewla's buttons, in points. */
+export function railRoom(height: number, ends: RailEnds): number {
+  return Math.max(0, height - ends.top - ends.bottom);
 }
 
 export type RailLayout<T> = {
